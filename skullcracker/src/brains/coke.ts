@@ -88,7 +88,8 @@
  * faces. The think function writes the pair as one dword, which is why both
  * halves come back at once.
  */
-import { install, type Brain } from "./kit";
+import type { Foe } from "../foes";
+import { install, type Brain, type Enemy } from "./kit";
 
 /**
  * Everything `0x43b630` and `0x43b780` do that is not this module's, named so
@@ -314,5 +315,29 @@ export const coke: Brain = (e, _foe, run, _k) => {
       return false;
   }
 };
+
+/**
+ * `0x43b655` and `0x43b66c` — the two things `0x43b630` asks before it weighs
+ * a blow at all.
+ *
+ * `cmp word ptr [esi+0x18], 0; jne` — a machine in any state but kind 0 takes
+ * nothing, and the only other kind it has is the rock, `0x474e70` kind 1. So
+ * a second punch landing before the first rock has finished is not counted,
+ * not heard and shakes nothing loose. And `cmp word ptr [edi+0x1a], 0; jl`: a
+ * negative strength — the flare's −9 — is no blow either.
+ *
+ * The third, `0x43b660`'s `cmp edi, [0x4ac3d4]` — only the player's own
+ * object — is not carried: a gate is handed the blow and not what threw it, so
+ * a flare or a stream that reaches a machine still counts here.
+ */
+export function cokeGate(
+  e: Enemy,
+  _foe: Foe,
+  blow: { damage: number; code: number },
+): { damage: number; code: number } | null {
+  if (e.state === "flinch" && e.anim.kind === COKE.rock.kind) return null;
+  if (blow.code < 0) return null;
+  return blow;
+}
 
 export { NOT_HERE as COKE_NOT_HERE };

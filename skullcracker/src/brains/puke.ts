@@ -95,7 +95,22 @@
  * terminated by the zero at `0x46cc1e`. So band 0 is beyond 280, band 1 is
  * 180..280, band 2 is 110..180, band 3 is inside 110, and −1 is behind.
  */
-import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+  type Reaction,
+} from "./kit";
+
+/**
+ * The corpse lies lower: state 6 writes `obj+0x10 = -12` on every frame its
+ * count lasts (`0x41820c`), the only write to the floor offset in the class.
+ */
+export const pukeCorpse: Reaction = (e) => {
+  if (e.state === "dead") e.floor = -12;
+};
 
 /**
  * The five things `0x417ed0` and its hit handler do that this port has nowhere
@@ -456,7 +471,7 @@ function decide(
   if (k.player.down) {
     k.say(e, PUKE.voice.advance);
     install(e, PUKE.walk);
-    e.facing = k.player.x > e.x ? -1 : 1;
+    e.facing = k.player.x > k.anchorX(e) ? -1 : 1;
     return false;
   }
   // `0x41800c` — and with him upright it turns towards him first

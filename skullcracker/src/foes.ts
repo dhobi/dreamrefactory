@@ -89,7 +89,9 @@
  * of this chapter's descriptors, not a grep.
  */
 
+import type { Enemy } from "./brains/kit";
 import { FOE_SFX } from "./sound";
+import { random } from "./random";
 
 /** one animation, as its script in `.data` carries it */
 export interface FoeAnim {
@@ -114,12 +116,9 @@ export interface FoeAnim {
    * When this one ends the thing holds its last cel for good and takes no more
    * hits.
    *
-   * The mailbox's hard topple is the case. `0x44fe10` — its frame function —
-   * watches for the animation to finish and then sets `obj+0x18 = 2`, a state with
-   * no script of its own, and its hit handler opens with `if (obj+0x18 != 2)`. So
-   * cel 2413, the mailbox on its side, is where it stays. Its LIGHT dent is the
-   * opposite: `0x44fe3d` reinstalls the intact cel when that one ends, so a punch
-   * marks it and it springs back.
+   * The Coke machine's emptied cel is the case: 8505 carries no body box, so
+   * once it shows nothing can reach it. (The mailbox on its side is NOT: its
+   * handler still plays the sound and answers 1 there — see `MAILBOX_DOWN`.)
    */
   terminal?: boolean;
   /**
@@ -130,6 +129,13 @@ export interface FoeAnim {
    * a third too fast.
    */
   then?: FoeAnim;
+  /**
+   * What the class's own machine is handed when this reaction ends: installed
+   * as its state, script and tag, rather than the gait. The punk's get-up is
+   * the case: `0x44ee90` ends `0x477580` tag 2 by installing the taunt,
+   * `0x477240` tag 0, and the taunt's own state (`0x44eac2`) decides from there.
+   */
+  resume?: FoeAnim;
   /**
    * The script's own KIND — word 4 of its header, what `0x45d090` copies into
    * `obj+0x18`.
@@ -164,6 +170,13 @@ export interface Blow {
    * round and gave the face take to a back.
    */
   facingAway: boolean;
+  /**
+   * The Y of the contact point `0x43041e` hands the handler, and the victim's
+   * own `obj+6` Y (its anchor) to weigh it against — `0x41839d` does. Absent
+   * for a blow that came with no contact.
+   */
+  contactY?: number;
+  pointY?: number;
 }
 
 /**
@@ -173,10 +186,21 @@ export interface Blow {
  * the runtime `Enemy` the level runner keeps them in.
  */
 export interface FoeState {
-  /** `AI+6` on the bishop — the size of the last blow that moved it */
+  /** `AI+6` on the bishop — the health it had when it last vanished */
   nerve?: number;
   /** its scaled health, which is what that word is seeded from */
   max: number;
+  /** what is left of it, the blow already taken off (`0x426593` reads it) */
+  hp?: number;
+  /** the Coke machine's `AI+0`, cans let go so far, this blow's included (`0x43b71a`) */
+  shaken?: number;
+  /** `obj+0x18` and `obj+0x44` as the blow found them (`0x420ae1` reads both) */
+  script?: number;
+  tag?: number;
+  /** `obj+0x28` as a facing, +1 east (kragg's ground snap picks its tag by it) */
+  facing?: number;
+  /** kragg's second bar — the grounded form, whose handler is `0x441ef0` */
+  rallied?: boolean;
 }
 
 export interface Foe {
@@ -265,14 +289,33 @@ export interface Foe {
     forever?: boolean;
     /** what the class plays out of its own book while it burns */
     anim?: FoeAnim;
-    /** ...and whether that is the end of it */
-    fatal?: boolean;
-    /** a sound of its own as it catches — the dog's `0x4550eb` plays 0x18 */
-    sound?: number;
     /**
-     * Whether the blow ALSO lands as damage. Seven of the eight answer 1 and
-     * are done; `0x4547b3` is the one that falls through into the ordinary
-     * arithmetic after lighting itself, so a burning CHOPPER takes the hit too.
+     * ...and whether that is the end of it: when `anim` runs out the class
+     * dies as it would of a blow — {@link Foe.deathSound}, {@link Foe.death}
+     * and the award. `0x4526ef` is the case: werec's state 3 ends in the
+     * squeal, the death and `0x40d450(0x104)`.
+     */
+    fatal?: boolean;
+    /**
+     * ...and the corpse time THAT death writes, in engine frames, where it is
+     * a literal of its own rather than {@link CORPSE_LINGER}'s global: werec's
+     * `0x452731` stores `0xc8` into `AI+2`, where its blow death at
+     * `0x452a6a` copies `[0x46b204]`.
+     */
+    linger?: number;
+    /**
+     * The arm IS the death: nothing of its own plays first, the class goes
+     * straight to {@link Foe.death} with its death sound and pays its award on
+     * the frame it catches. `0x4550d3` is the case — the dog's arm plays 0x18,
+     * installs `0x478208` and calls `0x40d450(0xc8)`, which is its death path
+     * at `0x4551c9` word for word, less the subtract.
+     */
+    dies?: boolean;
+    /**
+     * Whether the blow ALSO lands as damage. No creature's does: seven of the
+     * eight arms answer 1 and are done, and `0x4547b3`, which falls through,
+     * falls into `0x4547f2`'s negative-strength test and is thrown away there
+     * (see `weredGate`).
      */
     andHurts?: boolean;
     from: string;
@@ -329,6 +372,26 @@ export interface Foe {
    */
   rooted?: boolean;
   /**
+   * Its hit handler returns 0 even on a blow it takes, so the dispatcher never
+   * runs the velocity exchange for it — neither its own velocity nor the
+   * hitter's recoil changes.
+   *
+   * `0x430425` calls the victim's `obj+0x12` and only a nonzero answer reaches
+   * `0x43043b call 0x430470`. Nearly every creature's handler ends in
+   * `mov ax, 1` on a blow it takes and keeps `xor ax, ax` for the blows it
+   * refuses. Two answer 0 on every path: the CHOPPER's `0x454790` (`0x454880`,
+   * `0x45488a`), so a CHOPPER killed at its thirty a frame keeps riding the way
+   * it was going, and the hydrant's `0x44fbd0`, whose valve turns all end in
+   * `xor ax, ax` — a kick to a hydrant does not bounce the kicker off it.
+   *
+   * A class whose answer depends on its state says so with a test of the
+   * object: kragg's handler answers 1 only while `0x441d26` finds it below
+   * state 9, the flying form; from there the grounded branch at `0x441ef0`
+   * takes the blow off the bar and answers 0 on every way out (`0x441f82`,
+   * `0x441fb5`, `0x442004`, `0x442024`).
+   */
+  noExchange?: boolean | ((e: Enemy) => boolean);
+  /**
    * Does its creator take the record's `param` as the object's FACING.
    *
    * The level's own spawner (`0x4503a0`) hands each creator different pieces of
@@ -353,8 +416,30 @@ export interface Foe {
    * `0x454690`, in the first tag of the fourth kind's death: `call 0x450a50` —
    * the punk's own creator, at the dying thing's own position. The big one is a
    * CHOPPER with a man inside it.
+   *
+   * `leap` is what the creator does when it is handed a parent, which
+   * `0x454690` does (`push esi`, the fourth argument). `0x450afc..0x450b23`:
+   *
+   * ```
+   *   cmp [parent+0x28], 1 ; sbb ecx, ecx ; and ecx, 0x3c ; sub ecx, 0x1e
+   *   mov [obj+0xc], cx        ; +30 when the parent faces right, -30 left
+   *   mov [obj+0xa], 0xffce    ; -50
+   *   mov [obj+0x28], [parent+0x28]
+   *   0x45d090(obj, 0x477488, 0)
+   * ```
+   *
+   * So the rider leaves the bike at thirty pixels a frame the way the bike was
+   * going, which is the bike's own clamp ({@link speedCap}), and fifty up.
+   * It is a constant, not the parent's velocity: the two match because a
+   * CHOPPER at speed is at its clamp. The air takes nothing off it
+   * (`0x4302a4`), so it carries the thirty until it lands.
    */
-  hatches?: { kind: string; afterCels: number; from: string };
+  hatches?: {
+    kind: string;
+    afterCels: number;
+    from: string;
+    leap?: { vx: number; vy: number; anim: FoeAnim; from: string };
+  };
   /**
    * The class's own GROUND DRAG, when it is not the allocator's.
    *
@@ -376,6 +461,85 @@ export interface Foe {
    * CHOPPER is the only class in chapter one that sets either.
    */
   drag?: number;
+  /**
+   * What the mover measures the ground under it with: `obj+0x3c` and
+   * `obj+0x34`, both zero out of the allocator (`0x42f5a7`, `0x42f5e1`) and set
+   * by the class's own init.
+   *
+   * Every frame `0x42fd80` fills `obj+0x38` and `obj+0x3a` — the left and the
+   * right bound {@link BrainCtx.atBound} (`0x456550`) and its rear twin
+   * (`0x456590`) measure sixty pixels against:
+   *
+   * ```
+   *   42fe02  obj+0x3c > 0:   0x40bcd0(point, region, 0, obj+0x3c) -> obj+0x38
+   *                           0x40bcd0(point, region, 1, obj+0x3c) -> obj+0x3a
+   *   42fe4a  obj+0x34 != 0:  each row of the platform table 0x4a69d0 that spans
+   *                           the x, reaches below the feet and tops out above
+   *                           the floor; the highest one's ends -> 0x38, 0x3a
+   * ```
+   *
+   * `0x40bcd0` walks the region's floor from the point in eight-pixel samples,
+   * up to 200 pixels, and stops at the first sample that differs from the last
+   * by more than `reach` — a cliff up or down. So `reach` is how big a step the
+   * class treats as the end of its ground, and `platforms` is whether a ledge's
+   * own ends bound it: a class with neither never has a bound nearer than the
+   * zero it was allocated with, and never reads as at one. Nothing else keeps a
+   * thing on a ledge; the mover lets anything walk off one.
+   */
+  span?: { reach: number; platforms: boolean };
+  /**
+   * A FLOATER whose script `dx` is added into its velocity every frame the cel
+   * shows (`0x45d1a3` → `0x42f8b0`) rather than spent as a stride. There is no
+   * drag in the air, so it builds until the class's own think clamps it —
+   * slurp halves above 30 (`0x414b79`), kragg holds ±40 (`0x440aff`) — and a
+   * class sets this only once that clamp is in its brain.
+   */
+  accrues?: boolean;
+  /**
+   * Its hit handler plays {@link Foe.hitSound} only on a blow that leaves it
+   * standing; the killing one plays the death sound alone. Puke (`0x418362`),
+   * ghengis (`0x422c30`), hardcore (`0x43d317`) and the punks all branch that
+   * way; a class that plays both leaves this unset.
+   */
+  quietKill?: boolean;
+  /**
+   * The engine x its creator writes as its home instead of the record's point.
+   * `initwbooly` is the one: `0x4510dd` puts the constant `0x122a` in `AI+0x10`,
+   * and `0x455e7c`/`0x4560cd` snap it back onto that, wherever the level placed
+   * it. Converted to this page's foot x the same way the record's point is.
+   */
+  homeAt?: number;
+  /**
+   * `obj+0x24` in whole pixels a frame²: 10 out of the allocator (`0x42f5ca`)
+   * unless the class init calls `0x42f850(obj, f)`, which writes `f × 10`.
+   */
+  gravity?: number;
+  /**
+   * `obj+0x10` as its class init leaves it — added to the cel's drawn extent
+   * to find where it meets the floor (`0x42fdd7`). The allocator's 0; the rat
+   * −13 (`0x44dfa0`), the four gang members −6 (`0x437a95`, `0x4386d5`,
+   * `0x4391b5`, `0x439c15`). A state that changes it sets {@link Enemy.floor}.
+   */
+  floor?: number;
+  /**
+   * Its creator calls `0x42f850(obj, 0)`: it is made with no gravity and so
+   * stays on its record's point, stood on nothing, until its own think turns
+   * gravity on. The rat (`0x450a1c`) — a hidden rat sits where the level put
+   * it, and `0x44e0ff` lets it drop as it comes out.
+   */
+  bornWeightless?: boolean;
+  /**
+   * `obj+0x26`, the shove weight — how hard the body pass `0x430680` pushes this
+   * object off anything it overlaps. The allocator leaves it 0 (`0x42f5d0`), and
+   * 0 takes no part at all; each class init that wants a body writes its own.
+   */
+  shove?: number;
+  /**
+   * `obj+0x20`, the fraction of `obj+0xc` a wall hands back (`0x42ff02`):
+   * the allocator's 0x800 = 0.25 unless the class calls `0x42f7f0` (the dog's
+   * −0.3 turns it round).
+   */
+  restitution?: number;
   /**
    * A ceiling its own think puts on `obj+0xc`, in whole pixels an engine frame.
    *
@@ -433,8 +597,8 @@ export interface Foe {
    * it, a stirring and a climb out of the ground; **all three of level five's
    * enemies have none** — their dormant state is one cel and they go straight
    * into the walk when the player arrives (`0x4388dd`, `0x439365`, `0x437c41`).
-   * The dog has the same mechanism (`0x454c13`) and this page does not give it:
-   * WOODS' six are awake from the first frame.
+   * The dog has the same mechanism (`0x454c13`) in its own brain's state 0: it
+   * sits on cel 4800 until the player's point is inside its rect.
    */
   wake?: {
     cel?: number;
@@ -595,6 +759,10 @@ export interface Foe {
     at: number;
     /** `cmp eax, 0x25` — how close it has to get before it stops walking */
     reachPx: number;
+    /** ...and in height too, for the one class that asks (`0x43f71c`) */
+    reachY?: number;
+    /** what it goes to the lever on, when that is not its gait */
+    run?: FoeAnim;
     /** `0x434540(3) == 1` and then `0x434540(2) + 5`: a one-in-three chance of 5 or 6 */
     sound: readonly number[];
     from: string;
@@ -611,25 +779,34 @@ export interface Foe {
   floats?: boolean;
   /** how long the body lies there before it goes, in engine frames; Infinity never */
   linger?: number;
+  /**
+   * ...or, for a class whose count IS `[0x46b204]` but starts somewhere else
+   * than the end of the death script, what to add to it. The global is 50 until
+   * the first ox is made and 80 after (`0x435c76`), and SEWER comes before
+   * every level these classes live in, so a count baked at 50 is wrong in a
+   * run.
+   */
+  lingerPlus?: number;
   /** what it stood up with — `0x40e300`'s argument in the creator */
   health: number;
   /** the three figures it tells the interface panel, when it claims the bar */
-  panel?: { health: number; plate: number; award: number };
+  panel?: {
+    health: number;
+    plate: number;
+    award: number;
+    /**
+     * ...and when the plate is the creator's draw rather than one number:
+     * `plate - 1 + 0x434540(plates)`, one of `plates` consecutive cels per
+     * instance, kept in {@link file://./brains/kit.ts}'s `Enemy.plate`
+     */
+    plates?: number;
+  };
   /**
-   * Does a blow's momentum STAY with it — whether its own frame function leaves
-   * `obj+0xa`/`obj+0xc` alone.
-   *
-   * Those two words are a persistent velocity, not a per-frame stride, and an
-   * object that should not drift cancels them itself: the hydrant's `0x44fb20`
-   * zeroes both on its first two instructions, which is why a hydrant never
-   * budges, and a gob of goo zeroes them the frame it lands. The mailbox's
-   * `0x44fe10` never touches them — so the velocity `0x430470` hands it is kept,
-   * and a kick sends it most of a screen.
-   *
-   * The creatures are left out of this deliberately. Their knockbacks are in their
-   * own scripts (the punk's `0x477580` travels `dx 150, 150, 75, 75`) and whether
-   * they also keep the solver's momentum has not been settled, so this page does
-   * not give them any.
+   * A thing whose slide the panel reports — the mailbox, which a kick sends
+   * most of a screen. Every class takes `0x430470`'s velocity on every blow
+   * (see `knockback` in walk.ts) and keeps it until its own think or the drag
+   * spends it; the hydrant, whose `0x44fb20` zeroes both words first thing, is
+   * {@link Foe.rooted}.
    */
   flies?: boolean;
   /**
@@ -664,9 +841,10 @@ export interface Foe {
   /**
    * ...and it leaves its BOARD behind — `0x438450`, see `SKATEBOARD`.
    *
-   * Two of the gang carry one: `0x4383d9` drops it out of `initknotboy`'s hit
-   * handler and `0x43a6f9` out of `initknifeboy`'s, both on the frame the thing
-   * dies and neither anywhere else.
+   * All four of the gang carry one: `0x4383d9` drops it out of `initknotboy`'s
+   * hit handler, `0x43a6f9` out of `initknifeboy`'s, `0x43908e` out of
+   * `initmaskboy`'s and `0x439af9` out of `initbatboy`'s, each on the frame the
+   * thing dies and nowhere else.
    */
   drops?: "skateboard";
   /** the four functions above, for whoever checks this */
@@ -682,6 +860,232 @@ export interface Foe {
  * a third seconds of body on the ground.
  */
 export const CORPSE_LINGER = 50;
+
+/**
+ * The punk on the floor and getting up — `0x477580` tags 1 and 2, kind 10.
+ *
+ * `0x44ee13` is kind 10's state and it switches on the tag. Tag 0 (the
+ * knockdown's fall) hands to tag 1 once its script has ended and the punk is
+ * on the ground (`0x44ee2f`); tag 1 hands to tag 2 (`0x44ee65`); and tag 2
+ * ends on the taunt, `0x477240` tag 0 (`0x44ee90`). At two frames a cel that
+ * is sixteen frames on the floor after the four-cel fall, and then the taunt.
+ * FANG thrown off the CHOPPER reaches tag 1 through state 9 (`0x44edee`).
+ */
+export const WEREA_FLOORED: FoeAnim = {
+  cels: [1962, 1950, 1962, 1950],
+  hold: 2,
+  kind: 10,
+  tag: 1,
+  from: "0x477580 tag 1",
+  then: {
+    cels: [1951, 1952, 1953, 1954, 1955, 1956, 1957],
+    hold: 2,
+    kind: 10,
+    tag: 2,
+    from: "0x477580 tag 2",
+    // the same cels as `WEREA.taunt[0]` in brains/werea.ts
+    resume: {
+      cels: [1930, 1930, 1930, 1931, 1932, 1932, 1932],
+      hold: 1,
+      kind: 4,
+      tag: 0,
+      from: "0x477240 tag 0",
+    },
+  },
+};
+
+/**
+ * The punk's flinch ending — kind 11, `0x44eeb5`.
+ *
+ * Not a script of its own: `0x4774f8`'s three tags are all kind 11, and what
+ * state 11 does is choose, the frame the flinch runs out, between the stance
+ * and the coin its health decides (away or straight back in). This one cel is
+ * the stance's first, handed to the machine so it can make that choice.
+ */
+const WEREA_FLINCHED: FoeAnim = {
+  cels: [1900],
+  hold: 1,
+  kind: 11,
+  tag: 0,
+  from: "0x44eeb5",
+};
+
+/** the spitter's stance, `0x46c9f8` kind 2 — where its flinch hands back (`0x4181cf`) */
+const PUKE_STANCE: FoeAnim = {
+  cels: [3090, 3091, 3092, 3093, 3094, 3095],
+  hold: 2,
+  kind: 2,
+  tag: 0,
+  from: "0x46c9f8 tag 0",
+};
+
+/** kragg's ground idle, `0x473bc8` kind 12 — where state 11 hands back (`0x4417b8`) */
+const KRAGG_STAND: FoeAnim = {
+  cels: [7100],
+  hold: 1,
+  kind: 12,
+  tag: 0,
+  from: "0x473bc8 tag 0",
+};
+
+/**
+ * `[0x473de4]` — blows the grounded kragg has taken since its last snap or
+ * swing. A word in `.data`, like the rest of kragg's state: there is only one.
+ */
+let kraggGroundBlows = 0;
+
+/** LINK's stance, `0x477620` kind 1 — where its flinch hands back (`0x44f7e2`) */
+const WEREB_STANCE: FoeAnim = {
+  cels: [5000],
+  hold: 1,
+  kind: 1,
+  tag: 0,
+  from: "0x477620 tag 0",
+};
+
+/** MOLITOV's stance, `0x4778d0` kind 1 — where its flinch hands back (`0x452898`) */
+const WEREC_STANCE: FoeAnim = {
+  cels: [5090],
+  hold: 1,
+  kind: 1,
+  tag: 0,
+  from: "0x4778d0 tag 0",
+};
+
+/** the zombie's arms held up, `0x470088` tag 1 — where every flinch ends (`0x4207f2`) */
+const ZOMB_GUARD: FoeAnim = {
+  cels: [1846],
+  hold: 2,
+  kind: 2,
+  tag: 1,
+  from: "0x470088 tag 1",
+};
+
+/**
+ * The skeleton's flinch ending — kind 7, `0x423965`, which rolls
+ * `0x434540(5)` the frame the flinch runs out: under 4 the standing leap,
+ * otherwise the walk. The flinch's own last cel, handed to the machine so it
+ * can make that choice.
+ */
+const skelFlinched = (cel: number, tag: number): FoeAnim => ({
+  cels: [cel],
+  hold: 1,
+  kind: 7,
+  tag,
+  from: "0x423965",
+});
+
+/** IGOR's stance, `0x46fe10` kind 1 — where its flinch hands back (`0x4255d8`) */
+const IGOR_STANCE: FoeAnim = {
+  cels: [3100],
+  hold: 1,
+  kind: 1,
+  tag: 0,
+  from: "0x46fe10 tag 0",
+};
+
+/**
+ * The wraith's flinch ending — kind 7, `0x424e14`: `0x434540(10)` under 3,
+ * and only for the named one, splits; otherwise the hover. Its one cel,
+ * handed to the machine to choose.
+ */
+const WRAITH_FLINCHED: FoeAnim = {
+  cels: [3243],
+  hold: 1,
+  kind: 7,
+  tag: 0,
+  from: "0x424e14",
+};
+
+/**
+ * The mailbox on its side for good — state 2, which has no script of its own.
+ *
+ * `0x44fe60` writes `obj+0x18 = 2` by hand when the topple's four frames end,
+ * and the tag stays the topple's 1; the frame index stays on its last frame, so
+ * cel 2413 is what shows. Nothing in `0x44fe10` leaves state 2 again.
+ */
+const MAILBOX_DOWN: FoeAnim = {
+  cels: [2413],
+  hold: 1,
+  kind: 2,
+  tag: 1,
+  from: "0x44fe60",
+};
+
+/**
+ * The hydrant's valve, held where the last blow turned it. `0x44fbd0` installs
+ * tags 1 and 2 of `0x477d30` and nothing moves the hydrant off either until the
+ * next blow: a single-frame script ends on its only frame and `0x45d0f0` holds
+ * it there (`0x45d159`, no `obj+0x4a` loop).
+ */
+const HYDRANT_TURNED: readonly FoeAnim[] = [
+  { cels: [9701], hold: 1, kind: 0, tag: 1, from: "0x44fc00" },
+  { cels: [9702], hold: 1, kind: 0, tag: 2, from: "0x44fc14" },
+];
+
+/** wbooly's melee stance, `0x4785e8` kind 5 tag 4 — where `0x456058` tag 0 and `0x456033` hand back */
+const WBOOLY_HOVER: FoeAnim = {
+  cels: [3000],
+  hold: 1,
+  kind: 5,
+  tag: 4,
+  from: "0x4785e8 tag 4",
+};
+
+/** ...and its lob, `0x4786e0` kind 2 tag 0 — where `0x456086` sends the other take */
+const WBOOLY_LOB: FoeAnim = {
+  cels: [3010, 3011, 3012, 3013, 3014, 3015, 3016],
+  hold: 1,
+  kind: 2,
+  tag: 0,
+  from: "0x4786e0 tag 0",
+};
+
+/** the bishop's re-form, `0x46f370` kind 5 — the vanish's own twelve backwards (`0x42623e`) */
+const VPRIEST_REFORM: FoeAnim = {
+  cels: [
+    2681, 2680, 2679, 2678, 2677, 2676, 2675, 2674, 2673, 2672, 2671, 2670,
+  ],
+  hold: 1,
+  kind: 5,
+  tag: 0,
+  from: "0x46f370 tag 0",
+};
+
+/**
+ * Ghengis's hand-back from its flinch: one frame of kind 8, so the brain's
+ * case 8 — `0x422a25`, a finished kind-8 script — makes the roll between the
+ * walk and the bull rush. See `brains/ghengis.ts`.
+ */
+const GHENGIS_RALLY: FoeAnim = {
+  cels: [421],
+  hold: 1,
+  kind: 8,
+  tag: 0,
+  from: "0x422a25",
+};
+
+/** `0x472ef0` tag 0 — the ox's stand, where states 5 and 6 end (`0x43f794`, `0x43f7b4`) */
+const OX_STAND: FoeAnim = {
+  cels: [5090],
+  hold: 1,
+  kind: 2,
+  tag: 0,
+  from: "0x472ef0 tag 0",
+};
+
+/**
+ * The eyeball's hand-back from a hit reaction: one frame of kind 3, so the
+ * brain's case 3 — `0x43dff5`, a finished kind-3 script — puts it back on the
+ * hover with `vy = -5` (`0x43e002`). See `brains/eyeball.ts`.
+ */
+const EYEBALL_RECOVER: FoeAnim = {
+  cels: [6206],
+  hold: 1,
+  kind: 3,
+  tag: 0,
+  from: "0x43dff5",
+};
 
 /**
  * This chapter's classes — levels 1 to 4, registered by `0x4503a0`.
@@ -704,6 +1108,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * disc's number for a walking punk even though it is not this script's.
    */
   initwerea: {
+    // `0x44e4dd` — obj+0x26, the shove weight
+    shove: 8,
     /**
      * `0x4770f0` tag 0, kind 0 — the patrol, and the correction here is that it
      * is not `0x4774b0`.
@@ -723,16 +1129,21 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x4770f0 tag 0",
     },
     divisor: 20,
-    // 0x4774f8, three tags of one cel each, held four frames
+    // 0x4774f8, three tags of one cel each, held four frames, and all three end
+    // in state 11 (`0x44eeb5`), which the class's own machine decides from
     flinch: [
-      { cels: [1970], hold: 4, from: "0x4774f8 tag 0" },
-      { cels: [1971], hold: 4, from: "0x4774f8 tag 1" },
-      { cels: [1972], hold: 4, from: "0x4774f8 tag 2" },
-      // 0x477580 tag 0 — the knockdown a blow over 50 earns, and it travels
+      { cels: [1970], hold: 4, resume: WEREA_FLINCHED, from: "0x4774f8 tag 0" },
+      { cels: [1971], hold: 4, resume: WEREA_FLINCHED, from: "0x4774f8 tag 1" },
+      { cels: [1972], hold: 4, resume: WEREA_FLINCHED, from: "0x4774f8 tag 2" },
+      // 0x477580 tag 0 — the knockdown a blow over 50 earns, and it travels;
+      // the lying and the get-up follow ({@link WEREA_FLOORED})
       {
         cels: [1960, 1961, 1962, 1963],
         hold: 2,
         dx: [150, 150, 75, 75],
+        kind: 10,
+        tag: 0,
+        then: WEREA_FLOORED,
         from: "0x477580 tag 0",
       },
     ],
@@ -760,15 +1171,26 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * of it carries `dy -240`, so a burning werewolf LEAPS, three times,
      * and none of the three cels carries a strike box: it is thrashing, not
      * attacking.
+     *
+     * The −9 itself costs nothing. State 8 (`0x44ed8c`) is what costs: ten off
+     * the health every frame it plays, and when it ends the class's machine
+     * either stands it back up or lays it down dead — `wereaReacts` and state 8
+     * in {@link file://./brains/werea.ts}.
      */
     burns: {
       anim: {
         cels: [1940, 1941, 1942, 1942, 1942, 1940, 1941, 1942, 1942, 1942, 1940, 1941, 1942, 1942, 1942],
         hold: 1,
+        dy: [0, 0, -240, 0, 0, 0, 0, -240, 0, 0, 0, 0, -240, 0, 0],
+        kind: 8,
+        tag: 0,
+        resume: { cels: [1942], hold: 1, kind: 8, tag: 0, from: "0x44edae" },
         from: "0x477408 tag 0",
       },
       from: "0x44f0aa",
     },
+    // `0x44e4ea` and `0x44e4fc` — see {@link Foe.span}
+    span: { reach: 300, platforms: true },
     from: "0x450a50 / 0x44e4b0 / 0x44e580 / 0x44f0a0",
   },
   /**
@@ -780,6 +1202,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * out of its head — which is the same goo the spray throws (see effects.ts).
    */
   initwereb: {
+    // `0x44f32d` — obj+0x26, the shove weight
+    shove: 8,
     gait: {
       cels: [5000, 5001, 5002, 5003, 5004, 5005],
       hold: 2,
@@ -787,15 +1211,16 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x477630 tag 0",
     },
     divisor: 20,
-    // 0x477820 — four single-cel flinches held four frames, picked at random
+    // 0x477820 — four single-cel flinches held four frames, picked at random,
+    // and every one ends in the stance (`0x44f7e2`), not the walk
     flinch: [
-      { cels: [5080], hold: 4, from: "0x477820 tag 0" },
-      { cels: [5081], hold: 4, from: "0x477820 tag 1" },
-      { cels: [5082], hold: 4, from: "0x477820 tag 2" },
-      { cels: [5083], hold: 4, from: "0x477820 tag 3" },
+      { cels: [5080], hold: 4, resume: WEREB_STANCE, from: "0x477820 tag 0" },
+      { cels: [5081], hold: 4, resume: WEREB_STANCE, from: "0x477820 tag 1" },
+      { cels: [5082], hold: 4, resume: WEREB_STANCE, from: "0x477820 tag 2" },
+      { cels: [5083], hold: 4, resume: WEREB_STANCE, from: "0x477820 tag 3" },
     ],
     // 0x44f9d3: `push 4; call 0x434540; dec ax` — one of four, uniformly
-    pick: () => Math.floor(Math.random() * 4),
+    pick: () => Math.floor(random() * 4),
     death: {
       cels: [
         5060, 5061, 5062, 5063, 5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077,
@@ -815,17 +1240,24 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * `0x44f8bd` — and what a burning chained punk does is RUN. `0x477700` is
      * kind 4, twelve frames of its own walk cels 5000..5005 twice over, and
      * every one of them carries the walk's own `dx 75`. So it bolts, on the
-     * same art it patrols with, for twelve frames.
+     * same art it patrols with, for twelve frames — and state 4 (`0x44f735`)
+     * takes ten off its health on every one of them, then stands it back up or
+     * lays it down dead (`wereb.ts`).
      */
     burns: {
       anim: {
         cels: [5000, 5001, 5002, 5003, 5004, 5005, 5000, 5001, 5002, 5003, 5004, 5005],
         hold: 1,
         dx: [75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75],
+        kind: 4,
+        tag: 0,
+        resume: { cels: [5000], hold: 1, kind: 4, tag: 0, from: "0x44f74c" },
         from: "0x477700 tag 0",
       },
       from: "0x44f8bd",
     },
+    // `0x44f33a` and `0x44f34c` — see {@link Foe.span}
+    span: { reach: 50, platforms: true },
     from: "0x450b40 / 0x44f300 / 0x44f3d0 / 0x44f8b0",
   },
   /**
@@ -853,14 +1285,29 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * **no** strike box on any frame: it closes the distance and nothing else.
    */
   initwbooly: {
+    // `0x4558b5` — obj+0x26, the shove weight
+    shove: 12,
     // `0x478340` kind 1 — standing, two frames a cel, going nowhere
-    gait: { cels: [3040, 3041], hold: 2, dx: [0, 0], from: "0x478340 tag 0" },
+    gait: {
+      cels: [3040, 3041],
+      hold: 2,
+      dx: [0, 0],
+      kind: 1,
+      tag: 0,
+      from: "0x478340 tag 0",
+    },
     // `0x45589b`: thirty, the highest in the game — it is very heavy
     divisor: 30,
+    // `0x4510dd` — `AI+0x10 = 0x122a`, a constant, and not the record's x4199
+    homeAt: 0x122a,
+    // `0x451096`: its creator's floor offset, `obj+0x10`
+    floor: -30,
     /**
      * `0x4782e0` tags 1 and 2: four frames of the head lifting, then six of the
-     * thing pulling itself out of the ground. `0x455a14` plays its wake as a
-     * one-shot and `0x455a55` puts a loop under the climb.
+     * thing pulling itself out of the ground. The page holds the statue until
+     * the rect is entered; the brain's state 0 plays the stir and the climb and
+     * both of their sounds (`0x455a0d`, `0x455a50`), so none is given here —
+     * given twice, the wake cue played twice.
      */
     wake: {
       stir: { cels: [3041, 3040, 3041, 3040], hold: 1, from: "0x4782e0 tag 1" },
@@ -869,8 +1316,6 @@ export const FOES: Readonly<Record<string, Foe>> = {
         hold: 1,
         from: "0x4782e0 tag 2",
       },
-      sound: FOE_SFX.boolyWake,
-      stirSound: FOE_SFX.boolyStir,
       from: "0x4559e8 / 0x455a2f / 0x455a67",
     },
     /**
@@ -924,17 +1369,26 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * blow lands mid-combat and tag 1 the one it uses standing; this page keeps
      * both and picks between them the way `0x4564dc` does.
      */
+    // ...and where each hands back to, `0x456058`: the mid-combat take goes
+    // straight back into the melee stance, the other into the lob
     flinch: [
-      { cels: [3080], hold: 3, from: "0x478358 tag 0" },
-      { cels: [3124], hold: 3, from: "0x478358 tag 1" },
+      { cels: [3080], hold: 3, resume: WBOOLY_HOVER, from: "0x478358 tag 0" },
+      { cels: [3124], hold: 3, resume: WBOOLY_LOB, from: "0x478358 tag 1" },
     ],
-    // `0x456470`: a blow arriving while it is already down, throwing or flinching
-    // does nothing at all; `0x4564dc` picks the mid-combat take otherwise
-    pick: ({ hits }) => (hits % 2 === 0 ? 0 : 1),
+    // `0x4564dc` — by the STATE the blow found: the melee half (`obj+0x18 ==
+    // 5`) takes tag 0, anything else tag 1. States 2, 8 and 9 never get here
+    // (`0x456470`, in `wboolyGate`)
+    pick: (_blow, e) => (e.script === 5 ? 0 : 1),
     /**
-     * `0x456496`: every third consecutive blow puts it over instead. The get-up
-     * is its own script at its own rate, which is what {@link FoeAnim.then} is
-     * for — `0x478518` runs two frames a cel and `0x478578` three.
+     * `0x456496`: the third blow landed in the melee half puts it over instead,
+     * and zeroes `AI+4` (`0x4564c5`), so the get-up heads home. The get-up is
+     * its own script at its own rate, which is what {@link FoeAnim.then} is
+     * for — `0x478518` runs two frames a cel and `0x478578` three — and
+     * `0x456033` hands it to the melee stance.
+     *
+     * The count is `AI+0x12`, which steps only while `obj+0x18 == 5`; the gate
+     * keeps it in `dents` as one more than the count, so the knockdown lands
+     * on 4 — see `wboolyGate`.
      */
     knockdown: {
       anim: {
@@ -943,11 +1397,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
         then: {
           cels: [3110, 3100, 3111, 3101, 3112, 3102, 3113],
           hold: 3,
+          resume: WBOOLY_HOVER,
           from: "0x478578 tag 0",
         },
         from: "0x478518 tag 0",
       },
-      every: 3,
+      every: 4,
       sound: FOE_SFX.boolyKnock,
       from: "0x456496",
     },
@@ -1010,6 +1465,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * {@link BrainCtx.roller}; see `ROLLER` in {@link file://./props.ts}.
    */
   initmaskboy: {
+    // `0x4386d5`: its class init's floor offset, `obj+0x10`
+    floor: -6,
     lever: {
       dir: 0,
       anim: {
@@ -1025,15 +1482,22 @@ export const FOES: Readonly<Record<string, Foe>> = {
       sound: [5, 6],
       from: "0x438a55 / 0x438aa9 / 0x438ab9",
     },
-    // `0x474230` tag 4 — six cels, and the stride is on four of them
+    // `0x474230` tag 4 — six cels, and the stride is on four of them. Its kind
+    // and tag are the state a flinch hands back to: `0x438e69` waits for the
+    // ground and installs exactly this
     gait: {
       cels: [1800, 1801, 1802, 1803, 1804, 1805],
       hold: 1,
       dx: [0, 60, 70, 80, 120, 0],
+      kind: 5,
+      tag: 4,
       from: "0x474230 tag 4",
     },
     // `0x4386ab`: seven, against chapter four's twelve and twenty
     divisor: 7,
+    // `0x4386c4`: `0x42f7a0(obj, 0.05f)` — the gang skate, and keep 95% of
+    // their speed a frame where the allocator's walkers keep 30%
+    drag: 409,
     // `0x4742d8` tag 0 — ONE cel, and `0x4390df` installs it unconditionally:
     // this chapter's handlers have no Δy test, no facing test and no random roll
     flinch: [{ cels: [1820], hold: 1, from: "0x4742d8 tag 0" }],
@@ -1056,6 +1520,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    drops: "skateboard", // `0x43908e`
     from: "0x436280 / 0x438690 / 0x438760 / 0x438f00",
   },
   /**
@@ -1073,6 +1538,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * and twenty for its sibling. MALL places no goop, so it never happens here.
    */
   initbatboy: {
+    // `0x4391b5`: its class init's floor offset, `obj+0x10`
+    floor: -6,
     lever: {
       dir: 0,
       anim: {
@@ -1085,13 +1552,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
       sound: [5, 6],
       from: "0x4396c1 / 0x43970d / 0x43971d",
     },
+    // ...and a flinch ends on it: `0x4398e7` waits for the ground and puts the
+    // run back on, kind 4 tag 4
     gait: {
       cels: [1900, 1901, 1902, 1903, 1904, 1905],
       hold: 1,
       dx: [0, 60, 70, 80, 120, 0],
+      kind: 4,
+      tag: 4,
       from: "0x474438 tag 4",
     },
     divisor: 7,
+    drag: 409, // `0x4391a4`: `0x42f7a0(obj, 0.05f)`
     flinch: [{ cels: [1920], hold: 1, from: "0x474508 tag 0" }],
     death: {
       cels: [1920, 1921, 1922, 1923, 1924],
@@ -1105,11 +1577,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: true,
     bleeds: true,
     vanishes: true,
+    drops: "skateboard", // `0x439af9`
     from: "0x436320 / 0x439170 / 0x439240 / 0x439980",
   },
   /**
    * The third of level five's three, and the one that carries a skateboard.
-   * Creator `0x4361e0`, class `0x437a50`, think `0x437c00`, hit `0x438260`.
+   * Creator `0x4361e0`, class `0x437a50`, think `0x437b20`, hit `0x438260`.
    *
    * Fifty health, the most of the three, and worth the least — eighty, against
    * the masked one's 220 and the bat's 250. It drops its board when it dies
@@ -1122,6 +1595,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * straight out of the hit handler rather than carried on the object.
    */
   initknotboy: {
+    // `0x437a95`: its class init's floor offset, `obj+0x10`
+    floor: -6,
     lever: {
       dir: 0,
       anim: {
@@ -1134,13 +1609,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
       sound: [5, 6],
       from: "0x437f4b / 0x437fb0 / 0x437fef",
     },
+    // `0x473fb0` tag 4, the approach — and what `0x438169` puts back on when a
+    // flinch has landed it
     gait: {
       cels: [1940, 1941, 1942, 1943, 1944, 1945],
       hold: 1,
       dx: [0, 60, 70, 80, 120, 0],
-      from: "0x473e50 tag 0",
+      kind: 4,
+      tag: 4,
+      from: "0x473fb0 tag 4",
     },
     divisor: 7,
+    drag: 409, // `0x437a84`: `0x42f7a0(obj, 0.05f)`
     flinch: [{ cels: [1960], hold: 1, from: "0x474048 tag 0" }],
     death: {
       cels: [1960, 1961, 1962, 1963, 1964],
@@ -1161,7 +1641,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     bleeds: true,
     vanishes: true,
     drops: "skateboard", // `0x4383d9`
-    from: "0x4361e0 / 0x437a50 / 0x437c00 / 0x438260",
+    from: "0x4361e0 / 0x437a50 / 0x437b20 / 0x438260",
   },
   /**
    * The fourth of the gang, and the one level six adds. Creator `0x4363c0`,
@@ -1196,6 +1676,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * maker the third one uses. See `SKATEBOARD`.
    */
   initknifeboy: {
+    // `0x439c15`: its class init's floor offset, `obj+0x10`
+    floor: -6,
     lever: {
       dir: 0,
       anim: { cels: [1858, 1857, 1856], hold: 1, from: "0x4746a8 tag 1" },
@@ -1205,14 +1687,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x43a134 / 0x43a188 / 0x43a1c7",
     },
     // `0x474648` tag 4 — the same six-cel walk and the same stride as its three
-    // siblings, one book row along
+    // siblings, one book row along — and the push-off `0x43a3b8` hands a landed
+    // flinch back to
     gait: {
       cels: [1840, 1841, 1842, 1843, 1844, 1845],
       hold: 1,
       dx: [0, 60, 70, 80, 120, 0],
+      kind: 4,
+      tag: 4,
       from: "0x474648 tag 4",
     },
     divisor: 7,
+    drag: 409, // `0x439c04`: `0x42f7a0(obj, 0.05f)`
     // `0x474770` has three tags of one cel each and `0x43a744` installs tag 0
     // and only ever tag 0
     flinch: [{ cels: [1860], hold: 1, from: "0x474770 tag 0" }],
@@ -1255,43 +1741,62 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * none, so goop, knives and its own allies all land on it. The one thing it
    * does test is a blow strength of exactly −6, which it swallows.
    *
-   * Unlike the boss of level four the level does not wait for it: SERVICE's share
-   * is chapter two's ordinary 0.75, so the goal opens on the count and this is
-   * simply the biggest thing standing in front of it.
+   * SERVICE's share is chapter two's ordinary 0.75, but the level WAITS for it
+   * as well: its death writes `[0x472574] = 1` (`0x43d309`), and the chapter's
+   * end test `0x43b950` opens SERVICE's goal only on the count AND that flag
+   * (`0x43b9ec`). See `goalReady` in {@link file://./walk.ts}.
    */
   inithardcore: {
-    // `0x474960` — twelve frames, two cels' worth of walk cycled twice, and every
-    // dx is zero
+    // `0x43cbe5` — obj+0x26, the shove weight
+    shove: 12,
+    // `0x474950` — the one-cel stance its think returns to after everything,
+    // kind 1. Its roar, `0x474960`, is a state of its own (`HARDCORE.roar`)
     gait: {
-      cels: [6050, 6051, 6052, 6053, 6054, 6055],
+      cels: [6070],
       hold: 2,
-      from: "0x474960 tag 0",
+      kind: 1,
+      tag: 0,
+      from: "0x474950 tag 0",
     },
     // `0x43cbcb`: thirteen
     divisor: 13,
-    // `0x474b88` — four cels that carry their own knockback, dx -100 on two of them
+    // `0x474b88` — four cels that carry their own knockback, dx -100 on two of
+    // them. The flinch is kind 8, and `0x43d062` decides what follows it once it
+    // ends: a coin between the close and the swipe. `resume` hands the brain
+    // that state, holding the last cel for the frame it takes to decide
     flinch: [
       {
         cels: [6030, 6031, 6032, 6033],
         hold: 2,
         dx: [0, -100, 0, -100],
+        resume: {
+          cels: [6033],
+          hold: 2,
+          kind: 8,
+          tag: 0,
+          from: "0x43d062 — state 8 after 0x474b88",
+        },
         from: "0x474b88 tag 0",
       },
     ],
-    // `0x474bb0` — and the first frame throws it, dx -65 dy -180
     death: {
       cels: [6000, 6001, 6002, 6003, 6004, 6005],
       hold: 2,
       from: "0x474bb0 tag 0",
     },
-    // `0x43ccda`: the same point-in-rect the gang use, and it holds 6070 until then
+    // `0x474bb0`'s first frame carries dx -65 dy -180: the body is thrown back
+    // and up as it falls
+    deathThrow: { dx: -65, dy: -180, afterCels: 0, from: "0x474bb0 tag 0 frame 0" },
+    // `0x43ccda`: the same point-in-rect the gang use, and it holds 6070 until
+    // then. It wakes in silence — the state installs the stance and nothing else
     wake: {
       cel: 6070,
-      sound: FOE_SFX.hardcoreHit,
-      from: "0x43ccda / 0x43cd1b",
+      from: "0x43ccda",
     },
     health: 750,
+    // `0x43d317`: sound 0x45 is on the branch that leaves it standing only
     hitSound: FOE_SFX.hardcoreHit,
+    quietKill: true,
     // `0x43cca1` claims the bar with 0x3331 and 0x2ee; `0x43d2e8` pays 0x15e
     panel: { health: 750, plate: 13105, award: 350 },
     counts: true,
@@ -1309,39 +1814,76 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * frame. It has a shove weight of 3, the lightest thing in the game, and a
    * divisor of 8.
    *
-   * Its own state machine flies it: `0x472998` is three tags on the same twelve
-   * cels, a level cruise on 6206 with `dx 20` and then a climb and a dive that
-   * carry `dy -100` and `dy +100` on four frames each. This port holds it at the
-   * height its record's point puts it and cruises; the climb and the dive are
-   * not driven, and nor is `0x4728e0` tag 1, the ten cels of 6600 the death
-   * bursts into.
+   * Its own state machine flies it — see `brains/eyeball.ts`.
    *
    * **Which flinch it takes is decided by the cel it is showing.** `0x43e9bc`
    * compares the current cel against 6206, 6207 and 6208 — the three angles the
    * eye can be caught at — and picks tag 1, 2 or 3 of `0x472878` to match, so
-   * the eye that is hit shuts the way it was open. A blow over `0x46` skips all
-   * three for `0x4727f0`, twelve cels of 6300. Its ignore list is one class
-   * long, and the class is the pipe.
+   * the eye that is hit shuts the way it was open. A blow over `0x46`, or any
+   * blow while it spits, skips all three for `0x4727f0` tag 0, twelve cels of
+   * 6300. Its ignore list is one class long, and the class is the pipe.
+   *
+   * It leaves no body: the death is `0x4728e0` tag 0 and then tag 1, the ten
+   * cels of 6600 it bursts into, and the object goes the frame tag 1 ends.
    */
   initeyeball: {
+    // `0x43dd36` — obj+0x26, the shove weight
+    shove: 3,
     // `0x472aa0` tag 0 — one cel and a stride, which is the whole of its cruise
     gait: { cels: [6206], hold: 2, dx: [20], from: "0x472aa0 tag 0" },
     // `mov word ptr [esi+0xe], 8` at `0x43dd1b`
     divisor: 8,
-    // `0x472878` tags 1, 2 and 3 — the eye shutting from each of its angles,
-    // and this page's gait holds the first of the three
+    // `0x472878` tags 1, 2 and 3 — the eye shutting from each of its angles —
+    // and `0x4727f0` tag 0, the knock-out. Every one is kind 3, and a finished
+    // kind-3 script goes back to the hover with `vy = -5` (`0x43dff5`), which
+    // the brain's own case 3 does off the one-frame {@link EYEBALL_RECOVER}
     flinch: [
-      { cels: [6006, 6006, 6106, 6206], hold: 3, from: "0x472878 tag 1" },
-      { cels: [6007, 6007, 6107, 6207], hold: 3, from: "0x472878 tag 2" },
-      { cels: [6008, 6008, 6108, 6207], hold: 3, from: "0x472878 tag 3" },
+      { cels: [6006, 6006, 6106, 6206], hold: 3, resume: EYEBALL_RECOVER, from: "0x472878 tag 1" },
+      { cels: [6007, 6007, 6107, 6207], hold: 3, resume: EYEBALL_RECOVER, from: "0x472878 tag 2" },
+      { cels: [6008, 6008, 6108, 6207], hold: 3, resume: EYEBALL_RECOVER, from: "0x472878 tag 3" },
+      {
+        cels: [
+          6300, 6301, 6302, 6303, 6304, 6305, 6306, 6307, 6308, 6309, 6310, 6311,
+        ],
+        hold: 1,
+        resume: EYEBALL_RECOVER,
+        from: "0x4727f0 tag 0",
+      },
     ],
+    /**
+     * `0x43e9af` — over 0x46, or in state 7, is the knock-out; otherwise the
+     * cel now showing: 0x183e/0x183f/0x1840 (6206/6207/6208) are tags 1/2/3
+     * (`0x43e9bc`..`0x43e9cd`), and any other cel is −1, nothing installed —
+     * `0x43e9d4` returns 1 with the health already taken.
+     */
+    pick: (blow, e) => {
+      const s = e as FoeState & {
+        anim?: FoeAnim;
+        clock?: number;
+        swing?: boolean;
+        script?: number;
+      };
+      if (blow.damage > 0x46 || s.script === 7) return 3;
+      const a = s.anim;
+      if (!a) return -1;
+      const i = s.swing
+        ? Math.min(a.cels.length - 1, Math.floor((s.clock ?? 0) / a.hold))
+        : loopIndex(a, s.clock ?? 0);
+      return [6206, 6207, 6208].indexOf(a.cels[i]);
+    },
+    // `0x4728e0` tag 0 then tag 1 (`0x43e758`), one tick a cel throughout; the
+    // sound between them is `eyeballReacts`
     death: {
       cels: [
         6009, 6009, 6109, 6109, 6109, 6209, 6209, 6209, 6209, 6209, 6209, 6209,
+        6600, 6601, 6602, 6603, 6604, 6605, 6606, 6607, 6608, 6609,
       ],
       hold: 1,
-      from: "0x4728e0 tag 0",
+      from: "0x4728e0 tags 0 and 1",
     },
+    // `0x43e7b5` answers 1 the frame the burst ends: no body, and no
+    // `0x40cba0(pos, -13, 0)` either
+    linger: 0,
     health: 50,
     hitSound: FOE_SFX.eyeballHit,
     deathSound: FOE_SFX.eyeballDeath,
@@ -1349,9 +1891,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
     panel: { health: 50, plate: 13000, award: 80 },
     // `0x42f850(obj, 0)` at `0x43dd43`, and `obj+0xa = -5` on top of it
     floats: true,
+    gravity: 0,
     counts: true,
     bleeds: true,
-    vanishes: true,
     from: "0x435a30 / 0x43dd00 / 0x43dde0 / 0x43e8b0",
   },
   /**
@@ -1371,11 +1913,17 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * twelve cels as its walk carrying `dx 280` against the walk's 85, which over
    * a divisor of 13 is 323 pixels a second — faster than the player can run.
    *
-   * A blow is not certain to move it. `0x43fa7e` rolls `0x434540(3)` and does
-   * nothing at all on a 1; on a 2 or a 3 it rolls again for which of the three
-   * takes of `0x473098`, and plays 47, 48 or 49 to match the take it picked.
+   * A blow is mostly ANSWERED. `0x43fa7e` rolls `0x434540(3)`: on a 2 or a 3
+   * it rolls again for which of the three attacks of `0x473098` to hit back
+   * with, voiced 0x2f, 0x30 or 0x31 to match; on a 1 it plays 0x2c and slides
+   * back on `0x4731e0` tag 1. Either way the stand follows.
+   *
+   * Its body lies there for ten times the corpse global (`0x43fa6f`), and its
+   * own creator set that global to 80 (`0x435c73`): eight hundred frames.
    */
   initox: {
+    // `0x43f215` — obj+0x26, the shove weight
+    shove: 12,
     gait: {
       cels: [5090, 5091, 5092, 5093, 5094, 5095],
       hold: 1,
@@ -1384,33 +1932,57 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     // `mov word ptr [esi+0xe], 0xd` at `0x43f1fb`
     divisor: 13,
+    // the three attacks of `0x473098` (state 5, `0x43f789`) and the slide of
+    // `0x4731e0` tag 1 (state 6, `0x43f7a9`) — both states stand when their
+    // script ends, and the voice each is installed with is `oxReacts`
     flinch: [
       {
         cels: [5160, 5161, 5162, 5163, 5164],
         hold: 1,
         dx: [85, 85, 85, 85, 0],
+        resume: OX_STAND,
         from: "0x473098 tag 0",
       },
       {
         cels: [5170, 5171, 5172, 5173, 5174, 5175],
         hold: 1,
         dx: [85, 85, 105, 0, 0, 0],
+        resume: OX_STAND,
         from: "0x473098 tag 1",
       },
       {
         cels: [5120, 5121, 5122, 5123, 5124, 5123, 5122, 5121, 5120],
         hold: 1,
         dx: [85, 85, 105, 0, 0, 0, 0, 0, 0],
+        resume: OX_STAND,
         from: "0x473098 tag 2",
       },
+      {
+        cels: [
+          5155, 5154, 5153, 5152, 5151, 5150, 5147, 5146, 5145, 5144, 5143, 5142,
+          5141, 5140,
+        ],
+        hold: 1,
+        dx: [
+          -280, -280, -280, -280, -280, -280, -280, -85, -85, -85, -85, -85, -85,
+          0,
+        ],
+        dy: [0, 0, 0, 0, 0, 30, 40, 50, 60, 0, 0, 0, 0, 0],
+        resume: OX_STAND,
+        from: "0x4731e0 tag 1",
+      },
     ],
-    // `0x43fa8d`: `0x434540(3) - 1`, a flat one of the three
-    pick: () => Math.floor(Math.random() * 3),
+    // `0x43fa80`: `0x434540(3) > 1` answers with attack `0x434540(3) - 1`
+    // (`0x43fa8d`); a 1 is the slide (`0x43fae0`)
+    pick: () =>
+      Math.floor(random() * 3) > 0 ? Math.floor(random() * 3) : 3,
     death: {
       cels: [5190, 5190, 5191, 5192, 5193, 5194, 5194, 5195],
       hold: 2,
       from: "0x4732d8 tag 0",
     },
+    // `0x43fa6f` — `AI+0xe = 10 * [0x46b204]`, and `0x435c73` made that 80
+    linger: 800,
     lever: {
       dir: 1,
       anim: {
@@ -1418,12 +1990,22 @@ export const FOES: Readonly<Record<string, Foe>> = {
         hold: 1,
         from: "0x472ff0 tag 1",
       },
+      // `0x43f388` — the run to it, every frame a lit one stands in its rect
+      run: {
+        cels: [
+          5090, 5091, 5092, 5093, 5094, 5095, 5096, 5097, 5098, 5099, 5100, 5101,
+        ],
+        hold: 1,
+        dx: [280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280, 280],
+        from: "0x472ff0 tag 0",
+      },
       // `0x43f723` installs the reach and `0x43f73c` throws on the same frame
       at: 0,
-      // `cmp eax, 0x89` at `0x43f706` and again at `0x43f71c`
+      // `cmp eax, 0x89` at `0x43f706`, and again on the height at `0x43f71c`
       reachPx: 137,
-      // `0x43f6b3` — the one it makes as it goes
-      sound: [0x32],
+      reachY: 137,
+      // state 4 says nothing
+      sound: [],
       from: "0x43f6f4 / 0x43f70d / 0x43f73c",
     },
     health: 600,
@@ -1470,8 +2052,14 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * ({@link file://./props.ts}).
    */
   initkragg: {
-    // `0x473840` — one cel, five frames, and it does not travel
-    gait: { cels: [7040], hold: 5, from: "0x473840 tag 0" },
+    // `0x440b6d` — obj+0x26, the shove weight
+    shove: 40,
+    // `0x441d26` — the handler answers 1 below state 9 and 0 from there
+    noExchange: (e) => (e.script ?? 1) >= 9,
+    // `0x473840` — one cel, five frames, and it does not travel. Kind 1, the
+    // hover: where `0x4411e6` sends every flinch of tags 0..3 and `0x441608`
+    // the end of the flare's thrash
+    gait: { cels: [7040], hold: 5, kind: 1, tag: 0, from: "0x473840 tag 0" },
     // `mov word ptr [ecx+0xe], 0x32` at `0x441c1a`
     divisor: 50,
     flinch: [
@@ -1484,12 +2072,80 @@ export const FOES: Readonly<Record<string, Foe>> = {
         hold: 2,
         from: "0x473a48 tag 3",
       },
+      // `0x473a48` tag 4 — a light blow mid-dive, and `0x44123b` hands it to
+      // the dive's own recovery, `0x473950` tag 1
+      {
+        cels: [7044],
+        hold: 2,
+        resume: { cels: [7045], hold: 2, kind: 8, tag: 1, from: "0x473950 tag 1" },
+        from: "0x473a48 tag 4",
+      },
+      // `0x473ba8` tags 0..2 — the GROUND form's three takes (`0x441fa3`),
+      // kind 11, whose state (`0x4417a8`) stands it back on kind 12
+      ...[7104, 7105, 7106].map((cel, tag) => ({
+        cels: [cel],
+        hold: 3,
+        resume: KRAGG_STAND,
+        from: `0x473ba8 tag ${tag}`,
+      })),
+      // `0x441fef` — every fourth blow from behind: `0x473bd8` tag mirror + 2,
+      // the two-cel snap, and state 13 (`0x4418b6`) flips it as it ends
+      ...[
+        [7101, 7102],
+        [7103, 7102],
+      ].map((cels, m) => ({
+        cels,
+        hold: 4,
+        resume: { cels: [7102], hold: 1, kind: 13, tag: m + 2, from: `0x473bd8 tag ${m + 2}` },
+        from: `0x473bd8 tag ${m + 2}`,
+      })),
+      // `0x44200f` — ...and from in front it swings back, `0x473cc8` tag 1
+      {
+        cels: [7000],
+        hold: 1,
+        resume: {
+          cels: [7000, 7001, 7002, 7003, 7004, 7002, 7001, 7000],
+          hold: 1,
+          kind: 15,
+          tag: 1,
+          from: "0x473cc8 tag 1",
+        },
+        from: "0x473cc8 tag 1",
+      },
     ],
-    // `0x441ea4` / `0x441e67`: the threshold is 0x2d, and under it the three are
-    // picked with `0x434540(3) - 1`
-    pick: ({ damage }) => (damage >= 45 ? 3 : Math.floor(Math.random() * 3)),
-    // `0x473b60` tag 0, and tag 1 carries `dy -150` twice as it goes up
-    death: { cels: [7033, 7034, 7035, 7036], hold: 1, from: "0x473b60 tag 0" },
+    /**
+     * `0x441e5b` in the air: a blow of 0x2d or more is tag 3 and one under it
+     * is `0x434540(3) - 1` — except mid-dive (`obj+0x18 == 8`, `0x441e60`),
+     * where under 0x2d is tag 4. On the ground, `0x441ef0`: `[0x473de4]`
+     * counts every blow (`0x441f44`), the first three take `0x473ba8` at
+     * `0x434540(3) - 1`, and the fourth resets the count and either snaps it
+     * round — the player behind it, `0x441fed` — or swings.
+     */
+    pick: ({ damage, facingAway }, e) => {
+      if (e.rallied) {
+        kraggGroundBlows += 1;
+        if (kraggGroundBlows < 4) return 5 + Math.floor(random() * 3);
+        kraggGroundBlows = 0;
+        return facingAway ? ((e.facing ?? 1) > 0 ? 8 : 9) : 10;
+      }
+      if (e.script === 8) return damage < 0x2d ? 4 : 3;
+      return damage >= 0x2d ? 3 : Math.floor(random() * 3);
+    },
+    /**
+     * `0x441f5f` — the GROUND form's death, `0x473d38`, kind 16: tag 0's eight
+     * cels, and `0x441a42` hands to tag 2's three, which is held for good —
+     * state 16 never answers 1, so the body is never removed.
+     */
+    death: {
+      cels: [7110, 7111, 7112, 7113, 7114, 7112, 7113, 7114, 7115, 7116, 7117],
+      hold: 3,
+      from: "0x473d38 tags 0, 2",
+    },
+    linger: Infinity,
+    // `0x441f7d`
+    deathSound: FOE_SFX.kraggDeath,
+    // `0x440aff` holds `obj+0xc` to ±40 in the brain, so the closing stride builds
+    accrues: true,
     /**
      * Its state machine, as far as `0x440ab0`'s first two states carry it.
      *
@@ -1576,18 +2232,20 @@ export const FOES: Readonly<Record<string, Foe>> = {
     hitSound: FOE_SFX.kraggHit,
     // `0x440acf` claims the bar with 0x3332 and 0x3e8; nothing pays for it
     panel: { health: 1000, plate: 13106, award: 0 },
-    // `0x42f850(obj, 0)` at `0x441c6d`
+    // `0x42f850(obj, 0)` at `0x441c6d` — until {@link Foe.rallies}' fall
     floats: true,
+    // `0x441c92` — `0x42f7f0(obj, 0.8f)`, through the setter's negative scale
+    restitution: -0.8,
     counts: true,
     bleeds: true,
-    vanishes: true,
     /**
      * `0x441d30` — asked only after `0x441cf0` has thrown out its own shots
      * (`0x430ee0` against `[0x472568]`) and a strength of zero, and only while
      * its state is under 9: from 9 up every blow goes to `0x441ef0`, where
      * states 9..11 take nothing and 12 up take a flat `0x46` for any negative
-     * strength. {@link strikeFoe} does not carry that gate, so on this page a
-     * −9 reaches this entry in any state. The arm costs it no health: it plays `0x13`, throws a spark, installs `0x473a88` and returns
+     * strength. That gate is `kraggGate` in {@link file://./brains/kragg.ts},
+     * which {@link strikeFoe} asks before it reads this entry, so a −9 reaches
+     * it only out of states 1..8. The arm costs it no health: it plays `0x13`, throws a spark, installs `0x473a88` and returns
      * at `0x441d94` before any damage is computed. `0x473a88` is state 9, and
      * state 9 is the whole tactic of level eight — see `kraggReacts` in
      * {@link file://./brains/kragg.ts}.
@@ -1622,9 +2280,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
    *
    * It is furniture you punch, and it holds exactly four cans. `0x43b6ab` sorts
    * the blow into three: under 30 it rocks on 8501/8502 and nothing else; from 30
-   * to 75 it rocks harder and counts, and every third counted blow pops a can
-   * (`0x43b6f5`); over 75 it bursts through 8550..8558 and throws **all** the cans
-   * it has left at once (`0x43b74f`). Weak hits still count toward the next one.
+   * to 75 it rocks harder, and pops a can if this is at least the third blow
+   * since the last one (`0x43b6f5`); over 75 it bursts through 8550..8558 and
+   * throws **all** the cans it has left at once (`0x43b74f`). Weak hits count
+   * toward the next can but never let one go. A blow landing while it still
+   * rocks is not taken at all (`0x43b655`).
    *
    * **What stops it is its art, not a number.** It has no health word at all: cels
    * 8500..8504 carry a body box and 8505 — the emptied machine — does not, so
@@ -1640,9 +2300,17 @@ export const FOES: Readonly<Record<string, Foe>> = {
     gait: { cels: [8500], hold: 1, dx: [0], from: "0x474e10 tag 0" },
     // `0x43b51b`: forty-five, and it never moves anyway
     divisor: 45,
+    // kind 1 on the two rocks is what `0x43b655` reads: a machine already
+    // rocking takes no blow at all (`cokeGate` in brains/coke.ts)
     flinch: [
-      { cels: [8501, 8502], hold: 1, from: "0x474e70 tag 0" },
-      { cels: [8501, 8502, 8504, 8504, 8503], hold: 1, from: "0x474e70 tag 2" },
+      { cels: [8501, 8502], hold: 1, kind: 1, tag: 0, from: "0x474e70 tag 0" },
+      {
+        cels: [8501, 8502, 8504, 8504, 8503],
+        hold: 1,
+        kind: 1,
+        tag: 2,
+        from: "0x474e70 tag 2",
+      },
       // 8505 is the emptied machine, and it carries no body box: once it is
       // showing, nothing can hit it again
       { cels: [8505], hold: 1, terminal: true, from: "0x474e10 tag 1" },
@@ -1656,15 +2324,20 @@ export const FOES: Readonly<Record<string, Foe>> = {
       },
     ],
     /**
-     * `0x43b6ab`'s three bands, with the fourth can as the end of it. Twelve is
-     * this page's arithmetic rather than the disc's — four cans at three counted
-     * blows each — because the engine keeps the can count and the blow count in
-     * its own context and this page keeps only the blows.
+     * `0x43b6ab`'s three bands: 75 or more bursts it (`0x43b6d3`), under 30 is
+     * the light rock (`0x43b6b1`), and a middle blow is the hard rock — unless
+     * it has just let the fourth can go, when `0x43b71a` shows the empty
+     * machine instead.
      */
-    pick: ({ damage, hits }) =>
-      damage >= 75 ? 3 : hits >= 12 ? 2 : damage < 30 ? 0 : 1,
-    /** `0x43b6f5` / `0x43b71a` / `0x43b6d3` — every third counted blow, four of them */
+    pick: ({ damage }, e) =>
+      damage >= 75 ? 3 : damage < 30 ? 0 : (e.shaken ?? 0) >= 4 ? 2 : 1,
+    /** `0x43b6f5` / `0x43b71a` / `0x43b6d3` — a can once `AI+2` passes two, four of them */
     shakes: { counts: 30, every: 3, holds: 4, bursts: 75, from: "0x43b6ab" },
+    // `0x436682` writes `obj+0x10` as the floor under its x (`0x40bbd0`) less
+    // cel 8500's foot at the record's point — whatever puts that foot ON the
+    // floor, so the machine is drawn exactly at its record's point and the
+    // mover never moves it. A rooted class here is never moved either, which
+    // is the same thing, so no offset is carried.
     rooted: true,
     health: Infinity,
     hitSound: FOE_SFX.cokeHit,
@@ -1694,10 +2367,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
    *
    * It has **no name plate and no bar** (`0x40d1c0` is never called from any of
    * its functions) and it is **not in the census** (`0x42f870` likewise), so six
-   * dogs in WOODS change nobody's quota — but it pays 200 (`0x4551f7`), which is
-   * more than the thrower's 50.
+   * dogs in WOODS change nobody's quota — but it pays 200 (`0x4551f7`).
    */
   initdog: {
+    // `0x454b3a` — obj+0x26, the shove weight
+    shove: 1,
     gait: {
       cels: [4800, 4801, 4802, 4803, 4804, 4805, 4806, 4807, 4808, 4809],
       hold: 2,
@@ -1707,8 +2381,21 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x454b20`: the lowest in the chapter after the rat's seven
     divisor: 10,
     // `0x4781f8` — ONE cel held four frames, and no pick behind it: `0x4551c3`
-    // tests the health and nothing else
-    flinch: [{ cels: [4820], hold: 4, from: "0x4781f8 tag 0" }],
+    // tests the health and nothing else. When it ends, `0x454ff3` — kind 7's
+    // own case — flips the dog and charges, which the brain's `case 7` does
+    flinch: [
+      {
+        cels: [4820],
+        hold: 4,
+        kind: 7,
+        tag: 0,
+        resume: { cels: [4820], hold: 1, kind: 7, tag: 0, from: "0x454ff3" },
+        from: "0x4781f8 tag 0",
+      },
+    ],
+    // `0x454b40` — `0x42f7f0(obj, 0.3f)` through the −8192 scale: a wall hands
+    // the dog back −0.3 of its speed, which turns a charge round (`0x454f53`)
+    restitution: -0.3,
     death: {
       cels: [4850, 4851, 4852, 4853, 4854, 4855],
       hold: 1,
@@ -1727,14 +2414,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * as it catches: `0x4550eb` is `0x40ef30(0x4a7910, 0x18, point)`, out of
      * the PLAYER's bank rather than the chapter's. Then `0x478208` tag 0, six
      * cels, and none of them carries a strike box either. `0x478208` is the
-     * dog's DEATH, and the arm pays the death's 200 as well (`0x455115`); this
-     * entry is not `fatal` and pays nothing, so the dog here gets up again.
+     * dog's DEATH, 0x18 is its death sound, and the arm pays the death's 200
+     * as well (`0x455115`) — so a flame kills a dog outright, whatever its
+     * health, and pays for it once.
      */
-    burns: {
-      anim: { cels: [4850, 4851, 4852, 4853, 4854, 4855], hold: 1, from: "0x478208 tag 0" },
-      sound: 0x18,
-      from: "0x4550d3",
-    },
+    burns: { dies: true, from: "0x4550d3" },
+    // `0x454b4b`: ledges, and no floor scan — see {@link Foe.span}
+    span: { reach: 0, platforms: true },
     from: "0x450f60 / 0x454b00 / 0x454be0 / 0x4550b0",
   },
   /**
@@ -1754,6 +2440,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * a heavy blow, because there is no fourth flinch to knock it into.
    */
   initwerec: {
+    // `0x45233c` — obj+0x26, the shove weight
+    shove: 8,
     gait: {
       cels: [5090, 5091, 5092, 5093, 5094, 5095],
       hold: 2,
@@ -1762,11 +2450,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     divisor: 20,
     // 0x477a48, three tags of one cel each, held four frames — the same shape as
-    // the punk's 0x4774f8
+    // the punk's 0x4774f8 — and all three end in the stance (`0x452898`)
     flinch: [
-      { cels: [6040], hold: 4, from: "0x477a48 tag 0" },
-      { cels: [6041], hold: 4, from: "0x477a48 tag 1" },
-      { cels: [6042], hold: 4, from: "0x477a48 tag 2" },
+      { cels: [6040], hold: 4, resume: WEREC_STANCE, from: "0x477a48 tag 0" },
+      { cels: [6041], hold: 4, resume: WEREC_STANCE, from: "0x477a48 tag 1" },
+      { cels: [6042], hold: 4, resume: WEREC_STANCE, from: "0x477a48 tag 2" },
     ],
     // 0x452a87..0x452ae3, and the punk's 0x44f21e is the same four comparisons
     pick: ({ dy, facingAway }) =>
@@ -1781,8 +2469,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
     hitSound: FOE_SFX.punkHit,
     // `0x452a18` — and it is the punk's death sound too
     deathSound: FOE_SFX.wereaDeath,
-    // `0x452420`: the bar is claimed with plate 0x32cc and `obj+0x3c` is 0x32
-    panel: { health: 180, plate: 13004, award: 50 },
+    // `0x452420`: the bar is claimed with plate 0x32cc. What a death pays is
+    // `0x40d450(0x104)`, and both deaths pay it — `0x452a60` out of the hit
+    // handler and `0x452737` at the end of the burn. (`obj+0x3c`'s 0x32 is not
+    // the award.)
+    panel: { health: 180, plate: 13004, award: 260 },
     counts: true,
     bleeds: true,
     vanishes: true,
@@ -1796,8 +2487,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
     burns: {
       anim: { cels: [6040], hold: 5, from: "0x477a68 tag 0" },
       fatal: true,
+      // `0x452731` — the burn's death lies 200 frames, not `[0x46b204]`'s
+      linger: 0xc8,
       from: "0x45296e",
     },
+    // `0x452349` and `0x45235b` — see {@link Foe.span}
+    span: { reach: 50, platforms: true },
     from: "0x450bf0 / 0x452310 / 0x4523d0 / 0x452960",
   },
   /**
@@ -1836,7 +2531,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * It is also immune to its own kind and to one other (`0x4547e1` and
    * `0x454804` filter the blow by its owner's class), it carries a drag and a
    * restitution nothing else in the chapter has (`0x45436a`, `0x454378`), and it
-   * pays no award of its own — the punk it hatches carries the 300.
+   * pays 300 as it falls (`0x454873`) — the punk it hatches pays its own 220.
    */
   initwered: {
     gait: {
@@ -1849,41 +2544,79 @@ export const FOES: Readonly<Record<string, Foe>> = {
     /**
      * 0x477ba0, its four tags run together: it falls (4890, 4891), the punk comes
      * out of it (4900, whose record carries dx 190 and dy −140 — the only lift in
-     * either class), and the CHOPPER sinks (4905..4911).
+     * either class), the wreck lies on 4904 (tag 2, one cel that `0x4546f7`
+     * holds for `0x434540(0x4b) + 0x32` frames — `wered.ts`'s reaction holds
+     * it here), and the CHOPPER sinks (tag 3: 4905 twice, then 4906..4911).
      */
     death: {
       cels: [
-        4890, 4891, 4900, 4901, 4902, 4903, 4904, 4905, 4906, 4907, 4908, 4909,
-        4910, 4911,
+        4890, 4891, 4900, 4901, 4902, 4903, 4904, 4904, 4905, 4905, 4906, 4907,
+        4908, 4909, 4910, 4911,
       ],
       hold: 2,
       from: "0x477ba0 tags 0..3",
     },
-    hatches: { kind: "initwerea", afterCels: 2, from: "0x454690" },
+    // `0x454759` — the object goes the frame the sink ends: no corpse, and no
+    // `0x40cba0(pos, -13, 0)`, so no green ball either
+    linger: 0,
+    hatches: {
+      kind: "initwerea",
+      afterCels: 2,
+      from: "0x454690",
+      /**
+       * `0x477488` tag 0, the punk's kind 9: FANG coming off the bike (4892..4895,
+       * no stride). State 9 (`0x44edee`) installs `0x477580` tag 1 when it ends
+       * and tag 1's end (`0x44ee65`) installs tag 2, the get-up.
+       */
+      leap: {
+        vx: 30,
+        vy: -50,
+        from: "0x450b11, 0x450b15",
+        anim: {
+          cels: [4892, 4893, 4894, 4895],
+          hold: 2,
+          kind: 9,
+          tag: 0,
+          from: "0x477488 tag 0",
+          then: WEREA_FLOORED,
+        },
+      },
+    },
     /** `0x477ba0` tag 1's first frame — the same frame FANG is hatched on */
     deathThrow: { dx: 190, dy: -140, afterCels: 2, from: "0x477ba0 tag 1" },
     /** `0x45436a`: `0x42f7a0(obj, 0.05f)` — 409, against everything else's 5734 */
     drag: 409,
+    /**
+     * `0x454378`: `0x42f7f0(obj, 0.3f)`, and `0x42f825` multiplies it by the
+     * float at `0x46a10c`, −8192 — so a wall hands back three tenths of the
+     * speed, turned round
+     */
+    restitution: -0.3,
     /** `0x454473` — its think clamps `obj+0xc` to ±0x1e before it does anything */
     speedCap: 30,
     oneHitEach: true,
+    // `0x454880`/`0x45488a` — its handler answers 0, so `0x43043b` never runs
+    noExchange: true,
     health: 3,
     // `0x454828` — one index, and no random pick behind it
     hitSound: FOE_SFX.weredHit,
     deathSound: FOE_SFX.weredDeath,
+    // `0x454873` — `0x40d450(0x12c)` on the blow that empties it: three hundred
+    // for the bike, and the FANG that climbs out pays its own 220 later
+    award: 0x12c,
     // `0x454465`: plate 0x32cb, bar scaled to 0x64, and `obj+0x3c` is never written
-    panel: { health: 100, plate: 13003, award: 0 },
+    panel: { health: 100, plate: 13003, award: 0x12c },
     counts: true,
     bleeds: true,
-    vanishes: true,
     /**
-     * `0x4547b3` — the odd one out of the creature arms. It lights itself, writes 1
-     * into `AI+0x14` and zeroes the caller's own word, and then **falls
-     * through into the ordinary damage arithmetic** instead of answering 1.
-     * So a CHOPPER is the one thing that both catches fire and takes the hit, and
-     * it installs no script of its own while it burns.
+     * `0x4547b3` — the odd one out of the creature arms. It lights itself,
+     * writes 1 into `AI+0x14` and **zeroes `AI+0`, the health** (`0x4547d5`),
+     * then falls through — where `0x4547f2` throws the −9 away as a negative
+     * strength. So the flame itself takes nothing off and plays nothing, and
+     * the NEXT blow of any size, `dec`ed to −1, is the one that kills it.
+     * {@link file://./brains/wered.ts}'s gate does the zeroing.
      */
-    burns: { andHurts: true, from: "0x4547b3" },
+    burns: { from: "0x4547b3" },
     from: "0x450cb0 / 0x454330 / 0x454410 / 0x454790",
   },
   /**
@@ -1924,6 +2657,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * would really go is in the AI nothing has read.
    */
   initrat: {
+    bornWeightless: true,
+    // `0x44dfa0`: its class init's floor offset, `obj+0x10`
+    floor: -13,
     gait: {
       cels: [3025, 3024, 3023, 3022, 3021, 3020],
       hold: 1,
@@ -1948,25 +2684,34 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * The mailbox. Creator `0x451110`, class `0x44fd40`, hit `0x44fe80`.
    *
    * Furniture with a hit handler and two outcomes, both of them by SPEED. A blow
-   * under 10 does nothing at all. Between 10 and 54 — a punch, at 47 — it plays
+   * under 10 installs nothing. Between 10 and 54 — a punch, at 47 — it plays
    * cel 2411 and then springs back to 2410: a dent that does not last. At 55 or
    * over — a kick, at 55 — it plays 2410, 2411, 2412, 2413 and **stays on 2413**,
    * which is the mailbox lying on its side; `0x44fe10` sets `obj+0x18 = 2` when
-   * that animation ends and the hit handler will not touch it again.
+   * that animation ends and no blow installs anything on it again.
+   *
+   * What the handler does NOT skip, in any of those cases, is the rest: sound 5
+   * (`0x44feea`) and `return 1`, so the collision solver still hands it the
+   * blow's momentum. A weak tap slides it, and a mailbox already on its side
+   * goes skidding along the street every time it is kicked.
    *
    * It is also one of the eleven hit handlers with a −9 arm, and the only one
    * on furniture: `0x44fe89` tests the code before the speed and answers it with
    * `0x44ff20(self, 1, 0)` — a flame that starts at its going-out stage — and
-   * `return 1`, so no dent and no sound. This entry has no `burns`, so that arm
-   * is not on this page. Only STREETS places a mailbox, and nothing there
-   * carries a −9 in the original either: level 1's flares are `0x64` and the
-   * flamer is CITY's and WOODS'.
+   * `return 1`, so no dent and no sound — see {@link Foe.burns}. The test comes
+   * before the `obj+0x18 == 2` one, so a toppled mailbox catches as well. Only
+   * STREETS places a mailbox, and nothing there carries a −9 in the original:
+   * level 1's flares are `0x64` and the flamer is CITY's and WOODS'. Carrying
+   * the flamer in (`?weapon=10`) does not reach it either: STREETS' book has
+   * neither the stream's 9500s — whose strike boxes are the only thing a
+   * stream hits with — nor the flame's 9600s, so the stream there touches
+   * nothing. The entry is the handler's, for a book that would.
    *
    * Anchored, those four cels are a topple: the anchor sits near the top of the
    * box in all of them, the art swings from 93 pixels below it to 58, and the
-   * width spreads from `-38..35` to `-55..46`. Its divisor is 7 — the heaviest in
-   * the chapter — and nothing in its own scripts moves it, so the fall is all in
-   * the art.
+   * width spreads from `-38..35` to `-55..46`. Its divisor is 7 — the lightest
+   * mass the solver weighs anything in the chapter with — and nothing in its own
+   * scripts moves it, so the fall is all in the art.
    */
   initmailbox: {
     gait: { cels: [2410], hold: 1, from: "0x4787a8 tag 1 frame 0" },
@@ -1976,17 +2721,37 @@ export const FOES: Readonly<Record<string, Foe>> = {
       {
         cels: [2410, 2411, 2412, 2413],
         hold: 1,
-        terminal: true,
+        resume: MAILBOX_DOWN,
         from: "0x4787a8 tag 1",
       },
+      // a blow to one already on its side: no script (`0x44fec2` jumps past
+      // the install), so it stays on 2413 — but the sound still plays and the
+      // handler still answers 1, so the solver knocks it along the street
+      { cels: [2413], hold: 1, resume: MAILBOX_DOWN, from: "0x44fec2" },
+      // ...and one under 10 to one standing: likewise nothing installed
+      { cels: [2410], hold: 1, from: "0x44fec8" },
     ],
-    // 0x44fec4: under 10 does nothing at all, under 55 dents, else crumples
-    pick: ({ damage }) => (damage >= 55 ? 1 : 0),
+    /**
+     * `0x44febd` asks the state first — on its side (`obj+0x18 == 2`) no blow
+     * installs anything — and then the speed: under 10 nothing (`0x44fec8`),
+     * under 55 the dent, 55 or over the topple (`0x44fece`).
+     */
+    pick: ({ damage }, e) =>
+      e.script === 2 ? 2 : damage < 0xa ? 3 : damage >= 0x37 ? 1 : 0,
+    /**
+     * No `floor`: `0x451196` computes the offset per record — the region's
+     * floor under its point (`0x40bbd0`) less the point less cel 2410's drawn
+     * extent (`height - posY`, 93) — so that it stands on the floor it was put
+     * over. For STREETS' two that is −1 (x3522: floor 1341, point 1249) and 0
+     * (x6906: floor 1324, point 1231), which is the page's own zero to a pixel.
+     */
     flies: true,
     health: Infinity,
     // `0x44feea` — the same sound whether it dents or goes over
     hitSound: FOE_SFX.mailbox,
     counts: false,
+    // `0x44fe98`: `0x44ff20(self, 1, 0)`, and `return 1` before the speed
+    burns: { late: true, from: "0x44fe89" },
     from: "0x451110 / 0x44fd40 / 0x44fe80",
   },
   /**
@@ -2016,9 +2781,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * ready to be turned three more times — and the water is its own object twenty
    * five pixels to the side which sprays once and is removed. The jet cels grow
    * from 35x17 to 510x96 across ten frames and carry no collision box at all,
-   * which is the format's way of saying nothing can touch it; six of them do carry
-   * a STRIKE box, so in the original the water knocks things about, and that is
-   * not wired here.
+   * which is the format's way of saying nothing can touch it. Six of them carry
+   * a STRIKE box and blow pairs of −74 and −125, and none of it lands: the water
+   * is born with the allocator's strength of zero (`0x42f5af`), nothing in its
+   * class writes `obj+0x1a`, and `0x430367` passes over a hitter whose strength
+   * is zero. The jet is scenery.
    *
    * It also refuses to be hit by another hydrant: `0x44fc40` walks its own class
    * list looking for the striker, which is the only guard of its kind found so
@@ -2027,11 +2794,16 @@ export const FOES: Readonly<Record<string, Foe>> = {
   inithydrant: {
     gait: { cels: [9700], hold: 1, from: "0x477d30 tag 0" },
     divisor: 10,
+    // tags 1 and 2 HOLD — see {@link HYDRANT_TURNED}; tag 3's end is the burst
+    // (`0x44fb55`), which puts the hydrant back on tag 0
     flinch: [
-      { cels: [9701], hold: 1, from: "0x477d30 tag 1" },
-      { cels: [9702], hold: 1, from: "0x477d30 tag 2" },
+      { cels: [9701], hold: 1, resume: HYDRANT_TURNED[0], from: "0x477d30 tag 1" },
+      { cels: [9702], hold: 1, resume: HYDRANT_TURNED[1], from: "0x477d30 tag 2" },
       { cels: [9703], hold: 1, from: "0x477d30 tag 3" },
     ],
+    // `0x44faa0` — `0x42f850(obj, 0)` in its class init: no weight at all, and
+    // `0x44fb43` pins it to its record's point every frame anyway
+    gravity: 0,
     progressive: true,
     rooted: true,
     burst: {
@@ -2047,6 +2819,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x44fb77",
     },
     facesByParam: true,
+    // `0x44fbe2`, `0x44fbfc`, `0x44fc0d`, `0x44fc21`, `0x44fc35` — every way out
+    // answers 0, so `0x43043b` never runs
+    noExchange: true,
     health: Infinity,
     counts: false,
     from: "0x44fc70 / 0x44fa60 / 0x44fb20 / 0x44fbd0",
@@ -2073,6 +2848,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * (`0x4203b3`), then a patrol, a flinch and a death.
    */
   initzomb: {
+    // `0x41ef2e` — obj+0x26, the shove weight
+    shove: 8,
     // `0x470110` tag 0 — six cels at TWO frames each, dx 65
     gait: {
       cels: [1800, 1801, 1802, 1803, 1804, 1805],
@@ -2082,14 +2859,36 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     // `0x420280` — the slowest divisor in the game outside a boss
     divisor: 10,
-    // `0x470248` tags 0, 1 and 2 at FOUR frames a cel, rolled `0x434540(3)`
+    // `0x470248`, four one-cel tags at FOUR frames a cel, and every one of
+    // them ends in kind 2 tag 1 — the arms held up (`0x4207e7`)
     flinch: [
-      { cels: [1860], hold: 4, from: "0x470248 tag 0" },
-      { cels: [1861], hold: 4, from: "0x470248 tag 1" },
-      { cels: [1862], hold: 4, from: "0x470248 tag 2" },
+      { cels: [1860], hold: 4, resume: ZOMB_GUARD, from: "0x470248 tag 0" },
+      { cels: [1861], hold: 4, resume: ZOMB_GUARD, from: "0x470248 tag 1" },
+      { cels: [1862], hold: 4, resume: ZOMB_GUARD, from: "0x470248 tag 2" },
+      { cels: [1846], hold: 4, resume: ZOMB_GUARD, from: "0x470248 tag 3" },
     ],
-    // `0x470270` tag 0 — three cels at three frames each
-    death: { cels: [1863, 1864, 1865], hold: 3, from: "0x470270 tag 0" },
+    /**
+     * `0x420ae1` — hit in the claw (state 5), the raise (3) or the held guard
+     * (2 tag 1) it keeps the arms up: tag 3, cel 1846. Anywhere else
+     * `0x420afe` rolls `0x434540(3) - 1` for one of the other three.
+     */
+    pick: (_blow, e) =>
+      e.script === 5 || e.script === 3 || (e.script === 2 && e.tag === 1)
+        ? 3
+        : Math.floor(random() * 3),
+    /**
+     * `0x470270` — tag 0, three cels at three frames, and on the frame it ends
+     * `0x420832` puts tag 1 on, 1866..1868, which is the corpse. `AI+0x2e`
+     * (`[0x46b204]`, copied at `0x420ac7`) counts down only in tag 1
+     * (`0x420883`), from its first frame, and the body goes the frame after
+     * it runs out: tag 1's own nine frames and the rest on its last cel.
+     */
+    death: {
+      cels: [1863, 1864, 1865, 1866, 1867, 1868],
+      hold: 3,
+      from: "0x470270 tags 0 and 1",
+    },
+    lingerPlus: 1 - 9,
     // `0x4203b3`: it stands on the creator's own single cel until the player's
     // point is inside its record's rect, and then `0x470088` takes over
     wake: { cel: 1800, from: "0x4203a6 / 0x420294" },
@@ -2100,11 +2899,18 @@ export const FOES: Readonly<Record<string, Foe>> = {
     health: 200,
     hitSound: FOE_SFX.zombHit,
     deathSound: FOE_SFX.zombDeath,
-    // `0x420abf` pays 0x136
-    panel: { health: 200, plate: 13200, award: 310 },
+    /**
+     * `0x420abf` pays 0x136. The plate is NOT one number: `0x420388` claims
+     * the bar with `AI+0x32`, which the creator draws as `0x3489 +
+     * 0x434540(9)` (`0x41ef61`, and `0x434540(n)` is 1..n), so every zombie
+     * wears one of 13450..13458, drawn as it is made.
+     */
+    panel: { health: 200, plate: 13450, award: 310, plates: 9 },
     counts: true,
     bleeds: true,
     vanishes: true,
+    // `0x42029a` and `0x4202a0` — see {@link Foe.span}
+    span: { reach: 100, platforms: true },
     from: "0x41eee0 / 0x420260 / 0x420330 / 0x4209f0",
   },
   /**
@@ -2137,13 +2943,21 @@ export const FOES: Readonly<Record<string, Foe>> = {
     wake: { cel: 2206, from: "0x422e45 / 0x422f50" },
     flinch: [{ cels: [2205], hold: 4, from: "0x46f140 tag 0" }],
     death: { cels: [2205, 2206], hold: 4, from: "0x46f140 tag 0" },
+    // `0x4232a4` — the death's `0x42f850(obj, 1.0f)`; alive it floats on the
+    // creator's zero (`0x422e5f`), which {@link Foe.floats} already says
+    gravity: 10,
     health: 1,
     frail: true,
     hitSound: FOE_SFX.batDeath,
-    panel: { health: 1, plate: 13201, award: 70 },
+    // no plate: nothing of the class calls `0x40d1c0`, so a bat never claims
+    // the panel's bar. It pays 70 (`0x40d450(0x46)`, as `0x42640c` does too)
+    award: 70,
     counts: false,
+    // `0x4232b2` — the body goes the frame it lands, which `batReacts` sees,
+    // and not before
+    linger: Infinity,
+    // ...and state 4 never calls `0x40cba0(pos, -13, 0)`: no green ball
     bleeds: true,
-    vanishes: true,
     from: "0x41ead0 / 0x422e10 / 0x422ef0 / 0x4232f0",
   },
   /**
@@ -2155,6 +2969,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * first half of the cycle. It swallows a blow strength of exactly −4
    * (`0x422b52`), which is the second class in the game with a code in its
    * ignore test.
+   *
+   * It leaves no body. When the death's eleven cels end, `0x422a7e` calls
+   * `0x422c60` — nine pieces and a blast, see `brains/ghengis.ts` — and the
+   * object is removed on the same frame.
    */
   initghengis: {
     gait: {
@@ -2164,12 +2982,17 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x46ee60 tag 0",
     },
     divisor: 13,
-    // `0x46eee0` tag 0, kind 4 — nine cels, one frame each
+    // `0x46eec8` tag 0, kind 8 — installed by `0x422c32` whenever a blow leaves
+    // health, and its second cel steps back. When it ends `0x422a25` rolls
+    // between the walk and the bull rush, which the brain's own case 8 does
+    // off the one-frame {@link GHENGIS_RALLY}
     flinch: [
       {
-        cels: [470, 471, 472, 473, 474, 475, 476, 477, 478],
-        hold: 1,
-        from: "0x46eee0 tag 0",
+        cels: [420, 421],
+        hold: 2,
+        dx: [0, -85],
+        resume: GHENGIS_RALLY,
+        from: "0x46eec8 tag 0",
       },
     ],
     // `0x46efe0` tag 0, kind 9 — and it changes row half way down
@@ -2178,15 +3001,20 @@ export const FOES: Readonly<Record<string, Foe>> = {
       hold: 1,
       from: "0x46efe0 tag 0",
     },
-    // `0x46ed80` tag 0 — one cel, and the think installs it before anything
-    wake: { cel: 420, from: "0x46ed80 tag 0" },
+    // `0x422a83` answers 1 as the burst goes out: no body, no green ball
+    linger: 0,
+    // `0x46ed70` tag 0 — cel 400, what the creator installs (`0x41eaae`);
+    // the stand, 420, is what the rect wakes it into
+    wake: { cel: 400, from: "0x46ed70 tag 0" },
     health: 200,
     hitSound: FOE_SFX.ghengisHit,
+    // `0x422bc7`: the killing blow plays the death sound alone
+    quietKill: true,
     deathSound: FOE_SFX.ghengisDeath,
-    panel: { health: 200, plate: 13202, award: 400 },
+    // `0x4226d8` claims the bar with plate 0x3393
+    panel: { health: 200, plate: 13203, award: 400 },
     counts: true,
     bleeds: true,
-    vanishes: true,
     from: "0x41ea20 / 0x4225f0 / 0x422680 / 0x422ad0",
   },
   /**
@@ -2200,6 +3028,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * over are authored in the animation rather than applied to it.
    */
   initskel: {
+    // `0x41edbe` — obj+0x26, the shove weight
+    shove: 8,
     gait: {
       cels: [1200, 1201, 1202, 1203, 1204, 1205],
       hold: 2,
@@ -2207,28 +3037,92 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x46fac0 tag 0",
     },
     divisor: 13,
-    // `0x46fcf0` tag 0, kind 6 — and its last record carries the throw
+    /**
+     * `0x46fd58`, kind 7, three frames a cel — the three takes — and
+     * `0x46fcf0`, kind 6, the knockdown. `0x423ab5`'s handler picks between
+     * them ({@link Foe.pick} below); the takes all end in kind 7's own roll
+     * for a leap, the knockdown in its get-up and then the walk.
+     */
     flinch: [
       {
-        cels: [1260, 1261, 1262, 1263, 1263, 1263, 1264, 1265],
+        cels: [1260],
+        hold: 3,
+        resume: skelFlinched(1260, 0),
+        from: "0x46fd58 tag 0",
+      },
+      {
+        cels: [1212, 1212],
+        hold: 3,
+        resume: skelFlinched(1212, 1),
+        from: "0x46fd58 tag 1",
+      },
+      {
+        cels: [1261, 1261],
+        hold: 3,
+        resume: skelFlinched(1261, 2),
+        from: "0x46fd58 tag 2",
+      },
+      /**
+       * `0x46fcf0` tag 0 — and cel 1265 carries `dx 170, dy −420`, pushed on
+       * both of its frames: the blow throws it. `0x42391d` then holds the last
+       * cel until `obj+0x2e` says it is back on the ground (the brain's
+       * reaction pins the clock for that), and tag 1 gets it up.
+       */
+      {
+        cels: [1260, 1261, 1262, 1263, 1263, 1263, 1264, 1265, 1265],
         hold: 2,
+        dx: [0, 0, 0, 0, 0, 0, 0, 170, 0],
+        dy: [0, 0, 0, 0, 0, 0, 0, -420, 0],
+        kind: 6,
+        tag: 0,
+        then: {
+          cels: [1266, 1267, 1268],
+          hold: 2,
+          kind: 6,
+          tag: 1,
+          from: "0x46fcf0 tag 1",
+        },
         from: "0x46fcf0 tag 0",
       },
     ],
-    // `0x46fd90` tag 0, kind 8, three frames a cel
+    /**
+     * `0x423a30`, after the subtraction: a blow of `0x3c` or more knocks it
+     * down (`0x423b41`). Anything less is a take, and `0x423b61` asks which
+     * side it came from — from the front tag 0; from behind `0x434540(2)`,
+     * tag 1 or 2, and `0x423b9a` takes a further **0x14** off the health,
+     * without asking whether that leaves any.
+     */
+    pick: ({ damage, facingAway }, e) => {
+      if (damage >= 0x3c) return 3;
+      if (!facingAway) return 0;
+      if (e.hp !== undefined) e.hp -= 0x14;
+      return random() < 0.5 ? 1 : 2;
+    },
+    /**
+     * `0x46fd90` tag 0, kind 8, three frames a cel and 1359 twice. `AI+0x2e`
+     * is seeded from `[0x46b204]` as the blow lands (`0x423b27`) and state 8
+     * spends it from the death's own first frame (`0x4239cf`), so the body
+     * goes the frame after it runs out, the script's thirty-three included.
+     */
     death: {
-      cels: [1350, 1351, 1352, 1353, 1354, 1355, 1356, 1357, 1358, 1359],
+      cels: [
+        1350, 1351, 1352, 1353, 1354, 1355, 1356, 1357, 1358, 1359, 1359,
+      ],
       hold: 3,
       from: "0x46fd90 tag 0",
     },
+    lingerPlus: 1 - 33,
     // `0x46fab0` tag 0 — the one cel the creator stands it on
     wake: { cel: 1200, from: "0x42340f / 0x46fab0 tag 0" },
     health: 200,
     hitSound: FOE_SFX.skelHit,
-    panel: { health: 200, plate: 13203, award: 450 },
+    // `0x42350d` claims the bar with plate 0x3392
+    panel: { health: 200, plate: 13202, award: 450 },
     counts: true,
     bleeds: true,
     vanishes: true,
+    // `0x42341b` and `0x423421` — see {@link Foe.span}
+    span: { reach: 200, platforms: true },
     from: "0x41ed70 / 0x4233e0 / 0x4234b0 / 0x423a30",
   },
   /**
@@ -2251,27 +3145,40 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x46fe20 tag 0",
     },
     divisor: 10,
-    // `0x46ff30` tag 0, kind 7 — and its second cel is held three frames
+    /**
+     * `0x46ff80`, kind 8 — one cel for four frames, 3100 or 3140 on
+     * `0x434540(2) - 1` (`0x4257eb`), and state 8 hands back to the stance
+     * (`0x4255d8`), which decides again at once.
+     */
     flinch: [
-      {
-        cels: [3120, 3121, 3121, 3121, 3122, 3123],
-        hold: 2,
-        from: "0x46ff30 tag 0",
-      },
+      { cels: [3100], hold: 4, resume: IGOR_STANCE, from: "0x46ff80 tag 0" },
+      { cels: [3140], hold: 4, resume: IGOR_STANCE, from: "0x46ff80 tag 1" },
     ],
-    // `0x46ff98` tag 1, kind 5
+    pick: () => Math.floor(random() * 2),
+    /**
+     * `0x46ffd8`, kind 9 — tag 0 at two frames a cel, then tag 1 holding 3145
+     * while `AI+0x2c` — `[0x46b204]`, copied at `0x4257d1` — runs out
+     * (`0x4255f1`): the body goes the frame after, once the fall has finished.
+     */
     death: {
       cels: [3140, 3141, 3142, 3143, 3144, 3145],
-      hold: 1,
-      from: "0x46ff98 tag 1",
+      hold: 2,
+      from: "0x46ffd8 tag 0",
     },
+    lingerPlus: 1,
     // `0x46fe10` tag 0 — one cel, which is what the class stands it on
     wake: { cel: 3100, from: "0x4251a7 / 0x46fe10 tag 0" },
     health: 200,
-    panel: { health: 200, plate: 13204, award: 350 },
+    // `0x42574f` on every blow, and `0x4257a6` as it dies
+    hitSound: FOE_SFX.igorHit,
+    deathSound: FOE_SFX.igorDeath,
+    // `0x425271` claims the bar with plate 0x3390
+    panel: { health: 200, plate: 13200, award: 350 },
     counts: true,
     bleeds: true,
     vanishes: true,
+    // `0x4251b4`, and no platform flag — see {@link Foe.span}
+    span: { reach: 20, platforms: false },
     from: "0x41ee40 / 0x425180 / 0x425230 / 0x4256d0",
   },
   /**
@@ -2291,6 +3198,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * what the level actually shows is the 3200s, and 2500 is a leftover.
    */
   initwraith: {
+    // `0x41ecec` — obj+0x26, the shove weight
+    shove: 4,
     // `0x46f6c8` tag 1 — nine cels, dx 20 falling to 10 half way through
     gait: {
       cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250],
@@ -2300,22 +3209,38 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     divisor: 10,
     floats: true,
-    // `0x46f8a8` tag 0, kind 8
+    /**
+     * `0x46f898` tag 0, kind 7 — one cel at four frames: the blow it survives
+     * (`0x4250fa`). State 7 halves both velocities under it (the brain's
+     * reaction) and decides as it ends ({@link WRAITH_FLINCHED}).
+     */
     flinch: [
       {
-        cels: [3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208],
-        hold: 2,
-        from: "0x46f8a8 tag 0",
+        cels: [3243],
+        hold: 4,
+        resume: WRAITH_FLINCHED,
+        from: "0x46f898 tag 0",
       },
     ],
-    // `0x46f898` tag 0, kind 7 — one cel at four frames, and that is all of it
-    death: { cels: [3243], hold: 4, from: "0x46f898 tag 0" },
-    // `0x46f6c8` tag 0 — the hover, which is the walk with its strides removed
-    wake: { cel: 3250, from: "0x46f6c8 tag 0" },
+    /**
+     * `0x46f8a8` tag 0, kind 8 — the nine cels of the dissolve, which is what
+     * `0x4250d9` installs on the blow that empties it. State 8 takes the named
+     * one away on the frame the script ends (`0x424ec5`), with the green ball
+     * (`0x424ee2`) and no body left lying.
+     */
+    death: {
+      cels: [3200, 3201, 3202, 3203, 3204, 3205, 3206, 3207, 3208],
+      hold: 2,
+      from: "0x46f8a8 tag 0",
+    },
+    linger: 0,
+    // `0x46f688` tag 0 — the statue the creator stands it on (`0x41ed5b`)
+    wake: { cel: 3260, from: "0x46f688 tag 0" },
     health: 700,
     hitSound: FOE_SFX.wraithHit,
     deathSound: FOE_SFX.wraithDeath,
-    panel: { health: 700, plate: 13205, award: 0 },
+    // `0x42484a` claims the bar with plate 0x3397
+    panel: { health: 700, plate: 13207, award: 0 },
     counts: true,
     bleeds: true,
     vanishes: true,
@@ -2430,7 +3355,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
      *                          else  -> tag 0, the throw
      * ```
      *
-     * So it commits on three in ten at the far band and always inside 170, and
+     * So it commits on eight in ten at the far band (`0x434540(10)` has to
+     * come up 3 or more) and always inside 170, and
      * then the sweep is thirteen in forty-two against the throw. The throw's
      * follow-through is kind 2, whose tag 1 carries dx -30, -20, -10 — the
      * recoil is authored into the animation rather than applied to it.
@@ -2481,13 +3407,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
     /**
      * `0x46f2f0` kind 3 — one cel at THREE frames, and which of the two is
      * `0x434540(2) - 1`. Index 2 is not a flinch at all: it is the VANISH,
-     * `0x46f308` kind 4, which `0x4264f0` sends it to for a blow big enough.
-     *
-     * Both of those were wrong here. The page had the death script's own
-     * first eight frames as the flinch and the VANISH as the death — see the
-     * kind table in {@link file://./brains/vpriest.ts}, which had it right all
-     * along: `0x46f308` is the state the bishop comes BACK from, and the one
-     * path in the whole function that answers 1 is kind 6.
+     * `0x46f308` kind 4, which `0x4264f0` sends it to when its health falls
+     * under half of `AI+6`. `0x46f308` is the state the bishop comes BACK
+     * from — on the re-form, {@link VPRIEST_REFORM} — and the one path in the
+     * whole function that answers 1 is kind 6.
      */
     flinch: [
       { cels: [2640], hold: 3, from: "0x46f2f0 tag 0" },
@@ -2498,20 +3421,26 @@ export const FOES: Readonly<Record<string, Foe>> = {
           2681,
         ],
         hold: 1,
+        resume: VPRIEST_REFORM,
         from: "0x46f308 tag 0",
       },
     ],
     /**
-     * `0x426620` / `0x426633` — half of what it last took, and the bar rises
-     * with every blow that clears it. Under that, one of the two single cels.
+     * `0x426593`…`0x426633` — and it is the HEALTH that is weighed, not the
+     * blow. `di` is reloaded from `AI+0` after the subtraction, `0x426620`
+     * compares it with half of `AI+6` (seeded `0x40e300(0x4b0)` at
+     * `0x41ebf4`), and under that it vanishes and `AI+6` becomes what is
+     * left. So it goes under six hundred, then under half of whatever it had
+     * then, and so on down. Otherwise one of the two single cels.
      */
-    pick: ({ damage }, e) => {
+    pick: (_blow, e) => {
       const bar = e.nerve ?? e.max;
-      if (damage >= bar / 2) {
-        e.nerve = damage;
+      const left = e.hp ?? 0;
+      if (Math.trunc(bar / 2) > left) {
+        e.nerve = left;
         return 2;
       }
-      return Math.floor(Math.random() * 2);
+      return Math.floor(random() * 2);
     },
     /**
      * `0x46f3d8` kind 6 — sixteen frames of 2640/2641 guttering and then the
@@ -2528,13 +3457,21 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     // `0x46f160` tag 0 — the one cel the creator stands it on
     wake: { cel: 2500, from: "0x425be3 / 0x46f160 tag 0" },
+    /**
+     * State 6 takes it away on the frame the script ends (`0x426308`), and
+     * with no `0x40cba0(point, -13, 0)` in front of it: no body, and no
+     * green ball.
+     */
+    linger: 0,
     health: 1200,
     hitSound: FOE_SFX.priestHit,
     deathSound: FOE_SFX.priestDeath,
-    panel: { health: 1200, plate: 13206, award: 0 },
+    // `0x425cd3` claims the bar with plate 0x3394
+    panel: { health: 1200, plate: 13204, award: 0 },
     counts: true,
     bleeds: true,
-    vanishes: true,
+    // `0x41ebbe`, in the creator, and no platform flag — see {@link Foe.span}
+    span: { reach: 200, platforms: false },
     from: "0x41eb70 / 0x425bc0 / 0x425c90 / 0x4264f0",
   },
   /**
@@ -2555,6 +3492,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * a cop killed off the ground gets `0x46c8f0` tag 3 instead of `0x46c9a8`.
    */
   initcop: {
+    // `0x413f3a` — obj+0x26, the shove weight
+    shove: 3,
     /**
      * ...and it works the LEVERS. `0x414664` is inside the cop's own think: it
      * walks to a switch, and inside ten pixels calls `0x412550(point, 0)` —
@@ -2577,25 +3516,41 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x46c720 tag 0",
     },
     divisor: 13,
-    // `0x46c828` tag 0, kind 8
-    flinch: [{ cels: [2250, 2251], hold: 2, from: "0x46c828 tag 0" }],
-    // `0x46c9a8` tag 0, kind 11 — the one it gets standing up
+    // `0x46c828` tag 0, kind 8 — and state 8 (`0x41440e`) chooses what follows,
+    // so the machine is handed its own kind 8 to choose from
+    flinch: [
+      {
+        cels: [2250, 2251],
+        hold: 2,
+        resume: { cels: [2251], hold: 1, kind: 8, tag: 0, from: "0x41440e" },
+        from: "0x46c828 tag 0",
+      },
+    ],
+    /**
+     * `0x46c9a8` tag 0, kind 11 — the one it gets standing up. State 11
+     * (`0x41469c`) removes the body the first frame the script's index reaches
+     * 3, with lab.snd 0xd, the green ball (`0x40cba0(point, -0xd)`) and a
+     * splash of 0x78: three cels, and no corpse.
+     */
     death: {
-      cels: [2190, 2191, 2192, 2193, 2194],
+      cels: [2190, 2191, 2192],
       hold: 2,
       from: "0x46c9a8 tag 0",
     },
+    linger: 0,
     // `0x413f40` — the cel the creator stands it on
     wake: { cel: 2100, from: "0x413f40 / 0x46c628 tag 0" },
     // `0x4116b5` — `0x40e300(0xfa)`
     health: 250,
     hitSound: FOE_SFX.copHit,
     deathSound: FOE_SFX.copDeath,
-    // `0x41490d` pays 0x226
-    panel: { health: 250, plate: 13301, award: 550 },
+    // `0x41490d` pays 0x226; `0x414044` claims the bar with plate 0x33f7
+    panel: { health: 250, plate: 13303, award: 550 },
     counts: true,
     bleeds: true,
     vanishes: true,
+    // `0x413f2d` and `0x413f50` — see {@link Foe.span}
+    span: { reach: 20, platforms: true },
     from: "0x411660 / 0x413f00 / 0x413fd0 / 0x4147d0",
   },
   /**
@@ -2615,14 +3570,29 @@ export const FOES: Readonly<Record<string, Foe>> = {
     gait: { cels: [2550], hold: 1, from: "0x46d268 tag 0" },
     divisor: 8,
     floats: true,
-    flinch: [{ cels: [2550], hold: 1, from: "0x46d278 tag 0" }],
+    // `0x414b79` halves `obj+0xc` above 30 in the brain, so the drift builds
+    accrues: true,
+    flinch: [
+      {
+        cels: [2550],
+        hold: 1,
+        // `0x414e12` — state 3 ends on the stance, `0x46d440` kind 4
+        resume: { cels: [2550, 2551], hold: 2, kind: 4, tag: 0, from: "0x46d440 tag 0" },
+        from: "0x46d278 tag 0",
+      },
+    ],
     death: { cels: [2550], hold: 1, from: "0x46d458 tag 0" },
+    // `0x41507a` — the first think after the blow removes it: no corpse
+    linger: 0,
+    // `0x41508f` — lab.snd 13, as it goes
+    deathSound: FOE_SFX.copDeath,
     // `0x411a74` — `0x40e300(0x3c)`
     health: 60,
     // `0x414b21` claims the bar with plate 0x33f4
     panel: { health: 60, plate: 13300, award: 0 },
     counts: true,
     bleeds: true,
+    // `0x4150a6` — `0x40cba0(point, -0xd, 0)`
     vanishes: true,
     from: "0x411a20 / 0x414a00 / 0x414ae0 / 0x415100",
   },
@@ -2644,28 +3614,60 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x46ca30 tag 0",
     },
     divisor: 13,
-    // `0x46cb50` tag 0, kind 5 — seven records, the first held three frames
+    // `0x417e62` — `0x42f7a0(obj, 0.8f)`, eighty percent off a frame on the floor
+    drag: 6553,
+    // `0x417e5a` — `0x42f7f0(obj, 0.2f)`, through the setter's negative scale
+    restitution: -0.2,
+    // `0x46cb50`, kind 5, and state 5 (`0x4181c8`) stands it back on the stance
     flinch: [
       {
         cels: [3034, 3034, 3034, 3033, 3032, 3031, 3030],
         hold: 1,
+        resume: PUKE_STANCE,
         from: "0x46cb50 tag 0",
       },
+      {
+        cels: [3032, 3032, 3031, 3030],
+        hold: 1,
+        resume: PUKE_STANCE,
+        from: "0x46cb50 tag 1",
+      },
+      {
+        cels: [3038, 3038, 3038, 3037, 3036, 3035],
+        hold: 1,
+        resume: PUKE_STANCE,
+        from: "0x46cb50 tag 2",
+      },
     ],
+    /**
+     * `0x41837c` — under 0x1e it is tag 1. Otherwise `0x41839d` weighs its own
+     * Y against the Y of the contact point the collision dispatcher hands the
+     * handler (`0x43041e`): its point lower than the contact is tag 0, and
+     * level with it or above is tag 2 (`0x4183a1`, `jle`).
+     */
+    pick: ({ damage, contactY, pointY }) =>
+      damage < 0x1e
+        ? 1
+        : contactY === undefined || pointY === undefined || pointY > contactY
+          ? 0
+          : 2,
     // `0x46cbe0` tag 0, kind 6
     death: {
       cels: [3080, 3081, 3082, 3083, 3084, 3085],
       hold: 2,
       from: "0x46cbe0 tag 0",
     },
-    // `0x46c9f8` tag 0 — the six it stands on before anything happens
-    wake: { cel: 3090, from: "0x417e40 / 0x46c9f8 tag 0" },
+    // `0x4117a4` stands it on `0x46c9e8`, cel 3000, until the player is in its rect
+    wake: { cel: 3000, from: "0x4117a4 / 0x46c9e8 tag 0" },
     // `0x411753` — `0x40e300(0x190)`
     health: 400,
+    // `0x41835c` — only on a blow it lives through
     hitSound: FOE_SFX.pukeHit,
+    quietKill: true,
+    // `0x418316`
     deathSound: FOE_SFX.pukeDeath,
-    // `0x418335` pays 0x1b8
-    panel: { health: 400, plate: 13302, award: 440 },
+    // `0x418335` pays 0x1b8; `0x417f29` claims the bar with plate 0x33f5
+    panel: { health: 400, plate: 13301, award: 440 },
     counts: true,
     bleeds: true,
     vanishes: true,
@@ -2682,30 +3684,47 @@ export const FOES: Readonly<Record<string, Foe>> = {
    *
    * Its own leap is in the animation: `0x46d120` tag 0's seventh record carries
    * `dx 200, dy -200` and its death's first carries `dy -130`.
+   *
+   * Two kinds by the record's param (`0x411962`): param 1 is in the wall —
+   * divisor 0, weight 0, no gravity, on `0x46cf10` until it breaks out — and
+   * param 0 is already on the floor, divisor 6, on the stance. The class
+   * descriptor sets no divisor at all.
    */
   initarm: {
+    // `0x411995` — obj+0x26, the shove weight
+    shove: 2,
     // `0x46cf10` tag 0, kind 0 — seven cels, three frames each, out and back
     gait: {
       cels: [500, 501, 502, 503, 502, 501, 500],
       hold: 3,
       from: "0x46cf10 tag 0",
     },
-    divisor: 13,
+    // `0x418868` — what a wall arm is given as it comes out, and what six of
+    // LAB's ten fight with; the four param-0 arms are given `0x41199b`'s 6 as
+    // {@link Enemy.divisor} on their first think
+    divisor: 10,
+    // `0x411976` — a wall arm is created with `0x42f850(obj, 0)`; the brain
+    // turns gravity on as it breaks out (`0x418883`), and at once for a
+    // param-0 arm, whose creator gives it 1.0 (`0x4119a7`)
+    bornWeightless: true,
     flinch: [{ cels: [3360, 3361], hold: 3, from: "0x46cfc8 tag 0" }],
-    // `0x46d0b0` tag 0, kind 8 — and the first record throws it 130 up
+    // `0x46d0b0` tag 0, kind 8 — and the first record throws it 130 up, which
+    // `armReacts` spends
     death: {
       cels: [3390, 3391, 3392, 3393, 3394, 3395],
       hold: 3,
+      dy: [-130, 0, 0, 0, 0, 0],
       from: "0x46d0b0 tag 0",
     },
     health: 1,
     frail: true,
     hitSound: FOE_SFX.armHit,
-    // `0x418bc3` pays 0x71
-    panel: { health: 1, plate: 13303, award: 113 },
+    // `0x418bc3` pays 0x71 — and there is no plate: nothing of the class
+    // calls `0x40d1c0`, so an arm never claims the panel's bar
+    award: 113,
     counts: false,
+    // state 8 (`0x418af6`) removes it with no `0x40cba0(pos, -13, 0)`
     bleeds: true,
-    vanishes: true,
     from: "0x4118f0 / 0x418710 / 0x4187a0 / 0x418b40",
   },
   /**
@@ -2722,9 +3741,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * 5350 again. Only the death moves.
    */
   inittube: {
-    gait: { cels: [5350], hold: 1, from: "0x46d790 tag 0" },
+    // `0x419256` — obj+0x26, the shove weight
+    shove: 6,
+    // kind 3, the decider — what the flinch's own state (`0x4197a3`) hands back to
+    gait: { cels: [5350], hold: 1, kind: 3, tag: 0, from: "0x46d790 tag 0" },
     divisor: 13,
-    flinch: [{ cels: [5350], hold: 1, from: "0x46da20 tag 0" }],
+    // `0x46da20` — one cel, `ticksPerFrame` 3
+    flinch: [{ cels: [5350], hold: 3, from: "0x46da20 tag 0" }],
     // `0x46da30` tag 0, kind 10
     death: {
       cels: [5440, 5441, 5442, 5443, 5444, 5445],
@@ -2733,8 +3756,12 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     // `0x411be4` — `0x40e300(0x4b0)`
     health: 1200,
-    hitSound: FOE_SFX.tube,
-    panel: { health: 1200, plate: 13304, award: 0 },
+    // `0x419a4c`, before the health is looked at, so the killing blow too
+    hitSound: FOE_SFX.tubeHit,
+    // `0x419a96`
+    deathSound: FOE_SFX.tubeDeath,
+    // `0x419318` claims the bar with plate 0x33f9
+    panel: { health: 1200, plate: 13305, award: 0 },
     counts: true,
     bleeds: true,
     vanishes: true,

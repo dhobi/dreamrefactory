@@ -442,8 +442,10 @@ export const GUN_CODES: Readonly<Record<number, GunCode>> = {
  * table decides which player you stand back up as.
  *
  * And if you already had a gun, `0x42f0dc` throws it on the floor first:
- * `0x45b060` spawns your old weapon as a code-`id` object with gravity 1.0 and
- * a bounce of 0.3, landing where it falls. You can only ever carry one.
+ * `0x45b060` spawns your old weapon as a code-`id` object with gravity 1.0 at
+ * your own point, and it falls to the floor (the 0.3 it files through `0x42f7f0`
+ * is `obj+0x20`, what a WALL leaves of its horizontal speed). You can only ever
+ * carry one.
  */
 export const GRAB = {
   /** `0x472360` tag 0 — six cels, one engine frame each */
@@ -456,32 +458,20 @@ export const GRAB = {
   bandPx: 55,
   /** `0x45aecc`'s `cmp eax, 0x96` */
   liftPx: 150,
+  /**
+   * The codes whose reach throws your gun down first — `0x42f264`'s table sends
+   * these six to `0x42f0a8` (and 17 to `0x42f111`, the same test after the
+   * held-up variant of the reach); the refills and the can go straight to the
+   * reach at `0x42f0f2`.
+   */
+  drops: [6, 9, 10, 12, 16, 17] as readonly number[],
   from: "0x4298a1 / 0x42eff8 / 0x45ae90 / 0x4287bd",
 } as const;
 
 /**
- * The one gun this port fires, and why it is that one.
- *
- * Five weapons have a fire function in the table and all five are different
- * shapes. Four of them are not built here:
- *
- * - the **flamer** (`0x44dae0`) is a held stream, not a shot — modes −1 and −2
- *   reach into every live flame to stop it — and its flame's blow strength is
- *   `0xfff7`, **−9**. That is a CODE, not a number: it is the same −9 the kragg
- *   tests for, and what it means is each enemy's own hit handler's business.
- *   Drawing the stream without that is drawing a thing that cannot hurt.
- * - the **soaker** (`0x41f820`) is chapter three's, so it IS reachable now, and
- *   its droplet is the one of the four with a real number on it —
- *   `0x4217ba` writes 0x64 into `obj+0x1a`, the same hundred the flare carries,
- *   and its art (9800..9807) is in all four of the chapter's books. What is not
- *   built is the shape: like the flamer it is a held STREAM, spawning a droplet
- *   a frame with a velocity picked per pose ((170, −27), (97, 0), (60, −12),
- *   (66, 10)) and modes −1 and −2 that reach into every live one to stop it.
- * - the **blaster** (`0x412a70`) and the **scepter** (`0x41f6b0`) belong to
- *   chapters this port has not reached.
- *
- * The flare gun's (`0x436d40`) is the one that is a shot, does a NUMBER, and is
- * carried by four of the eight levels that are here.
+ * The FLARE GUN's shot — `0x436d40`, the one of the five fire functions that
+ * launches something with a strength of a hundred, carried by MALL, SERVICE,
+ * SEWER and ARCADE.
  *
  * ```
  *   436d43  cmp [0x4a7f82], 0        ; rounds left, or nothing happens
@@ -492,7 +482,7 @@ export const GRAB = {
  *   436db0  0x430d40(0x474cb8, …)    ; and there it is
  * ```
  *
- * The wobble is the whole character of it. `0x43ac3b` reads that random 13..29
+ * The wobble is the whole character of it. `0x43ac3b` reads that random 14..30
  * down two at a time, adding ±itself to the flare's vertical velocity each
  * frame and flipping the sign — so a flare leaves the barrel corkscrewing hard
  * and straightens out over about seven frames. It is not aimed and it is not
@@ -503,23 +493,32 @@ export const FLARE = {
   muzzle: 7200,
   /** tag 3, `0x43acae` — held all the way out */
   flight: 7207,
-  /** tag 4 — what it does where it lands */
+  /**
+   * tag 4 — what it does once it has landed or hit, one engine frame a cel
+   * (`0x474bf8` runs one tick a frame). Its end installs tag 5 (`0x43acd7`), the
+   * last cel held, and tag 5 frees the flare the first frame the mover finds it
+   * at rest (`0x43acf5` reads `obj+0x30`, which `0x43031c` sets when both
+   * velocities are zero) — so a burning flare goes on falling and sliding until
+   * the ground's drag has stopped it.
+   */
   burn: [7208, 7209, 7210, 7211],
-  /** `0x43ab2d`'s `mov word ptr [esi+0x1a], 0x64` */
+  /** `0x43ab2d`'s `mov word ptr [esi+0x1a], 0x64` — the STRENGTH, a percentage */
   blow: 100,
-  /** `0x474bf8` tag 0's own dx, through the object's divisor of 5 */
+  /** `0x474bf8` tag 0's own dx, through the object's divisor of 5 (`0x43ab50`) */
   dx: 200,
   divisor: 5,
-  /** `0x43ab46` — `0x42f850(obj, 0.5)` */
+  /** `0x43ab46` — `0x42f850(obj, 0.5)`, which files 5 in `obj+0x24` */
   gravity: 0.5,
-  /** `0x436d95` — `0x434540(0x11) + 0xd`, and it counts DOWN by two */
-  wobble: { lo: 13, hi: 29, step: 2, settle: 7 },
+  /**
+   * `0x436d95` — `0x434540(0x11) + 0xd`, and `0x434540(n)` answers 1..n, so
+   * 14..30. It counts DOWN by two (`0x43ac70`); from 7 down it is added to the
+   * vertical velocity rather than written over it (`0x43ac44`).
+   */
+  wobble: { lo: 14, hi: 30, step: 2, settle: 7 },
   /** `0x436dec`'s `sub eax, 0x3c` — where it appears */
   aheadPx: 60,
   /** `mall.snd` 0x49, `#0700 flare gun` */
   sound: 0x49,
-  /** how many engine frames the burn-out holds before the thing is freed */
-  burnHold: 2,
   from: "0x436d40 / 0x43ab10 / 0x43abf0 / 0x474bf8",
 } as const;
 
@@ -567,14 +566,28 @@ export const FLARE = {
 export const BOLT = {
   /** `0x46c588` tag 2 — one cel, and it is the whole flight */
   cel: 4000,
-  /** the tag's own dx, through the object's divisor */
+  /**
+   * the tag's own dx, through the object's divisor — ten, which the bolt class's
+   * init writes twice (`0x413a21`, `0x413a4d`); it also files gravity 0
+   * (`0x413a33`). A hundred pixels an engine frame.
+   */
   dx: 1000,
-  divisor: 5,
+  divisor: 10,
   /** `0x412b7f` — ahead of the muzzle, against this port's facing */
   aheadPx: 120,
-  /** `0x412b87` and `0x412b8f`: up 20, then a random 0..39 back down */
-  risePx: 20,
+  /**
+   * `0x412b87` and `0x412b8f`: `y - 0x14 + 0x434540(0x28) - 0x14`, and
+   * `0x434540(n)` answers 1..n — so from 39 above the muzzle's y to level with it
+   */
+  risePx: 40,
   scatterPx: 40,
+  /**
+   * `0x413b87`..`0x413baf` — the bolt's think expires it once its horizontal
+   * speed is under ten or it is more than a thousand pixels from the player,
+   * besides on any contact (`obj+0x2a`, `+0x2c`, `+0x2e`, `+0x30`).
+   */
+  minSpeed: 10,
+  rangePx: 1000,
   /** `0x412b66` — `#0350 blaster` in the chapter's own bank */
   sound: 0x23,
   /**
@@ -664,8 +677,21 @@ export interface StreamKit {
   standing: number;
   /** `obj+0x1a`: a hundred, or the code -9 */
   blow: number;
-  /** rounds per engine frame — `0x45ef00`'s argument */
+  /** rounds per engine frame the firing state holds — `0x45ef00`'s argument */
   perFrame: number;
+  /**
+   * The scepter's is not a stream at all: `0x424620` frees its object the
+   * frame its script ends and nothing loops it, and the fire function itself
+   * takes the rounds (`0x41f7b6`, forty) — one press, one beam.
+   */
+  shot?: { rounds: number };
+  /**
+   * What starts with it: the firing state plays an OWN sound as it calls the
+   * fire function — `0x42ba94` 0x16 for the flamer, `0x42c3fe` 0x1a for the
+   * soaker, both out of the player's bank `0x4ac3e0` — and the scepter's fire
+   * function its own, 0x22 (`0x41f73a`), out of the chapter's.
+   */
+  sound: { own?: number; effect?: number };
   from: string;
 }
 
@@ -690,6 +716,7 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
     /** `0x453b9b` — a CODE, and nothing ordinary reads it */
     blow: -9,
     perFrame: 1,
+    sound: { own: 0x16 },
     from: "0x44dae0 / 0x478858 / 0x453b80, list 0x4788c8",
   },
   12: {
@@ -711,11 +738,21 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
     /** `0x4217ba`, written fresh every frame the stream runs */
     blow: 100,
     perFrame: 1,
+    sound: { own: 0x1a },
     from: "0x41f820 / 0x4705e0 / 0x421630, list 0x470658",
   },
   16: {
-    start: { cels: [3270, 3271, 3272, 3273], hold: 1, from: "0x46f4d0 tag 0" },
-    loop: { cels: [3272, 3273], hold: 1, from: "0x46f4d0 tag 0's own tail" },
+    /**
+     * `0x41f7ce` installs tag 1 for the standing shot (variant 2) and the
+     * walking one (variant 1); tag 0 is the wraith's cast (variant 0, no
+     * rounds). The beam is this and nothing after it.
+     */
+    start: {
+      cels: [3280, 3281, 3282, 3283, 3282, 3283],
+      hold: 1,
+      from: "0x46f4d0 tag 1",
+    },
+    loop: { cels: [3282, 3283], hold: 1, from: "never shown: see shot" },
     stop: {
       cels: [3280, 3281, 3282, 3281, 3282],
       hold: 1,
@@ -736,8 +773,10 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
     standing: 2,
     /** `0x424630` */
     blow: 100,
-    /** `0x41f77f` — FORTY, which is four shots out of a full gauge */
-    perFrame: 0x28,
+    perFrame: 0,
+    /** `0x41f7b6` — FORTY a shot, which is four shots out of a full gauge */
+    shot: { rounds: 0x28 },
+    sound: { effect: 0x22 },
     from: "0x41f6b0 / 0x46f4d0 / 0x424510, list 0x46f580",
   },
 };
@@ -781,6 +820,10 @@ export interface Flare {
   sign: number;
   /** null while flying; the burn-out's frame once it has landed or hit */
   burn: number | null;
+  /** engine frames since it was fired — frame 0 is `0x474bf8` tag 0's muzzle */
+  age: number;
+  /** `obj+0x2e` — standing on something, so the drag runs and gravity does not */
+  grounded: boolean;
   spent: boolean;
 }
 

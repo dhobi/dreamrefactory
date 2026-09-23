@@ -135,6 +135,18 @@ jobs:
       - name: Automatic suite
         run: npm test
 
+      # Skull Cracker's game, headless: its machine suites stand the game up in
+      # node on the rip and step it frame by frame (docs/skullcracker/
+      # verification.md). About twenty seconds, so every pull request pays it.
+      # Without the rip there is no game to stand up, so it skips like the rest.
+      - name: Skull Cracker machine suites
+        run: |
+          if [ -d skullcracker/gamefiles/SKULL ]; then
+            npm test -w skullcracker
+          else
+            echo "::warning::no Skull Cracker rip linked — its machine suites were skipped"
+          fi
+
       # Which playthroughs this change needs — and why the automatic suite above
       # is deliberately NOT filtered the same way.
       #

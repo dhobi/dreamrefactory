@@ -104,6 +104,7 @@
  */
 import {
   install,
+  rewind,
   type Brain,
   type BrainCtx,
   type CastKit,
@@ -111,6 +112,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
+import type { Foe } from "../foes";
 
 /**
  * The five states a brain is never called during, and the three things they do
@@ -128,17 +130,14 @@ import {
  *   in the executable that raises a sprinkler, and the page currently attributes
  *   that to the dive. It is installed only from `0x441d8f`, only by a −9 blow,
  *   only while `obj+0x18 < 9`.
- * - **10**, the fall (`0x441615`). Tag 0 is steered at `[0x4a7574]` — which the
- *   death path set to the ROOM's own centre X out of `0x40ba30` — at double
- *   weight, and loops itself `[0x473de0]` = 4 more times before handing to tag
- *   1. Tag 1 turns real physics back on (`0x42f850(obj, 1.0)`,
- *   `0x42f7f0(obj, 0.15)`, `0x42f7a0(obj, 1.0)`), waits for `obj+0x30` and
- *   `obj+0x2e`, then pins `[0x4a7574]` to where it actually landed, plays sound
- *   `0x18`, **restores its health to `0x40e300(0x3e8)`** and installs kind 11.
- * - **11 tags 1 and 2**, the ground flinches. `0x441fa3` picks one of the three
- *   cels of `0x473ba8` at `0x434540(3) - 1`. Tag **0** of the same script is the
- *   rise out of state 10, which is why this module owns state 11's hand-back and
- *   nothing else.
+ * - **10**, the fall (`0x441615`), is no longer one of them: its tag 0 and the
+ *   laps are the brain's state 10 below. What stays the page's is the landing —
+ *   tag 1 waits for `obj+0x30` and `obj+0x2e`, then pins `[0x4a7574]` to where
+ *   it actually landed, plays sound `0x18`, **restores its health to
+ *   `0x40e300(0x3e8)`** and installs kind 11 — which {@link Foe.rallies} runs.
+ * - **11 tags 0..2**, the ground flinches. `0x441fa3` picks one of the three
+ *   cels of `0x473ba8` at `0x434540(3) - 1` — the page's {@link Foe.pick} —
+ *   and the flinch's `resume` hands state 12 back as state 11 would.
  * - **16**, the death that sticks (`0x4419fe`). `0x42f870(obj, 0)` takes it out
  *   of the census, floor offset −25, and tags 0/1 hand to tag 2 while playing
  *   sound `0x1b` and calling `0x4423a0(point, 0xf)` — fifteen pieces of debris,
@@ -150,6 +149,8 @@ import {
  * `0x42f910`'s own figure; `[0x473de4]` counts them, three give the flinch, and
  * every FOURTH one either spins it round (`0x473bd8` tags 2/3, the two-cel turn)
  * if the player has got behind it, or makes it swing back (`0x473cc8` tag 1).
+ * The gate in front of it is {@link kraggGate}; the count and what it picks
+ * are not here.
  */
 const NOT_HERE = "0x4411e6, 0x441509, 0x441615, 0x4417a8, 0x4419fe" as const;
 
@@ -287,6 +288,19 @@ export const KRAGG = {
    * belong to the page — see {@link NOT_HERE}.
    */
   rise: { cels: [7104], hold: 3, kind: 11, tag: 0, from: "0x473ba8 tag 0" },
+  /**
+   * kind 10 tag 1 — the second half of the fall, `0x473b60` tag 1: the last cel
+   * of the drop four times over, and the first two lift 150. Tag 0 is the page's
+   * {@link Foe.rallies} `fall`, which the blow that empties the bar installs.
+   */
+  fallLand: {
+    cels: [7036, 7036, 7036, 7036],
+    hold: 1,
+    dy: [-150, -150, 0, 0],
+    kind: 10,
+    tag: 1,
+    from: "0x473b60 tag 1",
+  },
   /** kind 12 — the ground idle. One cel, ONE tick, and it decides every frame */
   stand: { cels: [7100], hold: 1, kind: 12, tag: 0, from: "0x473bc8 tag 0" },
   /**
@@ -352,6 +366,8 @@ export const KRAGG = {
   cry: 0x15,
   /** `0x4412f2` — the frame the grab closes */
   grab: 0x16,
+  /** `0x441698` — each lap of the fall's first tag */
+  thud: 0x14,
   from: "0x440ab0",
 } as const;
 
@@ -558,30 +574,54 @@ function bob(e: Enemy, dy: number): void {
  *   None of those five words exist on this page's {@link Enemy}; **nothing hits
  *   the player back in this port**, so the strength is carried as read.
  * - `0x440b99` is the sprinkler scald — three health a frame for standing in
- *   water that is already up. The page owns that in `stepColumns`, which is
- *   right; what the page has wrong is which state raises the water.
+ *   water that is already up, states 1..9 only, and the frame it goes below
+ *   zero is the fall. The page owns that in `stepColumns`.
  */
 /** `0x440b1c` — at eleven and above it is the grounded second form */
 const GROUND = 11;
 
 export const kragg: Brain = (e, foe, run, k) => {
+  const took = think(e, foe, run, k);
+  // `0x45d1a3` — then the animator, and the cel's own dy with it, which the
+  // page leaves to a floater's brain
+  lift(e);
+  return took;
+};
+
+const think: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, KRAGG.bands);
   // `0x440af2` — whatever put speed into it, it may not carry more than forty
   const capped = Math.max(-CAP_VX, Math.min(CAP_VX, engineVx(e)));
   e.vx = capped * TICKS;
   /**
-   * `0x441c1f` — the FLYING form has no gravity, in every one of its states.
+   * `0x441c6d` — the FLYING form has no gravity, in every one of its states.
    *
-   * `0x440b1c` splits the class at eleven, and everything below that is the
-   * thing in the air: its height is whatever its own states put in `obj+0xa`,
-   * the hover's ±1 and the maul's steer, and nothing pulls on it in between.
-   * Weight is the grounded form's, and it gets it the moment it stands up.
-   * Setting this in the hover alone was not enough — the maul is where it
-   * spends a fight, and a boss with weight in the maul sinks out of the level.
+   * `0x42f850(obj, 0)` at setup, and nothing gives it weight until the fall's
+   * tag 1 calls `0x42f850(obj, 1.0)` at `0x4416e6`. Its height is whatever its
+   * own states put in `obj+0xa` — the hover's ±1, the maul's steer, the fall's
+   * pull — and nothing pulls on it in between. The page reads this per frame;
+   * {@link Foe.rallies} is what tells it the class is no longer a floater.
    */
-  e.weightless = (e.script ?? 1) < GROUND;
-  switch (e.script ?? 1) {
+  const state = e.script ?? 1;
+  e.weightless = state < 10 || (state === 10 && (e.tag ?? 0) === 0);
+  /**
+   * `0x440b31` / `0x440b43` — the grounded form keeps no sideways speed and is
+   * put back on `[0x4a7574]` every frame, the X the fall steered it to and the
+   * landing wrote (`0x441747`). The page keeps that word in {@link Enemy.home}.
+   */
+  if (state >= GROUND) {
+    e.vx = 0;
+    if (e.home !== undefined) e.x = e.home;
+  }
+  // `0x440b55` / `0x440b78` — and the floor offset, −15 grounded and 0 flying,
+  // rewritten every frame (the frame function's `0x442080` again for the first)
+  e.floor = state >= GROUND ? -15 : 0;
+  // `0x440b28` / `0x440b6d` — the shove weight, 100 grounded and 40 flying,
+  // and the maul (`0x440fc3`), the dive (`0x441255`) and the death (`0x441a1e`)
+  // clear it for as long as they run
+  e.shove = state === 5 || state === 8 || state === 16 ? 0 : state >= GROUND ? 100 : 40;
+  switch (state) {
     /**
      * ---- 1, `0x440cc4`: the hover, and the only air state that thinks.
      *
@@ -603,9 +643,15 @@ export const kragg: Brain = (e, foe, run, k) => {
       if (t.forward < 0) install(e, KRAGG.turn[e.facing < 0 ? 1 : 0]);
       // `0x440ddc` — `jmp [eax*4 + 0x441adc]`, four entries, on the band
       switch (t.band) {
-        // `0x440df1` — beyond 250, and it just comes at him
+        /**
+         * `0x440df1` — beyond 250, and it just comes at him. Played once and
+         * HELD: a finished script stays on its last frame and `0x45d1a3` goes
+         * on adding that frame's `dx 120` — three a frame — until state 2
+         * stops it, so it closes at the ±40 the prologue allows
+         * ({@link Foe.accrues}).
+         */
         case 0:
-          return install(e, KRAGG.closeIn);
+          return install(e, KRAGG.closeIn, true);
         /**
          * `0x440e0b` — 150…250, and it wants `out+0` to be exactly **2**, which
          * `0x45f00c` writes when the target is carrying no horizontal velocity
@@ -675,7 +721,7 @@ export const kragg: Brain = (e, foe, run, k) => {
         // `0x440fe9` — band 3 EXACTLY, and it lands it
         if (t.band === 3) return install(e, KRAGG.maul, true);
         // `0x440ff1` — otherwise `0x42f8b0` at his own point, every frame
-        steer(e, t.dy, k.player.x - e.x);
+        steer(e, t.dy, k.player.x - k.anchorX(e));
         return false;
       }
       if (tag === 1) {
@@ -741,7 +787,7 @@ export const kragg: Brain = (e, foe, run, k) => {
           return install(e, KRAGG.carry[1], true);
         }
         // `0x44134a` — out of range, so it keeps homing
-        steer(e, t.dy, k.player.x - e.x);
+        steer(e, t.dy, k.player.x - k.anchorX(e));
         if (!done) return false;
         return install(e, KRAGG.divePull);
       }
@@ -761,6 +807,9 @@ export const kragg: Brain = (e, foe, run, k) => {
        * its address; a caller that does not want a free heal for an attack that
        * cannot connect should gate it, and this comment is the reason it can.
        */
+      // `0x4413b2` — the floor offset −150 over the prologue's 0, every frame
+      // of the carry, so it rises clear
+      e.floor = -150;
       // `0x4413c9` / `0x4413f1` — ten a frame, capped at a full tank
       e.hp = Math.min(e.hp + 10, k.scaled(0x3e8));
       // `0x441462` — facing him the same way means facing the wrong way
@@ -851,13 +900,64 @@ export const kragg: Brain = (e, foe, run, k) => {
       if (!done) return false;
       return install(e, KRAGG.stand);
     /**
-     * States 4, 7, 9, 10 and 16. Four is a hole in the table with no script
+     * ---- 10, `0x441615`: shot out of the sky, and where it comes down.
+     *
+     * Tag 0 is still weightless and it is STEERED: `0x44165d` doubles the gap
+     * to `[0x4a7574]` — the room's own centre, which the blow or the scald that
+     * emptied the bar wrote there out of `0x40ba30` — and `0x44166d` doubles
+     * the gap to the player's height, and both go through `0x42f8b0`. Each
+     * time tag 0 ends it says 0x14 and plays again while `[0x473de0]` — seeded
+     * 4, decremented every lap and never reset — was still at or above zero,
+     * so five laps; then tag 1, which turns the weight on (above). What tag 1
+     * waits for, the landing and the second bar, is {@link Foe.rallies}'s.
+     */
+    case 10: {
+      if ((e.tag ?? 0) !== 0) return false;
+      steer(e, t.dy * 2, ((e.home ?? e.x) - e.x) * 2);
+      if (!done) return false;
+      k.say(e, KRAGG.thud);
+      const lap = fallLaps;
+      fallLaps -= 1;
+      return lap >= 0 && foe.rallies
+        ? rewind(e, foe.rallies.fall)
+        : install(e, KRAGG.fallLand, true);
+    }
+    /**
+     * States 4, 7, 9 and 16. Four is a hole in the table with no script
      * behind it (`0x441a9c[3]` is the epilogue); the rest are {@link NOT_HERE}.
      */
     default:
       return false;
   }
 };
+
+/** `[0x473de0]` — the fall's laps, seeded 4 in `.data` and never reset */
+let fallLaps = 4;
+
+/**
+ * Put `[0x473de0]` back to its `.data` value, as a fresh process has it. The
+ * game never calls this — the word is spent once per run, as on the disc — but
+ * a test that drives the fall off the page must not inherit what an earlier
+ * one spent.
+ */
+export function seedKraggFall(laps = 4): void {
+  fallLaps = laps;
+}
+
+/**
+ * `0x45d1a3` — the frame's own `dy`, added to `obj+0xa` through `0x42f8b0`
+ * on every frame it shows, and on the last one for as long as a finished
+ * script holds it. The page does this for everything that walks; a floater's
+ * is its brain's, and kragg's are the air turn's sink, the carry's climb and
+ * the fall's two lifts. Called after the think, so a script installed this
+ * frame spends its first frame now, as `0x45d0f0` does straight after it.
+ */
+function lift(e: Enemy): void {
+  const dy = e.anim.dy;
+  if (!dy?.length) return;
+  const i = Math.min(dy.length - 1, Math.floor(e.clock / e.anim.hold));
+  if (dy[i]) e.vy += away(dy[i]) * TICKS;
+}
 
 export { NOT_HERE as KRAGG_NOT_HERE };
 
@@ -891,17 +991,27 @@ export { NOT_HERE as KRAGG_NOT_HERE };
  * this page's `gait`, which is where a flinch that finishes goes anyway.
  */
 export const kraggReacts: Reaction = (e, foe, _run, k) => {
+  /**
+   * The prologue's floor offset runs in the page's states too: 0 flying and
+   * −15 grounded (`0x440b78` / `0x440b55`), and the death that sticks writes
+   * −25 over it every frame (`0x441a13`).
+   */
+  e.floor = e.state === "dead" ? -25 : e.rallied ? -15 : 0;
   if (e.anim !== foe.burns?.anim) return;
   const to = k.sprinkler(e);
   if (to) {
     // `0x42f8b0` divides each half by `obj+0xe` and ADDS it, so the pull
     // compounds every frame it is applied — which is what drags rather than
     // steers. `0x44154c`'s 0x78 is the drop below the record's own point.
+    // Whole engine pixels a frame, as the velocity words hold them, and this
+    // runs once a frame: into the page's per-tick velocity through TICKS
     const dx = to.x - e.x;
     const dy = to.y - e.y + SPRINKLER_DROP;
-    e.vx += roundAway(dx / DIVISOR);
-    e.vy += roundAway(dy / DIVISOR);
+    e.vx += away(dx) * TICKS;
+    e.vy += away(dy) * TICKS;
   }
+  // `0x440af2` — the prologue's ±40 runs in state 9 as in every other
+  e.vx = Math.max(-CAP_VX, Math.min(CAP_VX, engineVx(e))) * TICKS;
   // `0x441584`: tag 0 is the first five cels, and nothing is raised during it
   const lead = 5 * (foe.burns.anim?.hold ?? 2);
   if (e.clock >= lead) k.raise(e);
@@ -911,9 +1021,39 @@ export const kraggReacts: Reaction = (e, foe, _run, k) => {
 const SPRINKLER_DROP = 0x78;
 
 /**
- * Away from zero, as `0x42f8b0`'s own division is — the same rounding every
- * other stride on this page goes through.
+ * What a blow is by the time it reaches one of `0x441cf0`'s arms — `null` for
+ * nothing at all.
+ *
+ * The handler asks two things of kragg's STATE before it asks anything of the
+ * blow. `0x441d26`: from state 9 up, every blow goes to `0x441ef0` and the
+ * −9 arm at `0x441d30` is never reached — so the flare's thrash runs only out
+ * of states 1..8, the flying form on its own terms. And `0x441ef0` then splits
+ * at eleven (`0x441ef4`): 9, 10 and 11 take nothing whatever it is (`0x442024`
+ * answers 0), and from 12 up a blow with a negative strength is worth a flat
+ * `0x46` (`0x441efa`) — so a −9 on the ground form is seventy health and no
+ * fire.
+ *
+ * The page keeps kragg's state where the brain keeps it, in `Enemy.script`,
+ * with two exceptions it has to read off the animation: the burn is the
+ * page's {@link Foe.burns} rather than an installed script (state 9), and the
+ * fall is the page's {@link Foe.rallies} run (state 10, until the landing
+ * puts the health back). The rest of `0x441ef0` — `[0x473de4]`'s count, the
+ * ground flinches, the turn and the swing it picks — is not here; a blow the
+ * ground form takes goes on through the page's own arithmetic.
  */
-function roundAway(n: number): number {
-  return n < 0 ? -Math.round(-n) : Math.round(n);
+export function kraggGate(
+  e: Enemy,
+  foe: Foe,
+  blow: { damage: number; code: number },
+): { damage: number; code: number } | null {
+  const state =
+    e.anim === foe.burns?.anim ? 9 : e.rallied && e.hp <= 0 ? 10 : (e.script ?? 1);
+  if (state < 9) return blow;
+  if (state <= 11) return null;
+  // `0x441efa` — `mov ax, 0x46` before `0x441efe` asks whether the strength is
+  // negative; a code is, and it lands as that and nothing else
+  return blow.code < 0 ? { damage: GROUND_FLAT, code: 0 } : blow;
 }
+
+/** `0x441efa` — what the ground form takes for any negative strength */
+const GROUND_FLAT = 0x46;

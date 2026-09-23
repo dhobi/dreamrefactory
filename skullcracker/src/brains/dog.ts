@@ -63,7 +63,14 @@
  * the corpse is removed, and that is state 8 and not here. **So every path of
  * this brain returns `false`.**
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  rewind,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  type Reaction,
+} from "./kit";
 
 /**
  * The hit-reaction states, 7 and 8, and the handler that picks between them.
@@ -78,15 +85,30 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
  * - **7**, the flinch: `0x45521b` installs `0x4781f8`, one cel held four
  *   frames, and answers 1. State 7 at `0x454ff3` then waits for that cel to run
  *   out, **flips the mirror flag** (`0x454ffa`) and installs the charge
- *   `0x478070` — so a dog that has been hit turns round and bolts, and the
- *   page's flinch path, which hands back to whatever was playing, does not.
+ *   `0x478070` — so a dog that has been hit turns round and bolts. The page
+ *   plays the cel and its `resume` lands the dog in this brain's `case 7`,
+ *   which does the flip and the charge.
  * - **8**, the death: `0x4550fa` and `0x4551de` install `0x478208`, say 0x18,
  *   clear `obj+0x26` so the corpse leaves the collision list, and write
  *   `[0x46b204]` into **`AI+2`** — the same word the beat below counts down.
  *   State 8 at `0x455010` spends it a frame at a time, drops `obj+0x10` to −12
- *   while it lasts, and on the frame it runs out removes the object.
+ *   while it lasts ({@link dogReacts}), and on the frame it runs out removes
+ *   the object.
  */
-const NOT_HERE = "0x4550b0, 0x454ff3, 0x455010" as const;
+const NOT_HERE = "0x4550b0, 0x455010" as const;
+
+/**
+ * `0x45505b` — state 8, the corpse: `mov word ptr [esi+0x10], 0xfff4` on every
+ * frame its count lasts, so the body settles twelve pixels into the ground it
+ * fell on. A brain is never called while a thing is dying, so it is a
+ * {@link Reaction}.
+ */
+export const dogReacts: Reaction = (e) => {
+  if (e.state === "dead") e.floor = DOG_CORPSE_FLOOR;
+};
+
+/** `0x45505b` — `mov word ptr [esi+0x10], 0xfff4` */
+const DOG_CORPSE_FLOOR = -12;
 
 /**
  * The dog's repertoire, by kind and tag, straight out of `0x477f80`…`0x478208`.
@@ -231,21 +253,25 @@ const BREAK_OFF = 0x12c;
  *
  * `obj+0x1a` — the strength percent — is not set per state here the way the
  * punk sets it: `0x455065` writes 0x64 on the way out of **every** path, so a
- * dog's blow is always at full strength. Nothing hits the player in this port,
- * so it is carried as a comment and spends nothing.
+ * dog's blow is always at full strength, and {@link Enemy.strength} is put
+ * back to it every frame. Its bite cels (4824, 4825, and the bristle's 4831)
+ * carry a strike box and no blow pair, so what lands is the dog's own
+ * velocity (`0x42f910`): a lunge bites, a dog standing still barely does.
  */
 export const dog: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, DOG.bands);
   /**
-   * `0x450faa` — `0x40e300(0xa)`, and unlike the punk's the class's own machine
-   * never reads it back; the dog has no nerve test anywhere in `0x454be0`.
+   * `0x450faa` — `0x40e300(0xa)` into `AI+0`, and it is not a nerve: it is the
+   * HEALTH word `0x4551a9` subtracts every blow from, which the page keeps as
+   * {@link Enemy.hp}. The think never reads it.
    * `0x450fc8` seeds `AI+4` to zero and nothing seeds `AI+2`, so the first
    * frame the beat is looked at it has already expired and one is rolled.
    */
   e.nerve ??= k.scaled(0xa);
   e.beat ??= 0;
   e.decisions ??= 0;
+  e.strength = 0x64; // `0x455065`, on the way out of every path
   switch (e.script ?? 0) {
     /**
      * ---- 0, `0x454c13`: sitting, and the single test that ends it for good.
@@ -256,9 +282,12 @@ export const dog: Brain = (e, foe, run, k) => {
      * inside, and then it is in state 1 for the rest of its life.
      */
     case 0:
-      return e.fighting ? install(e, DOG.stand) : false;
-    // ---- 1, `0x454c46`: the decider, and the only state that thinks every frame
+      // `0x454b65` installed the sit and state 0 keeps it; `0x454c31` stands
+      return install(e, e.fighting ? DOG.stand : DOG.sit);
+    // ---- 1, `0x454c46`: the decider, and the only state that thinks every frame.
+    // It puts the shove weight back to 1 on every one
     case 1:
+      e.shove = undefined;
       return decide(e, k, t, done);
     /**
      * ---- 2 and 3, `0x454ef1` and `0x454f1f`: the walk and the trot, and the
@@ -280,22 +309,27 @@ export const dog: Brain = (e, foe, run, k) => {
      * so does nothing else; the death handler clears it again for the corpse.
      */
     case 4: {
+      e.shove = 0;
       /**
        * `0x454f53` — the jam test. It weighs the mirror flag against `obj+0xc`,
        * its actual sideways speed: facing west and not travelling west, or
        * facing east and not travelling east, means it has run into something,
        * so it turns and starts the charge again from the top.
        *
-       * `obj+0xc` is what the solver `0x430470` writes as a stride is spent.
-       * This page carries a velocity only for a struck flying kind (see
-       * {@link Enemy.vx}) and leaves it at zero for anything walking, so the
-       * test is written against what there is and guarded on there being one —
-       * without the guard a dog with no velocity turns round every frame and
-       * the charge never gets past its first cel.
+       * `obj+0xc` is one word in the executable. This page keeps it in two:
+       * {@link Enemy.vx} while the thing is off its feet and
+       * {@link Enemy.speed}, signed along its facing, while it walks — so the
+       * word is put back together here before it is weighed. On the ground a
+       * charge's own `dx 150` over the divisor of 10 has already been added by
+       * the time the next frame thinks, so a dog running free always passes;
+       * what fails it is a wall, whose `0x42ff02` hands back `obj+0xc` times
+       * the dog's −0.3 ({@link Foe.restitution}) — travelling backwards.
        */
-      if (e.vx !== 0 && (e.facing > 0 ? e.vx <= 0 : e.vx >= 0)) {
+      const vx = e.vx !== 0 ? e.vx : (e.speed ?? 0) * e.facing;
+      if (e.facing > 0 ? vx <= 0 : vx >= 0) {
         e.facing = -e.facing;
-        return install(e, DOG.charge);
+        // `0x454f7d` — the charge from its first cel, though it is the one playing
+        return rewind(e, DOG.charge);
       }
       return done ? install(e, DOG.stand) : false;
     }
@@ -317,6 +351,18 @@ export const dog: Brain = (e, foe, run, k) => {
      */
     case 6:
       return done ? install(e, DOG.stand) : false;
+    /**
+     * ---- 7, `0x454ff3`: the flinch has run out, so it turns and bolts.
+     *
+     * The page plays the flinch itself (`0x4781f8`, one cel held four frames)
+     * and hands the dog here through {@link FOES.initdog}'s `resume` on the
+     * frame it ends — which is the frame `0x454ff3`'s `obj+0x46` test passes.
+     * `0x454ffa` flips the mirror flag and `0x455006` installs the charge: a
+     * dog that has been hit runs off the way it came.
+     */
+    case 7:
+      e.facing = -e.facing;
+      return install(e, DOG.charge);
     default:
       return false;
   }
@@ -348,7 +394,7 @@ function decide(
    * `0x454c81` clears `obj+0x34` as it goes; state 6 puts it back on landing.
    * What reads that word is not in this class and is not resolved.
    */
-  if (Math.abs(e.y - k.player.y) > HEIGHT) return install(e, DOG.pounce, true);
+  if (Math.abs(k.anchorY(e) - k.player.anchor) > HEIGHT) return install(e, DOG.pounce, true);
   // `0x454c8f`/`0x455098` — and otherwise the band, six ways
   switch (t.band) {
     /**
@@ -431,7 +477,7 @@ function close(
    * band 3 at all means it is at least 320. The branch is transcribed because
    * it is what `0x454be0` contains, not because a dog ever takes it.
    */
-  if (t.side === 1 && Math.abs(e.x - k.player.x) < BREAK_OFF) {
+  if (t.side === 1 && Math.abs(k.anchorX(e) - k.player.x) < BREAK_OFF) {
     e.facing = -e.facing;
     k.say(e, DOG.bay);
     return install(e, DOG.charge);

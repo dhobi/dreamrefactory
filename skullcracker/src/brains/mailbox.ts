@@ -123,15 +123,17 @@ import type { Brain } from "./kit";
  *   non-terminal {@link Foe.flinch} entry: the page returns a foe to its gait
  *   when a flinch runs out, which is the same thing.
  * - **`0x44fe59`**, kind 1 tag 1 — the topple writes `obj+0x18 = 2` when its
- *   four frames end, and the hit handler opens `cmp word ptr [ecx+0x18], 2` and
- *   refuses the blow when it matches. Cel 2413, the mailbox on its side, is
- *   where it stays for good. That is {@link FoeAnim.terminal}.
+ *   four frames end. Cel 2413, the mailbox on its side, is where it stays for
+ *   good: the topple's `resume` is `MAILBOX_DOWN`, state 2 on that cel.
  * - **`0x44fe80`**, the hit handler — `0x42f910(striker)` is the blow's speed
  *   (the striking cel's own blow pair at `cel+0x14`/`cel+0x16`, scaled by the
  *   striker's `obj+0x1a` percent, plus its `obj+0xa`/`obj+0xc`, through the
- *   integer `sqrt` at `0x434630`). `0x44fec4`: under 10 it does nothing at all,
- *   10..54 installs `0x4787a8` tag 0, 55 or over installs tag 1. That is
- *   {@link FOES.initmailbox}'s `pick`.
+ *   integer `sqrt` at `0x434630`). `0x44febd`: in state 2 nothing is
+ *   installed; `0x44fec4`: under 10 nothing is installed; 10..54 installs
+ *   `0x4787a8` tag 0, 55 or over tag 1. Every one of those paths then plays
+ *   sound 5 and answers 1, so the solver moves the mailbox whatever it showed.
+ *   That is {@link FOES.initmailbox}'s `pick`, whose "nothing installed"
+ *   entries hold the cel already showing.
  * - **`0x44feea`** — `0x40ef30(0x4a7910, 5, striker->obj+6)`, the same sound
  *   whether it dents or goes over, and played at the STRIKER's point rather
  *   than the mailbox's. That is `FOE_SFX.mailbox`.
@@ -143,8 +145,9 @@ import type { Brain } from "./kit";
  *   is `0x4788d0` tags 0 and 1, cels 9600 to 9619. Strength −9 is set in two
  *   places, `0x43ac04` (when `[0x4abdfc] == 5`) and `0x453b9b`/`0x453d34`, and
  *   the mailbox is far from the only class that tests for it — `0x44ff20` has
- *   thirteen callers. **The page does not model this branch**: a −9 blow neither
- *   dents nor topples a mailbox, it only knocks dust out of it.
+ *   thirteen callers. That is {@link FOES.initmailbox}'s `burns`, `late`: a −9
+ *   blow neither dents nor topples a mailbox, and what it leaves is a flame
+ *   going out.
  * - **`0x44fd57`**, message 1 — `obj+0 = 0x96a` (cel 2410), `obj+2 = 0x4a8400`
  *   (the bank), `obj+0x12 = 0x44fe80` (the hit handler), `obj+0xe = 7` (the
  *   stride divisor and the mass, already {@link FOES.initmailbox}'s `divisor`),
@@ -227,9 +230,9 @@ export const mailbox: Brain = (e) => {
      * ---- 1, `0x44fe2b`: the two dents, sub-dispatched on `obj+0x44`.
      *
      * Tag 0 reinstalls the intact cel when its frame ends (`0x44fe4c`) and tag
-     * 1 writes the terminal state when its four end (`0x44fe60`). Both are the
-     * page's flinch path — {@link FoeAnim.terminal} for the second — and a
-     * brain is never called while a foe is flinching, so neither is here.
+     * 1 writes state 2 when its four end (`0x44fe60`). Both are the page's
+     * flinch path — the topple's `resume` for the second — and a brain is
+     * never called while a foe is flinching, so neither is here.
      */
     case 1:
       return false;
@@ -237,8 +240,9 @@ export const mailbox: Brain = (e) => {
      * ---- 2, `0x44fe26`: on its side for good, and also not in the if-chain.
      *
      * `0x45d090` never wrote this one — `0x44fe60` did, by hand — so there is
-     * no script to end and nothing to decide. Cel 2413 holds and the hit
-     * handler's first test (`0x44febd`) turns every further blow away.
+     * no script to end and nothing to decide. Cel 2413 holds; the hit
+     * handler's first test (`0x44febd`) installs nothing, but it still plays
+     * its sound and hands the blow's momentum over.
      */
     case 2:
       return false;

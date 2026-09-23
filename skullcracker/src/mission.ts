@@ -223,10 +223,10 @@ export const ENDING_FILM = "credits.mov";
  * So a finished game writes to the high-score board and the title screen is
  * where it is read — see {@link file://./scores.ts}.
  *
- * And the trigger is the LAST life. `0x4294a6` reads the count, `0x4294ad`
- * spends one, and `0x4294b7` takes the ordinary path while the count BEFORE the
- * spend was not negative — so state 9 is reached only once there is nothing
- * left. An ordinary death gets no film at all.
+ * And the trigger is the death after the LAST life. `0x4293f3` spends one as
+ * the dying animation ends, and once the body has lain its 25 or 40 frames
+ * `0x4294cb` asks `0x40d490()`: below zero is state 9, anything else is
+ * `0x402760`'s respawn. An ordinary death gets no film at all.
  */
 export const DEATH_FILMS = [
   "kill1.mov",

@@ -53,7 +53,14 @@
  * the AI struct rather than in the think function, and `0x4770e0` is `200, 80,
  * 0` — two bands, which makes band 2 the innermost.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  rewind,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  type Reaction,
+} from "./kit";
 
 /**
  * Three things `0x44e010` does that this port has nowhere to put, and the death
@@ -84,20 +91,39 @@ import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
  * - **state 6, `0x44e33f`, the death.** Two instructions: `mov word ptr
  *   [esi+0x10], 0xff6a` and fall into the common return. `obj+0x10` is the floor
  *   offset (see `props.ts` on `0x41a20e`'s −100 for the shower), so a dying rat
- *   is given **−150** and is free to travel a hundred and fifty pixels above
- *   whatever it was standing on for the whole of `0x477090`. The page plays that
- *   script through {@link Foe.death} and the launch through {@link Foe.frail}.
+ *   has its contact point lifted **150** pixels above the foot of its cel for
+ *   the whole of `0x477090`: nothing under it holds the drawn body up, and a
+ *   rat that has weight drops through the street it died on. The page plays
+ *   that script through {@link Foe.death} and the launch through
+ *   {@link Foe.frail}; the offset is {@link ratReacts}.
  */
-const NOT_HERE = "0x44e0ff, 0x44e390, 0x44e304, 0x44e33f" as const;
+const NOT_HERE = "0x44e0ff, 0x44e390, 0x44e304" as const;
+
+/**
+ * `0x44e33f` — state 6's one write, made every frame the death plays: the
+ * floor offset `obj+0x10 = −150`. A brain is never called while a thing is
+ * dying, so it is a {@link Reaction}.
+ */
+export const ratReacts: Reaction = (e) => {
+  if (e.state === "dead") e.floor = RAT_DYING_FLOOR;
+};
+
+/** `0x44e33f` — `mov word ptr [esi+0x10], 0xff6a` */
+const RAT_DYING_FLOOR = -150;
 
 /**
  * Its whole repertoire, by kind and tag, out of `0x476f48`…`0x477090`.
  *
- * Nothing it plays carries a strike box and nothing it plays lifts except the
- * pounce, whose first frame is `dx 150, dy -250`. The three kind-2 entries are
- * one cel apiece with no stride at all — `fights.ts` reads 3003 and 3004 as
- * attacks, and the script says they are poses: tags of a three-frame script with
- * four ticks a frame and a `dx` of zero.
+ * Nothing it plays lifts except the pounce, whose first frame is `dx 150, dy
+ * -250`. The three kind-2 entries are one cel apiece with no stride at all:
+ * tags of a three-frame script with four ticks a frame and a `dx` of zero.
+ *
+ * And it BITES. Cels 3002…3005 — the back four of the pounce, and 3003/3004
+ * are also the second and third pose — carry a strike box and no blow pair,
+ * and `0x44e349` stamps `obj+0x1a = 0x64` on the way out of every frame. So
+ * `0x42f910` makes the blow out of the rat's own velocity alone: the pounce
+ * lands as hard as it is flying, and a pose it is merely standing in lands as
+ * nothing much.
  */
 export const RAT = {
   /** kind 1 tag 0 — where a rat lives: cel 3011 three times, and it LOOPS */
@@ -227,6 +253,15 @@ const HOME_PX = 0x28;
  * anywhere in `0x44e010`, not even in the death case — the rat's `mov ax, 1` is
  * in its HIT handler (`0x44e43d`), which is a different function and not a
  * brain. So a waiting state here returns `false` and lets its script play.
+ *
+ * ## Every install is a rewind
+ *
+ * Each `0x45d090` in `0x44e010` is behind an `obj+0x46` test or a beat, so it
+ * runs once per event, and it starts the script from its first frame even when
+ * it is the one already playing (`0x45d0ab` zeroes the frame index). A second
+ * lap of the dash (`0x44e27b`) or the same pose rolled twice (`0x44e1d1`,
+ * `0x44e322`) plays whole again — so these are {@link rewind}, not the
+ * idempotent install.
  */
 export const rat: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
@@ -236,13 +271,13 @@ export const rat: Brain = (e, foe, run, k) => {
   e.nerve ??= k.scaled(RAT.nerve);
   e.beat ??= 0;
   e.decisions ??= 0;
+  e.strength = 0x64; // `0x44e349`, on the way out of every path
   switch (e.script ?? 0) {
     /**
      * ---- 0: not a state at all — `0x44e02f`'s `dec eax` puts it out of range.
      *
      * The creator's last act is `0x450a3a`, `0x45d090(obj, 0x476f48, 0)`, so a
-     * rat that has no script yet gets the hide. The page zeroes `e.script` when
-     * the player leaves a record's rect and this is what catches that.
+     * rat that has no script yet gets the hide.
      */
     case 0:
       return install(e, RAT.hide);
@@ -268,13 +303,13 @@ export const rat: Brain = (e, foe, run, k) => {
       e.beat = beat - 1;
       if (beat < 0) {
         k.say(e, RAT.squeak);
-        install(e, RAT.run);
+        rewind(e, RAT.run);
         // `0x44e1bc`: and a fresh beat of one to seven
         e.beat = k.roll(7);
         ended = false;
       }
       // `0x44e1ca`: otherwise, when the pose it is holding runs out, another pose
-      if (ended) install(e, RAT.pose[k.roll(3) - 1]);
+      if (ended) rewind(e, RAT.pose[k.roll(3) - 1]);
       /**
        * `0x44e1ec`: `cmp word ptr [esp+0x10], 2` — the BAND, and 2 is the
        * innermost of `0x4770e0`'s two, which is inside eighty pixels. It goes up
@@ -284,7 +319,7 @@ export const rat: Brain = (e, foe, run, k) => {
        */
       if (t.band === 2) {
         k.say(e, RAT.hiss);
-        install(e, RAT.pounce, true);
+        rewind(e, RAT.pounce, true);
       }
       return false;
     }
@@ -299,7 +334,7 @@ export const rat: Brain = (e, foe, run, k) => {
      * when the six cels have played, it stands about again.
      */
     case 4:
-      return done ? install(e, RAT.pose[k.roll(3) - 1]) : false;
+      return done ? rewind(e, RAT.pose[k.roll(3) - 1]) : false;
     /**
      * ---- 5: the table's fifth entry is `0x44e345`, the common return, and the
      * class owns no kind-5 script. Nothing can put a rat here.
@@ -330,14 +365,14 @@ function burrow(e: Enemy, k: BrainCtx, done: boolean): boolean {
       const beat = e.beat ?? 0;
       e.beat = beat - 1;
       if (beat >= 0) return false;
-      install(e, RAT.twitch);
+      rewind(e, RAT.twitch);
       e.beat = k.roll(7) + 0xe;
       return false;
     }
     // tag 1, `0x44e093` — `0x434540(4)`, and it is an even coin: back in, or look
     case 1:
       if (!done) return false;
-      return k.roll(4) < 3 ? install(e, RAT.hide) : install(e, RAT.look);
+      return k.roll(4) < 3 ? rewind(e, RAT.hide) : rewind(e, RAT.look);
     /**
      * tag 2, `0x44e0d7` — the look, and the one place a rat asks about the player.
      *
@@ -349,8 +384,10 @@ function burrow(e: Enemy, k: BrainCtx, done: boolean): boolean {
      */
     case 2:
       if (!done) return false;
-      // `0x44e0ff` — and gravity goes on here, which this port has nowhere to put
-      return k.player.x > e.x ? install(e, RAT.stir) : install(e, RAT.hide);
+      if (k.player.x <= k.anchorX(e)) return rewind(e, RAT.hide);
+      // `0x44e0ff`: `0x42f850(obj, 1.0)` — out it comes, and it falls now
+      e.weightless = false;
+      return rewind(e, RAT.stir);
     /**
      * tag 3, `0x44e137` — out it comes, and `AI+4` is set to one on the way.
      *
@@ -362,10 +399,10 @@ function burrow(e: Enemy, k: BrainCtx, done: boolean): boolean {
     case 3:
       if (!done) return false;
       e.decisions = 1;
-      return install(e, RAT.emerge);
+      return rewind(e, RAT.emerge);
     // tag 4, `0x44e15d` — and the last cel of coming out hands to kind 2 tag 0
     case 4:
-      return done ? install(e, RAT.pose[0]) : false;
+      return done ? rewind(e, RAT.pose[0]) : false;
     default:
       return false;
   }
@@ -388,8 +425,8 @@ function running(e: Enemy, k: BrainCtx, done: boolean): boolean {
   if (tag >= 0 && tag <= 1) {
     if (!done) return false;
     return k.roll(5) >= 3
-      ? install(e, RAT.dash)
-      : install(e, RAT.pose[k.roll(3) - 1]);
+      ? rewind(e, RAT.dash)
+      : rewind(e, RAT.pose[k.roll(3) - 1]);
   }
   if (tag !== 2) return false;
   /**
@@ -416,9 +453,11 @@ function running(e: Enemy, k: BrainCtx, done: boolean): boolean {
     e.vy = 0;
     e.decisions = 0;
     e.x = home;
-    return install(e, RAT.hide);
+    if (e.homeY !== undefined) e.y = e.homeY;
+    e.weightless = true;
+    return rewind(e, RAT.hide);
   }
-  return install(e, RAT.bolt);
+  return rewind(e, RAT.bolt);
 }
 
 export { NOT_HERE as RAT_NOT_HERE };

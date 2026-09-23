@@ -24,8 +24,8 @@
  *
  * Two of those are a surprise and are worth saying out loud, because the page's
  * old hand-rolled reading had them the other way round. **`0x46f308` is not the
- * death.** `0x4264f0`, the hit handler, sends the bishop there when one blow is
- * big enough, and state 4 dissolves it, throws a dozen bats out of where it
+ * death.** `0x4264f0`, the hit handler, sends the bishop there each time its
+ * health halves, and state 4 dissolves it, throws a dozen bats out of where it
  * stood, teleports it to one of them and re-forms it on kind 5. The death is
  * `0x46f3d8`, kind 6, and it is the one path in the whole function that answers
  * `mov ax, 1` (`0x426308`) — the frame the object is removed.
@@ -33,12 +33,10 @@
  * ## What this module owns, and what it does not
  *
  * States 0, 1 and 2 — the statue, the float and the attacks — are the ones it is
- * in while it is on its feet, and those are here. States 3 to 6 are reached only
- * from the hit handler and the page already drives those through
- * {@link Foe.flinch} and {@link Foe.death}; a brain is never called while an
- * enemy is flinching or dying. They are named above so the next reader can see
- * what is deliberately elsewhere, and the four behaviours they carry that the
- * page does NOT have are written out at {@link NOT_HERE}.
+ * in while it is on its feet, and those are here, with 5's hand-back. States 3,
+ * 4 and 6 are reached only from the hit handler and the page animates them
+ * through {@link Foe.flinch} and {@link Foe.death}; what they do besides is
+ * {@link vpriestReacts}, and {@link NOT_HERE} is the reading of all of them.
  */
 import {
   install,
@@ -51,21 +49,20 @@ import {
 } from "./kit";
 
 /**
- * States 3 to 6, and what they do that the page's own flinch and death path
- * does not. Read, not done — the page owns those animations.
+ * States 3 to 6, as the executable has them.
  *
  * - **the hit handler, `0x4264f0`.** It keeps the bishop's health in `AI+0`, not
- *   in the object, and takes the blow off it there (`0x42656c`). Then it sorts
- *   the blow three ways. Nothing at all left — `0x426599` — and it is the death,
- *   kind 6, with `belfry.snd 0x1e` and a downward shove of 30. Otherwise
- *   `0x426620` weighs the blow against **half of `AI+6`**, which the creator
- *   seeded at `0x40e300(0x4b0)` and which this handler then overwrites with each
- *   blow that passes the test (`0x426633`): a blow that big is the VANISH, kind
- *   4, with sound `0x1f`. Anything smaller is kind 3, the flinch, on
+ *   in the object, and takes the blow off it there (`0x42656c`), playing
+ *   `0x434540(2) + 0x18` as it lands. Then it sorts three ways. Nothing at all
+ *   left — `0x426599` — and it is the death, kind 6, with `belfry.snd 0x1e` and
+ *   a downward shove of 30. Otherwise `0x426620` weighs what is LEFT against
+ *   **half of `AI+6`**, which the creator seeded at `0x40e300(0x4b0)`: under
+ *   it is the VANISH, kind 4, with sound `0x1f`, and `0x426633` stores what is
+ *   left as the new `AI+6`. Anything else is kind 3, the flinch, on
  *   `0x434540(2) - 1` — tag 0 or tag 1, one cel either way.
- * - **3**, the flinch: `0x4260b7` asks `0x4271b0` — the same "within sixty of
- *   the bound it faces" test as `k.atBound` — and a bishop pinned against its own
- *   bound is kicked 100 up and 100 along its facing to get it out of the corner.
+ * - **3**, the flinch: `0x4260b7` asks `0x4271b0` — "within sixty of the bound
+ *   at its back", the other half of `k.atBound`'s pair — and a bishop pinned
+ *   there is kicked 100 up and 100 along its facing to get it out of the corner.
  *   Then it bleeds two a frame off both velocities until the two cels are up.
  * - **4**, the vanish: `0x42615c` is the whole trick. Once its script has run it
  *   throws **twelve** bats out of itself through `0x426340`, records how many
@@ -75,8 +72,7 @@ import {
  *   within five hundred, drops the bishop there, plays `0x1c`, and hands to kind
  *   5. `AI+2` is the one-shot that stops it throwing the twelve twice.
  * - **6**, the death: `0x426258` bleeds the velocities to zero, and on an odd
- *   `obj+0x42` fires `0x40e4c0(0xe1)` and `0x4307c0(3)` — the end-of-chapter
- *   business. When the script ends it throws twelve more bats, calls `0x4263e0`
+ *   `obj+0x42` fires `0x40e4c0(0xe1)` and `0x4307c0(3)` — a flash and a jolt. When the script ends it throws twelve more bats, calls `0x4263e0`
  *   — which kills every bat on the level, each with a lift of −40, `0x40d450(0x46)`
  *   of award and its own two-cel death `0x46f140` — and returns 1.
  */
@@ -159,8 +155,8 @@ export const VPRIEST = {
    * What the cast lets go — `0x426bc0`, called from `0x425fd6` on the frame the
    * fourteen cels run out, one object per cast.
    *
-   * **A brain has no creator**, so nothing here spawns it; this is the record of
-   * what it is so the caller can wire it later.
+   * The machine lets it go through {@link BrainCtx.cast} as
+   * {@link VPRIEST_BOLT}; this is the record of what it is.
    *
    * - class `[0x46ecdc]`, proc `0x426c80`, hit handler `0x426e30`
    * - `0x426ca3` base cel **2700**, `0x426c9d` divisor **13**, `0x426cbc`
@@ -271,7 +267,7 @@ export const VPRIEST_BOLT: CastKit = {
  */
 const DIVISOR = 10;
 
-/** an engine frame is two of this page's ticks, and `e.vx` is pixels per TICK */
+/** `e.vx`/`e.vy` are pixels a TICK, the engine's pixels an engine frame */
 const TICKS = TICK_SCALE;
 
 /** `0x425d86` and `0x425de6` — ten a frame, sign taken from `obj+0x28` */
@@ -293,31 +289,41 @@ const SUMMON_ROLL = 13;
 const HEALTH = 0x4b0;
 
 /**
- * `0x42f8b0` — add a delta to `obj+0xa`/`obj+0xc`, through the divisor.
+ * `0x42f8b0` — add a delta to `obj+0xa`/`obj+0xc`, through the divisor and
+ * rounded away from zero.
  *
- * The engine does this once an ENGINE frame and this page thinks twice a frame,
- * so half of it goes on a tick; and `e.vy`/`e.vx` are pixels per tick where the
- * engine's are pixels per frame, so the whole thing is scaled by {@link TICKS}
- * twice. Nothing caps it: `0x42f850(obj, 0)` gives the class no gravity and
- * `0x42f7a0(obj, 0)` leaves `obj+0x1e` zero, so `0x4302c0`'s drag never runs and
- * `0x430327`'s fall never runs either. What bounds it is the halving below —
- * every frame of an attack takes half of both back off.
+ * The engine does this once an ENGINE frame and the brain is called once an
+ * engine frame, so one call is one addition; `e.vy`/`e.vx` are pixels per tick
+ * where the engine's are pixels per frame, so it is scaled by {@link TICKS}
+ * once. Nothing caps it: `0x42f850(obj, 0)` gives the class no gravity and
+ * `0x42f7a0(obj, 0)` leaves `obj+0x1e` zero, so `0x4302c0`'s drag never runs
+ * and `0x430327`'s fall never runs either. What bounds it is the halving below
+ * — every frame of an attack takes half of both back off.
  */
 function shove(e: Enemy, dvy: number, dvx: number): void {
-  e.vy += (dvy / DIVISOR) * TICKS * TICKS;
-  e.vx += (dvx / DIVISOR) * TICKS * TICKS;
+  e.vy += through(dvy) * TICKS;
+  e.vx += through(dvx) * TICKS;
+}
+
+/** `0x42f8b0`'s rounding — `lea eax, [ecx+eax-1]` or `sub ax, cx; inc ax`, then `idiv` */
+function through(n: number): number {
+  return n >= 0
+    ? Math.trunc((n + DIVISOR - 1) / DIVISOR)
+    : Math.trunc((n - DIVISOR + 1) / DIVISOR);
+}
+
+/** one velocity word through `cdq; sub eax, edx; sar eax, 1` — toward zero */
+function half(v: number): number {
+  return Math.trunc(Math.round(v / TICKS) / 2) * TICKS;
 }
 
 /**
- * `movsx eax, [esi+0xa]; cdq; sub eax, edx; sar eax, 1` — halve, toward zero.
- *
- * The engine's velocity is a whole number of pixels a frame and that sequence
- * truncates; this page's is fractional, so the truncation is not reproduced and
- * the decay is a clean halving instead.
+ * `movsx eax, [esi+0xa]; cdq; sub eax, edx; sar eax, 1` — halve, toward zero,
+ * both words; a velocity of one pixel a frame halves to nothing.
  */
 function halve(e: Enemy): void {
-  e.vy /= 2;
-  e.vx /= 2;
+  e.vy = half(e.vy);
+  e.vx = half(e.vx);
 }
 
 /**
@@ -367,8 +373,8 @@ function halve(e: Enemy): void {
  *
  * Every path of `0x425c90` falls through `0x425d69`, which is
  * `xor ax, ax` with `mov word ptr [esi+0x1a], 0x64` beside it — the strength
- * percent, set to a hundred every frame, and **nothing hits the player back in
- * this port**, so it is carried as read. The single `mov ax, 1` is `0x426308`,
+ * percent, set to a hundred every frame — the page's default strength, so
+ * nothing needs writing. The single `mov ax, 1` is `0x426308`,
  * the frame the corpse goes. So every path here returns `false`, the waiting
  * ones included.
  */
@@ -393,7 +399,10 @@ export const vpriest: Brain = (e, foe, run, k) => {
     // ---- 2, `0x425f32`: the attacks, sub-dispatched on the tag by `0x426330`
     case 2:
       return attack(e, k, t, done);
-    // 3 to 6 are the hit reactions and the page owns them — see NOT_HERE
+    // ---- 5, `0x426248`: the re-form plays out and hands to the float
+    case 5:
+      return tail(e, done);
+    // 3, 4 and 6 are the hit reactions and the page owns them — see NOT_HERE
     default:
       return false;
   }
@@ -415,14 +424,14 @@ function hover(
   // `0x425d7a` — and this one does NOT return: it turns and carries on deciding
   if (t.forward < 0) e.facing = -e.facing;
   /**
-   * `0x425ded` — the climb, and it is measured `obj+6` against `obj+6`: the
-   * player's own y, not the top of him.
+   * `0x425ded` — the climb, and it is measured `obj+6` against `obj+6`, anchor
+   * against anchor.
    *
    * `0x425cfd` adds fifty to it while the player's own `obj+0x18` is 6 — one of
    * his upright scripts, which this page does not model and which is therefore
    * the one number in this state left out rather than guessed.
    */
-  const drop = k.player.y - e.y;
+  const drop = k.player.anchor - k.anchorY(e);
   let lift = 0;
   let level = false;
   if (drop > ALIGNED) lift = DRIFT;
@@ -430,7 +439,7 @@ function hover(
   else {
     level = true;
     // `0x425e2c` — level with him, the climb stops and what is left of it decays
-    e.vy /= 2;
+    e.vy = half(e.vy);
   }
   // `0x425d86`/`0x425de6` — ten a frame along the facing, whatever else happens
   shove(e, lift, DRIFT * e.facing);
@@ -445,7 +454,7 @@ function hover(
    * better and is not what either function does. Read literally here.
    */
   if (k.player.down) {
-    e.facing = k.player.x > e.x ? -1 : 1;
+    e.facing = k.player.x > k.anchorX(e) ? -1 : 1;
     return tail(e, done);
   }
   /**
@@ -507,7 +516,7 @@ function attack(
 ): boolean {
   // `0x425f32`/`0x425f45`/`0x425f4c` — the three gates, in that order
   if (
-    Math.abs(e.y - k.player.y) < DODGE_Y &&
+    Math.abs(k.anchorY(e) - k.player.anchor) < DODGE_Y &&
     t.side === 1 &&
     k.roll(100) < 30
   ) {
@@ -545,10 +554,7 @@ function attack(
      * divisor of one and so `* TICK_SCALE` in this page's units.
      *
      * The two states that throw TWELVE — the vanish at `0x4261df` and the death
-     * at `0x4262f7` — are not here and are not reachable: both live in states
-     * this port never runs, because {@link Foe.flinch} and {@link Foe.death}
-     * own them and a brain is never called while either is playing. They stay
-     * in {@link NOT_HERE} with the rest of that machinery.
+     * at `0x4262f7` — are reactions, not brain states: see {@link vpriestReacts}.
      */
     case 2:
       halve(e);
@@ -575,27 +581,32 @@ export { NOT_HERE as VPRIEST_NOT_HERE };
  * The two states a brain is never called during, and the only two in this
  * class that were out of reach — see {@link Reaction}.
  *
+ * ## 3, the flinch — `0x4260b7`
+ *
+ * With its back to its own bound (`0x4271b0`, the far one of the pair
+ * `0x427170` reads) every frame pushes `{-100, ±100}` through `0x42f8b0` —
+ * up, and out along its facing. Then both velocities bleed two a frame
+ * towards zero, and the frame it ends `0x426138` halves them.
+ *
  * ## 4, the vanish — `0x42615c`
  *
- * `0x4264f0` sends the bishop here for one blow bigger than half of `AI+6`
- * ({@link Foe.pick} keeps that bar). Then:
+ * `0x4264f0` sends the bishop here when its health falls under half of `AI+6`
+ * ({@link Foe.pick} keeps that bar) and plays `0x1f` as it does (`0x426648`).
+ * Then, motionless (`0x42615c` zeroes both velocities every frame):
  *
  * ```
- *   42615c  once the script has run, throw TWELVE bats through 0x426340
- *   426190  AI+4 = how many of them are alive
- *   4261f8  ...and HOLD, motionless, until that has fallen to half
- *   426450  then take the surviving bat nearest the player — or a point
- *           fifty west of him if none is within five hundred — and put the
- *           bishop there, play 0x1c, and hand to kind 5
+ *   426173  once the script has run, throw TWELVE bats through 0x426340
+ *   4261eb  AI+4 = how many of them are alive
+ *   4261f8  ...and HOLD until that has fallen to half
+ *   426218  then 0x426450 picks the surviving bat nearest the player — or a
+ *           point fifty west of him if none is within five hundred — and the
+ *           bishop is put there, plays 0x1c, and is handed kind 5, the re-form
  * ```
  *
  * `AI+2` is the one-shot that stops it throwing the twelve twice, and it is
- * `e.hatched` here for the same reason.
- *
- * The hold is the part a page like this has to be careful with: a flinch ends
- * when its animation does, and this one must not. Pinning the clock is how,
- * and it is honest — the engine's script has run out too; it is the STATE that
- * is waiting, not the animation.
+ * `e.hatched` here for the same reason. The hold pins the clock: the
+ * engine's script has run out too; it is the STATE that is waiting, not the
+ * animation. The re-form is the vanish's {@link FoeAnim.resume}.
  *
  * ## 6, the death — `0x426258`
  *
@@ -604,19 +615,32 @@ export { NOT_HERE as VPRIEST_NOT_HERE };
  * did not kill": the bishop dying kills them.
  */
 export const vpriestReacts: Reaction = (e, foe, run, k) => {
-  const bats = VPRIEST.bat;
+  /**
+   * `0x426187`…`0x4261df` (and `0x4262a0`… for the death): each bat turns the
+   * bishop itself to `0x434540(2) - 1` first, and is let go eighty along that
+   * facing (`0x4261a5`) and `0x434540(0xc8) - 0x64` up or down of its point.
+   */
   const twelve = (): void => {
-    for (let i = 0; i < VANISH_BATS; i += 1)
+    for (let i = 0; i < VANISH_BATS; i += 1) {
+      e.facing = k.roll(2) - 1 === 1 ? -1 : 1;
       k.hatch(e, "initbat", {
-        x: e.x + e.facing * (bats.ahead + k.roll(bats.aheadSpread)),
-        y: e.y - bats.up + (k.roll(bats.upSpread) - bats.up),
+        x: e.x + e.facing * VANISH_OUT,
+        y: e.y + k.roll(VANISH_SPREAD) - VANISH_SPREAD / 2,
         facing: e.facing,
-        vx: e.facing * bats.vx * TICKS,
+        vx: e.facing * VPRIEST.bat.vx * TICKS,
       });
+    }
   };
 
   // ---- 6, `0x426258`: the death, and it takes the swarm with it
   if (e.state === "dead") {
+    e.vx = 0;
+    e.vy = 0;
+    // `0x426262` — and on every odd frame of it, the flash and the jolt
+    if (!e.hatched && Math.floor(e.clock / e.anim.hold) % 2 === 1) {
+      k.flash(0xe1); // `0x426277`
+      k.shake(3); // `0x426284`
+    }
     if (e.hatched || e.clock < run) return;
     e.hatched = true;
     twelve();
@@ -625,15 +649,27 @@ export const vpriestReacts: Reaction = (e, foe, run, k) => {
     return;
   }
 
+  // ---- 3, `0x4260b7`: the take, and the kick out of a corner
+  if (e.anim === foe.flinch?.[0] || e.anim === foe.flinch?.[1]) {
+    if (k.atRear(e)) shove(e, KICK_UP, KICK_OUT * e.facing);
+    e.vx = bleed(e.vx);
+    e.vy = bleed(e.vy);
+    if (e.clock >= run) halve(e);
+    return;
+  }
+
   // ---- 4, `0x42615c`: the vanish, which is the only flinch that is a state
   if (e.anim !== foe.flinch?.[2]) return;
+  e.vx = 0;
+  e.vy = 0;
+  // `0x426648` — the hit handler's own sound, on the first frame it shows
+  if (Math.floor(e.clock) === 1) k.say(e, VANISH_SOUND);
   if (e.clock < run) return;
   if (!e.hatched) {
-    // `0x426190` — and the count it holds against is taken AFTER the throw
+    // `0x4261eb` — and the count it holds against is taken AFTER the throw
     e.hatched = true;
     twelve();
     e.side = k.count("initbat");
-    k.say(e, VANISH_SOUND);
   }
   // `0x4261f8` — still more than half of them up, so it stays gone
   if (k.count("initbat") > Math.floor((e.side ?? 0) / 2)) {
@@ -654,10 +690,27 @@ export const vpriestReacts: Reaction = (e, foe, run, k) => {
   e.x = at.x;
   e.y = at.y;
   e.hatched = false;
-  e.nerve = undefined;
+  k.say(e, REFORM_SOUND);
 };
 
-/** `0x426211` — `belfry.snd` 0x1f, which is the only sound the vanish plays */
+/** `0x42600b`-style bleed — `0x4260f7`/`0x4260ff`: two a frame, towards zero */
+function bleed(v: number): number {
+  const n = Math.round(v / TICKS);
+  return (n > 0 ? n - 2 : n < 0 ? n + 2 : 0) * TICKS;
+}
+
+/** `0x4260ca` — `-100` up, through the divisor */
+const KICK_UP = -100;
+/** `0x4260d8` — and `±100` along the facing */
+const KICK_OUT = 100;
+/** `0x4261b0` — `and eax, 0xa0; sub eax, 0x50`: eighty along the facing */
+const VANISH_OUT = 0x50;
+/** `0x426197` — `0x434540(0xc8) - 0x64` */
+const VANISH_SPREAD = 0xc8;
+/** `0x42622d` — `belfry.snd` 0x1c as it re-forms */
+const REFORM_SOUND = 0x1c;
+
+/** `0x426648` — `belfry.snd` 0x1f, played as the vanish goes on */
 const VANISH_SOUND = 0x1f;
 /** `0x42616e` — twelve, against the summon's three */
 const VANISH_BATS = 12;

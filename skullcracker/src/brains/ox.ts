@@ -70,7 +70,13 @@
  * one and leaves `e.fighting` to the page, which is why {@link inPatch} is
  * written out longhand instead of reading the flag.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  type Reaction,
+} from "./kit";
 
 /**
  * The four states a brain is never in, and what each of them does that this
@@ -281,6 +287,8 @@ export const OX = {
   attackSay: 0x2f,
   /** `0x43f6b3` — frame 2 of the long idle */
   idle: 0x32,
+  /** `0x43f890` — frame 5 of the death, and again as the fall ends (`0x43f81f`) */
+  fall: 0x3d,
   from: "0x43f2a0",
 } as const;
 
@@ -378,6 +386,9 @@ export const ox: Brain = (e, foe, run, k) => {
     case 0: {
       // `0x43f3b8`/`0x43f3c5` — both the widened rect AND the player upright
       if (inPatch(e, k) && !k.player.down) return install(e, OX.stand);
+      // `0x43f3e4` — a footfall on script frames 6 and 11, which are the first
+      // and last of tag 1's six
+      if ((e.tag ?? 0) === 1) footfall(e, k, 6);
       /**
        * `0x43f407` — the rect's ends, read against `obj+8`, the X.
        *
@@ -409,6 +420,9 @@ export const ox: Brain = (e, foe, run, k) => {
         e.facing = -e.facing;
         return install(e, OX.stand);
       }
+      // `0x43f4ac` — the same footfall on frames 6 and 11, which only tag 0's
+      // twelve reach, and `0x43f4d1` shakes the screen with it
+      if ((e.tag ?? 0) === 0 && footfall(e, k, 0)) k.shake(1);
       return done ? install(e, OX.stand) : false;
     // ---- 2, `0x43f4f9`: the stand, and the only state that thinks
     case 2:
@@ -416,10 +430,12 @@ export const ox: Brain = (e, foe, run, k) => {
     /**
      * ---- 3, `0x43f696`: the idles, and both of them just end.
      *
-     * The handler's only other business is the sound on frame 2 of tag 0, which
-     * this port cannot place — see the preamble note above.
+     * The handler's only other business is `0x43f6a8`: sound 0x32 on frame 2
+     * of tag 0, the long one.
      */
     case 3:
+      if ((e.tag ?? 0) === 0 && Math.floor(e.clock / e.anim.hold) === 2)
+        k.say(e, OX.idle);
       return done ? install(e, OX.stand) : false;
     // ---- 5, `0x43f789`: an attack plays through and hands back to the stand
     case 5:
@@ -567,5 +583,47 @@ function strike(e: Enemy, k: BrainCtx): boolean {
   k.say(e, OX.attackSay + n);
   return install(e, OX.attack[n], true);
 }
+
+/**
+ * `0x43f3e4`/`0x43f4ac` — `obj+0x42` is 6 or 11, and `0x40ef30(bank, 0x2b)`.
+ *
+ * `obj+0x42` counts frames from the top of the SCRIPT, not the tag, so `first`
+ * is where the playing tag starts in it.
+ */
+function footfall(e: Enemy, k: BrainCtx, first: number): boolean {
+  const at = first + Math.floor(e.clock / e.anim.hold);
+  if (at !== 6 && at !== 11) return false;
+  k.say(e, OX.foot);
+  return true;
+}
+
+/**
+ * What the ox does while the page plays its reaction or its death.
+ *
+ * - The answer to a blow (`0x43fa7e`): an attack of `0x473098` is installed
+ *   with its voice, `0x2f + n` through `0x40ef30`, and the slide of `0x4731e0`
+ *   with `0x2c` through `0x40f090`. The page picks and plays; the voice goes
+ *   out on the first frame here.
+ * - The death, `0x43f885`: sound 0x3d on script frame 5, with `0x43f8a1`
+ *   shaking the screen.
+ */
+export const oxReacts: Reaction = (e, foe, _run, k) => {
+  const frame = Math.floor(e.clock / e.anim.hold);
+  if (e.state === "dead") {
+    if (e.anim !== foe.death) return;
+    // `0x43f8f4` — `obj+0x10 = -15` on every frame the body's count is still
+    // running, which is all of it: it settles fifteen into the floor
+    e.floor = -15;
+    if (Math.floor(e.clock) === 5 * e.anim.hold) {
+      k.say(e, OX.fall);
+      k.shake(3);
+    }
+    return;
+  }
+  if (Math.floor(e.clock) !== 1 || frame > 1) return;
+  const n = foe.flinch?.indexOf(e.anim) ?? -1;
+  if (n >= 0 && n < 3) k.say(e, OX.attackSay + n);
+  else if (n === 3) k.say(e, OX.flip);
+};
 
 export { NOT_HERE as OX_NOT_HERE };

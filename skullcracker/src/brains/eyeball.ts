@@ -8,13 +8,12 @@
  * animation. This one does not: `0x43e6cc` — state 7, the spit — calls
  * `0x43e800`, and that routine **creates a second object** of a class of its
  * own and walks away. The glob is the hit. What `0x43e800` does, exactly, is
- * written out at {@link GLOB}, because the page has no spawner to hand it to
- * yet and the numbers must not be lost.
+ * written out at {@link GLOB}, and {@link BrainCtx.cast} flies it.
  *
  * The one other thing that reaches the player is the carry — state 5 tags 2 to
  * 5 — and that is `0x402ac0(0xa)`, ten health a frame straight out of the
- * player's own word while he is held. **Nothing here hits the player**, so both
- * are carried as read, with their addresses, and neither spends anything.
+ * player's own word while he is held. The swoop that leads to it is not
+ * reachable here (see {@link decide}), so the carry is read and not spent.
  *
  * ## Its nine scripts, and therefore its nine states
  *
@@ -99,12 +98,14 @@ import {
   type BrainCtx,
   type CastKit,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 
 /**
- * The two states the page owns, and the six things they do beyond playing an
- * animation. Read out of `0x43dde0` and `0x43e8b0`, not done here.
+ * The two states the page owns, and what they do beyond playing an animation.
+ * The pick is {@link Foe.pick} in `foes.ts`, the tail of state 3 is the brain's
+ * own case 3, and the death's sound is {@link eyeballReacts}.
  *
  * - **3**, the fall and the flinch (`0x43dfc4`). Two scripts, one kind. The hit
  *   handler `0x43e8b0` picks between them: `0x43e9af` sends any blow harder than
@@ -344,6 +345,8 @@ export const EYEBALL = {
    */
   hawk: 0x36,
   snatch: 0x37,
+  /** `0x43e749` — the burst, as tag 1 of the death goes on */
+  burst: 0x3b,
   hum: 0x38,
   grabA: 0x4c,
   grabB: 0x4d,
@@ -351,20 +354,13 @@ export const EYEBALL = {
 } as const;
 
 /**
- * Engine frames per tick of this page, and the only thing that converts a number
- * out of a script into a number this file may write.
+ * Engine frames per tick of this page — a quarter.
  *
- * `walk.ts:766` is the authority: `TICK_SCALE = ENGINE_HZ * tickMs / 1000`, and
- * with `ENGINE_HZ = 15` and `tickMs = 1000/60` that is **a quarter** — four
- * brain calls to the engine frame, `e.clock += TICK_SCALE` once per call, and
- * `e.x += e.vx` once per call, so a velocity written as pixels per engine FRAME
- * becomes pixels per tick by multiplying by this.
- *
- * **`werea.ts` and `wered.ts` both carry a local `TICKS = 0.5`** with the
- * comment "a tick is half of one". That is not what `walk.ts` computes and the
- * two cannot both be right; this file may not edit theirs, so it takes the
- * number the page actually runs on and says so here. If the halves turn out to
- * be the intended reading, this constant is the one line to change.
+ * The page moves a thing by `e.vx`/`e.vy` once a TICK, four ticks to the engine
+ * frame, so a velocity written as pixels per engine FRAME becomes pixels per
+ * tick by multiplying by this, once. The brain itself is called once an engine
+ * frame (`stepFight`), as `0x43dde0` is, so a per-frame delta is added once a
+ * call and a per-frame counter counts one a call.
  */
 const TICKS = TICK_SCALE;
 
@@ -380,7 +376,7 @@ const TICKS = TICK_SCALE;
  * every frame, stopped at death.
  *
  * {@link BrainCtx.say} is the second call only — a one-shot — and the kit has no
- * handle for a loop. Calling it here would fire the sample four times an engine
+ * handle for a loop. Calling it here would restart the sample every engine
  * frame for as long as the thing is alive, so the hum is carried as
  * {@link EYEBALL.hum} and left for whoever gives the kit a looping voice. Every
  * OTHER `0x40ef30` in this class is a genuine one-shot and is ported.
@@ -412,11 +408,10 @@ const DIVE_FRAMES = 21;
  * which fits the five shots `AI+4` has cel sets for, at frames 4, 8, 12, 16 and
  * 20, exactly once each.
  *
- * Here it is counted UP in engine frames on {@link Enemy.nerve} rather than down
- * on `AI+0x30`, because this page's brain runs four times an engine frame and a
- * bare `- 1` a call would fire four times as often.
+ * {@link Enemy.nerve} is `AI+0x30`, spent one a call: the brain is called once
+ * an engine frame, as the think is.
  */
-const SPIT_GAP = 4;
+const SPIT_SEED = 2;
 
 /**
  * `0x435ac6`/`0x43deb0` — the bob, which is what keeps it in the air.
@@ -465,15 +460,16 @@ const SHAKE_RATE = 3;
 const STRUGGLE = 4;
 
 /**
- * `initeyeball`'s own machine, states 0, 1, 2, 4, 5, 6 and 7.
+ * `initeyeball`'s own machine, states 0 to 7.
  *
  * ## Every path returns false, including the ones that do nothing
  *
  * `0x43dde0` has exactly one `mov ax, 1` — `0x43e7b5`, the frame the burst ends
  * and the corpse is removed — and every other exit, `0x43df8d` included, is
  * `xor ax, ax`. `0x43df8d` is also where the strength percent is written:
- * `mov word ptr [esi+0x1a], 0x64`, a hundred, on **every** frame of every state.
- * Nothing hits the player in this port, so that is read and not spent.
+ * `mov word ptr [esi+0x1a], 0x64`, a hundred, on **every** frame of every state
+ * — the page's default {@link Enemy.strength}. No eyeball cel carries a strike
+ * box, so it is never spent.
  *
  * ## The preamble runs before the jump table, and it is most of the class
  *
@@ -488,8 +484,8 @@ export const eyeball: Brain = (e, foe, run, k) => {
   const state = e.script ?? 0;
   // AI+0x48's sign, +1 sinking and -1 rising — `0x435ac6` starts it positive
   e.hover ??= 1;
-  // AI+0x30, but counted up in engine frames — see {@link SPIT_GAP}
-  e.nerve ??= 0;
+  // AI+0x30, the spit's metronome — see {@link SPIT_SEED}
+  e.nerve ??= SPIT_SEED;
   // AI+4 — which of the glob's five cel sets goes out next, `0x435acc`
   e.decisions ??= 0;
   // AI+0x32 — the ladder hunt's phase, `0x435ad9`
@@ -533,6 +529,20 @@ export const eyeball: Brain = (e, foe, run, k) => {
       if (!done) return false;
       e.facing = -e.facing;
       return install(e, EYEBALL.hover);
+    /**
+     * ---- 3, `0x43dfc4`: the tail of a hit reaction.
+     *
+     * The flinch and the knock-out fall play as the page's reaction; when one
+     * ends, {@link FoeAnim.resume} hands it here on a one-frame script of kind
+     * 3, and `0x43dff5` is what a finished kind-3 script does: the hover, and
+     * `0x43e002` writes `vy = -5` to climb back up on. The splat (`obj+0x2c`,
+     * tag 4 and sound 0x3c) wants a collision word this page does not keep.
+     */
+    case 3:
+      if (!done) return false;
+      install(e, EYEBALL.hover);
+      e.vy = -5 * TICKS;
+      return false;
     // ---- 4, `0x43e00c`: the whole of the fight, decided fresh every frame
     case 4:
       return decide(e, k, t, done);
@@ -541,21 +551,23 @@ export const eyeball: Brain = (e, foe, run, k) => {
       return swoop(e, k, done);
     // ---- 6, `0x43e503`: the ladder, three phases through `AI+0x32`
     case 6:
-      return ladder(e, done);
+      return ladder(e, k, done);
     /**
      * ---- 7, `0x43e6cc`: the spit, and the only state that makes anything.
      *
-     * The metronome first — see {@link SPIT_GAP} — and then `0x43e6e2` calls
+     * The metronome first — see {@link SPIT_SEED} — and then `0x43e6e2` calls
      * `0x43e800(obj, AI+4)`, which builds a glob and forgets it. `AI+4` then
      * advances and wraps at 4 (`0x43e6fa`), so the five cel sets go out in
      * order. The state ends the ordinary way: when the three cels run out,
      * back to the hover.
      */
     case 7: {
-      const beat = (e.nerve ?? 0) + TICKS;
-      e.nerve = beat;
-      if (beat >= SPIT_GAP) {
-        e.nerve = 0;
+      // `0x43e6cc`: `ax = AI+0x30; AI+0x30 = ax - 1; if (ax >= 0) skip`
+      const ax = e.nerve ?? SPIT_SEED;
+      e.nerve = ax - 1;
+      if (ax < 0) {
+        // `0x43e6ee` — and re-seeded two after every shot
+        e.nerve = SPIT_SEED;
         /**
          * `0x43e800(obj, AI+4)` — a glob of class `[0x472780]` on script
          * `0x4725c0` tag `2 * AI+4`, twenty-five pixels in front of this one and
@@ -601,7 +613,7 @@ function float(e: Enemy, k: BrainCtx, state: number): void {
     e.vy = 0;
     return;
   }
-  const dy = k.player.y - e.y;
+  const dy = k.player.anchor - k.anchorY(e);
   if (dy > REACH) {
     // `0x43de82` — he is below it, so down
     e.vy = CLIMB * TICKS;
@@ -613,12 +625,12 @@ function float(e: Enemy, k: BrainCtx, state: number): void {
      * `0x43deb0` — the spring. `AI+0x48`'s sign is forced opposite to the
      * vertical speed's once that speed passes five, and then
      * `0x42f8b0` adds `AI+0x48 / 8` to it, rounded away from zero: two pixels
-     * per engine FRAME. An acceleration converts twice — once for the velocity's
-     * own units and once because this brain runs four times a frame.
+     * per engine FRAME, added once a call because the brain is called once a
+     * frame, and converted once into this page's pixels a tick.
      */
     if (Math.abs(e.vy) > BOB_LIMIT * TICKS) e.hover = e.vy > 0 ? -1 : 1;
     const push = Math.ceil(BOB / BOB_DIVISOR) * (e.hover ?? 1);
-    e.vy += push * TICKS * TICKS;
+    e.vy += push * TICKS;
   }
   // `0x43def0` — and fifty a frame sideways is as fast as it drifts
   if (Math.abs(e.vx) > DRIFT_CAP * TICKS) e.vx = e.vx / 2;
@@ -632,17 +644,13 @@ function float(e: Enemy, k: BrainCtx, state: number): void {
  * only then the band. Each of the first five is a plain `jmp` to an install and
  * the frame is over.
  *
- * ## The two tests this port cannot make, and what it does instead
+ * ## The player's state, which two of those tests read
  *
- * `0x43e02b` and `0x43e06c` read the PLAYER's own `obj+0x18`. Neither
- * {@link Enemy} nor {@link BrainCtx} carries it — `k.player.down` is
- * `0x402f60`, the single test that his state is under 0x1a, and states 7 and 9
- * are both well under that — so:
+ * `0x43e02b` and `0x43e06c` read the PLAYER's own `obj+0x18`:
  *
  * - **state 7, on a ladder.** `0x43e02f` sends the eyeball off to find a ladder
- *   of its own and follow him up it. The port has no ladders and no way to ask,
- *   so this branch is not taken and the class reaches state 6 through its other
- *   door, the two-hundred-pixel one below, which IS expressible.
+ *   of its own and follow him up it — {@link ladder}. It is the same install
+ *   as the two-hundred-pixel door below.
  * - **state 9.** `0x43e070` is the swoop's only door: he is in state 9 and
  *   `0x43e880` — a walk of the class's own object list looking for a member
  *   already in state 5 — says no other eyeball has him. Nine is one of the four
@@ -663,13 +671,13 @@ function decide(
   // `0x43e016` — he is off his feet, so it goes back to hanging about
   if (k.player.down) return install(e, EYEBALL.idle);
   /**
-   * `0x43e04a` — two hundred off his height and it stops trying.
+   * `0x43e02f` — he is on a ladder — and `0x43e04a` — two hundred off his
+   * height: it goes after him by ladder.
    *
    * `0x43e12b` sets `AI+0x32` to 1, the first phase of the hunt, and installs
-   * the kind-6 drift. This is the door into state 6 that the port can still open
-   * — the ladder one above is not — and {@link ladder} says what happens after.
+   * the kind-6 drift; {@link ladder} says what happens after.
    */
-  if (Math.abs(e.y - k.player.y) > GIVE_UP) {
+  if (k.player.climbing || Math.abs(k.anchorY(e) - k.player.anchor) > GIVE_UP) {
     e.side = 1;
     return install(e, EYEBALL.hunt);
   }
@@ -705,8 +713,9 @@ function decide(
       e.vx = e.vx / 2;
       const roll = k.roll(2);
       if (roll === 1) {
-        // `0x43e0d0` — `0x402f00`, which this port reads as always true
-        e.nerve = 0;
+        // `0x43e0d0` — `0x402f00`, which this port reads as always true;
+        // `0x43e0da` seeds `AI+0x30` with two
+        e.nerve = SPIT_SEED;
         k.say(e, EYEBALL.hawk);
         return install(e, EYEBALL.spit, true);
       }
@@ -771,8 +780,8 @@ function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
      */
     case 0: {
       e.vy = -CLIMB_RATE * TICKS;
-      e.vx = (k.player.x >= e.x ? CLIMB_DRIFT : -CLIMB_DRIFT) * TICKS;
-      if (Math.abs(k.player.y - STRIKE - e.y) <= ARRIVED) return false;
+      e.vx = (k.player.x >= k.anchorX(e) ? CLIMB_DRIFT : -CLIMB_DRIFT) * TICKS;
+      if (Math.abs(k.player.anchor - STRIKE - k.anchorY(e)) <= ARRIVED) return false;
       return install(e, EYEBALL.dive);
     }
     /**
@@ -787,8 +796,8 @@ function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
       // `0x43e1af` — he went down mid-dive, so there is nothing to catch
       if (k.player.down) return install(e, EYEBALL.hover);
       const stale = e.clock >= DIVE_FRAMES;
-      const lift = k.player.y - STRIKE - e.y;
-      const reach = k.player.x - e.x;
+      const lift = k.player.anchor - STRIKE - k.anchorY(e);
+      const reach = k.player.x - k.anchorX(e);
       e.vy = Math.trunc(lift / DIVE_DIVISOR) * TICKS;
       e.vx = Math.trunc(reach / DIVE_DIVISOR) * TICKS;
       if (Math.abs(lift) < LATCH_Y && Math.abs(reach) < LATCH_X) {
@@ -846,48 +855,66 @@ function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
 }
 
 /**
- * State 6, `0x43e503` — the ladder, and the one state this port cannot finish.
+ * State 6, `0x43e503` — the ladder, in three phases through `AI+0x32`.
  *
- * `AI+0x32` runs it in three phases and the first of them is a search of the
- * level: `0x43e529` pushes the length-prefixed string at `0x46eb14`, which is
- * **"ladder"**, through `0x404440` and hands it to `0x40b660` along with the
- * eyeball itself. What comes back is the nearest ladder's point and rect, which
- * `0x43e550` stores at `AI+0x38`, `AI+0x40` and `AI+0x44`, and only then does
- * `AI+0x32` become 2.
- *
- * **There is no scenery lookup in {@link BrainCtx}** — a brain sees the player,
- * its own record's rect and nothing else — so phase 1 cannot succeed here, and
- * that is not a shortcut: it is what `0x43e542` does on a level with no ladder
- * on it. `test ax, ax; je 0x43e696` drops straight to the tail, the tail
- * re-installs the same tag when the one-cel script ends, and the eyeball drifts
- * sideways at twenty a frame for as long as it lives. **An eyeball that reaches
- * state 6 in this port does not come back**, because the only way out is inside
- * phase 3. The door it comes in by is {@link decide}'s two-hundred-pixel test,
- * which the hover normally keeps it well clear of; if that turns out to bite, the
- * fix is a ladder lookup, not a change here.
- *
- * The two phases that need one are written out rather than guessed at:
- *
- * - **phase 2**, `0x43e56b`: face the ladder (`obj+0x28` from the sign of
- *   `AI+0x3a − self.x`), and once it is within **fifty** pixels of it sideways,
- *   stop dead, choose a direction — `AI+0x34` is **1** if the ladder's point is
- *   below it and **2** if it is above — install `0x472998` at that tag and go to
- *   phase 3.
- * - **phase 3**, `0x43e5d9`: climb. `AI+0x34` is re-decided every frame against
- *   the ladder's own top and bottom and the point a hundred above the player
- *   (`0x43e5e3` through `0x43e606`), and when the tag it wants differs from the
- *   one playing, `0x43e665` swaps the script — saving `obj+0x42`, the frame
- *   index, first and putting it back **± 0xc** afterwards, because the two climbs
- *   are twelve frames each and that keeps the flap in phase across the swap. It
- *   leaves the ladder at `0x43e629`: inside **a hundred** of his height and with
- *   him no longer climbing, back to the hover with `vy = -5` and `AI+0x32` = 0.
+ * - **phase 1**, `0x43e51f`: find one. `0x40b660(<"ladder">, self, 0, -1)`
+ *   hands back the level's nearest ladder record ({@link BrainCtx.ladderNear})
+ *   and `0x43e550` keeps its point and rect; on a level with none it stays in
+ *   phase 1 and drifts on (`0x43e542`).
+ * - **phase 2**, `0x43e56b`: face the ladder's point (`obj+0x28` clear when
+ *   the point is east of it) and drift at it; inside **fifty** sideways, stop
+ *   dead, climb — tag **1** if the point is below it, **2** otherwise — and go
+ *   to phase 3.
+ * - **phase 3**, `0x43e5d9`: climb towards a hundred above the player, inside
+ *   the ladder's top and bottom (`0x43e5e3`..`0x43e606`): tag 2 while it is at
+ *   or above the top or above that point, tag 1 while it is at or below the
+ *   bottom or below it. A change of tag swaps the script and keeps the frame
+ *   (`0x43e665` saves `obj+0x42` and puts it back ±0xc, because the two climbs
+ *   are one twelve-frame run apart). It leaves at `0x43e629`: within **a
+ *   hundred** of his height with him off the ladder — back to the hover with
+ *   `vy = -5` and `AI+0x32` = 0.
  */
-function ladder(e: Enemy, done: boolean): boolean {
+function ladder(e: Enemy, k: BrainCtx, done: boolean): boolean {
   switch (e.side ?? 0) {
-    case 1:
-      // `0x43e51f` — `0x40b660(<"ladder">, self, 0, -1, &out)`. See above: the
-      // port has no scenery lookup, so this never advances past phase 1.
+    case 1: {
+      const found = k.ladderNear(e);
+      if (found) {
+        e.ladder = found;
+        e.side = 2;
+      }
       break;
+    }
+    case 2: {
+      const l = e.ladder!;
+      const x = k.anchorX(e);
+      e.facing = l.x > x ? 1 : -1;
+      if (Math.abs(l.x - x) < 50) {
+        e.side = 3;
+        e.vx = 0;
+        return install(e, l.y > k.anchorY(e) ? EYEBALL.climbUp : EYEBALL.climbDown);
+      }
+      break;
+    }
+    case 3: {
+      const l = e.ladder!;
+      e.vx = 0;
+      const y = k.anchorY(e);
+      const aim = k.player.anchor - 100;
+      let want = e.tag ?? 1;
+      if (l.top >= y || aim > y) want = 2;
+      else if (l.bottom <= y || aim < y) want = 1;
+      if (Math.abs(y - k.player.anchor) < 100 && !k.player.climbing) {
+        e.side = 0;
+        e.vy = -5 * TICKS;
+        return install(e, EYEBALL.hover);
+      }
+      if (want !== e.tag) {
+        const frame = e.clock;
+        install(e, want === 1 ? EYEBALL.climbUp : EYEBALL.climbDown);
+        e.clock = frame;
+      }
+      break;
+    }
     default:
       break;
   }
@@ -906,6 +933,29 @@ function ladder(e: Enemy, done: boolean): boolean {
   if (tag === 2) return install(e, EYEBALL.climbDown);
   return install(e, EYEBALL.hunt);
 }
+
+/** `0x4728e0` tag 0 — twelve cels at one tick, after which `0x43e745` bursts it */
+const POP_FRAMES = 12;
+
+/**
+ * State 8, `0x43e716` — the death, which the page plays as {@link Foe.death}:
+ * `0x4728e0` tag 0 and tag 1 back to back, both one tick a cel, with
+ * {@link Foe.linger} 0 because tag 1 ending is `0x43e7b5`'s `mov ax, 1`.
+ *
+ * What the script cannot do is done here, once an engine frame: tag 0 halves
+ * `obj+0xc` every frame (`0x43e72c`), and the frame it ends `0x43e750` plays
+ * sound **0x3b** through `0x40f090` as tag 1 goes on, and throws the four
+ * `0x40cba0(self.point, 0x32, 0)` gibs at `0x43e768`.
+ */
+export const eyeballReacts: Reaction = (e, foe, _run, k) => {
+  if (e.state !== "dead" || e.anim !== foe.death) return;
+  if (e.clock <= POP_FRAMES) e.vx = Math.trunc(e.vx / TICKS / 2) * TICKS;
+  if (!e.hatched && e.clock >= POP_FRAMES) {
+    e.hatched = true;
+    k.say(e, EYEBALL.burst);
+    for (let n = 0; n < 4; n++) k.spray(e, 0x32);
+  }
+};
 
 export {
   NOT_HERE as EYEBALL_NOT_HERE,

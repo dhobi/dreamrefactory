@@ -27,39 +27,29 @@
  * ## What this module owns, and what it does not
  *
  * Eight of the thirteen — 0 through 7 — are the ones a thing is in while it is
- * on its feet, and those are here. The last five are the hit reactions, and the
- * page already drives those through {@link Foe.flinch}, {@link Foe.pick} and
- * {@link Foe.death}; a brain is never called while an enemy is flinching or
- * dying, so wiring them here would mean two owners for one animation. They are
- * written out above so the next reader can see what is deliberately elsewhere,
- * and the three behaviours they carry that the page does NOT have are named at
- * {@link NOT_HERE}.
+ * on its feet, and those are here. The last five are the hit reactions: the
+ * page plays their animations through {@link Foe.flinch}, {@link Foe.pick},
+ * {@link Foe.burns} and {@link Foe.death}, and each one hands back to this
+ * machine through {@link FoeAnim.resume} — the flinch as kind 11, the burn as
+ * kind 8, the get-up as the taunt — so the choice SC.EXE makes as each one ends
+ * is made here. What happens DURING the burn is {@link wereaReacts}.
+ *
+ * ## `AI+0` is the health
+ *
+ * `0x44e5d5` hands `AI+0` to the enemy bar as the current figure and `0x44f173`
+ * subtracts the blow from it, so the word every "is it hurt" test reads —
+ * `0x44e7cd`, `0x44e9dc`, `0x44eee5`, each against `0x40e300(0xfa) / 2` — is
+ * the page's own `e.hp`. There is no separate nerve.
  */
 import {
   install,
+  rewind,
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
-
-/**
- * The hit-reaction states, 8 to 12, and what they do that the page's own flinch
- * path does not. Read, not done — the page owns those animations.
- *
- * - **8**, the growl: `0x44ed8c` takes **ten off `AI+0`**, the nerve, every time
- *   a blow lands, and when the nerve runs out the punk does not flinch — it goes
- *   straight to the death script with `AI+2` set to 200 corpse frames. So a punk
- *   that has been worn down dies of the next tap, and the port's pure health
- *   subtraction cannot express that.
- * - **10**, getting up: `0x44ee90` ends the get-up by installing the standing
- *   **taunt**, not the stance, so a knocked-down punk comes back mouthing off.
- * - **11**, the flinch: `0x44eeb5` half the time returns to the stance, and the
- *   other half reads its nerve against `0x40e300(0xfa)/2` and either backs off
- *   (kind 3 tag 0) or steps straight in (tag 1) — the same coin the fight makes
- *   when the player swings.
- */
-const NOT_HERE = "0x44ed8c, 0x44ee90, 0x44eeb5" as const;
 
 /**
  * Its repertoire, by kind and tag, straight out of `0x4770f0`…`0x477580`.
@@ -288,17 +278,19 @@ const MARGIN = 100;
 export const werea: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, WEREA.bands);
-  e.nerve ??= k.scaled(0xfa);
+  // `0x450acb`…`0x450ad7` — the creator's three words: beat 8, budget 3, side 0.
+  // A hatched FANG never passes through state 0, so the side it is born with
+  // is the one it fights with
   e.beat ??= 8;
   e.decisions ??= 3;
-  e.side ??= 1;
+  e.side ??= 0;
   switch (e.script ?? 0) {
     // ---- 0, `0x44e5fb`: the patrol, and the one thing that ends it
     case 0: {
       // `0x434200(player.point, AI+8)` — his point inside this record's rect
       if (e.fighting) {
         // `0x44e616`: which side of him to want is decided ONCE, on the way in
-        e.side = k.player.x < e.x ? 1 : 0;
+        e.side = k.player.x < k.anchorX(e) ? 1 : 0;
         return install(e, WEREA.stance);
       }
       // `0x44e64b`: a territory under three hundred wide is not walked at all
@@ -317,42 +309,52 @@ export const werea: Brain = (e, foe, run, k) => {
         e.x = lo; // `0x44e6aa`
         e.facing = -e.facing;
       } else if (k.atBound(e)) e.facing = -e.facing;
-      return done ? install(e, WEREA.patrol) : false;
+      return done ? rewind(e, WEREA.patrol) : false;
     }
-    // ---- 1, `0x44e6e7`: the stance, and the only state that thinks every frame
+    // ---- 1, `0x44e6e7`: the stance, and the only state that thinks every frame.
+    // It puts the shove weight back to 8 on every one
     case 1:
+      e.shove = undefined;
       return decide(e, k, t, done);
     // ---- 2, `0x44ea58`: a walk that ends in the stance
     case 2:
       return done ? install(e, WEREA.stance) : false;
-    // ---- 3, `0x44ea7d`: the back-off and the step-in both end facing him
+    // ---- 3, `0x44ea7d`: the back-off and the step-in both end facing him —
+    // and the turn is asked every frame of them, before the script-ended test
     case 3:
-      if (!done) return false;
       if (t.forward < 0) e.facing = -e.facing;
+      if (!done) return false;
       return install(e, WEREA.stance);
     // ---- 4, `0x44eaae`: and the taunts answer by WHICH taunt it was
     case 4: {
-      if (!done) return false;
-      // `0x44eac2` — the two it stands still for, and it steps in six times in ten
+      // `0x44eac2` — the two it stands still for land at full strength and
+      // step in six times in ten
       if ((e.tag ?? 0) <= 1) {
+        e.strength = 100;
+        if (!done) return false;
         return k.roll(100) < 60
           ? install(e, WEREA.near)
           : install(e, WEREA.stance);
       }
       /**
-       * `0x44eb16` — and the three it walks in on keep it going, but only while
-       * the player is still two bands out. `cmp word ptr [esp+0x10], 2` is the
-       * BAND, four fifths of the time, and anything nearer than that ends the
-       * mouthing off and puts it back in the stance.
+       * `0x44eb16` — the three it walks in on hit at HALF strength (`obj+0x1a =
+       * 0x32`) and keep it going, but only while the player is still two bands
+       * out. `cmp word ptr [esp+0x10], 2` is the BAND, four fifths of the time,
+       * and anything nearer than that ends the mouthing off and puts it back in
+       * the stance. The same taunt rolled twice starts again from its first
+       * cel: `0x45d090` rewinds whatever it is handed.
        */
+      e.strength = 0x32;
+      if (!done) return false;
       if (k.roll(100) < 80 && t.band >= 2) {
         k.say(e, WEREA.growl);
-        return install(e, WEREA.taunt[1 + k.roll(3)]);
+        return rewind(e, WEREA.taunt[1 + k.roll(3)]);
       }
       return install(e, WEREA.stance);
     }
     // ---- 5, `0x44eb90`: the punch backs off, the step-in punches
     case 5:
+      e.strength = 100; // `0x44eb94`
       if (!done) return false;
       return (e.tag ?? 0) === 0
         ? install(e, WEREA.away)
@@ -365,7 +367,7 @@ export const werea: Brain = (e, foe, run, k) => {
      */
     case 6:
       if (!done) return false;
-      if (k.player.down) return install(e, WEREA.mill);
+      if (k.player.down) return rewind(e, WEREA.mill);
       e.x = e.home ?? e.x;
       e.fighting = false;
       return install(e, WEREA.patrol);
@@ -374,23 +376,116 @@ export const werea: Brain = (e, foe, run, k) => {
      *
      * Four of the five wait for `obj+0x2e` — being back on the ground — and then
      * hand to tag 1, the landing, which hands to the stance. Tag 2 is the one
-     * that steers: `0x44ecb5` nudges its sideways speed ten a frame while it is
-     * within thirty of him, so it comes down on the side it wanted.
+     * that steers: `0x44ecb5` sets its sideways speed to ten while it is within
+     * thirty of him, so it comes down on the side it wanted.
      */
     case 7: {
       const tag = e.tag ?? 0;
+      // `0x44ec4a` — every leap lands at full strength but the big one, which
+      // `0x44ed50` zeroes: the leap over him is for changing sides, not hitting
+      e.strength = tag === 4 ? 0 : 100;
+      // `0x44ed56` — and takes its shove weight off with it, so it passes over him
+      if (tag === 4) e.shove = 0;
       if (tag === 1) return done ? install(e, WEREA.stance) : false;
-      if (tag === 2 && e.y - k.player.y < 30) {
+      if (tag === 2 && k.anchorY(e) - k.player.anchor < 30) {
+        /**
+         * `0x44ecc9`…`0x44ecec` — `obj+0xc` in WORLD terms, east positive (the
+         * shot's own `0x452b91` and the hatch's `0x450b01` write it the same
+         * way): wanting the west side (`AI+6` set) it is +10 facing east and −10
+         * facing west, and wanting the east side the other way round.
+         */
         const east = e.facing > 0;
-        e.vx = (e.side !== 0 ? (east ? -10 : 10) : east ? 10 : -10) * TICKS;
+        e.vx = (e.side !== 0 ? (east ? 10 : -10) : east ? -10 : 10) * TICKS;
       }
       if (!done || e.vy !== 0) return false;
       return install(e, WEREA.land);
     }
+    /**
+     * ---- 8, `0x44ed8c`: the burn has run out ({@link wereaReacts} spent it).
+     *
+     * `0x44edae`: anything left and it is back in the stance; nothing, and it
+     * dies where it stands — `AI+2 = 200` corpse frames (`0x44edce`) and the
+     * death script, with no death sound and no award: `0x44ed8c`'s arm calls
+     * neither `0x40f090` nor `0x40d450`. A punk burned out is worth nothing.
+     */
+    case 8:
+      if (e.hp > 0) return install(e, WEREA.stance);
+      if (foe.death) {
+        e.state = "dead";
+        e.anim = foe.death;
+        e.clock = 0;
+        e.swing = false;
+        e.linger = BURNT_CORPSE;
+      }
+      return false;
+    /**
+     * ---- 11, `0x44eeb5`: the flinch has ended. Half the time it answers the
+     * blow — out of reach while its health is under half, straight back in
+     * otherwise — and half the time it is back in the stance.
+     */
+    case 11:
+      if (k.roll(100) < 50)
+        return install(e, hurt(e, k) ? WEREA.away : WEREA.near);
+      return install(e, WEREA.stance);
     default:
       return false;
   }
 };
+
+/** `0x44edce` — `mov word ptr [edi+2], 0xc8`: a burnt punk lies two hundred frames */
+const BURNT_CORPSE = 0xc8;
+
+/**
+ * `0x44e7cd`, `0x44e9dc`, `0x44eee5` — `0x40e300(0xfa) / 2` against `AI+0`,
+ * the health: under half, and every one of its choices goes the cautious way.
+ */
+function hurt(e: Enemy, k: BrainCtx): boolean {
+  return Math.trunc(k.scaled(0xfa) / 2) > e.hp;
+}
+
+/**
+ * State 8 while it plays — `0x44ed8c`, run once an engine frame by the page.
+ *
+ * The burn costs nothing up front (`0x44f0aa` answers the −9 before any
+ * arithmetic); it is THIS that costs: ten off `AI+0` and a growl `0x23` on every
+ * frame of `0x477408`, fifteen of them, a hundred and fifty in all. What the
+ * end of it chooses is state 8 in {@link werea}.
+ */
+export const wereaReacts: Reaction = (e, foe, run, k) => {
+  floorOf(e, foe, run);
+  if (e.state !== "flinch" || e.anim !== foe.burns?.anim) return;
+  e.hp -= BURN_BITE;
+  k.say(e, WEREA.growl);
+};
+
+/**
+ * `obj+0x10`, the floor offset, and the three places this class writes it.
+ *
+ * - `0x44ee45`: the knockdown's fall (kind 10 tag 0) ends and the punk lies
+ *   TWELVE pixels into the ground, `0xfff4`, for tag 1;
+ * - `0x44ee70`: tag 1 ends and the get-up stands on the floor again, 0;
+ * - `0x44ef94`: every frame of state 12, the death and the corpse, −12.
+ *
+ * FANG thrown off the CHOPPER reaches tag 1 through state 9 (`0x44edee`),
+ * which writes nothing — so it lies on the floor, not in it.
+ */
+function floorOf(e: Enemy, foe: Parameters<Reaction>[1], run: number): void {
+  if (e.state === "dead") {
+    e.floor = LAID;
+    return;
+  }
+  const fall = foe.flinch?.[3];
+  if (!fall) return;
+  // the fall's last frame is the one `0x44ee2f` hands on from
+  if (e.anim === fall && e.clock + 1 >= run) e.floor = LAID;
+  else if (e.anim === fall.then?.then) e.floor = 0;
+}
+
+/** `0x44ee45` / `0x44ef94` — `mov word ptr [esi+0x10], 0xfff4` */
+const LAID = -12;
+
+/** `0x44ed8c` — `sub word ptr [edi], 0xa` */
+const BURN_BITE = 0xa;
 
 /** the leap's steering is ten pixels an ENGINE frame, and a tick is a QUARTER of one */
 const TICKS = TICK_SCALE;
@@ -419,7 +514,7 @@ function decide(
    * and read them this way.
    */
   if (k.player.down) {
-    e.facing = k.player.x > e.x ? -1 : 1;
+    e.facing = k.player.x > k.anchorX(e) ? -1 : 1;
     return install(e, WEREA.mill);
   }
   // `0x44e736` — and this one does NOT return: it turns and carries on deciding
@@ -429,19 +524,16 @@ function decide(
   // `0x44e75b` — and so is finding this side crowded
   if (k.crowded(e)) e.side = e.side === 0 ? 1 : 0;
   // `0x44e76e` — more than a hundred below him and the band is read as the far one
-  const band = e.y - k.player.y > 100 ? 0 : t.band;
+  const band = k.anchorY(e) - k.player.anchor > 100 ? 0 : t.band;
   // `0x44e77f` — he is on the way UP, so the anti-air goes out instead
   if (k.player.vy < -5) return install(e, WEREA.antiAir, true);
   /**
    * `0x44e7a0` — and if he is mid-blow, half the time it answers the blow
-   * rather than the distance: `0x40e300(0xfa) / 2` against its own nerve decides
-   * whether that means out of reach or straight in.
+   * rather than the distance: `0x40e300(0xfa) / 2` against its own health
+   * decides whether that means out of reach or straight in.
    */
   if (k.player.swinging && k.roll(100) < 50) {
-    return install(
-      e,
-      k.scaled(0xfa) / 2 > (e.nerve ?? 0) ? WEREA.away : WEREA.near,
-    );
+    return install(e, hurt(e, k) ? WEREA.away : WEREA.near);
   }
   /**
    * `0x44e806` — on the wrong side of him, and far enough out to fix it.
@@ -452,6 +544,9 @@ function decide(
    */
   const wanted = e.side === 1 ? -1 : 1;
   if (wanted !== e.facing && band <= 0) return install(e, WEREA.over, true);
+  // `0x44e83a` — the band dispatch is an unsigned `cmp eax, 4; ja`, so −1, the
+  // player behind it, falls straight through: the turn above is the whole frame
+  if (band < 0) return false;
   switch (band) {
     /**
      * Beyond 330: it leaps. Within three hundred of his height that is the
@@ -460,7 +555,7 @@ function decide(
      * it lifts itself fifty pixels first.
      */
     case 0: {
-      const drop = e.y - k.player.y;
+      const drop = k.anchorY(e) - k.player.anchor;
       if (drop < 300) return install(e, WEREA.kick, true);
       e.vy = -k.root(k.gravity * drop * 2);
       e.vx = 0;
@@ -476,13 +571,14 @@ function decide(
      * 150..200 — the decision band, and it only counts when the stance ENDS.
      * `0x44e909` spends one of `AI+4` each time round, and when they run out it
      * commits: a coin flip between a long step in and a short one, and three
-     * more on the clock.
+     * more on the clock. Each one spent puts the stance on AGAIN, from its first
+     * cel (`0x44e96a`), so a budget of three is four whole stances of waiting.
      */
     case 2: {
       if (!done) return false;
       const left = e.decisions ?? 3;
       e.decisions = left - 1;
-      if (left >= 0) return install(e, WEREA.stance);
+      if (left >= 0) return rewind(e, WEREA.stance);
       e.decisions = k.roll(3);
       return k.roll(2) === 1
         ? install(e, WEREA.stepIn)
@@ -491,7 +587,7 @@ function decide(
     /**
      * 80..150 — it taunts, on a beat of its own. `0x44e982` counts `AI+2` down,
      * reseeds it with `rand(8)`, growls, and picks out of the five: the three
-     * that walk in while its nerve holds, the two that stand when it does not.
+     * that walk in while it is over half health, the two that stand when not.
      */
     case 3: {
       const beat = e.beat ?? 8;
@@ -499,7 +595,7 @@ function decide(
       if (beat >= 0) return false;
       e.beat = k.roll(8);
       k.say(e, WEREA.growl);
-      if (k.roll(100) < 50 && k.scaled(0xfa) / 2 < (e.nerve ?? 0)) {
+      if (k.roll(100) < 50 && Math.trunc(k.scaled(0xfa) / 2) < e.hp) {
         return install(e, WEREA.taunt[1 + k.roll(3)]);
       }
       return install(e, WEREA.taunt[k.roll(2) - 1]);
@@ -510,5 +606,3 @@ function decide(
       return install(e, WEREA.punch, true);
   }
 }
-
-export { NOT_HERE as WEREA_NOT_HERE };

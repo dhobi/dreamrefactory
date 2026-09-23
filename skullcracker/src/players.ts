@@ -71,8 +71,8 @@
  * frames and `0x475c88` is 41, `0x471c90` is 26 and `0x476240` is 23.
  *
  * The two bodies are different sizes as well, which is not a detail: cel 1 is
- * 98x145 with its box bottom 88 below the anchor and cel 5001 is 73x138 with its
- * bottom at 69, so the same `p.y` means two different standing heights. Those
+ * 98x145 with its art reaching 90 below the anchor and cel 5001 is 73x138 reaching
+ * 71, so the same `p.y` means two different standing heights. Those
  * numbers are the cels' own and are read from `PLAYER.SBK` rather than written
  * here — {@link PlayerKit.standCel} is the cel to read them from.
  */
@@ -94,6 +94,16 @@ export interface PlayerAnim {
   climb: readonly (readonly number[])[];
   hang: readonly number[];
   /**
+   * The FLAIL — kind 25, one cel. Every frame the state machine's preamble
+   * (`0x4284ba`, `0x442f3f`) tests `obj+0x32`, the fall so far, and past 360 it
+   * installs this script whatever the player was doing, unless they are already
+   * in it, down or dead (kinds 25..27). Its handler (`0x4291e5`, `0x443c2b`)
+   * zeroes `obj+0xc` every frame, so a flailing player drops straight down, and
+   * it is what lands: past 530 into the dying script, else the hard landing
+   * with ten health off.
+   */
+  flail: readonly number[];
+  /**
    * The monkeybar — `0x472048` kind 8, five tags, and the only script in the
    * player's book that had nothing on this page's side. See `MONKEYBAR` in
    * {@link file://./walk.ts}: tag 0 hangs, 1 and 2 swing a hand each way, and
@@ -106,7 +116,22 @@ export interface PlayerAnim {
 export interface PlayerAction {
   cels: readonly number[];
   dx: readonly number[];
+  /**
+   * The records' own dy where any is nonzero. `0x45d0f0` hands both halves of a
+   * record to `0x42f8b0`, so a record with a dy is a lift into the velocity
+   * exactly as its dx is a push.
+   */
+  dy?: readonly number[];
   hold?: number;
+  /**
+   * The MOVE this is to `0x4029e0`, the blow-strength function, which the
+   * state's handler calls with it on every frame of the striking tag and
+   * stores as `obj+0x1a` — see `blowStrength` in {@link file://./walk.ts}.
+   * `id` is the number pushed; `held` is the one pushed instead while P is
+   * down (`0x42a4a2`: `P ? 5 : 1`); `from` is the first cel index whose tag
+   * makes the call, past a tag-0 guard that does not.
+   */
+  move?: { id: number; held?: number; from: number };
   from: string;
 }
 
@@ -147,6 +172,12 @@ export interface PlayerKit {
   tuckFeet: number;
   /** the cel a ladder rests you on */
   restCel: number;
+  /**
+   * What the flail plays once the fall passes 630 (`cmp [player+0x32], 0x276`):
+   * `0x42921d` pushes 0x17 and `0x443c63` pushes 0x10, each into the
+   * character's own bank.
+   */
+  flailSound: number;
   from: string;
 }
 
@@ -344,6 +375,8 @@ const ANIM_0: PlayerAnim = {
   ],
   /** tags 6 and 7 — one cel, held: hanging on a rung, going nowhere */
   hang: [405],
+  /** `0x472350` — one record, cel 941 */
+  flail: [941],
   /**
    * `0x472048` kind 8, two ticks a cel — the monkeybar, and its tags are not
    * interchangeable the way the ladder's are. Tag 1 goes out 4400…4405 with
@@ -395,18 +428,30 @@ const ANIM_0: PlayerAnim = {
  */
 const ACTIONS_0: PlayerActions = {
   // 0x471c90 tag 0 then tag 3 — the guard, then the jab
-  punch: { cels: [600, 601, 602], dx: [0, 0, 0], from: "0x471c90 tags 0, 3" },
+  // (the moves: tags 1..4 of the punch script push `P ? 5 : 1` at `0x42a4a2`,
+  // tags 5 and 6 push 5 at `0x42a547`, the headbutt's tag 8 13 at `0x42a60c`;
+  // the kick script's tag 1 pushes 6, tag 2 10, tag 4 11, tag 5 7 and tag 6 12,
+  // `0x42a6ed`..`0x42a891`)
+  punch: { cels: [600, 601, 602], dx: [0, 0, 0], move: { id: 1, held: 5, from: 1 }, from: "0x471c90 tags 0, 3" },
   // ...or tag 2, the other half of the coin `0x434540(2)` tosses
-  punch2: { cels: [600, 604], dx: [0, 0], from: "0x471c90 tags 0, 2" },
+  punch2: { cels: [600, 604], dx: [0, 0], move: { id: 1, held: 5, from: 1 }, from: "0x471c90 tags 0, 2" },
   // ...and tags 4 and 5 with W held, which are the same toss one pair up
-  punchRun: { cels: [600, 603, 604], dx: [0, 0, 0], from: "0x471c90 tags 0, 4" },
-  punchRun2: { cels: [600, 620, 621, 622, 623], dx: [0, 0, 0, 0, 0], from: "0x471c90 tags 0, 5" },
+  punchRun: { cels: [600, 603, 604], dx: [0, 0, 0], move: { id: 1, held: 5, from: 1 }, from: "0x471c90 tags 0, 4" },
+  punchRun2: { cels: [600, 620, 621, 622, 623], dx: [0, 0, 0, 0, 0], move: { id: 5, from: 1 }, from: "0x471c90 tags 0, 5" },
   // 0x471d68 tag 0 then tag 1 — NOT 0x471c90's 650s, which is the headbutt
-  kick: { cels: [600, 662, 663], dx: [0, 0, 0], from: "0x471d68 tags 0, 1" },
+  /**
+   * The step a punch ends in while forward is held: tags 1..6 end at `0x42a513`
+   * and `0x42a5aa`, which install tag 7 — `470(dx 95) 472(dx 95)` — when
+   * `[0x4ac3d2]` is down and the idle's tag 1 when it is not. So punching on
+   * the move carries you after the blow.
+   */
+  punchStep: { cels: [470, 472], dx: [95, 95], from: "0x471c90 tag 7, from 0x42a51d / 0x42a5b4" },
+  kick: { cels: [600, 662, 663], dx: [0, 0, 0], move: { id: 6, from: 1 }, from: "0x471d68 tags 0, 1" },
   // ...and tag 2 with W held: the six-frame kick
   kickRun: {
     cels: [600, 740, 741, 742, 743, 744, 745],
     dx: [0, 0, 0, 0, 0, 0, 0],
+    move: { id: 10, from: 1 },
     from: "0x471d68 tags 0, 2",
   },
   /**
@@ -417,9 +462,10 @@ const ACTIONS_0: PlayerActions = {
    * move, and this is its real trigger.
    */
   // `0x4717c8` tags 5 then 6 — S+P: the duck-punch, from the knee
-  duckPunch: { cels: [710, 711, 712, 713, 714, 715, 716], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x4717c8 tags 5, 6" },
+  // (tag 6's handler pushes 3 at `0x42acc9`, tag 9's 8 at `0x42adc3`)
+  duckPunch: { cels: [710, 711, 712, 713, 714, 715, 716], dx: [0, 0, 0, 0, 0, 0, 0], move: { id: 3, from: 1 }, from: "0x4717c8 tags 5, 6" },
   // tags 8 then 9 — S+K: the duck-kick, out and back
-  duckKick: { cels: [720, 721, 722, 723, 724, 724, 722, 720], dx: [0, 0, 0, 0, 0, 0, 0, 0], from: "0x4717c8 tags 8, 9" },
+  duckKick: { cels: [720, 721, 722, 723, 724, 724, 722, 720], dx: [0, 0, 0, 0, 0, 0, 0, 0], move: { id: 8, from: 1 }, from: "0x4717c8 tags 8, 9" },
   // S+P+K — the crouch machine reaches into the kick script for tag 6
   /**
    * S + P + K — and it is a DIVE, not the three cels this page had.
@@ -429,7 +475,7 @@ const ACTIONS_0: PlayerActions = {
    * the run. 630..632 is tag 6 of the PUNCH script `0x471c90`, a different
    * script with the same tag number, and that is what was written here.
    */
-  duckCombo: { cels: [4100, 4101, 4102, 4103], dx: [700, 0, 0, 0], from: "0x471d68 tag 6, from 0x42ab4a" },
+  duckCombo: { cels: [4100, 4101, 4102, 4103], dx: [700, 0, 0, 0], dy: [-80, 0, 0, 0], move: { id: 12, from: 0 }, from: "0x471d68 tag 6, from 0x42ab4a" },
   /**
    * What a blow does TO the player, and which one is which.
    *
@@ -448,14 +494,18 @@ const ACTIONS_0: PlayerActions = {
   downFront: { cels: [900, 901, 902, 903, 903, 903, 903, 903, 903], dx: [0, 0, 0, 0, 0, 0, 0, 0, 0], from: "0x4722a8 tag 0" },
   downBack: { cels: [940, 943, 944, 946, 947, 948, 949], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x4722a8 tag 2" },
   /**
-   * Dying — `0x4721a0` tag 1, two frames a cel.
+   * Dying — `0x4721a0` TAG 0, two frames a cel: `900 901 902 903`, the fall
+   * backwards onto the floor.
    *
-   * `0x429336` is the install and `0x429454` the line after it: the kind goes to
-   * **27** and the life is spent when the animation ends. This row read 5910..5915
-   * before, which is `0x476758` tag 0 — character 1's script, and character 1's
-   * code -6 reaction rather than its death.
+   * Both ways of dying install tag 0. Health running out is `0x402ac0` ->
+   * `0x402fa0(1)` -> `0x42f280(1)`, whose case `0x42f2e5` puts gravity back to 1
+   * and installs `0x4721a0` tag 0; a fatal landing out of the flail is
+   * `0x429273`, tag 0 again, because the flail script `0x472350` has only a tag
+   * 0 to be in. Tag 1 (`902 903 903 903`) is `0x429336`, the flail handler's
+   * tag-1 arm, which nothing reaches. The kind goes to 27 and the life is spent
+   * when the animation ends.
    */
-  dying: { cels: [902, 903, 903, 903], dx: [0, 0, 0, 0], hold: 2, from: "0x4721a0 tag 1, from 0x429336" },
+  dying: { cels: [900, 901, 902, 903], dx: [0, 0, 0, 0], hold: 2, from: "0x4721a0 tag 0, from 0x42f2e5 / 0x429273" },
   /**
    * The hard landing — `0x471c68` tag 5, FOUR frames a cel, after
    * `0x402ac0(0xa)` takes ten health and sound 5 plays (`0x429374`). Character
@@ -479,12 +529,14 @@ const ACTIONS_0: PlayerActions = {
    * punch cel. (Running + P goes through the punch's own machine, which is the
    * punchRun pair above.)
    */
-  flyingKick: { cels: [684, 685, 686, 687, 688], dx: [190, 0, 0, 0, 0], from: "0x471d68 tag 4, from 0x429db9" },
-  airKick: { cels: [687, 688, 688, 689], dx: [0, 0, 0, 0], from: "0x471b28 tag 8, from 0x42a036" },
-  airPunch: { cels: [604, 604, 689], dx: [0, 0, 0], from: "0x471b28 tag 9, from 0x42a082" },
+  flyingKick: { cels: [684, 685, 686, 687, 688], dx: [190, 0, 0, 0, 0], dy: [-310, 0, 0, 0, 0], move: { id: 11, from: 0 }, from: "0x471d68 tag 4, from 0x429db9" },
+  // `0x42a1e3`: the jump state's tag 8 pushes 9 and its tag 9 pushes 4
+  airKick: { cels: [687, 688, 688, 689], dx: [0, 0, 0, 0], move: { id: 9, from: 0 }, from: "0x471b28 tag 8, from 0x42a036" },
+  airPunch: { cels: [604, 604, 689], dx: [0, 0, 0], move: { id: 4, from: 0 }, from: "0x471b28 tag 9, from 0x42a082" },
   headbutt: {
     cels: [650, 651, 652, 653, 654, 655, 654, 653, 652, 651],
     dx: [0, 0, 0, 95, 95, 95, -95, -95, 0, 0],
+    move: { id: 13, from: 0 },
     from: "0x471c90 tag 8, on P+K",
   },
 };
@@ -492,14 +544,15 @@ const ACTIONS_0: PlayerActions = {
 /**
  * How far the standing player's feet are below the engine's own y for them.
  *
- * Cel 1 is 98x145 with its anchor 55 rows down and a collision box running
- * `y -55..88`, so the box bottom — what touches a floor — is 88 rows under the
- * anchor. That is the one number that converts this page's feet-based `p.y` into
- * the point every rect in the file is measured against.
+ * Cel 1 is 98x145 with its anchor 55 rows down, so its art reaches 90 rows under
+ * the anchor — the cel word at +0x26 the body stepper stands on a floor
+ * (`0x42fdcf`), not the 88 its collision box stops at. `walk.ts` reads that
+ * extent off whichever cel is on screen; these two are its stand-ins for the
+ * moments no cel has been drawn yet.
  */
-const STAND_FEET_0 = 88;
-/** and the tuck's, cel 200's own — the knees are up, so the feet are 19 higher */
-const TUCK_FEET_0 = 69;
+const STAND_FEET_0 = 90;
+/** and the tuck's, cel 200's own — the knees are up, so the feet are 20 higher */
+const TUCK_FEET_0 = 70;
 // ---------------------------------------------------------------------------
 // character 1 — `0x442ad0`, 5552 bytes of state machine with the same shape
 // ---------------------------------------------------------------------------
@@ -576,6 +629,8 @@ const ANIM_1: PlayerAnim = {
   ],
   /** tags 6 and 7 — hanging on a rung */
   hang: [5405],
+  /** `0x476938` — one record, cel 5207 */
+  flail: [5207],
   /**
    * `0x4765f8` — the same five tags at `dx 100`, and the swing SKIPS two cels
    * the chin-up owns: 9401 and 9402 appear in tags 3 and 4 only, so tag 1 runs
@@ -607,26 +662,33 @@ const ANIM_1: PlayerAnim = {
 const ACTIONS_1: PlayerActions = {
   // `0x476240` tag 0 is the guard the standing handler opens on (`0x44416d`),
   // and `0x444e12`'s roll picks tag 0 or tag 1 after it
-  punch: { cels: [5600, 5602], dx: [0, 0], from: "0x476240 tags 0, 1" },
+  // (the moves: punch tags 1 and 2 push 2 at `0x444e31`, tags 3 and 4 push 1
+  // at `0x444ec8`, tag 6 13 at `0x444f97`; the kick script's tags push what
+  // character 0's do, `0x44506d`..`0x445204`; the duck's 3 and 8)
+  punch: { cels: [5600, 5602], dx: [0, 0], move: { id: 2, from: 1 }, from: "0x476240 tags 0, 1" },
   punch2: { cels: [5600, 5600], dx: [0, 0], from: "0x476240 tag 0, and 0 again" },
   // W held: `0x444dd7` -> tag 4, and there is no second variant to toss for
-  punchRun: { cels: [5600, 5801, 5802, 5806, 5807, 5808, 5809], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x476240 tags 0, 4" },
-  punchRun2: { cels: [5600, 5801, 5802, 5806, 5807, 5808, 5809], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x476240 tags 0, 4 — the same one" },
+  punchRun: { cels: [5600, 5801, 5802, 5806, 5807, 5808, 5809], dx: [0, 0, 0, 0, 0, 0, 0], move: { id: 1, from: 1 }, from: "0x476240 tags 0, 4" },
+  punchRun2: { cels: [5600, 5801, 5802, 5806, 5807, 5808, 5809], dx: [0, 0, 0, 0, 0, 0, 0], move: { id: 1, from: 1 }, from: "0x476240 tags 0, 4 — the same one" },
   // `0x476300` tag 0 opens (`0x4441b2`), then `0x444ff0` picks: tag 5 plain,
   // tag 1 with K held, tag 2 with W held — the same three the other one has
-  kick: { cels: [5600, 5663, 5664], dx: [0, 0, 0], from: "0x476300 tags 0, 5" },
+  // forward still down as a punch tag ends: tag 5, `5470 5471` at dx 105
+  // (`0x444e9e`, `0x444f3f`), character 0's tag 7 in its own cels
+  punchStep: { cels: [5470, 5471], dx: [105, 105], from: "0x476240 tag 5, from 0x444e9e / 0x444f3f" },
+  kick: { cels: [5600, 5663, 5664], dx: [0, 0, 0], move: { id: 7, from: 1 }, from: "0x476300 tags 0, 5" },
   kickRun: {
     cels: [5600, 5740, 5741, 5742, 5743, 5744, 5745, 5746],
     dx: [0, 0, 0, 0, 0, 0, 0, 0],
+    move: { id: 10, from: 1 },
     from: "0x476300 tags 0, 2",
   },
   // `0x475dd8` tags 5 then 6 — S+P
-  duckPunch: { cels: [5710, 5711, 5712, 5713, 5714, 5715, 5716], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x475dd8 tags 5, 6" },
+  duckPunch: { cels: [5710, 5711, 5712, 5713, 5714, 5715, 5716], dx: [0, 0, 0, 0, 0, 0, 0], move: { id: 3, from: 1 }, from: "0x475dd8 tags 5, 6" },
   // tags 8 then 9 — S+K
-  duckKick: { cels: [5720, 5721, 5722, 5723, 5724, 5724, 5722, 5720], dx: [0, 0, 0, 0, 0, 0, 0, 0], from: "0x475dd8 tags 8, 9" },
+  duckKick: { cels: [5720, 5721, 5722, 5723, 5724, 5724, 5722, 5720], dx: [0, 0, 0, 0, 0, 0, 0, 0], move: { id: 8, from: 1 }, from: "0x475dd8 tags 8, 9" },
   // S+P+K — `0x4454c9` installs `0x476300` tag 6, whose first record carries
   // dx 700 and dy -80, the same dive character 0 has out of its own kick script
-  duckCombo: { cels: [5940, 5483, 5484, 5485], dx: [700, 0, 0, 0], from: "0x476300 tag 6, from 0x4454c9" },
+  duckCombo: { cels: [5940, 5483, 5484, 5485], dx: [700, 0, 0, 0], dy: [-80, 0, 0, 0], move: { id: 12, from: 0 }, from: "0x476300 tag 6, from 0x4454c9" },
   /** `0x4766f0` tags 1 and 2 — the stagger, `0x449115`'s sixty or less */
   hurtFront: { cels: [5901, 5901, 5901], dx: [0, 0, 0], from: "0x4766f0 tag 1" },
   hurtBack: { cels: [5902, 5902, 5902], dx: [0, 0, 0], from: "0x4766f0 tag 2" },
@@ -637,15 +699,19 @@ const ACTIONS_1: PlayerActions = {
     from: "0x476890 tag 0",
   },
   downBack: { cels: [5940, 5941, 5942, 5943, 5944, 5944, 5944], dx: [0, 0, 0, 0, 0, 0, 0], from: "0x476890 tag 2" },
-  /** `0x476758` tag 1, two ticks a cel — `0x443d4a`, and the kind goes to 27 */
-  dying: { cels: [5914, 5915, 5915, 5915], dx: [0, 0, 0, 0], hold: 2, from: "0x476758 tag 1, from 0x443d4a" },
+  /**
+   * `0x476758` tag 0, two frames a cel — `0x449765` (`0x402fa0(1)` on empty
+   * health) and `0x443ca3` (the flail's fatal landing) both install tag 0, as
+   * character 0's do; tag 1 is the flail's unreachable tag-1 arm
+   */
+  dying: { cels: [5910, 5911, 5912, 5913, 5914, 5915], dx: [0, 0, 0, 0, 0, 0], hold: 2, from: "0x476758 tag 0, from 0x449765 / 0x443ca3" },
   /** `0x476220` tag 5, four ticks a cel — `0x443d88`, after ten health and sound 5 */
   landRoll: { cels: [5208, 5207, 5206], dx: [0, 0, 0], hold: 4, from: "0x476220 tag 5, from 0x443d88" },
   /** `0x476300` tag 4 — `5681(dx 190, dy -370)`, a higher leap than character 0's */
-  flyingKick: { cels: [5681, 5682, 5683, 5684, 5685], dx: [190, 0, 0, 0, 0], from: "0x476300 tag 4" },
-  /** `0x476140` tags 8 and 9 — the two poses struck in mid-air */
-  airKick: { cels: [5663, 5664, 5664, 5205], dx: [0, 0, 0, 0], from: "0x476140 tag 8" },
-  airPunch: { cels: [5605, 5605, 5605, 5205], dx: [0, 0, 0, 0], from: "0x476140 tag 9" },
+  flyingKick: { cels: [5681, 5682, 5683, 5684, 5685], dx: [190, 0, 0, 0, 0], dy: [-370, 0, 0, 0, 0], move: { id: 11, from: 0 }, from: "0x476300 tag 4" },
+  /** `0x476140` tags 8 and 9 — the two poses struck in mid-air (9 and 4, `0x444b9f`) */
+  airKick: { cels: [5663, 5664, 5664, 5205], dx: [0, 0, 0, 0], move: { id: 9, from: 0 }, from: "0x476140 tag 8" },
+  airPunch: { cels: [5605, 5605, 5605, 5205], dx: [0, 0, 0, 0], move: { id: 4, from: 0 }, from: "0x476140 tag 9" },
   /**
    * P and K together — and character 1 does not headbutt.
    *
@@ -658,6 +724,8 @@ const ACTIONS_1: PlayerActions = {
   headbutt: {
     cels: [9800, 9802, 9803, 9804, 9805, 9806, 9806],
     dx: [150, 0, 0, 0, 0, 0, 0],
+    dy: [-250, 0, 0, 0, 0, 0, 0],
+    move: { id: 13, from: 0 },
     from: "0x476240 tag 6, on P+K",
   },
 };
@@ -665,13 +733,17 @@ const ACTIONS_1: PlayerActions = {
 /** `0x476428`'s resting rung cel, character 1's own */
 const REST_CEL_1 = 5405;
 /**
- * Cel 5001 is 73x138 with its anchor 67 rows down and a box running `y -65..69`,
- * so character 1's standing feet are 69 below the anchor against character 0's
- * 88 — nineteen pixels shorter, and the same `p.y` is a different height.
+ * Cel 5001 is 73x138 with its anchor 67 rows down, so its art reaches 71 below
+ * the anchor against character 0's 90 — nineteen pixels shorter, and the same
+ * `p.y` is a different height.
  */
-const STAND_FEET_1 = 69;
-/** cel 5203's own, the tuck: 38, against character 0's 69 */
-const TUCK_FEET_1 = 38;
+const STAND_FEET_1 = 71;
+/**
+ * cel 5203's own extent, the tuck: 71. Its collision box stops at 38, and
+ * standing the tuck on that box landed character 1 33 pixels above the floor
+ * it should have reached.
+ */
+const TUCK_FEET_1 = 71;
 
 /**
  * The two of them, indexed by what `0x46b1a8` holds.
@@ -690,6 +762,7 @@ export const PLAYERS: readonly [PlayerKit, PlayerKit] = [
     standFeet: STAND_FEET_0,
     tuckFeet: TUCK_FEET_0,
     restCel: 405,
+    flailSound: 0x17,
     from: "0x428080, and the 0x470a78..0x472350 scripts",
   },
   {
@@ -702,6 +775,7 @@ export const PLAYERS: readonly [PlayerKit, PlayerKit] = [
     standFeet: STAND_FEET_1,
     tuckFeet: TUCK_FEET_1,
     restCel: REST_CEL_1,
+    flailSound: 0x10,
     from: "0x442ad0, and the 0x475130..0x476938 scripts",
   },
 ];

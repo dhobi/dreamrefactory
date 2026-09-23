@@ -80,19 +80,8 @@
  * below reads or writes it. There is no beat, no decision budget and no side
  * word anywhere in the struct — this class does not circle and does not taunt.
  */
-import { TICK_SCALE, install, type Brain, type BrainCtx, type Enemy } from "./kit";
-
-/**
- * A tick is a QUARTER of an engine frame — {@link TICK_SCALE}.
- *
- * Every other class needs this to turn a script's pixels-a-frame into a
- * velocity. This one needs it for a PROBABILITY: `0x438848` rolls once per
- * engine frame and a brain is called once per tick, so the executable's own two
- * in sixty-eight would come out four times too often. Dividing the denominator
- * is the same trick the movers use in the other direction — the disc's numbers
- * stay on the page and the rate is the disc's.
- */
-const TICKS = TICK_SCALE;
+import { install, rewind, type Brain, type BrainCtx, type Enemy } from "./kit";
+import { ahead, turn } from "./batboy";
 
 /**
  * Everything `0x438760` does that is deliberately not in this file, with the
@@ -160,7 +149,8 @@ export const MASKBOY = {
   roller: {
     /**
      * `push 0x44` then `cmp eax, 3; jge` — two in sixty-eight, every ENGINE
-     * frame, which is why the brain divides the first by {@link TICKS}.
+     * frame, and the brain is called once an engine frame, so the roll is
+     * taken as it stands.
      */
     odds: [0x44, 3] as const,
     /** `0x438871` — and only with the player this close in x */
@@ -364,9 +354,9 @@ export const maskboy: Brain = (e, foe, run, k) => {
   {
     const r = MASKBOY.roller;
     if (
-      k.roll(Math.round(r.odds[0] / TICKS)) < r.odds[1] &&
-      Math.abs(k.player.x - e.x) < r.within &&
-      e.x < k.player.x
+      k.roll(r.odds[0]) < r.odds[1] &&
+      Math.abs(k.player.x - k.anchorX(e)) < r.within &&
+      k.anchorX(e) < k.player.x
     )
       k.roller(e, { x: k.player.x + r.beyond, y: k.player.y, vx: r.vx });
   }
@@ -380,14 +370,14 @@ export const maskboy: Brain = (e, foe, run, k) => {
    * `obj+0x46`, which `0x45d0db` cleared an instant earlier, so the frame ends
    * there — which is why this is written as a return.
    *
-   * State 0 is this page's own marker, not the executable's: `stepFight` writes
-   * `e.script = 0` when the player leaves a record's rect, and case 0 below
-   * stands for the class's state 1. It is excluded here for the same reason
-   * state 1 is.
+   * State 0 is this page's own marker, not the executable's: a page-spawned
+   * one carries no kind until it is first installed, and case 0 below stands
+   * for the class's state 1. It is excluded here for the same reason state 1
+   * is.
    */
   if (k.player.down && state !== 0 && state !== 1 && state !== 8) {
     install(e, MASKBOY.gloat);
-    if (t.forward < 0) e.facing = -e.facing;
+    if (t.forward < 0) turn(e);
     return false;
   }
   switch (state) {
@@ -395,9 +385,9 @@ export const maskboy: Brain = (e, foe, run, k) => {
      * ---- 0 and 1, `0x4388c5`: dormant, and the ONLY thing that ends it.
      *
      * State 0 is not the executable's — `0x4388b0`'s `dec eax` puts it out of
-     * the table — but the page zeroes `e.script` on leaving a rect and
-     * `0x4386f5` stands a fresh one up on kind 1, so both mean the same thing
-     * here: the dormant cel.
+     * the table — but a page-spawned one has no kind yet and `0x4386f5` stands
+     * a fresh one up on kind 1, so both mean the same thing here: the dormant
+     * cel.
      *
      * It zeroes both velocities every frame (`0x4388ca`, `0x4388cf`) and tests
      * `0x434200(player.point, AI+0xc)` — the player's own point inside the four
@@ -413,6 +403,7 @@ export const maskboy: Brain = (e, foe, run, k) => {
     case 1:
       e.vx = 0;
       e.vy = 0;
+      e.speed = 0;
       return e.fighting ? install(e, MASKBOY.run) : install(e, MASKBOY.dormant);
     // ---- 2, `0x438906`: the guard, sub-dispatched at `0x438ebc`
     case 2:
@@ -459,9 +450,10 @@ export const maskboy: Brain = (e, foe, run, k) => {
       if (!k.player.down) return install(e, MASKBOY.run);
       if (!done) return false;
       if ((e.tag ?? 0) === 0) {
+        // `0x438d7f` puts tag 0 on again, rewinding it: one roll a lap
         return k.roll(100) < 10
           ? install(e, MASKBOY.gloatB)
-          : install(e, MASKBOY.gloat);
+          : rewind(e, MASKBOY.gloat);
       }
       return k.roll(100) < 10 ? install(e, MASKBOY.gloat) : false;
     }
@@ -488,7 +480,7 @@ function guard(
   done: boolean,
 ): boolean {
   // `0x438906` — turn, and carry on
-  if (t.forward < 0) e.facing = -e.facing;
+  if (t.forward < 0) turn(e);
   switch (e.tag ?? 0) {
     /**
      * tags 0 and 1, `0x438959` — the pose, and the whole of the distance
@@ -530,12 +522,12 @@ function guard(
 /**
  * State 5, `0x438b00` — travel, and every branch of it weighs `obj+0xc`.
  *
- * `obj+0xc` is the sideways speed the solver `0x430470` writes as a stride is
- * spent, and `obj+0x30` is the at-rest word the same pass sets from the
- * velocity pair (`0x430314` clears it while either is non-zero, `0x43031c` sets
- * it when both are). This page carries a velocity on a foe only when one has
- * been struck — see {@link Enemy.vx} — so a maskboy on its feet reads as
- * stationary and at rest, and the branches below say so where they take it.
+ * `obj+0xc` is the sideways speed each frame's stride is added into, and the
+ * class's 0.05 friction (`0x4386c4`) leaves most of a run's worth of it under
+ * the thing for a dozen frames; {@link ahead} reads it along the facing.
+ * `obj+0x30` is the at-rest word the mover sets from the velocity pair
+ * (`0x430314` clears it while either is non-zero, `0x43031c` sets it when both
+ * are).
  */
 function travel(
   e: Enemy,
@@ -550,15 +542,12 @@ function travel(
      * `0x438b47` weighs the mirror flag against `obj+0xc`: facing west and
      * travelling east, or facing east and travelling west, means the run has
      * been turned back, and `0x438b6b` adds that anything under twenty is not
-     * travelling at all. Either way it hands straight to the run again. With no
-     * velocity on a foe here that is the branch always taken, so these two
-     * one-cel tags are a single frame apiece and the three tests below them are
-     * read and not reached.
+     * travelling at all. Either way it hands straight to the run again.
      */
     case 0:
     case 1: {
-      const forwards = e.facing > 0 ? e.vx > 0 : e.vx < 0;
-      if (!forwards || Math.abs(e.vx) < 20) return install(e, MASKBOY.run);
+      const speed = ahead(e);
+      if (speed < 0 || Math.abs(speed) < 20) return install(e, MASKBOY.run);
       // `0x438b7d` — he got behind it while it was coasting: give ground
       if (t.forward < 0) return install(e, MASKBOY.backOff);
       // `0x438b8c` — and only the second band, 150 to 400, commits to a swing
@@ -585,17 +574,15 @@ function travel(
      *
      * While it is still carried forward and not yet at rest it replays its own
      * cel each time the script runs out (`0x438c2b`). At rest — or drifting
-     * backwards — it turns to face him (`0x438c3d`) and takes the guard. With
-     * no velocity on a foe here the at-rest arm is the one taken, so this is
-     * one backward step and then the pose.
+     * backwards — it turns to face him (`0x438c3d`) and takes the guard.
      */
     case 5: {
-      const atRest = e.vx === 0 && e.vy === 0;
-      const backwards = e.facing > 0 ? e.vx < 0 : e.vx > 0;
-      if (!atRest && !backwards) {
-        return done ? install(e, MASKBOY.backOff) : false;
+      const speed = ahead(e);
+      const atRest = speed === 0 && e.vy === 0;
+      if (!atRest && speed >= 0) {
+        return done ? rewind(e, MASKBOY.backOff) : false;
       }
-      if (t.forward < 0) e.facing = -e.facing;
+      if (t.forward < 0) turn(e);
       return install(e, MASKBOY.guard[0]);
     }
     // tags 2 and 3 are `0x438e80` in the table, and no kind-5 script carries them
@@ -630,17 +617,15 @@ function attack(
      * Three things let the blow go, and any one of them is enough: `obj+0x2a`,
      * the "something hit me" word `0x430663` writes on the victim of an elastic
      * collision and which nothing in this port sets; the player getting behind
-     * it; or its own sideways speed falling under ten. With no velocity on a
-     * foe here the last is true from the first frame, so the strike goes out at
-     * once — which is the disc's behaviour for a maskboy that has already been
-     * stopped by whatever it walked into.
+     * it; or its own sideways speed falling under ten — so a wind-up thrown
+     * out of a coast rides in on it.
      *
      * `0x438cf2` shouts `mall.snd` 5, `0x438d09` adds **2** to the tag to pick
      * the strike, and `0x438d19` clears `obj+0x2a` behind it.
      */
     case 0:
     case 1:
-      if (t.forward >= 0 && Math.abs(e.vx) >= 10) return false;
+      if (t.forward >= 0 && Math.abs(ahead(e)) >= 10) return false;
       k.say(e, MASKBOY.shout);
       return install(e, MASKBOY.strike[tag], true);
     // tags 2 and 3, `0x438d27` — one cel of a blow, and then it steps back

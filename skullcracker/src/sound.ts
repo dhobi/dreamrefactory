@@ -236,13 +236,20 @@ export const FOE_SFX = {
   oxFlinch: [47, 48, 49] as const,
   /**
    * The thing at the end of chapter two. `0x441dc9` takes `0x434540(2) + 0x17`
-   * on every blow — 23 or 24 — and the same pair answers a flare; `0x441d72`
-   * plays 0x13 on top of the flare's own reaction, and `0x441e26` stops the
-   * loop it has been running at 0x17 as it goes down.
+   * on every blow — and `0x434540` answers 1..n, so 0x18 or 0x19, 24 or 25 —
+   * and the same pair answers a flare and a blow on the ground form
+   * (`0x441f2b`); `0x441d72` plays 0x13 on top of the flare's own reaction,
+   * and `0x441e26` stops the loop it has been running at 0x17 as it goes down.
+   * `0x440bea` is 0x14, the scald of a lit sprinkler, which `0x441698` also
+   * plays on each lap of the fall; `0x441794` is 0x18 as it stands back up,
+   * and `0x441f76` is 0x1a, the death of the ground form.
    */
-  kraggHit: [23, 24] as const,
+  kraggHit: [24, 25] as const,
   kraggFlare: 0x13,
   kraggLoop: 0x17,
+  kraggScald: 0x14,
+  kraggRise: 0x18,
+  kraggDeath: 0x1a,
   /**
    * Chapter THREE's, out of `belfry.snd`, and its names are again the check:
    * 12..18 are `0040 zombie die`, `0041 zombie a4`, `0042 zombie tak`,
@@ -260,48 +267,76 @@ export const FOE_SFX = {
   hand: 3,
   /** `0x42332c` — `0012 bat hit`, and a bat dies to any blow at all */
   batDeath: 2,
-  /** `0x422bcb` and `0x422cd7` — `0096 GHENGIS ST` and `0090 GHENGIS SN` */
-  ghengisHit: 0x2a,
+  /**
+   * `0x422c14` — `0x2c + 0x434540(2)` on a blow it stands up to, 0x2d or 0x2e;
+   * `0x422bcb` — 0x2f on the one that kills it, and nothing else
+   */
+  ghengisHit: [0x2d, 0x2e] as const,
   ghengisDeath: 0x2f,
+  /** `0x422d7e` — the blast it comes apart in */
+  ghengisBlast: 0x30,
   /** `0x423ac4` — `0053 skeleton z` */
   skelHit: 0x16,
+  /** `0x4239c2` — on the death script's frame 2, not as the blow lands */
+  skelDeath: 0x15,
+  /**
+   * `0x42574f` — `0x434540(5) < 3` plays 4, anything else 8, on every blow;
+   * the list is weighted two to three so a uniform pick is the same odds
+   */
+  igorHit: [4, 4, 8, 8, 8] as const,
+  /** `0x4257a6` — as the death script goes on */
+  igorDeath: 0xb,
   /** `0x4224xx` — `0124 bridge cru` as one gives way, `0125 bridge cav` after */
   bridgeCrack: 0x34,
   bridgeFall: 0x35,
   /** `0x423d9d` — `0070 swiningbla[de]` */
   axe: 0x20,
-  /** `0x425058` and `0x4250c8` — the wraith, hit and gone */
-  wraithHit: 0x21,
+  /**
+   * `0x42507c` — `0x434540(2) + 0x23`, `0082`/`0083 wraith get[s hit]`, on
+   * every blow the named one takes
+   */
+  wraithHit: [0x23, 0x24] as const,
+  /** `0x4250c8` — the named one's death */
   wraithDeath: 0x29,
+  /** `0x425058` / `0x424f51` — a lesser one going, struck or dissolved */
+  wraithGone: 0x21,
   /** `0x42704a` and `0x427075` — `0120 floor crea[ks]` then `0121 floor cave[s]` */
   floorCreak: 0x32,
   floorCave: 0x33,
   /** `0x426aa8` — `0134 surge` */
   surge: 0x38,
-  /** `0x426582` and `0x4265dd` — and belfry.snd calls it the BISHOP */
-  priestHit: 2,
+  /**
+   * `0x426573` — `0x434540(2) + 0x18`, on every blow; and `0x4265dd` the
+   * death. belfry.snd calls it the BISHOP
+   */
+  priestHit: [0x19, 0x1a] as const,
   priestDeath: 0x1e,
   /**
    * Chapter FOUR's, out of `lab.snd`, and its names are the check again — they
    * are also what the classes are actually CALLED. `initcop` is the TCop:
-   * 14..17 are `#0085 TCop eats` and three `TCop punc[h]`es, 13 is
-   * `#0084 TCop Dies`. 19 and 20 are `#0100 claw wizz` and `#0101 clawclamp`.
+   * 14 is `#0085 TCop eats` and 15..18 the `TCop punc[h]`es that `0x4148a1`
+   * rolls with `0x434540(4) + 0xe`, 13 is `#0084 TCop Dies`. 19 and 20 are
+   * `#0100 claw wizz` and `#0101 clawclamp`.
    */
-  copHit: [14, 15, 16, 17] as const,
+  copHit: [15, 16, 17, 18] as const,
   copDeath: 13,
   /** `0x417a7c` and `0x417ab8` — the claw, travelling and closing */
   clawMove: 19,
   clawShut: 20,
   /**
-   * LAB's three, and the names are the classes' own: 5 and 6 are
-   * `#0061 Pukeboy d[ies]` and `#0062 Pukeboy p[unched]` — `0x418362` rolls
-   * `0x434540(2) + 5` between them — 0x25 is `#2013 arm hit` and 0x19 is
-   * `#0201 test tube`.
+   * LAB's three, and the names are the classes' own: 5 is
+   * `#0061 Pukeboy d[ies]`, what `0x418316` plays and nothing else on the
+   * killing blow, and a blow it lives through is `0x418362`'s
+   * `0x434540(2) + 5` — 6 (`#0062 Pukeboy p[unched]`) or 7. 0x25 is
+   * `#2013 arm hit`. The test tube's are `0x419a4c`'s `0x434540(2) + 0x1a` on
+   * every blow, killing one included — 0x1b or 0x1c, `#0204`/`#0205 tt boy
+   * ge[ts hit]` — and `0x419a96`'s 0x18, `#0200 test tube`, as it dies.
    */
-  pukeHit: [5, 6] as const,
+  pukeHit: [6, 7] as const,
   pukeDeath: 5,
   armHit: 0x25,
-  tube: 0x19,
+  tubeHit: [0x1b, 0x1c] as const,
+  tubeDeath: 0x18,
   /** `0x43b6a3` — `mall.snd` names index 32 "#0120 coke mach[ine]" */
   cokeHit: 32,
   /**

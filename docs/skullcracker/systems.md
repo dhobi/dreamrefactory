@@ -109,10 +109,11 @@ the run's 22 plus its own 15, 360. A jump pressed from a standstill or a walk
 crouches for three frames first (`250 251 252`, dx 0, the walk's velocity draining
 under the drag) and only 253 launches; the run's tag 4 is one record and launches
 at once. Every jump lands in tag 1, four frames of `251 252 251 250` in which the
-handler reads no key and the slide is the drag's — and a fall of more than 360
-since the apex lands in `0x471c68` instead, sixteen frames of the same cels at
-four a cel, with ten health off. There is no mid-air flail: the tuck holds all the
-way down, and the hard landing's loop plays only on the ground.
+handler reads no key and the slide is the drag's. A fall that passes 360 is no
+longer a jump at all: the state machine's preamble (`0x4284ba`) forces the flail,
+`0x472350` (cel 941), which zeroes the sideways speed, reads no key and screams
+once past 630. It lands in `0x471c68` tag 5 with sound 5, ten health off and a
+jolt of the view (`0x4307c0(1)`), or past 530 in the dying script.
 
 STREETS' hardest jump is an 85px roof gap, which sits between the plain jump and
 the jump-with-lift; that is what `0x4723f0` is for. At the disc's own gravity and

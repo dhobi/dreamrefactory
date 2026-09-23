@@ -252,7 +252,7 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
    * change worth stating plainly: this note used to say that no class a level
    * places sends -2, and that was true for as long as no class could throw.
    * `0x43dbda` is one of the four writers and it belongs to the EYEBALL's glob
-   * — SEWER places nine eyes, they spit, and `tests/browser/casts.ts` watches
+   * — SEWER places nine eyes, they spit, and `tests/machine/casts.ts` watches
    * the jolt land. So the row below is what a glob does to a player who is
    * neither crouching nor on the board, and a player who IS one of those two
    * should be absorbing it and is not. That is the next piece of this.
@@ -467,7 +467,7 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
    * change worth stating plainly: this note used to say that no class a level
    * places sends -2, and that was true for as long as no class could throw.
    * `0x43dbda` is one of the four writers and it belongs to the EYEBALL's glob
-   * — SEWER places nine eyes, they spit, and `tests/browser/casts.ts` watches
+   * — SEWER places nine eyes, they spit, and `tests/machine/casts.ts` watches
    * the jolt land. So the row below is what a glob does to a player who is
    * neither crouching nor on the board, and a player who IS one of those two
    * should be absorbing it and is not. That is the next piece of this.

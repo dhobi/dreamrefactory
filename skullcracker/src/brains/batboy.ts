@@ -85,11 +85,10 @@
  * Read four low and `cmp word ptr [esp+0xc], 3` — a BAND test, and the one that
  * makes it back off — reads as a side test that can never be 3.
  *
- * ## Two engine words the port has no equivalent of
+ * ## Two engine words the mover writes
  *
  * Both are written by the mover, not by this class, and both change what this
- * machine does. They are ported as what there is, and what is lost is named at
- * each site.
+ * machine does.
  *
  * - **`obj+0x2c`** — set to 1 at `0x430181` when the object's own anchor is
  *   inside one of the level's obstacle rects. States 2 and 4 both open on it
@@ -98,13 +97,12 @@
  *   obstacle solver (see `wered.ts` on the same flag), so the counter never
  *   advances and **state 7 is unreachable from inside this module**. The leap's
  *   own chain is implemented anyway, for whoever wires the solver up.
- * - **`obj+0xc`** — the sideways speed. In the engine the mover writes it from
- *   the script's own stride (`0x430280`) and decays it, so a batboy that has
- *   just run carries twenty-odd units of residual for several frames. This page
- *   moves a walking foe by adding the stride to `e.x` and leaves {@link
- *   Enemy.vx} flat zero (`walk.ts`, the stride block) — so every `obj+0xc` test
- *   below reads as *already stopped*. The two places that costs something are
- *   marked.
+ * - **`obj+0xc`** — the sideways speed. `0x42f8b0` adds each frame's stride
+ *   over the divisor into it and the ground takes `obj+0x1e` of it back, and
+ *   the class sets that to 0.05 (`0x4391a4`), so a run of six cels leaves the
+ *   batboy skating at forty-odd a frame and coasting for a dozen frames after.
+ *   The page keeps a walker's speed in {@link Enemy.speed}, measured along its
+ *   facing, and {@link ahead} reads the pair back as the engine's one word.
  *
  * ## The two things in `0x439240` that are bookkeeping, not behaviour
  *
@@ -113,15 +111,16 @@
  *   distance is positive. It is the panel, not a decision, and the page draws it
  *   from {@link Foe.panel}.
  * - `0x439902` writes `obj+0x1a = 0x64` on every path that is not the corpse's.
- *   That is the strength percent a blow of its would be scaled by. **Nothing
- *   hits the player back in this port**, so it is carried as read and spends
- *   nothing.
+ *   That is the strength percent its blows are scaled by, and 100 is what
+ *   {@link Enemy.strength} reads when nothing sets it.
  */
 import {
   install,
+  rewind,
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 
@@ -312,11 +311,46 @@ export const BATBOY = {
 } as const;
 
 /**
- * The engine's `obj+0xc` is pixels per ENGINE frame; {@link Enemy.vx} is pixels
- * per tick and a tick is a QUARTER of one, so a threshold out of the executable is
- * weighed against `e.vx / TICKS`.
+ * `obj+0xc`, the one sideways word, measured along the facing: positive is the
+ * way the mirror flag points and negative is sliding backwards.
+ *
+ * The page splits it in two — {@link Enemy.speed}, a walker's own, already in
+ * engine pixels a frame and along the facing, and {@link Enemy.vx}, a thrown
+ * thing's, in pixels a tick and absolute — and only one of them is ever
+ * non-zero, so the sum is the engine's word.
  */
-const TICKS = TICK_SCALE;
+export function ahead(e: Enemy): number {
+  return (e.speed ?? 0) + (e.vx / TICK_SCALE) * e.facing;
+}
+
+/**
+ * `xor byte ptr [esi+0x28], 1` — the mirror flips and `obj+0xc` does not.
+ *
+ * The engine's velocity is absolute, so a batboy that turns round mid-coast
+ * is sliding backwards until the drag or a push-off says otherwise, and that
+ * is exactly what the "speed pointing the wrong way" tests read. The page's
+ * walker speed is measured along the facing, so it changes sign with it.
+ */
+export function turn(e: Enemy): void {
+  e.facing = -e.facing;
+  e.speed = -(e.speed ?? 0);
+}
+
+/**
+ * The corpse stops where it falls. Every one of the gang's hit handlers puts
+ * `obj+0x1e` back to 1.0 on the killing blow (`0x439aea`, `0x43907f`,
+ * `0x4383ca`, `0x43a6ea`) — full friction against the 0.05 it lived on — so
+ * the first frame on the ground takes the whole of the slide.
+ *
+ * ...and it lies lower. The death is state 9, and its tag-0 handler writes
+ * `obj+0x10 = -20` on every frame it runs (`0x439849` here, `0x438dc7` mask,
+ * `0x4380cb` knot, `0x43a31a` knife) over the −6 the class init gave it.
+ */
+export const gangCorpse: Reaction = (e) => {
+  if (e.state !== "dead") return;
+  e.floor = -20;
+  if (e.vy === 0) e.vx = 0;
+};
 
 /** `0x4394d9` — still sliding this fast and the poise does not restart the run */
 const COASTING = 0x14;
@@ -337,10 +371,10 @@ export const batboy: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, BATBOY.bands);
   /**
-   * `stepFight` zeroes `e.script` the frame the player leaves the rect, and this
-   * class has no kind 0 — `0x439336` decrements before it indexes, so zero falls
-   * through `ja` to the return, and nothing ever installs one. The thing it was
-   * born in is kind 1 (`0x4391cf`), so zero is read as that.
+   * This class has no kind 0 — `0x439336` decrements before it indexes, so zero
+   * falls through `ja` to the return, and nothing ever installs one. The thing
+   * it was born in is kind 1 (`0x4391cf`), and a page-spawned one that has not
+   * been installed into anything yet carries no kind at all, so both read as 1.
    */
   let now = e.script ? e.script : 1;
   /**
@@ -356,7 +390,7 @@ export const batboy: Brain = (e, foe, run, k) => {
   if (k.player.down && now !== 1 && now !== 8 && now !== 9) {
     install(e, BATBOY.gloat);
     // `0x439326` — and only then, and only if he is behind it
-    if (t.forward < 0) e.facing = -e.facing;
+    if (t.forward < 0) turn(e);
     now = 8;
   }
   switch (now) {
@@ -373,13 +407,17 @@ export const batboy: Brain = (e, foe, run, k) => {
      * this script's single cel, and while `e.asleep` is set `stepFight` returns
      * before the brain is asked at all. So a level's batboy holds 1901 under the
      * page's wake rule and holds it again here if it ever breaks off.
+     *
+     * `0x43937b` squeals as it leaves, and the page has already played that
+     * squeal on the frame it woke ({@link Foe.wake}'s sound), so it is not
+     * said twice here.
      */
     case 1: {
       e.vx = 0;
       e.vy = 0;
+      e.speed = 0;
       if (!e.fighting) return false;
-      // `0x43937b` then `0x4398ee` — it squeals and goes straight into the run
-      k.say(e, BATBOY.squeal);
+      // `0x4398ee` — straight into the run
       return install(e, BATBOY.run);
     }
     /**
@@ -393,7 +431,7 @@ export const batboy: Brain = (e, foe, run, k) => {
      * this page, so that branch is named and not written.
      */
     case 2: {
-      if (t.forward < 0) e.facing = -e.facing;
+      if (t.forward < 0) turn(e);
       switch (e.tag ?? 0) {
         /**
          * `0x4393db` — tags 0 and 1 are the same branch, and it is pure band.
@@ -449,20 +487,13 @@ export const batboy: Brain = (e, foe, run, k) => {
          * Speed pointing the wrong way for the mirror flag, or under twenty of
          * it, and the run starts again; still coasting hard and it acts —
          * backwards if the player got behind it, and into the bat if he is in
-         * band 1.
-         *
-         * `obj+0xc` here is the residue of the run's own stride, which this page
-         * does not carry (see the header). `e.vx` is zero for a walking foe, so
-         * `< COASTING` is always true and a poise always restarts the run. What
-         * that costs is the step back and the band-1 swing off this branch; the
-         * swing still goes out off tag 4 below, which is where it mostly came
-         * from anyway.
+         * band 1. What it is coasting on is the run's own speed, which the
+         * class's 0.05 friction leaves under it for a dozen frames.
          */
         case 0:
         case 1: {
-          const speed = e.vx / TICKS;
-          if (e.facing < 0 ? speed > 0 : speed < 0)
-            return install(e, BATBOY.run);
+          const speed = ahead(e);
+          if (speed < 0) return install(e, BATBOY.run);
           if (Math.abs(speed) < COASTING) return install(e, BATBOY.run);
           // `0x4394e2` — he is behind it, so it gives ground instead
           if (t.forward < 0) return install(e, BATBOY.back);
@@ -507,11 +538,10 @@ export const batboy: Brain = (e, foe, run, k) => {
          * each time it ends.
          */
         case 5: {
-          const rest = e.vx === 0 && e.vy === 0;
-          const speed = e.vx / TICKS;
-          const contrary = e.facing < 0 ? speed > 0 : speed < 0;
-          if (!rest && !contrary) return done ? install(e, BATBOY.back) : false;
-          if (t.forward < 0) e.facing = -e.facing;
+          const speed = ahead(e);
+          const rest = speed === 0 && e.vy === 0;
+          if (!rest && speed >= 0) return done ? rewind(e, BATBOY.back) : false;
+          if (t.forward < 0) turn(e);
           return install(e, BATBOY.read);
         }
         default:
@@ -536,18 +566,15 @@ export const batboy: Brain = (e, foe, run, k) => {
          *
          * Three ways out, any one of which sends it to `tag + 2` (`0x439617`)
          * with `mall.snd` 0x0d: `obj+0x2a` set, the player behind it, or under
-         * ten units of sideways speed left. `obj+0x2a` is the collision solver's
-         * "something hit me" word (`0x430663`, and `rat.ts` documents it) and
-         * nothing on this page writes it; `obj+0xc` is the stride residue this
-         * page does not carry either. So the third test is true on the first
-         * frame and the swing goes out at once rather than after the wind-up's
-         * two cels have slowed it. `0x439627` clears `obj+0x2a` on the way
-         * through, which is the same thing for the same reason.
+         * ten units of sideways speed left — so a swing thrown out of a coast
+         * rides in on it and lands when the glide has bled off. `obj+0x2a` is
+         * the collision solver's "something hit me" word (`0x430663`, and
+         * `rat.ts` documents it) and nothing on this page writes it;
+         * `0x439627` clears it on the way through.
          */
         case 0:
         case 1: {
-          if (!(t.forward < 0 || Math.abs(e.vx / TICKS) < PLANTED))
-            return false;
+          if (!(t.forward < 0 || Math.abs(ahead(e)) < PLANTED)) return false;
           k.say(e, BATBOY.strike);
           return install(
             e,
@@ -602,9 +629,11 @@ export const batboy: Brain = (e, foe, run, k) => {
       if (tag === 0) {
         if (!done) return false;
         // `0x4397f0` — `0x434540(0x64)` answers 1..100, so this is nine in a hundred
+        // ...and the loop is `0x439801` putting the same script on again, which
+        // rewinds it: one roll a lap, not one a frame
         return k.roll(100) < 10
           ? install(e, BATBOY.gloat2)
-          : install(e, BATBOY.gloat);
+          : rewind(e, BATBOY.gloat);
       }
       if (tag === 1) {
         if (!done) return false;

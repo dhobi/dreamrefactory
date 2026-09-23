@@ -39,17 +39,28 @@
  * ## What this module owns, and what it does not
  *
  * States 0 to 4 are the ones a CHOPPER is in while it is on its feet, and those are
- * here. State 5 is the whole of the death, which the page already drives through
- * {@link Foe.death} and {@link Foe.hatches}; a brain is never called during it.
- * It is named at {@link NOT_HERE} so the next reader can see what is deliberately
- * elsewhere. **There is no flinch state at all** — the table has no entry for
- * one and nothing installs the one script that holds flinch cels.
+ * here. State 5 is the whole of the death, which the page drives through
+ * {@link Foe.death} and {@link Foe.hatches}; a brain is never called during it,
+ * and what the death's own tags do on the way is {@link weredReacts}. It is
+ * laid out at {@link NOT_HERE}. **There is no flinch state at all** — the table
+ * has no entry for one and nothing installs the one script that holds flinch
+ * cels. The one thing its hit handler does besides count is {@link weredGate}.
  */
-import { install, type Brain, type Enemy, TICK_SCALE } from "./kit";
+import type { Foe } from "../foes";
+import {
+  install,
+  rewind,
+  type Brain,
+  type Enemy,
+  type Reaction,
+  TICK_SCALE,
+} from "./kit";
 
 /**
- * State 5, `0x454634`, and the hit handler `0x454790` that walks into it. Read,
- * not done — the page owns those animations.
+ * State 5, `0x454634`, and the hit handler `0x454790` that walks into it. The
+ * page owns the animation; the sounds and the lying-still are
+ * {@link weredReacts}, and the flame the wreck burns with for good is not
+ * carried (a reaction has no way to light one).
  *
  * - The handler: `0x454821` is `dec word ptr [eax]` on `AI+0`, the 3 the creator
  *   wrote, with the blow's own strength fetched at `0x454812` and spent only on
@@ -146,6 +157,10 @@ export const WERED = {
   squeal: 0x1e,
   /** `0x4545ad` — and 0x1d every time the lurch comes round again */
   tread: 0x1d,
+  /** `0x4546bd` — the wreck's cry as FANG is clear of it, the hatch's own 0x20 */
+  cry: 0x20,
+  /** `0x454720` — and 0x34 as it sinks */
+  sink: 0x34,
   from: "0x454410",
 } as const;
 
@@ -175,7 +190,7 @@ const STEP_OFF = 100;
  *
  * `obj+0xc` is clamped to ±0x1e on every think, whatever state the thing is in.
  * The CHOPPER is the one class in the chapter carrying a drag and a restitution of
- * its own (`0x45436a` pushes 0.1f, `0x454378` pushes 0.3f), so it is the one
+ * its own (`0x45436a` pushes 0.05f, `0x454378` pushes 0.3f), so it is the one
  * that can be bounced hard enough off an obstacle to need the cap.
  */
 const SPEED_CAP = 30;
@@ -266,10 +281,12 @@ export const wered: Brain = (e, foe, run, k) => {
         k.say(e, WERED.squeal);
         return install(e, WERED.maul, true);
       }
-      // `0x45459e` — otherwise the lurch simply comes round again, out loud
+      // `0x45459e` — otherwise the lurch simply comes round again, out loud,
+      // from its first cel: `0x45d090` rewinds the script it is handed even
+      // when it is the one already playing, so 0x1d is once a lap of four
       if (!done) return false;
       k.say(e, WERED.tread);
-      return install(e, WERED.lurch);
+      return rewind(e, WERED.lurch);
     }
     /**
      * ---- 2, `0x4545d5`: the maul ends and it goes back to walking.
@@ -293,6 +310,10 @@ export const wered: Brain = (e, foe, run, k) => {
      */
     case 3:
       e.facing = -e.facing;
+      // `0x4545ff` — `obj+0xc`, the ride itself: it stops dead and pulls away
+      // again from nothing. The page keeps the ride in `e.speed` and a flight
+      // in `e.vx`, and the engine's one word is both
+      e.speed = 0;
       e.vx = 0;
       e.x += STEP_OFF * e.facing;
       return install(e, WERED.walk);
@@ -325,5 +346,76 @@ function bounced(e: Enemy): boolean {
   if (e.vx === 0) return false;
   return e.facing > 0 ? e.vx < 0 : e.vx > 0;
 }
+
+/**
+ * `0x4547b3`…`0x4547d5` — the flame's arm of the hit handler, which the page
+ * asks before any of its own arithmetic.
+ *
+ * It lights the thing (`0x44ff20(self, 0, 0)`, the page's {@link Foe.burns}),
+ * writes 1 into `AI+0x14`, and writes **0 into `AI+0`** — the three blows'
+ * worth of health. Then it falls through to `0x4547f2`, which throws any
+ * negative strength away: no `dec`, no sound, no blood, no death this blow. So
+ * a CHOPPER set alight is still riding, and the next blow of anything, `dec`ed
+ * from 0 to −1, is the one that fells it.
+ */
+export function weredGate(
+  e: Enemy,
+  _foe: Foe,
+  blow: { damage: number; code: number },
+): { damage: number; code: number } | null {
+  if (blow.code === BURNS) e.hp = 0;
+  return blow;
+}
+
+/** `0x4547b3` — `cmp word ptr [edi+0x1a], -9` */
+const BURNS = -9;
+
+/**
+ * State 5 while the page plays it — `0x4546a1` and `0x4546f7`, once an engine
+ * frame.
+ *
+ * Tag 1 ending (the frame the death reaches its seventh cel) cries `0x20` a
+ * second time and rolls how long the wreck lies there, `0x434540(0x4b) + 0x32`
+ * into `AI+0x12`. Tag 2 is that lie: one cel, 4904, that `0x4546f7` holds while
+ * the count runs down, and when it has run out the sink goes on with `0x34`
+ * (`0x454720`). The page keeps that count on `e.beat`, which this class uses
+ * for nothing else, and holds the death's clock on the tag-2 cel to hold it.
+ *
+ * The sink is a blast: `0x454716` sets `obj+0x1a = 0x65` as it goes on and
+ * `0x454748` holds it there, and a dead thing worth `0x65` still hits (see
+ * `takeHits`). And `0x4546ac` lights the wreck with `0x44ff20(self, 3, 1)` —
+ * a flame from its last stage that never goes out.
+ */
+export const weredReacts: Reaction = (e, foe, _run, k) => {
+  if (e.state !== "dead" || e.anim !== foe.death) return;
+  const lie = LIE_CEL * e.anim.hold;
+  if (e.clock < lie) return;
+  if (e.beat === undefined) {
+    k.burn(e, { late: true, forever: true }); // `0x4546ac`
+    k.say(e, WERED.cry); // `0x4546bd`
+    e.beat = k.roll(0x4b) + 0x32; // `0x4546dc`
+  }
+  // `0x454748` — tag 3, the sink, re-asserts the blast every frame it plays
+  if (e.clock >= lie + e.anim.hold) {
+    e.strength = BLAST;
+    return;
+  }
+  const left = e.beat;
+  e.beat = left - 1;
+  if (left >= 0) {
+    e.clock = lie;
+    return;
+  }
+  // `0x454716` — the count is out: the wreck goes up, `obj+0x1a = 0x65`
+  e.strength = BLAST;
+  k.say(e, WERED.sink); // `0x454720`
+  e.clock = lie + e.anim.hold;
+};
+
+/** `0x454716` / `0x454748` — `0x65`, the strength a blast lands with */
+const BLAST = 0x65;
+
+/** where tag 2's one cel sits in {@link Foe.death}: 4890, 4891, then 4900..4904 */
+const LIE_CEL = 7;
 
 export { NOT_HERE as WERED_NOT_HERE, ORPHAN as WERED_ORPHAN };

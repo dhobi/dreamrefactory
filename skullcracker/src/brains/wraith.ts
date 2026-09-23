@@ -15,7 +15,7 @@
  * ```
  *   0  0x46f688  one cel, 3260: the statue, until his point enters the rect
  *   1  0x46f698  the hover — five cels going nowhere, and the state that DECIDES
- *   2  0x46f6c8  tag 0 the same drift with no stride; tag 1 the CLAW, dx 20/10
+ *   2  0x46f6c8  tag 0 the CLAW, in place; tag 1 the same nine with dx 20/10
  *   3  0x46f760  3240..3244, a shudder that travels nowhere and hands straight back
  *   4  0x46f7e0  the TELEPORT: tag 0 fades out, tag 1 is gone, tag 2 fades back in
  *   5  0x46f790  tag 0 the cast, tag 1 the follow-through
@@ -46,9 +46,10 @@
  * of numbers through `0x42f8b0` — which divides them by `obj+0xe`, the class's
  * divisor of ten, and ADDS them to `obj+0xa`/`obj+0xc`. So the wraith accelerates
  * at one pixel a frame sideways and two vertically while the hover keeps
- * looping, and its own gait (`0x46f6c8` tag 1, the only script in the class with
- * a stride) is not a walk at all — it is what goes out at band 4 with
- * `belfry.snd` 0x23, `0082 wraith cla[w]`, on it.
+ * looping. `0x46f6c8` tag 1, the only script in the class with a stride, is
+ * not a walk either: only the two ladder branches install it (`0x424a57`,
+ * `0x424b8c`). What goes out at band 4 with `belfry.snd` 0x23, `0082 wraith
+ * cla[w]`, is tag 0 (`0x424c05`), the same nine cels going nowhere.
  *
  * ## The two states nothing else in the game has
  *
@@ -81,43 +82,41 @@
  * dies `0x424f30` walks the class list and dissolves every lesser one with it.
  *
  * This page has no field for "first of my class", so {@link Enemy.decisions}
- * carries it — see the comment at the seed, which is the one place this module
- * chooses rather than reads.
+ * carries it, seeded from the class's live count the first time it thinks.
  *
  * ## What this module owns, and what it does not
  *
  * Seven of the nine — 0 through 6 — are the ones it is in while it is on its
- * feet, and those are here. Kinds 7 and 8 are the hit reactions, installed by
- * `0x424f80` (the frame handler hung on `obj+0x12` at `0x42475f`) and driven by
- * the page's own {@link Foe.flinch}/{@link Foe.death} path; a brain is never
- * called during them. They are named at {@link NOT_HERE}, together with the two
- * things they do that the page does not.
+ * feet, and those are here, with 7's closing roll. Kinds 7 and 8 are the hit
+ * reactions, installed by `0x424f80` (the frame handler hung on `obj+0x12` at
+ * `0x42475f`) and animated by the page's own {@link Foe.flinch}/{@link Foe.death}
+ * path; what they do besides is {@link wraithReacts} and {@link wraithGate}.
  */
+import type { Foe } from "../foes";
 import {
   install,
   type Brain,
   type BrainCtx,
+  type CastKit,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 
 /**
- * The hit reactions, kinds 7 and 8, and the handler that installs them. Read,
- * not done — the page owns those animations.
+ * The hit reactions, kinds 7 and 8, and the handler that installs them. The
+ * page owns those animations; what they do besides is here, in
+ * {@link wraithReacts}, {@link wraithGate} and state 7 of the machine.
  *
- * **The page has these two the wrong way round.** `Foe.initwraith` calls
- * `0x46f8a8` the flinch and `0x46f898` the death, and it is the other way about:
  * `0x4250fa` installs `0x46f898` — kind 7, cel 3243 alone — when the blow is
- * survived, and `0x425044`/`0x4250d9` install `0x46f8a8` — kind 8, 3200..3208 —
- * when it is not. State 8 is also the only state in `0x424800` that answers 1
- * (`0x424eb6` and `0x424ee7`, both followed by `0x40cba0(point, -0xd, 0)`), and
- * answering 1 is the frame an object is removed. The nine cels are the death.
+ * survived, and `0x425044`/`0x4250d9` install `0x46f8a8` — kind 8, 3200..3208
+ * — when it is not. State 8 is the only state in `0x424800` that answers 1
+ * (`0x424eb6` and `0x424ee7`, both followed by `0x40cba0(point, -0xd, 0)`).
  *
  * - **7**, the flinch, `0x424ded`: halves both velocities every frame, and when
  *   the cel ends rolls `0x434540(10)`. Under 3 — and only if `AI+4` is set — it
  *   plays 0x28 and goes to kind 6: **a named wraith splits when you hit it.**
- *   Otherwise straight back to the hover. The page's flinch path has no such
- *   branch and cannot have one, because a brain is not called during a flinch.
+ *   Otherwise straight back to the hover.
  * - **8**, the death, `0x424e51`: a LESSER wraith (`AI+4` zero) is removed on
  *   the frame it enters the state — `0x424ea7` does not wait for the script at
  *   all — where the named one plays all nine cels, calls `0x424f30` to dissolve
@@ -126,8 +125,8 @@ import {
  *   is the level's own flag and not behaviour.
  * - `0x424f80`'s damage line is `0x425075`, `sub word ptr [eax], di` against
  *   `AI+0`, and `0x42507c` plays `0x434540(2) + 0x23` — 0x23 or 0x24 — as it
- *   lands. `Foe.hitSound` uses 0x21 for that, which is the sound a lesser wraith
- *   makes DYING (`0x425058`), not the sound of a blow landing.
+ *   lands. A lesser one never gets there: `0x42503d` sends it straight to the
+ *   death with 0x21 and no subtraction.
  */
 const NOT_HERE = "0x424ded, 0x424e51, 0x424f80, 0x424f30" as const;
 
@@ -157,8 +156,9 @@ const UNREACHED = "0x4249b2, 0x424a25, 0x424b6d, 0x424c1a" as const;
  *
  * Every cel and hold below is the script's own header and frame list. Exactly
  * one tag in the class travels — `0x46f6c8` tag 1, dx 20 for three cels and then
- * 10 for six — and everything else in the class is `dx 0, dy 0`. A wraith that
- * is not clawing you moves only on the velocity `0x4248e9` gives it.
+ * 10 for six — and everything else in the class is `dx 0, dy 0`. Only the
+ * ladder branches install that tag, so a wraith moves on the velocity
+ * `0x4248e9` gives it and nothing else.
  */
 export const WRAITH = {
   /** kind 0 — one cel at one engine frame: the statue, and there is no patrol */
@@ -172,21 +172,22 @@ export const WRAITH = {
     from: "0x46f698 tag 0",
   },
   /**
-   * kind 2 tag 0 — the claw's nine cels with their strides removed.
-   *
-   * Nothing in `0x424800` installs it. It is in the table because the class owns
-   * it and because `Foe.initwraith`'s `wake` cel was taken from it; the statue's
-   * cel is 3260, out of `0x46f688`, not 3250.
+   * kind 2 tag 0 — the CLAW, nine cels going nowhere: what band 4 installs
+   * (`0x424c05` pushes tag 0).
    */
-  still: {
+  claw: {
     cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250],
     hold: 2,
     kind: 2,
     tag: 0,
     from: "0x46f6c8 tag 0",
   },
-  /** kind 2 tag 1 — the CLAW: the only script in the class with a stride */
-  claw: {
+  /**
+   * kind 2 tag 1 — the same nine with a stride, 20 and then 10: the lunge
+   * the two ladder branches install (`0x424a57`, `0x424b8c`), which the kit
+   * cannot reach — see {@link UNREACHED}.
+   */
+  lunge: {
     cels: [3250, 3251, 3252, 3253, 3252, 3253, 3252, 3251, 3250],
     hold: 2,
     dx: [20, 20, 20, 10, 10, 10, 10, 10, 10],
@@ -258,6 +259,8 @@ export const WRAITH = {
    * `0088 wraith die` — ids 0x21 through 0x29 in order.
    */
   claws: 0x23,
+  /** `0x41f733` — as the beam is made */
+  lightning: 0x22,
   arrive: 0x26,
   leave: 0x27,
   splits: 0x28,
@@ -270,15 +273,82 @@ export const WRAITH = {
 } as const;
 
 /**
- * A tick is half an ENGINE frame, so a velocity written per frame is scaled
- * once and a velocity ACCUMULATED per frame is scaled twice.
+ * `e.vx`/`e.vy` are pixels a TICK and the engine's are pixels an engine frame,
+ * so every velocity this module writes or adds is scaled by this once.
  *
  * `0x42f8b0` is the accumulator: it rounds its argument away from zero through
- * `obj+0xe` and adds the result to `obj+0xa`/`obj+0xc` once a frame. The port's
- * brain runs once a TICK, so the per-tick increment is the per-frame one halved
- * again — the same shape `walk.ts` gives the plank's gravity.
+ * `obj+0xe` and adds the result to `obj+0xa`/`obj+0xc` once a frame — and the
+ * brain is called once an engine frame, so one call is one addition.
  */
 const TICKS = TICK_SCALE;
+
+/** `0x42f8b0`'s own rounding — away from zero, through the divisor */
+const through = (n: number): number =>
+  n >= 0
+    ? Math.trunc((n + WRAITH.divisor - 1) / WRAITH.divisor)
+    : Math.trunc((n - WRAITH.divisor + 1) / WRAITH.divisor);
+
+/**
+ * `sar` after `sub eax, edx` — the halving `0x424932`, `0x424963`, `0x424ded`
+ * and the rest do on a velocity word: toward zero, and a one halves to nothing.
+ */
+const halve = (v: number): number =>
+  Math.trunc(Math.round(v / TICKS) / 2) * TICKS;
+
+/**
+ * What the cast lets go — `0x41f6b0(self, 0)`, the scepter's own fire function,
+ * variant 0 (`0x41f755`).
+ *
+ * The object is of the scepter's class (list `[0x46f580]`, proc `0x424510`),
+ * and its user words are `+2 = 0x46`, `+0 = 0`, `+4` the caster. `0x424620`,
+ * its think, plants it every frame at the caster's `obj+8 ± 0x46` and
+ * `obj+6`, writes `obj+0x1a = 0x64`, and — in kind 0, which `0x46f4d0` tag 0
+ * is — answers 1 the frame the six cels have run. `0x41f733` plays `0x22`,
+ * `0081 wraith lig[htning]`, as it is made.
+ *
+ * It hangs off the WRAITH, not the player: the page's streams are the player's
+ * own held weapons, and the wraith's is a thing in the level. It is flown here
+ * as a cast that does not move, born where the think would first plant it; the
+ * wraith is frozen under its cast, so the six frames it lasts are where it
+ * started.
+ */
+export const WRAITH_BEAM: CastKit = {
+  cels: [3270, 3271, 3272, 3273, 3272, 3273],
+  hold: 1,
+  speed: 0,
+  /** `0x41f755` — `user+2 = 0x46` along the caster's facing */
+  ahead: 0x46,
+  /** `user+0 = 0`: level with the caster's own point */
+  lift: 0,
+  /** `0x424630`, every frame */
+  blow: 0x64,
+  /** `0x424699` — gone the frame `0x46f4d0` tag 0's six cels report finished */
+  life: 6,
+  from: "0x41f6b0 variant 0 / 0x46f4d0 tag 0 / class 0x424510",
+};
+
+/**
+ * How many named wraiths have died — the only thing a lesser one needs to know
+ * about the named one, and `0x424f30` is why: as the named one's death ends it
+ * walks the class list and dissolves every wraith whose `AI+4` is clear. A
+ * lesser one remembers the count it was born under ({@link Enemy.side}) and
+ * goes the frame it changes.
+ */
+let namedFallen = 0;
+
+/** `0x424f47`…`0x424f6a` — `AI+0 = 0`, `belfry.snd` 0x21, the dissolve, and gone */
+function dissolve(e: Enemy, foe: Foe): void {
+  e.hp = 0;
+  e.state = "dead";
+  e.anim = foe.death ?? e.anim;
+  e.swing = false;
+  e.linger = 0;
+  // `0x424ea7`: a lesser one is removed on the frame it ENTERS state 8, so the
+  // page's corpse clock is put at the end of the script it would have played
+  e.clock = e.anim.cels.length * e.anim.hold - TICKS;
+  e.vx = 0;
+  e.vy = 0;
+}
 
 /**
  * `initwraith`'s own machine, states 0 to 6.
@@ -338,8 +408,7 @@ const TICKS = TICK_SCALE;
  * -3 is the grab. But `0x4248a9` is the function's only exit and its third
  * instruction is `mov word ptr [esi+0x1a], 0x64`: every path writes a hundred
  * back on the way out, so both writes are dead and the wraith hits like
- * everything else. `Foe.initwraith` already records that, and it holds. Nothing
- * hits the player in this port in any case.
+ * everything else, at the page's default strength.
  */
 export const wraith: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
@@ -347,16 +416,30 @@ export const wraith: Brain = (e, foe, run, k) => {
   // `0x424ab4`/`0x424ca9` — the beat is only ever reseeded to five
   e.beat ??= 5;
   /**
-   * `AI+4`, and this default is the one thing in this module that is chosen.
-   *
-   * `0x41ed12` sets it from the class's live instance count at birth, which a
-   * brain cannot see. The level places exactly ONE wraith (`Foe.initwraith`:
-   * RAVECAVE's x13043), so the shipped game's placed wraith always gets 1 —
-   * which is what this defaults to. Anything the page spawns from a split is a
-   * lesser one and the caller should seed it 0: no bar, no cast, no split of its
-   * own, and one blow kills it.
+   * `AI+4` — `0x41ed12` sets it to 1 when the class's live count is 1 at the
+   * moment of creation, and to 0 otherwise. The level places exactly one, so
+   * that one is alone the first time it thinks; a split is born beside its
+   * parent and counts two. A lesser one also remembers how many named ones
+   * had fallen when it was born — see {@link namedFallen} — and, being made by
+   * `0x424de0` with the creator's fifth argument set, starts materialising in
+   * kind 4 tag 0 (`0x41ed47`) rather than standing as a statue.
    */
-  e.decisions ??= 1;
+  if (e.decisions === undefined) {
+    e.decisions = k.count("initwraith") <= 1 ? 1 : 0;
+    if (e.decisions === 0) {
+      e.side = namedFallen;
+      e.vx = 0;
+      e.vy = 0;
+      return install(e, WRAITH.fade, true);
+    }
+  }
+  // `0x424f30` — the named one has gone, and it took this one with it
+  if (e.decisions === 0 && e.side !== namedFallen) {
+    k.say(e, WRAITH_GONE);
+    e.hatched = true;
+    dissolve(e, foe);
+    return false;
+  }
   switch (e.script ?? 0) {
     /**
      * ---- 0, `0x42487f`: the statue, and the one thing that ends it.
@@ -411,7 +494,8 @@ export const wraith: Brain = (e, foe, run, k) => {
         e.beat = beat - 1;
         if (beat >= 0) return false;
         k.say(e, WRAITH.arrive);
-        e.y = k.player.y;
+        // `obj+6` onto his: anchor on anchor, and its feet fall where they fall
+        e.y += k.player.anchor - k.anchorY(e);
         e.x =
           k.player.facing < 0
             ? k.player.x + k.roll(0x2f) + 100
@@ -427,17 +511,18 @@ export const wraith: Brain = (e, foe, run, k) => {
      * `0x424d77` calls `0x41f6b0(self, 0)` on the frame the six cels finish —
      * the scepter's own fire function, variant 0, the one that spends no rounds
      * and plays `belfry.snd` 0x22, `0081 wraith lig[htning]`, as it creates the
-     * object. That object is a class of its own in list `[0x46f580]` and the kit
-     * has no primitive that makes one, so the call is read and not done; the
-     * page's own `castBeams`/`streams` path is where the beam lives.
+     * object. See {@link WRAITH_BEAM}.
      *
      * Tag 1 is then three frames of the arm still out, and hands to the hover.
      */
     case 5:
       if (!done) return false;
-      return (e.tag ?? 0) === 0
-        ? install(e, WRAITH.held, true)
-        : install(e, WRAITH.hover);
+      if ((e.tag ?? 0) === 0) {
+        k.say(e, WRAITH.lightning);
+        k.cast(e, WRAITH_BEAM);
+        return install(e, WRAITH.held, true);
+      }
+      return install(e, WRAITH.hover);
     /**
      * ---- 6, `0x424d9b`: the split.
      *
@@ -446,17 +531,89 @@ export const wraith: Brain = (e, foe, run, k) => {
      * `0x41ec80(point, AI+6, AI+0xa, !obj+0x28, 1)` — its own creator, with the
      * record rect it was given and the fifth argument that starts the new one in
      * kind 4 tag 0, so the copy materialises rather than standing there. The new
-     * one gets `AI+4` of 0 because the class count is no longer 1.
-     *
-     * A brain cannot add to the pool, so the spawn is read and not done and only
-     * the six cels play. `0x41ec8d` would refuse a fifth instance anyway.
+     * one gets `AI+4` of 0 because the class count is no longer 1, and
+     * `0x41ec88` refuses a fifth instance.
      */
     case 6:
-      return done ? install(e, WRAITH.hover) : false;
+      if (!done) return false;
+      if (k.count("initwraith") <= 3)
+        k.hatch(e, "initwraith", {
+          x: e.x - e.facing * 0x46,
+          y: e.y,
+          facing: -e.facing,
+        });
+      return install(e, WRAITH.hover);
+    /**
+     * ---- 7, `0x424ded`: the flinch has run out ({@link WRAITH_FLINCHED}).
+     *
+     * `0x424e14` rolls `0x434540(10)`: under 3, and only for the named one, it
+     * cries 0x28 and splits; anything else is the hover again.
+     */
+    case 7:
+      if (k.roll(10) < 3 && e.decisions === 1) {
+        k.say(e, WRAITH.splits);
+        return install(e, WRAITH.split, true);
+      }
+      return install(e, WRAITH.hover);
     default:
       return false;
   }
 };
+
+/** `0x424f51` / `0x425058` — `belfry.snd` 0x21, a lesser one going */
+const WRAITH_GONE = 0x21;
+
+/**
+ * The two reaction states, as far as a page-owned animation can carry them.
+ *
+ * - **7**, `0x424ded`: both velocities halved every frame the take shows.
+ * - **8**, a lesser one struck ({@link wraithGate}) cries 0x21 on its way
+ *   out; the named one's death, the frame it ends, dissolves every lesser one
+ *   still up (`0x424ed5` → `0x424f30`) — which each of them sees as
+ *   {@link namedFallen} moving.
+ */
+export const wraithReacts: Reaction = (e, _foe, run, k) => {
+  if (e.state === "flinch") {
+    e.vx = halve(e.vx);
+    e.vy = halve(e.vy);
+    return;
+  }
+  if (e.state !== "dead" || e.hatched) return;
+  // `0x424e6d` — the named one's death lights and shakes on every odd frame
+  if (e.decisions !== 0 && Math.floor(e.clock / e.anim.hold) % 2 === 1) {
+    k.flash(0xe1); // `0x424e89`
+    k.shake(3); // `0x424e96`
+  }
+  if (e.decisions === 0) {
+    // `0x425058` — the gate put it here without a sound; this is that sound
+    e.hatched = true;
+    k.say(e, WRAITH_GONE);
+    return;
+  }
+  if (e.clock >= run) {
+    e.hatched = true;
+    namedFallen += 1;
+  }
+};
+
+/**
+ * `0x424f80`'s gate, in front of the page's own arithmetic.
+ *
+ * `0x424fd1` ignores a code before anything else. Then `0x42503d`: a LESSER
+ * wraith takes no subtraction at all — the death is installed with 0x21 and
+ * `0x424ea7` removes it the next frame, so any blow that lands is the end of
+ * it, with neither the named one's hit sound nor its death sound.
+ */
+export function wraithGate(
+  e: Enemy,
+  foe: Foe,
+  blow: { damage: number; code: number },
+): { damage: number; code: number } | null {
+  if (blow.code < 0) return null;
+  if (e.decisions !== 0) return blow;
+  dissolve(e, foe);
+  return null;
+}
 
 /** `0x424c44` — every band falls through here: restart the hover, or wait */
 function tail(e: Enemy, done: boolean): boolean {
@@ -490,7 +647,7 @@ function fight(
    * of the two readings is wrong. This module follows the instruction.
    */
   if (k.player.down) {
-    e.facing = k.player.x > e.x ? -1 : 1;
+    e.facing = k.player.x > k.anchorX(e) ? -1 : 1;
     return tail(e, done);
   }
   switch (t.band) {
@@ -516,14 +673,14 @@ function fight(
         if (-dy <= 15) {
           // `0x424932` — level with him: stop pushing, and halve what is left
           lift = 0;
-          e.vy /= 2;
+          e.vy = halve(e.vy);
         } else {
           // `0x424949` — he is more than fifteen ABOVE it, so climb
           lift = -20;
         }
       }
-      e.vx += ((e.facing * 10) / WRAITH.divisor) * TICKS * TICKS;
-      e.vy += (lift / WRAITH.divisor) * TICKS * TICKS;
+      e.vx += through(e.facing * 10) * TICKS;
+      e.vy += through(lift) * TICKS;
       return tail(e, done);
     }
     /**
@@ -534,7 +691,7 @@ function fight(
      * old value halved once it is within fifty of his row.
      */
     case 2: {
-      e.vx /= 2;
+      e.vx = halve(e.vx);
       close(e, k, 20, 0x32);
       /**
        * `0x4249b2` is the scepter dodge and `0x424a20` the ladder pair, and
@@ -563,7 +720,7 @@ function fight(
      * band where this thing is dangerous.
      */
     case 3: {
-      e.vx /= 2;
+      e.vx = halve(e.vx);
       close(e, k, 25, 0x32);
       /**
        * `0x424b05` — he is mid-blow, and the answer is a coin.
@@ -592,9 +749,9 @@ function fight(
      *
      * No velocity is touched here at all: whatever the approach gave it is still
      * running. `AI+4` must be set, it must be within fifty of his row, and then
-     * `belfry.snd` 0x23 — `0082 wraith cla[w]` — goes out with `0x46f6c8` tag 1,
-     * the one script in the class that travels. `0x424c21`'s -3 after it is the
-     * dead write.
+     * `belfry.snd` 0x23 — `0082 wraith cla[w]` — goes out with `0x46f6c8` tag 0
+     * (`0x424c05` pushes 0), the nine cels in place. `0x424c21`'s -3 after it
+     * is the dead write.
      */
     case 4: {
       if ((e.decisions ?? 1) === 0) return tail(e, done);
@@ -618,7 +775,7 @@ function fight(
  */
 function close(e: Enemy, k: BrainCtx, rate: number, slack: number): void {
   if (Math.abs(k.player.y - e.y) < slack) {
-    e.vy /= 2;
+    e.vy = halve(e.vy);
     return;
   }
   e.vy = (k.player.y >= e.y ? rate : -rate) * TICKS;

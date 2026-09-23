@@ -87,11 +87,46 @@ export class SkullFiles {
   /** fires as the number of fetches in flight changes — the spinner's signal */
   onBusyChange: ((inFlight: number) => void) | null = null;
 
+  /**
+   * How one located file is read. A page fetches it; a headless run
+   * ({@link SkullFiles.fromReader}) reads the disk.
+   */
+  private read: (at: string, key: string) => Promise<Uint8Array | null> = async (at, key) => {
+    const res = await fetch(at);
+    if (!res.ok) return null;
+    // read as it arrives where the browser gives a body to read: one film is
+    // up to 27 MB, and a bar that only moves on completion does not move
+    return res.body ? await this.readStream(key, res.body) : new Uint8Array(await res.arrayBuffer());
+  };
+
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<SkullFiles> {
-    const store = new SkullFiles();
     const res = await fetch(url("gamefiles.json"));
     const manifest: Record<string, number> = res.ok ? await res.json() : {};
+    return SkullFiles.index(manifest, url, root);
+  }
+
+  /**
+   * The same rip read some other way — `read` is handed each file's manifest
+   * path and answers its bytes. Headless runs use it with the disk.
+   */
+  static fromReader(
+    manifest: Record<string, number>,
+    read: (path: string) => Promise<Uint8Array | null>,
+    root = "gamefiles/",
+  ): SkullFiles {
+    const store = SkullFiles.index(manifest, (path) => path, root);
+    store.read = (at) => read(at);
+    return store;
+  }
+
+  /** the manifest's paths, one per basename, by the rules above */
+  private static index(
+    manifest: Record<string, number>,
+    locate: (path: string) => string,
+    root: string,
+  ): SkullFiles {
+    const store = new SkullFiles();
     for (const path of Object.keys(manifest).sort()) {
       if (!path.startsWith(root)) continue;
       const base = path.split("/").pop()!.toLowerCase();
@@ -99,7 +134,7 @@ export class SkullFiles {
       // first path wins, EXCEPT where the installed copy is the right one and
       // this is it (see INSTALLED_WINS)
       if (store.urls.has(base) && !(installed && INSTALLED_WINS.has(base))) continue;
-      store.urls.set(base, url(path));
+      store.urls.set(base, locate(path));
       store.sizes.set(base, manifest[path]);
     }
     return store;
@@ -151,13 +186,8 @@ export class SkullFiles {
     const flight =
       this.inFlight.get(key) ??
       (async () => {
-        const res = await fetch(at);
-        if (!res.ok) return null;
-        // read as it arrives where the browser gives a body to read: one film is
-        // up to 27 MB, and a bar that only moves on completion does not move
-        const bytes = res.body
-          ? await this.readStream(key, res.body)
-          : new Uint8Array(await res.arrayBuffer());
+        const bytes = await this.read(at, key);
+        if (!bytes) return null;
         this.cache.set(key, bytes);
         this.loads.push(key);
         return bytes;

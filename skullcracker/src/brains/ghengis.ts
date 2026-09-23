@@ -61,18 +61,25 @@
  * it passes with it.
  *
  * And `obj+0x1a` — the strength this thing commits — is set to **100**
- * (`0x4226ea`) at the top of every frame in every state. Nothing hits the
- * player in this port, so that is carried as read and spends nothing.
+ * (`0x4226ea`) at the top of every frame in every state — the page's default
+ * {@link Enemy.strength}.
  */
-import { install, type Brain, type BrainCtx, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+  type Reaction,
+} from "./kit";
 
 /**
- * States 6 to 9, and what they do that the page's own flinch and death path
- * does not. Read, not done — the page owns those animations.
+ * States 6 to 9. The page plays the flinch and the death; the flinch's tail
+ * is the brain's case 8 and the burst is {@link ghengisReacts}.
  *
  * - **8**, the flinch (`0x422a25`): `0x422c30` installs it whenever a blow
  *   leaves health, with sound `0x2c + 0x434540(2)` — 0x2d or 0x2e. What state 8
- *   then does is the part the page cannot express: when the two cels end it
+ *   then does: when the two cels end it
  *   rolls `0x434540(2)` and goes **straight back on the offensive** — a 1 walks
  *   it in on kind 3 tag 0, anything else drops it into the bull rush, kind 5 tag
  *   0. It never returns to the stance off a flinch.
@@ -189,10 +196,12 @@ export const GHENGIS = {
    * ({@link NOT_HERE}).
    */
   roarSnd: 0x2a,
-  /** `0x4228f8` — the footfall, and see state 3 for why it is not said here */
+  /** `0x4228f8` — the footfall, on frames 0 and 4 of the walk */
   footSnd: 0x2b,
   /** `0x42297b` — the one that goes with the charge coming out of the wind-up */
   chargeSnd: 0x2c,
+  /** `0x422d7e` — the blast it comes apart in */
+  blastSnd: 0x30,
   from: "0x422680",
 } as const;
 
@@ -266,10 +275,10 @@ export const ghengis: Brain = (e, foe, run, k) => {
      * The head of the state is a sound: `obj+0x42` is the ABSOLUTE frame index
      * `0x45d090` rewinds and `0x45d0c4` advances, and on **0 or 4** it lets out
      * `0x2b`, the footfall. Kind 3 is twelve frames — tag 0 is 0…5 and tag 1 is
-     * 6…11 — so those two thuds land on the walk only and never on the run. This
-     * page carries no frame-index word (the kit's {@link Enemy.thrown} is the
-     * once-per-blow flag, not this), and saying it per tick would machine-gun
-     * it, so the footfalls are read and not said. See {@link GHENGIS.footSnd}.
+     * 6…11 — so those two thuds land on the walk only and never on the run.
+     * The brain is called once an engine frame, so the frame index is the
+     * clock over the hold, and each thud is said on the first call that shows
+     * its frame.
      *
      * And the tail, `0x42291e`, is the whole point of walking in: it compares
      * the player's `obj+0x28` against its own, and **equal mirror flags mean his
@@ -277,6 +286,11 @@ export const ghengis: Brain = (e, foe, run, k) => {
      * launches the bull rush with a roar. Anything else and it just stands.
      */
     case 3: {
+      // `0x4228e5` — frames 0 and 4, which only tag 0 has
+      if ((e.tag ?? 0) === 0) {
+        const at = Math.floor(e.clock);
+        if (at === 1 || at === 4 * e.anim.hold) k.say(e, GHENGIS.footSnd);
+      }
       if (!done) return false;
       // `0x422912` — turn first, exactly as the fight does
       if (t.forward < 0) e.facing = -e.facing;
@@ -308,9 +322,86 @@ export const ghengis: Brain = (e, foe, run, k) => {
       if (tag === 0) k.say(e, GHENGIS.chargeSnd);
       return install(e, tag === 0 ? GHENGIS.rush : GHENGIS.rushEnd, true);
     }
+    /**
+     * ---- 8, `0x422a25`: the end of the flinch, and it goes straight back on
+     * the offensive.
+     *
+     * The flinch itself is the page's reaction; its {@link FoeAnim.resume} is a
+     * one-frame script of this kind, and when that is done `0x422a30` rolls
+     * `0x434540(2)`: a 1 walks in on `0x46ee60` tag 0, anything else is the
+     * bull rush's wind-up, `0x46ef30` tag 0 — with no roar in front of it.
+     */
+    case 8:
+      if (!done) return false;
+      return k.roll(2) === 1
+        ? install(e, GHENGIS.stride)
+        : install(e, GHENGIS.windUp, true);
     default:
       return false;
   }
+};
+
+/**
+ * `0x422c60`, called from state 9 (`0x422a7e`) the frame the death's cels end.
+ *
+ * Nine pieces of this class, one per tag of `0x46ed90` — cels 446 to 454 —
+ * each put down at the body's point with `x += si` for `si` = 24 down to −24
+ * in sixes (`0x422cb8`, `0x422cc8`) and `y += 0x434540(0x14) - 0x14`
+ * (`0x422ca3`), divisor 10 (`0x422cbf`) and a bounce of 0.4 (`0x422d13`). They
+ * are given no velocity at all: they drop where they are put, and state 6
+ * (`0x4229d2`) removes each once it has come to rest. Then a tenth,
+ * `0x46ede0`, the blast — cels 460 to 469, no gravity (`0x422d5d`), sound 0x30
+ * (`0x422d7e`) — which state 7 (`0x422a0a`) holds at strength **0x65** for
+ * its whole run and removes as it ends.
+ *
+ * The pieces are harmless in practice: their cels carry a strike box and no
+ * pair, so what they would hit with is their own velocity, and a cast hands
+ * the page only its sideways one.
+ */
+function burst(e: Enemy, k: BrainCtx): void {
+  for (let i = 0; i < 9; i += 1) {
+    k.cast(e, {
+      cels: [446 + i],
+      hold: 2,
+      speed: 0,
+      ahead: 0,
+      offX: 24 - 6 * i,
+      lift: 0x14 - k.roll(0x14),
+      blow: 100,
+      // the class's own weight — nothing in `0x422c60` calls `0x42f850`
+      pull: 10,
+      bounce: 0.4,
+      rest: 2,
+      from: `0x422c60 -> 0x46ed90 tag ${i}`,
+    });
+  }
+  k.say(e, GHENGIS.blastSnd);
+  k.cast(e, GHENGIS_BLAST);
+}
+
+/** `0x422d2b`..`0x422d95` — the blast, and the only one of the ten that hurts */
+const GHENGIS_BLAST: CastKit = {
+  cels: [460, 461, 462, 463, 464, 465, 466, 467, 468, 469],
+  hold: 1,
+  speed: 0,
+  ahead: 0,
+  lift: 0,
+  // `0x422a0a` — `obj+0x1a = 0x65` on every frame of state 7: the pair alone
+  blow: 0x65,
+  // `0x422a10` — removed the frame its ten cels end
+  life: 10,
+  from: "0x422c60 -> 0x46ede0 tag 0",
+};
+
+/**
+ * State 9, `0x422a6f`, while the page plays `0x46efe0`: on the frame its cels
+ * end the body comes apart ({@link burst}) and {@link Foe.linger} 0 removes it.
+ */
+export const ghengisReacts: Reaction = (e, foe, run, k) => {
+  if (e.state !== "dead" || e.anim !== foe.death) return;
+  if (e.hatched || e.clock < run) return;
+  e.hatched = true;
+  burst(e, k);
 };
 
 /**
