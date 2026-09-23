@@ -162,6 +162,14 @@ const CLOCK_ALLOWED = new Set([
   // produces — and the page it belongs to is not one a route is ever run on. The
   // module it drives, `devmode/menu.ts`, reads no clock and stays covered.
   "devmode-page.ts",
+  // The free-roam page shell (taoot/freeroam/), and the same case exactly: one
+  // timer, polling for the boot to have opened a set, and then it installs two
+  // listeners and stops. What that page WAITS on is not a clock at all — the
+  // door watcher counts animation frames against `session.scriptBusy`
+  // (`freeroam/doors.ts`, which reads no clock and stays covered), because the
+  // thing being waited for is a script dispatch finishing rather than time
+  // passing.
+  "freeroam-page.ts",
 ]);
 
 /**

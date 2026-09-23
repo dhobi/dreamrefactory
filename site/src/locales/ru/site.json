@@ -1,6 +1,10 @@
 {
   "brandTitle": "RE — reverse-engineered: посильная переработка движка DreamFactory, а не оригинальное издание 1996 года",
   "navPlay": "Играть",
+  "navOriginal": "Оригинал",
+  "navFreeRoam": "Свободный режим",
+  "navFreeRoamTitle": "Свободный режим — экскурсия с диска, в которой открывается каждая дверь",
+  "navPlayMenuTitle": "Как открыть игру",
   "navEditors": "Редакторы",
   "navCollection": "Коллекция",
   "navMinigames": "Мини-игры",

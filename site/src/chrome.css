@@ -247,6 +247,10 @@ kbd,
   position: absolute;
   right: 0;
   top: calc(100% + 0.3rem);
+  /* ...and never wider than the screen it is on. `right: 0` keeps the right
+     edge inside the viewport but says nothing about the left one, so a panel
+     with a long item in it runs off the other side on a phone. */
+  max-width: calc(100vw - 1.2rem);
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -256,6 +260,21 @@ kbd,
   border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
   background: var(--menu-panel);
   box-shadow: 0 10px 24px var(--shadow-drop);
+}
+/* The Play menu is the one that hangs from the LEFT.
+   The panel opens leftwards out of its trigger (`right: 0` above), which is
+   what the menus at the END of the bar want — the language picker and Games
+   both sit there, and {@link .langmenu} above goes to some trouble to make sure
+   its trigger does too. This one cannot: "Play" is the first link in the nav and
+   belongs at the front, so a panel opening leftwards out of it opens towards the
+   edge of the screen and is cut off in a narrow window.
+
+   So it opens the other way, from its own left edge, which is where there is
+   room. Paired with the `max-width` above, the panel then stays on the screen at
+   any width. */
+.playmenu > .navmenu-list {
+  left: 0;
+  right: auto;
 }
 .navmenu-list button,
 .navmenu-list a {

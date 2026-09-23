@@ -21,12 +21,14 @@ that stands on, see [the engine](../engine/).
   line, TI.EXE's own menu bar, and what `debugging` really opens
   - [The census](devmode-census.md) — every read of the flag and every modifier
     probe in the corpus, generated, with what each branch does
+- [Free roam](freeroam.md) — the guided tour `playmode.mov` offers, entered
+  directly, and the six doors that answer one with a knock
 - [How we know it's right](verification.md) — what was checked, against what, and
   what "right" was allowed to mean
 
 ## The code
 
-`taoot/` in the repository. Five pages — the front page, `/play/`,
+`taoot/` in the repository. The front page, `/play/`, `/freeroam/`,
 `/collection/`, and the unlisted `/speedrun/` workbench and `/devmode/` — the six
 editions and the demo, its own tools, and the suites that play the game through
 to the end.

@@ -211,7 +211,29 @@ export function applyTranslations(root: ParentNode = document): void {
  * it was already showing, which is a worse page than intended and a much better
  * one than a blank.
  */
-export async function installI18n(): Promise<void> {
+export function installI18n(): Promise<void> {
+  // Memoised, and the promise handed back to every caller.
+  //
+  // A page load has ONE language — the picker switches by reloading (see
+  // lang-menu.ts's switchTo) — so installing twice could only repeat the fetch
+  // and the DOM pass. What the memo is really for is the SECOND caller: a
+  // chrome module that needs the catalogue before it can build itself can now
+  // `await installI18n()` and get the install already in flight, instead of
+  // depending on the page having called it first and awaited it.
+  //
+  // That dependency was real and it was silently wrong on three pages. The
+  // collection, Titanic's front page and the minigames chooser all read
+  // `void installI18n(); void installPlayMenu();` — so for an English reader
+  // nothing was amiss (no catalogue to fetch, nothing to wait for) and for a
+  // Russian or Japanese one the Play dropdown was built out of untranslated
+  // markup and its summary read "Play" in a bar that said Играть everywhere
+  // else.
+  return (installing ??= install());
+}
+
+let installing: Promise<void> | null = null;
+
+async function install(): Promise<void> {
   const code = uiLanguage();
   document.documentElement.lang = code;
   if (code === DEFAULT_UI_LANGUAGE) return;

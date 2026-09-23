@@ -1,7 +1,8 @@
 /**
- * Titanic's pages: the front page, the game, the collection page, the minigames,
- * and the two developer pages the top bar carries as marks — the speedrun
- * workbench and developer mode.
+ * Titanic's pages: the front page, the game, free roam (the same game with the
+ * story turned off), the collection page, the minigames, and the two developer
+ * pages the top bar carries as marks — the speedrun workbench and developer
+ * mode.
  *
  * The Vite ROOT is this directory, which is what makes `/src/main.ts` in a page
  * mean `taoot/src/main.ts` and `gamefiles/` mean Titanic's rip and no other.
@@ -136,6 +137,11 @@ export default defineConfig({
       input: {
         main: join(HERE, "index.html"),
         play: join(HERE, "play/index.html"),
+        // Free roam: the disc's own guided tour (`playmode.mov`'s second
+        // button, `tour = true`) entered directly, with the six doors that
+        // answer a tour with a knock opened anyway. The play page with the
+        // story turned off, and LISTED — it is a way to play rather than a tool.
+        freeroam: join(HERE, "freeroam/index.html"),
         // The speedrun workbench: the play page plus a sheet to drive it with.
         // Reached by its mark (🏃‍➡️) in the top bar and carrying `noindex`, and
         // built, because a tool that only exists on a dev server is a tool

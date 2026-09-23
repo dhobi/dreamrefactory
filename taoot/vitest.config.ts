@@ -37,6 +37,7 @@ const NEEDS_THE_RIP = [
   "cst-play-order",
   "smokestack",
   "devmode",
+  "freeroam",
 ];
 
 export default defineConfig({

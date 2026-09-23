@@ -63,6 +63,7 @@ import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installPlayMenu } from "@dreamfactory/site/play-menu";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
 import {
+  editionsIn,
   gamefileManifest,
   gamefileSizes,
   installEditionPicker,
@@ -330,7 +331,25 @@ function log(line: string): void {
     scriptlog.scrollHeight - scriptlog.scrollTop - scriptlog.clientHeight < 4;
   const write = logLines.push(line);
   scriptlog.style.display = "block";
-  if (stage.style.display === "none") details.hidden = false;
+  /*
+   * A logged line does NOT open the pane.
+   *
+   * It used to, for any line written while the stage was still hidden — the idea
+   * being that a boot which never finishes has nothing else to say for itself.
+   * What that actually did was override the reader's own answer: X is a setting,
+   * it is remembered, and a player who had shut the pane got it back every
+   * launch and sat through the ownership question with a column of "edition:
+   * English (gamefiles/en/)" beside the film. Reported as "the Details section
+   * is always visible, no matter what my X settings are".
+   *
+   * It was not buying much either. A boot with no tree at all logs nothing and
+   * simply leaves the boot text up (see {@link initServerBrowser}, whose comment
+   * says as much: the fix for that reader is a second string in front of them,
+   * not a debug column behind it). So the pane follows the reader here, exactly
+   * as it does everywhere else — and a page the pane BELONGS to still gets it,
+   * because that is what `detailsWanted()` answers for `DETAILS_ALWAYS`.
+   */
+  if (detailsWanted()) details.hidden = false;
   if (write.repaint) scriptlog.textContent = logLines.text();
   else scriptlog.textContent += line + "\n";
   if (atTail) scriptlog.scrollTop = scriptlog.scrollHeight;
@@ -348,7 +367,7 @@ function clearLog(): void {
  *  pane is the page (see {@link DETAILS_ALWAYS}), because there is nothing to
  *  toggle it to. */
 function toggleDetails(): void {
-  if (DETAILS_ALWAYS) return;
+  if (DETAILS_ALWAYS || DETAILS_NEVER) return;
   details.hidden = !details.hidden;
   try {
     window.localStorage.setItem(DETAILS_OPEN_KEY, details.hidden ? "0" : "1");
@@ -365,6 +384,7 @@ const DETAILS_OPEN_KEY = "taoot.details.open";
  *  the pane belongs to ({@link DETAILS_ALWAYS}): this is what the boot reads to
  *  decide whether to shut it, and the workbench's boot must not */
 function detailsWanted(): boolean {
+  if (DETAILS_NEVER) return false;
   if (DETAILS_ALWAYS) return true;
   try {
     return window.localStorage.getItem(DETAILS_OPEN_KEY) === "1";
@@ -523,7 +543,9 @@ session.onQuit = () => {
   bootChatter = true;
   void session
     .nextFrame()
-    .then(() => host.restart())
+    // ...and back into the same mode: a page that IS the guided tour should not
+    // answer `quit()` with the first day
+    .then(() => host.restart({ tour: startsInTour() || undefined }))
     .catch((e) => log(`restart failed: ${(e as Error).message}`));
 };
 // Script poll loops (forceupdate/stilldown) yield through this so a real frame
@@ -746,6 +768,53 @@ const mutesTheme = (): boolean =>
   !!document.querySelector('meta[name="mute-theme"]');
 
 /**
+ * Which of the game's two modes this page boots into, when it is not a question.
+ *
+ * `<meta name="start-mode" content="tour">`, and the free-roam page says it. The
+ * disc has always had two: `playmode.mov` is a menu with a click region, and
+ * `boot()` reads it with `actionframe(1)` to set the `tour` global. The tour
+ * branch resets the story to `mission = -1`, hands the player the deck map with
+ * `mapdisabled()` answering false everywhere, and opens the ship.
+ *
+ * A page-level fact and not a control, for the reason {@link skipsIntro} gives:
+ * `/freeroam/` is the tour, however it was reached, and the declaration is
+ * visible in the markup. Saying nothing leaves the menu's own answer standing,
+ * which is every other page.
+ */
+const startsInTour = (): boolean =>
+  document.querySelector('meta[name="start-mode"]')?.getAttribute("content") === "tour";
+
+/**
+ * Which editions this page can actually play, or undefined for "all of them".
+ *
+ * Only a tour page narrows it, and only because one tree genuinely has no tour
+ * in it. The 1996 demo is a different CUT of the game rather than a translation
+ * of one: nine rooms instead of fifty-six, and a `BOOTFILE` with no
+ * `advancetour`, no `playmode.mov` and no `tour` global anywhere in it. There is
+ * no guided tour to enter, so offering it on `/freeroam/` offers a mode that
+ * cannot start.
+ *
+ * Derived rather than listed. `opentour.mov` is the tour's own opening film and
+ * `advancetour()` is the only thing in the corpus that plays it, so a tree that
+ * ships it has a tour and a tree that does not has none — and the manifest this
+ * page already fetches says which trees ship what. A hard-coded "not the demo"
+ * would be a second place to remember, and would say nothing at all about a
+ * seventh tree somebody drops in later.
+ * `taoot/tests/auto/freeroam.ts` holds the marker to the BOOTFILEs it stands for.
+ *
+ * An install with nothing else in it is left alone: a deployment carrying only
+ * the demo has no tour to offer under any rule, and hiding its one edition would
+ * replace a mode that cannot start with a page that cannot say why.
+ */
+const TOUR_FILM = /(^|\/)opentour\.mov$/i;
+
+async function playableEditions(): Promise<string[] | undefined> {
+  if (!startsInTour()) return undefined;
+  const withTour = editionsIn((await gamefileManifest()).filter((p) => TOUR_FILM.test(p)));
+  return withTour.length ? withTour : undefined;
+}
+
+/**
  * Is the Details pane part of this page rather than something to ask for?
  *
  * `<meta name="details-always">`, and the speedrun workbench says it. The pane
@@ -790,6 +859,21 @@ const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
  */
 const DETAILS_PANES =
   document.querySelector('meta[name="details-always"]')?.getAttribute("content") !== "log";
+
+/**
+ * ...and the other end of the same question: a page the pane is no part of.
+ *
+ * `<meta name="details-never">`, and the free-roam page says it. That page is
+ * the play page with the story turned off — one screen, its bars, and nothing
+ * that reads like a tool — so the scene readout and the log have no business
+ * appearing on it, by X, by a logged line during the boot or by `?debug=1`.
+ *
+ * The MARKUP still carries the column, because the log is written to on every
+ * page and a bug report is copied out of it; what this decides is only whether
+ * it is ever shown. The three places that would raise it check here, and
+ * {@link detailsWanted} answers no, which is what the boot reads.
+ */
+const DETAILS_NEVER = !!document.querySelector('meta[name="details-never"]');
 
 /**
  * Which copy of the game this PAGE plays, if it is not a question.
@@ -903,7 +987,17 @@ async function runNightdiveIntro(): Promise<Ownership> {
  * settle the question before this is asked.
  */
 async function resolveEdition(): Promise<{ code: string; asked: boolean }> {
-  const installed = files.availableEditions();
+  const all = files.availableEditions();
+  // ...and on a page that is one of the game's MODES, only the trees that have
+  // that mode. Narrowed here rather than in the picker alone, because the picker
+  // is only one of four ways an edition gets chosen — `?edition=`, a remembered
+  // one and the authored chooser are the others, and a tour page reached by a
+  // link carrying `?edition=demo` would otherwise boot a tree with no tour in it.
+  const playable = await playableEditions();
+  const installed = playable ? all.filter((c) => playable.includes(c)) : all;
+  for (const gone of all.filter((c) => !installed.includes(c))) {
+    log(`the ${editionName(gone)} edition has no guided tour, so this page does not offer it`);
+  }
   if (!installed.length) return { code: DEFAULT_LANGUAGE, asked: false };
 
   // a page that names its edition is not asking — see pinnedEdition
@@ -1065,7 +1159,7 @@ async function initServerBrowser(): Promise<void> {
   // before the boot, because the boot is where the mix is set and where the
   // first room's setupsound starts playing into it
   if (mutesTheme()) host.themeMix = 0;
-  await session.track(host.coldBoot(), "coldBoot");
+  await session.track(host.coldBoot({ tour: startsInTour() || undefined }), "coldBoot");
 }
 
 /**
@@ -1087,11 +1181,14 @@ async function boot(): Promise<void> {
   // other five languages should not be shown the English it is about to replace
   document.body.classList.add("spoken");
   installLanguageMenu();
-  installPlayMenu();
+  void installPlayMenu();
   installVersion();
   // Which copy of the game is being played — above the stage, never hidden with
   // it: the same row the editors and the collection carry (taoot/src/editions.ts).
-  if (editionPicker) void installEditionPicker(editionPicker);
+  if (editionPicker) {
+    const available = await playableEditions();
+    void installEditionPicker(editionPicker, available ? { available } : {});
+  }
   await initServerBrowser();
 }
 void boot();
@@ -1689,7 +1786,7 @@ const stateList = installStateList({
 function installDebugPanel(): void {
   const asked =
     new URLSearchParams(window.location.search).get("debug") === "1";
-  if (asked) {
+  if (asked && !DETAILS_NEVER) {
     details.hidden = false;
     try {
       window.localStorage.setItem(DETAILS_OPEN_KEY, "1");

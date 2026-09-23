@@ -1,6 +1,10 @@
 {
   "brandTitle": "RE — reverse engineered: eine bestmögliche Neuimplementierung der DreamFactory-Engine, nicht die Originalfassung von 1996",
   "navPlay": "Spielen",
+  "navOriginal": "Original",
+  "navFreeRoam": "Freies Erkunden",
+  "navFreeRoamTitle": "Freies Erkunden — die Führung von der CD, bei der sich jede Tür öffnet",
+  "navPlayMenuTitle": "Wie das Spiel geöffnet wird",
   "navEditors": "Editoren",
   "navCollection": "Sammlung",
   "navMinigames": "Minispiele",
