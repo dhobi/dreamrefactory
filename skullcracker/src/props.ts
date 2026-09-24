@@ -43,6 +43,8 @@
  * `0x40bbd0`'s floor is the only one it meets, and its record comes to rest with it.
  */
 
+import type { SoundWay } from "./sound";
+
 /** one of the three states a plank shows, as its own script */
 export interface PlankAnim {
   cels: readonly number[];
@@ -2039,13 +2041,31 @@ export interface Sprinkler {
 export const PICKUP = {
   /** by code: what it is called, what it shows, and how fast */
   kinds: {
-    "-1": { name: "stathealth", cels: [19040, 19041, 19042, 19043], hold: 3, sound: 0xa, from: "0x478c38" },
-    "-2": { name: "statlife", cels: [19000, 19001, 19002, 19003, 19004, 19005, 19006, 19007], hold: 2, sound: 0xb, from: "0x478bf0" },
-    "-4": { name: "statscoreup", cels: [20340, 20341, 20342, 20343, 20344, 20345, 20346, 20347, 20348, 20349, 20350, 20351, 20352, 20353, 20354], hold: 1, sound: 0xd, from: "0x478c60 tag 2" },
-    "-5": { name: "statscoreup", cels: [20320, 20321, 20322, 20323, 20324, 20325, 20326, 20327, 20328, 20329, 20330, 20331, 20332, 20333, 20334], hold: 1, sound: 0xd, from: "0x478c60 tag 1" },
-    "-6": { name: "statscoreup", cels: [19060, 19061, 19062, 19063, 19064, 19065, 19066, 19067, 19068, 19069, 19070, 19071, 19072, 19073, 19074], hold: 1, sound: 0xd, from: "0x478c60 tag 0" },
-    "-8": { name: "stattimer", cels: [19080, 19081, 19082, 19083, 19082, 19081], hold: 2, sound: 0xa, from: "0x478ef0" },
-  } as Readonly<Record<string, { name: string; cels: readonly number[]; hold: number; sound: number; from: string }>>,
+    "-1": { name: "stathealth", cels: [19040, 19041, 19042, 19043], hold: 3, sound: 0xa, bones: { sound: 8, way: "mix" }, from: "0x478c38" },
+    "-2": { name: "statlife", cels: [19000, 19001, 19002, 19003, 19004, 19005, 19006, 19007], hold: 2, sound: 0xb, bones: { sound: 9, way: "lead" }, from: "0x478bf0" },
+    "-4": { name: "statscoreup", cels: [20340, 20341, 20342, 20343, 20344, 20345, 20346, 20347, 20348, 20349, 20350, 20351, 20352, 20353, 20354], hold: 1, sound: 0xd, bones: { sound: 11, way: "lead" }, from: "0x478c60 tag 2" },
+    "-5": { name: "statscoreup", cels: [20320, 20321, 20322, 20323, 20324, 20325, 20326, 20327, 20328, 20329, 20330, 20331, 20332, 20333, 20334], hold: 1, sound: 0xd, bones: { sound: 11, way: "lead" }, from: "0x478c60 tag 1" },
+    "-6": { name: "statscoreup", cels: [19060, 19061, 19062, 19063, 19064, 19065, 19066, 19067, 19068, 19069, 19070, 19071, 19072, 19073, 19074], hold: 1, sound: 0xd, bones: { sound: 11, way: "lead" }, from: "0x478c60 tag 0" },
+    "-8": { name: "stattimer", cels: [19080, 19081, 19082, 19083, 19082, 19081], hold: 2, sound: 0xa, bones: { sound: 8, way: "lead" }, from: "0x478ef0" },
+  } as Readonly<
+    Record<
+      string,
+      {
+        name: string;
+        cels: readonly number[];
+        hold: number;
+        /** character 0's index, all through `0x40ef30` (`0x42827a`'s cases) */
+        sound: number;
+        /**
+         * ...and character 1's, which is its own switch (`0x442cca`, table
+         * `0x443f40`) with its own indices — and all but the health through
+         * `0x40f090`, the channel that always takes over
+         */
+        bones: { sound: number; way: SoundWay };
+        from: string;
+      }
+    >
+  >,
   /** `push 0x190` at `0x42844e`, spent through `0x402b20` */
   health: 400,
   /** `0x40d400` clamps to five, which is what the panel's five lamps are */

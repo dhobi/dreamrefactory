@@ -17,6 +17,7 @@
  * See `src/codes.ts` for the census of who sends what and for the two codes
  * nothing sends.
  */
+import { PLAYER_CODES } from "../../src/codes";
 import { fail, headless, ok, pass } from "./harness";
 
 const h = await headless("level=9&x=640");
@@ -132,10 +133,12 @@ const four = h.until(() => reacting(-4, "shocked"), 450);
 if (four < 0) fail(`TOWER's initsurge carries -4 (0x426a90); the player is playing ${p.act ?? "nothing"}`);
 ok(`and the surge's -4 shocks you, out of 0x4721a0 tag 3, ${four} frames in`);
 
-// 6. none of it is damage, and the switch has nothing to do with it. And "no
-//    row spends health" was character 1's table, not this one: `-1` is
-//    `0x42eb2b`, `0x402ac0(0x14)`, twenty off — behind the switch like every
+// 6. none of it is damage, and the switch has nothing to do with it. The one
+//    row that spends health is `-1`, in both tables — `0x42eb2b` and
+//    `0x448ffb`, `0x402ac0(0x14)`, twenty off — behind the switch like every
 //    other way the game takes a point, which is why it stays full here
+for (const c of [0, 1] as const)
+  if (PLAYER_CODES[c][-1].health !== 0x14) fail(`character ${c}'s -1 spends twenty (0x42eb2b, 0x448ffb); the table says ${PLAYER_CODES[c][-1].health}`);
 if (game.damageOn) fail(`this ran with the damage switch on; the point is that it does not matter`);
 if (stats.health !== stats.maxHealth) fail(`a code took health with the switch off: ${stats.health}/${stats.maxHealth}`);
 ok(`with damage off throughout — a code is a message, and nothing spent a point`);

@@ -289,10 +289,8 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
     /**
      * ...and it COSTS you twenty. `0x42eb2b` is `0x402ac0(0x14)`, the same
      * health call an ordinary blow ends in, and it is the one reaction in
-     * character 0's table that spends any. Character 1's `-1` (`0x448f7c`)
-     * spends none, which is where this page's "no reaction in the table takes a
-     * point of health off anybody" came from — true of the table it was read
-     * out of, and not of the one the player is actually using.
+     * character 0's table that spends any — character 1's spends the same
+     * (`0x448ffb`).
      */
     health: 0x14,
     /** `0x42eb3d`..`0x42eb51` — `0x434540(7) + 0xe` through `0x40f110` */
@@ -505,6 +503,8 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
     stops: true,
     /** `0x448ff3` — `0x40c900(y, -1, striker)` */
     shake: -1,
+    /** `0x448ffb` — `0x402ac0(0x14)`, twenty, as character 0's `0x42eb2b` */
+    health: 0x14,
     /** `0x44900f`..`0x449023` — `0x434540(2) + 0xc` through `0x40f110` */
     sound: 0xc,
     soundRoll: 2,

@@ -29,7 +29,7 @@ import type { AudioSink, PlayHandle } from "@dreamfactory/engine/runtime/audio";
 import { Film } from "../../src/film";
 import { FOES } from "../../src/foes";
 import { DEATH_FILMS } from "../../src/mission";
-import { BANK_RANK, FOE_SFX, LEVEL_BANKS, Mixer, OWN, PLAYER_BANK, priorityOf } from "../../src/sound";
+import { BANK_RANK, FOE_SFX, LEVEL_BANKS, Mixer, OWN, PLAYER_BANK, Sounds, priorityOf } from "../../src/sound";
 import { fail, headless, ok, pass, recordSound } from "./harness";
 
 /**
@@ -294,5 +294,55 @@ if (Math.abs(ran - authored) > 0.06) {
   fail(`the vignette is ${frames} frames at the film's own 50ms — ${authored.toFixed(2)}s; it took ${ran.toFixed(2)}s`);
 }
 ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixed(2)}s its author gave them`);
+
+/**
+ * 9. The music switch is the THEME and nothing else. `0x403cfb` starts or
+ *    stops the theme bank (`0x40f190` / `0x427960`) and never touches the
+ *    effects banks, so with the music off a fist is as loud as it was.
+ *
+ *    The real `Sounds`, on a stand-in AudioContext that counts what starts.
+ */
+{
+  const started: number[] = [];
+  const node = () => ({ connect() {}, gain: { value: 1 }, pan: { value: 0 } });
+  class FakeContext {
+    state = "running";
+    currentTime = 0;
+    destination = {};
+    createGain = node;
+    createStereoPanner = node;
+    createBuffer(_c: number, len: number, rate: number) {
+      return { duration: len / rate, copyToChannel() {} };
+    }
+    createBufferSource() {
+      const src = { buffer: null as { duration: number } | null, context: this, connect() {}, stop() {},
+        start: () => started.push(src.buffer?.duration ?? 0) };
+      return src;
+    }
+    resume() {}
+  }
+  const g = globalThis as { window?: unknown };
+  const had = g.window;
+  g.window = { AudioContext: FakeContext };
+  try {
+    const sounds = new Sounds(game.files);
+    await sounds.open("STREETS");
+    sounds.listen(0, 0);
+    sounds.setMusic(false);
+    if (sounds.musicOn) fail(`setMusic(false) should turn the theme off`);
+    sounds.own(0, 0, 0);
+    await new Promise((r) => setTimeout(r, 20));
+    if (!started.length) fail(`with the music off a footfall should still play (0x403cfb touches only the theme); nothing started`);
+    const before = started.length;
+    sounds.pump();
+    if (started.length !== before) fail(`with the music off the theme's bed should not be queued; pump started ${started.length - before}`);
+    sounds.setMusic(true);
+    sounds.pump();
+    if (started.length === before) fail(`with the music back on pump should queue the theme again`);
+  } finally {
+    g.window = had;
+  }
+  ok(`the music switch stops the theme and leaves every effect playing`);
+}
 
 pass(`the level's theme is its own arrangement, and the handlers' and films' one-shots are the disc's`);

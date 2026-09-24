@@ -6522,7 +6522,9 @@ export function stepPickups(): void {
     )
       continue;
     gone.push(q);
-    sound?.own(kind.sound, q.x, q.y);
+    // at the PLAYER's point (`[0x4ac3d4]+6`), and each character plays its own
+    if (CHARACTER === 1) sound?.own(kind.bones.sound, p.x, p.y, kind.bones.way);
+    else sound?.own(kind.sound, p.x, p.y);
     if (q.code === "-1")
       stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);
     else if (q.code === "-2")
@@ -8281,7 +8283,9 @@ export function takeGun(): void {
     );
     if (mine >= 0) cans.splice(mine, 1);
     stats.health = Math.min(stats.maxHealth, stats.health + 150);
-    sound?.own(0xa, g.x, g.y);
+    // at the player's point — 0xa for character 0 (`0x428893`), 8 for
+    // character 1 (`0x443319`), both through `0x40ef30`
+    sound?.own(CHARACTER === 1 ? 8 : 0xa, p.x, p.y);
     inv.drawn = false; // `0x42887c` ends on the unarmed idle too
     return;
   }

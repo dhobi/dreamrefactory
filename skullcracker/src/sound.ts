@@ -497,7 +497,10 @@ export class Sounds {
   /** the theme's place in its own play order, and the clock it is queued to */
   private step = 0;
   private queuedTo = 0;
+  /** the THEME is playing — {@link Sounds.setMusic} turns this and nothing else off */
   private playing = false;
+  /** a level's banks are open, which is all an effect needs */
+  private ready = false;
   /** the bars already handed to the clock, so a level change can take them back */
   private queued: AudioBufferSourceNode[] = [];
   private muted = false;
@@ -512,7 +515,7 @@ export class Sounds {
 
   /** on, off, and what the status line says about it */
   get on(): boolean {
-    return this.playing;
+    return this.ready;
   }
 
   get theme(): string {
@@ -557,6 +560,7 @@ export class Sounds {
     this.step = 0;
     this.queuedTo = 0;
     this.playing = this.music;
+    this.ready = true;
   }
 
   stop(): void {
@@ -727,7 +731,7 @@ export class Sounds {
     y: number,
     way: SoundWay,
   ): Promise<void> {
-    if (!this.playing || !bankName) return;
+    if (!this.ready || !bankName) return;
     // `0x40efb0` first, and `cmp ax, 1; jle` — a sound out of reach never
     // reaches the mixer, so it takes no channel from anything
     const at = this.place(x, y);
