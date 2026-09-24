@@ -25,7 +25,7 @@ import { KRAGG_SHOT_AIR, KRAGG_SHOT_GROUND } from "./brains/kragg";
 import { GHENGIS_BLAST } from "./brains/ghengis";
 import { KNIFEBOY_KNIFE, KNIFEBOY_LOB } from "./brains/knifeboy";
 import { FIGHTS, FoeFight } from "./fights";
-import { CRAFT, Gob, Pop, SPARK, Spark, SPRAY, VANISH, dryTime, gobCount, scatter } from "./effects";
+import { BLEED, CRAFT, Gob, Pop, SPARK, Spark, SPRAY, VANISH, dropCount, dryTime, gobCount, scatter } from "./effects";
 import { FOE_SFX, OWN, Sounds } from "./sound";
 import { CROW, Crow, ELEVATOR, Elevator, IBEAM, CRUSH, Ibeam, Crush, Feather, PLANK, Plank, burnCrow, crowCel, crowFrames, crowTag, type CrowState, elevatorFrames, ibeamCel, crushCel, ibeamFrames, crushFrames, plankCel, plankFrames, PICKUP, Pickup, SPRINKLER, Sprinkler, SHACK, Shack, shackFrames, BARREL, Barrel, PIPE, Pipe, SEWAGE, Sewage, BUSH, Bush, ROACH, SPILL, Nest2, Roach, DOOR, Door, doorFrames, ELEV, Elev, SWITCH, Switch, switchFrames, GOOP, Nest, Drip, dripCel, dripFrames, HOLE, Hole, HAND, Hand, AXE, Axe, BRIDGE, Bridge, FLOOR, Floor, SURGE, Surge, CAGE, Cage, ALARM, BIGGUN, Flypast, PROBE, Probe, BigGun, LIGHTFX, LightFx, Alarm, FAN, Fan, BELT, Belt, CHAIR, Chair, CLAW, Claw, FITTING, Fitting, BOGGS, Boggs, BoggsWorm, SKATEBOARD, Board, CAN, Can, HEAD, Head, FLAME, Flame, ROLLER, Roller } from "./props";
 import { DEATH_FILMS, ENDING_FILM, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
@@ -4887,6 +4887,58 @@ export function spray(
   }
 }
 
+/**
+ * The player's own spray — `0x40c900`, and {@link BLEED} has the whole of it.
+ *
+ * From `at`, the point the caller hands it: the contact for a blow
+ * (`0x42ebd3`), the player's own `obj+6` for everything else. With a
+ * `striker`, the drops leave along its cel's blow pair plus a quarter of its
+ * sideways speed and all of its fall; without one, anywhere within fifteen.
+ * Sweat while the tank is two thirds full and `n` is not negative, blood
+ * otherwise — `empty` for the one caller that has already spent the tank
+ * (the fan, `0x4154c4`) and this page does not.
+ */
+export function bleed(
+  n: number,
+  at: { x: number; y: number },
+  striker?: { blow: { dx: number; dy: number } | null; facing: number; vx: number; vy: number },
+  empty = false,
+): void {
+  const [num, den] = BLEED.bleeds;
+  const kind =
+    empty || n < 0 || Math.trunc((stats.maxHealth * num) / den) > stats.health ? "blood" : "sweat";
+  const loose = (): number => 1 + Math.floor(random() * BLEED.loose) - BLEED.loose / 2;
+  for (let i = 0; i < dropCount(n); i++) {
+    let vx: number, vy: number;
+    if (striker) {
+      const pair = striker.blow ?? { dx: 0, dy: 0 };
+      // `0x40c9d9`: the hitter's own `obj+0xc`, a quarter of it, rounded toward
+      // zero; the mirror at `0x40ca09` turns the pair and leaves the speed its own
+      vx = scatter(pair.dx * (striker.facing < 0 ? -1 : 1) + Math.trunc(striker.vx / 4));
+      vy = scatter(pair.dy + striker.vy);
+    } else {
+      vx = loose();
+      vy = loose();
+    }
+    gobs.push({
+      x: at.x,
+      y: at.y,
+      vx: vx * TICK_SCALE,
+      vy: vy * TICK_SCALE,
+      age: 0,
+      mirror: random() < 0.5,
+      stage: -1,
+      holds: 0,
+      kind,
+    });
+  }
+}
+
+/** the player's `obj+6` — the anchor, which is where `0x40c900`'s other callers throw from */
+function ownPoint(): { x: number; y: number } {
+  return { x: p.x, y: p.y - p.feet };
+}
+
 /** the goo — in the air, or a puddle on the pavement */
 export let gobs: Gob[] = [];
 /** the green balls bodies leave behind — see {@link VANISH} */
@@ -4943,6 +4995,12 @@ export function stepGobs(): void {
     // (`0x42fe4a`) — see {@link regionFloorUnder}
     const floor = ground(g.x);
     if (floor === null || g.y < floor) continue;
+    // the sweat is gone the frame it lands: kind 3's switch answers 1 on
+    // `obj+0x2e` in both its tags (`0x40c7a6`, `0x40c7bb`) and never pools
+    if (g.kind === "sweat") {
+      g.age = SPRAY.life;
+      continue;
+    }
     // landed. `0x40c810` looks for a puddle already here; if there is one it
     // grows and this gob is spent, which is how twenty gobs make one mess
     const pool = gobs.find(
@@ -4951,6 +5009,9 @@ export function stepGobs(): void {
     if (pool) {
       pool.stage = Math.min(SPRAY.pool.length - 1, pool.stage + 1);
       pool.holds = dryTime();
+      // ...on the lander's own script (`0x40c591` / `0x40c6f3`), so blood
+      // falling on goo turns the puddle red and goo on blood turns it green
+      pool.kind = g.kind;
       g.age = SPRAY.life; // spent: dropped by the filter below
       continue;
     }
@@ -5244,6 +5305,8 @@ export function takeCode(
   code: number,
   grip?: () => { x: number; y: number } | null,
   what?: object,
+  /** what struck, for the one reaction whose spray follows it (`0x42eb15`) */
+  striker?: Parameters<typeof bleed>[2],
 ): boolean {
   const r = BLOW_CODES[code];
   if (!r) return false;
@@ -5278,6 +5341,9 @@ export function takeCode(
     const which = r.sound + (r.soundRoll ? roll(r.soundRoll) : 0);
     sound?.own(which, p.x, p.y, r.soundWay);
   }
+  // `0x42e7f6` hands the spray nothing to follow and `0x42eb21` the striker,
+  // and −1's goes before its twenty come off (`0x42eb2b`)
+  if (r.spray !== undefined) bleed(r.spray, ownPoint(), r.spray < 0 ? striker : undefined);
   // ...and `-1` spends twenty: `0x42eb2b` is `0x402ac0(0x14)`, the only reaction
   // in character 0's eight that costs health. Behind the damage switch, like
   // every other way the game takes a point off you.
@@ -5552,7 +5618,7 @@ export function takeHits(): void {
     // not damage: no reaction in the table takes a point of health off anybody.
     // The switch is this port's, to keep the page walkable; the grab is the
     // game's, and turning one off has never had anything to do with the other.
-    if (code < 0) return takeCode(code, grip, what);
+    if (code < 0) return takeCode(code, grip, what, { blow: cel.blow, facing, vx, vy });
     // `0x430367`: a hitter whose strength is nothing hits nothing
     if (code === 0) return false;
     /**
@@ -5577,6 +5643,17 @@ export function takeHits(): void {
     // `0x434630` is an integer square root: the magnitude is whole, rounded down
     const damage = Math.floor(Math.sqrt(bx * bx + by * by));
     if (damage === 0) return false;
+    // `0x42ebda` / `0x42ed21` — hanging or not, the blow's own drops go first,
+    // from where it landed, before the cry and before the health they are
+    // coloured by comes off
+    bleed(
+      damage,
+      {
+        x: (Math.max(box.left, mine.left) + Math.min(box.right, mine.right)) / 2,
+        y: (Math.max(box.top, mine.top) + Math.min(box.bottom, mine.bottom)) / 2,
+      },
+      { blow: cel.blow, facing, vx, vy },
+    );
     // `0x42ebb1` — on a ladder or a bar there is no reaction and no disarm: the
     // cry (`0x42ed34`, 0xe + roll(7)) and the health (`0x42ed4f`), and he is
     // knocked off if a room holds him (`0x42ed84`), which is also the answer
@@ -7901,6 +7978,10 @@ export function stepFans(): void {
  */
 export function fanKills(f: Fan): void {
   dropKeys();
+  // `0x4154d8` / `0x415aba` — `0x40c900(player, 0x78, fan)` once `0x402ac0(0x4b0)`
+  // has emptied the tank, so it is always blood; the fan stands still
+  const cel = level ? celRec(level.sbk, fanCel(f)) : null;
+  bleed(0x78, ownPoint(), { blow: cel?.blow ?? null, facing: 1, vx: 0, vy: 0 }, true);
   sound?.effect(FAN.kill, f.x, f.y);
   f.red = true;
   f.clock = 0;
@@ -13097,6 +13178,7 @@ export const BRAIN_CTX: BrainCtx = {
   drain: (n) => {
     if (damageOn && p.act !== "dying") takeHealth(n);
   },
+  bleed: (n) => bleed(n, ownPoint()),
   pose: (mode) => posePlayer(mode),
   someIn: (e, state) =>
     spawnedHere().some((o) => o !== e && o.kind === e.kind && o.state !== "dead" && o.script === state),

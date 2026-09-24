@@ -132,6 +132,64 @@ export const SPRAY = {
 } as const;
 
 /**
+ * The player's own spray — `0x40c900(point, n, hitter)`, `0x40cba0`'s sibling,
+ * thrown into the same effect class and stepped by the same `0x40c480`.
+ *
+ * ```
+ *   count = clamp(|n| / 6, 1, 8)                 0x40c924..0x40c947
+ *   repeat count times:
+ *     with a hitter: (vy, vx) = its cel's blow   0x40c9bd, record +0x14
+ *       vx += hitter.vx / 4, vy += hitter.vy     0x40c9d9..0x40c9ff
+ *       vx mirrored by the hitter's facing       0x40ca09
+ *       each axis scattered as the goo's is      0x40ca1d..0x40cadb
+ *     without one: 0x434540(0x1e) - 0xf, both    0x40cae1..0x40cb01
+ *     facing = 0x434540(2) - 1, lifetime 60      0x40cb05..0x40cb27
+ *     health >= 2/3 of the tank and n >= 0       0x40cb2f..0x40cb55
+ *       ? 0x46bc98, kind 3                        the SWEAT: blue, 18220..18230
+ *       : 0x46bc38, kind 2                        the BLOOD: red, 18300..18310
+ * ```
+ *
+ * `0x40c480` gives the blood kind 2's switch (`0x40c60c`), which is the goo's
+ * own — it arcs, pools, grows as more lands on it and dries back — but kind 3's
+ * (`0x40c76e`) answers 1 the frame a gob lands, in either tag: the sweat never
+ * pools. So a fresh fighter flicks off drops, and a hurt one bleeds on the
+ * pavement.
+ */
+export const BLEED = {
+  sweat: {
+    rise: [18220, 18221, 18222] as readonly number[],
+    fall: [18223, 18224] as readonly number[],
+    pool: [18225, 18226, 18227, 18228, 18229, 18230] as readonly number[],
+    from: "0x46bc98 kind 3",
+  },
+  blood: {
+    rise: [18300, 18301, 18302] as readonly number[],
+    fall: [18303, 18304] as readonly number[],
+    pool: [18305, 18306, 18307, 18308, 18309, 18310] as readonly number[],
+    from: "0x46bc38 kind 2",
+  },
+  /** `0x40c93f` — at most eight, where the goo allows twenty */
+  most: 8,
+  /** `0x40cae1` — `0x434540(0x1e) - 0xf` on each axis with no hitter */
+  loose: 0x1e,
+  /** `0x40cb3c` — below two thirds of the tank it is blood */
+  bleeds: [2, 3] as const,
+  from: "0x40c900 / 0x40c480",
+} as const;
+
+/** the cels a gob of each kind draws — the three scripts share one layout */
+export const GOB_CELS = {
+  goo: { rise: SPRAY.rise.cels, fall: SPRAY.fall.cels, pool: SPRAY.pool },
+  sweat: BLEED.sweat,
+  blood: BLEED.blood,
+} as const;
+
+/** how many drops the player's spray throws — `clamp(|n| / 6, 1, 8)` */
+export function dropCount(n: number): number {
+  return Math.min(BLEED.most, Math.max(SPRAY.least, Math.trunc(Math.abs(n) / SPRAY.per)));
+}
+
+/**
  * The green ball a body leaves behind — `0x40cba0`'s **−13** branch.
  *
  * A corpse's own state handler counts `[0x46b204]`'s fifty frames down and then,
@@ -253,6 +311,12 @@ export interface Gob {
   age: number;
   /** the coin toss `0x434540(2) - 1` makes, so the gobs are not all identical */
   mirror: boolean;
+  /**
+   * Which script it is on — the goo `0x46bbd8`, or one of the player's own two
+   * ({@link BLEED}). Absent is goo. A gob landing on a puddle installs ITS
+   * script on that puddle (`0x40c6f3`), so a puddle takes the last one's colour.
+   */
+  kind?: "goo" | "sweat" | "blood";
   /**
    * Which of {@link SPRAY.pool} it has spread to, or −1 while it is still in the
    * air. A gob that lands on another does not become a puddle of its own: it

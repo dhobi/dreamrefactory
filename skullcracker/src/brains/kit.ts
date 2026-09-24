@@ -521,6 +521,8 @@ export interface BrainCtx {
   hide(hidden: boolean): void;
   /** `0x402ac0(n)` — health straight out of the player, behind the damage switch */
   drain(n: number): void;
+  /** `0x40c900(player, n, 0)` — the player's own spray, from his point, following nothing */
+  bleed(n: number): void;
   /**
    * `0x402fa0(mode)` — the player's own pose setter (`0x42f280`, table at
    * `0x42f418`): −1 the spawn pose `0x471b18`, 2 the knockdown `0x4722a8`,

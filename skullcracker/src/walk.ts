@@ -59,7 +59,7 @@ import { writeSkl } from "./savegame";
 import { Film } from "./film";
 import { FOES, loopIndex } from "./foes";
 import { type Enemy } from "./brains/kit";
-import { CRAFT, SPARK, SPRAY, VANISH } from "./effects";
+import { CRAFT, GOB_CELS, SPARK, SPRAY, VANISH } from "./effects";
 import { REACH, Sounds } from "./sound";
 import { ELEVATOR, Plank, crowCel, elevatorCel, ibeamCel, crushCel, plankCel, PICKUP, shackCel, PIPE, ROACH, doorCel, switchCel, dripCel, HAND, LIGHTFX, BOGGS, SKATEBOARD } from "./props";
 import { MISSIONS } from "./mission";
@@ -1098,19 +1098,22 @@ function drawGobs(camX: number, camY: number): void {
   for (const g of gobs) {
     // rising, falling, or a puddle — `0x40c480`'s three cases, and the switch to
     // the falling cels is the sign of vy exactly as it tests `obj+0xa > 0`
+    // ...on its own script: goo, or the player's sweat or blood (`BLEED`),
+    // three scripts of one layout and one hold
+    const cels = GOB_CELS[g.kind ?? "goo"];
     const id =
       g.stage >= 0
-        ? SPRAY.pool[g.stage]
+        ? cels.pool[g.stage]
         : g.vy > 0
-          ? SPRAY.fall.cels[
+          ? cels.fall[
               Math.min(
-                SPRAY.fall.cels.length - 1,
+                cels.fall.length - 1,
                 Math.floor(g.age / SPRAY.fall.hold),
               )
             ]
-          : SPRAY.rise.cels[
+          : cels.rise[
               Math.min(
-                SPRAY.rise.cels.length - 1,
+                cels.rise.length - 1,
                 Math.floor(g.age / SPRAY.rise.hold),
               )
             ];

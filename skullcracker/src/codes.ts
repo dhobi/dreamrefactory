@@ -107,7 +107,7 @@ export interface CodeReaction {
   shove?: number;
   /**
    * what `0x40c900` is given — the player's own spray, `0x40cba0`'s sibling:
-   * `clamp(|n| / 6, 1, 8)` drops on `0x46bc98` or `0x46bc38`. Not drawn here.
+   * `clamp(|n| / 6, 1, 8)` drops of sweat or blood — `bleed` in game.ts, `BLEED` in effects.ts.
    */
   spray?: number;
   /** an index into the player's own bank */

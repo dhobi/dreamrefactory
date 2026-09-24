@@ -302,8 +302,13 @@ Character 0's table is `0x42eda8`, index 0 being −8:
 ```
 
 The 0x78 is `0x40c900`'s, not a shake: the player's own spray, `0x40cba0`'s
-sibling, `clamp(|n| / 6, 1, 8)` drops on `0x46bc98` or `0x46bc38`. The page does
-not draw it yet.
+sibling, `clamp(|n| / 6, 1, 8)` drops. While the tank is two thirds full and the
+figure is not negative they are sweat (`0x46bc98`, kind 3, blue 18220..), which
+vanishes as it lands; otherwise blood (`0x46bc38`, kind 2, red 18300..), which
+pools like the goo (`0x40cb3c`, `0x40c480`). Every ordinary blow throws its own
+damage's worth from the contact after the striker (`0x42ebda`, `0x42ed21`); the
+fans throw 0x78 as they kill (`0x4154d8`) and kragg's carry one red drop a frame
+(`0x441446`).
 
 On a ladder or a bar (`0x471e78`, `0x472048`) three of them install nothing.
 The grab and the jolt (`0x42e99d`, `0x42ea3c`) answer 1 and set `[0x46b1bc]`;

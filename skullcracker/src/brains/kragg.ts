@@ -799,7 +799,8 @@ const think: Brain = (e, foe, run, k) => {
        * cleared, so he is not drawn — 7046/7047 are him in its fist;
        * `[0x4a75c8] += 0xa`, capped at `0x40e300(0x3e8)`, and `0x402ac0(0xa)`
        * — ten out of him and into kragg; he is put at `obj.x ± 50` (+50 while
-       * `obj+0x28` is clear), `obj.y`, both velocities zeroed; and kragg turns
+       * `obj+0x28` is clear), `obj.y`, both velocities zeroed, and bleeds from
+       * there (`0x441446`); and kragg turns
        * whenever he faces the way it does. His own think still runs — nothing
        * puts him in a held state until the end — and the carry holds him where
        * it wants him after it.
@@ -820,6 +821,8 @@ const think: Brain = (e, foe, run, k) => {
         { x: k.anchorX(e) + (e.facing > 0 ? CARRY_SIDE : -CARRY_SIDE), y: k.anchorY(e) },
         { vx: 0, vy: 0 },
       );
+      // `0x441446` — and bleeds, `0x40c900(player, -1, 0)`: one red drop a frame
+      k.bleed(-1);
       // `0x441462` — facing him the same way means facing the wrong way
       if (k.player.facing === e.facing) e.facing = -e.facing;
       if (!done) return false;
