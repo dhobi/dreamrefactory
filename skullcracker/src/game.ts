@@ -12557,8 +12557,8 @@ export function landCast(c: Cast): void {
  * The one path for all three things that set an impact off: the ground, the
  * player in {@link takeHits}, and a blow its own handler answers with a burst
  * ({@link CastCtx.burst}). {@link CastKit.bang} is MOLITOV's shot's sound and
- * `0x452ef0`'s flash; the flash is the closest of its three bands, both axes
- * strictly inside.
+ * `0x452ef0`'s flash and shake; the flash is the closest of its three bands,
+ * both axes strictly inside, and the shake falls off through all three.
  */
 export function burstCast(c: Cast): void {
   c.landed = 0;
@@ -12569,8 +12569,16 @@ export function burstCast(c: Cast): void {
   // `0x452e19`, `0x452e99`, `0x452fa5`, `0x452fea` — all four `0x40f090`, the
   // mixer's channel 0
   sound?.effect(bang.sound, c.x, c.y, "lead");
-  if (Math.abs(p.x - c.x) < bang.near.x && Math.abs(p.y - c.y) < bang.near.y)
-    flashColour = bang.flash;
+  const dx = Math.abs(p.x - c.x);
+  const dy = Math.abs(p.y - c.y);
+  const near = dx < bang.near.x && dy < bang.near.y;
+  if (near) flashColour = bang.flash;
+  // `0x452f38` / `0x452f52` / `0x452f6c` — the closest band that holds it
+  if (bang.shakes) {
+    if (near) shake(3);
+    else if (dx < 0x2ee && dy < 0x12c) shake(2);
+    else if (dx < 0x4b0 && dy < 0x1f4) shake(1);
+  }
 }
 
 /**
@@ -15255,7 +15263,8 @@ export function tick(): void {
         // (`0x40eee0`); character 1's plays out (`0x443c72` has no such call)
         if (CHARACTER === 0) sound?.mute(KIT.flailSound, true);
         sound?.own(OWN.landHard, p.x, p.y);
-        // `0x4292b7` / `0x429384` — and either way the view jolts
+        // `0x4292b7` / `0x429384` (character 1's `0x42a14b` / `0x42a38d`) — and
+        // either way the view jolts
         shake(1);
         if (damageOn && p.fallPx > HURT.fatalFall && p.act !== "dying") {
           p.act = "dying";

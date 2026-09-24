@@ -112,11 +112,8 @@ const NOT_HERE = "0x455fde, 0x456033, 0x456058, 0x4560ed, 0x456310" as const;
  *   points it at the boss the frame it wakes; `0x455e46`, kind 5 tag 3, points
  *   it back at the player as the melee half ends. Nothing else in the class
  *   moves it.
- * - **the shake**, `0x4307c0(n)`: an amplitude of 2/4/6 for n of 1/2/3.
- *   `0x455e61` shakes on 2 as it comes down at home, and `0x456157` on 3 as the
- *   death's middle section ends.
  */
-const NOT_BEHAVIOUR = "0x45595b, 0x430c90, 0x4307c0" as const;
+const NOT_BEHAVIOUR = "0x45595b, 0x430c90" as const;
 
 /**
  * The fireball, `0x456240`, and both muzzles.
@@ -764,13 +761,14 @@ export const wbooly: Brain = (e, foe, run, k) => {
          * `0x455e36` — the rise, and it is the door OUT of the melee half.
          *
          * Four things at once: the camera goes back on the player (`0x455e46`),
-         * kind 1 is installed, the screen shakes on 2 with a thud (`0x455e61`),
+         * kind 1 is installed, the screen shakes on 2 (`0x455e61`) with a thud,
          * and `0x455e7c` writes the packed home point straight into `obj+6` —
          * it does not walk home, it IS home. Only the x is taken here; see
          * {@link WBOOLY.homeY}.
          */
         case 3:
           if (!done) return false;
+          k.shake(2); // `0x455e61`
           k.say(e, WBOOLY.thud); // `0x455e6d`
           e.x = e.home ?? WBOOLY.homeX;
           return install(e, WBOOLY.stance);
@@ -959,7 +957,7 @@ export function wboolyGate(
  *
  * The page's {@link Foe.death} is tags 1 and 2 run together, so the tag-1 end
  * is the eighteenth cel's. There `0x456134` plays 0x32 through `0x40f090`
- * (and `0x456157` shakes, which is not behaviour) and seeds `AI+4 = 5`
+ * and shakes on 3 (`0x456157`), and seeds `AI+4 = 5`
  * (`0x456164`). Then the wreck burns for good, and every frame of tag 2
  * `0x456171` counts `AI+4` down: each time it had run out, `0x45618a` plays
  * `0x434540(2) - 1` — index 0 or 1 — at the PLAYER's point, and `0x4561a4`
@@ -972,6 +970,7 @@ export const wboolyReacts: Reaction = (e, foe, _run, k) => {
   if (!e.threw) {
     e.threw = true;
     k.say(e, DEATH_TAIL, "lead"); // `0x45613f`
+    k.shake(3); // `0x456157`
     e.decisions = DEATH_FIRST;
     return;
   }

@@ -231,8 +231,7 @@ const BURNS = -9;
  * same test before it calls this (see `strikeCast`), and `self.landed` is the
  * guard here for the record.
  *
- * Two things are not carried: the shake (see {@link CastKit.bang}), and
- * `0x45d090` leaving the velocity alone, so the engine's shot keeps travelling
+ * One thing is not carried: `0x45d090` leaving the velocity alone, so the engine's shot keeps travelling
  * under its flash. This page plays every impact where it starts, the way it
  * plays the one on the ground.
  */
@@ -304,7 +303,7 @@ export const WEREC_SHOT: CastKit = {
    * 5 when the player is inside 512 across and 128 up or down of it
    * (`0x452f21`, `0x452f28`)
    */
-  bang: { sound: 0x34, flash: 5, near: { x: 0x200, y: 0x80 } },
+  bang: { sound: 0x34, flash: 5, near: { x: 0x200, y: 0x80 }, shakes: true },
   /** `0x452c83` — {@link shotBursts} */
   onCode: shotBursts,
   from: "0x452b20 / 0x452c50, script 0x477c38 and burst 0x477c60",

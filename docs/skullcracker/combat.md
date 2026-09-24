@@ -291,7 +291,7 @@ people every other frame for as long as it holds.
 Character 0's table is `0x42eda8`, index 0 being −8:
 
 ```
-  -8  0x42e781  knocked flying    4550..4558, a 0x78 shake, and NO shove
+  -8  0x42e781  knocked flying    4550..4558, a 0x78 spray, and NO shove
   -7  0x42e807  floored           940..949, and only from the ground
   -6  0x42e86d  flattened         900..903, full gravity — nothing sends it
   -5  0x42e8b3  slumped           920..922, half gravity
@@ -300,6 +300,10 @@ Character 0's table is `0x42eda8`, index 0 being −8:
   -2  0x42ea34  jolted            460..462 five times over
   -1  0x42eaaa  spun              20/21 — and it TAKES TWENTY HEALTH
 ```
+
+The 0x78 is `0x40c900`'s, not a shake: the player's own spray, `0x40cba0`'s
+sibling, `clamp(|n| / 6, 1, 8)` drops on `0x46bc98` or `0x46bc38`. The page does
+not draw it yet.
 
 Two of those differ from character 1's in more than art. Character 0 does not
 shove on −8: the ±50 against `obj+0x28` is `0x448cf4`, character 1's, and
@@ -1086,7 +1090,7 @@ through `0x40f090`, `0x452ef0` shaking the screen by how close the player is
 (`0x4307c0` 3, 2 or 1, with a `0x40e4c0` flash at the closest), and the burst
 `0x477c60`; the −9 arm lights a flame first. `WEREC_SHOT` in `brains/werec.ts`
 carries both as its `onCode`, and `CastKit.bang` carries the sound and the flash
-for every burst of the shot, whatever set it off; the page has no screen shake.
+for every burst of the shot, whatever set it off, and its `shakes` the three bands.
 `0x65` is the one strength `0x430443` leaves on a hitter after a hit, so a burst
 goes on striking for as long as its cels carry a box (7000..7002), and
 `chainCasts` in `walk.ts` runs it against the other casts. `0x4303b3` passes over

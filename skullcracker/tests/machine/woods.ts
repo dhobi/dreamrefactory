@@ -629,4 +629,29 @@ const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly F
   ok(`the punk's take and burn, LINK's burn and the dog's take each hand on the frame they end: ${takes.join(", ")} frames`);
 }
 
+
+/**
+ * ...and every burst of it jolts the view by how close it went off —
+ * `0x452ef0`: `0x4307c0` 3 inside 512×128, 2 inside 750×300, 1 inside
+ * 1200×500, nothing past that.
+ */
+{
+  const bands: [number, number, number][] = [
+    [0x1ff, 0x7f, 3],
+    [0x200, 0x7f, 2],
+    [0x2ed, 0x12b, 2],
+    [0x2ee, 0x12b, 1],
+    [0x4af, 0x1f3, 1],
+    [0x4af, 0x1f4, 0],
+  ];
+  for (const [dx, dy, want] of bands) {
+    game.shake(1);
+    while (game.shakeAt >= 0) game.stepCamera();
+    game.burstCast({ x: game.p.x + dx, y: game.p.y - dy, vx: 0, vy: 0, landed: 1, kit: WEREC_SHOT } as never);
+    const got = game.shakeAt < 0 ? 0 : game.SHAKES.indexOf(game.shaking);
+    if (got !== want) fail(`a burst ${dx} across and ${dy} up should shake by ${want}, shook by ${got}`);
+  }
+  ok(`a burst of the shot shakes the view through 0x452ef0's three bands`);
+}
+
 pass(`WOODS is populated by its own records, burns, and can be crossed to its goal`);

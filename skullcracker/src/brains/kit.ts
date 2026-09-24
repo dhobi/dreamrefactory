@@ -932,10 +932,11 @@ export interface CastKit {
    * shot's own point and then call `0x452ef0`, which measures the player's
    * distance from the shot and, inside `near` on both axes, floods the window
    * with palette index `flash` through `0x40e4c0`. The same function shakes the
-   * screen — `0x4307c0` 3 inside `near`, 2 inside 750×300, 1 inside 1200×500 —
-   * and this page has no screen shake, so that half is not carried.
+   * screen — `0x4307c0` 3 inside `near`, 2 inside 750×300, 1 inside 1200×500
+   * — and `shakes` says a kit's burst goes through it. The tube's flash
+   * (`0x419056`) is its own and does not shake.
    */
-  bang?: { sound: number; flash: number; near: { x: number; y: number } };
+  bang?: { sound: number; flash: number; near: { x: number; y: number }; shakes?: true };
   /** the spawner and the script it installs */
   from: string;
 }

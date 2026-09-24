@@ -105,8 +105,11 @@ export interface CodeReaction {
   stops: boolean;
   /** a shove along the striker's facing, in whole pixels a frame */
   shove?: number;
-  /** what `0x40c900` is given to shake the screen by */
-  shake?: number;
+  /**
+   * what `0x40c900` is given — the player's own spray, `0x40cba0`'s sibling:
+   * `clamp(|n| / 6, 1, 8)` drops on `0x46bc98` or `0x46bc38`. Not drawn here.
+   */
+  spray?: number;
   /** an index into the player's own bank */
   sound?: number;
   /** ...plus `0x434540(soundRoll)`, 1..n, where the handler rolls for it */
@@ -166,7 +169,7 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
      * `0x42e781` writes no velocity at all: the cels carry the fall.
      */
     /** `0x42e7f6` — `0x40c900(y, 0x78, 0)` */
-    shake: 0x78,
+    spray: 0x78,
     /** `0x42e7c3` */
     sound: 0x1b,
     consumes: false,
@@ -285,7 +288,7 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
     gravity: null,
     stops: true,
     /** `0x42eb21` — `0x40c900(y, -1, striker)` */
-    shake: -1,
+    spray: -1,
     /**
      * ...and it COSTS you twenty. `0x42eb2b` is `0x402ac0(0x14)`, the same
      * health call an ordinary blow ends in, and it is the one reaction in
@@ -380,7 +383,7 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
      */
     shove: 50,
     /** `0x448d00` — `0x40c900(y, 0x78, 0)` */
-    shake: 0x78,
+    spray: 0x78,
     /** `0x448cc9` */
     sound: 0x13,
     consumes: false,
@@ -502,7 +505,7 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
     gravity: null,
     stops: true,
     /** `0x448ff3` — `0x40c900(y, -1, striker)` */
-    shake: -1,
+    spray: -1,
     /** `0x448ffb` — `0x402ac0(0x14)`, twenty, as character 0's `0x42eb2b` */
     health: 0x14,
     /** `0x44900f`..`0x449023` — `0x434540(2) + 0xc` through `0x40f110` */
