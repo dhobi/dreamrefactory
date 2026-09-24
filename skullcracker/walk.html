@@ -64,6 +64,43 @@
         touch-action: none;
       }
 
+      /*
+        A phone on its side (`mobile` on <html>, from src/mobile.ts): the width
+        rule above makes the picture 4:3 of the WIDTH, which in landscape is
+        taller than the window. So there it gets the window instead, as large as
+        4:3 fits, on black, over the bench. The stage is the whole window now,
+        so the pad is given the picture's own box, centred, to stay on it.
+        Rotating back undoes it.
+      */
+      @media (orientation: landscape) {
+        html.mobile body {
+          overflow: hidden;
+        }
+        html.mobile #stage {
+          position: fixed;
+          inset: 0;
+          z-index: 10;
+          width: 100dvw;
+          height: 100dvh;
+          display: grid;
+          place-items: center;
+          background: #000;
+        }
+        html.mobile #screen {
+          width: min(100dvw, calc(100dvh * 4 / 3));
+          height: min(100dvh, calc(100dvw * 3 / 4));
+          border: 0;
+        }
+        html.mobile #pad {
+          inset: auto;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: min(100dvw, calc(100dvh * 4 / 3));
+          height: min(100dvh, calc(100dvw * 3 / 4));
+        }
+      }
+
       #pick {
         display: flex;
         align-items: center;
@@ -118,9 +155,9 @@
         still it opens a door · S/↓ CROUCH (move to crawl, P/K attack from the knee) · J/space JUMP · P+K HEADBUTT ·
         K KICK · P PUNCH — the original's own keys and its own labels, from the
         table at 0x46b210 joined to the action handlers at 0x402d54 in SC.EXE ·
-        on a touchscreen the same eight actions are a PAD over the picture — the
+        on a phone or tablet the same eight actions are a PAD over the picture — the
         four directions at the left, INV, JUMP, PUNCH and KICK at the right, one
-        thumb each and two keys at once for the headbutt; `?pad=1` shows it on a
+        thumb each and two keys at once for the headbutt; `?pad=1` shows it off a
         desktop and `?pad=0` hides it on a phone · Ctrl+P INTERFACE / full screen (SC.EXE's own toggle) · the chooser above, or [ ]
         switch level · N next spawn point (SC.EXE's own unbound action 10) · P is 47 and K is 55 — the striking cel's own speed, which is what damage IS in this engine (0x42f910), so a punk with 250 takes six punches, a mailbox dents at 10 and springs back, and topples on its side for good at 55 — a hydrant is not smashed but OPENED, three quarter-turns of the valve on its cap and it lets go of a jet of water that is its own object beside it, while the hydrant itself shuts and can be turned again — and flies most of a screen doing it, because 0x430470 is a real elastic collision with obj+0xe as the mass (you 12, a mailbox 7), and every blow sprays one gob of goo per six points of it, which arcs, lands and spreads into one puddle · things on the FLOOR are below the fist: a rat's box tops out two pixels above where the punch's bottoms out, so it takes S+K, the duck-kick, whose boot box is on the ground — and one blow of any size launches a rat nine cels through the air · a punk's body lies there for fifty frames and then leaves a green ball (0x40cba0's -13 branch); a rat leaves none, and furniture does not bleed at all · CITY is a staircase of rooftops with no floor: its PLANKS give you six crossings and then drop you (six sags of cel 1050..1053 and it is gone, at three times your gravity), its CROWS sleep on a rooftop until you walk into their own rect and then hold a height a hundred pixels over you — they keep the x the level gave them, because no frame of any crow script carries a dx, and one blow of any size kills one · a level ends the way the game ends one: kill the mission's share of what stands and a flying television comes down to the goal; walk to it and the next mission's briefing film plays · ?clock=N starts the eight-minute mission clock short · fall out of the world (CITY has no floor: its ground is 2900px below anything it draws) and it costs a life, one of the seven KILL films plays, and the level starts again
         ·

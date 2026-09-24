@@ -54,6 +54,7 @@ import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import "./pad.css";
+import { MOBILE } from "./mobile";
 import { SkullFiles } from "./files";
 import { writeSkl } from "./savegame";
 import { Film } from "./film";
@@ -794,15 +795,15 @@ const pad = ((): HTMLDivElement => {
  * some way to look at the thing, and a phone that would rather use a paired
  * keyboard needs some way to be rid of it.
  *
- * `maxTouchPoints` AS WELL as the media query, for the reason
- * `engine/web/touch.ts` gives: a laptop with a touchscreen reports a FINE
- * pointer and still delivers fingers.
+ * Otherwise only a mobile browser gets it (`src/mobile.ts`): a touchscreen
+ * laptop has a keyboard right there, and the pad over its picture is only in
+ * the way.
  */
 const PAD_ON = ((): boolean => {
   const want = new URLSearchParams(location.search).get("pad");
   if (want === "1") return true;
   if (want === "0") return false;
-  return navigator.maxTouchPoints > 0 || matchMedia("(pointer: coarse)").matches;
+  return MOBILE;
 })();
 
 if (PAD_ON) {

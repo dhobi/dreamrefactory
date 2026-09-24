@@ -24,8 +24,8 @@
  * is on it, the run is UP held with a direction, and the headbutt is PUNCH and
  * KICK down at the same time — none of which a tap can express. The context is
  * a real phone profile, so these arrive as `pointerType: "touch"` on a page that
- * shows the pad because `navigator.maxTouchPoints` says so, not because a query
- * string asked for it.
+ * shows the pad because it is a mobile browser, not because a query string
+ * asked for it.
  *
  * ## The traps this file was written around
  *
@@ -204,16 +204,48 @@ await page.keyboard.press("Escape");
 await page.locator("#pad").waitFor({ state: "visible", timeout: 5_000 }).catch(() => fail(`the pad never came back after the panel closed`));
 console.log(`ok    ...and comes back when the panel does`);
 
+// ---- 8b — turned on its side, the picture is the window --------------------
+
+// a phone in landscape is ~390px tall: the page's upright layout would give it
+// a picture taller than the window, or a postage stamp under the bench. The
+// mobile landscape rules give it the whole window at 4:3, and the pad on it.
+{
+  const upright = page.viewportSize() ?? fail(`the phone page has no viewport`);
+  await page.setViewportSize({ width: upright.height, height: upright.width });
+  await page.waitForTimeout(300);
+  const [vw, vh] = [upright.height, upright.width];
+  const pic = (await page.locator("#screen").boundingBox()) ?? fail(`no canvas in landscape`);
+  if (pic.y < -1 || pic.y + pic.height > vh + 1 || pic.x < -1 || pic.x + pic.width > vw + 1)
+    fail(`landscape: the picture ${Math.round(pic.width)}x${Math.round(pic.height)} at ${Math.round(pic.x)},${Math.round(pic.y)} is off a ${vw}x${vh} window`);
+  if (Math.abs(pic.height - vh) > 2) fail(`landscape: the picture should be the window's height, ${Math.round(pic.height)} of ${vh}`);
+  for (const act of ["left", "kick"]) {
+    const key = (await page.locator(`#pad button[data-act="${act}"]`).boundingBox()) ?? fail(`no ${act} key in landscape`);
+    if (key.x < pic.x - 1 || key.x + key.width > pic.x + pic.width + 1 || key.y + key.height > pic.y + pic.height + 1)
+      fail(`landscape: ${act} is off the picture`);
+  }
+  await page.setViewportSize(upright);
+  await page.waitForTimeout(300);
+  console.log(`ok    in landscape the picture is the window, ${Math.round(pic.width)}x${Math.round(pic.height)} of ${vw}x${vh}, and the pad is on it`);
+}
+
 // ---- 9 — a machine with a mouse keeps a clean picture ----------------------
 
 const desk = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await desk.goto(`${BASE}/walk.html?level=1`);
 await desk.locator("#hud").filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
 if (await desk.locator("#pad").isVisible()) fail(`a mouse-only window drew the pad over the picture`);
+// a touchscreen laptop has fingers AND a keyboard: fingers alone are not a phone
+const laptop = await browser.newPage({ viewport: { width: 1280, height: 900 }, hasTouch: true });
+await laptop.goto(`${BASE}/walk.html?level=1`);
+await laptop.locator("#hud").filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+const points = await laptop.evaluate(() => navigator.maxTouchPoints);
+if (points < 1) fail(`the touch laptop profile reports no touch points, so it proves nothing`);
+if (await laptop.locator("#pad").isVisible()) fail(`a desktop browser with a touchscreen drew the pad`);
+await laptop.close();
 await desk.goto(`${BASE}/walk.html?level=1&pad=1`);
 await desk.locator("#hud").filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
 if (await desk.locator("#pad").isHidden()) fail(`?pad=1 did not show the pad on a desktop`);
-console.log(`ok    no pad without fingers, and ?pad=1 for a look at one`);
+console.log(`ok    no pad off a mobile browser, touchscreen or not, and ?pad=1 for a look at one`);
 
 // ---- 10 — and the front door gets one too -----------------------------------
 //
