@@ -5169,7 +5169,6 @@ const HELPLESS: ReadonlySet<string> = new Set(["jolt", "held", "struggle", "grab
  */
 export function posePlayer(mode: -1 | 2 | 3 | 4): void {
   dropKeys();
-  if (p.act === "dying") return;
   killStreams();
   let act: string;
   if (mode === -1) act = "posed";
@@ -5179,7 +5178,10 @@ export function posePlayer(mode: -1 | 2 | 3 | 4): void {
       knockedOff = true;
       return;
     }
-    if (p.act === "downFront" || p.act === "downBack") return;
+    // `0x42f334` / `0x42f33f` — already down, or dying. The knockdown is the
+    // only mode that asks the second: -1, 3 and 4 put their pose over a death
+    // too, and the next health taken (`0x402ac0`, even none) starts it again
+    if (p.act === "downFront" || p.act === "downBack" || p.act === "dying") return;
     act = "downFront";
   } else if (mode === 3) act = "held";
   else act = "jolt";

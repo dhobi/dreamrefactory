@@ -133,4 +133,20 @@ if (game.held.right || game.punchPressed || p.act !== "dying")
   fail(`dying drops the keys (0x402af4 -> 0x402df0): right ${game.held.right}, punch ${game.punchPressed}, ${p.act}`);
 ok(`dying lets go of every key held`);
 
+// ...and of the four poses a carrier can put on him, only the knockdown asks
+// whether he is dying (`0x42f33f`): the judder, held and the spawn pose go on
+// over the death, and the next health taken, even none, starts it again
+// (`0x402ac0` -> `0x402f60` -> `0x402fa0(1)`)
+{
+  if (p.act !== "dying") fail(`still dying from the step above: ${p.act}`);
+  game.posePlayer(2);
+  const afterKnock = p.act;
+  game.posePlayer(4);
+  const afterJudder = p.act;
+  game.takeHealth(0);
+  if (afterKnock !== "dying" || afterJudder !== "jolt" || p.act !== "dying")
+    fail(`0x402fa0(2) leaves a death alone and (4) does not: ${afterKnock}, ${afterJudder}, then ${p.act}`);
+  ok(`the knockdown leaves a death alone; the judder does not, and the next take kills again`);
+}
+
 pass("the damage switch is off by default, and the engine's own numbers when it is not");
