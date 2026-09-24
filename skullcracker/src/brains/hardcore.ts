@@ -180,7 +180,9 @@ export const hardcoreReacts: Reaction = (e) => {
  * The page owns those animations; state 8's exit is the brain's, below.
  *
  * - **`0x43d250`**, the damage proc, is the shortest in the chapter and the only
- *   one with no ignore list. It swallows a blow of exactly −6 (`0x43d25c`,
+ *   one with no ignore list — its own class included ({@link Foe.hitsOwn}) —
+ *   and it bleeds with no hitter (`0x43d28b push 0`, `bleeds: "scatter"`). It
+ *   swallows a blow of exactly −6 (`0x43d25c`,
  *   returning 1 with nothing spent), ignores a blow of 0, and otherwise takes
  *   `0x42f910`'s figure off **`AI+0`** at `0x43d2b4`. Over zero it plays sound
  *   0x45 and installs the flinch, `0x474b88`; at or under it clears the bar with
@@ -194,7 +196,8 @@ export const hardcoreReacts: Reaction = (e) => {
  *   and it never returns to the stance off a flinch. The flinch's
  *   {@link FoeAnim.resume} hands the brain kind 8 and `case 8` flips the coin.
  * - **9**, the corpse, `0x43d0c5`: `0x42f7f0(obj, 0.7)` sets the bounce, sound
- *   0x3d plays on the frame `obj+0x2c` says it has landed, `AI+0x30` counts down
+ *   0x3d plays on the frame `obj+0x2c` says it has landed — both the page's
+ *   {@link Foe.corpseBounce} — `AI+0x30` counts down
  *   and `0x43d131` is the only `mov ax, 1` in the whole of `0x43cc60` — the
  *   frame the object is removed. Every other path, the "my script has not
  *   finished" return at `0x43d144` included, answers `xor ax, ax`, which is why

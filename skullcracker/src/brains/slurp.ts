@@ -122,32 +122,39 @@ import {
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 import type { Foe } from "../foes";
 
 /**
- * The hit reactions, kinds 3 and 7, and the handler that installs them. Read,
- * not done — the page owns those animations.
+ * The hit reactions, kinds 3 and 7, and the handler that installs them. The
+ * page owns those animations; the one thing the corpse does besides vanish is
+ * {@link slurpReacts}.
  *
- * - **`0x415100`**, the hit handler, hung on `obj+0x12` at `0x414a2f`. It takes
- *   the blow's strength off `AI+0`, and the branch is the ordinary one: over
- *   zero installs `0x46d278` — kind 3, the flinch — and at or under zero it
- *   deregisters from the census (`0x42f870(obj, 0)`), clears the bar, installs
- *   `0x46d458` tag 0 and seeds `obj+0x2e` from `[0x46b204]`, the corpse's fifty
- *   frames. It calls no `0x40d450`: **a brain is worth nothing**, which is why
+ * - **`0x415100`**, the hit handler, hung on `obj+0x12` at `0x414a2f`. It reads
+ *   the STRIKER (`[esp+0x14]`) and turns five things away before it spends
+ *   anything: a TCop, class `[0x46c9e0]` (`0x415110`); a negative strength
+ *   (`0x415121`); its own class `[0x46c9e4]` (`0x415133`); a strength of 0
+ *   (`0x415160`); and the tube's thrown glass, `[0x46bfb4]` (`0x415170`) —
+ *   the page's `SPARES`. Then blood along the blow (`0x415194`) and the
+ *   strength off `AI+0`: over zero installs `0x46d278` — kind 3, the flinch —
+ *   and at or under zero it deregisters from the census (`0x42f870(obj, 0)`),
+ *   clears the bar, installs `0x46d458` tag 0 and writes `[0x46b204]` into
+ *   `AI+0x2e` (`0x415207`, through the pointer `0x430eb0` found). It plays no
+ *   sound and calls no `0x40d450`: **a brain is worth nothing**, which is why
  *   {@link FOES.initslurp}'s award is 0.
  * - **3**, the flinch, `0x414e12`: two instructions. Wait for the script to
- *   end, then install `0x46d440` — back to the stance. The page's own flinch
- *   return does the same thing by putting the thing back in `gait`.
+ *   end, then install `0x46d440` — back to the stance, the flinch's
+ *   {@link FoeAnim.resume}.
  * - **7**, the corpse, `0x41507a`: tag 1 answers **1** at once, and tag 0 plays
  *   `lab.snd` index 13 — `#0084 TCop Dies`, which is not this creature's own
  *   sound and is what the disc plays anyway — then two `0x40cba0` effects,
  *   `-0xd` and `0x78`, and answers 1 as well. Those two answers are the ONLY
  *   `mov ax, 1` in the whole of `0x414ae0`: the frame the object is removed,
  *   which is the first think after the blow. There is no corpse, and the
- *   `[0x46b204]` the handler writes into `AI+0x2e` is never read —
- *   {@link FOES.initslurp} carries that as a `linger` of 0.
+ *   `AI+0x2e` the handler wrote is never read — {@link FOES.initslurp}
+ *   carries that as a `linger` of 0.
  */
 const NOT_HERE = "0x414e12, 0x41507a, 0x415100" as const;
 
@@ -593,6 +600,26 @@ function decide(
       return done ? install(e, SLURP.stance) : false;
   }
 }
+
+/**
+ * State 7 tag 0, `0x41508b` — the frame after the killing blow, and the brain
+ * goes up in goo.
+ *
+ * Besides the sound (the page's {@link Foe.deathSound}) and the green ball
+ * (`0x4150a6`, {@link Foe.vanishes}), `0x4150b6` calls
+ * `0x40cba0(self.point, 0x78, 0)`: a hundred and twenty's worth — the twenty
+ * gobs the spray tops out at — and with no hitter (`push 0`), so every one of
+ * them takes `0x40ce7d`'s random velocity. Once: the object is gone the same
+ * frame.
+ */
+export const slurpReacts: Reaction = (e, _foe, _run, k) => {
+  if (e.state !== "dead" || e.hatched) return;
+  e.hatched = true;
+  k.spray(e, BURST);
+};
+
+/** `0x4150b3` — `push 0x78` */
+const BURST = 0x78;
 
 export {
   NOT_HERE as SLURP_NOT_HERE,

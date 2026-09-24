@@ -192,6 +192,24 @@ const slurpPay = fight("initslurp", 400);
 if (slurpPay !== 0) fail(`0x415100 has no 0x40d450 in it; the score moved by ${slurpPay}`);
 ok(`a slurp is sixty health, runs its own cels (${[...cels].sort().join(" ")}), and pays nothing`);
 
+// 3b. ...and it goes up in goo. `0x4150b6`, in the frame after the killing
+//     blow: `0x40cba0(point, 0x78, 0)` — the spray's full twenty gobs, and no
+//     hitter, so they leave every way at once (`0x40ce7d`)
+await go("&x=2100&y=7600");
+const pop = nearestPlated();
+if (pop?.kind !== "initslurp") fail(`a slurp should be nearest at x2100; it is ${pop?.kind}`);
+pop.hp = 1;
+const gobsWere = game.gobs.length;
+game.strikeFoe(pop, 5, { dx: 0, dy: 0 }, 1, pop.y, { top: 0, left: 0, bottom: 1, right: 1 });
+const blood = game.gobs.length - gobsWere;
+h.frame(2);
+const burst = game.gobs.slice(gobsWere + blood);
+if (burst.length !== 20) fail(`0x4150b6 throws 0x78's worth — twenty gobs; ${burst.length} came out`);
+if (!burst.some((g) => g.vx < 0) || !burst.some((g) => g.vx > 0))
+  fail(`with no hitter they should scatter both ways: ${burst.map((g) => Math.sign(g.vx)).join(" ")}`);
+if (game.spawnedHere().includes(pop)) fail(`and the brain itself is gone the same frame (0x41507a answers 1)`);
+ok(`a dead slurp bursts into twenty gobs going both ways, and is gone`);
+
 // 4. the cage doors: a shut one is an OBSTACLE, which is `0x411460` appending
 //    its own rect to the same table the level's `obstacle` records fill
 await go("&x=2100&y=7600");

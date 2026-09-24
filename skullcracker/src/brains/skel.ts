@@ -158,10 +158,10 @@ export const SKEL_BONE: CastKit = {
  *   (`0x45d18c` negates the dx only for the mirror flag) and up. State 6
  *   (`0x4238fc`) waits for both `obj+0x46` AND `obj+0x2e`, back on the ground,
  *   before handing to tag 1, cels 1266–1268, getting up; that hands to the
- *   walk.
+ *   walk (`0x423941`), which the get-up's `resume` says.
  * - **7, the flinch**, `0x46fd58`: three engine frames a cel. `0x423b61`
- *   compares the blow's own x against `obj+8` and reads `obj+0x28` to decide
- *   whether it came from behind. From the front it is tag 0, cel 1260. From
+ *   compares the contact point's x (`0x423ad0`) against `obj+8` and reads
+ *   `obj+0x28` to decide whether it came from behind. From the front it is tag 0, cel 1260. From
  *   **behind** it is tag 1 or 2 — `0x434540(2)`, cels 1212 and 1261 — and
  *   `0x423b9a` takes a further **0x14 off `AI+0`** on top of the blow. A
  *   skeleton hit in the back loses twenty more health than one hit in the face.

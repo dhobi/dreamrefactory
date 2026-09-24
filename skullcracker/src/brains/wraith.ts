@@ -99,6 +99,7 @@ import {
   type BrainCtx,
   type CastKit,
   type Enemy,
+  type Hitter,
   type Reaction,
   TICK_SCALE,
 } from "./kit";
@@ -328,11 +329,11 @@ export const WRAITH_BEAM: CastKit = {
 };
 
 /**
- * How many named wraiths have died — the only thing a lesser one needs to know
- * about the named one, and `0x424f30` is why: as the named one's death ends it
- * walks the class list and dissolves every wraith whose `AI+4` is clear. A
- * lesser one remembers the count it was born under ({@link Enemy.side}) and
- * goes the frame it changes.
+ * How many times `0x424f30` has walked the class list — which dissolves every
+ * wraith whose `AI+4` is clear. Two things call it: the named one's death as
+ * it ends (`0x424ed5`), and a blow from the wraith's own beam
+ * (`0x424ff7`, see {@link wraithGate}). A lesser one remembers the count it
+ * was born under ({@link Enemy.side}) and goes the frame it changes.
  */
 let namedFallen = 0;
 
@@ -599,20 +600,35 @@ export const wraithReacts: Reaction = (e, _foe, run, k) => {
 /**
  * `0x424f80`'s gate, in front of the page's own arithmetic.
  *
- * `0x424fd1` ignores a code before anything else. Then `0x42503d`: a LESSER
- * wraith takes no subtraction at all — the death is installed with 0x21 and
+ * The bats, its own class and the thrown class are turned away first
+ * (`0x424f90`..`0x424fcb`, `SPARES` in the page), and then `0x424fd1` any
+ * strength of zero or less, which is every code.
+ *
+ * `0x424fdd`: a blow from the scepter's class on its tag 0 — variant 0, which
+ * is the wraith's own beam; the player's shot is tag 1 — takes nothing off
+ * the one it hits and calls `0x424f30`, which dissolves every lesser wraith
+ * there is, and answers 0.
+ *
+ * Then `0x425018` sprays, whoever it is, and `0x42503d`: a LESSER wraith
+ * takes no subtraction at all — the death is installed with 0x21 and
  * `0x424ea7` removes it the next frame, so any blow that lands is the end of
- * it, with neither the named one's hit sound nor its death sound.
+ * it, with neither the named one's hit sound nor its death sound. It answers
+ * 1 (`0x425064`), so the blow is `still` — goo and the exchange, and no death
+ * of the page's.
  */
 export function wraithGate(
   e: Enemy,
   foe: Foe,
-  blow: { damage: number; code: number },
-): { damage: number; code: number } | null {
+  blow: { damage: number; code: number; by: Hitter },
+): { damage: number; code: number; still?: boolean; quiet?: boolean; spare?: boolean } | null {
   if (blow.code < 0) return null;
+  if (blow.by.kit === WRAITH_BEAM) {
+    namedFallen += 1;
+    return null;
+  }
   if (e.decisions !== 0) return blow;
   dissolve(e, foe);
-  return null;
+  return { ...blow, still: true, quiet: true, spare: true };
 }
 
 /** `0x424c44` — every band falls through here: restart the hover, or wait */

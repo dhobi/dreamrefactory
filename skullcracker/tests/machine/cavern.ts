@@ -24,6 +24,7 @@ import { bat, batReacts } from "../../src/brains/bat";
 import { ghengisReacts } from "../../src/brains/ghengis";
 import { SKEL, SKEL_BONE, skel, skelReacts } from "../../src/brains/skel";
 import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
+import { gobCount } from "../../src/effects";
 import { FPS, fail, headless, ok, pass } from "./harness";
 
 /**
@@ -95,27 +96,43 @@ const machines = (): void => {
   const gained = cruise.vx / TICK_SCALE;
   if (Math.abs(gained - 3) > 1e-9) fail(`a cruising bat gains 3 px a frame per frame; it gained ${gained}`);
   if (cruise.strength !== 0) fail(`0x422f30 zeroes a bat's strength outside the shallow dive`);
-  // `0x423334`: the body goes up at forty a frame
+  // `0x4232b2`: the body goes the frame it has landed, and not the frame it dies
   const down = foe("initbat", b.death!, "dead");
+  down.linger = Infinity;
   batReacts(down, b, 8, k);
-  if (Math.abs(down.vy / TICK_SCALE + 40) > 1e-9) fail(`0x423334 throws a dead bat up at 40; vy ${down.vy / TICK_SCALE}`);
-  ok(`a bat accelerates 3 a frame, carries no strength out of the dive, and dies thrown up at 40`);
+  if (down.linger === 0) fail(`0x4232b2 waits for the body to move before it asks whether it has landed`);
+  batReacts(down, b, 8, k);
+  if (down.linger !== 0) fail(`...and a body at rest has landed and goes`);
+  if (b.hitVel?.vy !== -40 || b.sprayAmount !== 0x3c || !b.codeBlind || !b.corpseTakesHits)
+    fail(`0x4232f0: obj+0xa = -40 before the exchange, a spray of 0x3c, no sign test and no state test`);
+  ok(`a bat accelerates 3 a frame, carries no strength out of the dive, and its body goes when it lands`);
 
   // the skeleton's handler, `0x423b41`/`0x423b61`: a blow of 0x3c or more is
   // the knockdown; less is a take — front tag 0, back tag 1 or 2 and 0x14 more
   const s = FOES.initskel;
   const bones = foe("initskel");
   bones.hp = 100;
-  if (s.pick!({ damage: 0x3c, hits: 1, dy: 0, facingAway: false }, bones) !== 3)
+  // `0x423b61`: the side is the CONTACT's x against its own point, not the
+  // hitter's facing — facing east, a contact west of the point is its back
+  const at = (contactX: number) => ({ damage: 0x3b, hits: 1, dy: 0, facingAway: false, contactX, pointX: 100 });
+  if (s.pick!({ ...at(130), damage: 0x3c }, bones) !== 3)
     fail(`0x423b41 knocks it down for a blow of 0x3c`);
-  if (s.pick!({ damage: 0x3b, hits: 1, dy: 0, facingAway: false }, bones) !== 0 || bones.hp !== 100)
-    fail(`a blow to the face is tag 0 and nothing more`);
-  const back = s.pick!({ damage: 0x3b, hits: 1, dy: 0, facingAway: true }, bones);
+  if (s.pick!(at(130), bones) !== 0 || s.pick!(at(100), bones) !== 0 || bones.hp !== 100)
+    fail(`a blow met in front of its point, or on it, is tag 0 and nothing more`);
+  const back = s.pick!(at(90), bones);
   if ((back !== 1 && back !== 2) || (bones.hp as number) !== 80)
-    fail(`0x423b7d/0x423b9a: from behind it is tag 1 or 2 and 0x14 more; got ${back}, hp ${bones.hp}`);
+    fail(`0x423b7d/0x423b9a: met behind its point it is tag 1 or 2 and 0x14 more; got ${back}, hp ${bones.hp}`);
+  bones.facing = -1;
+  bones.hp = 100;
+  if (s.pick!(at(90), bones) !== 0 || bones.hp !== 100)
+    fail(`...and facing west, west of its point is its face`);
+  bones.facing = 1;
   const knock = s.flinch![3];
   if (knock.dy?.[7] !== -420 || knock.dx?.[7] !== 170 || !knock.then)
     fail(`0x46fcf0 tag 0 throws it on cel 1265 (dx 170, dy -420) and tag 1 gets it up`);
+  // `0x423941`: and the get-up hands to the walk, kind 1 — not to the statue
+  if (knock.then.resume?.kind !== 1 || knock.then.resume.cels[0] !== SKEL.walk.cels[0])
+    fail(`0x423941 installs 0x46fac0, the walk, as the get-up ends; it resumes kind ${knock.then.resume?.kind}`);
   // `0x42391d`: the get-up waits for the landing
   const flying = foe("initskel", knock, "flinch");
   const knockRun = knock.cels.length * knock.hold;
@@ -227,6 +244,38 @@ const batPay = fell("initbat", 360, "punch");
 if (batPay !== 70) fail(`0x42333c pays 0x46 for a bat; the score rose ${batPay}`);
 ok(`a bat falls to one blow for ${batPay} points`);
 
+/**
+ * ...and what the one blow does, through the page's own hit path. `0x423334`
+ * writes `obj+0xa = -40` and `0x430470` weighs it in after: against the
+ * player's mass the body goes DOWN. `0x423313` sprays sixty whatever the blow.
+ * The corpse still shows 2205/2206, which carry a body, and `0x4232f0` has no
+ * state test, so it is struck again and pays again; and there is no sign test,
+ * so a −9 fells one too.
+ */
+await go(2290);
+h.frame(9);
+const strikeBat = (b: Enemy, code = 0): void => {
+  const a = game.foeAnchor(b, game.level!)!;
+  const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+  game.strikeFoe(b, code ? 0 : 47, { dx: 20, dy: 0 }, 1, a.y, box, code, { x: a.x, y: a.y });
+};
+const hitBat = nearestOf("initbat")!;
+const gobsBefore = game.gobs.length;
+const paidBefore = game.stats.score;
+strikeBat(hitBat);
+if (hitBat.state !== "dead") fail(`one blow fells a bat`);
+if (!(hitBat.vy > 0)) fail(`the exchange turns 0x423334's -40 round: the body leaves downwards, vy ${hitBat.vy / TICK_SCALE}`);
+if (game.gobs.length - gobsBefore !== gobCount(0x3c))
+  fail(`0x423313 sprays 0x3c whatever the blow: ${gobCount(0x3c)} gobs, got ${game.gobs.length - gobsBefore}`);
+strikeBat(hitBat);
+if (game.stats.score - paidBefore !== 140 || hitBat.clock !== 0)
+  fail(`a falling bat is struck again and pays again; the score rose ${game.stats.score - paidBefore}`);
+const burnt = game.spawnedHere().find((e) => e.kind === "initbat" && e.state !== "dead");
+if (!burnt) fail(`another bat to set a −9 on`);
+strikeBat(burnt, -9);
+if (burnt.state !== "dead") fail(`0x4232f0 reads no code: a −9 fells a bat`);
+ok(`a bat's body leaves downwards, sprays ${gobCount(0x3c)} gobs, pays again when struck falling, and a −9 fells one`);
+
 // 4. a skeleton: two hundred, and 450 — the most in the game
 await go(2990);
 h.frame(9);
@@ -257,6 +306,28 @@ if (!gh || gh.hp !== 200 || gh.max !== 200) fail(`0x41ea74 gives it 0x40e300(0xc
 const gPay = fell("initghengis", 600);
 if (gPay !== 400) fail(`0x422bea pays 0x190 for Ghengis; the score rose ${gPay}`);
 ok(`Ghengis is two hundred health and ${gPay} points`);
+
+/**
+ * ...and its goo flies loose. `0x422b73` hands `0x40cba0` no hitter, so
+ * `0x40ce7d`..`0x40ce9d` gives every gob `0x434540(0x50) - 0x28` on both
+ * axes — −39..40 — with nothing of the blow in it: a blow driving east still
+ * throws some of it west, and some of it up.
+ */
+await go(5520);
+h.frame(9);
+{
+  const g = nearestOf("initghengis")!;
+  const a = game.foeAnchor(g, game.level!)!;
+  const before = game.gobs.length;
+  const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+  // a strong blow straight east, so a directed spray would all go one way
+  game.strikeFoe(g, 120, { dx: 90, dy: 0 }, 1, a.y, box, 0, { x: a.x, y: a.y });
+  const thrown = game.gobs.slice(before).map((q) => ({ vx: q.vx / TICK_SCALE, vy: q.vy / TICK_SCALE }));
+  const out = thrown.filter((q) => q.vx < -39 || q.vx > 40 || q.vy < -39 || q.vy > 40);
+  if (thrown.length !== gobCount(120) || out.length || !thrown.some((q) => q.vx < 0) || !thrown.some((q) => q.vy < 0))
+    fail(`0x422b73: Ghengis' goo flies loose, −39..40 on both axes; ${thrown.length} gobs, ${JSON.stringify(thrown.slice(0, 4))}`);
+  ok(`its goo flies loose on both axes, as 0x40ce7d does for a spray with no hitter`);
+}
 
 // 6. the blades. `0x4702c8`'s three tags are a ring of 27 cels, one engine
 //    frame each, and the think does nothing else; every one of them is 4040..4052.

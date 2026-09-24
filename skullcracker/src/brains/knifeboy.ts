@@ -145,7 +145,8 @@ import { ahead, turn } from "./batboy";
  * - **state 10, `0x43a3b8`** — the flinch, `0x474770`. Two instructions: wait
  *   for `obj+0x2e`, back on the ground, and then install kind 4 tag 4 and push
  *   off again. `0x43a744` only ever installs its tag 0, so the other two one-cel
- *   tags of that script are never played.
+ *   tags of that script are never played. Kind 4 tag 4 is {@link Foe.gait},
+ *   and `gangCorpse` holds the flinch while it is still in the air.
  *
  * And the handler that feeds the last two, `0x43a580`: `AI+0` is the health, a
  * blow takes the striking cel's speed off it and sounds `0xf`, GOOP **adds**

@@ -101,8 +101,9 @@ import { ahead, turn } from "./batboy";
  *   patch straight to that path before a brain is ever called.
  * - **Kind 10, the flinch** (`0x438169`). Two instructions: wait for `obj+0x2e`,
  *   back on the ground, and then install `0x473fb0` tag 4 — so a struck keeper
- *   comes back walking AT you rather than standing. The page's own flinch path
- *   returns it to {@link Foe.gait} instead.
+ *   comes back walking AT you rather than standing. That script is
+ *   {@link Foe.gait}, which the page's flinch path returns it to, and
+ *   `gangCorpse` holds the flinch until the landing.
  * - **Kind 9, the death** (`0x4380b9`). Tag 0 writes `obj+0x10 = 0xffec`, −20,
  *   the floor offset a falling body is allowed; both tags then count `AI+0x36`
  *   down and, at −1, rebuild the object through `0x42fa80` and hand it to

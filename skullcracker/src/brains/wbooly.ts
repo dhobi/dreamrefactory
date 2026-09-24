@@ -55,6 +55,7 @@ import {
   type CastCode,
   type CastKit,
   type Enemy,
+  type Reaction,
 } from "./kit";
 import type { Foe } from "../foes";
 
@@ -77,7 +78,8 @@ import type { Foe } from "../foes";
  *   with `0x434540(8) + 0xc`. And `0x4561b6` calls `0x42f870(obj, 0)` every
  *   frame, which is what takes it out of the census `0x4502d0` polls: the level
  *   opens as it starts to burn, not when it is removed, because it is never
- *   removed. {@link Foe.linger} `Infinity` is right for that.
+ *   removed. {@link Foe.linger} `Infinity` is right for that. The sounds, and
+ *   the 0x32 as tag 1 ends (`0x456134`), are {@link wboolyReacts}.
  * - **9**, `0x456058`: the small flinch does NOT hand back to standing. Tag 0,
  *   the take it uses when the blow landed in state 5, installs `0x4785e8`
  *   **tag 4** — straight back into the melee stance, with `AI+4` untouched, so
@@ -92,7 +94,8 @@ import type { Foe } from "../foes";
  *   steps only while `obj+0x18 == 5`, `0x456461`) is a knockdown rather than a
  *   flinch, and it zeroes `AI+4` so the get-up goes home. A blow arriving while
  *   it is already in state 2, 8 or 9 takes its health and no reaction at all
- *   (`0x456470`). Both are {@link wboolyGate}.
+ *   (`0x456470`) — though it still sprays, grunts and answers 1, so it is
+ *   shoved. Both are {@link wboolyGate}.
  */
 const NOT_HERE = "0x455fde, 0x456033, 0x456058, 0x4560ed, 0x456310" as const;
 
@@ -907,9 +910,9 @@ function decide(e: Enemy, k: BrainCtx, done: boolean): boolean {
  *   4564dc  otherwise the flinch             tag by the state, see the pick
  * ```
  *
- * The absorbed states are answered here: the health comes off and the blow
- * lands as nothing else. A blow that empties the health goes through, because
- * `0x4563ce` kills before `0x456470` is reached.
+ * The absorbed states are `still` blows: the goo, the grunt, the health and
+ * the exchange, and nothing else. A blow that empties the health goes through,
+ * because `0x4563ce` kills before `0x456470` is reached.
  *
  * `AI+0x12` is kept in {@link Enemy.dents}, which the page steps once per blow
  * after this gate and weighs against {@link Foe.knockdown}'s `every`. Written
@@ -920,7 +923,7 @@ export function wboolyGate(
   e: Enemy,
   foe: Foe,
   blow: { damage: number; code: number },
-): { damage: number; code: number } | null {
+): { damage: number; code: number; still?: boolean } | null {
   // `0x45631e` — the −9 arm lights it and returns before any of this
   if (blow.code < 0) return blow;
   const over = foe.knockdown?.anim;
@@ -932,11 +935,14 @@ export function wboolyGate(
         : e.anim === over?.then
           ? 8
           : 9;
-  // `0x456470` — absorbed, unless it is the blow that kills
+  // `0x456470` — taken and answered 1, with the goo (`0x4563a0`) and the
+  // grunt (`0x456459`) and the exchange, and no reaction — unless it is the
+  // blow that kills, which `0x4563ce` reads first. `AI+0x12` is not stepped
+  // outside state 5, so the page's step of `dents` is taken back here
   if (state === 8 || state === 2 || state === 9) {
     if (e.hp - blow.damage > 0) {
-      e.hp -= blow.damage;
-      return null;
+      e.dents -= 1;
+      return { ...blow, still: true };
     }
     return blow;
   }
@@ -949,6 +955,41 @@ export function wboolyGate(
   } else e.dents = next; // -> next + 1
   return blow;
 }
+
+/**
+ * State 11 while the page plays the death — `0x456129` and `0x456171`.
+ *
+ * The page's {@link Foe.death} is tags 1 and 2 run together, so the tag-1 end
+ * is the eighteenth cel's. There `0x456134` plays 0x32 through `0x40f090`
+ * (and `0x456157` shakes, which is not behaviour) and seeds `AI+4 = 5`
+ * (`0x456164`). Then the wreck burns for good, and every frame of tag 2
+ * `0x456171` counts `AI+4` down: each time it had run out, `0x45618a` plays
+ * `0x434540(2) - 1` — index 0 or 1 — at the PLAYER's point, and `0x4561a4`
+ * reseeds it with `0x434540(8) + 0xc`. `AI+4` is {@link Enemy.decisions},
+ * the same word the live machine spends.
+ */
+export const wboolyReacts: Reaction = (e, foe, _run, k) => {
+  if (e.state !== "dead" || e.anim !== foe.death) return;
+  if (e.clock < DEATH_TAG1 * e.anim.hold) return;
+  if (!e.threw) {
+    e.threw = true;
+    k.say(e, DEATH_TAIL);
+    e.decisions = DEATH_FIRST;
+    return;
+  }
+  const left = e.decisions ?? 0;
+  e.decisions = left - 1;
+  if (left > 0) return;
+  k.say({ ...e, x: k.player.x, y: k.player.y }, k.roll(2) - 1);
+  e.decisions = k.roll(8) + 0xc;
+};
+
+/** `0x478370` tag 1 — eighteen cels before the wreck */
+const DEATH_TAG1 = 18;
+/** `0x456138` — as tag 1 ends */
+const DEATH_TAIL = 0x32;
+/** `0x456164` — the first wait in tag 2 */
+const DEATH_FIRST = 5;
 
 export {
   NOT_HERE as WBOOLY_NOT_HERE,

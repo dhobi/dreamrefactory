@@ -96,7 +96,14 @@ export interface Enemy {
   shaken?: number;
   /** has the CHOPPER already let out what was inside it — see {@link Foe.hatches} */
   hatched?: boolean;
-  /** ...and has its bike already been thrown clear — see {@link Foe.deathThrow} */
+  /** ...and has it already shed its head — see {@link Foe.sheds} */
+  shed?: boolean;
+  /**
+   * ...and has its bike already been thrown clear — see {@link Foe.deathThrow};
+   * the one-shot at the end of a death's first tag lives here too — kragg's
+   * roaches (`0x441a42`), which a death put on again lets out again, and the
+   * boss of level four's 0x32 (`0x456134`)
+   */
   threw?: boolean;
   /**
    * `obj+0x32`, the fall so far: `0x42fdbc` adds `obj+0xa` to it every frame
@@ -225,6 +232,12 @@ export interface Enemy {
    * gives you. BARREL places both; MAZE places only param 0.
    */
   param?: number;
+  /**
+   * `initcop`'s `AI+0x30`, the switch-run stage — zeroed by the creator and
+   * made nonzero the first time a blow drops it under half (`0x414971`), so
+   * that blow's switch run happens once. See its {@link Foe.pick}.
+   */
+  switchRun?: number;
   /**
    * `AI+0x10` — the record's own point, kept because a class can be sent back
    * to it. `0x44ec26` is the case: the frame the player is upright again, the
@@ -444,6 +457,12 @@ export interface BrainCtx {
    * then steers for is **120 BELOW** it (`0x44154c`), not the point itself.
    */
   sprinkler(e: Enemy): { x: number; y: number } | null;
+  /**
+   * `0x4423a0(point, n)` — `n` roaches thrown out of a point, each on its own
+   * arc. Kragg's corpse is the one caller (`0x441a8d`, fifteen); see `SPILL`
+   * in {@link file://../props.ts}.
+   */
+  spill(at: { x: number; y: number }, n: number): void;
   /**
    * ...and send one up — `0x441b20` then `0x441b60`.
    *

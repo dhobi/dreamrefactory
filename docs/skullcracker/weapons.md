@@ -227,7 +227,8 @@ Two of the three are ordinary damage; the flame is a code. And -9 is the one
 code that is not in the player's own table — it falls below `0x448c84`'s range
 test — so what reads it is a −9 arm in the victim's own hit handler
 ([Fighting](combat.md#what-is-still-read-and-not-done)). Like the blaster's
-bolt, the flamethrower is a key rather than a weapon. What a full gauge of it
+bolt — which only chapter four's own handlers read, Boggs', the TCop's and the
+test tube's — the flamethrower is a key rather than a weapon. What a full gauge of it
 kills is three kinds of thing: MOLITOV (`initwerec`), whose −9 arm at `0x45296e`
 ends in its death; the dog, whose arm at `0x4550d3` installs its death script
 `0x478208` and pays its 200 (`0x455115`); and CITY's crows, which burn for eight

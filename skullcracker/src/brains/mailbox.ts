@@ -132,8 +132,8 @@ import type { Brain } from "./kit";
  *   installed; `0x44fec4`: under 10 nothing is installed; 10..54 installs
  *   `0x4787a8` tag 0, 55 or over tag 1. Every one of those paths then plays
  *   sound 5 and answers 1, so the solver moves the mailbox whatever it showed.
- *   That is {@link FOES.initmailbox}'s `pick`, whose "nothing installed"
- *   entries hold the cel already showing.
+ *   That is {@link FOES.initmailbox}'s `pick`, whose "nothing installed" is
+ *   −1: whatever was playing plays on.
  * - **`0x44feea`** — `0x40ef30(0x4a7910, 5, striker->obj+6)`, the same sound
  *   whether it dents or goes over, and played at the STRIKER's point rather
  *   than the mailbox's. That is `FOE_SFX.mailbox`.

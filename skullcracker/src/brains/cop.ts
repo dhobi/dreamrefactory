@@ -49,12 +49,8 @@
  * cels 2110…2115 and sprays on 2120/2121. BARREL places seven of the latter and
  * five of the former; all seven of MAZE's are param 0.
  *
- * The port's {@link Enemy} has no slot for a record `param` and this file may
- * not add one, so it is read out of {@link Enemy.decisions} — a word this class
- * does not otherwise use, because its `AI+4` is the record RECT and not a
- * decision budget — and defaults to 0, which is the slug-gun cop. See
- * {@link gunner}: a caller that seeds `e.decisions` from the record's `param`
- * gets the other one, and until it does, state 9 is written and unreached.
+ * {@link gunner} reads it off {@link Enemy.param}, which the level fills from
+ * the record, and so does the page's own death choice, {@link Foe.deathFor}.
  *
  * ## Its AI struct, which is not the punk's
  *
@@ -118,7 +114,14 @@
  * this brain returns `false`.** Returning `true` would freeze the thing
  * mid-swing with its stride unspent.
  */
-import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./kit";
+import {
+  install,
+  type Brain,
+  type BrainCtx,
+  type CastKit,
+  type Enemy,
+  type Reaction,
+} from "./kit";
 import type { FoeAnim } from "../foes";
 
 /**
@@ -131,7 +134,8 @@ import type { FoeAnim } from "../foes";
  *   8 itself (`0x41440e`), and that is below: the flinch's `resume` hands the
  *   machine kind 8 the frame the page's animation ends. `0x414933` is the
  *   other thing in the handler: a blow that leaves it under half health with
- *   `AI+0x30` still 0 starts the switch run instead of the flinch.
+ *   `AI+0x30` still 0 starts the switch run instead of the flinch — that is
+ *   {@link Foe.pick}'s second reaction for this class.
  * - **10**, the switch run (`0x46c888`). `0x4145d6` asks `0x404440` for the
  *   nearest **`initswitch`**, files its point at `AI+0x34`, runs to it on
  *   2100…2105 at 130, and inside ten pixels of `AI+0x36` plays the reach and
@@ -145,13 +149,14 @@ import type { FoeAnim } from "../foes";
  * - **11**, the death (`0x46c9a8`, cels 2190…2194). `0x414696` zeroes
  *   `obj+0x26`, the shove weight, every frame of it, and on frame 3 of the
  *   script (`obj+0x42`) plays lab.snd 0xd — `#0084 TCop Dies` — sprays
- *   `0x40cba0` twice and answers 1, the one frame in the whole function that
- *   does — which {@link FOES.initcop} carries as three cels and no corpse. The
- *   gunner's death is kind 9 tag 3 instead (`0x4148f4`), and `0x414566` ends
- *   THAT by handing to kind 11 anyway, after one `0x45b060(6, …)` a hundred
- *   pixels BEHIND it (`0x414588`: `sbb`, `and 0xff38`, `add 0x64`) — the
- *   blaster, which the page drops at the kill. The four cels of tag 3 are not
- *   played: a page death is one animation.
+ *   `0x40cba0` twice (the green ball, and 0x78 of goo) and answers 1, the one
+ *   frame in the whole function that does. The page plays the three cels and
+ *   {@link copReacts} says and sprays on the last of them. The gunner's death
+ *   is kind 9 tag 3 instead (`0x4148f4`, {@link Foe.deathFor}), four cels that
+ *   carry a body and so still take blows, and `0x414566` ends THAT by handing
+ *   to kind 11 anyway, after one `0x45b060(6, …)` a hundred pixels BEHIND it
+ *   (`0x414588`: `sbb`, `and 0xff38`, `add 0x64`) — the blaster, which the
+ *   page drops as the one death hands to the other.
  */
 const NOT_HERE = "0x41440e, 0x4145b0, 0x414696" as const;
 
@@ -703,5 +708,23 @@ function decide(
    */
   return done ? rewind(e, COP.stance) : false;
 }
+
+/**
+ * State 11's last frame, `0x41469c`: once the script's index `obj+0x42` reaches
+ * 3 it says lab.snd **0xd** (`0x4146ab`), puts the green ball down
+ * (`0x4146c2`, which is {@link Foe.vanishes}) and throws **0x78** of goo out of
+ * its own point with no blow behind it (`0x4146d2`), and answers 1. The hit
+ * handler says nothing as it kills (`0x4148c7`…`0x41490d` has no sound), so
+ * the death's noise is here and not at the blow. The gunner's four cels of
+ * kind 9 tag 3 come first and are not this animation.
+ */
+export const copReacts: Reaction = (e, foe, run, k) => {
+  if (e.state !== "dead" || e.anim !== foe.death || e.clock < run) return;
+  k.say(e, COP_GONE.sound);
+  k.spray(e, COP_GONE.goo);
+};
+
+/** `0x4146ab` and `0x4146d2` — the frame a TCop is taken away */
+export const COP_GONE = { sound: 0xd, goo: 0x78 } as const;
 
 export { NOT_HERE as COP_NOT_HERE };

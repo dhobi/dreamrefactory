@@ -59,7 +59,7 @@ import { writeSkl } from "./savegame";
 import { Film } from "./film";
 import { FOES, loopIndex } from "./foes";
 import { type Enemy } from "./brains/kit";
-import { CRAFT, SPRAY, VANISH } from "./effects";
+import { CRAFT, SPARK, SPRAY, VANISH } from "./effects";
 import { REACH, Sounds } from "./sound";
 import { ELEVATOR, Plank, crowCel, elevatorCel, ibeamCel, crushCel, plankCel, PICKUP, shackCel, PIPE, ROACH, doorCel, switchCel, dripCel, HAND, LIGHTFX, BOGGS, SKATEBOARD } from "./props";
 import { MISSIONS } from "./mission";
@@ -98,6 +98,8 @@ import {
   cageCel,
   canCel,
   cans,
+  headCel,
+  heads,
   castBlow,
   castCel,
   casts,
@@ -205,6 +207,7 @@ import {
   solids,
   sound,
   spawnedHere,
+  sparks,
   spritesTouch,
   startTicks,
   stats,
@@ -1260,7 +1263,9 @@ function loop(now: number): void {
     drawLevelCel(
       r.running
         ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)]
-        : ROACH.drop.cels[0],
+        : r.spilled
+          ? ROACH.fall.cels[0]
+          : ROACH.drop.cels[0],
       r.x,
       r.y,
       camX,
@@ -1369,6 +1374,8 @@ function loop(now: number): void {
   // the pickup underneath it, because code 2 keeps cel 14000 and no book in
   // the game carries that. See {@link CAN}.
   for (const c of cans) drawLevelCel(canCel(c), c.x, c.y, camX, camY, c.vx < 0);
+  // ...and the heads the zombies and igors shed — `HEAD` in props.ts
+  for (const h of heads) drawLevelCel(headCel(h), h.x, h.y, camX, camY, h.west);
   // ...and the flames LAST, because a flame is an object standing on top of
   // whatever it is burning and not a wash over its cel
   for (const f of flames) drawLevelCel(flameCel(f), f.x, f.y, camX, camY, f.mirror);
@@ -1376,6 +1383,9 @@ function loop(now: number): void {
   drawStreams(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
+  // kragg's sparks, out of ARCADE's own book (`0x474ed8`)
+  for (const k of sparks)
+    drawLevelCel(SPARK.cels[Math.min(SPARK.cels.length - 1, Math.floor(k.age / SPARK.hold))], k.x, k.y, camX, camY);
 
   // the player, feet on the ground, between the rate-1 planes and the
   // foreground — the disc's own cels for both facings, so nothing is mirrored

@@ -25,7 +25,7 @@
  *     into a seven-entry table by its own `param`, and nothing stands there
  *     until the boss does.
  */
-import { fail, headless, ok, pass } from "./harness";
+import { fail, headless, ok, pass, recordSound } from "./harness";
 import { FOES } from "../../src/foes";
 import {
   kragg,
@@ -156,7 +156,16 @@ const machines = (): void => {
 
   // `0x441e5b`, `0x441ef0` — the takes, in the air and on the ground
   const pick = K.pick!;
-  const blow = (damage: number, facingAway = false) => ({ damage, hits: 1, dy: 0, facingAway });
+  // `behind` puts the player west of a kragg facing east — `0x441fdb` weighs
+  // his x against its own, not the blow's direction
+  const blow = (damage: number, behind = false) => ({
+    damage,
+    hits: 1,
+    dy: 0,
+    facingAway: behind,
+    playerX: behind ? 0 : 200,
+    pointX: 100,
+  });
   if (pick(blow(20), { max: 1000, script: 8 }) !== 4) fail(`mid-dive, under 0x2d, is 0x473a48 tag 4`);
   if (pick(blow(50), { max: 1000, script: 8 }) !== 3) fail(`mid-dive, 0x2d or more, is tag 3`);
   if (!K.flinch![4].resume || K.flinch![4].resume.kind !== 8 || K.flinch![4].resume.tag !== 1)
@@ -547,5 +556,117 @@ ok(`and pays ${points} points, because nothing in its code awards any`);
 // 10. only then does the craft come, and the goal is where you began
 if (h.until(() => game.craft !== null, 60) < 0) fail(`the craft should arrive once the room is empty`);
 ok(`and the craft comes down for it`);
+
+/**
+ * 11. what a blow DOES to it, through the page's own hit path.
+ *
+ * - the −9 arm `0x441d30` lights no flame (no `0x44ff20` anywhere in the
+ *   class): it plays the hit sound (`0x441d41`), sparks (`0x441d60`) and plays
+ *   0x13 (`0x441d72`);
+ * - the flying form sparks and does not bleed (`0x441db8`, no `0x40cba0`);
+ * - the ground takes are kind 11, which `0x441ef4` takes nothing in;
+ * - `0x441f56` is `jge`: a blow that leaves nothing is a take;
+ * - the death that sticks spills fifteen roaches with 0x1b as tag 0 ends
+ *   (`0x441a42`), and a corpse struck on cel 7114 dies again from the top
+ *   (`0x441f58`).
+ */
+{
+  await go();
+  let b = boss();
+  // read fresh: the checks below each follow a blow the compiler cannot see
+  const state = (): string => b.state;
+  const script = (): number | undefined => b.script;
+  const hit = (damage: number, code = 0): void => {
+    const a = game.foeAnchor(b, game.level!)!;
+    const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+    game.strikeFoe(b, damage, { dx: 20, dy: 0 }, 1, a.y, box, code, { x: a.x, y: a.y }, { mass: 5, vx: 0, vy: 0 });
+  };
+  const calls = recordSound(game);
+  const effects = (): number[] => calls.filter((c) => c.call === "effect").map((c) => c.args[0] as number);
+  const flames0 = game.flames.length;
+  const sparks0 = game.sparks.length;
+  hit(0, -9);
+  const heard = effects();
+  if (game.flames.length !== flames0) fail(`0x441d30 calls no 0x44ff20: a flame was lit on kragg`);
+  if (game.sparks.length !== sparks0 + 1) fail(`0x441d60 throws one spark: ${game.sparks.length - sparks0}`);
+  if (heard.length !== 2 || ![24, 25].includes(heard[0]) || heard[1] !== 0x13)
+    fail(`0x441d41 then 0x441d72: its hit sound and 0x13; heard ${heard.join(",")}`);
+  if (b.anim !== K.burns!.anim || b.script !== 9) fail(`and 0x473a88 goes on, kind 9: script ${b.script}`);
+  ok(`a flare on kragg lights nothing, sparks once and plays ${heard.join(" then ")} (0x441d30)`);
+
+  await go();
+  b = boss();
+  const gobs0 = game.gobs.length;
+  const sparks1 = game.sparks.length;
+  hit(40);
+  if (game.gobs.length !== gobs0 || game.sparks.length !== sparks1 + 1)
+    fail(`the flying form sparks and does not bleed (0x441db8): gobs +${game.gobs.length - gobs0}, sparks +${game.sparks.length - sparks1}`);
+  if (script() !== 7) fail(`a take on the wing is kind 7 (0x473a28/0x473a48): ${b.script}`);
+  ok(`a blow on the wing throws a spark and no goo, and the take reads kind 7`);
+
+  // the ground form, as the landing leaves it
+  const ground = (): void => {
+    b.rallied = true;
+    b.state = "gait";
+    b.anim = K.rallies!.rise;
+    b.script = 12;
+    b.tag = 0;
+    b.clock = 0;
+  };
+  ground();
+  b.hp = 1000;
+  let took = false;
+  for (let i = 0; i < 8 && !took; i++) {
+    hit(30);
+    took = script() === 11;
+    if (!took) ground();
+  }
+  if (!took) fail(`a ground blow should put on one of 0x473ba8's takes, kind 11`);
+  const during = b.hp;
+  hit(30);
+  if (b.hp !== during) fail(`0x441ef4: a blow during a ground take (kind 11) takes nothing; ${during} -> ${b.hp}`);
+  ok(`the ground takes are kind 11, and a blow during one lands as nothing (0x441ef4)`);
+
+  ground();
+  b.hp = 30;
+  hit(30);
+  if (state() === "dead" || b.hp !== 0) fail(`0x441f56 is jge: a blow that leaves nothing is a take; ${b.state} at ${b.hp}`);
+  ground();
+  calls.length = 0;
+  hit(30);
+  if (state() !== "dead" || script() !== 16) fail(`below nothing it dies on 0x473d38, kind 16: ${b.state} ${b.script}`);
+  ok(`health at exactly nothing is a take, and below it the death (0x441f56)`);
+
+  const roaches0 = game.roaches.length;
+  calls.length = 0;
+  h.frame(8 * K.death!.hold + 2);
+  if (game.roaches.length - roaches0 !== 15 || !effects().includes(0x1b))
+    fail(`0x441a42 spills fifteen roaches with 0x1b as tag 0 ends: ${game.roaches.length - roaches0}, heard ${effects().join(",")}`);
+  ok(`the death that sticks lets fifteen roaches out with 0x1b (0x441a42, 0x4423a0)`);
+
+  b.clock = 4 * K.death!.hold;
+  if (game.celOf(b) !== 7114) fail(`cel 7114 is the death's fifth: ${game.celOf(b)}`);
+  calls.length = 0;
+  hit(30);
+  if (state() !== "dead" || b.clock !== 0 || b.threw || !effects().includes(FOES.initkragg.deathSound!))
+    fail(`a corpse struck on 7114 dies again from the top with 0x1a (0x441f58): clock ${b.clock}, heard ${effects().join(",")}`);
+  ok(`and struck on 7114 it dies again from the top, 0x1a and all (0x441f58)`);
+
+  // `0x441fdb` / `0x441fed`: the fourth ground blow weighs the PLAYER's x
+  // against its own mirror flag — in front, it swings; behind, it turns
+  const fourth = (facing: number, playerX: number): number => {
+    const e = { max: 1000, rallied: true, facing };
+    for (let i = 0; i < 8; i++) {
+      const r = K.pick!({ damage: 30, hits: 1, dy: 0, facingAway: false, playerX, pointX: 100 }, e);
+      if (r >= 8) return r;
+    }
+    return -1;
+  };
+  const picks = [fourth(-1, 0), fourth(1, 0), fourth(1, 200), fourth(-1, 200)];
+  if (picks.join() !== "10,8,10,9")
+    fail(`the fourth ground blow: swing in front, turn on tag mirror + 2 behind; got ${picks.join()}`);
+  ok(`the fourth ground blow swings at a player in front and turns from one behind (0x441fed)`);
+  game.setSound(null);
+}
 
 pass("ARCADE is one room, one boss out of reach, and a goal that waits for it");

@@ -105,16 +105,20 @@ import {
 /**
  * The two states the page owns, and what they do beyond playing an animation.
  * The pick is {@link Foe.pick} in `foes.ts`, the tail of state 3 is the brain's
- * own case 3, and the death's sound is {@link eyeballReacts}.
+ * own case 3, and the death's sound and the hover that goes on under both
+ * are {@link eyeballReacts}.
  *
  * - **3**, the fall and the flinch (`0x43dfc4`). Two scripts, one kind. The hit
  *   handler `0x43e8b0` picks between them: `0x43e9af` sends any blow harder than
  *   **0x46** — and any blow at all that lands while it is spitting — to
- *   `0x4727f0` tag 0, twelve cels of a dead-weight fall; anything softer reads
+ *   `0x4727f0` tag 0, twelve cels of 6300 with no stride of their own — what
+ *   moves it meanwhile is the hover ({@link float}); anything softer reads
  *   `obj+0`, the cel now showing, and answers cel **6206/6207/6208** with
  *   `0x472878` tags **1/2/3**. So which flinch it plays is chosen by which frame
  *   of the hover the blow caught, and a cel not in that list is not a flinch at
- *   all: `0x43e9d4` returns 1 with nothing installed.
+ *   all: `0x43e9d4` returns 1 with nothing installed. That includes a second
+ *   blow during the knock-out: the state is 3 by then, not 7, and the 6300s are
+ *   none of the three.
  * - **3** again, the splat: `0x43dfc4` watches `obj+0x2c` — the mover's "this
  *   thing is inside an obstacle" flag — and the frame a falling eyeball hits
  *   something it plays `0x4727f0` **tag 4**, cels 6527 down to 6524, with
@@ -938,6 +942,13 @@ function ladder(e: Enemy, k: BrainCtx, done: boolean): boolean {
 const POP_FRAMES = 12;
 
 /**
+ * States 3 and 8 while the page plays them.
+ *
+ * The hover is not a state's: `0x43de45` runs it before the jump table for
+ * every state but 0, 5 and 7, so a struck eye goes on being dragged to the
+ * player's height, bobbing, and having any sideways speed past fifty halved
+ * (`0x43def0`) all through its flinch and its death — {@link float}.
+ *
  * State 8, `0x43e716` — the death, which the page plays as {@link Foe.death}:
  * `0x4728e0` tag 0 and tag 1 back to back, both one tick a cel, with
  * {@link Foe.linger} 0 because tag 1 ending is `0x43e7b5`'s `mov ax, 1`.
@@ -948,6 +959,8 @@ const POP_FRAMES = 12;
  * `0x40cba0(self.point, 0x32, 0)` gibs at `0x43e768`.
  */
 export const eyeballReacts: Reaction = (e, foe, _run, k) => {
+  // `0x43de45`, ahead of `0x43df52`'s jump on 3 and on 8 alike
+  float(e, k, e.state === "dead" ? 8 : 3);
   if (e.state !== "dead" || e.anim !== foe.death) return;
   if (e.clock <= POP_FRAMES) e.vx = Math.trunc(e.vx / TICKS / 2) * TICKS;
   if (!e.hatched && e.clock >= POP_FRAMES) {

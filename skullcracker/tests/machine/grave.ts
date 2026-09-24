@@ -38,9 +38,16 @@ const machines = (): void => {
     if (z.pick!(blow, state(1)) === 3) fail(`0x420afe rolls tags 0..2 on the walk`);
   if (z.flinch!.some((a) => a.resume?.kind !== 2 || a.resume?.tag !== 1))
     fail(`0x4207f2 ends every flinch in kind 2 tag 1`);
+  // `0x420ae1` reads `obj+0x18` as the blow finds it, and a flinch puts 6
+  // there: struck again in the guard's own 1846, it drops the guard
+  if (z.flinch!.some((a, i) => a.kind !== 6 || a.tag !== i)) fail(`0x470248 is kind 6, tags 0..3`);
+  for (let i = 0; i < 30; i++)
+    if (z.pick!(blow, state(6, 3)) === 3) fail(`0x420afe: struck again in kind 6 it rolls tags 0..2`);
+  if (!z.hitsOwn || z.sheds?.mode !== 0 || z.sheds.afterCels !== 3)
+    fail(`0x4209f0 turns away only bats, and 0x420832 sheds the head after tag 0's three cels`);
   if (z.death!.cels.join() !== "1863,1864,1865,1866,1867,1868")
     fail(`0x470270 is tag 0 and then tag 1, the corpse`);
-  ok(`a zombie keeps its guard when struck in it, and every flinch ends in the guard`);
+  ok(`a zombie keeps its guard when struck in it once, drops it the second time, and every flinch ends in the guard`);
 };
 
 machines();
@@ -240,4 +247,51 @@ if (game.p.x < 6000 || game.stats.lives !== 3) fail(`the run should reach the fa
 if (deepest > 1100) fail(`a zombie fell into a grave — ${where} reached y ${deepest}, and the pit floors are y1232..1346`);
 ok(`...and no zombie goes into any of the five — deepest y ${deepest}, and the run reached x ${game.p.x}`);
 
-pass(`GRAVE's zombies stand, its graves open and take, and its hands come up`);
+/**
+ * 7. ...and what a zombie leaves: its HEAD. `0x420832` calls `0x4208e0` as the
+ *    death's tag 0 ends, thirty above its point with `vy -10` and one pixel
+ *    backwards; `0x420010` hops it on every landing; and `0x420090` pays 400
+ *    to the player's foot (see `HEAD` in props.ts).
+ */
+await go(1050);
+h.frame(6);
+const shedder = nearZomb();
+game.killFoe(shedder, FOES.initzomb);
+if (h.until(() => game.heads.length > 0, 14) < 0) fail(`0x420832 sheds a head as the death's tag 0 ends`);
+const head = game.heads[0];
+const at = game.foeAnchor(shedder, game.level!)!;
+if (head.mode !== 0 || Math.round(head.y) !== Math.round(at.y - 30) || head.west !== shedder.facing > 0)
+  fail(`0x420842: thirty above the point, going backwards; it is at y${head.y} (point y${at.y}), west ${head.west}`);
+let hops = 0;
+let wasDown = false;
+for (let i = 0; i < 60 && game.heads.includes(head); i++) {
+  h.frame();
+  if (wasDown && head.vy < 0) hops++;
+  wasDown = head.down;
+}
+if (hops < 2) fail(`0x420010 reinstalls tag 0 on every landing, and dy -55 lifts it again; it hopped ${hops} times`);
+ok(`a felled zombie sheds its head thirty above itself, and the head hops (${hops} hops)`);
+
+// ...and a punch on it: 0135 basketball, four hundred, a green ball — away
+// from x1050, where a hand has the player before the fist is out
+await go(2900);
+h.frame(6);
+const ball = { x: 0, y: 0, vx: 0, vy: 0, west: false, mode: 0 as const, clock: 0, down: false };
+game.heads.push(ball);
+const paid = game.stats.score;
+const pops = game.pops.length;
+h.press("punch");
+for (let i = 0; i < 12 && game.stats.score === paid; i++) {
+  // held in front of the fist until the impact frame comes round
+  ball.x = game.p.x + 80 * game.p.facing;
+  ball.y = game.p.y - 120;
+  ball.vx = 0;
+  ball.vy = 0;
+  ball.west = game.p.facing < 0;
+  h.frame();
+}
+if (game.stats.score - paid !== 400 || game.pops.length <= pops)
+  fail(`0x420090 pays 0x190 and leaves a green ball for the player's blow; the score rose ${game.stats.score - paid}`);
+ok(`a head struck by the player pays 400 and leaves a green ball`);
+
+pass(`GRAVE's zombies stand, its graves open and take, its hands come up, and its heads come off`);

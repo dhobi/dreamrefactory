@@ -397,6 +397,28 @@ if (game.celOf(box) !== 2413) fail(`...and stays on its side, cel 2413; showed $
 ok(`a mailbox on its side is kicked along the street, x${from} -> x${Math.round(box.x)}, still on 2413`);
 
 /**
+ * 12c. ...and a light blow installs nothing at all. `0x44fec8`: under ten the
+ *     handler jumps past the install to the sound, so whatever the mailbox was
+ *     showing plays on — a topple struck lightly still goes over.
+ */
+await at("level=1&x=6795", 8);
+{
+  const m = nearestOf("initmailbox")!;
+  const a = game.foeAnchor(m, game.level!)!;
+  const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+  const strike = (damage: number): void => game.strikeFoe(m, damage, { dx: 5, dy: 0 }, 1, a.y, box, 0);
+  strike(5);
+  if (m.state !== "gait") fail(`0x44fec8: under ten installs nothing on a standing mailbox; it is ${m.state}`);
+  strike(60);
+  const topple = m.anim;
+  strike(5);
+  if (m.anim !== topple || m.clock !== 0) fail(`a light blow mid-topple leaves the topple running: ${m.anim.from}`);
+  h.frame(10);
+  if (game.celOf(m) !== 2413 || m.script !== 2) fail(`...and it still goes over onto 2413, state 2: cel ${game.celOf(m)}, kind ${m.script}`);
+  ok(`a light blow installs nothing — a standing mailbox stands, and a toppling one still goes over (0x44fec8)`);
+}
+
+/**
  * 13. ...and the jet does NOT hit.
  *
  *     Six of its ten cels carry a strike box (9802..9807) and five of those a

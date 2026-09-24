@@ -1808,6 +1808,8 @@ export const ROACH = {
   run: { cels: [3400, 3401, 3402, 3405], hold: 1, dx: [65, 65, 65, 65], from: "0x474db0 tag 0" },
   /** tag 1 — the leap, one frame of `dx 65, dy -150`; not driven here */
   leap: { cels: [3400], hold: 1, dx: [65], from: "0x474db0 tag 1" },
+  /** tag 2 — one cel held in the air until it lands (`0x43b381`) */
+  fall: { cels: [3405], hold: 1, from: "0x474db0 tag 2" },
   /** `0x474de8` tag 0 — flattened */
   squash: { cels: [3406, 3407, 3407], hold: 2, from: "0x474de8 tag 0" },
   /** `mov word ptr [ecx+0xe], 0xa` at `0x43b0cc` */
@@ -1856,7 +1858,42 @@ export interface Roach {
   left: number;
   bottom: number;
   right: number;
+  /**
+   * Thrown out of kragg's corpse rather than dropped by a nest — `0x4423a0`,
+   * see {@link SPILL}: it leaves on the leap (tag 1) with a speed of its own,
+   * on the allocator's full gravity, falls on tag 2's cel and starts the run
+   * on landing without the run sound (`0x43b35c`).
+   */
+  spilled?: { vx: number };
 }
+
+/**
+ * Fifteen roaches out of kragg's body — `0x4423a0(point, 0xf)`, called once
+ * from the death that sticks (`0x441a8d`). ARCADE carries the roach's cels.
+ *
+ * Each one is the roach class `[0x474e08]` made where it is told, and then
+ * `0x4423ec`..`0x44246b` scatter it: x plus `0x434540(0x1e)`, y less
+ * `0x434540(0x32)`, `obj+0xa = -5 - 0x434540(0x19)`, a coin-flip facing and
+ * `obj+0xc = 5 + 0x434540(0xf)`. The leash is the region its point is in
+ * (`0x40b940`, into `AI+6`). It is installed on `0x474db0` tag 1, whose one
+ * frame carries `dx 65, dy -150` through the divisor of 10 (`0x43b0cc`). No
+ * `0x42f850` call: it keeps the allocator's gravity of ten, where a nest's
+ * roach is given 0.6 in the state it never reaches (`0x43b1be`).
+ */
+export const SPILL = {
+  count: 0xf,
+  /** `0x4423ec` / `0x4423fd` — the scatter on its point */
+  across: 0x1e,
+  up: 0x32,
+  /** `0x4423ba` / `0x44240b` — `bp = -5`, less `0x434540(0x19)` */
+  rise: [-5, 0x19] as const,
+  /** `0x44245d` — `5 + 0x434540(0xf)` */
+  speed: [5, 0xf] as const,
+  /** `0x474db0` tag 1 — the leap's one frame */
+  leap: { dx: 65, dy: -150 },
+  gravity: 1,
+  from: "0x4423a0 / 0x474db0 tag 1",
+} as const;
 
 
 /**
@@ -3527,6 +3564,103 @@ export interface Can {
   drag: number;
   /** the cel it came to rest on, once it has — and the pickup exists from then */
   rest?: number;
+}
+
+/**
+ * The HEAD a creature sheds as it dies — class `[0x46faa8]`, class proc
+ * `0x41feb0`, creator `0x4208e0`, think `0x41ffb0`, hit `0x420090`, script
+ * `0x46fa68`.
+ *
+ * Two classes call the creator from their death state: the zombie as tag 0
+ * of its death ends (`0x420872`, mode 0) and igor as tag 0 of its own does
+ * (`0x425679`, mode 1). `belfry.snd` names both — `0047 zombie hea[d]` is
+ * index 0x13, `0031 igor's hea[d]` index 5 — and the one it plays on a kick is
+ * `0135 basketball`.
+ *
+ * The creator (`0x4208e0`) puts it at the point and velocity it is handed, faces
+ * it west when that velocity's x is negative (`0x42090c`) and installs
+ * `0x46fa68` at tag `mode`, playing index 5 first for mode 1 (`0x420951`).
+ * The class (`0x41fec7`) is a ball: divisor 5, `0x42f7f0(0.3)` — a floor or a
+ * wall hands back three tenths turned round — `0x42f850(0.8)` of weight and
+ * `0x42f7a0(0)`, no drag at all, so nothing on the ground slows it.
+ *
+ * The think (`0x41ffb0`) removes it more than 800 pixels from the player
+ * (`0x41ffc9`), and the moment its `obj+0xc` points against the way it faces
+ * (`0x41ffde`..`0x41fffa`) — so the wall that turns it round is the end of it.
+ * Tag 0 reinstalls itself with index 0x13 on every frame it stands
+ * (`0x420010`), and tag 0's first record carries `dx 7, dy -55`, so the
+ * zombie's head hops for as long as it lasts and gathers speed each hop. Tag 1
+ * reinstalls itself with index 5 each time it runs out (`0x42003f`): igor's
+ * rolls.
+ *
+ * Only the zombie's can be struck — 3146..3148 carry no body box — and only by
+ * the player's own object (`0x420095`, `cmp eax, [0x4ac3d4]`): index 0x39,
+ * **400 points** (`0x4200b4`), a green ball at its point (`0x4200c9`) and
+ * `return 1`, so the exchange sends it off the foot that kicked it.
+ */
+export const HEAD = {
+  /** `0x41fecd` — `obj+0xe` */
+  divisor: 5,
+  /** `0x41ff06` — `0x42f7f0(obj, 0.3f)`, the word `0.3 × −8192.0` */
+  bounce: Math.trunc(0.3 * -8192),
+  /** `0x41ff14` — `0x42f850(obj, 0.8f)`, `0.8 × 10` */
+  weight: 8,
+  /** `0x46fa68` tag 0 — the zombie's, and its first record is the hop */
+  hop: {
+    cels: [1869, 1870],
+    hold: 2,
+    dx: [7, 0],
+    dy: [-55, 0],
+    from: "0x46fa68 tag 0",
+  },
+  /** `0x46fa68` tag 1 — igor's, rolling */
+  roll: {
+    cels: [3146, 3147, 3148],
+    hold: 2,
+    dx: [0, 0, 0],
+    dy: [0, 0, 0],
+    from: "0x46fa68 tag 1",
+  },
+  /** `0x41ffc9` — `cmp eax, 0x320` */
+  range: 0x320,
+  /** `0x42001b` — every landing of the zombie's */
+  bounceSound: 0x13,
+  /** `0x420951` / `0x42005a` — igor's, as it is made and every roll after */
+  rollSound: 5,
+  /** `0x4200a5` — `0135 basketball` */
+  kickSound: 0x39,
+  /** `0x4200b4` */
+  award: 0x190,
+  /**
+   * Where each creature's death hands it over — the offset from the dying
+   * thing's point, along its facing, and the velocity:
+   *
+   * - the zombie, `0x420842`..`0x420867`: thirty ABOVE the point, `vy -10`,
+   *   and `vx` one pixel BACKWARDS (`cmp [obj+0x28], 1; sbb; and -2; inc`);
+   * - igor, `0x425639`..`0x42566e`: thirty IN FRONT, `vy -12`, `vx` ten
+   *   forwards (`sbb; and 0x3c; sub 0x1e` and `sbb; and 0x14; sub 0xa`).
+   */
+  sheds: [
+    { dx: 0, dy: -0x1e, vx: -1, vy: -10, from: "0x420842" },
+    { dx: 0x1e, dy: 0, vx: 10, vy: -12, from: "0x425639" },
+  ],
+  from: "0x4208e0 / 0x41feb0 / 0x41ffb0 / 0x420090 / 0x46fa68",
+} as const;
+
+/** one head, from the frame it is shed */
+export interface Head {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** `obj+0x28` — set when the velocity it was made with pointed west */
+  west: boolean;
+  /** `AI+0` — which of the two it is, and so which tag it plays */
+  mode: 0 | 1;
+  /** engine frames into the tag */
+  clock: number;
+  /** `obj+0x2e` as the mover left it last frame */
+  down: boolean;
 }
 
 export const ROLLER = {

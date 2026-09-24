@@ -329,10 +329,12 @@ instead of making it flinch (`0x456496`) and sends the get-up home; getting up i
 its own script at its own rate — which is why a `then` field exists, since the
 knockdown runs two frames a cel and the get-up three. A flinch in the melee half
 goes back into the melee stance and one anywhere else into a lob (`0x456058`).
-Blows landed while it is throwing, flinching or getting up take health and get
-no reaction (`0x456470`), so a throw cannot be punched out of. Dead, it comes
-apart over eighteen frames and burns as cel 3140 for ever; the object is never
-destroyed.
+Blows landed while it is throwing, flinching or getting up take health, goo, a
+grunt and a shove and get no reaction (`0x456470`), so a throw cannot be punched
+out of. The grunt is for blows it survives; the killing one plays its death
+alone. Dead, it comes apart over eighteen frames, plays 0x32, and burns as cel
+3140 for ever, crackling every thirteen to twenty frames (`0x456171`); the
+object is never destroyed.
 
 Its fireball: `0x456240` builds a second object of its own class with a
 restitution of 0.8 so the low shot bounces, and every frame of it carries a strike
@@ -359,9 +361,12 @@ pinned at 100 and re-stamped by the think's own epilogue on every single frame, 
 there is no window in which one is disarmed. One flinch cel installed
 unconditionally — no height test, no facing test, no random roll anywhere in any
 of the three handlers, where chapter four's punk has four takes and picks between
-them. An award paid straight out of the hit handler rather than carried on the
+them — and held until they LAND: state 10 waits for the mover's on-the-ground
+word before the run goes back on (`0x4398e7`), and the flinch cel has no body
+box, so one knocked into the air cannot be hit again until it comes down. An
+award paid straight out of the hit handler rather than carried on the
 object. Six classes named in an ignore list so that they cannot hurt each
-other. And they are on WHEELS: every class init calls `0x42f7a0(obj, 0.05f)`, a
+other — the four of the gang, the knifeboy's knives and the roller. And they are on WHEELS: every class init calls `0x42f7a0(obj, 0.05f)`, a
 ground friction of 409 in 8192 against the allocator's 5734, so the run's strides
 pile up to forty-odd pixels an engine frame and the thing coasts for a dozen
 frames after it — which is what the "still coasting" and "slowed under ten"
@@ -392,7 +397,8 @@ harder and counts, every third counted blow pops a can, and a blow over 75 burst
 it and throws every can it has left at once. Weak hits still count toward the next
 one. **What stops it is its art, not a number** — it has no health word at all, and
 the emptied cel 8505 carries no body box, so the collision pass stops offering it
-as a victim the moment it shows. That is the same trick as the player's own
+as a victim the moment it shows. And only the player can rock it: `0x43b660`
+turns away any other striker, a flare included. That is the same trick as the player's own
 invulnerability while staggering.
 
 ## SERVICE is the first level that is a system
@@ -462,7 +468,9 @@ instead — 750 health, a divisor of 13 against the gang's 7, a shove weight
 nothing else in the chapter sets, and a walk whose cels carry no stride at all,
 so it travels on its velocity. Its hit handler is the only one in the chapter
 with **no ignore list**, which means goop, knives and its own allies all land on
-it. The level waits for it as well as for the count: SERVICE's share is chapter
+it. It bleeds with no hitter (`0x43d28b`), so its goo flies every way, and its
+death throws the body up and lets it come down bouncing at seven tenths
+(`0x42f7f0(obj, 0.7)` at `0x43d0c5`), thudding 0x3d on every landing. The level waits for it as well as for the count: SERVICE's share is chapter
 two's ordinary 0.75, but its death writes `[0x472574] = 1` (`0x43d309`), and the
 chapter's end test `0x43b950` opens SERVICE's goal only when the count is met AND
 that flag is set (`0x43b9ec`).
@@ -530,7 +538,10 @@ here with **no gravity at all** — `0x42f850(obj, 0)`, plus a standing rise of 
 pixels a frame written straight into `obj+0xa` — and the flinch it takes is chosen
 by the cel it was caught on, so the eye shuts the way it was open; a cel outside
 those three takes the damage and no reaction, and a blow over `0x46` knocks it
-out of the air. It spits a glob every fourth frame of its spit, five in all, and
+out of the air — and a second blow during the knock-out finds it in that
+state, not the one it was knocked out of, so it takes the damage and the fall
+runs on. The hover goes on under every flinch and the death (`0x43de45` runs
+before the jump table). It spits a glob every fourth frame of its spit, five in all, and
 dies in a burst that leaves no body. An eye that finds the player two hundred
 pixels off its height, or on a ladder, goes after him by ladder: `0x40b660` hands
 it the level's nearest one, it drifts until it is within fifty pixels of it,
@@ -628,8 +639,9 @@ Its takes are sorted by one number, `0x2d`: under 45 a random one of the three
 single cels of `0x473a28`, 45 or over the six-cel `0x473a48` — and mid-dive the
 light one is that script's tag 4, which drops it back into the dive's recovery.
 And there is a third kind of blow it tests for before either — a strength of
-exactly **−9**, which gets twenty-six frames of `0x473a88` and an extra sound.
-Minus nine is the flare, and level eight is the level that places a
+exactly **−9**, which gets twenty-six frames of `0x473a88`, its hit sound, a
+spark and 0x13 — and no flame: nothing in the class calls `0x44ff20`. A blow on
+the wing throws a spark too, and no goo (`0x441db8`). Minus nine is the flare, and level eight is the level that places a
 `statflaregun` and a `statflare` to throw at it.
 
 **It is two fights.** Emptying the first bar — by blows (`0x441e4a`) or by the
@@ -639,9 +651,12 @@ first tag is still weightless and is steered at the room's centre X
 times on `[0x473de0]`; its second turns the weight on, and on the floor
 `0x441787` writes a full thousand back and it stands up as the grounded form,
 pinned to the X it landed at. That form's handler (`0x441ef0`) counts blows:
-three takes of `0x473ba8`, then a snap turn if the player is behind it or a
-swing if not. Emptying the second bar is `0x473d38` and sound 0x1a, and state 16
-never removes the body.
+three takes of `0x473ba8`, which take no blow while they show, then a snap
+turn if the player is behind it or a swing if not. It falls and dies on a
+health below zero, not at it (`jge`). Emptying the second bar is `0x473d38` and
+sound 0x1a; as its first tag ends fifteen roaches spill out of the body with
+0x1b (`0x4423a0`), and state 16 never removes it — a blow on cel 7114 kills it
+again from the top.
 
 **A sprinkler record is not an object.** `0x440800` creates nothing: it walks the
 seven records and files each one's point into a seven-entry table at `0x4a7000`
@@ -679,20 +694,33 @@ A rect on a bat's record is an alarm and not a patrol: once the player's point
 is inside it the bat drops off the ceiling and flies its own cruise and dives
 (`brains/bat.ts`), with `obj+0xc` clamped to ±27 on every think (`0x422f12`).
 It is worth nothing outside the shallow dive, which is the one state that gives
-it a strength (`0x423199`, twenty). A dead bat is thrown up at forty
-(`0x423334`), falls under a gravity its death turns back on, and goes the frame
-it lands.
+it a strength (`0x423199`, twenty). Its hit handler writes `obj+0xa = -40`
+(`0x423334`) before the exchange weighs it in, and against the player's mass
+that turns round: the body leaves downwards, falls under a gravity its death
+turns back on, and goes the frame it lands. The handler tests neither the
+blow's sign nor its own state, so a −9 fells a bat, and a falling body — 2205
+and 2206 carry a body box — is struck again and pays another seventy. It
+sprays sixty whatever the blow (`0x423313`).
 
 **Ghengis** is 200 and 400 points, and leaves no body: the death ends in nine
-pieces and a blast worth `0x65` (`0x422c60`). The **skeleton** is 200 and **450**, the most
+pieces and a blast worth `0x65` (`0x422c60`). Its handler gives the spray no
+hitter, so its goo flies loose in every direction (`0x422b73`). The **skeleton** is 200 and **450**, the most
 any ordinary creature is worth, and a blow of 0x3c or more knocks it down and
 throws it (`0x46fcf0`, dx 170 and dy −420 on cel 1265), where anything less is a
 one-cel take that costs 0x14 more from behind and ends in a leap three times in
-five. It throws a bone (`0x421310` index 0). **Igor** is 200 and 350, and it has
+five. "Behind" is where the blow MET it — the contact's x against its own point
+(`0x423b61`) — not which way the striker faced. It throws a bone (`0x421310` index 0). **Igor** is 200 and 350, and it has
 a script no other class has — `0x46fea0`, whose `ticksPerFrame` is zero and whose
 five records all carry a negative dx: the walk run backwards and travelling
 backwards. The zombie keeps its arms up when struck in its guard (`0x420ae1`),
-and every take hands back to that guard.
+and every take hands back to that guard — but only once: a second blow finds it
+in the take itself and drops the guard onto a cel nothing can reach.
+
+Zombies and Igors shed their **heads** (`0x4208e0`, class `[0x46faa8]`) as their
+deaths reach their second tag. A zombie's hops off backwards, gathering speed
+with every hop, and pays **400** each time the player strikes it (`0x420090`,
+`0135 basketball`); an Igor's rolls off forwards with no body to strike. Either
+is gone 800 from the player or once a wall turns it round (`0x41ffb0`).
 
 **Two bosses, and neither pays anything.** The wraith (`0x41ec80`, seven
 hundred health, one in the game) and the bishop (`initvpriest`, twelve hundred —
@@ -715,9 +743,15 @@ most any creature outside a boss is worth. It has eleven scripts and two of them
 are the same walk in reverse: `0x46c720` tag 0 is 2100…2105 at dx 65 and tag 1 is
 2105…2100 at −195, −130, −65, −65, −65, −65. It backs away faster than it comes
 on, and after a flinch it does so two times in three (`0x41440e`); the third it
-winds up a swing. It dies two ways: `0x4148ed` tests the record's `param`, so the
-gunner gets a death of its own and leaves its blaster a hundred pixels behind it
-(`0x414599`). Either way the body is gone three cels into the death (`0x41469c`).
+winds up a swing. The first blow that leaves it under half its health is not a
+flinch at all (`0x414933`): it turns for a switch, and with none to find it is
+back on its stance the next frame. It dies two ways: `0x4148ed` tests the
+record's `param`, so the gunner gets four cels of a death of its own — drawn with
+a body, so a blow in them kills it again and pays again — and leaves its blaster
+a hundred pixels behind it as they end (`0x414599`). Either way the body is gone
+three cels into the standing death (`0x41469c`), and that is when it says
+`#0084 TCop Dies` and throws its goo, not at the blow. The blaster's bolt is a
+full blow to it: `0x4147d9` writes the −1 back as a hundred.
 
 **The slurp** (`initslurp`) is twenty of MAZE's twenty-seven and worth nothing —
 `0x415100` has no `0x40d450` in it. Sixty health, no gravity, and `0x414a36`
@@ -727,7 +761,9 @@ stride: each dx 50 is added into its velocity, nothing drags it in the air, and
 `0x414b79` halves it above thirty — so a slurp comes at you fast. Its three
 scripts are three different kinds and **every record in all three is cel 2550**:
 whatever state a slurp is in, it looks the same. It leaves no body: the first
-think after the killing blow removes it (`0x41507a`).
+think after the killing blow removes it (`0x41507a`), in a green ball and a
+burst of twenty gobs thrown every way (`0x40cba0(point, 0x78, 0)` at
+`0x4150b6`).
 
 **And the cage doors are opened by the cops.** `initswitch` and `initcagedoor`
 are SERVICE's lever and SEWER's door told again — `0x46c050` has the same four
@@ -791,8 +827,9 @@ any size fells one, and it does not count. Its record's param picks one of two
 (`0x411962`): param 1 is a hand in the wall that breaks out when the player
 comes into its rect, param 0 is already on the floor and fighting; LAB places
 six of the first and four of the second. **The test tube** (`inittube`, one in
-the game) carries twelve hundred, the player's own number, and pays nothing. It
-throws: its rear-back ends in one to four shards of glass (`0x41973e`,
+the game) carries twelve hundred, the player's own number, and pays nothing; the
+blaster's bolt is a blow to it (`0x419999`), and only a sound to a Puke Boy
+(`0x41825e`). It throws: its rear-back ends in one to four shards of glass (`0x41973e`,
 `0x419860`) at dx 400 or 200 through its divisor of 13, 140 pixels up, that break
 with a flash where they land; and its flip breathes a puff out on its third
 frame (`0x419910`).

@@ -5,11 +5,10 @@
  *   npx tsx tools/runmachine.mts blaster      (from skullcracker/)
  *
  * Its bolt carries the CODE -1 rather than a number (`0x413bf9`, through the
- * variant map at `0x413c48`), and a strength below 1 is not a blow: every
- * ordinary handler in the game throws it away at `0x4199b9`. Boggs' handler is
- * the one that translates it — `0x41bc71` rewrites -1 as a hundred — so the gun
- * in the last room of the game does a full blow to exactly one thing and
- * nothing at all to everything else.
+ * variant map at `0x413c48`), and a strength below 1 is not a blow to most
+ * handlers. Chapter four's own read it first: Boggs' `0x41bc71`, the TCop's
+ * `0x4147d9` and the test tube's `0x419999` rewrite -1 as a hundred, so the gun
+ * is a full blow to the things of the chapter that hands it out.
  *
  * And a bolt alone still cannot kill it, for the game's own reason: the two
  * flags at `0x46e080` and `0x46e084` SHIP as 1 and are cleared only by emptying
@@ -120,7 +119,7 @@ h.frame(15);
 if (Math.round(boggs().hp) !== 4000) fail(`the healing caps at 4000; it reads ${boggs().hp}`);
 ok(`...and 0x41be7c puts every point of it back, because both flags ship set — the machine is what stops it`);
 
-// 5. the same bolt does NOTHING to an ordinary creature. `[` walks back
+// 5. ...and to one of MAZE's cops, whose `0x4147d9` translates it too. `[` walks back
 //    through chapter four, which keeps the weapon (`0x4511f0` runs per
 //    CHAPTER), so this is the gun taken in VAT fired at one of MAZE's cops
 for (let i = 0; i < 3; i++) {
@@ -151,12 +150,17 @@ if (target.x < game.p.x) {
 if (Math.sign(target.x - game.p.x) !== game.p.facing || Math.abs(target.x - game.p.x) > 1000)
   fail(`the cop at x${target.x} is not in the line of fire from x${game.p.x} facing ${game.p.facing}`);
 const shots = game.roundsIn(6);
-for (let i = 0; i < 25; i++) {
+for (let i = 0; i < 25 && target.hp === before; i++) {
   h.press("punch");
   h.frame(2);
 }
 if (game.roundsIn(6) >= shots) fail(`the bolts at the cop were never fired`);
-if (target.hp < before) fail(`a strength below 1 is not a blow (0x4199b9); the cop went ${before} -> ${target.hp}`);
-ok(`and ${shots - game.roundsIn(6)} bolts take nothing off a cop — ${Math.round(target.hp)}/${target.max}hp still`);
+// `0x42f910` at 100: cel 4000's own pair, mirrored, plus the bolt's hundred a
+// frame, and the integer root of the squares
+const pair = game.celRec(game.level!.sbk, 4000)?.blow ?? { dx: 0, dy: 0 };
+const each = Math.floor(Math.hypot(pair.dx + 100, pair.dy));
+const took = before - target.hp;
+if (took !== each) fail(`a bolt is 0x42f910 at 100 on a cop, ${each}; it took ${took}`);
+ok(`and a bolt takes ${took} off a cop — the -1 written back as 100 (0x4147d9)`);
 
-pass(`the blaster fires, its bolt is a code, and only Boggs reads it`);
+pass(`the blaster fires, its bolt is a code, and chapter four's own read it`);

@@ -58,9 +58,8 @@ import {
 
 /**
  * State 5, `0x454634`, and the hit handler `0x454790` that walks into it. The
- * page owns the animation; the sounds and the lying-still are
- * {@link weredReacts}, and the flame the wreck burns with for good is not
- * carried (a reaction has no way to light one).
+ * page owns the animation; the sounds, the lying-still and the flame the wreck
+ * burns with for good are {@link weredReacts}.
  *
  * - The handler: `0x454821` is `dec word ptr [eax]` on `AI+0`, the 3 the creator
  *   wrote, with the blow's own strength fetched at `0x454812` and spent only on

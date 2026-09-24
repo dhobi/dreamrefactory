@@ -113,9 +113,9 @@ import {
  *   it squeals `0x21`, clears the bar, installs the death and pays **0x104** to
  *   the score (`0x452737`). The page plays it as {@link Foe.burns} with
  *   `fatal`, and the shots are {@link werecReacts} — `0x4526db` passes SELF as
- *   the target, so the gap is zero and every one of them comes out flat. One
- *   thing differs: this death's corpse lies `0xc8` frames (`0x452731`), and the
- *   page lays every death of the class down for the same {@link Foe.linger}.
+ *   the target, so the gap is zero and every one of them comes out flat. This
+ *   death's corpse lies `0xc8` frames (`0x452731`) where the blow's copies
+ *   `[0x46b204]` (`0x452a6a`) — the burn's own `linger` in {@link Foe.burns}.
  * - **7**, `0x452898`: the flinch, and it ends in the stance rather than in
  *   anything of its own — one branch shorter than the punk's. The flinch's
  *   {@link FoeAnim.resume} is that stance.

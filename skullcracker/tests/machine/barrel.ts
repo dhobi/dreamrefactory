@@ -18,6 +18,9 @@
  * ten `statblasterpack` refills here and nothing to fire them with, because the
  * gun itself is in VAT.
  */
+import { COP_SLUG, copReacts } from "../../src/brains/cop";
+import type { BrainCtx, Enemy } from "../../src/brains/kit";
+import { FOES } from "../../src/foes";
 import { GUN_CODES, WEAPONS } from "../../src/guns";
 import { fail, headless, ok, pass } from "./harness";
 
@@ -124,5 +127,61 @@ const names = new Set(lying.map((g) => GUN_CODES[g.code]?.name ?? String(g.code)
 if (lying.length !== 10 || names.size !== 1 || !names.has("statblasterpack"))
   fail(`BARREL places ten statblasterpack and no statblaster; it places ${lying.length}: ${[...names].join(" ")}`);
 ok(`and its ten blaster packs have no gun in the level to go in`);
+
+// 7. a GUNNER dies its own way — `0x4148ed` reads `AI+0x32`, the record's
+//    param, and gives it `0x46c8f0` tag 3; `0x414566` ends that by dropping
+//    the blaster behind it and installing kind 11, whose third frame takes the
+//    body away (`0x41469c`). Its four cels carry a body and `0x4147d0` has no
+//    state test, so a blow in them kills it again and pays again (`0x41490d`)
+const gunnerAt = game.level!.spawned.flat().find((e) => e.kind === "initcop" && e.param);
+if (!gunnerAt) fail(`BARREL places gunner TCops (param 1)`);
+await go(`&x=${Math.round(gunnerAt.x)}&y=${Math.round(gunnerAt.y) - 20}`);
+const gunner = game
+  .spawnedHere()
+  .filter((e) => e.kind === "initcop" && e.param)
+  .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+if (!gunner) fail(`no gunner near x${gunnerAt.x}`);
+const box = { top: gunner.y - 100, bottom: gunner.y, left: gunner.x - 50, right: gunner.x + 50 };
+const packs = () => game.level!.guns.flat().length;
+const lie = packs();
+const paid = game.stats.score;
+game.strikeFoe(gunner, gunner.hp + 1, { dx: 0, dy: 0 }, 1, gunner.y - 50, box);
+if (gunner.state !== "dead" || gunner.anim.from !== "0x46c8f0 tag 3" || gunner.script !== 9 || gunner.tag !== 3)
+  fail(`a gunner dies on 0x46c8f0 tag 3 (0x4148f4); it is on ${gunner.anim.from}`);
+if (!game.celRec(game.level!.sbk, 2130)?.body || !FOES.initcop.corpseTakesHits)
+  fail(`2130..2133 carry a body, so the gunner's death takes blows`);
+game.strikeFoe(gunner, 50, { dx: 0, dy: 0 }, 1, gunner.y - 50, box);
+if (game.stats.score - paid !== 2 * 550) fail(`a second blow in tag 3 pays 0x226 again; the score rose ${game.stats.score - paid}`);
+if (packs() !== lie) fail(`the blaster drops as tag 3 ENDS, not at the blow`);
+h.until(() => gunner.anim.from === "0x46c9a8 tag 0", 8);
+if ((gunner.anim.from as string) !== "0x46c9a8 tag 0" || (gunner.script as number) !== 11) fail(`tag 3 hands to kind 11 (0x4145a4); it shows ${gunner.anim.from}`);
+if (packs() !== lie + 1) fail(`0x414599 drops the blaster as tag 3 ends; ${packs() - lie} dropped`);
+h.until(() => !game.spawnedHere().includes(gunner), 10);
+if (game.spawnedHere().includes(gunner)) fail(`kind 11 takes the body away on its third frame (0x41469c)`);
+ok(`a gunner dies on its own four cels, pays again if struck in them, drops the blaster and goes on kind 11`);
+
+// 8. the first blow that drops a cop under half is not a flinch — `0x414933`
+//    installs `0x46c888` tag 0 and sets `AI+0x30`, once — and the body goes
+//    with lab.snd 0xd and 0x78 of goo on kind 11's last frame, not at the blow
+const C = FOES.initcop;
+const blow = { damage: 30, hits: 1, dy: 0, facingAway: false };
+const cop = { max: 250, hp: 124 } as { max: number; hp: number; switchRun?: number };
+if (C.pick!(blow, { max: 250, hp: 125 }) !== 0) fail(`at exactly half it still flinches (0x414949 jle)`);
+if (C.pick!(blow, cop) !== 1 || cop.switchRun !== 1) fail(`under half it takes the switch run and latches AI+0x30`);
+if (C.pick!(blow, cop) !== 0) fail(`...and only once (0x414952)`);
+const run = C.flinch![1];
+if (run.from !== "0x46c888 tag 0" || run.resume?.kind !== 1) fail(`the switch run's first cel hands to the stance with no switch (0x414618)`);
+const said: number[] = [];
+const goo: number[] = [];
+const k = { say: (_e: unknown, id: number) => said.push(id), spray: (_e: unknown, n: number) => goo.push(n) } as unknown as BrainCtx;
+const body = { state: "dead", anim: C.death!, clock: 5 } as Enemy;
+copReacts(body, C, 6, k);
+body.clock = 6;
+copReacts(body, C, 6, k);
+if (said.join() !== "13" || goo.join() !== "120" || C.deathSound !== undefined)
+  fail(`0x4146ab says 0xd and 0x4146d2 sprays 0x78 as the body goes, and the blow says nothing; said ${said} sprayed ${goo}`);
+if (!C.hitsOwn || !game.SPARES.initcop?.kinds.includes("initslurp") || !game.SPARES.initcop.kits.includes(COP_SLUG))
+  fail(`0x4147e6..0x41482f turn away the slurp and the slug, and not a cop`);
+ok(`under half the first time it runs for a switch instead of flinching, and it goes with 0xd and 0x78 of goo`);
 
 pass(`BARREL's conveyors carry, its chairs turn, and its twelve cops stand`);

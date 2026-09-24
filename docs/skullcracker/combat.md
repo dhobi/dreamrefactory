@@ -158,10 +158,13 @@ thirty a frame against a punch worth about fifty.
 And -1 is not a requirement, it is a conversion. What carries -1 is the
 BLASTER's bolt — `0x413af0` maps the variant the bolt remembers to its strength,
 and variants 1..3 all give -1 while the blaster fires with 2 and 3. So the bolt
-is worth a full hundred to Boggs and **nothing at all to anything else**: every
-ordinary handler treats a strength below 1 as no damage (`0x4199b9`). That is
-what the gun in its room is for, and it only works because the codes are
-carried at all.
+is worth a full hundred to Boggs and nothing to most of what it meets, whose
+handlers treat a strength below 1 as no damage. The chapter's own are the
+exceptions: the TCop's `0x4147d9` and the test tube's `0x419999` convert it the
+same way (`Foe.minusOne`), and a Puke Boy answers it with a sound (`0x41825e`).
+The big gun's bolt is the same object fired with variant 0, a plain 100 on tag
+0, and the TCop turns that one away (`0x41482a`). That is what the gun is for,
+and it only works because the codes are carried at all.
 
 The healing is not a phase Boggs enters — it is how it starts:
 
@@ -531,7 +534,9 @@ The split (`0x424de0`) calls the class's own creator seventy pixels behind it,
 facing the other way, with the argument that starts the copy teleporting in.
 `0x41ed12` makes the one the level places the named one (`AI+4` = 1) because it
 is alone when created; every copy is lesser: `0x42503d` kills it with any blow,
-and `0x424f30` dissolves all of them as the named one's death ends. A take
+and `0x424f30` dissolves all of them as the named one's death ends — or as a
+wraith is struck by the wraith's own beam, the scepter's tag 0 (`0x424fdd`),
+which takes nothing off the one it hits. A take
 (`0x46f898`, one cel) splits three times in ten as it ends (`0x424e14`); the
 killing blow gets the nine-cel dissolve `0x46f8a8`, and nothing is left lying.
 
@@ -961,7 +966,7 @@ eleven of them — eight creatures, one prop and two things in the air:
   0x4547b3  initwered   hit 0x454790   burns, health to 0       Foe.burns + weredGate
   0x4550d3  initdog     hit 0x4550b0   its death, and its 200   Foe.burns (dies)
   0x45631e  initwbooly  hit 0x456310   catches, nothing else    Foe.burns
-  0x441d30  initkragg   hit 0x441cf0   state 9                  Foe.burns + kraggReacts + kraggGate
+  0x441d30  initkragg   hit 0x441cf0   state 9, and no flame    Foe.burns (noFlame) + kraggReacts + kraggGate
   0x44fe89  initmailbox hit 0x44fe80   a late flame, no dent    Foe.burns (late)
   0x455763  fireball    hit 0x455730   stops, hops, is removed  CastKit.onCode (wbooly.ts)
   0x452fcc  MOLITOV's   hit 0x452f80   burns and bursts         CastKit.onCode (werec.ts)

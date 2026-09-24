@@ -63,21 +63,28 @@ import { install, type Brain, type BrainCtx, type CastKit, type Enemy } from "./
  * page owns those animations; `Foe.initzomb` carries the pick, the hand-back
  * to the guard and the two-tag death.
  *
+ * - **the handler**, `0x4209f0`, turns away the bats' class (`0x420a13`)
+ *   and a negative strength (`0x420a2b`) and nothing else — not its own class
+ *   ({@link Foe.hitsOwn}). `belfry.snd` 0xf on every blow, 0xc on the one that
+ *   kills.
  * - **6**, the flinch, `0x470248`: four one-cel tags at four engine frames
  *   apiece, 1860/1861/1862 and 1846. `0x420afe` picks one of the first three
  *   with `0x434540(3) - 1`, but `0x420ae1` takes tag **3** instead — cel 1846,
  *   the arms still up — whenever it is hit in state 5, state 3, or state 2 tag
  *   1. A zombie mid-claw does not drop its guard for a punch; it just holds the
- *   pose. `0x4207e7`, the state's own handler, then ends every flinch back in
- *   kind 2 tag 1, the hold, whichever tag it played.
+ *   pose — once. 1846 is the only one of the four with a body, so the next
+ *   blow finds it in state 6, which is none of the three, and the guard drops
+ *   onto a cel nothing can reach. `0x4207e7`, the state's own handler, then
+ *   ends every flinch back in kind 2 tag 1, the hold, whichever tag it played.
  * - **7**, the death, `0x470270`: tag 0 is 1863–1865, tag 1 is 1866–1868, three
  *   engine frames a cel. `0x420aaa` installs tag 0 and seeds `AI+0x2e` from
  *   `[0x46b204]` — fifty corpse frames, the same word this page's
  *   {@link Enemy.linger} already carries. `0x420827` then clears `obj+0x26`
- *   (the creator set it 8 at `0x41ef2e`), hands to tag 1, and spawns one more
- *   object thirty pixels above itself through `0x4208e0` — velocity `{vy: -10,
- *   vx: -1 east / +1 west}`, class `[0x46faa8]`, script `0x46fa68` — the thing
- *   that rises off a zombie as it dies and drifts back over it. `0x420883`
+ *   (the creator set it 8 at `0x41ef2e`), hands to tag 1, and sheds its HEAD
+ *   thirty pixels above itself through `0x4208e0` — velocity `{vy: -10,
+ *   vx: -1 east / +1 west}`, class `[0x46faa8]`, script `0x46fa68` — which
+ *   hops away backwards and pays four hundred to the foot that kicks it: see
+ *   `HEAD` in {@link file://../props.ts} and {@link Foe.sheds}. `0x420883`
  *   counts `AI+0x2e` down and, on the frame it runs out, calls
  *   `0x40cba0(self.point, -0xd, 0)` and returns **1**: the only `mov ax, 1` in
  *   the whole of `0x420330`, and the frame the object is removed.

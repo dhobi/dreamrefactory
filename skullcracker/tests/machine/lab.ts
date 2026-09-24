@@ -17,6 +17,7 @@
 import { fail, headless, ok, pass } from "./harness";
 import { FOES } from "../../src/foes";
 import { TUBE, TUBE_BREATH, TUBE_SHARDS, tube } from "../../src/brains/tube";
+import { armGate } from "../../src/brains/arm";
 import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
 
 /**
@@ -24,6 +25,15 @@ import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
  * an engine frame, as `stepFight` calls it; and the two classes' records.
  */
 const machines = (): void => {
+  // `0x418b58`: an arm that has hold of you turns every blow away
+  {
+    const blow = { damage: 50, code: 0, by: { player: true } };
+    const held = { script: 5 } as unknown as Enemy;
+    const loose = { script: 2 } as unknown as Enemy;
+    if (armGate(held, FOES.initarm, blow) !== null || armGate(loose, FOES.initarm, blow) !== blow)
+      fail(`0x418b58 refuses every blow in state 5, and only there`);
+    ok(`an arm that holds you cannot be struck`);
+  }
   const casts: CastKit[] = [];
   const said: number[] = [];
   let rolls: number[] = [];
@@ -228,6 +238,53 @@ const t = nearest("inittube");
 if (!t || Math.abs(t.x - 8204) > 200) fail(`LAB's one test tube stands at x8204; nearest is at ${t?.x}`);
 if (t.max !== 1200 || t.hp !== 1200) fail(`0x411be4 gives it 0x40e300(0x4b0); it has ${t.hp}/${t.max}`);
 ok(`the test tube carries the player's own twelve hundred health`);
+// ...and the blaster's bolt is a blow to it: `0x419999` writes the −1 back as
+// 100, and `0x42f910` makes that cel 4000's pair plus the bolt's hundred a
+// frame. Only on a cel with a body (`0x4303b3`): its stand, 5350, has none
+{
+  const shoot = (e: Enemy): void => {
+    const c = game.celRec(game.level!.sbk, game.celOf(e))!;
+    const b = game.hurtBox(e, c, game.level!);
+    const dir = e.x > game.p.x ? 1 : -1;
+    // `spawnBolt` lifts it 40 and scatters it back down by up to 40
+    game.spawnBolt(e.x - dir * 150, (b.top + b.bottom) / 2 + 20, dir);
+    h.frame(3);
+  };
+  t.state = "flinch";
+  t.anim = FOES.inittube.flinch![0];
+  t.clock = 0;
+  shoot(t);
+  if (t.hp !== 1200 || !game.bolts.length) fail(`a bolt goes on through the tube on its body-less stand; ${t.hp}, ${game.bolts.length} in the air`);
+  game.bolts.length = 0;
+  t.asleep = false;
+  t.state = "flinch";
+  // one of its charge's cels held, so the box the bolt is aimed at stays put
+  t.anim = { cels: [TUBE.charge.cels[0]], hold: 10, from: "test" };
+  t.clock = 0;
+  // ...and a frame for the mover to stand it on that cel's own foot
+  h.frame();
+  shoot(t);
+  const pair = game.celRec(game.level!.sbk, 4000)?.blow ?? { dx: 0, dy: 0 };
+  const each = Math.floor(Math.hypot(pair.dx + 100, pair.dy));
+  if (1200 - t.hp !== each) fail(`a bolt on 5410 takes 0x42f910 at 100, ${each}; it took ${1200 - t.hp}`);
+  // `0x41825e`: puke answers a −1 with lab.snd 0xb and takes nothing
+  const puke = nearest("initpuke")!;
+  const had = puke.hp;
+  puke.asleep = false;
+  puke.state = "flinch";
+  puke.anim = { cels: [3000], hold: 10, from: "test" };
+  puke.clock = 0;
+  h.frame();
+  shoot(puke);
+  if (puke.hp !== had || game.bolts.length) fail(`a bolt stops on puke and takes nothing (0x41825e); ${had} -> ${puke.hp}`);
+  const P = FOES.initpuke;
+  if (JSON.stringify(P.minusOne) !== '{"sound":11}' || !P.corpseTakesHits || P.lingerPlus !== 1 - 12 || FOES.inittube.lingerPlus !== 1 - 18)
+    fail(`puke answers −1 with 0xb, its 3080 takes blows, and both bodies count from the death's first frame`);
+  if (!game.SPARES.inittube?.kinds.includes("initarm") || !game.SPARES.inittube.kits.includes(TUBE_BREATH))
+    fail(`0x4199c3..0x419a05 turn away the tube's glass, puke's spit and the arm`);
+  ok(`a blaster bolt takes ${each} off the tube when it has a body to hit, and stops on a Puke Boy for nothing`);
+  t.hp = 1200;
+}
 // ...and the goal waits for it: `0x416047` asks `[0x46bfbc]` after the count,
 // and the tube's fatal blow is what writes it (`0x419ac9`)
 for (const e of game.spawnedHere()) if (e.kind === "initpuke") game.killFoe(e, FOES.initpuke);

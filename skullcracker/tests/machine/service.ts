@@ -28,7 +28,7 @@
 import { FOES } from "../../src/foes";
 import { type Enemy } from "../../src/brains/kit";
 import { SKATEBOARD } from "../../src/props";
-import { FPS, fail, headless, ok, pass } from "./harness";
+import { FPS, fail, headless, ok, pass, recordSound } from "./harness";
 
 const h = await headless("level=6");
 const { game } = h;
@@ -137,6 +137,34 @@ for (let i = 0; i < 600 && after < 0; i++) {
 if (!flinched) fail(`never landed a blow on the one at the end`);
 if (after !== 3 && after !== 6) fail(`0x43d062 hands a flinch to kind 3 or kind 6; it went to kind ${after}`);
 ok(`a blow on it flinches, and the flinch hands on to kind ${after}`);
+
+/**
+ * 4d. ...and the blow that fells it. `0x43d28b` hands `0x40cba0` no hitter, so
+ * its goo goes both ways whatever way the blow went; and state 9 calls
+ * `0x42f7f0(obj, 0.7)` (`0x43d0c5`), so the body its death throws up comes
+ * down BOUNCING, with 0x3d on every landing that hands speed back (`0x43d0d3`).
+ */
+await go(8700);
+const felled = game.spawnedHere().find((e) => e.kind === "inithardcore")!;
+felled.hp = 1;
+const heard = recordSound(game);
+const gobsWere = game.gobs.length;
+game.strikeFoe(felled, 120, { dx: 40, dy: 0 }, 1, felled.y, { top: 0, left: 0, bottom: 1, right: 1 });
+const goo = game.gobs.slice(gobsWere);
+if (goo.length !== 20 || !goo.some((g) => g.vx < 0) || !goo.some((g) => g.vx > 0))
+  fail(`a blow of 120 from the west should throw twenty gobs both ways; ${goo.map((g) => Math.sign(g.vx)).join(" ")}`);
+if (felled.state !== "dead") fail(`a blow past its health should fell it; it is ${felled.state}`);
+const thuds = (): number => heard.filter((c) => c.call === "effect" && c.args[0] === 0x3d).length;
+let rose = false;
+for (let i = 0; i < 30; i++) {
+  h.frame();
+  if (thuds() > 0 && felled.vy < 0) rose = true;
+}
+const landed = thuds();
+if (!rose || landed < 2) fail(`at seven tenths the body should come back up off the floor and land again: ${landed} thuds`);
+h.frame(30);
+if (thuds() !== landed || felled.vy !== 0) fail(`...and then lie still and quiet: ${thuds() - landed} more thuds, vy ${felled.vy}`);
+ok(`it bleeds both ways, and its body bounces with ${landed} thuds before it lies still`);
 
 // 5. six levers, and every one of them starts off
 await go();

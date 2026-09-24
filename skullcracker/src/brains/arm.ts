@@ -95,6 +95,7 @@ import {
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Gate,
   type Reaction,
   TICK_SCALE,
 } from "./kit";
@@ -111,21 +112,29 @@ import {
  *   above whatever it was lying on for the whole of `0x46d0b0`, whose own first
  *   frame carries `dy -130`. {@link Foe.death} plays the script and
  *   {@link Foe.frail} the launch.
- * - **`0x418b40`, the hit handler.** It opens `if (obj+0x18 == 5) return 0` —
- *   **an arm that has hold of you cannot be hit**, which is the only defence
- *   this class has and the page has no hook for. Otherwise it sprays through
- *   `0x42f910`/`0x40cba0`, plays `lab.snd` 0x25, installs `0x46d0b0` and pays
- *   `0x40d450(0x71)`. Nothing is subtracted from anything: one blow of any size
- *   and the arm is done, which is what {@link Foe.frail} and `health: 1` say.
- * - **`obj+0x2a`, the "something hit me" word.** `0x430663`, the elastic
- *   collision solver, sets it to 1 on the victim. `0x418904` clears it as the
- *   lunge goes in and `0x418992` reads it back every frame: an arm whose lunge
- *   CONNECTED then measures itself against the point it remembered, and if it is
- *   within fifty pixels of it in both axes it has you. Nothing in this port
- *   writes a collision flag onto a foe — `rat.ts` reads the same word out of
- *   `0x44e304` and reaches the same dead end — so state 4 here only ever takes
- *   its other branch and state 5 is unreachable. Its tail is ported anyway, so
- *   that an arm the page ever does put in state 5 comes out of it correctly.
+ * - **`0x418b40`, the hit handler.** A hitter whose strength is −1 has it
+ *   rewritten to 100 on the hitter itself and is taken as that
+ *   (`0x418b47`..`0x418b4e`). Then `if (obj+0x18 == 5) return 0` — **an arm
+ *   that has hold of you cannot be hit** ({@link armGate}); a strength of
+ *   exactly −6 answers 1 and does nothing else (`0x418b6a`), and anything
+ *   else under 1 is refused. −1 and −6 are pickup codes, and no pickup is
+ *   ever handed to a creature here, so those two arms are read and not
+ *   spent. What is left sprays through `0x42f910`/`0x40cba0`, plays `lab.snd`
+ *   0x25, installs `0x46d0b0` and pays `0x40d450(0x71)`. Nothing is
+ *   subtracted from anything: one blow of any size and the arm is done, which
+ *   is what {@link Foe.frail} and `health: 1` say. It tests no class at all,
+ *   so arms hurt arms ({@link Foe.hitsOwn}).
+ * - **`obj+0x2a`, the "my blow landed" word.** `0x430663`, the elastic
+ *   collision solver, sets it to 1 on the HITTER — `esi` there is the object
+ *   whose `obj+0x1a` strength the exchange spent (`0x43047a`). `0x418904`
+ *   clears it as the lunge goes in and `0x418992` reads it back every frame:
+ *   an arm whose lunge CONNECTED then measures itself against the point it
+ *   remembered, and if it is within fifty pixels of it in both axes it has
+ *   you. Nothing in this port writes that word onto a foe whose blow lands on
+ *   the player — `rat.ts` reads the same word out of `0x44e304` — so state 4
+ *   here only ever takes its other branch and state 5 is unreachable. Its
+ *   tail is ported anyway, so that an arm the page ever does put in state 5
+ *   comes out of it correctly.
  * - **`[0x46b1b4]`, the grab claim.** A single engine-wide word, 1 in the file
  *   and therefore free at boot. `0x4189cf` refuses the grab unless it is 1,
  *   `0x418a1b` takes it to 0 as the hold goes on and `0x418aa1` hands it back as
@@ -596,9 +605,18 @@ export const armReacts: Reaction = (e, foe, _run, _k) => {
   // hundred and fifty up the cel, so the body falls that far through the floor
   // before `obj+0x2e` calls it landed
   e.floor = -150;
+  // ...and the first record's lift is ADDED to what the exchange left it
+  // with: `0x45d090` only puts the script on, and it is `0x45d1a3`, on the
+  // next step, that hands the record's `dy / divisor` to `0x42f8b0`
   const lift = foe.death.dy?.[0] ?? 0;
   const q = lift / (e.divisor ?? foe.divisor);
-  e.vy = (q < 0 ? -Math.ceil(-q) : Math.ceil(q)) * TICK_SCALE;
+  e.vy += (q < 0 ? -Math.ceil(-q) : Math.ceil(q)) * TICK_SCALE;
 };
+
+/**
+ * `0x418b58` — `cmp word ptr [esi+0x18], 5; jne; xor ax, ax`: an arm holding
+ * the player turns every blow away.
+ */
+export const armGate: Gate = (e, _foe, blow) => (e.script === 5 ? null : blow);
 
 export { NOT_HERE as ARM_NOT_HERE };

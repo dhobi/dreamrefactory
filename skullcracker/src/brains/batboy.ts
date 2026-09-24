@@ -132,7 +132,8 @@ import {
  *   instructions long. It waits on `obj+0x2e` — back on the ground — and then
  *   installs the RUN, `0x474438` tag 4, not a stance. So a batboy knocked into
  *   the air comes down already charging, and it is the landing rather than the
- *   animation ending that releases it.
+ *   animation ending that releases it: {@link Foe.gait} is that run, and
+ *   {@link gangCorpse} holds the flinch while it is still in the air.
  * - **9**, the death (`0x474528`, cels 1920..1924): `0x439837` sets
  *   `obj+0x10 = -20` — the floor offset, so the corpse floats twenty pixels off
  *   whatever it fell on — counts `AI+0x36` down from the `[0x46b204]` the hit
@@ -143,8 +144,8 @@ import {
  *
  * Also in the handler and not in any state: `0x439a4a` asks whether the thing
  * that hit it belongs to the goop class `[0x472560]` and if so **adds 60** to
- * `AI+0`, clamps to `0x40e300(0x19)`, plays 3 and returns without spraying. MALL
- * places no goop.
+ * `AI+0`, clamps to `0x40e300(0x19)`, plays 3 and returns without spraying.
+ * MALL places no goop; SERVICE does, and `feedTheGang` is that branch.
  */
 const NOT_HERE = "0x4398e7, 0x439837, 0x439980, 0x439a4a" as const;
 
@@ -345,8 +346,23 @@ export function turn(e: Enemy): void {
  * ...and it lies lower. The death is state 9, and its tag-0 handler writes
  * `obj+0x10 = -20` on every frame it runs (`0x439849` here, `0x438dc7` mask,
  * `0x4380cb` knot, `0x43a31a` knife) over the −6 the class init gave it.
+ *
+ * And the flinch is held until it LANDS. State 10 is the same two
+ * instructions in all four thinks — `cmp word ptr [esi+0x2e], 0; je` before
+ * the run goes back on (`0x4398e7` here, `0x438e69` mask, `0x438169` knot,
+ * `0x43a3b8` knife) — so one knocked into the air holds its one flinch cel
+ * until the mover says it is down. That cel carries no body box (1920, 1820,
+ * 1960, 1860), so for the whole flight nothing can hit it (`0x4303b3`). The
+ * page ends a flinch when its animation does; the clock is held on the last
+ * frame while the thing is still in flight — moving vertically, or at the top
+ * of the arc with its last airborne foot still kept ({@link Enemy.lastBase},
+ * which only a landing clears).
  */
-export const gangCorpse: Reaction = (e) => {
+export const gangCorpse: Reaction = (e, _foe, run) => {
+  if (e.state === "flinch") {
+    if (e.clock >= run && (e.vy !== 0 || e.lastBase !== undefined)) e.clock = run - 1;
+    return;
+  }
   if (e.state !== "dead") return;
   e.floor = -20;
   if (e.vy === 0) e.vx = 0;

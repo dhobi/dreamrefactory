@@ -111,13 +111,26 @@ const machines = (): void => {
   wraith(lesser, f, 4, k);
   if (lesser.script !== 1) fail(`a lesser wraith does not split (AI+4 clear); went to kind ${lesser.script}`);
 
-  // `0x42503d` — any blow ends a lesser one, and the named one takes it whole
+  // `0x42503d` — any blow ends a lesser one, and the named one takes it whole;
+  // the lesser one's is still sprayed (`0x425018`) and answered 1 (`0x425064`)
   const struck = one(1);
   struck.decisions = 0;
-  if (wraithGate(struck, f, { damage: 40, code: 0 }) !== null || struck.state !== "dead")
-    fail(`0x42503d sends a lesser wraith straight to its death`);
-  if (!wraithGate(one(1), f, { damage: 40, code: 0 }))
+  const lesserBlow = wraithGate(struck, f, { damage: 40, code: 0, by: { player: true } });
+  if (!lesserBlow?.still || !lesserBlow.quiet || !lesserBlow.spare || struck.state !== "dead")
+    fail(`0x42503d sends a lesser wraith straight to its death, and the blow goes on still, quiet and unsubtracted; got ${JSON.stringify(lesserBlow)}`);
+  const named = wraithGate(one(1), f, { damage: 40, code: 0, by: { player: true } });
+  if (!named || named.still)
     fail(`the named wraith's blow goes on to the subtraction`);
+  // `0x424fdd` — its own beam (the scepter's tag 0) takes nothing and sweeps
+  // every lesser one away through `0x424f30`
+  const swept = one(1);
+  swept.decisions = 0;
+  swept.side = 0;
+  const beamed = one(1);
+  if (wraithGate(beamed, f, { damage: 100, code: 0, by: { kit: WRAITH_BEAM } }) !== null || beamed.hp !== one(1).hp)
+    fail(`0x424fdd: the wraith's own beam lands as nothing on the one it hits`);
+  wraith(swept, f, 12, k);
+  if (swept.state !== "dead") fail(`0x424ff7: the beam's 0x424f30 dissolves every lesser wraith; one is ${swept.state}`);
   if (f.flinch?.[0].cels.join() !== "3243" || f.death?.cels[0] !== 3200 || f.linger !== 0)
     fail(`0x46f898 is the take and 0x46f8a8 the death, and no body is left`);
   ok(
@@ -249,6 +262,29 @@ if (igorDeath.length ? igorDeath.some((c) => c < 3140 || c > 3145) : !fell.lengt
   fail(`0x46ffd8 is 3140..3145; the death showed ${igorDeath.join(" ") || "nothing"}`);
 if (fell.some((c) => c !== 3100 && (c < 3140 || c > 3145))) fail(`0x46ff98 is 3100 and then 3140..3145; the fall showed ${fell.join(" ")}`);
 ok(`...its take is ${igorTake.join("/")} and its death ${igorDeath.length ? igorDeath.sort().join(" ") : `a fall, ${fell.sort().join(" ")}`}`);
+
+// ...and what an Igor leaves: its HEAD, rolling. `0x425629` calls `0x4208e0`
+// in mode 1 as the death's tag 0 ends — thirty in front, `vy -12`, ten a frame
+// forwards — and the head plays `0x46fa68` tag 1, 3146..3148 (see `HEAD` in
+// props.ts)
+await go(9080);
+h.frame(9);
+{
+  const igor = nearest("initigor")!;
+  game.killFoe(igor, FOES.initigor);
+  if (h.until(() => game.heads.length > 0, 16) < 0) fail(`0x425679 sheds a head as the death's tag 0 ends`);
+  const head = game.heads[0];
+  const at = game.foeAnchor(igor, game.level!)!;
+  if (head.mode !== 1 || head.vx !== 10 * igor.facing || Math.round(head.x) !== Math.round(at.x + 30 * igor.facing))
+    fail(`0x425639: mode 1, thirty in front and ten a frame forwards; mode ${head.mode}, vx ${head.vx}, x${head.x} (point x${at.x})`);
+  const cels = new Set<number>();
+  for (let i = 0; i < 12 && game.heads.includes(head); i++) {
+    h.frame();
+    cels.add(game.headCel(head));
+  }
+  if ([...cels].some((c) => c < 3146 || c > 3148)) fail(`0x46fa68 tag 1 is 3146..3148; it showed ${[...cels].join(" ")}`);
+  ok(`a felled Igor sheds its head thirty in front, rolling on ${[...cels].sort().join(" ")}`);
+}
 
 // 4. the wraith — seven hundred, and nothing for it
 await go(13000);

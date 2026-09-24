@@ -557,11 +557,13 @@ export const FLARE = {
  * ```
  *
  * The blaster only ever fires variants 2 and 3, so its bolt always carries -1 —
- * and -1 is a code. Every ordinary handler in the game throws a strength below
- * 1 away (`0x4199b9`'s `cmp ax, 1; jl`), so the bolt does **nothing at all** to
- * a punk, a cop or a rat. Boggs' handler is the one that translates it:
- * `0x41bc71` turns -1 into 100. So the gun in the last room of the game is a
- * weapon against exactly one thing, and it is useless everywhere else.
+ * and -1 is a code. Most handlers throw a strength below 1 away, so the bolt
+ * does nothing at all to most of what it meets. Chapter four's own are the
+ * exceptions, and they read it themselves before the sign test: Boggs'
+ * `0x41bc71`, the TCop's `0x4147d9` and the test tube's `0x419999` turn -1
+ * into 100 and take the blow, and puke's `0x41825e` answers it with a sound
+ * and nothing else ({@link Foe.minusOne}). So the gun is a weapon in the
+ * chapter that hands it out, and useless everywhere else.
  */
 export const BOLT = {
   /** `0x46c588` tag 2 — one cel, and it is the whole flight */
@@ -604,6 +606,14 @@ export interface Bolt {
   vx: number;
   facing: number;
   spent: boolean;
+  /**
+   * Its strength, `obj+0x1a`, as the bolt's think writes it from the variant
+   * it was fired with (`0x413be0` through the byte map at `0x413c48`): the
+   * blaster's variants 2 and 3 give **−1** (`0x413bf9`), and the big gun's
+   * `0x412a70(gun, 0)` gives variant 0 and so **100** (`0x413bed`), on tag 0
+   * (`0x412afb`) rather than the blaster's tag 2.
+   */
+  code: -1 | 100;
   /**
    * True on the tick it was created, and it collides with nothing while it is.
    *

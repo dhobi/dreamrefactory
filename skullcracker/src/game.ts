@@ -17,14 +17,17 @@ import { EYEBALL_GLOBS } from "./brains/eyeball";
 import { HARDCORE_THROW, HARDCORE_THROW_LOW } from "./brains/hardcore";
 import { IGOR_THROW } from "./brains/igor";
 import { SKEL_BONE } from "./brains/skel";
-import { TUBE_SHARDS } from "./brains/tube";
+import { PUKE_GOB } from "./brains/puke";
+import { TUBE_BREATH, TUBE_SHARDS } from "./brains/tube";
 import { VPRIEST_BOLT } from "./brains/vpriest";
 import { WBOOLY_HIGH, WBOOLY_LOW } from "./brains/wbooly";
+import { KRAGG_SHOT_AIR, KRAGG_SHOT_GROUND } from "./brains/kragg";
+import { GHENGIS_BLAST } from "./brains/ghengis";
 import { KNIFEBOY_KNIFE, KNIFEBOY_LOB } from "./brains/knifeboy";
 import { FIGHTS, FoeFight } from "./fights";
-import { CRAFT, Gob, Pop, SPRAY, VANISH, dryTime, gobCount, scatter } from "./effects";
+import { CRAFT, Gob, Pop, SPARK, Spark, SPRAY, VANISH, dryTime, gobCount, scatter } from "./effects";
 import { FOE_SFX, OWN, Sounds } from "./sound";
-import { CROW, Crow, ELEVATOR, Elevator, IBEAM, CRUSH, Ibeam, Crush, Feather, PLANK, Plank, burnCrow, crowCel, crowFrames, crowTag, type CrowState, elevatorFrames, ibeamCel, crushCel, ibeamFrames, crushFrames, plankCel, plankFrames, PICKUP, Pickup, SPRINKLER, Sprinkler, SHACK, Shack, shackFrames, BARREL, Barrel, PIPE, Pipe, SEWAGE, Sewage, BUSH, Bush, ROACH, Nest2, Roach, DOOR, Door, doorFrames, ELEV, Elev, SWITCH, Switch, switchFrames, GOOP, Nest, Drip, dripCel, dripFrames, HOLE, Hole, HAND, Hand, AXE, Axe, BRIDGE, Bridge, FLOOR, Floor, SURGE, Surge, CAGE, Cage, ALARM, BIGGUN, Flypast, PROBE, Probe, BigGun, LIGHTFX, LightFx, Alarm, FAN, Fan, BELT, Belt, CHAIR, Chair, CLAW, Claw, FITTING, Fitting, BOGGS, Boggs, BoggsWorm, SKATEBOARD, Board, CAN, Can, FLAME, Flame, ROLLER, Roller } from "./props";
+import { CROW, Crow, ELEVATOR, Elevator, IBEAM, CRUSH, Ibeam, Crush, Feather, PLANK, Plank, burnCrow, crowCel, crowFrames, crowTag, type CrowState, elevatorFrames, ibeamCel, crushCel, ibeamFrames, crushFrames, plankCel, plankFrames, PICKUP, Pickup, SPRINKLER, Sprinkler, SHACK, Shack, shackFrames, BARREL, Barrel, PIPE, Pipe, SEWAGE, Sewage, BUSH, Bush, ROACH, SPILL, Nest2, Roach, DOOR, Door, doorFrames, ELEV, Elev, SWITCH, Switch, switchFrames, GOOP, Nest, Drip, dripCel, dripFrames, HOLE, Hole, HAND, Hand, AXE, Axe, BRIDGE, Bridge, FLOOR, Floor, SURGE, Surge, CAGE, Cage, ALARM, BIGGUN, Flypast, PROBE, Probe, BigGun, LIGHTFX, LightFx, Alarm, FAN, Fan, BELT, Belt, CHAIR, Chair, CLAW, Claw, FITTING, Fitting, BOGGS, Boggs, BoggsWorm, SKATEBOARD, Board, CAN, Can, HEAD, Head, FLAME, Flame, ROLLER, Roller } from "./props";
 import { DEATH_FILMS, ENDING_FILM, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
 import { BOLT, CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, STREAMS, WEAPONS, type Bolt, type Flare, type Gun, type Stream } from "./guns";
 import { PLAYER_CODES, PLAYER_HELD, gripOf } from "./codes";
@@ -1655,6 +1658,7 @@ export async function loadLevel(index: number): Promise<void> {
   skates = [];
   rollers = [];
   cans = [];
+  heads = [];
   flames = [];
   // the chapter's own entry function: zero every count, name the chapter's
   // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
@@ -2132,6 +2136,7 @@ export async function loadLevel(index: number): Promise<void> {
   craft = null;
   gobs = [];
   pops = [];
+  sparks = [];
   dropAt(roomAt(anchorX, anchorY), anchorX, anchorY);
   // `0x42e580`: the corner goes on the start point itself, not the arrival's
   startCamera(anchorX, anchorY);
@@ -4123,6 +4128,23 @@ export function landHits(): void {
     struckCrows.add(c);
     strikeCrow(c, mine.damage);
   }
+  // the heads, whose handler `0x420090` answers the player's own object and
+  // nobody else's — see {@link HEAD}
+  for (const h of heads) {
+    if (struckHeads.has(h)) continue;
+    const body = celRec(level.sbk, headCel(h))?.body;
+    if (!body) continue;
+    const [x0, x1] = h.west ? [-body.x1, -body.x0] : [body.x0, body.x1];
+    if (!(
+      mine.right > h.x + x0 &&
+      mine.left < h.x + x1 &&
+      mine.bottom > h.y + body.y0 &&
+      mine.top < h.y + body.y1
+    ))
+      continue;
+    struckHeads.add(h);
+    kickHead(h, mine.blow);
+  }
   const pool = level.spawned[i];
   for (const e of [...pool]) {
     // and once it has toppled it is out of the fight, the way `0x44fe80` opens
@@ -4407,7 +4429,17 @@ export function strikeFoe(
   if (code === BURN_CODE) {
     const how = foe.burns;
     if (!how) return; // nothing in this class reads a −9
-    burnFoe(e, how);
+    if (!how.noFlame) burnFoe(e, how);
+    // kragg's arm, in its own order: the hit sound, the spark, 0x13
+    // (`0x441d41`, `0x441d60`, `0x441d72`)
+    how.sounds?.forEach((set, i) => {
+      sound?.effect(
+        typeof set === "number" ? set : set[Math.floor(random() * set.length)],
+        e.x,
+        e.y,
+      );
+      if (i === 0 && how.spark) sparkAt(contact ?? { x: e.x, y: e.y - 70 });
+    });
     // `0x4550d3`: the dog's arm is its death path, sound and award and all
     if (how.dies && foe.death) {
       killFoe(e, foe);
@@ -4429,7 +4461,10 @@ export function strikeFoe(
   // and only for the kinds whose handler calls it at all
   const bleeds = typeof foe.bleeds === "function" ? foe.bleeds(e) : foe.bleeds;
   if (bleeds)
-    spray(e, foe.sprayAmount ?? damage, bleeds === "scatter" ? { dx: 0, dy: 0 } : shove, contact);
+    spray(e, foe.sprayAmount ?? damage, shove, contact, bleeds === "scatter");
+  // ...or a spark where the goo would have gone — {@link Foe.sparks}, kragg's
+  // flying handler (`0x441db8`)
+  else if (foe.sparks?.(e)) sparkAt(contact ?? { x: e.x, y: e.y - 70 });
   // and the kind's own sound, at the thing that was hit — see FOE_SFX for which
   // handler plays which index
   // ...unless this is the blow that kills and the class keeps the hit sound
@@ -4489,18 +4524,16 @@ export function strikeFoe(
    * `0x441e4a` is the frame kragg's health runs out and it does not install the
    * death: it installs `0x473b60`, the fall — see {@link rallyFall}.
    */
-  if (foe.rallies && !e.rallied && e.hp <= 0) {
+  const spent = foe.survivesZero ? e.hp < 0 : e.hp <= 0;
+  if (foe.rallies && !e.rallied && spent) {
     rallyFall(e, foe.rallies, false);
     return;
   }
-  if ((foe.frail || e.hp <= 0) && foe.death) {
+  if ((foe.frail || spent) && foe.death) {
     killFoe(e, foe);
     // `0x4383d9`, `0x43a6f9`, `0x43908e`, `0x439af9` — the gang's four hit
     // handlers, on this frame
     if (foe.drops === "skateboard") dropBoard(e);
-    // `0x414599` — the gunner TCop (`AI+0x32`, the record's param) leaves its
-    // blaster behind it as its death runs out
-    if (e.kind === "initcop" && e.param) dropBlaster(e);
     return;
   }
   /**
@@ -4613,10 +4646,18 @@ export function spray(
   damage: number,
   blow: { dx: number; dy: number },
   at?: { x: number; y: number },
+  /**
+   * The handler handed no hitter — `push 0` as the third argument (ghengis'
+   * `0x422b73`, the hardcore's `0x43d28b`). `0x40cd70` finds it null and
+   * `0x40ce7d`..`0x40ce9d` gives every gob `0x434540(0x50) - 0x28` on each
+   * axis, −39..40, with nothing of the blow in it.
+   */
+  wild = false,
 ): void {
   // `0x40cd53`: from the point the handler was given — the contact — and,
   // for the callers that have none, about where a body is struck
   const from = at ?? { x: e.x, y: e.y - 70 };
+  const loose = (): number => 1 + Math.floor(random() * 0x50) - 0x28;
   for (let n = 0; n < gobCount(damage); n++) {
     gobs.push({
       x: from.x,
@@ -4624,8 +4665,8 @@ export function spray(
       // the blow's own pair, scattered, written straight into `obj+0xa` and
       // `obj+0xc` (`0x40cdb6`) — a velocity, which the class's divisor of 2
       // never touches: that only scales a script's own steps (`0x42f8b0`)
-      vx: scatter(blow.dx * p.facing) * TICK_SCALE,
-      vy: scatter(blow.dy) * TICK_SCALE,
+      vx: (wild ? loose() : scatter(blow.dx * p.facing)) * TICK_SCALE,
+      vy: (wild ? loose() : scatter(blow.dy)) * TICK_SCALE,
       age: 0,
       mirror: random() < 0.5,
       stage: -1,
@@ -4638,6 +4679,19 @@ export function spray(
 export let gobs: Gob[] = [];
 /** the green balls bodies leave behind — see {@link VANISH} */
 export let pops: Pop[] = [];
+/** kragg's sparks — see {@link SPARK} */
+export let sparks: Spark[] = [];
+
+/** `0x4424a0(point)` — one spark, flying off sideways at its own random speed */
+export function sparkAt(at: { x: number; y: number }): void {
+  sparks.push({
+    x: at.x,
+    y: at.y,
+    vx: 1 + Math.floor(random() * SPARK.across) - SPARK.across / 2,
+    vy: 0,
+    age: 0,
+  });
+}
 
 /**
  * Step every gob: the arc, the landing, the merge and the drying.
@@ -4699,6 +4753,15 @@ export function stepGobs(): void {
   gobs = gobs.filter((g) => g.stage >= 0 || g.age < SPRAY.life);
   for (const q of pops) q.age += TICK_SCALE;
   pops = pops.filter((q) => q.age < VANISH.cels.length * VANISH.hold);
+  // the spark: moved by its velocity, then the gravity added (`0x430322`),
+  // and gone as its script ends (`0x442635`)
+  for (const k of sparks) {
+    k.x += k.vx * TICK_SCALE;
+    k.y += k.vy * TICK_SCALE;
+    k.vy += SPARK.gravity * TICK_SCALE;
+    k.age += TICK_SCALE;
+  }
+  sparks = sparks.filter((k) => k.age < SPARK.cels.length * SPARK.hold);
 }
 
 /**
@@ -4968,9 +5031,9 @@ export function takeCode(
  * body box goes to that body's own hit handler. What stops a crowd of punks
  * felling each other is the HANDLERS — each turns away its own class first
  * (the dog's `0x430ee0([0x476a90])` at `0x455139`, the CHOPPER's `0x4547e1`)
- * and a negative strength that is not fire — so a punk's kick lands on a dog, a
- * zombie's bone on a skeleton, the CHOPPER's sink blast on whatever lies under
- * it, and the handler pays its award as it always does.
+ * and a negative strength that is not fire — so a punk's kick lands on the
+ * CHOPPER, a skeleton's bone on a zombie, the CHOPPER's sink blast on whatever
+ * lies under it, and the handler pays its award as it always does.
  *
  * The arithmetic is the player's (`0x42f910`, see {@link takeHits}). A thrown
  * thing is spent on the first body that takes it (`0x430470` sets `obj+0x2a`;
@@ -4992,14 +5055,43 @@ export const struckBy = new WeakMap<object, { anim: unknown; hit: Set<Enemy> }>(
  *   the dogs' `[0x476a90]` (`0x456376` — the list the dog's own handler turns
  *   its kind away with at `0x455139`).
  * - the gang of chapter five, whose four handlers read the same list: the
- *   knotboy's `[0x4740b4]`, the knife class `[0x4a7578]` (both of the
- *   knifeboy's throws, `0x43a462` / `0x43a512`), the batboy's `[0x4740ac]` and
- *   the maskboy's `[0x4740b0]` — `0x438284`..`0x4382cc` (knotboy),
- *   `0x438f24`..`0x438f6c` (maskboy), `0x4399a4`..`0x4399ec` (batboy),
- *   `0x43a5a4`..`0x43a5ec` (knifeboy). The knifeboy's own class is on none of
- *   them.
+ *   roller's `[0x472564]` (`0x43a790` makes it), the knotboy's `[0x4740b4]`,
+ *   the knife class `[0x4a7578]` (both of the knifeboy's throws, `0x43a462` /
+ *   `0x43a512`), the batboy's `[0x4740ac]`, the maskboy's `[0x4740b0]` and the
+ *   knifeboy's own `[0x4740a8]` (registered for `0x439bd0` at `0x439bbd`) —
+ *   `0x438263`..`0x4382f4` (knotboy), `0x438f03`..`0x438f94` (maskboy),
+ *   `0x439983`..`0x439a14` (batboy), `0x43a583`..`0x43a614` (knifeboy). The
+ *   roller never lands on a creature here, so only the four and the knives
+ *   are listed;
+ * - the TCop's `0x4147d0`: the slurp's `[0x46c9e4]` (`0x4147e7`) and its own
+ *   slug's `[0x46c620]` (`0x4147ff`) — and not its own class, so cops hurt
+ *   cops ({@link Foe.hitsOwn});
+ * - the tube's `0x419990`: its own glass `[0x46bfb4]` (the shards and the
+ *   breath), puke's spit `[0x46cc60]` and the arm's `[0x46d1b0]`
+ *   (`0x4199c3`…`0x419a05`);
+ * - the CHOPPER's `0x454804`: the dogs' `[0x476a90]`, after its own class;
+ * - the brain's `0x415100`: a TCop, class `[0x46c9e0]` (`0x415110`), and the
+ *   tube's thrown glass `[0x46bfb4]` (`0x415170`), beside its own;
+ * - the dog's `0x4550b0`: after its own class, the punk's `[0x47760c]`
+ *   (`0x455150`, the list `0x450a61` fills) and the CHOPPER's `[0x477c34]`
+ *   (`0x455168`);
+ * - the skeleton's `0x423a30`: the thrown class `[0x46ecd0]` (`0x423a33`),
+ *   the bats' `[0x46ecc4]` (`0x423a52`), then its own;
+ * - the zombie's `0x4209f0`: the bats' `[0x46ecc4]` (`0x420a13`), and nothing
+ *   else — not even its own class ({@link Foe.hitsOwn});
+ * - kragg's `0x441cf0`: its own shots' `[0x472568]` (`0x441cff`);
+ * - the wraith's `0x424f80`: the bats' `[0x46ecc4]`, its own class and the
+ *   thrown class `[0x46ecd0]` (`0x424f90`..`0x424fc0`);
+ * - ghengis' `0x422ad0`: its own class `[0x46f048]` — whose blast, and whose
+ *   nine pieces, are objects of it (`0x422c60`) — then `[0x46ecd0]` and the
+ *   surge's `[0x46ecc8]` (`0x422afb`..`0x422b41`). The pieces are casts of
+ *   their own each time and are not listed; their strength is held at zero
+ *   while they fly (`0x4229d2`).
  */
-export const GANG = { kinds: ["initknotboy", "initbatboy", "initmaskboy"], kits: [KNIFEBOY_KNIFE, KNIFEBOY_LOB] };
+export const GANG = {
+  kinds: ["initknotboy", "initbatboy", "initmaskboy", "initknifeboy"],
+  kits: [KNIFEBOY_KNIFE, KNIFEBOY_LOB],
+};
 export const SPARES: Record<string, { kinds: readonly string[]; kits: readonly CastKit[] }> = {
   initigor: { kinds: ["initbat"], kits: [IGOR_THROW, SKEL_BONE] },
   initvpriest: { kinds: ["initbat"], kits: [VPRIEST_BOLT] },
@@ -5008,6 +5100,16 @@ export const SPARES: Record<string, { kinds: readonly string[]; kits: readonly C
   initbatboy: GANG,
   initmaskboy: GANG,
   initknifeboy: GANG,
+  initwered: { kinds: ["initdog"], kits: [] },
+  initslurp: { kinds: ["initcop"], kits: [...TUBE_SHARDS] },
+  initcop: { kinds: ["initslurp"], kits: [COP_SLUG] },
+  inittube: { kinds: ["initarm"], kits: [...TUBE_SHARDS, TUBE_BREATH, PUKE_GOB] },
+  initdog: { kinds: ["initwerea", "initwered"], kits: [] },
+  initskel: { kinds: ["initbat"], kits: [IGOR_THROW, SKEL_BONE] },
+  initzomb: { kinds: ["initbat"], kits: [] },
+  initkragg: { kinds: [], kits: [KRAGG_SHOT_AIR, KRAGG_SHOT_GROUND] },
+  initwraith: { kinds: ["initbat"], kits: [IGOR_THROW, SKEL_BONE] },
+  initghengis: { kinds: [], kits: [IGOR_THROW, SKEL_BONE, GHENGIS_BLAST] },
 };
 export function foesStrikeFoes(): void {
   const lvl = level;
@@ -7090,7 +7192,7 @@ export function stepBigGuns(): void {
           // inverts the shooter's own mirror flag: the gun faces you and the
           // bolt goes the other way round, which is the same way
           sound?.effect(BIGGUN.sound, g.x, g.gunY);
-          spawnBolt(g.x, g.gunY, p.x > g.x ? 1 : -1);
+          spawnBolt(g.x, g.gunY, p.x > g.x ? 1 : -1, 100);
           g.shot += 1;
           g.clock = 0;
         } else {
@@ -8705,7 +8807,13 @@ export function fireBolt(): void {
  * NOT do is spend a round, because the rounds are `0x412a83`'s caller's
  * business and the gun has none.
  */
-export function spawnBolt(x: number, y: number, facing: number): void {
+export function spawnBolt(
+  x: number,
+  y: number,
+  facing: number,
+  // the variant's strength — see {@link Bolt.code}: the player's −1, the gun's 100
+  code: Bolt["code"] = BOLT.blow,
+): void {
   bolts.push({
     // `0x412b7f` puts it 120 ahead; `obj+0x28 == 1` is this port's facing -1
     x: x + facing * BOLT.aheadPx,
@@ -8714,6 +8822,7 @@ export function spawnBolt(x: number, y: number, facing: number): void {
     vx: roundAway((facing * BOLT.dx) / BOLT.divisor),
     facing,
     spent: false,
+    code,
     born: true,
   });
 }
@@ -8855,11 +8964,13 @@ export function stepBolts(): void {
       continue;
     }
     // ...and everything else stops it, and most of it takes nothing — the
-    // few handlers that read a −1 are {@link Foe.minusOne}
+    // few handlers that read a −1 are {@link Foe.minusOne}. A cel with no body
+    // box is not there to a bolt either (`0x4303b3`): a flinching TCop, the
+    // tube on its stand
     for (const e of pool) {
       if (!takesBlows(e)) continue;
       const c = celRec(lvl.sbk, celOf(e));
-      if (!c) continue;
+      if (!c?.body) continue;
       const hurt = hurtBox(e, c, lvl);
       if (!(
         box.right > hurt.left &&
@@ -8869,14 +8980,19 @@ export function stepBolts(): void {
       ))
         continue;
       b.spent = true;
-      const minus = FOES[e.kind].minusOne;
+      // ...and only the blaster's −1 is read there. The big gun's bolt is 100
+      // on tag 0: the TCop turns that away (`0x41482a`), and what a 100 does
+      // to anything else is a blow this loop does not deliver
+      const minus = b.code === -1 ? FOES[e.kind].minusOne : undefined;
       if (minus && "sound" in minus) sound?.effect(minus.sound, b.x, b.y);
       else if (minus) {
         // `0x42f910` at the rewritten strength: 4000's own pair, scaled and
-        // mirrored, plus the bolt's hundred a frame, and the length of that
+        // mirrored, plus `obj+0xc` — the bolt's hundred a frame, which is
+        // what {@link Bolt.vx} already holds, a step being one engine frame —
+        // and the integer root of the sum of squares (`0x434630`)
         const pair = art?.blow ?? { dx: 0, dy: 0 };
         const facing = b.vx < 0 ? -1 : 1;
-        const vx = b.vx / TICK_SCALE;
+        const vx = b.vx;
         const dx = Math.trunc((pair.dx * minus.as) / 100) * facing + vx;
         const dy = Math.trunc((pair.dy * minus.as) / 100);
         strikeFoe(
@@ -9123,6 +9239,32 @@ export function clockFor(sbk: SbkFile): number {
 /** every roach in the air or on the floor, nest or no nest */
 export let roaches: Roach[] = [];
 
+/** `0x4423a0(point, n)` — kragg's roaches, see {@link SPILL} */
+export function spillRoaches(at: { x: number; y: number }, n: number): void {
+  const room = p.room;
+  if (!room) return;
+  for (let i = 0; i < n; i++) {
+    const facing = roll(2) === 1 ? 1 : -1;
+    roaches.push({
+      x: at.x + roll(SPILL.across),
+      y: at.y - roll(SPILL.up),
+      // the leap's one frame is spent through the divisor as it goes on
+      vy: SPILL.rise[0] - roll(SPILL.rise[1]) + roundAway(SPILL.leap.dy / ROACH.divisor),
+      facing,
+      onGround: false,
+      running: false,
+      clock: 0,
+      top: room.top,
+      left: room.left,
+      bottom: room.bottom,
+      right: room.right,
+      spilled: {
+        vx: SPILL.speed[0] + roll(SPILL.speed[1]) + roundAway(SPILL.leap.dx / ROACH.divisor) * facing,
+      },
+    });
+  }
+}
+
 /** which of the seven slots has water standing in it, and engine frames since it rose */
 export let columns = new Map<number, number>();
 /** `0x473728` — every slot that has ever gone up this level; never cleared */
@@ -9362,8 +9504,10 @@ export function stepScenery(): void {
       // object's own and the mover spends it whenever there is no floor
       r.onGround = false;
     }
-    r.vy += PLAYER_GRAVITY * ROACH.gravity * TICK_SCALE;
+    r.vy += PLAYER_GRAVITY * (r.spilled ? SPILL.gravity : ROACH.gravity) * TICK_SCALE;
     r.y += r.vy * TICK_SCALE;
+    // a spilled one carries its own speed across until it lands ({@link SPILL})
+    if (r.spilled) r.x += r.spilled.vx * TICK_SCALE;
     const floor = surfaceUnder(
       r.x,
       r.y - Math.max(r.vy, 0) - CLIMB_PX,
@@ -9378,7 +9522,10 @@ export function stepScenery(): void {
     // `0x474db0`, which plays the run sound as it starts
     r.running = true;
     r.clock = 0;
-    sound?.effect(ROACH.runSound, r.x, r.y);
+    // ...where a spilled one lands out of tag 2 and starts it silently
+    // (`0x43b35c`), and the run's own stride takes over from its speed
+    if (r.spilled) r.spilled.vx = 0;
+    else sound?.effect(ROACH.runSound, r.x, r.y);
   }
   // `0x43b1e8`: it removes itself the frame its own point leaves the rect
   roaches = roaches.filter(
@@ -9846,13 +9993,16 @@ export function feedTheGang(): void {
   const lvl = level;
   if (!lvl || !drips.length) return;
   for (const e of spawnedHere()) {
-    if (e.state === "dead" || e.state === "burst" || e.asleep) continue;
+    // a sleeper is fed like anything else — the handlers test no state — but
+    // only through a cel with a body box (`0x4303b3`): the gang's flinch and
+    // death cels carry none, so a flinching one is out of reach
+    if (e.state === "dead" || e.state === "burst") continue;
     const heal = GOOP.feeds[e.kind];
     if (heal === undefined) continue;
     const foe = FOES[e.kind];
     if (e.hp <= 0) continue;
     const c = celRec(lvl.sbk, celOf(e));
-    if (!c) continue;
+    if (!c?.body) continue;
     const box = hurtBox(e, c, lvl);
     const fed = drips.find((d) => {
       const cel = dripStrike(d);
@@ -10618,6 +10768,114 @@ export function stepCans(): void {
     cans = cans.filter(
       (c) => c.rest !== undefined || (c.x >= span.lo && c.x <= span.hi),
     );
+}
+
+/** the heads creatures have shed — {@link HEAD} */
+export let heads: Head[] = [];
+
+/**
+ * `0x4208e0` — a head off a dying creature, at the creature's own point
+ * (`obj+6`) moved along its facing, with the velocity its death hands over
+ * ({@link HEAD}'s `sheds`). Mode 1 says index 5 as it is made (`0x420951`).
+ */
+export function shedHead(e: Enemy, mode: 0 | 1): void {
+  const lvl = level;
+  if (!lvl) return;
+  const tag = mode === 0 ? HEAD.hop : HEAD.roll;
+  // no art, no head: the zombie's are in GRAVE and CAVERN, igor's in RAVECAVE
+  if (!tag.cels.every((id) => lvl.sbk.byId.has(id))) return;
+  const s = HEAD.sheds[mode];
+  const at = foeAnchor(e, lvl) ?? { x: e.x, y: e.y };
+  const vx = s.vx * e.facing;
+  heads.push({
+    x: at.x + s.dx * e.facing,
+    y: at.y + s.dy,
+    vx,
+    vy: s.vy,
+    // `0x42090c` — `obj+0x28 = 1` when the x it was handed is negative
+    west: vx < 0,
+    mode,
+    clock: 0,
+    down: false,
+  });
+  if (mode === 1) sound?.effect(HEAD.rollSound, at.x, at.y);
+}
+
+/**
+ * `0x420090` — the player's foot on a zombie's head: `0135 basketball`, four
+ * hundred points, a green ball where it was, and `return 1`, so `0x430470`
+ * trades the blow with it at the head's divisor of five.
+ */
+function kickHead(h: Head, blow: { dx: number; dy: number }): void {
+  sound?.effect(HEAD.kickSound, h.x, h.y);
+  stats.score += HEAD.award;
+  pops.push({ x: h.x, y: h.y, age: 0 });
+  const v = knockback(
+    DIVISOR,
+    HEAD.divisor,
+    { dx: blow.dx * p.facing, dy: blow.dy },
+    { vx: p.vx, vy: p.vyRaw },
+    { vx: h.vx, vy: h.vy },
+  );
+  h.vx = v.vx;
+  h.vy = v.vy;
+  p.vx = v.hvx;
+  if (!p.onGround) p.vyRaw = v.hvy;
+}
+
+/**
+ * The heads, one engine frame at a time, in the frame's own order: every
+ * object's script is stepped first (`0x42fc2f`, `0x42fc4b` call `0x45d0f0`)
+ * and the mover runs last (`0x42fd56`), so the think reads the landing the
+ * mover has just left ({@link HEAD}).
+ *
+ * The step counts the hold down BEFORE it reads a record (`0x45d121`), and
+ * `0x45d090` sets that count to the script's rate: so the first record shows
+ * for one step, not two, and `0x45d1a3` adds its `dx / divisor` and
+ * `dy / divisor`, rounded away from zero, into the velocity once — `dx`
+ * turned round for a head facing west (`0x45d18c`).
+ */
+export function stepHeads(): void {
+  const lvl = level;
+  if (!lvl) return;
+  heads = heads.filter((h) => {
+    const tag = h.mode === 0 ? HEAD.hop : HEAD.roll;
+    const len = tag.cels.length * tag.hold;
+    h.clock += 1;
+    const i = Math.min(tag.cels.length - 1, Math.floor(h.clock / tag.hold));
+    const dx = tag.dx[i];
+    const dy = tag.dy[i];
+    if (dx) h.vx += roundAway(dx / HEAD.divisor) * (h.west ? -1 : 1);
+    if (dy) h.vy += roundAway(dy / HEAD.divisor);
+    h.down = looseStep(h, {
+      foot: celFoot(headCel(h)),
+      bounce: HEAD.bounce,
+      drag: 0,
+      weight: HEAD.weight,
+    }).down;
+    // `0x41ffc9` — out of the player's reach, and `0x41ffde` — going the
+    // other way from the way it faces
+    if (Math.abs(p.x - h.x) > HEAD.range) return false;
+    if (h.west ? h.vx > 0 : h.vx < 0) return false;
+    if (h.mode === 0) {
+      // `0x420010` — standing: index 0x13 and tag 0 again, and so the hop
+      if (h.down) {
+        sound?.effect(HEAD.bounceSound, h.x, h.y);
+        h.clock = 0;
+      }
+    } else if (h.clock >= len) {
+      // `0x42003f` — the roll ran out: tag 1 again, and index 5 again
+      h.clock = 0;
+      sound?.effect(HEAD.rollSound, h.x, h.y);
+    }
+    return true;
+  });
+}
+
+/** the cel a head is showing — {@link HEAD} */
+export function headCel(h: Head): number {
+  const tag = h.mode === 0 ? HEAD.hop : HEAD.roll;
+  return tag.cels[Math.min(tag.cels.length - 1, Math.floor(h.clock / tag.hold))];
 }
 
 /** the cel a can is showing — {@link CAN} */
@@ -11792,6 +12050,7 @@ export const BRAIN_CTX: BrainCtx = {
    * −1 is `0x40b756`: the record whose `pointY`/`pointX` is nearest in
    * MANHATTAN distance, not the one whose rect holds anything.
    */
+  spill: (at, n) => spillRoaches(at, n),
   sprinkler: (e) => {
     const all = hereOf((l) => l.sprinklers);
     if (!all.length) return null;
@@ -11989,7 +12248,8 @@ export function stepEnemies(): void {
       e.script = foe.rallies.rise.kind;
       e.tag = foe.rallies.rise.tag;
       e.clock = 0;
-      spray(e, 0x14, { dx: 0, dy: 0 });
+      // no hitter behind it (`0x441767 push 0`), so the goo flies loose
+      spray(e, 0x14, { dx: 0, dy: 0 }, undefined, true);
       sound?.effect(FOE_SFX.kraggRise, e.x, e.y);
     }
     const run = e.anim.cels.length * e.anim.hold;
@@ -12014,6 +12274,16 @@ export function stepEnemies(): void {
        * the thing that climbs out arrives as the death reaches its second group
        * of cels ({@link Foe.hatches}).
        */
+      /**
+       * ...and the HEAD, as the death's first tag ends — the zombie's
+       * `0x420832` and igor's `0x425629` install tag 1 and call `0x4208e0` on
+       * the same frame ({@link Foe.sheds}, {@link HEAD}).
+       */
+      const shed = foe.sheds;
+      if (shed && !e.shed && e.clock >= shed.afterCels * e.anim.hold) {
+        e.shed = true;
+        shedHead(e, shed.mode);
+      }
       const born = foe.hatches;
       if (born && !e.hatched && e.clock >= born.afterCels * e.anim.hold) {
         e.hatched = true;
@@ -12126,9 +12396,12 @@ export function stepEnemies(): void {
           e.y -= base - floor;
           // a body that bounces — {@link Foe.corpseBounce}: `0x42ff83` hands
           // back anything faster than 2 through `obj+0x20`, and the landing
-          // sets the flag the death state plays its thud on
+          // sets the flag the death state plays its thud on. The speed is the
+          // one it came down with: `0x430322` adds no gravity on a frame that
+          // ends on the floor (`0x42ff5d` sets `di`), so a body at rest is not
+          // handed its own tick of gravity back as a bounce
           const bounce = foe.corpseBounce;
-          if (bounce && Math.abs(e.vy / TICK_SCALE) > 2) {
+          if (bounce && Math.abs((e.vy - foeGravity(foe)) / TICK_SCALE) > 2) {
             e.vy = -Math.trunc((e.vy / TICK_SCALE) * bounce.restitution) * TICK_SCALE;
             sound?.effect(bounce.sound, e.x, e.y);
           } else e.vy = 0;
@@ -12137,6 +12410,23 @@ export function stepEnemies(): void {
               dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
               TICK_SCALE;
         }
+      }
+      /**
+       * ...a death that is two scripts hands to its second half at its own
+       * rate, as a flinch does ({@link FoeAnim.then}). The gunner TCop's kind 9
+       * tag 3 is the case: `0x414566` waits for it to end, drops the blaster a
+       * hundred pixels behind it (`0x414599`, `0x45b060(6, …)`) and installs
+       * kind 11 (`0x4145a4`), which is the removal.
+       */
+      if (e.anim.then && e.clock >= run) {
+        if (e.kind === "initcop" && e.param) dropBlaster(e);
+        e.anim = e.anim.then;
+        e.clock = 0;
+        if (e.anim.kind !== undefined) {
+          e.script = e.anim.kind;
+          e.tag = e.anim.tag;
+        }
+        continue;
       }
       // the death animation, then the body, then a green ball where it was
       if (e.clock >= run) {
@@ -12811,6 +13101,9 @@ export const struckCrows = new Set<Crow>();
 /** and the Boggs parts this swing has already landed on — `"body"` or a machine index */
 export const struckBoggs = new Set<string>();
 
+/** ...and the heads it has already kicked — {@link HEAD} */
+export const struckHeads = new Set<Head>();
+
 /** the player cel drawn on the last frame — reported in the status line */
 export let lastCel = 0;
 /** which frame of the gait was showing last, so a footfall fires once per step */
@@ -13047,6 +13340,7 @@ export function tick(): void {
       p.fired = false;
       struck.clear();
       struckCrows.clear();
+      struckHeads.clear();
       struckBoggs.clear();
       swing();
     }
@@ -13083,6 +13377,7 @@ export function tick(): void {
       p.actClock = 0;
       struck.clear();
       struckCrows.clear();
+      struckHeads.clear();
       struckBoggs.clear();
       swing();
     }
@@ -13968,6 +14263,7 @@ export function tick(): void {
   if (frame) stepBoards();
   if (frame) stepRollers();
   if (frame) stepCans();
+  if (frame) stepHeads();
   if (frame) stepCrows();
   stepEnemies();
   // after the creatures, as WOODS' runner has it — the CHOPPER's pass

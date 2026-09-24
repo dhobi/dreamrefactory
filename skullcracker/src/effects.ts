@@ -159,6 +159,40 @@ export interface Pop {
   age: number;
 }
 
+/**
+ * The spark kragg throws where a blow lands on its flying form — `0x4424a0`,
+ * class `[0x474f08]`, proc `0x442530`.
+ *
+ * `0x4424a0` puts one object at the point it is handed and installs
+ * `0x474ed8` tag 0: five cels of ARCADE's own 9100..9104, three frames each.
+ * The class's message 1 (`0x442547`) gives it `obj+0xc = 0x434540(0x28) -
+ * 0x14`, −19..20 across, no vertical speed, and `0x42f850(obj, 0.1f)` — a
+ * gravity of one pixel a frame². Its think `0x442620` answers 1 the frame the
+ * script ends (`0x442635`), so it is gone after fifteen frames. The mover's
+ * floor (its offset is −60, `0x44255a`) is not carried: fifteen frames at
+ * that gravity drop it about a hundred pixels, from a body in the air.
+ */
+export const SPARK = {
+  cels: [9100, 9101, 9102, 9103, 9104] as readonly number[],
+  hold: 3,
+  /** `0x44254b` — `0x434540(0x28) - 0x14` */
+  across: 0x28,
+  /** `0x442575` — `0x42f850(obj, 0.1f)`, a tenth of the allocator's ten */
+  gravity: 1,
+  from: "0x4424a0 / 0x442530 / 0x474ed8",
+} as const;
+
+/** one spark */
+export interface Spark {
+  x: number;
+  y: number;
+  /** pixels an engine frame */
+  vx: number;
+  vy: number;
+  /** engine frames since it appeared */
+  age: number;
+}
+
 /** the flying television — `0x410170` mode −1 and `0x410480` */
 export const CRAFT = {
   /** `sub word ptr [esi+6], 0xb4` — how far above the record it appears */

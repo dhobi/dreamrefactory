@@ -27,7 +27,7 @@
  *     600-health thing that goes round shutting the doors again.
  */
 import { FOES } from "../../src/foes";
-import { EYEBALL, eyeball } from "../../src/brains/eyeball";
+import { EYEBALL, eyeball, eyeballReacts } from "../../src/brains/eyeball";
 import { oxReacts } from "../../src/brains/ox";
 import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
 import { FPS, fail, headless, ok, pass } from "./harness";
@@ -97,6 +97,23 @@ const machines = (): void => {
   if (pick(blow(0x47), on(6206)) !== 3) fail(`a blow over 0x46 is the knock-out, 0x4727f0 tag 0`);
   ok(`an eye's spit sends five globs, and the cel it is caught on picks its flinch`);
 
+  // `0x43de45` runs ahead of the jump table in states 3 and 8 too: a struck
+  // eye is still dragged at seven towards his height, and a dying one as well
+  {
+    const struck = foe("initeyeball", eb.flinch![0], "flinch");
+    k.player.anchor = 400;
+    struck.clock = 1;
+    eyeballReacts(struck, eb, 12, k);
+    const dying = foe("initeyeball", eb.death!, "dead");
+    k.player.anchor = -400;
+    dying.clock = 1;
+    eyeballReacts(dying, eb, 22, k);
+    k.player.anchor = 0;
+    if (struck.vy <= 0 || dying.vy >= 0)
+      fail(`the hover goes on under a flinch and a death: vy ${struck.vy} with him below, ${dying.vy} with him above`);
+  }
+  ok(`a flinching or dying eye is still drawn to his height`);
+
   // `0x43e503`: an eye that has lost him finds the nearest ladder (0x40b660),
   // drifts at it until it is inside fifty, climbs towards a hundred above him
   // inside the ladder's span, and comes off it back to the hover within a
@@ -140,6 +157,9 @@ const machines = (): void => {
   oxReacts(hit, ox, 6, k);
   if (said[0] !== 0x30) fail(`attack tag 1 goes out voiced 0x2f + 1; said ${said.join(",")}`);
   ok(`an ox answers a blow with a voiced attack or slides back, and lies 800 frames`);
+  // `0x43f9aa` is the handler's only test — no class, no state — and 5190,
+  // the death's first cel, is drawn with a body
+  if (!ox.corpseTakesHits || !ox.hitsOwn) fail(`0x43f9a0 turns nothing away but a negative strength`);
 };
 
 machines();
@@ -228,6 +248,24 @@ if (eye.y !== was.y) fail(`it has no gravity and should hold its height; y ${was
  */
 if (eye.x !== was.x) fail(`an unnoticed eye should hang where it was put; x ${was.x} -> ${eye.x}`);
 ok(`an eye holds x ${eye.x}, y ${eye.y} with 50 health, where the level hung it`);
+
+// 3b. a blow while it spits is the knock-out (`0x43e9b5`), and the knock-out is
+//     kind 3 — so a second blow finds state 3 on the 6300s, none of the three
+//     cels `0x43e9bc` answers, and `0x43e9d4` takes it without a new flinch
+{
+  const box = { top: 0, left: 0, bottom: 1, right: 1 };
+  eye.script = 7;
+  game.strikeFoe(eye, 10, { dx: 0, dy: 0 }, 1, eye.y, box);
+  const out = FOES.initeyeball.flinch![3];
+  if (eye.state !== "flinch" || eye.anim !== out || eye.script !== 3)
+    fail(`a blow on a spitting eye is 0x4727f0 tag 0, kind 3: ${eye.state} ${eye.anim.from} kind ${eye.script}`);
+  h.frame(3);
+  const at = eye.clock;
+  game.strikeFoe(eye, 10, { dx: 0, dy: 0 }, 1, eye.y, box);
+  if (eye.anim !== out || eye.clock !== at || (eye.hp as number) !== 30)
+    fail(`a second blow takes ten and leaves the knock-out running: ${eye.anim.from} at ${eye.clock} (was ${at}), hp ${eye.hp}`);
+}
+ok(`a knocked-out eye takes a second blow without starting the knock-out again`);
 
 // 4. five doors, all shut, and five levers, all off
 const gates = game.level!.doors.flat();
@@ -416,5 +454,21 @@ if (!move(["right"], 240, { jump: true, until: () => room() === "hugeroom" }))
  * floor it belongs to.
  */
 ok(`...and the hall of lifts is reached, at x ${game.p.x}, y ${game.p.y}`);
+
+// ...and a blow on the death's first cel is the whole handler again: 0x33,
+// 0x34, the death from its first frame and another 0x140 (`0x43fa36`)
+{
+  const ox = game.level!.spawned.flat().find((e) => e.kind === "initox");
+  if (!ox) fail(`SEWER places an ox`);
+  ox.hp = 0;
+  game.killFoe(ox, FOES.initox);
+  const paid = game.stats.score;
+  ox.clock = 1;
+  const a = game.foeAnchor(ox, game.level!) ?? { x: ox.x, y: ox.y };
+  game.strikeFoe(ox, 47, { dx: 20, dy: 0 }, 1, a.y, { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 }, 0, a);
+  if (game.stats.score - paid !== 320 || ox.clock !== 0 || ox.state !== "dead")
+    fail(`an ox struck on 5190 dies again and pays again; the score rose ${game.stats.score - paid}`);
+  ok(`an ox struck as it falls dies again from the top and pays another 320`);
+}
 
 pass(`SEWER's doors are locks, its levers are keys, and three of them can be walked to`);

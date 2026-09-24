@@ -100,11 +100,15 @@ import {
  *   **101** for its whole run before removing it. So Ghengis does not leave a
  *   corpse: it comes apart into nine pieces over a blast.
  * - The hit handler itself, `0x422ad0`, is the class's `obj+0x12`
- *   (`0x422619`). It throws a blow away outright when the striker is in its own
- *   class list `[0x46f048]` or in `[0x46ecd0]` or `[0x46ecc8]`, when the
- *   striker's `obj+0x1a` is 0, and while this one is already in state 6 or state
- *   7 — so nothing interrupts the burst, and nothing of its own kind can hurt
- *   it. A striker whose `obj+0x1a` is **-4** is absorbed whole.
+ *   (`0x422619`). A piece (state 6) answers 1 and clears its own `obj+0x2a`
+ *   before anything else (`0x422ad9`..`0x422aef`). Otherwise it throws a blow
+ *   away outright when the striker is in its own class list `[0x46f048]` or
+ *   in `[0x46ecd0]` or `[0x46ecc8]`, when the striker's `obj+0x1a` is 0, and
+ *   while this one is the blast (state 7) — so nothing of its own kind can
+ *   hurt it. A striker whose `obj+0x1a` is **-4** is absorbed whole; no other
+ *   negative strength is turned away, and what `0x42f910` makes of a −9 goes
+ *   through its error report `0x408f80(0, 0xc22)` first — not carried. The
+ *   spray is handed no hitter (`0x422b73`), so the goo flies loose.
  */
 const NOT_HERE = "0x422a25, 0x422a6f, 0x4229d2, 0x422a0a, 0x422ad0" as const;
 
@@ -380,7 +384,7 @@ function burst(e: Enemy, k: BrainCtx): void {
 }
 
 /** `0x422d2b`..`0x422d95` — the blast, and the only one of the ten that hurts */
-const GHENGIS_BLAST: CastKit = {
+export const GHENGIS_BLAST: CastKit = {
   cels: [460, 461, 462, 463, 464, 465, 466, 467, 468, 469],
   hold: 1,
   speed: 0,

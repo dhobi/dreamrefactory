@@ -115,42 +115,40 @@ import {
 import type { Foe } from "../foes";
 
 /**
- * The five states a brain is never called during, and the three things they do
- * that the page's own flinch/death path does not know about.
+ * The states a brain is never called during, and what the page does for each.
  *
  * - **7**, the flinches (`0x4411e6`). `0x441ea4` sorts a blow by `0x2d`: under
  *   it, one of the three single cels of `0x473a28` at `0x434540(3) - 1`; at or
  *   over it, the six-cel `0x473a48` tag 3. A blow landed while the dive is
- *   already running (`obj+0x18 == 8`) uses the same threshold for tags **4** and
- *   3 of the same script — and tag 4, cel 7044, is the one the page's `flinch`
- *   table is missing. Tags 0…3 hand back to the idle; **tag 4 hands to
- *   `0x473950` tag 1**, so a heavy blow mid-dive drops it straight back into the
- *   dive's recovery rather than into the hover.
- * - **9**, the flare thrash (`0x441509`). Described above: it is the ONLY thing
- *   in the executable that raises a sprinkler, and the page currently attributes
- *   that to the dive. It is installed only from `0x441d8f`, only by a −9 blow,
- *   only while `obj+0x18 < 9`.
- * - **10**, the fall (`0x441615`), is no longer one of them: its tag 0 and the
- *   laps are the brain's state 10 below. What stays the page's is the landing —
- *   tag 1 waits for `obj+0x30` and `obj+0x2e`, then pins `[0x4a7574]` to where
- *   it actually landed, plays sound `0x18`, **restores its health to
- *   `0x40e300(0x3e8)`** and installs kind 11 — which {@link Foe.rallies} runs.
- * - **11 tags 0..2**, the ground flinches. `0x441fa3` picks one of the three
+ *   running (`obj+0x18 == 8`) takes tag **4** under the threshold and tag 3
+ *   over it. Tags 0…3 hand back to the idle; tag 4 hands to `0x473950` tag 1,
+ *   so a light blow mid-dive drops it into the dive's recovery. All five are
+ *   kind 7 in {@link Foe.flinch}, so a second blow reads state 7.
+ * - **9**, the flare thrash (`0x441509`), installed only from `0x441d8f`, only
+ *   by a −9 blow, only while `obj+0x18 < 9` — the one thing in the executable
+ *   that raises a sprinkler. {@link kraggReacts}.
+ * - **10**, the fall (`0x441615`): its tag 0 and the laps are the brain's
+ *   state 10 below. What stays the page's is the landing — tag 1 waits for
+ *   `obj+0x30` and `obj+0x2e`, then pins `[0x4a7574]` to where it actually
+ *   landed, plays sound `0x18`, **restores its health to `0x40e300(0x3e8)`**
+ *   and installs kind 11 — which {@link Foe.rallies} runs.
+ * - **11 tags 0..2**, the ground takes. `0x441fa3` picks one of the three
  *   cels of `0x473ba8` at `0x434540(3) - 1` — the page's {@link Foe.pick} —
- *   and the flinch's `resume` hands state 12 back as state 11 would.
+ *   and state 11 (`0x4417a8`) stands it on kind 12 as each ends, which is
+ *   the flinch's `resume`. A blow during one is taken by nothing
+ *   (`0x441ef4`; {@link kraggGate}).
  * - **16**, the death that sticks (`0x4419fe`). `0x42f870(obj, 0)` takes it out
- *   of the census, floor offset −25, and tags 0/1 hand to tag 2 while playing
- *   sound `0x1b` and calling `0x4423a0(point, 0xf)` — fifteen pieces of debris,
- *   each with a random arc, out of `0x474db0`.
+ *   of the census, floor offset −25, and the end of tag 0 or 1 hands to tag 2
+ *   while playing sound `0x1b` and calling `0x4423a0(point, 0xf)` — fifteen
+ *   roaches, each on its own arc. {@link kraggReacts}.
  *
- * The ground form's hit handler is its own machine and worth naming here too.
- * `0x441ef0`: states 9, 10 and 11 take **no hits at all**; from state 12 up a
- * blow with a negative strength is worth a flat `0x46` and anything else is
- * `0x42f910`'s own figure; `[0x473de4]` counts them, three give the flinch, and
- * every FOURTH one either spins it round (`0x473bd8` tags 2/3, the two-cel turn)
- * if the player has got behind it, or makes it swing back (`0x473cc8` tag 1).
- * The gate in front of it is {@link kraggGate}; the count and what it picks
- * are not here.
+ * The ground form's hit handler is its own machine. `0x441ef0`: states 9, 10
+ * and 11 take **no hits at all**; from state 12 up a blow with a negative
+ * strength is worth a flat `0x46` and anything else is `0x42f910`'s own
+ * figure; `[0x473de4]` counts them, three give a take, and every FOURTH one
+ * either spins it round (`0x473bd8` tags 2/3) if the player has got behind it
+ * or makes it swing back (`0x473cc8` tag 1). The gate is {@link kraggGate}, the
+ * count and what it picks {@link Foe.pick}.
  */
 const NOT_HERE = "0x4411e6, 0x441509, 0x441615, 0x4417a8, 0x4419fe" as const;
 
@@ -997,6 +995,23 @@ export const kraggReacts: Reaction = (e, foe, _run, k) => {
    * −25 over it every frame (`0x441a13`).
    */
   e.floor = e.state === "dead" ? -25 : e.rallied ? -15 : 0;
+  /**
+   * ---- 16, `0x441a42`: tag 0's eight cels end and tag 2 goes on, and with
+   * it 0x1b through `0x40f090` and `0x4423a0(point, 0xf)` — fifteen roaches.
+   * The point is its own `obj+6` moved 25 up (`0x441a5f`) and 20 BEHIND it
+   * (`0x441a65`..`0x441a79`: −20 when `obj+0x28` is 0, +20 when it is 1).
+   */
+  if (e.state === "dead") {
+    if (e.threw || e.clock < DEATH_TAG0 * e.anim.hold) return;
+    e.threw = true;
+    const at = {
+      x: k.anchorX(e) + (e.facing > 0 ? -DEATH_BEHIND : DEATH_BEHIND),
+      y: k.anchorY(e) - DEATH_UP,
+    };
+    k.say({ ...e, ...at }, DEATH_SPILL_SOUND);
+    k.spill(at, DEATH_SPILL);
+    return;
+  }
   if (e.anim !== foe.burns?.anim) return;
   const to = k.sprinkler(e);
   if (to) {
@@ -1017,6 +1032,16 @@ export const kraggReacts: Reaction = (e, foe, _run, k) => {
   if (e.clock >= lead) k.raise(e);
 };
 
+/** `0x473d38` tag 0 — eight cels before tag 2 */
+const DEATH_TAG0 = 8;
+/** `0x441a79` / `0x441a5f` — where the roaches come out, against its own point */
+const DEATH_BEHIND = 0x14;
+const DEATH_UP = 0x19;
+/** `0x441a6c` — 0x1b, through `0x40f090` */
+const DEATH_SPILL_SOUND = 0x1b;
+/** `0x441a8a` — fifteen of them */
+const DEATH_SPILL = 0xf;
+
 /** `0x44154c` — the boss is pulled to a point this far BELOW the record's own */
 const SPRINKLER_DROP = 0x78;
 
@@ -1034,12 +1059,13 @@ const SPRINKLER_DROP = 0x78;
  * fire.
  *
  * The page keeps kragg's state where the brain keeps it, in `Enemy.script`,
- * with two exceptions it has to read off the animation: the burn is the
- * page's {@link Foe.burns} rather than an installed script (state 9), and the
- * fall is the page's {@link Foe.rallies} run (state 10, until the landing
- * puts the health back). The rest of `0x441ef0` — `[0x473de4]`'s count, the
- * ground flinches, the turn and the swing it picks — is not here; a blow the
- * ground form takes goes on through the page's own arithmetic.
+ * and every reaction it puts on writes its own kind there as `0x45d090`
+ * does: the thrash 9, the fall 10 (`rallyFall`), the ground takes 11,
+ * the death 16. The burn is still read off the animation as well, since a
+ * flinch that ends hands the machine its gait without a kind of its own. The
+ * rest of `0x441ef0` — `[0x473de4]`'s count and the turn or swing the fourth
+ * blow picks — is {@link Foe.pick}; the death it reinstalls on a corpse is
+ * {@link Foe.corpseTakesHits}.
  */
 export function kraggGate(
   e: Enemy,
@@ -1047,7 +1073,7 @@ export function kraggGate(
   blow: { damage: number; code: number },
 ): { damage: number; code: number } | null {
   const state =
-    e.anim === foe.burns?.anim ? 9 : e.rallied && e.hp <= 0 ? 10 : (e.script ?? 1);
+    e.anim === foe.burns?.anim ? 9 : (e.script ?? 1);
   if (state < 9) return blow;
   if (state <= 11) return null;
   // `0x441efa` — `mov ax, 0x46` before `0x441efe` asks whether the strength is
