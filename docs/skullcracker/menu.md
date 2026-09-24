@@ -463,6 +463,24 @@ outranks what is on it, and it is refused if the other channel is already
 playing that same sound. So a handler that asks for its sound on three frames
 running is heard once. A replaced sound is cut, not faded (`0x456f00`).
 
+A record can also loop. Its loop word (`+0x33`) is clear when the bank
+opens, and `0x40ee90` sets or clears it. `0x428000` hands the word to any
+channel playing the record, and a looping channel's queue goes back to its
+start instead of running dry, so the channel never empties and keeps its
+priority. When the loop is let go, the pass in hand plays out.
+
+Every play call also sets the record's volume and pan before the channels
+are argued over, and that moves an instance that is already playing
+(`0x427da0`, `0x427ed0`). So a hum is armed once and asked for every frame
+where the thing now is: the mixer refuses the repeat, but the sound follows
+it. `0x40eee0` silences a sound by setting its volume to nothing. That is how
+the flamer falls quiet when you let go, and how a falling scream stops at the
+floor.
+
+The loops the page runs are the eyeball's, Boggs' machine, the TOWER surges,
+kragg on the wing (only in the gaps between ARCADE's sprinkler rects), the
+hardcore's thrown whoosh and the goal craft's hum.
+
 The stereo is `SC.EXE`'s own too: DirectSound is never asked to pan or fade.
 `0x427da0` and `0x427ed0` turn a volume and a pan into two linear gains,
 `volume/255 × (255 − pan)/255` for the left and `volume/255 × pan/255` for

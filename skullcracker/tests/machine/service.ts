@@ -30,7 +30,7 @@ import { type Enemy } from "../../src/brains/kit";
 import { SKATEBOARD } from "../../src/props";
 import { FPS, fail, headless, ok, pass, recordSound } from "./harness";
 import type { FoeAnim } from "../../src/foes";
-import { HARDCORE } from "../../src/brains/hardcore";
+import { HARDCORE, HARDCORE_THROW, HARDCORE_THROW_LOW } from "../../src/brains/hardcore";
 
 const h = await headless("level=6");
 const { game } = h;
@@ -139,6 +139,81 @@ for (let i = 0; i < 600 && after < 0; i++) {
 if (!flinched) fail(`never landed a blow on the one at the end`);
 if (after !== 3 && after !== 6) fail(`0x43d062 hands a flinch to kind 3 or kind 6; it went to kind ${after}`);
 ok(`a blow on it flinches, and the flinch hands on to kind ${after}`);
+
+/**
+ * 4c'. ...and what it throws: `0x43c860`. Tag 2 once and tag 3 round and round
+ * in flight; a HIGH throw rolls `0x434540(0x64)` as its launch ends and under
+ * 30 goes out on tag 4 and COMES BACK — `0x43c9bd` turns it past 700 from the
+ * thrower, 25 below his point, at the launch's 80 the other way. Only the
+ * landing ends it, and it lies there 0x28 frames past that (`0x43cafb`).
+ */
+{
+  await go(8700);
+  const hc2 = game.spawnedHere().find((e) => e.kind === "inithardcore")!;
+  const a = game.foeAnchor(hc2, game.level!)!;
+  // the fork: a run of high throws, each let go and stepped past its launch;
+  // the low ones never roll
+  let back = 0;
+  const runs = 40;
+  for (let i = 0; i < runs; i++) {
+    game.casts.length = 0;
+    game.castAt(hc2.x, a.y, 1, HARDCORE_THROW);
+    game.castAt(hc2.x, a.y, 1, HARDCORE_THROW_LOW);
+    h.frame(2);
+    if (game.casts.find((c) => c.kit === HARDCORE_THROW_LOW)?.out) fail(`a low throw never comes back (0x43c926)`);
+    if (game.casts.find((c) => c.kit === HARDCORE_THROW)?.out) back += 1;
+  }
+  if (back === 0 || back > runs / 2) fail(`under 30 in 100 comes back; ${back} of ${runs} did`);
+  // one that does: out on 2114/2115, turned past 700, 25 below where he stood
+  game.casts.length = 0;
+  game.castAt(hc2.x, a.y, -1, HARDCORE_THROW);
+  const c = game.casts[0];
+  c.out = true;
+  let turned: { was: number; x: number; y: number; vx: number } | null = null;
+  const cels = new Set<number>();
+  for (let i = 0; i < 40 && game.casts.includes(c) && c.landed === undefined; i++) {
+    const was = c.x;
+    h.frame();
+    if (c.out) cels.add(game.castCel(c));
+    if (c.back === 0 && !turned) turned = { was, x: c.x, y: c.y, vx: c.vx };
+  }
+  // the frame it turns is the frame it starts back: the think turns it and
+  // stops it, and the same frame's script step spends `0x4748c8`'s dx 80
+  // before the move (`0x45d0f0`, `0x42fd80`) — so it is already 80 back
+  if (!turned || Math.abs(turned.was - hc2.x) <= 700 || turned.vx !== 80 || turned.x - turned.was !== 80 || turned.y !== a.y + 25)
+    fail(`the far leg turns past 700 and moves 80 back on that frame, 25 below his point: ${JSON.stringify(turned)} from x${hc2.x} y${a.y}`);
+  if ([...cels].some((cel) => cel !== 2114 && cel !== 2115)) fail(`the far leg is tag 4, 2114 and 2115; saw ${[...cels].join(",")}`);
+  // ...and it goes only by landing, then lies 0x28 more
+  const landedAt = h.until(() => c.landed !== undefined || !game.casts.includes(c), 200);
+  if (landedAt < 0 || c.landed === undefined) fail(`only the landing ends it`);
+  const lay = h.until(() => !game.casts.includes(c), 100);
+  if (lay < 40 || lay > 43) fail(`it lies 0x28 frames past its landing (0x43cafb); it went after ${lay}`);
+  // ...and a hit leaves it flying, worth nothing (`0x43c866`): one thrown
+  // into the player with the damage on, clear of anything else that hits
+  await h.load("level=6&damage=1&foehit=1");
+  h.until(() => game.p.onGround, 60);
+  h.frame(4);
+  game.casts.length = 0;
+  const pa = game.p.y - game.p.feet;
+  // from 240 behind him, a LOW one — a high one may take the far leg, whose
+  // 2114/2115 carry no strike box at all — launched 25 below a point 60 above
+  // his anchor, so it crosses his chest
+  game.castAt(game.p.x - 240, pa - 60, 1, HARDCORE_THROW_LOW);
+  const s2 = game.casts[0];
+  const hp = game.stats.health;
+  let hitAt = -1;
+  for (let i = 0; i < 12 && hitAt < 0; i++) {
+    h.frame();
+    if (game.stats.health < hp) hitAt = i;
+  }
+  if (hitAt < 0) fail(`a high throw from 240 behind should meet him: health ${hp} -> ${game.stats.health}, throw at x${s2.x} y${s2.y}, him x${game.p.x} y${pa}`);
+  if (!game.casts.includes(s2) || !s2.struck || game.castBlow(s2) !== 0 || s2.landed !== undefined)
+    fail(`the throw that met him flies on, worth nothing (0x43c866): here ${game.casts.includes(s2)}, struck ${s2.struck}, blow ${game.castBlow(s2)}`);
+  const after = game.stats.health;
+  h.frame(3);
+  if (game.stats.health !== after) fail(`and it cannot strike him twice: health ${after} -> ${game.stats.health}`);
+}
+ok(`its throw flies on harmless once it has struck, sometimes comes back, and goes only by landing`);
 
 /**
  * 4d. ...and the blow that fells it. `0x43d28b` hands `0x40cba0` no hitter, so
@@ -300,6 +375,48 @@ if (life > 0xb4) fail(`0x4385d0 seeds it 180 at most; it read ${life}`);
 ok(`...and leaves its board — cels ${[...boardCels].sort().join(",")}, lying there ${life} frames`);
 // and it is swept up: `0x437809` spends one a frame and removes it at -1
 if (h.until(() => !game.skates.includes(board), 200) < 0) fail(`0x437809 removes it when AI+0xa goes negative; it is still there`);
+
+/**
+ * ...and a board lying there can be STEPPED on — `0x437854`, state 1. On it,
+ * it takes a unit of speed your way every frame and no drag; the frame it has
+ * gone on out from under you it is kicked back up on its hop with forty
+ * frames off its life, and faster than 25 (`0x4379a3`) it takes you down with
+ * it: `0x402fa0(2)`, the knockdown.
+ */
+{
+  const lay = (speed: number) => {
+    game.skates.length = 0;
+    game.dropBoard({ x: game.p.x, y: game.p.y, facing: game.p.facing } as Enemy);
+    const d = game.skates[0];
+    h.until(() => d.down, 60);
+    d.x = game.p.x;
+    d.vx = speed * game.p.facing;
+    d.life = 150;
+    return d;
+  };
+  game.p.act = null;
+  const slow = lay(0);
+  const seen: string[] = [];
+  let kicked = -1;
+  for (let i = 0; i < 40 && kicked < 0; i++) {
+    const was = slow.life;
+    h.frame();
+    if (slow.stood) seen.push("on");
+    if (!slow.down && was - slow.life >= 0x28) kicked = i;
+  }
+  if (!seen.length || kicked < 0 || Math.sign(slow.vx) !== game.p.facing || game.p.act === "downFront")
+    fail(`standing on a board rolls it on and kicks it up behind you, and slowly that is all: on ${seen.length}, kicked ${kicked}, vx ${slow.vx}, ${game.p.act}`);
+  ok(`a board stood on rolls away your way and is kicked up as it leaves you`);
+  const fast = lay(30);
+  h.hold(game.p.facing > 0 ? "left" : "right", false);
+  let down = false;
+  for (let i = 0; i < 20 && !down; i++) {
+    h.frame();
+    down = game.p.act === "downFront";
+  }
+  if (!down) fail(`a board faster than 25 going out from under you knocks you down (0x4379aa): ${game.p.act}, vx ${fast.vx}`);
+  ok(`and one going faster than 25 takes you down with it`);
+}
 ok(`...and 0x437809 sweeps it up again`);
 
 // 10. the goop hits back, once the switch that lets anything hit back is on.

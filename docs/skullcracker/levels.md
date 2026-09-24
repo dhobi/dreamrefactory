@@ -380,6 +380,13 @@ tests in their machines are measuring. The killing blow puts the friction back
 to 1.0, so the body stops where it falls, and every one of the four leaves a
 skateboard there (`0x438450`).
 
+The board can be stood on. While it lies there its think (`0x437854`) asks
+whether the player's feet are on its top, and each frame they are it rolls on a
+unit faster his way with no drag at all. The frame it has gone on out from under
+him it is kicked back up on its hop with forty frames off its life, and if it
+was doing more than 25 it takes him down with it — `0x402fa0(2)`, the knockdown
+(`0x4379aa`).
+
 **They are all statues until you come to them.** Each stands dormant on one cel
 until the player's own point crosses into its record's rect, and then walks. The
 dog has the same mechanism and the level-four boss makes a performance of it; these
@@ -476,7 +483,11 @@ so it travels on its velocity. Its hit handler is the only one in the chapter
 with **no ignore list**, which means goop, knives and its own allies all land on
 it. It bleeds with no hitter (`0x43d28b`), so its goo flies every way, and its
 death throws the body up and lets it come down bouncing at seven tenths
-(`0x42f7f0(obj, 0.7)` at `0x43d0c5`), thudding 0x3d on every landing. The level waits for it as well as for the count: SERVICE's share is chapter
+(`0x42f7f0(obj, 0.7)` at `0x43d0c5`), thudding 0x3d on every landing. What it
+throws ends only by landing: a hit leaves it flying on worth nothing
+(`0x43c866`), and one high throw in about three-and-a-half comes BACK — out on
+2114/2115 until it is 700 from where it was thrown, then turned, dropped to 25
+below the thrower's point and sent back at 80 (`0x43c917`, `0x43c9bd`). The level waits for it as well as for the count: SERVICE's share is chapter
 two's ordinary 0.75, but its death writes `[0x472574] = 1` (`0x43d309`), and the
 chapter's end test `0x43b950` opens SERVICE's goal only when the count is met AND
 that flag is set (`0x43b9ec`).

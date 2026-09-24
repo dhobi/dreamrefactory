@@ -266,8 +266,11 @@ ok(`the test tube carries the player's own twelve hundred health`);
     const c = game.celRec(game.level!.sbk, game.celOf(e))!;
     const b = game.hurtBox(e, c, game.level!);
     const dir = e.x > game.p.x ? 1 : -1;
-    // `spawnBolt` lifts it 40 and scatters it back down by up to 40
-    game.spawnBolt(e.x - dir * 150, (b.top + b.bottom) / 2 + 20, dir);
+    // `spawnBolt` lifts it 40 and scatters it back down by up to 40, and puts
+    // it 120 ahead: a bolt is tested where it stands, from the frame it is
+    // made (`0x430350`), so it is born twenty short of the tube's point and
+    // clear of the arm that stands at x8120..8157
+    game.spawnBolt(e.x - dir * 140, (b.top + b.bottom) / 2 + 20, dir);
     h.frame(3);
   };
   t.state = "flinch";

@@ -26,6 +26,7 @@
  *     until the boss does.
  */
 import { fail, headless, ok, pass, recordSound } from "./harness";
+import { FOE_SFX } from "../../src/sound";
 import { FOES, type FoeAnim } from "../../src/foes";
 import {
   kragg,
@@ -34,7 +35,7 @@ import {
   KRAGG,
   seedKraggFall,
 } from "../../src/brains/kragg";
-import { TICK_SCALE, type BrainCtx, type Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, install, type BrainCtx, type Enemy } from "../../src/brains/kit";
 
 /**
  * The machine itself, on its own: `kragg` handed a stand-in context and
@@ -501,9 +502,16 @@ ok(`and a flare into a burning kragg does nothing — ${landedOnBurn} flare(s) s
 game.inv.armed = false;
 game.inv.rounds = {};
 await go();
+// ...and the first bar is started at a sliver. The flying form's dive ends in
+// the CARRY whenever he is in reach of it (`0x4413a8`, test 12): it takes him
+// up, puts ten a frame of him into itself and throws him down, so a fist
+// fight on the floor under it feeds it faster than it bleeds. The level's
+// answer is the water (test 7); what this measures is the fall and the rise
+const sliver = 40;
+boss().hp = sliver;
 const score0 = game.stats.score;
 let rallied = false;
-let lowest = 1000;
+let lowest = sliver;
 let fightFrames = 0;
 let blows = 0;
 for (; fightFrames < 20000; fightFrames++) {
@@ -547,7 +555,7 @@ for (; fightFrames < 20000; fightFrames++) {
     }
   }
 }
-if (lowest >= 1000) fail(`a jumping attack should reach it; it never dropped below ${lowest}`);
+if (lowest >= sliver) fail(`a jumping attack should reach it; it never dropped below ${lowest}`);
 if (!rallied) fail(`0x441787 puts a full bar back when it lands; it had ${lowest} left and never stood up`);
 // 7033..7036 is `0x473b60` tag 0, the FALL
 if (![7033, 7034, 7035, 7036].some((c) => cels.has(c)))
@@ -614,6 +622,33 @@ ok(`and the craft comes down for it`);
     fail(`the flying form sparks and does not bleed (0x441db8): gobs +${game.gobs.length - gobs0}, sparks +${game.sparks.length - sparks1}`);
   if (script() !== 7) fail(`a take on the wing is kind 7 (0x473a28/0x473a48): ${b.script}`);
   ok(`a blow on the wing throws a spark and no goo, and the take reads kind 7`);
+
+  // `0x440c81`..`0x440ca2` — on the wing and over no sprinkler it arms and
+  // plays its hum every frame; the fall lets it go (`0x441e34`). ARCADE's
+  // seven sprinkler rects tile the floor to the ceiling, so it is in the gaps
+  // between them — x723..780 is one — that it hums at all
+  const inGap = (): void => {
+    b.x = 750;
+  };
+  calls.length = 0;
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  const flies = FOE_SFX.kraggFlies;
+  if (!calls.some((c) => c.call === "loop" && c.args[0] === flies && c.args[1] === true) ||
+    calls.filter((c) => c.call === "effect" && c.args[0] === flies).length < 1)
+    fail(`0x440c81 arms and plays 0x17 each frame on the wing; heard ${calls.map((c) => `${c.call} ${c.args[0]}`).join(", ")}`);
+  calls.length = 0;
+  game.rallyFall(b, K.rallies!, false);
+  if (!calls.some((c) => c.call === "loop" && c.args[0] === flies && c.args[1] === false)) fail(`0x441e34: the fall lets the wing's loop go`);
+  ok(`on the wing it hums on a loop, and the fall lets it go`);
 
   // the ground form, as the landing leaves it
   const ground = (): void => {
@@ -712,6 +747,40 @@ ok(`and the craft comes down for it`);
   if (sf !== swing.cels.length * swing.hold || b.anim !== KRAGG.stand)
     fail(`the swing back is 0x473cc8 tag 1's ${swing.cels.length} frames and then the stand; ${sf} frames, then ${b.anim.from}`);
   ok(`its snap round stands it up after ${tf} frames and its swing back after ${sf}, the frame each script ends`);
+}
+
+/**
+ * 12. the CARRY — `0x4413a8`, the dive's end taking him with no test of
+ * whether anything connected. Every frame: `[0x46b1b4]` cleared, so its fist
+ * draws him; ten out of him (`0x402ac0(0xa)`) and ten into it; he is held fifty
+ * to its side at its height, standing still. As the eight cels end he is let
+ * go with ten along its facing, drawn again, and `0x402fa0(2)` knocks him down.
+ */
+{
+  await go("&damage=1");
+  const b = boss();
+  b.hp = 500;
+  install(b, KRAGG.carry[1], true);
+  const hp0 = game.stats.health;
+  let hidden = 0;
+  let off = 0;
+  const run = KRAGG.carry[1].cels.length * KRAGG.carry[1].hold;
+  for (let f = 0; f < run - 1; f++) {
+    h.frame();
+    if (game.p.hidden) hidden += 1;
+    const want = game.BRAIN_CTX.anchorX(b) + (b.facing > 0 ? 50 : -50);
+    // held at its point as its think found it, and it flies on by its own
+    // speed after (`0x42fd80` moves everything after the thinks)
+    if (Math.abs(game.p.x - want) > Math.abs(b.vx / TICK_SCALE) + 1) off += 1;
+  }
+  const drained = hp0 - game.stats.health;
+  h.frame(3);
+  if (hidden < run - 2 || off > 1) fail(`0x4413b8 / 0x44141e: carried unseen at its side; hidden ${hidden} of ${run - 1}, off its side ${off}`);
+  if (drained < 10 * (run - 2)) fail(`0x4413fc takes ten a frame; ${drained} over ${run - 1} frames`);
+  if (b.hp < 500 + 10 * (run - 2)) fail(`0x4413c9 puts the same ten into kragg; it has ${b.hp}`);
+  if (game.p.hidden || game.p.act !== "downFront")
+    fail(`0x4414ba / 0x4414c3: let go, drawn again and knocked down; hidden ${game.p.hidden}, act ${game.p.act}`);
+  ok(`kragg carries him unseen for ${run} frames, ${drained} health out of him and into itself, and throws him down (0x4413a8)`);
 }
 
 pass("ARCADE is one room, one boss out of reach, and a goal that waits for it");

@@ -732,51 +732,71 @@ the next frame and sets it back to -1. Two things in the game use it — the
 blaster's muzzle, with 0xe1, and this, with 0. Colour 0 in TOWER's own palette
 is pure blue.
 
-## A grabber holds you by taking your step away
+**And the bolt strikes.** Its own think, `0x426780`, asks one thing on its first
+frame (`obj+0x42` and `obj+0x44` both 0): is its point below the player's
+(`0x42679c`)? There is no x in it, so every bolt asks it and a player who has
+climbed above the bolts' points — y 14755 — is hit wherever he stands. With the
+scepter drawn (`0x402ee0`, weapon 16) it is `0x402fa0(6)`: `0x470c40` tag 18,
+five tags of three frames in the armed state machine `0x42d2b0`, which let the
+bolt out of the rod four times — the scepter's fire function on variants 3 and
+4, free and hung 130 above him (`0x41f7e2`), with the flash in colour 5 before
+two of them — then fill the gauge to 160 (`0x42d9e0`), throw the scepter on the
+floor (`0x42da0d`) and knock him down. Anything else is `0x402fa0(7)`: the
+flash in colour 5 and `0x4721a0` tag 3, the shock and the fall — a death,
+asked about nothing, health included. The bolt holds its first cel for two frames and
+asks on both, and `0x45d090` puts the reaction on from its first frame each
+time: the charge or the shock starts over a frame late, and the shock floods a
+second frame. The life is spent once. The second character's dispatcher
+(`0x449700`) and armed machine (`0x4478b0`) do the same on its own cels.
 
-SEWER's hall of lifts is the one stretch of the game that cannot be walked.
-Fixing three defects there makes the hall crossable end to end, but also turns
-the bushes from things that DUMP you into things that PIN you, which breaks two
-earlier stretches of the same level that depend on being dumped; that change was
-reverted. The cause lies underneath all three defects.
+## A carrier holds you by writing your point, and draws you itself
 
 The bush handler is `0x43ec80..0x43f174`: one function, a switch on `obj+0x18`
-with five kinds through the table at `0x43f150`. Two details are not the
-problem. `0x43045d` is a spend rather than a rate limit — the frame a hitter
-connects, `[obj+0x1a] = 0` and the scan stops, unless the strength is `0x65` —
-and the bush re-arms every frame anyway. The re-trigger cooldown is `user+0xa`:
-`0x434540(0x28) + 0xa`, a random 10 to 49 frames, reset after every trigger of
-the PAIRED bush, and gated on the player being neither held nor already slumped.
+with five kinds through the table at `0x43f150`. `0x43045d` is a spend rather
+than a rate limit — the frame a hitter connects, `[obj+0x1a] = 0`, unless the
+strength is `0x65` — and the bush re-arms every frame anyway. The re-trigger
+cooldown is `user+0xa`: `0x434540(0x28) + 0xa`, a random 10 to 49 frames, reset
+after every trigger of the PAIRED bush, and gated on the player being neither
+held nor already slumped.
 
-The cause is a global:
+The word they all touch is a global:
 
 ```
   cmp  word ptr [0x46b1b4], 0
   je   skip
-  call 0x402980            ; -> 0x42fbd0(player), the player's own step
+  call 0x402980            ; -> 0x42fbd0(player) -> 0x40e5f0 -> 0x4026d0, the blit
 ```
 
-That shape appears thirteen times, once in each level's main loop, and
-twenty-four classes write the word. **`[0x46b1b4]` is the player-step gate.** A
-grabber in this engine does not hold you with a flag on YOU. It holds you by
-zeroing that word, every frame, so your controls do not run at all — the bush
-does it at `0x43ef0a`, in phase 2, and only once `0x402f60` says you are no
-longer hittable, which means the -5's kind-26 reaction is up. Its own
-ten-a-frame sink then carries you down, and `0x43ef28`/`0x43ef57` hand the gate
-back when the script ends.
+That shape sits in the DRAW half of each level's loop, after `0x42fc10`, and
+twenty-four classes write the word. **`[0x46b1b4]` is the player-draw gate**,
+not a step gate: the player's think (`0x402950`) runs every frame whatever it
+says. A carrier clears it because its own cels draw him — kragg's fist
+7046/7047 (`0x4413b8`), the eyeball's carry (`0x43e260`), the skeleton's
+1240s/1340s (`0x4236f8`), the bush in its phase 2 (`0x43ef0a`) — and hands it
+back as it lets go (`0x4414ba`, `0x43e3a1`, `0x4237f8`, `0x43ef28`). A carry
+holds him by writing his point every frame after his think has run, which is
+`BrainCtx.pin`; the page keeps the gate as `p.hidden`.
 
-So the dump is not the grip letting go at a height. It is a sequence: the -5
-lands, the reaction takes the player's kind to 26, the bush stops arming and
-takes the player's step away, the bush sinks with them, and the gate comes back
-wherever it left them. This page models a hold as `p.heldBy` — a latch on the
-player, released when the cel loses its strike box — which is why fixing the
-three defects produced a pin: nothing takes the player's step away, so a grab
-can only ever be a hold.
+Four carriers end by putting him in a pose of the disc's own choosing —
+`0x402fa0(mode)`, the player's pose setter (`0x42f280`, table `0x42f418` on
+`mode + 1`, every mode dropping the keys first through `0x402df0`):
 
-The fix is a port of the gate rather than another patch. One question it leaves
-that reading cannot settle: the hall wants the player left on the walkway and
-door-7 wants them dumped off it, and both come out of this one machine, so the
-difference has to be geometry and has to be measured.
+```
+  kragg     0x4413a8  ten a frame out of him and into it, fifty to its side;
+                      0x4414c3  0x402fa0(2), the knockdown, thrown on ten
+  eyeball   0x43e259  0x402fa0(-1), the spawn pose 0x471b18, every frame,
+                      120 under it; 0x43e2f5 the shake, ten a frame;
+                      0x43e38e  0x402fa0(2)
+  skeleton  0x423756  facing it, fifty-one in front, thirty-eight up, five a frame;
+                      0x423801  0x402fa0(2), a hundred on and thirty up
+  brain     0x414f64 / 0x414fd9  0x402fa0(4), the judder 0x471fc8 — no carry
+```
+
+The judder is kind 9, which is also the −2 code's reaction, and kind 9 is the
+eyeball's swoop's only door (`0x43e06c`): one eye's glob, or a brain's
+hypnosis, opens another eye's carry. None of the four can be struggled out of
+by a key — the keys are dropped every frame of the eyeball's, and the others
+end on their own scripts.
 
 ## Twenty-six classes, one brain
 

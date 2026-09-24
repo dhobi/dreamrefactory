@@ -427,6 +427,43 @@ await at("level=1&x=6795", 8);
 }
 
 /**
+ * 12d. ...and a blow is judged where the frame BEGAN. Every chapter's loop runs
+ *     the thinks, then `0x42fc10`: the scripts step, the hit pass `0x430350`
+ *     runs, and only then does anything move (`0x42fd80`). So a mailbox set
+ *     flying four hundred pixels a frame out of reach, on the very frame the
+ *     kick's impact cel goes up, is struck at the place it left from.
+ */
+// ...first, which frame tick after the press the kick lands on, left alone
+const impactTick = async (): Promise<number> => {
+  await at("level=1&x=6795", 8);
+  const m = nearestOf("initmailbox")!;
+  const dents = m.dents;
+  h.press("kick");
+  for (let t = 0; t < 80; t++) {
+    game.tick();
+    if (m.dents !== dents) return t;
+  }
+  return -1;
+};
+const landsOn = await impactTick();
+if (landsOn < 0) fail(`a kick from x6795 should reach the mailbox`);
+await at("level=1&x=6795", 8);
+{
+  const m = nearestOf("initmailbox")!;
+  const dents = m.dents;
+  h.press("kick");
+  const from = m.x;
+  // ...then the same again, with the mailbox launched four hundred a frame on the
+  // tick the kick lands, so that tick's own move carries it out of the box
+  for (let t = 0; t <= landsOn; t++) {
+    if (t === landsOn) m.vx = 400 * 0.25;
+    game.tick();
+  }
+  if (m.dents === dents) fail(`0x42fc10 runs the hit pass before the move: the kick should land where the mailbox stood (x${Math.round(from)}); it is at x${Math.round(m.x)}, untouched`);
+  ok(`a mailbox launched out of reach on the impact frame is still kicked where it stood — the pass comes before the move`);
+}
+
+/**
  * 13. ...and the jet does NOT hit.
  *
  *     Six of its ten cels carry a strike box (9802..9807) and five of those a

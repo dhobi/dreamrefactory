@@ -22,7 +22,7 @@
 import { FOES } from "../../src/foes";
 import { SLURP, slurp } from "../../src/brains/slurp";
 import { COP, cop } from "../../src/brains/cop";
-import { TICK_SCALE, type BrainCtx, type Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, install, type BrainCtx, type Enemy } from "../../src/brains/kit";
 import { FPS, fail, headless, ok, pass } from "./harness";
 
 /**
@@ -278,6 +278,36 @@ if (wrong.length) fail(`0x4153fa counts 60 and 15 down past zero — 62, 17, 62,
 if ([...fanCels].some((c) => c < 10020 || c > 10024)) fail(`0x46d478 is 10020..10024; saw ${[...fanCels].join(" ")}`);
 ok(`a fan turns itself on and off on its own counter: ${whole.map((r) => `${r.state} ${r.frames}`).join(", ")}`);
 
+// 6b. ...and inside 270 of a sucking fan, `0x415588` calls `0x402fa0(0)` every
+//     frame, whose `0x402df0` drops every key: a key held or a punch pressed
+//     there is gone the next frame. Inside 140 it kills (`0x4154b7`,
+//     `0x402fa0(8)`), and that drops them too
+{
+  const f = fan;
+  const side = f.right - f.x > f.x - f.left ? 1 : -1;
+  const standAt = (dx: number): void => {
+    f.state = "suck";
+    f.count = 50;
+    game.p.x = f.x + side * dx;
+    game.p.y = (f.top + f.bottom) / 2 + game.p.feet;
+    game.p.vx = 0;
+  };
+  standAt(200);
+  h.hold(side > 0 ? "right" : "left", true);
+  h.press("punch");
+  h.frame();
+  if (Object.values(game.held).some(Boolean) || game.punchPressed)
+    fail(`inside 270 of a sucking fan every key is dropped (0x415588): held ${JSON.stringify(game.held)}, punch ${game.punchPressed}; x ${game.p.x} in ${f.left}..${f.right}`);
+  const lives = game.stats.lives;
+  standAt(100);
+  h.hold("left", true);
+  h.press("kick");
+  h.frame();
+  if (game.stats.lives !== lives - 1 || game.held.left || game.kickPressed)
+    fail(`inside 140 it kills and drops the keys (0x4154b7): lives ${lives} -> ${game.stats.lives}, left ${game.held.left}, kick ${game.kickPressed}`);
+}
+ok(`a sucking fan drops every key inside 270, and its kill drops them too`);
+
 // 7. the big guns — `0x4115b0` makes two objects of one record and `0x4135b0`
 //    runs them through eight script kinds. Standing inside the rect takes it
 //    the whole way round; the bolt it fires is the BLASTER's, out of the same
@@ -288,12 +318,23 @@ if (!gun) fail(`a big gun stands over x1850`);
 const states: string[] = [];
 const gunCels = new Set<number>();
 let bolt: number | null = null;
+// the shot's own records and where it left the gun — see `GUNBOLT`
+const shotCels: number[] = [];
+let shotFrom: { x: number; y: number } | null = null;
+let shotAt: { gx: number; gy: number } | null = null;
+let shot: (typeof game.bolts)[number] | null = null;
 for (let i = 0; i < 10 * FPS; i++) {
   h.frame();
   if (states[states.length - 1] !== gun.state) states.push(gun.state);
   const cel = game.gunCel(gun);
   if (cel) gunCels.add(cel);
-  if (bolt === null && game.bolts.length) bolt = game.bolts[0].vx;
+  if (bolt === null && game.bolts.length) {
+    shot = game.bolts[0];
+    bolt = shot.vx;
+    shotFrom = shot.was ?? { x: shot.x, y: shot.y };
+    shotAt = { gx: gun.x, gy: gun.gunY };
+  }
+  if (shot && game.bolts.includes(shot) && shotCels.length < 6) shotCels.push(game.boltCel(shot));
 }
 let from = 0;
 for (const want of ["arm", "drop", "unfold", "fire", "blink"]) {
@@ -305,7 +346,28 @@ if ([...gunCels].some((c) => c < 10080 || c > 10101))
   fail(`the turret's cels are 0x46c350..0x46c3e0's 10080..10101; saw ${[...gunCels].sort().join(" ")}`);
 if (bolt === null) fail(`0x41374c fires 0x412a70; no bolt appeared in ten seconds under the gun`);
 if (bolt >= 0) fail(`the gun stands at x2167 and the probe at x1850, so its bolt goes LEFT; vx ${bolt}`);
-ok(`a big gun drops, unfolds and fires the blaster's own bolt at you: ${states.slice(0, 6).join(" -> ")}, vx ${bolt}`);
+// `0x412af4`: variant 0 — 45 ahead of the gun's own point, no rise, no scatter,
+// dx 300 over the divisor of ten, and 10102 once, then 10103, 10104, 10105, 10105
+if (bolt !== -30) fail(`0x46c588 tag 0's dx 300 over the divisor of ten is thirty a frame; vx ${bolt}`);
+if (!shotFrom || !shotAt || shotFrom.x !== shotAt.gx - 45 || shotFrom.y !== shotAt.gy)
+  fail(`the shot starts 45 along the gun's facing at its own height (0x412af4); from ${JSON.stringify(shotFrom)}, gun ${JSON.stringify(shotAt)}`);
+if (shotCels[0] !== 10102 || shotCels.slice(1, 5).join() !== "10103,10104,10105,10105")
+  fail(`tag 0 is 10102 once, then tag 1 round from its second record; saw ${shotCels.join(" ")}`);
+ok(`a big gun drops, unfolds and fires its own shot at you: ${states.slice(0, 6).join(" -> ")}, vx ${bolt}, on ${shotCels.join(" ")}`);
+
+// ...and the shot is a hundred-strength blow to the player (`0x413bed`): the
+// hit pass trades its thirty a frame into him, `0x42f910`'s length of it
+await go("&x=1850&y=7100&damage=1");
+{
+  const hp = game.stats.health;
+  game.bolts.length = 0;
+  game.spawnBolt(game.p.x - 45, game.p.y - 60, 1, 100);
+  const one = game.bolts[0];
+  h.frame(2);
+  if (game.stats.health >= hp || game.bolts.includes(one))
+    fail(`the gun's shot meeting him is a blow and is spent; health ${hp} -> ${game.stats.health}, still flying ${game.bolts.includes(one)}`);
+  ok(`the gun's shot lands on him for ${hp - game.stats.health} and is spent`);
+}
 
 // ...and walking out of the rect folds it away wherever it had got to — every
 //    interruptible kind tests the rect first (`0x413692`, `0x4136e3`,
@@ -387,6 +449,43 @@ for (const [x, y, want] of [
   h.frame(22);
   if (game.p.y !== want) fail(`the floorless room at x${x} has a flat floor at y ${want} (0x40bc7d); stood at ${game.p.y}`);
   ok(`the floorless room at x${x} stands you on y ${game.p.y}, its top plus +46`);
+}
+
+/**
+ * The brain's HYPNOSIS — `0x402fa0(4)`, the player's own judder `0x471fc8`.
+ *
+ * Between 140 and 180 and facing it, an upright player is hypnotised
+ * (`0x414fd9`) as the brain goes into its kind 6; one already juddering is
+ * bolted instead (`0x414fb4` → `0x415015`). The judder drops his keys
+ * (`0x402df0`) and runs out into the idle.
+ */
+{
+  await h.load("level=13");
+  h.until(() => game.p.onGround, 60);
+  h.frame(4);
+  const e = game.level!.spawned.flat().find((q) => q.kind === "initslurp")!;
+  const k = game.BRAIN_CTX;
+  const stage = (): void => {
+    install(e, SLURP.stance);
+    e.state = "gait";
+    e.asleep = false;
+    e.clock = 0;
+    e.facing = -1;
+    e.x = game.p.x + 140;
+    e.y = game.p.y - 20;
+    game.p.facing = 1;
+  };
+  stage();
+  game.p.act = null;
+  slurp(e, FOES.initslurp, 16, k);
+  const hyp = { act: game.p.act, kind: e.script };
+  stage();
+  slurp(e, FOES.initslurp, 16, k);
+  const again = e.script;
+  if (hyp.act !== "jolt" || hyp.kind !== 6 || again !== 5)
+    fail(`0x414fd9 hypnotises him into the judder, and 0x414fb4 bolts one already in it; ${JSON.stringify(hyp)}, then kind ${again}`);
+  game.p.act = null;
+  ok(`a brain facing him from 140..180 puts him in the judder, and bolts him if he is already in it (0x414fd9, 0x414fb4)`);
 }
 
 pass(`MAZE's cops work its levers, its cages are wall, its fans keep their own time, its big guns fire and its ladders climb`);

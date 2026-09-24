@@ -565,6 +565,38 @@ export const FLARE = {
  * and nothing else ({@link Foe.minusOne}). So the gun is a weapon in the
  * chapter that hands it out, and useless everywhere else.
  */
+/**
+ * The big gun's shot — `0x412a70(gun, 0)` from `0x41374c` / `0x413780`, and it
+ * is not the blaster's bolt but its own variant of the same class.
+ *
+ * - the new object takes the gun's own point (`0x412abb`) and the gun's
+ *   mirror turned round (`0x412aaa`..`0x412ab3`), then `0x412af4` puts it
+ *   45 along that facing and installs `0x46c588` **tag 0** — no rise and no
+ *   scatter, which are the blaster's (`0x412b83`..`0x412ba3`);
+ * - tag 0 is one record, cel 10102, `dx 300` over the class's divisor of ten
+ *   (`0x413a4d`): thirty pixels a frame, put into the velocity on the step of
+ *   the frame it is made and never again;
+ * - the think hands tag 0 to tag 1 as it ends (`0x413b2e`), and tag 1 —
+ *   10102..10105, one frame each — reinstalls itself whenever it ends
+ *   (`0x413bb5`). A step reads the hold before the record (`0x45d121`), so a
+ *   freshly installed run of one-frame records opens on its SECOND: the shot
+ *   shows 10102 once, then 10103, 10104, 10105, 10105 round and round;
+ * - tag 1's think lets it go as the blaster's does (`0x413b4f`): contact,
+ *   under ten of speed, or a thousand from the player;
+ * - its strength is **100** (`0x413bed`, variant 0), and the TCop turns any
+ *   bolt below tag 2 away (`0x41482a`).
+ */
+export const GUNBOLT = {
+  /** `0x412af4`..`0x412b09` — 45 along its facing */
+  aheadPx: 0x2d,
+  /** `0x46c588` tag 0 — `dx 300` over the divisor of ten */
+  dx: 300,
+  launch: 10102,
+  /** tag 1's records as a step shows them round — see above */
+  flight: [10103, 10104, 10105, 10105] as const,
+  from: "0x412a70 case 0x412af4 / 0x413af0 / 0x46c588 tags 0, 1",
+} as const;
+
 export const BOLT = {
   /** `0x46c588` tag 2 — one cel, and it is the whole flight */
   cel: 4000,
@@ -614,21 +646,18 @@ export interface Bolt {
    * (`0x412afb`) rather than the blaster's tag 2.
    */
   code: -1 | 100;
+  /** engine frames since it was made — which record of its script shows ({@link boltCel}) */
+  age: number;
   /**
-   * True on the tick it was created, and it collides with nothing while it is.
+   * Where it stood as this frame began — the point the hit pass tests it at.
    *
-   * `0x412a70` builds the bolt through `0x430d40` and the object is collided on
-   * the passes AFTER the one that made it; here the gun and the bolts step in
-   * the same tick, so a bolt born into something was spent before it had ever
-   * been drawn. MAZE is where that showed: the turret at x1850 puts its bolt a
-   * hundred and twenty pixels ahead, and now that the level's `initcop` walks up
-   * to the player it stands exactly there and ate every one of them on frame
-   * zero — the gun fired, and nothing was ever on the screen.
-   *
-   * A body stopping a bolt is right ({@link stepBolts}: everything stops it and
-   * takes nothing). A bolt nobody can see is not.
+   * `0x430350` collides every object where the last frame's move left it,
+   * once a frame, before this frame's move (`0x42fd80` comes after it in
+   * `0x42fc10`). A bolt made this frame is tested where it was made: the
+   * player's think and the gun's (`0x41374c`) both run before `0x42fc10`, and
+   * `0x430d40` puts the new object straight into the list the pass walks.
    */
-  born: boolean;
+  was?: { x: number; y: number };
 }
 
 /**
@@ -699,9 +728,16 @@ export interface StreamKit {
    * What starts with it: the firing state plays an OWN sound as it calls the
    * fire function — `0x42ba94` 0x16 for the flamer, `0x42c3fe` 0x1a for the
    * soaker, both out of the player's bank `0x4ac3e0` — and the scepter's fire
-   * function its own, 0x22 (`0x41f73a`), out of the chapter's.
+   * function its own, 0x22 (`0x41f73a`), out of the chapter's. `own1` is the
+   * second character's, out of `bones.snd` (`0x446239` 0xf, `0x446b07` 0x14).
+   *
+   * And what stops with it: every `-2` in the flamer's and soaker's states is
+   * followed by `0x40eee0` on that same sound (`0x42bafb`, `0x42c449`,
+   * `0x4462a7`, `0x446b59` and the rest), silencing it where it plays; and a
+   * blow that cancels the flamer with `-1` does the same for the flamer's
+   * (`0x42e727`, `0x448c37`, `0x4490cd`).
    */
-  sound: { own?: number; effect?: number };
+  sound: { own?: number; own1?: number; effect?: number };
   from: string;
 }
 
@@ -726,7 +762,7 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
     /** `0x453b9b` — a CODE, and nothing ordinary reads it */
     blow: -9,
     perFrame: 1,
-    sound: { own: 0x16 },
+    sound: { own: 0x16, own1: 0xf },
     from: "0x44dae0 / 0x478858 / 0x453b80, list 0x4788c8",
   },
   12: {
@@ -748,7 +784,7 @@ export const STREAMS: Readonly<Record<number, StreamKit>> = {
     /** `0x4217ba`, written fresh every frame the stream runs */
     blow: 100,
     perFrame: 1,
-    sound: { own: 0x1a },
+    sound: { own: 0x1a, own1: 0x14 },
     from: "0x41f820 / 0x4705e0 / 0x421630, list 0x470658",
   },
   16: {
@@ -799,6 +835,10 @@ export interface Stream {
   facing: number;
   state: "start" | "loop" | "stop";
   clock: number;
+  /** which of {@link StreamKit.at} it hangs at, where not the standing one */
+  variant?: number;
+  /** `user+8`, which `0x42466c` reads: drawn facing away from the player */
+  flip?: boolean;
 }
 
 /** one placed weapon or refill, as its record stands in the level */
@@ -830,6 +870,13 @@ export interface Flare {
   sign: number;
   /** null while flying; the burn-out's frame once it has landed or hit */
   burn: number | null;
+  /**
+   * Where it stood as this frame began, and whether it still carried its
+   * strength then — what the hit pass reads (see {@link Bolt.was}). A flare
+   * that lands in this frame's move still strikes in this frame's pass: the
+   * burn-out is next frame's think (`0x43acae`).
+   */
+  was?: { x: number; y: number; vx: number; vy: number; armed: boolean; cel: number };
   /** engine frames since it was fired — frame 0 is `0x474bf8` tag 0's muzzle */
   age: number;
   /** `obj+0x2e` — standing on something, so the drag runs and gravity does not */

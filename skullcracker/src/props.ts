@@ -3338,9 +3338,8 @@ export const BOGGS = {
    * and twenty health, character 1 the same.
    *
    * `0x41afd3` also arms `lab.snd` 0x14 as a loop (`0x40ee90(bank, 0x14, 1)`)
-   * and `0x41b008` positions it at the eighth machine every frame while either
-   * flag is up — a looping voice, which this page does not have; see
-   * `EYEBALL.hum` for the same gap.
+   * and `0x41b008` plays it at the eighth machine every frame while either
+   * flag is up — {@link BOGGS.hum}, which `boggsMachinery` sounds.
    */
   zap: {
     /** `0x46e490` — five tags of cel 5630, and how many frames each holds */
@@ -3474,7 +3473,7 @@ export const BOGGS = {
    * ```
    *
    * So `wormbounds` is the box they are confined to, `0x41c3c8`'s
-   * `cmp word ptr [eax+4], 0x13` caps them at nineteen alive, and the four
+   * `cmp word ptr [eax+4], 0x13; jg` caps them at twenty alive, and the four
    * kinds of `0x41adf0` are one life: wait, rise, strike, sink.
    *
    * `0x41adf9` writes `obj+0x1a = 0x64` before the dispatch, so a worm is worth
@@ -3484,8 +3483,10 @@ export const BOGGS = {
   worms: {
     /** `0x41c0fd` — seven in fifty-five, once a frame */
     odds: [7, 0x37] as const,
-    /** `0x41c3c8` — and never a twentieth */
+    /** `0x41c3c8` — `jg` past this count: twenty at most */
     cap: 0x13,
+    /** `0x41c142` — `0x40ef30(bank, 0x18, body)` as one is dropped */
+    sound: 0x18,
     /** `0x41c10c` — `−30 − 0x434540(0x3c)` from the body in x... */
     offX: [-0x1e, 0x3c] as const,
     /** ...and `0x434540(0xa0) + 30` below it in y */
@@ -3520,6 +3521,10 @@ export const BOGGS = {
   machineDivisor: 0x32,
   /** `0x41b628` / `0x41b774` — the cue that plays when the SECOND half goes */
   bothDownSound: 0x21,
+  /** `0x41afd5` — the machine's hum, `lab.snd` 0x14, looped while it runs */
+  hum: 0x14,
+  /** `0x41aff8` — played at `0x4a516c`'s point, the second half's */
+  humAt: 7,
   /**
    * What the body says when it is struck — `0x41bc50`, its hit handler. A
    * blaster bolt (class `[0x46c600]`, `0x41bca7`) while either half of the
@@ -3604,6 +3609,37 @@ export const SKATEBOARD = {
   lasts: [0xb4, 0xa] as const,
   /** `0x4385af` — inside one of these it is the ten */
   sweptBy: "noskateboards",
+  /**
+   * Stepping on a board that lies there — `0x437854`, its think's state 1.
+   *
+   * The rect is `0x438501`..`0x438536`'s, read off the class's own cel 2300
+   * (`0x43763a`) as it is made and kept in `AI+0`: its drawn box widened 25
+   * each side, its top three below the cel's, three hundred deep, and turned
+   * round with the board (`0x438540`). The player is ON it when his point's x
+   * is inside that rect (`0x4378ca`, `0x4378d1`), the bottom of his drawn box
+   * is within 20 of its top (`0x4378e9`) and he is on the ground (`0x4378f3`).
+   * Then every frame: `AI+8 = 1`, a unit of speed his way (`0x437913`), the
+   * board turned to face as he does, and no drag at all (`0x437924`). Off it,
+   * the drag is 0.02 (`0x437936`). The speed is held to ±40 (`0x4378a7`).
+   *
+   * And the frame he is off it again, `0x437944`: if the board has gone on
+   * ahead — he is behind its rect's back edge — it is kicked up on its hop
+   * again (`0x43798d`, tag 0), forty frames come off its life (`0x437992`),
+   * and faster than 25 (`0x4379a3`) it has gone out from under him:
+   * `0x402fa0(2)`, the knockdown.
+   */
+  ride: {
+    cel: 2300,
+    widen: 0x19,
+    topDown: 3,
+    deep: 0x12c,
+    feetPx: 0x14,
+    maxSpeed: 0x28,
+    offDrag: 0.02,
+    kickedLife: 0x28,
+    tripSpeed: 0x19,
+    from: "0x437854 / 0x4378c1 / 0x437936 / 0x4379aa",
+  },
   from: "0x438450 / 0x473de8, class 0x437610",
 } as const;
 
@@ -3619,6 +3655,10 @@ export interface Board {
   down: boolean;
   /** `AI+0xa` — frames left once it is down, and it is gone at −1 */
   life: number;
+  /** `obj+0x28` as a facing: the dropper's, then whoever last stood on it */
+  facing: number;
+  /** `AI+8` — the player was on it last frame (`0x4378fa`) */
+  stood?: boolean;
 }
 
 /**
@@ -4010,7 +4050,7 @@ export interface Boggs {
   throwWait: number;
   /** `[0x46e138]` — which of {@link BOGGS.throwing.drop} the next one leaves at */
   throwDrop: number;
-  /** `[0x46e0a8]`'s own list — {@link BOGGS.worms}, capped at nineteen */
+  /** `[0x46e0a8]`'s own list — {@link BOGGS.worms}, capped at twenty */
   worms: BoggsWorm[];
   /** `[0x46e270]` — the one-time warning, spent the first time one rises */
   warned: boolean;
@@ -4020,6 +4060,12 @@ export interface Boggs {
   machineBlows?: number;
   /** the `wormbounds` record, which `0x41ac16` keeps every worm inside */
   bounds: { left: number; right: number; top: number; bottom: number } | null;
+  /**
+   * ...and where it stood against the body's own record — `[0x4a50d8]` and
+   * `[0x4a50da]`, taken once (`0x41acea`, `0x41acfc`); `0x41ab90` moves the
+   * box with the body every frame by them
+   */
+  boundsOff?: { left: number; right: number; top: number; bottom: number };
 }
 
 /**
@@ -4036,6 +4082,13 @@ export interface BoggsWorm {
   y: number;
   kind: 0 | 1 | 2 | 4;
   clock: number;
+  /**
+   * Its place against the BODY — the dword `0x41c3fb` keeps in its user
+   * words, which `0x41ab90` adds to the body's point every frame before it
+   * clamps the worm into the bounds; so a worm rides the lunge like the rest
+   * of the rig
+   */
+  off?: { dx: number; dy: number };
 }
 
 /** the first machine, `[0x4a50ec]`, as `0x41afd0` keeps it — {@link BOGGS.zap} */
@@ -4120,6 +4173,15 @@ export const LIGHTFX = {
   sound: 0x37,
   /** `0x426861` — the colour `0x40e4c0` floods the window with for one frame */
   flash: 0,
+  /** `0x4267ac` — the weapon that turns a strike into a charge: 16, the scepter */
+  rod: 0x10,
+  /** `0x42f3c5` and `0x42d94e` — the colour a strike floods the window with */
+  struckFlash: 5,
+  /**
+   * `0x470c40` tags 18..22 — five tags of three frames on one cel, then
+   * `0x42d9e0`'s `0x45ef30(0xa0)`: a full gauge
+   */
+  charge: { tags: 5, hold: 3, rounds: 0xa0, from: "0x470c40 tags 18..22, 0x42d93e / 0x42d98a / 0x42d9c7" },
   from: "0x41e450 / 0x426800 / 0x426870 / 0x4268c0",
 } as const;
 
@@ -4169,9 +4231,10 @@ export interface LightFx {
  * stops the gun wherever it had got to. The two records' rects are 835 pixels
  * wide and the gun is in the middle of each.
  *
- * What it fires is the BLASTER's bolt and not a shot of its own: `0x412a70` is
- * the same function the armed player's state machine calls, so the bolt's speed,
- * its scatter and its own code all come from {@link BLASTER}.
+ * What it fires comes out of `0x412a70`, the function the armed player's state
+ * machine calls too, but as variant 0: its own shot, 45 ahead with no scatter,
+ * on 10102..10105 at thirty a frame and a strength of a hundred — `GUNBOLT` in
+ * {@link file://./guns.ts}, not the blaster's bolt.
  */
 export const BIGGUN = {
   /** `0x4115ec` — the turret sits ten pixels above the record's point */

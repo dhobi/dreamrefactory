@@ -130,7 +130,13 @@ const points = game.stats.score - before;
  * you are finishing the first, so a fixture that swings until something dies
  * can leave two on the ground. What `0x420abf` says is the rate, not the count.
  */
-if (points === 0 || points % 310 !== 0) fail(`0x420abf pays 0x136 a zombie; the score rose ${points}`);
+// ...and a head struck in passing pays 0x190 of its own (`0x4200b4`), so the
+// rise is some zombies at 310 and some heads at 400
+const paysOut = (n: number): boolean => {
+  for (let heads = 0; heads * 400 <= n; heads++) if ((n - heads * 400) % 310 === 0 && n - heads * 400 > 0) return true;
+  return false;
+};
+if (points === 0 || !paysOut(points)) fail(`0x420abf pays 0x136 a zombie (and 0x4200b4 0x190 a head); the score rose ${points}`);
 ok(`one falls for ${points} points`);
 
 // 5. a grave is SHUT until the player's x comes within a hundred of its own,
@@ -177,9 +183,12 @@ ok(`...and standing beside an OPEN one on solid ground costs nothing`);
 await go(1300);
 h.hold("right", true);
 const took = h.until(() => game.stats.lives !== 3, 60);
+// `0x421239` — and `0x402fa0` drops every key as it takes you (`0x402df0`)
+const stillHeld = game.held.right;
 h.hold("right", false);
 if (took < 0) fail(`walking into a grave should cost a life; still ${game.stats.lives} lives`);
-ok(`and walking at one costs a life, with no blow anywhere in it`);
+if (stillHeld) fail(`the grave's 0x402fa0(5) drops the key that walked you in`);
+ok(`and walking at one costs a life, with no blow anywhere in it, and lets go of the key`);
 
 // 7b. the jump is the answer, and `0x4210a7` is why: off the ground, the pull
 //     does not apply

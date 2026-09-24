@@ -92,6 +92,7 @@ import {
   boggsHeadCel,
   boggsWormCel,
   bolts,
+  boltCel,
   bridgeCel,
   bushCel,
   buttonMask,
@@ -148,6 +149,7 @@ import {
   handCel,
   hatchCel,
   held,
+  inputOpen,
   hereOf,
   holeCel,
   ibeamsHere,
@@ -609,11 +611,17 @@ addEventListener("keydown", (e) => {
     return;
   }
   const k = KEYS[e.key];
-  if (k === "up" && !held.up) setUpPressed(true);
-  if (k === "jump" && !held.jump) setJumpPressed(true);
-  if (k === "punch" && !held.punch) setPunchPressed(true);
-  if (k === "kick" && !held.kick) setKickPressed(true);
-  if (k) held[k] = true;
+  if (k) {
+    // `0x402be0` answers nothing while `[0x46b1d4]` is 0 — see {@link inputOpen}
+    // — and the key is the game's either way, so the page does not scroll on it
+    if (inputOpen) {
+      if (k === "up" && !held.up) setUpPressed(true);
+      if (k === "jump" && !held.jump) setJumpPressed(true);
+      if (k === "punch" && !held.punch) setPunchPressed(true);
+      if (k === "kick" && !held.kick) setKickPressed(true);
+      held[k] = true;
+    }
+  }
   /*
    * ...and the rest of this page's own keys are held with SHIFT, which they were
    * not until the cheat words went in.
@@ -651,7 +659,7 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => {
   const k = KEYS[e.key];
-  if (k) held[k] = false;
+  if (k && inputOpen) held[k] = false;
 });
 /**
  * A tap on the picture belongs to the film, and to nothing else.
@@ -1056,7 +1064,7 @@ function drawStreams(camX: number, camY: number): void {
 /** the bolts, one cel each — `0x46c588` tag 2 holds 4000 the whole way out */
 function drawBolts(camX: number, camY: number): void {
   if (!level) return;
-  for (const b of bolts) drawLevelCel(BOLT.cel, b.x, b.y, camX, camY);
+  for (const b of bolts) drawLevelCel(boltCel(b), b.x, b.y, camX, camY, b.facing < 0);
 }
 
 /** the green balls, from the shared player book, centred on their own anchors */
@@ -1388,7 +1396,9 @@ function loop(now: number): void {
   // foreground — the disc's own cels for both facings, so nothing is mirrored
   const id = lastCel;
   const loc = player.byId.get(id);
-  if (loc !== undefined) {
+  // ...unless something is carrying him and drawing him itself — `0x419d25`
+  // skips `0x402980` while `[0x46b1b4]` is clear
+  if (loc !== undefined && !p.hidden) {
     const art = playerCel(loc);
     if (art) {
       // one set of cels, flipped by facing, and placed the way `0x4026d0`

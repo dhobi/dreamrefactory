@@ -251,6 +251,12 @@ export const FOE_SFX = {
   kraggFlare: 0x13,
   kraggLoop: 0x17,
   kraggScald: 0x14,
+  /**
+   * `0x440c81`..`0x440ca2` — `#0065 kragg flo[ats]`, armed to loop and played
+   * every frame it is on the wing and over no sprinkler; the fall lets it go
+   * (`0x440c4b`, `0x441e34`)
+   */
+  kraggFlies: 0x17,
   kraggRise: 0x18,
   kraggDeath: 0x1a,
   /**
@@ -377,6 +383,10 @@ const QUEUE_AHEAD = 0.75;
  */
 export interface Voice {
   stop(): void;
+  /** the channel's loop, on or off — `0x4570c0`, see {@link Mixer.loop} */
+  setLoop?(on: boolean): void;
+  /** its two gains, while it plays — `0x457110`, see {@link Mixer.place} */
+  setGains?(at: { left: number; right: number }): void;
 }
 
 /**
@@ -417,14 +427,29 @@ export interface Voice {
  * new record.
  */
 export class Mixer {
-  private readonly slots = [0, 1, 2].map(() => ({ prio: 0, until: 0, voice: null as Voice | null }));
+  private readonly slots = [0, 1, 2].map(() => ({
+    prio: 0,
+    until: 0,
+    voice: null as Voice | null,
+    /** when it started and how long one pass of it is, for a loop let go */
+    start: 0,
+    secs: 0,
+  }));
 
   /**
    * Put one sound on by one of the three calls ({@link SoundWay}) and answer
    * the channel it went onto, or −1 where the mixer turned it away. `start` is
    * only called for a sound that plays.
    */
-  play(way: SoundWay, prio: number, now: number, secs: number, start: () => Voice | null): number {
+  play(
+    way: SoundWay,
+    prio: number,
+    now: number,
+    secs: number,
+    start: () => Voice | null,
+    /** the record's loop word, `+0x33`, which the play hands the channel */
+    loops = false,
+  ): number {
     // `0x427890` — a channel whose sound has ended is back to nothing
     for (const s of this.slots) if (now >= s.until) s.prio = 0;
     let ch = 0;
@@ -444,8 +469,46 @@ export class Mixer {
     s.voice?.stop();
     s.voice = start();
     s.prio = prio;
-    s.until = now + secs;
+    s.start = now;
+    s.secs = secs;
+    // `0x427b9a` / `0x427d69` — `0x4570c0(channel, record+0x33)`: a looping
+    // record never empties its channel, so `0x427890` never frees it
+    s.until = loops ? Infinity : now + secs;
+    if (loops) s.voice?.setLoop?.(true);
     return ch;
+  }
+
+  /**
+   * `0x428000` — a record's loop word changed, and any channel playing that
+   * record now loops or stops looping (`0x42801a`..`0x428059`).
+   *
+   * What the flag does is the channel's: `0x4570c0` leaves a request that the
+   * mixer's service loop hands `0x457da0` (`0x4578a1`), which sets the
+   * channel's loop word (`+0x2a`) and remembers where its queue began
+   * (`+0x2e`); the queue walk then goes back to that start instead of running
+   * dry (`0x457f7b`..`0x457f8f`). Let go, the pass in hand plays out and the
+   * channel empties.
+   */
+  loop(prio: number, on: boolean, now: number): void {
+    for (const s of this.slots) {
+      if (s.prio !== prio || now >= s.until) continue;
+      s.voice?.setLoop?.(on);
+      if (on) s.until = Infinity;
+      else if (s.until === Infinity)
+        s.until = now + (s.secs - ((now - s.start) % s.secs || 0));
+    }
+  }
+
+  /**
+   * `0x427da0` / `0x427ed0` — a record's volume or pan set again, and every
+   * channel playing that record takes the new gains at once
+   * (`0x427e4b`..`0x427e7e`). Both run at the top of every play call, before
+   * the channels are argued over, so a request the mixer turns away still
+   * moves the sound it would have been; and `0x40eee0`'s volume of 0 is how a
+   * sound is silenced where it plays.
+   */
+  place(prio: number, at: { left: number; right: number }, now: number): void {
+    for (const s of this.slots) if (s.prio === prio && now < s.until) s.voice?.setGains?.(at);
   }
 
   /** what each one-shot channel holds now — for whoever wants to look */
@@ -539,7 +602,12 @@ export function sides(volume: number, pan: number): { left: number; right: numbe
 export const THEME_SIDES = sides(0xff, 0x80);
 
 /** a mono voice onto the two sides, each at its own linear gain */
-function route(ctx: AudioContext, src: AudioNode, to: AudioNode, at: { left: number; right: number }): void {
+function route(
+  ctx: AudioContext,
+  src: AudioNode,
+  to: AudioNode,
+  at: { left: number; right: number },
+): { left: GainNode; right: GainNode } {
   const merge = ctx.createChannelMerger(2);
   const left = ctx.createGain();
   const right = ctx.createGain();
@@ -550,6 +618,7 @@ function route(ctx: AudioContext, src: AudioNode, to: AudioNode, at: { left: num
   left.connect(merge, 0, 0);
   right.connect(merge, 0, 1);
   merge.connect(to);
+  return { left, right };
 }
 
 /**
@@ -626,6 +695,8 @@ export class Sounds {
     if (!want) return;
     this.stop();
     this.mixer.clear();
+    // `0x42781d` — every record opens with its loop word clear
+    this.loops.clear();
     this.themeName = want.theme;
     this.sfxName = want.sfx;
     await Promise.all([this.bank(want.theme), this.bank(want.sfx), this.bank(PLAYER_BANK)]);
@@ -810,9 +881,43 @@ export class Sounds {
     const buf = this.buffer(bank, rec.containerLoc);
     if (!buf) return;
     const master = this.master;
-    this.mixer.play(way, priorityOf(rank, index), ctx.currentTime, buf.duration, () =>
-      this.voice(ctx, master, buf, at),
+    const prio = priorityOf(rank, index);
+    // `0x40ef4c`..`0x40ef8e` — the record's volume and pan first, and whatever
+    // is playing it already moves with them ({@link Mixer.place})
+    this.mixer.place(prio, at, ctx.currentTime);
+    this.mixer.play(
+      way,
+      prio,
+      ctx.currentTime,
+      buf.duration,
+      () => this.voice(ctx, master, buf, at),
+      this.loops.has(prio),
     );
+  }
+
+  /** the records whose loop word is set — `+0x33`, zero as a bank opens (`0x42781d`) */
+  private readonly loops = new Set<number>();
+
+  /**
+   * `0x40ee90(bank, index, on)` → `0x428000` — set or clear a record's loop
+   * word, and with it the loop of any channel playing it ({@link Mixer.loop}).
+   * `own` is the character's bank rather than the chapter's.
+   */
+  loop(index: number, on: boolean, own = false): void {
+    const prio = priorityOf(own ? BANK_RANK.own : BANK_RANK.chapter, index);
+    if (on) this.loops.add(prio);
+    else this.loops.delete(prio);
+    this.mixer.loop(prio, on, this.ctx?.currentTime ?? 0);
+  }
+
+  /**
+   * `0x40eee0(bank, index)` → `0x427da0(record, 0)` — the record's volume to
+   * nothing, which silences it wherever it plays; it keeps its channel until it
+   * ends, and the next play call gives it a volume again.
+   */
+  mute(index: number, own = false): void {
+    const prio = priorityOf(own ? BANK_RANK.own : BANK_RANK.chapter, index);
+    this.mixer.place(prio, { left: 0, right: 0 }, this.ctx?.currentTime ?? 0);
   }
 
   private voice(
@@ -823,7 +928,7 @@ export class Sounds {
   ): Voice {
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    route(ctx, src, master, at);
+    const gains = route(ctx, src, master, at);
     src.start();
     return {
       stop() {
@@ -832,6 +937,13 @@ export class Sounds {
         } catch {
           /* already finished */
         }
+      },
+      setLoop(on) {
+        src.loop = on;
+      },
+      setGains(to) {
+        gains.left.gain.value = to.left;
+        gains.right.gain.value = to.right;
       },
     };
   }

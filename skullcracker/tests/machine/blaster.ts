@@ -41,6 +41,8 @@ h.hold("down", false);
 h.frame(9);
 const full = Math.round(boggs().hp);
 if (full !== 4000) fail(`Boggs opens on 0x40e300(0xfa0); it has ${full}`);
+const whole = Math.round(halves()[0].hp);
+if (whole !== 3000) fail(`0x41b47f gives each half 0x40e300(0xbb8); it has ${whole}`);
 const rounds = game.roundsIn(6);
 if (!(rounds > 0) || !game.inv.armed) fail(`taking the statblaster gives 0x28 rounds; it has ${rounds}`);
 ok(`VAT's one statblaster is taken with S and loads ${rounds} of 160`);
@@ -89,8 +91,10 @@ ok(`and a bolt lands on Boggs — 4000 down to ${lowest} at its lowest`);
 // sweep (`BOGGS.zap`) spins whoever is in it, and from the west a bolt at knee
 // height passes under the body's own box and meets the half behind it
 h.frame(6);
+// ...and it may already carry a bolt or two: the bolt is tested where it
+// stands, once a frame (`0x430350`), and a low one fired at the body can pass
+// under the body's box and meet the half behind it
 const a0 = Math.round(halves()[0].hp);
-if (a0 !== 3000) fail(`0x41b47f gives each half 0x40e300(0xbb8); it has ${a0}`);
 if (game.p.x >= boggs().x || game.p.facing < 0) fail(`the shot is fired west of the body, facing it: x${game.p.x} facing ${game.p.facing}`);
 // ...and most of a spread still meets the body: the scatter is forty up and
 // down (`BOLT.scatterPx`) and only the low end of it clears 5988's box. The

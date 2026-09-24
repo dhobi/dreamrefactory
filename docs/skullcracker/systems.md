@@ -78,6 +78,18 @@ clock goes to 32000 and the stage ends. Past step 12 the dial flashes, and a
 goal reached on a frame that shows the empty dial pays nothing. A level with
 no `timer` pays nothing either.
 
+The keys are shut from the moment the screen starts down. `0x402be0`, the one
+place a key becomes an action, does nothing while `[0x46b1d4]` is 0, and the
+craft's think writes it through `0x402e30`: 0 as the screen starts down
+(`0x410702`), 1 once the tally has run (`0x410754`). Both calls also drop every
+key held (`0x402db0`), so the player stands at the goal while it opens. The
+player's own set-up opens the keys at every level start (`0x402df0`, from
+`0x448a93` and `0x42e583`), and `0x402fa0`, the call that puts the player in
+a state, drops them first thing (`0x402df0`): a death from the health
+(`0x402af4`), a grave (`0x421239`), TOWER's floor (`0x42713e`), a fan's blades
+(`0x4154b7`, `0x415a89`) — and every frame inside 270 of a horizontal fan that
+is sucking (`0x415588`), so a held key does not walk you out of its pull.
+
 The craft hums while it waits. For every frame of its life at a goal, its
 think asks for the character's 0x1c (0x15 for the second character) through
 `0x40ef30`. The mixer refuses the sound while it is still playing, so the
@@ -327,6 +339,54 @@ man walking at 60. The step is decided at the frame, on the disc's own
 arithmetic, and then spent a quarter at a time, the same way the frame's fall
 is. At every frame boundary the corner is where `0x4309f0` would have put it.
 The corner is rounded only at the blit, or the whole backdrop resamples.
+
+## One engine frame, in the order the disc runs it
+
+Each of the sixteen levels has its own frame loop, and all sixteen have one
+shape. VAT's is `0x419c0b`..`0x419e35`, STREETS' `0x44dcfc`..`0x44de83`, MALL's
+`0x43702c`..`0x4371a6`, GRAVE's `0x41fa18`..`0x41fb6a`:
+
+1. the chapter's end test (`0x450190`, `0x43b950`, `0x421900`, `0x415f50`);
+2. the player's think, `0x402950` — a few levels run one class first
+   (BARREL's `0x4170f0`, MALL's `0x4375d0`, SEWER's `0x43d680`);
+3. every class's think, `0x430f10` once per class list: the creatures, the
+   furniture, the casts, the goal's craft (`0x410380`), the pickups
+   (`0x45ad90`) and the goo (`0x40c8f0`);
+4. `0x42fc10`, the world step, in one call:
+   - every object's script steps (`0x45d0f0`), which is where a script's own
+     `dx`/`dy` go into the velocity (`0x42f8b0`);
+   - each current cel's rects are fetched (`0x42f9f0`);
+   - the body pass pushes overlapping bodies apart (`0x430680`);
+   - the hit pass runs with every object as the hitter (`0x42fc9a` →
+     `0x430350`);
+   - the platforms follow the things they ride on (`0x434270`);
+   - and only then does every object MOVE (`0x42fd80`: velocity, floor, walls,
+     drag, gravity), and the camera follows (`0x4309f0`);
+5. VAT alone then re-places Boggs' rig against the body's new point: the head
+   (`0x41c4c0`), the eight machines (`0x411ed0`), the arm (`0x412180`) and the
+   worms in their box (`0x41ab90`);
+6. the draws, the flip, the theme and the input.
+
+So a blow is judged on the cel this frame's thinks and script steps put up, at
+the place the last frame's move left everything, and the hit pass zeroes a
+hitter's strength when the victim's handler takes the blow (`0x43045d`). A
+thing hit this frame moves this frame on the velocity the hit traded it
+(`0x430470`), and what a hit puts on — a grab, a flinch — is acted on by the
+next frame's thinks.
+
+This page moves things every tick, four to the frame, and runs each class's
+think and move together. `hitPass` in `game.ts` keeps the disc's order the only
+way that shape allows: it runs on the frame tick after every think and after the
+player's cel for the frame is chosen, with everything put back where it stood
+when the frame tick began, and whatever the pass itself moves is kept. The body
+pass runs first inside it, on the same cels and places, and what it takes off
+a body's speed is taken there and then, as a hit's trade is. The flare and the
+blaster's bolt are hitters in the same pass: each is tested where it stood as
+the frame began, and a bolt made this frame is tested where it was made. A
+bolt's box is six pixels wide and the bolt crosses a hundred pixels a frame, so
+it goes clean through anything it does not happen to land in. That is the
+engine's own behaviour, and it means where you stand to shoot decides what the
+blaster reaches.
 
 ## A collision box is a translation, and nothing else
 

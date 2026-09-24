@@ -29,7 +29,7 @@ import { CRAFT, Gob, Pop, SPARK, Spark, SPRAY, VANISH, dryTime, gobCount, scatte
 import { FOE_SFX, OWN, Sounds } from "./sound";
 import { CROW, Crow, ELEVATOR, Elevator, IBEAM, CRUSH, Ibeam, Crush, Feather, PLANK, Plank, burnCrow, crowCel, crowFrames, crowTag, type CrowState, elevatorFrames, ibeamCel, crushCel, ibeamFrames, crushFrames, plankCel, plankFrames, PICKUP, Pickup, SPRINKLER, Sprinkler, SHACK, Shack, shackFrames, BARREL, Barrel, PIPE, Pipe, SEWAGE, Sewage, BUSH, Bush, ROACH, SPILL, Nest2, Roach, DOOR, Door, doorFrames, ELEV, Elev, SWITCH, Switch, switchFrames, GOOP, Nest, Drip, dripCel, dripFrames, HOLE, Hole, HAND, Hand, AXE, Axe, BRIDGE, Bridge, FLOOR, Floor, SURGE, Surge, CAGE, Cage, ALARM, BIGGUN, Flypast, PROBE, Probe, BigGun, LIGHTFX, LightFx, Alarm, FAN, Fan, BELT, Belt, CHAIR, Chair, CLAW, Claw, FITTING, Fitting, BOGGS, Boggs, BoggsWorm, SKATEBOARD, Board, CAN, Can, HEAD, Head, FLAME, Flame, ROLLER, Roller } from "./props";
 import { DEATH_FILMS, ENDING_FILM, MISSIONS, PIT_DEPTH, TIME_OUT_FILMS, allowanceFor, type Mission } from "./mission";
-import { BOLT, CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, STREAMS, WEAPONS, type Bolt, type Flare, type Gun, type Stream } from "./guns";
+import { BOLT, GUNBOLT, CHAPTER_WEAPON, FLARE, GRAB, GUN_CODES, STREAMS, WEAPONS, type Bolt, type Flare, type Gun, type Stream, type StreamKit } from "./guns";
 import { PLAYER_CODES, PLAYER_HELD, gripOf } from "./codes";
 import { PLAYERS } from "./players";
 import { PREFS_ACTIONS, keyName, loadPrefs } from "./prefs";
@@ -1392,6 +1392,12 @@ export const p = {
   act: null as string | null,
   actClock: 0,
   /**
+   * Which tag of the dying script `0x4721a0` is playing: 0, which every death
+   * but one installs, or 3 — the lightning's (`0x42f3d4`), which jerks
+   * through two shock cels before the fall. See {@link actOf}.
+   */
+  dyingTag: 0 as 0 | 3,
+  /**
    * `obj+0x24`, the float `0x42f850` sets — what the constant gravity is
    * multiplied by before it is added.
    *
@@ -1415,6 +1421,12 @@ export const p = {
    * answer has to come from somewhere.
    */
   heldWhat: null as object | null,
+  /**
+   * `[0x46b1b4]` clear — something is carrying him and its own cels draw him,
+   * so `0x402980` is skipped (`0x419d25`): kragg's fist, the eyeball, the
+   * skeleton's grip. Collision does not ask.
+   */
+  hidden: false,
   /** engine frames into the held loop, once the reaction's own script has run */
   heldClock: 0,
   /** whether the fire act has already let its round go — `0x42cd53` fires once */
@@ -1448,11 +1460,9 @@ export const p = {
   fallPx: 0,
   /**
    * In the flail — kind 25, `0x472350`, which the state machine's preamble
-   * forces on a fall past 360 ({@link PlayerAnim.flail}); and whether its
-   * scream past 630 has gone out this fall.
+   * forces on a fall past 360 ({@link PlayerAnim.flail}).
    */
   flail: false,
-  screamed: false,
   /** a running jump is tag 4's instant leap: no wind-up, straight to the tuck */
   leap: false,
   /** the fidget playing over the idle, if the end-of-cycle roll picked one */
@@ -1619,6 +1629,40 @@ export let jumpPressed = false;
 /** the attacks fire on the press too: holding K should not machine-gun kicks */
 export let punchPressed = false;
 export let kickPressed = false;
+
+/**
+ * `[0x46b1d4]` — does a key reach the player at all.
+ *
+ * `0x402be0` is the one place a key becomes an action (the window procedure's
+ * two callers, `0x428090` and `0x442ae0`, hand it the action number), and it
+ * opens `cmp word ptr [0x46b1d4], 0; je` — ret — so while the word is 0 a key
+ * going down sets nothing and a key coming up clears nothing. `0x402e30(n)`
+ * writes the word and falls into `0x402db0`, which zeroes all eight action
+ * words ({@link dropKeys}). Its only two callers are the craft's think: `(0)`
+ * the frame the screen starts down (`0x410702`) and `(1)` once the tally has
+ * run (`0x410754`). `0x402df0` — the same eight zeroes with the word set to 1
+ * — is what the player's own set-up calls (`0x42e583`, `0x448a93`), so every
+ * level starts with the keys open.
+ */
+export let inputOpen = true;
+
+/**
+ * `0x402db0` — the eight action words, `0x4ac3d2` … `0x4ac386`, all zeroed: every
+ * key held is let go and every edge not yet spent is thrown away.
+ */
+export function dropKeys(): void {
+  for (const k of Object.keys(held) as (keyof typeof held)[]) held[k] = false;
+  upPressed = false;
+  jumpPressed = false;
+  punchPressed = false;
+  kickPressed = false;
+}
+
+/** `0x402e30(open)` — the word, then `0x402db0` */
+export function setInput(open: boolean): void {
+  inputOpen = open;
+  dropKeys();
+}
 
 export async function loadLevel(index: number): Promise<void> {
   // a level loaded in the middle of the red is a level with its own palette
@@ -2030,6 +2074,7 @@ export async function loadLevel(index: number): Promise<void> {
         warned: false,
         // `0x41ac7f` — one record, read once, and every worm is kept inside it
         bounds: wormBounds(sbk, r),
+        boundsOff: boundsAgainst(wormBounds(sbk, r), e),
         // the head has a record of its own, and `0x412364` stores the offset it
         // lands at; `0x41c4c0` re-places it at body + that offset every frame
         ...headAndArm(sbk, r, e),
@@ -2163,6 +2208,8 @@ export async function loadLevel(index: number): Promise<void> {
   bossDown.hardcore = bossDown.belfry = bossDown.lab = false;
   leftGoal = false;
   craft = null;
+  // `0x448a93` / `0x42e583` — the player's set-up opens the keys (`0x402df0`)
+  setInput(true);
   gobs = [];
   pops = [];
   sparks = [];
@@ -2422,10 +2469,10 @@ export function respawn(): void {
   p.flail = false;
   inv.drawn = false;
   p.inv15 = p.invLoop = false;
-  p.screamed = false;
   p.crouching = false;
   p.act = null;
   p.actClock = 0;
+  p.dyingTag = 0;
   camVx = 0;
   camVy = 0;
   view.x = x;
@@ -2598,14 +2645,15 @@ export function stepCraft(): void {
       drift: CRAFT.bob,
       bobbed: 0,
     };
+    // `0x41020a`..`0x410230` — the hum's record armed to loop as it is made
+    sound?.loop(CRAFT.hum[CHARACTER], true, true);
   }
   if (!craft) return;
   craft.clock += TICK_SCALE;
   // `0x4105d7`..`0x4105ef` — its hum, asked for every frame of kind 1, which
   // is all of the craft's life at a goal: through `0x40ef30`, so the mixer
-  // turns the ask away while the hum still sounds and it plays on unbroken.
-  // `0x410212` arms the record's loop flag as the craft is made, and the
-  // page's mixer loops nothing, so the ask a frame after it ends starts it again
+  // turns the ask away while the hum still sounds — the loop armed above keeps
+  // it sounding — and each ask moves it to where the craft now is
   const onFrame = Math.floor(craft.clock) !== Math.floor(craft.clock - TICK_SCALE);
   if (onFrame) sound?.own(CRAFT.hum[CHARACTER], craft.x, craft.y);
   if (craft.state === "open") {
@@ -2642,6 +2690,10 @@ export function stepCraft(): void {
     // `0x4106c1`..`0x4106d9` — the screen's own sound as it starts down, and
     // `0x4106f8` takes the hum's loop flag off again
     sound?.own(CRAFT.opens[CHARACTER], craft.x, craft.y);
+    sound?.loop(CRAFT.hum[CHARACTER], false, true);
+    // `0x410702` — `0x402e30(0)`: the keys are dropped and shut out until the
+    // tally has run, so the player stands at the goal while the screen comes down
+    setInput(false);
   }
 }
 
@@ -2675,8 +2727,9 @@ export function craftOpened(): boolean {
  * `0x40d2b3` puts the empty 12717 in `[0x4a4d60]` every other frame, and a
  * stage finished on one of those frames tallies nothing.
  *
- * Back in the think, `0x402e30(1)` clears the keys (`0x402db0`) and the flag
- * goes up (`0x410759`); `0x410370` sees it the next frame and the stage ends.
+ * Back in the think, `0x402e30(1)` opens the keys the opening shut
+ * ({@link inputOpen}) and clears them (`0x402db0`), and the flag goes up
+ * (`0x410759`); `0x410370` sees it the next frame and the stage ends.
  */
 function startTally(c: NonNullable<typeof craft>): void {
   iface = true;
@@ -2698,11 +2751,8 @@ function endTally(c: NonNullable<typeof craft>): void {
   c.tally = undefined;
   // `0x410154` — no limit, and the dial shows it empty
   stats.ticks = CLOCK.noLimit;
-  // `0x402db0` — every key the frame had seen is dropped
-  upPressed = false;
-  jumpPressed = false;
-  punchPressed = false;
-  kickPressed = false;
+  // `0x410754` — `0x402e30(1)`: the keys open again, dropped as they open
+  setInput(true);
   c.tallied = true;
 }
 
@@ -3249,6 +3299,7 @@ export function sideWalls(nx: number): number | null {
  * the floor put the player in the sewage.
  */
 export function dropAt(room: SbkRoom | undefined, x: number, anchorY: number): void {
+  p.hidden = false;
   p.room = room ?? null;
   p.x = x;
   p.y = anchorY + p.feet;
@@ -3758,6 +3809,8 @@ export function padPress(el: HTMLButtonElement, id: number): void {
   el.classList.add("on");
   // the same four edges `keydown` takes: a door and a jump fire on the PRESS,
   // and a held fist must not machine-gun
+  // `0x402be0` — nothing while the keys are shut ({@link inputOpen})
+  if (!inputOpen) return;
   if (act === "up" && !held.up) upPressed = true;
   if (act === "jump" && !held.jump) jumpPressed = true;
   if (act === "punch" && !held.punch) punchPressed = true;
@@ -3774,7 +3827,7 @@ export function padLift(id: number): void {
   // a key is let go when the LAST finger on it lifts, not the first: a thumb
   // rolling from left to right puts two pointers on the pad for a moment
   for (const still of padFingers.values()) if (padAct(still) === act) return;
-  held[act] = false;
+  if (inputOpen) held[act] = false;
 }
 
 /** every key at once — a film starting, or the page losing the fingers */
@@ -4212,6 +4265,8 @@ export function actOf(name: string): {
   if (name === "held") return { ...HELD.loop, dx: HELD.loop.cels.map(() => 0) };
   if (name === "struggle")
     return { ...HELD.struggle, dx: HELD.struggle.cels.map(() => 0) };
+  // `0x42f3d4` — the lightning's death is tag 3 of the same script
+  if (name === "dying" && p.dyingTag === 3 && ACTIONS.dyingStruck) return ACTIONS.dyingStruck;
   if (name === "fire") {
     const w = WEAPONS[inv.weapon];
     if (!w) return null;
@@ -4425,8 +4480,8 @@ export function killFoe(e: Enemy, foe: Foe): void {
  *   (`0x40ba30` copies the region record; `0x441e14`..`0x441e28` add half its
  *   width to its left), which is where the fall's first tag steers it and
  *   which the page keeps in {@link Enemy.home};
- * - `0x40ee90(bank, 0x17, 0)` stops its flying loop — not a sound this page
- *   runs;
+ * - `0x40ee90(bank, 0x17, 0)` lets its flying loop go ({@link FOE_SFX}
+ *   `kraggFlies`);
  * - the scald alone zeroes both velocities (`0x440c59`, `0x440c69`); the blow
  *   leaves them;
  * - `0x473b60` tag 0 goes on, state 10, which its brain now runs.
@@ -4471,6 +4526,8 @@ export function rallyFall(
 ): void {
   e.rallied = true;
   e.hp = 0;
+  // `0x440c4b` / `0x441e34` — `0x40ee90(bank, 0x17, 0)`: the wing's loop let go
+  sound?.loop(FOE_SFX.kraggFlies, false);
   e.state = "gait";
   e.swing = false;
   if (p.room) e.home = p.room.left + Math.trunc((p.room.right - p.room.left) / 2);
@@ -5056,10 +5113,69 @@ export function takeHealth(n: number): void {
   stats.health = Math.max(0, stats.health - Math.round(n));
   if (stats.health > 0 || p.act === "dying") return;
   // `0x402f60` refuses a second death while the first is playing, and `0x402fa0`
-  // installs `0x476758` tag 0 — the kind that IS being dead
+  // installs `0x476758` tag 0 — the kind that IS being dead — having called
+  // `0x402df0` first: every key dropped
+  dropKeys();
+  p.dyingTag = 0;
   p.act = "dying";
   p.actClock = 0;
   p.vx = 0;
+}
+
+/** `0x402f00`'s four: the judder, held, the spawn pose, knocked down */
+const HELPLESS: ReadonlySet<string> = new Set(["jolt", "held", "struggle", "grabbed", "posed", "downFront", "downBack"]);
+
+/**
+ * `0x402fa0(mode)`, the player's pose setter — `0x402df0` drops every key,
+ * then `0x42f280` puts out a running stream (`0x42e700`) and jumps through
+ * `0x42f418` on `mode + 1`:
+ *
+ * ```
+ *   -1  0x42f29b  0x471b18 tag 0, the spawn pose (kind 13), and nothing else
+ *    2  0x42f319  0x4722a8 tag 0, the knockdown — unless he is on a ladder or
+ *                 a bar (`[0x46b1bc] = 1` instead), already down (kind 0x18),
+ *                 or dying (`0x402f60`)
+ *    3  0x42f36d  0x4720e8 tag 0, held
+ *    4  0x42f383  0x471fc8 tag 0, the judder (kind 9)
+ * ```
+ *
+ * Character 1's own setter `0x449700` is the same table on its own scripts.
+ * The ladder's flag is read by the climb (`0x42ae50`), and is not carried here.
+ */
+export function posePlayer(mode: -1 | 2 | 3 | 4): void {
+  dropKeys();
+  if (p.act === "dying") return;
+  killStreams();
+  let act: string;
+  if (mode === -1) act = "posed";
+  else if (mode === 2) {
+    if (p.climbing || p.bar || p.act === "downFront" || p.act === "downBack") return;
+    act = "downFront";
+  } else if (mode === 3) act = "held";
+  else act = "jolt";
+  p.act = act;
+  p.actClock = 0;
+}
+
+/** a grabber writing the player's point and, where it does, his velocity and facing */
+export function pinPlayer(
+  at: { x: number; y: number },
+  v?: { vx?: number; vy?: number; facing?: number; fell?: number },
+): void {
+  p.x = at.x;
+  // the point is the ANCHOR and `p.y` is the feet — see {@link poseFeet}
+  p.y = at.y + p.feet;
+  p.onGround = false;
+  if (v?.vx !== undefined) p.vx = v.vx;
+  if (v?.vy !== undefined) {
+    p.vyRaw = v.vy;
+    p.vy = 0;
+    // `0x42fdb0` — a vertical speed that is not downward is no fall at all
+    if (v.vy <= 0) p.fallPx = 0;
+  }
+  if (v?.facing !== undefined) p.facing = v.facing > 0 ? 1 : -1;
+  // `obj+0x32`, the fall so far — the eyeball's `0x43e39b` writes it to nothing
+  if (v?.fell !== undefined) p.fallPx = v.fell;
 }
 
 /**
@@ -5341,7 +5457,10 @@ export function foesStrikeFoes(): void {
         c.vx = hvx;
         c.vy = hvy;
       }, c.kit);
-    if (hit && code !== 0x65) c.spent = true;
+    if (hit && code !== 0x65) {
+      if (c.kit.flyOn) c.struck = true;
+      else c.spent = true;
+    }
   }
 }
 
@@ -5584,7 +5703,12 @@ export function takeHits(): void {
     const strength = e.state === "burst" ? 0 : (e.strength ?? 100);
     // the box hangs off `obj+6`, the anchor, not the feet ({@link strikeOf})
     const a = foeAnchor(e, lvl) ?? { x: e.x, y: e.y };
-    if (hit(c, a.x, a.y, e.facing, vx, e.vy / TICK_SCALE, strength)) return;
+    if (hit(c, a.x, a.y, e.facing, vx, e.vy / TICK_SCALE, strength)) {
+      // `0x430663` — the exchange marks the hitter's `obj+0x2a`, for a blow
+      // with a strength (`0x430430`)
+      if (strength > 0) e.connected = true;
+      return;
+    }
   }
   /**
    * ...and the crows, whose dive cels (1875, 1877, 1884..1887) carry a strike
@@ -5666,10 +5790,14 @@ export function takeHits(): void {
       if (hit(cel, c.x, c.y, c.facing, 0, 0, c.kit.blow)) return;
       continue;
     }
-    c.spent = true;
+    // ...or, for one that flies on, it is only worth nothing from now on
+    // ({@link CastKit.flyOn}) — its blow is read before that is written
+    const blow = castBlow(c);
+    if (c.kit.flyOn) c.struck = true;
+    else c.spent = true;
     // `0x42f910` adds what the HITTER was doing to the cel's own pair, and a
     // cast's velocity is already in the executable's units — a frame's worth
-    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, castBlow(c))) return;
+    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, blow)) return;
   }
   /**
    * ...and Boggs' WORMS, which are the same argument as a cast.
@@ -5722,6 +5850,18 @@ export function takeHits(): void {
     const cel = celRec(lvl.sbk, ibeamCel(b));
     if (!cel?.strike) continue;
     if (hit(cel, b.x, b.y, 1, 0, 0)) return;
+  }
+  // the big gun's shot, a hundred (`0x413bed`), tested where it stood as the
+  // frame began on the record the step shows ({@link GUNBOLT}); a blow taken
+  // is the exchange that sets its `obj+0x2a`, and its think lets it go
+  for (const b of bolts) {
+    if (b.code !== 100 || b.spent || !b.was) continue;
+    const cel = celRec(lvl.sbk, boltCel(b));
+    if (!cel?.strike) continue;
+    if (hit(cel, b.was.x, b.was.y, b.facing, b.vx, 0)) {
+      b.spent = true;
+      return;
+    }
   }
   // `0x423d29` and the four writes after it — the blade carries a blow of a
   // hundred at every tag it has, and it has nothing else
@@ -6430,6 +6570,20 @@ export function wormBounds(
   return r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
 }
 
+/** the worms' box against the body's own record point — `0x41acd9`..`0x41acfc` */
+export function boundsAgainst(
+  r: { left: number; right: number; top: number; bottom: number } | null,
+  body: { pointX: number; pointY: number },
+): { left: number; right: number; top: number; bottom: number } | undefined {
+  if (!r) return undefined;
+  return {
+    left: r.left - body.pointX,
+    right: r.right - body.pointX,
+    top: r.top - body.pointY,
+    bottom: r.bottom - body.pointY,
+  };
+}
+
 /** every `initshack` in this room — CITY places eleven and nothing else places any */
 export function shacksIn(sbk: SbkFile, room: SbkRoom): Shack[] {
   return placed(sbk, room, "initshack", SHACK.opening.cels, (e) => ({
@@ -6761,6 +6915,8 @@ export function stepHoles(): void {
     // opens is the whole of it: you have to be in the air over it.
     if (py - h.y > HOLE.deathPx && p.act !== "dying" && !film && !h.taken) {
       h.taken = true;
+      // `0x421239` — `0x402fa0` opens with `0x402df0`: every key dropped
+      dropKeys();
       sound?.effect(FOE_SFX.graveTake, h.x, h.y);
       void died();
     }
@@ -7126,8 +7282,11 @@ export function stepFloors(): void {
       ay < f.bottom + FLOOR.deathTo &&
       p.act !== "dying" &&
       !film
-    )
+    ) {
+      // `0x42713e` — `0x402fa0(1)`, and `0x402df0` before it drops every key
+      dropKeys();
       void died();
+    }
   }
 }
 
@@ -7152,6 +7311,11 @@ export function stepSurges(): void {
   for (const q of all) {
     q.clock += 1;
     if (!q.on) continue;
+    // `0x426a88`..`0x426ab3` — every frame it is on, `0134 surge` armed to
+    // loop and played at the arc: one looping voice the mixer keeps, moved
+    // down the column as the arc hops
+    sound?.loop(SURGE.sound, true);
+    sound?.effect(SURGE.sound, q.x, q.y);
     // `0x426ad4`..`0x426b27`: the scepter in hand, near the arc — thirteen rounds
     if (
       // (`0x402ee0` is `0x448bf0` for this character — OUT, not just carried)
@@ -7169,10 +7333,11 @@ export function stepSurges(): void {
     if (Math.abs(q.bottom - SURGE.hop) > q.y) {
       q.clock = 0;
       q.y += SURGE.hop;
-      sound?.effect(SURGE.sound, q.x, q.y);
     } else {
       q.on = false;
       q.y = q.top;
+      // `0x426b66` — the loop let go as it goes off
+      sound?.loop(SURGE.sound, false);
     }
   }
 }
@@ -7185,7 +7350,6 @@ export function switchSurgesOn(): void {
   for (const q of level?.surges.flat() ?? []) {
     // its script ran out long ago, so the next think hops at once (`0x426b2c`)
     q.on = true;
-    sound?.effect(SURGE.sound, q.x, q.y);
   }
 }
 
@@ -7263,12 +7427,117 @@ export function stepLights(): void {
     // `0x426829`: and every surge in the level switches on
     switchSurgesOn();
   }
+  stepStruck();
+  // the bolt's second frame on its first cel — see {@link boltStrikes}
+  if (all.some((q) => q.clock === 1)) boltStrikes(all);
   if (levelClock !== LIGHTFX.strikeAt || !all.length) return;
   for (const q of all) q.clock = 0;
   // `0x426857` — at the PLAYER's own y, not the bolt's, so it is overhead
   // wherever you are standing
   sound?.effect(LIGHTFX.sound, p.x, p.y, "lead");
   flashColour = LIGHTFX.flash;
+  boltStrikes(all);
+}
+
+/**
+ * ...and the bolt STRIKES. `0x426780`, the bolt's own think, asks on its
+ * first frame (`obj+0x42` and `obj+0x44` both 0, `0x426785`/`0x42678c`) one
+ * thing only: is its point BELOW the player's (`0x42679c`, `obj+6` against
+ * the player's `obj+6`, a signed `jle`). No x, no distance — every bolt in
+ * the level asks it, so a player who has climbed above a bolt's point is hit
+ * wherever he is. Then `0x4267a2`: armed (`0x402ee0`) with the scepter,
+ * weapon 16 (`0x4267ac`), `0x402fa0(6)`; anything else, `0x402fa0(7)`.
+ *
+ * And it asks TWICE. The bolt's script holds its first cel two frames
+ * (`0x46f588`, two ticks a frame), so `obj+0x42` is 0 on both, and each time
+ * `0x45d090` puts the reaction on from its first frame whatever was playing
+ * (`0x45d0ab` zeroes the frame index, `0x45d0db` the tick count): the charge
+ * or the shock starts over one frame late, and the shock's `0x40e4c0(5)`
+ * floods a second frame. The life is spent once, as the death ends.
+ */
+function boltStrikes(all: readonly LightFx[]): void {
+  const ay = p.y - p.feet;
+  if (!all.some((q) => q.y > ay) || film) return;
+  // `0x402fa0` opens with `0x402df0`: every key dropped
+  dropKeys();
+  if (inv.drawn && inv.weapon === LIGHTFX.rod) {
+    // `0x42f3af` — `0x470c40` tag 18, the scepter's own script: the charge
+    if (p.act === "fire") shutStreams();
+    p.act = "struck";
+    p.actClock = 0;
+    p.flail = false;
+    struckTags = 0;
+    return;
+  }
+  // `0x42f3c5` — `0x40e4c0(5)` and `0x4721a0` TAG 3, the shock and the fall.
+  // Unconditional: no `0x402f60` test here, so it is a death whatever the
+  // health says, and it goes on from its first frame over whatever was playing
+  flashColour = LIGHTFX.struckFlash;
+  p.act = "dying";
+  p.actClock = 0;
+  p.vx = 0;
+  p.dyingTag = 3;
+  // ...and the life goes with it, once: `died` answers a second call with
+  // nothing, as the disc spends it only as the death script ends
+  void died();
+}
+
+/**
+ * A lightning strike on the scepter — `0x470c40` tags 18..22 in the player's
+ * armed state machine `0x42d2b0`, three frames each, all on one cel.
+ *
+ * ```
+ *   42d93e  tags 18 and 20 end: 0x40e4c0(5), fire(3), the next tag
+ *   42d98a  tags 19 and 21 end: fire(4), the next tag
+ *   42d9c7  tag 22 ends:  weapon 16, 0x45ef30(0xa0), 0x45b060 — the scepter
+ *           thrown on the floor — [0x479438] = 0, and 0x4722a8 tag 0
+ * ```
+ *
+ * `fire` is `[0x4a7fd8]`, the scepter's fire function `0x41f6b0`, and its
+ * variants 3 and 4 (`0x41f7e2`) cost nothing, hang the beam 48 along and 130
+ * up, and turn it round (`user+8`, read at `0x42466c`). So the bolt goes out
+ * of the rod four times, the gauge fills, and it is knocked out of your hands.
+ */
+function stepStruck(): void {
+  if (p.act !== "struck") return;
+  // each tag that has ended since last time, in order
+  const now = Math.floor(p.actClock / LIGHTFX.charge.hold);
+  for (; struckTags < now && struckTags < LIGHTFX.charge.tags; struckTags++) {
+    const ended = struckTags;
+    if (ended < LIGHTFX.charge.tags - 1) {
+      if (ended % 2 === 0) flashColour = LIGHTFX.struckFlash;
+      dischargeScepter(ended % 2 === 0 ? 3 : 4);
+      continue;
+    }
+    // `0x42d9d7`..`0x42da31`
+    inv.weapon = LIGHTFX.rod;
+    loadRounds(LIGHTFX.rod, LIGHTFX.charge.rounds);
+    dropGun();
+    p.act = "downFront";
+    p.actClock = 0;
+    return;
+  }
+}
+
+/** how many of the strike's tags {@link stepStruck} has already ended */
+let struckTags = 0;
+
+/** `0x41f7e2` — a beam of the scepter's, variant 3 or 4, and free */
+function dischargeScepter(variant: 3 | 4): void {
+  const kit = STREAMS[LIGHTFX.rod];
+  if (!kit) return;
+  // `0x41f73a` — 0x22 through `0x40f110`, at the beam
+  sound?.effect(kit.sound.effect ?? 0x22, p.x, p.y, "renew");
+  streams.push({
+    weapon: LIGHTFX.rod,
+    x: p.x,
+    y: p.y,
+    facing: -p.facing,
+    state: "start",
+    clock: 0,
+    variant,
+    flip: true,
+  });
 }
 
 /** which cel a bolt is showing, or 0 while there is none */
@@ -7351,7 +7620,8 @@ export function stepBigGuns(): void {
         if (g.shot < 2) {
           // `0x41373c` / `0x413770` — the sound, then `0x412a70(gun, 0)`, which
           // inverts the shooter's own mirror flag: the gun faces you and the
-          // bolt goes the other way round, which is the same way
+          // shot goes the other way round, which is the same way. Variant 0
+          // is its own shot, not the blaster's — {@link GUNBOLT}
           sound?.effect(BIGGUN.sound, g.x, g.gunY);
           spawnBolt(g.x, g.gunY, p.x > g.x ? 1 : -1, 100);
           g.shot += 1;
@@ -7532,6 +7802,9 @@ export function stepFans(): void {
         } else if (dx < 0x10e) {
           p.vyRaw = 0;
           p.facing = p.x > f.x ? -1 : 1;
+          // `0x415588` — `0x402fa0(0)`, every frame of it: `0x402df0` drops
+          // every key, so nothing held walks you out of the fan's pull
+          dropKeys();
         }
       } else {
         // `0x415a2c`: up into it; `0x415a6e`: within 100 of it, it kills
@@ -7572,8 +7845,12 @@ export function stepFans(): void {
   }
 }
 
-/** `0x4154ae` / `0x415a85`: `0x402fa0(8)`, 0x16, and the blades run red */
+/**
+ * `0x4154ae` / `0x415a85`: `0x402fa0(8)` (`0x4154b7`, `0x415a89`), 0x16, and
+ * the blades run red. `0x402fa0` opens with `0x402df0`, which drops every key.
+ */
 export function fanKills(f: Fan): void {
+  dropKeys();
   sound?.effect(FAN.kill, f.x, f.y);
   f.red = true;
   f.clock = 0;
@@ -7962,6 +8239,15 @@ export function boggsSendsZap(b: Boggs): void {
 export function boggsMachinery(b: Boggs): void {
   const z = b.zap;
   const Z = BOGGS.zap;
+  // `0x41afd3` — `lab.snd` 0x14 armed to loop, every frame whatever else, and
+  // while either half of the machine still runs it plays at the second half's
+  // point (`0x41aff8`..`0x41b008`): the machine's hum, one loop the mixer keeps
+  // and each frame's play moves
+  sound?.loop(BOGGS.hum, true);
+  if (b.flags[0] || b.flags[1]) {
+    const m = b.machines[BOGGS.humAt];
+    sound?.effect(BOGGS.hum, m.x, m.y);
+  }
   if (z.kind === 1) {
     z.armed = true; // `0x41b022`
     // `0x41b028` / `0x41b045` — 0x402f60 is his kind under 0x1a, which is
@@ -8016,6 +8302,25 @@ export function boggsMachinery(b: Boggs): void {
 export function placeBoggs(b: Boggs): void {
   b.headX = b.x + b.headOff.dx;
   b.headY = b.y + b.headOff.dy;
+  // `0x41ab90` — the worms' box with the body, and each worm at the body plus
+  // its own offset, held inside the box (`0x41ac09`..`0x41ac46`)
+  if (b.bounds && b.boundsOff) {
+    b.bounds = {
+      left: b.x + b.boundsOff.left,
+      right: b.x + b.boundsOff.right,
+      top: b.y + b.boundsOff.top,
+      bottom: b.y + b.boundsOff.bottom,
+    };
+  }
+  for (const w of b.worms) {
+    if (!w.off) continue;
+    w.x = b.x + w.off.dx;
+    w.y = b.y + w.off.dy;
+    if (b.bounds) {
+      w.x = Math.min(Math.max(w.x, b.bounds.left), b.bounds.right);
+      w.y = Math.min(Math.max(w.y, b.bounds.top), b.bounds.bottom);
+    }
+  }
   for (let i = 0; i < b.machines.length; i++) {
     const m = b.machines[i];
     const spec = BOGGS.machines[i];
@@ -8126,14 +8431,16 @@ export function boggsReach(b: Boggs): void {
   // `0x41c0fd` — seven in fifty-five, and one goes down where it stands
   const w = BOGGS.worms;
   if (Math.floor(random() * w.odds[1]) >= w.odds[0]) return;
-  // `0x41c3c8` — nineteen, counted off the class's own list
-  if (b.worms.length >= w.cap) return;
-  const at = {
-    x: b.x + w.offX[0] - Math.floor(random() * w.offX[1]),
-    y: b.y + w.offY[0] + Math.floor(random() * w.offY[1]),
-    kind: 0 as const,
-    clock: 0,
+  const off = {
+    dx: w.offX[0] - Math.floor(random() * w.offX[1]),
+    dy: w.offY[0] + Math.floor(random() * w.offY[1]),
   };
+  // `0x41c149` — 0x18 at the body, before the dropper has counted anything
+  sound?.effect(w.sound, b.x, b.y);
+  // `0x41c3c8` — `cmp [list+4], 0x13; jg`: a count past nineteen refuses, so
+  // the twentieth goes down and the twenty-first does not
+  if (b.worms.length > w.cap) return;
+  const at = { x: b.x + off.dx, y: b.y + off.dy, kind: 0 as const, clock: 0, off };
   // `0x41ac09`…`0x41ac26` — and the record is what keeps it on the floor
   if (b.bounds) {
     at.x = Math.min(Math.max(at.x, b.bounds.left), b.bounds.right);
@@ -8353,7 +8660,11 @@ export function strikeMachine(b: Boggs, i: number, damage: number, bolted = fals
   }
   // `0x41b628` / `0x41b774` — the cue only the SECOND one to go plays
   // ...through `0x40f090`, the mixer's channel 0
-  if (!b.flags[0] && !b.flags[1]) sound?.effect(BOGGS.bothDownSound, m.x, m.y, "lead");
+  if (!b.flags[0] && !b.flags[1]) {
+    sound?.effect(BOGGS.bothDownSound, m.x, m.y, "lead");
+    // `0x41b640` / `0x41b78c` — and the hum is let go: its pass plays out
+    sound?.loop(BOGGS.hum, false);
+  }
   return true;
 }
 
@@ -8721,7 +9032,8 @@ export function openStream(): void {
   const kit = STREAMS[inv.weapon];
   if (!kit || roundsIn(inv.weapon) <= 0) return;
   if (streams.some((q) => q.state !== "stop")) return;
-  if (kit.sound.own !== undefined) sound?.own(kit.sound.own, p.x, p.y);
+  const own = streamOwn(kit);
+  if (own !== undefined) sound?.own(own, p.x, p.y);
   if (kit.sound.effect !== undefined) sound?.effect(kit.sound.effect, p.x, p.y);
   // `0x45ef00` in the fire function itself, for the one that is a shot
   if (kit.shot)
@@ -8736,17 +9048,35 @@ export function openStream(): void {
   });
 }
 
-/** `-2`: every live one goes to its tag 2, the animation of shutting off */
+/** the character's own sound a stream starts with — {@link StreamKit.sound} */
+function streamOwn(kit: StreamKit): number | undefined {
+  return CHARACTER === 1 ? (kit.sound.own1 ?? kit.sound.own) : kit.sound.own;
+}
+
+/**
+ * `-2`: every live one goes to its tag 2, the animation of shutting off — and
+ * the state that sent it silences the weapon's own sound (`0x40eee0`, see
+ * {@link StreamKit.sound})
+ */
 export function shutStreams(): void {
   for (const q of streams)
     if (q.state !== "stop") {
       q.state = "stop";
       q.clock = 0;
+      const own = STREAMS[q.weapon] && streamOwn(STREAMS[q.weapon]);
+      if (own !== undefined) sound?.mute(own, true);
     }
 }
 
-/** `-1`: `0x448c19`'s cancel — the stream simply stops existing */
+/**
+ * `-1`: `0x448c19`'s cancel — the stream simply stops existing, and a flamer
+ * cancelled so is silenced with it (`0x42e727`, `0x448c37`)
+ */
 export function killStreams(): void {
+  for (const q of streams) {
+    const own = q.weapon === 10 && STREAMS[10] ? streamOwn(STREAMS[10]) : undefined;
+    if (own !== undefined) sound?.mute(own, true);
+  }
   streams = [];
 }
 
@@ -8783,8 +9113,9 @@ export function stepStreams(): void {
      * So it is not fired and forgotten, it is redrawn where you are — which is
      * why walking while you hold the button sweeps it across a room.
      */
-    const at = kit.at[kit.standing] ?? kit.at[0];
-    q.facing = p.facing;
+    const at = kit.at[q.variant ?? kit.standing] ?? kit.at[0];
+    // `0x42466c` — a variant that sets `user+8` is drawn turned round
+    q.facing = q.flip ? -p.facing : p.facing;
     q.x = p.x + p.facing * at.dx + p.vx;
     q.y = p.y - p.feet + at.dy + p.vyRaw;
     if (
@@ -8804,7 +9135,8 @@ export function stepStreams(): void {
     if (q.state === "stop") continue;
     // `0x45ef00(1)` or the scepter's forty, and an empty gauge shuts it off
     inv.rounds[q.weapon] = Math.max(0, roundsIn(q.weapon) - kit.perFrame);
-    if (roundsIn(q.weapon) <= 0) {
+    // ...but a lightning's discharge (`0x41f7e2`) asks the gauge nothing
+    if (roundsIn(q.weapon) <= 0 && q.variant === undefined) {
       q.state = "stop";
       q.clock = 0;
       continue;
@@ -9184,10 +9516,9 @@ export function fireBolt(): void {
  * `0x412a70` itself — a bolt from whoever fired it.
  *
  * The player is not the only caller: MAZE's big gun reaches the same function
- * (`0x41374c`), which is why its shot has the blaster's speed, the blaster's
- * scatter and the blaster's code rather than one of its own. What the gun does
- * NOT do is spend a round, because the rounds are `0x412a83`'s caller's
- * business and the gun has none.
+ * (`0x41374c`) with variant 0, which is a shot of its own — {@link GUNBOLT}.
+ * What the gun does NOT do is spend a round, because the rounds are
+ * `0x412a83`'s caller's business and the gun has none.
  */
 export function spawnBolt(
   x: number,
@@ -9196,6 +9527,19 @@ export function spawnBolt(
   // the variant's strength — see {@link Bolt.code}: the player's −1, the gun's 100
   code: Bolt["code"] = BOLT.blow,
 ): void {
+  // the gun's variant 0 is a shot of its own — {@link GUNBOLT}
+  if (code === 100) {
+    bolts.push({
+      x: x + facing * GUNBOLT.aheadPx,
+      y,
+      vx: roundAway((facing * GUNBOLT.dx) / BOLT.divisor),
+      facing,
+      spent: false,
+      code,
+      age: 0,
+    });
+    return;
+  }
   bolts.push({
     // `0x412b7f` puts it 120 ahead; `obj+0x28 == 1` is this port's facing -1
     x: x + facing * BOLT.aheadPx,
@@ -9205,8 +9549,14 @@ export function spawnBolt(
     facing,
     spent: false,
     code,
-    born: true,
+    age: 0,
   });
+}
+
+/** the cel a bolt shows this frame — 4000 for the blaster's, {@link GUNBOLT} for the gun's */
+export function boltCel(b: Bolt): number {
+  if (b.code !== 100) return BOLT.cel;
+  return b.age === 0 ? GUNBOLT.launch : GUNBOLT.flight[(b.age - 1) % GUNBOLT.flight.length];
 }
 
 /**
@@ -9225,50 +9575,53 @@ export function spawnBolt(
 export function stepBolts(): void {
   const lvl = level;
   if (!lvl) return;
+  for (const b of bolts) {
+    // the think, before anything moves: `0x413b95`..`0x413baf`, more than a
+    // thousand pixels across from the player, lets it go where it stands
+    if (Math.abs(b.x - p.x) > BOLT.rangePx) {
+      b.spent = true;
+      continue;
+    }
+    // ...and then the move, after the frame's hit pass has tested it where it
+    // stood — see {@link boltHits} — and on the record this frame's step shows
+    if (b.was) b.age += 1;
+    b.was = { x: b.x, y: b.y };
+    b.x += b.vx;
+  }
+  bolts = bolts.filter((b) => !b.spent);
+}
+
+/**
+ * The bolts' part of the frame's hit pass ({@link hitPass}) — `0x430350` with
+ * each bolt as the hitter, at the point it stood as the frame began.
+ *
+ * Its strike box is its cel's own, 4000's `x −4..2, y −4..2` about the anchor
+ * and mirrored with it (`0x40e6a2`), tested once a frame where it is. The bolt
+ * crosses a hundred pixels an engine frame, so the six-pixel box samples the
+ * world every hundred and goes clean through anything it does not happen to
+ * land in: a body whose box is narrower than the gap, standing in the gap, is
+ * never struck. That is the engine's, and it is what the blaster is — where
+ * you stand to shoot decides what it reaches.
+ */
+export function boltHits(): void {
+  const lvl = level;
+  if (!lvl) return;
   const i = lvl.rooms.indexOf(p.room!);
   const pool = i >= 0 ? lvl.spawned[i] : [];
   const span = p.room ? roomSpan(p.room) : null;
   for (const b of bolts) {
-    // ...but not on the tick it was made — see {@link Bolt.born}
-    if (b.born) {
-      b.born = false;
-      continue;
-    }
-    const was = b.x;
-    b.x += b.vx;
+    if (b.spent || !b.was) continue;
+    const art = celRec(lvl.sbk, boltCel(b));
+    const sb = art?.strike ?? { y0: -4, x0: -4, y1: 2, x1: 2 };
+    const at = b.was;
+    const [x0, x1] = b.facing < 0 ? [-sb.x1, -sb.x0] : [sb.x0, sb.x1];
+    const box = { left: at.x + x0, right: at.x + x1, top: at.y + sb.y0, bottom: at.y + sb.y1 };
+    const was = at.x;
     /**
-     * The box is SWEPT, and it has to be.
-     *
-     * `BOLT.cel` in a level book is a six-by-six dot — VAT's 4000 is 6x6 against
-     * `PLAYER.SBK`'s 104x143, which is the player's own pose while holding the
-     * thing — and the bolt crosses a hundred pixels of the world every engine
-     * frame. Tested only where it landed, a six-pixel dot samples about ten
-     * points on its way across a room and goes through everything in between:
-     * measured, nine rounds fired straight at Boggs' machine took nothing off
-     * it, off the other machine, or off Boggs.
-     *
-     * So this tests the whole span it travelled rather than the end of it. That
-     * is this port's, not the disc's — the engine collides objects where they
-     * are, once a frame, the same way — but a gun whose entire purpose is the
-     * one thing in the game that reads its code has to be able to reach it.
-     */
-    const art = celRec(lvl.sbk, BOLT.cel);
-    const half = { w: art ? art.width / 2 : 12, h: art ? art.height / 2 : 12 };
-    const box = {
-      left: Math.min(was, b.x) - half.w,
-      right: Math.max(was, b.x) + half.w,
-      top: b.y - half.h,
-      bottom: b.y + half.h,
-    };
-    /**
-     * What it meets first, and FIRST is the word: a swept box can cross Boggs'
-     * body and its machine in the same step, so testing them in source order
-     * would feed every round to the thing that heals thirty a frame while the
-     * machine that stops the healing stands untouched behind it.
-     *
-     * So collect what the sweep crossed and take the nearest along the way it
-     * was going. Both take the same hundred: `0x41bc71` on the body and
-     * `0x41b510` in the machinery's handler translate the `-1` identically.
+     * What it meets first. Boggs' body and a machine can both stand over the
+     * point it is tested at; both take the same hundred — `0x41bc71` on the
+     * body and `0x41b510` in the machinery's handler translate the `-1`
+     * identically — and the nearer along the way it flies is taken.
      */
     const met: { edge: number; take: () => void }[] = [];
     for (const g of hereOf((l) => l.boggs)) {
@@ -9334,16 +9687,10 @@ export function stepBolts(): void {
       b.spent = true;
       continue;
     }
-    // ...and only now the room's own end, because culling first threw away the
-    // step that crossed the target: the machine at x6694 stands past the end of
-    // chamber2's floor, so every bolt aimed at it died on the frame it arrived
-    if (span && (b.x < span.lo || b.x > span.hi)) {
-      b.spent = true;
-      continue;
-    }
-    // `0x413b95`..`0x413baf`: more than a thousand pixels across from the
-    // player and the think lets it go
-    if (Math.abs(b.x - p.x) > BOLT.rangePx) {
+    // ...and only now the room's own end — the page's, not the disc's — and
+    // on the point it was tested at, because culling first would throw that
+    // test away: the machine at x6694 stands past the end of chamber2's floor
+    if (span && (was < span.lo || was > span.hi)) {
       b.spent = true;
       continue;
     }
@@ -9422,10 +9769,10 @@ export function stepBolts(): void {
         Math.floor(Math.hypot(dx, dy)),
         pair,
         facing,
-        b.y,
+        at.y,
         hurt,
         0,
-        { x: b.x, y: b.y },
+        { x: at.x, y: at.y },
         { mass: BOLT.divisor, vx, vy: 0, by: {} },
       );
       if (e.dents !== dents) {
@@ -9455,8 +9802,6 @@ export function stepBolts(): void {
 export function stepFlares(): void {
   const lvl = level;
   if (!lvl) return;
-  const i = lvl.rooms.indexOf(p.room!);
-  const pool = i >= 0 ? lvl.spawned[i] : [];
   for (const f of flares) {
     f.age += 1;
     if (f.burn !== null) {
@@ -9478,6 +9823,9 @@ export function stepFlares(): void {
       f.sign = -f.sign;
       f.wobble -= FLARE.wobble.step;
     }
+    // where it stands for the frame's hit pass, and with what — see
+    // {@link flareHits}: the pass comes before this move in the engine's frame
+    f.was = { x: f.x, y: f.y, vx: f.vx, vy: f.vy, armed: f.burn === null, cel: f.age <= 1 ? FLARE.muzzle : FLARE.flight };
     // the mover, `0x42fd80`: move, then the floor, then — airborne only —
     // gravity (`0x430322`); on the ground the drag instead (`0x4302c0`)
     const wasY = f.y;
@@ -9499,17 +9847,35 @@ export function stepFlares(): void {
     if (f.grounded) f.vx = dragged(f.vx);
     // `0x42f850(obj, 0.5)` stores `trunc(0.5 * 10)` — half the player's own
     else f.vy += FLARE.gravity * PLAYER_GRAVITY;
-    // strength 0 once it has hit or landed (`0x43ac19`)
-    if (f.burn !== null) continue;
+  }
+  flares = flares.filter((f) => !f.spent);
+}
+
+/**
+ * The flares' part of the frame's hit pass ({@link hitPass}) — `0x430350`
+ * with each flare as the hitter, at the point it stood as the frame began and
+ * on the cel it shows this frame, and only while it still carries its strength
+ * (`0x43ac19` zeroes it once it has hit or landed).
+ */
+export function flareHits(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const i = lvl.rooms.indexOf(p.room!);
+  const pool = i >= 0 ? lvl.spawned[i] : [];
+  for (const f of flares) {
+    const at = f.was;
+    if (f.spent || !at || !at.armed || (f.burn !== null && f.burn >= 0)) continue;
+    const art = celRec(lvl.sbk, at.cel);
     // ...and anything it reaches: the flight cel's own STRIKE box, about its
     // anchor and mirrored with it (`0x4026d0`), against the body it meets
     const sb = art?.strike ?? { y0: -12, x0: -12, y1: 12, x1: 12 };
     const box = {
-      left: f.x + (f.facing < 0 ? -sb.x1 : sb.x0),
-      right: f.x + (f.facing < 0 ? -sb.x0 : sb.x1),
-      top: f.y + sb.y0,
-      bottom: f.y + sb.y1,
+      left: at.x + (f.facing < 0 ? -sb.x1 : sb.x0),
+      right: at.x + (f.facing < 0 ? -sb.x0 : sb.x1),
+      top: at.y + sb.y0,
+      bottom: at.y + sb.y1,
     };
+    let struck = false;
     for (const e of pool) {
       if (!takesBlows(e)) continue;
       const c = celRec(lvl.sbk, celOf(e));
@@ -9548,8 +9914,8 @@ export function stepFlares(): void {
         // 7207's `dx 8` and forty a frame of flight is about fifty, not a
         // flat hundred
         const pair = art?.blow ?? { dx: 0, dy: 0 };
-        const dx = pair.dx + f.vx * f.facing;
-        const dy = pair.dy + f.vy;
+        const dx = pair.dx + at.vx * f.facing;
+        const dy = pair.dy + at.vy;
         strikeFoe(
           e,
           Math.round(Math.hypot(dx, dy)),
@@ -9560,10 +9926,11 @@ export function stepFlares(): void {
           0,
           undefined,
           // the flare's own mass, its divisor of 5 (`0x43ab50`)
-          { mass: FLARE.divisor, vx: f.vx * f.facing, vy: f.vy, by: {} },
+          { mass: FLARE.divisor, vx: at.vx * f.facing, vy: at.vy, by: {} },
         );
       }
       f.burn = -1;
+      struck = true;
       break;
     }
     /**
@@ -9582,7 +9949,7 @@ export function stepFlares(): void {
      * placed in CITY at all — the chapter's weapon is the flamer (see
      * `CHAPTER_WEAPON` in {@link file://./guns.ts}). The two can never meet.
      */
-    if (f.burn === null && levelIndex % 4 === 3)
+    if ((f.burn === null || f.burn < 0) && !struck && levelIndex % 4 === 3)
       for (const c of casts) {
         if (c.spent || !c.kit.onCode) continue;
         const art = celRec(lvl.sbk, castCel(c));
@@ -9600,7 +9967,6 @@ export function stepFlares(): void {
         break;
       }
   }
-  flares = flares.filter((f) => !f.spent);
 }
 
 /**
@@ -9738,6 +10104,21 @@ export function raiseSprinkler(e: Enemy): void {
  */
 export function stepColumns(): void {
   const all = hereOf((l) => l.sprinklers);
+  /**
+   * ...and the boss's own hum, in the same prologue (`0x440b8e`, states 1..9):
+   * `0x441b20` finds no sprinkler rect around its point and it arms and plays
+   * `0x17` (`0x440c81`..`0x440ca2`), a loop the mixer keeps and each frame
+   * moves. Over a sprinkler that is down it asks nothing that frame; over one
+   * that is up it is the scald below.
+   */
+  for (const e of spawnedHere()) {
+    const foe = FOES[e.kind];
+    if (e.state === "dead" || e.rallied || !foe.drives?.raises || !foe.rallies) continue;
+    if (Math.floor(e.clock) === Math.floor(e.clock - TICK_SCALE)) continue;
+    if (all.some((q) => e.x >= q.left && e.x < q.right && e.y >= q.top && e.y < q.bottom)) continue;
+    sound?.loop(FOE_SFX.kraggFlies, true);
+    sound?.effect(FOE_SFX.kraggFlies, e.x, e.y);
+  }
   if (!all.length && !columns.size) return;
   const gone: number[] = [];
   for (const [slot, clock] of columns) {
@@ -10799,6 +11180,15 @@ export interface Cast {
   alight?: boolean;
   /** its impact was started by another's burst — {@link chainCasts}; the probe's */
   setOff?: boolean;
+  /** it has struck something and flies on worth nothing — {@link CastKit.flyOn} */
+  struck?: boolean;
+  /** where its thrower stood when it let go — `AI+4`/`AI+6` of the hardcore's */
+  fromX: number;
+  fromY: number;
+  /** out on the far leg of a throw that comes back — {@link CastKit.returns} */
+  out?: boolean;
+  /** ...and engine frames into the way back, once it has turned */
+  back?: number;
   spent: boolean;
 }
 
@@ -10873,7 +11263,70 @@ export function dropBoard(e: Enemy): void {
     vy: roundAway(b.hop.dy / b.divisor),
     down: false,
     life: b.lasts[swept ? 1 : 0],
+    facing: e.facing,
   });
+}
+
+/**
+ * The board's rect — {@link SKATEBOARD.ride}: cel 2300's drawn box as
+ * `0x438501`..`0x43855c` files it, at the board's own point.
+ */
+function boardRect(d: Board): { top: number; left: number; right: number } | null {
+  const r = SKATEBOARD.ride;
+  const c = celRec(level?.sbk, r.cel);
+  if (!c) return null;
+  let left = -r.widen - c.posX;
+  let right = c.width - c.posX + r.widen;
+  if (d.facing < 0) [left, right] = [-right, -left];
+  return { top: d.y + r.topDown - c.posY, left: d.x + left, right: d.x + right };
+}
+
+/**
+ * One frame of a board lying there with the player about — `0x437854`, and
+ * see {@link SKATEBOARD.ride}. Answers the drag the mover takes this frame.
+ */
+function rideBoard(d: Board): number {
+  const r = SKATEBOARD.ride;
+  const box = boardRect(d);
+  d.vx = Math.max(-r.maxSpeed, Math.min(r.maxSpeed, d.vx));
+  const me = playerSprite();
+  const bottom = me ? me.top + me.f.height : p.y;
+  const on =
+    !!box &&
+    p.onGround &&
+    p.x < box.right &&
+    p.x > box.left &&
+    Math.abs(bottom - box.top) < r.feetPx;
+  if (on) {
+    // `0x4378fa`..`0x437924`
+    d.stood = true;
+    d.vx += p.facing;
+    d.facing = p.facing;
+    return 0;
+  }
+  if (!d.stood || !box) return r.offDrag;
+  d.stood = false;
+  // `0x437951`..`0x43797e` — gone on ahead of him, the way it faces
+  const behind = d.facing > 0 ? p.x < box.left : p.x > box.right;
+  if (!behind) return r.offDrag;
+  // `0x43798d` — tag 0 again, the hop, its script step spent as an impulse
+  d.down = false;
+  d.vx += roundAway((d.facing * SKATEBOARD.hop.dx) / SKATEBOARD.divisor);
+  d.vy += roundAway(SKATEBOARD.hop.dy / SKATEBOARD.divisor);
+  d.life -= r.kickedLife;
+  // `0x4379a3` — out from under him at speed: `0x402fa0(2)`, which drops the
+  // keys (`0x402df0`) and, off a ladder and not already down or dying
+  // (`0x42f321`..`0x42f347`), installs `0x4722a8` tag 0 — kind 24, unarmed
+  if (Math.abs(d.vx) > r.tripSpeed) {
+    dropKeys();
+    if (p.act !== "downFront" && p.act !== "downBack" && p.act !== "dying" && !p.ladder && !p.bar) {
+      if (p.act === "fire") shutStreams();
+      p.act = "downFront";
+      p.actClock = 0;
+      inv.drawn = false;
+    }
+  }
+  return r.offDrag;
 }
 
 /**
@@ -10888,10 +11341,13 @@ export function dropBoard(e: Enemy): void {
 export function stepBoards(): void {
   const b = SKATEBOARD;
   for (const d of skates) {
+    // state 1, the board lying there: the player can step on it — and what
+    // that leaves the drag at is what the mover takes this frame
+    const drag = d.down ? rideBoard(d) : b.friction;
     const moved = looseStep(d, {
       foot: celFoot(d.down ? b.rest : b.hop.cel),
       bounce: Math.trunc(b.bounce * -8192),
-      drag: Math.trunc(b.friction * 8192),
+      drag: Math.trunc(drag * 8192),
       weight: b.pull,
     });
     if (moved.down) d.down = true; // `0x4377c4`
@@ -11556,6 +12012,8 @@ export function castAt(
     clock: 0,
     bornX,
     bornY,
+    fromX: x,
+    fromY: y,
     // a kit with no arming rule is dangerous from the frame it leaves
     armed: kit.arm === undefined,
     spent: false,
@@ -11580,15 +12038,29 @@ export function castCel(c: Cast): number {
   // an armed one is its own cel and nothing else: the arming IS a script
   // install, so there is no flight cycle left to be part way through
   if (c.kit.arm && c.armed) return c.kit.arm.cel;
-  const hold = Math.max(1, c.kit.hold);
-  const i = Math.floor(c.clock / hold);
-  if (i < c.kit.cels.length) return c.kit.cels[i];
+  // the far leg of a throw that comes back loops its own two cels
+  const out = c.kit.returns?.out;
+  if (out && c.out) return out.cels[Math.floor(c.clock / Math.max(1, out.hold)) % out.cels.length];
+  // ...and the way back is the launch and the flight again, from the turn
+  return flightCel(c.kit, c.back ?? c.clock);
+}
+
+/** the launch, then the flight — looped, or once and then its own loop */
+function flightCel(kit: CastKit, clock: number): number {
+  const hold = Math.max(1, kit.hold);
+  const i = Math.floor(clock / hold);
+  if (i < kit.cels.length) return kit.cels[i];
   // the launch has run out: either the flight takes over and loops, or the last
   // cel holds, which is what a finished script does with nobody to reinstall it
-  const then = c.kit.then;
-  if (!then) return c.kit.cels[c.kit.cels.length - 1];
-  const since = c.clock - c.kit.cels.length * hold;
-  return then.cels[Math.floor(since / Math.max(1, then.hold)) % then.cels.length];
+  const then = kit.then;
+  if (!then) return kit.cels[kit.cels.length - 1];
+  const since = clock - kit.cels.length * hold;
+  const j = Math.floor(since / Math.max(1, then.hold));
+  const loop = kit.thenLoop;
+  if (!loop) return then.cels[j % then.cels.length];
+  if (j < then.cels.length) return then.cels[j];
+  const after = since - then.cels.length * Math.max(1, then.hold);
+  return loop.cels[Math.floor(after / Math.max(1, loop.hold)) % loop.cels.length];
 }
 
 /**
@@ -11619,6 +12091,8 @@ export function castStride(c: Cast): number {
 /** what it would hit for — zero until it arms, which is the slug's whole design */
 export function castBlow(c: Cast): number {
   if (!c.armed) return 0;
+  // `0x43c866` — `obj+0x2a` set, and the strength is held at nothing
+  if (c.struck) return 0;
   // ...and the one whose flight is a dud is worth nothing until it bursts —
   // `0x452ec0` is where the hundred and one is written, and it is the burst's
   // own state that writes it. See {@link CastKit.onImpact}.
@@ -11871,7 +12345,10 @@ export function stepCasts(): void {
     if (c.landed !== undefined) {
       c.landed += 1;
       const smash = c.kit.impact;
-      if (!smash || c.landed >= smash.cels.length * Math.max(1, smash.hold)) c.spent = true;
+      // ...for its own count where it keeps one (`0x43cafb`), else its impact
+      const lie = c.kit.lieFor;
+      if (lie !== undefined ? c.landed > lie + 1 : !smash || c.landed >= smash.cels.length * Math.max(1, smash.hold))
+        c.spent = true;
       continue;
     }
     // ...a bounce's burst runs on its own clock and hands the flight back
@@ -11898,6 +12375,35 @@ export function stepCasts(): void {
     const stride = castStride(c);
     if (stride) c.vx += c.facing * stride;
     c.clock += 1;
+    if (c.back !== undefined) c.back += 1;
+    // the throw that comes back — {@link CastKit.returns}: the fork as the
+    // launch cel ends (`0x43c917`), and the turn once it is far enough out
+    const turn = c.kit.returns;
+    if (turn) {
+      if (c.back === undefined && !c.out && c.clock === c.kit.cels.length * Math.max(1, c.kit.hold))
+        c.out = roll(turn.of) < turn.odds;
+      if (c.out && Math.abs(c.fromX - c.x) > turn.far) {
+        c.out = false;
+        c.back = 0;
+        c.facing = -c.facing;
+        c.vy = 0;
+        c.y = c.fromY + turn.drop;
+        // `0x43c9ca`/`0x43c9cf` zero both speeds and `0x43c9e5` puts `0x4748c8`
+        // on — and the think runs before the frame's script step (`0x42fc10`
+        // after `0x430f10`), whose `0x45d0f0` spends the new tag's first frame
+        // at once: its `dx 80` is read off the frame index the step ENTERS with
+        // (`0x45d105`) and handed to `0x42f8b0` (`0x45d1a3`) that same frame,
+        // before the move. So the zero never survives a frame, and it moves
+        // back by eighty on the frame it turns
+        c.vx = c.facing * turn.speed;
+      }
+    }
+    // the whoosh, every frame it is in the air — see {@link CastKit.hum}
+    const hum = c.kit.hum;
+    if (hum !== undefined) {
+      sound?.effect(hum, c.x, c.y);
+      sound?.loop(hum, true);
+    }
     // ...and the mover, whole pixels on the ENGINE frame, like the bolts — see
     // {@link CastKit.speed}
     const moved = looseStep(c, {
@@ -11922,6 +12428,9 @@ export function stepCasts(): void {
     // answers `0x7d00`, a floor nothing reaches, and a thing out there would
     // fall for the rest of the level
     if (c.y - c.bornY > FALLS_FOREVER) c.spent = true;
+    // a whoosh whose thing is gone some other way than landing: this page's
+    // own ends, above — the engine's throw only ends by landing — let it go
+    if (hum !== undefined && c.spent) sound?.loop(hum, false);
     if (!moved.down) continue;
     if (c.kit.bounce !== undefined) bounceCast(c);
     // `0x452e00` / `0x452e79` — MOLITOV's shot goes off once it is standing
@@ -12029,6 +12538,11 @@ export function bounceCast(c: Cast): void {
  * of that is simply gone, which is what the four flat ones do.
  */
 export function landCast(c: Cast): void {
+  // `0x43c8e1`..`0x43c8f9` — a whoosh lets its loop go and falls silent as it lands
+  if (c.kit.hum !== undefined) {
+    sound?.loop(c.kit.hum, false);
+    sound?.mute(c.kit.hum);
+  }
   if (!c.kit.impact) {
     c.spent = true;
     return;
@@ -12456,6 +12970,21 @@ export const BRAIN_CTX: BrainCtx = {
     get climbing() {
       return p.climbing;
     },
+    get crouching() {
+      return p.crouching;
+    },
+    get character() {
+      return CHARACTER;
+    },
+    get jolted() {
+      return p.act === "jolt";
+    },
+    get helpless() {
+      return p.act !== null && HELPLESS.has(p.act);
+    },
+    get free() {
+      return !p.hidden;
+    },
   },
   ladderNear: (e) => {
     if (!level) return undefined;
@@ -12497,6 +13026,16 @@ export const BRAIN_CTX: BrainCtx = {
    * MANHATTAN distance, not the one whose rect holds anything.
    */
   spill: (at, n) => spillRoaches(at, n),
+  pin: (at, v) => pinPlayer(at, v),
+  hide: (hidden) => {
+    p.hidden = hidden;
+  },
+  drain: (n) => {
+    if (damageOn && p.act !== "dying") takeHealth(n);
+  },
+  pose: (mode) => posePlayer(mode),
+  someIn: (e, state) =>
+    spawnedHere().some((o) => o !== e && o.kind === e.kind && o.state !== "dead" && o.script === state),
   sprinkler: (e) => {
     const all = hereOf((l) => l.sprinklers);
     if (!all.length) return null;
@@ -13224,14 +13763,9 @@ export function stepEnemies(): void {
       const cap = foe.speedCap;
       if (cap !== undefined) e.speed = Math.max(-cap, Math.min(cap, e.speed));
     }
-    // ...and then what the body pass took off `obj+0xc` ({@link bodyPush}): a
-    // walker's speed is kept along its facing, anything else's in `e.vx`
-    const pushed = pushes.get(e);
-    if (pushed !== undefined && onFrame) {
-      pushes.delete(e);
-      if (rolling && !foe.floats) e.speed = (e.speed ?? 0) + pushed * e.facing;
-      else e.vx += pushed * TICK_SCALE;
-    }
+    // ...and whether what the body pass takes off `obj+0xc` goes into its
+    // walk or its flight — see {@link bodyPush}, in the frame's {@link hitPass}
+    if (onFrame) e.rolling = rolling && !foe.floats;
     /**
      * ...and a FLOATER is not dragged, because the drag is the ground's.
      *
@@ -13751,6 +14285,70 @@ export function stepGoal(): void {
 }
 
 /**
+ * Where every thing that can strike or be struck stood as the frame began —
+ * see {@link hitPass}. Built on the frame tick, before anything moves.
+ */
+let frameStart: { o: { x: number; y: number }; x: number; y: number }[] = [];
+
+function standing(): { o: { x: number; y: number }; x: number; y: number }[] {
+  const all: { x: number; y: number }[] = [p, ...spawnedHere(), ...casts, ...crowsHere(), ...heads, ...rollers];
+  for (const b of hereOf((l) => l.boggs)) all.push(b, ...b.machines, ...b.worms);
+  for (const c of hereOf((l) => l.claws)) all.push(c);
+  return all.map((o) => ({ o, x: o.x, y: o.y }));
+}
+
+/**
+ * The frame's hit pass — `0x430350`, and WHERE it runs in the frame is the
+ * point of this function.
+ *
+ * Every chapter's frame loop has one shape (VAT's `0x419c0b`..`0x419e35`,
+ * STREETS' `0x44dcfc`..`0x44de83`, MALL's `0x43702c`..`0x4371a6`, GRAVE's
+ * `0x41fa18`..`0x41fb6a` and the other twelve alike): the chapter's end
+ * test, the player's think (`0x402950`), every class's think (`0x430f10` per
+ * class), and then `0x42fc10`, which in one call steps every object's script
+ * (`0x45d0f0`), fetches each current cel's rects (`0x42f9f0`), runs the body
+ * pass (`0x430680`), runs THIS pass for every object as the hitter
+ * (`0x42fc9a`), moves the platforms, and only then moves every object
+ * (`0x42fd80`) and the camera (`0x4309f0`). VAT alone places Boggs' rig after
+ * it (`0x41c4c0`, `0x411ed0`, `0x412180`, `0x41ab90`); then the draws.
+ *
+ * So a blow is judged on the cel this frame's think and script step put up,
+ * at the place the LAST frame's move left everything. This page runs its
+ * thinks and moves together across the frame's four ticks, so the pass waits
+ * for the frame tick's thinks to be done and puts everything back at its
+ * frame-start place while it runs; whatever the pass itself moves is kept.
+ * The body pass comes first, as it does in `0x42fc10`; the flares and bolts,
+ * whose steps run the same frame, carry the place they stood in
+ * ({@link Flare.was}, {@link Bolt.was}) and are tested there.
+ */
+export function hitPass(ladder: boolean): void {
+  const back = frameStart.map((s) => ({ ...s, dx: s.o.x - s.x, dy: s.o.y - s.y }));
+  for (const s of back) {
+    s.o.x = s.x;
+    s.o.y = s.y;
+  }
+  // `0x430680` first, on the same cels and the same frame-start places: what
+  // it takes off `obj+0xc` is taken now, as the hit's trade is — a walker's
+  // along its facing in its walk, anything else's in `e.vx`
+  bodyPush(ladder);
+  for (const [e, pushed] of pushes) {
+    if (e.rolling) e.speed = (e.speed ?? 0) + pushed * e.facing;
+    else e.vx += pushed * TICK_SCALE;
+  }
+  pushes.clear();
+  if (p.act) landHits();
+  takeHits();
+  foesStrikeFoes();
+  flareHits();
+  boltHits();
+  for (const s of back) {
+    s.o.x += s.dx;
+    s.o.y += s.dy;
+  }
+  frameStart = [];
+}
+
+/**
  * One tick of the game — a quarter of an engine frame (see {@link INVENTED}).
  * Everything that happens in the world happens here; {@link loop} only paces
  * it against the clock and draws what it left.
@@ -13775,6 +14373,8 @@ export function tick(): void {
     return;
   }
   stepDeathRed(frame);
+  // where everything stands before this frame moves it — {@link hitPass}
+  if (frame) frameStart = standing();
   // `0x4309f0` is an engine-frame job like everything else in here; the step it
   // decides is spent across this frame's four ticks
   if (frame) stepCamera();
@@ -14122,7 +14722,6 @@ export function tick(): void {
     ) {
       p.flail = true;
       inv.drawn = false; // `0x472350` is kind 25, and it ends on `0x471648`
-      p.screamed = false;
       p.launched = false;
       p.fallState = null;
       p.landLeft = 0;
@@ -14136,10 +14735,9 @@ export function tick(): void {
       // a flailing player drops straight down — and past 630 it screams
       // (`0x429211`). The landing is the body's, below.
       p.vx = 0;
-      if (!p.screamed && p.fallPx > 0x276) {
-        p.screamed = true;
-        sound?.own(KIT.flailSound, p.x, p.y);
-      }
+      // asked every frame past it, through `0x40ef30`: the mixer turns the ask
+      // away while the scream still sounds, and a long enough fall screams again
+      if (p.fallPx > 0x276) sound?.own(KIT.flailSound, p.x, p.y);
     } else if (p.landLeft > 0) {
       // tag 1, or 0x471c68's tag 5: `0x42a182` reads ESC and nothing else until
       // the script ends on the ground. The keys do nothing; the slide is the drag's
@@ -14210,8 +14808,6 @@ export function tick(): void {
     // one call before the body step at 0x417c57)
     else p.fallPx = 0;
   }
-  // ---- the body pass, after every think and script and before any move
-  if (frame) bodyPush(ladder !== undefined);
   // every tick moves by a quarter of the frame's velocity, in the air and on the
   // ground alike: the stepper adds `obj+0xc` to the position whatever the input,
   // so a released jump coasts and a landing slides
@@ -14646,8 +15242,8 @@ export function tick(): void {
         p.onGround = true;
       }
       /**
-       * ...and a flail's landing is the flail handler's: `0x42922c` (and
-       * `0x443c72` for character 1) stops the scream, and then past 530 of
+       * ...and a flail's landing is the flail handler's: `0x42922c` stops
+       * character 0's scream (character 1's `0x443c72` does not), and then past 530 of
        * accumulated fall the landing is fatal — straight into `0x4721a0` tag
        * 0 — and under it sound 5, `0x471c68` tag 5 and ten health off
        * (`0x4292bf`). The health and the death are behind the damage switch
@@ -14655,6 +15251,9 @@ export function tick(): void {
        */
       if (p.flail && p.onGround) {
         p.flail = false;
+        // `0x42923c` — character 0's scream is silenced as he lands
+        // (`0x40eee0`); character 1's plays out (`0x443c72` has no such call)
+        if (CHARACTER === 0) sound?.mute(KIT.flailSound, true);
         sound?.own(OWN.landHard, p.x, p.y);
         // `0x4292b7` / `0x429384` — and either way the view jolts
         shake(1);
@@ -14712,10 +15311,6 @@ export function tick(): void {
   // and the obstacles, once the whole move is in — the engine resolves them in
   // the mover after everything else has had its say (`0x430146`)
   if (!p.climbing) ejectFromObstacles();
-  if (p.act) landHits();
-  // ...and everything that can hit back, on the frame tick — see {@link takeHits}
-  if (frame) takeHits();
-  if (frame) foesStrikeFoes();
   stepPlanks();
   stepElevators();
   stepIbeams();
@@ -14784,6 +15379,12 @@ export function tick(): void {
   punchPressed = false;
   kickPressed = false;
   choosePlayerCel();
+  // ...and only now, every think and script of the frame done and the
+  // player's cel put up, the hit pass — and the cel again, for a reaction
+  if (frame) {
+    hitPass(ladder !== undefined);
+    choosePlayerCel();
+  }
   stepGoal();
 }
 

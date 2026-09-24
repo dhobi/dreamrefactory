@@ -69,7 +69,11 @@ const gripCel = game.handCel(grip);
 if (gripCel !== 1556) fail(`only 1556 carries a grip; it is holding on cel ${gripCel}`);
 ok(`the hand's -3 takes hold after ${took} frames, on the one cel of eleven that has a strike box`);
 
-// 2. ...and it is pinned to the grip rather than to where it was standing
+// 2. ...and it is pinned to the grip rather than to where it was standing —
+//    from the frame after: the grab lands in the hit pass (`0x42fc10`), after
+//    the player's think, and it is the held state's own think (`0x428080`'s
+//    kind 10) that plants him at the grip, which is the next frame's
+h.frame();
 const heldAt = p.x;
 if (Math.abs(heldAt - grip.atX) > 40)
   fail(`the grip is the centre of the fist's box; the player is at ${heldAt} and the hand at ${grip.atX}`);

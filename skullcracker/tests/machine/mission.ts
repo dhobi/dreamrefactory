@@ -164,6 +164,20 @@ ok(`and it costs a life and puts them back where the level starts, x ${backX} y 
   game.p.act = null;
   if (h.until(() => game.craft?.state === "open", 400) < 0) fail(`the craft should open for a player standing at the goal`);
   ok(`the craft waits while the player is dying (0x402f60) and opens once they are not`);
+  // `0x410702` — `0x402e30(0)`: the keys are dropped as the screen starts down
+  // and `0x402be0` answers none of them until the tally has run
+  {
+    if (game.inputOpen || Object.values(game.held).some(Boolean))
+      fail(`the opening shuts the keys and drops what was held: open ${game.inputOpen}, held ${JSON.stringify(game.held)}`);
+    const x0 = game.p.x;
+    h.hold("right", true);
+    h.press("jump");
+    h.frame(5);
+    h.hold("right", false);
+    if (game.held.right || game.jumpPressed || game.p.x !== x0 || game.p.act === "jump")
+      fail(`a key pressed while the screen comes down does nothing: right ${game.held.right}, x ${x0} -> ${game.p.x}, act ${game.p.act}`);
+  }
+  ok(`the keys are shut while the screen comes down`);
   // its sounds: the hum asked for every frame of kind 1 (`0x4105ef`) and the
   // screen's own as it opens (`0x4106d9`), the character's, through `0x40ef30`
   const own = (id: number) => heard.filter((c) => c.call === "own" && c.args[0] === id && c.args[3] === undefined).length;
@@ -171,7 +185,11 @@ ok(`and it costs a life and puts them back where the level starts, x ${backX} y 
   h.frame(10);
   if (own(0x1c) - hums !== 10) fail(`0x4105ef asks for the hum every frame; ten frames asked ${own(0x1c) - hums} times`);
   if (own(0x1d) !== 1) fail(`0x4106d9 plays 0x1d once as the screen starts down; it played ${own(0x1d)}`);
-  ok(`the craft hums (0x1c) every frame and says 0x1d once as it opens`);
+  // ...its hum's record armed to loop as it is made (`0x410212`) and let go
+  // as it opens (`0x4106f8`)
+  const loops = heard.filter((c) => c.call === "loop" && c.args[0] === 0x1c).map((c) => c.args[1]);
+  if (loops.join() !== "true,false") fail(`0x410212 arms the hum and 0x4106f8 lets it go; the loop word went ${loops.join(" ")}`);
+  ok(`the craft hums (0x1c) every frame on a loop, says 0x1d once as it opens, and lets the loop go`);
   // 3000 left: step 16 - 6 = 10, dial 12710, seven steps to the empty dial
   game.stats.ticks = 3000;
   const score = game.stats.score;
@@ -202,6 +220,8 @@ ok(`and it costs a life and puts them back where the level starts, x ${backX} y 
   const ding = heard.slice(mark).filter((c) => c.call === "own" && c.args[0] === 0x1f && c.args[3] === "renew");
   if (ding.length !== 70) fail(`each hundred is the character's 0x1f through 0x40f110; heard ${ding.length}`);
   if (game.stats.ticks !== 32000 || !game.craftOpened()) fail(`then the clock is 32000 and the stage is over; ticks ${game.stats.ticks}`);
+  // `0x410754` — `0x402e30(1)` opens them again as the flag goes up
+  if (!game.inputOpen) fail(`the tally's end opens the keys again (0x410754)`);
   ok(`the goal tallies the clock: seven dial steps, seventy frames, seven thousand points, then 32000`);
 
   // ...and past step 12 the dial flashes, and a stage finished on a frame that

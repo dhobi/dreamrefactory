@@ -207,7 +207,7 @@ const LADDER = "0x414bf1 / 0x40b660 / 0x46eb14" as const;
 
 /**
  * The hypnosis, `0x402fa0(4)`, which is the one thing this class does to the
- * player and is therefore not done.
+ * player.
  *
  * Kind 6 is installed at `0x414f52` and `0x414fe1`, and both sites call
  * `0x402fa0(4)` beside it. That function is the player's own pose setter: a
@@ -216,13 +216,11 @@ const LADDER = "0x414bf1 / 0x40b660 / 0x46eb14" as const;
  * kind **9**, the judder. So the brain's kind 6 puts the player into a state he
  * does not choose, which is what `#0007 Brain hyp` is the sound of.
  *
- * Nothing in this port hits the player back, so the animation is installed on
- * the brain and the call on the player is not made. It has one visible
- * consequence beyond the obvious: `0x414f2e`, `0x414fb4` and `0x414c81`'s
- * sibling tests all ask whether the player is ALREADY in kind 9 — a brain will
- * not hypnotise a man who is already hypnotised, and will bolt him instead.
- * Because nothing here ever puts him in kind 9, those tests are permanently
- * false in this port and are written below as false.
+ * The judder runs its fifteen frames (thirty engine frames) and its handler
+ * hands him back to the idle; nothing else holds him, and nothing is taken.
+ * `0x414f2e` and `0x414fb4` ask whether he is ALREADY in kind 9 — a brain will
+ * not hypnotise a man who is already hypnotised, and bolts him instead — and
+ * the eyeball's swoop opens on the same kind.
  */
 const HYPNOSIS = "0x402fa0 / 0x42f383 / 0x471fc8" as const;
 
@@ -499,15 +497,12 @@ function decide(
    * ladder hunt, and `0x415048` is the same three lines for both: `AI+0x30 = 1`
    * and kind 2 tag 0, the walk.
    *
-   * The first is `player+0x18 == 7`, the player's own state being the LADDER,
-   * and {@link BrainCtx} has no way to ask it — `k.player` carries his
-   * position, his velocity, whether he is swinging, whether he is down and
-   * which way he faces, and not which script he is playing. It is left out.
-   * The second is the two hundred pixels of {@link SLURP.apart}, which is
-   * askable and which a player up a ladder is nearly always on the far side
-   * of anyway.
+   * The first is `player+0x18 == 7`, the player's own state being the LADDER
+   * ({@link BrainCtx}'s `player.climbing`); the second is the two hundred
+   * pixels of {@link SLURP.apart}.
    */
-  if (Math.abs(k.anchorY(e) - k.player.anchor) > SLURP.apart) return install(e, SLURP.walk);
+  if (k.player.climbing || Math.abs(k.anchorY(e) - k.player.anchor) > SLURP.apart)
+    return install(e, SLURP.walk);
   /**
    * `0x414e52` — and while it is off a ladder it has no region index, so it
    * asks `0x40b940` which record's rect it is standing in and takes the stance
@@ -549,13 +544,12 @@ function decide(
         return install(e, SLURP.drift);
       }
       halve(e);
-      // `0x414f29`'s "is he already juddering" is permanently false here — see
-      // {@link HYPNOSIS} — and `0x402f60` is `k.player.down` negated
-      if (k.roll(2) === 1 && !k.player.down) {
+      // `0x414f29` — not a man already juddering — and `0x402f60`, upright
+      if (k.roll(2) === 1 && !k.player.jolted && !k.player.down) {
         k.say(e, SLURP.sfxHyp);
-        // `0x414f62` — `0x402fa0(4)` goes here, and is the blow this port
-        // does not land
-        return install(e, SLURP.latch, true);
+        install(e, SLURP.latch, true);
+        k.pose(4); // `0x414f64`
+        return false;
       }
       k.say(e, SLURP.sfxFly);
       return install(e, SLURP.drift);
@@ -570,10 +564,11 @@ function decide(
      */
     case 2: {
       halve(e);
-      if (e.facing !== k.player.facing) {
+      // `0x414fb4` — already juddering, and he is bolted instead
+      if (e.facing !== k.player.facing && !k.player.jolted) {
         if (k.player.down) return done ? install(e, SLURP.stance) : false;
         k.say(e, SLURP.sfxHyp);
-        // `0x414fd7` — `0x402fa0(4)` again, again not landed
+        k.pose(4); // `0x414fd9`
         return install(e, SLURP.latch, true);
       }
       k.say(e, SLURP.sfxBolt);

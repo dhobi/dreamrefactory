@@ -23,7 +23,7 @@ import { FOES } from "../../src/foes";
 import { bat, batReacts } from "../../src/brains/bat";
 import { GHENGIS, ghengisReacts } from "../../src/brains/ghengis";
 import { SKEL, SKEL_BONE, skel, skelReacts } from "../../src/brains/skel";
-import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, install, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 import { gobCount } from "../../src/effects";
 import { FPS, fail, headless, ok, pass } from "./harness";
 import type { FoeAnim } from "../../src/foes";
@@ -461,6 +461,47 @@ const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly F
   const f: number[] = [];
   for (let t = 0; t < 3; t++) f.push(await handOff(10, "initskel", S[t], [SKEL.leap, SKEL.walk]));
   ok(`the skeleton's takes hand to the leap or the walk after ${f.join(", ")} frames (0x423965)`);
+}
+
+/**
+ * The skeleton's GRAB, and what it does to him.
+ *
+ * `0x4236b1`: the reach ends with him inside a hundred, nobody holding him
+ * (`[0x46b1b4]`), within fifty of its row and upright, so `0x4236f8` takes him
+ * — undrawn from here, the 1240s draw him — and installs `0x46faf8`. Every
+ * frame of it (`0x423756`) he faces it, is held fifty-one in front and
+ * thirty-eight up, and loses five (`0x402ac0(5)`); as it ends he is thrown a
+ * hundred on and thirty up, drawn again, and knocked down (`0x402fa0(2)`).
+ */
+{
+  await h.load("level=10&x=2990&damage=1");
+  h.until(() => game.p.onGround, 60);
+  h.frame(4);
+  const e = game.level!.spawned.flat().find((q) => q.kind === "initskel")!;
+  const S = FOES.initskel;
+  const k = game.BRAIN_CTX;
+  install(e, SKEL.stoop, true);
+  e.state = "gait";
+  e.asleep = false;
+  e.facing = -1;
+  e.x = game.p.x + 60;
+  e.y = game.p.y;
+  e.clock = SKEL.stoop.cels.length * SKEL.stoop.hold;
+  skel(e, S, e.clock, k);
+  if (e.script !== 3 || !game.p.hidden) fail(`0x4236f8: the reach ends in the grab, and he is not drawn; kind ${e.script}, hidden ${game.p.hidden}`);
+  const hp0 = game.stats.health;
+  const run = e.anim.cels.length * e.anim.hold;
+  let held = 0;
+  for (e.clock = 0; e.clock < run; e.clock += 1) {
+    skel(e, S, run, k);
+    const at = { x: k.anchorX(e) + (e.facing > 0 ? 0x33 : -0x33), y: k.anchorY(e) - 0x26 };
+    if (Math.abs(game.p.x - at.x) < 1 && Math.abs(k.player.anchor - at.y) < 1 && game.p.facing === -e.facing) held += 1;
+  }
+  const drained = hp0 - game.stats.health;
+  skel(e, S, run, k);
+  if (held !== run || drained !== 5 * run) fail(`0x423756: held in front, facing it, five a frame; held ${held} of ${run}, ${drained} taken`);
+  if (game.p.hidden || game.p.act !== "downFront") fail(`0x4237f8 / 0x423801: thrown, drawn again and knocked down; ${game.p.act}, hidden ${game.p.hidden}`);
+  ok(`a skeleton grabs him, holds him ${run} frames for ${drained} health, and throws him down (0x423756)`);
 }
 
 pass(`CAVERN's four creatures stand, its blades swing, its bridges give way and its lifts carry`);

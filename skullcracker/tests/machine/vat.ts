@@ -196,6 +196,14 @@ ok(`and its showers, balls and teeth stand on their own single cels`);
   if (m.length !== 2 || m[0] < 6 || m[0] > 8 || m[1] < 9 || m[1] > 11)
     fail(`0x41b53f..0x41b56b: 0x434540(3) + 5, or + 8 for a bolt; heard ${m.join(" ")}`);
   ok(`Boggs cries out as it is struck (a bolt ${bolt[0][0]}, a fist ${fist[0][0]}), hints on the twelfth blow, and its machinery answers too`);
+  // `0x41afd3` / `0x41b008` — the machine's hum, armed every frame and
+  // played at the second half while either half runs
+  mark = heard.length;
+  game.boggsMachinery(b);
+  const hum = heard.slice(mark);
+  if (!hum.some((c) => c.call === "loop" && c.args[0] === BOGGS.hum && c.args[1] === true) ||
+    !hum.some((c) => c.call === "effect" && c.args[0] === BOGGS.hum))
+    fail(`0x41afd3 arms 0x14 and 0x41b008 plays it while the machine runs; heard ${JSON.stringify(hum)}`);
   // and the page's own silence back, which the rest of this suite ran under
   game.setSound(null);
 }
@@ -472,12 +480,56 @@ for (let i = 0; i < 240; i++) {
 }
 if (!mostWorms) fail(`0x41c0fd drops one seven frames in fifty-five; in 240 frames none was ever down`);
 // `0x41c3c8` — `cmp word ptr [eax+4], 0x13`, and the class's own count is what
-// it tests, so nineteen is a hard ceiling rather than a tendency
-if (mostWorms > 0x13) fail(`0x41c3c8 caps them at nineteen; ${mostWorms} were down at once`);
+// it tests, and past nineteen (`jg`) it refuses — twenty is a hard ceiling
+if (mostWorms > 0x14) fail(`0x41c3c8 caps them at twenty; ${mostWorms} were down at once`);
 const wormCels = [...worms.values()].flatMap((v) => [...v]);
 if (wormCels.some((c) => c !== 5670 && (c < 5660 || c > 5678)))
   fail(`a worm is 5670 asleep and 5660..5678 awake; saw ${wormCels.sort((a, b) => a - b).join(",")}`);
-ok(`and Boggs seeds WORMS — up to ${mostWorms} of its nineteen, kinds ${[...worms.keys()].sort().join(",")}, cels ${[...new Set(wormCels)].sort((a, b) => a - b).join(",")}`);
+ok(`and Boggs seeds WORMS — up to ${mostWorms} of its twenty, kinds ${[...worms.keys()].sort().join(",")}, cels ${[...new Set(wormCels)].sort((a, b) => a - b).join(",")}`);
+
+/**
+ * ...and a worm rides the body. `0x41ab90` runs every frame after the move
+ * (`0x419c85`): the `wormbounds` box goes where the body goes, and every worm
+ * is put at the body plus the offset it was dropped at (`0x41c3fb`), held
+ * inside the box.
+ */
+{
+  const b = boggs();
+  // one put down the way `0x41c3c0` puts one: at the body plus its offset
+  const w = { x: 0, y: 0, kind: 0 as const, clock: 0, off: { dx: -60, dy: 90 } };
+  b.worms.push(w);
+  game.placeBoggs(b);
+  if (!b.bounds) fail(`VAT's wormbounds record should give the worms a box`);
+  const was = { bx: b.x, wx: w!.x, left: b.bounds!.left };
+  b.x += 20;
+  game.placeBoggs(b);
+  const inside = (x: number): number => Math.min(Math.max(x, b.bounds!.left), b.bounds!.right);
+  if (b.bounds!.left !== was.left + 20 || w!.x !== inside(b.x + w!.off!.dx))
+    fail(`0x41ab90 moves the box and the worm with the body: box ${was.left} -> ${b.bounds!.left}, worm ${was.wx} -> ${w!.x}`);
+  b.x = was.bx;
+  b.worms.splice(b.worms.indexOf(w), 1);
+  game.placeBoggs(b);
+  ok(`and a worm and its box ride the body (0x41ab90)`);
+}
+
+// ...and the cap is twenty, not nineteen: `0x41c3c8` refuses only a count past
+// 0x13 (`jg`), so a twentieth goes down and a twenty-first never does
+{
+  const b = boggs();
+  const keep = b.worms;
+  b.worms = Array.from({ length: 19 }, () => ({ x: b.x, y: b.y, kind: 0 as const, clock: 0 }));
+  const px = game.p.x;
+  game.p.x = b.x - 200;
+  let most = 0;
+  for (let i = 0; i < 3000 && most < 21; i++) {
+    game.boggsReach(b);
+    most = Math.max(most, b.worms.length);
+  }
+  game.p.x = px;
+  b.worms = keep;
+  if (most !== 20) fail(`0x41c3c8's jg lets the twentieth down and no more; the most was ${most}`);
+  ok(`and twenty worms is the most there can be (0x41c3c8)`);
+}
 
 /**
  * ...and past three hundred it throws instead, out of `[0x4a5170]` — which is

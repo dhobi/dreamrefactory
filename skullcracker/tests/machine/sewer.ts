@@ -29,7 +29,7 @@
 import { FOES } from "../../src/foes";
 import { EYEBALL, eyeball, eyeballReacts } from "../../src/brains/eyeball";
 import { OX, OX_PIT, ox as oxBrain, oxReacts } from "../../src/brains/ox";
-import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, install, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 import { FPS, fail, headless, ok, pass } from "./harness";
 import type { FoeAnim } from "../../src/foes";
 
@@ -609,6 +609,61 @@ const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly F
   const E = FOES.initeyeball.flinch!;
   const f = [await handOff(7, "initeyeball", E[0], [EYEBALL.hover]), await handOff(7, "initeyeball", E[3], [EYEBALL.hover])];
   ok(`an eyeball's shut eye and its knock-out hand to the hover after ${f.join(" and ")} frames (0x43dff5)`);
+}
+
+/**
+ * The eyeball's SWOOP, and what it does to him.
+ *
+ * `0x43e06c` is its door: he is in the judder, kind 9 — which is what the
+ * glob's own −2 puts him in — and no other eye is already swooping
+ * (`0x43e880`). The carry (`0x43e259`) holds him a hundred and twenty below
+ * it in the spawn pose, `0x402fa0(-1)` every frame, undrawn (`[0x46b1b4]`),
+ * rising with it; the shake (`0x43e2f5`) takes ten a frame (`0x402ac0(0xa)`);
+ * and it lets him go into the knockdown, `0x402fa0(2)`, drawn again.
+ */
+{
+  await go("damage=1");
+  const eyes = game.level!.spawned.flat().filter((q) => q.kind === "initeyeball");
+  const e = eyes[0];
+  const E = FOES.initeyeball;
+  const k = game.BRAIN_CTX;
+  const stage = (): void => {
+    install(e, EYEBALL.hover);
+    e.state = "gait";
+    e.clock = 0;
+    e.facing = -1;
+    e.x = game.p.x + 120;
+    e.y = game.p.y - 60;
+  };
+  stage();
+  game.p.act = null;
+  eyeball(e, E, 16, k);
+  const calm = e.script;
+  stage();
+  game.p.act = "jolt";
+  eyeball(e, E, 16, k);
+  if (calm === 5 || e.script !== 5 || e.tag !== 0)
+    fail(`0x43e06c: the swoop opens on a juddering player and not otherwise; calm ${calm}, jolted ${e.script}/${e.tag}`);
+  ok(`an eye swoops on a man in the judder, and only then (0x43e06c)`);
+
+  game.p.act = null;
+  const hp0 = game.stats.health;
+  install(e, EYEBALL.carryA);
+  e.clock = 0;
+  let posed = 0;
+  let under = 0;
+  const frames = EYEBALL.carryA.cels.length * EYEBALL.carryA.hold + EYEBALL.shakeA.cels.length * EYEBALL.shakeA.hold + 2;
+  for (let f = 0; f < frames; f++) {
+    eyeball(e, E, e.anim.cels.length * e.anim.hold, k);
+    if (e.script !== 5) break;
+    if (game.p.act === "posed" && game.p.hidden) posed += 1;
+    if (Math.abs(game.p.x - k.anchorX(e)) < 1 && Math.abs(k.player.anchor - (k.anchorY(e) + 0x78)) < 1) under += 1;
+    e.clock += 1;
+  }
+  if (!posed || posed !== under) fail(`0x43e26c / 0x43e2ab: held in the spawn pose, undrawn, 120 under it; posed ${posed}, under ${under}`);
+  if (game.stats.health >= hp0) fail(`0x43e2fc: the shake takes ten a frame; health ${hp0} -> ${game.stats.health}`);
+  if (game.p.hidden || game.p.act !== "downFront") fail(`0x43e38c / 0x43e3a1: let go into the knockdown and drawn again; ${game.p.act}, hidden ${game.p.hidden}`);
+  ok(`and it carries him ${posed} frames in the spawn pose, shakes ${hp0 - game.stats.health} health out of him and drops him down (0x43e259, 0x43e2f5)`);
 }
 
 pass(`SEWER's doors are locks, its levers are keys, and three of them can be walked to`);

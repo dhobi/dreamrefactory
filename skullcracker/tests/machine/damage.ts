@@ -123,4 +123,14 @@ const lying = game.hereOf((l) => l.guns).length;
 if (lying <= guns) fail(`0x45b060 puts the weapon on the FLOOR; the level still holds ${lying} guns against ${guns}`);
 ok(`a knockdown disarms: the flamer left the hand and the level went from ${guns} guns to ${lying}`);
 
+// 7. ...and the death drops every key. `0x402ac0` empties the health into
+//    `0x402fa0(1)`, whose first call is `0x402df0`: the eight action words
+//    zeroed, so a key held as the player dies is let go
+h.hold("right", true);
+h.press("punch");
+game.takeHealth(stats.health);
+if (game.held.right || game.punchPressed || p.act !== "dying")
+  fail(`dying drops the keys (0x402af4 -> 0x402df0): right ${game.held.right}, punch ${game.punchPressed}, ${p.act}`);
+ok(`dying lets go of every key held`);
+
 pass("the damage switch is off by default, and the engine's own numbers when it is not");

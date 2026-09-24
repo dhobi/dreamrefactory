@@ -230,19 +230,32 @@ const NOT_HERE = "0x43d062, 0x43d0c5, 0x43d250" as const;
  * `0x43c7c3` pushes 0.23f — `obj+0x24` = 2, so it droops like the knife does.
  * Tag 0 is one cel at `dx 80`, undivided: eighty pixels a frame.
  *
- * `0x43c860` is its think and it does one thing this page keeps: `obj+0x2a`
- * set — it has hit something — and the strength goes to **zero** the same
- * frame, so a thing that has already struck cannot strike twice. Landing
- * (`obj+0x2e`) installs `0x474910`, four cels of it coming apart.
+ * `0x43c860` is its think. Every frame: `obj+0x2a` set — it has hit
+ * something — and the strength is **zero**, or not and it is a hundred
+ * (`0x43c866`), so a thing that has struck flies on harmless
+ * ({@link CastKit.flyOn}): nothing ends it but landing. Landing (`obj+0x2e`,
+ * `0x43c8c0` and `0x43ca38` on the way back) installs `0x474910`, four cels of
+ * it coming apart, with `AI+2 = 0x28`, and that state (`0x43caf6`) holds the
+ * strength at zero and removes it once the count is past zero
+ * ({@link CastKit.lieFor}).
  *
- * **Not modelled:** the whoosh `0x43c8af` loops while it flies (sound 0x3e
- * through `0x40ee90`), and `0x43c917`'s fork. When the launch frame ends a HIGH
- * throw (its `AI+8`, the thrower's tag, zero) rolls `0x434540(0x64)` and under
- * 30 takes tag 4 (cels 2114, 2115) rather than the ordinary tag 2 — and tag 4
- * comes BACK: `0x43c9bd` waits until it is more than 700 pixels from the thrower,
- * flips its mirror, zeroes its velocity, drops to the thrower's y + 25 and
- * returns on `0x4748c8`. The page flies the common one. Written down rather
- * than left out.
+ * The flight is tag 2 once (2101..2103) and then tag 3, 2104..2107, over and
+ * over (`0x43c968`, `0x43c989`) — {@link CastKit.thenLoop}.
+ *
+ * The whoosh is {@link CastKit.hum}: `0x43c8a7` plays 0x3e and `0x43c8af` arms
+ * it to loop, every frame it flies, and landing lets it go and silences it
+ * (`0x43c8e1`, `0x43c8f2`) — on the way back as well (`0x43ca1f`, `0x43ca30`,
+ * `0x43ca62`, `0x43ca71`).
+ *
+ * And a HIGH throw can come back — {@link CastKit.returns}: as its launch cel
+ * ends, one whose thrower's tag was 0 (`AI+8`) rolls `0x434540(0x64)` and
+ * under 30 (`0x43c937`) takes tag 4, cels 2114 and 2115, instead of tag 2.
+ * `0x43c9bd` waits for it to be more than 700 from where the thrower stood,
+ * turns it round, stops it, drops it to 25 below the thrower's point and puts
+ * `0x4748c8` on — the launch and the flight again, the other way, moving back
+ * on the very frame it turns (the frame's script step spends the new launch's
+ * dx before the move). The far leg itself cannot hurt anyone: 2114 and 2115
+ * carry no strike box. The way back can.
  */
 export const HARDCORE_THROW: CastKit = {
   /** `0x474870` tag 0 — the launch, one cel */
@@ -257,10 +270,28 @@ export const HARDCORE_THROW: CastKit = {
   /** `0x43d1ea` — the HIGH throw, out of `0x474ab8` tag 0 */
   lift: 0x46,
   blow: 0x64,
-  /** `0x474870` tag 2, the ordinary flight */
+  /** `0x43c8a0` / `0x43c8b1` — `mall.snd` 0x3e, the whoosh, looped in flight */
+  hum: 0x3e,
+  /** `0x474870` tag 2, the ordinary flight — once */
   then: { cels: [2101, 2102, 2103], hold: 1 },
+  /** ...and tag 3, round and round until it lands (`0x43c968`, `0x43c989`) */
+  thenLoop: { cels: [2104, 2105, 2106, 2107], hold: 1 },
   /** `0x474910` tag 0 — it coming apart where it lands */
   impact: { cels: [2104, 2105, 2106, 2107], hold: 1 },
+  /** `0x43c8cd` — `AI+2 = 0x28`, spent by `0x43cafb` */
+  lieFor: 0x28,
+  /** `0x43c866` — a hit leaves it flying, worth nothing */
+  flyOn: true,
+  /** `0x43c917`..`0x43c9e5` — see {@link CastKit.returns} */
+  returns: {
+    odds: 0x1e,
+    of: 0x64,
+    out: { cels: [2114, 2115], hold: 1 },
+    far: 0x2bc,
+    drop: 0x19,
+    speed: 80,
+    from: "0x43c917 / 0x43c9aa / 0x4748c8",
+  },
   from: "0x43d190, script 0x474870, class 0x43c770",
 };
 
@@ -268,6 +299,8 @@ export const HARDCORE_THROW: CastKit = {
 export const HARDCORE_THROW_LOW: CastKit = {
   ...HARDCORE_THROW,
   lift: -0x19,
+  // `0x43c926` — `AI+8` is 1, so a low throw never rolls for the way back
+  returns: undefined,
   from: "0x43d190 tag 1, script 0x474870, class 0x43c770",
 };
 

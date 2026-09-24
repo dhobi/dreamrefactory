@@ -99,6 +99,11 @@ export interface Enemy {
   hatched?: boolean;
   /** ...and has it already shed its head — see {@link Foe.sheds} */
   shed?: boolean;
+  /**
+   * Whether this frame's step has it walking — so that what the body pass
+   * takes off its speed goes into the walk rather than a flight (`bodyPush`)
+   */
+  rolling?: boolean;
   /** the lever it last found and turned to — see {@link Foe.lever}'s `found` */
   aimed?: object;
   /**
@@ -108,6 +113,15 @@ export interface Enemy {
    * boss of level four's 0x32 (`0x456134`)
    */
   threw?: boolean;
+  /**
+   * `obj+0x2a` — its blow LANDED: `0x430663` sets it on the hitter when the
+   * victim's handler took the blow and the hitter's strength was above 0
+   * (`0x430430`). The arm clears it as its lunge goes in (`0x418904`) and
+   * reads it back (`0x418992`)
+   */
+  connected?: boolean;
+  /** `[0x4a50f0]`/`[0x4a50f2]` — the point the arm's lunge was aimed at (`0x418935`) */
+  mark?: { x: number; y: number };
   /**
    * `obj+0x32`, the fall so far: `0x42fdbc` adds `obj+0xa` to it every frame
    * the thing is off its feet and moving down, and zeroes it otherwise. Kept
@@ -388,6 +402,19 @@ export interface BrainCtx {
     facing: number;
     /** is he on a ladder — his `obj+0x18` is 7 (`0x43e02b`) */
     climbing: boolean;
+    /** his `obj+0x18` is 6, the crouch (`0x4188fb`) */
+    crouching: boolean;
+    /** `[0x46b1a8]` — which of the two characters, and the tag several grabs pick by */
+    character: 0 | 1;
+    /** his `obj+0x18` is 9, the judder `0x471fc8` — hypnotised or jolted */
+    jolted: boolean;
+    /**
+     * `0x402f00` answers 0: his kind is 9 (the judder), 0xa (held), 0xd (the
+     * spawn pose a carry holds him in) or 0x18 (knocked down)
+     */
+    helpless: boolean;
+    /** `[0x46b1b4]` — nobody has him: he is drawn as himself (`0x419d25`) */
+    free: boolean;
   };
   /**
    * `0x40b660(<"ladder">, self, 0, -1)` — the level's nearest ladder to this
@@ -462,6 +489,14 @@ export interface BrainCtx {
    */
   say(e: Enemy, id: number, way?: SoundWay): void;
   /**
+   * `0x40ee90(bank, id, on)` — a record's loop word, on or off, and the loop
+   * of whatever channel is playing it (`Mixer.loop` in sound.ts). Optional so
+   * a stand-in context without sound need not carry it.
+   */
+  loop?(id: number, on: boolean): void;
+  /** `0x40eee0(bank, id)` — the record silenced where it plays (`Sounds.mute`) */
+  mute?(id: number): void;
+  /**
    * The nearest `initsprinkler` record's own point — `0x40b660` geometry −1.
    *
    * Level eight's only, and it is asked with the boss's point rather than the
@@ -476,6 +511,25 @@ export interface BrainCtx {
    * in {@link file://../props.ts}.
    */
   spill(at: { x: number; y: number }, n: number): void;
+  /**
+   * Put the player somewhere — a grabber writing his `obj+6`/`obj+8` (an ANCHOR
+   * point, as {@link player.anchor} is) and, where it does, his velocity in
+   * pixels an engine frame and his facing (+1 east).
+   */
+  pin(at: { x: number; y: number }, v?: { vx?: number; vy?: number; facing?: number; fell?: number }): void;
+  /** `[0x46b1b4]` cleared (hidden) or set — while a grabber's own cels draw him he is not drawn */
+  hide(hidden: boolean): void;
+  /** `0x402ac0(n)` — health straight out of the player, behind the damage switch */
+  drain(n: number): void;
+  /**
+   * `0x402fa0(mode)` — the player's own pose setter (`0x42f280`, table at
+   * `0x42f418`): −1 the spawn pose `0x471b18`, 2 the knockdown `0x4722a8`,
+   * 3 held `0x4720e8`, 4 the judder `0x471fc8`. Every mode drops the keys first
+   * (`0x402df0`) and puts out a running stream (`0x42e700`).
+   */
+  pose(mode: -1 | 2 | 3 | 4): void;
+  /** `0x43e880`'s walk — is another of this one's class in state `state` */
+  someIn(e: Enemy, state: number): boolean;
   /**
    * ...and send one up — `0x441b20` then `0x441b60`.
    *
@@ -786,6 +840,45 @@ export interface CastKit {
    */
   rest?: number;
   /**
+   * ...and where {@link CastKit.then} plays ONCE and hands to a loop of its
+   * own: the hardcore's `0x43c968` puts tag 3 on when tag 2 ends, and
+   * `0x43c989` puts tag 3 on again when tag 3 ends.
+   */
+  thenLoop?: { cels: readonly number[]; hold: number };
+  /**
+   * A hit does not end it: it flies on harmless. The hardcore's `0x43c866`
+   * zeroes `obj+0x1a` on every frame `obj+0x2a` is set, and nothing but the
+   * landing (`0x43c8c0`) takes the thing away.
+   */
+  flyOn?: boolean;
+  /**
+   * Engine frames it lies where it landed before it goes — `AI+2`, which
+   * `0x43c8cd` seeds with `0x28` as the impact goes on and `0x43cafb` spends,
+   * answering 1 once it is past zero. Absent, it goes as its impact ends.
+   */
+  lieFor?: number;
+  /**
+   * The throw that COMES BACK — the hardcore's high one, `0x43c917`.
+   *
+   * As the launch cel ends, a throw whose thrower's tag was 0 (`AI+8`) rolls
+   * `0x434540(0x64)` and under `odds` flies on {@link out} instead of its
+   * ordinary flight. `0x43c9bd` waits for it to be more than `far` from where
+   * its thrower stood (`AI+6`, filed by `0x43d226`), then turns it round
+   * (`0x43c9c6`), zeroes both speeds, puts it `drop` below the thrower's point
+   * (`AI+4`, `0x43c9dd`) and starts `0x4748c8` — the same launch and flight,
+   * so it comes back at the launch's `speed`. Nothing catches it; only the
+   * landing ends it, as it ends every throw of this class.
+   */
+  returns?: {
+    odds: number;
+    of: number;
+    out: { cels: readonly number[]; hold: number };
+    far: number;
+    drop: number;
+    speed: number;
+    from: string;
+  };
+  /**
    * `obj+0xa` is pinned inside ±this at the top of the class's own think.
    *
    * `0x452d4d` and `0x452d5b` — werec's shot is the one class that does it,
@@ -811,6 +904,14 @@ export interface CastKit {
    * the collision words and this page has no solver to set them.
    */
   onImpact?: boolean;
+  /**
+   * A sound it carries while it flies — the hardcore's throw, `0x43c89c`:
+   * played and armed to loop every frame in the air (`0x40ef30`, then
+   * `0x40ee90(bank, id, 1)`), and on landing let go and silenced
+   * (`0x40ee90(…, 0)`, `0x40eee0`). One looping voice the mixer keeps and
+   * each frame's play moves with it.
+   */
+  hum?: number;
   /**
    * ...and what a CODE landing on it does — `obj+0x12`, a hit handler of its
    * own. See {@link CastCode}, and two classes in the game have one.

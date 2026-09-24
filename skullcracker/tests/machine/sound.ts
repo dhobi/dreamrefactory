@@ -81,6 +81,36 @@ import { fail, headless, ok, pass, recordSound } from "./harness";
   if (l.held(0.2)[2] !== fx(5)) fail(`...and leaves channels 1 and 2 alone`);
   ok(`0x427d20: the lead takes channel 0 whatever it held and touches nothing else`);
 
+  // the loop word: a looping record never empties its channel (`0x4570c0`,
+  // `0x457f7b`), `0x428000` sets or clears it on a channel already playing it,
+  // and let go the pass in hand plays out; and `0x427da0`/`0x427ed0` move a
+  // playing record's gains on every ask, which is also how `0x40eee0` silences
+  const events: string[] = [];
+  const looped = (name: string) => () => ({
+    stop: () => events.push(`${name} cut`),
+    setLoop: (on: boolean) => events.push(`${name} loop ${on}`),
+    setGains: (at: { left: number; right: number }) => events.push(`${name} gains ${at.left}/${at.right}`),
+  });
+  const lp = new Mixer();
+  if (lp.play("mix", fx(7), 0, 1, looped("hum"), true) !== 2 || !events.includes("hum loop true"))
+    fail(`a record whose loop word is set plays looping (0x427b9a)`);
+  if (lp.held(50)[2] !== fx(7)) fail(`...and its channel is never empty — it holds at fifty seconds`);
+  if (lp.play("mix", fx(7), 50, 1, looped("hum2")) !== -1) fail(`...and a second ask of it is still turned away`);
+  lp.place(fx(7), { left: 0.1, right: 0.2 }, 50);
+  if (!events.includes("hum gains 0.1/0.2")) fail(`0x427e7e: an ask moves the playing record's gains`);
+  lp.place(fx(7), { left: 0, right: 0 }, 50);
+  if (!events.includes("hum gains 0/0")) fail(`0x40eee0: volume 0 silences it where it plays`);
+  lp.loop(fx(7), false, 50.25);
+  if (!events.includes("hum loop false") || lp.held(50.5)[2] !== fx(7) || lp.held(51)[2] !== 0)
+    fail(`let go at 50.25, the pass in hand ends at 51 and the channel empties (0x457ddf)`);
+  // ...and a one-shot already playing is put to loop by 0x428000
+  const late = new Mixer();
+  events.length = 0;
+  late.play("mix", fx(3), 0, 1, looped("a"));
+  late.loop(fx(3), true, 0.5);
+  if (!events.includes("a loop true") || late.held(9)[2] !== fx(3)) fail(`0x428059: a channel already playing the record loops from then on`);
+  ok(`a looping record holds its channel, is moved and silenced by every ask, and let go plays out its pass`);
+
   // `0x40efb0`: the two numbers, and `0x427da0`/`0x427ed0` + the mixing loop's
   // `0x458ab1`/`0x458ab4`: what the speakers get
   const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
@@ -325,6 +355,7 @@ ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixe
  */
 {
   const started: number[] = [];
+  const sources: { loop: boolean }[] = [];
   const gains: { value: number }[] = [];
   const node = () => {
     const n = { connect() {}, gain: { value: 1 }, pan: { value: 0 } };
@@ -342,8 +373,9 @@ ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixe
       return { duration: len / rate, copyToChannel() {} };
     }
     createBufferSource() {
-      const src = { buffer: null as { duration: number } | null, context: this, connect() {}, stop() {},
+      const src = { buffer: null as { duration: number } | null, context: this, connect() {}, stop() {}, loop: false,
         start: () => started.push(src.buffer?.duration ?? 0) };
+      sources.push(src);
       return src;
     }
     resume() {}
@@ -373,10 +405,68 @@ ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixe
     sounds.setMusic(true);
     sounds.pump();
     if (started.length === before) fail(`with the music back on pump should queue the theme again`);
+    // `0x40ee90` then a play: the voice loops
+    sounds.loop(2, true, true);
+    const was = sources.length;
+    sounds.own(2, 0, 0);
+    await new Promise((r) => setTimeout(r, 20));
+    if (sources.length !== was + 1 || !sources.at(-1)!.loop) fail(`a record armed by 0x40ee90 plays looping`);
+    sounds.loop(2, false, true);
+    if (sources.at(-1)!.loop) fail(`...and 0x40ee90(…, 0) lets the playing one go`);
   } finally {
     g.window = had;
   }
   ok(`the music switch stops the theme and leaves every effect playing`);
+}
+
+/**
+ * 9b. The loops and silences, site by site: the eyeball's hum armed and
+ *     played every frame (`0x43df25`) and let go and silenced by the killing
+ *     blow (`0x43e940`); and a stream's own sound silenced as `-2` shuts it
+ *     (`0x42bafb`) and as `-1` cancels the flamer (`0x42e727`).
+ */
+{
+  const { eyeball, eyeballReacts } = await import("../../src/brains/eyeball");
+  const said: string[] = [];
+  const k = {
+    player: { x: 0, y: 0, top: 0, anchor: 0, vy: 0, swinging: false, down: false, facing: 1 },
+    track: () => ({ forward: 1000, dy: 0, band: 0, side: 1 }),
+    anchorY: (e: { y: number }) => e.y,
+    anchorX: (e: { x: number }) => e.x,
+    roll: () => 1,
+    say: (_e: unknown, id: number, way?: string) => said.push(`say ${id}${way ? ` ${way}` : ""}`),
+    loop: (id: number, on: boolean) => said.push(`loop ${id} ${on}`),
+    mute: (id: number) => said.push(`mute ${id}`),
+    spray: () => {},
+    cast: () => {},
+    shake: () => {},
+    gravity: 1,
+  } as unknown as import("../../src/brains/kit").BrainCtx;
+  const E = FOES.initeyeball;
+  const eye = { kind: "initeyeball", x: 0, y: 0, facing: 1, left: -500, right: 500, top: -500, bottom: 500, clock: 0,
+    state: "gait", anim: E.gait, linger: 0, dents: 0, vx: 0, vy: 0, hp: 50, max: 50, script: 1 } as import("../../src/brains/kit").Enemy;
+  eyeball(eye, E, 4, k);
+  if (said.slice(0, 2).join() !== `loop ${0x38} true,say ${0x38}`) fail(`0x43df25: the hum armed then played; heard ${said.join(", ")}`);
+  said.length = 0;
+  const dead = { ...eye, state: "dead" as const, anim: E.death!, clock: 0 };
+  eyeballReacts(dead, E, 8, k);
+  if (!said.includes(`loop ${0x38} false`) || !said.includes(`mute ${0x38}`)) fail(`0x43e940: the killing blow lets the hum go and silences it; heard ${said.join(", ")}`);
+  ok(`the eyeball hums on a loop while it lives and falls silent as it dies`);
+
+  const heard = recordSound(game);
+  await h.load("level=2&weapon=10");
+  h.frame(4);
+  game.inv.weapon = 10;
+  game.inv.rounds[10] = 50;
+  game.openStream();
+  game.shutStreams();
+  if (!heard.some((c) => c.call === "mute" && c.args[0] === 0x16 && c.args[1] === true)) fail(`0x42bafb: -2 silences the flamer's 0x16`);
+  game.openStream();
+  const at = heard.length;
+  game.killStreams();
+  if (!heard.slice(at).some((c) => c.call === "mute" && c.args[0] === 0x16)) fail(`0x42e727: -1 on the flamer silences it too`);
+  game.setSound(null);
+  ok(`the flamer's own sound is silenced as -2 shuts it and as -1 cancels it`);
 }
 
 /**

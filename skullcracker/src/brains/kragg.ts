@@ -782,7 +782,8 @@ const think: Brain = (e, foe, run, k) => {
           if (!done) return false;
           k.say(e, KRAGG.grab);
           e.vy = 0;
-          return install(e, KRAGG.carry[1], true);
+          // `0x441306` — tag 2 for the second character, tag 3 for the first
+          return install(e, KRAGG.carry[k.player.character === 1 ? 0 : 1], true);
         }
         // `0x44134a` — out of range, so it keeps homing
         steer(e, t.dy, k.player.x - k.anchorX(e));
@@ -791,28 +792,41 @@ const think: Brain = (e, foe, run, k) => {
       }
       /**
        * `0x4413a8` — the carry, and the only state in the class that is a
-       * transaction rather than a move.
+       * transaction rather than a move. It takes him with no test of whether
+       * anything connected: the dive's end found him in reach, and that is all.
        *
-       * The disc: floor offset −150 so it rises clear; `0x402ac0(0xa)` takes
-       * **ten off the player a frame**; `[0x4a75c8] += 0xa` a frame puts the
-       * same ten into kragg, capped at `0x40e300(0x3e8)`; the player is held at
-       * `obj.x ± 50`, `obj.y`, with his velocity zeroed and kragg turned to face
-       * him; and when the eight cels run out `0x402fa0(2)` throws him down with
-       * ten of sideways speed while kragg recoils on thirty of its own.
+       * Every frame of it: floor offset −150 so it rises clear; `[0x46b1b4]`
+       * cleared, so he is not drawn — 7046/7047 are him in its fist;
+       * `[0x4a75c8] += 0xa`, capped at `0x40e300(0x3e8)`, and `0x402ac0(0xa)`
+       * — ten out of him and into kragg; he is put at `obj.x ± 50` (+50 while
+       * `obj+0x28` is clear), `obj.y`, both velocities zeroed; and kragg turns
+       * whenever he faces the way it does. His own think still runs — nothing
+       * puts him in a held state until the end — and the carry holds him where
+       * it wants him after it.
        *
-       * **The drain is not ported and never will be — nothing hits the player
-       * back in this port.** The heal is kragg's own word and is ported, with
-       * its address; a caller that does not want a free heal for an attack that
-       * cannot connect should gate it, and this comment is the reason it can.
+       * When the eight cels run out: his vertical speed zeroed and ten of
+       * sideways along kragg's facing, `[0x46b1b4]` back, `0x402fa0(2)` — the
+       * knockdown — and kragg recoils on thirty of its own and ten down.
        */
       // `0x4413b2` — the floor offset −150 over the prologue's 0, every frame
       // of the carry, so it rises clear
       e.floor = -150;
+      k.hide(true); // `0x4413b8`
       // `0x4413c9` / `0x4413f1` — ten a frame, capped at a full tank
       e.hp = Math.min(e.hp + 10, k.scaled(0x3e8));
+      k.drain(0xa); // `0x4413fc`
+      // `0x44141e` / `0x441438` — at its side and height, standing still
+      k.pin(
+        { x: k.anchorX(e) + (e.facing > 0 ? CARRY_SIDE : -CARRY_SIDE), y: k.anchorY(e) },
+        { vx: 0, vy: 0 },
+      );
       // `0x441462` — facing him the same way means facing the wrong way
       if (k.player.facing === e.facing) e.facing = -e.facing;
       if (!done) return false;
+      // `0x441490` / `0x4414b6` — let go with ten along its facing, and knocked down
+      k.pin({ x: k.player.x, y: k.player.anchor }, { vx: e.facing > 0 ? CARRY_THROW : -CARRY_THROW, vy: 0 });
+      k.hide(false);
+      k.pose(2); // `0x4414c3`
       // `0x4414cb` / `0x4414ef` — thirty back and ten down as it lets go
       e.vx = -30 * e.facing * TICKS;
       e.vy = 10 * TICKS;
@@ -1050,6 +1064,11 @@ const DEATH_UP = 0x19;
 const DEATH_SPILL_SOUND = 0x1b;
 /** `0x441a8a` — fifteen of them */
 const DEATH_SPILL = 0xf;
+
+/** `0x441416` / `0x441419` — how far to its side it holds him */
+const CARRY_SIDE = 0x32;
+/** `0x4414ae` / `0x4414b3` — and the sideways speed it drops him with */
+const CARRY_THROW = 0xa;
 
 /** `0x44154c` — the boss is pulled to a point this far BELOW the record's own */
 const SPRINKLER_DROP = 0x78;
