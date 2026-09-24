@@ -54,6 +54,8 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
 import { SkullFiles } from "./files";
 import { SkullSave, readSkl, SKL } from "./savegame";
+// puts `mobile` on <html> for the landscape rules in index.html
+import "./mobile";
 import { Film } from "./film";
 import {
   DOSSIER,

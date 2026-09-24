@@ -64,6 +64,43 @@
         touch-action: none;
       }
 
+      /*
+        A phone on its side (`mobile` on <html>, from src/mobile.ts): the width
+        rule above makes the picture 4:3 of the WIDTH, which in landscape is
+        taller than the window. So there it gets the window instead, as large as
+        4:3 fits, on black, over the bench. The stage is the whole window now,
+        so the pad is given the picture's own box, centred, to stay on it.
+        Rotating back undoes it.
+      */
+      @media (orientation: landscape) {
+        html.mobile body {
+          overflow: hidden;
+        }
+        html.mobile #stage {
+          position: fixed;
+          inset: 0;
+          z-index: 10;
+          width: 100dvw;
+          height: 100dvh;
+          display: grid;
+          place-items: center;
+          background: #000;
+        }
+        html.mobile #screen {
+          width: min(100dvw, calc(100dvh * 4 / 3));
+          height: min(100dvh, calc(100dvw * 3 / 4));
+          border: 0;
+        }
+        html.mobile #pad {
+          inset: auto;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: min(100dvw, calc(100dvh * 4 / 3));
+          height: min(100dvh, calc(100dvw * 3 / 4));
+        }
+      }
+
       #pick {
         display: flex;
         align-items: center;

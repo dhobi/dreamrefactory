@@ -204,6 +204,30 @@ await page.keyboard.press("Escape");
 await page.locator("#pad").waitFor({ state: "visible", timeout: 5_000 }).catch(() => fail(`the pad never came back after the panel closed`));
 console.log(`ok    ...and comes back when the panel does`);
 
+// ---- 8b — turned on its side, the picture is the window --------------------
+
+// a phone in landscape is ~390px tall: the page's upright layout would give it
+// a picture taller than the window, or a postage stamp under the bench. The
+// mobile landscape rules give it the whole window at 4:3, and the pad on it.
+{
+  const upright = page.viewportSize() ?? fail(`the phone page has no viewport`);
+  await page.setViewportSize({ width: upright.height, height: upright.width });
+  await page.waitForTimeout(300);
+  const [vw, vh] = [upright.height, upright.width];
+  const pic = (await page.locator("#screen").boundingBox()) ?? fail(`no canvas in landscape`);
+  if (pic.y < -1 || pic.y + pic.height > vh + 1 || pic.x < -1 || pic.x + pic.width > vw + 1)
+    fail(`landscape: the picture ${Math.round(pic.width)}x${Math.round(pic.height)} at ${Math.round(pic.x)},${Math.round(pic.y)} is off a ${vw}x${vh} window`);
+  if (Math.abs(pic.height - vh) > 2) fail(`landscape: the picture should be the window's height, ${Math.round(pic.height)} of ${vh}`);
+  for (const act of ["left", "kick"]) {
+    const key = (await page.locator(`#pad button[data-act="${act}"]`).boundingBox()) ?? fail(`no ${act} key in landscape`);
+    if (key.x < pic.x - 1 || key.x + key.width > pic.x + pic.width + 1 || key.y + key.height > pic.y + pic.height + 1)
+      fail(`landscape: ${act} is off the picture`);
+  }
+  await page.setViewportSize(upright);
+  await page.waitForTimeout(300);
+  console.log(`ok    in landscape the picture is the window, ${Math.round(pic.width)}x${Math.round(pic.height)} of ${vw}x${vh}, and the pad is on it`);
+}
+
 // ---- 9 — a machine with a mouse keeps a clean picture ----------------------
 
 const desk = await browser.newPage({ viewport: { width: 1280, height: 900 } });

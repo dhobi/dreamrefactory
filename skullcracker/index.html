@@ -905,6 +905,60 @@
         max-height: none;
       }
 
+      /* ------------------------------------------------------------------
+         A PHONE ON ITS SIDE. Upright, the picture shares the page with the
+         card and the controls under it, and there is height to spare for them;
+         turned to landscape the window is ~390px tall and --pic-w, which pays
+         for the bar, the card's band, the moulding and --under out of that,
+         leaves a postage stamp. So a mobile browser (`mobile` on <html>, from
+         src/mobile.ts) in landscape gets what fullscreen gets: the picture as
+         large as 4:3 fits, on black, over everything.
+
+         #frame stays POSITIONED, unlike `.fs`: the pad is absolute inside it,
+         and on a phone the pad is the controls. --frame-w goes to nothing there
+         so `pad.css` insets it by no moulding. Rotating back undoes all of it.
+         ------------------------------------------------------------------ */
+      @media (orientation: landscape) {
+        html.mobile body.playing {
+          overflow: hidden;
+        }
+        html.mobile body.playing #stage {
+          position: fixed;
+          top: 0;
+          left: 0;
+          z-index: 200;
+          display: grid;
+          place-items: center;
+          width: 100dvw;
+          height: 100dvh;
+          gap: 0;
+          padding: 0;
+          min-height: 0;
+          background: #000;
+        }
+        html.mobile body.playing #curtain,
+        html.mobile body.playing #brand,
+        html.mobile body.playing #frame::before {
+          display: none;
+        }
+        html.mobile body.playing #frame {
+          --frame-w: 0px;
+          margin: 0;
+          padding: 0;
+          width: auto;
+          height: auto;
+          background: none;
+          box-shadow: none;
+          border-radius: 0;
+        }
+        html.mobile body.playing #stage #frame > #screen {
+          width: min(100dvw, calc(100dvh * 4 / 3));
+          height: min(100dvh, calc(100dvw * 3 / 4));
+          max-width: none;
+          max-height: none;
+        }
+      }
+
       #log {
         width: min(60rem, calc(100vw - 2 * var(--pad)));
         max-height: 18rem;
