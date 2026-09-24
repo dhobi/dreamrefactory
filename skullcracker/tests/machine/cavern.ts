@@ -511,4 +511,35 @@ const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly F
   ok(`a skeleton grabs him, holds him ${run} frames for ${drained} health, and throws him down (0x423756)`);
 }
 
+/**
+ * ...and a blow that lands on it mid-grab leaves him undrawn, as the disc does.
+ *
+ * `0x423a30` turns away only its own class and a code — there is no state test
+ * like the arm's (`0x418b40`) — so the flinch replaces the grab, and nothing
+ * but a life or a level starting (`0x429528`, `0x42e5a1`) sets `[0x46b1b4]`
+ * back. Kept as SC.EXE has it: he is invisible, and no other grabber takes him.
+ */
+{
+  await h.load("level=10&x=2990&damage=1");
+  h.until(() => game.p.onGround, 60);
+  h.frame(4);
+  const e = game.level!.spawned.flat().find((q) => q.kind === "initskel")!;
+  const k = game.BRAIN_CTX;
+  install(e, SKEL.stoop, true);
+  e.state = "gait";
+  e.asleep = false;
+  e.facing = -1;
+  e.x = game.p.x + 60;
+  e.y = game.p.y;
+  e.clock = SKEL.stoop.cels.length * SKEL.stoop.hold;
+  skel(e, FOES.initskel, e.clock, k);
+  if (e.script !== 3 || !game.p.hidden) fail(`the grab should have him before the blow`);
+  const box = { top: e.y - 120, left: e.x - 30, bottom: e.y, right: e.x + 30 };
+  game.strikeFoe(e, 20, { dx: 20, dy: 0 }, 1, e.y - 60, box);
+  h.frame(40);
+  if (e.script === 3 || !game.p.hidden || k.player.free)
+    fail(`a blow mid-grab flinches it and leaves him undrawn and claimed: kind ${e.script}, hidden ${game.p.hidden}, free ${k.player.free}`);
+  ok(`a blow that lands on a skeleton mid-grab leaves him undrawn until the next life, as 0x423a30 has no state test`);
+}
+
 pass(`CAVERN's four creatures stand, its blades swing, its bridges give way and its lifts carry`);

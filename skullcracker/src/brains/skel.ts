@@ -444,6 +444,10 @@ export const skel: Brain = (e, foe, run, k) => {
      */
     case 2: {
       if (!done) return false;
+      // ...and the claim is only handed back by the grab's own end
+      // (`0x4237f8`): `0x423a30` has no state test, so a blow that lands
+      // mid-grab flinches it and he stays undrawn until a life or a level
+      // starts (`0x429528`, `0x42e5a1`). The disc's, and kept
       const near = Math.abs(k.anchorY(e) - k.player.anchor) < GRAB_ROW;
       if (t.band >= 3 && k.player.free && near && !k.player.down) {
         k.hide(true);
