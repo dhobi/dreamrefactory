@@ -215,6 +215,26 @@ export const CRAFT = {
   },
   /** `0x42fad0(craft, 0x12c, 0xc8)` — how close is close enough, on top of the rect */
   near: { x: 300, y: 200 },
+  /**
+   * The character's own hum, every frame of kind 1 (`0x4105e4` / `0x4105e8`,
+   * through `0x40ef30`) — 0x1c, or 0x15 for the second character
+   */
+  hum: [0x1c, 0x15] as const,
+  /** ...and the screen starting down (`0x4106ce` / `0x4106d2`) — 0x1d or 0x16 */
+  opens: [0x1d, 0x16] as const,
+  /**
+   * The stage-end tally — `0x40ffe0`, which `0x41074d` calls as the screen's
+   * last cel runs out. See {@link stepTally} in game.ts.
+   */
+  tally: {
+    /** `0x41004b` — score additions a dial step, each a frame */
+    perStep: 10,
+    /** `0x410059` — each one a hundred */
+    points: 0x64,
+    /** `0x4100fe` / `0x410102` — the character's own, 0x1f or 0x18, through `0x40f110` */
+    sound: [0x1f, 0x18] as const,
+    from: "0x40ffe0",
+  },
   from: "0x410170 / 0x410480 / 0x450060",
 } as const;
 

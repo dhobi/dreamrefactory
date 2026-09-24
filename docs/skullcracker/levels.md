@@ -92,7 +92,13 @@ of a sphere swelling to 89 pixels and collapsing to nothing, fired by the corpse
 own state handler on the frame `[0x46b204]`'s fifty run out. The rat gets none —
 that call is in the punk classes and nowhere else. And the census leaves before the
 body does: the corpse handler calls `0x42f870(obj, 0)` on its first dead frame, so
-the quota moves on the killing blow.
+the quota moves on the killing blow. Three classes never make that call — the
+eyeball, the ox and the hardcore — and theirs is made for them as the object is
+freed: `0x430fd0` → `0x42f6e0` → `0x42f750`, which takes one off `[0x4a6e88]`
+for an object still enrolled (`0x42f778`). So their bodies hold the quota for as
+long as they lie, the ox's for eight hundred frames, and anything a think
+removes without dying (the ox's pit, igor's fall) leaves the count the frame it
+goes.
 
 Each of the four chapters registers its own classes and each chapter's books put
 a walking figure at cel 1900, so a class function from the wrong chapter looks
@@ -552,7 +558,10 @@ direction 1 to the same `0x436820` the gang of level six pass 0 to, after runnin
 to within `0x89` pixels in both axes — the only reach test in the game that
 measures the height as well as the distance. Two blows in three it answers with
 an attack; the third it slides back from. Its body lies for eight hundred frames
-(`0x43fa6f`).
+(`0x43fa6f`). And it can fall to its end: more than a hundred pixels of drop, in
+any state but its patrol — a slide off a ledge included — puts it in the pit
+(`0x43f325`, `0x472f00`), crying 0x35 at the player's own point; it lands, says
+0x3d, shakes the screen and is gone for the same 320 a kill pays (`0x43f7c9`).
 
 ## The six that were placed and not drawn
 
@@ -834,8 +843,20 @@ blaster's bolt is a blow to it (`0x419999`), and only a sound to a Puke Boy
 with a flash where they land; and its flip breathes a puff out on its third
 frame (`0x419910`).
 
-VAT is seven showers, two balls, a set of teeth — all one cel apiece — chapter
-four's own gun, and BOGGS.
+VAT is seven showers, two balls, a set of teeth, chapter four's own gun, and
+BOGGS — and the showers and the balls are traps. **A shower** (`0x41a2a0`)
+sprays whenever the player's point is in its rect, down out of the ceiling or,
+for the four whose point is in the rect's lower half (`0x4117f7`), up out of the
+floor; on its frames 7..10 (22..26 for a floor one) a player within fifty
+pixels in x, at any height, loses a hundred a frame straight off the health
+(`0x402ac0`) — not a blow, so no reaction and no knockback — and catches a
+flame (`0x41a3f0`) with sound 5. It hisses 1 or 2 as it starts, and the first
+one in a run of the game says 0x20 (`[0x46cd8c]`). **A ball** (`0x41a7d0`)
+swings when the player's point enters its rect, which stops just above a
+standing player, so it is a jump that sets it off: sound 4 at the player, out
+on 4310..4300 and back at half the speed, a swish of 0 on each swing's third
+frame. Its cels carry strike boxes and it holds a strength of a hundred
+(`0x41a89e`), so what it does is an ordinary blow.
 
 **The `statblaster` is in VAT and in no other level.** MAZE, BARREL and LAB place
 fourteen `statblasterpack` between them and no gun to put them in; the placed gun

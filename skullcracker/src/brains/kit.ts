@@ -894,8 +894,9 @@ export type Gate = (
  * machine and the page takes the thing out of the flinch and puts it on that
  * script, on this frame. That is a think's preamble overriding the state the
  * handler installed — the gang's gloat, which `0x439300` and its siblings put
- * on over state 10 the frame the player goes down. From a death it is
- * ignored.
+ * on over state 10 the frame the player goes down. From a death the same:
+ * the ox's `0x43f325` exempts only states 0 and 7, so a dying ox that falls
+ * a hundred pixels is put in the pit.
  */
 export type Reaction = (
   e: Enemy,

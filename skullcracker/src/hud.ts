@@ -293,6 +293,11 @@ export interface HudState {
   quota: number;
   /** engine frames left on the mission clock ({@link CLOCK.noLimit} = none) */
   ticks: number;
+  /**
+   * The dial cel itself, where something other than the clock is driving it —
+   * the stage-end tally, `0x40ffe0`, which steps it on by hand
+   */
+  dial?: number;
   /** which buttons are down, one bit each in {@link BUTTONS} order */
   buttons: number;
   /** the special weapon: its icon cel and its magazine, or null for empty hands */
@@ -406,7 +411,7 @@ export function paintHud(ctx: CanvasRenderingContext2D, art: HudArt, s: HudState
 
   // ---- the mission dial ---------------------------------------------------
   within(RECT.dial, () => {
-    const cel = dialCel(s.ticks);
+    const cel = s.dial ?? dialCel(s.ticks);
     put(cel, AT.dial.x, AT.dial.y);
   });
 

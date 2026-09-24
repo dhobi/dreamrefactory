@@ -70,6 +70,97 @@ if (!celOfKind("ball").includes(4310)) fail(`0x41a73d files 0x10d6; balls show $
 if (!celOfKind("teeth").includes(3516)) fail(`0x418c9d files 0xdbc; teeth show ${celOfKind("teeth")}`);
 ok(`and its showers, balls and teeth stand on their own single cels`);
 
+/**
+ * 2a. ...and the showers and the balls are not furniture. A shower's point in
+ * the rect's lower half hangs it in the floor (`0x4117f7`); the four VAT puts
+ * there stand under the region's floor and are filed by their rect.
+ */
+{
+  const all = game.level!.fittings.flat();
+  const sh = all.filter((f) => f.kind === "shower");
+  if (sh.length !== 7 || sh.filter((f) => f.tag === 1).length !== 4 || all.filter((f) => f.kind === "ball").length !== 2)
+    fail(`VAT places seven showers, four in the floor, and two balls; ${sh.length} showers (${sh.filter((f) => f.tag === 1).length} in the floor)`);
+  const heard = recordSound(game);
+  const said = (from: number) => heard.slice(from).filter((c) => c.call === "effect").map((c) => c.args);
+  /**
+   * One spray from where a shower stands, frame by frame: the health each
+   * frame, and what it said. `0x41a2f8` — within fifty in x, on frame index
+   * 7..10 (tag 0) or 22..26 (tag 1), a hundred through `0x402ac0` a frame.
+   */
+  const spray = async (x: number): Promise<{ lost: number[]; said: unknown[][]; flames: number }> => {
+    await go(`&x=${x}&damage=1`);
+    const f = game.hereOf((l) => l.fittings).find((q) => q.kind === "shower" && q.x === x)!;
+    game.stats.health = game.stats.maxHealth;
+    // ...stood in it and still, until it has gone back to idle once
+    h.until(() => f.phase === "idle", 40);
+    const mark = heard.length;
+    const flames0 = game.flames.length;
+    h.until(() => f.phase === "spray", 5);
+    const lost: number[] = [];
+    let was = game.stats.health;
+    for (let i = 0; i < 17 && f.phase === "spray"; i++) {
+      h.frame();
+      lost.push(was - game.stats.health);
+      was = game.stats.health;
+    }
+    return { lost, said: said(mark), flames: game.flames.length - flames0 };
+  };
+  const top = await spray(3240);
+  const burnt = top.lost.map((n, i) => (n ? i : -1)).filter((i) => i >= 0);
+  if (burnt.join() !== "7,8,9,10" || top.lost.some((n) => n !== 0 && n !== 100))
+    fail(`a ceiling shower burns a hundred on frames 7..10 (0x41a301); it took ${top.lost.join(" ")}`);
+  const fives = top.said.filter((a) => a[0] === 5).length;
+  const hiss = top.said.filter((a) => a[0] === 1 || a[0] === 2).length;
+  if (fives !== 4 || hiss < 1 || top.flames < 4)
+    fail(`each burning frame says 5 (0x41a348) and lights a flame (0x41a3f0), and it hisses 1 or 2 as it starts; ${fives} fives, ${hiss} hisses, ${top.flames} flames`);
+  const firsts = heard.filter((c) => c.call === "effect" && c.args[0] === 0x20);
+  if (firsts.length > 1 || (firsts.length === 1 && firsts[0].args[3] !== "lead"))
+    fail(`0x20 through 0x40f090 once in the run ([0x46cd8c]); heard ${firsts.length}`);
+  const floor = await spray(3494);
+  const burntF = floor.lost.map((n, i) => (n ? i : -1)).filter((i) => i >= 0);
+  if (burntF.join() !== "6,7,8,9,10")
+    fail(`a floor shower's tag 1 counts from 16, so it burns on its own 6..10 — 22..26 of the script; it took ${floor.lost.join(" ")}`);
+  ok(`a ceiling shower takes 100 on its frames 7..10 and a floor one on 22..26, a flame and a 5 each — no blow, 0x402ac0`);
+
+  // the ball: in its rect it says 4 at the player (0x41a886), swings out on
+  // 4310..4300 and back at half the speed, swishing 0 on frame index 3 of each.
+  // Its rect stops twelve pixels above a standing player's point — it is a
+  // jump that sets it going
+  await go(`&x=4337`);
+  const ball = game.hereOf((l) => l.fittings).find((q) => q.kind === "ball" && q.x === 4337)!;
+  if (ball.phase !== "idle") fail(`a standing player's point is under the ball's rect; it swung`);
+  const mark = heard.length;
+  h.press("jump");
+  h.until(() => ball.phase === "out", 30);
+  const cels: number[] = [];
+  let outFrames = 0;
+  while ((ball.phase as string) === "out" && outFrames < 20) {
+    cels.push(game.fittingCel(ball));
+    h.frame();
+    outFrames += 1;
+  }
+  let backFrames = 0;
+  while ((ball.phase as string) === "back" && backFrames < 40) {
+    h.frame();
+    backFrames += 1;
+  }
+  const b = said(mark);
+  const cue = b.find((a) => a[0] === 4);
+  const swish = b.filter((a) => a[0] === 0).length;
+  if (!cue || cue[3] !== "lead" || outFrames !== 12 || backFrames !== 23 || cels[0] !== 4310 || cels[10] !== 4300 || swish !== 3)
+    fail(`the ball cues 4 through 0x40f090, swings out 11 frames and back 22, and swishes on index 3 of each; cue ${cue}, out ${outFrames}, back ${backFrames}, cels ${cels.join(" ")}, ${swish} swishes`);
+  ok(`a ball in its rect cues 4 at the player, swings 4310..4300 and back, and swishes 0 on each swing's frame 3`);
+  // ...and its cels are the blow: a hundred at `obj+0x1a` (`0x41a89e`) through
+  // the player's own hit handler, 4305's box hanging where he lands
+  await go(`&x=4337&damage=1`);
+  game.stats.health = game.stats.maxHealth;
+  h.press("jump");
+  h.until(() => ball.phase === "out" || game.hereOf((l) => l.fittings).some((q) => q.kind === "ball" && q.phase === "out"), 30);
+  const hitAt = h.until(() => game.stats.health < game.stats.maxHealth, 40);
+  if (hitAt < 0) fail(`the swing through a player under the ball should land its blow; health ${game.stats.health}/${game.stats.maxHealth}`);
+  ok(`and the swing lands on a player under it as a blow — ${game.stats.maxHealth - game.stats.health} off`);
+}
+
 // 2b. what Boggs says as it is struck — `0x41bc50` for the body, `0x41b510`
 //     for the machinery — and the two hints that tell you to break the machine
 {
@@ -107,6 +198,89 @@ ok(`and its showers, balls and teeth stand on their own single cels`);
   ok(`Boggs cries out as it is struck (a bolt ${bolt[0][0]}, a fist ${fist[0][0]}), hints on the twelfth blow, and its machinery answers too`);
   // and the page's own silence back, which the rest of this suite ran under
   game.setSound(null);
+}
+
+/**
+ * 2c. the FIRST machine strikes — `0x41afd0`, and see `BOGGS.zap`.
+ *
+ * - `0x41bef4`: a player at or right of the body, the machine on kind 0 and
+ *   `0x46e080` up, and `0x46e490` goes on, 60 along and 70 down (`0x46e0a4`);
+ * - `0x41b089`..`0x41b0f2`: it slides out along x and back, and `0x46e4d0`
+ *   ends it on kind 0;
+ * - `0x41b022`: −1 from the first frame, and it is never undone — the player
+ *   standing in 5630's strike box is spun, and it costs twenty (`0x42eb2b`);
+ * - `0x41b045`: 0x24 at the head through `0x40f090`, once each time the
+ *   player is down while it sweeps;
+ * - `0x411ed0` runs every frame (`0x419c7b`): the machines stand at their
+ *   offsets from the body wherever the body has lunged to;
+ * - `0x41b156`: the sixth machine's wreck run costs ten a frame and stops the
+ *   fourth machine on 5945 as it ends.
+ */
+{
+  await go("&x=6400&damage=1");
+  const b = boggs();
+  const z = b.zap;
+  const state = (): string => game.p.act ?? "";
+  const kind = (): number => z.kind;
+  if (z.kind !== 1 || z.dy !== BOGGS.zap.at.dy || z.dx < BOGGS.zap.at.dx)
+    fail(`0x41bf1e puts the first machine out on a player right of the body: kind ${z.kind}, at ${z.dx},${z.dy}`);
+  let most = 0;
+  let spun = 0;
+  let off = 0;
+  const hp0 = game.stats.health;
+  for (let i = 0; i < 200 && kind() === 1; i++) {
+    most = Math.max(most, z.dx);
+    if (state() === "spun") spun += 1;
+    for (let k = 1; k < BOGGS.machines.length; k++) {
+      const m = b.machines[k];
+      if (m.x - b.x !== BOGGS.machines[k].dx || m.y - b.y !== BOGGS.machines[k].dy) off += 1;
+    }
+    h.frame();
+  }
+  if (kind() !== 0 || !z.armed) fail(`0x46e490's five tags end on 0x46e4d0, kind 0, still armed: kind ${z.kind}, armed ${z.armed}`);
+  if (most < BOGGS.zap.at.dx + 30 || most > BOGGS.zap.at.dx + 32 || Math.abs(z.dx - BOGGS.zap.at.dx) > 1)
+    fail(`it slides thirty-odd out and back (0x41b089..0x41b0f2): out to +${most - BOGGS.zap.at.dx}, back to +${z.dx - BOGGS.zap.at.dx}`);
+  if (!spun || game.stats.health >= hp0)
+    fail(`standing in 5630's strike box the player is spun by the −1 and pays for it: spun ${spun} frames, health ${hp0} -> ${game.stats.health}`);
+  if (off) fail(`0x411ed0 re-places the machines against the body every frame; ${off} were off`);
+  ok(`the first machine sweeps out ${most - BOGGS.zap.at.dx}px and back, spins the player with −1 (${hp0 - game.stats.health} health), and the machines keep to the body`);
+
+  // the taunt, straight off the think: down once, then spent until he is up
+  const heard = recordSound(game);
+  const player = game.p as { act: string | null };
+  const was = player.act;
+  z.kind = 1;
+  z.tag = 2;
+  z.clock = 1;
+  z.taunted = false;
+  player.act = "dying";
+  game.boggsMachinery(b);
+  game.boggsMachinery(b);
+  player.act = null;
+  game.boggsMachinery(b);
+  player.act = "dying";
+  game.boggsMachinery(b);
+  player.act = was;
+  const taunts = heard.filter((c) => c.call === "effect" && c.args[0] === BOGGS.zap.taunt && c.args[3] === "lead");
+  if (taunts.length !== 2) fail(`0x41b045: 0x24 once each time the player goes down while it sweeps; ${taunts.length} said`);
+  ok(`and it taunts once each time the player is down (0x41b068)`);
+  game.setSound(null);
+
+  // the sixth machine's wreck run: ten a frame off, balls at the fourth, and the gauge stops
+  const d = BOGGS.drain;
+  b.hp = 2000;
+  const pops0 = game.pops.length;
+  b.machines[d.machine].hp = 1;
+  game.strikeMachine(b, d.machine, 100);
+  const spec = BOGGS.machines[d.machine];
+  const run = "wreck" in spec ? spec.wreck.length * spec.hold : 0;
+  const up = b.flags[0] || b.flags[1];
+  h.frame(run + 2);
+  // the heal runs every one of those frames; the drain on the run's
+  const expect = 2000 + (run + 2) * (up ? BOGGS.regen : 0) - (run + 1) * d.perFrame;
+  if (Math.round(b.hp) !== expect || !b.machines[d.at].wrecked || game.machineCel(b, d.at) !== 5945)
+    fail(`0x41b168 takes ten a frame for the ${run + 1} frames of the wreck run, and 0x41b1e2 stops the fourth machine on 5945: hp ${b.hp} (want ${expect}), fourth on ${game.machineCel(b, d.at)}`);
+  ok(`the sixth machine's wreck costs Boggs ten a frame through its run, ${game.pops.length - pops0} ball(s) at the fourth, which stops on 5945 (0x41b156)`);
 }
 
 // 3. BOGGS, in the other region, with four thousand health
@@ -245,12 +419,26 @@ ok(`and the game's one statblaster is here, and it arms you with 41 of 160`);
 await go("&x=6100");
 const states = new Set<string>();
 const xs = new Set<number>();
+// ...and each lunge is five a frame for its nine impulse frames and no more:
+// the body's drag is a whole 1.0 (`0x41bc16`), so nothing carries over
+const strides: number[] = [];
+let from: number | null = null;
 for (let i = 0; i < 160; i++) {
   const b = boggs();
   states.add(b.lunge ?? "idle");
   xs.add(Math.round(b.x));
+  if (b.lunge && from === null) from = b.x;
   h.frame();
+  if (from !== null && !boggs().lunge) {
+    // one that ran into its record's end (`0x41bb40`) is cut short, and not counted
+    const [lo, hi] = boggs().span!;
+    const to = boggs().x;
+    if (to > lo && to < hi) strides.push(Math.round(Math.abs(to - from)));
+    from = null;
+  }
 }
+if (!strides.length || strides.some((d) => d !== 45))
+  fail(`a lunge is 5 a frame for nine frames, 45 in all (0x41bc16's drag of 1.0); strides ${strides.join(" ")}`);
 if (!states.has("idle")) fail(`it should sit on its idle between lunges; it did ${[...states].join(" ")}`);
 if (!states.has("left") && !states.has("right")) fail(`0x41c006 takes seven in forty-two; it never lunged`);
 if (xs.size < 4) fail(`a lunge carries it; it stood at ${[...xs].join(" ")}`);
@@ -327,8 +515,8 @@ ok(`...and beyond three hundred it THROWS — cels ${[...hurl].sort((a, b) => a 
 /**
  * ...and the MACHINERY, which is what the fight is actually about.
  *
- * `0x411ed0` stands eight objects at eight fixed offsets from the body, out of
- * the table at `0x46e088`, and it runs once — at setup — so they never move.
+ * `0x411ed0` stands eight objects at eight offsets from the body, out of the
+ * table at `0x46e088`, and runs again every frame after the move (`0x419c7b`).
  * Six are scenery. The two that are not are `0x4a56e8` and `0x4a516c`, three
  * thousand each (`0x40e300(0xbb8)`), at `+218` and `+373` from the body's own
  * record point of x6321.
@@ -353,22 +541,52 @@ await go("&x=6100");
  * So: break one and half the healing stops. Break both and the thirty a frame
  * stops entirely, and only then can the four thousand be spent.
  */
+// ...and from where the disc lets you: WEST of the body, with the room's gun.
+// East of it the first machine's sweep (`BOGGS.zap`) stands between the body
+// and the halves and spins whoever is in it; west of it a bolt, at a standing
+// player's knee, passes under the body's own box (x −151..31, y −36..127 on
+// 5988) and meets the half behind it. The gun holds 160 and the halves take
+// sixty hits between them, so the test tops it up — the rounds are not what
+// this measures
+await go("&x=6000&weapon=6&rounds=160");
+game.inv.drawn = true;
 const seen = new Map<string, number>();
 let kicks = 0;
+let shots = 0;
 let frames = 0;
-for (; frames < 6000; frames++) {
+for (; frames < 12000; frames++) {
   const b = boggs();
   const key = `${flags()}/${b.dying}`;
-  if (!seen.has(key)) seen.set(key, kicks);
+  if (!seen.has(key)) seen.set(key, kicks + shots);
   if (b.dying) break;
-  // stand at whichever half is still up, and kick it
-  const [a, c] = halves();
-  const want = a.hp > 0 ? a.x : c.hp > 0 ? c.x : b.x;
-  const d = want - game.p.x;
   if (game.p.act) {
     h.frame();
     continue;
   }
+  const [a, c] = halves();
+  if (a.hp > 0 || c.hp > 0) {
+    // stay two hundred west of it, facing it, and fire
+    if (game.roundsIn(6) === 0) game.inv.rounds = { ...game.inv.rounds, 6: 160 };
+    if (b.x - game.p.x < 200) {
+      h.hold("left", true);
+      h.frame();
+      h.hold("left", false);
+      continue;
+    }
+    if (game.p.facing < 0) {
+      h.hold("right", true);
+      h.frame();
+      h.hold("right", false);
+      continue;
+    }
+    h.press("punch");
+    h.frame();
+    shots += 1;
+    continue;
+  }
+  // both halves down: the gun away, and the four thousand by hand
+  game.inv.drawn = false;
+  const d = b.x - game.p.x;
   if (Math.abs(d) > 55) {
     const k = d > 0 ? "right" : "left";
     const was = game.p.x;
@@ -391,7 +609,7 @@ if (!seen.has("01/false")) fail(`emptying 0x4a56ec should clear 0x46e080 and lea
 if (!seen.has("00/false")) fail(`emptying 0x4a5174 should clear 0x46e084 too; the flags went ${[...seen.keys()].join(" -> ")}`);
 if (!boggs().dying) fail(`with both flags down the four thousand should fall; after ${kicks} kicks it is ${boggs().hp}/4000 with flags ${flags()}`);
 if (boggs().flags[0] || boggs().flags[1]) fail(`0x41be68 heals only while a flag is up; a flag is still up: ${flags()}`);
-ok(`...and breaking them is the fight — one half at ${seen.get("01/false")} kicks, both at ${seen.get("00/false")}, Boggs down at ${kicks} (${frames} frames)`);
+ok(`...and breaking them is the fight — one half at ${seen.get("01/false")} blows, both at ${seen.get("00/false")}, Boggs down after ${kicks} kicks (${frames} frames)`);
 
 // the goal is `0x416047`'s, and it wants BOTH the allowance and 0x46bfbc
 h.frame(18);
@@ -407,16 +625,28 @@ ok(`and the census it was the whole of falls to nothing`);
  * in the rip was never evidence of an ending by itself — `0x41293d` is.
  */
 // ...and WITHOUT reloading, because a reload would stand Boggs back up and
-// `0x416047` would refuse the goal again. The kill left the player at the far
-// right of chamber2, so the goal is back the other way.
-h.hold("left", true);
+// `0x416047` would refuse the goal again. The kill was made from the west,
+// inside the goal's own rect, so step out east past it and walk back in
+h.hold("right", true);
+for (let i = 0; i < 300 && !game.leftGoal; i++) {
+  h.frame();
+  await new Promise((r) => setImmediate(r));
+}
+h.hold("right", false);
+// ...and give the craft time to come down to it
+for (let i = 0; i < 120; i++) {
+  h.frame();
+  await new Promise((r) => setImmediate(r));
+}
+const toGoal = "left";
+h.hold(toGoal, true);
 let walked = 0;
 for (; walked < 600 && !films.length; walked++) {
   h.frame();
   // the end is a film and then a load, both of them promises
   await new Promise((r) => setImmediate(r));
 }
-h.hold("left", false);
+h.hold(toGoal, false);
 if (!films.length) fail(`with Boggs down the goal opens and walking into it should end the game; nothing played in ${walked} frames`);
 if (films[0].toLowerCase() !== "credits.mov") fail(`the sixteenth level ends on credits.mov; it played ${films[0]}`);
 ok(`...and only THEN does its goal open, and walking into it ends the game — ${films[0]}, ${walked} frames on`);

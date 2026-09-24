@@ -193,10 +193,28 @@ and the fight is a sequence rather than a damage race.
 ## What turns the healing off is the machinery
 
 `initbgmachinery` (`0x411da0`) stands up eight more objects and `0x411ed0` puts
-them at eight fixed offsets from the body, out of the table at `0x46e088`. That
-placer is called exactly twice in the program — once from the initialiser, once
-from VAT's setup — so the machinery, the head and the arm all stand still for
-the whole fight. Only the body moves.
+them at eight offsets from the body, out of the table at `0x46e088`. VAT's frame
+loop calls it every frame (`0x419c7b`), after the move pass, together with the
+head's (`0x41c4c0`) and the arm's (`0x412180`) — so the machinery, the head and
+the arm all go where the body goes. The body lunges forty-five at a time: an
+impulse of 5 for nine frames, and a drag of a whole 1.0 (`0x41bc16`) takes it
+all back after each move; which way is decided against the head's x
+(`0x41c047`).
+
+**The first machine strikes.** `[0x4a50ec]` is hidden on `0x46e4d0` until the
+body's tick finds the player at or right of the body with `0x46e080` still up
+(`0x41bef4`); then it goes on `0x46e490` 60 along and 70 down, slides some thirty
+out and back over 106 frames, and its think (`0x41afd0`) writes −1 into its
+strength every frame of it (`0x41b022`). Its cel 5630 is all strike box, so a
+player standing in it is spun — twenty health — and spun again the frame the
+spin ends; the collision pass zeroes a hitter that lands (`0x43045d`) and only
+the next frame of the sweep re-arms it. It says 0x24 at the head once each time
+the player is down while it sweeps (`0x41b068`). So while the first half stands
+the ground east of the body is its; a bolt from the west, at knee height,
+passes under the body's own box and meets the halves behind it, which is what
+the room's gun is for. The same think makes the sixth machine's wreck cost
+Boggs ten a frame for its run, with green balls at the fourth machine, which
+then stops on 5945 (`0x41b156`..`0x41b209`).
 
 Six of the eight are scenery. The two that are not are `0x4a56e8` (cel 5860) and
 `0x4a516c` (cel 5870), three thousand health each through `0x40e300(0xbb8)`, and
@@ -222,9 +240,8 @@ and 5871/5872 are never installed. A machine is intact until it is wrecked. It
 is the same shape of dead code as the wraith's `-3`, and the arithmetic holds
 for the whole domain.
 
-Measured on this page with fists alone: one half at 110 punches, the other 55
-after it, and Boggs down 144 punches later — 309 in all. With the blaster's bolt
-at a hundred a shot it is sixty into the machine and forty into Boggs.
+With the blaster's bolt at a hundred a shot it is sixty hits into the machine
+and forty into Boggs.
 
 ## A negative blow is a message, and the grip is the drawing
 

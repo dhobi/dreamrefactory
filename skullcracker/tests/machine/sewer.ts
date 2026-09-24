@@ -28,8 +28,8 @@
  */
 import { FOES } from "../../src/foes";
 import { EYEBALL, eyeball, eyeballReacts } from "../../src/brains/eyeball";
-import { oxReacts } from "../../src/brains/ox";
-import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
+import { OX, OX_PIT, ox as oxBrain, oxReacts } from "../../src/brains/ox";
+import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 import { FPS, fail, headless, ok, pass } from "./harness";
 import type { FoeAnim } from "../../src/foes";
 
@@ -161,6 +161,70 @@ const machines = (): void => {
   // `0x43f9aa` is the handler's only test — no class, no state — and 5190,
   // the death's first cel, is drawn with a body
   if (!ox.corpseTakesHits || !ox.hitsOwn) fail(`0x43f9a0 turns nothing away but a negative strength`);
+
+  // `0x43f325`: past a hundred pixels of drop, in any state but 0 and 7, the
+  // pit — 0x35 at the PLAYER's point, AI+0xe = 2 * 80 (`0x435c73`), and
+  // `0x472f00` tag 0; the landing puts on tag 1, and its end says 0x3d, jolts
+  // the screen, pays 0x140 and takes the ox out (`0x43f7c9`..`0x43f85a`)
+  {
+    const shook: number[] = [];
+    const gone: number[] = [];
+    const pk = { ...k, atBound: () => false, shake: (n: number) => shook.push(n), remove: (_e: Enemy, award: number) => gone.push(award) } as BrainCtx;
+    let heardAt: number[] = [];
+    pk.say = (who: Enemy, id: number) => {
+      said.push(id);
+      heardAt.push(who.x);
+    };
+    pk.player.x = 333;
+    said.length = 0;
+    const pit = foe("initox", OX.stand);
+    pit.script = 2;
+    pit.x = 0;
+    pit.vy = 30 * TICK_SCALE;
+    let calls = 0;
+    while (pit.script !== 7 && calls < 10) {
+      oxBrain(pit, ox, 1, pk);
+      calls += 1;
+    }
+    if (calls !== 4 || pit.tag !== 0 || Number(said[0]) !== 0x35 || heardAt[0] !== 333 || pit.beat !== 160)
+      fail(`thirty a frame passes a hundred on the fourth frame and goes over with 0x35 at the player: ${calls} frames, tag ${pit.tag}, said ${said.join(",")} at x${heardAt[0]}, AI+0xe ${pit.beat}`);
+    oxBrain(pit, ox, 1, pk);
+    if (pit.tag !== 0) fail(`tag 0 holds while it is still falling`);
+    pit.vy = 0;
+    oxBrain(pit, ox, 1, pk);
+    if (pit.script !== 7 || Number(pit.tag) !== 1) fail(`the landing puts on 0x472f00 tag 1`);
+    pit.clock = 3;
+    said.length = 0;
+    heardAt = [];
+    oxBrain(pit, ox, 3, pk);
+    if (Number(said[0]) !== 0x3d || heardAt[0] !== 333 || shook[0] !== 3 || gone[0] !== 0x140)
+      fail(`the landing's end says 0x3d at the player, shakes 3 and pays 320 as it goes: ${said.join(",")}, shake ${shook.join(",")}, paid ${gone.join(",")}`);
+    // ...and not from the patrol, whose state `0x43f336` exempts
+    // (with the player out of its widened rect, or the patrol stands at once)
+    pk.player.x = 2000;
+    const walker = foe("initox", OX.patrolA);
+    walker.script = 0;
+    walker.vy = 60 * TICK_SCALE;
+    for (let i = 0; i < 4; i++) oxBrain(walker, ox, 6, pk);
+    if (walker.script === 7) fail(`a patrolling ox does not go into the pit (0x43f339)`);
+    // ...and the preamble runs under the flinch and the death as well: the
+    // frame the drop passes the mark the reaction hands the page the pit
+    pk.player.x = 333;
+    said.length = 0;
+    const slid = foe("initox", ox.flinch![3], "flinch");
+    slid.vy = 60 * TICK_SCALE;
+    slid.clock = 2;
+    if (oxReacts(slid, ox, 40, pk) !== undefined) fail(`sixty is not yet a hundred`);
+    const fromSlide = oxReacts(slid, ox, 40, pk);
+    if (fromSlide?.kind !== 7 || fromSlide.tag !== 0 || Number(said[0]) !== 0x35 || slid.beat !== 160)
+      fail(`a hundred and twenty under the slide is the pit: ${fromSlide?.from}, said ${said.join(",")}`);
+    const dying = foe("initox", ox.death!, "dead");
+    dying.vy = 120 * TICK_SCALE;
+    dying.clock = 1;
+    if (oxReacts(dying, ox, 16, pk)?.kind !== 7) fail(`0x43f325 does not exempt the death: a dying ox that falls a hundred goes in the pit`);
+    pk.player.x = 0;
+  }
+  ok(`an ox that drops more than a hundred goes into the pit, lands, and is gone for 320`);
 };
 
 machines();
@@ -471,6 +535,40 @@ ok(`...and the hall of lifts is reached, at x ${game.p.x}, y ${game.p.y}`);
     fail(`an ox struck on 5190 dies again and pays again; the score rose ${game.stats.score - paid}`);
   ok(`an ox struck as it falls dies again from the top and pays another 320`);
 }
+
+// ...and the census. Nothing in the ox's class calls `0x42f870(obj, 0)`, so
+// its body keeps `obj+0x1c` and counts until the object is freed — `0x42f750`
+// takes it off `[0x4a6e88]` then (`0x42f778`). The pit's end frees it at once
+{
+  const dead = game.level!.spawned.flat().find((e) => e.kind === "initox" && e.state === "dead")!;
+  const counted = game.aliveNow();
+  if (!game.inCensus(dead)) fail(`a dead ox still holds its census flag until it is freed`);
+  const other = game.level!.spawned.flat().find((e) => e.kind === "initox" && e.state !== "dead");
+  if (!other) fail(`SEWER places two oxen`);
+  await h.load(`level=7&x=${Math.round(other.x)}&y=${Math.round(other.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const ox2 = game.spawnedHere().find((e) => e.kind === "initox")!;
+  // killed — and still counted — and then knocked off a ledge as it dies:
+  // `0x43f325` exempts only 0 and 7, so the body goes into the pit
+  game.killFoe(ox2, FOES.initox);
+  const before = game.aliveNow();
+  const score = game.stats.score;
+  ox2.fell = 200;
+  ox2.y -= 400;
+  ox2.vy = 5 * TICK_SCALE;
+  h.frame();
+  if (ox2.state !== "gait" || ox2.script !== 7) fail(`a dying ox past a hundred of drop goes in the pit: ${ox2.state}, kind ${ox2.script}`);
+  ox2.state = "gait";
+  ox2.anim = OX_PIT.land;
+  ox2.script = 7;
+  ox2.tag = 1;
+  ox2.clock = OX_PIT.land.cels.length;
+  h.frame(2);
+  if (game.spawnedHere().includes(ox2) || game.aliveNow() !== before - 1 || game.stats.score - score !== 0x140)
+    fail(`the pit's end frees the ox, takes it out of the census and pays 320: alive ${before} -> ${game.aliveNow()}, +${game.stats.score - score}`);
+  if (counted < 1) fail(`the corpse was counted: ${counted}`);
+}
+ok(`an ox's body counts until it is freed, and the pit frees it and takes it off the count`);
 
 /**
  * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands

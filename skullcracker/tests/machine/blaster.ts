@@ -85,23 +85,19 @@ ok(`and a bolt lands on Boggs — 4000 down to ${lowest} at its lowest`);
  *     no collision at all. 5960 is drawn across the whole right half of the
  *     machine beside it.
  */
-// ...walking there rather than reloading, because a reload puts the gun back
-// on the floor: what you are carrying is not in the URL
-const walkTo = (x: number): void => {
-  for (let i = 0; i < 200 && Math.abs(game.p.x - x) >= 20; i++) {
-    const k = game.p.x < x ? "right" : "left";
-    h.hold(k, true);
-    h.frame();
-    h.hold(k, false);
-  }
-  h.frame(6);
-};
-walkTo(6360);
-if (Math.abs(game.p.x - 6360) >= 30) fail(`could not walk to x6360; stopped at ${game.p.x}`);
+// ...from where it stands, WEST of the body: east of it the first machine's
+// sweep (`BOGGS.zap`) spins whoever is in it, and from the west a bolt at knee
+// height passes under the body's own box and meets the half behind it
+h.frame(6);
 const a0 = Math.round(halves()[0].hp);
 if (a0 !== 3000) fail(`0x41b47f gives each half 0x40e300(0xbb8); it has ${a0}`);
+if (game.p.x >= boggs().x || game.p.facing < 0) fail(`the shot is fired west of the body, facing it: x${game.p.x} facing ${game.p.facing}`);
+// ...and most of a spread still meets the body: the scatter is forty up and
+// down (`BOLT.scatterPx`) and only the low end of it clears 5988's box. The
+// gun is topped up so the count is of bolts, not of what the pickup gave
+game.inv.rounds = { ...game.inv.rounds, 6: 160 };
 const spent = game.roundsIn(6);
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 120 && Math.round(halves()[0].hp) >= a0; i++) {
   h.press("punch");
   h.frame(4);
 }

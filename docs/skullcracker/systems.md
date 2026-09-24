@@ -66,6 +66,24 @@ One number does both, and it is the record's own `param`. Eleven books carry a
 The five without a record are the two whose bosses the level waits for, and
 chapter three's and four's last stages.
 
+What is left on the clock when you reach the goal is paid out. The craft's
+think calls `0x40ffe0` as the screen's last cel runs out (`0x41074d`). That
+function is a loop of its own, and the whole game waits on it. It starts at
+the dial cel on show (`[0x4a4d60]`) and steps up to the empty 12717. Each
+step is ten frames, and each frame adds a hundred to the score and plays the
+character's own 0x1f (0x18 for the second character) through `0x40f110`. So a
+step is worth a thousand, and a full eight-minute dial is seventeen thousand
+over 170 frames. Nothing moves and no key is read while it runs. Then the
+clock goes to 32000 and the stage ends. Past step 12 the dial flashes, and a
+goal reached on a frame that shows the empty dial pays nothing. A level with
+no `timer` pays nothing either.
+
+The craft hums while it waits. For every frame of its life at a goal, its
+think asks for the character's 0x1c (0x15 for the second character) through
+`0x40ef30`. The mixer refuses the sound while it is still playing, so the
+hum carries on unbroken. As the screen starts down, the craft plays 0x1d
+(0x16) once (`0x4106d9`).
+
 ## Gravity was in there all along
 
 Gravity is not in any animation script — the player has exactly one script

@@ -18,7 +18,9 @@
  *
  * `?clock=` exists for the clock: the dial is eight minutes long.
  */
-import { fail, headless, ok, pass } from "./harness";
+import { FOES } from "../../src/foes";
+import { dialCel } from "../../src/hud";
+import { fail, headless, ok, pass, recordSound } from "./harness";
 
 const h = await headless("level=1");
 const { game } = h;
@@ -125,5 +127,106 @@ if (now().lives !== 2) fail(`the fall cost ${3 - now().lives} lives`);
 if (backX !== spawn.pointX) fail(`the respawn is at x ${backX}; CITY's initplayer stands at x ${spawn.pointX}`);
 if (backAt !== 3925) fail(`the respawn is not CITY's own spawn point: y ${backAt}, wanted 3925`);
 ok(`and it costs a life and puts them back where the level starts, x ${backX} y ${backAt}`);
+
+/**
+ * 6. ...and the goal ends the stage through the TALLY. `0x41074d` calls
+ *    `0x40ffe0` as the screen's last cel runs out: from the dial on show up to
+ *    the empty 12717, ten frames a step and a hundred a frame, the character's
+ *    own 0x1f each time through `0x40f110`, nothing else moving; then the clock
+ *    is 32000 (`0x410154`) and the flag the stage end waits for goes up.
+ */
+{
+  const heard = recordSound(game);
+  // read through a function: the tick changes it behind the checker's back
+  const tallyOf = () => game.craft?.tally;
+  await h.load("level=1");
+  h.frame(4);
+  game.setIface(false);
+  for (const e of game.level!.spawned.flat())
+    if (FOES[e.kind].counts && e.state !== "dead") {
+      e.hp = 0;
+      game.killFoe(e, FOES[e.kind]);
+    }
+  h.frame(2);
+  const g = game.solids().goal!;
+  game.p.x = g.pointX;
+  game.p.y = g.pointY;
+  // `0x4106a3` — and not for a player who is dying: `0x402f60` is the kind
+  // under 0x1a, which every state but the dying ones is
+  for (let i = 0; i < 100 * 4; i++) {
+    game.p.act = "dying";
+    game.p.actClock = 0;
+    game.tick();
+  }
+  const opened = (): boolean => (game.craft as { state: string } | null)?.state === "open";
+  if (opened())
+    fail(`0x402f60: the craft does not open for a dying player`);
+  game.p.act = null;
+  if (h.until(() => game.craft?.state === "open", 400) < 0) fail(`the craft should open for a player standing at the goal`);
+  ok(`the craft waits while the player is dying (0x402f60) and opens once they are not`);
+  // its sounds: the hum asked for every frame of kind 1 (`0x4105ef`) and the
+  // screen's own as it opens (`0x4106d9`), the character's, through `0x40ef30`
+  const own = (id: number) => heard.filter((c) => c.call === "own" && c.args[0] === id && c.args[3] === undefined).length;
+  const hums = own(0x1c);
+  h.frame(10);
+  if (own(0x1c) - hums !== 10) fail(`0x4105ef asks for the hum every frame; ten frames asked ${own(0x1c) - hums} times`);
+  if (own(0x1d) !== 1) fail(`0x4106d9 plays 0x1d once as the screen starts down; it played ${own(0x1d)}`);
+  ok(`the craft hums (0x1c) every frame and says 0x1d once as it opens`);
+  // 3000 left: step 16 - 6 = 10, dial 12710, seven steps to the empty dial
+  game.stats.ticks = 3000;
+  const score = game.stats.score;
+  for (let i = 0; i < 400 && !tallyOf(); i++) game.tick();
+  if (tallyOf()?.dial !== 12710) fail(`the tally counts from the dial on show, 12710; it started at ${tallyOf()?.dial}`);
+  if (!game.iface) fail(`0x40e120(1) puts the panel up for the tally`);
+  const px = game.p.x;
+  const dials: number[] = [];
+  const mark = heard.length;
+  // counted in ticks, four to an engine frame, from the tick it starts
+  let ticks = 0;
+  let last = game.stats.score;
+  while (tallyOf() && ticks < 4000) {
+    game.tick();
+    ticks++;
+    if (game.stats.score !== last) {
+      last = game.stats.score;
+      dials.push(game.tallyDial() ?? dialCel(game.stats.ticks));
+    }
+    if (game.p.x !== px) fail(`nothing moves while the tally runs`);
+  }
+  const frames = Math.ceil(ticks / 4);
+  const gained = game.stats.score - score;
+  if (frames !== 70 || gained !== 7000)
+    fail(`seven steps are seventy frames and seven thousand points; it took ${frames} frames for ${gained}`);
+  if (dials[0] !== 12710 || dials[9] !== 12710 || dials[10] !== 12711 || dials[68] !== 12716 || dials[69] !== 12717)
+    fail(`the dial steps on once every ten frames to the empty 12717; saw ${[...new Set(dials)].join(" ")}`);
+  const ding = heard.slice(mark).filter((c) => c.call === "own" && c.args[0] === 0x1f && c.args[3] === "renew");
+  if (ding.length !== 70) fail(`each hundred is the character's 0x1f through 0x40f110; heard ${ding.length}`);
+  if (game.stats.ticks !== 32000 || !game.craftOpened()) fail(`then the clock is 32000 and the stage is over; ticks ${game.stats.ticks}`);
+  ok(`the goal tallies the clock: seven dial steps, seventy frames, seven thousand points, then 32000`);
+
+  // ...and past step 12 the dial flashes, and a stage finished on a frame that
+  // shows the empty 12717 (`0x40d2b3`) tallies nothing at all
+  await h.load("level=1");
+  h.frame(4);
+  for (const e of game.level!.spawned.flat())
+    if (FOES[e.kind].counts && e.state !== "dead") {
+      e.hp = 0;
+      game.killFoe(e, FOES[e.kind]);
+    }
+  h.frame(2);
+  game.p.x = g.pointX;
+  game.p.y = g.pointY;
+  h.until(() => game.craft?.state === "open", 400);
+  const before = game.stats.score;
+  for (let i = 0; i < 400 && !game.craftOpened(); i++) {
+    // 1000 left is step 14, and an even count is the empty half of the flash
+    game.stats.ticks = 1000;
+    game.tick();
+  }
+  if (!game.craftOpened() || game.stats.score !== before || game.stats.ticks !== 32000)
+    fail(`on the flash's empty frame the tally gives nothing; +${game.stats.score - before}, ticks ${game.stats.ticks}`);
+  ok(`...and on the flash's empty frame it gives nothing and the stage ends at once`);
+  game.setSound(null);
+}
 
 pass(`the quota gates the goal, the clock and the void end the level too`);

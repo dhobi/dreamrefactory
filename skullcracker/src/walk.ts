@@ -193,6 +193,7 @@ import {
   setFilm,
   setFlashColour,
   setIface,
+  tallyDial,
   setJumpPressed,
   setKickPressed,
   setPlayer,
@@ -1329,13 +1330,9 @@ function loop(now: number): void {
     // then the head. The disassembly settles where each of these STANDS but not
     // what order they are painted in, and this is the order that reads.
     for (let i = 0; i < b.machines.length; i++)
-      drawLevelCel(
-        machineCel(b, i),
-        b.machines[i].x,
-        b.machines[i].y,
-        camX,
-        camY,
-      );
+      // `0x419d38` — the first one is painted only while it is sweeping
+      if (i !== 0 || b.zap.kind !== 0)
+        drawLevelCel(machineCel(b, i), b.machines[i].x, b.machines[i].y, camX, camY);
     for (const m of b.worms) drawLevelCel(boggsWormCel(m), m.x, m.y, camX, camY);
     drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
     drawLevelCel(BOGGS.arm.poses[BOGGS.arm.tag], b.x, b.y, camX, camY);
@@ -1489,6 +1486,7 @@ function loop(now: number): void {
       // (`0x415f55` computes it with the same subtraction the win test makes)
       quota: Math.max(0, aliveNow() - stats.allowance),
       ticks: stats.ticks,
+      dial: tallyDial(),
       buttons: buttonMask(),
       // `0x40d663` — the icon is drawn only while `[0x479438]` is set, but the
       // four gauge rows are drawn whatever, out of the weapon record's own

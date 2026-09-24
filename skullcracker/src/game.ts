@@ -34,7 +34,7 @@ import { PLAYER_CODES, PLAYER_HELD, gripOf } from "./codes";
 import { PLAYERS } from "./players";
 import { PREFS_ACTIONS, keyName, loadPrefs } from "./prefs";
 import { Cheat, CheatTyper } from "./cheats";
-import { CLOCK, CLOCK_FULL, HudFighter, LABEL, WINDOW, buttonBit } from "./hud";
+import { CEL as HUD_CEL, CLOCK, CLOCK_FULL, HudFighter, LABEL, WINDOW, buttonBit, dialCel } from "./hud";
 import { random, roll as scRoll, seedRandom } from "./random";
 
 
@@ -1000,7 +1000,7 @@ export function nobodyNear(x: number, y: number, w: number, h: number): boolean 
     px >= left && px <= left + w && py >= top && py <= top + h;
   for (const r of level.spawned)
     for (const e of r)
-      if (FOES[e.kind].counts && e.state !== "dead" && inside(e.x, e.y))
+      if (inCensus(e) && inside(e.x, e.y))
         return false;
   for (const r of level.boggs)
     for (const g of r) if (!g.dying && inside(g.headX, g.headY)) return false;
@@ -1953,26 +1953,49 @@ export async function loadLevel(index: number): Promise<void> {
         clock: 0,
       })),
     ),
-    fittings: rooms.map((r) => [
-      ...placed(sbk, r, "initshower", [FITTING.shower.on], (e) => ({
-        kind: "shower" as const,
-        x: e.pointX,
-        y: e.pointY + FITTING.shower.below,
-        clock: 0,
-      })),
-      ...placed(sbk, r, "initball", [FITTING.ball.cel], (e) => ({
-        kind: "ball" as const,
+    fittings: rooms.map((r) => {
+      /**
+       * Filed by the middle of their RECT rather than by their point. VAT's
+       * four floor showers stand thirty pixels under the floor, below the
+       * bottom of the region they spray into, and the point is only where the
+       * grate is drawn; `0x40b940` puts each in a region all the same, and it
+       * thinks with the rest (`0x41a2a0`).
+       */
+      const mine = (e: SbkEntity): boolean => {
+        const cx = (e.left + e.right) / 2;
+        const cy = (e.top + e.bottom) / 2;
+        return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+      };
+      const fitted = (e: SbkEntity, kind: Fitting["kind"]): Fitting => ({
+        kind,
+        // the think writes the record's point into `obj+6` every frame
+        // (`0x41a2b6`, `0x41a7ec`); the −100 floor offset only moves the foot
+        // the mover measures, and with no weight and no speed that is never
+        // near a floor
         x: e.pointX,
         y: e.pointY,
         clock: 0,
-      })),
-      ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => ({
-        kind: "teeth" as const,
-        x: e.pointX,
-        y: e.pointY,
-        clock: 0,
-      })),
-    ]),
+        left: e.left,
+        right: e.right,
+        top: e.top,
+        bottom: e.bottom,
+        // `0x4117f7`: 1 when the point is nearer the rect's bottom
+        tag: e.bottom - e.pointY < e.pointY - e.top ? 1 : 0,
+        phase: "idle",
+      });
+      const art = (a: readonly { cels: readonly number[] }[]): boolean =>
+        a.every((x) => x.cels.every((id) => sbk.byId.has(id)));
+      const F = FITTING;
+      return [
+        ...(art([...F.shower.idle, ...F.shower.spray])
+          ? sbk.entities.filter((e) => e.isEntity && e.name === "initshower" && mine(e)).map((e) => fitted(e, "shower"))
+          : []),
+        ...(art([F.ball.idle, F.ball.out, F.ball.back])
+          ? sbk.entities.filter((e) => e.isEntity && e.name === "initball" && mine(e)).map((e) => fitted(e, "ball"))
+          : []),
+        ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => fitted(e, "teeth")),
+      ];
+    }),
     boggs: rooms.map((r) =>
       placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({
         x: e.pointX,
@@ -1983,8 +2006,8 @@ export async function loadLevel(index: number): Promise<void> {
         vx: 0,
         // `0x4122fa`: the record's rect, whose two x `0x41bb40` clamps the body to
         span: [e.left, e.right] as [number, number],
-        // `0x411ed0`, which runs at setup and never again: eight objects at
-        // eight fixed offsets from the body, and they stay there
+        // `0x411ed0`: eight objects at eight offsets from the body, and it runs
+        // again every frame ({@link placeBoggs})
         machines: BOGGS.machines.map((m) => ({
           x: e.pointX + m.dx,
           y: e.pointY + m.dy,
@@ -2008,9 +2031,10 @@ export async function loadLevel(index: number): Promise<void> {
         // `0x41ac7f` — one record, read once, and every worm is kept inside it
         bounds: wormBounds(sbk, r),
         // the head has a record of its own, and `0x412364` stores the offset it
-        // lands at; `0x41c4c0` then re-places it at body + that offset, which is
-        // the same point again. Both run once, at setup, so it never moves.
+        // lands at; `0x41c4c0` re-places it at body + that offset every frame
         ...headAndArm(sbk, r, e),
+        // the first machine on `0x46e4d0`, at the body itself until it sweeps
+        zap: { kind: 0 as const, tag: 0, clock: 0, dy: 0, dx: 0, armed: false, taunted: false },
       })),
     ),
     fans: [
@@ -2483,6 +2507,23 @@ export function mission(): Mission {
 }
 
 /** how many of this level's population are still standing */
+/**
+ * Does this one still hold `obj+0x1c`, the census flag — enrolled by its
+ * creator (`0x42f870(obj, 1)`, {@link Foe.counts}) and not yet let go.
+ *
+ * Most classes let go the first frame they are dead (`0x42f870(obj, 0)` in
+ * their death state or handler). A class that never does is let go only as
+ * the object is freed: `0x430fd0` → `0x42f6e0` → `0x42f750`, whose `0x42f778`
+ * takes one off `[0x4a6e88]` for an object whose flag is still set — see
+ * {@link Foe.countsDead}. A removal that is not a death (the ox's pit, igor's
+ * fall, `BrainCtx.remove`) takes the thing out of the pool, and so out of
+ * here, the frame the think answers 1.
+ */
+export function inCensus(e: Enemy): boolean {
+  const foe = FOES[e.kind];
+  return foe.counts && (e.state !== "dead" || !!foe.countsDead);
+}
+
 export function aliveNow(): number {
   // a body has already left: its state handler calls `0x42f870(obj, 0)` on the
   // first frame it is dead, fifty frames before the object itself goes
@@ -2490,7 +2531,7 @@ export function aliveNow(): number {
   return (
     level.spawned.reduce(
       (n, r) =>
-        n + r.filter((e) => FOES[e.kind].counts && e.state !== "dead").length,
+        n + r.filter(inCensus).length,
       0,
     ) +
     // and Boggs leaves the census the frame it starts dying, for the same reason
@@ -2525,15 +2566,20 @@ export let craft: {
   /** the bob: `[0x46ba0c]`, reversed each time the offset passes five */
   drift: number;
   bobbed: number;
+  /** the stage-end tally while it runs — see {@link startTally} */
+  tally?: { dial: number; frames: number };
+  /** ...and once it has run: `[0x46ba10]`, the flag the stage end waits for */
+  tallied?: boolean;
 } | null = null;
 
 /**
  * Bring the craft in, fly it down, bob it, and open it when the player arrives.
  *
  * The order is `0x410480`'s: sink while it is above its rest height, otherwise
- * bob and test. The test is two things — `0x434200(player, rect)` for the goal
- * RECT and `0x42fad0(craft, 300, 200)` for the craft itself — so the rect the
- * disc draws is still what you walk into, and the thing you walk to is over it.
+ * bob and test. The test is three things — `0x434200(player, rect)` for the goal
+ * RECT, `0x42fad0(craft, 300, 200)` for the craft itself, and `0x402f60`, the
+ * player not dying — so the rect the disc draws is still what you walk into,
+ * and the thing you walk to is over it.
  */
 export function stepCraft(): void {
   const g = solids().goal;
@@ -2555,7 +2601,20 @@ export function stepCraft(): void {
   }
   if (!craft) return;
   craft.clock += TICK_SCALE;
-  if (craft.state === "open") return;
+  // `0x4105d7`..`0x4105ef` — its hum, asked for every frame of kind 1, which
+  // is all of the craft's life at a goal: through `0x40ef30`, so the mixer
+  // turns the ask away while the hum still sounds and it plays on unbroken.
+  // `0x410212` arms the record's loop flag as the craft is made, and the
+  // page's mixer loops nothing, so the ask a frame after it ends starts it again
+  const onFrame = Math.floor(craft.clock) !== Math.floor(craft.clock - TICK_SCALE);
+  if (onFrame) sound?.own(CRAFT.hum[CHARACTER], craft.x, craft.y);
+  if (craft.state === "open") {
+    // `0x41073c`..`0x41074d` — the screen's last cel has run out and the flag
+    // is not yet up: the tally, before anything else
+    if (!craft.tallied && !craft.tally && craft.clock >= CRAFT.open.cels.length * CRAFT.open.hold)
+      startTally(craft);
+    return;
+  }
   if (craft.y < craft.restY) {
     craft.y = Math.min(craft.restY, craft.y + CRAFT.sink * TICK_SCALE);
     return;
@@ -2573,28 +2632,84 @@ export function stepCraft(): void {
   const close =
     Math.abs(p.x - craft.x) <= CRAFT.near.x &&
     Math.abs(p.y - craft.y) <= CRAFT.near.y;
-  if (inRect && close && leftGoal) {
+  // ...and `0x4106a3` asks `0x402f60` last: the player's kind under 0x1a, both
+  // characters alike (`0x402f79`, `0x402f8a`) — which is every state but the
+  // two dying ones, a jump or a knockdown included. A dying player does not
+  // open it
+  if (inRect && close && leftGoal && p.act !== "dying") {
     craft.state = "open";
     craft.clock = 0;
+    // `0x4106c1`..`0x4106d9` — the screen's own sound as it starts down, and
+    // `0x4106f8` takes the hum's loop flag off again
+    sound?.own(CRAFT.opens[CHARACTER], craft.x, craft.y);
   }
 }
 
 /**
  * Has the screen finished coming down — `[0x46ba10]`, and the stage is over.
- *
- * Not the whole of that frame in the engine: before it raises the flag,
- * `0x41074d` calls `0x40ffe0`, which turns what is left on the clock into
- * points — the dial's cel `[0x4a4d60]` stepped on to 12717, a hundred to the
- * score ten times a step, each hundred sounded through `0x40f110` (`0x410109`:
- * the character's own 0x1f, or 0x18 for the second character) and the panel
- * redrawn, and then the clock set to 32000 (`0x410154`). This page has no
- * such tally, so neither the points nor the sound are given.
+ * The tally ({@link startTally}) runs first, and the flag goes up after it.
  */
 export function craftOpened(): boolean {
-  return (
-    craft?.state === "open" &&
-    craft.clock >= CRAFT.open.cels.length * CRAFT.open.hold
-  );
+  return craft?.state === "open" && !!craft.tallied;
+}
+
+/**
+ * The stage-end tally — `0x40ffe0`, which the craft's think calls the frame the
+ * screen's last cel runs out (`0x41074d`) and before it raises `[0x46ba10]`.
+ * It is called from `0x410480` alone, and every chapter's goal (`0x415f50`,
+ * `0x421900`, `0x43b950`, `0x450190`) makes its craft through `0x410170`, so
+ * every stage ends through it.
+ *
+ * It is a loop of its own that the rest of the game waits on. `0x40e120(1)`
+ * puts the panel up if it was down. Then, from the dial's cel as `0x40d250`
+ * last left it (`[0x4a4d60]`, `0x410026`) up to the empty 12717 (`0x410030`,
+ * `0x41011e`): the dial is drawn on that cel (`0x410061`), and ten times
+ * (`0x41004b`) a hundred goes on the score (`0x410072`), the score is drawn
+ * again (`0x4100b0`), the character's own 0x1f — 0x18 for the second — plays
+ * through `0x40f110` (`0x410109`), and `0x40e4f0` spins until four sixtieths
+ * have passed: one engine frame (`0x40e50f`). So a thousand a step and ten
+ * frames a step, with nothing else moving and no key read. Then the empty dial
+ * (`0x41014f`), and the clock is set to 32000 (`0x410154`).
+ *
+ * The dial it counts from is the one on show, and past step 12 that flashes:
+ * `0x40d2b3` puts the empty 12717 in `[0x4a4d60]` every other frame, and a
+ * stage finished on one of those frames tallies nothing.
+ *
+ * Back in the think, `0x402e30(1)` clears the keys (`0x402db0`) and the flag
+ * goes up (`0x410759`); `0x410370` sees it the next frame and the stage ends.
+ */
+function startTally(c: NonNullable<typeof craft>): void {
+  iface = true;
+  const dial = dialCel(stats.ticks);
+  if (dial >= HUD_CEL.dialOff) endTally(c);
+  else c.tally = { dial, frames: 0 };
+}
+
+/** one frame of the tally — see {@link startTally} */
+function stepTally(c: NonNullable<typeof craft>): void {
+  const t = c.tally!;
+  stats.score += CRAFT.tally.points;
+  sound?.own(CRAFT.tally.sound[CHARACTER], p.x, p.y, "renew");
+  t.frames += 1;
+  if (t.frames >= (HUD_CEL.dialOff - t.dial) * CRAFT.tally.perStep) endTally(c);
+}
+
+function endTally(c: NonNullable<typeof craft>): void {
+  c.tally = undefined;
+  // `0x410154` — no limit, and the dial shows it empty
+  stats.ticks = CLOCK.noLimit;
+  // `0x402db0` — every key the frame had seen is dropped
+  upPressed = false;
+  jumpPressed = false;
+  punchPressed = false;
+  kickPressed = false;
+  c.tallied = true;
+}
+
+/** the dial while the tally drives it, or undefined — `0x410061` */
+export function tallyDial(): number | undefined {
+  const t = craft?.tally;
+  return t ? t.dial + Math.floor(Math.max(0, t.frames - 1) / CRAFT.tally.perStep) : undefined;
 }
 
 /**
@@ -5242,7 +5357,8 @@ export function takeHits(): void {
     !hereOf((l) => l.claws).length &&
     !hereOf((l) => l.hands).length &&
     !hereOf((l) => l.surges).length &&
-    !hereOf((l) => l.bushes).length
+    !hereOf((l) => l.bushes).length &&
+    !hereOf((l) => l.boggs).some((b) => b.zap.armed)
   )
     return;
   const mine = playerBody();
@@ -5351,8 +5467,9 @@ export function takeHits(): void {
     const cel = celRec(lvl.sbk, clawCel(c));
     if (!cel?.strike) continue;
     /**
-     * `obj+0x2a` is set by the COLLISION, not by the damage — `0x43045d` marks a
-     * hitter the frame its box overlaps, whatever the blow pair says. The claw's
+     * `obj+0x2a` is set by the COLLISION, not by the damage — the exchange
+     * `0x43043b` runs once the victim's handler takes the blow, and it marks the
+     * hitter (`0x430663`) whatever the blow pair says. The claw's
      * jaw cels carry a strike box and no pair at all, so asking `hit` to report
      * contact would never mark one: the dive would touch you and go back up.
      */
@@ -5427,6 +5544,20 @@ export function takeHits(): void {
     if (!cel?.strike) continue;
     if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return;
   }
+  // `0x41b022` — Boggs' first machine, armed with −1 while it sweeps, seen or
+  // not ({@link BOGGS.zap}); its `obj+0x28` is 0 (`0x41b28b`). A blow the
+  // player's handler takes disarms it (`0x43045d`, `obj+0x1a = 0`), and only
+  // the next frame of the sweep puts the −1 back
+  for (const b of hereOf((l) => l.boggs)) {
+    if (!b.zap.armed) continue;
+    const cel = celRec(lvl.sbk, BOGGS.zap.cel);
+    const m = b.machines[0];
+    if (!cel?.strike || !m) continue;
+    if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.zap.code, undefined, b.zap)) {
+      b.zap.armed = false;
+      return;
+    }
+  }
   if (!damageOn) return;
   for (const e of foesHurt ? spawnedHere() : []) {
     /**
@@ -5459,7 +5590,7 @@ export function takeHits(): void {
    * ...and the crows, whose dive cels (1875, 1877, 1884..1887) carry a strike
    * box and no pair — so the blow is the crow's own velocity at strength 100
    * (`0x45206f` rewrites it every frame). Touching is what sets `obj+0x2a`
-   * (`0x43045d`), and that is what ends a dive's run ({@link stepCrows}).
+   * (the exchange, `0x430663`), and that is what ends a dive's run ({@link stepCrows}).
    */
   for (const c of foesHurt ? crowsHere() : []) {
     const cel = celRec(lvl.sbk, crowCel(c));
@@ -5599,12 +5730,21 @@ export function takeHits(): void {
     if (!cel?.strike) continue;
     if (hit(cel, a.x, a.y, 1, 0, 0)) return;
   }
+  // ...and VAT's wrecking balls: `0x41a89e` writes a hundred every frame, and
+  // every cel of the swing carries a box. It is pinned to its point with both
+  // velocities zeroed (`0x41a7de`), so what it hits with is the cel's own pair
+  for (const f of hereOf((l) => l.fittings)) {
+    if (f.kind !== "ball") continue;
+    const cel = celRec(lvl.sbk, fittingCel(f));
+    if (!cel?.strike) continue;
+    if (hit(cel, f.x, f.y, 1, 0, 0, FITTING.ball.blow)) return;
+  }
   // ...and the goop, which carries `obj+0x1a = 0x64` and therefore its cel's own
   // pair unscaled — see {@link dripStrike} for why that is one cel of nine
   for (const d of drips) {
     const cel = dripStrike(d);
     if (!cel || d.hit) continue;
-    // touching is what sets `obj+0x2a` (`0x43045d`), and a gob that has touched
+    // touching is what sets `obj+0x2a` (the exchange, `0x430663`), and a gob that has touched
     // bursts on its next think (`0x43746a`) whatever the blow came to
     const reach = strikeOf(cel, d.x, d.y, 1);
     if (
@@ -6239,7 +6379,8 @@ export function placed<T>(
 }
 
 /**
- * Where the head and the claw arm stand, which is decided once and never again.
+ * Where the head and the claw arm stand against the body — decided once, and
+ * then kept to every frame as the body moves ({@link placeBoggs}).
  *
  * `initboggshead` has a record of its own in `VAT.SBK` and `0x412310` puts the
  * head on its point. `initbgclawarm` has no point at all: `0x4121ae` copies the
@@ -6251,7 +6392,7 @@ export function headAndArm(
   sbk: SbkFile,
   room: SbkRoom,
   body: SbkEntity,
-): { headX: number; headY: number } {
+): { headX: number; headY: number; headOff: { dx: number; dy: number } } {
   const head = sbk.entities.find(
     (e) =>
       e.isEntity &&
@@ -6261,10 +6402,9 @@ export function headAndArm(
       e.pointX >= room.left &&
       e.pointX <= room.right,
   );
-  return {
-    headX: head?.pointX ?? body.pointX,
-    headY: head?.pointY ?? body.pointY,
-  };
+  const headX = head?.pointX ?? body.pointX;
+  const headY = head?.pointY ?? body.pointY;
+  return { headX, headY, headOff: { dx: headX - body.pointX, dy: headY - body.pointY } };
 }
 
 /**
@@ -7674,11 +7814,84 @@ export function boggsStruck(b: Boggs, bolted: boolean): void {
   }
 }
 
-/** LAB's and VAT's one-cel furniture, which does nothing but stand where it is */
+/** what a fitting is playing — see {@link FITTING} */
+function fittingAnim(f: Fitting): { cels: readonly number[]; hold: number } {
+  if (f.kind === "teeth") return { cels: [FITTING.teeth.cel], hold: 1 };
+  if (f.kind === "ball")
+    return f.phase === "out" ? FITTING.ball.out : f.phase === "back" ? FITTING.ball.back : FITTING.ball.idle;
+  return f.phase === "spray" ? FITTING.shower.spray[f.tag] : FITTING.shower.idle[f.tag];
+}
+
+/** the cel a fitting is showing — the teeth's one, a shower's or a ball's script */
 export function fittingCel(f: Fitting): number {
-  if (f.kind === "ball") return FITTING.ball.cel;
-  if (f.kind === "teeth") return FITTING.teeth.cel;
-  return FITTING.shower.on;
+  const a = fittingAnim(f);
+  return a.cels[Math.min(a.cels.length - 1, Math.floor(f.clock / a.hold))];
+}
+
+/**
+ * `[0x46cd8c]` — the shower's first-time cue. It ships as 1 and `0x41a38f` is
+ * the only write, so it is spent once in a run of the game.
+ */
+let showerFirst = true;
+
+/**
+ * VAT's showers and balls, one engine frame each — `0x41a2a0` and `0x41a7d0`.
+ * See {@link FITTING} for the whole of both.
+ */
+export function stepFittings(): void {
+  const lvl = level;
+  if (!lvl) return;
+  const px = p.x;
+  const py = p.y - p.feet;
+  // `0x434200`, half-open, the player's own point against the record's rect
+  const inside = (f: Fitting): boolean => px >= f.left && px < f.right && py >= f.top && py < f.bottom;
+  for (const f of hereOf((l) => l.fittings)) {
+    if (f.kind === "teeth") continue;
+    const a = fittingAnim(f);
+    const ended = f.clock >= a.cels.length * a.hold;
+    const at = Math.floor(f.clock / a.hold);
+    if (f.kind === "shower") {
+      const S = FITTING.shower;
+      if (f.phase === "idle") {
+        if (!inside(f)) continue;
+        if (showerFirst) {
+          showerFirst = false;
+          sound?.effect(S.first, f.x, f.y, "lead");
+        }
+        const hiss = roll(S.hiss);
+        sound?.effect(hiss, f.x, f.y);
+        f.phase = "spray";
+        f.clock = 0;
+        continue;
+      }
+      // `0x41a2f8` — the x distance and nothing else, on the frames that burn,
+      // and only while `0x402f60` says the player is on his feet
+      if (Math.abs(px - f.x) < S.withinPx && S.burns(S.base[f.tag] + at) && p.act !== "dying") {
+        if (damageOn) takeHealth(S.health);
+        // `0x41a3f0` makes a new flame every frame it is called
+        lightFlame(p, celRec(player, lastCel), p.facing < 0, { stack: true });
+        sound?.effect(S.burn, px, py);
+      }
+      if (ended) {
+        f.phase = "idle";
+        f.clock = 0;
+      } else f.clock += 1;
+      continue;
+    }
+    const B = FITTING.ball;
+    if (f.phase === "idle") {
+      if (!inside(f)) continue;
+      sound?.effect(B.cue, px, py, "lead");
+      f.phase = "out";
+      f.clock = 0;
+      continue;
+    }
+    if (at === B.swishAt) sound?.effect(B.swish, f.x, f.y);
+    if (ended) {
+      f.phase = f.phase === "out" ? "back" : "idle";
+      f.clock = 0;
+    } else f.clock += 1;
+  }
 }
 
 /**
@@ -7699,10 +7912,11 @@ export function fittingCel(f: Fitting): number {
  * break three thousand more to stop the rest, and only then can the four
  * thousand on the head be spent. See {@link BOGGS.machines}.
  *
- * Everything but the body stands still. `0x411ed0` (the eight machines),
- * `0x412180` (the arm) and `0x41c4c0` (the head) each run once, at setup, and
- * no per-frame call re-places any of them — so when the body lunges it lunges
- * out from under its own head.
+ * Everything else is placed against the body. VAT's frame loop runs the body's
+ * tick (`0x41be50`), the first machine's think (`0x41afd0`) and the move pass,
+ * and then re-places the head (`0x41c4c0`), the eight machines (`0x411ed0`)
+ * and the arm (`0x412180`) from the body's new point — every frame, so all of
+ * it lunges with the body. See {@link placeBoggs}.
  */
 export function stepBoggs(): void {
   for (const b of hereOf((l) => l.boggs)) {
@@ -7714,79 +7928,178 @@ export function stepBoggs(): void {
       if (m.wrecked) m.wreckClock += 1;
       else m.clock += 1;
     }
-    if (b.dying) {
-      b.headClock += 1;
-      continue;
-    }
-    // `0x41bd69` — and `0x41bdd8` is the level's own cleared flag
-    if (b.hp <= 0) {
-      b.dying = true;
-      bossDown.lab = true;
-      b.clock = 0;
-      b.headClock = 0;
-      // `0x41bda0` — through `0x40f090`, the mixer's channel 0
-      sound?.effect(BOGGS.dies.sound, b.headX, b.headY, "lead");
-      continue;
-    }
-    // `0x41c182` — the head re-aims whenever its own script has ended, which at
-    // one frame a tag and three ticks a frame is every third frame
-    b.headClock += 1;
-    if (b.headClock >= BOGGS.head.hold) {
-      b.headClock = 0;
-      b.headTag = boggsAim(b);
-    }
-    // `0x41be68` — thirty a frame, and only while a flag is still up
-    if (b.flags[0] || b.flags[1])
-      b.hp = Math.min(scaled(BOGGS.health), b.hp + BOGGS.regen);
-    // `0x41c164` — the 5-in-100 branch, and the jaws snap through `0x46e558`
-    const jaws = BOGGS.arm.jaws;
-    if (
-      b.snap <= 0 &&
-      Math.floor(random() * jaws.snapOdds[1]) < jaws.snapOdds[0]
-    ) {
-      b.snap = jaws.snap.cels.length * jaws.snap.hold;
-    }
-    const a = b.lunge ? BOGGS.lunge[b.lunge] : null;
-    if (a) {
-      // the stride is the script's own, an impulse through the biggest divisor
-      // in the game (`0x45d0f0` → `0x42f8b0`: 470/100 is 5 a frame, every frame
-      // the cel shows), and the mover spends it with the ground's drag
-      const k = Math.floor(b.clock / a.hold);
-      if (k >= a.cels.length) {
-        // `0x41bb86`: the script's end puts it back on the idle
-        b.lunge = null;
-        b.clock = 0;
-        boggsMove(b);
-        continue;
-      }
-      const dx = a.dx[k] ?? 0;
-      if (dx) b.vx = (b.vx ?? 0) + roundAway(dx / BOGGS.divisor);
-      boggsMove(b);
-      continue;
-    }
-    boggsMove(b);
-    // `0x41bffc` — seven in forty-two, once a frame, and only out of the idle
-    if (Math.floor(random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0]) {
-      // ...and `0x41c068` is what the other thirty-five frames do
-      boggsReach(b);
-      continue;
-    }
-    b.lunge = p.x < b.x ? "left" : "right";
-    b.clock = 0;
-    const which = BOGGS.lunge.sound + Math.floor(random() * 2);
-    sound?.effect(which, b.x, b.y);
+    boggsSendsZap(b);
+    boggsBody(b);
+    boggsMachinery(b);
+    placeBoggs(b);
   }
 }
 
 /**
- * Boggs' share of the mover: move by `obj+0xc`, then the ground's drag
- * (`0x4302c0`), and `0x41bb40` keeps the body inside its record's x.
+ * `0x41bef4` — the body's tick puts the first machine out: the player at or
+ * right of the body, the machine on its kind 0 and `0x46e080` up. See
+ * {@link BOGGS.zap}.
+ */
+export function boggsSendsZap(b: Boggs): void {
+  const z = b.zap;
+  if (b.x - p.x > 0 || z.kind !== 0 || !b.flags[0]) return;
+  z.kind = 1;
+  z.tag = 0;
+  z.clock = 0;
+  z.dy = BOGGS.zap.at.dy;
+  z.dx = BOGGS.zap.at.dx;
+}
+
+/**
+ * `0x41afd0`, the machinery's own think, once a frame: the first machine's
+ * sweep and the price of the sixth machine's wreck — {@link BOGGS.zap},
+ * {@link BOGGS.drain}.
+ *
+ * The think runs before the stepper does (`0x419c30`, then `0x42fc10`), so
+ * `obj+0x46` — the script has ended — is what the step of the frame before
+ * left, and a tag's end is read the frame after its last cel is spent.
+ */
+export function boggsMachinery(b: Boggs): void {
+  const z = b.zap;
+  const Z = BOGGS.zap;
+  if (z.kind === 1) {
+    z.armed = true; // `0x41b022`
+    // `0x41b028` / `0x41b045` — 0x402f60 is his kind under 0x1a, which is
+    // what the brains read as the player being down
+    if (p.act !== "dying") z.taunted = false;
+    else if (!z.taunted) {
+      z.taunted = true;
+      sound?.effect(Z.taunt, b.headX, b.headY, "lead");
+    }
+    z.dx += Z.step[z.tag] ?? 0;
+    if (z.clock >= (Z.frames[z.tag] ?? 1) * Z.hold) {
+      // each tag's end installs the next; 4's is `0x46e4d0`, kind 0
+      // (`0x41b105`) — and the stepper takes its first step of it this frame
+      if (z.tag < Z.frames.length - 1) {
+        z.tag += 1;
+        z.clock = 1;
+      } else {
+        z.kind = 0;
+        z.tag = 0;
+        z.clock = 0;
+      }
+    } else z.clock += 1;
+  }
+  // `0x41b156` — the sixth machine's wreck run, and what it takes
+  const d = BOGGS.drain;
+  const g = b.machines[d.machine];
+  const spec = BOGGS.machines[d.machine];
+  const run = "wreck" in spec ? spec.wreck.length * spec.hold : 0;
+  if (!g?.wrecked || g.wreckClock < 1 || g.wreckClock > run + 1) return;
+  b.hp -= d.perFrame;
+  const r = roll(d.odds[1]);
+  if (r < d.odds[0]) {
+    const at = b.machines[d.at];
+    const across = roll(d.across[0]) - d.across[1];
+    const down = roll(d.down);
+    pops.push({ x: at.x + across, y: at.y + down, age: 0 });
+  }
+  // `0x41b1e2` — the run has ended: the gauge stops on 5945
+  if (g.wreckClock === run + 1) {
+    b.machines[d.at].wrecked = true;
+    b.machines[d.at].wreckClock = 0;
+  }
+}
+
+/**
+ * `0x41c4c0`, `0x411ed0` and `0x412180`, which VAT's frame loop runs every
+ * frame after the move (`0x419c76`..`0x419c80`): the head at the body plus its
+ * stored offset, the eight machines at the body plus `0x46e088`'s, and the
+ * first of them at the body plus `[0x4a5168]` instead. The arm is drawn at the
+ * body's own point, which is what `0x4121ae` copies.
+ */
+export function placeBoggs(b: Boggs): void {
+  b.headX = b.x + b.headOff.dx;
+  b.headY = b.y + b.headOff.dy;
+  for (let i = 0; i < b.machines.length; i++) {
+    const m = b.machines[i];
+    const spec = BOGGS.machines[i];
+    m.x = b.x + (i === 0 ? b.zap.dx : spec.dx);
+    m.y = b.y + (i === 0 ? b.zap.dy : spec.dy);
+  }
+}
+
+/** the body's own share of `0x41be50` — the heal, the head, the jaws and the lunge */
+function boggsBody(b: Boggs): void {
+  if (b.dying) {
+    b.headClock += 1;
+    return;
+  }
+  // `0x41bd69` — and `0x41bdd8` is the level's own cleared flag
+  if (b.hp <= 0) {
+    b.dying = true;
+    bossDown.lab = true;
+    b.clock = 0;
+    b.headClock = 0;
+    // `0x41bda0` — through `0x40f090`, the mixer's channel 0
+    sound?.effect(BOGGS.dies.sound, b.headX, b.headY, "lead");
+    return;
+  }
+  // `0x41c182` — the head re-aims whenever its own script has ended, which at
+  // one frame a tag and three ticks a frame is every third frame
+  b.headClock += 1;
+  if (b.headClock >= BOGGS.head.hold) {
+    b.headClock = 0;
+    b.headTag = boggsAim(b);
+  }
+  // `0x41be68` — thirty a frame, and only while a flag is still up
+  if (b.flags[0] || b.flags[1])
+    b.hp = Math.min(scaled(BOGGS.health), b.hp + BOGGS.regen);
+  // `0x41c164` — the 5-in-100 branch, and the jaws snap through `0x46e558`
+  const jaws = BOGGS.arm.jaws;
+  if (
+    b.snap <= 0 &&
+    Math.floor(random() * jaws.snapOdds[1]) < jaws.snapOdds[0]
+  ) {
+    b.snap = jaws.snap.cels.length * jaws.snap.hold;
+  }
+  const a = b.lunge ? BOGGS.lunge[b.lunge] : null;
+  if (a) {
+    // the stride is the script's own, an impulse through the biggest divisor
+    // in the game (`0x45d0f0` → `0x42f8b0`: 470/100 is 5 a frame, every frame
+    // the cel shows), and the mover spends it with the ground's drag
+    const k = Math.floor(b.clock / a.hold);
+    if (k >= a.cels.length) {
+      // `0x41bb86`: the script's end puts it back on the idle
+      b.lunge = null;
+      b.clock = 0;
+      boggsMove(b);
+      return;
+    }
+    const dx = a.dx[k] ?? 0;
+    if (dx) b.vx = (b.vx ?? 0) + roundAway(dx / BOGGS.divisor);
+    boggsMove(b);
+    return;
+  }
+  boggsMove(b);
+  // `0x41bffc` — seven in forty-two, once a frame, and only out of the idle
+  if (Math.floor(random() * BOGGS.lunge.odds[1]) >= BOGGS.lunge.odds[0]) {
+    // ...and `0x41c068` is what the other thirty-five frames do
+    boggsReach(b);
+    return;
+  }
+  // `0x41c047` — against the head's x, and at or past it is tag 1
+  b.lunge = p.x >= b.headX ? "right" : "left";
+  b.clock = 0;
+  const which = BOGGS.lunge.sound + Math.floor(random() * 2);
+  sound?.effect(which, b.x, b.y);
+}
+
+/**
+ * Boggs' share of the mover: move by `obj+0xc`, then the drag (`0x4302c0`) —
+ * the body's own whole 1.0, {@link BOGGS.drag} — and `0x41bb40` keeps the
+ * body inside its record's x.
  */
 export function boggsMove(b: Boggs): void {
   const v = b.vx ?? 0;
   if (!v) return;
   b.x += v;
-  b.vx = dragged(v);
+  b.vx = dragged(v, BOGGS.drag);
   if (b.span) b.x = Math.max(b.span[0], Math.min(b.span[1], b.x));
 }
 
@@ -8948,11 +9261,10 @@ export function stepBolts(): void {
       bottom: b.y + half.h,
     };
     /**
-     * What it meets first, and FIRST is the word: a swept box crosses Boggs'
-     * body and its machine in the same step — 5988 is drawn x6106..6449 and the
-     * machine at x6539 is x6406..6648 — so testing them in source order would
-     * feed every round to the thing that heals thirty a frame while the machine
-     * that stops the healing stands untouched behind it.
+     * What it meets first, and FIRST is the word: a swept box can cross Boggs'
+     * body and its machine in the same step, so testing them in source order
+     * would feed every round to the thing that heals thirty a frame while the
+     * machine that stops the healing stands untouched behind it.
      *
      * So collect what the sweep crossed and take the nearest along the way it
      * was going. Both take the same hundred: `0x41bc71` on the body and
@@ -8961,15 +9273,17 @@ export function stepBolts(): void {
     const met: { edge: number; take: () => void }[] = [];
     for (const g of hereOf((l) => l.boggs)) {
       const cel = celRec(lvl.sbk, boggsCel(g));
-      if (cel) {
-        // the rect the thing is actually DRAWN in — `drawLevelCel` hangs a cel
-        // off its anchor by the record's own `posX`/`posY`, and Boggs' 5988 is
-        // 343x270 anchored at (215, 56), so a centred box misses it twice over
+      if (cel?.body) {
+        // the cel's BODY box off the anchor, which is what the collision pass
+        // tests a victim by (`0x4303b3` reads `cel+0xc`, `0x40e680` translates
+        // it) — 5988's is x −151..31, y −36..127, so a bolt at a standing
+        // player's knee height passes under the body and meets the machine
+        // behind it
         const gb = {
-          left: g.x - cel.posX,
-          right: g.x - cel.posX + cel.width,
-          top: g.y - cel.posY,
-          bottom: g.y - cel.posY + cel.height,
+          left: g.x + cel.body.x0,
+          right: g.x + cel.body.x1,
+          top: g.y + cel.body.y0,
+          bottom: g.y + cel.body.y1,
         };
         if (
           box.right > gb.left &&
@@ -10656,7 +10970,7 @@ export function lightFlame(
   on: object,
   art: SbkCel | undefined,
   mirror: boolean,
-  how: { late?: boolean; forever?: boolean },
+  how: { late?: boolean; forever?: boolean; stack?: boolean },
 ): void {
   const lvl = level;
   if (!lvl) return;
@@ -10668,7 +10982,9 @@ export function lightFlame(
   // stream stays on it. Kept so that a held stream reads as one fire — but a
   // flame lit to burn for ever (the CHOPPER's wreck, `0x4546b1`) is a second
   // object beside whatever was already burning, as it is on the disc
-  if (!how.forever && flames.some((f) => f.on === on)) return;
+  // ...and the shower's `0x41a3f0` asks for its own too: one a frame for as
+  // long as it burns, which is the point of it (`stack`)
+  if (!how.forever && !how.stack && flames.some((f) => f.on === on)) return;
   // `0x44ff42` — halves of the victim's `0x42f9f0` rect, which is its current
   // cel's drawn extent; a cel the book does not carry has none
   const halfW = art ? Math.floor(art.width / 2) : 0;
@@ -10691,7 +11007,11 @@ export function lightFlame(
   flames.push(f);
   // placed now as well as every frame, so a flame lit after the flame pass
   // (the CHOPPER's wreck, lit from its own think) is not drawn once elsewhere
-  placeFlame(f, lvl, crowsHere().includes(on as Crow) ? "crow" : casts.includes(on as Cast) ? "cast" : "foe");
+  placeFlame(
+    f,
+    lvl,
+    on === p ? "player" : crowsHere().includes(on as Crow) ? "crow" : casts.includes(on as Cast) ? "cast" : "foe",
+  );
 }
 
 /**
@@ -10703,8 +11023,13 @@ export function lightFlame(
  * 197 of its 222 pixels right of the anchor, measuring from `e.x` put the flame
  * on its wreck 86 pixels off it.
  */
-function placeFlame(f: Flame, lvl: Level, kind: "crow" | "cast" | "foe"): void {
-  if (kind === "crow") {
+function placeFlame(f: Flame, lvl: Level, kind: "crow" | "cast" | "foe" | "player"): void {
+  if (kind === "player") {
+    // `0x41a019`..`0x41a055` — chapter four's flame, the same arithmetic
+    // against the player's own point
+    f.x = p.x + (p.facing < 0 ? -f.dx : f.dx);
+    f.y = p.y - p.feet + f.dy;
+  } else if (kind === "crow") {
     // a crow's point is its own anchor, and nothing on this page mirrors its
     // art, so `0x453eb7`'s facing has nothing to flip the offset by
     const c = f.on as Crow;
@@ -10746,9 +11071,11 @@ export function stepFlames(): void {
   // its own `obj+0x12`, so what can be lit is not only what is in the pool
   const birds = new Set<object>(crowsHere());
   for (const c of birds) alive.add(c);
+  // ...and the player, whom VAT's showers light (`0x41a3f0`)
+  alive.add(p);
   for (const f of flames) {
     if (!alive.has(f.on)) continue;
-    placeFlame(f, lvl, birds.has(f.on) ? "crow" : lit.has(f.on) ? "cast" : "foe");
+    placeFlame(f, lvl, f.on === p ? "player" : birds.has(f.on) ? "crow" : lit.has(f.on) ? "cast" : "foe");
     f.clock += 1;
     const run =
       f.stage === 0
@@ -10770,9 +11097,12 @@ export function stepFlames(): void {
   }
   // gone: the victim left the level, or the third stage ran out on one that
   // was not lit to last
+  // `0x41a0d2` — and a flame on a player no longer on his feet goes the moment
+  // it is in its third stage
   flames = flames.filter(
     (f) =>
       alive.has(f.on) &&
+      !(f.on === p && f.stage === 2 && p.act === "dying") &&
       (f.forever ||
         f.stage !== 2 ||
         f.clock < FLAME.fade.cels.length * FLAME.fade.hold),
@@ -12390,6 +12720,15 @@ export function stepEnemies(): void {
     ) {
       const to = REACTIONS[e.kind]?.(e, foe, run, BRAIN_CTX);
       if (to && e.state === "flinch") cut = to;
+      // ...and from a death as well, where the think's preamble exempts the
+      // death's state: the ox's `0x43f325` puts even a dying ox in the pit
+      else if (to && e.state === "dead") {
+        e.state = "gait";
+        e.swing = false;
+        install(e, to);
+        e.clock = 0;
+        continue;
+      }
     }
     if (e.state === "dead") {
       /**
@@ -13430,6 +13769,11 @@ export function tick(): void {
   p.frameAcc += TICK_SCALE;
   const frame = p.frameAcc >= 1 - 1e-9;
   if (frame) p.frameAcc -= 1;
+  // the stage-end tally holds the whole world still — {@link startTally}
+  if (craft?.tally) {
+    if (frame) stepTally(craft);
+    return;
+  }
   stepDeathRed(frame);
   // `0x4309f0` is an engine-frame job like everything else in here; the step it
   // decides is spent across this frame's four ticks
@@ -14401,6 +14745,7 @@ export function tick(): void {
   if (frame) stepBelts();
   if (frame) stepChairs();
   if (frame) stepClaws();
+  if (frame) stepFittings();
   // last of the props, because the grip is read off whatever moved just now
   if (frame) stepHeld();
   if (frame) stepBoggs();
@@ -14422,8 +14767,9 @@ export function tick(): void {
   stepGobs();
   stepCraft();
   claimBar();
-  // the mission clock runs at the engine's rate, not this page's
-  stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
+  // the mission clock runs at the engine's rate, not this page's — and 32000
+  // is no clock at all: `0x40d25b` returns before the `dec`
+  if (stats.ticks < CLOCK.noLimit) stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
   if (stats.ticks <= 0 && !film) void ranOut();
   // `0x443dea`: the life is spent when the dying animation ENDS, not when the
   // health runs out, and `0x443ec7` turns the last one into the game-over state

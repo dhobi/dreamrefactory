@@ -878,6 +878,15 @@ export interface Foe {
   /** does it enrol in the level census — `0x42f870(obj, 1)` in its creator */
   counts: boolean;
   /**
+   * ...and it stays counted as a corpse. Nothing in the class calls
+   * `0x42f870(obj, 0)`, so its census flag outlives the death and the count
+   * comes down only as the object is freed (`0x42f750`'s `0x42f778`). Three
+   * classes: the eyeball (`0x435a60` enrols, nothing lets go), the ox
+   * (`0x435ca7`) and the hardcore (`0x4364a6`) — none of the 45 calls to
+   * `0x42f870` falls inside their classes' code.
+   */
+  countsDead?: boolean;
+  /**
    * Does a blow throw goo out of it — whether its hit handler calls `0x40cba0`.
    *
    * The three creatures do (`0x44f12e`, `0x44f90f`, `0x44e411`) and the two pieces
@@ -1961,6 +1970,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x43cca1` claims the bar with 0x3331 and 0x2ee; `0x43d2e8` pays 0x15e
     panel: { health: 750, plate: 13105, award: 350 },
     counts: true,
+    // `0x43cc60` and `0x43d250` never call `0x42f870(obj, 0)`: the body counts until it is freed
+    countsDead: true,
     vanishes: true,
     from: "0x436460 / 0x43cbb0 / 0x43cc60 / 0x43d250",
   },
@@ -2064,6 +2075,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     floats: true,
     gravity: 0,
     counts: true,
+    // `0x43dde0` and `0x43e8b0` never call `0x42f870(obj, 0)`: the body counts until it is freed
+    countsDead: true,
     bleeds: true,
     // `0x43e8b0` turns away state 8, a negative strength and the pipe
     // (`0x43e8db`) — never another eye
@@ -2193,6 +2206,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x43f300` claims the bar with 0x32ce and 0x258; `0x43fa36` pays 0x140
     panel: { health: 600, plate: 13006, award: 320 },
     counts: true,
+    // `0x43f2a0` and `0x43f9a0` never call `0x42f870(obj, 0)`: the body counts until it is freed
+    countsDead: true,
     bleeds: true,
     vanishes: true,
     from: "0x435c70 / 0x43f1e0 / 0x43f2a0 / 0x43f9a0",

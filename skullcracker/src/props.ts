@@ -2865,37 +2865,146 @@ export interface Claw {
 }
 
 /**
- * VAT's three pieces of furniture, and all three are one cel apiece.
+ * VAT's three pieces of furniture — two of which are not furniture at all.
  *
- * - **`initshower`**, seven of them. Creator `0x4117c0`, class `0x41a1d0`.
- *   `0x46cc68` has two tags of one record: 4060 and 4022. Divisor 20, gravity
- *   zero, and `0x41a20e` writes `0xff9c` — **−100** — into `obj+0x10`, the floor
- *   offset, so it hangs a hundred pixels above whatever it stands on.
- * - **`initball`**, two. Creator `0x4118a0`, class `0x41a720`, cel 4310.
- * - **`initteeth`**, one in LAB and one in VAT. Creator `0x4119d0`, class
- *   `0x418c80`, cel 3516.
+ * ## `initshower`, seven of them: an acid shower that sets you alight
  *
- * All three stand still here, and two of them are not still in the engine,
- * which is where two of chapter four's `0x40f090` cues live and why neither
- * plays: the shower's think `0x41a2a0` sprays on its own clock, costs a
- * player within fifty a hundred health and, the first time in the level the
- * player walks into a shower's rect (`[0x46cd8c]`), says 0x20 (`0x41a3a3`);
- * the ball's `0x41a7d0` says 4 at the player's point while the player is in
- * its rect (`0x41a886`). The class at `0x418d30` — the Boggs sequence's own,
- * which no level places — has a third, 0x30 or 4 (`0x418e76`).
+ * Creator `0x4117c0` keeps the record's point and rect in a fourteen-byte AI
+ * struct and one more word, `AI+0xc`, which is which way up it hangs:
+ * `0x4117f7`..`0x4117ff` set it to 1 when the point is nearer the rect's
+ * bottom than its top. VAT puts three in the ceiling (tag 0, cel 4060, the
+ * spray falling) and four in the floor (tag 1, cel 4022, the spray rising).
+ * Class `0x41a1d0`: divisor 20, no gravity (`0x42f850(obj, 0)`), a floor offset
+ * of −100 (`0x41a20e`) that only the mover's foot test ever reads, and
+ * `0x46cc68` on that tag.
+ *
+ * Think `0x41a2a0` pins it to the record's point every frame (`0x41a2b6`) and
+ * zeroes both velocities, then:
+ *
+ * ```
+ *   kind 1  0x41a36a  the player's point in the rect (0x434200)
+ *                       first time in the RUN: 0x40f090(0x20)   0x41a3a3
+ *                       0x40ef30(0x434540(2)) — 1 or 2          0x41a3bf
+ *                       -> 0x46cc80, the spray, on the same tag
+ *   kind 0  0x41a2cf  |player.x - x| < 0x32 and the script's frame index
+ *                     inside 7..10 or 22..26, and the player upright (0x402f60):
+ *                       0x402ac0(0x64)          a hundred off the health
+ *                       0x41a3f0(player, 0, 0)  a flame stuck to him
+ *                       0x40ef30(5) at his point
+ *                     the script ends -> 0x46cc68 again
+ * ```
+ *
+ * The hundred is not a blow. Neither script's cels carry a strike box; it is
+ * `0x402ac0`, the health spend itself, so there is no reaction, no knockback
+ * and nothing for the player's own hit handler to read — only the x distance,
+ * with no height in it at all. The frame index is the script's own, counted
+ * across both tags, so tag 0 (frames 0..15) burns on 7..10 and tag 1 (16..31)
+ * on 22..26: four frames and five, a hundred each.
+ *
+ * `0x41a3f0` is `0x44ff20`'s twin for chapter four: an object of the class at
+ * `[0x46c580]` (`0x419f10`) hung at a random point in the victim's cel, on
+ * `0x46c480` tags 0 and 1 and then `0x46c528` tag 2 — the same 9600s, holds and
+ * order as {@link FLAME}. Its think `0x41a000` differs in one test: a flame on
+ * the player whose player is no longer upright goes at once in its third stage
+ * (`0x41a0d2`).
+ *
+ * `[0x46cd8c]` ships as 1 in `.data` and the only write is that clear, so the
+ * 0x20 is said once in a run of the game, not once a level.
+ *
+ * ## `initball`, two of them: a wrecking ball on a swing
+ *
+ * Creator `0x4118a0`, class `0x41a720`: divisor 20, no gravity, `0x46ce38`.
+ * Think `0x41a7d0`, pinned to its point the same way:
+ *
+ * ```
+ *   kind 2  0x41a85c  the player's point in the rect: 0x40f090(4) at HIS point
+ *                     (0x41a886), and -> 0x46ce48, the swing out
+ *   kind 0  0x41a806  frame index 3: 0x40ef30(0) at its own; ends -> 0x46cea8
+ *   kind 1  0x41a831  frame index 3: 0x40ef30(0) again; ends -> 0x46ce38
+ * ```
+ *
+ * And it hits with its cels, not with a spend. `0x41a89e` writes `obj+0x1a =
+ * 0x64` every frame and 4300..4310 all carry a strike box, most with a blow
+ * pair (4310: `dx -24, dy 47`), so the ball is an ordinary hundred-strength
+ * blow through the player's hit handler, knockback and all.
+ *
+ * ## `initteeth`, one in LAB and one in VAT
+ *
+ * Creator `0x4119d0`, class `0x418c80`, cel 3516, and it stands where it is.
+ * The class at `0x418d30` — the Boggs sequence's own, which no level places —
+ * has a cue of its own, 0x30 or 4 (`0x418e76`).
  */
 export const FITTING = {
-  shower: { on: 4060, off: 4022, below: -100, from: "0x4117c0 / 0x41a1d0 / 0x46cc68" },
-  ball: { cel: 4310, from: "0x4118a0 / 0x41a720 / 0x46ce38" },
+  shower: {
+    /** `0x46cc68` — one cel a tag, and what it hangs on between sprays */
+    idle: [
+      { cels: [4060], hold: 1, from: "0x46cc68 tag 0" },
+      { cels: [4022], hold: 1, from: "0x46cc68 tag 1" },
+    ],
+    /** `0x46cc80` — sixteen frames a tag: down out of the ceiling, or up out of the floor */
+    spray: [
+      {
+        cels: [4060, 4061, 4062, 4063, 4064, 4065, 4066, 4067, 4068, 4069, 4070, 4071, 4072, 4073, 4074, 4075],
+        hold: 1,
+        from: "0x46cc80 tag 0",
+      },
+      {
+        cels: [4022, 4023, 4024, 4025, 4018, 4019, 4020, 4021, 4014, 4015, 4016, 4017, 4010, 4011, 4012, 4013],
+        hold: 1,
+        from: "0x46cc80 tag 1",
+      },
+    ],
+    /** where each tag starts in the script's own frame count, which `obj+0x42` is */
+    base: [0, 16],
+    /** `0x41a301`..`0x41a317`: frame index 7..10, or 22..26 */
+    burns: (at: number): boolean => (at > 6 && at < 0xb) || (at > 0x15 && at < 0x1b),
+    /** `0x41a2f8` — the x distance, and the only distance */
+    withinPx: 0x32,
+    /** `0x41a323` — through `0x402ac0` */
+    health: 0x64,
+    /** `0x41a39c` — the first time in the run, through `0x40f090` */
+    first: 0x20,
+    /** `0x41a3af` — `0x434540(2)`, 1 or 2, every time it starts */
+    hiss: 2,
+    /** `0x41a348` — at the player, every frame it burns */
+    burn: 5,
+  },
+  ball: {
+    /** `0x46ce38`, kind 2 — hanging, and waiting for you */
+    idle: { cels: [4310], hold: 1, from: "0x46ce38 tag 0" },
+    /** `0x46ce48`, kind 0 — the swing out */
+    out: { cels: [4310, 4309, 4308, 4307, 4306, 4305, 4304, 4303, 4302, 4301, 4300], hold: 1, from: "0x46ce48 tag 0" },
+    /** `0x46cea8`, kind 1 — and back, at half the speed */
+    back: { cels: [4300, 4301, 4302, 4303, 4304, 4305, 4306, 4307, 4308, 4309, 4310], hold: 2, from: "0x46cea8 tag 0" },
+    /** `0x41a87f` — at the player's point, through `0x40f090` */
+    cue: 4,
+    /** `0x41a812` / `0x41a83d` — at its own, on frame index 3 of each swing */
+    swish: 0,
+    swishAt: 3,
+    /** `0x41a89e` — every frame */
+    blow: 0x64,
+  },
   teeth: { cel: 3516, from: "0x4119d0 / 0x418c80 / 0x46d1b8" },
   divisor: 0x14,
+  from: "0x4117c0 / 0x41a1d0 / 0x41a2a0; 0x4118a0 / 0x41a720 / 0x41a7d0",
 } as const;
 
 export interface Fitting {
   kind: "shower" | "ball" | "teeth";
+  /** the record's point, which the think pins it to every frame */
   x: number;
   y: number;
+  /** engine frames into what it is playing */
   clock: number;
+  /** the record's rect — what the player's point is tested against (`0x434200`) */
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  /** a shower's `AI+0xc`: 0 in the ceiling, 1 in the floor */
+  tag: 0 | 1;
+  /** which script: a shower's idle or spray, a ball's idle, swing out or back */
+  phase: "idle" | "spray" | "out" | "back";
 }
 
 /**
@@ -2963,8 +3072,13 @@ export const BOGGS = {
    * 5983(-470) 5984..5988` and tag 1 the same the other way. Four hundred and
    * seventy through its divisor of a hundred is an impulse of 5 (`0x42f8b0`
    * rounds away from zero), added every one of the nine frames those three cels
-   * show; the ground's drag keeps 30% of the speed each frame, so the lunge
-   * settles at about eight pixels a frame and carries it some seventy-five.
+   * show — and the body's drag is a whole 1.0 (`0x41bc16`, `0x42f7a0`), so
+   * `0x4302c0` takes all of it back after each move: five pixels a frame for
+   * nine frames, forty-five a lunge.
+   *
+   * Which way is the HEAD's business, not the body's: `0x41c047` compares the
+   * player's x with `[0x4a50e0]`'s, and tag 1 — rightward — is the player at
+   * or past it.
    */
   lunge: {
     left: { cels: [5980, 5981, 5982, 5983, 5984, 5985, 5986, 5987, 5988], hold: 3, dx: [0, -470, -470, -470, 0, 0, 0, 0, 0], from: "0x46e6d8 tag 0" },
@@ -2992,6 +3106,8 @@ export const BOGGS = {
   translatesTo: 100,
   /** `0x41bbe0` — the largest divisor in the game */
   divisor: 100,
+  /** `0x41bc16` — `0x42f7a0(body, 1.0f)`: all of `obj+0xc` back off after each move */
+  drag: 0x2000,
   /** `0x41bbf0` — and the largest shove weight */
   weight: 0x50,
   /**
@@ -3108,9 +3224,10 @@ export const BOGGS = {
    * reason Boggs can be killed at all.
    *
    * `0x411ed0` places all eight at fixed offsets from the body, out of the table
-   * at `0x46e088`, and it is called twice in the whole program — once from the
-   * initialiser and once from VAT's setup — so they are STATIC. They do not
-   * follow the body when it lunges.
+   * at `0x46e088` — and VAT's frame loop calls it every frame (`0x419c7b`,
+   * inside `0x419c0b`..`0x419e35`), after the move pass, so they FOLLOW the
+   * body when it lunges. The head (`0x41c4c0`, `0x419c76`) and the arm
+   * (`0x412180`, `0x419c80`) are re-placed the same way, every frame.
    *
    * Six of them are scenery. `0x41b510` is the hit handler all eight share, and
    * after the friendly-fire filter and the same `-1`-becomes-100 translation the
@@ -3141,19 +3258,21 @@ export const BOGGS = {
    */
   machines: [
     /**
-     * `0x4a50ec` — `0x46e4d0`, and `0x4a5168` is zero until `0x41bf2c` moves it.
-     * Its think `0x41afd0` is not stepped here — it is what sends the `-1` and
-     * keeps `lab.snd` 0x14 looping (`0x41afd3`) — so its taunt is not either:
-     * 0x24 at the head through `0x40f090`, once each time the player is down
-     * while it is in its kind 1 (`0x41b03b`..`0x41b068`).
+     * `0x4a50ec` — `0x46e4d0`, the one that strikes. Its place is not this
+     * table's: `0x411ed0` puts it at the body plus `[0x4a5168]`, which is zero
+     * until the first sweep moves it. See {@link BOGGS.zap}.
      */
     { dy: 0, dx: 0, cels: [5630], hold: 1 },
     /** `0x4a5170` — `0x46e278`, and tag 1 is what machine A's death installs */
     { dy: 35, dx: 88, cels: [5700], hold: 3, wreck: [5701, 5702, 5703], wreckedBy: 0 },
     /** `0x4a50f4` — `0x46e2a0` */
     { dy: 38, dx: 81, cels: [5720], hold: 3, wreck: [5721, 5722, 5723], wreckedBy: 0 },
-    /** `0x4a50e4` — `0x46e2c8`, ten frames that just run, and nothing stops them */
-    { dy: 53, dx: 255, cels: [5940, 5941, 5942, 5943, 5944, 5945, 5944, 5943, 5942, 5941], hold: 2 },
+    /**
+     * `0x4a50e4` — `0x46e2c8`, ten frames that loop (`0x41b13f` puts tag 0 back
+     * on each time it ends) until the sixth machine's wreck has run: then
+     * `0x41b1e2` gives it tag 1, 5945 held — the gauge dies. {@link BOGGS.drain}.
+     */
+    { dy: 53, dx: 255, cels: [5940, 5941, 5942, 5943, 5944, 5945, 5944, 5943, 5942, 5941], hold: 2, wreck: [5945] },
     /** `0x4a5164` — `0x46e328`, and machine A sprays thirteen times at its point */
     { dy: -39, dx: 63, cels: [5650], hold: 3, wreck: [5651, 5652, 5653], wreckedBy: 0 },
     /** `0x4a50f8` — `0x46e350`, machine B's neighbour */
@@ -3175,6 +3294,96 @@ export const BOGGS = {
       sprays: 0xd, sprayAt: 5,
     },
   ],
+  /**
+   * The first machine STRIKES — `[0x4a50ec]`, and its think is `0x41afd0`,
+   * which VAT's frame loop calls once a frame (`0x419c30`) whatever else is
+   * going on.
+   *
+   * It is put out by the BODY. `0x41bef4`: with the player at or to the right
+   * of the body (`body.x - player.x <= 0`), the first machine still on its
+   * kind-0 script and `0x46e080` still up, `0x41bf1e` installs `0x46e490`
+   * tag 0 — kind 1 — and `0x41bf31` sets its offset `[0x4a5168]` to the dword
+   * at `0x46e0a4`: 70 down, 60 along.
+   *
+   * Then `0x41afd0`, every frame of kind 1:
+   *
+   * ```
+   *   41b022  obj+0x1a = -1                 ; the CODE, and nothing resets it
+   *   41b028  0x402f60() -> [0x46e4e0] = 0  ; he is up: the taunt re-arms
+   *   41b045  ...down and unspent: [0x46e4e0] = 1, 0x40f090(bank, 0x24, head)
+   *   41b082  switch (tag)                  ; 0x46e490's five, 15 ticks a frame
+   *           0, 1: [0x4a516a] += 1         ; it slides out along x
+   *           2:    nothing                  ; three frames held
+   *           3, 4: [0x4a516a] -= 1         ; and back
+   *           each one's end installs the next; 4's end is 0x46e4d0, kind 0
+   * ```
+   *
+   * Its cel is 5630 on every tag, whose STRIKE box is the whole of it
+   * (x −8..75, y −11..93) and which carries no body box, so nothing can hit
+   * it. Its strength is written −1 every frame of kind 1 and nothing else
+   * writes it but the collision pass, which zeroes a hitter's strength when
+   * the victim's handler takes the blow (`0x43045d`). So while it sweeps it
+   * strikes every frame there is a body to strike, and once it is back on
+   * kind 0 a −1 it has not spent stays armed until it lands once. What kind 0
+   * changes is the draw — `0x419d38` paints it only while `obj+0x18` is not
+   * 0 — and the collision pass asks nothing about drawing.
+   *
+   * Which makes it a wall. It stands 52..198 right of the body at the height
+   * of a standing player's chest, follows the body when it lunges, and a
+   * player spun in it (four frames, and both velocities zeroed) is spun again
+   * the frame the spin ends. The monkeybar (`MONKEYBAR`), which runs to
+   * x6617, goes over it.
+   *
+   * −1 is `BLOW_CODES`' "spun" in {@link file://./codes.ts}: character 0 spun
+   * and twenty health, character 1 the same.
+   *
+   * `0x41afd3` also arms `lab.snd` 0x14 as a loop (`0x40ee90(bank, 0x14, 1)`)
+   * and `0x41b008` positions it at the eighth machine every frame while either
+   * flag is up — a looping voice, which this page does not have; see
+   * `EYEBALL.hum` for the same gap.
+   */
+  zap: {
+    /** `0x46e490` — five tags of cel 5630, and how many frames each holds */
+    frames: [1, 1, 3, 1, 1] as const,
+    hold: 15,
+    /** `0x41b089`..`0x41b0f2` — what each tag does to `[0x4a516a]` every frame */
+    step: [1, 1, 0, -1, -1] as const,
+    cel: 5630,
+    /** `0x46e0a4` — `[0x4a5168]`, y then x, as `0x41bf31` writes it */
+    at: { dy: 70, dx: 60 },
+    /** `0x41b022` */
+    code: -1,
+    /** `0x41b061` — through `0x40f090`, at the head */
+    taunt: 0x24,
+    from: "0x41afd0 / 0x41bef4 / 0x46e490 / 0x46e4d0",
+  },
+  /**
+   * ...and the same think is what the sixth machine's wreck COSTS him.
+   *
+   * `0x41b156`: while `[0x4a56e8]` is on `0x46e3b8` tag 3 — the wreck run
+   * `0x41b510` installs when its three thousand are gone — `0x41b168` takes
+   * ten a frame off the head's health, and on a roll `0x41b177` (`0x434540(0x2a)`
+   * under 7; the `obj+0x48 <= 0` test in front of it is the frame countdown,
+   * which the stepper has always put back to at least 1 by the time the think
+   * reads it) `0x40cba0(point, -13, 0)` swells a green ball at the fourth
+   * machine, `0x434540(0x8c) - 0x46` across and `0x434540(0x3c)` down. When
+   * the run ends `0x41b1e2` stops the fourth machine on tag 1 and `0x41b1fc`
+   * holds the sixth on tag 4. The seventh machine's wreck has no such arm.
+   */
+  drain: {
+    /** `[0x4a56e8]` — the sixth machine, index 6 here */
+    machine: 6,
+    /** `0x41b168` */
+    perFrame: 0xa,
+    /** `0x41b177` / `0x41b181` — seven in forty-two */
+    odds: [7, 0x2a] as const,
+    /** `[0x4a50e4]` — where the balls come up, index 3 */
+    at: 3,
+    /** `0x41b186` / `0x41b19d` */
+    across: [0x8c, 0x46] as const,
+    down: 0x3c,
+    from: "0x41b156..0x41b209",
+  },
   /**
    * ...and what the idle does when it does NOT lunge, which this page had as
    * nothing at all.
@@ -3790,9 +3999,13 @@ export interface Boggs {
   snap: number;
   /** `0x46bfbc` — set once, by `0x41bdd8`, and the body and head go to their deaths */
   dying: boolean;
-  /** where `initboggshead`'s own record put the head, and it stays there */
+  /** where the head is — the body plus {@link headOff}, re-placed every frame (`0x41c4c0`) */
   headX: number;
   headY: number;
+  /** `[0x4a56cc]`/`[0x4a56ce]` — the head's own record against the body's, stored once (`0x412364`) */
+  headOff: { dx: number; dy: number };
+  /** the first machine's own state — {@link BOGGS.zap} */
+  zap: BoggsZap;
   /** `[0x46e0b0]` — frames to the next throw, spent whether or not it fires */
   throwWait: number;
   /** `[0x46e138]` — which of {@link BOGGS.throwing.drop} the next one leaves at */
@@ -3825,7 +4038,24 @@ export interface BoggsWorm {
   clock: number;
 }
 
-/** one of {@link BOGGS.machines}, placed once and then standing still */
+/** the first machine, `[0x4a50ec]`, as `0x41afd0` keeps it — {@link BOGGS.zap} */
+export interface BoggsZap {
+  /** `obj+0x18` — 0 on `0x46e4d0`, unseen; 1 on `0x46e490`, sweeping */
+  kind: 0 | 1;
+  /** `obj+0x44` — which of `0x46e490`'s five */
+  tag: number;
+  /** the stepper's steps since the tag went on */
+  clock: number;
+  /** `[0x4a5168]` and `[0x4a516a]` — its offset from the body */
+  dy: number;
+  dx: number;
+  /** `obj+0x1a` is −1 — written every frame of kind 1, zeroed by a blow it lands (`0x43045d`) */
+  armed: boolean;
+  /** `[0x46e4e0]` — the taunt, spent until the player is up again */
+  taunted: boolean;
+}
+
+/** one of {@link BOGGS.machines}, at its own offset from the body */
 export interface BoggsMachine {
   x: number;
   y: number;
