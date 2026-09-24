@@ -99,6 +99,8 @@ export interface Enemy {
   hatched?: boolean;
   /** ...and has it already shed its head — see {@link Foe.sheds} */
   shed?: boolean;
+  /** the lever it last found and turned to — see {@link Foe.lever}'s `found` */
+  aimed?: object;
   /**
    * ...and has its bike already been thrown clear — see {@link Foe.deathThrow};
    * the one-shot at the end of a death's first tag lives here too — kragg's

@@ -2874,6 +2874,15 @@ export interface Claw {
  * - **`initball`**, two. Creator `0x4118a0`, class `0x41a720`, cel 4310.
  * - **`initteeth`**, one in LAB and one in VAT. Creator `0x4119d0`, class
  *   `0x418c80`, cel 3516.
+ *
+ * All three stand still here, and two of them are not still in the engine,
+ * which is where two of chapter four's `0x40f090` cues live and why neither
+ * plays: the shower's think `0x41a2a0` sprays on its own clock, costs a
+ * player within fifty a hundred health and, the first time in the level the
+ * player walks into a shower's rect (`[0x46cd8c]`), says 0x20 (`0x41a3a3`);
+ * the ball's `0x41a7d0` says 4 at the player's point while the player is in
+ * its rect (`0x41a886`). The class at `0x418d30` — the Boggs sequence's own,
+ * which no level places — has a third, 0x30 or 4 (`0x418e76`).
  */
 export const FITTING = {
   shower: { on: 4060, off: 4022, below: -100, from: "0x4117c0 / 0x41a1d0 / 0x46cc68" },
@@ -3131,7 +3140,13 @@ export const BOGGS = {
    * This is the same shape of dead code as the wraith's `-3`.
    */
   machines: [
-    /** `0x4a50ec` — `0x46e4d0`, and `0x4a5168` is zero until `0x41bf2c` moves it */
+    /**
+     * `0x4a50ec` — `0x46e4d0`, and `0x4a5168` is zero until `0x41bf2c` moves it.
+     * Its think `0x41afd0` is not stepped here — it is what sends the `-1` and
+     * keeps `lab.snd` 0x14 looping (`0x41afd3`) — so its taunt is not either:
+     * 0x24 at the head through `0x40f090`, once each time the player is down
+     * while it is in its kind 1 (`0x41b03b`..`0x41b068`).
+     */
     { dy: 0, dx: 0, cels: [5630], hold: 1 },
     /** `0x4a5170` — `0x46e278`, and tag 1 is what machine A's death installs */
     { dy: 35, dx: 88, cels: [5700], hold: 3, wreck: [5701, 5702, 5703], wreckedBy: 0 },
@@ -3296,6 +3311,31 @@ export const BOGGS = {
   machineDivisor: 0x32,
   /** `0x41b628` / `0x41b774` — the cue that plays when the SECOND half goes */
   bothDownSound: 0x21,
+  /**
+   * What the body says when it is struck — `0x41bc50`, its hit handler. A
+   * blaster bolt (class `[0x46c600]`, `0x41bca7`) while either half of the
+   * machinery still stands (`0x41bc92`) is `0x434540(4) + 0x26` through
+   * `0x40f110`; anything else is `0x434540(6) + 0x18` through `0x40ef30`
+   * (`0x41bce5`..`0x41bcf9`).
+   */
+  struck: { sound: 0x18, roll: 6, bolted: 0x26, boltRoll: 4 },
+  /**
+   * ...and the hint in the same handler, after the health comes off: while
+   * either half stands, `[0x46e998]` counts the blows (`0x41bd22`), and one
+   * past ten with the player more than a hundred west of the machine at
+   * `0x4a56e8` (`0x41bd2f`..`0x41bd46`) says 0x26 at the HEAD's point through
+   * `0x40f090` and starts the count again (`0x41bd58`).
+   */
+  hint: { sound: 0x26, after: 0xa, westOf: 0x64, machine: 6 },
+  /**
+   * The machinery's own handler, `0x41b510`, for any of the eight: a bolt's
+   * −1 is `0x434540(3) + 8`, anything else `0x434540(3) + 5`, through
+   * `0x40ef30` (`0x41b53f`..`0x41b56b`). Then, on the two halves only, with
+   * the player east of two hundred short of the machine at `0x4a56e8`
+   * (`0x41b583`..`0x41b59d`), `[0x46e4e4]` counts the blows, and one past
+   * twenty says 0x23 at the head through `0x40f090` (`0x41b5cb`).
+   */
+  machineStruck: { sound: 5, bolted: 8, roll: 3, hint: 0x23, after: 0x14, short: 0xc8 },
   /** `0x46e770`, nine frames at three, and `0x41bd99` plays 0x22 over it */
   dies: { cels: [5740, 5741, 5742, 5743, 5744, 5745, 5746, 5747, 5748], hold: 3, sound: 0x22 },
   from: "0x411285 / 0x412240 / 0x41bb80 / 0x41bc50",
@@ -3761,6 +3801,10 @@ export interface Boggs {
   worms: BoggsWorm[];
   /** `[0x46e270]` — the one-time warning, spent the first time one rises */
   warned: boolean;
+  /** `[0x46e998]` — blows on the body since the last hint, {@link BOGGS.hint} */
+  blows?: number;
+  /** `[0x46e4e4]` — blows on the two halves since theirs, {@link BOGGS.machineStruck} */
+  machineBlows?: number;
   /** the `wormbounds` record, which `0x41ac16` keeps every worm inside */
   bounds: { left: number; right: number; top: number; bottom: number } | null;
 }

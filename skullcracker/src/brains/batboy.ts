@@ -177,7 +177,7 @@ const NOT_HERE = "0x4398e7, 0x439837, 0x439980, 0x439a4a" as const;
  * `rand(2)+5`. The animation then finishes and it goes back to the run.
  *
  * All of it is already {@link Foe.lever} — `dir: 0`, `at: 5`, `reachPx: 37`,
- * `sound: [5, 6]` and `0x4743b8 tag 1` as its animation — and `stepFight`
+ * `sound: [5, 6]`, `found: 0xb` and `0x4743b8 tag 1` as its animation — and `stepFight`
  * short-circuits the brain entirely while a switch is left in the patch. Two
  * owners for one animation is the thing this split is for, so state 6 is not
  * implemented here.

@@ -862,13 +862,16 @@ const think: Brain = (e, foe, run, k) => {
      * wind-up, and the page's as a blow's take, which hands here the frame it
      * ends ({@link FoeAnim.decides}); state 15 below the same.
      *
-     * `0x44185f` also carries a roar — on tag 1, on script frame `obj+0x42 ==
-     * 0xa` exactly, `0x434540(0x64) < 0x1e` picks `0x40f090` sound `0x1c` or
-     * `0x1d`, through `0x40f090` ({@link BrainCtx.lead}). **Not emitted
-     * here**: the port carries no script-frame index to hang the test on, so it
-     * is not faked.
+     * `0x44185f` also carries a roar — on tag 1, while the script's frame
+     * index `obj+0x42` is 0xa (the index counts the whole script, and tag 0 is
+     * eight records long, so that is tag 1's third), `0x434540(0x64) < 0x1e`
+     * picks `0x434540(2) + 0x1b`, 0x1c or 0x1d, through `0x40f090`
+     * (`0x44189e`). It asks on every frame that record shows, and the lead
+     * starts over each time it is asked.
      */
     case 13:
+      if ((e.tag ?? 0) === 1 && Math.floor(e.clock / e.anim.hold) === ROAR_AT && k.roll(0x64) < 0x1e)
+        k.say(e, 0x1b + k.roll(2), "lead");
       if (!done) return false;
       // `0x4418b6` — and it flips `obj+0x28` on the way out, like the air turn
       e.facing = -e.facing;
@@ -1037,6 +1040,9 @@ export const kraggReacts: Reaction = (e, foe, _run, k) => {
 
 /** `0x473d38` tag 0 — eight cels before tag 2 */
 const DEATH_TAG0 = 8;
+/** `0x44186b` — `obj+0x42 == 0xa`, less tag 0's eight records */
+const ROAR_AT = 0xa - 8;
+
 /** `0x441a79` / `0x441a5f` — where the roaches come out, against its own point */
 const DEATH_BEHIND = 0x14;
 const DEATH_UP = 0x19;

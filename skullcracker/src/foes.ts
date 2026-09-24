@@ -811,6 +811,12 @@ export interface Foe {
     run?: FoeAnim;
     /** `0x434540(3) == 1` and then `0x434540(2) + 5`: a one-in-three chance of 5 or 6 */
     sound: readonly number[];
+    /**
+     * ...and what it says the moment it FINDS one, where it says anything —
+     * the batboy's `0x4392d7`, `mall.snd` 0xb through `0x40f090`, as its
+     * preamble turns it to the lever and puts the lever script on.
+     */
+    found?: number;
     from: string;
   };
   /**
@@ -1680,7 +1686,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
       at: 5,
       reachPx: 37,
       sound: [5, 6],
-      from: "0x4396c1 / 0x43970d / 0x43971d",
+      found: 0xb,
+      from: "0x4392a4 / 0x4396c1 / 0x43970d / 0x43971d",
     },
     // ...and a flinch ends on it: `0x4398e7` waits for the ground and puts the
     // run back on, kind 4 tag 4

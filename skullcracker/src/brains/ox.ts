@@ -109,7 +109,9 @@ import {
  *   fall has stopped; tag 1 plays three cels, pays `0x40d450(0x140)` — the same
  *   320 points the kill pays — drops the bar, shakes the screen with
  *   `0x4307c0(3)` and **returns 1**, the one answer in this class that removes
- *   the object.
+ *   the object. Both its sounds go through `0x40f090`, the mixer's channel 0
+ *   (`0x43f359`, `0x43f826`); this page keeps no `obj+0x32` for an ox, so
+ *   state 7 is never reached and neither is played.
  * - **9**, the death, `0x43f885`: `0x4732d8`, eight cels at two ticks each, with
  *   sound `0x3d` and another `0x4307c0(3)` on frame 5. `AI+0xe` counts the
  *   corpse down from ten times `[0x46b204]` (`0x43fa6f`) and the last frame

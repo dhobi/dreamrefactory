@@ -1303,6 +1303,11 @@ export let files: SkullFiles;
  * see {@link file://./sound.ts}. Null until the rip is indexed, and silent
  * whenever a browser will not start an AudioContext, so nothing here has to check
  * twice.
+ *
+ * ...which is why a sound's index is never rolled INSIDE `sound?.effect(...)`:
+ * an optional call does not evaluate its arguments when there is no sound, so
+ * the `0x434540` roll would be made in a browser and skipped headless, and the
+ * two would play different games from there on. SC.EXE rolls before it calls.
  */
 export let sound: Sounds | null = null;
 export let level: Level | null = null;
@@ -2574,7 +2579,17 @@ export function stepCraft(): void {
   }
 }
 
-/** has the screen finished coming down — `[0x46ba10]`, and the stage is over */
+/**
+ * Has the screen finished coming down — `[0x46ba10]`, and the stage is over.
+ *
+ * Not the whole of that frame in the engine: before it raises the flag,
+ * `0x41074d` calls `0x40ffe0`, which turns what is left on the clock into
+ * points — the dial's cel `[0x4a4d60]` stepped on to 12717, a hundred to the
+ * score ten times a step, each hundred sounded through `0x40f110` (`0x410109`:
+ * the character's own 0x1f, or 0x18 for the second character) and the panel
+ * redrawn, and then the clock set to 32000 (`0x410154`). This page has no
+ * such tally, so neither the points nor the sound are given.
+ */
 export function craftOpened(): boolean {
   return (
     craft?.state === "open" &&
@@ -4233,6 +4248,8 @@ export function landHits(): void {
     if (struckBoggs.has("body")) continue;
     struckBoggs.add("body");
     b.hp = Math.max(0, b.hp - mine.damage);
+    // a fist is not a bolt, so it is the plain take
+    boggsStruck(b, false);
   }
 }
 
@@ -4438,11 +4455,8 @@ export function strikeFoe(
     // kragg's arm, in its own order: the hit sound, the spark, 0x13
     // (`0x441d41`, `0x441d60`, `0x441d72`)
     how.sounds?.forEach((set, i) => {
-      sound?.effect(
-        typeof set === "number" ? set : set[Math.floor(random() * set.length)],
-        e.x,
-        e.y,
-      );
+      const which = typeof set === "number" ? set : set[Math.floor(random() * set.length)];
+      sound?.effect(which, e.x, e.y);
       if (i === 0 && how.spark) sparkAt(contact ?? { x: e.x, y: e.y - 70 });
     });
     // `0x4550d3`: the dog's arm is its death path, sound and award and all
@@ -4477,13 +4491,9 @@ export function strikeFoe(
   const fatal = e.hp - (foe.oneHitEach ? 1 : damage) <= 0;
   if (foe.hitSound !== undefined && !quiet && !(foe.quietKill && fatal && !still)) {
     const set = foe.hitSound;
-    sound?.effect(
-      typeof set === "number"
-        ? set
-        : set[Math.floor(random() * set.length)],
-      e.x,
-      e.y,
-    );
+    // the roll is made whether or not anything is listening — see {@link sound}
+    const which = typeof set === "number" ? set : set[Math.floor(random() * set.length)];
+    sound?.effect(which, e.x, e.y);
   }
   // the fourth kind's handler keeps the damage only for the blood and takes a
   // single point off the health — `0x454821`, and see {@link Foe.oneHitEach}
@@ -4994,8 +5004,10 @@ export function takeCode(
   // No reaction in CHARACTER 0's table shoves — the ±50 this page used to apply
   // is `0x448cf4`, in character 1's. Kept because the field is still read.
   if (r.shove) p.vx -= r.shove * p.facing;
-  if (r.sound !== undefined)
-    sound?.own(r.sound + (r.soundRoll ? roll(r.soundRoll) : 0), p.x, p.y, r.soundWay);
+  if (r.sound !== undefined) {
+    const which = r.sound + (r.soundRoll ? roll(r.soundRoll) : 0);
+    sound?.own(which, p.x, p.y, r.soundWay);
+  }
   // ...and `-1` spends twenty: `0x42eb2b` is `0x402ac0(0x14)`, the only reaction
   // in character 0's eight that costs health. Behind the damage switch, like
   // every other way the game takes a point off you.
@@ -5302,7 +5314,8 @@ export function takeHits(): void {
         ? "hurtFront"
         : "hurtBack";
     p.actClock = 0;
-    sound?.own(OWN.hurt[Math.floor(random() * OWN.hurt.length)], p.x, p.y);
+    const hurt = OWN.hurt[Math.floor(random() * OWN.hurt.length)];
+    sound?.own(hurt, p.x, p.y);
     // ...and a knockdown takes the gun out of your hands. The same `cmp di, 0x3c`
     // that chose the animation is the disarm's test too: `0x44911b` asks
     // `0x448bf0` whether `player+0x18` is one of the five armed kinds (0x12..0x16)
@@ -7634,6 +7647,33 @@ export function clawCel(c: Claw): number {
   return a.cels[i];
 }
 
+/**
+ * What Boggs' body says as a blow lands — `0x41bc50`, and see
+ * {@link BOGGS.struck} and {@link BOGGS.hint}. `bolted` is a blaster bolt,
+ * the class `0x41bca7` asks about.
+ */
+export function boggsStruck(b: Boggs, bolted: boolean): void {
+  const s = BOGGS.struck;
+  const up = b.flags[0] || b.flags[1];
+  // `0x41bcd6` through `0x40f110`, or `0x41bcf9` through `0x40ef30`
+  if (up && bolted) {
+    const which = s.bolted + roll(s.boltRoll);
+    sound?.effect(which, b.x, b.y, "renew");
+  } else {
+    const which = s.sound + roll(s.roll);
+    sound?.effect(which, b.x, b.y);
+  }
+  if (!up) return;
+  const h = BOGGS.hint;
+  const was = b.blows ?? 0;
+  b.blows = was + 1;
+  const m = b.machines[h.machine];
+  if (was > h.after && m && m.x - h.westOf > p.x) {
+    sound?.effect(h.sound, b.headX, b.headY, "lead");
+    b.blows = 0;
+  }
+}
+
 /** LAB's and VAT's one-cel furniture, which does nothing but stand where it is */
 export function fittingCel(f: Fitting): number {
   if (f.kind === "ball") return FITTING.ball.cel;
@@ -7733,7 +7773,8 @@ export function stepBoggs(): void {
     }
     b.lunge = p.x < b.x ? "left" : "right";
     b.clock = 0;
-    sound?.effect(BOGGS.lunge.sound + Math.floor(random() * 2), b.x, b.y);
+    const which = BOGGS.lunge.sound + Math.floor(random() * 2);
+    sound?.effect(which, b.x, b.y);
   }
 }
 
@@ -7958,9 +7999,24 @@ export function machineCel(b: Boggs, i: number): number {
  * emptying one clears one of the two healing flags — which is the whole of why
  * this boss can be killed.
  */
-export function strikeMachine(b: Boggs, i: number, damage: number): boolean {
+export function strikeMachine(b: Boggs, i: number, damage: number, bolted = false): boolean {
   const spec = BOGGS.machines[i];
+  // `0x41b53f`..`0x41b56b` — every one of the eight answers with a sound
+  const said = BOGGS.machineStruck;
+  const at = b.machines[i];
+  const which = (bolted ? said.bolted : said.sound) + roll(said.roll);
+  sound?.effect(which, at.x, at.y);
   if (!("health" in spec)) return false;
+  // `0x41b573`..`0x41b5cb` — and the two halves count toward a hint
+  const a = b.machines[BOGGS.hint.machine];
+  if (a && a.x - said.short < p.x) {
+    const was = b.machineBlows ?? 0;
+    b.machineBlows = was + 1;
+    if (was > said.after) {
+      b.machineBlows = 0;
+      sound?.effect(said.hint, b.headX, b.headY, "lead");
+    }
+  }
   const m = b.machines[i];
   if (m.wrecked) return false;
   m.hp = Math.max(0, m.hp - damage);
@@ -8927,6 +8983,7 @@ export function stepBolts(): void {
               // `0x41bc71` -> 100, then `0x42f910` the usual way
               g.hp = Math.max(0, g.hp - BOGGS.translatesTo);
               sound?.effect(BOLT.sound, g.x, g.y);
+              boggsStruck(g, true);
             },
           });
         }
@@ -8947,7 +9004,7 @@ export function stepBolts(): void {
           // leading edge behind it is not the thing it met first
           edge: b.vx >= 0 ? Math.max(mb.left, was) : Math.min(mb.right, was),
           take: () => {
-            strikeMachine(g, k, BOGGS.translatesTo);
+            strikeMachine(g, k, BOGGS.translatesTo, true);
             sound?.effect(BOLT.sound, g.machines[k].x, g.machines[k].y);
           },
         });
@@ -12716,6 +12773,11 @@ export function stepEnemies(): void {
       foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep
         ? leverFor(e, foe.lever.dir)
         : null;
+    // the frame one is FOUND — the batboy's `0x4392a4` turns to it, says
+    // `0x4392d7` through `0x40f090` and puts the lever script on, once
+    if (aim && e.aimed !== aim && foe.lever?.found !== undefined)
+      sound?.effect(foe.lever.found, e.x, e.y, "lead");
+    e.aimed = aim ?? undefined;
     if (e.state === "lever") {
       const L = foe.lever!;
       // ...and once it has thrown, the lever it threw is no longer the kind it
@@ -12729,8 +12791,10 @@ export function stepEnemies(): void {
         if (aim && !e.thrown && e.clock >= L.at * L.anim.hold) {
           e.thrown = true;
           // `0x43a191`: one roll in three, and then one of two takes
-          if (L.sound.length && roll(3) === 1)
-            sound?.effect(L.sound[roll(L.sound.length) - 1], e.x, e.y);
+          if (L.sound.length && roll(3) === 1) {
+            const which = L.sound[roll(L.sound.length) - 1];
+            sound?.effect(which, e.x, e.y);
+          }
           throwSwitch(aim, foe.lever!.dir);
         }
         if (e.clock >= run) {
@@ -13176,7 +13240,8 @@ export function enemyPasses(): { before: Enemy[]; after: Enemy[] } {
  * and two are the man behind it.
  */
 export function swing(): void {
-  sound?.own(OWN.swing[Math.floor(random() * OWN.swing.length)], p.x, p.y);
+  const which = OWN.swing[Math.floor(random() * OWN.swing.length)];
+  sound?.own(which, p.x, p.y);
 }
 
 /** the crows this swing has already taken, so one blow is one crow */

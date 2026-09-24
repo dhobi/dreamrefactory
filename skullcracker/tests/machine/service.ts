@@ -168,6 +168,26 @@ h.frame(30);
 if (thuds() !== landed || felled.vy !== 0) fail(`...and then lie still and quiet: ${thuds() - landed} more thuds, vy ${felled.vy}`);
 ok(`it bleeds both ways, and its body bounces with ${landed} thuds before it lies still`);
 
+/**
+ * 4e. A batboy that FINDS a lever says so: `0x4392a4` turns it to the lever,
+ * `0x4392d7` plays `mall.snd` 0xb through `0x40f090` and the lever script
+ * goes on — once, not every frame it goes on being there.
+ */
+{
+  const told = recordSound(game);
+  await go(4300);
+  const bat = game.spawnedHere().find((e) => e.kind === "initbatboy" && e.left === 3900);
+  if (!bat) fail(`SERVICE's batboy at x4500 watches the lever at x4599`);
+  bat.asleep = false;
+  if (h.until(() => !!bat.aimed, 200) < 0) fail(`a batboy with a lever in its rect should find it`);
+  h.frame(20);
+  // (its waking squeal is the same 0xb, through `0x40ef30` — `0x43937b`)
+  const found = told.filter((c) => c.call === "effect" && c.args[0] === 0xb && c.args[3] === "lead");
+  if (found.length !== 1)
+    fail(`0x4392d7: one 0xb through 0x40f090 as it finds the lever; heard ${JSON.stringify(found.map((c) => c.args))}`);
+  ok(`a batboy finding a lever says 0xb once, on channel 0`);
+}
+
 // 5. six levers, and every one of them starts off
 await go();
 const levers = game.switchesHere();

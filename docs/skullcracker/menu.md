@@ -461,7 +461,18 @@ are bank 2, so the player outranks every creature. A finished channel drops
 to nothing. A new sound replaces the lower of the two channels only if it
 outranks what is on it, and it is refused if the other channel is already
 playing that same sound. So a handler that asks for its sound on three frames
-running is heard once. A replaced sound is cut, not faded (`0x456f00`). The
+running is heard once. A replaced sound is cut, not faded (`0x456f00`).
+
+The stereo is `SC.EXE`'s own too: DirectSound is never asked to pan or fade.
+`0x427da0` and `0x427ed0` turn a volume and a pan into two linear gains,
+`volume/255 × (255 − pan)/255` for the left and `volume/255 × pan/255` for
+the right, and the mixing loops multiply each sample by them, left byte then
+right (`0x458ab1`). `0x40efb0` hands out pans from 0 to 128, with 64 in the
+middle of the view. So a sound in the middle of the screen is three times
+louder on the left than on the right, and only one at the far right of its
+reach is balanced. The theme plays at the level a bank opens with, volume
+0xff and pan 0x80, which is 0.498 left and 0.502 right. The page does the
+same (`placeAt` and `sides` in `src/sound.ts`). The
 page does the same (`Mixer` in `src/sound.ts`): `effect` and `own` take the
 call as their last argument.
 

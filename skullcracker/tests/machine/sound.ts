@@ -29,7 +29,7 @@ import type { AudioSink, PlayHandle } from "@dreamfactory/engine/runtime/audio";
 import { Film } from "../../src/film";
 import { FOES } from "../../src/foes";
 import { DEATH_FILMS } from "../../src/mission";
-import { BANK_RANK, FOE_SFX, LEVEL_BANKS, Mixer, OWN, PLAYER_BANK, Sounds, priorityOf } from "../../src/sound";
+import { BANK_RANK, FOE_SFX, LEVEL_BANKS, Mixer, OWN, PLAYER_BANK, Sounds, THEME_SIDES, placeAt, priorityOf, sides } from "../../src/sound";
 import { fail, headless, ok, pass, recordSound } from "./harness";
 
 /**
@@ -80,6 +80,27 @@ import { fail, headless, ok, pass, recordSound } from "./harness";
     fail(`0x427d20: the lead goes onto channel 0 unconditionally, cutting the one before`);
   if (l.held(0.2)[2] !== fx(5)) fail(`...and leaves channels 1 and 2 alone`);
   ok(`0x427d20: the lead takes channel 0 whatever it held and touches nothing else`);
+
+  // `0x40efb0`: the two numbers, and `0x427da0`/`0x427ed0` + the mixing loop's
+  // `0x458ab1`/`0x458ab4`: what the speakers get
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  const mid = placeAt(0, 0)!;
+  if (mid.volume !== 128 || mid.pan !== 64) fail(`0x40efb0: dead centre is volume 128, pan 64; got ${JSON.stringify(mid)}`);
+  const far = placeAt(768, 0);
+  if (far !== null) fail(`...768 across is volume 0, which is under the gate`);
+  const edge = placeAt(762, 0);
+  if (edge !== null || placeAt(761, 0)?.volume !== 2) fail(`the gate is volume <= 1: 762 across is silent and 761 plays at 2`);
+  if (placeAt(-384, 0)!.pan !== 32 || placeAt(384, 0)!.pan !== 96 || placeAt(0, 769) !== null)
+    fail(`the pan is (dx + 768) * 128 / 1536, and 768 past on either axis is out`);
+  const c = sides(128, 64);
+  if (!near(c.left, (128 / 255) * (191 / 255)) || !near(c.right, (128 / 255) * (64 / 255)))
+    fail(`sides: linear, volume/255 times (255 - pan)/255 left and pan/255 right; got ${JSON.stringify(c)}`);
+  if (!near(c.left / c.right, 191 / 64)) fail(`...so the middle of the view is 191:64 to the left`);
+  const east = sides(2, 128);
+  if (!near(east.left, (2 / 255) * (127 / 255))) fail(`...and the far right is balanced`);
+  if (!near(THEME_SIDES.left, 127 / 255) || !near(THEME_SIDES.right, 128 / 255))
+    fail(`0x427824: a record opens at volume 0xff, pan 0x80 — 0.498 and 0.502`);
+  ok(`0x40efb0 places at volume 128 - d/6 and pan (dx + 768)/12, and the mixer splits it linearly, 191:64 in the middle`);
 }
 
 const h = await headless("level=1&x=9500");
@@ -304,13 +325,19 @@ ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixe
  */
 {
   const started: number[] = [];
-  const node = () => ({ connect() {}, gain: { value: 1 }, pan: { value: 0 } });
+  const gains: { value: number }[] = [];
+  const node = () => {
+    const n = { connect() {}, gain: { value: 1 }, pan: { value: 0 } };
+    gains.push(n.gain);
+    return n;
+  };
   class FakeContext {
     state = "running";
     currentTime = 0;
     destination = {};
     createGain = node;
     createStereoPanner = node;
+    createChannelMerger = node;
     createBuffer(_c: number, len: number, rate: number) {
       return { duration: len / rate, copyToChannel() {} };
     }
@@ -330,9 +357,16 @@ ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixe
     sounds.listen(0, 0);
     sounds.setMusic(false);
     if (sounds.musicOn) fail(`setMusic(false) should turn the theme off`);
+    const gainsWere = gains.length;
     sounds.own(0, 0, 0);
     await new Promise((r) => setTimeout(r, 20));
     if (!started.length) fail(`with the music off a footfall should still play (0x403cfb touches only the theme); nothing started`);
+    // ...and it goes out on the two linear sides `0x427da0`/`0x427ed0` give
+    // the middle of the view: volume 128, pan 64
+    const mid = sides(128, 64);
+    const set = gains.slice(gainsWere).map((g) => g.value);
+    if (!set.some((v) => Math.abs(v - mid.left) < 1e-9) || !set.some((v) => Math.abs(v - mid.right) < 1e-9))
+      fail(`a sound at the eye plays ${mid.left.toFixed(3)} left and ${mid.right.toFixed(3)} right; the gains were ${set.join(" ")}`);
     const before = started.length;
     sounds.pump();
     if (started.length !== before) fail(`with the music off the theme's bed should not be queued; pump started ${started.length - before}`);
@@ -343,6 +377,37 @@ ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixe
     g.window = had;
   }
   ok(`the music switch stops the theme and leaves every effect playing`);
+}
+
+/**
+ * 10. ...and whether anything is listening changes nothing about the GAME.
+ *     `0x434540` is rolled before a sound is asked for, so the same fight with
+ *     no sound and with a sound attached has to end in the same place with the
+ *     random stream at the same point — a roll made only when there is a
+ *     `sound` to hand it to would split the two.
+ */
+{
+  const { nextRandom } = await import("../../src/random");
+  const fight = async (): Promise<string> => {
+    await h.load("level=1&x=2300&damage=1&foehit=1&score=0&lives=3");
+    h.hold("right", true);
+    for (let i = 0; i < 240; i++) {
+      if (i % 6 === 0) h.press(i % 12 === 0 ? "punch" : "kick");
+      h.frame();
+    }
+    h.hold("right", false);
+    const foes = game.spawnedHere().map((e) => `${e.kind}:${Math.round(e.x)}:${e.hp}:${e.state}`);
+    return [game.stats.health, game.stats.score, Math.round(game.p.x), nextRandom(), ...foes].join(" ");
+  };
+  game.setSound(null);
+  // once to settle what the earlier blocks left in the player's own state
+  await fight();
+  const quiet = await fight();
+  recordSound(game);
+  const heard = await fight();
+  game.setSound(null);
+  if (quiet !== heard) fail(`the same fight should come out the same with or without sound:\n  silent ${quiet}\n  sound  ${heard}`);
+  ok(`the same fight comes out the same with sound and without — every roll is made before the sound is asked for`);
 }
 
 pass(`the level's theme is its own arrangement, and the handlers' and films' one-shots are the disc's`);

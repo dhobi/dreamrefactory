@@ -55,7 +55,8 @@
  *
  * So a sound fades with the distance from the middle of the screen and is silent
  * three quarters of a screen-width past its edge. {@link REACH} and
- * {@link Sounds.place} are those four lines.
+ * {@link placeAt} are those four lines, and {@link sides} is what the mixer
+ * makes of the two numbers.
  *
  * `0x40f090` is the same function with one call different at the end (`0x427d20`
  * where `0x40ef30` calls `0x427b20`), and that call is the whole difference:
@@ -481,6 +482,77 @@ export const BANK_RANK = { theme: 0, chapter: 1, own: 2 } as const;
 export const priorityOf = (rank: number, index: number): number => (rank << 16) | (index + 1);
 
 /**
+ * `0x40efb0` — a world offset from the middle of the view turned into the
+ * engine's own two numbers, or null where it plays nothing.
+ *
+ * Out past 768 on either axis is 0 and silent (`0x40efdc`..`0x40f02d`). The
+ * volume is `128 + (|dx| + |dy|) * 128 / -768`, the divide truncating toward
+ * zero (`0x40f06f`..`0x40f07d`), and every caller skips a volume of one or less
+ * (`0x40ef65`: `cmp ax, 1; jle`). The pan is `(dx + 768) * 128 / 1536`
+ * (`0x40f03a`..`0x40f04e`): 0 at the far left, **64** in the middle, 128 at the
+ * far right.
+ */
+export function placeAt(dx: number, dy: number): { volume: number; pan: number } | null {
+  if (Math.abs(dx) > REACH.span || Math.abs(dy) > REACH.span) return null;
+  const volume = 128 - Math.floor(((Math.abs(dx) + Math.abs(dy)) * 128) / REACH.span);
+  if (volume <= 1) return null;
+  const pan = Math.trunc(((Math.trunc(dx) + REACH.span) * 128) / (2 * REACH.span));
+  return { volume, pan };
+}
+
+/**
+ * What a volume and a pan come out of the two speakers as — linear gains,
+ * left and right.
+ *
+ * `0x427da0` (volume) and `0x427ed0` (pan) both work out the same two figures,
+ * with `[0x46a0d0]` = 1/255:
+ *
+ * ```
+ *   first  = volume/255 * (255 - pan)/255
+ *   second = volume/255 * pan/255
+ * ```
+ *
+ * and `0x457370` stores them as fixed point (a mantissa over `1 << 16`, or
+ * `1 << 8` above one) beside their mean. They reach the sample unchanged:
+ * `0x4574a0` multiplies them by the queued sound's own, which is 1.0
+ * (`0x478bc0`), and the mixing loops multiply each sample by the first for the
+ * FIRST byte of the stereo pair and by the second for the second (`0x458ab1`,
+ * `0x458ab4`: `imul`, `sar` by the fixed point's shift) — left, then right.
+ * So the law is linear, not equal-power, and nothing in DirectSound is asked
+ * to pan or to fade: `SC.EXE` mixes the stereo itself.
+ *
+ * Taken with {@link placeAt}'s 0..128 pan, a sound in the middle of the view
+ * is three times louder on the left than on the right (191 against 64), and
+ * only a sound at the far right of its reach is balanced. That is what the
+ * executable does, and this is it.
+ */
+export function sides(volume: number, pan: number): { left: number; right: number } {
+  const v = volume / 255;
+  return { left: (v * (255 - pan)) / 255, right: (v * pan) / 255 };
+}
+
+/**
+ * A record as the bank opened it: `0x42783c` volume 0xff and `0x427842` pan
+ * 0x80 — the two doubles `0x427824` hands `0x457370`, 0.498 and 0.502. The
+ * theme's bars are never placed, so this is how loud the music is.
+ */
+export const THEME_SIDES = sides(0xff, 0x80);
+
+/** a mono voice onto the two sides, each at its own linear gain */
+function route(ctx: AudioContext, src: AudioNode, to: AudioNode, at: { left: number; right: number }): void {
+  const merge = ctx.createChannelMerger(2);
+  const left = ctx.createGain();
+  const right = ctx.createGain();
+  left.gain.value = at.left;
+  right.gain.value = at.right;
+  src.connect(left);
+  src.connect(right);
+  left.connect(merge, 0, 0);
+  right.connect(merge, 0, 1);
+  merge.connect(to);
+}
+
+/**
  * The page's sound, and it is all optional: a page with no `AudioContext`, a
  * rip with no banks, or a browser that will not start audio without a gesture all
  * end up here doing nothing, which is what the film player already does.
@@ -697,15 +769,9 @@ export class Sounds {
    * `0x40efb0` — the volume and the pan a world point gets, or null where the
    * engine would not have played the sound at all.
    */
-  private place(x: number, y: number): { gain: number; pan: number } | null {
-    const dx = x - this.eye.x;
-    const dy = y - this.eye.y;
-    if (Math.abs(dx) > REACH.span || Math.abs(dy) > REACH.span) return null;
-    // `0x40f06f`..`0x40f07d`: `128 + (|dx| + |dy|) * 128 / -768`, the divide
-    // truncating toward zero — whole steps of 1/128
-    const volume = 128 - Math.floor(((Math.abs(dx) + Math.abs(dy)) * 128) / REACH.span);
-    if (volume <= 1) return null; // `cmp ax, 1; jle` — under one step, silence
-    return { gain: volume / 128, pan: Math.max(-1, Math.min(1, dx / REACH.span)) };
+  private place(x: number, y: number): { left: number; right: number } | null {
+    const at = placeAt(x - this.eye.x, y - this.eye.y);
+    return at && sides(at.volume, at.pan);
   }
 
   /**
@@ -753,21 +819,11 @@ export class Sounds {
     ctx: AudioContext,
     master: GainNode,
     buf: AudioBuffer,
-    at: { gain: number; pan: number },
+    at: { left: number; right: number },
   ): Voice {
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    const gain = ctx.createGain();
-    gain.gain.value = at.gain;
-    // a StereoPannerNode is not everywhere; without one the sound is centred,
-    // which is the part of `0x40efb0` a page can lose without losing the point
-    const panner = typeof ctx.createStereoPanner === "function" ? ctx.createStereoPanner() : null;
-    if (panner) panner.pan.value = at.pan;
-    src.connect(gain);
-    if (panner) {
-      gain.connect(panner);
-      panner.connect(master);
-    } else gain.connect(master);
+    route(ctx, src, master, at);
     src.start();
     return {
       stop() {
@@ -808,7 +864,9 @@ export class Sounds {
       if (!buf) continue;
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.connect(this.master);
+      // `0x427a50` plays the record as the bank opened it: `0x427824` wrote
+      // volume 0xff and pan 0x80, which is {@link THEME_SIDES}
+      route(ctx, src, this.master, THEME_SIDES);
       src.start(this.queuedTo);
       this.queued.push(src);
       this.queuedTo += buf.duration;

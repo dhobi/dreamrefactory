@@ -184,6 +184,17 @@ const machines = (): void => {
   if (K.death!.cels.at(-1) !== 7117 || K.linger !== Infinity || K.vanishes)
     fail(`0x473d38 ends on 7117 and state 16 never removes it`);
   ok(`and it dies on 0x473d38 and stays down`);
+
+  // `0x44185f`: the ground turn's tag 1 roars while the script's frame index
+  // is 0xa — its third record — on a roll under thirty, through `0x40f090`
+  const roared: string[] = [];
+  const kr = { ...k, say: (_e: Enemy, id: number, way?: string) => roared.push(`${id}:${way}`) } as BrainCtx;
+  const turn = KRAGG.groundTurn[1];
+  const t: Enemy = { ...e, anim: turn, script: 13, tag: 1, state: "gait", clock: 0 };
+  for (t.clock = 0; t.clock < turn.cels.length * turn.hold - 1; t.clock += 1) kragg(t, K, turn.cels.length * turn.hold, kr);
+  if (roared.length !== turn.hold || roared.some((r) => r !== `${0x1b + 1}:lead`))
+    fail(`0x44189e roars 0x1b + roll(2) on each frame of tag 1's third record; heard ${roared.join(" ")}`);
+  ok(`its ground turn roars on the third record of tag 1, through 0x40f090, every frame it shows`);
 };
 
 machines();

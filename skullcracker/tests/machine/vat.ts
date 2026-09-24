@@ -29,7 +29,7 @@
  */
 import { GUN_CODES } from "../../src/guns";
 import { BOGGS } from "../../src/props";
-import { fail, headless, ok, pass } from "./harness";
+import { fail, headless, ok, pass, recordSound } from "./harness";
 
 // the films are the page's business; headless, the game only says which one
 const films: string[] = [];
@@ -69,6 +69,45 @@ if (!celOfKind("shower").includes(4060)) fail(`0x46cc68 tag 0 is one record, 406
 if (!celOfKind("ball").includes(4310)) fail(`0x41a73d files 0x10d6; balls show ${celOfKind("ball")}`);
 if (!celOfKind("teeth").includes(3516)) fail(`0x418c9d files 0xdbc; teeth show ${celOfKind("teeth")}`);
 ok(`and its showers, balls and teeth stand on their own single cels`);
+
+// 2b. what Boggs says as it is struck — `0x41bc50` for the body, `0x41b510`
+//     for the machinery — and the two hints that tell you to break the machine
+{
+  const heard = recordSound(game);
+  await go("&x=6100");
+  const b = boggs();
+  const said = (from: number) => heard.slice(from).filter((c) => c.call === "effect").map((c) => [c.args[0], c.args[3]] as const);
+  let mark = heard.length;
+  game.boggsStruck(b, true);
+  const bolt = said(mark);
+  if (bolt.length !== 1 || (bolt[0][0] as number) < 0x27 || (bolt[0][0] as number) > 0x2a || bolt[0][1] !== "renew")
+    fail(`0x41bcd6: a bolt with the machinery up is 0x434540(4) + 0x26 through 0x40f110; heard ${JSON.stringify(bolt)}`);
+  mark = heard.length;
+  game.boggsStruck(b, false);
+  const fist = said(mark);
+  if (fist.length !== 1 || (fist[0][0] as number) < 0x19 || (fist[0][0] as number) > 0x1e || fist[0][1] !== undefined)
+    fail(`0x41bcf9: anything else is 0x434540(6) + 0x18 through 0x40ef30; heard ${JSON.stringify(fist)}`);
+  // the hint: the blow past ten, with the player a hundred west of machine A
+  b.blows = 0;
+  const a = b.machines[BOGGS.hint.machine];
+  const px = game.p.x;
+  game.p.x = a.x - BOGGS.hint.westOf - 1;
+  mark = heard.length;
+  for (let i = 0; i < 12; i++) game.boggsStruck(b, false);
+  const hints = said(mark).filter(([id, way]) => id === BOGGS.hint.sound && way === "lead");
+  game.p.x = px;
+  if (hints.length !== 1) fail(`0x41bd58: the twelfth blow west of the machine says 0x26 through 0x40f090; ${hints.length} said`);
+  // the machinery answers every blow, a bolt's higher than a fist's
+  mark = heard.length;
+  game.strikeMachine(b, 0, 0);
+  game.strikeMachine(b, 0, 0, true);
+  const m = said(mark).map(([id]) => id as number);
+  if (m.length !== 2 || m[0] < 6 || m[0] > 8 || m[1] < 9 || m[1] > 11)
+    fail(`0x41b53f..0x41b56b: 0x434540(3) + 5, or + 8 for a bolt; heard ${m.join(" ")}`);
+  ok(`Boggs cries out as it is struck (a bolt ${bolt[0][0]}, a fist ${fist[0][0]}), hints on the twelfth blow, and its machinery answers too`);
+  // and the page's own silence back, which the rest of this suite ran under
+  game.setSound(null);
+}
 
 // 3. BOGGS, in the other region, with four thousand health
 await go("&x=6100");
@@ -273,8 +312,12 @@ for (let i = 0; i < 200; i++) {
     hurl.add(game.castCel(c));
     blows.add(game.castBlow(c));
   }
+  // a lunge (`0x41bffc`) closes the gap, and under three hundred it seeds
+  // worms instead — so back off whenever it has come within reach
+  h.hold("left", boggs().x - game.p.x < 340);
   h.frame();
 }
+h.hold("left", false);
 if (!hurl.size) fail(`0x41c0dc throws on a countdown of 0x434540(0x1e) + 0x1e; in 200 frames nothing flew`);
 if ([...hurl].some((c) => (c < 5610 || c > 5615) && (c < 5530 || c > 5537)))
   fail(`its throw is 5610..5615 in the air and 5530..5537 where it lands; saw ${[...hurl].sort((a, b) => a - b).join(",")}`);
