@@ -864,9 +864,9 @@ const think: Brain = (e, foe, run, k) => {
      *
      * `0x44185f` also carries a roar — on tag 1, on script frame `obj+0x42 ==
      * 0xa` exactly, `0x434540(0x64) < 0x1e` picks `0x40f090` sound `0x1c` or
-     * `0x1d`. **Not emitted here**: the kit's `say` is `0x40ef30` and this is the
-     * distance-gated `0x40f090`, and the port carries no script-frame index to
-     * hang the test on. Both halves of that are missing, so neither is faked.
+     * `0x1d`, through `0x40f090` ({@link BrainCtx.lead}). **Not emitted
+     * here**: the port carries no script-frame index to hang the test on, so it
+     * is not faked.
      */
     case 13:
       if (!done) return false;
@@ -1010,7 +1010,8 @@ export const kraggReacts: Reaction = (e, foe, _run, k) => {
       x: k.anchorX(e) + (e.facing > 0 ? -DEATH_BEHIND : DEATH_BEHIND),
       y: k.anchorY(e) - DEATH_UP,
     };
-    k.say({ ...e, ...at }, DEATH_SPILL_SOUND);
+    // `0x441a7e` — through `0x40f090`, the mixer's channel 0
+    k.say({ ...e, ...at }, DEATH_SPILL_SOUND, "lead");
     k.spill(at, DEATH_SPILL);
     return;
   }

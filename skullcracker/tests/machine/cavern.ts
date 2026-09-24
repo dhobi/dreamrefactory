@@ -26,6 +26,7 @@ import { SKEL, SKEL_BONE, skel, skelReacts } from "../../src/brains/skel";
 import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 import { gobCount } from "../../src/effects";
 import { FPS, fail, headless, ok, pass } from "./harness";
+import type { FoeAnim } from "../../src/foes";
 
 /**
  * The machines themselves, on their own: a brain handed a stand-in context,
@@ -418,6 +419,48 @@ h.frame(9);
   if (f !== take.cels.length * take.hold || (g.anim !== GHENGIS.stride && g.anim !== GHENGIS.windUp))
     fail(`the flinch is ${take.cels.length * take.hold} frames and then the walk or the rush; ${f} frames, then ${g.anim.from}`);
   ok(`Ghengis' flinch hands to ${g.anim === GHENGIS.stride ? "the walk" : "the bull rush"} after ${f} frames, the frame it ends (0x422a25)`);
+}
+
+/**
+ * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands
+ * its own case the frame the script ends, and the next script goes on then:
+ * exactly the script's own frames, and nothing between. A fresh one of `kind`
+ * near where the level puts it, given the reaction by hand.
+ */
+const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly FoeAnim[], hp?: number): Promise<number> => {
+  await h.load(`level=${lv}`);
+  const at = game.level!.spawned.flat().find((q) => q.kind === kind);
+  if (!at) fail(`level ${lv} places no ${kind}`);
+  await h.load(`level=${lv}&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const e = game
+    .spawnedHere()
+    .filter((q) => q.kind === kind && q.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  if (!e) fail(`no ${kind} near x${at.x}`);
+  e.asleep = false;
+  if (hp !== undefined) e.hp = hp;
+  e.state = "flinch";
+  e.anim = take;
+  e.clock = 0;
+  e.script = take.kind;
+  e.tag = take.tag;
+  let f = 0;
+  while (e.state === "flinch" && e.anim === take && f < 60) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || !next.includes(e.anim))
+    fail(`${kind}: ${take.from} is ${take.cels.length * take.hold} frames and then ${next.map((a) => a.from).join(" or ")}; ${f} frames, then ${e.anim.from}`);
+  return f;
+};
+
+{
+  // the skeleton's three takes are kind 7, and `0x423965` rolls on `obj+0x46`
+  const S = FOES.initskel.flinch!;
+  const f: number[] = [];
+  for (let t = 0; t < 3; t++) f.push(await handOff(10, "initskel", S[t], [SKEL.leap, SKEL.walk]));
+  ok(`the skeleton's takes hand to the leap or the walk after ${f.join(", ")} frames (0x423965)`);
 }
 
 pass(`CAVERN's four creatures stand, its blades swing, its bridges give way and its lifts carry`);

@@ -829,7 +829,7 @@ comes into its rect, param 0 is already on the floor and fighting; LAB places
 six of the first and four of the second. **The test tube** (`inittube`, one in
 the game) carries twelve hundred, the player's own number, and pays nothing; the
 blaster's bolt is a blow to it (`0x419999`), and only a sound to a Puke Boy
-(`0x41825e`). It throws: its rear-back ends in one to four shards of glass (`0x41973e`,
+(`0x41825e`), which it then flies straight through (`0x418278` answers 0). It throws: its rear-back ends in one to four shards of glass (`0x41973e`,
 `0x419860`) at dx 400 or 200 through its divisor of 13, 140 pixels up, that break
 with a flash where they land; and its flip breathes a puff out on its third
 frame (`0x419910`).

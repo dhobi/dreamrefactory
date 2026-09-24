@@ -27,9 +27,60 @@ import { readMovFile } from "@dreamfactory/engine/df/mov";
 import type { DecodedAudio } from "@dreamfactory/engine/df/audio";
 import type { AudioSink, PlayHandle } from "@dreamfactory/engine/runtime/audio";
 import { Film } from "../../src/film";
+import { FOES } from "../../src/foes";
 import { DEATH_FILMS } from "../../src/mission";
-import { FOE_SFX, LEVEL_BANKS, OWN, PLAYER_BANK } from "../../src/sound";
+import { BANK_RANK, FOE_SFX, LEVEL_BANKS, Mixer, OWN, PLAYER_BANK, priorityOf } from "../../src/sound";
 import { fail, headless, ok, pass, recordSound } from "./harness";
+
+/**
+ * 0. The mixer, on its own and on a clock of its own: `0x427b20`, `0x427c20`
+ *    and `0x427d20`, the three tails of the three one-shot calls.
+ */
+{
+  const cut: string[] = [];
+  const m = new Mixer();
+  const voice = (name: string) => () => ({ stop: () => cut.push(name) });
+  const fx = (i: number) => priorityOf(BANK_RANK.chapter, i);
+  // the priority is `(bank << 16) | (index + 1)` (`0x40ed63`..`0x40ed6d`)
+  if (fx(0x15) !== 0x10016 || priorityOf(BANK_RANK.own, 0) !== 0x20001)
+    fail(`a record's priority is (bank << 16) | (index + 1)`);
+  // two free channels: the first sound takes 2 (both 0, so 1 is not the lower)
+  if (m.play("mix", fx(5), 0, 1, voice("a")) !== 2) fail(`0x427b54: with both free the sound goes onto channel 2`);
+  if (m.play("mix", fx(3), 0, 1, voice("b")) !== 1) fail(`...and the next onto channel 1`);
+  // the same sound again while it plays: refused, not doubled, not restarted
+  if (m.play("mix", fx(5), 0.5, 1, voice("a2")) !== -1 || cut.length)
+    fail(`0x427b6b: the sound still playing on the other channel refuses itself`);
+  // a lower one than both: refused
+  if (m.play("mix", fx(2), 0.5, 1, voice("c")) !== -1) fail(`0x427b5f: a priority at or under the lower channel's is refused`);
+  // a higher one replaces the LOWER channel, and cuts what was there
+  if (m.play("mix", fx(9), 0.5, 1, voice("d")) !== 1 || cut.join() !== "b")
+    fail(`a higher priority takes the lower channel and cuts it there and then (0x456f00); cut ${cut.join()}`);
+  // the character's own outrank the whole chapter bank
+  if (m.play("mix", priorityOf(BANK_RANK.own, 0), 0.5, 1, voice("e")) !== 2 || cut.join() !== "b,a")
+    fail(`bank 2's lowest outranks bank 1's highest`);
+  // a finished channel drops to nothing (`0x427890`)
+  if (m.play("mix", fx(1), 2, 1, voice("f")) < 0) fail(`0x427890: channels whose sounds have ended are free again`);
+  ok(`0x427b20: two channels by priority, a sound never doubled, the lower one cut for a higher`);
+
+  // `0x427c20`: a tie is let through, and the same sound starts over where it is
+  const r = new Mixer();
+  cut.length = 0;
+  r.play("mix", fx(5), 0, 1, voice("a"));
+  r.play("mix", fx(3), 0, 1, voice("b"));
+  if (r.play("renew", fx(5), 0.5, 1, voice("a2")) !== 2 || cut.join() !== "a")
+    fail(`0x427c71/0x427c87: renewing a sound still playing restarts it on its own channel; cut ${cut.join()}`);
+  if (r.play("renew", fx(2), 0.5, 1, voice("c")) !== -1) fail(`0x427c65: renew still refuses under the lower channel`);
+  ok(`0x427c20: a renewed sound starts over on its own channel, and is refused only by something above it`);
+
+  // `0x427d20`: channel 0 takes it whatever it held, and the other two are untouched
+  const l = new Mixer();
+  cut.length = 0;
+  l.play("mix", fx(5), 0, 1, voice("a"));
+  if (l.play("lead", fx(1), 0, 1, voice("x")) !== 0 || l.play("lead", fx(1), 0.1, 1, voice("y")) !== 0 || cut.join() !== "x")
+    fail(`0x427d20: the lead goes onto channel 0 unconditionally, cutting the one before`);
+  if (l.held(0.2)[2] !== fx(5)) fail(`...and leaves channels 1 and 2 alone`);
+  ok(`0x427d20: the lead takes channel 0 whatever it held and touches nothing else`);
+}
 
 const h = await headless("level=1&x=9500");
 const { game } = h;
@@ -127,6 +178,22 @@ const rec = sfx.tables.singles[FOE_SFX.hydrant];
 const hydrantSecs = sfx.secs(sfx.audio(rec.containerLoc));
 if (!/hydrant/i.test(rec.identifier) || hydrantSecs !== 1.07) fail(`woods.snd ${FOE_SFX.hydrant} should be the 1.07s "0040 hydrant"; it is "${rec.identifier}" ${hydrantSecs}s`);
 ok(`the hydrant bursts on its own sound: "${rec.identifier.trim()}", ${hydrantSecs}s`);
+
+/**
+ * 5b. ...and which call a death goes through. The punk's `0x44f184` plays its
+ *     0x21 through `0x40f090` — the mixer's channel 0 — where the dog's
+ *     `0x4551cf` plays its 0x18 through `0x40ef30`.
+ */
+{
+  const punk = game.level!.spawned.flat().find((e) => e.kind === "initwerea");
+  if (!punk) fail(`STREETS places a punk`);
+  mark = calls.length;
+  game.killFoe(punk, FOES.initwerea);
+  const died = calls.slice(mark).find((c) => c.call === "effect" && c.args[0] === FOE_SFX.wereaDeath);
+  if (!died || died.args[3] !== "lead") fail(`0x44f18b: the punk's death goes through 0x40f090; heard ${JSON.stringify(died?.args)}`);
+  if (FOES.initdog.deathLead) fail(`0x4551d4: the dog's death goes through 0x40ef30`);
+  ok(`a punk's death is the lead, on channel 0 (0x44f18b)`);
+}
 
 /**
  * 6. the FILMS' own one-shots, which are where nearly all of this game's

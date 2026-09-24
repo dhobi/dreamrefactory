@@ -536,9 +536,9 @@ export const eyeball: Brain = (e, foe, run, k) => {
     /**
      * ---- 3, `0x43dfc4`: the tail of a hit reaction.
      *
-     * The flinch and the knock-out fall play as the page's reaction; when one
-     * ends, {@link FoeAnim.resume} hands it here on a one-frame script of kind
-     * 3, and `0x43dff5` is what a finished kind-3 script does: the hover, and
+     * The flinch and the knock-out fall play as the page's reaction, of kind 3;
+     * the frame one ends it is handed here ({@link FoeAnim.decides}), and
+     * `0x43dff5` is what a finished kind-3 script does: the hover, and
      * `0x43e002` writes `vy = -5` to climb back up on. The splat (`obj+0x2c`,
      * tag 4 and sound 0x3c) wants a collision word this page does not keep.
      */
@@ -965,7 +965,8 @@ export const eyeballReacts: Reaction = (e, foe, _run, k) => {
   if (e.clock <= POP_FRAMES) e.vx = Math.trunc(e.vx / TICKS / 2) * TICKS;
   if (!e.hatched && e.clock >= POP_FRAMES) {
     e.hatched = true;
-    k.say(e, EYEBALL.burst);
+    // `0x43e750` — through `0x40f090`, the mixer's channel 0
+    k.say(e, EYEBALL.burst, "lead");
     for (let n = 0; n < 4; n++) k.spray(e, 0x32);
   }
 };

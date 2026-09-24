@@ -623,7 +623,8 @@ export const oxReacts: Reaction = (e, foe, _run, k) => {
   if (Math.floor(e.clock) !== 1 || frame > 1) return;
   const n = foe.flinch?.indexOf(e.anim) ?? -1;
   if (n >= 0 && n < 3) k.say(e, OX.attackSay + n);
-  else if (n === 3) k.say(e, OX.flip);
+  // `0x43fad8` — the slide's is `0x40f090`: the mixer's channel 0
+  else if (n === 3) k.say(e, OX.flip, "lead");
 };
 
 export { NOT_HERE as OX_NOT_HERE };

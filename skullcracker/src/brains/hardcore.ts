@@ -193,8 +193,8 @@ export const hardcoreReacts: Reaction = (e) => {
  * - **8**, the flinch's exit, `0x43d062`: when the flinch ends it flips a coin.
  *   Heads is sound 0x48 and the WALK, `0x474a38`; tails is sound 0x47 and the
  *   swipe, `0x4749c8` tag 0. So hitting this thing is what makes it come at you,
- *   and it never returns to the stance off a flinch. The flinch's
- *   {@link FoeAnim.resume} hands the brain kind 8 and `case 8` flips the coin.
+ *   and it never returns to the stance off a flinch. The flinch is kind 8 and
+ *   {@link FoeAnim.decides}: `case 8` flips the coin the frame it ends.
  * - **9**, the corpse, `0x43d0c5`: `0x42f7f0(obj, 0.7)` sets the bounce, sound
  *   0x3d plays on the frame `obj+0x2c` says it has landed — both the page's
  *   {@link Foe.corpseBounce} — `AI+0x30` counts down
@@ -514,24 +514,24 @@ export const hardcore: Brain = (e, foe, run, k) => {
      *
      * `0x43cffe` is the compiler's signed `obj+0x42 % 2` — every even frame
      * index of the ten plays sound 0x44 — and when the script ends `0x43d030`
-     * plays `0x434540(2) + 0x3e` through **`0x40f090`**, which is not
-     * `0x40ef30`: a different entry point in the same sound module, taking the
-     * same `(bank, id, point)`. The kit has one primitive, so both go through
-     * {@link BrainCtx.say}.
+     * plays `0x434540(2) + 0x3e` through **`0x40f090`** (`0x43d045`), which
+     * is not `0x40ef30`: it goes onto the mixer's channel 0 whatever that
+     * holds ({@link BrainCtx.lead}), where the pants go onto channel 1 or 2 by
+     * priority, and a pant still playing refuses the next one.
      */
     case 7: {
       if (!done && frameIndex(e, HARDCORE.pant.hold) % 2 === 0)
         k.say(e, HARDCORE.breath);
       if (!done) return false;
-      k.say(e, HARDCORE.sigh + k.roll(2));
+      k.say(e, HARDCORE.sigh + k.roll(2), "lead");
       return install(e, HARDCORE.stance);
     }
     /**
      * ---- 8, `0x43d062`: the flinch's exit, and a coin.
      *
-     * The page plays the flinch (`0x474b88`) and its {@link FoeAnim.resume}
-     * puts this state on the frame it ends — which is the frame `obj+0x46`
-     * lets `0x43d06d` roll. Heads: sound 0x48 and the walk. Tails: sound 0x47
+     * The page plays the flinch (`0x474b88`) and hands this state its end on
+     * the frame it comes ({@link FoeAnim.decides}) — which is the frame
+     * `obj+0x46` lets `0x43d06d` roll. Heads: sound 0x48 and the walk. Tails: sound 0x47
      * and the swipe.
      */
     case 8:

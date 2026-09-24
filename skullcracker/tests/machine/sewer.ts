@@ -31,6 +31,7 @@ import { EYEBALL, eyeball, eyeballReacts } from "../../src/brains/eyeball";
 import { oxReacts } from "../../src/brains/ox";
 import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
 import { FPS, fail, headless, ok, pass } from "./harness";
+import type { FoeAnim } from "../../src/foes";
 
 /**
  * The machines themselves, on their own: a brain handed a stand-in context and
@@ -469,6 +470,47 @@ ok(`...and the hall of lifts is reached, at x ${game.p.x}, y ${game.p.y}`);
   if (game.stats.score - paid !== 320 || ox.clock !== 0 || ox.state !== "dead")
     fail(`an ox struck on 5190 dies again and pays again; the score rose ${game.stats.score - paid}`);
   ok(`an ox struck as it falls dies again from the top and pays another 320`);
+}
+
+/**
+ * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands
+ * its own case the frame the script ends, and the next script goes on then:
+ * exactly the script's own frames, and nothing between. A fresh one of `kind`
+ * near where the level puts it, given the reaction by hand.
+ */
+const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly FoeAnim[], hp?: number): Promise<number> => {
+  await h.load(`level=${lv}`);
+  const at = game.level!.spawned.flat().find((q) => q.kind === kind);
+  if (!at) fail(`level ${lv} places no ${kind}`);
+  await h.load(`level=${lv}&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const e = game
+    .spawnedHere()
+    .filter((q) => q.kind === kind && q.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  if (!e) fail(`no ${kind} near x${at.x}`);
+  e.asleep = false;
+  if (hp !== undefined) e.hp = hp;
+  e.state = "flinch";
+  e.anim = take;
+  e.clock = 0;
+  e.script = take.kind;
+  e.tag = take.tag;
+  let f = 0;
+  while (e.state === "flinch" && e.anim === take && f < 60) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || !next.includes(e.anim))
+    fail(`${kind}: ${take.from} is ${take.cels.length * take.hold} frames and then ${next.map((a) => a.from).join(" or ")}; ${f} frames, then ${e.anim.from}`);
+  return f;
+};
+
+{
+  // every eyeball reaction is kind 3, and `0x43dfee` puts the hover on at `obj+0x46`
+  const E = FOES.initeyeball.flinch!;
+  const f = [await handOff(7, "initeyeball", E[0], [EYEBALL.hover]), await handOff(7, "initeyeball", E[3], [EYEBALL.hover])];
+  ok(`an eyeball's shut eye and its knock-out hand to the hover after ${f.join(" and ")} frames (0x43dff5)`);
 }
 
 pass(`SEWER's doors are locks, its levers are keys, and three of them can be walked to`);

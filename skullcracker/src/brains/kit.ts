@@ -30,6 +30,7 @@
  * back**, so it is carried as read and spends nothing.
  */
 import type { Foe, FoeAnim } from "../foes";
+import type { SoundWay } from "../sound";
 
 /**
  * `gait`, `flinch` and `dead` are the kind's own animations; `burst` is the one
@@ -452,8 +453,12 @@ export interface BrainCtx {
   scaled(n: number): number;
   /** `0x434630` — the integer square root the ballistic leaps solve their arc with */
   root(n: number): number;
-  /** `0x40ef30(0x4a7910, id, y)` — a creature sound where this one is */
-  say(e: Enemy, id: number): void;
+  /**
+   * `0x40ef30(bank, id, point)` — a creature sound where this one is. `way`
+   * is which of the engine's three calls it is — see `SoundWay` in sound.ts:
+   * `0x40f090` is `"lead"` and `0x40f110` `"renew"`.
+   */
+  say(e: Enemy, id: number, way?: SoundWay): void;
   /**
    * The nearest `initsprinkler` record's own point — `0x40b660` geometry −1.
    *

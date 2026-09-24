@@ -14,7 +14,7 @@
  *   - **the test tube** (`inittube`), `#0201 test tube` — one in the game, with
  *     twelve hundred health, the player's own number, and no award.
  */
-import { fail, headless, ok, pass } from "./harness";
+import { fail, headless, ok, pass, recordSound } from "./harness";
 import { FOES } from "../../src/foes";
 import { TUBE, TUBE_BREATH, TUBE_SHARDS, tube } from "../../src/brains/tube";
 import { armGate } from "../../src/brains/arm";
@@ -287,22 +287,63 @@ ok(`the test tube carries the player's own twelve hundred health`);
   const pair = game.celRec(game.level!.sbk, 4000)?.blow ?? { dx: 0, dy: 0 };
   const each = Math.floor(Math.hypot(pair.dx + 100, pair.dy));
   if (1200 - t.hp !== each) fail(`a bolt on 5410 takes 0x42f910 at 100, ${each}; it took ${1200 - t.hp}`);
-  // `0x41825e`: puke answers a −1 with lab.snd 0xb and takes nothing
+  // `0x41825e`: puke answers a −1 with lab.snd 0xb and takes nothing — and
+  // answers it 0 (`0x418278`), so the bolt is not stopped: `0x43042b` moves on
+  // and nothing sets the bolt's `obj+0x2a`, and it flies straight through
   const puke = nearest("initpuke")!;
   const had = puke.hp;
   puke.asleep = false;
+  // clear of the room's west end at x7150, which is where the bolt would go
+  puke.x = game.p.x - 500;
   puke.state = "flinch";
-  puke.anim = { cels: [3000], hold: 10, from: "test" };
+  puke.anim = { cels: [3000], hold: 20, from: "test" };
   puke.clock = 0;
   h.frame();
-  shoot(puke);
-  if (puke.hp !== had || game.bolts.length) fail(`a bolt stops on puke and takes nothing (0x41825e); ${had} -> ${puke.hp}`);
+  const heard = recordSound(game);
+  const through = (): { past: boolean; beeps: number } => {
+    const c = game.celRec(game.level!.sbk, game.celOf(puke))!;
+    const pb = game.hurtBox(puke, c, game.level!);
+    const dir = puke.x > game.p.x ? 1 : -1;
+    game.bolts.length = 0;
+    const mark = heard.length;
+    game.spawnBolt(puke.x - dir * 150, (pb.top + pb.bottom) / 2 + 20, dir);
+    const fired = game.bolts[0];
+    let past = false;
+    for (let i = 0; i < 4; i++) {
+      h.frame();
+      if (game.bolts.includes(fired) && (fired.x - puke.x) * dir > (pb.right - pb.left) / 2 + 20) past = true;
+    }
+    const beeps = heard.slice(mark).filter((x) => x.call === "effect" && x.args[0] === 0xb).length;
+    return { past, beeps };
+  };
+  const pass1 = through();
+  if (puke.hp !== had || !pass1.past || pass1.beeps < 1)
+    fail(`a bolt passes through puke with 0xb and takes nothing (0x41825e, 0x418278): hp ${had} -> ${puke.hp}, past ${pass1.past}, 0xb x${pass1.beeps}`);
   const P = FOES.initpuke;
   if (JSON.stringify(P.minusOne) !== '{"sound":11}' || !P.corpseTakesHits || P.lingerPlus !== 1 - 12 || FOES.inittube.lingerPlus !== 1 - 18)
     fail(`puke answers −1 with 0xb, its 3080 takes blows, and both bodies count from the death's first frame`);
   if (!game.SPARES.inittube?.kinds.includes("initarm") || !game.SPARES.inittube.kits.includes(TUBE_BREATH))
     fail(`0x4199c3..0x419a05 turn away the tube's glass, puke's spit and the arm`);
-  ok(`a blaster bolt takes ${each} off the tube when it has a body to hit, and stops on a Puke Boy for nothing`);
+  ok(`a blaster bolt takes ${each} off the tube when it has a body to hit, and goes through a Puke Boy for nothing`);
+
+  // ...and an arm that has hold of you (`0x418b58`) answers 0 AFTER
+  // `0x418b4e` has written the 100 onto the bolt, so what stands behind it in
+  // the same pass takes a hundred-strength blow — a Puke Boy included
+  const holder = game.spawnedHere().find((e) => e.kind === "initarm" && e.state !== "dead")
+    ?? game.level!.spawned.flat().find((e) => e.kind === "initarm" && e.state !== "dead")!;
+  const dir = puke.x > game.p.x ? 1 : -1;
+  holder.x = puke.x - dir * 30;
+  holder.y = puke.y;
+  holder.script = 5;
+  holder.state = "flinch";
+  holder.anim = { cels: [3360], hold: 20, from: "test" };
+  holder.clock = 0;
+  if (!game.spawnedHere().includes(holder)) game.spawnedHere().push(holder);
+  const pukeHad = puke.hp;
+  through();
+  if ((holder.state as string) === "dead" || puke.hp >= pukeHad)
+    fail(`the held arm turns the bolt away and the Puke Boy behind takes it at 100: arm ${holder.state}, puke ${pukeHad} -> ${puke.hp}`);
+  ok(`an arm that holds you lets the bolt by at a hundred, and the Puke Boy behind it takes ${pukeHad - puke.hp}`);
   t.hp = 1200;
 }
 // ...and the goal waits for it: `0x416047` asks `[0x46bfbc]` after the count,

@@ -471,14 +471,12 @@ export const WBOOLY = {
    * {@link BrainCtx.say} is wired to — so every id below goes through the
    * helper unchanged.
    *
-   * With one caveat worth stating: the class plays out of that bank through TWO
-   * entry points. `0x40ef30` is `k.say`'s; `0x40f090` is its twin — identical
-   * but for the last call, `0x427d20` where `0x40ef30` uses `0x427b20` — and
-   * the class uses it for exactly four cues: `stirLoop` at `0x455a50`, and
-   * three inside the death (`0x456138`, `0x45619c`, `0x456411`). Those four are
-   * the sustained ones. `k.say` is used for them here because the bank and the
-   * id are the same and this page has no second entry point; the difference is
-   * named rather than pretended away.
+   * The class plays out of that bank through TWO entry points. `0x40ef30`
+   * is `k.say`'s own; `0x40f090` is its twin but for the last call — the
+   * mixer's channel 0 whatever it held, where `0x40ef30` competes for 1 and 2
+   * by priority (see `Mixer` in sound.ts) — and the class uses it for exactly
+   * four cues: `stirLoop` at `0x455a50`, and three inside the death
+   * (`0x456138`, `0x45619c`, `0x456411`). Those go through `k.say(…, "lead")`.
    */
   wake: 0x2c,
   stirLoop: 0x2b,
@@ -588,7 +586,7 @@ export const wbooly: Brain = (e, foe, run, k) => {
         // `0x455a2f` — and the stir puts the sustained cue under the climb
         case 1:
           if (!done) return false;
-          k.say(e, WBOOLY.stirLoop); // `0x455a50`, through `0x40f090`
+          k.say(e, WBOOLY.stirLoop, "lead"); // `0x455a50`, through `0x40f090`
           return install(e, WBOOLY.climb);
         /**
          * `0x455a67` — out of the ground, `AI+4` cleared, and it does NOT
@@ -973,14 +971,14 @@ export const wboolyReacts: Reaction = (e, foe, _run, k) => {
   if (e.clock < DEATH_TAG1 * e.anim.hold) return;
   if (!e.threw) {
     e.threw = true;
-    k.say(e, DEATH_TAIL);
+    k.say(e, DEATH_TAIL, "lead"); // `0x45613f`
     e.decisions = DEATH_FIRST;
     return;
   }
   const left = e.decisions ?? 0;
   e.decisions = left - 1;
   if (left > 0) return;
-  k.say({ ...e, x: k.player.x, y: k.player.y }, k.roll(2) - 1);
+  k.say({ ...e, x: k.player.x, y: k.player.y }, k.roll(2) - 1, "lead"); // `0x45619c`
   e.decisions = k.roll(8) + 0xc;
 };
 

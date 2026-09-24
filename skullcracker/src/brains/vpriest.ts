@@ -391,7 +391,8 @@ export const vpriest: Brain = (e, foe, run, k) => {
      */
     case 0:
       if (!e.fighting) return install(e, VPRIEST.statue);
-      k.say(e, VPRIEST.wake);
+      // `0x425d51` — through `0x40f090`, the mixer's channel 0
+      k.say(e, VPRIEST.wake, "lead");
       return install(e, VPRIEST.float);
     // ---- 1, `0x425d7a`: the float, and the only state that thinks every frame
     case 1:
@@ -663,7 +664,8 @@ export const vpriestReacts: Reaction = (e, foe, run, k) => {
   e.vx = 0;
   e.vy = 0;
   // `0x426648` — the hit handler's own sound, on the first frame it shows
-  if (Math.floor(e.clock) === 1) k.say(e, VANISH_SOUND);
+  // `0x42664f` — through `0x40f090`, the mixer's channel 0
+  if (Math.floor(e.clock) === 1) k.say(e, VANISH_SOUND, "lead");
   if (e.clock < run) return;
   if (!e.hatched) {
     // `0x4261eb` — and the count it holds against is taken AFTER the throw
@@ -690,7 +692,8 @@ export const vpriestReacts: Reaction = (e, foe, run, k) => {
   e.x = at.x;
   e.y = at.y;
   e.hatched = false;
-  k.say(e, REFORM_SOUND);
+  // `0x426234` — through `0x40f090`, the mixer's channel 0
+  k.say(e, REFORM_SOUND, "lead");
 };
 
 /** `0x42600b`-style bleed — `0x4260f7`/`0x4260ff`: two a frame, towards zero */

@@ -519,7 +519,8 @@ export const wraith: Brain = (e, foe, run, k) => {
     case 5:
       if (!done) return false;
       if ((e.tag ?? 0) === 0) {
-        k.say(e, WRAITH.lightning);
+        // `0x41f73a` — through `0x40f110`: a beam still sounding starts over
+        k.say(e, WRAITH.lightning, "renew");
         k.cast(e, WRAITH_BEAM);
         return install(e, WRAITH.held, true);
       }

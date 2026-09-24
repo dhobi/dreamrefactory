@@ -861,8 +861,14 @@ export interface Foe {
    * one of them, which is what `0x434540` in front of the call means.
    */
   hitSound?: number | readonly number[];
-  /** what its death path plays, through `0x40f090` */
+  /** what its death path plays */
   deathSound?: number;
+  /**
+   * ...and whether it plays it through `0x40f090` — the mixer's channel 0,
+   * which takes it whatever it held — rather than `0x40ef30`'s two channels by
+   * priority. See `Mixer` in sound.ts.
+   */
+  deathLead?: boolean;
   /** does it enrol in the level census — `0x42f870(obj, 1)` in its creator */
   counts: boolean;
   /**
@@ -1013,22 +1019,6 @@ export const WEREA_FLOORED: FoeAnim = {
   },
 };
 
-/**
- * The punk's flinch ending — kind 11, `0x44eeb5`.
- *
- * Not a script of its own: `0x4774f8`'s three tags are all kind 11, and what
- * state 11 does is choose, the frame the flinch runs out, between the stance
- * and the coin its health decides (away or straight back in). This one cel is
- * the stance's first, handed to the machine so it can make that choice.
- */
-const WEREA_FLINCHED: FoeAnim = {
-  cels: [1900],
-  hold: 1,
-  kind: 11,
-  tag: 0,
-  from: "0x44eeb5",
-};
-
 /** the spitter's stance, `0x46c9f8` kind 2 — where its flinch hands back (`0x4181cf`) */
 /** the TCop's stance, `0x46c638` kind 1 — the state that decides */
 const COP_STANCE: FoeAnim = {
@@ -1118,20 +1108,6 @@ const ZOMB_GUARD: FoeAnim = {
 };
 
 /**
- * The skeleton's flinch ending — kind 7, `0x423965`, which rolls
- * `0x434540(5)` the frame the flinch runs out: under 4 the standing leap,
- * otherwise the walk. The flinch's own last cel, handed to the machine so it
- * can make that choice.
- */
-const skelFlinched = (cel: number, tag: number): FoeAnim => ({
-  cels: [cel],
-  hold: 1,
-  kind: 7,
-  tag,
-  from: "0x423965",
-});
-
-/**
  * The skeleton's walk, `0x46fac0` kind 1 — what `0x423941` installs as the
  * knockdown's get-up ends. The same cels as `SKEL.walk` in brains/skel.ts.
  */
@@ -1218,19 +1194,6 @@ const OX_STAND: FoeAnim = {
 };
 
 /**
- * The eyeball's hand-back from a hit reaction: one frame of kind 3, so the
- * brain's case 3 — `0x43dff5`, a finished kind-3 script — puts it back on the
- * hover with `vy = -5` (`0x43e002`). See `brains/eyeball.ts`.
- */
-const EYEBALL_RECOVER: FoeAnim = {
-  cels: [6206],
-  hold: 1,
-  kind: 3,
-  tag: 0,
-  from: "0x43dff5",
-};
-
-/**
  * This chapter's classes — levels 1 to 4, registered by `0x4503a0`.
  *
  * These are the five the shipped STREETS places, and the same registration
@@ -1272,12 +1235,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
       from: "0x4770f0 tag 0",
     },
     divisor: 20,
-    // 0x4774f8, three tags of one cel each, held four frames, and all three end
-    // in state 11 (`0x44eeb5`), which the class's own machine decides from
+    // 0x4774f8, three tags of one cel each, held four frames, all kind 11 —
+    // and state 11 (`0x44eeb5`) decides the frame the script ends, on
+    // `obj+0x46` ({@link FoeAnim.decides})
     flinch: [
-      { cels: [1970], hold: 4, resume: WEREA_FLINCHED, from: "0x4774f8 tag 0" },
-      { cels: [1971], hold: 4, resume: WEREA_FLINCHED, from: "0x4774f8 tag 1" },
-      { cels: [1972], hold: 4, resume: WEREA_FLINCHED, from: "0x4774f8 tag 2" },
+      { cels: [1970], hold: 4, kind: 11, tag: 0, decides: true, from: "0x4774f8 tag 0" },
+      { cels: [1971], hold: 4, kind: 11, tag: 1, decides: true, from: "0x4774f8 tag 1" },
+      { cels: [1972], hold: 4, kind: 11, tag: 2, decides: true, from: "0x4774f8 tag 2" },
       // 0x477580 tag 0 — the knockdown a blow over 50 earns, and it travels;
       // the lying and the get-up follow ({@link WEREA_FLOORED})
       {
@@ -1304,6 +1268,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x44f15a` and `0x44f184` — four hit takes, one death
     hitSound: FOE_SFX.punkHit,
     deathSound: FOE_SFX.wereaDeath,
+    // `0x44f18b` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     panel: { health: 250, plate: 13001, award: 220 },
     counts: true,
     bleeds: true,
@@ -1327,7 +1293,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
         dy: [0, 0, -240, 0, 0, 0, 0, -240, 0, 0, 0, 0, -240, 0, 0],
         kind: 8,
         tag: 0,
-        resume: { cels: [1942], hold: 1, kind: 8, tag: 0, from: "0x44edae" },
+        // state 8 takes its ten, then waits on `obj+0x46` (`0x44eda3`)
+        decides: true,
         from: "0x477408 tag 0",
       },
       from: "0x44f0aa",
@@ -1375,6 +1342,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x44f942` — the same four takes; `0x44f965` drops its chain instead
     hitSound: FOE_SFX.punkHit,
     deathSound: FOE_SFX.werebDeath,
+    // `0x44f96c` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     panel: { health: 200, plate: 13002, award: 240 },
     counts: true,
     bleeds: true,
@@ -1394,7 +1363,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
         dx: [75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75, 75],
         kind: 4,
         tag: 0,
-        resume: { cels: [5000], hold: 1, kind: 4, tag: 0, from: "0x44f74c" },
+        // state 4 takes its ten, then waits on `obj+0x46` (`0x44f74c`)
+        decides: true,
         from: "0x477700 tag 0",
       },
       from: "0x44f8bd",
@@ -1579,6 +1549,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // death plays 0x33 alone (`0x456411`)
     quietKill: true,
     deathSound: FOE_SFX.boolyDeath,
+    // `0x456418` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x455999`: the bar with plate 0x32d1, which lives in PLAYER.SBK and not in
     // this level's book; `0x456420` pays 0x9c4
     panel: { health: 800, plate: 13009, award: 2500 },
@@ -1928,21 +1900,16 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x43cbcb`: thirteen
     divisor: 13,
     // `0x474b88` — four cels that carry their own knockback, dx -100 on two of
-    // them. The flinch is kind 8, and `0x43d062` decides what follows it once it
-    // ends: a coin between the close and the swipe. `resume` hands the brain
-    // that state, holding the last cel for the frame it takes to decide
+    // them. The flinch is kind 8, and `0x43d062` decides what follows it the
+    // frame it ends, on `obj+0x46`: a coin between the close and the swipe
     flinch: [
       {
         cels: [6030, 6031, 6032, 6033],
         hold: 2,
         dx: [0, -100, 0, -100],
-        resume: {
-          cels: [6033],
-          hold: 2,
-          kind: 8,
-          tag: 0,
-          from: "0x43d062 — state 8 after 0x474b88",
-        },
+        kind: 8,
+        tag: 0,
+        decides: true,
         from: "0x474b88 tag 0",
       },
     ],
@@ -2020,15 +1987,16 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `mov word ptr [esi+0xe], 8` at `0x43dd1b`
     divisor: 8,
     // `0x472878` tags 1, 2 and 3 — the eye shutting from each of its angles —
-    // and `0x4727f0` tag 0, the knock-out. Every one is kind 3, and a finished
-    // kind-3 script goes back to the hover with `vy = -5` (`0x43dff5`), which
-    // the brain's own case 3 does off the one-frame {@link EYEBALL_RECOVER}.
+    // and `0x4727f0` tag 0, the knock-out. Every one is kind 3, and the frame
+    // a kind-3 script ends (`0x43dfee`, `obj+0x46`) it goes back to the hover
+    // with `vy = -5` (`0x43dff5`), which is the brain's own case 3
+    // ({@link FoeAnim.decides}).
     // The kind is carried so a second blow reads state 3 and not whatever the
     // first one interrupted — see {@link pick}
     flinch: [
-      { cels: [6006, 6006, 6106, 6206], hold: 3, kind: 3, tag: 1, resume: EYEBALL_RECOVER, from: "0x472878 tag 1" },
-      { cels: [6007, 6007, 6107, 6207], hold: 3, kind: 3, tag: 2, resume: EYEBALL_RECOVER, from: "0x472878 tag 2" },
-      { cels: [6008, 6008, 6108, 6207], hold: 3, kind: 3, tag: 3, resume: EYEBALL_RECOVER, from: "0x472878 tag 3" },
+      { cels: [6006, 6006, 6106, 6206], hold: 3, kind: 3, tag: 1, decides: true, from: "0x472878 tag 1" },
+      { cels: [6007, 6007, 6107, 6207], hold: 3, kind: 3, tag: 2, decides: true, from: "0x472878 tag 2" },
+      { cels: [6008, 6008, 6108, 6207], hold: 3, kind: 3, tag: 3, decides: true, from: "0x472878 tag 3" },
       {
         cels: [
           6300, 6301, 6302, 6303, 6304, 6305, 6306, 6307, 6308, 6309, 6310, 6311,
@@ -2036,7 +2004,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
         hold: 1,
         kind: 3,
         tag: 0,
-        resume: EYEBALL_RECOVER,
+        decides: true,
         from: "0x4727f0 tag 0",
       },
     ],
@@ -2081,6 +2049,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     health: 50,
     hitSound: FOE_SFX.eyeballHit,
     deathSound: FOE_SFX.eyeballDeath,
+    // `0x43e96b` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x43de23` claims the bar with 0x32c8; `0x43e99a` pays 0x50
     panel: { health: 50, plate: 13000, award: 80 },
     // `0x42f850(obj, 0)` at `0x43dd43`, and `obj+0xa = -5` on top of it
@@ -2377,6 +2347,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     linger: Infinity,
     // `0x441f7d`
     deathSound: FOE_SFX.kraggDeath,
+    // `0x441f7d` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x440aff` holds `obj+0xc` to ±40 in the brain, so the closing stride builds
     accrues: true,
     /**
@@ -2624,15 +2596,16 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x454b20`: the lowest in the chapter after the rat's seven
     divisor: 10,
     // `0x4781f8` — ONE cel held four frames, and no pick behind it: `0x4551c3`
-    // tests the health and nothing else. When it ends, `0x454ff3` — kind 7's
-    // own case — flips the dog and charges, which the brain's `case 7` does
+    // tests the health and nothing else. The frame it ends, `0x454ff3` — kind
+    // 7's own case, on `obj+0x46` — flips the dog and charges, which the
+    // brain's `case 7` does ({@link FoeAnim.decides})
     flinch: [
       {
         cels: [4820],
         hold: 4,
         kind: 7,
         tag: 0,
-        resume: { cels: [4820], hold: 1, kind: 7, tag: 0, from: "0x454ff3" },
+        decides: true,
         from: "0x4781f8 tag 0",
       },
     ],
@@ -2712,6 +2685,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     hitSound: FOE_SFX.punkHit,
     // `0x452a18` — and it is the punk's death sound too
     deathSound: FOE_SFX.wereaDeath,
+    // `0x452a1f`, and the burn's `0x452705` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x452420`: the bar is claimed with plate 0x32cc. What a death pays is
     // `0x40d450(0x104)`, and both deaths pay it — `0x452a60` out of the hit
     // handler and `0x452737` at the end of the burn. (`obj+0x3c`'s 0x32 is not
@@ -2846,6 +2821,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x454828` — one index, and no random pick behind it
     hitSound: FOE_SFX.weredHit,
     deathSound: FOE_SFX.weredDeath,
+    // `0x45485b` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x454873` — `0x40d450(0x12c)` on the blow that empties it: three hundred
     // for the bike, and the FANG that climbs out pays its own 220 later
     award: 0x12c,
@@ -3327,25 +3304,32 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * `0x46fd58`, kind 7, three frames a cel — the three takes — and
      * `0x46fcf0`, kind 6, the knockdown. `0x423ab5`'s handler picks between
      * them ({@link Foe.pick} below); the takes all end in kind 7's own roll
-     * for a leap, the knockdown in its get-up and then the walk.
+     * for a leap the frame they end (`0x423965`, on `obj+0x46`), the knockdown
+     * in its get-up and then the walk.
      */
     flinch: [
       {
         cels: [1260],
         hold: 3,
-        resume: skelFlinched(1260, 0),
+        kind: 7,
+        tag: 0,
+        decides: true,
         from: "0x46fd58 tag 0",
       },
       {
         cels: [1212, 1212],
         hold: 3,
-        resume: skelFlinched(1212, 1),
+        kind: 7,
+        tag: 1,
+        decides: true,
         from: "0x46fd58 tag 1",
       },
       {
         cels: [1261, 1261],
         hold: 3,
-        resume: skelFlinched(1261, 2),
+        kind: 7,
+        tag: 2,
+        decides: true,
         from: "0x46fd58 tag 2",
       },
       /**
@@ -3770,6 +3754,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     health: 1200,
     hitSound: FOE_SFX.priestHit,
     deathSound: FOE_SFX.priestDeath,
+    // `0x4265e4` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x425cd3` claims the bar with plate 0x3394
     panel: { health: 1200, plate: 13204, award: 0 },
     counts: true,
@@ -4115,6 +4101,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
     hitSound: FOE_SFX.tubeHit,
     // `0x419a96`
     deathSound: FOE_SFX.tubeDeath,
+    // `0x419a9d` — through `0x40f090`, the mixer's channel 0
+    deathLead: true,
     // `0x419318` claims the bar with plate 0x33f9
     panel: { health: 1200, plate: 13305, award: 0 },
     counts: true,

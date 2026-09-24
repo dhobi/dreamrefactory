@@ -440,7 +440,30 @@ levels' own name for their punks: they are werewolves.
 
 `0x40efb0` places each one — the volume falls off linearly with the Manhattan
 distance from the middle of the view and nothing 768 pixels past it is played at
-all — and that is the whole of the mixer.
+all.
+
+## Four channels, and a sound that is playing is not played again
+
+The mixer has four channels (`0x427890` walks their slots at `0x4a6778`). The
+theme has channel 3 to itself (`0x40f190` → `0x427a50`). The one-shots share
+the other three, and which ones they may use depends on which of the three
+one-shot calls plays them:
+
+- `0x40ef30` → `0x427b20`, the common one: channel 1 or 2, by priority.
+- `0x40f090` → `0x427d20`: channel 0, whatever it held. Most deaths, the
+  bosses' cues and the voices use it.
+- `0x40f110` → `0x427c20`: channels 1 and 2 again, but a sound still playing
+  starts over rather than being refused. Six sites use it.
+
+A record's priority is `(bank << 16) | (index + 1)`, fixed as the bank opens
+(`0x40ed69`). A chapter's effects are bank 1 and the character's own sounds
+are bank 2, so the player outranks every creature. A finished channel drops
+to nothing. A new sound replaces the lower of the two channels only if it
+outranks what is on it, and it is refused if the other channel is already
+playing that same sound. So a handler that asks for its sound on three frames
+running is heard once. A replaced sound is cut, not faded (`0x456f00`). The
+page does the same (`Mixer` in `src/sound.ts`): `effect` and `own` take the
+call as their last argument.
 
 ## The films keep their sound somewhere else entirely
 

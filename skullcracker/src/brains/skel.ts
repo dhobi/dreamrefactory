@@ -514,7 +514,8 @@ export const skel: Brain = (e, foe, run, k) => {
     case 5:
       return done ? install(e, SKEL.walk) : false;
     /**
-     * ---- 7, `0x423965`: a take has run out (the flinch's `resume`), and
+     * ---- 7, `0x423965`: a take has run out — handed here the frame it does
+     * ({@link FoeAnim.decides}) — and
      * `0x434540(5)` under 4 — three in five — springs away on the standing
      * leap; anything else walks.
      */

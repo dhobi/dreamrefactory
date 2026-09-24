@@ -4248,7 +4248,8 @@ export function landHits(): void {
 export function killFoe(e: Enemy, foe: Foe): void {
   const death = foe.deathFor?.(e) ?? foe.death;
   if (!death) return;
-  if (foe.deathSound !== undefined) sound?.effect(foe.deathSound, e.x, e.y);
+  if (foe.deathSound !== undefined)
+    sound?.effect(foe.deathSound, e.x, e.y, foe.deathLead ? "lead" : "mix");
   e.state = "dead";
   e.anim = death;
   e.clock = 0;
@@ -4993,7 +4994,8 @@ export function takeCode(
   // No reaction in CHARACTER 0's table shoves — the ±50 this page used to apply
   // is `0x448cf4`, in character 1's. Kept because the field is still read.
   if (r.shove) p.vx -= r.shove * p.facing;
-  if (r.sound !== undefined) sound?.own(r.sound, p.x, p.y);
+  if (r.sound !== undefined)
+    sound?.own(r.sound + (r.soundRoll ? roll(r.soundRoll) : 0), p.x, p.y, r.soundWay);
   // ...and `-1` spends twenty: `0x42eb2b` is `0x402ac0(0x14)`, the only reaction
   // in character 0's eight that costs health. Behind the damage switch, like
   // every other way the game takes a point off you.
@@ -7110,7 +7112,7 @@ export function stepLights(): void {
   for (const q of all) q.clock = 0;
   // `0x426857` — at the PLAYER's own y, not the bolt's, so it is overhead
   // wherever you are standing
-  sound?.effect(LIGHTFX.sound, p.x, p.y);
+  sound?.effect(LIGHTFX.sound, p.x, p.y, "lead");
   flashColour = LIGHTFX.flash;
 }
 
@@ -7680,7 +7682,8 @@ export function stepBoggs(): void {
       bossDown.lab = true;
       b.clock = 0;
       b.headClock = 0;
-      sound?.effect(BOGGS.dies.sound, b.headX, b.headY);
+      // `0x41bda0` — through `0x40f090`, the mixer's channel 0
+      sound?.effect(BOGGS.dies.sound, b.headX, b.headY, "lead");
       continue;
     }
     // `0x41c182` — the head re-aims whenever its own script has ended, which at
@@ -7836,7 +7839,7 @@ export function stepBoggsWorms(b: Boggs): void {
       // rises to your left and within two hundred of your own height
       if (!b.warned && m.x < p.x && Math.abs(p.y - m.y) < w.warnBelow) {
         b.warned = true;
-        sound?.effect(w.warn, m.x, m.y);
+        sound?.effect(w.warn, m.x, m.y, "lead"); // `0x41ae9e`, through `0x40f090`
       } else sound?.effect(w.hiss, m.x, m.y);
       m.kind = 2;
       m.clock = 0;
@@ -7978,7 +7981,8 @@ export function strikeMachine(b: Boggs, i: number, damage: number): boolean {
     b.machines[k].wreckClock = 0;
   }
   // `0x41b628` / `0x41b774` — the cue only the SECOND one to go plays
-  if (!b.flags[0] && !b.flags[1]) sound?.effect(BOGGS.bothDownSound, m.x, m.y);
+  // ...through `0x40f090`, the mixer's channel 0
+  if (!b.flags[0] && !b.flags[1]) sound?.effect(BOGGS.bothDownSound, m.x, m.y, "lead");
   return true;
 }
 
@@ -8623,7 +8627,8 @@ export function stepBushes(): void {
     q.state = "rise";
     q.phase = 0;
     q.clock = 0;
-    sound?.effect(BUSH.sound, q.x, q.y);
+    // `0x43ed1e` and `0x43f071` — both through `0x40f090`, the mixer's channel 0
+    sound?.effect(BUSH.sound, q.x, q.y, "lead");
   };
   const idle = (q: Bush): void => {
     q.state = "idle";
@@ -8967,10 +8972,31 @@ export function stepBolts(): void {
       b.spent = true;
       continue;
     }
-    // ...and everything else stops it, and most of it takes nothing — the
-    // few handlers that read a −1 are {@link Foe.minusOne}. A cel with no body
-    // box is not there to a bolt either (`0x4303b3`): a flinching TCop, the
-    // tube on its stand
+    /**
+     * ...and the creatures, which a bolt does NOT simply stop on.
+     *
+     * The hit pass `0x430350` hands the bolt to each body's handler in turn,
+     * and what happens next is the handler's ANSWER and the bolt's strength
+     * AFTER it:
+     *
+     * - an answer of 0 (`0x43042b`) moves on to the next body — nothing is
+     *   exchanged, nothing marks the bolt, and it flies on. Every handler that
+     *   turns a negative strength away answers 0 to the blaster's −1, and so
+     *   does puke's, after its sound (`0x418278`): the bolt goes THROUGH them;
+     * - an answer of 1 with a strength over 0 runs `0x430470`, which sets the
+     *   bolt's `obj+0x2a` (`0x430663`), and the bolt's think lets it go on its
+     *   next frame (`0x413b56`). A handler of {@link Foe.minusOne} `as` writes
+     *   the 100 onto the BOLT before it answers (`0x4147e0`, `0x418b4e`,
+     *   `0x4199a0`), which is what lets its 1 stop it;
+     * - and a handler that rewrites and then answers 0 — an arm that has hold
+     *   of you (`0x418b58`) — leaves a hundred-strength bolt going on to the
+     *   next body in the same pass. The think puts the −1 back next frame
+     *   (`0x413bf9`, from the variant, every frame).
+     *
+     * A cel with no body box is not there to a bolt either (`0x4303b3`): a
+     * flinching TCop, the tube on its stand.
+     */
+    let str: number = b.code;
     for (const e of pool) {
       if (!takesBlows(e)) continue;
       const c = celRec(lvl.sbk, celOf(e));
@@ -8983,35 +9009,54 @@ export function stepBolts(): void {
         box.top < hurt.bottom
       ))
         continue;
-      b.spent = true;
-      // ...and only the blaster's −1 is read there. The big gun's bolt is 100
-      // on tag 0: the TCop turns that away (`0x41482a`), and what a 100 does
-      // to anything else is a blow this loop does not deliver
-      const minus = b.code === -1 ? FOES[e.kind].minusOne : undefined;
-      if (minus && "sound" in minus) sound?.effect(minus.sound, b.x, b.y);
-      else if (minus) {
-        // `0x42f910` at the rewritten strength: 4000's own pair, scaled and
-        // mirrored, plus `obj+0xc` — the bolt's hundred a frame, which is
-        // what {@link Bolt.vx} already holds, a step being one engine frame —
-        // and the integer root of the sum of squares (`0x434630`)
-        const pair = art?.blow ?? { dx: 0, dy: 0 };
-        const facing = b.vx < 0 ? -1 : 1;
-        const vx = b.vx;
-        const dx = Math.trunc((pair.dx * minus.as) / 100) * facing + vx;
-        const dy = Math.trunc((pair.dy * minus.as) / 100);
-        strikeFoe(
-          e,
-          Math.floor(Math.hypot(dx, dy)),
-          pair,
-          facing,
-          b.y,
-          hurt,
-          0,
-          { x: b.x, y: b.y },
-          { mass: BOLT.divisor, vx, vy: 0, by: {} },
-        );
+      const foe = FOES[e.kind];
+      if (str === -1) {
+        const minus = foe.minusOne;
+        if (!minus) continue;
+        if ("sound" in minus) {
+          // puke's `0x41825e` answers it through `0x40f090` (`0x418273`)
+          sound?.effect(minus.sound, b.x, b.y, "lead");
+          continue;
+        }
+        str = minus.as;
+      } else if (b.code === 100 && e.kind === "initcop") {
+        // the big gun's bolt is the bolt class `[0x46c600]` below tag 2,
+        // which the TCop turns away (`0x41482a`) — an answer of 0
+        continue;
+      } else if (b.code === 100 && !foesHurt) {
+        // ...and to anything else it is a blow of a hundred, which lands
+        // under the creature switch like every other blow a machine throws;
+        // without it the bolt stops there and takes nothing
+        b.spent = true;
+        break;
       }
-      break;
+      // `0x42f910` at the strength it now has: 4000's own pair, scaled and
+      // mirrored, plus `obj+0xc` — the bolt's hundred a frame, which is what
+      // {@link Bolt.vx} already holds, a step being one engine frame — and the
+      // integer root of the sum of squares (`0x434630`)
+      const pair = art?.blow ?? { dx: 0, dy: 0 };
+      const facing = b.vx < 0 ? -1 : 1;
+      const vx = b.vx;
+      const dx = Math.trunc((pair.dx * str) / 100) * facing + vx;
+      const dy = Math.trunc((pair.dy * str) / 100);
+      // a taken blow is a counted one; a gate that turned it away left the
+      // count where it was — the handler's 1 or 0
+      const dents = e.dents;
+      strikeFoe(
+        e,
+        Math.floor(Math.hypot(dx, dy)),
+        pair,
+        facing,
+        b.y,
+        hurt,
+        0,
+        { x: b.x, y: b.y },
+        { mass: BOLT.divisor, vx, vy: 0, by: {} },
+      );
+      if (e.dents !== dents) {
+        b.spent = true;
+        break;
+      }
     }
   }
   bolts = bolts.filter((b) => !b.spent);
@@ -9800,7 +9845,9 @@ export function broadcast(param: number): void {
     for (const n of lvl.nests.flat()) {
       if (n.param !== param) continue;
       n.on = !n.on;
-      sound?.effect(SWITCH.toggle, (n.left + n.right) / 2, n.top);
+      // `0x43c3f8` — through `0x40f090`, the mixer's channel 0, so of a
+      // broadcast that reaches several only the last is heard
+      sound?.effect(SWITCH.toggle, (n.left + n.right) / 2, n.top, "lead");
     }
     return;
   }
@@ -9827,17 +9874,18 @@ export function broadcast(param: number): void {
       sound?.effect(CAGE.toggle, c.x, c.y);
     }
   }
-  // `0x43c430` sounds 0x24 at each door it turns (`0x43c460`, `0x43c477`)
+  // `0x43c430` sounds 0x24 at each door it turns (`0x43c460`, `0x43c477`),
+  // through `0x40f090` — channel 0 again
   for (const d of lvl.doors.flat()) {
     if (d.param !== param) continue;
     if (d.state === "shut") {
       d.state = "opening";
       d.clock = 0;
-      sound?.effect(SWITCH.toggle, d.x, d.y);
+      sound?.effect(SWITCH.toggle, d.x, d.y, "lead");
     } else if (d.state === "open") {
       d.state = "closing";
       d.clock = 0;
-      sound?.effect(SWITCH.toggle, d.x, d.y);
+      sound?.effect(SWITCH.toggle, d.x, d.y, "lead");
     }
   }
 }
@@ -10993,7 +11041,8 @@ export function rollerAt(x: number, y: number, vx: number): void {
     wait: ROLLER.wait,
     clock: 0,
   });
-  sound?.effect(ROLLER.bornSound, x, y);
+  // `0x43a82c` — through `0x40f090`, the mixer's channel 0
+  sound?.effect(ROLLER.bornSound, x, y, "lead");
 }
 
 /**
@@ -11612,7 +11661,9 @@ export function burstCast(c: Cast): void {
   c.vy = 0;
   const bang = c.kit.bang;
   if (!bang) return;
-  sound?.effect(bang.sound, c.x, c.y);
+  // `0x452e19`, `0x452e99`, `0x452fa5`, `0x452fea` — all four `0x40f090`, the
+  // mixer's channel 0
+  sound?.effect(bang.sound, c.x, c.y, "lead");
   if (Math.abs(p.x - c.x) < bang.near.x && Math.abs(p.y - c.y) < bang.near.y)
     flashColour = bang.flash;
 }
@@ -12048,7 +12099,7 @@ export const BRAIN_CTX: BrainCtx = {
   // `0x434630` — and it really is the integer one: the arcs it solves are whole
   // pixels in the engine and a fractional root would drift them
   root: (n) => Math.floor(Math.sqrt(Math.max(0, n))),
-  say: (e, id) => sound?.effect(id, e.x, e.y),
+  say: (e, id, way) => sound?.effect(id, e.x, e.y, way),
   /**
    * `0x441519` — `0x40b660("initsprinkler", boss, 1, -1, out)`, and geometry
    * −1 is `0x40b756`: the record whose `pointY`/`pointX` is nearest in
@@ -12302,7 +12353,8 @@ export function stepEnemies(): void {
         const kid = FOES[born.kind];
         const g = celRec(lvl?.sbk, kid.gait.cels[0]);
         if (kid && g) {
-          sound?.effect(FOE_SFX.weredHatch, e.x, e.y);
+          // `0x454669` — through `0x40f110`, which restarts it if it sounds
+          sound?.effect(FOE_SFX.weredHatch, e.x, e.y, "renew");
           // `0x450b11`: handed a parent, the creator launches what it makes off
           // it — the parent's way at a fixed thirty, fifty up, in its own leap
           // script, which the page plays as a reaction so no brain steers the

@@ -407,7 +407,7 @@ export const weredReacts: Reaction = (e, foe, _run, k) => {
   }
   // `0x454716` — the count is out: the wreck goes up, `obj+0x1a = 0x65`
   e.strength = BLAST;
-  k.say(e, WERED.sink); // `0x454720`
+  k.say(e, WERED.sink, "lead"); // `0x454720`, through `0x40f090`
   e.clock = lie + e.anim.hold;
 };
 

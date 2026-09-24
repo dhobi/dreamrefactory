@@ -119,7 +119,9 @@ import {
  *   exactly −6 answers 1 and does nothing else (`0x418b6a`), and anything
  *   else under 1 is refused. The −1 is the BLASTER's bolt, whose think writes
  *   it for the blaster's variants (`0x413bf9`), and LAB hands out blaster
- *   packs among its arms — {@link Foe.minusOne}. It is not a pickup's code:
+ *   packs among its arms — {@link Foe.minusOne}. In state 5 the rewrite has
+ *   already happened when the 0 goes back, so the bolt goes on through the
+ *   pass at a hundred and strikes whatever is behind the arm (`stepBolts`). It is not a pickup's code:
  *   a pickup is built by `0x45b160` through `0x430dc0`/`0x42f610`, which
  *   leaves `obj+0x1a` at 0 (`0x42f66f`), its code lives in its own six bytes
  *   (`0x45b18c`), and `0x430367` never lets a strength of 0 strike anything.

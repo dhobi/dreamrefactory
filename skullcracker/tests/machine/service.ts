@@ -29,6 +29,8 @@ import { FOES } from "../../src/foes";
 import { type Enemy } from "../../src/brains/kit";
 import { SKATEBOARD } from "../../src/props";
 import { FPS, fail, headless, ok, pass, recordSound } from "./harness";
+import type { FoeAnim } from "../../src/foes";
+import { HARDCORE } from "../../src/brains/hardcore";
 
 const h = await headless("level=6");
 const { game } = h;
@@ -370,5 +372,45 @@ if (jumps > 8) fail(`the level's own risers are four; this took ${jumps} jumps`)
 const lit = game.switchesHere().filter((w) => w.state === "on" || w.state === "turningOn").length;
 if (lit < 5) fail(`running past every keeper should light nearly all six; ${lit} are lit`);
 ok(`ran the level to the goal at x ${game.p.x}, y ${game.p.y}, on ${jumps} jumps, ${lit} of 6 levers lit behind`);
+
+/**
+ * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands
+ * its own case the frame the script ends, and the next script goes on then:
+ * exactly the script's own frames, and nothing between. A fresh one of `kind`
+ * near where the level puts it, given the reaction by hand.
+ */
+const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly FoeAnim[], hp?: number): Promise<number> => {
+  await h.load(`level=${lv}`);
+  const at = game.level!.spawned.flat().find((q) => q.kind === kind);
+  if (!at) fail(`level ${lv} places no ${kind}`);
+  await h.load(`level=${lv}&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const e = game
+    .spawnedHere()
+    .filter((q) => q.kind === kind && q.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  if (!e) fail(`no ${kind} near x${at.x}`);
+  e.asleep = false;
+  if (hp !== undefined) e.hp = hp;
+  e.state = "flinch";
+  e.anim = take;
+  e.clock = 0;
+  e.script = take.kind;
+  e.tag = take.tag;
+  let f = 0;
+  while (e.state === "flinch" && e.anim === take && f < 60) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || !next.includes(e.anim))
+    fail(`${kind}: ${take.from} is ${take.cels.length * take.hold} frames and then ${next.map((a) => a.from).join(" or ")}; ${f} frames, then ${e.anim.from}`);
+  return f;
+};
+
+{
+  // the hardcore's flinch is kind 8, and `0x43d062` flips its coin on `obj+0x46`
+  const f = await handOff(6, "inithardcore", FOES.inithardcore.flinch![0], [HARDCORE.close, HARDCORE.swipe]);
+  ok(`the hardcore's flinch hands to the close or the swipe after its ${f} frames (0x43d062)`);
+}
 
 pass(`SERVICE's two new classes stand, its levers pour, and its goal can be reached`);

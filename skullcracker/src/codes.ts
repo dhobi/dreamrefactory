@@ -79,6 +79,7 @@
  * the hold is the drawing.
  */
 import type { SbkCel } from "@dreamfactory/engine/df/sbk";
+import type { SoundWay } from "./sound";
 
 /** an animation as the reaction scripts state it: cels and frames-per-cel */
 export interface CodeAnim {
@@ -108,6 +109,10 @@ export interface CodeReaction {
   shake?: number;
   /** an index into the player's own bank */
   sound?: number;
+  /** ...plus `0x434540(soundRoll)`, 1..n, where the handler rolls for it */
+  soundRoll?: number;
+  /** ...and which of the three sound calls plays it — `SoundWay` in sound.ts */
+  soundWay?: SoundWay;
   /** health this reaction spends through `0x402ac0`, where it spends any */
   health?: number;
   /** true where the handler returns 1: the blow is consumed and cannot also hurt */
@@ -290,6 +295,10 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
      * out of, and not of the one the player is actually using.
      */
     health: 0x14,
+    /** `0x42eb3d`..`0x42eb51` — `0x434540(7) + 0xe` through `0x40f110` */
+    sound: 0xe,
+    soundRoll: 7,
+    soundWay: "renew",
     consumes: true,
     sender: "the Boggs machinery — 0x413bf9, 0x41b022 — and it is also what Boggs ALONE takes",
     from: "0x42eaaa",
@@ -496,6 +505,10 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
     stops: true,
     /** `0x448ff3` — `0x40c900(y, -1, striker)` */
     shake: -1,
+    /** `0x44900f`..`0x449023` — `0x434540(2) + 0xc` through `0x40f110` */
+    sound: 0xc,
+    soundRoll: 2,
+    soundWay: "renew",
     consumes: true,
     sender: "the Boggs machinery — 0x413bf9, 0x41b022 — and it is also what Boggs ALONE takes",
     from: "0x448f7c",

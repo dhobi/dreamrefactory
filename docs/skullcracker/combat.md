@@ -160,10 +160,22 @@ BLASTER's bolt — `0x413af0` maps the variant the bolt remembers to its strengt
 and variants 1..3 all give -1 while the blaster fires with 2 and 3. So the bolt
 is worth a full hundred to Boggs and nothing to most of what it meets, whose
 handlers treat a strength below 1 as no damage. The chapter's own are the
-exceptions: the TCop's `0x4147d9` and the test tube's `0x419999` convert it the
-same way (`Foe.minusOne`), and a Puke Boy answers it with a sound (`0x41825e`).
-The big gun's bolt is the same object fired with variant 0, a plain 100 on tag
-0, and the TCop turns that one away (`0x41482a`). That is what the gun is for,
+exceptions: the TCop's `0x4147d9`, the arm's `0x418b47` and the test tube's
+`0x419999` convert it the same way (`Foe.minusOne`), and a Puke Boy answers it
+with a sound (`0x41825e`).
+
+**A bolt stops only on a handler that takes it.** The hit pass `0x430350` moves
+on to the next body when a handler answers 0 (`0x43042b`), and only an answer of
+1 with a strength above 0 runs `0x430470`, which marks the bolt (`obj+0x2a`,
+`0x430663`) for its think to let go (`0x413b56`). So the bolt flies THROUGH
+everything that turns a negative strength away, and through the Puke Boy, whose
+handler answers 0 after its sound (`0x418278`). The converters write the 100 onto
+the bolt itself, which is what lets their 1 stop it — and an arm that has hold
+of you converts and then answers 0 (`0x418b58`), so the body behind it in the
+same pass meets a hundred. The think writes the −1 back every frame
+(`0x413bf9`). The big gun's bolt is the same object fired with variant 0, a
+plain 100 on tag 0, and the TCop turns that one away (`0x41482a`) and lets it
+past; anything else takes it as a blow, under the creature switch. That is what the gun is for,
 and it only works because the codes are carried at all.
 
 The healing is not a phase Boggs enters — it is how it starts:
@@ -988,6 +1000,22 @@ the class's `pick`: `[0x473de4]` counts the blows, the first three take
 `0x473ba8`, and the fourth snaps it round (`0x473bd8` tag mirror + 2) if the
 player is behind it or swings (`0x473cc8` tag 1) if not.
 
+**A handler with no sign test does not survive a −9.** One that neither reads
+the code nor turns away a negative strength hands it to `0x42f910`, and
+`0x42f91f` sends any strength outside 1..0x65 to `0x408f80` — the engine's
+fatal error: every path meets at `0x40915d`, `MessageBoxA` (`0x409239`), then
+`ExitProcess(0)` (`0x409241`). The hardcore (`0x43d250`) and ghengis
+(`0x422ad0`) are two such handlers, and neither meets a −9 in a game started
+fresh: SERVICE is not a fourth level and chapter two places no flamer, and
+chapter three's runner zeroes every round and hands over the scepter on the way
+in (`0x41f67b`). On the two fourth levels that do carry a code — PLAYGR by the
+flamer brought from WOODS, ARCADE by its flares — everything one can reach reads
+it or turns it away: the dog, the booly and its fireball, kragg, and the
+sprinkler columns (`0x440a80`) and probes (`0x410770`), whose handlers are
+`xor ax, ax`. Kragg's own shot has no handler at all (`0x442190`'s class leaves
+`obj+0x12` at the allocator's 0, `0x42f594`) and no body to be struck on. The
+page takes nothing from a code a class does not read.
+
 The dog's arm installs `0x478208`, which is its death, plays its death sound
 0x18 and pays the death's 200 at `0x455115` — its death path at `0x4551c9`,
 less the subtract. Its `Foe.burns` is `dies`, so a flame kills a dog outright,
@@ -1048,7 +1076,10 @@ And a reaction that is itself a state of the class's machine says so with
 `FoeAnim.decides`: when it ends, the brain is handed that kind with its script
 finished and runs on the same frame, because that is the frame `obj+0x46` is
 set and the think installs what follows (the wraith's `0x424e05`, Ghengis'
-`0x422a25`, the TCop's `0x41440e`, kragg's states 13 and 15). A stand-in cel
+`0x422a25`, the TCop's `0x41440e`, kragg's states 13 and 15, the punk's take
+and burn at `0x44eeb5` and `0x44eda3`, LINK's burn at `0x44f74c`, the dog's
+`0x454ff3`, the hardcore's `0x43d062`, the eyeball's `0x43dfee` and the
+skeleton's `0x423965`). A stand-in cel
 between the two would put the next script a frame late.
 
 ### The nameless handler is the crow's
