@@ -550,11 +550,14 @@ export const skel: Brain = (e, foe, run, k) => {
  *   sound whose priority either channel already holds (`0x427b5f`,
  *   `0x427b6b`, `0x427bc2`, `0x427bca`) — and the priority is the record's
  *   own, `(bank << 16) | (index + 1)` (`0x40ed69`), so the one it refuses is
- *   the same sound still playing. Said once here.
+ *   the same sound still playing. Asked the same way here, and the page's own
+ *   mixer ({@link file://./../sound.ts}) does the refusing.
  */
 export const skelReacts: Reaction = (e, foe, run, k) => {
   if (e.state === "dead") {
-    if (Math.floor(e.clock) === 2 * (foe.death?.hold ?? 3)) k.say(e, SKEL.groan);
+    // asked on every frame the third cel shows (`0x4239b5`), and the mixer
+    // refuses the repeats while the first is still sounding
+    if (Math.floor(e.clock / (foe.death?.hold ?? 3)) === 2) k.say(e, SKEL.groan);
     return;
   }
   const down = foe.flinch?.[3];

@@ -163,9 +163,16 @@ const machines = (): void => {
   said.length = 0;
   const dying = foe("initskel", s.death!, "dead");
   const deathRun = s.death!.cels.length * s.death!.hold;
-  for (dying.clock = 0; dying.clock < deathRun; dying.clock += 1) skelReacts(dying, s, deathRun, k);
-  if (said.filter((n) => n === SKEL.groan).length !== 1) fail(`a dying skeleton groans once; said ${said.join(",")}`);
-  ok(`a skeleton is knocked down by 0x3c, takes 0x14 more from behind, waits to land, leaps off a take, throws its bone and groans once as it dies`);
+  const asks: number[] = [];
+  for (dying.clock = 0; dying.clock < deathRun; dying.clock += 1) {
+    const before = said.length;
+    skelReacts(dying, s, deathRun, k);
+    if (said.length > before) asks.push(dying.clock);
+  }
+  const cel2 = [0, 1, 2].map((i) => 2 * s.death!.hold + i);
+  if (asks.join() !== cel2.join() || said.some((n) => n !== SKEL.groan))
+    fail(`0x4239b5 asks for the groan on each frame of cel 2, for the mixer to refuse the repeats (sound.ts step 0); asked on ${asks.join(",")}: ${said.join(",")}`);
+  ok(`a skeleton is knocked down by 0x3c, takes 0x14 more from behind, waits to land, leaps off a take, throws its bone and asks for its groan on each frame of cel 2 as it dies`);
 };
 
 machines();
