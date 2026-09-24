@@ -218,7 +218,7 @@ import {
   useCharacter,
   view,
   viewH,
-  waitsForHardcore,
+  waitsFor,
   wakeAudio,
   wormsHere,
 } from "./game";
@@ -1553,8 +1553,9 @@ function loop(now: number): void {
     room?.exits.some((e) => inside(e as unknown as SbkEntity)) ?? false;
   const alive = aliveNow();
   const ready = goalReady();
-  // SERVICE's second condition, {@link waitsForHardcore}
-  const bossSay = waitsForHardcore() ? " and HARDCORE still standing" : "";
+  // the goal's second condition, {@link waitsFor}
+  const waiting = waitsFor();
+  const bossSay = waiting ? ` and ${waiting} still standing` : "";
   const inGoal = here.goal !== undefined && inside(here.goal);
   const won = craftOpened();
   // the level is thousands of pixels wide and its end is one rect in it, so say

@@ -2126,7 +2126,8 @@ export async function loadLevel(index: number): Promise<void> {
   startTicks = null;
   stats.shown = null;
   goalOpen = false;
-  hardcoreDown = false; // `0x437020` / `0x43d440`
+  // `0x437020` / `0x43d440`, `0x41fa0c` / `0x421fa0`, `0x412cfb` / `0x4165ac`
+  bossDown.hardcore = bossDown.belfry = bossDown.lab = false;
   leftGoal = false;
   craft = null;
   gobs = [];
@@ -2158,22 +2159,47 @@ export async function loadLevel(index: number): Promise<void> {
  * the craft should not open on the frame it arrives either.
  */
 export function goalReady(): boolean {
-  if (aliveNow() <= stats.allowance && !waitsForHardcore()) goalOpen = true;
+  if (aliveNow() <= stats.allowance && !waitsFor()) goalOpen = true;
   return goalOpen;
 }
 
 /**
- * SERVICE's second condition. The chapter's end test `0x43b950` switches on
- * the stage, and its second case (`0x43b9da`) asks `[0x472574]` after the count
- * (`0x43b9ec`): only `inithardcore`'s death writes it 1 (`0x43d309`), so the
- * sixth level's goal waits for that one kill however far the count has gone.
+ * The goal's second condition — a kill the count does not stand for.
+ *
+ * Three of the four chapter end tests switch on the stage and, for some stages,
+ * ask a flag besides (or instead of) the census:
+ *
+ * - SERVICE, level 6: `0x43b950`'s second case asks `[0x472574]` after the
+ *   count (`0x43b9ec`), and only `inithardcore`'s death writes it
+ *   (`0x43d309`) — so the goal waits for that one kill however far the count
+ *   has gone.
+ * - RAVECAVE and TOWER, levels 11 and 12: `0x421900`'s third and fourth cases
+ *   (`0x4219e5`, `0x421a38`) ask `[0x46ece0]` and NOTHING else — their
+ *   allowance is the census, see {@link MISSIONS}. The named wraith's fatal
+ *   blow writes it (`0x4250eb`) and so does the bishop's (`0x426600`).
+ * - LAB and VAT, levels 15 and 16: `0x415f50`'s third and fourth cases ask
+ *   `[0x46bfbc]` after the count (`0x416047`, `0x4160a8`). The test tube's
+ *   fatal blow writes it (`0x419ac9`) and so does Boggs going down
+ *   (`0x41bdd8`).
+ *
+ * Every flag is cleared as its chapter's level begins (`0x437020`, `0x41fa0c`,
+ * `0x412cfb` and their siblings). Answers what is still standing, or null.
  */
-export function waitsForHardcore(): boolean {
-  return mission().number === 6 && !hardcoreDown;
+export function waitsFor(): string | null {
+  const n = mission().number;
+  if (n === 6 && !bossDown.hardcore) return "HARDCORE";
+  if (n === 11 && !bossDown.belfry) return "the wraith";
+  if (n === 12 && !bossDown.belfry) return "the bishop";
+  if (n === 15 && !bossDown.lab) return "the test tube";
+  if (n === 16 && !bossDown.lab) return "Boggs";
+  return null;
 }
 
-/** `[0x472574]` — set when `inithardcore` dies, cleared as a level begins */
-export let hardcoreDown = false;
+/**
+ * The three flags {@link waitsFor} reads: `[0x472574]` (`hardcore`),
+ * `[0x46ece0]` (`belfry`) and `[0x46bfbc]` (`lab`).
+ */
+export const bossDown = { hardcore: false, belfry: false, lab: false };
 
 /**
  * Has the player left the world? CITY is why this exists.
@@ -4204,8 +4230,12 @@ export function killFoe(e: Enemy, foe: Foe): void {
     e.speed = 0;
   }
   stats.score += foe.award ?? foe.panel?.award ?? 0;
-  // `0x43d309` — the flag SERVICE's goal waits for, {@link waitsForHardcore}
-  if (e.kind === "inithardcore") hardcoreDown = true;
+  // the flags three goals wait for — see {@link waitsFor}: `0x43d309`, the
+  // bishop's `0x426600` and the named wraith's `0x4250eb`, and `0x419ac9`
+  if (e.kind === "inithardcore") bossDown.hardcore = true;
+  if (e.kind === "initvpriest" || (e.kind === "initwraith" && e.decisions !== 0))
+    bossDown.belfry = true;
+  if (e.kind === "inittube") bossDown.lab = true;
 }
 
 /**
@@ -7478,6 +7508,7 @@ export function stepBoggs(): void {
     // `0x41bd69` — and `0x41bdd8` is the level's own cleared flag
     if (b.hp <= 0) {
       b.dying = true;
+      bossDown.lab = true;
       b.clock = 0;
       b.headClock = 0;
       sound?.effect(BOGGS.dies.sound, b.headX, b.headY);

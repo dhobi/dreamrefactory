@@ -93,7 +93,7 @@ ok(`and the one at the end stands on 6070 with 750 health`);
 
 // 4b. ...and the goal waits for it: `0x43b9ec` asks `[0x472574]`, which only
 //     its death writes (`0x43d309`), after the count
-if (!game.waitsForHardcore()) fail(`SERVICE's goal waits for the one at the end — 0x43b9ec`);
+if (game.waitsFor() !== "HARDCORE") fail(`SERVICE's goal waits for the one at the end — 0x43b9ec`);
 ok(`and SERVICE's goal waits for it as well as for the count`);
 
 /**

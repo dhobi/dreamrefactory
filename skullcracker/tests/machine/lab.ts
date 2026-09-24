@@ -228,5 +228,16 @@ const t = nearest("inittube");
 if (!t || Math.abs(t.x - 8204) > 200) fail(`LAB's one test tube stands at x8204; nearest is at ${t?.x}`);
 if (t.max !== 1200 || t.hp !== 1200) fail(`0x411be4 gives it 0x40e300(0x4b0); it has ${t.hp}/${t.max}`);
 ok(`the test tube carries the player's own twelve hundred health`);
+// ...and the goal waits for it: `0x416047` asks `[0x46bfbc]` after the count,
+// and the tube's fatal blow is what writes it (`0x419ac9`)
+for (const e of game.spawnedHere()) if (e.kind === "initpuke") game.killFoe(e, FOES.initpuke);
+h.frame(2);
+if (game.aliveNow() > game.stats.allowance)
+  fail(`the Puke Boys down should meet the count; ${game.aliveNow()} stand against an allowance of ${game.stats.allowance}`);
+if (game.goalReady() || game.waitsFor() !== "the test tube")
+  fail(`every Puke Boy down meets the count, but 0x416047 wants [0x46bfbc] too; the goal is ${game.goalReady() ? "open" : "shut"}, waiting for ${game.waitsFor()}`);
+game.killFoe(t!, FOES.inittube);
+if (!game.goalReady()) fail(`the tube's death writes [0x46bfbc] (0x419ac9); the goal is still shut`);
+ok(`the goal waits for the test tube whatever the count, and opens when it goes`);
 
 pass("LAB's Puke Boys, its ten arms and its one test tube are all where the records put them");

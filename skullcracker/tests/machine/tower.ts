@@ -233,6 +233,14 @@ await go("&x=17600&y=15300");
   const box = game.playerBox();
   if (!g || !(box.right > g.left && box.left < g.right && box.bottom > g.top && box.top < g.bottom))
     fail(`the bishop stands ON the goal, and the player beside it should be in the goal rect`);
+  // ...and standing in it is not enough: `0x421a38` asks `[0x46ece0]` and
+  // nothing else, and only the bishop's death writes it (`0x426600`)
+  h.frame(4);
+  if (game.goalReady() || game.waitsFor() !== "the bishop")
+    fail(`0x421a38 waits for [0x46ece0]; the goal is ${game.goalReady() ? "open" : "shut"} with the bishop standing, waiting for ${game.waitsFor()}`);
+  game.killFoe(b, FOES.initvpriest);
+  if (!game.goalReady()) fail(`the bishop's death writes [0x46ece0] (0x426600); the goal is still shut`);
+  ok(`the goal waits for the bishop, whatever the count says, and opens when it dies`);
 }
 // a bat thrown past the room's east wall stays in the fight: the creator gives
 // it region -1 (`0x426378`) and the mover files it by its point only once that

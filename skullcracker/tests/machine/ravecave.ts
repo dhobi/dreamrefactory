@@ -4,8 +4,9 @@
  *   npx tsx tools/runmachine.mts ravecave      (from skullcracker/)
  *
  * Chapter three's third stage stores the whole census as its allowance
- * (`0x4218ca`), so the goal is open from the first frame and everything in the
- * level is optional. What is in it that is new:
+ * (`0x4218ca`), so no count is asked for — but its end test asks for the
+ * wraith instead: `0x4219e5` reads `[0x46ece0]` and nothing else, and only the
+ * named wraith's fatal blow writes it (`0x4250eb`). What is in it that is new:
  *
  *   - **Igor** (`0x41ee40`), three of them and all three here. Two hundred
  *     health, 350 points, and a retreat script — `0x46fea0`, five records whose
@@ -207,8 +208,9 @@ if (game.mission().kill !== 0 || game.stats.census !== 4)
   fail(`three Igors and one wraith count and its 27 bats do not; the census is kill ${game.mission().kill} of ${game.stats.census}`);
 if (game.stats.census - game.stats.allowance !== 0)
   fail(`a share of nothing leaves the whole census standing: allowance ${game.stats.allowance} of ${game.stats.census}`);
-if (!game.goalReady()) fail(`with nothing to kill the goal is open from the first frame (0x4218ca)`);
-ok(`RAVECAVE is four regions, a census of four, and a level that asks for no kills`);
+if (game.goalReady() || game.waitsFor() !== "the wraith")
+  fail(`no count is asked for, but 0x4219e5 waits for [0x46ece0] — the goal is ${game.goalReady() ? "open" : "shut"}, waiting for ${game.waitsFor()}`);
+ok(`RAVECAVE is four regions, a census of four, and a level that asks for no kills — only the wraith`);
 
 // 2. its own clock — 2500, out of the timer record at x7914
 if (game.stats.clockFull !== 2500) fail(`RAVECAVE's timer record carries 2500; the clock is full at ${game.stats.clockFull}`);
@@ -261,6 +263,8 @@ const wraithPay = fight("initwraith", 2000);
 if (!seen.has("initwraith dead")) fail(`never felled the wraith`);
 if (wraithPay !== 0) fail(`0x424f80 pays nothing at all; the score moved by ${wraithPay}`);
 ok(`the wraith is seven hundred health and pays nothing — the only class in the game that does`);
+if (!game.goalReady()) fail(`the named wraith's fall writes [0x46ece0] (0x4250eb), which is all 0x4219e5 asks; the goal is still shut`);
+ok(`...and its fall is what opens the goal`);
 /**
  * ...and the two reactions are the right way round: `0x4250fa` installs
  * `0x46f898`, cel 3243 alone, for a blow it survives, and `0x4250d9` the
