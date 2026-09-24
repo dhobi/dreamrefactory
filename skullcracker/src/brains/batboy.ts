@@ -123,6 +123,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
+import type { FoeAnim } from "../foes";
 
 /**
  * The hit reactions, 9 and 10, and the one thing each does that the page's own
@@ -368,6 +369,31 @@ export const gangCorpse: Reaction = (e, _foe, run) => {
   if (e.vy === 0) e.vx = 0;
 };
 
+/**
+ * The preamble's gloat, `0x439316`: `0x474340` tag 0, turned to face him —
+ * `0x439326`, and only if he is behind it. The brain installs it over any state
+ * but 1, 8 and 9, and {@link gangReacts} over the flinch, state 10, which the
+ * preamble does not exempt.
+ */
+export function batboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  if (k.track(e, BATBOY.bands).forward < 0) turn(e);
+  return BATBOY.gloat;
+}
+
+/**
+ * The gang's reaction: {@link gangCorpse}, and the think's preamble reaching
+ * into the flinch. All four exempt only states 8, 1 and 9 from the gloat — the
+ * knotboy 5 as well — at `0x439300`, `0x43880f`, `0x437bcd` and `0x439d4d`, so
+ * state 10 is taken over the frame `0x402f60` says the player is down, in the
+ * air or not. `down` is the class's own preamble.
+ */
+export function gangReacts(down: (e: Enemy, k: BrainCtx) => FoeAnim): Reaction {
+  return (e, foe, run, k) => {
+    if (e.state === "flinch" && k.player.down) return down(e, k);
+    return gangCorpse(e, foe, run, k);
+  };
+}
+
 /** `0x4394d9` — still sliding this fast and the poise does not restart the run */
 const COASTING = 0x14;
 /** `0x4395f7` — and the wind-up waits until it is under this before it swings */
@@ -404,9 +430,7 @@ export const batboy: Brain = (e, foe, run, k) => {
    * why it does nothing that frame.
    */
   if (k.player.down && now !== 1 && now !== 8 && now !== 9) {
-    install(e, BATBOY.gloat);
-    // `0x439326` — and only then, and only if he is behind it
-    if (t.forward < 0) turn(e);
+    install(e, batboyDown(e, k));
     now = 8;
   }
   switch (now) {

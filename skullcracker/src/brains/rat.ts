@@ -95,8 +95,10 @@ import {
  *   offset (see `props.ts` on `0x41a20e`'s −100 for the shower), so a dying rat
  *   has its contact point lifted **150** pixels above the foot of its cel for
  *   the whole of `0x477090`: nothing under it holds the drawn body up, and a
- *   rat that has weight drops through the street it died on. The page plays
- *   that script through {@link Foe.death} and the launch through
+ *   rat that has weight drops through the street it died on — below the
+ *   region's own bottom, where the camera never goes. State 6 never answers
+ *   1, so the body is never freed ({@link Foe.linger}). The page plays that
+ *   script through {@link Foe.death} and the launch through
  *   {@link Foe.frail}; the offset is {@link ratReacts}.
  */
 const NOT_HERE = "0x44e3f0, 0x44e390, 0x44e304" as const;

@@ -1036,10 +1036,20 @@ and WOODS. A flamer carried in reaches nothing either: STREETS' book has none
 of the stream's 9500s, whose strike boxes are what a stream hits with.
 
 `Reaction` in `brains/kit.ts` is the seam these three reactions need: a think for the
-states the PAGE owns. It is deliberately not a brain — it returns nothing and
-installs nothing — and it is what lets `initwerec` fire a shot a frame out of a
-corpse, `initvpriest` throw twelve bats and wait out of sight until half of them
-are dead, and `initkragg` drag itself onto a sprinkler.
+states the PAGE owns. It is deliberately not a brain — it installs nothing
+itself — and it is what lets `initwerec` fire a shot a frame out of a corpse,
+`initvpriest` throw twelve bats and wait out of sight until half of them are
+dead, and `initkragg` drag itself onto a sprinkler. The one thing it may answer
+is a script that ENDS a flinch: a think's preamble overriding the state the
+handler installed, which is the gang's gloat going on over state 10 the frame
+the player goes down (`0x439300` and its three siblings).
+
+And a reaction that is itself a state of the class's machine says so with
+`FoeAnim.decides`: when it ends, the brain is handed that kind with its script
+finished and runs on the same frame, because that is the frame `obj+0x46` is
+set and the think installs what follows (the wraith's `0x424e05`, Ghengis'
+`0x422a25`, the TCop's `0x41440e`, kragg's states 13 and 15). A stand-in cel
+between the two would put the next script a frame late.
 
 ### The nameless handler is the crow's
 

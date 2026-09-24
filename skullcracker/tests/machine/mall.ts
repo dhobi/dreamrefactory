@@ -27,6 +27,7 @@ import { CHEATS } from "../../src/cheats";
 import { FOES } from "../../src/foes";
 import { TICK_SCALE, type BrainCtx, type Enemy } from "../../src/brains/kit";
 import { maskboyReacts } from "../../src/brains/maskboy";
+import { BATBOY } from "../../src/brains/batboy";
 import { fail, headless, ok, pass } from "./harness";
 
 const h = await headless("level=5");
@@ -498,6 +499,24 @@ ok(`ran all three rooms to the goal at x ${game.p.x}, y ${game.p.y}, on ${jumps}
     fail(`held ${aloft} frames aloft, then the run (0x4398ee); it is ${bat.state} on ${bat.anim.from}`);
   if (game.celRec(game.level!.sbk, 1920)?.body) fail(`the flinch cel 1920 carries no body box, so nothing reaches it in the air`);
   ok(`a batboy knocked up holds its flinch ${aloft} frames until it lands, and comes down running`);
+
+  // ...unless the player goes down: the preamble (`0x439300`) exempts 8, 1
+  // and 9 and not 10, so the gloat goes on over the flinch that frame, in the
+  // air or not
+  bat.state = "flinch";
+  bat.anim = FOES.initbatboy.flinch![0];
+  bat.clock = 0;
+  bat.vx = 3 * TICK_SCALE;
+  bat.vy = -60 * TICK_SCALE;
+  h.frame(2);
+  if (bat.state !== "flinch") fail(`the batboy should still be up in its flinch`);
+  const act = game.p.act;
+  game.p.act = "dying";
+  h.frame();
+  const gloated = (bat.state as string) === "gait" && bat.anim === BATBOY.gloat && bat.script === 8;
+  game.p.act = act;
+  if (!gloated) fail(`a downed player puts the gloat over the flinch (0x439316); it is ${bat.state} on ${bat.anim.from}`);
+  ok(`and the frame the player goes down, the gloat takes over its flinch in mid-air`);
 
   // the knifeboy's own class `[0x4740a8]` is on all four lists (`0x439a03`,
   // `0x438f83`, `0x4382e3`, `0x43a603`), and the corpse count starts at the

@@ -424,6 +424,12 @@ export interface BrainCtx {
    */
   count(kind: string): number;
   /**
+   * Every live one of a class in the LEVEL, whichever room it is in — a
+   * class-list walk that does not stop at the room, as `0x424f30` walks the
+   * wraiths'.
+   */
+  every?(kind: string): Enemy[];
+  /**
    * The nearest live one of a class to the PLAYER, inside `within` — the
    * search `0x426450` does to decide where the bishop re-forms.
    */
@@ -872,17 +878,24 @@ export type Gate = (
  * and all three were unreachable for exactly that reason.
  *
  * So a reaction gets a think of its own. It is deliberately NOT a brain: it
- * returns nothing, it may not install a state, and the page goes on owning the
- * animation and the frame count. It runs once an ENGINE FRAME, like a brain,
- * and `run` is how many frames the reaction's own animation lasts, so a class
- * can tell the last frame of it from the first.
+ * does not install anything itself, and the page goes on owning the animation
+ * and the frame count. It runs once an ENGINE FRAME, like a brain, and `run`
+ * is how many frames the reaction's own animation lasts, so a class can tell
+ * the last frame of it from the first.
+ *
+ * The one thing it may do is END a flinch: answer a script of the class's own
+ * machine and the page takes the thing out of the flinch and puts it on that
+ * script, on this frame. That is a think's preamble overriding the state the
+ * handler installed — the gang's gloat, which `0x439300` and its siblings put
+ * on over state 10 the frame the player goes down. From a death it is
+ * ignored.
  */
 export type Reaction = (
   e: Enemy,
   foe: Foe,
   run: number,
   k: BrainCtx,
-) => void;
+) => void | FoeAnim;
 
 /**
  * A CAST as its own hit handler sees it — the object's own words, and nothing

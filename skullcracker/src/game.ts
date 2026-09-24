@@ -2164,7 +2164,11 @@ export async function loadLevel(index: number): Promise<void> {
  * the craft should not open on the frame it arrives either.
  */
 export function goalReady(): boolean {
-  if (aliveNow() <= stats.allowance && !waitsFor()) goalOpen = true;
+  // RAVECAVE's and TOWER's cases ask the flag and NOT the count (`0x4219e5`,
+  // `0x421a38`): what a split or a summon adds to the room is not counted
+  const n = mission().number;
+  const counted = n === 11 || n === 12 || aliveNow() <= stats.allowance;
+  if (counted && !waitsFor()) goalOpen = true;
   return goalOpen;
 }
 
@@ -4517,7 +4521,7 @@ export function strikeFoe(
   // a blow the handler takes and answers 1 to, with no reaction — see {@link Gate}
   if (still) return;
   // a frail kind's handler never looks at health: one blow, whatever the blow.
-  // The rat is the case, and no corpse lingers — the launch IS the exit.
+  // The rat is the case — the launch is its death.
   /**
    * ...and one class stands up instead — see {@link Foe.rallies}.
    *
@@ -12067,6 +12071,8 @@ export const BRAIN_CTX: BrainCtx = {
   },
   raise: (e) => raiseSprinkler(e),
   count: (kind) => spawnedHere().filter((q) => q.kind === kind && q.state !== "dead").length,
+  every: (kind) =>
+    (level?.spawned ?? []).flat().filter((q) => q.kind === kind && q.state !== "dead"),
   // `0x426450` — Manhattan, `|dx| + |dy|` against the player's point, and a
   // candidate has to come in strictly under the best so far (`0x426499`)
   nearest: (kind, within) => {
@@ -12262,11 +12268,17 @@ export function stepEnemies(): void {
      * does, and it may not install anything: the page goes on owning the
      * animation and the frame count.
      */
+    // ...and what it answers, from a flinch, is a script of its own machine
+    // that ends the flinch this frame ({@link Reaction}), handled with the
+    // `resume` below once the frame's movement is done
+    let cut: FoeAnim | undefined;
     if (
       (e.state === "flinch" || e.state === "dead") &&
       Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE)
-    )
-      REACTIONS[e.kind]?.(e, foe, run, BRAIN_CTX);
+    ) {
+      const to = REACTIONS[e.kind]?.(e, foe, run, BRAIN_CTX);
+      if (to && e.state === "flinch") cut = to;
+    }
     if (e.state === "dead") {
       /**
        * ...and what comes out of it. `0x454690` calls the punk's own creator
@@ -12570,11 +12582,27 @@ export function stepEnemies(): void {
     // ...and a reaction that hands its class's machine a state of its own
     // rather than the gait — the punk's get-up ending on the taunt,
     // `0x44ee90`, and see {@link FoeAnim.resume}
-    const resume = e.state === "flinch" && e.clock >= run && e.anim.resume;
+    const resume = e.state === "flinch" && (cut ?? (e.clock >= run && e.anim.resume));
     if (resume) {
       e.state = "gait";
+      e.swing = false;
       install(e, resume);
       e.clock = 0;
+      continue;
+    }
+    /**
+     * ...or a reaction that is itself a state of the machine, whose case
+     * decides the moment the script ends ({@link FoeAnim.decides}): the brain
+     * is handed the reaction's own kind with the script finished, and runs on
+     * this same frame — the frame `obj+0x46` is set and the think installs
+     * what follows.
+     */
+    if (e.state === "flinch" && e.clock >= run && e.anim.decides && brain) {
+      e.state = "gait";
+      e.swing = false;
+      e.script = e.anim.kind;
+      e.tag = e.anim.tag;
+      stepFight(e, foe, run);
       continue;
     }
     if (e.state === "flinch" && e.clock >= run) {

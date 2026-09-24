@@ -117,9 +117,14 @@ import {
  *   (`0x418b47`..`0x418b4e`). Then `if (obj+0x18 == 5) return 0` — **an arm
  *   that has hold of you cannot be hit** ({@link armGate}); a strength of
  *   exactly −6 answers 1 and does nothing else (`0x418b6a`), and anything
- *   else under 1 is refused. −1 and −6 are pickup codes, and no pickup is
- *   ever handed to a creature here, so those two arms are read and not
- *   spent. What is left sprays through `0x42f910`/`0x40cba0`, plays `lab.snd`
+ *   else under 1 is refused. The −1 is the BLASTER's bolt, whose think writes
+ *   it for the blaster's variants (`0x413bf9`), and LAB hands out blaster
+ *   packs among its arms — {@link Foe.minusOne}. It is not a pickup's code:
+ *   a pickup is built by `0x45b160` through `0x430dc0`/`0x42f610`, which
+ *   leaves `obj+0x1a` at 0 (`0x42f66f`), its code lives in its own six bytes
+ *   (`0x45b18c`), and `0x430367` never lets a strength of 0 strike anything.
+ *   Nothing writes −6 into a strength, so that arm is read and not spent.
+ *   What is left sprays through `0x42f910`/`0x40cba0`, plays `lab.snd`
  *   0x25, installs `0x46d0b0` and pays `0x40d450(0x71)`. Nothing is
  *   subtracted from anything: one blow of any size and the arm is done, which
  *   is what {@link Foe.frail} and `health: 1` say. It tests no class at all,

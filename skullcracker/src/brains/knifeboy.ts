@@ -117,6 +117,7 @@ import {
   type Enemy,
 } from "./kit";
 import { ahead, turn } from "./batboy";
+import type { FoeAnim } from "../foes";
 
 /**
  * The four states that are deliberately elsewhere, and what they carry.
@@ -486,6 +487,18 @@ function atRest(e: Enemy): boolean {
 }
 
 /**
+ * The preamble's push-off, `0x439d63`: `0x4745c0` tag 0, and AWAY from him
+ * (`0x439d7c`) — the mirror is written, the slide under it is not. The brain
+ * installs it over any state but 1, 8 and 9; `gangReacts` over the flinch,
+ * state 10.
+ */
+export function knifeboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  const away = k.anchorX(e) < k.player.x ? -1 : 1;
+  if (away !== e.facing) turn(e);
+  return KNIFEBOY.flee;
+}
+
+/**
  * `initknifeboy`'s own machine — states 1, 2, 4, 5, 7 and 8.
  *
  * ## The return value
@@ -516,11 +529,7 @@ export const knifeboy: Brain = (e, foe, run, k) => {
 
   // `0x439d43` — and states 1, 8 and 9 are the three it does not interrupt
   if (k.player.down && state !== 1 && state !== 8 && state !== 0) {
-    // `0x439d7c`, and it is AWAY from him — the mirror is written, the slide
-    // under it is not
-    const away = k.anchorX(e) < k.player.x ? -1 : 1;
-    if (away !== e.facing) turn(e);
-    return install(e, KNIFEBOY.flee);
+    return install(e, knifeboyDown(e, k));
   }
 
   switch (state) {

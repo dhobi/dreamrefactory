@@ -232,6 +232,26 @@ if (floorKinds.has(0) || floorKinds.has(1))
   fail(`the param-0 arm at x3616 played the wall's scripts (kinds ${[...floorKinds].join(", ")})`);
 ok(`a param-0 arm starts on the floor (kinds ${[...floorKinds].join(", ")}), never in the wall`);
 
+// 3c. ...and the blaster's bolt fells one. Its think writes −1 into the bolt
+//    (`0x413bf9`), and `0x418b47` writes that back onto the bolt as 100 and
+//    takes it like any blow — LAB hands out blaster packs among its arms
+{
+  floorArm.state = "flinch";
+  floorArm.anim = { cels: [game.celOf(floorArm)], hold: 10, from: "test" };
+  floorArm.clock = 0;
+  h.frame();
+  const c = game.celRec(game.level!.sbk, game.celOf(floorArm))!;
+  const b = game.hurtBox(floorArm, c, game.level!);
+  const dir = floorArm.x > game.p.x ? 1 : -1;
+  const score = game.stats.score;
+  game.bolts.length = 0;
+  game.spawnBolt(floorArm.x - dir * 150, (b.top + b.bottom) / 2 + 20, dir);
+  h.frame(3);
+  if ((floorArm.state as string) !== "dead" || game.stats.score - score !== 113)
+    fail(`a blaster bolt should fell an arm for 0x71 (0x418b4e); it is ${floorArm.state}, +${game.stats.score - score}`);
+}
+ok(`a blaster bolt fells an arm for 113`);
+
 // 4. the test tube — the player's own twelve hundred, and nothing for it
 await go("&x=8150");
 const t = nearest("inittube");

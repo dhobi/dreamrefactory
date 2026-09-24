@@ -18,7 +18,7 @@
  * ten `statblasterpack` refills here and nothing to fire them with, because the
  * gun itself is in VAT.
  */
-import { COP_SLUG, copReacts } from "../../src/brains/cop";
+import { COP, COP_SLUG, copReacts } from "../../src/brains/cop";
 import type { BrainCtx, Enemy } from "../../src/brains/kit";
 import { FOES } from "../../src/foes";
 import { GUN_CODES, WEAPONS } from "../../src/guns";
@@ -183,5 +183,31 @@ if (said.join() !== "13" || goo.join() !== "120" || C.deathSound !== undefined)
 if (!C.hitsOwn || !game.SPARES.initcop?.kinds.includes("initslurp") || !game.SPARES.initcop.kits.includes(COP_SLUG))
   fail(`0x4147e6..0x41482f turn away the slurp and the slug, and not a cop`);
 ok(`under half the first time it runs for a switch instead of flinching, and it goes with 0xd and 0x78 of goo`);
+
+// 9. its flinch is state 8, and `0x41440e` decides on `obj+0x46`: the wind-up
+//    or the walk out goes on the frame the two cels' four frames end
+{
+  const at = game.level!.spawned.flat().find((e) => e.kind === "initcop" && !e.param)!;
+  await go(`&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  const c = game
+    .spawnedHere()
+    .filter((e) => e.kind === "initcop" && !e.param && e.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  const take = C.flinch![0];
+  c.state = "flinch";
+  c.anim = take;
+  c.clock = 0;
+  c.script = take.kind;
+  c.tag = take.tag;
+  c.asleep = false;
+  let f = 0;
+  while (c.state === "flinch" && c.anim === take && f < 20) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || (c.anim !== COP.wind && c.anim !== COP.walkOut))
+    fail(`the flinch is ${take.cels.length * take.hold} frames and then the wind-up or the walk out; ${f} frames, then ${c.anim.from}`);
+  ok(`a cop's flinch hands to ${c.anim === COP.wind ? "the wind-up" : "the walk out"} after ${f} frames, the frame it ends (0x41440e)`);
+}
 
 pass(`BARREL's conveyors carry, its chairs turn, and its twelve cops stand`);

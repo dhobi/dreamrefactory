@@ -545,7 +545,8 @@ export const wraith: Brain = (e, foe, run, k) => {
         });
       return install(e, WRAITH.hover);
     /**
-     * ---- 7, `0x424ded`: the flinch has run out ({@link WRAITH_FLINCHED}).
+     * ---- 7, `0x424ded`: the flinch has run out — the frame its script ends
+     * (`0x424e05`), which the page hands here ({@link FoeAnim.decides}).
      *
      * `0x424e14` rolls `0x434540(10)`: under 3, and only for the named one, it
      * cries 0x28 and splits; anything else is the hover again.
@@ -573,7 +574,7 @@ const WRAITH_GONE = 0x21;
  *   still up (`0x424ed5` → `0x424f30`) — which each of them sees as
  *   {@link namedFallen} moving.
  */
-export const wraithReacts: Reaction = (e, _foe, run, k) => {
+export const wraithReacts: Reaction = (e, foe, run, k) => {
   if (e.state === "flinch") {
     e.vx = halve(e.vx);
     e.vy = halve(e.vy);
@@ -594,6 +595,11 @@ export const wraithReacts: Reaction = (e, _foe, run, k) => {
   if (e.clock >= run) {
     e.hatched = true;
     namedFallen += 1;
+    // `0x424ed5` → `0x424f30`: every lesser one on the class list, in
+    // whatever room it is — each cries 0x21 as its own death goes on. Every
+    // other wraith is a lesser one, thought yet or not (`e.decisions` is only
+    // filed on a first think)
+    for (const q of k.every?.(e.kind) ?? []) if (q !== e) dissolve(q, foe);
   }
 };
 

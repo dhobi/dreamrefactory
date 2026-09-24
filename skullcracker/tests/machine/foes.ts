@@ -221,18 +221,26 @@ for (let i = 0; i < 10 && buriedCel(); i++) {
 }
 ok(`a rat down its hole cannot be hit — its cels carry no box`);
 
-// 9. and a rat leaves no green ball. That effect is `0x40cba0`'s −13 branch and
-//    only the punk classes' CORPSE handlers call it (`0x44ef7e`, `0x44f848`); the
-//    rat's launch ends with the object simply gone. So kill one outright, the
-//    class's own way, and watch it go.
+// 9. and a rat leaves no green ball — and no gap either. The ball is
+//    `0x40cba0`'s −13 branch and only the punk classes' CORPSE handlers call it
+//    (`0x44ef7e`, `0x44f848`). The rat's state 6 (`0x44e33f`) answers 0 for
+//    ever, so the body is never freed; its `obj+0x10 = -150` drops it until
+//    3048 hangs 63..150 under the street, and the region ends about forty
+//    under its floor, where `0x430914` holds the camera. Kill one the way a
+//    blow finds it — out of its hole, with its weight on (`0x44e0ff`).
 if (FOES.initrat.vanishes) fail(`FOES.initrat says its corpse vanishes in a ball; only the punks' do`);
 const pops0 = game.pops.length;
+rat!.weightless = false;
 game.killFoe(rat!, FOES.initrat);
-const ratGone = h.until(() => !game.spawnedHere().includes(rat!), 120);
-if (ratGone < 0) fail(`a killed rat never left the room`);
-h.frame(2);
+h.frame(120);
+if (!game.spawnedHere().includes(rat!)) fail(`0x44e33f never answers 1: a dead rat is not freed`);
+const ratAt = game.foeAnchor(rat!, game.level!)!;
+const ratCel = game.celRec(game.level!.sbk, game.celOf(rat!))!;
+const ratTop = ratAt.y - ratCel.posY;
+if (game.celOf(rat!) !== 3048 || ratTop <= game.p.room!.bottom || ratTop <= game.view.y + game.viewH())
+  fail(`the body sinks below the region and out of the camera; cel ${game.celOf(rat!)} tops out at y${ratTop}, region bottom ${game.p.room!.bottom}`);
 if (game.pops.length > pops0) fail(`a rat left a green ball; only the punks' corpses do that`);
-ok(`and a dead rat leaves no green ball behind`);
+ok(`and a dead rat leaves no green ball: it sinks to y${Math.round(ratTop)}, under the region's ${game.p.room!.bottom}, and lies there`);
 
 // 10. a kicked mailbox flies. `0x430470` is an elastic collision with `obj+0xe`
 //     as the mass — the player 12, a mailbox 7 — so a kick's 55 leaves it at

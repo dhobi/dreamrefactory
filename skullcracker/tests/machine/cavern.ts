@@ -21,7 +21,7 @@
  */
 import { FOES } from "../../src/foes";
 import { bat, batReacts } from "../../src/brains/bat";
-import { ghengisReacts } from "../../src/brains/ghengis";
+import { GHENGIS, ghengisReacts } from "../../src/brains/ghengis";
 import { SKEL, SKEL_BONE, skel, skelReacts } from "../../src/brains/skel";
 import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 import { gobCount } from "../../src/effects";
@@ -157,7 +157,14 @@ const machines = (): void => {
   casts.length = 0;
   skel(wind, s, 12, k);
   if (casts[0] !== SKEL_BONE) fail(`0x4238a3 throws the bone as the wind-up ends`);
-  ok(`a skeleton is knocked down by 0x3c, takes 0x14 more from behind, waits to land, leaps off a take and throws its bone`);
+  // `0x4239b5` asks for 0x15 on all three frames of the death's third cel,
+  // and `0x427b20` refuses the same sound while it plays: heard once
+  said.length = 0;
+  const dying = foe("initskel", s.death!, "dead");
+  const deathRun = s.death!.cels.length * s.death!.hold;
+  for (dying.clock = 0; dying.clock < deathRun; dying.clock += 1) skelReacts(dying, s, deathRun, k);
+  if (said.filter((n) => n === SKEL.groan).length !== 1) fail(`a dying skeleton groans once; said ${said.join(",")}`);
+  ok(`a skeleton is knocked down by 0x3c, takes 0x14 more from behind, waits to land, leaps off a take, throws its bone and groans once as it dies`);
 };
 
 machines();
@@ -389,5 +396,28 @@ for (let i = 0; i < 10 * FPS; i++) {
 // the x4944 shaft's record is y1170..2132; a rider that is carried clears most of it
 if (started - top < 500) fail(`the x4944 lift should carry the player up its shaft; started at y ${started} and the highest was y ${top}`);
 ok(`...and its lifts carry a rider — y ${started} up to y ${top}, on chapter three's own cel 5210`);
+
+// ...and its flinch is state 8: the frame the two cels end, `0x422a25` rolls
+// between the walk and the bull rush, and that script goes on that frame
+await go(5520);
+h.frame(9);
+{
+  const g = nearestOf("initghengis")!;
+  const take = FOES.initghengis.flinch![0];
+  g.state = "flinch";
+  g.anim = take;
+  g.clock = 0;
+  g.script = take.kind;
+  g.tag = take.tag;
+  g.asleep = false;
+  let f = 0;
+  while (g.state === "flinch" && g.anim === take && f < 20) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || (g.anim !== GHENGIS.stride && g.anim !== GHENGIS.windUp))
+    fail(`the flinch is ${take.cels.length * take.hold} frames and then the walk or the rush; ${f} frames, then ${g.anim.from}`);
+  ok(`Ghengis' flinch hands to ${g.anim === GHENGIS.stride ? "the walk" : "the bull rush"} after ${f} frames, the frame it ends (0x422a25)`);
+}
 
 pass(`CAVERN's four creatures stand, its blades swing, its bridges give way and its lifts carry`);

@@ -131,8 +131,8 @@ import type { FoeAnim } from "../foes";
  * - **8**, the flinch (`0x46c828`, cels 2250/2251). `0x414898` takes the blow
  *   off `AI+0` and `0x4148a1` rolls `0x434540(4) + 0xe` for the noise — lab.snd
  *   **15…18**, the four `#0087…#0090 TCop punc[h]`es. What follows it is state
- *   8 itself (`0x41440e`), and that is below: the flinch's `resume` hands the
- *   machine kind 8 the frame the page's animation ends. `0x414933` is the
+ *   8 itself (`0x41440e`), and that is below: the flinch {@link FoeAnim.decides},
+ *   so the machine is handed kind 8 on the frame the page's animation ends. `0x414933` is the
  *   other thing in the handler: a blow that leaves it under half health with
  *   `AI+0x30` still 0 starts the switch run instead of the flinch — that is
  *   {@link Foe.pick}'s second reaction for this class.
@@ -541,9 +541,8 @@ export const cop: Brain = (e, foe, run, k) => {
     case 7:
       return done ? install(e, COP.stance) : false;
     /**
-     * ---- 8, `0x41440e`: what follows the flinch, and the flinch has already
-     * ended by the time the machine is handed this — {@link Foe.flinch}'s
-     * `resume`. A cop on its way to a switch (`AI+0x30` over 0) goes back to
+     * ---- 8, `0x41440e`: what follows the flinch, on the frame its script
+     * ends — the flinch {@link FoeAnim.decides}. A cop on its way to a switch (`AI+0x30` over 0) goes back to
      * that stage of the run (`0x414422`), which the page's {@link Foe.lever}
      * owns; otherwise `0x434540(3)`: one time in three the wind-up
      * (`0x46c660` tag 0), and otherwise the walk out (`0x46c720` tag 1).

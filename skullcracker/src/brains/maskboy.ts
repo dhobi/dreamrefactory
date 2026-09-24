@@ -89,6 +89,7 @@ import {
   type Reaction,
 } from "./kit";
 import { ahead, gangCorpse, turn } from "./batboy";
+import type { FoeAnim } from "../foes";
 
 /**
  * Everything `0x438760` does that is deliberately not in this file, with the
@@ -348,9 +349,23 @@ function rollRoller(e: Enemy, k: BrainCtx): void {
  * state 10 as in any other.
  */
 export const maskboyReacts: Reaction = (e, foe, run, k) => {
+  // `0x438805` comes first: the gloat goes on over the knockdown, and the roll
+  // at `0x438841` is taken on the state it has just written
+  const down = e.state === "flinch" && k.player.down ? maskboyDown(e, k) : undefined;
   gangCorpse(e, foe, run, k);
   if (e.state === "flinch") rollRoller(e, k);
+  return down;
 };
+
+/**
+ * The preamble's gloat, `0x438825`: kind 8 tag 0, turned to face him when he
+ * is behind (`0x438835`). The brain installs it over any state but 1, 8 and 9;
+ * {@link maskboyReacts} over the knockdown, state 10.
+ */
+export function maskboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  if (k.track(e, MASKBOY.bands).forward < 0) turn(e);
+  return MASKBOY.gloat;
+}
 
 /**
  * `initmaskboy`'s machine — states 1, 2, 5, 6, 7 and 8.
@@ -398,9 +413,7 @@ export const maskboy: Brain = (e, foe, run, k) => {
    * is.
    */
   if (k.player.down && state !== 0 && state !== 1 && state !== 8) {
-    install(e, MASKBOY.gloat);
-    if (t.forward < 0) turn(e);
-    return false;
+    return install(e, maskboyDown(e, k));
   }
   switch (state) {
     /**

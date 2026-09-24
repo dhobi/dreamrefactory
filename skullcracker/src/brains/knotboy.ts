@@ -81,6 +81,7 @@
  * did would freeze the thing mid-stride.
  */
 import { install, rewind, type Brain, type BrainCtx, type Enemy } from "./kit";
+import type { FoeAnim } from "../foes";
 import { ahead, turn } from "./batboy";
 
 /**
@@ -301,6 +302,18 @@ function settled(e: Enemy): boolean {
 }
 
 /**
+ * The preamble's walk-away, `0x437be9`: `0x473ed0` tag 0 with the mirror
+ * turned AWAY from him (`0x437bf6`) — the mirror is written, the slide under
+ * it (`obj+0xc`) is not. The brain installs it over any state but 1, 5, 8 and
+ * 9; `gangReacts` over the flinch, state 10.
+ */
+export function knotboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  const away = k.player.x > k.anchorX(e) ? -1 : 1;
+  if (away !== e.facing) turn(e);
+  return KNOTBOY.saunter;
+}
+
+/**
  * `initknotboy`'s machine, states 1, 2, 4, 5, 7 and 8.
  *
  * Read `e.script` as `obj+0x18`, `e.tag` as `obj+0x44` and `e.clock >= run` as
@@ -335,10 +348,7 @@ export const knotboy: Brain = (e, foe, run, k) => {
     state !== 8 &&
     state !== 9
   ) {
-    // the mirror is written; the slide under it (`obj+0xc`) is not
-    const away = k.player.x > k.anchorX(e) ? -1 : 1;
-    if (away !== e.facing) turn(e);
-    return install(e, KNOTBOY.saunter);
+    return install(e, knotboyDown(e, k));
   }
 
   switch (state) {

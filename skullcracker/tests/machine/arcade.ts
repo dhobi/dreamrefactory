@@ -26,7 +26,7 @@
  *     until the boss does.
  */
 import { fail, headless, ok, pass, recordSound } from "./harness";
-import { FOES } from "../../src/foes";
+import { FOES, type FoeAnim } from "../../src/foes";
 import {
   kragg,
   kraggGate,
@@ -667,6 +667,40 @@ ok(`and the craft comes down for it`);
     fail(`the fourth ground blow: swing in front, turn on tag mirror + 2 behind; got ${picks.join()}`);
   ok(`the fourth ground blow swings at a player in front and turns from one behind (0x441fed)`);
   game.setSound(null);
+}
+
+// the ground form's two blow-takes that are states of its own machine — the
+// snap round (`0x473bd8` tag 2/3, state 13) and the swing back (`0x473cc8` tag
+// 1, state 15). Each state stands it up the frame its script ends (`0x4418b6`
+// after `0x441855`'s `obj+0x46` test), so the stand goes on after exactly the
+// script's own frames, with nothing between
+{
+  await go();
+  const b = boss();
+  const take = (anim: FoeAnim): number => {
+    b.rallied = true;
+    b.state = "flinch";
+    b.anim = anim;
+    b.clock = 0;
+    b.script = anim.kind;
+    b.tag = anim.tag;
+    let f = 0;
+    while (b.state === "flinch" && b.anim === anim && f < 40) {
+      h.frame();
+      f += 1;
+    }
+    return f;
+  };
+  const turn = K.flinch!.find((a) => a.kind === 13)!;
+  const faced = b.facing;
+  const tf = take(turn);
+  if (tf !== turn.cels.length * turn.hold || b.anim !== KRAGG.stand || b.facing !== -faced)
+    fail(`the snap round is ${turn.cels.length * turn.hold} frames and then the stand, turned; ${tf} frames, then ${b.anim.from}`);
+  const swing = K.flinch!.find((a) => a.kind === 15)!;
+  const sf = take(swing);
+  if (sf !== swing.cels.length * swing.hold || b.anim !== KRAGG.stand)
+    fail(`the swing back is 0x473cc8 tag 1's ${swing.cels.length} frames and then the stand; ${sf} frames, then ${b.anim.from}`);
+  ok(`its snap round stands it up after ${tf} frames and its swing back after ${sf}, the frame each script ends`);
 }
 
 pass("ARCADE is one room, one boss out of reach, and a goal that waits for it");

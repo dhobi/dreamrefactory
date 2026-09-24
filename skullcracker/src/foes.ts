@@ -137,6 +137,16 @@ export interface FoeAnim {
    */
   resume?: FoeAnim;
   /**
+   * ...or the reaction IS a state of the machine, whose own case decides the
+   * moment its script ends: `obj+0x46` is set on the reaction's last frame and
+   * that frame's think installs what follows (the wraith's `0x424e05`,
+   * Ghengis' `0x422a25`). When this one ends the brain is handed the reaction's
+   * own {@link kind} and tag with the script finished and runs on the same
+   * frame — no stand-in cel between, which would put the next script a frame
+   * late. Needs {@link kind}.
+   */
+  decides?: boolean;
+  /**
    * The script's own KIND — word 4 of its header, what `0x45d090` copies into
    * `obj+0x18`.
    *
@@ -943,7 +953,7 @@ export interface Foe {
    *
    * Both punk classes do (`0x44ef7e` and `0x44f848`, each right after `0x42fa80`
    * fetches the body's own rect), and the rat does not: its launch is a different
-   * state and ends with the object simply gone. See {@link VANISH} in
+   * state, which sinks the body out of sight and never frees it. See {@link VANISH} in
    * {@link file://./effects.ts} for the eleven cels.
    */
   vanishes?: boolean;
@@ -1144,19 +1154,6 @@ const IGOR_STANCE: FoeAnim = {
 };
 
 /**
- * The wraith's flinch ending — kind 7, `0x424e14`: `0x434540(10)` under 3,
- * and only for the named one, splits; otherwise the hover. Its one cel,
- * handed to the machine to choose.
- */
-const WRAITH_FLINCHED: FoeAnim = {
-  cels: [3243],
-  hold: 1,
-  kind: 7,
-  tag: 0,
-  from: "0x424e14",
-};
-
-/**
  * The mailbox on its side for good — state 2, which has no script of its own.
  *
  * `0x44fe60` writes `obj+0x18 = 2` by hand when the topple's four frames end,
@@ -1209,19 +1206,6 @@ const VPRIEST_REFORM: FoeAnim = {
   kind: 5,
   tag: 0,
   from: "0x46f370 tag 0",
-};
-
-/**
- * Ghengis's hand-back from its flinch: one frame of kind 8, so the brain's
- * case 8 — `0x422a25`, a finished kind-8 script — makes the roll between the
- * walk and the bull rush. See `brains/ghengis.ts`.
- */
-const GHENGIS_RALLY: FoeAnim = {
-  cels: [421],
-  hold: 1,
-  kind: 8,
-  tag: 0,
-  from: "0x422a25",
 };
 
 /** `0x472ef0` tag 0 — the ox's stand, where states 5 and 6 end (`0x43f794`, `0x43f7b4`) */
@@ -1992,7 +1976,13 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * the landing's own flag (`0x42ff8d`) — says it hit.
      */
     corpseBounce: { restitution: 0.7, sound: 0x3d },
-    // `0x43d250` has no ignore list at all
+    // `0x43d250` has no ignore list at all — and no sign test either: any
+    // negative strength but −6 reaches `0x42f910`, whose `0x42f91f` calls the
+    // fatal `0x408f80` (MessageBoxA, then ExitProcess at `0x409241`). SERVICE
+    // is chapter two's second level and a flare is only −9 on a chapter's
+    // fourth (`0x43ac04`), and chapter two zeroes the rounds on the way in
+    // and places no flamer tank, so no −9 reaches it; with no `burns` the page takes
+    // nothing from one
     hitsOwn: true,
     // `0x43cca1` claims the bar with 0x3331 and 0x2ee; `0x43d2e8` pays 0x15e
     panel: { health: 750, plate: 13105, award: 350 },
@@ -2311,7 +2301,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
         from: `0x473ba8 tag ${tag}`,
       })),
       // `0x441fef` — every fourth blow from behind: `0x473bd8` tag mirror + 2,
-      // the two-cel snap, and state 13 (`0x4418b6`) flips it as it ends
+      // the two-cel snap, and state 13 (`0x4418b6`) flips it and stands it up
+      // the frame it ends
       ...[
         [7101, 7102],
         [7103, 7102],
@@ -2320,22 +2311,17 @@ export const FOES: Readonly<Record<string, Foe>> = {
         hold: 4,
         kind: 13,
         tag: m + 2,
-        resume: { cels: [7102], hold: 1, kind: 13, tag: m + 2, from: `0x473bd8 tag ${m + 2}` },
+        decides: true,
         from: `0x473bd8 tag ${m + 2}`,
       })),
-      // `0x44200f` — ...and from in front it swings back, `0x473cc8` tag 1
+      // `0x44200f` — ...and from in front it swings back: the whole of
+      // `0x473cc8` tag 1, whose state 15 stands it up the frame it ends
       {
-        cels: [7000],
+        cels: [7000, 7001, 7002, 7003, 7004, 7002, 7001, 7000],
         hold: 1,
         kind: 15,
         tag: 1,
-        resume: {
-          cels: [7000, 7001, 7002, 7003, 7004, 7002, 7001, 7000],
-          hold: 1,
-          kind: 15,
-          tag: 1,
-          from: "0x473cc8 tag 1",
-        },
+        decides: true,
         from: "0x473cc8 tag 1",
       },
     ],
@@ -2933,6 +2919,19 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     frail: true,
     health: 200,
+    /**
+     * ...and the launch is not an exit. State 6 (`0x44e33f`) writes
+     * `obj+0x10 = -150` and answers 0, and a rat's class proc (`0x44df70`)
+     * frees nothing but what its think answers 1 for (`0x44dfca`), so the body
+     * stays until the level's own teardown frees the class (`0x44e450`). What
+     * the −150 does is drop the contact point up the cel (`0x42fdd7` adds it
+     * to the cel's drawn extent): the body falls until its last cel, 3048,
+     * hangs 63..150 below the street — and every region a rat lives in ends
+     * about forty under its floor (STREETS: 1387 under ~1345, 2804 under
+     * ~2766), which `0x430914` holds the camera's bottom to. It sinks out of
+     * sight and lies there, drawn and never seen.
+     */
+    linger: Infinity,
     // `0x44e423` — one blow of any size, and this is the sound of it
     hitSound: FOE_SFX.rat,
     // `0x44e3f5` tests the sign and nothing else: another rat's bite lands
@@ -3266,15 +3265,17 @@ export const FOES: Readonly<Record<string, Foe>> = {
     },
     divisor: 13,
     // `0x46eec8` tag 0, kind 8 — installed by `0x422c32` whenever a blow leaves
-    // health, and its second cel steps back. When it ends `0x422a25` rolls
-    // between the walk and the bull rush, which the brain's own case 8 does
-    // off the one-frame {@link GHENGIS_RALLY}
+    // health, and its second cel steps back. The frame it ends `0x422a25`
+    // rolls between the walk and the bull rush, which is the brain's own
+    // case 8 ({@link FoeAnim.decides})
     flinch: [
       {
         cels: [420, 421],
         hold: 2,
         dx: [0, -85],
-        resume: GHENGIS_RALLY,
+        kind: 8,
+        tag: 0,
+        decides: true,
         from: "0x46eec8 tag 0",
       },
     ],
@@ -3512,13 +3513,16 @@ export const FOES: Readonly<Record<string, Foe>> = {
     /**
      * `0x46f898` tag 0, kind 7 — one cel at four frames: the blow it survives
      * (`0x4250fa`). State 7 halves both velocities under it (the brain's
-     * reaction) and decides as it ends ({@link WRAITH_FLINCHED}).
+     * reaction) and decides the frame it ends (`0x424e05`, the brain's case
+     * 7 — {@link FoeAnim.decides}).
      */
     flinch: [
       {
         cels: [3243],
         hold: 4,
-        resume: WRAITH_FLINCHED,
+        kind: 7,
+        tag: 0,
+        decides: true,
         from: "0x46f898 tag 0",
       },
     ],
@@ -3823,9 +3827,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
       {
         cels: [2250, 2251],
         hold: 2,
-        resume: { cels: [2251], hold: 1, kind: 8, tag: 0, from: "0x41440e" },
         kind: 8,
         tag: 0,
+        decides: true,
         from: "0x46c828 tag 0",
       },
       /**
@@ -4070,6 +4074,9 @@ export const FOES: Readonly<Record<string, Foe>> = {
     counts: false,
     // state 8 (`0x418af6`) removes it with no `0x40cba0(pos, -13, 0)`
     bleeds: true,
+    // `0x418b47`: the blaster's −1 (`0x413bf9`) is written back onto the bolt
+    // as 100 (`0x418b4e`) and taken like any blow — LAB places both
+    minusOne: { as: 100 },
     from: "0x4118f0 / 0x418710 / 0x4187a0 / 0x418b40",
   },
   /**

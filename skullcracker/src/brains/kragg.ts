@@ -858,7 +858,9 @@ const think: Brain = (e, foe, run, k) => {
       }
     }
     /**
-     * ---- 13, `0x44185f`: the ground turn.
+     * ---- 13, `0x44185f`: the ground turn — the brain's own from the volley's
+     * wind-up, and the page's as a blow's take, which hands here the frame it
+     * ends ({@link FoeAnim.decides}); state 15 below the same.
      *
      * `0x44185f` also carries a roar — on tag 1, on script frame `obj+0x42 ==
      * 0xa` exactly, `0x434540(0x64) < 0x1e` picks `0x40f090` sound `0x1c` or

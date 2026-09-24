@@ -534,7 +534,13 @@ export const skel: Brain = (e, foe, run, k) => {
  *   `obj+0x2e` says it is on the ground again, so the last cel is held (the
  *   clock pinned a frame short) for as long as it is still in the air.
  * - **8**, the death: `0x4239b5` plays `zombie.snd` 0x15 when the frame index
- *   `obj+0x42` is 2 — the third cel, six frames in.
+ *   `obj+0x42` is 2 — the third cel, six frames in. It asks on every frame
+ *   that cel shows, three of them, and only the first is heard: `0x40ef30`
+ *   hands the record to `0x427b20`, which mixes on two channels and refuses a
+ *   sound whose priority either channel already holds (`0x427b5f`,
+ *   `0x427b6b`, `0x427bc2`, `0x427bca`) — and the priority is the record's
+ *   own, `(bank << 16) | (index + 1)` (`0x40ed69`), so the one it refuses is
+ *   the same sound still playing. Said once here.
  */
 export const skelReacts: Reaction = (e, foe, run, k) => {
   if (e.state === "dead") {

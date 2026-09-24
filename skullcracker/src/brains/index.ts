@@ -15,7 +15,7 @@
 import type { Brain, Gate, Reaction } from "./kit";
 import { arm, armGate, armReacts } from "./arm";
 import { bat, batReacts } from "./bat";
-import { batboy, gangCorpse } from "./batboy";
+import { batboy, batboyDown, gangReacts } from "./batboy";
 import { coke, cokeGate } from "./coke";
 import { cop, copReacts } from "./cop";
 import { dog, dogReacts } from "./dog";
@@ -24,8 +24,8 @@ import { ghengis, ghengisReacts } from "./ghengis";
 import { hardcore, hardcoreReacts } from "./hardcore";
 import { hydrant } from "./hydrant";
 import { igor } from "./igor";
-import { knifeboy } from "./knifeboy";
-import { knotboy } from "./knotboy";
+import { knifeboy, knifeboyDown } from "./knifeboy";
+import { knotboy, knotboyDown } from "./knotboy";
 import { kragg, kraggGate, kraggReacts } from "./kragg";
 import { mailbox } from "./mailbox";
 import { maskboy, maskboyReacts } from "./maskboy";
@@ -86,12 +86,12 @@ export const REACTIONS: Readonly<Record<string, Reaction>> = {
   initdog: dogReacts,
   initrat: ratReacts,
   initbat: batReacts,
-  initbatboy: gangCorpse,
+  initbatboy: gangReacts(batboyDown),
   initcop: copReacts,
   initeyeball: eyeballReacts,
   initghengis: ghengisReacts,
-  initknifeboy: gangCorpse,
-  initknotboy: gangCorpse,
+  initknifeboy: gangReacts(knifeboyDown),
+  initknotboy: gangReacts(knotboyDown),
   initmaskboy: maskboyReacts,
   inithardcore: hardcoreReacts,
   initkragg: kraggReacts,

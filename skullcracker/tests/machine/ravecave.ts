@@ -301,6 +301,12 @@ if (wraithPay !== 0) fail(`0x424f80 pays nothing at all; the score moved by ${wr
 ok(`the wraith is seven hundred health and pays nothing — the only class in the game that does`);
 if (!game.goalReady()) fail(`the named wraith's fall writes [0x46ece0] (0x4250eb), which is all 0x4219e5 asks; the goal is still shut`);
 ok(`...and its fall is what opens the goal`);
+// ...and takes every lesser wraith with it, in whatever room it is
+// (`0x424ed5` → `0x424f30`), once its own nine cels have played
+h.frame(30);
+const lesser = game.level!.spawned.flat().filter((e) => e.kind === "initwraith" && e.state !== "dead");
+if (lesser.length) fail(`0x424f30 dissolves every lesser wraith on the class list; ${lesser.length} still stand, at ${lesser.map((e) => Math.round(e.x)).join(", ")}`);
+ok(`...and no lesser wraith outlives it, in this room or any other`);
 /**
  * ...and the two reactions are the right way round: `0x4250fa` installs
  * `0x46f898`, cel 3243 alone, for a blow it survives, and `0x4250d9` the
@@ -414,5 +420,27 @@ for (let i = 0; i < 110; i++) {
 }
 if (!hovered) fail(`inside sixty it should hover, or claw when level with you (0x424bd1)`);
 ok(`...and inside sixty it hovers or claws, and takes hold of nothing — 0x4248ad writes 100 back`);
+
+// its take is state 7, and `0x424e05` decides on `obj+0x46` — the frame the
+// one cel's four frames end, the hover (or the split) going on that frame
+{
+  await go(13000);
+  h.frame(9);
+  const w = nearest("initwraith")!;
+  const take = FOES.initwraith.flinch![0];
+  w.state = "flinch";
+  w.anim = take;
+  w.clock = 0;
+  w.script = take.kind;
+  w.tag = take.tag;
+  let f = 0;
+  while (w.state === "flinch" && w.anim === take && f < 20) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || (w.anim !== WRAITH.hover && w.anim !== WRAITH.split))
+    fail(`the take is ${take.cels.length * take.hold} frames and then the hover or the split; ${f} frames, then ${w.anim.from}`);
+  ok(`its take hands to ${w.anim === WRAITH.split ? "the split" : "the hover"} after ${f} frames, the frame the script ends (0x424e05)`);
+}
 
 pass("RAVECAVE's Igors, its one wraith and its scepter are all where the records put them");

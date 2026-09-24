@@ -94,7 +94,7 @@ const machines = (): void => {
   rolls = [3];
   cop(c, C, 1, k);
   if (c.anim !== COP.walkOut) fail(`any other roll is 0x46c720 tag 1`);
-  if (JSON.stringify(C.hitSound) !== "[15,16,17,18]" || C.linger !== 0 || C.death!.cels.length !== 3 || C.flinch![0].resume?.kind !== 8)
+  if (JSON.stringify(C.hitSound) !== "[15,16,17,18]" || C.linger !== 0 || C.death!.cels.length !== 3 || C.flinch![0].kind !== 8 || !C.flinch![0].decides)
     fail(`cop: 15..18 on a blow (0x4148a1), gone at frame 3 of its death (0x41469c)`);
   ok(`a TCop winds up or backs off after a flinch (0x41440e), and is gone three cels into its death`);
 };
