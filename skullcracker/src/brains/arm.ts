@@ -516,6 +516,13 @@ export const arm: Brain = (e, foe, run, k) => {
      * own velocity zeroed and its point snapped onto his (`0x418a19`..`0x418a41`).
      * Otherwise `0x418a4a`, the tail: the eight cels play out, the hand comes
      * back down, and it stands.
+     *
+     * A lunge that misses goes a long way, and that is the disc's. The hop's
+     * `dx 200, dy -200` sits on a frame held two engine frames, and `0x45d0f0`
+     * hands the shown record to `0x42f8b0` on every one of them, which adds
+     * `round_away(200 / 6)` = 34 into `obj+0xc` and `obj+0xa` each time: a
+     * floor arm leaves at 68 across and 68 up, with no drag in the air and a
+     * gravity of ten, and comes down some nine hundred pixels on.
      */
     case 4: {
       const m = e.mark;

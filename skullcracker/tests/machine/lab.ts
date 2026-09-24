@@ -18,7 +18,7 @@ import { fail, headless, ok, pass, recordSound } from "./harness";
 import { FOES } from "../../src/foes";
 import { TUBE, TUBE_BREATH, TUBE_SHARDS, tube } from "../../src/brains/tube";
 import { armGate } from "../../src/brains/arm";
-import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 
 /**
  * The machines on their own: `tube` handed a stand-in context and called once
@@ -276,6 +276,31 @@ ok(`a blaster bolt fells an arm for 113`);
   if ((grabber.script as number) !== 2 || Math.round(grabber.x - at) !== 50 * -grabber.facing)
     fail(`it lets go into the stance, fifty back: kind ${grabber.script}, moved ${grabber.x - at}`);
   ok(`an arm whose lunge lands has hold of him for ${heldFor} frames, and lets go fifty back`);
+}
+
+//    ...and one whose lunge MISSES flies. The hop frame is held two engine
+//    frames and `0x45d0f0` hands it to `0x42f8b0` on both: `round_away(200/6)`
+//    = 34 into each axis twice, 68 across and 68 up, and nothing slows it in
+//    the air. Someone else holding him (`[0x46b1b4]`) is what makes it miss.
+{
+  await go("&x=3496&foehit=1&damage=1");
+  const arm = nearest("initarm")!;
+  const from = arm.x;
+  let fastest = 0;
+  let rise = 0;
+  for (let i = 0; i < 60 && !(arm.script === 2 && fastest); i++) {
+    game.p.hidden = true;
+    h.frame();
+    if (arm.script === 4) {
+      fastest = Math.max(fastest, Math.abs(arm.vx / TICK_SCALE));
+      rise = Math.min(rise, arm.vy / TICK_SCALE);
+    }
+  }
+  game.p.hidden = false;
+  const flew = Math.abs(arm.x - from);
+  if (fastest < 68 || fastest > 69 || rise > -50 || flew < 700)
+    fail(`a missed lunge leaves at 68 across (plus the body pass's shove) and 68 up less the first gravity, and flies: ${fastest} across, ${rise} up, ${flew} flown`);
+  ok(`an arm that misses leaves at ${fastest} a frame and comes down ${Math.round(flew)} on, as the disc's doubled hop throws it`);
 }
 
 // 4. the test tube — the player's own twelve hundred, and nothing for it
