@@ -776,8 +776,11 @@ twenty-four classes write the word. **`[0x46b1b4]` is the player-draw gate**,
 not a step gate: the player's think (`0x402950`) runs every frame whatever it
 says. A carrier clears it because its own cels draw him — kragg's fist
 7046/7047 (`0x4413b8`), the eyeball's carry (`0x43e260`), the skeleton's
-1240s/1340s (`0x4236f8`), the bush in its phase 2 (`0x43ef0a`) — and hands it
-back as it lets go (`0x4414ba`, `0x43e3a1`, `0x4237f8`, `0x43ef28`). A carry
+1240s/1340s (`0x4236f8`), LAB's arm's 4500s/5900s (`0x418a1b`), the bush in
+its phase 2 (`0x43ef0a`) — and hands it back as it lets go (`0x4414ba`,
+`0x43e3a1`, `0x4237f8`, `0x418aa1`, `0x43ef28`). The arm takes it only when its
+lunge landed and its hand is within fifty of the point it aimed at, and puts
+no pose on him at all: he is let go where it held him. A carry
 holds him by writing his point every frame after his think has run, which is
 `BrainCtx.pin`; the page keeps the gate as `p.hidden`.
 

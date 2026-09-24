@@ -252,6 +252,32 @@ ok(`a param-0 arm starts on the floor (kinds ${[...floorKinds].join(", ")}), nev
 }
 ok(`a blaster bolt fells an arm for 113`);
 
+//    ...and it grabs. Stood 120 in front of it, the lunge lands (`obj+0x2a`),
+//    the hand is within fifty of the point it aimed at, and nobody holds him:
+//    `0x418a0b` puts on the hold, `0x418a1b` takes the claim — he is hidden and
+//    drawn in its cels — and `0x418a6c` carries him on its point every frame,
+//    until the ten beats end and it lets go fifty back (`0x418a98`, `0x418aa1`).
+{
+  await go("&x=3496&foehit=1&damage=1");
+  const grabber = nearest("initarm")!;
+  let heldFor = 0;
+  let pinned = true;
+  let at = 0;
+  h.until(() => grabber.script === 5, 60);
+  if (grabber.script !== 5 || !game.p.hidden) fail(`the arm near x3616 should have hold of him: kind ${grabber.script}, hidden ${game.p.hidden}`);
+  while (grabber.script === 5 && heldFor < 40) {
+    at = grabber.x;
+    h.frame();
+    heldFor++;
+    if (grabber.script === 5 && (!game.p.hidden || Math.abs(game.p.x - game.anchorX(grabber)) > 1)) pinned = false;
+  }
+  if (!pinned) fail(`while it holds him he is hidden and on its point`);
+  if (game.p.hidden) fail(`letting go hands him back (0x418aa1)`);
+  if (grabber.script !== 2 || Math.round(grabber.x - at) !== 50 * -grabber.facing)
+    fail(`it lets go into the stance, fifty back: kind ${grabber.script}, moved ${grabber.x - at}`);
+  ok(`an arm whose lunge lands has hold of him for ${heldFor} frames, and lets go fifty back`);
+}
+
 // 4. the test tube — the player's own twelve hundred, and nothing for it
 await go("&x=8150");
 const t = nearest("inittube");
