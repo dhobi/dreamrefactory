@@ -112,6 +112,8 @@ h.hold("up", false);
 // `0x4027b8` puts the corner on the record's point and the player drops the
 // last few pixels onto the floor under it
 const spawn = game.level!.sbk.entities.find((e) => e.name === "initplayer")!;
+// the red first — fifty sixtieths of fade and state 27's hold (`0x429392`)
+h.until(() => !game.deathRed, 200);
 const backX = game.p.x;
 h.until(() => game.p.onGround, 30);
 const backAt = game.p.y;

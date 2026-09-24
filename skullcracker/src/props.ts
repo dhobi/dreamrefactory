@@ -87,6 +87,15 @@ export interface PlankAnim {
  * as the engine actually flies it — 80 pixels plain, 137 with the lift — that is
  * the difference between "hopping across is safe, leaping onto it is not" and
  * "the first plank you land on drops you". See {@link hardFallPx}.
+ *
+ * A fallen plank does not stay fallen past a death. The class's own pass
+ * (`0x453040`), after stepping every plank, watches `0x402f60` — the player is
+ * alive while their script's kind is below 26, the dying scripts' — and when it
+ * has seen them dead and then alive again it calls `0x453090`, which puts every
+ * plank back: crossings 0 (`0x4530a2`), the creator's point (`0x4530b0`), no
+ * speed, the intact script and no gravity. So the respawn finds every plank
+ * whole, fallen or not, and the platform it owns comes back under it
+ * (`0x42fcb9`). The rope bridge's pass does the same (`0x4221e0` → `0x422230`).
  */
 export const PLANK = {
   /** `0x477ca8` — one cel, and the only one that is a plank you can see across */
@@ -140,6 +149,12 @@ export interface Plank {
   vy: number;
   /** a fallen plank that the room's floor has caught */
   landed?: boolean;
+  /** fallen past the room, drawn and stepped no more until a death puts it back */
+  gone?: boolean;
+  /** the creator's point, where `0x453090` puts it back — `ctx[0]` */
+  homeY: number;
+  /** and where its record stood then */
+  homeFloor: { top: number; bottom: number } | null;
   /**
    * The platform record this plank owns, or null where the level gave it none.
    * It is a COPY made per level ({@link file://./walk.ts}'s `solidsIn`), so moving
@@ -1830,8 +1845,11 @@ export interface Roach {
   x: number;
   y: number;
   vy: number;
+  /** `obj+0x28` — set, and it runs west on its cels reflected (`0x43b11c`) */
   facing: number;
   onGround: boolean;
+  /** off cel 3300 and onto the run — `0x43b17f` does it on the first landing */
+  running: boolean;
   clock: number;
   /** the nest's rect, which is also its leash */
   top: number;
@@ -2289,6 +2307,8 @@ export const BRIDGE = {
 export interface Bridge {
   x: number;
   y: number;
+  /** the creator's point, where `0x422230` puts it back */
+  homeY: number;
   top: number;
   left: number;
   bottom: number;
@@ -3461,6 +3481,8 @@ export interface Flame {
   clock: number;
   /** `user+2` — `0x453f6f`, and it never goes out */
   forever: boolean;
+  /** `obj+0x28`, the victim's facing when it caught — `0x44ffee`, written once */
+  mirror: boolean;
   x: number;
   y: number;
 }

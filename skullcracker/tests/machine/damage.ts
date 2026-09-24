@@ -94,6 +94,8 @@ const took = h.until(() => stats.lives < began, 1000);
 if (took < 0) fail(`standing under a press should eventually cost a life; still ${stats.lives} of ${began}`);
 if (films.length) fail(`the KILL film is the last life's — 0x4294b7 — and this was the first of ${began}: ${films.join(" ")}`);
 ok(`and running out of it spends a life, ${began} down to ${stats.lives} after ${took} frames, with no film`);
+// ...and the red runs out before the checkpoint (`0x429392`, see game.deathRed)
+if (h.until(() => !game.deathRed, 200) < 0) fail(`the red after the death never ended`);
 
 // 6. ...and a knockdown takes the gun out of your hands. `0x44911b` asks
 //    `0x448bf0` whether the player is one of the five armed kinds, and if it

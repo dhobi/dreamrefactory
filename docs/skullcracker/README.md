@@ -24,7 +24,7 @@ which otherwise rests on a single frame.
   carries, and the shape of the four chapters
 - [Fighting, and the things that fight](combat.md) — one tracker, one blow, one
   grip, and the bosses that keep state of their own
-- [Weapons and pickups](weapons.md) — five weapons, a holster, and a table read
+- [Weapons and pickups](weapons.md) — five weapons, the button that puts them away, and a table read
   off the art rather than off the box
 - [The menu, and everything before a level](menu.md) — the film layer, which is
   the completely DreamFactory half of this disc
@@ -363,7 +363,7 @@ a level with no class anywhere.
 ### The systems
 
 - **All five weapons fire**, and the INV button with them — see
-  [Weapons and pickups](weapons.md). There was never an inventory screen to build.
+  [Weapons and pickups](weapons.md). There was never an inventory screen to build: INV switches between the one gun and the fists.
 - **The blow codes are carried, and so are the claw and the bush.** `0x40e680`
   translates a strike box by the object's own position and does nothing else, so
   no prop's box is lifted by `height - posY`. The bush grabs, and BARREL's claw
@@ -392,7 +392,18 @@ a level with no class anywhere.
   as the dying animation ends and `0x4294cb` plays the film only once
   `0x40d490` is below zero, so three on the panel is four deaths. Every other
   death is `0x402760`: back at the checkpoint (`[0x4ac38a]`), with the level
-  left exactly as it was.
+  left as it was — except the planks and the rope bridges. Their class passes
+  (`0x453040`, `0x4221e0`) watch for the player dead and then alive again, and
+  put every one back whole where its creator placed it (`0x453090`,
+  `0x422230`), so a board that fell on the route cannot strand a respawn.
+- **Every death goes red first** (`0x429392`), before the checkpoint or the
+  vignette. The screen is frozen while `0x434680` blends the palette in fifty
+  sixtieth-second steps. It starts from `CLUT.FIRSTREDCLUT` (all pure red) and
+  ends at `CLUT.REDCLUT` (the system palette with only its red channel), both
+  resources inside `SC.EXE`. The world then runs on in red for 25 frames, or
+  40 with a creature within 256 (`0x42fad0`). After that `0x4294c3` puts the
+  level's palette back. The page draws this by reddening the finished frame,
+  panel included, since the palette is the whole screen's.
 - **The shell is finished except for the demo player.** All fourteen preferences
   controls answer, all eight cheat words work, and the high-score board takes a
   finished game and shows it over the title film, and Open loads a `.SKL`

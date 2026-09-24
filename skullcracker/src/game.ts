@@ -263,6 +263,39 @@ export function steerAir(): void {
   else p.vx = p.facing * AIR_SPEED;
 }
 
+/**
+ * One frame of the flight's own handler — `0x429f1f` for tag 0 and, the same
+ * code again, `0x42a201` for the air attacks' tags 8 and 9: the lift, then the
+ * steering.
+ */
+function airThink(dir: number): void {
+  if (held.up && p.hold > 0) {
+    p.vyRaw += roundAway(-MEASURED.rise / DIVISOR);
+    p.hold -= 1;
+  }
+  if (dir && dir !== p.facing) {
+    // backward alone: `0x402e40` swaps the two flags and turns the player
+    // round, and `0x429fdf` zeroes the velocity — and then `0x429fe5` reads
+    // the forward flag, which now holds that same key, so the steering drives
+    // 30 the new way on this very frame
+    p.facing = dir as 1 | -1;
+    p.vx = 0;
+    steerAir();
+  } else if (dir) steerAir();
+}
+
+/**
+ * J pressed: `0x4296d6`, `0x429a76`, `0x429c65` — one sound, then the standing
+ * state installs tag 2, the walk tag 3 and the run tag 4: three frames of 250
+ * 251 252 before 253 launches, or the run's one record of 200.
+ */
+function startJump(run: boolean, moving: boolean): void {
+  sound?.own(OWN.jump, p.x, p.y);
+  p.leap = run;
+  p.windup = run ? 1 : ANIM.launch.length;
+  p.launchDx = run ? MEASURED.runJumpDx : moving ? MEASURED.launchDx : 0;
+}
+
 export function engineFrame(): void {
   // `vyRaw` now holds the velocity in whole pixels a frame, as `obj+0xa` does;
   // the name is kept so the call sites read unchanged. Move by it, then gravity.
@@ -1309,6 +1342,10 @@ export const p = {
   stepPx: 0,
   /** ticks into the current engine frame: TICK_SCALE each, so one frame per four */
   frameAcc: 0,
+  /** `player+0x18` is 15, INV's state (`0x428975`) — see {@link stepInv} */
+  inv15: false,
+  /** ...or the idle it hands you to while INV is down, which goes straight back */
+  invLoop: false,
   onGround: true,
   climbing: false,
   /**
@@ -1418,6 +1455,16 @@ export const p = {
    * which the engine only ever sets to 2.
    */
   hold: 0,
+  /**
+   * Off a ledge WITHOUT a jump, and so still in a ground state: `0x42999e` has
+   * the walk state install the idle's tag 1 the frame there is no floor, and
+   * `0x429bf0` the run its own tag 1. Neither the idle (`0x429690`) nor the run
+   * (`0x429b80`) asks for a floor before it reads J, P or K, so a fall off an
+   * edge can still jump — the launch's -35 on top of the fall — and still
+   * punch and kick, with the ground's moves rather than the flight's. The
+   * flail ends it at a fall of 360, as it ends everything.
+   */
+  fallState: null as "idle" | "run" | null,
 };
 /** `mov word ptr [0x4723f0], 2` — the allowance, and it is 2 in all eight places */
 export const HOLD_FRAMES = 2;
@@ -1566,6 +1613,12 @@ export let punchPressed = false;
 export let kickPressed = false;
 
 export async function loadLevel(index: number): Promise<void> {
+  // a level loaded in the middle of the red is a level with its own palette
+  // back (`0x402860` reads the CLUTs afresh): the death that was playing is over
+  if (deathRed) {
+    deathRed = null;
+    advancing = false;
+  }
   const name = LEVEL_ORDER[index];
   ui.status(`loading ${name}…`);
   const bytes = await files.load(`${name}.sbk`);
@@ -1615,6 +1668,10 @@ export async function loadLevel(index: number): Promise<void> {
     inv.armed = false;
     inv.rounds = {};
   }
+  // `0x448bc7` — and every level opens on the idle `0x475c88`, kind 0, whatever
+  // you carried in from the last one: the gun waits for INV
+  inv.drawn = false;
+  p.inv15 = p.invLoop = false;
   level = {
     sbk,
     pal,
@@ -1982,6 +2039,7 @@ export async function loadLevel(index: number): Promise<void> {
       placed(sbk, r, "initbridge", [BRIDGE.whole], (e) => ({
         x: e.pointX,
         y: e.pointY,
+        homeY: e.pointY,
         top: e.top,
         left: e.left,
         bottom: e.bottom,
@@ -2175,14 +2233,96 @@ export async function died(): Promise<void> {
   if (advancing) return;
   advancing = true;
   stats.lives -= 1;
-  const gameOver = stats.lives < 0;
-  if (gameOver)
+  // what reached here without the dying script lies still in it for the red:
+  // `0x402fa0` puts every death through a kind-26 script, and this page plays
+  // only the blow's
+  if (p.act !== "dying") {
+    p.act = "dying";
+    p.actClock = Math.max(0, (actOf("dying")?.cels.length ?? 1) - 1) * (actOf("dying")?.hold ?? 1);
+    p.vx = 0;
+  }
+  deathRed = { step: 0, hold: -1 };
+}
+
+/**
+ * The red — what the screen does between a death and the checkpoint, and all
+ * of it is `0x429392`, the dying state's handler, the frame its script ends.
+ *
+ * ```
+ *   4293eb  0x40d400(0x40d490() - 1)            ; the life, spent
+ *   429404  for step = 1 .. 50:
+ *   429425    0x434680(firstredclut, redclut, step, 50)
+ *   42942d    spin until 0x4087c0 has moved on  ; one sixtieth a step
+ *   429454  state 27, and [0x4ac364] = 25 frames, or 40 if 0x42fad0 finds a
+ *           creature in the 512x512 round the player
+ *   4294a6  0x429490 counts it down, and once it is below zero:
+ *   4294c3  0x434bf0([0x4a8960])                ; the level's own palette back
+ *   4294cb  lives < 0 ? state 9, the vignette  :  0x402760, the checkpoint
+ * ```
+ *
+ * The two CLUTs are `SC.EXE`'s own resources, `RAW/CLUT.FIRSTREDCLUT` and
+ * `RAW/CLUT.REDCLUT` (`0x402860` loads them by those names at level start).
+ * The first is 256 entries of pure red; the second is the Mac system palette
+ * every level draws with, red channel kept and green and blue zeroed. So the
+ * fade is: the frozen frame goes solid red, and over fifty sixtieths its red
+ * channel comes back up through it — `0x434680` blends each 16-bit component
+ * `a + (b - a) * step / 50`, truncated — and the world then runs on in red for
+ * the hold. The loop at `0x429404` BLOCKS: nothing moves while it fades.
+ */
+export const DEATH_RED = {
+  /** `mov esi, 0x32` at `0x4293e6`, one step per sixtieth */
+  steps: 50,
+  /** `0x429476` and `0x429485`: engine frames of state 27 */
+  holdClear: 25,
+  holdNear: 40,
+  /** `0x42fad0(player, 0x200, 0x200)` at `0x429465` */
+  box: 0x200,
+} as const;
+
+/** the red in progress: `step` counts the fade's sixtieths, `hold` state 27's frames */
+export let deathRed: { step: number; hold: number } | null = null;
+
+/**
+ * One pixel under the red, at fade step `step` (50 and over is the finished
+ * `REDCLUT`). Entries 0 and 255 are black and white in every level palette and
+ * `0x434bf0` writes them so again, so those two stay as they are; everything
+ * else is its own red channel, blended up from pure red. Only the red comes
+ * back because in both CLUTs green and blue are nought.
+ */
+export function reddened(r: number, g: number, b: number, step: number): [number, number, number] {
+  if ((r | g | b) === 0 || (r & g & b) === 255) return [r, g, b];
+  if (step >= DEATH_RED.steps) return [r, 0, 0];
+  const from = 0xffff;
+  const to = r * 257;
+  return [(from + Math.trunc(((to - from) * step) / DEATH_RED.steps)) >> 8, 0, 0];
+}
+
+/** the red, a frame at a time — frozen through the fade, then state 27's hold */
+function stepDeathRed(frame: boolean): boolean {
+  if (!deathRed) return false;
+  if (deathRed.step < DEATH_RED.steps) {
+    deathRed.step += 1;
+    if (deathRed.step === DEATH_RED.steps)
+      deathRed.hold = nobodyNear(p.x, p.y - p.feet, DEATH_RED.box, DEATH_RED.box)
+        ? DEATH_RED.holdClear
+        : DEATH_RED.holdNear;
+    return true;
+  }
+  // `0x4294a6`: the count before the decrement, so 25 is 26 frames of it
+  if (frame && deathRed.hold-- < 0) void deathOver();
+  return false;
+}
+
+/** `0x4294c3` on: the palette back, and the vignette or the checkpoint */
+async function deathOver(): Promise<void> {
+  deathRed = null;
+  if (stats.lives < 0) {
     await ui.film(DEATH_FILMS[Math.floor(random() * DEATH_FILMS.length)]);
-  if (gameOver) {
     ui.gameOver(stats.score, levelIndex + 1, DIFFICULTY);
     return;
   }
   respawn();
+  restoreBoards();
   advancing = false;
 }
 
@@ -2213,10 +2353,15 @@ export function respawn(): void {
   p.vx = 0;
   p.facing = 1;
   p.fallPx = 0;
-  // `0x42950f` — and the idle script goes in, which ends any flail or duck
+  // `0x42950f` — and the idle script goes in, which ends any flail or duck, and
+  // puts the gun away: it is kind 0, and `0x479438` is left as it was
   p.flail = false;
+  inv.drawn = false;
+  p.inv15 = p.invLoop = false;
   p.screamed = false;
   p.crouching = false;
+  p.act = null;
+  p.actClock = 0;
   camVx = 0;
   camVy = 0;
   view.x = x;
@@ -2786,6 +2931,8 @@ export function planksIn(sbk: SbkFile, room: SbkRoom, solids: Solids): Plank[] {
       crossings: 0,
       vy: 0,
       floor,
+      homeY: e.pointY,
+      homeFloor: floor ? { top: floor.top, bottom: floor.bottom } : null,
     });
   }
   return out;
@@ -4965,7 +5112,10 @@ export function takeHits(): void {
     //
     // A CODE never gets here — `0x448c72` dispatched it before the arithmetic —
     // so a claw's grab and a wraith's hold leave you armed.
-    if (knocked && inv.armed) dropGun();
+    if (knocked && inv.drawn) dropGun();
+    // ...and asks it of `player+0x18`, not `0x479438`: with your fists out the
+    // gun stays yours. Either way the knockdown `0x476890` is kind 24, unarmed
+    if (knocked) inv.drawn = false;
     takeHealth(damage);
     return true;
   };
@@ -5307,6 +5457,7 @@ export function planksHere(): Plank[] {
  */
 export function stepPlanks(): void {
   for (const k of planksHere()) {
+    if (k.gone) continue;
     k.clock += TICK_SCALE;
     if (k.state === "fall") {
       if (k.vy === 0 && k.landed) continue;
@@ -5365,20 +5516,62 @@ export function stepPlanks(): void {
     sound?.effect(PLANK.sound, k.x, k.y);
   }
   // a plank past the end of the room's floor has nothing to land on. The engine's
-  // region bounds would hold it at the room's edge; this port drops it and its
-  // record once it is 400px below the room, which nobody can see
+  // region bounds would hold it at the room's edge; this port stops it and its
+  // record once it is 400px below the room, which nobody can see, and keeps it
+  // for the death that puts it back
   const room = p.room;
   if (!room) return;
-  const i = level ? level.rooms.indexOf(room) : -1;
-  if (!level || i < 0) return;
-  level.planks[i] = level.planks[i].filter((k) => {
-    if (k.state !== "fall" || k.landed || k.y < room.bottom + 400) return true;
+  for (const k of planksHere()) {
+    if (k.gone || k.state !== "fall" || k.landed || k.y < room.bottom + 400) continue;
+    k.gone = true;
     if (k.floor) {
       // and it takes the record with it: nothing stands on a plank that has gone
       k.floor.top = room.bottom + 10000;
       k.floor.bottom = k.floor.top + 1;
     }
-    return false;
+  }
+}
+
+/**
+ * `0x453090` and `0x422230` — every plank and every rope bridge in the level
+ * whole again, where its creator put it. Their class passes (`0x453040`,
+ * `0x4221e0`) call them on the first frame the player is alive after being
+ * dead, which is the respawn after a death's red — and only that: `zip` and
+ * the debug key move a living player, and {@link PLANK} has the listing.
+ */
+export function restoreBoards(): void {
+  if (!level) return;
+  for (const k of level.planks.flat()) {
+    k.state = "intact";
+    k.clock = 0;
+    k.crossings = 0;
+    k.vy = 0;
+    k.y = k.homeY;
+    k.landed = false;
+    k.gone = false;
+    if (k.floor && k.homeFloor) {
+      k.floor.top = k.homeFloor.top;
+      k.floor.bottom = k.homeFloor.bottom;
+    }
+  }
+  level.bridges.forEach((room, r) => {
+    for (const b of room) {
+      const d = b.y - b.homeY;
+      // the platform it owns follows it home, as it followed it down
+      if (d !== 0)
+        for (const q of level!.solids[r].platforms)
+          if (b.x >= q.left && b.x < q.right && b.y >= q.top && b.y < q.bottom) {
+            q.top -= d;
+            q.bottom -= d;
+          }
+      b.y = b.homeY;
+      b.top -= d;
+      b.bottom -= d;
+      b.state = "whole";
+      b.stood = 0;
+      b.clock = 0;
+      b.vy = 0;
+    }
   });
 }
 
@@ -6605,7 +6798,8 @@ export function stepSurges(): void {
     if (!q.on) continue;
     // `0x426ad4`..`0x426b27`: the scepter in hand, near the arc — thirteen rounds
     if (
-      inv.armed &&
+      // (`0x402ee0` is `0x448bf0` for this character — OUT, not just carried)
+      inv.drawn &&
       inv.weapon === SURGE.weapon &&
       p.x >= q.left - SURGE.reachX &&
       p.x < q.right + SURGE.reachX &&
@@ -7643,8 +7837,20 @@ export function machineBox(
 export const inv = {
   /** `0x479434` — which of {@link WEAPONS}, whether or not it is in your hands */
   weapon: 9,
-  /** `0x479438` — and this is what the fire button reads */
+  /**
+   * `0x479438` — you are carrying it. The panel's icon (`0x40d663`) and the
+   * swap at a different gun (`0x42f0a8`) read this, and nothing else does
+   */
   armed: false,
+  /**
+   * ...and it is OUT: `player+0x18` is one of the five armed kinds 0x12..0x16
+   * (`0x448bf0`). The fire button, the armed moveset, the knockdown's disarm and
+   * the surge's recharge all ask this, not the flag above. INV flips it
+   * (`0x428975`), and every unarmed script installed while you carry the gun
+   * puts it away: the level's first idle, a respawn, a ladder, the bar, a
+   * flail, a knockdown, and a reach that took anything but one of the five guns
+   */
+  drawn: false,
   /** `0x4a7f16 + id * 12`, per weapon */
   rounds: {} as Record<number, number>,
 };
@@ -7757,6 +7963,7 @@ export function dropGun(): void {
     },
   ];
   inv.armed = false;
+  inv.drawn = false;
 }
 
 /**
@@ -7784,6 +7991,58 @@ export function dropBlaster(e: Enemy): void {
       vx: 0,
     },
   ];
+}
+
+/**
+ * INV, one engine frame of it — the button that puts the gun away and gets it
+ * out again.
+ *
+ * Every player state, armed or not, answers `0x4ac386` with
+ * `mov word ptr [eax+0x18], 0xf` — the unarmed idle unconditionally
+ * (`0x4298c0`), the unarmed walk and run only while `0x479438` says you carry a
+ * gun (`0x429af4`), and all five guns' handlers. State 15 (`0x428975`) then:
+ *
+ *   - while the button is DOWN, installs the unarmed idle `0x471648`
+ *     (`0x428c46`). That is kind 0, so it has left state 15 — and kind 0's
+ *     handler sees the button still down and puts it back. Held, the player
+ *     alternates between the two every engine frame, standing on the idle
+ *     and reading no direction;
+ *   - when it is UP, dispatches on the weapon (`0x429624`) and, for each of the
+ *     five, asks whether the gun's own script is the one installed
+ *     (`0x4289c1`). If it is not and you carry it, the gun's script goes in:
+ *     it is out. Otherwise the unarmed idle goes in — or the duck `0x4717c8`
+ *     with S held (`0x4289ea`) — and it is away.
+ *
+ * So it is a toggle, decided on the release, and the release has to land on a
+ * state-15 frame to do anything: coming up on one of kind 0's frames just leaves
+ * the idle standing. A tap is two frames — in, and out on the next — and flips
+ * cleanly; a long hold is whichever frame the finger leaves on.
+ */
+function stepInv(): void {
+  if (p.inv15) {
+    p.inv15 = false; // either branch installs a script, which sets the kind
+    if (held.inv) inv.drawn = false;
+    else {
+      inv.drawn = inv.armed && !inv.drawn;
+      p.invLoop = false;
+    }
+    return;
+  }
+  const free =
+    p.onGround &&
+    !p.act &&
+    p.windup === 0 &&
+    p.landLeft === 0 &&
+    !p.climbing &&
+    !p.bar &&
+    !p.flail;
+  if (!held.inv || !free) {
+    p.invLoop = false;
+    return;
+  }
+  // the unarmed walk and run do not answer it with nothing to get out
+  if (!inv.drawn && !inv.armed && p.moving && !p.invLoop) return;
+  p.inv15 = p.invLoop = true;
 }
 
 /**
@@ -7819,8 +8078,12 @@ export function takeGun(): void {
     if (mine >= 0) cans.splice(mine, 1);
     stats.health = Math.min(stats.maxHealth, stats.health + 150);
     sound?.own(0xa, g.x, g.y);
+    inv.drawn = false; // `0x42887c` ends on the unarmed idle too
     return;
   }
+  // every case but the five guns ends on `0x471648` (`0x42884d`), and that is
+  // the unarmed idle: a refill taken with the gun out leaves your fists out
+  if (!kind.arms) inv.drawn = false;
   if (kind.weapon === null) return;
   // the callback: the weapon, then the rounds, clamped
   inv.weapon = kind.weapon;
@@ -7829,6 +8092,8 @@ export function takeGun(): void {
   // single round, which is what makes a bare `statflaregun` worth taking
   if (kind.arms) {
     inv.armed = true;
+    // ...and the case installs the gun's own script (`0x4288b7`), so it is out
+    inv.drawn = true;
     loadRounds(kind.weapon, 1);
   }
 }
@@ -8087,7 +8352,7 @@ export function stepStreams(): void {
         // woods 17 is the fall's own sound and `0x451e5a` plays it under the
         // state, so it goes with entering it rather than with the blow
         if (c.state !== "fall") sound?.effect(CROW.sound.fall, c.x, c.y);
-        lightFlame(c, art, c.x, c.y, CROW.burns);
+        lightFlame(c, art, false, CROW.burns);
         burnCrow(c);
       }
   }
@@ -8950,6 +9215,7 @@ export function stepScenery(): void {
       vy: 0,
       facing: random() < 0.5 ? 1 : -1,
       onGround: false,
+      running: false,
       clock: 0,
       top: n.top,
       left: n.left,
@@ -8963,29 +9229,39 @@ export function stepScenery(): void {
   }
   for (const r of roaches) {
     r.clock += TICK_SCALE;
-    if (!r.onGround) {
-      // `0x43b17f` waits for the ground before the run starts at all
-      r.vy += PLAYER_GRAVITY * ROACH.gravity * TICK_SCALE;
-      r.y += r.vy * TICK_SCALE;
-      const floor = surfaceUnder(
-        r.x,
-        r.y - CLIMB_PX,
-        r.y + Math.max(r.vy, 0) + STICK_PX,
-      );
-      if (floor !== null && r.y >= floor) {
-        r.y = floor;
-        r.vy = 0;
-        r.onGround = true;
-        r.clock = 0;
-        sound?.effect(ROACH.runSound, r.x, r.y);
-      }
-      continue;
+    if (r.running) {
+      // the run carries `dx 65` on every one of its four cels, and the mover
+      // spends it on the ground and off it alike
+      const i = loopIndex(ROACH.run, r.clock);
+      r.x += ((ROACH.run.dx[i] ?? 0) / ROACH.divisor) * TICK_SCALE * r.facing;
     }
-    // the run carries `dx 65` on every one of its four cels
-    const i = loopIndex(ROACH.run, r.clock);
-    r.x += ((ROACH.run.dx[i] ?? 0) / ROACH.divisor) * TICK_SCALE * r.facing;
-    const floor = surfaceUnder(r.x, r.y - CLIMB_PX, r.y + STICK_PX);
-    if (floor !== null) r.y = floor;
+    if (r.onGround) {
+      const floor = surfaceUnder(r.x, r.y - CLIMB_PX, r.y + STICK_PX);
+      if (floor !== null) {
+        r.y = floor;
+        continue;
+      }
+      // off the end of a ramp: the 0.6 gravity `0x43b1be` gave it is the
+      // object's own and the mover spends it whenever there is no floor
+      r.onGround = false;
+    }
+    r.vy += PLAYER_GRAVITY * ROACH.gravity * TICK_SCALE;
+    r.y += r.vy * TICK_SCALE;
+    const floor = surfaceUnder(
+      r.x,
+      r.y - Math.max(r.vy, 0) - CLIMB_PX,
+      r.y + STICK_PX,
+    );
+    if (floor === null || r.y < floor) continue;
+    r.y = floor;
+    r.vy = 0;
+    r.onGround = true;
+    if (r.running) continue;
+    // `0x43b17f` waits for the ground before the run starts at all: tag 0 of
+    // `0x474db0`, which plays the run sound as it starts
+    r.running = true;
+    r.clock = 0;
+    sound?.effect(ROACH.runSound, r.x, r.y);
   }
   // `0x43b1e8`: it removes itself the frame its own point leaves the rect
   roaches = roaches.filter(
@@ -9969,7 +10245,7 @@ export let flames: Flame[] = [];
  */
 export function burnFoe(e: Enemy, how: NonNullable<Foe["burns"]>): void {
   if (!level) return;
-  lightFlame(e, celRec(level.sbk, celOf(e)), e.x, e.y, how);
+  lightFlame(e, celRec(level.sbk, celOf(e)), e.facing < 0, how);
 }
 
 /**
@@ -9984,15 +10260,22 @@ export function burnCast(
   how: { late?: boolean; forever?: boolean },
 ): void {
   if (!level) return;
-  lightFlame(c, celRec(level.sbk, castCel(c)), c.x, c.y, how);
+  lightFlame(c, celRec(level.sbk, castCel(c)), c.facing < 0, how);
 }
 
-/** the shared half: one flame, somewhere inside the victim's own cel */
+/**
+ * The shared half: one flame, somewhere inside the victim's own cel.
+ *
+ * `mirror` is the victim's facing as it catches: `0x44ffee` copies its
+ * `obj+0x28` into the flame's, once, and nothing writes it again. The flame
+ * cels are not centred on their anchors (9620's is 11 of 34 across), so a flame
+ * on something facing left is drawn reflected about that anchor, and it stays
+ * so if the victim turns.
+ */
 export function lightFlame(
   on: object,
   art: SbkCel | undefined,
-  x: number,
-  y: number,
+  mirror: boolean,
   how: { late?: boolean; forever?: boolean },
 ): void {
   const lvl = level;
@@ -10012,7 +10295,7 @@ export function lightFlame(
   const halfH = art ? Math.floor(art.height / 2) : 0;
   // `0x434540` answers nothing for a range of nothing
   const pick = (n: number): number => (n > 0 ? roll(n) : 0);
-  flames.push({
+  const f: Flame = {
     on,
     // `0x44ffa5`/`0x44ffc6`: `roll(half) - half/2`, so it is centred on the
     // middle of the box and spread half a box either way
@@ -10021,9 +10304,46 @@ export function lightFlame(
     stage: how.late ? 2 : 0,
     clock: 0,
     forever: how.forever === true,
-    x,
-    y,
-  });
+    mirror,
+    x: 0,
+    y: 0,
+  };
+  flames.push(f);
+  // placed now as well as every frame, so a flame lit after the flame pass
+  // (the CHOPPER's wreck, lit from its own think) is not drawn once elsewhere
+  placeFlame(f, lvl, crowsHere().includes(on as Crow) ? "crow" : casts.includes(on as Cast) ? "cast" : "foe");
+}
+
+/**
+ * Where a flame stands — `0x453eb7`, against its victim's `obj+8` and `obj+6`.
+ *
+ * Those are the victim's ANCHOR, the point its cels are drawn from, and not the
+ * middle of anything. A creature's `e.x` on this page is the middle of its gait
+ * cel, so the anchor is {@link foeAnchor}'s: for the CHOPPER, whose 4870 hangs
+ * 197 of its 222 pixels right of the anchor, measuring from `e.x` put the flame
+ * on its wreck 86 pixels off it.
+ */
+function placeFlame(f: Flame, lvl: Level, kind: "crow" | "cast" | "foe"): void {
+  if (kind === "crow") {
+    // a crow's point is its own anchor, and nothing on this page mirrors its
+    // art, so `0x453eb7`'s facing has nothing to flip the offset by
+    const c = f.on as Crow;
+    f.x = c.x + f.dx;
+    f.y = c.y + f.dy;
+  } else if (kind === "cast") {
+    // ...and a cast's own point IS its anchor: `obj+6` is what `0x453eb7`
+    // reads back, and one of these has no separate foot to measure from
+    const c = f.on as Cast;
+    f.x = c.x + (c.facing < 0 ? -f.dx : f.dx);
+    f.y = c.y + f.dy;
+  } else {
+    const e = f.on as Enemy;
+    // `0x453eb7` — the offset is mirrored by the victim's facing, the
+    // vertical one is not, and both are against the victim's own anchor
+    const at = foeAnchor(e, lvl) ?? e;
+    f.x = at.x + (e.facing < 0 ? -f.dx : f.dx);
+    f.y = at.y + f.dy;
+  }
 }
 
 /**
@@ -10048,26 +10368,7 @@ export function stepFlames(): void {
   for (const c of birds) alive.add(c);
   for (const f of flames) {
     if (!alive.has(f.on)) continue;
-    if (birds.has(f.on)) {
-      // a crow's point is its own anchor, and nothing on this page mirrors its
-      // art, so `0x453eb7`'s facing has nothing to flip the offset by
-      const c = f.on as Crow;
-      f.x = c.x + f.dx;
-      f.y = c.y + f.dy;
-    } else if (lit.has(f.on)) {
-      // ...and a cast's own point IS its anchor: `obj+6` is what `0x453eb7`
-      // reads back, and one of these has no separate foot to measure from
-      const c = f.on as Cast;
-      f.x = c.x + (c.facing < 0 ? -f.dx : f.dx);
-      f.y = c.y + f.dy;
-    } else {
-      const e = f.on as Enemy;
-      // `0x453eb7` — the offset is mirrored by the victim's facing, the
-      // vertical one is not, and both are against the victim's own anchor
-      const at = foeAnchor(e, lvl);
-      f.x = e.x + (e.facing < 0 ? -f.dx : f.dx);
-      f.y = (at?.y ?? e.y) + f.dy;
-    }
+    placeFlame(f, lvl, birds.has(f.on) ? "crow" : lit.has(f.on) ? "cast" : "foe");
     f.clock += 1;
     const run =
       f.stage === 0
@@ -12412,19 +12713,12 @@ export function choosePlayerCel(): void {
    * and the duck in its weapon's own cels. See {@link Moveset}.
    */
   /**
-   * ...unless INV is down, which is the whole of what that button does.
-   *
-   * Every one of the player's states, armed and unarmed, answers `0x4ac386`
-   * with the same two instructions — `mov word ptr [eax+0x18], 0xf` — and state
-   * 15 (`0x428975`) is four lines long: while the button is held it stands you
-   * on `0x471648` tag 0, the plain unarmed idle, and when it comes up it reads
-   * `0x479434` and puts you back into the idle of whatever you are carrying.
-   *
-   * So INV is a HOLSTER. There is no inventory screen in `SC.EXE` — see the
-   * README for the wrong turning that went looking for one at `0x42edd0`.
+   * ...while it is OUT, which is {@link inv}'s `drawn` and not its `armed`: a
+   * carried gun you have put away with INV ({@link stepInv}) leaves you on the
+   * fists' own moveset.
    */
   const kit =
-    inv.armed && !held.inv ? (WEAPONS[inv.weapon]?.moveset ?? null) : null;
+    inv.drawn ? (WEAPONS[inv.weapon]?.moveset ?? null) : null;
   const seq = acting
     ? acting.cels
     : p.bar
@@ -12557,6 +12851,12 @@ export function stepGoal(): void {
  * it against the clock and draws what it left.
  */
 export function tick(): void {
+  // the red's fade holds the whole world still — a tick is the sixtieth that
+  // `0x42942d` spins on, so each one is a step of it and nothing else
+  if (deathRed && deathRed.step < DEATH_RED.steps) {
+    stepDeathRed(false);
+    return;
+  }
   // where the tick started, so a fall can be tested along the path it took
   const tickX = p.x;
   // one ENGINE frame in four ticks: the player's state machine, the impulses and
@@ -12564,6 +12864,7 @@ export function tick(): void {
   p.frameAcc += TICK_SCALE;
   const frame = p.frameAcc >= 1 - 1e-9;
   if (frame) p.frameAcc -= 1;
+  stepDeathRed(frame);
   // `0x4309f0` is an engine-frame job like everything else in here; the step it
   // decides is spent across this frame's four ticks
   if (frame) stepCamera();
@@ -12574,7 +12875,8 @@ export function tick(): void {
   // an attack owns the player until it finishes — and it can start in the
   // air, which is where the flying moves live
   // (and state 15, INV held, reads no other key at all — `0x428975`)
-  if (p.onGround && !p.act && p.windup === 0 && p.landLeft === 0 && !held.inv) {
+  if (frame) stepInv();
+  if (p.onGround && !p.act && p.windup === 0 && p.landLeft === 0 && !p.invLoop) {
     // W picks the bigger variant of either, which is what both state machines
     // do with `0x4ac3fe` before they look at their own button
     const big = held.up ? "Run" : "";
@@ -12602,7 +12904,7 @@ export function tick(): void {
     // ...and with a gun in your hands P is not a fist any more. The five armed
     // state machines read P (`[0x4ac394]`) and install their own wind-up tag;
     // none of them has a kick at all.
-    else if (inv.armed && punchPressed && !held.down) p.act = "fire";
+    else if (inv.drawn && punchPressed && !held.down) p.act = "fire";
     else if (both) p.act = held.down ? "duckCombo" : "headbutt";
     else if (punchPressed)
       p.act = held.down
@@ -12624,12 +12926,35 @@ export function tick(): void {
       struckBoggs.clear();
       swing();
     }
-  } else if (!p.onGround && !p.act && !p.flail) {
-    // mid-flight, the kind-3 handler accepts both buttons once the launch is
-    // done (`0x42a036`, `0x42a082`): K is tag 8, P is tag 9 — the flail's
-    // handler reads neither
-    if (kickPressed) p.act = "airKick";
-    else if (punchPressed) p.act = "airPunch";
+  } else if (!p.onGround && !p.act && !p.flail && p.windup === 0) {
+    if (p.launched) {
+      // mid-flight, the kind-3 handler accepts both buttons once the launch
+      // is done (`0x42a036`, `0x42a082`): K is tag 8, P is tag 9 — the
+      // flail's handler reads neither
+      if (kickPressed) p.act = "airKick";
+      else if (punchPressed) p.act = "airPunch";
+    } else if (p.fallState && !inv.drawn && !p.invLoop) {
+      // off a ledge the player is still in a GROUND state ({@link
+      // Player.fallState}), and its handler plays its own ground moves in the
+      // air. The idle (`0x4296fc`..`0x4297b5`) asks for both buttons first,
+      // then P, then K; the run (`0x429d6a`, `0x429daf`) for P and then K, and
+      // its K is the flying kick
+      const big = held.up ? "Run" : "";
+      // the punch's coin is tossed only when there is a punch — every roll
+      // moves the dice on for everything else in the level
+      const coin = (): string => (random() < 0.5 ? "" : "2");
+      if (p.fallState === "run") {
+        if (punchPressed) p.act = `punch${coin()}`;
+        else if (kickPressed) {
+          p.act = "flyingKick";
+          p.leap = true;
+        }
+      } else if (punchPressed && (kickPressed || held.kick)) p.act = "headbutt";
+      else if (kickPressed && held.punch) p.act = "headbutt";
+      else if (punchPressed) p.act = `punch${big}${coin()}`;
+      else if (kickPressed) p.act = `kick${big}`;
+      if (p.act) p.fired = false;
+    }
     if (p.act) {
       p.actClock = 0;
       struck.clear();
@@ -12638,18 +12963,39 @@ export function tick(): void {
       swing();
     }
   }
-  // an air act ends with the flight: landing hands the player back
-  if (
-    p.act &&
-    (p.act === "airKick" || p.act === "airPunch" || p.act === "flyingKick") &&
-    p.onGround &&
-    p.actClock > 0
-  )
-    p.act = null;
   if (p.act) {
-    const a = actOf(p.act);
-    const f = a ? Math.floor(p.actClock / (a.hold ?? 1)) : 0;
-    if (!a || f >= a.cels.length) {
+    let a = actOf(p.act);
+    let f = a ? Math.floor(p.actClock / (a.hold ?? 1)) : 0;
+    /**
+     * The flight's attacks END on the ground, not with their script. The
+     * player's scripts never loop (`0x45d070` clears `obj+0x4a` and nothing
+     * sets it again), so a tag that runs out HOLDS its last cel, and:
+     *
+     * - tags 8 and 9 (`0x42a1e3`) leave only once the tag has ended AND the
+     *   player is down (`0x42a33a`) — a kick that runs out in the air holds
+     *   689 to the ground, and one that lands early plays out on it before
+     *   the landing;
+     * - the flying kick's tag 4 (`0x42a7b0`) goes on to tag 3 once it has
+     *   ended and is falling at 32 or more, is down, or has connected
+     *   (`obj+0x2a`, the collision word); tag 3 (`0x42a784`) holds to the
+     *   ground and then goes to the idle.
+     */
+    const connected = struck.size + struckCrows.size + struckBoggs.size > 0;
+    if (a && f >= a.cels.length && p.act === "flyingKick" && (p.onGround || p.vyRaw >= 32 || connected)) {
+      p.act = "flyingKickEnd";
+      p.actClock = 0;
+      a = actOf(p.act);
+      f = 0;
+    }
+    const holds =
+      !!a &&
+      f >= a.cels.length &&
+      ((!p.onGround &&
+        (p.act === "airKick" || p.act === "airPunch" || p.act === "flyingKick" || p.act === "flyingKickEnd")) ||
+        // state 27 installs nothing (`0x429454`): the body lies in the dying
+        // script's last cel until the checkpoint
+        (p.act === "dying" && !!deathRed));
+    if (!a || (f >= a.cels.length && !holds)) {
       // the reach ENDS in the take — `0x4287bd` is the kind-14 state, and it
       // probes the band a second time rather than remembering what it found
       if (p.act === "reach") takeGun();
@@ -12692,6 +13038,10 @@ export function tick(): void {
         p.actClock = 0;
       } else {
         if (p.act === "fire") shutStreams();
+        // a ground move that ends in the air hands back to the idle, still
+        // falling: the punch and kick states' ends all install `0x471648`
+        // (`0x42a526`, `0x42a5fb`, `0x42a870`), and the idle reads no floor
+        if (!p.onGround && !p.launched) p.fallState = "idle";
         p.act = null;
         // ...and the gravity a reaction took goes back with it. In the engine
         // nothing restores it either — the NEXT state's own `0x42f850` does,
@@ -12811,10 +13161,10 @@ export function tick(): void {
     held.right === held.left
   )
     bar = barAt();
-  // ...and INV stands you still: state 15 reads no direction at all, so a
-  // holstered player cannot walk while the button is down
+  // ...and INV stands you still: state 15 reads no direction at all, and the
+  // idle it hands you to goes straight back to it while the button is down
   const dir =
-    ladder || bar || p.act || held.inv
+    ladder || bar || p.act || p.invLoop
       ? 0
       : (held.right ? 1 : 0) - (held.left ? 1 : 0);
   p.moving = dir !== 0;
@@ -12842,6 +13192,7 @@ export function tick(): void {
    */
   if (frame && !ladder) {
     if (!p.onGround) p.airFrames += 1;
+    else p.fallState = null;
     // the drag closes the frame before — `0x4302c0`, grounded frames only
     if (p.onGround) p.vx = dragged(p.vx);
     /**
@@ -12858,8 +13209,10 @@ export function tick(): void {
       p.act !== "dying"
     ) {
       p.flail = true;
+      inv.drawn = false; // `0x472350` is kind 25, and it ends on `0x471648`
       p.screamed = false;
       p.launched = false;
+      p.fallState = null;
       p.landLeft = 0;
       if (p.act === "fire") shutStreams();
       p.act = null;
@@ -12879,6 +13232,11 @@ export function tick(): void {
       // tag 1, or 0x471c68's tag 5: `0x42a182` reads ESC and nothing else until
       // the script ends on the ground. The keys do nothing; the slide is the drag's
       p.landLeft -= 1;
+    } else if (p.act === "airKick" || p.act === "airPunch") {
+      // `0x42a1e3`, tags 8 and 9: the same lift and the same steering as the
+      // flight's own tag 0, on the ground too until the tag ends — the keys
+      // themselves, since an act takes the walk's direction away
+      airThink((held.right ? 1 : 0) - (held.left ? 1 : 0));
     } else if (p.onGround && p.launched) {
       // `0x42a0f0`, the tag-0 handler's first grounded frame: the allowance back
       // to 2 and `0x471b28` tag 1 with sound 4. Its other arm, `0x42a109`'s
@@ -12890,43 +13248,21 @@ export function tick(): void {
       p.landLeft = ANIM.land.length;
       sound?.own(OWN.land, p.x, p.y);
     } else if (!p.onGround) {
-      if (p.launched && p.airFrames >= 2) {
-        // `0x429f1f`, tag 0's frame: the lift, then the steering
-        if (held.up && p.hold > 0) {
-          p.vyRaw += roundAway(-MEASURED.rise / DIVISOR);
-          p.hold -= 1;
-        }
-        if (dir && dir !== p.facing) {
-          // backward alone: `0x402e40` swaps the two flags and turns the
-          // player round, and `0x429fdf` zeroes the velocity — and then
-          // `0x429fe5` reads the forward flag, which now holds that same key,
-          // so the steering drives 30 the new way on this very frame
-          p.facing = dir;
-          p.vx = 0;
-          steerAir();
-        } else if (dir) steerAir();
-      }
+      if (p.launched && p.airFrames >= 2) airThink(dir);
       // a walk or run that left the ground without a jump has no steering: the
       // walk state installs the idle script's tag 1 (`0x42999e`) and the run
-      // its own tag 1 (`0x429bf0`), and neither handler reads a direction
+      // its own tag 1 (`0x429bf0`), and neither handler reads a direction —
+      // but both read J, and neither asks whether there is a floor
+      else if (p.fallState && p.windup === 0 && jumpPressed && !p.act && !p.invLoop)
+        startJump(p.fallState === "run", false);
     } else if (p.windup === 0) {
       if (dir) p.facing = dir;
-      if (jumpPressed && !p.act && !held.inv) {
-        // `0x4296d6`, `0x429a76`, `0x429c65`: one sound, then the standing state
-        // installs tag 2, the walk tag 3 and the run tag 4 — three frames of
-        // 250 251 252 before 253 launches, or the run's one record of 200
-        sound?.own(OWN.jump, p.x, p.y);
-        p.leap = p.running;
-        p.windup = p.leap ? 1 : ANIM.launch.length;
-        p.launchDx = p.running
-          ? MEASURED.runJumpDx
-          : p.moving
-            ? MEASURED.launchDx
-            : 0;
-      }
+      if (jumpPressed && !p.act && !p.invLoop) startJump(p.running, p.moving);
     }
     // ---- animate: the current record's dx/dy through the mover, `0x45d196`
-    if (p.onGround && p.landLeft === 0) {
+    // (a launch tag plays to its end wherever the player is: the jump state's
+    // `0x42a1c2` waits for the tag and reads no floor)
+    if (p.landLeft === 0 && (p.onGround || p.windup > 0)) {
       if (p.windup > 0) {
         p.windup -= 1;
         if (p.windup === 0) {
@@ -12938,10 +13274,11 @@ export function tick(): void {
           p.vx += p.facing * roundAway(p.launchDx / DIVISOR);
           p.onGround = false;
           p.launched = true;
+          p.fallState = null;
           p.airFrames = 0;
           p.hold = HOLD_FRAMES;
         }
-      } else if (dir) {
+      } else if (dir && p.onGround) {
         // the gait's own dx: the walk's 95, the run's 180, and ducked it is the
         // CRAWL — 0x4717c8 tag 4's 47, which cannot run
         const dx = held.down
@@ -13073,6 +13410,10 @@ export function tick(): void {
   p.climbing = ladder !== undefined;
   const wasHanging = p.bar !== undefined;
   p.bar = bar;
+  // the climb `0x471e78` is kind 7 and the bar `0x472048` kind 8, and both end
+  // on the unarmed fall `0x471b28` (`0x42af84`, `0x42b597`): the gun goes away
+  // on the way up and INV is what brings it back
+  if (ladder || bar) inv.drawn = false;
   if (ladder) {
     /**
      * Step ONTO it, where the record says and facing the way it says.
@@ -13345,9 +13686,11 @@ export function tick(): void {
       // follow the floor: up a curb, down a step, off an edge
       const s = surfaceUnder(p.x, p.y - CLIMB_PX, p.y + STICK_PX);
       if (s === null) {
-        // walked off: airborne on the gait's own velocity, with no steering
+        // walked off: airborne on the gait's own velocity, with no steering,
+        // and still in a ground state — see `p.fallState`
         p.onGround = false;
         p.airFrames = 0;
+        p.fallState = p.running && !p.act ? "run" : "idle";
       } else {
         p.y = s;
         p.vy = 0;
@@ -13501,9 +13844,12 @@ export function tick(): void {
   if (frame) stepBoards();
   if (frame) stepRollers();
   if (frame) stepCans();
-  if (frame) stepFlames();
   if (frame) stepCrows();
   stepEnemies();
+  // after the creatures, as WOODS' runner has it — the CHOPPER's pass
+  // `0x4540d3` and then the flames' `0x4540ec` — so a flame on something
+  // riding thirty a frame is where it is this frame, not where it was
+  if (frame) stepFlames();
   stepGobs();
   stepCraft();
   claimBar();

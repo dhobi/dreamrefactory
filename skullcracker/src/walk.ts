@@ -131,6 +131,9 @@ import {
   flames,
   flares,
   flashColour,
+  deathRed,
+  DEATH_RED,
+  reddened,
   floorCel,
   flypastCel,
   flypasts,
@@ -758,7 +761,7 @@ const pad = ((): HTMLDivElement => {
       ["down", "\u25bc", "down — crouch"],
     ]),
     group("padActs", "act", [
-      ["inv", "INV", "inv — hold to holster the gun"],
+      ["inv", "INV", "inv — tap to put the gun away or get it out"],
       ["jump", "JUMP", "jump"],
       ["punch", "PUNCH", "punch"],
       ["kick", "KICK", "kick"],
@@ -920,6 +923,7 @@ function drawPlayerCel(
  * matched to its floor in the first place ({@link planksIn}).
  */
 function drawPlank(k: Plank, camX: number, camY: number): void {
+  if (k.gone) return;
   drawLevelCel(plankCel(k), k.x, k.y, camX, camY);
 }
 
@@ -979,6 +983,9 @@ function drawPickups(camX: number, camY: number): void {
  */
 function drawGuns(camX: number, camY: number): void {
   for (const g of hereOf((l) => l.guns)) {
+    // `0x45ae23`: the pickup class draws nothing for code 2. That is a can's
+    // pickup, and the can lying on top of it is the picture
+    if (g.code === 2) continue;
     const loc = player?.byId.get(GUN_CODES[g.code]?.cel ?? -1);
     if (loc === undefined) continue;
     const art = playerCel(loc);
@@ -1114,6 +1121,25 @@ function drawGobs(camX: number, camY: number): void {
   }
 }
 
+/** the canvas through {@link reddened} at fade step `step`, a red channel table at a time */
+function redden(step: number): void {
+  const lut = new Uint8Array(256);
+  for (let r = 0; r < 256; r++) lut[r] = reddened(r, 1, 1, step)[0];
+  const img = ctx.getImageData(0, 0, W, H);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+    // black and white are entries 0 and 255, which the palette keeps
+    if ((r | g | b) === 0 || (r & g & b) === 255) continue;
+    d[i] = lut[r];
+    d[i + 1] = 0;
+    d[i + 2] = 0;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 function loop(now: number): void {
   requestAnimationFrame(loop);
   // the pad is the only control a phone has, so it is up whenever the level is
@@ -1232,13 +1258,15 @@ function loop(now: number): void {
     drawLevelCel(bushCel(q), q.x, q.y, camX, camY, q.mirror);
   for (const r of roaches) {
     drawLevelCel(
-      r.onGround
+      r.running
         ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)]
         : ROACH.drop.cels[0],
       r.x,
       r.y,
       camX,
       camY,
+      // `0x43b11c` hands the draw its `obj+0x28`
+      r.facing < 0,
     );
   }
   for (const [slot, clock] of columns) {
@@ -1343,7 +1371,7 @@ function loop(now: number): void {
   for (const c of cans) drawLevelCel(canCel(c), c.x, c.y, camX, camY, c.vx < 0);
   // ...and the flames LAST, because a flame is an object standing on top of
   // whatever it is burning and not a wash over its cel
-  for (const f of flames) drawLevelCel(flameCel(f), f.x, f.y, camX, camY, false);
+  for (const f of flames) drawLevelCel(flameCel(f), f.x, f.y, camX, camY, f.mirror);
   drawCasts(camX, camY);
   drawStreams(camX, camY);
   drawGobs(camX, camY);
@@ -1467,6 +1495,10 @@ function loop(now: number): void {
       labelInk: panelInk(),
     });
   }
+
+  // the red after a death: `0x434680` rewrites the one palette the whole screen
+  // draws through, so the panel goes red with the level
+  if (deathRed) redden(Math.min(deathRed.step, DEATH_RED.steps));
 
   const room = p.room;
   const which = room ? `${room.name}/p${room.param}` : "nowhere";
@@ -1784,7 +1816,7 @@ function loop(now: number): void {
     ? arms.reduce((a, b) => (far(b) < far(a) ? b : a))
     : null;
   const armed =
-    ` · ${inv.armed ? "holding" : "no"} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}` +
+    ` · ${inv.drawn ? "holding" : inv.armed ? "carrying" : "no"} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}` +
     (arms.length
       ? ` · ${arms.length} guns · nearest ${GUN_CODES[lying!.code]?.name ?? lying!.code} at x ${Math.round(lying!.x)}, y ${Math.round(lying!.y)}${gunAhead() ? " IN REACH" : ""}`
       : "") +
@@ -1821,7 +1853,7 @@ function loop(now: number): void {
       : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
   const air =
-    (held.inv ? " · <b>INV held</b> — holstered, standing" : "") +
+    (p.invLoop ? " · <b>INV held</b> — standing, decided on the release" : "") +
     (bolts.length
       ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}, y ${Math.round(bolts[0].y)} vx ${Math.round(bolts[0].vx)}`
       : "") +

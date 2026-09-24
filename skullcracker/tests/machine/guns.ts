@@ -238,21 +238,50 @@ if (!(spent < 41)) fail(`0x42bab5 spends a round a frame while it pours; the inv
 ok(`WOODS' flamer holds 41 of 160, has its own cels, and pours 41 down to ${spent}`);
 
 /**
- * ...and INV holsters it, which is the whole of that button.
+ * ...and INV puts it away and gets it out again — a toggle, decided on the
+ * release.
  *
- * Every player state answers `0x4ac386` with `mov word ptr [eax+0x18], 0xf`,
- * and state 15 (`0x428975`) stands you on `0x471648` tag 0 while it is held
- * and reads `0x479434` to restore your weapon's idle when it comes up. There
- * is no inventory screen anywhere in `SC.EXE`.
+ * Every player state answers `0x4ac386` with `mov word ptr [eax+0x18], 0xf`.
+ * State 15 (`0x428975`) installs the unarmed idle while the button is down —
+ * kind 0, whose handler puts it straight back — and on the release asks whether
+ * the gun's own script is installed (`0x4289c1`): if not, it goes in; if so,
+ * the unarmed idle does. `0x479438` is never touched, so the gun stays yours.
  */
 await go(9, 2058);
 take();
-if (!game.inv.armed || name() !== "soaker" || rounds() !== 41) fail(`GRAVE's statsoaker should arm you with 41: ${held()}`);
-const holstered = showed(14, ["inv"]);
-if (holstered.some((c) => c > 100)) fail(`INV stands you on the unarmed idle, cels 1..8; saw ${holstered.join(" ")}`);
-ok(`and INV holsters it — the plain idle's own ${holstered.join(" ")}`);
+if (!game.inv.armed || !game.inv.drawn || name() !== "soaker" || rounds() !== 41)
+  fail(`GRAVE's statsoaker should arm you with 41, gun out: ${held()} drawn ${game.inv.drawn}`);
+/** press INV for `frames` engine frames and let go */
+const inv = (frames: number): void => {
+  h.hold("inv", true);
+  h.frame(frames);
+  h.hold("inv", false);
+  h.frame(3);
+};
+inv(1);
+if (game.inv.drawn || !game.inv.armed || rounds() !== 41)
+  fail(`a tap of INV with the gun out puts it away and keeps it: drawn ${game.inv.drawn}, ${held()}`);
+const away = showed(8, []);
+if (away.some((c) => c > 100)) fail(`with the gun away it stands on the unarmed idle, cels 1..8; saw ${away.join(" ")}`);
+ok(`a tap of INV puts the soaker away — the plain idle's own ${away.join(" ")} — and it is still carried, 41 rounds`);
 
-// ...and it stands you still: state 15 reads no direction at all
+// ...and the fists are fists again: P is the punch, not the soaker
+h.hold("punch", true);
+h.frame(1);
+h.hold("punch", false);
+const act = game.p.act ?? "";
+h.frame(30);
+if (!act.startsWith("punch") || rounds() !== 41)
+  fail(`with the gun away P should punch and spend nothing; it did ${act || "nothing"}, ${held()}`);
+ok(`with it away P punches (${act}) and the soaker keeps its 41`);
+
+inv(1);
+if (!game.inv.drawn || rounds() !== 41) fail(`a second tap gets it out again: drawn ${game.inv.drawn}, ${held()}`);
+const back = showed(8, []);
+if (!back.includes(3200)) fail(`0x428a73 puts the soaker's own idle in; saw ${back.join(" ")}`);
+ok(`and a second tap gets it out again on 3200`);
+
+// ...it stands you still while it is down: state 15 reads no direction at all
 h.hold("inv", true);
 h.frame(3);
 const stood = x();
@@ -261,11 +290,26 @@ h.frame(12);
 h.hold("right", false);
 const moved = x();
 h.hold("inv", false);
+h.frame(3);
 if (moved !== stood) fail(`state 15 has no walk; the player went ${stood} -> ${moved} with INV down`);
-h.frame(6);
-if (!game.inv.armed || name() !== "soaker" || rounds() !== 41) fail(`releasing INV restores the weapon untouched: ${held()}`);
-const back = showed(8, []);
-if (!back.includes(3200)) fail(`0x428a73 puts the soaker's own idle back; saw ${back.join(" ")}`);
-ok(`...holds you still while it is down, and gives the gun back on 3200 when it comes up`);
+ok(`and it holds you still while it is down`);
+
+// ...and a long hold is decided by the frame it ends on: held, the player
+// alternates between state 15 and the idle kind 0 it installs, and only a
+// release that lands on 15 flips anything
+game.inv.drawn = true;
+inv(5);
+if (!game.inv.drawn) fail(`held five frames the release lands on state 15, which puts back what the hold took away; drawn ${game.inv.drawn}`);
+inv(4);
+if (game.inv.drawn) fail(`held four frames the release lands on kind 0's idle, which leaves the gun away; drawn ${game.inv.drawn}`);
+ok(`a hold ends on whichever of the two states its last frame was: five frames gun out, four frames gun away`);
+
+// ...and a respawn's idle is kind 0 too (`0x42950f`): away, still carried
+inv(1);
+if (!game.inv.drawn) fail(`the gun should be out before the respawn`);
+game.respawn();
+h.frame(3);
+if (game.inv.drawn || !game.inv.armed) fail(`a respawn puts the gun away and leaves it carried: drawn ${game.inv.drawn}, ${held()}`);
+ok(`a respawn stands you on the fists with the soaker still carried`);
 
 pass(`the guns are placed, reached for, carried between levels and fired`);

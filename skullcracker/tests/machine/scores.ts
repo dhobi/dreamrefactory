@@ -78,6 +78,8 @@ const spendALife = (): void => {
   }
   if (h.until(() => game.stats.lives !== lives || over !== null, 200) < 0)
     fail(`three harakari did not cost a life: health ${game.stats.health}, ${game.stats.lives} lives`);
+  // and the red plays out before the checkpoint (`0x429392`)
+  h.until(() => !game.deathRed || over !== null, 200);
   clock += 5000;
 };
 

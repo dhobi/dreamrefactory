@@ -130,6 +130,10 @@ for (let i = 0; i < 3; i++) {
 if (game.levelIndex !== 12) fail(`three [ from VAT is MAZE; it is level ${game.levelIndex + 1} ${game.level?.name}`);
 if (!game.inv.armed || game.inv.weapon !== 6) fail(`the weapon is the chapter's, not the level's; MAZE has ${game.inv.weapon} armed ${game.inv.armed}`);
 h.until(() => game.p.onGround, 60);
+// a level opens on the unarmed idle (`0x448bc7`) and the load only sets
+// `0x479438` (`0x45e041`): the gun is carried, not out, until INV — which
+// tests/machine/guns.ts presses. Here it is simply out, frame for frame as before
+game.inv.drawn = true;
 const cop = () =>
   game
     .spawnedHere()

@@ -162,7 +162,35 @@ const after = game.spawnedHere().length;
 if (after !== before + 1) fail(`killing a CHOPPER should leave a punk standing: ${before} spawned, then ${after}`);
 // the wreck lies up to 125 frames on 4904 before it sinks (`0x4546dc`), and
 // what is left once it has gone is the punk `0x450a50` made
-if (h.until(() => !game.spawnedHere().includes(chopper), 200) < 0) fail(`the CHOPPER's wreck never sank`);
+// ...and it burns there, `0x4546ac`'s flame that never goes out. `0x453eb7`
+// hangs it off the wreck's `obj+8`, its ANCHOR, every frame after the
+// CHOPPER's own pass; the page hung it off the middle of the gait cel, 86
+// pixels to one side of the bike, and a frame behind it
+let burned = 0;
+const lvl = game.level!;
+if (
+  h.until(() => {
+    const f = game.flames.find((q) => q.on === chopper);
+    if (!f) return !game.spawnedHere().includes(chopper);
+    const a = game.foeAnchor(chopper, lvl)!;
+    const x = a.x + (chopper.facing < 0 ? -f.dx : f.dx);
+    if (f.x !== x || f.y !== a.y + f.dy)
+      fail(`the wreck's flame stands at x${f.x} y${f.y}, wanted its anchor x${a.x} y${a.y} plus ${f.dx}, ${f.dy}`);
+    if (f.mirror !== chopper.facing < 0) fail(`a flame takes its victim's facing as it catches (0x44ffee)`);
+    // and it is ON the bike: inside the lying wreck, 4904, as drawn about that
+    // anchor — the cel it caught on and rolled its point in (`0x44ff42`); the
+    // sink's cels shrink under it to 39 wide, and the flame stays put
+    const c = game.celRec(lvl.sbk, game.celOf(chopper))!;
+    const left = chopper.facing < 0 ? a.x - (c.width - c.posX) : a.x - c.posX;
+    if (c.id === 4904 && (f.x < left || f.x > left + c.width))
+      fail(`the flame at x${f.x} is off the wreck, x${left}..${left + c.width}`);
+    burned += 1;
+    return !game.spawnedHere().includes(chopper);
+  }, 200) < 0
+)
+  fail(`the CHOPPER's wreck never sank`);
+if (!burned) fail(`the wreck never caught — 0x4546ac`);
+ok(`the wreck burns on its own anchor for ${burned} frames, then sinks`);
 if (!game.spawnedHere().includes(rider)) fail(`the punk out of the CHOPPER should still be standing`);
 ok(`blows fell a CHOPPER and an ${rider.kind} climbs out of it — ${before} spawned, then ${after}`);
 
@@ -421,6 +449,10 @@ if (handled.join(" ") !== "burn burst burst" || answers.some((a) => !a))
 // at you crosses the stream on the way, and the five of the death throw leave
 // from inside it
 await go("x=3800&y=284&foehit=1&damage=1&weapon=10&rounds=160");
+// a level opens on the unarmed idle (`0x448bc7`) and the load only sets
+// `0x479438` (`0x45e041`): the gun is carried, not out, until INV — which
+// tests/machine/guns.ts presses. Here it is simply out, frame for frame as before
+game.inv.drawn = true;
 let shotsLit = 0;
 let shotsSetOff = 0;
 pourOn(
@@ -453,6 +485,10 @@ ok(`its shots catch in the flame and burst (0x452fcc), and each burst sets off i
  * dog wakes, charges along its ledge into the stream, and dies of it.
  */
 await go("x=3680&y=820&weapon=10&rounds=160");
+// a level opens on the unarmed idle (`0x448bc7`) and the load only sets
+// `0x479438` (`0x45e041`): the gun is carried, not out, until INV — which
+// tests/machine/guns.ts presses. Here it is simply out, frame for frame as before
+game.inv.drawn = true;
 game.p.facing = -1;
 const dog = game.spawnedHere().find((e) => e.kind === "initdog" && e.left === 2987);
 if (!dog) fail(`no dog on the y711 ledge (rect x2987..3748)`);
@@ -489,6 +525,10 @@ ok(`the flame kills a dog outright as it charges along its ledge, x${Math.round(
  * werec keeps it in state 3 for as long as it is held.
  */
 await go("x=3800&y=284&weapon=10&rounds=160");
+// a level opens on the unarmed idle (`0x448bc7`) and the load only sets
+// `0x479438` (`0x45e041`): the gun is carried, not out, until INV — which
+// tests/machine/guns.ts presses. Here it is simply out, frame for frame as before
+game.inv.drawn = true;
 const w = ledgeWerec();
 if (!w) fail(`no werec on the flamer's ledge`);
 const wScore = game.stats.score;
