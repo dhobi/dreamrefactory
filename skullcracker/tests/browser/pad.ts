@@ -24,8 +24,8 @@
  * is on it, the run is UP held with a direction, and the headbutt is PUNCH and
  * KICK down at the same time — none of which a tap can express. The context is
  * a real phone profile, so these arrive as `pointerType: "touch"` on a page that
- * shows the pad because `navigator.maxTouchPoints` says so, not because a query
- * string asked for it.
+ * shows the pad because it is a mobile browser, not because a query string
+ * asked for it.
  *
  * ## The traps this file was written around
  *
@@ -210,10 +210,18 @@ const desk = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await desk.goto(`${BASE}/walk.html?level=1`);
 await desk.locator("#hud").filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
 if (await desk.locator("#pad").isVisible()) fail(`a mouse-only window drew the pad over the picture`);
+// a touchscreen laptop has fingers AND a keyboard: fingers alone are not a phone
+const laptop = await browser.newPage({ viewport: { width: 1280, height: 900 }, hasTouch: true });
+await laptop.goto(`${BASE}/walk.html?level=1`);
+await laptop.locator("#hud").filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
+const points = await laptop.evaluate(() => navigator.maxTouchPoints);
+if (points < 1) fail(`the touch laptop profile reports no touch points, so it proves nothing`);
+if (await laptop.locator("#pad").isVisible()) fail(`a desktop browser with a touchscreen drew the pad`);
+await laptop.close();
 await desk.goto(`${BASE}/walk.html?level=1&pad=1`);
 await desk.locator("#hud").filter({ hasText: /room \d+ of \d+/ }).waitFor({ timeout: 30_000 });
 if (await desk.locator("#pad").isHidden()) fail(`?pad=1 did not show the pad on a desktop`);
-console.log(`ok    no pad without fingers, and ?pad=1 for a look at one`);
+console.log(`ok    no pad off a mobile browser, touchscreen or not, and ?pad=1 for a look at one`);
 
 // ---- 10 — and the front door gets one too -----------------------------------
 //

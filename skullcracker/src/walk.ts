@@ -794,16 +794,30 @@ const pad = ((): HTMLDivElement => {
  * some way to look at the thing, and a phone that would rather use a paired
  * keyboard needs some way to be rid of it.
  *
- * `maxTouchPoints` AS WELL as the media query, for the reason
- * `engine/web/touch.ts` gives: a laptop with a touchscreen reports a FINE
- * pointer and still delivers fingers.
+ * Otherwise only a MOBILE BROWSER gets it. Fingers alone are not enough: a
+ * laptop with a touchscreen, or a Windows desktop whose driver advertises touch
+ * points, reports `maxTouchPoints > 0` and has a keyboard right there, and the
+ * pad over its picture is only in the way.
+ *
+ * `userAgentData.mobile` where the browser has it (Chromium), and the user agent
+ * string where it has not. iPadOS is the one that lies: since 13 it asks for
+ * the desktop site as `Macintosh`, and the touch points are what give it away —
+ * no Mac has any.
  */
 const PAD_ON = ((): boolean => {
   const want = new URLSearchParams(location.search).get("pad");
   if (want === "1") return true;
   if (want === "0") return false;
-  return navigator.maxTouchPoints > 0 || matchMedia("(pointer: coarse)").matches;
+  return isMobileBrowser();
 })();
+
+function isMobileBrowser(): boolean {
+  const hints = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (hints?.mobile) return true;
+  const ua = navigator.userAgent;
+  if (/Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(ua)) return true;
+  return /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+}
 
 if (PAD_ON) {
   for (const el of pad.querySelectorAll<HTMLButtonElement>("button[data-act]")) {
