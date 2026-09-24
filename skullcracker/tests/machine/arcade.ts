@@ -395,6 +395,10 @@ ok(`...and burning it DOES raise one, for ${hpWas - hpNow} health rather than th
 await go("&x=1740&weapon=9&rounds=16");
 if (!game.inv.armed || game.inv.weapon !== 9 || game.roundsIn(9) !== 16)
   fail(`?weapon=9&rounds=16 should arm the flare gun with sixteen: ${game.inv.weapon} ${game.roundsIn(9)}`);
+// a level opens on the unarmed idle (`0x448bc7`) and the load only sets
+// `0x479438` (`0x45e041`): the gun is carried, not out, until INV — which
+// tests/machine/guns.ts presses. Here it is simply out, frame for frame as before
+game.inv.drawn = true;
 let burns = 0;
 let whole = 0;
 let restarted = "";

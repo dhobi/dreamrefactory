@@ -554,7 +554,8 @@ out of fighting entirely, and **two hundred and sixty kicks take nothing off
 it**; with the code removed it falls in eighteen.
 
 Reading a `mov` without its exit path gives the wrong answer here, as it does
-for Boggs' -1 and its two flags and for the inventory screen that is not one.
+for Boggs' -1 and its two flags, and for INV, whose state 15 reads as a holster until
+you follow what the idle it installs does next.
 
 ## The bishop rolls for it, and Boggs lunges
 
@@ -623,6 +624,10 @@ reaching for a second gun runs to throw the first one down, gravity 1.0 and
 bounce 0.3 — so a knockdown and a swap put the weapon on the floor by exactly
 the same route. The other player class carries its own copy of all six at
 `0x42ec07`, so it is both characters.
+
+It asks whether the gun is OUT, not whether you carry it. With it put away by
+INV the player is on an unarmed kind, the test fails, and the knockdown leaves
+it carried — see [INV](weapons.md#inv-puts-the-gun-away-and-gets-it-out-again).
 
 What does **not** disarm you is a code. `0x448c72` reads the sign of the blow
 first and dispatches a negative one before any of this arithmetic runs, so a
@@ -928,7 +933,12 @@ victim's own hit handler, and every one of those arms begins by calling
 `0x44ff20`. That function does not play an effect — it builds a FLAME,
 an object with its own position, parked at a random point inside whatever the
 victim's current cel covers, and `0x453ea0` carries it along with the victim
-(mirroring its offset by the facing) for as long as it burns. The flame is worth
+(mirroring its offset by the facing) for as long as it burns. The offset is
+measured from the victim's `obj+8` and `obj+6`, its anchor, not from the middle
+of its cel. The flame takes the victim's facing once, as it catches
+(`0x44ffee`), and is drawn reflected by it from then on. WOODS' runner steps the
+flames after the creatures (`0x4540d3`, then `0x4540ec`), so a flame on a
+riding CHOPPER keeps up with it. The flame is worth
 a hundred on paper (`0x453eed` writes it every frame) and worth nothing in fact:
 not one of 9600..9629 carries a strike box or a blow pair. It is a reaction, not
 a weapon.

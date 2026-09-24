@@ -530,6 +530,10 @@ const ACTIONS_0: PlayerActions = {
    * punchRun pair above.)
    */
   flyingKick: { cels: [684, 685, 686, 687, 688], dx: [190, 0, 0, 0, 0], dy: [-310, 0, 0, 0, 0], move: { id: 11, from: 0 }, from: "0x471d68 tag 4, from 0x429db9" },
+  // tag 3, which `0x42a7ee` installs once tag 4 has ended AND the kick is falling
+  // at 32 or more, is down or has connected; `0x42a784` holds its last cel until
+  // the ground and then goes to the idle — no landing tag
+  flyingKickEnd: { cels: [689, 689], dx: [0, 0], from: "0x471d68 tag 3, from 0x42a7ee" },
   // `0x42a1e3`: the jump state's tag 8 pushes 9 and its tag 9 pushes 4
   airKick: { cels: [687, 688, 688, 689], dx: [0, 0, 0, 0], move: { id: 9, from: 0 }, from: "0x471b28 tag 8, from 0x42a036" },
   airPunch: { cels: [604, 604, 689], dx: [0, 0, 0], move: { id: 4, from: 0 }, from: "0x471b28 tag 9, from 0x42a082" },
@@ -709,6 +713,7 @@ const ACTIONS_1: PlayerActions = {
   landRoll: { cels: [5208, 5207, 5206], dx: [0, 0, 0], hold: 4, from: "0x476220 tag 5, from 0x443d88" },
   /** `0x476300` tag 4 — `5681(dx 190, dy -370)`, a higher leap than character 0's */
   flyingKick: { cels: [5681, 5682, 5683, 5684, 5685], dx: [190, 0, 0, 0, 0], dy: [-370, 0, 0, 0, 0], move: { id: 11, from: 0 }, from: "0x476300 tag 4" },
+  flyingKickEnd: { cels: [5686, 5687, 5688, 5689], dx: [0, 0, 0, 0], from: "0x476300 tag 3, from 0x445156" },
   /** `0x476140` tags 8 and 9 — the two poses struck in mid-air (9 and 4, `0x444b9f`) */
   airKick: { cels: [5663, 5664, 5664, 5205], dx: [0, 0, 0, 0], move: { id: 9, from: 0 }, from: "0x476140 tag 8" },
   airPunch: { cels: [5605, 5605, 5605, 5205], dx: [0, 0, 0, 0], move: { id: 4, from: 0 }, from: "0x476140 tag 9" },

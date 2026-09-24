@@ -594,7 +594,9 @@ inside its rect — a counter climbs, and past −2 it lets a roach out at its o
 position, four of them one to eight frames apart, and then thirty-five frames of
 nothing before the next rush. A roach falls on cel 3300, waits for the ground
 before it does anything at all, runs the four cels of `0x474db0` with `dx 65` on
-each, and **removes itself the frame its own point leaves the rect it was born
+each, facing whichever way a coin flip gave it (`obj+0x28`, drawn reflected), and
+keeps its gravity of 0.6 while it runs, so one that runs off the end of a ramp
+falls to the floor below. It **removes itself the frame its own point leaves the rect it was born
 in** — which is what keeps them in the room.
 
 ## ARCADE is fourteen records and one fight

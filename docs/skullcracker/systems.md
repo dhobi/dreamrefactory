@@ -115,6 +115,33 @@ longer a jump at all: the state machine's preamble (`0x4284ba`) forces the flail
 once past 630. It lands in `0x471c68` tag 5 with sound 5, ten health off and a
 jolt of the view (`0x4307c0(1)`), or past 530 in the dying script.
 
+Once tag 0 is playing, K and P start the flight's own attacks: tag 8, move 9,
+and tag 9, move 4 (`0x42a036`, `0x42a082`). Their handler, `0x42a1e3`, runs the
+same lift and steering as tag 0 and asks `0x4029e0` for the blow's strength
+every frame, so a held kick weakens by five a frame. The player's scripts never
+loop: `0x45d070` clears `obj+0x4a` and nothing sets it again. So a kick that
+runs out in the air holds its last cel, 689, all the way down, and no second
+attack can start in that jump. The attack ends only when the tag is done and
+the player is down (`0x42a33a`). A kick that lands early plays out on the ground,
+still steering, and only then comes the landing tag. The run's flying kick
+(`0x471d68` tag 4) ends the same way: it holds 688 until it is falling at 32 or
+more, has landed or has connected (`obj+0x2a`). Then tag 3 holds 689 to the
+ground (`0x42a7ee`, `0x42a784`), and it goes straight to the idle, with no
+landing tag.
+
+Walking or running off an edge is not a jump. The walk state puts the idle's
+tag 1 in the frame the floor goes (`0x42999e`), and the run its own tag 1
+(`0x429bf0`). Neither the idle nor the run asks for a floor before it reads J, P
+or K, so a fall off an edge still answers all three:
+
+- the idle's J is the standing jump, three frames of wind-up in the air, then
+  −35 added to the fall;
+- the run's J is tag 4's leap, at once;
+- P and K are the ground's punch and kick, and the run's K is the flying kick;
+- a ground move that ends in the air hands back to the idle, still falling.
+
+The flail at 360 ends it, as it ends everything.
+
 STREETS' hardest jump is an 85px roof gap, which sits between the plain jump and
 the jump-with-lift; that is what `0x4723f0` is for. At the disc's own gravity and
 airborne horizontal the disc's own gaps close with no scale factor.

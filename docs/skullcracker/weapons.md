@@ -1,6 +1,6 @@
 # Weapons and pickups
 
-Five weapons, one holster, and a table of pickups that is read off the art
+Five weapons, one button to put them away, and a table of pickups that is read off the art
 rather than off the box. Taking a gun makes you a different player, which is
 why the guns are here and not with the classes that carry them.
 
@@ -61,6 +61,10 @@ things of it: that it falls inside `x ± 55` — a band the creator writes at
 `user+6` and `user+0xa`, unrelated to the record's rect — that the two are
 within 150 pixels vertically, and that `obj+0x30` is set, which a weapon still
 bouncing after a swap is not.
+
+**Code 2 is invisible.** The class's draw (`0x45ae23`) skips any pickup whose
+code is 2, which is the one a Coke machine's can files when it comes to rest. The
+can lying on top is the picture, and taking it pays 150 health, not a weapon.
 
 **And taking one changes the player.** `0x45eed0` sets `0x479438` and the pickup
 case installs the weapon's own script; that script's `kind` becomes
@@ -236,30 +240,54 @@ scales the striking cel's own `(dy, dx)` by the object's strength, and the
 soaker's 9806 carries `dx 8`. Eight a frame, so a two-hundred-health zombie
 takes about twenty-five frames of water.
 
-### INV is a holster, and there is no inventory screen
+### INV puts the gun away and gets it out again
 
-`0x42edd0` message 1 is the CROUCH state — it reads the keys, probes 0x23 ahead for a pickup and
-installs `0x4717c8` — and there is no inventory screen anywhere in `SC.EXE`.
+There is no inventory screen anywhere in `SC.EXE`, and only one weapon slot,
+`0x479434`: taking a different gun throws yours down (`0x42f0dc`). What INV
+does is switch between that one gun and your fists.
 
-What the fourth button on the lower band does is two instructions, and
-all 81 of its readers are the same two:
+Two things say "armed", and they are not the same. `0x479438` is **carried**:
+the panel's icon (`0x40d663`) and the swap at a different gun (`0x42f0a8`) read
+it. `player+0x18` being one of the five armed kinds 0x12..0x16 is **out**
+(`0x448bf0`): the fire button, the armed moveset, the knockdown's disarm
+(`0x44911b`) and the surge's recharge (`0x402ee0`) ask that.
+
+Every player state answers the button with the same instruction, `mov word
+ptr [eax+0x18], 0xf` — the unarmed idle unconditionally (`0x4298c0`), the
+unarmed walk and run only while you carry a gun (`0x429af4`), and all five
+guns' handlers. State 15 is `0x428975`:
 
 ```
-  4298c0  cmp word ptr [0x4ac386], 0
-  4298cf  mov word ptr [eax+0x18], 0xf     ; ...every player state, armed or not
+  428975  cmp word ptr [0x4ac386], 0
+  42897d  jne 0x428c46                   ; down: install the unarmed idle 0x471648
+  428983  ...0x479434 through 0x429624   ; up: dispatch on the weapon
+  4289c1  cmp dword ptr [eax+0x3e], 0x471458
+  4289c8  je  0x4289ea                   ; the gun's script is already in: put it away
+  4289ca  cmp word ptr [0x479438], 0
+  4289d2  je  0x4289ea                   ; nothing carried: nothing to get out
+  4289d6  push 0x471458 / call 0x45d090  ; get it out
+  4289ea  ...0x4717c8 with S held, else 0x471648
 ```
 
-State 15 is `0x428975` and it is four lines long. While the button is held it
-stands you on `0x471648` tag 0 — the plain unarmed idle, the one that breathes —
-and reads no direction at all, so you cannot walk. When the button comes up it
-reads `0x479434` and dispatches through the map at `0x429624` to put you back
-into the idle of whatever you are carrying: `0x471458` for the blaster,
-`0x470a78` for the flare gun, and the unarmed idle for anything that is not one
-of the five.
+So it is a toggle, decided on the release. The release has to land on a state
+15 frame, and a hold alternates: `0x45d090` writes the new script's kind into
+`player+0x18` (`0x45d0a7`), so the unarmed idle the held branch installs is
+kind 0, and kind 0's handler sees the button still down and goes back to 15.
+A tap — in on one engine frame, out on the next — flips cleanly. A hold ends
+on whichever of the two its last frame was, and a release on kind 0's frame
+leaves the idle standing with the gun away.
 
-So it is a holster. You put the gun away to look at yourself, and taking your
-finger off draws it again — nothing is spent, nothing is swapped, and no screen
-is drawn.
+Nothing is spent and `0x479438` is never touched. With the gun away the player
+is on the unarmed state machine, so P punches and K kicks again.
+
+The gun also goes away, still carried, whenever an unarmed script goes in:
+every level opens on the idle `0x475c88` (`0x448bc7`) and a save load only sets
+`0x479438` (`0x45e041`), a respawn installs `0x471648` (`0x42950f`), the ladder
+and the bar end on the unarmed fall `0x471b28` (`0x42af84`, `0x42b597`), the
+flail `0x472350` ends on the idle, a knockdown is `0x476890`, and a reach that
+took anything but one of the five guns ends on `0x471648` (`0x42884d`). A
+knockdown throws the gun down only if it was out. INV brings it back from any
+of these.
 
 ## A pickup is taken on the ART, not the box
 

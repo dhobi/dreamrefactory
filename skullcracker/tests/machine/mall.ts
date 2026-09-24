@@ -430,4 +430,23 @@ if (jumps > 2) fail(`the level's own wall is one; this took ${jumps} jumps`);
 if (room() !== 3) fail(`the goal is in the third region; it is in ${room()}`);
 ok(`ran all three rooms to the goal at x ${game.p.x}, y ${game.p.y}, on ${jumps} jump${jumps === 1 ? "" : "s"}`);
 
+// the roaches. The nest at x6004 lets them out beside a ramp, and a roach that
+// runs off its top end falls: `0x43b1be` gave it a gravity of 0.6 and the mover
+// spends it whenever there is no floor, running or not. They used to keep the
+// height of the ramp's end and run on across the air
+{
+  await go("&foes=0&x=6004&y=8221");
+  let offRamp = 0;
+  for (let f = 0; f < 300; f++) {
+    h.frame(1);
+    for (const r of game.roaches) {
+      if (r.onGround && game.surfaceUnder(r.x, r.y - 2, r.y + 2) === null)
+        fail(`a roach stands at x${Math.round(r.x)}, y${Math.round(r.y)} with no floor under it`);
+      if (r.running && !r.onGround) offRamp += 1;
+    }
+  }
+  if (!offRamp) fail(`no roach ran off the ramp's end in 300 frames`);
+  ok(`the roaches stand on floor or fall to it, ${offRamp} roach-frames of them in the air off the ramp`);
+}
+
 pass(`MALL's three regions hand over on foot, and its goal can be reached`);
