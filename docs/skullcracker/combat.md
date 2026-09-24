@@ -305,6 +305,13 @@ The 0x78 is `0x40c900`'s, not a shake: the player's own spray, `0x40cba0`'s
 sibling, `clamp(|n| / 6, 1, 8)` drops on `0x46bc98` or `0x46bc38`. The page does
 not draw it yet.
 
+On a ladder or a bar (`0x471e78`, `0x472048`) three of them install nothing.
+The grab and the jolt (`0x42e99d`, `0x42ea3c`) answer 1 and set `[0x46b1bc]`;
+an ordinary blow (`0x42ebb1`) still cries and costs its health, and sets it if
+a room holds him. `0x402fa0(2)` does the same (`0x42f363`). The ladder state
+reads the flag as forward, backward or J (`0x42ae6f`), so he hops off at the
+end of the rung; the bar never reads it, and it waits for the next ladder.
+
 Two of those differ from character 1's in more than art. Character 0 does not
 shove on −8: the ±50 against `obj+0x28` is `0x448cf4`, character 1's, and
 `0x42e781` writes no velocity at all — the cels carry the fall. And character

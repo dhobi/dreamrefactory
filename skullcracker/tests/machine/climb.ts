@@ -130,6 +130,21 @@ if (tags.size !== 1) fail(`the top rung should hold one tag with W down; saw ${[
 if (!near(p.y, 828)) fail(`W at the top rung moved the player to y ${p.y}`);
 ok(`W at the top rung holds tag ${[...tags][0]} for 12 frames — no flicker`);
 
+// 3b'. a jolt on the ladder is no jolt: `0x42ea3c` sees the ladder script
+// and knocks him off instead (`0x42ea9c`, `[0x46b1bc]`), which the ladder
+// state reads as a key at the end of the rung (`0x42ae6f`) — a hop off with
+// nothing held, and the flag spent (`0x42aea1`)
+holdFor(["down"], 18);
+if (!p.climbing) fail(`should be on the ladder before the jolt; y ${p.y}`);
+if (!game.takeCode(-2)) fail(`0x42ea9c answers 1 for a jolt on a ladder`);
+if (p.act || !game.knockedOff) fail(`a jolt on a ladder installs nothing and knocks him off: act ${p.act}, flag ${game.knockedOff}`);
+const hopped = h.until(() => !p.climbing, 12);
+if (hopped < 0 || game.knockedOff) fail(`knocked off, he leaves the ladder at the end of the rung: ${hopped} frames, flag ${game.knockedOff}`);
+settle();
+ok(`a jolt on the ladder knocks him off ${hopped} frames later, and he lands at y ${p.y}`);
+holdFor(["up"], 135);
+if (!p.climbing) fail(`back up the ladder after the knock: y ${p.y}`);
+
 // 3c. a direction takes you OFF, and off you stay until you land: `0x42ae98`
 // sets `[0x46b1b8]` on the leave and `0x42849c` clears it on the ground, so
 // W + D on a ladder is a hop east and a fall to the street, not a faster climb

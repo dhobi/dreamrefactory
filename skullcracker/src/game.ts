@@ -587,6 +587,31 @@ export const MONKEYBAR = {
  * ladder you LAND before you can climb again.
  */
 export let ladderLatch = false;
+/**
+ * `[0x46b1bc]` — knocked off. A blow that lands on a player on a ladder or a
+ * bar sets it in place of a reaction (`0x42ea26`, `0x42ea9c`, `0x42ed90`,
+ * `0x42f363`; character 1's `0x448f6e`, `0x44929e`, `0x4497e3`), and the ladder
+ * state reads it as it reads forward, backward and J (`0x42ae6f`): at the end
+ * of the rung he hops off. Only the ladder's leave clears it (`0x42aea1`) and
+ * nothing resets it — the bar never reads it, so a blow taken on the bar is
+ * spent on the next ladder he climbs.
+ */
+export let knockedOff = false;
+
+/**
+ * `0x471e78` or `0x472048` — on a ladder or a bar, the two scripts each of the
+ * player's blow handlers asks after before it reacts (`0x42e99d`, `0x42ea3c`,
+ * `0x42ebb1`)
+ */
+function hanging(): boolean {
+  return p.climbing || !!p.bar;
+}
+
+/** `0x40b940(2, anchor)` answering a room — what the knocks off a ladder ask */
+function roomHolds(): boolean {
+  const y = p.climbing ? p.climbY : p.y - p.feet;
+  return !!level?.rooms.some((r) => p.x >= r.left && p.x <= r.right && y >= r.top && y <= r.bottom);
+}
 
 /**
  * How far the player travels per animation cel: `MEASURED.walk / DIVISOR` = 8px.
@@ -5140,7 +5165,7 @@ const HELPLESS: ReadonlySet<string> = new Set(["jolt", "held", "struggle", "grab
  * ```
  *
  * Character 1's own setter `0x449700` is the same table on its own scripts.
- * The ladder's flag is read by the climb (`0x42ae50`), and is not carried here.
+ * The ladder's flag is {@link knockedOff}.
  */
 export function posePlayer(mode: -1 | 2 | 3 | 4): void {
   dropKeys();
@@ -5149,7 +5174,12 @@ export function posePlayer(mode: -1 | 2 | 3 | 4): void {
   let act: string;
   if (mode === -1) act = "posed";
   else if (mode === 2) {
-    if (p.climbing || p.bar || p.act === "downFront" || p.act === "downBack") return;
+    // `0x42f363` — on a ladder or a bar, no knockdown: knocked off instead
+    if (hanging()) {
+      knockedOff = true;
+      return;
+    }
+    if (p.act === "downFront" || p.act === "downBack") return;
     act = "downFront";
   } else if (mode === 3) act = "held";
   else act = "jolt";
@@ -5222,6 +5252,13 @@ export function takeCode(
   // connects and the classes re-arm on the next, so without this the reaction
   // restarts every frame and the grab never reaches its own loop
   if (r.holds && what && p.heldWhat === what) return r.consumes;
+  // `0x42e99d` / `0x42ea3c` — the grab and the jolt ask first whether he is
+  // on a ladder or a bar, and there they install nothing: they knock him off
+  // (`0x42ea26`, `0x42ea9c`) and answer 1
+  if ((code === -3 || code === -2) && hanging()) {
+    knockedOff = true;
+    return true;
+  }
   p.act = r.act;
   p.actClock = 0;
   p.heldClock = 0;
@@ -5538,6 +5575,17 @@ export function takeHits(): void {
     // `0x434630` is an integer square root: the magnitude is whole, rounded down
     const damage = Math.floor(Math.sqrt(bx * bx + by * by));
     if (damage === 0) return false;
+    // `0x42ebb1` — on a ladder or a bar there is no reaction and no disarm: the
+    // cry (`0x42ed34`, 0xe + roll(7)) and the health (`0x42ed4f`), and he is
+    // knocked off if a room holds him (`0x42ed84`), which is also the answer
+    if (hanging()) {
+      const cry = OWN.hurt[Math.floor(random() * OWN.hurt.length)];
+      sound?.own(cry, p.x, p.y);
+      takeHealth(damage);
+      if (!roomHolds()) return false;
+      knockedOff = true;
+      return true;
+    }
     // `0x44915c` / `0x44919e`: which side it came from decides the take
     const front = x > p.x === p.facing > 0;
     const knocked = damage > HURT.knockdown;
@@ -14653,10 +14701,12 @@ export function tick(): void {
   // clears `[0x46b1b8]` unless `obj+0x32 <= 0x37` and the player is airborne,
   // so a long drop off a ladder may grab the next one on the way down.
   if (p.onGround || p.fallPx > 0x37) ladderLatch = false;
-  const letGo =
-    p.climbing &&
-    (held.right !== held.left || held.jump || jumpPressed) &&
-    canLetGo();
+  const asked = held.right !== held.left || held.jump || jumpPressed;
+  // `0x42ae6f` — knocked off asks as a key does, and `0x42aea1` spends it once
+  // the rung is done, whether or not a room lets him go
+  const bumped = p.climbing && !asked && knockedOff;
+  if (p.climbing && (asked || knockedOff) && p.climbClock >= LADDER.rungFrames) knockedOff = false;
+  const letGo = p.climbing && (asked || bumped) && canLetGo();
   let ladder: SbkEntity | undefined;
   if (p.climbing) ladder = p.act || letGo ? undefined : p.ladder;
   else if (
@@ -15167,7 +15217,7 @@ export function tick(): void {
       p.onGround = false;
       jumpPressed = false;
     }
-    if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed)) {
+    if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed || bumped)) {
       /**
        * Off the ladder sideways. `0x42ae50` leaves the ladder state on
        * forward, backward or J — at the end of the rung tag playing — and
