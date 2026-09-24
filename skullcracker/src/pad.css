@@ -126,3 +126,14 @@
   border-color: var(--rule-bright, #f2ece2);
   color: #fff;
 }
+/* A PHONE ON ITS SIDE. `--key` is sized from the width, and a phone turned to
+   landscape is ~844 wide and ~340 tall under Safari's bars: 8.5vw reaches the
+   64px ceiling and the three-key cross stands 202px, most of the picture. So
+   in landscape the DIRECTIONS take their size from the height instead — a
+   cross about a third of the picture tall. The strikes stay as they are: a
+   2x2 is only two keys high, and those are the keys hit hard and fast. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #padDirs {
+    --key: clamp(36px, 11dvh, 56px);
+  }
+}
