@@ -809,6 +809,39 @@ export interface CastKit {
 export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
 
 /**
+ * Who struck — what a handler that reads its hitter can see of it.
+ *
+ * `player` is the player's own object (`[0x4ac3d4]`, which the coke's
+ * `0x43b660` and the zombie head's `0x420090` compare against); `kind` is
+ * the class of a creature that struck, and `kit` the cast it threw. A flare,
+ * a stream or a bolt is none of the three.
+ */
+export interface Hitter {
+  player?: boolean;
+  kind?: string | null;
+  kit?: CastKit | null;
+}
+
+/**
+ * A class's hit handler asking its own state before it reads the blow.
+ *
+ * `null` turns the blow away whole — no goo, no sound, no exchange. A result
+ * goes on to the page's arithmetic, and three flags on it say how much of it:
+ *
+ * - `still`: the blow is TAKEN — goo, sound, subtraction and exchange, and the
+ *   handler answers 1 — but no reaction is installed and no death is read. The
+ *   boss's absorbed states (`0x4563a0`..`0x456518`) and a lesser wraith, whose
+ *   gate has already sent it to its death, are the two.
+ * - `quiet`: no hit sound on it.
+ * - `spare`: nothing off the health.
+ */
+export type Gate = (
+  e: Enemy,
+  foe: Foe,
+  blow: { damage: number; code: number; by: Hitter },
+) => { damage: number; code: number; still?: boolean; quiet?: boolean; spare?: boolean } | null;
+
+/**
  * What a class does DURING a reaction — the states the PAGE owns.
  *
  * A {@link Brain} is never called while an enemy is flinching or dying, and

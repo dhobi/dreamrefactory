@@ -12,7 +12,7 @@
  * spend a level in: the furniture really does just stand there, and the file
  * says so with the addresses to prove it rather than leaving a gap.
  */
-import type { Brain, Reaction } from "./kit";
+import type { Brain, Gate, Reaction } from "./kit";
 import { arm, armReacts } from "./arm";
 import { bat, batReacts } from "./bat";
 import { batboy, gangCorpse } from "./batboy";
@@ -111,9 +111,7 @@ export const REACTIONS: Readonly<Record<string, Reaction>> = {
  * blow — see {@link kraggGate}, the one that does. `null` is a blow that lands
  * as nothing at all.
  */
-export const GATES: Readonly<
-  Record<string, typeof kraggGate>
-> = {
+export const GATES: Readonly<Record<string, Gate>> = {
   initkragg: kraggGate,
   initwbooly: wboolyGate,
   initwered: weredGate,

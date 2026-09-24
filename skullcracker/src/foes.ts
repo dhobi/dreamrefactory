@@ -177,6 +177,15 @@ export interface Blow {
    */
   contactY?: number;
   pointY?: number;
+  /**
+   * ...and the same two along x — the contact's own X against the victim's
+   * `obj+8` (the skeleton's back test, `0x423b61`, compares these, not the
+   * two facings).
+   */
+  contactX?: number;
+  pointX?: number;
+  /** the player's `obj+8`, which kragg's ground snap weighs its own x against (`0x441fd3`) */
+  playerX?: number;
 }
 
 /**
@@ -201,6 +210,8 @@ export interface FoeState {
   facing?: number;
   /** kragg's second bar — the grounded form, whose handler is `0x441ef0` */
   rallied?: boolean;
+  /** the record's own parameter — a TCop's `AI+0x32`, the gunner */
+  param?: number;
 }
 
 export interface Foe {
@@ -826,8 +837,68 @@ export interface Foe {
    * of furniture do not: `0x44fe80` and `0x44fbd0` fetch the blow with `0x42f910`,
    * install a dent and play a sound, and never touch the spray. A mailbox does not
    * bleed.
+   *
+   * `"scatter"` is a handler that hands `0x40cba0` no hitter — `push 0` as its
+   * third argument (the hardcore's `0x43d28b`, ghengis' `0x422b73`) — so every
+   * gob takes `0x40ce7d`'s random velocity on both axes instead of the blow's.
+   * A function is a class whose handler bleeds on one path and not another
+   * (kragg sparks in the air and bleeds on the ground).
    */
-  bleeds?: boolean;
+  bleeds?: boolean | "scatter" | ((e: FoeState) => boolean);
+  /**
+   * The amount the handler hands `0x40cba0`, when it is a constant rather than
+   * the blow — the bat's `push 0x3c` at `0x423313`.
+   */
+  sprayAmount?: number;
+  /**
+   * The handler's own velocity write, made BEFORE `0x430470`'s exchange reads
+   * the victim's velocity back — pixels an engine frame, and a missing axis is
+   * left alone. The bat's `0x423334` (`obj+0xa = -40`) is the case: the
+   * exchange weighs that in, so what the body leaves with is the mix of the
+   * two, not the -40.
+   */
+  hitVel?: { vx?: number; vy?: number };
+  /**
+   * The handler reads no code at all — a −9 is only a strength like any other
+   * and goes through the ordinary blow. The bat's `0x4232f0` has no sign test
+   * anywhere, so a flare on a stage 5 or the flamer kills one outright.
+   */
+  codeBlind?: boolean;
+  /**
+   * Its corpse can still be struck. The dispatcher `0x430350` has no state
+   * test — only the body box of the cel on show (`0x4303b3`) — so a class
+   * whose handler has none either and whose death cels carry a body takes the
+   * whole handler again: goo, sound, the death from its first frame and the
+   * award again. Most deaths are drawn without a body and need nothing.
+   */
+  corpseTakesHits?: boolean;
+  /**
+   * The death bounces: `0x42f7f0(obj, f)` on the body, so the floor branch of
+   * `0x42ff40` hands back `vy × f` every landing faster than 2 (`0x42ff83`)
+   * and sets `obj+0x2c` (`0x42ff8d`), which the death state reads to play
+   * `sound` — the hardcore's `0x43d0c5` / `0x43d0d3`.
+   */
+  corpseBounce?: { restitution: number; sound: number };
+  /**
+   * The death, when the handler picks between more than one — a gunner TCop
+   * dies on a different script (`0x4148ed`). Falls back to {@link death}.
+   */
+  deathFor?: (e: FoeState) => FoeAnim | undefined;
+  /**
+   * Its handler does NOT turn its own class away. Most do, and the page skips
+   * a blow between two of a kind; the ones listed here have no such test
+   * (`0x44e3f0`, `0x44f8b0`, `0x452960`, …), so under `?foehit=1` they hurt
+   * each other.
+   */
+  hitsOwn?: boolean;
+  /**
+   * What the handler does with a −1, the blaster bolt's strength
+   * (`0x412bb1`). `as` rewrites it to a strength and takes the blow — the
+   * TCop's `0x4147d9` and the tube's `0x419999`, 100 — and `sound` answers it
+   * with a sound at the bolt and nothing else (puke's `0x41825e`). A class
+   * without one stops the bolt and takes nothing.
+   */
+  minusOne?: { as: number } | { sound: number };
   /**
    * Does its body leave a green ball behind — whether its CORPSE state handler
    * calls `0x40cba0(pos, -13, 0)` when `[0x46b204]`'s fifty frames expire.

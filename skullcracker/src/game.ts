@@ -10,7 +10,7 @@ import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine
 import { SkullFiles } from "./files";
 import { Film } from "./film";
 import { CORPSE_LINGER, FOES, FoeAnim, celAt, loopIndex, type Foe } from "./foes";
-import { TICK_SCALE, install, type BrainCtx, type Aim, type CastCtx, type CastKit, type Enemy, type Hatch, type Track } from "./brains/kit";
+import { TICK_SCALE, install, type BrainCtx, type Aim, type CastCtx, type CastKit, type Enemy, type Hatch, type Hitter, type Track } from "./brains/kit";
 import { BRAINS, GATES, REACTIONS } from "./brains";
 import { COP_SLUG } from "./brains/cop";
 import { EYEBALL_GLOBS } from "./brains/eyeball";
@@ -4082,6 +4082,17 @@ export function actOf(name: string): {
   return ACTIONS[name] ?? null;
 }
 
+/**
+ * Can a blow reach it at all. The water never — it is not a thing — and a
+ * corpse only where its class's handler has no state test and its death is
+ * drawn with a body ({@link Foe.corpseTakesHits}); everything else that
+ * decides it is the body box of the cel on show, `0x4303b3`.
+ */
+function takesBlows(e: Enemy): boolean {
+  if (e.state === "burst") return false;
+  return e.state !== "dead" || !!FOES[e.kind].corpseTakesHits;
+}
+
 export function landHits(): void {
   if (!level || !player || !p.act) return;
   const i = level.rooms.indexOf(p.room!);
@@ -4117,7 +4128,7 @@ export function landHits(): void {
     // and once it has toppled it is out of the fight, the way `0x44fe80` opens
     // with `if (obj+0x18 != 2)`; the water is not a thing at all — its cels carry
     // no collision box, which is how the format says so
-    if (struck.has(e) || e.state === "dead" || e.state === "burst") continue;
+    if (struck.has(e) || !takesBlows(e)) continue;
     /**
      * ...and neither is a creature whose CURRENT cel carries no box.
      *
@@ -4209,12 +4220,20 @@ export function landHits(): void {
  * apart.
  */
 export function killFoe(e: Enemy, foe: Foe): void {
-  if (!foe.death) return;
+  const death = foe.deathFor?.(e) ?? foe.death;
+  if (!death) return;
   if (foe.deathSound !== undefined) sound?.effect(foe.deathSound, e.x, e.y);
   e.state = "dead";
-  e.anim = foe.death;
+  e.anim = death;
   e.clock = 0;
   e.swing = false;
+  // `0x45d0a7`, as in {@link react}; and a corpse struck again dies again from
+  // the top, its one-shot reactions with it ({@link Foe.corpseTakesHits})
+  if (death.kind !== undefined) {
+    e.script = death.kind;
+    e.tag = death.tag;
+  }
+  e.threw = false;
   e.linger =
     foe.linger ?? (foe.frail ? 0 : corpseFrames + (foe.lingerPlus ?? 0));
   /**
@@ -4354,6 +4373,8 @@ export function strikeFoe(
     vx: number;
     vy: number;
     recoil?: (vx: number, vy: number) => void;
+    /** who it was, for the handlers that ask — see {@link Hitter} */
+    by?: Hitter;
   } = {
     mass: DIVISOR,
     vx: p.vx,
@@ -4362,17 +4383,27 @@ export function strikeFoe(
       p.vx = vx;
       if (!p.onGround) p.vyRaw = vy;
     },
+    by: { player: true },
   },
 ): void {
   if (!level) return;
   const foe = FOES[e.kind];
   // a handler that asks its own state first — `0x441d26`, and see {@link GATES}
   const gate = GATES[e.kind];
+  let still = false;
+  let quiet = false;
+  let spare = false;
   if (gate) {
-    const blow = gate(e, foe, { damage, code });
+    const blow = gate(e, foe, { damage, code, by: hitter.by ?? {} });
     if (!blow) return;
     ({ damage, code } = blow);
+    still = !!blow.still;
+    quiet = !!blow.quiet;
+    spare = !!blow.spare;
   }
+  // a handler with no sign test takes a code as a blow like any other —
+  // {@link Foe.codeBlind}, the bat's `0x4232f0`
+  if (code < 0 && foe.codeBlind) code = 0;
   if (code === BURN_CODE) {
     const how = foe.burns;
     if (!how) return; // nothing in this class reads a −9
@@ -4386,9 +4417,7 @@ export function strikeFoe(
       // a FLINCH even when it is fatal: the death is what the end of it
       // installs (`0x4526ef`), in {@link stepEnemies}, and a blow landed in
       // the meantime is read like any other — `0x452960` has no state test
-      e.state = "flinch";
-      e.anim = how.anim;
-      e.clock = 0;
+      react(e, how.anim);
       e.swing = false;
     }
     // ...and every creature arm returns here and is done. The CHOPPER's
@@ -4398,13 +4427,15 @@ export function strikeFoe(
   }
   // the spray goes first, exactly as `0x40cba0` is called before the subtract —
   // and only for the kinds whose handler calls it at all
-  if (foe.bleeds) spray(e, damage, shove, contact);
+  const bleeds = typeof foe.bleeds === "function" ? foe.bleeds(e) : foe.bleeds;
+  if (bleeds)
+    spray(e, foe.sprayAmount ?? damage, bleeds === "scatter" ? { dx: 0, dy: 0 } : shove, contact);
   // and the kind's own sound, at the thing that was hit — see FOE_SFX for which
   // handler plays which index
   // ...unless this is the blow that kills and the class keeps the hit sound
   // for the ones that do not — {@link Foe.quietKill}
   const fatal = e.hp - (foe.oneHitEach ? 1 : damage) <= 0;
-  if (foe.hitSound !== undefined && !(foe.quietKill && fatal)) {
+  if (foe.hitSound !== undefined && !quiet && !(foe.quietKill && fatal && !still)) {
     const set = foe.hitSound;
     sound?.effect(
       typeof set === "number"
@@ -4416,8 +4447,12 @@ export function strikeFoe(
   }
   // the fourth kind's handler keeps the damage only for the blood and takes a
   // single point off the health — `0x454821`, and see {@link Foe.oneHitEach}
-  e.hp -= foe.oneHitEach ? 1 : damage;
+  if (!spare) e.hp -= foe.oneHitEach ? 1 : damage;
   e.dents += 1;
+  // the handler's own velocity write, which the exchange then reads back —
+  // {@link Foe.hitVel}, the bat's `0x423334`
+  if (foe.hitVel?.vx !== undefined) e.vx = foe.hitVel.vx * TICK_SCALE;
+  if (foe.hitVel?.vy !== undefined) e.vy = foe.hitVel.vy * TICK_SCALE;
   // `0x43043b` — and the exchange of velocity, whoever it was, weighted by the
   // two masses; a thing bolted down is re-pinned by its own think (the
   // hydrant's `0x44fb43`), which this page says with {@link Foe.rooted}.
@@ -4444,6 +4479,8 @@ export function strikeFoe(
     }
     hitter.recoil?.(v.hvx, v.hvy);
   }
+  // a blow the handler takes and answers 1 to, with no reaction — see {@link Gate}
+  if (still) return;
   // a frail kind's handler never looks at health: one blow, whatever the blow.
   // The rat is the case, and no corpse lingers — the launch IS the exit.
   /**
@@ -4474,9 +4511,7 @@ export function strikeFoe(
   const over = foe.knockdown;
   if (over && e.dents % over.every === 0) {
     sound?.effect(over.sound, e.x, e.y);
-    e.state = "flinch";
-    e.anim = over.anim;
-    e.clock = 0;
+    react(e, over.anim);
     return;
   }
   if (!foe.flinch) return;
@@ -4486,7 +4521,8 @@ export function strikeFoe(
   // punk) and `0x452a87` (werec), and the signed pair at `0x41839d` (puke). A
   // blow handed in with no contact is taken at the middle of what struck
   const contactY = contact?.y ?? mid;
-  const pointY = foeAnchor(e, level)?.y;
+  const point = foeAnchor(e, level);
+  const pointY = point?.y;
   const blow = {
     damage,
     // this blow included: `e.dents` was stepped above, and the boss's handler
@@ -4496,6 +4532,9 @@ export function strikeFoe(
     facingAway: e.facing === from,
     contactY,
     pointY,
+    contactX: contact?.x ?? (box.left + box.right) / 2,
+    pointX: point?.x ?? e.x,
+    playerX: p.x,
   };
   /**
    * ...and what the blow shakes OUT of it, before the animation is chosen.
@@ -4532,9 +4571,31 @@ export function strikeFoe(
   // ...and a pick of −1 is a handler that takes the blow and shows nothing:
   // the eyeball's on any cel but its three hover poses (`0x43e9d4`)
   if (which < 0) return;
+  react(e, foe.flinch[Math.min(foe.flinch.length - 1, Math.max(0, which))]);
+}
+
+/**
+ * Put a hit reaction on — the handler's `0x45d090`.
+ *
+ * Which writes the script's kind into `obj+0x18` and its tag into `obj+0x44`
+ * (`0x45d0a7`) the moment the reaction goes on, so a second blow landing
+ * during it — a {@link Foe.pick} or a {@link GATES} reading `e.script` — sees
+ * the reaction's state and not the one the first blow interrupted. Only an
+ * animation that says which script it is carries that over.
+ *
+ * And a blow wakes it: no handler tests the dormant state, and every reaction
+ * ends by installing an awake one (the gang's run, `0x4398ee`; the cop's kind
+ * 8, `0x41440e`; puke's stance, `0x4181c8`).
+ */
+function react(e: Enemy, anim: FoeAnim): void {
   e.state = "flinch";
-  e.anim = foe.flinch[Math.min(foe.flinch.length - 1, Math.max(0, which))];
+  e.anim = anim;
   e.clock = 0;
+  if (anim.kind !== undefined) {
+    e.script = anim.kind;
+    e.tag = anim.tag;
+  }
+  e.asleep = false;
 }
 
 /**
@@ -4951,7 +5012,7 @@ export const SPARES: Record<string, { kinds: readonly string[]; kits: readonly C
 export function foesStrikeFoes(): void {
   const lvl = level;
   if (!lvl || !foesHurt) return;
-  const bodies = spawnedHere().filter((v) => v.state !== "dead" && v.state !== "burst");
+  const bodies = spawnedHere().filter(takesBlows);
   const land = (
     who: object,
     kind: string | null,
@@ -4974,7 +5035,9 @@ export function foesStrikeFoes(): void {
     if (!mem || mem.anim !== anim) struckBy.set(who, (mem = { anim, hit: new Set() }));
     let landed = false;
     for (const v of bodies) {
-      if (v === who || v.kind === kind || mem.hit.has(v)) continue;
+      if (v === who || mem.hit.has(v)) continue;
+      // most handlers turn their own class away; {@link Foe.hitsOwn} are the ones that do not
+      if (v.kind === kind && !FOES[v.kind].hitsOwn) continue;
       const spares = SPARES[v.kind];
       if (spares && ((kind && spares.kinds.includes(kind)) || (kit && spares.kits.includes(kit)))) continue;
       if (v.state === "flinch" && v.anim.terminal) continue;
@@ -5010,7 +5073,7 @@ export function foesStrikeFoes(): void {
           x: (Math.max(box.left, hb.left) + Math.min(box.right, hb.right)) / 2,
           y: (Math.max(box.top, hb.top) + Math.min(box.bottom, hb.bottom)) / 2,
         },
-        { mass, vx, vy, recoil },
+        { mass, vx, vy, recoil, by: { kind, kit } },
       );
     }
     return landed;
@@ -8282,7 +8345,7 @@ export function stepStreams(): void {
     const box = streamBox(q, cel);
     if (!box || (!cel?.blow && !burns)) continue;
     for (const e of pool) {
-      if (e.state === "dead" || e.state === "burst") continue;
+      if (!takesBlows(e)) continue;
       const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
@@ -8298,7 +8361,7 @@ export function stepStreams(): void {
       // 9806 carries `dx 8`, so a stream is eight a frame rather than a blow,
       // and a two-hundred-health zombie takes about twenty-five frames of it.
       if (burns) {
-        strikeFoe(e, 0, { dx: 0, dy: 0 }, q.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE);
+        strikeFoe(e, 0, { dx: 0, dy: 0 }, q.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE, undefined, { mass: 0, vx: 0, vy: 0, by: {} });
         continue;
       }
       const scale = kit.blow / 100;
@@ -8315,7 +8378,7 @@ export function stepStreams(): void {
         undefined,
         // the stream class leaves `obj+0xe` at the allocator's nothing
         // (`0x424534`), so it trades no momentum with what it wets
-        { mass: 0, vx: 0, vy: 0 },
+        { mass: 0, vx: 0, vy: 0, by: {} },
       );
     }
     /**
@@ -8791,9 +8854,10 @@ export function stepBolts(): void {
       b.spent = true;
       continue;
     }
-    // ...and everything else stops it and takes nothing
+    // ...and everything else stops it, and most of it takes nothing — the
+    // few handlers that read a −1 are {@link Foe.minusOne}
     for (const e of pool) {
-      if (e.state === "dead" || e.state === "burst") continue;
+      if (!takesBlows(e)) continue;
       const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
@@ -8805,6 +8869,28 @@ export function stepBolts(): void {
       ))
         continue;
       b.spent = true;
+      const minus = FOES[e.kind].minusOne;
+      if (minus && "sound" in minus) sound?.effect(minus.sound, b.x, b.y);
+      else if (minus) {
+        // `0x42f910` at the rewritten strength: 4000's own pair, scaled and
+        // mirrored, plus the bolt's hundred a frame, and the length of that
+        const pair = art?.blow ?? { dx: 0, dy: 0 };
+        const facing = b.vx < 0 ? -1 : 1;
+        const vx = b.vx / TICK_SCALE;
+        const dx = Math.trunc((pair.dx * minus.as) / 100) * facing + vx;
+        const dy = Math.trunc((pair.dy * minus.as) / 100);
+        strikeFoe(
+          e,
+          Math.floor(Math.hypot(dx, dy)),
+          pair,
+          facing,
+          b.y,
+          hurt,
+          0,
+          { x: b.x, y: b.y },
+          { mass: BOLT.divisor, vx, vy: 0, by: {} },
+        );
+      }
       break;
     }
   }
@@ -8885,7 +8971,7 @@ export function stepFlares(): void {
       bottom: f.y + sb.y1,
     };
     for (const e of pool) {
-      if (e.state === "dead" || e.state === "burst") continue;
+      if (!takesBlows(e)) continue;
       const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
@@ -8915,7 +9001,7 @@ export function stepFlares(): void {
        * has: see {@link Foe.burns}.
        */
       if (levelIndex % 4 === 3) {
-        strikeFoe(e, 0, { dx: 0, dy: 0 }, f.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE);
+        strikeFoe(e, 0, { dx: 0, dy: 0 }, f.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE, undefined, { mass: FLARE.divisor, vx: 0, vy: 0, by: {} });
       } else {
         // `0x42f910` at strength 100: the cel's own pair, mirrored by facing,
         // plus the flare's own velocity, and the damage is the length of that —
@@ -8934,7 +9020,7 @@ export function stepFlares(): void {
           0,
           undefined,
           // the flare's own mass, its divisor of 5 (`0x43ab50`)
-          { mass: FLARE.divisor, vx: f.vx * f.facing, vy: f.vy },
+          { mass: FLARE.divisor, vx: f.vx * f.facing, vy: f.vy, by: {} },
         );
       }
       f.burn = -1;
@@ -12038,7 +12124,14 @@ export function stepEnemies(): void {
         if (floor !== null && base >= floor - landingWindow(e.vy)) {
           e.lastBase = undefined;
           e.y -= base - floor;
-          e.vy = 0;
+          // a body that bounces — {@link Foe.corpseBounce}: `0x42ff83` hands
+          // back anything faster than 2 through `obj+0x20`, and the landing
+          // sets the flag the death state plays its thud on
+          const bounce = foe.corpseBounce;
+          if (bounce && Math.abs(e.vy / TICK_SCALE) > 2) {
+            e.vy = -Math.trunc((e.vy / TICK_SCALE) * bounce.restitution) * TICK_SCALE;
+            sound?.effect(bounce.sound, e.x, e.y);
+          } else e.vy = 0;
           if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
             e.vx =
               dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
