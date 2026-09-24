@@ -9426,13 +9426,17 @@ export function stepBushes(): void {
     // the grab's latch runs on both arms of `0x43ef31`, rising and sinking:
     // `0x43eea3` — it slides under you while it is still reaching; `0x43eeb0`
     // moves the latch on the frame after the grab has taken, `0x43eee1` again
-    // once the cel that closes is up; and `0x43ef00`, with the latch closed on
-    // a player who has died, plays 0x2a
+    // once the cel that closes is up; and `0x43ef00`, with the latch closed,
+    // asks every frame whether he is dead: dead, it takes the draw gate
+    // (`0x43ef0a`) — it has swallowed him, and its cels are all that is drawn —
+    // and plays 0x2a; alive, it hands the gate back (`0x43ef28`)
     if (q.phase === 0) q.x = p.x;
     if (q.phase === 0 && p.heldWhat === q) q.phase = 1;
     else if (q.phase === 1 && bushCel(q) >= BUSH.holdsAt) q.phase = 2;
-    else if (q.phase === 2 && p.act === "dying")
-      sound?.effect(BUSH.sinkSound, q.x, q.y);
+    else if (q.phase === 2) {
+      p.hidden = p.act === "dying";
+      if (p.hidden) sound?.effect(BUSH.sinkSound, q.x, q.y);
+    }
     if (q.state === "rise") {
       // `0x43ef65` — forty a frame up for as long as the top of its travel is
       // above it, so a rise that starts off the forty-pixel grid overshoots
@@ -9454,7 +9458,9 @@ export function stepBushes(): void {
     else {
       // `0x43ef57` → `0x43f007` installs `0x472b70`, whose cels carry no strike
       // box — which is what lets go of the player, and the only thing that
-      // does. It stays where the last step left it.
+      // does. It stays where the last step left it, and hands the draw gate
+      // back (`0x43ef57`) — a player it swallowed is drawn again, dead.
+      p.hidden = false;
       q.phase = 0;
       idle(q);
     }

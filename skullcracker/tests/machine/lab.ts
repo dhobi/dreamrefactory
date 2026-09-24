@@ -273,7 +273,7 @@ ok(`a blaster bolt fells an arm for 113`);
   }
   if (!pinned) fail(`while it holds him he is hidden and on its point`);
   if (game.p.hidden) fail(`letting go hands him back (0x418aa1)`);
-  if (grabber.script !== 2 || Math.round(grabber.x - at) !== 50 * -grabber.facing)
+  if ((grabber.script as number) !== 2 || Math.round(grabber.x - at) !== 50 * -grabber.facing)
     fail(`it lets go into the stance, fifty back: kind ${grabber.script}, moved ${grabber.x - at}`);
   ok(`an arm whose lunge lands has hold of him for ${heldFor} frames, and lets go fifty back`);
 }

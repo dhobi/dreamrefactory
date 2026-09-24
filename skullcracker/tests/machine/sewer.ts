@@ -442,6 +442,29 @@ if (game.p.heldBy) fail(`-5 holds nothing; the player should be down and free, n
 if (topWhileUp > 17321 - 40) fail(`it comes UP to grab — 0x43ef65's arm; the highest it got was y${topWhileUp}`);
 ok(`its bush comes up to y${topWhileUp}, grabs with ${codes.join(" then ")}, and the slump drops you again`);
 
+// ...and a player it closes on DEAD is swallowed: with the latch at 2,
+// `0x43ef0a` takes the draw gate every frame he is dying and plays 0x2a, and
+// the bottom of its travel hands it back (`0x43ef57`). Here the latch closes
+// on the sink's last step (5030 is late in the rise), so the gate is taken and
+// handed back in the same frame, as `0x43ec80` would; the bush is put back at
+// the top of its travel as it closes so that the sink has frames to see.
+{
+  await go("x=7700&damage=1");
+  const bush = game.hereOf((l) => l.bushes).filter((b) => Math.abs(b.x - 7689) < 300)[0];
+  if (h.until(() => bush.phase === 1, 200) < 0) fail(`the bush never had hold of him (phase ${bush.phase})`);
+  game.takeHealth(game.stats.health);
+  if (h.until(() => bush.phase === 2, 40) < 0) fail(`the bush's latch never closed`);
+  bush.y = bush.top;
+  let hidden = 0;
+  h.until(() => {
+    if (game.p.hidden) hidden++;
+    return bush.state === "idle";
+  }, 80);
+  if (hidden < 5 || game.p.hidden || game.p.act !== "dying")
+    fail(`a closed bush hides a dead player all the way down and shows him at the bottom: hidden ${hidden} frames, then ${game.p.hidden}, ${game.p.act}`);
+  ok(`a bush closed on a dead player swallows him for ${hidden} frames, and gives him back at the bottom`);
+}
+
 // 9. the level, played through: five regions, three levers and a ride. Every
 //    one of those levers is in a different region from its door bar the first,
 //    which is what `0x43c430` walking the LEVEL's list is for.
