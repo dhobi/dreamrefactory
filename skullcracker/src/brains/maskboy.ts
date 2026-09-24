@@ -80,8 +80,16 @@
  * below reads or writes it. There is no beat, no decision budget and no side
  * word anywhere in the struct — this class does not circle and does not taunt.
  */
-import { install, rewind, type Brain, type BrainCtx, type Enemy } from "./kit";
-import { ahead, turn } from "./batboy";
+import {
+  install,
+  rewind,
+  type Brain,
+  type BrainCtx,
+  type Enemy,
+  type Reaction,
+} from "./kit";
+import { ahead, gangCorpse, turn } from "./batboy";
+import type { FoeAnim } from "../foes";
 
 /**
  * Everything `0x438760` does that is deliberately not in this file, with the
@@ -123,7 +131,9 @@ import { ahead, turn } from "./batboy";
  *   `obj+0x2e`, being back on the ground, and then install kind 5 tag 4 — it
  *   gets up already running. There is no flinch at all in this class:
  *   `0x4390dd` installs the knockdown for every blow that does not finish it,
- *   which is why {@link Foe.flinch} here is one cel.
+ *   which is why {@link Foe.flinch} here is one cel. Kind 5 tag 4 is
+ *   {@link Foe.gait}, and {@link maskboyReacts} holds the knockdown until the
+ *   landing.
  */
 const NOT_HERE =
   "0x43877c, 0x4387b6, 0x4389e3, 0x438848, 0x438912, 0x438db5, 0x438e69" as const;
@@ -309,6 +319,55 @@ export const MASKBOY = {
 } as const;
 
 /**
+ * `0x438848` — the roller, and it is the preamble's business rather than any
+ * one state's.
+ *
+ * Both arms of the player-down test at `0x438805` fall into `0x438841`, and
+ * `0x438841` skips the roll in state 9, the death, and nowhere else — so it is
+ * rolled in every state the brain runs AND in state 10, the knockdown the page
+ * plays, which is why {@link maskboyReacts} calls it too.
+ *
+ * The three conditions are its own: the roll, the player within 300 in x, and
+ * this one WEST of him (`0x438878 cmp bx, bp; jge`) — so the roller is always
+ * built on the side of the player this one is not, and rolls back through
+ * him. {@link BrainCtx.roller} carries the latch that keeps it to one.
+ */
+function rollRoller(e: Enemy, k: BrainCtx): void {
+  const r = MASKBOY.roller;
+  if (
+    k.roll(r.odds[0]) < r.odds[1] &&
+    Math.abs(k.player.x - k.anchorX(e)) < r.within &&
+    k.anchorX(e) < k.player.x
+  )
+    k.roller(e, { x: k.player.x + r.beyond, y: k.player.y, vx: r.vx });
+}
+
+/**
+ * What it does while the page plays its knockdown and its death: the gang's
+ * own ({@link gangCorpse} — the knockdown held until it lands, the corpse
+ * stopped and lowered), and the roller's roll, which `0x438841` takes in
+ * state 10 as in any other.
+ */
+export const maskboyReacts: Reaction = (e, foe, run, k) => {
+  // `0x438805` comes first: the gloat goes on over the knockdown, and the roll
+  // at `0x438841` is taken on the state it has just written
+  const down = e.state === "flinch" && k.player.down ? maskboyDown(e, k) : undefined;
+  gangCorpse(e, foe, run, k);
+  if (e.state === "flinch") rollRoller(e, k);
+  return down;
+};
+
+/**
+ * The preamble's gloat, `0x438825`: kind 8 tag 0, turned to face him when he
+ * is behind (`0x438835`). The brain installs it over any state but 1, 8 and 9;
+ * {@link maskboyReacts} over the knockdown, state 10.
+ */
+export function maskboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  if (k.track(e, MASKBOY.bands).forward < 0) turn(e);
+  return MASKBOY.gloat;
+}
+
+/**
  * `initmaskboy`'s machine — states 1, 2, 5, 6, 7 and 8.
  *
  * ## The shape of it
@@ -337,29 +396,7 @@ export const maskboy: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
   const t = k.track(e, MASKBOY.bands);
   const state = e.script ?? 0;
-  /**
-   * `0x438848` — the roller, and it is the preamble's business rather than any
-   * one state's.
-   *
-   * Both arms of the player-down test at `0x438805` fall into `0x438841`, so
-   * the roll happens whatever he is doing; the only state it is skipped in is
-   * 9, the death, which this page owns and a brain is never called during. So
-   * there is no state gate here at all, which is what the executable has.
-   *
-   * The three conditions are its own: the roll, the player within 300 in x, and
-   * this one WEST of him (`0x438878 cmp bx, bp; jge`) — so the roller is always
-   * built on the side of the player this one is not, and rolls back through
-   * him. {@link BrainCtx.roller} carries the latch that keeps it to one.
-   */
-  {
-    const r = MASKBOY.roller;
-    if (
-      k.roll(r.odds[0]) < r.odds[1] &&
-      Math.abs(k.player.x - k.anchorX(e)) < r.within &&
-      k.anchorX(e) < k.player.x
-    )
-      k.roller(e, { x: k.player.x + r.beyond, y: k.player.y, vx: r.vx });
-  }
+  rollRoller(e, k);
   /**
    * `0x438805` — `0x402f60` says the player is down, and then everything on its
    * feet but the dormant one and the gloat itself drops what it is doing,
@@ -376,9 +413,7 @@ export const maskboy: Brain = (e, foe, run, k) => {
    * is.
    */
   if (k.player.down && state !== 0 && state !== 1 && state !== 8) {
-    install(e, MASKBOY.gloat);
-    if (t.forward < 0) turn(e);
-    return false;
+    return install(e, maskboyDown(e, k));
   }
   switch (state) {
     /**

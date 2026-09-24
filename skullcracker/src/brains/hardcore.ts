@@ -180,7 +180,9 @@ export const hardcoreReacts: Reaction = (e) => {
  * The page owns those animations; state 8's exit is the brain's, below.
  *
  * - **`0x43d250`**, the damage proc, is the shortest in the chapter and the only
- *   one with no ignore list. It swallows a blow of exactly −6 (`0x43d25c`,
+ *   one with no ignore list — its own class included ({@link Foe.hitsOwn}) —
+ *   and it bleeds with no hitter (`0x43d28b push 0`, `bleeds: "scatter"`). It
+ *   swallows a blow of exactly −6 (`0x43d25c`,
  *   returning 1 with nothing spent), ignores a blow of 0, and otherwise takes
  *   `0x42f910`'s figure off **`AI+0`** at `0x43d2b4`. Over zero it plays sound
  *   0x45 and installs the flinch, `0x474b88`; at or under it clears the bar with
@@ -191,10 +193,11 @@ export const hardcoreReacts: Reaction = (e) => {
  * - **8**, the flinch's exit, `0x43d062`: when the flinch ends it flips a coin.
  *   Heads is sound 0x48 and the WALK, `0x474a38`; tails is sound 0x47 and the
  *   swipe, `0x4749c8` tag 0. So hitting this thing is what makes it come at you,
- *   and it never returns to the stance off a flinch. The flinch's
- *   {@link FoeAnim.resume} hands the brain kind 8 and `case 8` flips the coin.
+ *   and it never returns to the stance off a flinch. The flinch is kind 8 and
+ *   {@link FoeAnim.decides}: `case 8` flips the coin the frame it ends.
  * - **9**, the corpse, `0x43d0c5`: `0x42f7f0(obj, 0.7)` sets the bounce, sound
- *   0x3d plays on the frame `obj+0x2c` says it has landed, `AI+0x30` counts down
+ *   0x3d plays on the frame `obj+0x2c` says it has landed — both the page's
+ *   {@link Foe.corpseBounce} — `AI+0x30` counts down
  *   and `0x43d131` is the only `mov ax, 1` in the whole of `0x43cc60` — the
  *   frame the object is removed. Every other path, the "my script has not
  *   finished" return at `0x43d144` included, answers `xor ax, ax`, which is why
@@ -227,19 +230,32 @@ const NOT_HERE = "0x43d062, 0x43d0c5, 0x43d250" as const;
  * `0x43c7c3` pushes 0.23f — `obj+0x24` = 2, so it droops like the knife does.
  * Tag 0 is one cel at `dx 80`, undivided: eighty pixels a frame.
  *
- * `0x43c860` is its think and it does one thing this page keeps: `obj+0x2a`
- * set — it has hit something — and the strength goes to **zero** the same
- * frame, so a thing that has already struck cannot strike twice. Landing
- * (`obj+0x2e`) installs `0x474910`, four cels of it coming apart.
+ * `0x43c860` is its think. Every frame: `obj+0x2a` set — it has hit
+ * something — and the strength is **zero**, or not and it is a hundred
+ * (`0x43c866`), so a thing that has struck flies on harmless
+ * ({@link CastKit.flyOn}): nothing ends it but landing. Landing (`obj+0x2e`,
+ * `0x43c8c0` and `0x43ca38` on the way back) installs `0x474910`, four cels of
+ * it coming apart, with `AI+2 = 0x28`, and that state (`0x43caf6`) holds the
+ * strength at zero and removes it once the count is past zero
+ * ({@link CastKit.lieFor}).
  *
- * **Not modelled:** the whoosh `0x43c8af` loops while it flies (sound 0x3e
- * through `0x40ee90`), and `0x43c917`'s fork. When the launch frame ends a HIGH
- * throw (its `AI+8`, the thrower's tag, zero) rolls `0x434540(0x64)` and under
- * 30 takes tag 4 (cels 2114, 2115) rather than the ordinary tag 2 — and tag 4
- * comes BACK: `0x43c9bd` waits until it is more than 700 pixels from the thrower,
- * flips its mirror, zeroes its velocity, drops to the thrower's y + 25 and
- * returns on `0x4748c8`. The page flies the common one. Written down rather
- * than left out.
+ * The flight is tag 2 once (2101..2103) and then tag 3, 2104..2107, over and
+ * over (`0x43c968`, `0x43c989`) — {@link CastKit.thenLoop}.
+ *
+ * The whoosh is {@link CastKit.hum}: `0x43c8a7` plays 0x3e and `0x43c8af` arms
+ * it to loop, every frame it flies, and landing lets it go and silences it
+ * (`0x43c8e1`, `0x43c8f2`) — on the way back as well (`0x43ca1f`, `0x43ca30`,
+ * `0x43ca62`, `0x43ca71`).
+ *
+ * And a HIGH throw can come back — {@link CastKit.returns}: as its launch cel
+ * ends, one whose thrower's tag was 0 (`AI+8`) rolls `0x434540(0x64)` and
+ * under 30 (`0x43c937`) takes tag 4, cels 2114 and 2115, instead of tag 2.
+ * `0x43c9bd` waits for it to be more than 700 from where the thrower stood,
+ * turns it round, stops it, drops it to 25 below the thrower's point and puts
+ * `0x4748c8` on — the launch and the flight again, the other way, moving back
+ * on the very frame it turns (the frame's script step spends the new launch's
+ * dx before the move). The far leg itself cannot hurt anyone: 2114 and 2115
+ * carry no strike box. The way back can.
  */
 export const HARDCORE_THROW: CastKit = {
   /** `0x474870` tag 0 — the launch, one cel */
@@ -254,10 +270,28 @@ export const HARDCORE_THROW: CastKit = {
   /** `0x43d1ea` — the HIGH throw, out of `0x474ab8` tag 0 */
   lift: 0x46,
   blow: 0x64,
-  /** `0x474870` tag 2, the ordinary flight */
+  /** `0x43c8a0` / `0x43c8b1` — `mall.snd` 0x3e, the whoosh, looped in flight */
+  hum: 0x3e,
+  /** `0x474870` tag 2, the ordinary flight — once */
   then: { cels: [2101, 2102, 2103], hold: 1 },
+  /** ...and tag 3, round and round until it lands (`0x43c968`, `0x43c989`) */
+  thenLoop: { cels: [2104, 2105, 2106, 2107], hold: 1 },
   /** `0x474910` tag 0 — it coming apart where it lands */
   impact: { cels: [2104, 2105, 2106, 2107], hold: 1 },
+  /** `0x43c8cd` — `AI+2 = 0x28`, spent by `0x43cafb` */
+  lieFor: 0x28,
+  /** `0x43c866` — a hit leaves it flying, worth nothing */
+  flyOn: true,
+  /** `0x43c917`..`0x43c9e5` — see {@link CastKit.returns} */
+  returns: {
+    odds: 0x1e,
+    of: 0x64,
+    out: { cels: [2114, 2115], hold: 1 },
+    far: 0x2bc,
+    drop: 0x19,
+    speed: 80,
+    from: "0x43c917 / 0x43c9aa / 0x4748c8",
+  },
   from: "0x43d190, script 0x474870, class 0x43c770",
 };
 
@@ -265,6 +299,8 @@ export const HARDCORE_THROW: CastKit = {
 export const HARDCORE_THROW_LOW: CastKit = {
   ...HARDCORE_THROW,
   lift: -0x19,
+  // `0x43c926` — `AI+8` is 1, so a low throw never rolls for the way back
+  returns: undefined,
   from: "0x43d190 tag 1, script 0x474870, class 0x43c770",
 };
 
@@ -511,24 +547,24 @@ export const hardcore: Brain = (e, foe, run, k) => {
      *
      * `0x43cffe` is the compiler's signed `obj+0x42 % 2` — every even frame
      * index of the ten plays sound 0x44 — and when the script ends `0x43d030`
-     * plays `0x434540(2) + 0x3e` through **`0x40f090`**, which is not
-     * `0x40ef30`: a different entry point in the same sound module, taking the
-     * same `(bank, id, point)`. The kit has one primitive, so both go through
-     * {@link BrainCtx.say}.
+     * plays `0x434540(2) + 0x3e` through **`0x40f090`** (`0x43d045`), which
+     * is not `0x40ef30`: it goes onto the mixer's channel 0 whatever that
+     * holds ({@link BrainCtx.lead}), where the pants go onto channel 1 or 2 by
+     * priority, and a pant still playing refuses the next one.
      */
     case 7: {
       if (!done && frameIndex(e, HARDCORE.pant.hold) % 2 === 0)
         k.say(e, HARDCORE.breath);
       if (!done) return false;
-      k.say(e, HARDCORE.sigh + k.roll(2));
+      k.say(e, HARDCORE.sigh + k.roll(2), "lead");
       return install(e, HARDCORE.stance);
     }
     /**
      * ---- 8, `0x43d062`: the flinch's exit, and a coin.
      *
-     * The page plays the flinch (`0x474b88`) and its {@link FoeAnim.resume}
-     * puts this state on the frame it ends — which is the frame `obj+0x46`
-     * lets `0x43d06d` roll. Heads: sound 0x48 and the walk. Tails: sound 0x47
+     * The page plays the flinch (`0x474b88`) and hands this state its end on
+     * the frame it comes ({@link FoeAnim.decides}) — which is the frame
+     * `obj+0x46` lets `0x43d06d` roll. Heads: sound 0x48 and the walk. Tails: sound 0x47
      * and the swipe.
      */
     case 8:

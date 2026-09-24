@@ -124,7 +124,7 @@ import type { FoeAnim } from "../foes";
 
 /**
  * State 4 and the hit handler — the page plays them, and {@link batReacts}
- * does the throw and the removal.
+ * does the removal.
  *
  * - **state 4, `0x42329e`, the death.** `0x42f850(obj, 1.0f)` turns its gravity
  *   back on — the creator gave it **zero** (`0x422e5f`), which is why a live bat
@@ -133,12 +133,18 @@ import type { FoeAnim } from "../foes";
  *   whatever it would have stood on. It is the one path in the class that
  *   answers `mov ax, 1` rather than `xor ax, ax`, and only on the frame
  *   `obj+0x2e` says it has landed: that return is the object being removed.
- * - **`0x4232f0`, the hit handler.** There is no subtraction in it anywhere. It
- *   asks `0x430ee0` whether the thing that hit it is one of its own class and
- *   does nothing if so; otherwise it sprays sixty (`0x40cba0(point, 0x3c, 0)`),
- *   installs `0x46f140`, sets `obj+0xa = -40` so the corpse is thrown upward
- *   first, pays **seventy** points (`0x40d450(0x46)`) and plays `0012 bat hit`.
- *   One blow of any size, which is {@link Foe.frail}.
+ * - **`0x4232f0`, the hit handler.** There is no subtraction in it anywhere,
+ *   and no test of the blow's sign or of the bat's own state. It asks
+ *   `0x430ee0` whether the thing that hit it is one of its own class and does
+ *   nothing if so; otherwise it sprays sixty (`0x40cba0(point, 0x3c, 0)`),
+ *   installs `0x46f140`, sets `obj+0xa = -40`, pays **seventy** points
+ *   (`0x40d450(0x46)`) and plays `0012 bat hit`. One blow of any size, which
+ *   is {@link Foe.frail}; a −9 is a blow like any other
+ *   ({@link Foe.codeBlind}); and a corpse still showing 2205/2206 takes it all
+ *   again ({@link Foe.corpseTakesHits}). The −40 is not what the body leaves
+ *   with: `0x430470` runs after the handler answers 1 and reads it back, and
+ *   against the player's mass of twelve a bat's one turns it round — the
+ *   corpse goes DOWN ({@link Foe.hitVel}).
  * - **`obj+0x1a`, the strength percent.** `0x422f30` zeroes it at the top of
  *   every think and `0x423199` sets it to **0x14** — twenty — for the two dive
  *   tags that carry the strike, and for nothing else; the steep dive, tag 3,
@@ -610,17 +616,15 @@ function flight(
   }
 }
 
-/** `0x423334` — `obj+0xa = 0xffd8`, written outright by the hit handler */
-const DEATH_LIFT = -40;
-
 /**
  * State 4, `0x42329e`, while the page plays `0x46f140`.
  *
- * The hit handler throws the body up at forty a frame (`0x423334`) and the
- * death's own `0x42f850(obj, 1.0f)` lets {@link Foe.gravity} bring it down;
- * `0x4232b2` removes it the frame `obj+0x2e` says it has landed: the body
- * lies for ever ({@link Foe.linger}) until then, and this lets it go. `e.threw`
- * marks the throw spent.
+ * The hit handler writes `obj+0xa = -40` before the exchange weighs it in
+ * ({@link Foe.hitVel}), and the death's own `0x42f850(obj, 1.0f)` lets
+ * {@link Foe.gravity} take the body from there; `0x4232b2` removes it the
+ * frame `obj+0x2e` says it has landed: the body lies for ever
+ * ({@link Foe.linger}) until then, and this lets it go. `e.threw` keeps the
+ * landing test off the frame of the blow, when the body has not moved yet.
  */
 export const batReacts: Reaction = (e, foe) => {
   if (e.state !== "dead" || e.anim !== foe.death) return;
@@ -629,7 +633,6 @@ export const batReacts: Reaction = (e, foe) => {
   e.floor = -150;
   if (!e.threw) {
     e.threw = true;
-    e.vy = DEATH_LIFT * TICKS;
     return;
   }
   // landed: the page's dead branch zeroes `vy` and forgets the last base

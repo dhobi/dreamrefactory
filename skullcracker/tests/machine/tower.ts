@@ -233,6 +233,14 @@ await go("&x=17600&y=15300");
   const box = game.playerBox();
   if (!g || !(box.right > g.left && box.left < g.right && box.bottom > g.top && box.top < g.bottom))
     fail(`the bishop stands ON the goal, and the player beside it should be in the goal rect`);
+  // ...and standing in it is not enough: `0x421a38` asks `[0x46ece0]` and
+  // nothing else, and only the bishop's death writes it (`0x426600`)
+  h.frame(4);
+  if (game.goalReady() || game.waitsFor() !== "the bishop")
+    fail(`0x421a38 waits for [0x46ece0]; the goal is ${game.goalReady() ? "open" : "shut"} with the bishop standing, waiting for ${game.waitsFor()}`);
+  game.killFoe(b, FOES.initvpriest);
+  if (!game.goalReady()) fail(`the bishop's death writes [0x46ece0] (0x426600); the goal is still shut`);
+  ok(`the goal waits for the bishop, whatever the count says, and opens when it dies`);
 }
 // a bat thrown past the room's east wall stays in the fight: the creator gives
 // it region -1 (`0x426378`) and the mover files it by its point only once that
@@ -379,7 +387,8 @@ ok(`and its bishop works its own bands — ${[...modes].sort().join(", ")} — o
 // and nothing triggers. `0x426800` is a metronome on the level's own counter:
 // 202 engine frames a period, the strike on 195, and the two records carry
 // params 1 and -1 so both play tag 0 of `0x46f588` and one of them is flipped.
-await h.load("level=12&x=17600&y=14700");
+// (from the floor BELOW the bolts' points, y14755: above them they strike you)
+await h.load("level=12&x=17600&y=15300");
 const lit = game.level!.lights.flat();
 if (lit.length !== 2) fail(`TOWER places two lightfx records; it has ${lit.length}`);
 if (LIGHTFX.period !== 202 || LIGHTFX.strikeAt !== 195) fail(`0x426815's counter runs 0..201 and 0x426837 strikes on 0xc3`);
@@ -409,6 +418,89 @@ if (stray.length) fail(`0x46f588 tag 0 is 9081..9086; saw ${stray.join(" ")}`);
 if ([...bolts.values()].some((v) => v.split(",")[0] !== v.split(",")[1]))
   fail(`both records play the same tag, one flipped — they should never disagree on the cel`);
 ok(`and its lightning strikes every ${strikes[0]} frames on 195 of its 0..201, ${bolts.size} counter values lit on 9081..9086`);
+
+/**
+ * ...and it strikes YOU, from above its own point. `0x426780` asks on the
+ * bolt's first frame whether its point is below the player's (`0x42679c`) —
+ * no x at all — and then: the scepter drawn (`0x402ee0`, weapon 16) is
+ * `0x402fa0(6)`, the charge; anything else is `0x402fa0(7)`, the shock
+ * (`0x4721a0` tag 3) and the death. At x17600 on the ledge at y14700 the
+ * player stands above both bolts, whose points are at y14755.
+ */
+{
+  const toStrike = (): void => {
+    for (let i = 0; i < LIGHTFX.period + 2 && game.levelClock !== LIGHTFX.strikeAt - 1; i++) h.frame();
+  };
+  await h.load("level=12&x=17600&y=14700&lives=3");
+  h.frame(4);
+  toStrike();
+  h.hold("right", true);
+  h.frame();
+  if (game.p.act !== "dying" || game.p.dyingTag !== 3 || game.stats.lives !== 2 || game.held.right)
+    fail(`struck unarmed above a bolt: the tag-3 death, a life, and the keys dropped; ${game.p.act} tag ${game.p.dyingTag}, lives ${game.stats.lives}, right ${game.held.right}`);
+  h.hold("right", false);
+  // ...and on the bolt's second frame on its first cel it asks again, and
+  // `0x45d090` puts tag 3 on from its first frame again: the shock starts over
+  // one frame late, and the life is not spent twice
+  const first = game.p.actClock;
+  h.frame();
+  if (game.p.actClock !== first || game.stats.lives !== 2)
+    fail(`the second ask restarts the shock and costs nothing more: clock ${first} then ${game.p.actClock}, lives ${game.stats.lives}`);
+  ok(`struck from above its point with no scepter, the player dies on the shock's tag 3, started over by the bolt's second frame`);
+
+  await h.load("level=12&x=17600&y=14700&lives=3");
+  h.frame(4);
+  game.inv.weapon = LIGHTFX.rod;
+  game.inv.armed = true;
+  game.inv.drawn = true;
+  game.inv.rounds[LIGHTFX.rod] = 40;
+  const guns = game.hereOf((l) => l.guns).length;
+  toStrike();
+  h.frame();
+  if ((game.p.act as string) !== "struck" || (game.stats.lives as number) !== 3) fail(`with the scepter drawn a strike is the charge, 0x470c40 tag 18: ${game.p.act}, lives ${game.stats.lives}`);
+  const beams: number[] = [];
+  for (let i = 0; i < 20 && (game.p.act as string) === "struck"; i++) {
+    h.frame();
+    for (const q of game.streams) if (q.variant !== undefined && q.clock === 1) beams.push(q.variant);
+  }
+  if (beams.join(",") !== "3,4,3,4") fail(`tags 18..21 each let a beam go, variants 3, 4, 3, 4 (0x42d93e / 0x42d98a); saw ${beams.join(",")}`);
+  if ((game.p.act as string) !== "downFront" || game.inv.armed || game.inv.drawn || game.inv.rounds[LIGHTFX.rod] !== 160 || game.hereOf((l) => l.guns).length !== guns + 1)
+    fail(`and tag 22 fills it, throws it down and knocks you over (0x42d9d7): ${game.p.act}, armed ${game.inv.armed}, rounds ${game.inv.rounds[LIGHTFX.rod]}, guns ${guns} -> ${game.hereOf((l) => l.guns).length}`);
+}
+ok(`struck with the scepter drawn, it lets the bolt out four times, fills, and is knocked out of your hands`);
+
+// ...and the second character: its own dispatcher `0x449700` sends mode 7 to
+// `0x476758` tag 3 (`0x449856`) and mode 6 to `0x4752f0` tag 18 (`0x449836`),
+// and its armed machine `0x4478b0` runs tags 18..22 exactly as the first's
+// (`0x447e5b`, `0x447ea7`, `0x447ee4`), down on its own `0x476890`
+{
+  const toStrike = (): void => {
+    for (let i = 0; i < LIGHTFX.period + 2 && game.levelClock !== LIGHTFX.strikeAt - 1; i++) h.frame();
+  };
+  await h.load("level=12&x=17600&y=14700&lives=3&char=1");
+  h.frame(4);
+  toStrike();
+  h.frame();
+  if (game.CHARACTER !== 1 || game.p.act !== "dying" || game.actOf("dying")?.cels[0] !== 9700)
+    fail(`the second, struck unarmed: 0x476758 tag 3, from 9700; ${game.CHARACTER} ${game.p.act} ${game.actOf("dying")?.cels[0]}`);
+  await h.load("level=12&x=17600&y=14700&lives=3&char=1");
+  h.frame(4);
+  game.inv.weapon = LIGHTFX.rod;
+  game.inv.armed = true;
+  game.inv.drawn = true;
+  toStrike();
+  h.frame();
+  const cel = game.actOf("struck")?.cels[0];
+  const beams: number[] = [];
+  for (let i = 0; i < 20 && (game.p.act as string) === "struck"; i++) {
+    h.frame();
+    for (const q of game.streams) if (q.variant !== undefined && q.clock === 1) beams.push(q.variant);
+  }
+  if (cel !== 8324 || beams.join(",") !== "3,4,3,4" || (game.p.act as string) !== "downFront" || game.inv.rounds[LIGHTFX.rod] !== 160)
+    fail(`the second, struck with the scepter: 8324, beams 3,4,3,4, full and down; ${cel} ${beams.join(",")} ${game.p.act} ${game.inv.rounds[LIGHTFX.rod]}`);
+  await h.load("level=12&char=0");
+}
+ok(`and the second character is struck the same way, on its own cels`);
 
 /**
  * ...and its three LADDERS carry you between its regions, both ways.

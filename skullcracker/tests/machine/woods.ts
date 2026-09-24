@@ -35,6 +35,10 @@ import { FOES } from "../../src/foes";
 import { GUN_CODES } from "../../src/guns";
 import { crushCel } from "../../src/props";
 import { fail, headless, ok, pass } from "./harness";
+import type { FoeAnim } from "../../src/foes";
+import { WEREA } from "../../src/brains/werea";
+import { WEREB } from "../../src/brains/wereb";
+import { DOG } from "../../src/brains/dog";
 
 const near = (a: number, b: number, slack = 3): boolean => Math.abs(a - b) <= slack;
 
@@ -573,6 +577,81 @@ await h.load("level=3&x=9000");
   if (falls === 0) fail(`a WOODS dog east of x9000 should charge off a ledge in twenty seconds; none fell charging`);
   if (spins > 0) fail(`a charging dog turned round on consecutive frames ${spins} times in ${falls} falling frames`);
   ok(`a charging dog runs off its ledge and down, ${falls} frames in the air, without spinning`);
+}
+
+/**
+ * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands
+ * its own case the frame the script ends, and the next script goes on then:
+ * exactly the script's own frames, and nothing between. A fresh one of `kind`
+ * near where the level puts it, given the reaction by hand.
+ */
+const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly FoeAnim[], hp?: number): Promise<number> => {
+  await h.load(`level=${lv}`);
+  const at = game.level!.spawned.flat().find((q) => q.kind === kind);
+  if (!at) fail(`level ${lv} places no ${kind}`);
+  await h.load(`level=${lv}&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const e = game
+    .spawnedHere()
+    .filter((q) => q.kind === kind && q.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  if (!e) fail(`no ${kind} near x${at.x}`);
+  e.asleep = false;
+  if (hp !== undefined) e.hp = hp;
+  e.state = "flinch";
+  e.anim = take;
+  e.clock = 0;
+  e.script = take.kind;
+  e.tag = take.tag;
+  let f = 0;
+  while (e.state === "flinch" && e.anim === take && f < 60) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || !next.includes(e.anim))
+    fail(`${kind}: ${take.from} is ${take.cels.length * take.hold} frames and then ${next.map((a) => a.from).join(" or ")}; ${f} frames, then ${e.anim.from}`);
+  return f;
+};
+
+{
+  const A = FOES.initwerea;
+  const B = FOES.initwereb;
+  const D = FOES.initdog;
+  // the punk's take is kind 11 and `0x44eeb5` decides on `obj+0x46`; its burn
+  // is kind 8 and `0x44eda3` does; LINK's burn is kind 4 (`0x44f74c`); the
+  // dog's take is kind 7 (`0x454ff3`)
+  const takes = [
+    await handOff(3, "initwerea", A.flinch![0], [WEREA.stance, WEREA.away, WEREA.near]),
+    await handOff(3, "initwerea", A.burns!.anim!, [WEREA.stance], 1000),
+    await handOff(3, "initwereb", B.burns!.anim!, [WEREB.stance], 1000),
+    await handOff(3, "initdog", D.flinch![0], [DOG.charge]),
+  ];
+  ok(`the punk's take and burn, LINK's burn and the dog's take each hand on the frame they end: ${takes.join(", ")} frames`);
+}
+
+
+/**
+ * ...and every burst of it jolts the view by how close it went off —
+ * `0x452ef0`: `0x4307c0` 3 inside 512×128, 2 inside 750×300, 1 inside
+ * 1200×500, nothing past that.
+ */
+{
+  const bands: [number, number, number][] = [
+    [0x1ff, 0x7f, 3],
+    [0x200, 0x7f, 2],
+    [0x2ed, 0x12b, 2],
+    [0x2ee, 0x12b, 1],
+    [0x4af, 0x1f3, 1],
+    [0x4af, 0x1f4, 0],
+  ];
+  for (const [dx, dy, want] of bands) {
+    game.shake(1);
+    while (game.shakeAt >= 0) game.stepCamera();
+    game.burstCast({ x: game.p.x + dx, y: game.p.y - dy, vx: 0, vy: 0, landed: 1, kit: WEREC_SHOT } as never);
+    const got = game.shakeAt < 0 ? 0 : game.SHAKES.indexOf(game.shaking);
+    if (got !== want) fail(`a burst ${dx} across and ${dy} up should shake by ${want}, shook by ${got}`);
+  }
+  ok(`a burst of the shot shakes the view through 0x452ef0's three bands`);
 }
 
 pass(`WOODS is populated by its own records, burns, and can be crossed to its goal`);

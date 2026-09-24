@@ -158,10 +158,25 @@ thirty a frame against a punch worth about fifty.
 And -1 is not a requirement, it is a conversion. What carries -1 is the
 BLASTER's bolt — `0x413af0` maps the variant the bolt remembers to its strength,
 and variants 1..3 all give -1 while the blaster fires with 2 and 3. So the bolt
-is worth a full hundred to Boggs and **nothing at all to anything else**: every
-ordinary handler treats a strength below 1 as no damage (`0x4199b9`). That is
-what the gun in its room is for, and it only works because the codes are
-carried at all.
+is worth a full hundred to Boggs and nothing to most of what it meets, whose
+handlers treat a strength below 1 as no damage. The chapter's own are the
+exceptions: the TCop's `0x4147d9`, the arm's `0x418b47` and the test tube's
+`0x419999` convert it the same way (`Foe.minusOne`), and a Puke Boy answers it
+with a sound (`0x41825e`).
+
+**A bolt stops only on a handler that takes it.** The hit pass `0x430350` moves
+on to the next body when a handler answers 0 (`0x43042b`), and only an answer of
+1 with a strength above 0 runs `0x430470`, which marks the bolt (`obj+0x2a`,
+`0x430663`) for its think to let go (`0x413b56`). So the bolt flies THROUGH
+everything that turns a negative strength away, and through the Puke Boy, whose
+handler answers 0 after its sound (`0x418278`). The converters write the 100 onto
+the bolt itself, which is what lets their 1 stop it — and an arm that has hold
+of you converts and then answers 0 (`0x418b58`), so the body behind it in the
+same pass meets a hundred. The think writes the −1 back every frame
+(`0x413bf9`). The big gun's bolt is the same object fired with variant 0, a
+plain 100 on tag 0, and the TCop turns that one away (`0x41482a`) and lets it
+past; anything else takes it as a blow, under the creature switch. That is what the gun is for,
+and it only works because the codes are carried at all.
 
 The healing is not a phase Boggs enters — it is how it starts:
 
@@ -178,10 +193,28 @@ and the fight is a sequence rather than a damage race.
 ## What turns the healing off is the machinery
 
 `initbgmachinery` (`0x411da0`) stands up eight more objects and `0x411ed0` puts
-them at eight fixed offsets from the body, out of the table at `0x46e088`. That
-placer is called exactly twice in the program — once from the initialiser, once
-from VAT's setup — so the machinery, the head and the arm all stand still for
-the whole fight. Only the body moves.
+them at eight offsets from the body, out of the table at `0x46e088`. VAT's frame
+loop calls it every frame (`0x419c7b`), after the move pass, together with the
+head's (`0x41c4c0`) and the arm's (`0x412180`) — so the machinery, the head and
+the arm all go where the body goes. The body lunges forty-five at a time: an
+impulse of 5 for nine frames, and a drag of a whole 1.0 (`0x41bc16`) takes it
+all back after each move; which way is decided against the head's x
+(`0x41c047`).
+
+**The first machine strikes.** `[0x4a50ec]` is hidden on `0x46e4d0` until the
+body's tick finds the player at or right of the body with `0x46e080` still up
+(`0x41bef4`); then it goes on `0x46e490` 60 along and 70 down, slides some thirty
+out and back over 106 frames, and its think (`0x41afd0`) writes −1 into its
+strength every frame of it (`0x41b022`). Its cel 5630 is all strike box, so a
+player standing in it is spun — twenty health — and spun again the frame the
+spin ends; the collision pass zeroes a hitter that lands (`0x43045d`) and only
+the next frame of the sweep re-arms it. It says 0x24 at the head once each time
+the player is down while it sweeps (`0x41b068`). So while the first half stands
+the ground east of the body is its; a bolt from the west, at knee height,
+passes under the body's own box and meets the halves behind it, which is what
+the room's gun is for. The same think makes the sixth machine's wreck cost
+Boggs ten a frame for its run, with green balls at the fourth machine, which
+then stops on 5945 (`0x41b156`..`0x41b209`).
 
 Six of the eight are scenery. The two that are not are `0x4a56e8` (cel 5860) and
 `0x4a516c` (cel 5870), three thousand health each through `0x40e300(0xbb8)`, and
@@ -207,9 +240,8 @@ and 5871/5872 are never installed. A machine is intact until it is wrecked. It
 is the same shape of dead code as the wraith's `-3`, and the arithmetic holds
 for the whole domain.
 
-Measured on this page with fists alone: one half at 110 punches, the other 55
-after it, and Boggs down 144 punches later — 309 in all. With the blaster's bolt
-at a hundred a shot it is sixty into the machine and forty into Boggs.
+With the blaster's bolt at a hundred a shot it is sixty hits into the machine
+and forty into Boggs.
 
 ## A negative blow is a message, and the grip is the drawing
 
@@ -259,7 +291,7 @@ people every other frame for as long as it holds.
 Character 0's table is `0x42eda8`, index 0 being −8:
 
 ```
-  -8  0x42e781  knocked flying    4550..4558, a 0x78 shake, and NO shove
+  -8  0x42e781  knocked flying    4550..4558, a 0x78 spray, and NO shove
   -7  0x42e807  floored           940..949, and only from the ground
   -6  0x42e86d  flattened         900..903, full gravity — nothing sends it
   -5  0x42e8b3  slumped           920..922, half gravity
@@ -268,6 +300,22 @@ Character 0's table is `0x42eda8`, index 0 being −8:
   -2  0x42ea34  jolted            460..462 five times over
   -1  0x42eaaa  spun              20/21 — and it TAKES TWENTY HEALTH
 ```
+
+The 0x78 is `0x40c900`'s, not a shake: the player's own spray, `0x40cba0`'s
+sibling, `clamp(|n| / 6, 1, 8)` drops. While the tank is two thirds full and the
+figure is not negative they are sweat (`0x46bc98`, kind 3, blue 18220..), which
+vanishes as it lands; otherwise blood (`0x46bc38`, kind 2, red 18300..), which
+pools like the goo (`0x40cb3c`, `0x40c480`). Every ordinary blow throws its own
+damage's worth from the contact after the striker (`0x42ebda`, `0x42ed21`); the
+fans throw 0x78 as they kill (`0x4154d8`) and kragg's carry one red drop a frame
+(`0x441446`).
+
+On a ladder or a bar (`0x471e78`, `0x472048`) three of them install nothing.
+The grab and the jolt (`0x42e99d`, `0x42ea3c`) answer 1 and set `[0x46b1bc]`;
+an ordinary blow (`0x42ebb1`) still cries and costs its health, and sets it if
+a room holds him. `0x402fa0(2)` does the same (`0x42f363`). The ladder state
+reads the flag as forward, backward or J (`0x42ae6f`), so he hops off at the
+end of the rung; the bar never reads it, and it waits for the next ladder.
 
 Two of those differ from character 1's in more than art. Character 0 does not
 shove on −8: the ±50 against `obj+0x28` is `0x448cf4`, character 1's, and
@@ -531,7 +579,9 @@ The split (`0x424de0`) calls the class's own creator seventy pixels behind it,
 facing the other way, with the argument that starts the copy teleporting in.
 `0x41ed12` makes the one the level places the named one (`AI+4` = 1) because it
 is alone when created; every copy is lesser: `0x42503d` kills it with any blow,
-and `0x424f30` dissolves all of them as the named one's death ends. A take
+and `0x424f30` dissolves all of them as the named one's death ends — or as a
+wraith is struck by the wraith's own beam, the scepter's tag 0 (`0x424fdd`),
+which takes nothing off the one it hits. A take
 (`0x46f898`, one cel) splits three times in ten as it ends (`0x424e14`); the
 killing blow gets the nine-cel dissolve `0x46f8a8`, and nothing is left lying.
 
@@ -698,51 +748,74 @@ the next frame and sets it back to -1. Two things in the game use it — the
 blaster's muzzle, with 0xe1, and this, with 0. Colour 0 in TOWER's own palette
 is pure blue.
 
-## A grabber holds you by taking your step away
+**And the bolt strikes.** Its own think, `0x426780`, asks one thing on its first
+frame (`obj+0x42` and `obj+0x44` both 0): is its point below the player's
+(`0x42679c`)? There is no x in it, so every bolt asks it and a player who has
+climbed above the bolts' points — y 14755 — is hit wherever he stands. With the
+scepter drawn (`0x402ee0`, weapon 16) it is `0x402fa0(6)`: `0x470c40` tag 18,
+five tags of three frames in the armed state machine `0x42d2b0`, which let the
+bolt out of the rod four times — the scepter's fire function on variants 3 and
+4, free and hung 130 above him (`0x41f7e2`), with the flash in colour 5 before
+two of them — then fill the gauge to 160 (`0x42d9e0`), throw the scepter on the
+floor (`0x42da0d`) and knock him down. Anything else is `0x402fa0(7)`: the
+flash in colour 5 and `0x4721a0` tag 3, the shock and the fall — a death,
+asked about nothing, health included. The bolt holds its first cel for two frames and
+asks on both, and `0x45d090` puts the reaction on from its first frame each
+time: the charge or the shock starts over a frame late, and the shock floods a
+second frame. The life is spent once. The second character's dispatcher
+(`0x449700`) and armed machine (`0x4478b0`) do the same on its own cels.
 
-SEWER's hall of lifts is the one stretch of the game that cannot be walked.
-Fixing three defects there makes the hall crossable end to end, but also turns
-the bushes from things that DUMP you into things that PIN you, which breaks two
-earlier stretches of the same level that depend on being dumped; that change was
-reverted. The cause lies underneath all three defects.
+## A carrier holds you by writing your point, and draws you itself
 
 The bush handler is `0x43ec80..0x43f174`: one function, a switch on `obj+0x18`
-with five kinds through the table at `0x43f150`. Two details are not the
-problem. `0x43045d` is a spend rather than a rate limit — the frame a hitter
-connects, `[obj+0x1a] = 0` and the scan stops, unless the strength is `0x65` —
-and the bush re-arms every frame anyway. The re-trigger cooldown is `user+0xa`:
-`0x434540(0x28) + 0xa`, a random 10 to 49 frames, reset after every trigger of
-the PAIRED bush, and gated on the player being neither held nor already slumped.
+with five kinds through the table at `0x43f150`. `0x43045d` is a spend rather
+than a rate limit — the frame a hitter connects, `[obj+0x1a] = 0`, unless the
+strength is `0x65` — and the bush re-arms every frame anyway. The re-trigger
+cooldown is `user+0xa`: `0x434540(0x28) + 0xa`, a random 10 to 49 frames, reset
+after every trigger of the PAIRED bush, and gated on the player being neither
+held nor already slumped.
 
-The cause is a global:
+The word they all touch is a global:
 
 ```
   cmp  word ptr [0x46b1b4], 0
   je   skip
-  call 0x402980            ; -> 0x42fbd0(player), the player's own step
+  call 0x402980            ; -> 0x42fbd0(player) -> 0x40e5f0 -> 0x4026d0, the blit
 ```
 
-That shape appears thirteen times, once in each level's main loop, and
-twenty-four classes write the word. **`[0x46b1b4]` is the player-step gate.** A
-grabber in this engine does not hold you with a flag on YOU. It holds you by
-zeroing that word, every frame, so your controls do not run at all — the bush
-does it at `0x43ef0a`, in phase 2, and only once `0x402f60` says you are no
-longer hittable, which means the -5's kind-26 reaction is up. Its own
-ten-a-frame sink then carries you down, and `0x43ef28`/`0x43ef57` hand the gate
-back when the script ends.
+That shape sits in the DRAW half of each level's loop, after `0x42fc10`, and
+twenty-four classes write the word. **`[0x46b1b4]` is the player-draw gate**,
+not a step gate: the player's think (`0x402950`) runs every frame whatever it
+says. A carrier clears it because its own cels draw him — kragg's fist
+7046/7047 (`0x4413b8`), the eyeball's carry (`0x43e260`), the skeleton's
+1240s/1340s (`0x4236f8`), LAB's arm's 4500s/5900s (`0x418a1b`), the bush in
+its phase 2 (`0x43ef0a`) — and hands it back as it lets go (`0x4414ba`,
+`0x43e3a1`, `0x4237f8`, `0x418aa1`, `0x43ef28`). The arm takes it only when its
+lunge landed and its hand is within fifty of the point it aimed at, and puts
+no pose on him at all: he is let go where it held him. A carry
+holds him by writing his point every frame after his think has run, which is
+`BrainCtx.pin`; the page keeps the gate as `p.hidden`.
 
-So the dump is not the grip letting go at a height. It is a sequence: the -5
-lands, the reaction takes the player's kind to 26, the bush stops arming and
-takes the player's step away, the bush sinks with them, and the gate comes back
-wherever it left them. This page models a hold as `p.heldBy` — a latch on the
-player, released when the cel loses its strike box — which is why fixing the
-three defects produced a pin: nothing takes the player's step away, so a grab
-can only ever be a hold.
+Four carriers end by putting him in a pose of the disc's own choosing —
+`0x402fa0(mode)`, the player's pose setter (`0x42f280`, table `0x42f418` on
+`mode + 1`, every mode dropping the keys first through `0x402df0`):
 
-The fix is a port of the gate rather than another patch. One question it leaves
-that reading cannot settle: the hall wants the player left on the walkway and
-door-7 wants them dumped off it, and both come out of this one machine, so the
-difference has to be geometry and has to be measured.
+```
+  kragg     0x4413a8  ten a frame out of him and into it, fifty to its side;
+                      0x4414c3  0x402fa0(2), the knockdown, thrown on ten
+  eyeball   0x43e259  0x402fa0(-1), the spawn pose 0x471b18, every frame,
+                      120 under it; 0x43e2f5 the shake, ten a frame;
+                      0x43e38e  0x402fa0(2)
+  skeleton  0x423756  facing it, fifty-one in front, thirty-eight up, five a frame;
+                      0x423801  0x402fa0(2), a hundred on and thirty up
+  brain     0x414f64 / 0x414fd9  0x402fa0(4), the judder 0x471fc8 — no carry
+```
+
+The judder is kind 9, which is also the −2 code's reaction, and kind 9 is the
+eyeball's swoop's only door (`0x43e06c`): one eye's glob, or a brain's
+hypnosis, opens another eye's carry. None of the four can be struggled out of
+by a key — the keys are dropped every frame of the eyeball's, and the others
+end on their own scripts.
 
 ## Twenty-six classes, one brain
 
@@ -961,7 +1034,7 @@ eleven of them — eight creatures, one prop and two things in the air:
   0x4547b3  initwered   hit 0x454790   burns, health to 0       Foe.burns + weredGate
   0x4550d3  initdog     hit 0x4550b0   its death, and its 200   Foe.burns (dies)
   0x45631e  initwbooly  hit 0x456310   catches, nothing else    Foe.burns
-  0x441d30  initkragg   hit 0x441cf0   state 9                  Foe.burns + kraggReacts + kraggGate
+  0x441d30  initkragg   hit 0x441cf0   state 9, and no flame    Foe.burns (noFlame) + kraggReacts + kraggGate
   0x44fe89  initmailbox hit 0x44fe80   a late flame, no dent    Foe.burns (late)
   0x455763  fireball    hit 0x455730   stops, hops, is removed  CastKit.onCode (wbooly.ts)
   0x452fcc  MOLITOV's   hit 0x452f80   burns and bursts         CastKit.onCode (werec.ts)
@@ -982,6 +1055,22 @@ page's own burn. What `0x441ef0` then does with a blow on the ground form is
 the class's `pick`: `[0x473de4]` counts the blows, the first three take
 `0x473ba8`, and the fourth snaps it round (`0x473bd8` tag mirror + 2) if the
 player is behind it or swings (`0x473cc8` tag 1) if not.
+
+**A handler with no sign test does not survive a −9.** One that neither reads
+the code nor turns away a negative strength hands it to `0x42f910`, and
+`0x42f91f` sends any strength outside 1..0x65 to `0x408f80` — the engine's
+fatal error: every path meets at `0x40915d`, `MessageBoxA` (`0x409239`), then
+`ExitProcess(0)` (`0x409241`). The hardcore (`0x43d250`) and ghengis
+(`0x422ad0`) are two such handlers, and neither meets a −9 in a game started
+fresh: SERVICE is not a fourth level and chapter two places no flamer, and
+chapter three's runner zeroes every round and hands over the scepter on the way
+in (`0x41f67b`). On the two fourth levels that do carry a code — PLAYGR by the
+flamer brought from WOODS, ARCADE by its flares — everything one can reach reads
+it or turns it away: the dog, the booly and its fireball, kragg, and the
+sprinkler columns (`0x440a80`) and probes (`0x410770`), whose handlers are
+`xor ax, ax`. Kragg's own shot has no handler at all (`0x442190`'s class leaves
+`obj+0x12` at the allocator's 0, `0x42f594`) and no body to be struck on. The
+page takes nothing from a code a class does not read.
 
 The dog's arm installs `0x478208`, which is its death, plays its death sound
 0x18 and pays the death's 200 at `0x455115` — its death path at `0x4551c9`,
@@ -1016,7 +1105,7 @@ through `0x40f090`, `0x452ef0` shaking the screen by how close the player is
 (`0x4307c0` 3, 2 or 1, with a `0x40e4c0` flash at the closest), and the burst
 `0x477c60`; the −9 arm lights a flame first. `WEREC_SHOT` in `brains/werec.ts`
 carries both as its `onCode`, and `CastKit.bang` carries the sound and the flash
-for every burst of the shot, whatever set it off; the page has no screen shake.
+for every burst of the shot, whatever set it off, and its `shakes` the three bands.
 `0x65` is the one strength `0x430443` leaves on a hitter after a hit, so a burst
 goes on striking for as long as its cels carry a box (7000..7002), and
 `chainCasts` in `walk.ts` runs it against the other casts. `0x4303b3` passes over
@@ -1031,10 +1120,23 @@ and WOODS. A flamer carried in reaches nothing either: STREETS' book has none
 of the stream's 9500s, whose strike boxes are what a stream hits with.
 
 `Reaction` in `brains/kit.ts` is the seam these three reactions need: a think for the
-states the PAGE owns. It is deliberately not a brain — it returns nothing and
-installs nothing — and it is what lets `initwerec` fire a shot a frame out of a
-corpse, `initvpriest` throw twelve bats and wait out of sight until half of them
-are dead, and `initkragg` drag itself onto a sprinkler.
+states the PAGE owns. It is deliberately not a brain — it installs nothing
+itself — and it is what lets `initwerec` fire a shot a frame out of a corpse,
+`initvpriest` throw twelve bats and wait out of sight until half of them are
+dead, and `initkragg` drag itself onto a sprinkler. The one thing it may answer
+is a script that ENDS a flinch: a think's preamble overriding the state the
+handler installed, which is the gang's gloat going on over state 10 the frame
+the player goes down (`0x439300` and its three siblings).
+
+And a reaction that is itself a state of the class's machine says so with
+`FoeAnim.decides`: when it ends, the brain is handed that kind with its script
+finished and runs on the same frame, because that is the frame `obj+0x46` is
+set and the think installs what follows (the wraith's `0x424e05`, Ghengis'
+`0x422a25`, the TCop's `0x41440e`, kragg's states 13 and 15, the punk's take
+and burn at `0x44eeb5` and `0x44eda3`, LINK's burn at `0x44f74c`, the dog's
+`0x454ff3`, the hardcore's `0x43d062`, the eyeball's `0x43dfee` and the
+skeleton's `0x423965`). A stand-in cel
+between the two would put the next script a frame late.
 
 ### The nameless handler is the crow's
 

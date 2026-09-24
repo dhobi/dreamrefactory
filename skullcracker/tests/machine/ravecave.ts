@@ -4,8 +4,9 @@
  *   npx tsx tools/runmachine.mts ravecave      (from skullcracker/)
  *
  * Chapter three's third stage stores the whole census as its allowance
- * (`0x4218ca`), so the goal is open from the first frame and everything in the
- * level is optional. What is in it that is new:
+ * (`0x4218ca`), so no count is asked for — but its end test asks for the
+ * wraith instead: `0x4219e5` reads `[0x46ece0]` and nothing else, and only the
+ * named wraith's fatal blow writes it (`0x4250eb`). What is in it that is new:
  *
  *   - **Igor** (`0x41ee40`), three of them and all three here. Two hundred
  *     health, 350 points, and a retreat script — `0x46fea0`, five records whose
@@ -110,13 +111,26 @@ const machines = (): void => {
   wraith(lesser, f, 4, k);
   if (lesser.script !== 1) fail(`a lesser wraith does not split (AI+4 clear); went to kind ${lesser.script}`);
 
-  // `0x42503d` — any blow ends a lesser one, and the named one takes it whole
+  // `0x42503d` — any blow ends a lesser one, and the named one takes it whole;
+  // the lesser one's is still sprayed (`0x425018`) and answered 1 (`0x425064`)
   const struck = one(1);
   struck.decisions = 0;
-  if (wraithGate(struck, f, { damage: 40, code: 0 }) !== null || struck.state !== "dead")
-    fail(`0x42503d sends a lesser wraith straight to its death`);
-  if (!wraithGate(one(1), f, { damage: 40, code: 0 }))
+  const lesserBlow = wraithGate(struck, f, { damage: 40, code: 0, by: { player: true } });
+  if (!lesserBlow?.still || !lesserBlow.quiet || !lesserBlow.spare || struck.state !== "dead")
+    fail(`0x42503d sends a lesser wraith straight to its death, and the blow goes on still, quiet and unsubtracted; got ${JSON.stringify(lesserBlow)}`);
+  const named = wraithGate(one(1), f, { damage: 40, code: 0, by: { player: true } });
+  if (!named || named.still)
     fail(`the named wraith's blow goes on to the subtraction`);
+  // `0x424fdd` — its own beam (the scepter's tag 0) takes nothing and sweeps
+  // every lesser one away through `0x424f30`
+  const swept = one(1);
+  swept.decisions = 0;
+  swept.side = 0;
+  const beamed = one(1);
+  if (wraithGate(beamed, f, { damage: 100, code: 0, by: { kit: WRAITH_BEAM } }) !== null || beamed.hp !== one(1).hp)
+    fail(`0x424fdd: the wraith's own beam lands as nothing on the one it hits`);
+  wraith(swept, f, 12, k);
+  if (swept.state !== "dead") fail(`0x424ff7: the beam's 0x424f30 dissolves every lesser wraith; one is ${swept.state}`);
   if (f.flinch?.[0].cels.join() !== "3243" || f.death?.cels[0] !== 3200 || f.linger !== 0)
     fail(`0x46f898 is the take and 0x46f8a8 the death, and no body is left`);
   ok(
@@ -207,8 +221,9 @@ if (game.mission().kill !== 0 || game.stats.census !== 4)
   fail(`three Igors and one wraith count and its 27 bats do not; the census is kill ${game.mission().kill} of ${game.stats.census}`);
 if (game.stats.census - game.stats.allowance !== 0)
   fail(`a share of nothing leaves the whole census standing: allowance ${game.stats.allowance} of ${game.stats.census}`);
-if (!game.goalReady()) fail(`with nothing to kill the goal is open from the first frame (0x4218ca)`);
-ok(`RAVECAVE is four regions, a census of four, and a level that asks for no kills`);
+if (game.goalReady() || game.waitsFor() !== "the wraith")
+  fail(`no count is asked for, but 0x4219e5 waits for [0x46ece0] — the goal is ${game.goalReady() ? "open" : "shut"}, waiting for ${game.waitsFor()}`);
+ok(`RAVECAVE is four regions, a census of four, and a level that asks for no kills — only the wraith`);
 
 // 2. its own clock — 2500, out of the timer record at x7914
 if (game.stats.clockFull !== 2500) fail(`RAVECAVE's timer record carries 2500; the clock is full at ${game.stats.clockFull}`);
@@ -248,6 +263,29 @@ if (igorDeath.length ? igorDeath.some((c) => c < 3140 || c > 3145) : !fell.lengt
 if (fell.some((c) => c !== 3100 && (c < 3140 || c > 3145))) fail(`0x46ff98 is 3100 and then 3140..3145; the fall showed ${fell.join(" ")}`);
 ok(`...its take is ${igorTake.join("/")} and its death ${igorDeath.length ? igorDeath.sort().join(" ") : `a fall, ${fell.sort().join(" ")}`}`);
 
+// ...and what an Igor leaves: its HEAD, rolling. `0x425629` calls `0x4208e0`
+// in mode 1 as the death's tag 0 ends — thirty in front, `vy -12`, ten a frame
+// forwards — and the head plays `0x46fa68` tag 1, 3146..3148 (see `HEAD` in
+// props.ts)
+await go(9080);
+h.frame(9);
+{
+  const igor = nearest("initigor")!;
+  game.killFoe(igor, FOES.initigor);
+  if (h.until(() => game.heads.length > 0, 16) < 0) fail(`0x425679 sheds a head as the death's tag 0 ends`);
+  const head = game.heads[0];
+  const at = game.foeAnchor(igor, game.level!)!;
+  if (head.mode !== 1 || head.vx !== 10 * igor.facing || Math.round(head.x) !== Math.round(at.x + 30 * igor.facing))
+    fail(`0x425639: mode 1, thirty in front and ten a frame forwards; mode ${head.mode}, vx ${head.vx}, x${head.x} (point x${at.x})`);
+  const cels = new Set<number>();
+  for (let i = 0; i < 12 && game.heads.includes(head); i++) {
+    h.frame();
+    cels.add(game.headCel(head));
+  }
+  if ([...cels].some((c) => c < 3146 || c > 3148)) fail(`0x46fa68 tag 1 is 3146..3148; it showed ${[...cels].join(" ")}`);
+  ok(`a felled Igor sheds its head thirty in front, rolling on ${[...cels].sort().join(" ")}`);
+}
+
 // 4. the wraith — seven hundred, and nothing for it
 await go(13000);
 h.frame(9);
@@ -261,6 +299,14 @@ const wraithPay = fight("initwraith", 2000);
 if (!seen.has("initwraith dead")) fail(`never felled the wraith`);
 if (wraithPay !== 0) fail(`0x424f80 pays nothing at all; the score moved by ${wraithPay}`);
 ok(`the wraith is seven hundred health and pays nothing — the only class in the game that does`);
+if (!game.goalReady()) fail(`the named wraith's fall writes [0x46ece0] (0x4250eb), which is all 0x4219e5 asks; the goal is still shut`);
+ok(`...and its fall is what opens the goal`);
+// ...and takes every lesser wraith with it, in whatever room it is
+// (`0x424ed5` → `0x424f30`), once its own nine cels have played
+h.frame(30);
+const lesser = game.level!.spawned.flat().filter((e) => e.kind === "initwraith" && e.state !== "dead");
+if (lesser.length) fail(`0x424f30 dissolves every lesser wraith on the class list; ${lesser.length} still stand, at ${lesser.map((e) => Math.round(e.x)).join(", ")}`);
+ok(`...and no lesser wraith outlives it, in this room or any other`);
 /**
  * ...and the two reactions are the right way round: `0x4250fa` installs
  * `0x46f898`, cel 3243 alone, for a blow it survives, and `0x4250d9` the
@@ -374,5 +420,27 @@ for (let i = 0; i < 110; i++) {
 }
 if (!hovered) fail(`inside sixty it should hover, or claw when level with you (0x424bd1)`);
 ok(`...and inside sixty it hovers or claws, and takes hold of nothing — 0x4248ad writes 100 back`);
+
+// its take is state 7, and `0x424e05` decides on `obj+0x46` — the frame the
+// one cel's four frames end, the hover (or the split) going on that frame
+{
+  await go(13000);
+  h.frame(9);
+  const w = nearest("initwraith")!;
+  const take = FOES.initwraith.flinch![0];
+  w.state = "flinch";
+  w.anim = take;
+  w.clock = 0;
+  w.script = take.kind;
+  w.tag = take.tag;
+  let f = 0;
+  while (w.state === "flinch" && w.anim === take && f < 20) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || (w.anim !== WRAITH.hover && w.anim !== WRAITH.split))
+    fail(`the take is ${take.cels.length * take.hold} frames and then the hover or the split; ${f} frames, then ${w.anim.from}`);
+  ok(`its take hands to ${w.anim === WRAITH.split ? "the split" : "the hover"} after ${f} frames, the frame the script ends (0x424e05)`);
+}
 
 pass("RAVECAVE's Igors, its one wraith and its scepter are all where the records put them");

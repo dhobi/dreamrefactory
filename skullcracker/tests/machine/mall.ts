@@ -25,7 +25,9 @@
  */
 import { CHEATS } from "../../src/cheats";
 import { FOES } from "../../src/foes";
-import { type Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, type BrainCtx, type Enemy } from "../../src/brains/kit";
+import { maskboyReacts } from "../../src/brains/maskboy";
+import { BATBOY } from "../../src/brains/batboy";
 import { fail, headless, ok, pass } from "./harness";
 
 const h = await headless("level=5");
@@ -249,6 +251,25 @@ if (!cans.has(8505)) fail(`four cans in and it should be showing the emptied 850
 ok(`a Coke machine rocks through ${cans.size} of its own cels and empties on 8505`);
 
 /**
+ * ...and only the PLAYER can rock one: `0x43b660` compares the striker with
+ * `[0x4ac3d4]` before it weighs anything. A flare's blow, or anything else's,
+ * is turned away unheard and uncounted.
+ */
+await go("&x=700");
+h.frame(8);
+{
+  const m = nearestOf("initcoke")!;
+  const a = game.foeAnchor(m, game.level!)!;
+  const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+  const dents = m.dents;
+  game.strikeFoe(m, 50, { dx: 20, dy: 0 }, 1, a.y, box, 0, undefined, { mass: 5, vx: 40, vy: 0 });
+  if (m.dents !== dents || m.state !== "gait") fail(`0x43b660: a blow that is not the player's is turned away; dents ${dents} -> ${m.dents}, ${m.state}`);
+  game.strikeFoe(m, 50, { dx: 20, dy: 0 }, 1, a.y, box, 0);
+  if (m.dents !== dents + 1) fail(`...and the player's own lands: dents ${dents} -> ${m.dents}`);
+  ok(`a flare's blow on a Coke machine is turned away, and the player's lands (0x43b660)`);
+}
+
+/**
  * ...and the four CANS it was holding, which is what emptying it means.
  *
  * `0x43b6f5` shakes one loose on every third counted blow and `0x43b71a` stops
@@ -447,6 +468,74 @@ ok(`ran all three rooms to the goal at x ${game.p.x}, y ${game.p.y}, on ${jumps}
   }
   if (!offRamp) fail(`no roach ran off the ramp's end in 300 frames`);
   ok(`the roaches stand on floor or fall to it, ${offRamp} roach-frames of them in the air off the ramp`);
+}
+
+// the gang's hit reactions. State 10 of all four waits for `obj+0x2e` before
+// the run goes back on (`0x4398e7`, `0x438e69`, `0x438169`, `0x43a3b8`), so one
+// knocked up holds its body-less flinch cel until it lands
+{
+  await go();
+  const at = game.level!.spawned.flat().find((e) => e.kind === "initbatboy");
+  if (!at) fail(`MALL places batboys`);
+  await go(`&x=${Math.round(at.x) - 300}`);
+  const bat = game
+    .spawnedHere()
+    .filter((e) => e.kind === "initbatboy")
+    .sort((a, b) => Math.abs(a.x - at.x) - Math.abs(b.x - at.x))[0];
+  bat.asleep = false;
+  bat.state = "flinch";
+  bat.anim = FOES.initbatboy.flinch![0];
+  bat.clock = 0;
+  bat.vx = 3 * TICK_SCALE;
+  bat.vy = -60 * TICK_SCALE;
+  let aloft = 0;
+  for (let f = 0; f < 60 && bat.state === "flinch"; f++) {
+    h.frame();
+    const up = bat.vy !== 0 || bat.lastBase !== undefined;
+    if (bat.state === "flinch" && up) aloft += 1;
+    if (bat.state !== "flinch" && up) fail(`the flinch let go in the air, ${aloft} frames up`);
+  }
+  if (aloft < 3 || (bat.state as string) !== "gait" || bat.anim !== FOES.initbatboy.gait)
+    fail(`held ${aloft} frames aloft, then the run (0x4398ee); it is ${bat.state} on ${bat.anim.from}`);
+  if (game.celRec(game.level!.sbk, 1920)?.body) fail(`the flinch cel 1920 carries no body box, so nothing reaches it in the air`);
+  ok(`a batboy knocked up holds its flinch ${aloft} frames until it lands, and comes down running`);
+
+  // ...unless the player goes down: the preamble (`0x439300`) exempts 8, 1
+  // and 9 and not 10, so the gloat goes on over the flinch that frame, in the
+  // air or not
+  bat.state = "flinch";
+  bat.anim = FOES.initbatboy.flinch![0];
+  bat.clock = 0;
+  bat.vx = 3 * TICK_SCALE;
+  bat.vy = -60 * TICK_SCALE;
+  h.frame(2);
+  if (bat.state !== "flinch") fail(`the batboy should still be up in its flinch`);
+  const act = game.p.act;
+  game.p.act = "dying";
+  h.frame();
+  const gloated = (bat.state as string) === "gait" && bat.anim === BATBOY.gloat && bat.script === 8;
+  game.p.act = act;
+  if (!gloated) fail(`a downed player puts the gloat over the flinch (0x439316); it is ${bat.state} on ${bat.anim.from}`);
+  ok(`and the frame the player goes down, the gloat takes over its flinch in mid-air`);
+
+  // the knifeboy's own class `[0x4740a8]` is on all four lists (`0x439a03`,
+  // `0x438f83`, `0x4382e3`, `0x43a603`), and the corpse count starts at the
+  // death's first frame (`0x439849`): five frames of death, then the count
+  if (!game.GANG.kinds.includes("initknifeboy")) fail(`a knifeboy's own blow is turned away by the gang`);
+  for (const kind of ["initbatboy", "initmaskboy", "initknotboy", "initknifeboy"])
+    if (FOES[kind].lingerPlus !== 1 - 5) fail(`${kind}'s AI+0x36 counts from the death's first frame`);
+  // `0x438841` skips the roller's roll in state 9 only — the knockdown rolls it
+  let built = 0;
+  const mask = { ...bat, kind: "initmaskboy", state: "flinch", x: 0, clock: 0 } as Enemy;
+  const k = {
+    roll: () => 1,
+    player: { x: 100, y: 0 },
+    anchorX: (e: Enemy) => e.x,
+    roller: () => (built += 1),
+  } as unknown as BrainCtx;
+  maskboyReacts(mask, FOES.initmaskboy, 1, k);
+  if (built !== 1) fail(`the maskboy rolls for its roller while knocked down`);
+  ok(`the knifeboy is on the gang's list, the bodies count from the death's first frame, and a knocked-down maskboy still rolls`);
 }
 
 pass(`MALL's three regions hand over on foot, and its goal can be reached`);

@@ -123,6 +123,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
+import type { FoeAnim } from "../foes";
 
 /**
  * The hit reactions, 9 and 10, and the one thing each does that the page's own
@@ -132,7 +133,8 @@ import {
  *   instructions long. It waits on `obj+0x2e` — back on the ground — and then
  *   installs the RUN, `0x474438` tag 4, not a stance. So a batboy knocked into
  *   the air comes down already charging, and it is the landing rather than the
- *   animation ending that releases it.
+ *   animation ending that releases it: {@link Foe.gait} is that run, and
+ *   {@link gangCorpse} holds the flinch while it is still in the air.
  * - **9**, the death (`0x474528`, cels 1920..1924): `0x439837` sets
  *   `obj+0x10 = -20` — the floor offset, so the corpse floats twenty pixels off
  *   whatever it fell on — counts `AI+0x36` down from the `[0x46b204]` the hit
@@ -143,8 +145,8 @@ import {
  *
  * Also in the handler and not in any state: `0x439a4a` asks whether the thing
  * that hit it belongs to the goop class `[0x472560]` and if so **adds 60** to
- * `AI+0`, clamps to `0x40e300(0x19)`, plays 3 and returns without spraying. MALL
- * places no goop.
+ * `AI+0`, clamps to `0x40e300(0x19)`, plays 3 and returns without spraying.
+ * MALL places no goop; SERVICE does, and `feedTheGang` is that branch.
  */
 const NOT_HERE = "0x4398e7, 0x439837, 0x439980, 0x439a4a" as const;
 
@@ -175,7 +177,7 @@ const NOT_HERE = "0x4398e7, 0x439837, 0x439980, 0x439a4a" as const;
  * `rand(2)+5`. The animation then finishes and it goes back to the run.
  *
  * All of it is already {@link Foe.lever} — `dir: 0`, `at: 5`, `reachPx: 37`,
- * `sound: [5, 6]` and `0x4743b8 tag 1` as its animation — and `stepFight`
+ * `sound: [5, 6]`, `found: 0xb` and `0x4743b8 tag 1` as its animation — and `stepFight`
  * short-circuits the brain entirely while a switch is left in the patch. Two
  * owners for one animation is the thing this split is for, so state 6 is not
  * implemented here.
@@ -345,12 +347,52 @@ export function turn(e: Enemy): void {
  * ...and it lies lower. The death is state 9, and its tag-0 handler writes
  * `obj+0x10 = -20` on every frame it runs (`0x439849` here, `0x438dc7` mask,
  * `0x4380cb` knot, `0x43a31a` knife) over the −6 the class init gave it.
+ *
+ * And the flinch is held until it LANDS. State 10 is the same two
+ * instructions in all four thinks — `cmp word ptr [esi+0x2e], 0; je` before
+ * the run goes back on (`0x4398e7` here, `0x438e69` mask, `0x438169` knot,
+ * `0x43a3b8` knife) — so one knocked into the air holds its one flinch cel
+ * until the mover says it is down. That cel carries no body box (1920, 1820,
+ * 1960, 1860), so for the whole flight nothing can hit it (`0x4303b3`). The
+ * page ends a flinch when its animation does; the clock is held on the last
+ * frame while the thing is still in flight — moving vertically, or at the top
+ * of the arc with its last airborne foot still kept ({@link Enemy.lastBase},
+ * which only a landing clears).
  */
-export const gangCorpse: Reaction = (e) => {
+export const gangCorpse: Reaction = (e, _foe, run) => {
+  if (e.state === "flinch") {
+    if (e.clock >= run && (e.vy !== 0 || e.lastBase !== undefined)) e.clock = run - 1;
+    return;
+  }
   if (e.state !== "dead") return;
   e.floor = -20;
   if (e.vy === 0) e.vx = 0;
 };
+
+/**
+ * The preamble's gloat, `0x439316`: `0x474340` tag 0, turned to face him —
+ * `0x439326`, and only if he is behind it. The brain installs it over any state
+ * but 1, 8 and 9, and {@link gangReacts} over the flinch, state 10, which the
+ * preamble does not exempt.
+ */
+export function batboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  if (k.track(e, BATBOY.bands).forward < 0) turn(e);
+  return BATBOY.gloat;
+}
+
+/**
+ * The gang's reaction: {@link gangCorpse}, and the think's preamble reaching
+ * into the flinch. All four exempt only states 8, 1 and 9 from the gloat — the
+ * knotboy 5 as well — at `0x439300`, `0x43880f`, `0x437bcd` and `0x439d4d`, so
+ * state 10 is taken over the frame `0x402f60` says the player is down, in the
+ * air or not. `down` is the class's own preamble.
+ */
+export function gangReacts(down: (e: Enemy, k: BrainCtx) => FoeAnim): Reaction {
+  return (e, foe, run, k) => {
+    if (e.state === "flinch" && k.player.down) return down(e, k);
+    return gangCorpse(e, foe, run, k);
+  };
+}
 
 /** `0x4394d9` — still sliding this fast and the poise does not restart the run */
 const COASTING = 0x14;
@@ -388,9 +430,7 @@ export const batboy: Brain = (e, foe, run, k) => {
    * why it does nothing that frame.
    */
   if (k.player.down && now !== 1 && now !== 8 && now !== 9) {
-    install(e, BATBOY.gloat);
-    // `0x439326` — and only then, and only if he is behind it
-    if (t.forward < 0) turn(e);
+    install(e, batboyDown(e, k));
     now = 8;
   }
   switch (now) {

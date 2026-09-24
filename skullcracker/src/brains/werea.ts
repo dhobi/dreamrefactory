@@ -30,9 +30,9 @@
  * on its feet, and those are here. The last five are the hit reactions: the
  * page plays their animations through {@link Foe.flinch}, {@link Foe.pick},
  * {@link Foe.burns} and {@link Foe.death}, and each one hands back to this
- * machine through {@link FoeAnim.resume} — the flinch as kind 11, the burn as
- * kind 8, the get-up as the taunt — so the choice SC.EXE makes as each one ends
- * is made here. What happens DURING the burn is {@link wereaReacts}.
+ * machine the frame it ends — the flinch as kind 11 and the burn as kind 8
+ * ({@link FoeAnim.decides}), the get-up as the taunt ({@link FoeAnim.resume}) —
+ * so the choice SC.EXE makes as each one ends is made here. What happens DURING the burn is {@link wereaReacts}.
  *
  * ## `AI+0` is the health
  *

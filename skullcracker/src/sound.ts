@@ -55,11 +55,14 @@
  *
  * So a sound fades with the distance from the middle of the screen and is silent
  * three quarters of a screen-width past its edge. {@link REACH} and
- * {@link Sounds.place} are those four lines.
+ * {@link placeAt} are those four lines, and {@link sides} is what the mixer
+ * makes of the two numbers.
  *
  * `0x40f090` is the same function with one call different at the end (`0x427d20`
- * where `0x40ef30` calls `0x427b20`) — both deaths use it and every other sound
- * uses the first, which is why they are not told apart here.
+ * where `0x40ef30` calls `0x427b20`), and that call is the whole difference:
+ * they are different ways onto the mixer's channels, and there is a third,
+ * `0x40f110`, whose tail is `0x427c20` — see {@link Mixer} and
+ * {@link SoundWay}.
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { readBankTables, type BankTables } from "@dreamfactory/engine/df/banks";
@@ -248,6 +251,12 @@ export const FOE_SFX = {
   kraggFlare: 0x13,
   kraggLoop: 0x17,
   kraggScald: 0x14,
+  /**
+   * `0x440c81`..`0x440ca2` — `#0065 kragg flo[ats]`, armed to loop and played
+   * every frame it is on the wing and over no sprinkler; the fall lets it go
+   * (`0x440c4b`, `0x441e34`)
+   */
+  kraggFlies: 0x17,
   kraggRise: 0x18,
   kraggDeath: 0x1a,
   /**
@@ -369,6 +378,250 @@ interface Bank {
 const QUEUE_AHEAD = 0.75;
 
 /**
+ * A sound the mixer has started, as far as the mixer needs to know it: how to
+ * cut it short.
+ */
+export interface Voice {
+  stop(): void;
+  /** the channel's loop, on or off — `0x4570c0`, see {@link Mixer.loop} */
+  setLoop?(on: boolean): void;
+  /** its two gains, while it plays — `0x457110`, see {@link Mixer.place} */
+  setGains?(at: { left: number; right: number }): void;
+}
+
+/**
+ * The engine's mixer — four channels, and what gets onto them.
+ *
+ * `0x427890`'s loop and the slots it walks (`0x4a6778 + channel × 106`, a
+ * copy of the bank record each) say there are four. Channel 3 is the theme's:
+ * `0x40f190` hands the level's theme bank to `0x427a50`, which chains its bars
+ * and queues them on 3 (`0x427ac8`) and nothing else ever plays there — this
+ * page's {@link Sounds.pump}. Channels 0, 1 and 2 are the one-shots', and the
+ * two calls every handler makes choose between them:
+ *
+ * - **`0x40f090` → `0x427d20`: channel 0, unconditionally.** It copies the
+ *   record into slot 0 (`0x427d46`) and starts it there, whatever channel 0
+ *   was playing. The lead — most deaths, the bosses' cues, the voices.
+ * - **`0x40ef30` → `0x427b20`: channel 1 or 2, by priority.** A record's
+ *   priority is `(bank << 16) | (index + 1)`, written as the bank is opened
+ *   (`0x40ed63`..`0x40ed6d`); `bank` is the open's third argument, 1 for a
+ *   chapter's effects (`0x41f2ec`), 2 for the character's own (`0x4488c6`),
+ *   0 for a theme. `0x427890` first puts any channel that has finished back to
+ *   priority 0 (`0x457070`, its queue empty). Then, with the lower of the two
+ *   channels called L and the other H (`0x427b54`):
+ *   - L's priority at or above the new one: refused (`0x427b5f`, `0x427bc2`);
+ *   - H's priority EQUAL to the new one: refused (`0x427b6b`, `0x427bca`) —
+ *     and since no two records share a priority, that is the same sound
+ *     still playing, so a sound is never doubled and never restarted;
+ *   - otherwise it goes onto L.
+ * - **`0x40f110` → `0x427c20`: channel 1 or 2, and it may start again.** The
+ *   same two channels and the same L and H, but a tie is let through: refused
+ *   only when L's priority is strictly above the new one (`0x427c65`,
+ *   `0x427c7b`); if H is already playing this very sound it goes onto H — the
+ *   sound starts over where it was (`0x427c71`, `0x427c87`) — and otherwise
+ *   onto L. Six sites use it: the hatch of the CHOPPER, the wraith's beam,
+ *   Boggs struck by a bolt, the player's own −1, and the probe's (`0x410109`).
+ *
+ * Whatever a channel was playing when something is put on it is cut there and
+ * then: `0x456e90` frees the channel's queue (`0x456f00`) before it queues the
+ * new record.
+ */
+export class Mixer {
+  private readonly slots = [0, 1, 2].map(() => ({
+    prio: 0,
+    until: 0,
+    voice: null as Voice | null,
+    /** when it started and how long one pass of it is, for a loop let go */
+    start: 0,
+    secs: 0,
+  }));
+
+  /**
+   * Put one sound on by one of the three calls ({@link SoundWay}) and answer
+   * the channel it went onto, or −1 where the mixer turned it away. `start` is
+   * only called for a sound that plays.
+   */
+  play(
+    way: SoundWay,
+    prio: number,
+    now: number,
+    secs: number,
+    start: () => Voice | null,
+    /** the record's loop word, `+0x33`, which the play hands the channel */
+    loops = false,
+  ): number {
+    // `0x427890` — a channel whose sound has ended is back to nothing
+    for (const s of this.slots) if (now >= s.until) s.prio = 0;
+    let ch = 0;
+    if (way !== "lead") {
+      // `0x427b54` / `0x427c54`: L is channel 1 only while it holds strictly less
+      const [l, h] = this.slots[1].prio < this.slots[2].prio ? [1, 2] : [2, 1];
+      if (way === "mix") {
+        if (this.slots[l].prio >= prio || this.slots[h].prio === prio) return -1;
+        ch = l;
+      } else {
+        if (this.slots[l].prio > prio) return -1;
+        ch = this.slots[h].prio === prio ? h : l;
+      }
+    }
+    const s = this.slots[ch];
+    // `0x456f00` — cut, not faded
+    s.voice?.stop();
+    s.voice = start();
+    s.prio = prio;
+    s.start = now;
+    s.secs = secs;
+    // `0x427b9a` / `0x427d69` — `0x4570c0(channel, record+0x33)`: a looping
+    // record never empties its channel, so `0x427890` never frees it
+    s.until = loops ? Infinity : now + secs;
+    if (loops) s.voice?.setLoop?.(true);
+    return ch;
+  }
+
+  /**
+   * `0x428000` — a record's loop word changed, and any channel playing that
+   * record now loops or stops looping (`0x42801a`..`0x428059`).
+   *
+   * What the flag does is the channel's: `0x4570c0` leaves a request that the
+   * mixer's service loop hands `0x457da0` (`0x4578a1`), which sets the
+   * channel's loop word (`+0x2a`) and remembers where its queue began
+   * (`+0x2e`); the queue walk then goes back to that start instead of running
+   * dry (`0x457f7b`..`0x457f8f`). Let go, the pass in hand plays out and the
+   * channel empties.
+   */
+  loop(prio: number, on: boolean, now: number): void {
+    for (const s of this.slots) {
+      if (s.prio !== prio || now >= s.until) continue;
+      s.voice?.setLoop?.(on);
+      if (on) s.until = Infinity;
+      else if (s.until === Infinity)
+        s.until = now + (s.secs - ((now - s.start) % s.secs || 0));
+    }
+  }
+
+  /**
+   * `0x427da0` / `0x427ed0` — a record's volume or pan set again, and every
+   * channel playing that record takes the new gains at once
+   * (`0x427e4b`..`0x427e7e`). Both run at the top of every play call, before
+   * the channels are argued over, so a request the mixer turns away still
+   * moves the sound it would have been; and `0x40eee0`'s volume of 0 is how a
+   * sound is silenced where it plays.
+   */
+  place(prio: number, at: { left: number; right: number }, now: number): void {
+    for (const s of this.slots) if (s.prio === prio && now < s.until) s.voice?.setGains?.(at);
+  }
+
+  /** what each one-shot channel holds now — for whoever wants to look */
+  held(now: number): number[] {
+    return this.slots.map((s) => (now >= s.until ? 0 : s.prio));
+  }
+
+  /** a level change: nothing carries over */
+  clear(): void {
+    for (const s of this.slots) {
+      s.voice?.stop();
+      s.voice = null;
+      s.prio = 0;
+      s.until = 0;
+    }
+  }
+}
+
+/**
+ * Which of the engine's three one-shot calls a sound goes through — the same
+ * `(bank, index, point)`, the same `0x40efb0` placing, and a different tail:
+ *
+ * - `"mix"`, `0x40ef30` → `0x427b20` — the common one;
+ * - `"lead"`, `0x40f090` → `0x427d20` — channel 0, whatever it held;
+ * - `"renew"`, `0x40f110` → `0x427c20` — channels 1 and 2, restarting a
+ *   sound that is already playing rather than refusing it.
+ */
+export type SoundWay = "mix" | "lead" | "renew";
+
+/** `0x40ea80`'s third argument, which is the high word of every record's priority */
+export const BANK_RANK = { theme: 0, chapter: 1, own: 2 } as const;
+
+/** `0x40ed63`..`0x40ed6d` — a record's priority */
+export const priorityOf = (rank: number, index: number): number => (rank << 16) | (index + 1);
+
+/**
+ * `0x40efb0` — a world offset from the middle of the view turned into the
+ * engine's own two numbers, or null where it plays nothing.
+ *
+ * Out past 768 on either axis is 0 and silent (`0x40efdc`..`0x40f02d`). The
+ * volume is `128 + (|dx| + |dy|) * 128 / -768`, the divide truncating toward
+ * zero (`0x40f06f`..`0x40f07d`), and every caller skips a volume of one or less
+ * (`0x40ef65`: `cmp ax, 1; jle`). The pan is `(dx + 768) * 128 / 1536`
+ * (`0x40f03a`..`0x40f04e`): 0 at the far left, **64** in the middle, 128 at the
+ * far right.
+ */
+export function placeAt(dx: number, dy: number): { volume: number; pan: number } | null {
+  if (Math.abs(dx) > REACH.span || Math.abs(dy) > REACH.span) return null;
+  const volume = 128 - Math.floor(((Math.abs(dx) + Math.abs(dy)) * 128) / REACH.span);
+  if (volume <= 1) return null;
+  const pan = Math.trunc(((Math.trunc(dx) + REACH.span) * 128) / (2 * REACH.span));
+  return { volume, pan };
+}
+
+/**
+ * What a volume and a pan come out of the two speakers as — linear gains,
+ * left and right.
+ *
+ * `0x427da0` (volume) and `0x427ed0` (pan) both work out the same two figures,
+ * with `[0x46a0d0]` = 1/255:
+ *
+ * ```
+ *   first  = volume/255 * (255 - pan)/255
+ *   second = volume/255 * pan/255
+ * ```
+ *
+ * and `0x457370` stores them as fixed point (a mantissa over `1 << 16`, or
+ * `1 << 8` above one) beside their mean. They reach the sample unchanged:
+ * `0x4574a0` multiplies them by the queued sound's own, which is 1.0
+ * (`0x478bc0`), and the mixing loops multiply each sample by the first for the
+ * FIRST byte of the stereo pair and by the second for the second (`0x458ab1`,
+ * `0x458ab4`: `imul`, `sar` by the fixed point's shift) — left, then right.
+ * So the law is linear, not equal-power, and nothing in DirectSound is asked
+ * to pan or to fade: `SC.EXE` mixes the stereo itself.
+ *
+ * Taken with {@link placeAt}'s 0..128 pan, a sound in the middle of the view
+ * is three times louder on the left than on the right (191 against 64), and
+ * only a sound at the far right of its reach is balanced. That is what the
+ * executable does, and this is it.
+ */
+export function sides(volume: number, pan: number): { left: number; right: number } {
+  const v = volume / 255;
+  return { left: (v * (255 - pan)) / 255, right: (v * pan) / 255 };
+}
+
+/**
+ * A record as the bank opened it: `0x42783c` volume 0xff and `0x427842` pan
+ * 0x80 — the two doubles `0x427824` hands `0x457370`, 0.498 and 0.502. The
+ * theme's bars are never placed, so this is how loud the music is.
+ */
+export const THEME_SIDES = sides(0xff, 0x80);
+
+/** a mono voice onto the two sides, each at its own linear gain */
+function route(
+  ctx: AudioContext,
+  src: AudioNode,
+  to: AudioNode,
+  at: { left: number; right: number },
+): { left: GainNode; right: GainNode } {
+  const merge = ctx.createChannelMerger(2);
+  const left = ctx.createGain();
+  const right = ctx.createGain();
+  left.gain.value = at.left;
+  right.gain.value = at.right;
+  src.connect(left);
+  src.connect(right);
+  left.connect(merge, 0, 0);
+  right.connect(merge, 0, 1);
+  merge.connect(to);
+  return { left, right };
+}
+
+/**
  * The page's sound, and it is all optional: a page with no `AudioContext`, a
  * rip with no banks, or a browser that will not start audio without a gesture all
  * end up here doing nothing, which is what the film player already does.
@@ -385,7 +638,10 @@ export class Sounds {
   /** the theme's place in its own play order, and the clock it is queued to */
   private step = 0;
   private queuedTo = 0;
+  /** the THEME is playing — {@link Sounds.setMusic} turns this and nothing else off */
   private playing = false;
+  /** a level's banks are open, which is all an effect needs */
+  private ready = false;
   /** the bars already handed to the clock, so a level change can take them back */
   private queued: AudioBufferSourceNode[] = [];
   private muted = false;
@@ -400,7 +656,7 @@ export class Sounds {
 
   /** on, off, and what the status line says about it */
   get on(): boolean {
-    return this.playing;
+    return this.ready;
   }
 
   get theme(): string {
@@ -438,12 +694,16 @@ export class Sounds {
     const want = LEVEL_BANKS[book.toUpperCase()];
     if (!want) return;
     this.stop();
+    this.mixer.clear();
+    // `0x42781d` — every record opens with its loop word clear
+    this.loops.clear();
     this.themeName = want.theme;
     this.sfxName = want.sfx;
     await Promise.all([this.bank(want.theme), this.bank(want.sfx), this.bank(PLAYER_BANK)]);
     this.step = 0;
     this.queuedTo = 0;
     this.playing = this.music;
+    this.ready = true;
   }
 
   stop(): void {
@@ -580,27 +840,37 @@ export class Sounds {
    * `0x40efb0` — the volume and the pan a world point gets, or null where the
    * engine would not have played the sound at all.
    */
-  private place(x: number, y: number): { gain: number; pan: number } | null {
-    const dx = x - this.eye.x;
-    const dy = y - this.eye.y;
-    if (Math.abs(dx) > REACH.span || Math.abs(dy) > REACH.span) return null;
-    const gain = 1 - (Math.abs(dx) + Math.abs(dy)) / REACH.span;
-    if (gain <= 1 / 128) return null; // `cmp ax, 1; jle` — under one step, silence
-    return { gain, pan: Math.max(-1, Math.min(1, dx / REACH.span)) };
+  private place(x: number, y: number): { left: number; right: number } | null {
+    const at = placeAt(x - this.eye.x, y - this.eye.y);
+    return at && sides(at.volume, at.pan);
   }
 
-  /** one one-shot from the level's effects bank, at a place in the world */
-  effect(index: number, x: number, y: number): void {
-    void this.oneShot(this.sfxName, index, x, y);
+  /**
+   * One one-shot out of the level's effects bank, at a place in the world —
+   * `0x40ef30` unless `way` says it is `0x40f090` or `0x40f110`.
+   */
+  effect(index: number, x: number, y: number, way: SoundWay = "mix"): void {
+    void this.oneShot(this.sfxName, BANK_RANK.chapter, index, x, y, way);
   }
 
-  /** one one-shot from the character's own bank */
-  own(index: number, x: number, y: number): void {
-    void this.oneShot(PLAYER_BANK, index, x, y);
+  /** ...and out of the character's own bank */
+  own(index: number, x: number, y: number, way: SoundWay = "mix"): void {
+    void this.oneShot(PLAYER_BANK, BANK_RANK.own, index, x, y, way);
   }
 
-  private async oneShot(bankName: string, index: number, x: number, y: number): Promise<void> {
-    if (!this.playing || !bankName) return;
+  private readonly mixer = new Mixer();
+
+  private async oneShot(
+    bankName: string,
+    rank: number,
+    index: number,
+    x: number,
+    y: number,
+    way: SoundWay,
+  ): Promise<void> {
+    if (!this.ready || !bankName) return;
+    // `0x40efb0` first, and `cmp ax, 1; jle` — a sound out of reach never
+    // reaches the mixer, so it takes no channel from anything
     const at = this.place(x, y);
     if (!at) return;
     const ctx = this.context();
@@ -610,20 +880,72 @@ export class Sounds {
     if (!rec) return;
     const buf = this.buffer(bank, rec.containerLoc);
     if (!buf) return;
+    const master = this.master;
+    const prio = priorityOf(rank, index);
+    // `0x40ef4c`..`0x40ef8e` — the record's volume and pan first, and whatever
+    // is playing it already moves with them ({@link Mixer.place})
+    this.mixer.place(prio, at, ctx.currentTime);
+    this.mixer.play(
+      way,
+      prio,
+      ctx.currentTime,
+      buf.duration,
+      () => this.voice(ctx, master, buf, at),
+      this.loops.has(prio),
+    );
+  }
+
+  /** the records whose loop word is set — `+0x33`, zero as a bank opens (`0x42781d`) */
+  private readonly loops = new Set<number>();
+
+  /**
+   * `0x40ee90(bank, index, on)` → `0x428000` — set or clear a record's loop
+   * word, and with it the loop of any channel playing it ({@link Mixer.loop}).
+   * `own` is the character's bank rather than the chapter's.
+   */
+  loop(index: number, on: boolean, own = false): void {
+    const prio = priorityOf(own ? BANK_RANK.own : BANK_RANK.chapter, index);
+    if (on) this.loops.add(prio);
+    else this.loops.delete(prio);
+    this.mixer.loop(prio, on, this.ctx?.currentTime ?? 0);
+  }
+
+  /**
+   * `0x40eee0(bank, index)` → `0x427da0(record, 0)` — the record's volume to
+   * nothing, which silences it wherever it plays; it keeps its channel until it
+   * ends, and the next play call gives it a volume again.
+   */
+  mute(index: number, own = false): void {
+    const prio = priorityOf(own ? BANK_RANK.own : BANK_RANK.chapter, index);
+    this.mixer.place(prio, { left: 0, right: 0 }, this.ctx?.currentTime ?? 0);
+  }
+
+  private voice(
+    ctx: AudioContext,
+    master: GainNode,
+    buf: AudioBuffer,
+    at: { left: number; right: number },
+  ): Voice {
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    const gain = ctx.createGain();
-    gain.gain.value = at.gain;
-    // a StereoPannerNode is not everywhere; without one the sound is centred,
-    // which is the part of `0x40efb0` a page can lose without losing the point
-    const panner = typeof ctx.createStereoPanner === "function" ? ctx.createStereoPanner() : null;
-    if (panner) panner.pan.value = at.pan;
-    src.connect(gain);
-    if (panner) {
-      gain.connect(panner);
-      panner.connect(this.master);
-    } else gain.connect(this.master);
+    const gains = route(ctx, src, master, at);
     src.start();
+    return {
+      stop() {
+        try {
+          src.stop();
+        } catch {
+          /* already finished */
+        }
+      },
+      setLoop(on) {
+        src.loop = on;
+      },
+      setGains(to) {
+        gains.left.gain.value = to.left;
+        gains.right.gain.value = to.right;
+      },
+    };
   }
 
   /**
@@ -654,7 +976,9 @@ export class Sounds {
       if (!buf) continue;
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.connect(this.master);
+      // `0x427a50` plays the record as the bank opened it: `0x427824` wrote
+      // volume 0xff and pan 0x80, which is {@link THEME_SIDES}
+      route(ctx, src, this.master, THEME_SIDES);
       src.start(this.queuedTo);
       this.queued.push(src);
       this.queuedTo += buf.duration;

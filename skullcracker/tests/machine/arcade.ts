@@ -25,8 +25,9 @@
  *     into a seven-entry table by its own `param`, and nothing stands there
  *     until the boss does.
  */
-import { fail, headless, ok, pass } from "./harness";
-import { FOES } from "../../src/foes";
+import { fail, headless, ok, pass, recordSound } from "./harness";
+import { FOE_SFX } from "../../src/sound";
+import { FOES, type FoeAnim } from "../../src/foes";
 import {
   kragg,
   kraggGate,
@@ -34,7 +35,7 @@ import {
   KRAGG,
   seedKraggFall,
 } from "../../src/brains/kragg";
-import { TICK_SCALE, type BrainCtx, type Enemy } from "../../src/brains/kit";
+import { TICK_SCALE, install, type BrainCtx, type Enemy } from "../../src/brains/kit";
 
 /**
  * The machine itself, on its own: `kragg` handed a stand-in context and
@@ -156,7 +157,16 @@ const machines = (): void => {
 
   // `0x441e5b`, `0x441ef0` — the takes, in the air and on the ground
   const pick = K.pick!;
-  const blow = (damage: number, facingAway = false) => ({ damage, hits: 1, dy: 0, facingAway });
+  // `behind` puts the player west of a kragg facing east — `0x441fdb` weighs
+  // his x against its own, not the blow's direction
+  const blow = (damage: number, behind = false) => ({
+    damage,
+    hits: 1,
+    dy: 0,
+    facingAway: behind,
+    playerX: behind ? 0 : 200,
+    pointX: 100,
+  });
   if (pick(blow(20), { max: 1000, script: 8 }) !== 4) fail(`mid-dive, under 0x2d, is 0x473a48 tag 4`);
   if (pick(blow(50), { max: 1000, script: 8 }) !== 3) fail(`mid-dive, 0x2d or more, is tag 3`);
   if (!K.flinch![4].resume || K.flinch![4].resume.kind !== 8 || K.flinch![4].resume.tag !== 1)
@@ -175,6 +185,17 @@ const machines = (): void => {
   if (K.death!.cels.at(-1) !== 7117 || K.linger !== Infinity || K.vanishes)
     fail(`0x473d38 ends on 7117 and state 16 never removes it`);
   ok(`and it dies on 0x473d38 and stays down`);
+
+  // `0x44185f`: the ground turn's tag 1 roars while the script's frame index
+  // is 0xa — its third record — on a roll under thirty, through `0x40f090`
+  const roared: string[] = [];
+  const kr = { ...k, say: (_e: Enemy, id: number, way?: string) => roared.push(`${id}:${way}`) } as BrainCtx;
+  const turn = KRAGG.groundTurn[1];
+  const t: Enemy = { ...e, anim: turn, script: 13, tag: 1, state: "gait", clock: 0 };
+  for (t.clock = 0; t.clock < turn.cels.length * turn.hold - 1; t.clock += 1) kragg(t, K, turn.cels.length * turn.hold, kr);
+  if (roared.length !== turn.hold || roared.some((r) => r !== `${0x1b + 1}:lead`))
+    fail(`0x44189e roars 0x1b + roll(2) on each frame of tag 1's third record; heard ${roared.join(" ")}`);
+  ok(`its ground turn roars on the third record of tag 1, through 0x40f090, every frame it shows`);
 };
 
 machines();
@@ -481,9 +502,16 @@ ok(`and a flare into a burning kragg does nothing — ${landedOnBurn} flare(s) s
 game.inv.armed = false;
 game.inv.rounds = {};
 await go();
+// ...and the first bar is started at a sliver. The flying form's dive ends in
+// the CARRY whenever he is in reach of it (`0x4413a8`, test 12): it takes him
+// up, puts ten a frame of him into itself and throws him down, so a fist
+// fight on the floor under it feeds it faster than it bleeds. The level's
+// answer is the water (test 7); what this measures is the fall and the rise
+const sliver = 40;
+boss().hp = sliver;
 const score0 = game.stats.score;
 let rallied = false;
-let lowest = 1000;
+let lowest = sliver;
 let fightFrames = 0;
 let blows = 0;
 for (; fightFrames < 20000; fightFrames++) {
@@ -527,7 +555,7 @@ for (; fightFrames < 20000; fightFrames++) {
     }
   }
 }
-if (lowest >= 1000) fail(`a jumping attack should reach it; it never dropped below ${lowest}`);
+if (lowest >= sliver) fail(`a jumping attack should reach it; it never dropped below ${lowest}`);
 if (!rallied) fail(`0x441787 puts a full bar back when it lands; it had ${lowest} left and never stood up`);
 // 7033..7036 is `0x473b60` tag 0, the FALL
 if (![7033, 7034, 7035, 7036].some((c) => cels.has(c)))
@@ -547,5 +575,212 @@ ok(`and pays ${points} points, because nothing in its code awards any`);
 // 10. only then does the craft come, and the goal is where you began
 if (h.until(() => game.craft !== null, 60) < 0) fail(`the craft should arrive once the room is empty`);
 ok(`and the craft comes down for it`);
+
+/**
+ * 11. what a blow DOES to it, through the page's own hit path.
+ *
+ * - the −9 arm `0x441d30` lights no flame (no `0x44ff20` anywhere in the
+ *   class): it plays the hit sound (`0x441d41`), sparks (`0x441d60`) and plays
+ *   0x13 (`0x441d72`);
+ * - the flying form sparks and does not bleed (`0x441db8`, no `0x40cba0`);
+ * - the ground takes are kind 11, which `0x441ef4` takes nothing in;
+ * - `0x441f56` is `jge`: a blow that leaves nothing is a take;
+ * - the death that sticks spills fifteen roaches with 0x1b as tag 0 ends
+ *   (`0x441a42`), and a corpse struck on cel 7114 dies again from the top
+ *   (`0x441f58`).
+ */
+{
+  await go();
+  let b = boss();
+  // read fresh: the checks below each follow a blow the compiler cannot see
+  const state = (): string => b.state;
+  const script = (): number | undefined => b.script;
+  const hit = (damage: number, code = 0): void => {
+    const a = game.foeAnchor(b, game.level!)!;
+    const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+    game.strikeFoe(b, damage, { dx: 20, dy: 0 }, 1, a.y, box, code, { x: a.x, y: a.y }, { mass: 5, vx: 0, vy: 0 });
+  };
+  const calls = recordSound(game);
+  const effects = (): number[] => calls.filter((c) => c.call === "effect").map((c) => c.args[0] as number);
+  const flames0 = game.flames.length;
+  const sparks0 = game.sparks.length;
+  hit(0, -9);
+  const heard = effects();
+  if (game.flames.length !== flames0) fail(`0x441d30 calls no 0x44ff20: a flame was lit on kragg`);
+  if (game.sparks.length !== sparks0 + 1) fail(`0x441d60 throws one spark: ${game.sparks.length - sparks0}`);
+  if (heard.length !== 2 || ![24, 25].includes(heard[0]) || heard[1] !== 0x13)
+    fail(`0x441d41 then 0x441d72: its hit sound and 0x13; heard ${heard.join(",")}`);
+  if (b.anim !== K.burns!.anim || b.script !== 9) fail(`and 0x473a88 goes on, kind 9: script ${b.script}`);
+  ok(`a flare on kragg lights nothing, sparks once and plays ${heard.join(" then ")} (0x441d30)`);
+
+  await go();
+  b = boss();
+  const gobs0 = game.gobs.length;
+  const sparks1 = game.sparks.length;
+  hit(40);
+  if (game.gobs.length !== gobs0 || game.sparks.length !== sparks1 + 1)
+    fail(`the flying form sparks and does not bleed (0x441db8): gobs +${game.gobs.length - gobs0}, sparks +${game.sparks.length - sparks1}`);
+  if (script() !== 7) fail(`a take on the wing is kind 7 (0x473a28/0x473a48): ${b.script}`);
+  ok(`a blow on the wing throws a spark and no goo, and the take reads kind 7`);
+
+  // `0x440c81`..`0x440ca2` — on the wing and over no sprinkler it arms and
+  // plays its hum every frame; the fall lets it go (`0x441e34`). ARCADE's
+  // seven sprinkler rects tile the floor to the ceiling, so it is in the gaps
+  // between them — x723..780 is one — that it hums at all
+  const inGap = (): void => {
+    b.x = 750;
+  };
+  calls.length = 0;
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  inGap();
+  game.tick();
+  const flies = FOE_SFX.kraggFlies;
+  if (!calls.some((c) => c.call === "loop" && c.args[0] === flies && c.args[1] === true) ||
+    calls.filter((c) => c.call === "effect" && c.args[0] === flies).length < 1)
+    fail(`0x440c81 arms and plays 0x17 each frame on the wing; heard ${calls.map((c) => `${c.call} ${c.args[0]}`).join(", ")}`);
+  calls.length = 0;
+  game.rallyFall(b, K.rallies!, false);
+  if (!calls.some((c) => c.call === "loop" && c.args[0] === flies && c.args[1] === false)) fail(`0x441e34: the fall lets the wing's loop go`);
+  ok(`on the wing it hums on a loop, and the fall lets it go`);
+
+  // the ground form, as the landing leaves it
+  const ground = (): void => {
+    b.rallied = true;
+    b.state = "gait";
+    b.anim = K.rallies!.rise;
+    b.script = 12;
+    b.tag = 0;
+    b.clock = 0;
+  };
+  ground();
+  b.hp = 1000;
+  let took = false;
+  for (let i = 0; i < 8 && !took; i++) {
+    hit(30);
+    took = script() === 11;
+    if (!took) ground();
+  }
+  if (!took) fail(`a ground blow should put on one of 0x473ba8's takes, kind 11`);
+  const during = b.hp;
+  hit(30);
+  if (b.hp !== during) fail(`0x441ef4: a blow during a ground take (kind 11) takes nothing; ${during} -> ${b.hp}`);
+  ok(`the ground takes are kind 11, and a blow during one lands as nothing (0x441ef4)`);
+
+  ground();
+  b.hp = 30;
+  hit(30);
+  if (state() === "dead" || b.hp !== 0) fail(`0x441f56 is jge: a blow that leaves nothing is a take; ${b.state} at ${b.hp}`);
+  ground();
+  calls.length = 0;
+  hit(30);
+  if (state() !== "dead" || script() !== 16) fail(`below nothing it dies on 0x473d38, kind 16: ${b.state} ${b.script}`);
+  ok(`health at exactly nothing is a take, and below it the death (0x441f56)`);
+
+  const roaches0 = game.roaches.length;
+  calls.length = 0;
+  h.frame(8 * K.death!.hold + 2);
+  if (game.roaches.length - roaches0 !== 15 || !effects().includes(0x1b))
+    fail(`0x441a42 spills fifteen roaches with 0x1b as tag 0 ends: ${game.roaches.length - roaches0}, heard ${effects().join(",")}`);
+  ok(`the death that sticks lets fifteen roaches out with 0x1b (0x441a42, 0x4423a0)`);
+
+  b.clock = 4 * K.death!.hold;
+  if (game.celOf(b) !== 7114) fail(`cel 7114 is the death's fifth: ${game.celOf(b)}`);
+  calls.length = 0;
+  hit(30);
+  if (state() !== "dead" || b.clock !== 0 || b.threw || !effects().includes(FOES.initkragg.deathSound!))
+    fail(`a corpse struck on 7114 dies again from the top with 0x1a (0x441f58): clock ${b.clock}, heard ${effects().join(",")}`);
+  ok(`and struck on 7114 it dies again from the top, 0x1a and all (0x441f58)`);
+
+  // `0x441fdb` / `0x441fed`: the fourth ground blow weighs the PLAYER's x
+  // against its own mirror flag — in front, it swings; behind, it turns
+  const fourth = (facing: number, playerX: number): number => {
+    const e = { max: 1000, rallied: true, facing };
+    for (let i = 0; i < 8; i++) {
+      const r = K.pick!({ damage: 30, hits: 1, dy: 0, facingAway: false, playerX, pointX: 100 }, e);
+      if (r >= 8) return r;
+    }
+    return -1;
+  };
+  const picks = [fourth(-1, 0), fourth(1, 0), fourth(1, 200), fourth(-1, 200)];
+  if (picks.join() !== "10,8,10,9")
+    fail(`the fourth ground blow: swing in front, turn on tag mirror + 2 behind; got ${picks.join()}`);
+  ok(`the fourth ground blow swings at a player in front and turns from one behind (0x441fed)`);
+  game.setSound(null);
+}
+
+// the ground form's two blow-takes that are states of its own machine — the
+// snap round (`0x473bd8` tag 2/3, state 13) and the swing back (`0x473cc8` tag
+// 1, state 15). Each state stands it up the frame its script ends (`0x4418b6`
+// after `0x441855`'s `obj+0x46` test), so the stand goes on after exactly the
+// script's own frames, with nothing between
+{
+  await go();
+  const b = boss();
+  const take = (anim: FoeAnim): number => {
+    b.rallied = true;
+    b.state = "flinch";
+    b.anim = anim;
+    b.clock = 0;
+    b.script = anim.kind;
+    b.tag = anim.tag;
+    let f = 0;
+    while (b.state === "flinch" && b.anim === anim && f < 40) {
+      h.frame();
+      f += 1;
+    }
+    return f;
+  };
+  const turn = K.flinch!.find((a) => a.kind === 13)!;
+  const faced = b.facing;
+  const tf = take(turn);
+  if (tf !== turn.cels.length * turn.hold || b.anim !== KRAGG.stand || b.facing !== -faced)
+    fail(`the snap round is ${turn.cels.length * turn.hold} frames and then the stand, turned; ${tf} frames, then ${b.anim.from}`);
+  const swing = K.flinch!.find((a) => a.kind === 15)!;
+  const sf = take(swing);
+  if (sf !== swing.cels.length * swing.hold || b.anim !== KRAGG.stand)
+    fail(`the swing back is 0x473cc8 tag 1's ${swing.cels.length} frames and then the stand; ${sf} frames, then ${b.anim.from}`);
+  ok(`its snap round stands it up after ${tf} frames and its swing back after ${sf}, the frame each script ends`);
+}
+
+/**
+ * 12. the CARRY — `0x4413a8`, the dive's end taking him with no test of
+ * whether anything connected. Every frame: `[0x46b1b4]` cleared, so its fist
+ * draws him; ten out of him (`0x402ac0(0xa)`) and ten into it; he is held fifty
+ * to its side at its height, standing still. As the eight cels end he is let
+ * go with ten along its facing, drawn again, and `0x402fa0(2)` knocks him down.
+ */
+{
+  await go("&damage=1");
+  const b = boss();
+  b.hp = 500;
+  install(b, KRAGG.carry[1], true);
+  const hp0 = game.stats.health;
+  let hidden = 0;
+  let off = 0;
+  const run = KRAGG.carry[1].cels.length * KRAGG.carry[1].hold;
+  for (let f = 0; f < run - 1; f++) {
+    h.frame();
+    if (game.p.hidden) hidden += 1;
+    const want = game.BRAIN_CTX.anchorX(b) + (b.facing > 0 ? 50 : -50);
+    // held at its point as its think found it, and it flies on by its own
+    // speed after (`0x42fd80` moves everything after the thinks)
+    if (Math.abs(game.p.x - want) > Math.abs(b.vx / TICK_SCALE) + 1) off += 1;
+  }
+  const drained = hp0 - game.stats.health;
+  h.frame(3);
+  if (hidden < run - 2 || off > 1) fail(`0x4413b8 / 0x44141e: carried unseen at its side; hidden ${hidden} of ${run - 1}, off its side ${off}`);
+  if (drained < 10 * (run - 2)) fail(`0x4413fc takes ten a frame; ${drained} over ${run - 1} frames`);
+  if (b.hp < 500 + 10 * (run - 2)) fail(`0x4413c9 puts the same ten into kragg; it has ${b.hp}`);
+  if (game.p.hidden || game.p.act !== "downFront")
+    fail(`0x4414ba / 0x4414c3: let go, drawn again and knocked down; hidden ${game.p.hidden}, act ${game.p.act}`);
+  ok(`kragg carries him unseen for ${run} frames, ${drained} health out of him and into itself, and throws him down (0x4413a8)`);
+}
 
 pass("ARCADE is one room, one boss out of reach, and a goal that waits for it");

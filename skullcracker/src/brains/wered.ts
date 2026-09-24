@@ -58,9 +58,8 @@ import {
 
 /**
  * State 5, `0x454634`, and the hit handler `0x454790` that walks into it. The
- * page owns the animation; the sounds and the lying-still are
- * {@link weredReacts}, and the flame the wreck burns with for good is not
- * carried (a reaction has no way to light one).
+ * page owns the animation; the sounds, the lying-still and the flame the wreck
+ * burns with for good are {@link weredReacts}.
  *
  * - The handler: `0x454821` is `dec word ptr [eax]` on `AI+0`, the 3 the creator
  *   wrote, with the blow's own strength fetched at `0x454812` and spent only on
@@ -408,7 +407,7 @@ export const weredReacts: Reaction = (e, foe, _run, k) => {
   }
   // `0x454716` — the count is out: the wreck goes up, `obj+0x1a = 0x65`
   e.strength = BLAST;
-  k.say(e, WERED.sink); // `0x454720`
+  k.say(e, WERED.sink, "lead"); // `0x454720`, through `0x40f090`
   e.clock = lie + e.anim.hold;
 };
 

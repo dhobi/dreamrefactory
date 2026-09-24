@@ -12,31 +12,31 @@
  * spend a level in: the furniture really does just stand there, and the file
  * says so with the addresses to prove it rather than leaving a gap.
  */
-import type { Brain, Reaction } from "./kit";
-import { arm, armReacts } from "./arm";
+import type { Brain, Gate, Reaction } from "./kit";
+import { arm, armGate, armReacts } from "./arm";
 import { bat, batReacts } from "./bat";
-import { batboy, gangCorpse } from "./batboy";
+import { batboy, batboyDown, gangReacts } from "./batboy";
 import { coke, cokeGate } from "./coke";
-import { cop } from "./cop";
+import { cop, copReacts } from "./cop";
 import { dog, dogReacts } from "./dog";
 import { eyeball, eyeballReacts } from "./eyeball";
 import { ghengis, ghengisReacts } from "./ghengis";
 import { hardcore, hardcoreReacts } from "./hardcore";
 import { hydrant } from "./hydrant";
 import { igor } from "./igor";
-import { knifeboy } from "./knifeboy";
-import { knotboy } from "./knotboy";
+import { knifeboy, knifeboyDown } from "./knifeboy";
+import { knotboy, knotboyDown } from "./knotboy";
 import { kragg, kraggGate, kraggReacts } from "./kragg";
 import { mailbox } from "./mailbox";
-import { maskboy } from "./maskboy";
+import { maskboy, maskboyReacts } from "./maskboy";
 import { ox, oxReacts } from "./ox";
 import { puke, pukeCorpse } from "./puke";
 import { rat, ratReacts } from "./rat";
 import { skel, skelReacts } from "./skel";
-import { slurp } from "./slurp";
+import { slurp, slurpReacts } from "./slurp";
 import { tube, tubeCorpse } from "./tube";
 import { vpriest, vpriestReacts } from "./vpriest";
-import { wbooly, wboolyGate } from "./wbooly";
+import { wbooly, wboolyGate, wboolyReacts } from "./wbooly";
 import { werea, wereaReacts } from "./werea";
 import { wereb, werebReacts } from "./wereb";
 import { werec, werecReacts } from "./werec";
@@ -86,17 +86,19 @@ export const REACTIONS: Readonly<Record<string, Reaction>> = {
   initdog: dogReacts,
   initrat: ratReacts,
   initbat: batReacts,
-  initbatboy: gangCorpse,
+  initbatboy: gangReacts(batboyDown),
+  initcop: copReacts,
   initeyeball: eyeballReacts,
   initghengis: ghengisReacts,
-  initknifeboy: gangCorpse,
-  initknotboy: gangCorpse,
-  initmaskboy: gangCorpse,
+  initknifeboy: gangReacts(knifeboyDown),
+  initknotboy: gangReacts(knotboyDown),
+  initmaskboy: maskboyReacts,
   inithardcore: hardcoreReacts,
   initkragg: kraggReacts,
   initox: oxReacts,
   initpuke: pukeCorpse,
   initskel: skelReacts,
+  initslurp: slurpReacts,
   inittube: tubeCorpse,
   initvpriest: vpriestReacts,
   initwerea: wereaReacts,
@@ -104,6 +106,7 @@ export const REACTIONS: Readonly<Record<string, Reaction>> = {
   initwerec: werecReacts,
   initwered: weredReacts,
   initwraith: wraithReacts,
+  initwbooly: wboolyReacts,
 };
 
 /**
@@ -111,12 +114,11 @@ export const REACTIONS: Readonly<Record<string, Reaction>> = {
  * blow — see {@link kraggGate}, the one that does. `null` is a blow that lands
  * as nothing at all.
  */
-export const GATES: Readonly<
-  Record<string, typeof kraggGate>
-> = {
+export const GATES: Readonly<Record<string, Gate>> = {
   initkragg: kraggGate,
   initwbooly: wboolyGate,
   initwered: weredGate,
   initcoke: cokeGate,
   initwraith: wraithGate,
+  initarm: armGate,
 };

@@ -100,11 +100,26 @@ import {
  *   **101** for its whole run before removing it. So Ghengis does not leave a
  *   corpse: it comes apart into nine pieces over a blast.
  * - The hit handler itself, `0x422ad0`, is the class's `obj+0x12`
- *   (`0x422619`). It throws a blow away outright when the striker is in its own
- *   class list `[0x46f048]` or in `[0x46ecd0]` or `[0x46ecc8]`, when the
- *   striker's `obj+0x1a` is 0, and while this one is already in state 6 or state
- *   7 — so nothing interrupts the burst, and nothing of its own kind can hurt
- *   it. A striker whose `obj+0x1a` is **-4** is absorbed whole.
+ *   (`0x422619`). A piece (state 6) answers 1 and clears its own `obj+0x2a`
+ *   before anything else (`0x422ad9`..`0x422aef`). Otherwise it throws a blow
+ *   away outright when the striker is in its own class list `[0x46f048]` or
+ *   in `[0x46ecd0]` or `[0x46ecc8]`, when the striker's `obj+0x1a` is 0, and
+ *   while this one is the blast (state 7) — so nothing of its own kind can
+ *   hurt it. A striker whose `obj+0x1a` is **-4** is absorbed whole; no other
+ *   negative strength is turned away, so a −9 goes on to `0x42f910` — and
+ *   that is the end of the GAME, not of the blow. `0x42f91f` sends any
+ *   strength outside 1..0x65 to `0x408f80(0, 0xc22)`, whose every path meets
+ *   at `0x40915d`: the message, `MessageBoxA(…, 0x2010)` (`0x409239`) and
+ *   `ExitProcess(0)` (`0x409241`); its one `ret` lies behind the exit. Nothing
+ *   in a fresh game gets there: the only −9s are the flamer's (`0x453b9b`)
+ *   and a flare while `[0x4abdfc]` is 5 (`0x43ac04`), which puts TOWER's
+ *   three in reach — but chapter three's runner zeroes every round and hands
+ *   you the scepter on the way in (`0x41f67b`..`0x41f69c`) unless a save was
+ *   just loaded (`0x45e068`), no flare, flare gun or flamer tank is placed
+ *   in the chapter, and a save only keeps the weapon in your hands
+ *   (`0x45e273`). So the page takes nothing from a −9 here ({@link Foe.burns}
+ *   is unset), which is the one answer that is not a crash. The spray is
+ *   handed no hitter (`0x422b73`), so the goo flies loose.
  */
 const NOT_HERE = "0x422a25, 0x422a6f, 0x4229d2, 0x422a0a, 0x422ad0" as const;
 
@@ -326,8 +341,8 @@ export const ghengis: Brain = (e, foe, run, k) => {
      * ---- 8, `0x422a25`: the end of the flinch, and it goes straight back on
      * the offensive.
      *
-     * The flinch itself is the page's reaction; its {@link FoeAnim.resume} is a
-     * one-frame script of this kind, and when that is done `0x422a30` rolls
+     * The flinch itself is the page's reaction, of this kind, and it
+     * {@link FoeAnim.decides}: the frame its script ends `0x422a30` rolls
      * `0x434540(2)`: a 1 walks in on `0x46ee60` tag 0, anything else is the
      * bull rush's wind-up, `0x46ef30` tag 0 — with no roar in front of it.
      */
@@ -380,7 +395,7 @@ function burst(e: Enemy, k: BrainCtx): void {
 }
 
 /** `0x422d2b`..`0x422d95` — the blast, and the only one of the ten that hurts */
-const GHENGIS_BLAST: CastKit = {
+export const GHENGIS_BLAST: CastKit = {
   cels: [460, 461, 462, 463, 464, 465, 466, 467, 468, 469],
   hold: 1,
   speed: 0,

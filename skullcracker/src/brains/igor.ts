@@ -395,7 +395,8 @@ export const igor: Brain = (e, foe, run, k) => {
   if (e.fell > IGOR.deadly && now !== 5 && now !== 0) {
     // `0x4252ad` — `AI+0x2c = [0x46b204] * 2`
     e.beat = FALL_WAIT;
-    k.say(e, IGOR.over);
+    // `0x4252cb` — through `0x40f090`, the mixer's channel 0
+    k.say(e, IGOR.over, "lead");
     return install(e, IGOR.stunned);
   }
   switch (now) {
@@ -515,7 +516,8 @@ export const igor: Brain = (e, foe, run, k) => {
         return install(e, IGOR.smashed);
       }
       if (!done) return false;
-      k.say(e, IGOR.smash);
+      // `0x4254b8` — through `0x40f090`, the mixer's channel 0
+      k.say(e, IGOR.smash, "lead");
       k.shake(1);
       k.remove(e, IGOR.fallAward);
       return false;

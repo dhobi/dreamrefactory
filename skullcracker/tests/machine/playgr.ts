@@ -19,7 +19,8 @@
  *     which is more than three times the biggest thing in level three.
  *   - **the goal is shut until it is dead**, which is what a 100% share means.
  */
-import { fail, headless, ok, pass } from "./harness";
+import { fail, headless, ok, pass, recordSound } from "./harness";
+import { FOES } from "../../src/foes";
 
 const h = await headless("level=4");
 const { game } = h;
@@ -150,5 +151,73 @@ ok(`it falls for ${points} points and burns on cel 3140, and the quota is clear`
 // 7. ...and only then does the television come down
 if (h.until(() => game.craft !== null, 60) < 0) fail(`the craft should arrive once the boss is dead`);
 ok(`and the television comes down for it`);
+
+/**
+ * 8. what a blow does to it, through the page's own hit path — `0x456310`.
+ *
+ * - in states 2, 8 and 9 it is taken with the goo (`0x4563a0`) and the grunt
+ *   (`0x456459`) and answered 1 (`0x456518`), so it is shoved, and nothing
+ *   goes on;
+ * - the grunt is on the path that survives (`0x4563ce jg`): the killing blow
+ *   plays 0x33 alone;
+ * - the take reads kind 9 (`0x478358`), so a blow during it is state 9;
+ * - dead, tag 1's end plays 0x32 (`0x456134`), and the wreck crackles index 0
+ *   or 1 at the player every 13..20 frames for good (`0x456171`).
+ */
+{
+  await h.load("level=4&x=4100");
+  settle();
+  const W = FOES.initwbooly;
+  const b = boss();
+  const state = (): string => b.state;
+  const hit = (damage: number): void => {
+    const a = game.foeAnchor(b, game.level!)!;
+    const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+    game.strikeFoe(b, damage, { dx: 30, dy: 0 }, 1, a.y, box, 0, { x: a.x, y: a.y }, { mass: 12, vx: 30, vy: 0 });
+  };
+  const calls = recordSound(game);
+  const effects = (): number[] => calls.filter((c) => c.call === "effect").map((c) => c.args[0] as number);
+  b.asleep = false;
+  b.state = "gait";
+  b.script = 2;
+  b.vx = 0;
+  const hp0 = b.hp;
+  const gobs0 = game.gobs.length;
+  const dents0 = b.dents;
+  hit(40);
+  const grunt = effects().filter((n) => n >= 45 && n <= 47).length;
+  if (b.hp !== hp0 - 40 || game.gobs.length === gobs0 || grunt !== 1 || b.vx === 0 || state() !== "gait" || b.dents !== dents0)
+    fail(`0x456470: taken, with goo, a grunt and the exchange, and no reaction; hp ${hp0} -> ${b.hp}, gobs +${game.gobs.length - gobs0}, grunts ${grunt}, vx ${b.vx}, ${b.state}, dents ${dents0} -> ${b.dents}`);
+  ok(`a blow mid-throw comes off the bar with goo, a grunt and a shove, and it goes on throwing (0x456470)`);
+
+  b.script = 5;
+  hit(40);
+  if (state() !== "flinch" || b.script !== 9 || b.tag !== 0) fail(`a blow in the melee half is 0x478358 tag 0, kind 9: ${b.state} ${b.script}/${b.tag}`);
+  ok(`the take reads kind 9, so a second blow is state 9's`);
+
+  b.state = "gait";
+  b.script = 1;
+  b.hp = 10;
+  calls.length = 0;
+  hit(40);
+  if (state() !== "dead" || effects().some((n) => n >= 45 && n <= 47) || !effects().includes(51))
+    fail(`0x4563ce: the killing blow plays 0x33 alone; heard ${effects().join(",")}`);
+  ok(`and the killing blow plays its death alone (0x4563ce, 0x456411)`);
+
+  calls.length = 0;
+  const heardAt: [number, number][] = [];
+  for (let f = 0; f < 18 * W.death!.hold + 120; f++) {
+    const n = calls.length;
+    h.frame();
+    for (const c of calls.slice(n)) if (c.call === "effect") heardAt.push([f, c.args[0] as number]);
+  }
+  const tail = heardAt.filter(([, id]) => id === 0x32);
+  const crackle = heardAt.filter(([, id]) => id === 0 || id === 1);
+  const gaps = crackle.slice(1).map(([f], i) => f - crackle[i][0]);
+  if (tail.length !== 1 || crackle.length < 4 || gaps.some((g) => g < 13 || g > 21))
+    fail(`0x456134 plays 0x32 once and 0x456171 crackles every 13..20 frames: 0x32 x${tail.length}, crackles at ${crackle.map(([f]) => f).join(",")}`);
+  ok(`dead, it plays 0x32 as tag 1 ends and crackles ${crackle.length} times, ${Math.min(...gaps)}..${Math.max(...gaps)} frames apart (0x456171)`);
+  game.setSound(null);
+}
 
 pass("PLAYGR is its seven dogs, its one boss, and a goal that waits for it");

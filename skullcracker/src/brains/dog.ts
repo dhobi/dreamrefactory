@@ -86,8 +86,8 @@ import {
  *   frames, and answers 1. State 7 at `0x454ff3` then waits for that cel to run
  *   out, **flips the mirror flag** (`0x454ffa`) and installs the charge
  *   `0x478070` — so a dog that has been hit turns round and bolts. The page
- *   plays the cel and its `resume` lands the dog in this brain's `case 7`,
- *   which does the flip and the charge.
+ *   plays the cel and hands the dog this brain's `case 7` the frame it ends
+ *   (`FoeAnim.decides`), which does the flip and the charge.
  * - **8**, the death: `0x4550fa` and `0x4551de` install `0x478208`, say 0x18,
  *   clear `obj+0x26` so the corpse leaves the collision list, and write
  *   `[0x46b204]` into **`AI+2`** — the same word the beat below counts down.
@@ -355,8 +355,7 @@ export const dog: Brain = (e, foe, run, k) => {
      * ---- 7, `0x454ff3`: the flinch has run out, so it turns and bolts.
      *
      * The page plays the flinch itself (`0x4781f8`, one cel held four frames)
-     * and hands the dog here through {@link FOES.initdog}'s `resume` on the
-     * frame it ends — which is the frame `0x454ff3`'s `obj+0x46` test passes.
+     * and hands the dog here ({@link FoeAnim.decides}) on the frame it ends — which is the frame `0x454ff3`'s `obj+0x46` test passes.
      * `0x454ffa` flips the mirror flag and `0x455006` installs the charge: a
      * dog that has been hit runs off the way it came.
      */

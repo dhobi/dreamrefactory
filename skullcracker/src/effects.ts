@@ -132,6 +132,64 @@ export const SPRAY = {
 } as const;
 
 /**
+ * The player's own spray — `0x40c900(point, n, hitter)`, `0x40cba0`'s sibling,
+ * thrown into the same effect class and stepped by the same `0x40c480`.
+ *
+ * ```
+ *   count = clamp(|n| / 6, 1, 8)                 0x40c924..0x40c947
+ *   repeat count times:
+ *     with a hitter: (vy, vx) = its cel's blow   0x40c9bd, record +0x14
+ *       vx += hitter.vx / 4, vy += hitter.vy     0x40c9d9..0x40c9ff
+ *       vx mirrored by the hitter's facing       0x40ca09
+ *       each axis scattered as the goo's is      0x40ca1d..0x40cadb
+ *     without one: 0x434540(0x1e) - 0xf, both    0x40cae1..0x40cb01
+ *     facing = 0x434540(2) - 1, lifetime 60      0x40cb05..0x40cb27
+ *     health >= 2/3 of the tank and n >= 0       0x40cb2f..0x40cb55
+ *       ? 0x46bc98, kind 3                        the SWEAT: blue, 18220..18230
+ *       : 0x46bc38, kind 2                        the BLOOD: red, 18300..18310
+ * ```
+ *
+ * `0x40c480` gives the blood kind 2's switch (`0x40c60c`), which is the goo's
+ * own — it arcs, pools, grows as more lands on it and dries back — but kind 3's
+ * (`0x40c76e`) answers 1 the frame a gob lands, in either tag: the sweat never
+ * pools. So a fresh fighter flicks off drops, and a hurt one bleeds on the
+ * pavement.
+ */
+export const BLEED = {
+  sweat: {
+    rise: [18220, 18221, 18222] as readonly number[],
+    fall: [18223, 18224] as readonly number[],
+    pool: [18225, 18226, 18227, 18228, 18229, 18230] as readonly number[],
+    from: "0x46bc98 kind 3",
+  },
+  blood: {
+    rise: [18300, 18301, 18302] as readonly number[],
+    fall: [18303, 18304] as readonly number[],
+    pool: [18305, 18306, 18307, 18308, 18309, 18310] as readonly number[],
+    from: "0x46bc38 kind 2",
+  },
+  /** `0x40c93f` — at most eight, where the goo allows twenty */
+  most: 8,
+  /** `0x40cae1` — `0x434540(0x1e) - 0xf` on each axis with no hitter */
+  loose: 0x1e,
+  /** `0x40cb3c` — below two thirds of the tank it is blood */
+  bleeds: [2, 3] as const,
+  from: "0x40c900 / 0x40c480",
+} as const;
+
+/** the cels a gob of each kind draws — the three scripts share one layout */
+export const GOB_CELS = {
+  goo: { rise: SPRAY.rise.cels, fall: SPRAY.fall.cels, pool: SPRAY.pool },
+  sweat: BLEED.sweat,
+  blood: BLEED.blood,
+} as const;
+
+/** how many drops the player's spray throws — `clamp(|n| / 6, 1, 8)` */
+export function dropCount(n: number): number {
+  return Math.min(BLEED.most, Math.max(SPRAY.least, Math.trunc(Math.abs(n) / SPRAY.per)));
+}
+
+/**
  * The green ball a body leaves behind — `0x40cba0`'s **−13** branch.
  *
  * A corpse's own state handler counts `[0x46b204]`'s fifty frames down and then,
@@ -159,6 +217,40 @@ export interface Pop {
   age: number;
 }
 
+/**
+ * The spark kragg throws where a blow lands on its flying form — `0x4424a0`,
+ * class `[0x474f08]`, proc `0x442530`.
+ *
+ * `0x4424a0` puts one object at the point it is handed and installs
+ * `0x474ed8` tag 0: five cels of ARCADE's own 9100..9104, three frames each.
+ * The class's message 1 (`0x442547`) gives it `obj+0xc = 0x434540(0x28) -
+ * 0x14`, −19..20 across, no vertical speed, and `0x42f850(obj, 0.1f)` — a
+ * gravity of one pixel a frame². Its think `0x442620` answers 1 the frame the
+ * script ends (`0x442635`), so it is gone after fifteen frames. The mover's
+ * floor (its offset is −60, `0x44255a`) is not carried: fifteen frames at
+ * that gravity drop it about a hundred pixels, from a body in the air.
+ */
+export const SPARK = {
+  cels: [9100, 9101, 9102, 9103, 9104] as readonly number[],
+  hold: 3,
+  /** `0x44254b` — `0x434540(0x28) - 0x14` */
+  across: 0x28,
+  /** `0x442575` — `0x42f850(obj, 0.1f)`, a tenth of the allocator's ten */
+  gravity: 1,
+  from: "0x4424a0 / 0x442530 / 0x474ed8",
+} as const;
+
+/** one spark */
+export interface Spark {
+  x: number;
+  y: number;
+  /** pixels an engine frame */
+  vx: number;
+  vy: number;
+  /** engine frames since it appeared */
+  age: number;
+}
+
 /** the flying television — `0x410170` mode −1 and `0x410480` */
 export const CRAFT = {
   /** `sub word ptr [esi+6], 0xb4` — how far above the record it appears */
@@ -181,6 +273,26 @@ export const CRAFT = {
   },
   /** `0x42fad0(craft, 0x12c, 0xc8)` — how close is close enough, on top of the rect */
   near: { x: 300, y: 200 },
+  /**
+   * The character's own hum, every frame of kind 1 (`0x4105e4` / `0x4105e8`,
+   * through `0x40ef30`) — 0x1c, or 0x15 for the second character
+   */
+  hum: [0x1c, 0x15] as const,
+  /** ...and the screen starting down (`0x4106ce` / `0x4106d2`) — 0x1d or 0x16 */
+  opens: [0x1d, 0x16] as const,
+  /**
+   * The stage-end tally — `0x40ffe0`, which `0x41074d` calls as the screen's
+   * last cel runs out. See {@link stepTally} in game.ts.
+   */
+  tally: {
+    /** `0x41004b` — score additions a dial step, each a frame */
+    perStep: 10,
+    /** `0x410059` — each one a hundred */
+    points: 0x64,
+    /** `0x4100fe` / `0x410102` — the character's own, 0x1f or 0x18, through `0x40f110` */
+    sound: [0x1f, 0x18] as const,
+    from: "0x40ffe0",
+  },
   from: "0x410170 / 0x410480 / 0x450060",
 } as const;
 
@@ -199,6 +311,12 @@ export interface Gob {
   age: number;
   /** the coin toss `0x434540(2) - 1` makes, so the gobs are not all identical */
   mirror: boolean;
+  /**
+   * Which script it is on — the goo `0x46bbd8`, or one of the player's own two
+   * ({@link BLEED}). Absent is goo. A gob landing on a puddle installs ITS
+   * script on that puddle (`0x40c6f3`), so a puddle takes the last one's colour.
+   */
+  kind?: "goo" | "sweat" | "blood";
   /**
    * Which of {@link SPRAY.pool} it has spread to, or −1 while it is still in the
    * air. A gob that lands on another does not become a puddle of its own: it

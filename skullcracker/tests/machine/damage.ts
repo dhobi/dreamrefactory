@@ -22,6 +22,7 @@
  *   - **the life is spent when the dying animation ends**, not when the health
  *     runs out (`0x443dea`).
  */
+import { TICK_SCALE } from "../../src/brains/kit";
 import { WEAPONS } from "../../src/guns";
 import { fail, headless, ok, pass } from "./harness";
 
@@ -77,6 +78,49 @@ if (!downs.length)
   fail(`64 is over 0x3c, so it should knock down, not stagger; saw ${[...seen].filter((c) => c < 1000).join(" ")}`);
 ok(`a press takes ${1200 - after} in 64s and knocks the player down (cels ${downs.join(" ")})`);
 
+// 4b. ...and the blow throws the player's own spray, `0x40c900(contact, 64,
+//     press)`: clamp(64/6, 1, 8) drops, sweat on `0x46bc98` while the tank is
+//     two thirds full, blood on `0x46bc38` below it (`0x40cb3c`) — and kind 3's
+//     sweat is gone the frame it lands (`0x40c7a6`) where kind 2's blood pools
+{
+  const struck = async (health: number) => {
+    await go(7100, true);
+    stats.health = health;
+    const before = stats.health;
+    h.hold("right", true);
+    const at = h.until(() => stats.health < before, 200);
+    h.hold("right", false);
+    if (at < 0) fail(`no press landed walking east from x7100`);
+    return game.gobs.filter((g) => g.kind === "sweat" || g.kind === "blood");
+  };
+  const fresh = await struck(1200);
+  if (fresh.length !== 8 || fresh.some((g) => g.kind !== "sweat"))
+    fail(`a 64 at 1200/1200 throws eight drops of sweat: ${fresh.map((g) => g.kind).join(" ")}`);
+  h.frame(90);
+  if (game.gobs.some((g) => g.kind === "sweat")) fail(`the sweat should be gone once it lands`);
+  const hurt = await struck(700);
+  if (hurt.length !== 8 || hurt.some((g) => g.kind !== "blood"))
+    fail(`a 64 at 700/1200 throws eight drops of blood: ${hurt.map((g) => g.kind).join(" ")}`);
+  h.frame(90);
+  const pools = game.gobs.filter((g) => g.kind === "blood" && g.stage >= 0);
+  if (!pools.length) fail(`the blood should lie on the pavement once it lands`);
+  ok(`a press throws eight drops — sweat at full health, blood at 700, and only the blood pools (stage ${pools.map((g) => g.stage).join(" ")})`);
+  // the codes' own: −1 is one red drop after the striker, and −8's 0x78 is
+  // eight thrown loose, within fifteen of still (`0x40cae1`)
+  await go(7100, true);
+  const was = game.gobs.length;
+  game.takeCode(-1);
+  const spun = game.gobs.slice(was);
+  if (spun.length !== 1 || spun[0].kind !== "blood") fail(`−1 throws one drop, always blood: ${spun.map((g) => g.kind).join(" ")}`);
+  const was8 = game.gobs.length;
+  game.takeCode(-8);
+  const bowled = game.gobs.slice(was8);
+  const tick = TICK_SCALE;
+  if (bowled.length !== 8 || bowled.some((g) => Math.abs(g.vx / tick) > 15 || Math.abs(g.vy / tick) > 15))
+    fail(`−8 throws eight loose drops: ${bowled.map((g) => `${g.vx / tick},${g.vy / tick}`).join(" ")}`);
+  ok(`−1 bleeds one red drop and −8 throws eight within fifteen of still`);
+}
+
 // 5. run out of it and a life goes — and NO film, because the film is the last
 //    life's. `0x4294a6` reads the count, `0x4294ad` spends one and `0x4294b7`
 //    takes the ordinary path while the count before the spend was not
@@ -122,5 +166,31 @@ if (WEAPONS[inv.weapon]?.name !== "flamer") fail(`the weapon record should still
 const lying = game.hereOf((l) => l.guns).length;
 if (lying <= guns) fail(`0x45b060 puts the weapon on the FLOOR; the level still holds ${lying} guns against ${guns}`);
 ok(`a knockdown disarms: the flamer left the hand and the level went from ${guns} guns to ${lying}`);
+
+// 7. ...and the death drops every key. `0x402ac0` empties the health into
+//    `0x402fa0(1)`, whose first call is `0x402df0`: the eight action words
+//    zeroed, so a key held as the player dies is let go
+h.hold("right", true);
+h.press("punch");
+game.takeHealth(stats.health);
+if (game.held.right || game.punchPressed || p.act !== "dying")
+  fail(`dying drops the keys (0x402af4 -> 0x402df0): right ${game.held.right}, punch ${game.punchPressed}, ${p.act}`);
+ok(`dying lets go of every key held`);
+
+// ...and of the four poses a carrier can put on him, only the knockdown asks
+// whether he is dying (`0x42f33f`): the judder, held and the spawn pose go on
+// over the death, and the next health taken, even none, starts it again
+// (`0x402ac0` -> `0x402f60` -> `0x402fa0(1)`)
+{
+  if (p.act !== "dying") fail(`still dying from the step above: ${p.act}`);
+  game.posePlayer(2);
+  const afterKnock = p.act;
+  game.posePlayer(4);
+  const afterJudder = p.act as string;
+  game.takeHealth(0);
+  if (afterKnock !== "dying" || afterJudder !== "jolt" || p.act !== "dying")
+    fail(`0x402fa0(2) leaves a death alone and (4) does not: ${afterKnock}, ${afterJudder}, then ${p.act}`);
+  ok(`the knockdown leaves a death alone; the judder does not, and the next take kills again`);
+}
 
 pass("the damage switch is off by default, and the engine's own numbers when it is not");

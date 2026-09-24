@@ -95,6 +95,7 @@ import {
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Gate,
   type Reaction,
   TICK_SCALE,
 } from "./kit";
@@ -111,52 +112,34 @@ import {
  *   above whatever it was lying on for the whole of `0x46d0b0`, whose own first
  *   frame carries `dy -130`. {@link Foe.death} plays the script and
  *   {@link Foe.frail} the launch.
- * - **`0x418b40`, the hit handler.** It opens `if (obj+0x18 == 5) return 0` —
- *   **an arm that has hold of you cannot be hit**, which is the only defence
- *   this class has and the page has no hook for. Otherwise it sprays through
- *   `0x42f910`/`0x40cba0`, plays `lab.snd` 0x25, installs `0x46d0b0` and pays
- *   `0x40d450(0x71)`. Nothing is subtracted from anything: one blow of any size
- *   and the arm is done, which is what {@link Foe.frail} and `health: 1` say.
- * - **`obj+0x2a`, the "something hit me" word.** `0x430663`, the elastic
- *   collision solver, sets it to 1 on the victim. `0x418904` clears it as the
- *   lunge goes in and `0x418992` reads it back every frame: an arm whose lunge
- *   CONNECTED then measures itself against the point it remembered, and if it is
- *   within fifty pixels of it in both axes it has you. Nothing in this port
- *   writes a collision flag onto a foe — `rat.ts` reads the same word out of
- *   `0x44e304` and reaches the same dead end — so state 4 here only ever takes
- *   its other branch and state 5 is unreachable. Its tail is ported anyway, so
- *   that an arm the page ever does put in state 5 comes out of it correctly.
- * - **`[0x46b1b4]`, the grab claim.** A single engine-wide word, 1 in the file
- *   and therefore free at boot. `0x4189cf` refuses the grab unless it is 1,
- *   `0x418a1b` takes it to 0 as the hold goes on and `0x418aa1` hands it back as
- *   the hold ends. It is what stops two of the ten holding you at once, it is
- *   shared with a dozen other classes (`0x412d9a`, `0x41fa8d`, `0x421247`,
- *   `0x4236cd`…), and a brain here is handed no view of it.
- * - **`[0x4a50f0]`/`[0x4a50f2]`, the remembered point.** The y and x the lunge
- *   aims at, written at `0x418937`/`0x418942` and `0x418969`/`0x418977` as the
- *   attack is installed and read back at `0x4189a1`/`0x4189bc`. Two engine
- *   globals, and {@link Enemy} has no slot for a point. Only the grab uses them,
- *   so they go with it.
- * - **the carry, `0x418a6c`.** Every frame of the hold writes the arm's own
- *   packed `(y, x)` straight over the player's: `mov eax, [esi+6]; mov ecx,
- *   [0x4ac3d4]; mov dword ptr [ecx+6], eax`. **Nothing in this port hits the
- *   player back**, and moving him is hitting him, so the carry is read and
- *   spends nothing.
- * - **`[0x46b1a8]`, which of the two player characters is in play.** `0x402f60`
- *   — the "he is upright" test the whole game asks — branches on it, and
- *   `0x4189d9` uses it to choose between the hold's tag 0 (cels 4500..4503) with
- *   `lab.snd` 0x2c and its tag 1 (cels 5900..5903) with 0x2d. This page has one
- *   player, so {@link ARM.hold} is tag 0 and tag 1 is carried as read.
- * - **the player's own CROUCH.** `0x4188f6` and `0x41890a` both ask
- *   `cmp word ptr [player+0x18], 6`, and player kind 6 is the duck —
- *   `players.ts` reads `0x4717c8`'s kind-6 handler `0x42a9a0` as a whole crouch
- *   state machine. A ducking player gets {@link ARM.lunge} tag 1: the hand lifts
- *   `dy -100` instead of `-200` and aims at his feet rather than seventy pixels
- *   above them. {@link BrainCtx.player} exposes `down`, which is `0x402f60`'s
- *   own `obj+0x18 >= 0x1a`, and nothing finer — so tag 1 is named in the table
- *   below and never installed.
+ * - **`0x418b40`, the hit handler.** A hitter whose strength is −1 has it
+ *   rewritten to 100 on the hitter itself and is taken as that
+ *   (`0x418b47`..`0x418b4e`). Then `if (obj+0x18 == 5) return 0` — **an arm
+ *   that has hold of you cannot be hit** ({@link armGate}); a strength of
+ *   exactly −6 answers 1 and does nothing else (`0x418b6a`), and anything
+ *   else under 1 is refused. The −1 is the BLASTER's bolt, whose think writes
+ *   it for the blaster's variants (`0x413bf9`), and LAB hands out blaster
+ *   packs among its arms — {@link Foe.minusOne}. In state 5 the rewrite has
+ *   already happened when the 0 goes back, so the bolt goes on through the
+ *   pass at a hundred and strikes whatever is behind the arm (`stepBolts`). It is not a pickup's code:
+ *   a pickup is built by `0x45b160` through `0x430dc0`/`0x42f610`, which
+ *   leaves `obj+0x1a` at 0 (`0x42f66f`), its code lives in its own six bytes
+ *   (`0x45b18c`), and `0x430367` never lets a strength of 0 strike anything.
+ *   Nothing writes −6 into a strength, so that arm is read and not spent.
+ *   What is left sprays through `0x42f910`/`0x40cba0`, plays `lab.snd`
+ *   0x25, installs `0x46d0b0` and pays `0x40d450(0x71)`. Nothing is
+ *   subtracted from anything: one blow of any size and the arm is done, which
+ *   is what {@link Foe.frail} and `health: 1` say. It tests no class at all,
+ *   so arms hurt arms ({@link Foe.hitsOwn}).
+ * - **the grab, `0x418992`, and the hold, `0x418a6c`.** Both are in the
+ *   machine below. `obj+0x2a` is {@link Enemy.connected}, which the hit pass
+ *   marks on a foe whose blow landed; `[0x4a50f0]`/`[0x4a50f2]` is
+ *   {@link Enemy.mark}, per arm rather than engine-wide, which only differs if
+ *   two arms lunge the same frame; `[0x46b1b4]` is {@link BrainCtx.hide} and
+ *   `player.free`; the crouch (`0x4188fb`) is `player.crouching` and the
+ *   character (`0x4189d9`) `player.character`.
  */
-const NOT_HERE = "0x418af6, 0x418b40, 0x418992, 0x418a6c, 0x4188f6" as const;
+const NOT_HERE = "0x418af6, 0x418b40" as const;
 
 /**
  * Its whole repertoire, by kind and tag, out of `0x46cf10`…`0x46d120`.
@@ -230,9 +213,7 @@ export const ARM = {
   /**
    * kind 4 tag 1 — the same eight cels at a DUCKING player, and the only
    * difference is that the hop is half as high. `0x418916` picks it and aims the
-   * remembered point at his feet rather than seventy pixels up; this page cannot
-   * see his crouch, so it is here to be read and not installed
-   * ({@link NOT_HERE}).
+   * remembered point at his feet rather than seventy pixels up.
    */
   lungeLow: {
     cels: [3340, 3341, 3342, 3343, 3343, 3343, 3344, 3349],
@@ -254,7 +235,7 @@ export const ARM = {
   /**
    * kind 5 tag 0 — the HOLD: ten cels of the player being shaken, 4502 and 4503
    * alternating four times. Nothing here travels; the travelling is the carry
-   * that writes the arm's position onto the player ({@link NOT_HERE}).
+   * that writes the arm's position onto the player (state 5).
    */
   hold: {
     cels: [4500, 4501, 4502, 4503, 4502, 4503, 4502, 4503, 4502, 4503],
@@ -265,7 +246,7 @@ export const ARM = {
   },
   /**
    * kind 5 tag 1 — the same ten beats on the other player character's sheet,
-   * chosen by `[0x46b1a8]` at `0x4189d9`. One player on this page, so read only.
+   * chosen by `[0x46b1a8]` at `0x4189d9`.
    */
   holdB: {
     cels: [5900, 5901, 5902, 5903, 5902, 5903, 5902, 5903, 5902, 5903],
@@ -294,6 +275,9 @@ export const ARM = {
   slap: 0x26,
   breaks: 0x27,
   scuttle: 0x28,
+  /** `0x4189e7` / `0x4189fa` — the held player's cry, by character */
+  muffled: 0x2c,
+  muffledB: 0x2d,
   from: "0x4187a0",
 } as const;
 
@@ -312,6 +296,9 @@ const NERVE = 0x28;
  * pushes itself fifty pixels BACKWARDS as it lets go.
  */
 const RELEASE = 50;
+
+/** `0x4189af` / `0x4189ca` — `cmp eax, 0x32`, both axes, against the remembered point */
+const GRIP = 0x32;
 
 /**
  * `initarm`'s own machine, states 0 to 7.
@@ -495,15 +482,16 @@ export const arm: Brain = (e, foe, run, k) => {
           if (dice >= NERVE && !k.player.swinging) {
             return done ? install(e, ARM.stance) : false;
           }
-          return reach(e);
+          return reach(e, k);
         /**
          * `0x418904` — 40 to 160, and it goes every time. It clears `obj+0x2a`
          * first so that `0x418992` can tell a lunge that connected from one that
-         * did not ({@link NOT_HERE}); band 1's own route into the same attack
-         * does not, which is the executable's asymmetry and not a misreading.
+         * did not; band 1's own route into the same attack does not, which is
+         * the executable's asymmetry and not a misreading.
          */
         case 2:
-          return reach(e);
+          e.connected = false;
+          return reach(e, k);
         /**
          * Band 3 — inside forty pixels — and band −1, which the forward test
          * above has already taken. `0x4188b7` falls through to `0x41897b`, which
@@ -518,28 +506,60 @@ export const arm: Brain = (e, foe, run, k) => {
      * script. Nothing can put an arm here — see the default below.
      */
     /**
-     * ---- 4, `0x418992`: the lunge, which only ever ends one way here.
+     * ---- 4, `0x418992`: the lunge, and the grab.
      *
-     * The executable opens on `obj+0x2a`, then on being within fifty pixels of
-     * the point it remembered, then on the engine-wide grab claim — three things
-     * this port cannot see ({@link NOT_HERE}). What is left is `0x418a4a`, the
-     * tail: the eight cels play out, the hand comes back down, and it stands.
+     * Every frame of it asks three things: did its blow land (`obj+0x2a`), is it
+     * within fifty of the point it remembered on both axes (`0x4189af`,
+     * `0x4189ca`), and is nobody else holding him (`[0x46b1b4]`, `0x4189cf`).
+     * All three, and it has him: the muffled cry for the character in play
+     * (`0x4189ee` / `0x418a01`), the hold for his sheet, the claim taken, its
+     * own velocity zeroed and its point snapped onto his (`0x418a19`..`0x418a41`).
+     * Otherwise `0x418a4a`, the tail: the eight cels play out, the hand comes
+     * back down, and it stands.
+     *
+     * A lunge that misses goes a long way, and that is the disc's. The hop's
+     * `dx 200, dy -200` sits on a frame held two engine frames, and `0x45d0f0`
+     * hands the shown record to `0x42f8b0` on every one of them, which adds
+     * `round_away(200 / 6)` = 34 into `obj+0xc` and `obj+0xa` each time: a
+     * floor arm leaves at 68 across and 68 up, with no drag in the air and a
+     * gravity of ten, and comes down some nine hundred pixels on.
      */
-    case 4:
+    case 4: {
+      const m = e.mark;
+      if (
+        e.connected &&
+        m &&
+        Math.abs(k.anchorX(e) - m.x) < GRIP &&
+        Math.abs(k.anchorY(e) - m.y) < GRIP &&
+        k.player.free
+      ) {
+        const b = k.player.character;
+        k.say(e, b === 0 ? ARM.muffled : ARM.muffledB);
+        install(e, b === 0 ? ARM.hold : ARM.holdB);
+        k.hide(true);
+        e.vx = 0;
+        e.vy = 0;
+        e.x += k.player.x - k.anchorX(e);
+        e.y += k.player.anchor - k.anchorY(e);
+        return false;
+      }
       // `0x418a55` — `obj+0x2e`, back on the ground after the hop
       if (!done || e.vy !== 0) return false;
       return install(e, ARM.stance);
+    }
     /**
-     * ---- 5, `0x418a6c`: the hold, which nothing here can reach.
-     *
-     * Its body is the carry and its immunity is in the hit handler; both are at
-     * {@link NOT_HERE}. The tail is ported so that the state is complete: when
-     * the ten beats have played the arm shoves itself fifty pixels backwards and
-     * hands the grab claim back.
+     * ---- 5, `0x418a6c`: the hold. The carry is its whole body — `mov eax,
+     * [esi+6]; mov ecx, [0x4ac3d4]; mov [ecx+6], eax`, its own packed point
+     * straight over his, every frame and nothing else: no velocity, no pose,
+     * his own think still runs and is put back each frame. When the ten beats
+     * have played the arm shoves itself fifty pixels backwards (`0x418a98`) and
+     * hands the claim back (`0x418aa1`); he is left standing where it was.
      */
     case 5:
+      k.pin({ x: k.anchorX(e), y: k.anchorY(e) });
       if (!done) return false;
       e.x -= RELEASE * (e.facing > 0 ? 1 : -1);
+      k.hide(false);
       return install(e, ARM.stance);
     // ---- 6, `0x418ab2`: the turn, and `xor byte ptr [esi+0x28], 1` is the whole of it
     case 6:
@@ -568,15 +588,16 @@ export const arm: Brain = (e, foe, run, k) => {
  *
  * Both ask `cmp word ptr [player+0x18], 6`, the player's crouch, and both then
  * write the point the hand is aimed at into `[0x4a50f0]`/`[0x4a50f2]`: his own
- * position when he is ducking, and his position less `0x46` — seventy pixels, so
- * chest height — when he is standing. The crouch is not a question this page can
- * put ({@link NOT_HERE}), so what goes on is always tag 0, the standing reach.
+ * position when he is ducking (tag 1, the low hop), and his position less
+ * `0x46` — seventy pixels, so chest height — when he is standing (tag 0).
  *
  * `once` because it is an attack: it plays through and hands back, where the
  * stance and the reach loop.
  */
-function reach(e: Enemy): false {
-  return install(e, ARM.lunge, true);
+function reach(e: Enemy, k: BrainCtx): false {
+  const low = k.player.crouching;
+  e.mark = { x: k.player.x, y: k.player.anchor - (low ? 0 : 0x46) };
+  return install(e, low ? ARM.lungeLow : ARM.lunge, true);
 }
 
 /**
@@ -596,9 +617,18 @@ export const armReacts: Reaction = (e, foe, _run, _k) => {
   // hundred and fifty up the cel, so the body falls that far through the floor
   // before `obj+0x2e` calls it landed
   e.floor = -150;
+  // ...and the first record's lift is ADDED to what the exchange left it
+  // with: `0x45d090` only puts the script on, and it is `0x45d1a3`, on the
+  // next step, that hands the record's `dy / divisor` to `0x42f8b0`
   const lift = foe.death.dy?.[0] ?? 0;
   const q = lift / (e.divisor ?? foe.divisor);
-  e.vy = (q < 0 ? -Math.ceil(-q) : Math.ceil(q)) * TICK_SCALE;
+  e.vy += (q < 0 ? -Math.ceil(-q) : Math.ceil(q)) * TICK_SCALE;
 };
+
+/**
+ * `0x418b58` — `cmp word ptr [esi+0x18], 5; jne; xor ax, ax`: an arm holding
+ * the player turns every blow away.
+ */
+export const armGate: Gate = (e, _foe, blow) => (e.script === 5 ? null : blow);
 
 export { NOT_HERE as ARM_NOT_HERE };

@@ -30,6 +30,7 @@
  * back**, so it is carried as read and spends nothing.
  */
 import type { Foe, FoeAnim } from "../foes";
+import type { SoundWay } from "../sound";
 
 /**
  * `gait`, `flinch` and `dead` are the kind's own animations; `burst` is the one
@@ -96,8 +97,31 @@ export interface Enemy {
   shaken?: number;
   /** has the CHOPPER already let out what was inside it — see {@link Foe.hatches} */
   hatched?: boolean;
-  /** ...and has its bike already been thrown clear — see {@link Foe.deathThrow} */
+  /** ...and has it already shed its head — see {@link Foe.sheds} */
+  shed?: boolean;
+  /**
+   * Whether this frame's step has it walking — so that what the body pass
+   * takes off its speed goes into the walk rather than a flight (`bodyPush`)
+   */
+  rolling?: boolean;
+  /** the lever it last found and turned to — see {@link Foe.lever}'s `found` */
+  aimed?: object;
+  /**
+   * ...and has its bike already been thrown clear — see {@link Foe.deathThrow};
+   * the one-shot at the end of a death's first tag lives here too — kragg's
+   * roaches (`0x441a42`), which a death put on again lets out again, and the
+   * boss of level four's 0x32 (`0x456134`)
+   */
   threw?: boolean;
+  /**
+   * `obj+0x2a` — its blow LANDED: `0x430663` sets it on the hitter when the
+   * victim's handler took the blow and the hitter's strength was above 0
+   * (`0x430430`). The arm clears it as its lunge goes in (`0x418904`) and
+   * reads it back (`0x418992`)
+   */
+  connected?: boolean;
+  /** `[0x4a50f0]`/`[0x4a50f2]` — the point the arm's lunge was aimed at (`0x418935`) */
+  mark?: { x: number; y: number };
   /**
    * `obj+0x32`, the fall so far: `0x42fdbc` adds `obj+0xa` to it every frame
    * the thing is off its feet and moving down, and zeroes it otherwise. Kept
@@ -225,6 +249,12 @@ export interface Enemy {
    * gives you. BARREL places both; MAZE places only param 0.
    */
   param?: number;
+  /**
+   * `initcop`'s `AI+0x30`, the switch-run stage — zeroed by the creator and
+   * made nonzero the first time a blow drops it under half (`0x414971`), so
+   * that blow's switch run happens once. See its {@link Foe.pick}.
+   */
+  switchRun?: number;
   /**
    * `AI+0x10` — the record's own point, kept because a class can be sent back
    * to it. `0x44ec26` is the case: the frame the player is upright again, the
@@ -372,6 +402,19 @@ export interface BrainCtx {
     facing: number;
     /** is he on a ladder — his `obj+0x18` is 7 (`0x43e02b`) */
     climbing: boolean;
+    /** his `obj+0x18` is 6, the crouch (`0x4188fb`) */
+    crouching: boolean;
+    /** `[0x46b1a8]` — which of the two characters, and the tag several grabs pick by */
+    character: 0 | 1;
+    /** his `obj+0x18` is 9, the judder `0x471fc8` — hypnotised or jolted */
+    jolted: boolean;
+    /**
+     * `0x402f00` answers 0: his kind is 9 (the judder), 0xa (held), 0xd (the
+     * spawn pose a carry holds him in) or 0x18 (knocked down)
+     */
+    helpless: boolean;
+    /** `[0x46b1b4]` — nobody has him: he is drawn as himself (`0x419d25`) */
+    free: boolean;
   };
   /**
    * `0x40b660(<"ladder">, self, 0, -1)` — the level's nearest ladder to this
@@ -411,6 +454,12 @@ export interface BrainCtx {
    */
   count(kind: string): number;
   /**
+   * Every live one of a class in the LEVEL, whichever room it is in — a
+   * class-list walk that does not stop at the room, as `0x424f30` walks the
+   * wraiths'.
+   */
+  every?(kind: string): Enemy[];
+  /**
    * The nearest live one of a class to the PLAYER, inside `within` — the
    * search `0x426450` does to decide where the bishop re-forms.
    */
@@ -433,8 +482,20 @@ export interface BrainCtx {
   scaled(n: number): number;
   /** `0x434630` — the integer square root the ballistic leaps solve their arc with */
   root(n: number): number;
-  /** `0x40ef30(0x4a7910, id, y)` — a creature sound where this one is */
-  say(e: Enemy, id: number): void;
+  /**
+   * `0x40ef30(bank, id, point)` — a creature sound where this one is. `way`
+   * is which of the engine's three calls it is — see `SoundWay` in sound.ts:
+   * `0x40f090` is `"lead"` and `0x40f110` `"renew"`.
+   */
+  say(e: Enemy, id: number, way?: SoundWay): void;
+  /**
+   * `0x40ee90(bank, id, on)` — a record's loop word, on or off, and the loop
+   * of whatever channel is playing it (`Mixer.loop` in sound.ts). Optional so
+   * a stand-in context without sound need not carry it.
+   */
+  loop?(id: number, on: boolean): void;
+  /** `0x40eee0(bank, id)` — the record silenced where it plays (`Sounds.mute`) */
+  mute?(id: number): void;
   /**
    * The nearest `initsprinkler` record's own point — `0x40b660` geometry −1.
    *
@@ -444,6 +505,33 @@ export interface BrainCtx {
    * then steers for is **120 BELOW** it (`0x44154c`), not the point itself.
    */
   sprinkler(e: Enemy): { x: number; y: number } | null;
+  /**
+   * `0x4423a0(point, n)` — `n` roaches thrown out of a point, each on its own
+   * arc. Kragg's corpse is the one caller (`0x441a8d`, fifteen); see `SPILL`
+   * in {@link file://../props.ts}.
+   */
+  spill(at: { x: number; y: number }, n: number): void;
+  /**
+   * Put the player somewhere — a grabber writing his `obj+6`/`obj+8` (an ANCHOR
+   * point, as {@link player.anchor} is) and, where it does, his velocity in
+   * pixels an engine frame and his facing (+1 east).
+   */
+  pin(at: { x: number; y: number }, v?: { vx?: number; vy?: number; facing?: number; fell?: number }): void;
+  /** `[0x46b1b4]` cleared (hidden) or set — while a grabber's own cels draw him he is not drawn */
+  hide(hidden: boolean): void;
+  /** `0x402ac0(n)` — health straight out of the player, behind the damage switch */
+  drain(n: number): void;
+  /** `0x40c900(player, n, 0)` — the player's own spray, from his point, following nothing */
+  bleed(n: number): void;
+  /**
+   * `0x402fa0(mode)` — the player's own pose setter (`0x42f280`, table at
+   * `0x42f418`): −1 the spawn pose `0x471b18`, 2 the knockdown `0x4722a8`,
+   * 3 held `0x4720e8`, 4 the judder `0x471fc8`. Every mode drops the keys first
+   * (`0x402df0`) and puts out a running stream (`0x42e700`).
+   */
+  pose(mode: -1 | 2 | 3 | 4): void;
+  /** `0x43e880`'s walk — is another of this one's class in state `state` */
+  someIn(e: Enemy, state: number): boolean;
   /**
    * ...and send one up — `0x441b20` then `0x441b60`.
    *
@@ -754,6 +842,45 @@ export interface CastKit {
    */
   rest?: number;
   /**
+   * ...and where {@link CastKit.then} plays ONCE and hands to a loop of its
+   * own: the hardcore's `0x43c968` puts tag 3 on when tag 2 ends, and
+   * `0x43c989` puts tag 3 on again when tag 3 ends.
+   */
+  thenLoop?: { cels: readonly number[]; hold: number };
+  /**
+   * A hit does not end it: it flies on harmless. The hardcore's `0x43c866`
+   * zeroes `obj+0x1a` on every frame `obj+0x2a` is set, and nothing but the
+   * landing (`0x43c8c0`) takes the thing away.
+   */
+  flyOn?: boolean;
+  /**
+   * Engine frames it lies where it landed before it goes — `AI+2`, which
+   * `0x43c8cd` seeds with `0x28` as the impact goes on and `0x43cafb` spends,
+   * answering 1 once it is past zero. Absent, it goes as its impact ends.
+   */
+  lieFor?: number;
+  /**
+   * The throw that COMES BACK — the hardcore's high one, `0x43c917`.
+   *
+   * As the launch cel ends, a throw whose thrower's tag was 0 (`AI+8`) rolls
+   * `0x434540(0x64)` and under `odds` flies on {@link out} instead of its
+   * ordinary flight. `0x43c9bd` waits for it to be more than `far` from where
+   * its thrower stood (`AI+6`, filed by `0x43d226`), then turns it round
+   * (`0x43c9c6`), zeroes both speeds, puts it `drop` below the thrower's point
+   * (`AI+4`, `0x43c9dd`) and starts `0x4748c8` — the same launch and flight,
+   * so it comes back at the launch's `speed`. Nothing catches it; only the
+   * landing ends it, as it ends every throw of this class.
+   */
+  returns?: {
+    odds: number;
+    of: number;
+    out: { cels: readonly number[]; hold: number };
+    far: number;
+    drop: number;
+    speed: number;
+    from: string;
+  };
+  /**
    * `obj+0xa` is pinned inside ±this at the top of the class's own think.
    *
    * `0x452d4d` and `0x452d5b` — werec's shot is the one class that does it,
@@ -780,6 +907,14 @@ export interface CastKit {
    */
   onImpact?: boolean;
   /**
+   * A sound it carries while it flies — the hardcore's throw, `0x43c89c`:
+   * played and armed to loop every frame in the air (`0x40ef30`, then
+   * `0x40ee90(bank, id, 1)`), and on landing let go and silenced
+   * (`0x40ee90(…, 0)`, `0x40eee0`). One looping voice the mixer keeps and
+   * each frame's play moves with it.
+   */
+  hum?: number;
+  /**
    * ...and what a CODE landing on it does — `obj+0x12`, a hit handler of its
    * own. See {@link CastCode}, and two classes in the game have one.
    *
@@ -799,14 +934,48 @@ export interface CastKit {
    * shot's own point and then call `0x452ef0`, which measures the player's
    * distance from the shot and, inside `near` on both axes, floods the window
    * with palette index `flash` through `0x40e4c0`. The same function shakes the
-   * screen — `0x4307c0` 3 inside `near`, 2 inside 750×300, 1 inside 1200×500 —
-   * and this page has no screen shake, so that half is not carried.
+   * screen — `0x4307c0` 3 inside `near`, 2 inside 750×300, 1 inside 1200×500
+   * — and `shakes` says a kit's burst goes through it. The tube's flash
+   * (`0x419056`) is its own and does not shake.
    */
-  bang?: { sound: number; flash: number; near: { x: number; y: number } };
+  bang?: { sound: number; flash: number; near: { x: number; y: number }; shakes?: true };
   /** the spawner and the script it installs */
   from: string;
 }
 export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
+
+/**
+ * Who struck — what a handler that reads its hitter can see of it.
+ *
+ * `player` is the player's own object (`[0x4ac3d4]`, which the coke's
+ * `0x43b660` and the zombie head's `0x420090` compare against); `kind` is
+ * the class of a creature that struck, and `kit` the cast it threw. A flare,
+ * a stream or a bolt is none of the three.
+ */
+export interface Hitter {
+  player?: boolean;
+  kind?: string | null;
+  kit?: CastKit | null;
+}
+
+/**
+ * A class's hit handler asking its own state before it reads the blow.
+ *
+ * `null` turns the blow away whole — no goo, no sound, no exchange. A result
+ * goes on to the page's arithmetic, and three flags on it say how much of it:
+ *
+ * - `still`: the blow is TAKEN — goo, sound, subtraction and exchange, and the
+ *   handler answers 1 — but no reaction is installed and no death is read. The
+ *   boss's absorbed states (`0x4563a0`..`0x456518`) and a lesser wraith, whose
+ *   gate has already sent it to its death, are the two.
+ * - `quiet`: no hit sound on it.
+ * - `spare`: nothing off the health.
+ */
+export type Gate = (
+  e: Enemy,
+  foe: Foe,
+  blow: { damage: number; code: number; by: Hitter },
+) => { damage: number; code: number; still?: boolean; quiet?: boolean; spare?: boolean } | null;
 
 /**
  * What a class does DURING a reaction — the states the PAGE owns.
@@ -820,17 +989,25 @@ export type Brain = (e: Enemy, foe: Foe, run: number, k: BrainCtx) => boolean;
  * and all three were unreachable for exactly that reason.
  *
  * So a reaction gets a think of its own. It is deliberately NOT a brain: it
- * returns nothing, it may not install a state, and the page goes on owning the
- * animation and the frame count. It runs once an ENGINE FRAME, like a brain,
- * and `run` is how many frames the reaction's own animation lasts, so a class
- * can tell the last frame of it from the first.
+ * does not install anything itself, and the page goes on owning the animation
+ * and the frame count. It runs once an ENGINE FRAME, like a brain, and `run`
+ * is how many frames the reaction's own animation lasts, so a class can tell
+ * the last frame of it from the first.
+ *
+ * The one thing it may do is END a flinch: answer a script of the class's own
+ * machine and the page takes the thing out of the flinch and puts it on that
+ * script, on this frame. That is a think's preamble overriding the state the
+ * handler installed — the gang's gloat, which `0x439300` and its siblings put
+ * on over state 10 the frame the player goes down. From a death the same:
+ * the ox's `0x43f325` exempts only states 0 and 7, so a dying ox that falls
+ * a hundred pixels is put in the pit.
  */
 export type Reaction = (
   e: Enemy,
   foe: Foe,
   run: number,
   k: BrainCtx,
-) => void;
+) => void | FoeAnim;
 
 /**
  * A CAST as its own hit handler sees it — the object's own words, and nothing

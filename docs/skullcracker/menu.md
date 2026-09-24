@@ -440,7 +440,59 @@ levels' own name for their punks: they are werewolves.
 
 `0x40efb0` places each one — the volume falls off linearly with the Manhattan
 distance from the middle of the view and nothing 768 pixels past it is played at
-all — and that is the whole of the mixer.
+all.
+
+## Four channels, and a sound that is playing is not played again
+
+The mixer has four channels (`0x427890` walks their slots at `0x4a6778`). The
+theme has channel 3 to itself (`0x40f190` → `0x427a50`). The one-shots share
+the other three, and which ones they may use depends on which of the three
+one-shot calls plays them:
+
+- `0x40ef30` → `0x427b20`, the common one: channel 1 or 2, by priority.
+- `0x40f090` → `0x427d20`: channel 0, whatever it held. Most deaths, the
+  bosses' cues and the voices use it.
+- `0x40f110` → `0x427c20`: channels 1 and 2 again, but a sound still playing
+  starts over rather than being refused. Six sites use it.
+
+A record's priority is `(bank << 16) | (index + 1)`, fixed as the bank opens
+(`0x40ed69`). A chapter's effects are bank 1 and the character's own sounds
+are bank 2, so the player outranks every creature. A finished channel drops
+to nothing. A new sound replaces the lower of the two channels only if it
+outranks what is on it, and it is refused if the other channel is already
+playing that same sound. So a handler that asks for its sound on three frames
+running is heard once. A replaced sound is cut, not faded (`0x456f00`).
+
+A record can also loop. Its loop word (`+0x33`) is clear when the bank
+opens, and `0x40ee90` sets or clears it. `0x428000` hands the word to any
+channel playing the record, and a looping channel's queue goes back to its
+start instead of running dry, so the channel never empties and keeps its
+priority. When the loop is let go, the pass in hand plays out.
+
+Every play call also sets the record's volume and pan before the channels
+are argued over, and that moves an instance that is already playing
+(`0x427da0`, `0x427ed0`). So a hum is armed once and asked for every frame
+where the thing now is: the mixer refuses the repeat, but the sound follows
+it. `0x40eee0` silences a sound by setting its volume to nothing. That is how
+the flamer falls quiet when you let go, and how a falling scream stops at the
+floor.
+
+The loops the page runs are the eyeball's, Boggs' machine, the TOWER surges,
+kragg on the wing (only in the gaps between ARCADE's sprinkler rects), the
+hardcore's thrown whoosh and the goal craft's hum.
+
+The stereo is `SC.EXE`'s own too: DirectSound is never asked to pan or fade.
+`0x427da0` and `0x427ed0` turn a volume and a pan into two linear gains,
+`volume/255 × (255 − pan)/255` for the left and `volume/255 × pan/255` for
+the right, and the mixing loops multiply each sample by them, left byte then
+right (`0x458ab1`). `0x40efb0` hands out pans from 0 to 128, with 64 in the
+middle of the view. So a sound in the middle of the screen is three times
+louder on the left than on the right, and only one at the far right of its
+reach is balanced. The theme plays at the level a bank opens with, volume
+0xff and pan 0x80, which is 0.498 left and 0.502 right. The page does the
+same (`placeAt` and `sides` in `src/sound.ts`). The
+page does the same (`Mixer` in `src/sound.ts`): `effect` and `own` take the
+call as their last argument.
 
 ## The films keep their sound somewhere else entirely
 

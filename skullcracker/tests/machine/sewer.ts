@@ -27,10 +27,11 @@
  *     600-health thing that goes round shutting the doors again.
  */
 import { FOES } from "../../src/foes";
-import { EYEBALL, eyeball } from "../../src/brains/eyeball";
-import { oxReacts } from "../../src/brains/ox";
-import type { BrainCtx, CastKit, Enemy } from "../../src/brains/kit";
+import { EYEBALL, eyeball, eyeballReacts } from "../../src/brains/eyeball";
+import { OX, OX_PIT, ox as oxBrain, oxReacts } from "../../src/brains/ox";
+import { TICK_SCALE, install, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
 import { FPS, fail, headless, ok, pass } from "./harness";
+import type { FoeAnim } from "../../src/foes";
 
 /**
  * The machines themselves, on their own: a brain handed a stand-in context and
@@ -97,6 +98,23 @@ const machines = (): void => {
   if (pick(blow(0x47), on(6206)) !== 3) fail(`a blow over 0x46 is the knock-out, 0x4727f0 tag 0`);
   ok(`an eye's spit sends five globs, and the cel it is caught on picks its flinch`);
 
+  // `0x43de45` runs ahead of the jump table in states 3 and 8 too: a struck
+  // eye is still dragged at seven towards his height, and a dying one as well
+  {
+    const struck = foe("initeyeball", eb.flinch![0], "flinch");
+    k.player.anchor = 400;
+    struck.clock = 1;
+    eyeballReacts(struck, eb, 12, k);
+    const dying = foe("initeyeball", eb.death!, "dead");
+    k.player.anchor = -400;
+    dying.clock = 1;
+    eyeballReacts(dying, eb, 22, k);
+    k.player.anchor = 0;
+    if (struck.vy <= 0 || dying.vy >= 0)
+      fail(`the hover goes on under a flinch and a death: vy ${struck.vy} with him below, ${dying.vy} with him above`);
+  }
+  ok(`a flinching or dying eye is still drawn to his height`);
+
   // `0x43e503`: an eye that has lost him finds the nearest ladder (0x40b660),
   // drifts at it until it is inside fifty, climbs towards a hundred above him
   // inside the ladder's span, and comes off it back to the hover within a
@@ -140,6 +158,73 @@ const machines = (): void => {
   oxReacts(hit, ox, 6, k);
   if (said[0] !== 0x30) fail(`attack tag 1 goes out voiced 0x2f + 1; said ${said.join(",")}`);
   ok(`an ox answers a blow with a voiced attack or slides back, and lies 800 frames`);
+  // `0x43f9aa` is the handler's only test — no class, no state — and 5190,
+  // the death's first cel, is drawn with a body
+  if (!ox.corpseTakesHits || !ox.hitsOwn) fail(`0x43f9a0 turns nothing away but a negative strength`);
+
+  // `0x43f325`: past a hundred pixels of drop, in any state but 0 and 7, the
+  // pit — 0x35 at the PLAYER's point, AI+0xe = 2 * 80 (`0x435c73`), and
+  // `0x472f00` tag 0; the landing puts on tag 1, and its end says 0x3d, jolts
+  // the screen, pays 0x140 and takes the ox out (`0x43f7c9`..`0x43f85a`)
+  {
+    const shook: number[] = [];
+    const gone: number[] = [];
+    const pk = { ...k, atBound: () => false, shake: (n: number) => shook.push(n), remove: (_e: Enemy, award: number) => gone.push(award) } as BrainCtx;
+    let heardAt: number[] = [];
+    pk.say = (who: Enemy, id: number) => {
+      said.push(id);
+      heardAt.push(who.x);
+    };
+    pk.player.x = 333;
+    said.length = 0;
+    const pit = foe("initox", OX.stand);
+    pit.script = 2;
+    pit.x = 0;
+    pit.vy = 30 * TICK_SCALE;
+    let calls = 0;
+    while (pit.script !== 7 && calls < 10) {
+      oxBrain(pit, ox, 1, pk);
+      calls += 1;
+    }
+    if (calls !== 4 || pit.tag !== 0 || Number(said[0]) !== 0x35 || heardAt[0] !== 333 || pit.beat !== 160)
+      fail(`thirty a frame passes a hundred on the fourth frame and goes over with 0x35 at the player: ${calls} frames, tag ${pit.tag}, said ${said.join(",")} at x${heardAt[0]}, AI+0xe ${pit.beat}`);
+    oxBrain(pit, ox, 1, pk);
+    if (pit.tag !== 0) fail(`tag 0 holds while it is still falling`);
+    pit.vy = 0;
+    oxBrain(pit, ox, 1, pk);
+    if (pit.script !== 7 || Number(pit.tag) !== 1) fail(`the landing puts on 0x472f00 tag 1`);
+    pit.clock = 3;
+    said.length = 0;
+    heardAt = [];
+    oxBrain(pit, ox, 3, pk);
+    if (Number(said[0]) !== 0x3d || heardAt[0] !== 333 || shook[0] !== 3 || gone[0] !== 0x140)
+      fail(`the landing's end says 0x3d at the player, shakes 3 and pays 320 as it goes: ${said.join(",")}, shake ${shook.join(",")}, paid ${gone.join(",")}`);
+    // ...and not from the patrol, whose state `0x43f336` exempts
+    // (with the player out of its widened rect, or the patrol stands at once)
+    pk.player.x = 2000;
+    const walker = foe("initox", OX.patrolA);
+    walker.script = 0;
+    walker.vy = 60 * TICK_SCALE;
+    for (let i = 0; i < 4; i++) oxBrain(walker, ox, 6, pk);
+    if (walker.script === 7) fail(`a patrolling ox does not go into the pit (0x43f339)`);
+    // ...and the preamble runs under the flinch and the death as well: the
+    // frame the drop passes the mark the reaction hands the page the pit
+    pk.player.x = 333;
+    said.length = 0;
+    const slid = foe("initox", ox.flinch![3], "flinch");
+    slid.vy = 60 * TICK_SCALE;
+    slid.clock = 2;
+    if (oxReacts(slid, ox, 40, pk) !== undefined) fail(`sixty is not yet a hundred`);
+    const fromSlide = oxReacts(slid, ox, 40, pk);
+    if (fromSlide?.kind !== 7 || fromSlide.tag !== 0 || Number(said[0]) !== 0x35 || slid.beat !== 160)
+      fail(`a hundred and twenty under the slide is the pit: ${fromSlide?.from}, said ${said.join(",")}`);
+    const dying = foe("initox", ox.death!, "dead");
+    dying.vy = 120 * TICK_SCALE;
+    dying.clock = 1;
+    if (oxReacts(dying, ox, 16, pk)?.kind !== 7) fail(`0x43f325 does not exempt the death: a dying ox that falls a hundred goes in the pit`);
+    pk.player.x = 0;
+  }
+  ok(`an ox that drops more than a hundred goes into the pit, lands, and is gone for 320`);
 };
 
 machines();
@@ -228,6 +313,24 @@ if (eye.y !== was.y) fail(`it has no gravity and should hold its height; y ${was
  */
 if (eye.x !== was.x) fail(`an unnoticed eye should hang where it was put; x ${was.x} -> ${eye.x}`);
 ok(`an eye holds x ${eye.x}, y ${eye.y} with 50 health, where the level hung it`);
+
+// 3b. a blow while it spits is the knock-out (`0x43e9b5`), and the knock-out is
+//     kind 3 — so a second blow finds state 3 on the 6300s, none of the three
+//     cels `0x43e9bc` answers, and `0x43e9d4` takes it without a new flinch
+{
+  const box = { top: 0, left: 0, bottom: 1, right: 1 };
+  eye.script = 7;
+  game.strikeFoe(eye, 10, { dx: 0, dy: 0 }, 1, eye.y, box);
+  const out = FOES.initeyeball.flinch![3];
+  if (eye.state !== "flinch" || eye.anim !== out || eye.script !== 3)
+    fail(`a blow on a spitting eye is 0x4727f0 tag 0, kind 3: ${eye.state} ${eye.anim.from} kind ${eye.script}`);
+  h.frame(3);
+  const at = eye.clock;
+  game.strikeFoe(eye, 10, { dx: 0, dy: 0 }, 1, eye.y, box);
+  if (eye.anim !== out || eye.clock !== at || (eye.hp as number) !== 30)
+    fail(`a second blow takes ten and leaves the knock-out running: ${eye.anim.from} at ${eye.clock} (was ${at}), hp ${eye.hp}`);
+}
+ok(`a knocked-out eye takes a second blow without starting the knock-out again`);
 
 // 4. five doors, all shut, and five levers, all off
 const gates = game.level!.doors.flat();
@@ -339,6 +442,29 @@ if (game.p.heldBy) fail(`-5 holds nothing; the player should be down and free, n
 if (topWhileUp > 17321 - 40) fail(`it comes UP to grab — 0x43ef65's arm; the highest it got was y${topWhileUp}`);
 ok(`its bush comes up to y${topWhileUp}, grabs with ${codes.join(" then ")}, and the slump drops you again`);
 
+// ...and a player it closes on DEAD is swallowed: with the latch at 2,
+// `0x43ef0a` takes the draw gate every frame he is dying and plays 0x2a, and
+// the bottom of its travel hands it back (`0x43ef57`). Here the latch closes
+// on the sink's last step (5030 is late in the rise), so the gate is taken and
+// handed back in the same frame, as `0x43ec80` would; the bush is put back at
+// the top of its travel as it closes so that the sink has frames to see.
+{
+  await go("x=7700&damage=1");
+  const bush = game.hereOf((l) => l.bushes).filter((b) => Math.abs(b.x - 7689) < 300)[0];
+  if (h.until(() => bush.phase === 1, 200) < 0) fail(`the bush never had hold of him (phase ${bush.phase})`);
+  game.takeHealth(game.stats.health);
+  if (h.until(() => bush.phase === 2, 40) < 0) fail(`the bush's latch never closed`);
+  bush.y = bush.top;
+  let hidden = 0;
+  h.until(() => {
+    if (game.p.hidden) hidden++;
+    return bush.state === "idle";
+  }, 80);
+  if (hidden < 5 || game.p.hidden || game.p.act !== "dying")
+    fail(`a closed bush hides a dead player all the way down and shows him at the bottom: hidden ${hidden} frames, then ${game.p.hidden}, ${game.p.act}`);
+  ok(`a bush closed on a dead player swallows him for ${hidden} frames, and gives him back at the bottom`);
+}
+
 // 9. the level, played through: five regions, three levers and a ride. Every
 //    one of those levers is in a different region from its door bar the first,
 //    which is what `0x43c430` walking the LEVEL's list is for.
@@ -416,5 +542,151 @@ if (!move(["right"], 240, { jump: true, until: () => room() === "hugeroom" }))
  * floor it belongs to.
  */
 ok(`...and the hall of lifts is reached, at x ${game.p.x}, y ${game.p.y}`);
+
+// ...and a blow on the death's first cel is the whole handler again: 0x33,
+// 0x34, the death from its first frame and another 0x140 (`0x43fa36`)
+{
+  const ox = game.level!.spawned.flat().find((e) => e.kind === "initox");
+  if (!ox) fail(`SEWER places an ox`);
+  ox.hp = 0;
+  game.killFoe(ox, FOES.initox);
+  const paid = game.stats.score;
+  ox.clock = 1;
+  const a = game.foeAnchor(ox, game.level!) ?? { x: ox.x, y: ox.y };
+  game.strikeFoe(ox, 47, { dx: 20, dy: 0 }, 1, a.y, { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 }, 0, a);
+  if (game.stats.score - paid !== 320 || ox.clock !== 0 || ox.state !== "dead")
+    fail(`an ox struck on 5190 dies again and pays again; the score rose ${game.stats.score - paid}`);
+  ok(`an ox struck as it falls dies again from the top and pays another 320`);
+}
+
+// ...and the census. Nothing in the ox's class calls `0x42f870(obj, 0)`, so
+// its body keeps `obj+0x1c` and counts until the object is freed — `0x42f750`
+// takes it off `[0x4a6e88]` then (`0x42f778`). The pit's end frees it at once
+{
+  const dead = game.level!.spawned.flat().find((e) => e.kind === "initox" && e.state === "dead")!;
+  const counted = game.aliveNow();
+  if (!game.inCensus(dead)) fail(`a dead ox still holds its census flag until it is freed`);
+  const other = game.level!.spawned.flat().find((e) => e.kind === "initox" && e.state !== "dead");
+  if (!other) fail(`SEWER places two oxen`);
+  await h.load(`level=7&x=${Math.round(other.x)}&y=${Math.round(other.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const ox2 = game.spawnedHere().find((e) => e.kind === "initox")!;
+  // killed — and still counted — and then knocked off a ledge as it dies:
+  // `0x43f325` exempts only 0 and 7, so the body goes into the pit
+  game.killFoe(ox2, FOES.initox);
+  const before = game.aliveNow();
+  const score = game.stats.score;
+  ox2.fell = 200;
+  ox2.y -= 400;
+  ox2.vy = 5 * TICK_SCALE;
+  h.frame();
+  if (ox2.state !== "gait" || ox2.script !== 7) fail(`a dying ox past a hundred of drop goes in the pit: ${ox2.state}, kind ${ox2.script}`);
+  ox2.state = "gait";
+  ox2.anim = OX_PIT.land;
+  ox2.script = 7;
+  ox2.tag = 1;
+  ox2.clock = OX_PIT.land.cels.length;
+  h.frame(2);
+  if (game.spawnedHere().includes(ox2) || game.aliveNow() !== before - 1 || game.stats.score - score !== 0x140)
+    fail(`the pit's end frees the ox, takes it out of the census and pays 320: alive ${before} -> ${game.aliveNow()}, +${game.stats.score - score}`);
+  if (counted < 1) fail(`the corpse was counted: ${counted}`);
+}
+ok(`an ox's body counts until it is freed, and the pit frees it and takes it off the count`);
+
+/**
+ * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands
+ * its own case the frame the script ends, and the next script goes on then:
+ * exactly the script's own frames, and nothing between. A fresh one of `kind`
+ * near where the level puts it, given the reaction by hand.
+ */
+const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly FoeAnim[], hp?: number): Promise<number> => {
+  await h.load(`level=${lv}`);
+  const at = game.level!.spawned.flat().find((q) => q.kind === kind);
+  if (!at) fail(`level ${lv} places no ${kind}`);
+  await h.load(`level=${lv}&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const e = game
+    .spawnedHere()
+    .filter((q) => q.kind === kind && q.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  if (!e) fail(`no ${kind} near x${at.x}`);
+  e.asleep = false;
+  if (hp !== undefined) e.hp = hp;
+  e.state = "flinch";
+  e.anim = take;
+  e.clock = 0;
+  e.script = take.kind;
+  e.tag = take.tag;
+  let f = 0;
+  while (e.state === "flinch" && e.anim === take && f < 60) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || !next.includes(e.anim))
+    fail(`${kind}: ${take.from} is ${take.cels.length * take.hold} frames and then ${next.map((a) => a.from).join(" or ")}; ${f} frames, then ${e.anim.from}`);
+  return f;
+};
+
+{
+  // every eyeball reaction is kind 3, and `0x43dfee` puts the hover on at `obj+0x46`
+  const E = FOES.initeyeball.flinch!;
+  const f = [await handOff(7, "initeyeball", E[0], [EYEBALL.hover]), await handOff(7, "initeyeball", E[3], [EYEBALL.hover])];
+  ok(`an eyeball's shut eye and its knock-out hand to the hover after ${f.join(" and ")} frames (0x43dff5)`);
+}
+
+/**
+ * The eyeball's SWOOP, and what it does to him.
+ *
+ * `0x43e06c` is its door: he is in the judder, kind 9 — which is what the
+ * glob's own −2 puts him in — and no other eye is already swooping
+ * (`0x43e880`). The carry (`0x43e259`) holds him a hundred and twenty below
+ * it in the spawn pose, `0x402fa0(-1)` every frame, undrawn (`[0x46b1b4]`),
+ * rising with it; the shake (`0x43e2f5`) takes ten a frame (`0x402ac0(0xa)`);
+ * and it lets him go into the knockdown, `0x402fa0(2)`, drawn again.
+ */
+{
+  await go("damage=1");
+  const eyes = game.level!.spawned.flat().filter((q) => q.kind === "initeyeball");
+  const e = eyes[0];
+  const E = FOES.initeyeball;
+  const k = game.BRAIN_CTX;
+  const stage = (): void => {
+    install(e, EYEBALL.hover);
+    e.state = "gait";
+    e.clock = 0;
+    e.facing = -1;
+    e.x = game.p.x + 120;
+    e.y = game.p.y - 60;
+  };
+  stage();
+  game.p.act = null;
+  eyeball(e, E, 16, k);
+  const calm = e.script;
+  stage();
+  game.p.act = "jolt";
+  eyeball(e, E, 16, k);
+  if (calm === 5 || e.script !== 5 || e.tag !== 0)
+    fail(`0x43e06c: the swoop opens on a juddering player and not otherwise; calm ${calm}, jolted ${e.script}/${e.tag}`);
+  ok(`an eye swoops on a man in the judder, and only then (0x43e06c)`);
+
+  game.p.act = null;
+  const hp0 = game.stats.health;
+  install(e, EYEBALL.carryA);
+  e.clock = 0;
+  let posed = 0;
+  let under = 0;
+  const frames = EYEBALL.carryA.cels.length * EYEBALL.carryA.hold + EYEBALL.shakeA.cels.length * EYEBALL.shakeA.hold + 2;
+  for (let f = 0; f < frames; f++) {
+    eyeball(e, E, e.anim.cels.length * e.anim.hold, k);
+    if (e.script !== 5) break;
+    if (game.p.act === "posed" && game.p.hidden) posed += 1;
+    if (Math.abs(game.p.x - k.anchorX(e)) < 1 && Math.abs(k.player.anchor - (k.anchorY(e) + 0x78)) < 1) under += 1;
+    e.clock += 1;
+  }
+  if (!posed || posed !== under) fail(`0x43e26c / 0x43e2ab: held in the spawn pose, undrawn, 120 under it; posed ${posed}, under ${under}`);
+  if (game.stats.health >= hp0) fail(`0x43e2fc: the shake takes ten a frame; health ${hp0} -> ${game.stats.health}`);
+  if (game.p.hidden || game.p.act !== "downFront") fail(`0x43e38c / 0x43e3a1: let go into the knockdown and drawn again; ${game.p.act}, hidden ${game.p.hidden}`);
+  ok(`and it carries him ${posed} frames in the spawn pose, shakes ${hp0 - game.stats.health} health out of him and drops him down (0x43e259, 0x43e2f5)`);
+}
 
 pass(`SEWER's doors are locks, its levers are keys, and three of them can be walked to`);

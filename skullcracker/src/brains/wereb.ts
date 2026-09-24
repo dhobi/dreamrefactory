@@ -69,7 +69,8 @@ import {
  * The hit-reaction states — 4, 6 and 7 — and what the class's own handler
  * (`0x44f8b0`) does with them. The page plays the animations; the drain of
  * state 4 is {@link werebReacts}, its end is state 4 in {@link wereb}, and the
- * flinch hands back to the stance through {@link FoeAnim.resume}.
+ * flinch hands back to the stance through {@link FoeAnim.resume}. The burn
+ * {@link FoeAnim.decides}: state 4 is handed its own end on the frame it comes.
  *
  * - **`0x44f8b5`, the strength gate.** The handler opens on `[attacker+0x1a]`,
  *   the striking object's strength percent. `-9` (`0xfff7`) is a code, not a

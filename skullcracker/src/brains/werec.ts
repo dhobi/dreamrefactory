@@ -113,9 +113,9 @@ import {
  *   it squeals `0x21`, clears the bar, installs the death and pays **0x104** to
  *   the score (`0x452737`). The page plays it as {@link Foe.burns} with
  *   `fatal`, and the shots are {@link werecReacts} — `0x4526db` passes SELF as
- *   the target, so the gap is zero and every one of them comes out flat. One
- *   thing differs: this death's corpse lies `0xc8` frames (`0x452731`), and the
- *   page lays every death of the class down for the same {@link Foe.linger}.
+ *   the target, so the gap is zero and every one of them comes out flat. This
+ *   death's corpse lies `0xc8` frames (`0x452731`) where the blow's copies
+ *   `[0x46b204]` (`0x452a6a`) — the burn's own `linger` in {@link Foe.burns}.
  * - **7**, `0x452898`: the flinch, and it ends in the stance rather than in
  *   anything of its own — one branch shorter than the punk's. The flinch's
  *   {@link FoeAnim.resume} is that stance.
@@ -231,8 +231,7 @@ const BURNS = -9;
  * same test before it calls this (see `strikeCast`), and `self.landed` is the
  * guard here for the record.
  *
- * Two things are not carried: the shake (see {@link CastKit.bang}), and
- * `0x45d090` leaving the velocity alone, so the engine's shot keeps travelling
+ * One thing is not carried: `0x45d090` leaving the velocity alone, so the engine's shot keeps travelling
  * under its flash. This page plays every impact where it starts, the way it
  * plays the one on the ground.
  */
@@ -304,7 +303,7 @@ export const WEREC_SHOT: CastKit = {
    * 5 when the player is inside 512 across and 128 up or down of it
    * (`0x452f21`, `0x452f28`)
    */
-  bang: { sound: 0x34, flash: 5, near: { x: 0x200, y: 0x80 } },
+  bang: { sound: 0x34, flash: 5, near: { x: 0x200, y: 0x80 }, shakes: true },
   /** `0x452c83` — {@link shotBursts} */
   onCode: shotBursts,
   from: "0x452b20 / 0x452c50, script 0x477c38 and burst 0x477c60",

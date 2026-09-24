@@ -76,11 +76,14 @@ import {
   type BrainCtx,
   type Enemy,
   type Reaction,
+  TICK_SCALE,
 } from "./kit";
+import type { FoeAnim } from "../foes";
 
 /**
- * The four states a brain is never in, and what each of them does that this
- * file therefore does not.
+ * The three states a brain is never in and what each does that this file
+ * therefore does not — and the fall, which this file owns but which is entered
+ * from any of them.
  *
  * - **4**, the lever, `0x43f6e2`. `0x43f950` walks the world's switch list at
  *   `[0x472570]` and answers the first one whose point is inside this keeper's
@@ -100,16 +103,11 @@ import {
  *   and answers the blow with one of the three ATTACKS of `0x473098`, sound
  *   `0x2f + n` to match. Only a 1 reaches `0x4731e0` tag 1, the long knockback.
  *   So two blows in three are answered rather than taken.
- * - **7**, the fall, `0x43f7c9` — and this one is not a hit reaction at all, it
- *   is the pit. `0x42fdbc` accumulates `obj+0x32 += vy` for every airborne frame
- *   the thing is falling, and the preamble at `0x43f325` watches for that to pass
- *   **100**: more than a hundred pixels of drop and it is put into `0x472f00`
- *   tag 0 with `AI+0xe` set to twice `[0x46b204]` and sound `0x35`, which the
- *   bank names `#0390 ox scooby`. Tag 0 holds until the counter runs out and the
- *   fall has stopped; tag 1 plays three cels, pays `0x40d450(0x140)` — the same
- *   320 points the kill pays — drops the bar, shakes the screen with
- *   `0x4307c0(3)` and **returns 1**, the one answer in this class that removes
- *   the object.
+ * - **7**, the fall, is this module's own now — see `case 7` — but it is
+ *   listed because the preamble that enters it runs in EVERY state but 0 and
+ *   7, the flinch and the death included. {@link oxReacts} carries the fall
+ *   through both and hands the page the pit the frame it passes a hundred —
+ *   from the death too, which pays the 320 a second time when it lands.
  * - **9**, the death, `0x43f885`: `0x4732d8`, eight cels at two ticks each, with
  *   sound `0x3d` and another `0x4307c0(3)` on frame 5. `AI+0xe` counts the
  *   corpse down from ten times `[0x46b204]` (`0x43fa6f`) and the last frame
@@ -299,6 +297,55 @@ const MARGIN = 200;
 const BEAT = 8;
 
 /**
+ * `0x43f325` — `cmp word ptr [edi+0x32], 0x64; jle`: more than a hundred pixels
+ * of drop is the pit. `obj+0x32` is the body stepper's fall so far — `0x42fdbc`
+ * adds `obj+0xa` to it on every frame the thing is off its feet and moving
+ * down, and zeroes it on any other (the same word igor's `0x425296` reads) —
+ * which this page keeps as {@link Enemy.fell}.
+ */
+const PIT_DROP = 0x64;
+
+/**
+ * `0x43f33b` — `AI+0xe = [0x46b204] * 2`, and the ox's own creator has already
+ * written 80 into that global (`0x435c73`, `mov word ptr [0x46b204], 0x50`):
+ * a hundred and sixty frames at most in the air before the landing is forced.
+ */
+const PIT_WAIT = 0x50 * 2;
+
+/**
+ * `0x472f00`, kind 7 — the pit. Tag 0 is one cel, 5164, held while it drops;
+ * tag 1 is 5193..5195, the landing, a tick each.
+ */
+const PIT = {
+  drop: { cels: [5164], hold: 1, kind: 7, tag: 0, from: "0x472f00 tag 0" },
+  land: { cels: [5193, 5194, 5195], hold: 1, kind: 7, tag: 1, from: "0x472f00 tag 1" },
+  /** `0x43f352` — `#0390 ox scooby`, as it goes over */
+  over: 0x35,
+  /** `0x43f846` — the same 320 its death pays (`0x43f99a`'s handler) */
+  award: 0x140,
+} as const;
+
+/**
+ * `0x43f33b`..`0x43f369` — over the edge: `AI+0xe` gets the landing's
+ * patience, `0x35` goes out through `0x40f090` at the PLAYER's point
+ * (`[0x4ac3d4]+6`, `0x43f348`), and `0x472f00` tag 0 is what goes on.
+ */
+function overTheEdge(e: Enemy, k: BrainCtx): FoeAnim {
+  e.beat = PIT_WAIT;
+  k.say({ ...e, x: k.player.x, y: k.player.y }, PIT.over, "lead");
+  return PIT.drop;
+}
+
+/**
+ * `0x42fdbc`, for one engine frame: the frame's downward speed, in whole
+ * pixels a frame, added while it falls and forgotten the moment it is not.
+ */
+function falling(e: Enemy): number {
+  e.fell = e.vy > 0 ? (e.fell ?? 0) + e.vy / TICK_SCALE : 0;
+  return e.fell;
+}
+
+/**
  * `0x434200(point, rect)`, written out because this class does not hand it the
  * rect the page does.
  *
@@ -321,7 +368,7 @@ function inPatch(e: Enemy, k: BrainCtx): boolean {
 }
 
 /**
- * `initox`'s own machine — states 0, 1, 2, 3, 5 and 8.
+ * `initox`'s own machine — states 0, 1, 2, 3, 5, 7 and 8.
  *
  * ## The stack frame, which is where the field numbers come from
  *
@@ -353,7 +400,7 @@ function inPatch(e: Enemy, k: BrainCtx): boolean {
  * - `0x43f2f7`..`0x43f31c` claims the on-screen bar with `0x32ce` and
  *   `0x40e300(0x258)` whenever the player is in front and inside the first band.
  *   That is the HUD, not behaviour.
- * - `0x43f325` is the pit — see {@link NOT_HERE}.
+ * - `0x43f325` is the pit, which is ported: see `case 7`.
  * - `0x43f371` is the lever search, and it runs before the jump table — see
  *   {@link NOT_HERE} again.
  * - `obj+0x1a = 0x64` on the way out is this class committing its full strength
@@ -373,7 +420,15 @@ export const ox: Brain = (e, foe, run, k) => {
   const t = k.track(e, OX.bands);
   // `AI+0xe`, and it is the only slot of the struct this port spends
   e.beat ??= BEAT;
-  switch (e.script ?? 0) {
+  /**
+   * `0x43f325`, ahead of the jump table — the pit. Past a hundred pixels of
+   * drop, in any state but the patrol and the pit itself, `AI+0xe` gets the
+   * landing's patience, `0x35` goes out through `0x40f090` — at the PLAYER's
+   * point, `[0x4ac3d4]+6` (`0x43f348`) — and `0x472f00` tag 0 goes on.
+   */
+  const now = e.script ?? 0;
+  if (falling(e) > PIT_DROP && now !== 7 && now !== 0) return install(e, overTheEdge(e, k));
+  switch (now) {
     /**
      * ---- 0, `0x43f3ac`: the patrol, and the two things that end it.
      *
@@ -456,9 +511,32 @@ export const ox: Brain = (e, foe, run, k) => {
     case 8:
       return done ? install(e, OX.stand) : false;
     /**
-     * Kind 4 is the lever and kinds 6, 7 and 9 are the flinch, the fall and the
-     * death — all four are somebody else's, see {@link NOT_HERE}, and the page
-     * never calls a brain while one of them is running.
+     * ---- 7, `0x43f7c9`: the pit, in two tags.
+     *
+     * Tag 0 (`0x43f7db`) spends `AI+0xe` a frame at a time and holds its cel
+     * while the count lasts AND the fall goes on (`0x43f7e9`, `0x43f7eb`): the
+     * landing OR the count running out puts on tag 1. Tag 1 (`0x43f80b`), as
+     * its three cels end, says `0x3d` through `0x40f090` at the player's point
+     * (`0x43f826`), drops the bar, pays `0x40d450(0x140)`, jolts the screen with
+     * `0x4307c0(3)` and answers **1** (`0x43f85a`): the ox is taken out there,
+     * with no death and no corpse.
+     */
+    case 7:
+      if ((e.tag ?? 0) === 0) {
+        const left = e.beat ?? 0;
+        e.beat = left - 1;
+        if (left >= 0 && (e.fell ?? 0) !== 0) return false;
+        return install(e, PIT.land);
+      }
+      if (!done) return false;
+      k.say({ ...e, x: k.player.x, y: k.player.y }, OX.fall, "lead");
+      k.shake(3);
+      k.remove(e, PIT.award);
+      return false;
+    /**
+     * Kind 4 is the lever and kinds 6 and 9 are the flinch and the death —
+     * all three are somebody else's, see {@link NOT_HERE}, and the page never
+     * calls a brain while one of them is running.
      */
     default:
       return false;
@@ -609,6 +687,16 @@ function footfall(e: Enemy, k: BrainCtx, first: number): boolean {
  */
 export const oxReacts: Reaction = (e, foe, _run, k) => {
   const frame = Math.floor(e.clock / e.anim.hold);
+  /**
+   * `0x43f325` runs in the flinch and in the death too — it exempts only
+   * states 0 and 7 — so the long slide of `0x4731e0` off a ledge, or a body
+   * knocked off one as it dies, is the pit whatever it was doing. The fall is
+   * counted here as it is in the brain, and the frame it passes the mark the
+   * reaction hands the page the pit. From the death that means a second 320
+   * when it lands: `0x43fa3b` paid the first, and nothing in the class takes
+   * it out of the census before the pit frees it ({@link Foe.countsDead}).
+   */
+  if (falling(e) > PIT_DROP) return overTheEdge(e, k);
   if (e.state === "dead") {
     if (e.anim !== foe.death) return;
     // `0x43f8f4` — `obj+0x10 = -15` on every frame the body's count is still
@@ -623,7 +711,8 @@ export const oxReacts: Reaction = (e, foe, _run, k) => {
   if (Math.floor(e.clock) !== 1 || frame > 1) return;
   const n = foe.flinch?.indexOf(e.anim) ?? -1;
   if (n >= 0 && n < 3) k.say(e, OX.attackSay + n);
-  else if (n === 3) k.say(e, OX.flip);
+  // `0x43fad8` — the slide's is `0x40f090`: the mixer's channel 0
+  else if (n === 3) k.say(e, OX.flip, "lead");
 };
 
-export { NOT_HERE as OX_NOT_HERE };
+export { NOT_HERE as OX_NOT_HERE, PIT as OX_PIT };

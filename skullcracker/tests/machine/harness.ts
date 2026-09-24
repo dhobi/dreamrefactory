@@ -76,7 +76,9 @@ export async function headless(query = ""): Promise<Headless> {
       return done() ? max : -1;
     },
     hold(key, down) {
-      // the page's keydown (walk.ts): a key going down also lights its edge
+      // the page's keydown (walk.ts): nothing at all while the keys are shut
+      // (`0x402be0`, `game.inputOpen`), and a key going down lights its edge
+      if (!game.inputOpen) return;
       if (down && !game.held[key]) {
         if (key === "up") game.setUpPressed(true);
         if (key === "jump") game.setJumpPressed(true);
@@ -86,6 +88,7 @@ export async function headless(query = ""): Promise<Headless> {
       (game.held as Record<string, boolean>)[key as string] = down;
     },
     press(key) {
+      if (!game.inputOpen) return;
       if (key === "up") game.setUpPressed(true);
       if (key === "jump") game.setJumpPressed(true);
       if (key === "punch") game.setPunchPressed(true);

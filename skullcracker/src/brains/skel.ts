@@ -158,10 +158,10 @@ export const SKEL_BONE: CastKit = {
  *   (`0x45d18c` negates the dx only for the mirror flag) and up. State 6
  *   (`0x4238fc`) waits for both `obj+0x46` AND `obj+0x2e`, back on the ground,
  *   before handing to tag 1, cels 1266–1268, getting up; that hands to the
- *   walk.
+ *   walk (`0x423941`), which the get-up's `resume` says.
  * - **7, the flinch**, `0x46fd58`: three engine frames a cel. `0x423b61`
- *   compares the blow's own x against `obj+8` and reads `obj+0x28` to decide
- *   whether it came from behind. From the front it is tag 0, cel 1260. From
+ *   compares the contact point's x (`0x423ad0`) against `obj+8` and reads
+ *   `obj+0x28` to decide whether it came from behind. From the front it is tag 0, cel 1260. From
  *   **behind** it is tag 1 or 2 — `0x434540(2)`, cels 1212 and 1261 — and
  *   `0x423b9a` takes a further **0x14 off `AI+0`** on top of the blow. A
  *   skeleton hit in the back loses twenty more health than one hit in the face.
@@ -297,6 +297,13 @@ const DEPTH = 100;
 /** `0x4235a1` — and him rising faster than this, in the engine's own units */
 const RISING = -10;
 
+/** `0x42376f`..`0x423779` — how far in front of it the grab holds him, and how far up */
+const GRAB_SIDE = 0x33;
+const GRAB_UP = 0x26;
+/** `0x4237df`..`0x4237f3` — and the throw: on a hundred, thirty up */
+const THROW_ON = 0x64;
+const THROW_UP = 0x1e;
+
 /** `0x4236e9` — the grab needs him within this much of its own row */
 const GRAB_ROW = 50;
 
@@ -426,52 +433,58 @@ export const skel: Brain = (e, foe, run, k) => {
      *
      * Then, on the frame the reach ends, all four of these or it just walks
      * away: the band is 3, inside a hundred (`0x4236c2`); `[0x46b1b4]` is set
-     * (`0x4236ca`); `|self.y - player.y|` is under fifty (`0x4236e9`); and
-     * `0x402f60` says he is upright (`0x4236ee`). `[0x46b1b4]` is the
-     * chapter-wide "nobody is holding him" latch — thirty-seven sites across
-     * the executable touch it, and `0x4236f8` takes it as it grabs while
-     * `0x4237f8` puts it back as it lets go. This port has no grab to hold him
-     * with and therefore no way for the latch to be down, so it is read as
-     * always set; that is the disc's own resting value.
+     * — nobody has him (`0x4236ca`); `|self.y - player.y|` is under fifty
+     * (`0x4236e9`); and `0x402f60` says he is upright (`0x4236ee`). Then
+     * `0x4236f8` clears `[0x46b1b4]` — the grab's own cels draw him from here —
+     * and installs the grab.
      *
      * The tag is `[0x46b1a8]` (`0x423701`), the index of which of the two
      * player characters is being played — the same global `0x402f60` and
      * `0x402fa0` dispatch on. Cels 1240s hold one of them and 1340s the other.
-     * The page has one player, so {@link SKEL.grab} is the one taken and
-     * {@link SKEL.grabAlt} is named for the reader.
      */
     case 2: {
       if (!done) return false;
+      // ...and the claim is only handed back by the grab's own end
+      // (`0x4237f8`): `0x423a30` has no state test, so a blow that lands
+      // mid-grab flinches it and he stays undrawn until a life or a level
+      // starts (`0x429528`, `0x42e5a1`). The disc's, and kept
       const near = Math.abs(k.anchorY(e) - k.player.anchor) < GRAB_ROW;
-      if (t.band >= 3 && near && !k.player.down) {
-        return install(e, SKEL.grab, true);
+      if (t.band >= 3 && k.player.free && near && !k.player.down) {
+        k.hide(true);
+        return install(e, k.player.character === 1 ? SKEL.grabAlt : SKEL.grab, true);
       }
       return install(e, SKEL.walk);
     }
     /**
-     * ---- 3, `0x423756`: the grab, and almost none of it can be ported.
+     * ---- 3, `0x423756`: the grab.
      *
      * Every frame it holds him, `0x423756` does four things to the PLAYER:
      * turns his `obj+0x28` to the opposite of its own so he faces it, plants
      * him at `obj+8 ± 0x33` — fifty-one pixels in front — and `obj+6 - 0x26`,
      * thirty-eight up, and calls `0x402ac0(5)`, which takes five off
-     * `[0x4ac3d0]`. Then `0x42379d` reads the frame index `obj+0x42` and plays
+     * `[0x4ac3d0]`. His velocity is left alone and nothing puts him in a held
+     * state: his own think runs, and the grab puts him back where it wants him
+     * after it. Then `0x42379d` reads the frame index `obj+0x42` and plays
      * `zombie.snd` 0x17 on every frame whose index is not a multiple of four —
-     * the bones grinding, three beats in four.
+     * the bones grinding.
      *
-     * And on the frame the script ends, `0x4237c8` throws him: `obj+8 ± 0x64`,
-     * a hundred pixels the way the skeleton faces, `obj+6 - 0x1e`, thirty up,
-     * `[0x46b1b4]` handed back, and `0x402fa0(2)` — which dispatches on the
-     * character index and puts him into his own thrown state. Only then kind 1.
-     *
-     * The kit hands a brain no way to hold, drain or throw the player, so all
-     * five of those are read and not done (the grab's own cels still hit him
-     * through the page's ordinary strike-box pass). What
-     * survives is the transition, which is the state machine: hold the grab
-     * until it ends, then walk.
+     * And on the frame the script ends, `0x4237c8` throws him: a hundred
+     * pixels on from where it held him, the way the skeleton faces, thirty up,
+     * `[0x46b1b4]` handed back, and `0x402fa0(2)` — the knockdown. Only then
+     * kind 1.
      */
-    case 3:
-      return done ? install(e, SKEL.walk) : false;
+    case 3: {
+      const side = e.facing > 0 ? GRAB_SIDE : -GRAB_SIDE;
+      k.pin({ x: k.anchorX(e) + side, y: k.anchorY(e) - GRAB_UP }, { facing: -e.facing });
+      k.drain(5); // `0x423798`
+      if (Math.floor(e.clock / e.anim.hold) % 4 !== 0) k.say(e, SKEL.crunch);
+      if (!done) return false;
+      // `0x4237d3`..`0x4237f3` — on a hundred, thirty up, and down
+      k.pin({ x: k.player.x + (e.facing > 0 ? THROW_ON : -THROW_ON), y: k.player.anchor - THROW_UP });
+      k.hide(false); // `0x4237f8`
+      k.pose(2); // `0x423801`
+      return install(e, SKEL.walk);
+    }
     /**
      * ---- 4, `0x423822`: the throw, and the bone is a separate object.
      *
@@ -514,7 +527,8 @@ export const skel: Brain = (e, foe, run, k) => {
     case 5:
       return done ? install(e, SKEL.walk) : false;
     /**
-     * ---- 7, `0x423965`: a take has run out (the flinch's `resume`), and
+     * ---- 7, `0x423965`: a take has run out — handed here the frame it does
+     * ({@link FoeAnim.decides}) — and
      * `0x434540(5)` under 4 — three in five — springs away on the standing
      * leap; anything else walks.
      */
@@ -534,11 +548,20 @@ export const skel: Brain = (e, foe, run, k) => {
  *   `obj+0x2e` says it is on the ground again, so the last cel is held (the
  *   clock pinned a frame short) for as long as it is still in the air.
  * - **8**, the death: `0x4239b5` plays `zombie.snd` 0x15 when the frame index
- *   `obj+0x42` is 2 — the third cel, six frames in.
+ *   `obj+0x42` is 2 — the third cel, six frames in. It asks on every frame
+ *   that cel shows, three of them, and only the first is heard: `0x40ef30`
+ *   hands the record to `0x427b20`, which mixes on two channels and refuses a
+ *   sound whose priority either channel already holds (`0x427b5f`,
+ *   `0x427b6b`, `0x427bc2`, `0x427bca`) — and the priority is the record's
+ *   own, `(bank << 16) | (index + 1)` (`0x40ed69`), so the one it refuses is
+ *   the same sound still playing. Asked the same way here, and the page's own
+ *   mixer ({@link file://./../sound.ts}) does the refusing.
  */
 export const skelReacts: Reaction = (e, foe, run, k) => {
   if (e.state === "dead") {
-    if (Math.floor(e.clock) === 2 * (foe.death?.hold ?? 3)) k.say(e, SKEL.groan);
+    // asked on every frame the third cel shows (`0x4239b5`), and the mixer
+    // refuses the repeats while the first is still sounding
+    if (Math.floor(e.clock / (foe.death?.hold ?? 3)) === 2) k.say(e, SKEL.groan);
     return;
   }
   const down = foe.flinch?.[3];

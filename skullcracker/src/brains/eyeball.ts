@@ -12,8 +12,9 @@
  *
  * The one other thing that reaches the player is the carry — state 5 tags 2 to
  * 5 — and that is `0x402ac0(0xa)`, ten health a frame straight out of the
- * player's own word while he is held. The swoop that leads to it is not
- * reachable here (see {@link decide}), so the carry is read and not spent.
+ * player's own word while he is held. The swoop that leads to it opens on a
+ * player in the judder, kind 9 — which is what the glob's own −2 puts him in
+ * (see {@link decide}).
  *
  * ## Its nine scripts, and therefore its nine states
  *
@@ -105,16 +106,20 @@ import {
 /**
  * The two states the page owns, and what they do beyond playing an animation.
  * The pick is {@link Foe.pick} in `foes.ts`, the tail of state 3 is the brain's
- * own case 3, and the death's sound is {@link eyeballReacts}.
+ * own case 3, and the death's sound and the hover that goes on under both
+ * are {@link eyeballReacts}.
  *
  * - **3**, the fall and the flinch (`0x43dfc4`). Two scripts, one kind. The hit
  *   handler `0x43e8b0` picks between them: `0x43e9af` sends any blow harder than
  *   **0x46** — and any blow at all that lands while it is spitting — to
- *   `0x4727f0` tag 0, twelve cels of a dead-weight fall; anything softer reads
+ *   `0x4727f0` tag 0, twelve cels of 6300 with no stride of their own — what
+ *   moves it meanwhile is the hover ({@link float}); anything softer reads
  *   `obj+0`, the cel now showing, and answers cel **6206/6207/6208** with
  *   `0x472878` tags **1/2/3**. So which flinch it plays is chosen by which frame
  *   of the hover the blow caught, and a cel not in that list is not a flinch at
- *   all: `0x43e9d4` returns 1 with nothing installed.
+ *   all: `0x43e9d4` returns 1 with nothing installed. That includes a second
+ *   blow during the knock-out: the state is 3 by then, not 7, and the 6300s are
+ *   none of the three.
  * - **3** again, the splat: `0x43dfc4` watches `obj+0x2c` — the mover's "this
  *   thing is inside an obstacle" flag — and the frame a falling eyeball hits
  *   something it plays `0x4727f0` **tag 4**, cels 6527 down to 6524, with
@@ -375,12 +380,17 @@ const TICKS = TICK_SCALE;
  * (`0x43e940`), which is what a looping voice looks like: armed once, positioned
  * every frame, stopped at death.
  *
- * {@link BrainCtx.say} is the second call only — a one-shot — and the kit has no
- * handle for a loop. Calling it here would restart the sample every engine
- * frame for as long as the thing is alive, so the hum is carried as
- * {@link EYEBALL.hum} and left for whoever gives the kit a looping voice. Every
- * OTHER `0x40ef30` in this class is a genuine one-shot and is ported.
+ * So it is both calls, every frame the kind is not 8 (`0x43df1e`) — the brain's
+ * and, through a flinch, {@link eyeballReacts}'s — and the mixer does the rest:
+ * the first play loops on its channel, every later one is turned away as the
+ * same sound but moves it to where the eye now is ({@link BrainCtx.loop},
+ * `Mixer.place` in sound.ts). Every other `0x40ef30` in this class is a
+ * genuine one-shot.
  */
+function hum(e: Enemy, k: BrainCtx): void {
+  k.loop?.(EYEBALL.hum, true);
+  k.say(e, EYEBALL.hum);
+}
 const HUM = "0x43df25" as const;
 
 /**
@@ -458,6 +468,8 @@ const CARRY_RATE = 10;
 const SHAKE_RATE = 3;
 /** `0x43e371`/`0x43e4c5` — five turns of the stick and he is out of its feet */
 const STRUGGLE = 4;
+/** `0x43e2c3` — he hangs a hundred and twenty below its point */
+const HANGS = 0x78;
 
 /**
  * `initeyeball`'s own machine, states 0 to 7.
@@ -475,8 +487,8 @@ const STRUGGLE = 4;
  *
  * `0x43ddfc` to `0x43df49` happens whatever state the thing is in, and three
  * separate things live there: the health bar's claim, the hover, and the hum.
- * {@link float} is the second of them; the other two are documented where they
- * are and deliberately not ported.
+ * {@link float} is the second of them and {@link hum} the third; the bar's claim
+ * is documented where it is and not ported.
  */
 export const eyeball: Brain = (e, foe, run, k) => {
   const done = e.clock >= run;
@@ -502,6 +514,8 @@ export const eyeball: Brain = (e, foe, run, k) => {
    * ported, the same way the punk's is.
    */
   float(e, k, state);
+  // `0x43df25` — the hum, whatever it is doing
+  hum(e, k);
 
   switch (state) {
     /**
@@ -532,9 +546,9 @@ export const eyeball: Brain = (e, foe, run, k) => {
     /**
      * ---- 3, `0x43dfc4`: the tail of a hit reaction.
      *
-     * The flinch and the knock-out fall play as the page's reaction; when one
-     * ends, {@link FoeAnim.resume} hands it here on a one-frame script of kind
-     * 3, and `0x43dff5` is what a finished kind-3 script does: the hover, and
+     * The flinch and the knock-out fall play as the page's reaction, of kind 3;
+     * the frame one ends it is handed here ({@link FoeAnim.decides}), and
+     * `0x43dff5` is what a finished kind-3 script does: the hover, and
      * `0x43e002` writes `vy = -5` to climb back up on. The splat (`obj+0x2c`,
      * tag 4 and sound 0x3c) wants a collision word this page does not keep.
      */
@@ -597,14 +611,14 @@ export const eyeball: Brain = (e, foe, run, k) => {
  * below him and it climbs at seven, more than a hundred above and it sinks at
  * seven, and inside that it bobs. See {@link BOB}.
  *
- * Two of its four jobs cannot be done here:
+ * One of its four jobs cannot be done here, and one is not this function's:
  *
  * - `0x43dee4` reads **`obj+0x2e`** — back on the ground — and lifts the thing
  *   twenty pixels outright when it is set, which is how an eyeball that has
  *   settled on the floor gets airborne again. {@link Enemy} has no such flag;
  *   this page does not run foes through the ground solver in a way a brain can
  *   ask about, and `e.vy` is not it.
- * - the hum, {@link HUM}.
+ * - the hum, {@link HUM}, which is {@link hum} and called beside this.
  */
 function float(e: Enemy, k: BrainCtx, state: number): void {
   // `0x43df10` — the idle, the swoop and the spit steer themselves
@@ -656,11 +670,9 @@ function float(e: Enemy, k: BrainCtx, state: number): void {
  *   already in state 5 — says no other eyeball has him. Nine is one of the four
  *   `0x402f00` also names (9, 0xa, 0xd, 0x18) and those four are what the spit
  *   declines to go out at, so it is a helpless state: stunned, or already held.
- *   **The swoop is therefore unreachable in this port**, and {@link swoop} is
- *   written out in full anyway so that the day the page can answer "is he
- *   stunned" it is one condition, not a re-read of `0x43e13d`.
- *   For the same reason `0x402f00` is taken as true at the spit below: the port
- *   can never see the player in any of the four states that would refuse it.
+ *   Kind 9 is the judder `0x471fc8`, which the −2 code puts him in — the
+ *   eyeball's own glob carries −2 — and the brain's hypnosis too
+ *   (`0x402fa0(4)`). So one eye's glob opens another's swoop.
  */
 function decide(
   e: Enemy,
@@ -690,13 +702,10 @@ function decide(
     return install(e, e.facing > 0 ? EYEBALL.turnEast : EYEBALL.turnWest);
   }
   /**
-   * `0x43e07c` — the swoop's door, which this port cannot open. See above.
-   *
-   * ```
-   *   if (player.state == 9 && !anyEyeballAlreadySwooping())
-   *       install(0x472ad0, 0);   // kind 5 tag 0, the climb
-   * ```
+   * `0x43e06c` — the swoop's door: he is juddering and no eye already has
+   * him (`0x43e880` walks the class for one in state 5).
    */
+  if (k.player.jolted && !k.someIn(e, 5)) return install(e, EYEBALL.climb);
   switch (t.band) {
     // beyond 260 — nothing to think about, close on him
     case 0:
@@ -713,7 +722,9 @@ function decide(
       e.vx = e.vx / 2;
       const roll = k.roll(2);
       if (roll === 1) {
-        // `0x43e0d0` — `0x402f00`, which this port reads as always true;
+        // `0x43e0d0` — `0x402f00`: not at a man already juddering, held,
+        // carried or down; that falls to the tail
+        if (k.player.helpless) break;
         // `0x43e0da` seeds `AI+0x30` with two
         e.nerve = SPIT_SEED;
         k.say(e, EYEBALL.hawk);
@@ -760,13 +771,12 @@ function decide(
  * instruction). This port has one player, so it takes the first pair and names
  * the second in the table.
  *
- * **Nothing here reaches the player.** The carry writes his x, his y and his
- * vertical speed every frame (`0x43e2ab`…`0x43e2d4`), puts him in a held state
- * with `0x402fa0(-1)`, marks him held at `[0x46b1b4]`, and the shake takes
- * `0x402ac0(0xa)` — ten health — off him every frame it plays. All of that is
- * read and none of it is done: this file moves the eyeball and nothing else.
- *
- * And see {@link decide} for why the state is unreachable as things stand.
+ * The carry writes his x, his y and his vertical speed every frame
+ * (`0x43e2ab`…`0x43e2d4`) — its own x, a hundred and twenty below its own y —
+ * puts him in the spawn pose with `0x402fa0(-1)` every frame (which drops his
+ * keys every frame too), and clears `[0x46b1b4]`, so its own cels draw him.
+ * The shake takes `0x402ac0(0xa)` — ten health — off him every frame it
+ * plays. And see {@link decide} for the door.
  */
 function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
   switch (e.tag ?? 0) {
@@ -802,7 +812,8 @@ function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
       e.vx = Math.trunc(reach / DIVE_DIVISOR) * TICKS;
       if (Math.abs(lift) < LATCH_Y && Math.abs(reach) < LATCH_X) {
         k.say(e, EYEBALL.snatch);
-        install(e, EYEBALL.carryA);
+        // `0x43e222` — tag 4 for the second character, tag 2 for the first
+        install(e, k.player.character === 1 ? EYEBALL.carryB : EYEBALL.carryA);
       }
       /**
        * `0x43e240` — and the countdown is spent whether it latched or not, so a
@@ -823,8 +834,12 @@ function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
     case 2:
     case 4: {
       e.vy = -CARRY_RATE * TICKS;
+      k.pose(-1); // `0x43e26c`
+      k.hide(true); // `0x43e260`
       k.say(e, e.tag === 4 ? EYEBALL.grabB : EYEBALL.grabA);
       if (k.player.facing === e.facing) e.facing = -e.facing;
+      // `0x43e2ab`..`0x43e2d4` — under it, rising with it
+      k.pin({ x: k.anchorX(e), y: k.anchorY(e) + HANGS }, { vy: -CARRY_RATE });
       if (!done) return false;
       e.beat = 0;
       return install(e, e.tag === 4 ? EYEBALL.shakeB : EYEBALL.shakeA);
@@ -840,14 +855,23 @@ function swoop(e: Enemy, k: BrainCtx, done: boolean): boolean {
     case 3:
     case 5: {
       e.vy = -SHAKE_RATE * TICKS;
-      // `0x43e2fa` — `0x402ac0(0xa)`, ten health a frame. Read, never spent.
+      k.drain(0xa); // `0x43e2fc`
+      k.pose(-1); // `0x43e306`
+      k.hide(true); // `0x43e314`
       if (k.player.facing === e.facing) {
         e.facing = -e.facing;
         e.beat = (e.beat ?? 0) + 1;
       }
+      // `0x43e331`..`0x43e364` — under it, and standing still in it
+      k.pin({ x: k.anchorX(e), y: k.anchorY(e) + HANGS }, { vx: 0, vy: -SHAKE_RATE });
       if (!done && (e.beat ?? 0) <= STRUGGLE) return false;
-      // `0x43e38c` — `0x402fa0(2)` hands him back to himself, and `[0x46b1b4]`
-      return install(e, EYEBALL.drift);
+      install(e, EYEBALL.drift);
+      // `0x43e38c` — `0x402fa0(2)` knocks him down, his fall so far goes to
+      // nothing (`0x43e39b`) and `[0x46b1b4]` hands him back (`0x43e3a1`)
+      k.pose(2);
+      k.pin({ x: k.player.x, y: k.player.anchor }, { fell: 0 });
+      k.hide(false);
+      return false;
     }
     default:
       return false;
@@ -938,6 +962,13 @@ function ladder(e: Enemy, k: BrainCtx, done: boolean): boolean {
 const POP_FRAMES = 12;
 
 /**
+ * States 3 and 8 while the page plays them.
+ *
+ * The hover is not a state's: `0x43de45` runs it before the jump table for
+ * every state but 0, 5 and 7, so a struck eye goes on being dragged to the
+ * player's height, bobbing, and having any sideways speed past fifty halved
+ * (`0x43def0`) all through its flinch and its death — {@link float}.
+ *
  * State 8, `0x43e716` — the death, which the page plays as {@link Foe.death}:
  * `0x4728e0` tag 0 and tag 1 back to back, both one tick a cel, with
  * {@link Foe.linger} 0 because tag 1 ending is `0x43e7b5`'s `mov ax, 1`.
@@ -948,11 +979,23 @@ const POP_FRAMES = 12;
  * `0x40cba0(self.point, 0x32, 0)` gibs at `0x43e768`.
  */
 export const eyeballReacts: Reaction = (e, foe, _run, k) => {
-  if (e.state !== "dead" || e.anim !== foe.death) return;
+  // `0x43de45`, ahead of `0x43df52`'s jump on 3 and on 8 alike
+  float(e, k, e.state === "dead" ? 8 : 3);
+  if (e.state !== "dead") {
+    hum(e, k);
+    return;
+  }
+  // `0x43e940` / `0x43e951` — the killing blow lets the loop go and silences it
+  if (e.clock < 1) {
+    k.loop?.(EYEBALL.hum, false);
+    k.mute?.(EYEBALL.hum);
+  }
+  if (e.anim !== foe.death) return;
   if (e.clock <= POP_FRAMES) e.vx = Math.trunc(e.vx / TICKS / 2) * TICKS;
   if (!e.hatched && e.clock >= POP_FRAMES) {
     e.hatched = true;
-    k.say(e, EYEBALL.burst);
+    // `0x43e750` — through `0x40f090`, the mixer's channel 0
+    k.say(e, EYEBALL.burst, "lead");
     for (let n = 0; n < 4; n++) k.spray(e, 0x32);
   }
 };

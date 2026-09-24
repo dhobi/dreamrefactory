@@ -59,7 +59,7 @@ import { writeSkl } from "./savegame";
 import { Film } from "./film";
 import { FOES, loopIndex } from "./foes";
 import { type Enemy } from "./brains/kit";
-import { CRAFT, SPRAY, VANISH } from "./effects";
+import { CRAFT, GOB_CELS, SPARK, SPRAY, VANISH } from "./effects";
 import { REACH, Sounds } from "./sound";
 import { ELEVATOR, Plank, crowCel, elevatorCel, ibeamCel, crushCel, plankCel, PICKUP, shackCel, PIPE, ROACH, doorCel, switchCel, dripCel, HAND, LIGHTFX, BOGGS, SKATEBOARD } from "./props";
 import { MISSIONS } from "./mission";
@@ -92,12 +92,15 @@ import {
   boggsHeadCel,
   boggsWormCel,
   bolts,
+  boltCel,
   bridgeCel,
   bushCel,
   buttonMask,
   cageCel,
   canCel,
   cans,
+  headCel,
+  heads,
   castBlow,
   castCel,
   casts,
@@ -146,6 +149,7 @@ import {
   handCel,
   hatchCel,
   held,
+  inputOpen,
   hereOf,
   holeCel,
   ibeamsHere,
@@ -191,6 +195,7 @@ import {
   setFilm,
   setFlashColour,
   setIface,
+  tallyDial,
   setJumpPressed,
   setKickPressed,
   setPlayer,
@@ -205,6 +210,7 @@ import {
   solids,
   sound,
   spawnedHere,
+  sparks,
   spritesTouch,
   startTicks,
   stats,
@@ -218,7 +224,7 @@ import {
   useCharacter,
   view,
   viewH,
-  waitsForHardcore,
+  waitsFor,
   wakeAudio,
   wormsHere,
 } from "./game";
@@ -605,11 +611,17 @@ addEventListener("keydown", (e) => {
     return;
   }
   const k = KEYS[e.key];
-  if (k === "up" && !held.up) setUpPressed(true);
-  if (k === "jump" && !held.jump) setJumpPressed(true);
-  if (k === "punch" && !held.punch) setPunchPressed(true);
-  if (k === "kick" && !held.kick) setKickPressed(true);
-  if (k) held[k] = true;
+  if (k) {
+    // `0x402be0` answers nothing while `[0x46b1d4]` is 0 — see {@link inputOpen}
+    // — and the key is the game's either way, so the page does not scroll on it
+    if (inputOpen) {
+      if (k === "up" && !held.up) setUpPressed(true);
+      if (k === "jump" && !held.jump) setJumpPressed(true);
+      if (k === "punch" && !held.punch) setPunchPressed(true);
+      if (k === "kick" && !held.kick) setKickPressed(true);
+      held[k] = true;
+    }
+  }
   /*
    * ...and the rest of this page's own keys are held with SHIFT, which they were
    * not until the cheat words went in.
@@ -647,7 +659,7 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => {
   const k = KEYS[e.key];
-  if (k) held[k] = false;
+  if (k && inputOpen) held[k] = false;
 });
 /**
  * A tap on the picture belongs to the film, and to nothing else.
@@ -1052,7 +1064,7 @@ function drawStreams(camX: number, camY: number): void {
 /** the bolts, one cel each — `0x46c588` tag 2 holds 4000 the whole way out */
 function drawBolts(camX: number, camY: number): void {
   if (!level) return;
-  for (const b of bolts) drawLevelCel(BOLT.cel, b.x, b.y, camX, camY);
+  for (const b of bolts) drawLevelCel(boltCel(b), b.x, b.y, camX, camY, b.facing < 0);
 }
 
 /** the green balls, from the shared player book, centred on their own anchors */
@@ -1086,19 +1098,22 @@ function drawGobs(camX: number, camY: number): void {
   for (const g of gobs) {
     // rising, falling, or a puddle — `0x40c480`'s three cases, and the switch to
     // the falling cels is the sign of vy exactly as it tests `obj+0xa > 0`
+    // ...on its own script: goo, or the player's sweat or blood (`BLEED`),
+    // three scripts of one layout and one hold
+    const cels = GOB_CELS[g.kind ?? "goo"];
     const id =
       g.stage >= 0
-        ? SPRAY.pool[g.stage]
+        ? cels.pool[g.stage]
         : g.vy > 0
-          ? SPRAY.fall.cels[
+          ? cels.fall[
               Math.min(
-                SPRAY.fall.cels.length - 1,
+                cels.fall.length - 1,
                 Math.floor(g.age / SPRAY.fall.hold),
               )
             ]
-          : SPRAY.rise.cels[
+          : cels.rise[
               Math.min(
-                SPRAY.rise.cels.length - 1,
+                cels.rise.length - 1,
                 Math.floor(g.age / SPRAY.rise.hold),
               )
             ];
@@ -1260,7 +1275,9 @@ function loop(now: number): void {
     drawLevelCel(
       r.running
         ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)]
-        : ROACH.drop.cels[0],
+        : r.spilled
+          ? ROACH.fall.cels[0]
+          : ROACH.drop.cels[0],
       r.x,
       r.y,
       camX,
@@ -1324,13 +1341,9 @@ function loop(now: number): void {
     // then the head. The disassembly settles where each of these STANDS but not
     // what order they are painted in, and this is the order that reads.
     for (let i = 0; i < b.machines.length; i++)
-      drawLevelCel(
-        machineCel(b, i),
-        b.machines[i].x,
-        b.machines[i].y,
-        camX,
-        camY,
-      );
+      // `0x419d38` — the first one is painted only while it is sweeping
+      if (i !== 0 || b.zap.kind !== 0)
+        drawLevelCel(machineCel(b, i), b.machines[i].x, b.machines[i].y, camX, camY);
     for (const m of b.worms) drawLevelCel(boggsWormCel(m), m.x, m.y, camX, camY);
     drawLevelCel(boggsCel(b), b.x, b.y, camX, camY);
     drawLevelCel(BOGGS.arm.poses[BOGGS.arm.tag], b.x, b.y, camX, camY);
@@ -1369,6 +1382,8 @@ function loop(now: number): void {
   // the pickup underneath it, because code 2 keeps cel 14000 and no book in
   // the game carries that. See {@link CAN}.
   for (const c of cans) drawLevelCel(canCel(c), c.x, c.y, camX, camY, c.vx < 0);
+  // ...and the heads the zombies and igors shed — `HEAD` in props.ts
+  for (const h of heads) drawLevelCel(headCel(h), h.x, h.y, camX, camY, h.west);
   // ...and the flames LAST, because a flame is an object standing on top of
   // whatever it is burning and not a wash over its cel
   for (const f of flames) drawLevelCel(flameCel(f), f.x, f.y, camX, camY, f.mirror);
@@ -1376,12 +1391,17 @@ function loop(now: number): void {
   drawStreams(camX, camY);
   drawGobs(camX, camY);
   drawPops(camX, camY);
+  // kragg's sparks, out of ARCADE's own book (`0x474ed8`)
+  for (const k of sparks)
+    drawLevelCel(SPARK.cels[Math.min(SPARK.cels.length - 1, Math.floor(k.age / SPARK.hold))], k.x, k.y, camX, camY);
 
   // the player, feet on the ground, between the rate-1 planes and the
   // foreground — the disc's own cels for both facings, so nothing is mirrored
   const id = lastCel;
   const loc = player.byId.get(id);
-  if (loc !== undefined) {
+  // ...unless something is carrying him and drawing him itself — `0x419d25`
+  // skips `0x402980` while `[0x46b1b4]` is clear
+  if (loc !== undefined && !p.hidden) {
     const art = playerCel(loc);
     if (art) {
       // one set of cels, flipped by facing, and placed the way `0x4026d0`
@@ -1479,6 +1499,7 @@ function loop(now: number): void {
       // (`0x415f55` computes it with the same subtraction the win test makes)
       quota: Math.max(0, aliveNow() - stats.allowance),
       ticks: stats.ticks,
+      dial: tallyDial(),
       buttons: buttonMask(),
       // `0x40d663` — the icon is drawn only while `[0x479438]` is set, but the
       // four gauge rows are drawn whatever, out of the weapon record's own
@@ -1553,8 +1574,9 @@ function loop(now: number): void {
     room?.exits.some((e) => inside(e as unknown as SbkEntity)) ?? false;
   const alive = aliveNow();
   const ready = goalReady();
-  // SERVICE's second condition, {@link waitsForHardcore}
-  const bossSay = waitsForHardcore() ? " and HARDCORE still standing" : "";
+  // the goal's second condition, {@link waitsFor}
+  const waiting = waitsFor();
+  const bossSay = waiting ? ` and ${waiting} still standing` : "";
   const inGoal = here.goal !== undefined && inside(here.goal);
   const won = craftOpened();
   // the level is thousands of pixels wide and its end is one rect in it, so say

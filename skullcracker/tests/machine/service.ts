@@ -28,7 +28,9 @@
 import { FOES } from "../../src/foes";
 import { type Enemy } from "../../src/brains/kit";
 import { SKATEBOARD } from "../../src/props";
-import { FPS, fail, headless, ok, pass } from "./harness";
+import { FPS, fail, headless, ok, pass, recordSound } from "./harness";
+import type { FoeAnim } from "../../src/foes";
+import { HARDCORE, HARDCORE_THROW, HARDCORE_THROW_LOW } from "../../src/brains/hardcore";
 
 const h = await headless("level=6");
 const { game } = h;
@@ -93,7 +95,7 @@ ok(`and the one at the end stands on 6070 with 750 health`);
 
 // 4b. ...and the goal waits for it: `0x43b9ec` asks `[0x472574]`, which only
 //     its death writes (`0x43d309`), after the count
-if (!game.waitsForHardcore()) fail(`SERVICE's goal waits for the one at the end — 0x43b9ec`);
+if (game.waitsFor() !== "HARDCORE") fail(`SERVICE's goal waits for the one at the end — 0x43b9ec`);
 ok(`and SERVICE's goal waits for it as well as for the count`);
 
 /**
@@ -137,6 +139,129 @@ for (let i = 0; i < 600 && after < 0; i++) {
 if (!flinched) fail(`never landed a blow on the one at the end`);
 if (after !== 3 && after !== 6) fail(`0x43d062 hands a flinch to kind 3 or kind 6; it went to kind ${after}`);
 ok(`a blow on it flinches, and the flinch hands on to kind ${after}`);
+
+/**
+ * 4c'. ...and what it throws: `0x43c860`. Tag 2 once and tag 3 round and round
+ * in flight; a HIGH throw rolls `0x434540(0x64)` as its launch ends and under
+ * 30 goes out on tag 4 and COMES BACK — `0x43c9bd` turns it past 700 from the
+ * thrower, 25 below his point, at the launch's 80 the other way. Only the
+ * landing ends it, and it lies there 0x28 frames past that (`0x43cafb`).
+ */
+{
+  await go(8700);
+  const hc2 = game.spawnedHere().find((e) => e.kind === "inithardcore")!;
+  const a = game.foeAnchor(hc2, game.level!)!;
+  // the fork: a run of high throws, each let go and stepped past its launch;
+  // the low ones never roll
+  let back = 0;
+  const runs = 40;
+  for (let i = 0; i < runs; i++) {
+    game.casts.length = 0;
+    game.castAt(hc2.x, a.y, 1, HARDCORE_THROW);
+    game.castAt(hc2.x, a.y, 1, HARDCORE_THROW_LOW);
+    h.frame(2);
+    if (game.casts.find((c) => c.kit === HARDCORE_THROW_LOW)?.out) fail(`a low throw never comes back (0x43c926)`);
+    if (game.casts.find((c) => c.kit === HARDCORE_THROW)?.out) back += 1;
+  }
+  if (back === 0 || back > runs / 2) fail(`under 30 in 100 comes back; ${back} of ${runs} did`);
+  // one that does: out on 2114/2115, turned past 700, 25 below where he stood
+  game.casts.length = 0;
+  game.castAt(hc2.x, a.y, -1, HARDCORE_THROW);
+  const c = game.casts[0];
+  c.out = true;
+  let turned: { was: number; x: number; y: number; vx: number } | null = null;
+  const cels = new Set<number>();
+  for (let i = 0; i < 40 && game.casts.includes(c) && c.landed === undefined; i++) {
+    const was = c.x;
+    h.frame();
+    if (c.out) cels.add(game.castCel(c));
+    if (c.back === 0 && !turned) turned = { was, x: c.x, y: c.y, vx: c.vx };
+  }
+  // the frame it turns is the frame it starts back: the think turns it and
+  // stops it, and the same frame's script step spends `0x4748c8`'s dx 80
+  // before the move (`0x45d0f0`, `0x42fd80`) — so it is already 80 back
+  if (!turned || Math.abs(turned.was - hc2.x) <= 700 || turned.vx !== 80 || turned.x - turned.was !== 80 || turned.y !== a.y + 25)
+    fail(`the far leg turns past 700 and moves 80 back on that frame, 25 below his point: ${JSON.stringify(turned)} from x${hc2.x} y${a.y}`);
+  if ([...cels].some((cel) => cel !== 2114 && cel !== 2115)) fail(`the far leg is tag 4, 2114 and 2115; saw ${[...cels].join(",")}`);
+  // ...and it goes only by landing, then lies 0x28 more
+  const landedAt = h.until(() => c.landed !== undefined || !game.casts.includes(c), 200);
+  if (landedAt < 0 || c.landed === undefined) fail(`only the landing ends it`);
+  const lay = h.until(() => !game.casts.includes(c), 100);
+  if (lay < 40 || lay > 43) fail(`it lies 0x28 frames past its landing (0x43cafb); it went after ${lay}`);
+  // ...and a hit leaves it flying, worth nothing (`0x43c866`): one thrown
+  // into the player with the damage on, clear of anything else that hits
+  await h.load("level=6&damage=1&foehit=1");
+  h.until(() => game.p.onGround, 60);
+  h.frame(4);
+  game.casts.length = 0;
+  const pa = game.p.y - game.p.feet;
+  // from 240 behind him, a LOW one — a high one may take the far leg, whose
+  // 2114/2115 carry no strike box at all — launched 25 below a point 60 above
+  // his anchor, so it crosses his chest
+  game.castAt(game.p.x - 240, pa - 60, 1, HARDCORE_THROW_LOW);
+  const s2 = game.casts[0];
+  const hp = game.stats.health;
+  let hitAt = -1;
+  for (let i = 0; i < 12 && hitAt < 0; i++) {
+    h.frame();
+    if (game.stats.health < hp) hitAt = i;
+  }
+  if (hitAt < 0) fail(`a high throw from 240 behind should meet him: health ${hp} -> ${game.stats.health}, throw at x${s2.x} y${s2.y}, him x${game.p.x} y${pa}`);
+  if (!game.casts.includes(s2) || !s2.struck || game.castBlow(s2) !== 0 || s2.landed !== undefined)
+    fail(`the throw that met him flies on, worth nothing (0x43c866): here ${game.casts.includes(s2)}, struck ${s2.struck}, blow ${game.castBlow(s2)}`);
+  const after = game.stats.health;
+  h.frame(3);
+  if (game.stats.health !== after) fail(`and it cannot strike him twice: health ${after} -> ${game.stats.health}`);
+}
+ok(`its throw flies on harmless once it has struck, sometimes comes back, and goes only by landing`);
+
+/**
+ * 4d. ...and the blow that fells it. `0x43d28b` hands `0x40cba0` no hitter, so
+ * its goo goes both ways whatever way the blow went; and state 9 calls
+ * `0x42f7f0(obj, 0.7)` (`0x43d0c5`), so the body its death throws up comes
+ * down BOUNCING, with 0x3d on every landing that hands speed back (`0x43d0d3`).
+ */
+await go(8700);
+const felled = game.spawnedHere().find((e) => e.kind === "inithardcore")!;
+felled.hp = 1;
+const heard = recordSound(game);
+const gobsWere = game.gobs.length;
+game.strikeFoe(felled, 120, { dx: 40, dy: 0 }, 1, felled.y, { top: 0, left: 0, bottom: 1, right: 1 });
+const goo = game.gobs.slice(gobsWere);
+if (goo.length !== 20 || !goo.some((g) => g.vx < 0) || !goo.some((g) => g.vx > 0))
+  fail(`a blow of 120 from the west should throw twenty gobs both ways; ${goo.map((g) => Math.sign(g.vx)).join(" ")}`);
+if (felled.state !== "dead") fail(`a blow past its health should fell it; it is ${felled.state}`);
+const thuds = (): number => heard.filter((c) => c.call === "effect" && c.args[0] === 0x3d).length;
+let rose = false;
+for (let i = 0; i < 30; i++) {
+  h.frame();
+  if (thuds() > 0 && felled.vy < 0) rose = true;
+}
+const landed = thuds();
+if (!rose || landed < 2) fail(`at seven tenths the body should come back up off the floor and land again: ${landed} thuds`);
+h.frame(30);
+if (thuds() !== landed || felled.vy !== 0) fail(`...and then lie still and quiet: ${thuds() - landed} more thuds, vy ${felled.vy}`);
+ok(`it bleeds both ways, and its body bounces with ${landed} thuds before it lies still`);
+
+/**
+ * 4e. A batboy that FINDS a lever says so: `0x4392a4` turns it to the lever,
+ * `0x4392d7` plays `mall.snd` 0xb through `0x40f090` and the lever script
+ * goes on — once, not every frame it goes on being there.
+ */
+{
+  const told = recordSound(game);
+  await go(4300);
+  const bat = game.spawnedHere().find((e) => e.kind === "initbatboy" && e.left === 3900);
+  if (!bat) fail(`SERVICE's batboy at x4500 watches the lever at x4599`);
+  bat.asleep = false;
+  if (h.until(() => !!bat.aimed, 200) < 0) fail(`a batboy with a lever in its rect should find it`);
+  h.frame(20);
+  // (its waking squeal is the same 0xb, through `0x40ef30` — `0x43937b`)
+  const found = told.filter((c) => c.call === "effect" && c.args[0] === 0xb && c.args[3] === "lead");
+  if (found.length !== 1)
+    fail(`0x4392d7: one 0xb through 0x40f090 as it finds the lever; heard ${JSON.stringify(found.map((c) => c.args))}`);
+  ok(`a batboy finding a lever says 0xb once, on channel 0`);
+}
 
 // 5. six levers, and every one of them starts off
 await go();
@@ -250,6 +375,48 @@ if (life > 0xb4) fail(`0x4385d0 seeds it 180 at most; it read ${life}`);
 ok(`...and leaves its board — cels ${[...boardCels].sort().join(",")}, lying there ${life} frames`);
 // and it is swept up: `0x437809` spends one a frame and removes it at -1
 if (h.until(() => !game.skates.includes(board), 200) < 0) fail(`0x437809 removes it when AI+0xa goes negative; it is still there`);
+
+/**
+ * ...and a board lying there can be STEPPED on — `0x437854`, state 1. On it,
+ * it takes a unit of speed your way every frame and no drag; the frame it has
+ * gone on out from under you it is kicked back up on its hop with forty
+ * frames off its life, and faster than 25 (`0x4379a3`) it takes you down with
+ * it: `0x402fa0(2)`, the knockdown.
+ */
+{
+  const lay = (speed: number) => {
+    game.skates.length = 0;
+    game.dropBoard({ x: game.p.x, y: game.p.y, facing: game.p.facing } as Enemy);
+    const d = game.skates[0];
+    h.until(() => d.down, 60);
+    d.x = game.p.x;
+    d.vx = speed * game.p.facing;
+    d.life = 150;
+    return d;
+  };
+  game.p.act = null;
+  const slow = lay(0);
+  const seen: string[] = [];
+  let kicked = -1;
+  for (let i = 0; i < 40 && kicked < 0; i++) {
+    const was = slow.life;
+    h.frame();
+    if (slow.stood) seen.push("on");
+    if (!slow.down && was - slow.life >= 0x28) kicked = i;
+  }
+  if (!seen.length || kicked < 0 || Math.sign(slow.vx) !== game.p.facing || game.p.act === "downFront")
+    fail(`standing on a board rolls it on and kicks it up behind you, and slowly that is all: on ${seen.length}, kicked ${kicked}, vx ${slow.vx}, ${game.p.act}`);
+  ok(`a board stood on rolls away your way and is kicked up as it leaves you`);
+  const fast = lay(30);
+  h.hold(game.p.facing > 0 ? "left" : "right", false);
+  let down = false;
+  for (let i = 0; i < 20 && !down; i++) {
+    h.frame();
+    down = game.p.act === "downFront";
+  }
+  if (!down) fail(`a board faster than 25 going out from under you knocks you down (0x4379aa): ${game.p.act}, vx ${fast.vx}`);
+  ok(`and one going faster than 25 takes you down with it`);
+}
 ok(`...and 0x437809 sweeps it up again`);
 
 // 10. the goop hits back, once the switch that lets anything hit back is on.
@@ -342,5 +509,45 @@ if (jumps > 8) fail(`the level's own risers are four; this took ${jumps} jumps`)
 const lit = game.switchesHere().filter((w) => w.state === "on" || w.state === "turningOn").length;
 if (lit < 5) fail(`running past every keeper should light nearly all six; ${lit} are lit`);
 ok(`ran the level to the goal at x ${game.p.x}, y ${game.p.y}, on ${jumps} jumps, ${lit} of 6 levers lit behind`);
+
+/**
+ * A reaction that is a state of the machine — {@link FoeAnim.decides} — hands
+ * its own case the frame the script ends, and the next script goes on then:
+ * exactly the script's own frames, and nothing between. A fresh one of `kind`
+ * near where the level puts it, given the reaction by hand.
+ */
+const handOff = async (lv: number, kind: string, take: FoeAnim, next: readonly FoeAnim[], hp?: number): Promise<number> => {
+  await h.load(`level=${lv}`);
+  const at = game.level!.spawned.flat().find((q) => q.kind === kind);
+  if (!at) fail(`level ${lv} places no ${kind}`);
+  await h.load(`level=${lv}&x=${Math.round(at.x)}&y=${Math.round(at.y) - 20}`);
+  h.until(() => game.p.onGround, 60);
+  const e = game
+    .spawnedHere()
+    .filter((q) => q.kind === kind && q.state !== "dead")
+    .sort((a, b) => Math.abs(a.x - game.p.x) - Math.abs(b.x - game.p.x))[0];
+  if (!e) fail(`no ${kind} near x${at.x}`);
+  e.asleep = false;
+  if (hp !== undefined) e.hp = hp;
+  e.state = "flinch";
+  e.anim = take;
+  e.clock = 0;
+  e.script = take.kind;
+  e.tag = take.tag;
+  let f = 0;
+  while (e.state === "flinch" && e.anim === take && f < 60) {
+    h.frame();
+    f += 1;
+  }
+  if (f !== take.cels.length * take.hold || !next.includes(e.anim))
+    fail(`${kind}: ${take.from} is ${take.cels.length * take.hold} frames and then ${next.map((a) => a.from).join(" or ")}; ${f} frames, then ${e.anim.from}`);
+  return f;
+};
+
+{
+  // the hardcore's flinch is kind 8, and `0x43d062` flips its coin on `obj+0x46`
+  const f = await handOff(6, "inithardcore", FOES.inithardcore.flinch![0], [HARDCORE.close, HARDCORE.swipe]);
+  ok(`the hardcore's flinch hands to the close or the swipe after its ${f} frames (0x43d062)`);
+}
 
 pass(`SERVICE's two new classes stand, its levers pour, and its goal can be reached`);

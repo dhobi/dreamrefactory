@@ -21,7 +21,7 @@
  */
 import { loopIndex } from "../../src/foes";
 import { PICKUP } from "../../src/props";
-import { fail, headless, ok, pass } from "./harness";
+import { fail, headless, ok, pass, recordSound } from "./harness";
 
 const h = await headless("level=1&x=1900&y=1223");
 const { game } = h;
@@ -143,7 +143,31 @@ if (capped > 4000) fail(`0x40d378 is the clamp; the clock reads ${capped}`);
 if (capped < 3900) fail(`a full clock should stay full, not fall; the clock reads ${capped}`);
 ok(`...and nothing at all on a full one — ${capped} against the dial's own 4000`);
 
-// 7. and they are in every level, not only the first
+/**
+ * 7. ...and each character plays its OWN sound for it, at the player's point.
+ *    Character 0's cases (`0x42827a`) all go through `0x40ef30`; character 1's
+ *    are a switch of their own (`0x442cca`, table `0x443f40`) with their own
+ *    indices, and the statlife's 9 goes through `0x40f090` (`0x442ecc`), the
+ *    channel that always takes over.
+ */
+{
+  const heard = recordSound(game);
+  const took = async (extra: string) => {
+    heard.length = 0;
+    await stand(1, 3679, 985, extra);
+    return heard.find((c) => c.call === "own")?.args;
+  };
+  const zero = await took("");
+  if (zero?.[0] !== 0xb || zero?.[1] !== p.x || (zero?.[3] ?? "mix") !== "mix")
+    fail(`character 0's statlife is 0xb through the mix at the player (0x42844a); heard ${JSON.stringify(zero)}`);
+  const one = await took("&char=1");
+  if (one?.[0] !== 9 || one?.[1] !== p.x || one?.[3] !== "lead")
+    fail(`character 1's statlife is 9 through 0x40f090 at the player (0x442ecc); heard ${JSON.stringify(one)}`);
+  await h.load(`level=1`);
+  ok(`a statlife sounds 0xb for character 0 and 9, on the lead channel, for character 1`);
+}
+
+// 8. and they are in every level, not only the first
 for (const [level, want] of [[3, 10], [5, 2], [6, 5]] as const) {
   await h.load(`level=${level}`);
   h.frame(9);

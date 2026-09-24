@@ -221,18 +221,26 @@ for (let i = 0; i < 10 && buriedCel(); i++) {
 }
 ok(`a rat down its hole cannot be hit — its cels carry no box`);
 
-// 9. and a rat leaves no green ball. That effect is `0x40cba0`'s −13 branch and
-//    only the punk classes' CORPSE handlers call it (`0x44ef7e`, `0x44f848`); the
-//    rat's launch ends with the object simply gone. So kill one outright, the
-//    class's own way, and watch it go.
+// 9. and a rat leaves no green ball — and no gap either. The ball is
+//    `0x40cba0`'s −13 branch and only the punk classes' CORPSE handlers call it
+//    (`0x44ef7e`, `0x44f848`). The rat's state 6 (`0x44e33f`) answers 0 for
+//    ever, so the body is never freed; its `obj+0x10 = -150` drops it until
+//    3048 hangs 63..150 under the street, and the region ends about forty
+//    under its floor, where `0x430914` holds the camera. Kill one the way a
+//    blow finds it — out of its hole, with its weight on (`0x44e0ff`).
 if (FOES.initrat.vanishes) fail(`FOES.initrat says its corpse vanishes in a ball; only the punks' do`);
 const pops0 = game.pops.length;
+rat!.weightless = false;
 game.killFoe(rat!, FOES.initrat);
-const ratGone = h.until(() => !game.spawnedHere().includes(rat!), 120);
-if (ratGone < 0) fail(`a killed rat never left the room`);
-h.frame(2);
+h.frame(120);
+if (!game.spawnedHere().includes(rat!)) fail(`0x44e33f never answers 1: a dead rat is not freed`);
+const ratAt = game.foeAnchor(rat!, game.level!)!;
+const ratCel = game.celRec(game.level!.sbk, game.celOf(rat!))!;
+const ratTop = ratAt.y - ratCel.posY;
+if (game.celOf(rat!) !== 3048 || ratTop <= game.p.room!.bottom || ratTop <= game.view.y + game.viewH())
+  fail(`the body sinks below the region and out of the camera; cel ${game.celOf(rat!)} tops out at y${ratTop}, region bottom ${game.p.room!.bottom}`);
 if (game.pops.length > pops0) fail(`a rat left a green ball; only the punks' corpses do that`);
-ok(`and a dead rat leaves no green ball behind`);
+ok(`and a dead rat leaves no green ball: it sinks to y${Math.round(ratTop)}, under the region's ${game.p.room!.bottom}, and lies there`);
 
 // 10. a kicked mailbox flies. `0x430470` is an elastic collision with `obj+0xe`
 //     as the mass — the player 12, a mailbox 7 — so a kick's 55 leaves it at
@@ -395,6 +403,65 @@ for (let i = 0; i < 4 && Math.abs(moved) < 20; i++) {
 if (Math.abs(moved) < 20) fail(`a toppled mailbox still answers 1 (0x44fef4) and is knocked along; it stayed at x${from}`);
 if (game.celOf(box) !== 2413) fail(`...and stays on its side, cel 2413; showed ${game.celOf(box)}`);
 ok(`a mailbox on its side is kicked along the street, x${from} -> x${Math.round(box.x)}, still on 2413`);
+
+/**
+ * 12c. ...and a light blow installs nothing at all. `0x44fec8`: under ten the
+ *     handler jumps past the install to the sound, so whatever the mailbox was
+ *     showing plays on — a topple struck lightly still goes over.
+ */
+await at("level=1&x=6795", 8);
+{
+  const m = nearestOf("initmailbox")!;
+  const a = game.foeAnchor(m, game.level!)!;
+  const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
+  const strike = (damage: number): void => game.strikeFoe(m, damage, { dx: 5, dy: 0 }, 1, a.y, box, 0);
+  strike(5);
+  if (m.state !== "gait") fail(`0x44fec8: under ten installs nothing on a standing mailbox; it is ${m.state}`);
+  strike(60);
+  const topple = m.anim;
+  strike(5);
+  if (m.anim !== topple || m.clock !== 0) fail(`a light blow mid-topple leaves the topple running: ${m.anim.from}`);
+  h.frame(10);
+  if (game.celOf(m) !== 2413 || m.script !== 2) fail(`...and it still goes over onto 2413, state 2: cel ${game.celOf(m)}, kind ${m.script}`);
+  ok(`a light blow installs nothing — a standing mailbox stands, and a toppling one still goes over (0x44fec8)`);
+}
+
+/**
+ * 12d. ...and a blow is judged where the frame BEGAN. Every chapter's loop runs
+ *     the thinks, then `0x42fc10`: the scripts step, the hit pass `0x430350`
+ *     runs, and only then does anything move (`0x42fd80`). So a mailbox set
+ *     flying four hundred pixels a frame out of reach, on the very frame the
+ *     kick's impact cel goes up, is struck at the place it left from.
+ */
+// ...first, which frame tick after the press the kick lands on, left alone
+const impactTick = async (): Promise<number> => {
+  await at("level=1&x=6795", 8);
+  const m = nearestOf("initmailbox")!;
+  const dents = m.dents;
+  h.press("kick");
+  for (let t = 0; t < 80; t++) {
+    game.tick();
+    if (m.dents !== dents) return t;
+  }
+  return -1;
+};
+const landsOn = await impactTick();
+if (landsOn < 0) fail(`a kick from x6795 should reach the mailbox`);
+await at("level=1&x=6795", 8);
+{
+  const m = nearestOf("initmailbox")!;
+  const dents = m.dents;
+  h.press("kick");
+  const from = m.x;
+  // ...then the same again, with the mailbox launched four hundred a frame on the
+  // tick the kick lands, so that tick's own move carries it out of the box
+  for (let t = 0; t <= landsOn; t++) {
+    if (t === landsOn) m.vx = 400 * 0.25;
+    game.tick();
+  }
+  if (m.dents === dents) fail(`0x42fc10 runs the hit pass before the move: the kick should land where the mailbox stood (x${Math.round(from)}); it is at x${Math.round(m.x)}, untouched`);
+  ok(`a mailbox launched out of reach on the impact frame is still kicked where it stood — the pass comes before the move`);
+}
 
 /**
  * 13. ...and the jet does NOT hit.

@@ -27,9 +27,111 @@ import { readMovFile } from "@dreamfactory/engine/df/mov";
 import type { DecodedAudio } from "@dreamfactory/engine/df/audio";
 import type { AudioSink, PlayHandle } from "@dreamfactory/engine/runtime/audio";
 import { Film } from "../../src/film";
+import { FOES } from "../../src/foes";
 import { DEATH_FILMS } from "../../src/mission";
-import { FOE_SFX, LEVEL_BANKS, OWN, PLAYER_BANK } from "../../src/sound";
+import { BANK_RANK, FOE_SFX, LEVEL_BANKS, Mixer, OWN, PLAYER_BANK, Sounds, THEME_SIDES, placeAt, priorityOf, sides } from "../../src/sound";
 import { fail, headless, ok, pass, recordSound } from "./harness";
+
+/**
+ * 0. The mixer, on its own and on a clock of its own: `0x427b20`, `0x427c20`
+ *    and `0x427d20`, the three tails of the three one-shot calls.
+ */
+{
+  const cut: string[] = [];
+  const m = new Mixer();
+  const voice = (name: string) => () => ({ stop: () => cut.push(name) });
+  const fx = (i: number) => priorityOf(BANK_RANK.chapter, i);
+  // the priority is `(bank << 16) | (index + 1)` (`0x40ed63`..`0x40ed6d`)
+  if (fx(0x15) !== 0x10016 || priorityOf(BANK_RANK.own, 0) !== 0x20001)
+    fail(`a record's priority is (bank << 16) | (index + 1)`);
+  // two free channels: the first sound takes 2 (both 0, so 1 is not the lower)
+  if (m.play("mix", fx(5), 0, 1, voice("a")) !== 2) fail(`0x427b54: with both free the sound goes onto channel 2`);
+  if (m.play("mix", fx(3), 0, 1, voice("b")) !== 1) fail(`...and the next onto channel 1`);
+  // the same sound again while it plays: refused, not doubled, not restarted
+  if (m.play("mix", fx(5), 0.5, 1, voice("a2")) !== -1 || cut.length)
+    fail(`0x427b6b: the sound still playing on the other channel refuses itself`);
+  // a lower one than both: refused
+  if (m.play("mix", fx(2), 0.5, 1, voice("c")) !== -1) fail(`0x427b5f: a priority at or under the lower channel's is refused`);
+  // a higher one replaces the LOWER channel, and cuts what was there
+  if (m.play("mix", fx(9), 0.5, 1, voice("d")) !== 1 || cut.join() !== "b")
+    fail(`a higher priority takes the lower channel and cuts it there and then (0x456f00); cut ${cut.join()}`);
+  // the character's own outrank the whole chapter bank
+  if (m.play("mix", priorityOf(BANK_RANK.own, 0), 0.5, 1, voice("e")) !== 2 || cut.join() !== "b,a")
+    fail(`bank 2's lowest outranks bank 1's highest`);
+  // a finished channel drops to nothing (`0x427890`)
+  if (m.play("mix", fx(1), 2, 1, voice("f")) < 0) fail(`0x427890: channels whose sounds have ended are free again`);
+  ok(`0x427b20: two channels by priority, a sound never doubled, the lower one cut for a higher`);
+
+  // `0x427c20`: a tie is let through, and the same sound starts over where it is
+  const r = new Mixer();
+  cut.length = 0;
+  r.play("mix", fx(5), 0, 1, voice("a"));
+  r.play("mix", fx(3), 0, 1, voice("b"));
+  if (r.play("renew", fx(5), 0.5, 1, voice("a2")) !== 2 || cut.join() !== "a")
+    fail(`0x427c71/0x427c87: renewing a sound still playing restarts it on its own channel; cut ${cut.join()}`);
+  if (r.play("renew", fx(2), 0.5, 1, voice("c")) !== -1) fail(`0x427c65: renew still refuses under the lower channel`);
+  ok(`0x427c20: a renewed sound starts over on its own channel, and is refused only by something above it`);
+
+  // `0x427d20`: channel 0 takes it whatever it held, and the other two are untouched
+  const l = new Mixer();
+  cut.length = 0;
+  l.play("mix", fx(5), 0, 1, voice("a"));
+  if (l.play("lead", fx(1), 0, 1, voice("x")) !== 0 || l.play("lead", fx(1), 0.1, 1, voice("y")) !== 0 || cut.join() !== "x")
+    fail(`0x427d20: the lead goes onto channel 0 unconditionally, cutting the one before`);
+  if (l.held(0.2)[2] !== fx(5)) fail(`...and leaves channels 1 and 2 alone`);
+  ok(`0x427d20: the lead takes channel 0 whatever it held and touches nothing else`);
+
+  // the loop word: a looping record never empties its channel (`0x4570c0`,
+  // `0x457f7b`), `0x428000` sets or clears it on a channel already playing it,
+  // and let go the pass in hand plays out; and `0x427da0`/`0x427ed0` move a
+  // playing record's gains on every ask, which is also how `0x40eee0` silences
+  const events: string[] = [];
+  const looped = (name: string) => () => ({
+    stop: () => events.push(`${name} cut`),
+    setLoop: (on: boolean) => events.push(`${name} loop ${on}`),
+    setGains: (at: { left: number; right: number }) => events.push(`${name} gains ${at.left}/${at.right}`),
+  });
+  const lp = new Mixer();
+  if (lp.play("mix", fx(7), 0, 1, looped("hum"), true) !== 2 || !events.includes("hum loop true"))
+    fail(`a record whose loop word is set plays looping (0x427b9a)`);
+  if (lp.held(50)[2] !== fx(7)) fail(`...and its channel is never empty — it holds at fifty seconds`);
+  if (lp.play("mix", fx(7), 50, 1, looped("hum2")) !== -1) fail(`...and a second ask of it is still turned away`);
+  lp.place(fx(7), { left: 0.1, right: 0.2 }, 50);
+  if (!events.includes("hum gains 0.1/0.2")) fail(`0x427e7e: an ask moves the playing record's gains`);
+  lp.place(fx(7), { left: 0, right: 0 }, 50);
+  if (!events.includes("hum gains 0/0")) fail(`0x40eee0: volume 0 silences it where it plays`);
+  lp.loop(fx(7), false, 50.25);
+  if (!events.includes("hum loop false") || lp.held(50.5)[2] !== fx(7) || lp.held(51)[2] !== 0)
+    fail(`let go at 50.25, the pass in hand ends at 51 and the channel empties (0x457ddf)`);
+  // ...and a one-shot already playing is put to loop by 0x428000
+  const late = new Mixer();
+  events.length = 0;
+  late.play("mix", fx(3), 0, 1, looped("a"));
+  late.loop(fx(3), true, 0.5);
+  if (!events.includes("a loop true") || late.held(9)[2] !== fx(3)) fail(`0x428059: a channel already playing the record loops from then on`);
+  ok(`a looping record holds its channel, is moved and silenced by every ask, and let go plays out its pass`);
+
+  // `0x40efb0`: the two numbers, and `0x427da0`/`0x427ed0` + the mixing loop's
+  // `0x458ab1`/`0x458ab4`: what the speakers get
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  const mid = placeAt(0, 0)!;
+  if (mid.volume !== 128 || mid.pan !== 64) fail(`0x40efb0: dead centre is volume 128, pan 64; got ${JSON.stringify(mid)}`);
+  const far = placeAt(768, 0);
+  if (far !== null) fail(`...768 across is volume 0, which is under the gate`);
+  const edge = placeAt(762, 0);
+  if (edge !== null || placeAt(761, 0)?.volume !== 2) fail(`the gate is volume <= 1: 762 across is silent and 761 plays at 2`);
+  if (placeAt(-384, 0)!.pan !== 32 || placeAt(384, 0)!.pan !== 96 || placeAt(0, 769) !== null)
+    fail(`the pan is (dx + 768) * 128 / 1536, and 768 past on either axis is out`);
+  const c = sides(128, 64);
+  if (!near(c.left, (128 / 255) * (191 / 255)) || !near(c.right, (128 / 255) * (64 / 255)))
+    fail(`sides: linear, volume/255 times (255 - pan)/255 left and pan/255 right; got ${JSON.stringify(c)}`);
+  if (!near(c.left / c.right, 191 / 64)) fail(`...so the middle of the view is 191:64 to the left`);
+  const east = sides(2, 128);
+  if (!near(east.left, (2 / 255) * (127 / 255))) fail(`...and the far right is balanced`);
+  if (!near(THEME_SIDES.left, 127 / 255) || !near(THEME_SIDES.right, 128 / 255))
+    fail(`0x427824: a record opens at volume 0xff, pan 0x80 — 0.498 and 0.502`);
+  ok(`0x40efb0 places at volume 128 - d/6 and pan (dx + 768)/12, and the mixer splits it linearly, 191:64 in the middle`);
+}
 
 const h = await headless("level=1&x=9500");
 const { game } = h;
@@ -127,6 +229,22 @@ const rec = sfx.tables.singles[FOE_SFX.hydrant];
 const hydrantSecs = sfx.secs(sfx.audio(rec.containerLoc));
 if (!/hydrant/i.test(rec.identifier) || hydrantSecs !== 1.07) fail(`woods.snd ${FOE_SFX.hydrant} should be the 1.07s "0040 hydrant"; it is "${rec.identifier}" ${hydrantSecs}s`);
 ok(`the hydrant bursts on its own sound: "${rec.identifier.trim()}", ${hydrantSecs}s`);
+
+/**
+ * 5b. ...and which call a death goes through. The punk's `0x44f184` plays its
+ *     0x21 through `0x40f090` — the mixer's channel 0 — where the dog's
+ *     `0x4551cf` plays its 0x18 through `0x40ef30`.
+ */
+{
+  const punk = game.level!.spawned.flat().find((e) => e.kind === "initwerea");
+  if (!punk) fail(`STREETS places a punk`);
+  mark = calls.length;
+  game.killFoe(punk, FOES.initwerea);
+  const died = calls.slice(mark).find((c) => c.call === "effect" && c.args[0] === FOE_SFX.wereaDeath);
+  if (!died || died.args[3] !== "lead") fail(`0x44f18b: the punk's death goes through 0x40f090; heard ${JSON.stringify(died?.args)}`);
+  if (FOES.initdog.deathLead) fail(`0x4551d4: the dog's death goes through 0x40ef30`);
+  ok(`a punk's death is the lead, on channel 0 (0x44f18b)`);
+}
 
 /**
  * 6. the FILMS' own one-shots, which are where nearly all of this game's
@@ -227,5 +345,159 @@ if (Math.abs(ran - authored) > 0.06) {
   fail(`the vignette is ${frames} frames at the film's own 50ms — ${authored.toFixed(2)}s; it took ${ran.toFixed(2)}s`);
 }
 ok(`...and its ${frames} frames run in ${ran.toFixed(2)}s, the ${authored.toFixed(2)}s its author gave them`);
+
+/**
+ * 9. The music switch is the THEME and nothing else. `0x403cfb` starts or
+ *    stops the theme bank (`0x40f190` / `0x427960`) and never touches the
+ *    effects banks, so with the music off a fist is as loud as it was.
+ *
+ *    The real `Sounds`, on a stand-in AudioContext that counts what starts.
+ */
+{
+  const started: number[] = [];
+  const sources: { loop: boolean }[] = [];
+  const gains: { value: number }[] = [];
+  const node = () => {
+    const n = { connect() {}, gain: { value: 1 }, pan: { value: 0 } };
+    gains.push(n.gain);
+    return n;
+  };
+  class FakeContext {
+    state = "running";
+    currentTime = 0;
+    destination = {};
+    createGain = node;
+    createStereoPanner = node;
+    createChannelMerger = node;
+    createBuffer(_c: number, len: number, rate: number) {
+      return { duration: len / rate, copyToChannel() {} };
+    }
+    createBufferSource() {
+      const src = { buffer: null as { duration: number } | null, context: this, connect() {}, stop() {}, loop: false,
+        start: () => started.push(src.buffer?.duration ?? 0) };
+      sources.push(src);
+      return src;
+    }
+    resume() {}
+  }
+  const g = globalThis as { window?: unknown };
+  const had = g.window;
+  g.window = { AudioContext: FakeContext };
+  try {
+    const sounds = new Sounds(game.files);
+    await sounds.open("STREETS");
+    sounds.listen(0, 0);
+    sounds.setMusic(false);
+    if (sounds.musicOn) fail(`setMusic(false) should turn the theme off`);
+    const gainsWere = gains.length;
+    sounds.own(0, 0, 0);
+    await new Promise((r) => setTimeout(r, 20));
+    if (!started.length) fail(`with the music off a footfall should still play (0x403cfb touches only the theme); nothing started`);
+    // ...and it goes out on the two linear sides `0x427da0`/`0x427ed0` give
+    // the middle of the view: volume 128, pan 64
+    const mid = sides(128, 64);
+    const set = gains.slice(gainsWere).map((g) => g.value);
+    if (!set.some((v) => Math.abs(v - mid.left) < 1e-9) || !set.some((v) => Math.abs(v - mid.right) < 1e-9))
+      fail(`a sound at the eye plays ${mid.left.toFixed(3)} left and ${mid.right.toFixed(3)} right; the gains were ${set.join(" ")}`);
+    const before = started.length;
+    sounds.pump();
+    if (started.length !== before) fail(`with the music off the theme's bed should not be queued; pump started ${started.length - before}`);
+    sounds.setMusic(true);
+    sounds.pump();
+    if (started.length === before) fail(`with the music back on pump should queue the theme again`);
+    // `0x40ee90` then a play: the voice loops
+    sounds.loop(2, true, true);
+    const was = sources.length;
+    sounds.own(2, 0, 0);
+    await new Promise((r) => setTimeout(r, 20));
+    if (sources.length !== was + 1 || !sources.at(-1)!.loop) fail(`a record armed by 0x40ee90 plays looping`);
+    sounds.loop(2, false, true);
+    if (sources.at(-1)!.loop) fail(`...and 0x40ee90(…, 0) lets the playing one go`);
+  } finally {
+    g.window = had;
+  }
+  ok(`the music switch stops the theme and leaves every effect playing`);
+}
+
+/**
+ * 9b. The loops and silences, site by site: the eyeball's hum armed and
+ *     played every frame (`0x43df25`) and let go and silenced by the killing
+ *     blow (`0x43e940`); and a stream's own sound silenced as `-2` shuts it
+ *     (`0x42bafb`) and as `-1` cancels the flamer (`0x42e727`).
+ */
+{
+  const { eyeball, eyeballReacts } = await import("../../src/brains/eyeball");
+  const said: string[] = [];
+  const k = {
+    player: { x: 0, y: 0, top: 0, anchor: 0, vy: 0, swinging: false, down: false, facing: 1 },
+    track: () => ({ forward: 1000, dy: 0, band: 0, side: 1 }),
+    anchorY: (e: { y: number }) => e.y,
+    anchorX: (e: { x: number }) => e.x,
+    roll: () => 1,
+    say: (_e: unknown, id: number, way?: string) => said.push(`say ${id}${way ? ` ${way}` : ""}`),
+    loop: (id: number, on: boolean) => said.push(`loop ${id} ${on}`),
+    mute: (id: number) => said.push(`mute ${id}`),
+    spray: () => {},
+    cast: () => {},
+    shake: () => {},
+    gravity: 1,
+  } as unknown as import("../../src/brains/kit").BrainCtx;
+  const E = FOES.initeyeball;
+  const eye = { kind: "initeyeball", x: 0, y: 0, facing: 1, left: -500, right: 500, top: -500, bottom: 500, clock: 0,
+    state: "gait", anim: E.gait, linger: 0, dents: 0, vx: 0, vy: 0, hp: 50, max: 50, script: 1 } as import("../../src/brains/kit").Enemy;
+  eyeball(eye, E, 4, k);
+  if (said.slice(0, 2).join() !== `loop ${0x38} true,say ${0x38}`) fail(`0x43df25: the hum armed then played; heard ${said.join(", ")}`);
+  said.length = 0;
+  const dead = { ...eye, state: "dead" as const, anim: E.death!, clock: 0 };
+  eyeballReacts(dead, E, 8, k);
+  if (!said.includes(`loop ${0x38} false`) || !said.includes(`mute ${0x38}`)) fail(`0x43e940: the killing blow lets the hum go and silences it; heard ${said.join(", ")}`);
+  ok(`the eyeball hums on a loop while it lives and falls silent as it dies`);
+
+  const heard = recordSound(game);
+  await h.load("level=2&weapon=10");
+  h.frame(4);
+  game.inv.weapon = 10;
+  game.inv.rounds[10] = 50;
+  game.openStream();
+  game.shutStreams();
+  if (!heard.some((c) => c.call === "mute" && c.args[0] === 0x16 && c.args[1] === true)) fail(`0x42bafb: -2 silences the flamer's 0x16`);
+  game.openStream();
+  const at = heard.length;
+  game.killStreams();
+  if (!heard.slice(at).some((c) => c.call === "mute" && c.args[0] === 0x16)) fail(`0x42e727: -1 on the flamer silences it too`);
+  game.setSound(null);
+  ok(`the flamer's own sound is silenced as -2 shuts it and as -1 cancels it`);
+}
+
+/**
+ * 10. ...and whether anything is listening changes nothing about the GAME.
+ *     `0x434540` is rolled before a sound is asked for, so the same fight with
+ *     no sound and with a sound attached has to end in the same place with the
+ *     random stream at the same point — a roll made only when there is a
+ *     `sound` to hand it to would split the two.
+ */
+{
+  const { nextRandom } = await import("../../src/random");
+  const fight = async (): Promise<string> => {
+    await h.load("level=1&x=2300&damage=1&foehit=1&score=0&lives=3");
+    h.hold("right", true);
+    for (let i = 0; i < 240; i++) {
+      if (i % 6 === 0) h.press(i % 12 === 0 ? "punch" : "kick");
+      h.frame();
+    }
+    h.hold("right", false);
+    const foes = game.spawnedHere().map((e) => `${e.kind}:${Math.round(e.x)}:${e.hp}:${e.state}`);
+    return [game.stats.health, game.stats.score, Math.round(game.p.x), nextRandom(), ...foes].join(" ");
+  };
+  game.setSound(null);
+  // once to settle what the earlier blocks left in the player's own state
+  await fight();
+  const quiet = await fight();
+  recordSound(game);
+  const heard = await fight();
+  game.setSound(null);
+  if (quiet !== heard) fail(`the same fight should come out the same with or without sound:\n  silent ${quiet}\n  sound  ${heard}`);
+  ok(`the same fight comes out the same with sound and without — every roll is made before the sound is asked for`);
+}
 
 pass(`the level's theme is its own arrangement, and the handlers' and films' one-shots are the disc's`);

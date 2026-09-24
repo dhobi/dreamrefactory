@@ -45,6 +45,8 @@ interface Seen {
   /** pixels an engine frame, which the last legs are entirely about */
   vx: number;
   vy: number;
+  /** it has landed a blow this frame and goes on the next — `obj+0x2a` */
+  spent: boolean;
 }
 
 /** the nearest living thing of this class in the player's room, or null */
@@ -89,6 +91,7 @@ const sweep = (
         blow: game.castBlow(c),
         vx: Math.round(c.vx),
         vy: Math.round(c.vy),
+        spent: !!c.spent,
       });
     if (game.p.act) acts.add(game.p.act);
     if (health[health.length - 1] !== game.stats.health) health.push(game.stats.health);
@@ -323,7 +326,10 @@ const boltCels = cels(bolts.seen);
 if (boltCels.some((c) => c < 2700 || c > 2704)) fail(`a bolt is cels 2700..2704; saw ${boltCels.join(",")}`);
 if (bolts.seen.some((s) => s.blow !== 0x64)) fail(`0x426e1e writes 0x64 on every path; saw ${blows(bolts.seen)}`);
 // and it flies FLAT: 0x426cbc gives the class no weight at all
-if (bolts.seen.some((s) => s.vy !== 0)) fail(`0x42f850(obj, 0) — a bolt has no weight; saw vy ${[...new Set(bolts.seen.map((s) => s.vy))].join(",")}`);
+// ...until it lands a blow: the hit pass (`0x42fc10` → `0x430350`) trades
+// velocities with what it struck (`0x430470`) and marks it, and the bolt flies
+// that frame's move on the traded velocity before its think lets it go
+if (bolts.seen.some((s) => !s.spent && s.vy !== 0)) fail(`0x42f850(obj, 0) — a bolt has no weight; saw vy ${[...new Set(bolts.seen.filter((s) => !s.spent).map((s) => s.vy))].join(",")}`);
 if (!bolts.seen.some((s) => Math.abs(s.vx) === 46)) fail(`dx 600 over 13 is 46 a frame; saw ${[...new Set(bolts.seen.map((s) => s.vx))].join(",")}`);
 ok(`the bishop's bolt flies — ${bolts.seen.length} frames, cels ${boltCels.join(",")}, 46 a frame and worth a hundred`);
 

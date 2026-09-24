@@ -81,6 +81,7 @@
  * did would freeze the thing mid-stride.
  */
 import { install, rewind, type Brain, type BrainCtx, type Enemy } from "./kit";
+import type { FoeAnim } from "../foes";
 import { ahead, turn } from "./batboy";
 
 /**
@@ -101,8 +102,9 @@ import { ahead, turn } from "./batboy";
  *   patch straight to that path before a brain is ever called.
  * - **Kind 10, the flinch** (`0x438169`). Two instructions: wait for `obj+0x2e`,
  *   back on the ground, and then install `0x473fb0` tag 4 — so a struck keeper
- *   comes back walking AT you rather than standing. The page's own flinch path
- *   returns it to {@link Foe.gait} instead.
+ *   comes back walking AT you rather than standing. That script is
+ *   {@link Foe.gait}, which the page's flinch path returns it to, and
+ *   `gangCorpse` holds the flinch until the landing.
  * - **Kind 9, the death** (`0x4380b9`). Tag 0 writes `obj+0x10 = 0xffec`, −20,
  *   the floor offset a falling body is allowed; both tags then count `AI+0x36`
  *   down and, at −1, rebuild the object through `0x42fa80` and hand it to
@@ -300,6 +302,18 @@ function settled(e: Enemy): boolean {
 }
 
 /**
+ * The preamble's walk-away, `0x437be9`: `0x473ed0` tag 0 with the mirror
+ * turned AWAY from him (`0x437bf6`) — the mirror is written, the slide under
+ * it (`obj+0xc`) is not. The brain installs it over any state but 1, 5, 8 and
+ * 9; `gangReacts` over the flinch, state 10.
+ */
+export function knotboyDown(e: Enemy, k: BrainCtx): FoeAnim {
+  const away = k.player.x > k.anchorX(e) ? -1 : 1;
+  if (away !== e.facing) turn(e);
+  return KNOTBOY.saunter;
+}
+
+/**
  * `initknotboy`'s machine, states 1, 2, 4, 5, 7 and 8.
  *
  * Read `e.script` as `obj+0x18`, `e.tag` as `obj+0x44` and `e.clock >= run` as
@@ -334,10 +348,7 @@ export const knotboy: Brain = (e, foe, run, k) => {
     state !== 8 &&
     state !== 9
   ) {
-    // the mirror is written; the slide under it (`obj+0xc`) is not
-    const away = k.player.x > k.anchorX(e) ? -1 : 1;
-    if (away !== e.facing) turn(e);
-    return install(e, KNOTBOY.saunter);
+    return install(e, knotboyDown(e, k));
   }
 
   switch (state) {

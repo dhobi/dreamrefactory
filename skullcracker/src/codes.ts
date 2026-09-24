@@ -79,6 +79,7 @@
  * the hold is the drawing.
  */
 import type { SbkCel } from "@dreamfactory/engine/df/sbk";
+import type { SoundWay } from "./sound";
 
 /** an animation as the reaction scripts state it: cels and frames-per-cel */
 export interface CodeAnim {
@@ -104,10 +105,17 @@ export interface CodeReaction {
   stops: boolean;
   /** a shove along the striker's facing, in whole pixels a frame */
   shove?: number;
-  /** what `0x40c900` is given to shake the screen by */
-  shake?: number;
+  /**
+   * what `0x40c900` is given — the player's own spray, `0x40cba0`'s sibling:
+   * `clamp(|n| / 6, 1, 8)` drops of sweat or blood — `bleed` in game.ts, `BLEED` in effects.ts.
+   */
+  spray?: number;
   /** an index into the player's own bank */
   sound?: number;
+  /** ...plus `0x434540(soundRoll)`, 1..n, where the handler rolls for it */
+  soundRoll?: number;
+  /** ...and which of the three sound calls plays it — `SoundWay` in sound.ts */
+  soundWay?: SoundWay;
   /** health this reaction spends through `0x402ac0`, where it spends any */
   health?: number;
   /** true where the handler returns 1: the blow is consumed and cannot also hurt */
@@ -161,7 +169,7 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
      * `0x42e781` writes no velocity at all: the cels carry the fall.
      */
     /** `0x42e7f6` — `0x40c900(y, 0x78, 0)` */
-    shake: 0x78,
+    spray: 0x78,
     /** `0x42e7c3` */
     sound: 0x1b,
     consumes: false,
@@ -280,16 +288,18 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
     gravity: null,
     stops: true,
     /** `0x42eb21` — `0x40c900(y, -1, striker)` */
-    shake: -1,
+    spray: -1,
     /**
      * ...and it COSTS you twenty. `0x42eb2b` is `0x402ac0(0x14)`, the same
      * health call an ordinary blow ends in, and it is the one reaction in
-     * character 0's table that spends any. Character 1's `-1` (`0x448f7c`)
-     * spends none, which is where this page's "no reaction in the table takes a
-     * point of health off anybody" came from — true of the table it was read
-     * out of, and not of the one the player is actually using.
+     * character 0's table that spends any — character 1's spends the same
+     * (`0x448ffb`).
      */
     health: 0x14,
+    /** `0x42eb3d`..`0x42eb51` — `0x434540(7) + 0xe` through `0x40f110` */
+    sound: 0xe,
+    soundRoll: 7,
+    soundWay: "renew",
     consumes: true,
     sender: "the Boggs machinery — 0x413bf9, 0x41b022 — and it is also what Boggs ALONE takes",
     from: "0x42eaaa",
@@ -373,7 +383,7 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
      */
     shove: 50,
     /** `0x448d00` — `0x40c900(y, 0x78, 0)` */
-    shake: 0x78,
+    spray: 0x78,
     /** `0x448cc9` */
     sound: 0x13,
     consumes: false,
@@ -495,7 +505,13 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
     gravity: null,
     stops: true,
     /** `0x448ff3` — `0x40c900(y, -1, striker)` */
-    shake: -1,
+    spray: -1,
+    /** `0x448ffb` — `0x402ac0(0x14)`, twenty, as character 0's `0x42eb2b` */
+    health: 0x14,
+    /** `0x44900f`..`0x449023` — `0x434540(2) + 0xc` through `0x40f110` */
+    sound: 0xc,
+    soundRoll: 2,
+    soundWay: "renew",
     consumes: true,
     sender: "the Boggs machinery — 0x413bf9, 0x41b022 — and it is also what Boggs ALONE takes",
     from: "0x448f7c",

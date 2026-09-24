@@ -63,16 +63,17 @@ import {
 } from "./kit";
 
 /**
- * Three things `0x44e010` does that this port has nowhere to put, and the death
- * state, which the page owns.
+ * Two things `0x44e010` does that this port has nowhere to put, the handler,
+ * and the death state, which the page owns. (Its gravity, `0x42f850(obj, 0)`
+ * from the creator `0x450a1c`, `1.0` at `0x44e0ff` as it comes out and zero
+ * again at `0x44e2cf` home, is {@link Enemy.weightless}, set in states 1 and 3
+ * below.)
  *
- * - **`obj+0x24`, the gravity multiplier.** `0x42f850(obj, f)` stores `f * 10.0`
- *   (`[0x46a110]`) into `obj+0x24`, and `0x450a1c` creates a rat with **zero**:
- *   a hidden rat does not fall. `0x44e0ff` turns it to `1.0` on the frame the rat
- *   decides to come out, and `0x44e2cf` turns it back to zero the frame it gets
- *   home. This page's {@link Enemy} carries no per-foe gravity scale — only the
- *   player has one (`walk.ts`'s `gravityScale`) — so the two calls are read and
- *   not spent.
+ * - **`0x44e3f0`, the hit handler.** It refuses a negative strength
+ *   (`0x44e3f5`) — the −9 with it — and asks nothing else: no class, no
+ *   health, no state. It sprays the blow, plays 0xc, installs `0x477090` and
+ *   answers 1. One blow of any size is the launch ({@link Foe.frail}), and a
+ *   rat's own bite lands on another rat ({@link Foe.hitsOwn}).
  * - **`0x44e390`, the test that keeps it in.** It is NOT a crowd test of its own
  *   class. `[0x476a8c]` is the list `0x44fd2d` registers the **mailbox** class
  *   under, and `0x44e390` walks it looking for one within `0x4b` (75) in x and
@@ -81,23 +82,26 @@ import {
  *   in the level — {@link BrainCtx} has `crowded`, which is the punk's own
  *   `0x44f020` and counts the punk's own class — so the mailbox is not asked
  *   about and a rat next to one comes out anyway.
- * - **`obj+0x2a`, the "something hit me" word.** `0x430663` — the elastic
- *   collision solver — sets it to 1 on the victim as it writes the new velocity
- *   pair. `0x44e218` clears it as the pounce goes on and `0x44e304` reads it back
- *   every frame of the pounce: a rat that collides with anything in mid-air
- *   abandons the leap and bolts for home on kind 3 tag 2. Nothing in this port
- *   writes a collision flag onto a foe, so state 4 here only ever takes its other
- *   branch.
+ * - **`obj+0x2a`, the "my blow landed" word.** `0x430663` — the elastic
+ *   collision solver — sets it to 1 on the HITTER as it writes the new velocity
+ *   pair: `esi` there is the object whose `obj+0x1a` strength the exchange
+ *   spent (`0x43047a`). `0x44e218` clears it as the pounce goes on and
+ *   `0x44e304` reads it back every frame of the pounce: a rat whose bite lands
+ *   in mid-air abandons the leap and bolts for home on kind 3 tag 2. Nothing in
+ *   this port writes that word onto a foe whose blow lands on the player, so
+ *   state 4 here only ever takes its other branch.
  * - **state 6, `0x44e33f`, the death.** Two instructions: `mov word ptr
  *   [esi+0x10], 0xff6a` and fall into the common return. `obj+0x10` is the floor
  *   offset (see `props.ts` on `0x41a20e`'s −100 for the shower), so a dying rat
  *   has its contact point lifted **150** pixels above the foot of its cel for
  *   the whole of `0x477090`: nothing under it holds the drawn body up, and a
- *   rat that has weight drops through the street it died on. The page plays
- *   that script through {@link Foe.death} and the launch through
+ *   rat that has weight drops through the street it died on — below the
+ *   region's own bottom, where the camera never goes. State 6 never answers
+ *   1, so the body is never freed ({@link Foe.linger}). The page plays that
+ *   script through {@link Foe.death} and the launch through
  *   {@link Foe.frail}; the offset is {@link ratReacts}.
  */
-const NOT_HERE = "0x44e0ff, 0x44e390, 0x44e304" as const;
+const NOT_HERE = "0x44e3f0, 0x44e390, 0x44e304" as const;
 
 /**
  * `0x44e33f` — state 6's one write, made every frame the death plays: the

@@ -449,11 +449,10 @@ export const tube: Brain = (e, foe, run, k) => {
      */
     case 0:
       if (!e.fighting) return false;
-      // `0x419363` — and it calls out as it steps down. The executable uses
-      // `0x40f090`, which is `0x40ef30` with a different tail (`0x427d20`
-      // rather than `0x427b20`); the kit has the one call, and it is the same
-      // sound. The engine positions this one at the PLAYER's point, not its own
-      k.say(e, TUBE.call);
+      // `0x419363` — and it calls out as it steps down, through `0x40f090`:
+      // the mixer's channel 0. The engine positions this one at the PLAYER's
+      // point, not its own
+      k.say(e, TUBE.call, "lead");
       return install(e, TUBE.stand);
     /**
      * ---- 1, `0x419385`: the walk, which ends facing him.

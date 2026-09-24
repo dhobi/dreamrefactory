@@ -122,32 +122,39 @@ import {
   type Brain,
   type BrainCtx,
   type Enemy,
+  type Reaction,
   TICK_SCALE,
 } from "./kit";
 import type { Foe } from "../foes";
 
 /**
- * The hit reactions, kinds 3 and 7, and the handler that installs them. Read,
- * not done — the page owns those animations.
+ * The hit reactions, kinds 3 and 7, and the handler that installs them. The
+ * page owns those animations; the one thing the corpse does besides vanish is
+ * {@link slurpReacts}.
  *
- * - **`0x415100`**, the hit handler, hung on `obj+0x12` at `0x414a2f`. It takes
- *   the blow's strength off `AI+0`, and the branch is the ordinary one: over
- *   zero installs `0x46d278` — kind 3, the flinch — and at or under zero it
- *   deregisters from the census (`0x42f870(obj, 0)`), clears the bar, installs
- *   `0x46d458` tag 0 and seeds `obj+0x2e` from `[0x46b204]`, the corpse's fifty
- *   frames. It calls no `0x40d450`: **a brain is worth nothing**, which is why
+ * - **`0x415100`**, the hit handler, hung on `obj+0x12` at `0x414a2f`. It reads
+ *   the STRIKER (`[esp+0x14]`) and turns five things away before it spends
+ *   anything: a TCop, class `[0x46c9e0]` (`0x415110`); a negative strength
+ *   (`0x415121`); its own class `[0x46c9e4]` (`0x415133`); a strength of 0
+ *   (`0x415160`); and the tube's thrown glass, `[0x46bfb4]` (`0x415170`) —
+ *   the page's `SPARES`. Then blood along the blow (`0x415194`) and the
+ *   strength off `AI+0`: over zero installs `0x46d278` — kind 3, the flinch —
+ *   and at or under zero it deregisters from the census (`0x42f870(obj, 0)`),
+ *   clears the bar, installs `0x46d458` tag 0 and writes `[0x46b204]` into
+ *   `AI+0x2e` (`0x415207`, through the pointer `0x430eb0` found). It plays no
+ *   sound and calls no `0x40d450`: **a brain is worth nothing**, which is why
  *   {@link FOES.initslurp}'s award is 0.
  * - **3**, the flinch, `0x414e12`: two instructions. Wait for the script to
- *   end, then install `0x46d440` — back to the stance. The page's own flinch
- *   return does the same thing by putting the thing back in `gait`.
+ *   end, then install `0x46d440` — back to the stance, the flinch's
+ *   {@link FoeAnim.resume}.
  * - **7**, the corpse, `0x41507a`: tag 1 answers **1** at once, and tag 0 plays
  *   `lab.snd` index 13 — `#0084 TCop Dies`, which is not this creature's own
  *   sound and is what the disc plays anyway — then two `0x40cba0` effects,
  *   `-0xd` and `0x78`, and answers 1 as well. Those two answers are the ONLY
  *   `mov ax, 1` in the whole of `0x414ae0`: the frame the object is removed,
  *   which is the first think after the blow. There is no corpse, and the
- *   `[0x46b204]` the handler writes into `AI+0x2e` is never read —
- *   {@link FOES.initslurp} carries that as a `linger` of 0.
+ *   `AI+0x2e` the handler wrote is never read — {@link FOES.initslurp}
+ *   carries that as a `linger` of 0.
  */
 const NOT_HERE = "0x414e12, 0x41507a, 0x415100" as const;
 
@@ -200,7 +207,7 @@ const LADDER = "0x414bf1 / 0x40b660 / 0x46eb14" as const;
 
 /**
  * The hypnosis, `0x402fa0(4)`, which is the one thing this class does to the
- * player and is therefore not done.
+ * player.
  *
  * Kind 6 is installed at `0x414f52` and `0x414fe1`, and both sites call
  * `0x402fa0(4)` beside it. That function is the player's own pose setter: a
@@ -209,13 +216,11 @@ const LADDER = "0x414bf1 / 0x40b660 / 0x46eb14" as const;
  * kind **9**, the judder. So the brain's kind 6 puts the player into a state he
  * does not choose, which is what `#0007 Brain hyp` is the sound of.
  *
- * Nothing in this port hits the player back, so the animation is installed on
- * the brain and the call on the player is not made. It has one visible
- * consequence beyond the obvious: `0x414f2e`, `0x414fb4` and `0x414c81`'s
- * sibling tests all ask whether the player is ALREADY in kind 9 — a brain will
- * not hypnotise a man who is already hypnotised, and will bolt him instead.
- * Because nothing here ever puts him in kind 9, those tests are permanently
- * false in this port and are written below as false.
+ * The judder runs its fifteen frames (thirty engine frames) and its handler
+ * hands him back to the idle; nothing else holds him, and nothing is taken.
+ * `0x414f2e` and `0x414fb4` ask whether he is ALREADY in kind 9 — a brain will
+ * not hypnotise a man who is already hypnotised, and bolts him instead — and
+ * the eyeball's swoop opens on the same kind.
  */
 const HYPNOSIS = "0x402fa0 / 0x42f383 / 0x471fc8" as const;
 
@@ -492,15 +497,12 @@ function decide(
    * ladder hunt, and `0x415048` is the same three lines for both: `AI+0x30 = 1`
    * and kind 2 tag 0, the walk.
    *
-   * The first is `player+0x18 == 7`, the player's own state being the LADDER,
-   * and {@link BrainCtx} has no way to ask it — `k.player` carries his
-   * position, his velocity, whether he is swinging, whether he is down and
-   * which way he faces, and not which script he is playing. It is left out.
-   * The second is the two hundred pixels of {@link SLURP.apart}, which is
-   * askable and which a player up a ladder is nearly always on the far side
-   * of anyway.
+   * The first is `player+0x18 == 7`, the player's own state being the LADDER
+   * ({@link BrainCtx}'s `player.climbing`); the second is the two hundred
+   * pixels of {@link SLURP.apart}.
    */
-  if (Math.abs(k.anchorY(e) - k.player.anchor) > SLURP.apart) return install(e, SLURP.walk);
+  if (k.player.climbing || Math.abs(k.anchorY(e) - k.player.anchor) > SLURP.apart)
+    return install(e, SLURP.walk);
   /**
    * `0x414e52` — and while it is off a ladder it has no region index, so it
    * asks `0x40b940` which record's rect it is standing in and takes the stance
@@ -542,13 +544,12 @@ function decide(
         return install(e, SLURP.drift);
       }
       halve(e);
-      // `0x414f29`'s "is he already juddering" is permanently false here — see
-      // {@link HYPNOSIS} — and `0x402f60` is `k.player.down` negated
-      if (k.roll(2) === 1 && !k.player.down) {
+      // `0x414f29` — not a man already juddering — and `0x402f60`, upright
+      if (k.roll(2) === 1 && !k.player.jolted && !k.player.down) {
         k.say(e, SLURP.sfxHyp);
-        // `0x414f62` — `0x402fa0(4)` goes here, and is the blow this port
-        // does not land
-        return install(e, SLURP.latch, true);
+        install(e, SLURP.latch, true);
+        k.pose(4); // `0x414f64`
+        return false;
       }
       k.say(e, SLURP.sfxFly);
       return install(e, SLURP.drift);
@@ -563,10 +564,11 @@ function decide(
      */
     case 2: {
       halve(e);
-      if (e.facing !== k.player.facing) {
+      // `0x414fb4` — already juddering, and he is bolted instead
+      if (e.facing !== k.player.facing && !k.player.jolted) {
         if (k.player.down) return done ? install(e, SLURP.stance) : false;
         k.say(e, SLURP.sfxHyp);
-        // `0x414fd7` — `0x402fa0(4)` again, again not landed
+        k.pose(4); // `0x414fd9`
         return install(e, SLURP.latch, true);
       }
       k.say(e, SLURP.sfxBolt);
@@ -593,6 +595,26 @@ function decide(
       return done ? install(e, SLURP.stance) : false;
   }
 }
+
+/**
+ * State 7 tag 0, `0x41508b` — the frame after the killing blow, and the brain
+ * goes up in goo.
+ *
+ * Besides the sound (the page's {@link Foe.deathSound}) and the green ball
+ * (`0x4150a6`, {@link Foe.vanishes}), `0x4150b6` calls
+ * `0x40cba0(self.point, 0x78, 0)`: a hundred and twenty's worth — the twenty
+ * gobs the spray tops out at — and with no hitter (`push 0`), so every one of
+ * them takes `0x40ce7d`'s random velocity. Once: the object is gone the same
+ * frame.
+ */
+export const slurpReacts: Reaction = (e, _foe, _run, k) => {
+  if (e.state !== "dead" || e.hatched) return;
+  e.hatched = true;
+  k.spray(e, BURST);
+};
+
+/** `0x4150b3` — `push 0x78` */
+const BURST = 0x78;
 
 export {
   NOT_HERE as SLURP_NOT_HERE,
