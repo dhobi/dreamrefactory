@@ -825,6 +825,13 @@ export class GameSession {
    * so a stuck loop MUST still hit the 100k guard instead of hanging forever.
    */
   hasRealFrames = false;
+  /**
+   * False when nothing will ever look at a film's pixels — a machine suite
+   * (redjack/tests/machine) — so a DreamFactory 5 film reads each frame's size
+   * and palette and skips the decode, which is most of what a headless run
+   * would otherwise spend its time on. Every page leaves it true.
+   */
+  drawsPictures = true;
   realYieldSeq = 0;
   /**
    * The host advances movie frames, so `playmovie` may block the way TI.EXE's

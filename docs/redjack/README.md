@@ -92,6 +92,29 @@ a setter of the same name are two functions, and `cmd` prints both.
 was compiled from (`move.c`, `wave.c`, `high.c`, `Flat.c`), so
 `rjdis str "move.c"` lands in the film player.
 
+## Machine suites
+
+RedJack is tested the way Skull Cracker is: the game runs in node on the three
+discs, with no page and no clock, and each suite steps the engine as fast as the
+CPU goes, waiting on the game's state and never on a duration.
+
+    npm test -w redjack                          every suite
+    npx tsx tools/runmachine.mts intro           just these (from redjack/)
+
+- [`tests/machine/harness.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/harness.ts)
+  serves the discs as the page does, including each disc's own
+  `death.move`. A v5 room has no set viewer, so the harness reads the room from
+  `session.maze` and sends clicks and keys to the director.
+- The harness sets `session.drawsPictures` to false, so a film reads each frame's
+  size and palette but skips decoding its pixels. That is most of the time a
+  headless run would otherwise take. The film still paces by its own
+  soundtrack, so the audio is still decoded.
+- `tests.yml` runs the suites on every pull request when the rip is linked.
+
+The first suite, `intro`, runs from the cold boot through the three films to
+the first room, `liznite` at Node52, and checks that no script error was logged
+on the way.
+
 ## What does not work yet
 
 - **Copying to the hard disk.** `buildfilenames` and `copylocal` copy game

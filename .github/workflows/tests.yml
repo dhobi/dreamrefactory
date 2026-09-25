@@ -157,6 +157,16 @@ jobs:
             echo "::warning::no Skull Cracker rip linked — its machine suites were skipped"
           fi
 
+      # RedJack's, the same way: the shared engine stood up in node on the three
+      # discs, stepped as fast as the CPU goes, with no film pixels decoded.
+      - name: RedJack machine suites
+        run: |
+          if [ -f redjack/gamefiles/RJDisk1/RedJack/bootfile.boot ]; then
+            npm test -w redjack
+          else
+            echo "::warning::no RedJack rip linked — its machine suites were skipped"
+          fi
+
       # Which playthroughs this change needs — and why the automatic suite above
       # is deliberately NOT filtered the same way.
       #
