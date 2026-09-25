@@ -625,13 +625,28 @@ export class MazeRuntime {
   /** the quad under a screen point, topmost (last) first as `0x4468b0` asks */
   quadAt(x: number, y: number, width: number, height: number): MazeQuad | null {
     if (this.walk) return null;
+    const polys = this.quadOutlines(width, height);
     for (let i = this.sett.quads.length - 1; i >= 0; i--) {
-      const q = this.sett.quads[i];
-      const poly = this.quadOutline(q, width, height);
-      if (poly && inPolygon(poly, x, y)) return q;
+      const poly = polys[i];
+      if (poly && inPolygon(poly, x, y)) return this.sett.quads[i];
     }
     return null;
   }
+
+  /**
+   * Every quad's outline for the camera as it stands, kept until the camera
+   * moves: `idle ()` hit-tests the pointer every frame, and each test used to
+   * project every quad in the room again.
+   */
+  private quadOutlines(width: number, height: number): ([number, number][] | null)[] {
+    const cam = this.camera();
+    const key = cam ? `${cam.x},${cam.y},${cam.z},${cam.heading},${cam.pitch},${cam.roll},${cam.fov},${width},${height}` : "";
+    if (this.outlines?.key !== key) {
+      this.outlines = { key, polys: this.sett.quads.map((q) => this.quadOutline(q, width, height)) };
+    }
+    return this.outlines.polys;
+  }
+  private outlines: { key: string; polys: ([number, number][] | null)[] } | null = null;
 
   /**
    * An event to a quad, along its chain: the quad's script, the node you

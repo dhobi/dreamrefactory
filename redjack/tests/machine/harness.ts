@@ -89,6 +89,10 @@ export interface Headless {
   node(): string;
   /** a click as the page makes one, not awaited — a modal film would stall the pump */
   click(x: number, y: number): () => boolean;
+  /** the button pressed and held at (x, y), until {@link mouseUp} */
+  mouseDown(x: number, y: number): void;
+  /** the button let go */
+  mouseUp(x: number, y: number): void;
   /** a key coming up, as the page hands the arrows' releases over */
   keyUp(name: string): void;
   /** a key as the page hands one over */
@@ -220,12 +224,23 @@ export async function headless(): Promise<Headless> {
     return () => done;
   };
   const keyUp = (name: string): void => void host.director.keyUp(name);
+  // the button held, as the page's pointerdown holds it: `stilldown ()` reads it,
+  // and the fight on the dock strikes only while it is down (combat.shop think)
+  const mouseDown = (x: number, y: number): void => {
+    session.setPointer(x, y);
+    session.pointerDown = true;
+    void session.track(host.director.press(x, y), `press ${x},${y}`);
+  };
+  const mouseUp = (x: number, y: number): void => {
+    session.pointerDown = false;
+    host.director.release(x, y);
+  };
   const key = (name: string, special = false): (() => boolean) => {
     let done = false;
     void host.director.keyDown(name, special).then(() => (done = true));
     return () => done;
   };
-  return { host, session, logs, idle, keyUp, running: () => [...running.values()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
+  return { host, session, logs, idle, keyUp, mouseDown, mouseUp, running: () => [...running.values()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
 }
 
 export class SuiteFailure extends Error {}

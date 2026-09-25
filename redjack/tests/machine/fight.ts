@@ -91,6 +91,27 @@ const EPOS_X: Record<number, number> = { 1: 150, 2: 410, 3: 650 };
  */
 export async function schoolOfDodging(h: Headless): Promise<void> {
   if (!fighting(h, "sdocombat.stag")) fail(`the school of dodging is not up (stage ${h.session.stageName})`);
+  const dodge = dodger(h);
+  await h.until(
+    () => {
+      if (!fighting(h, "sdocombat.stag")) return true;
+      dodge.step();
+      return false;
+    },
+    "the school of dodging to end",
+    60_000,
+  );
+  dodge.stop();
+}
+
+/**
+ * One frame of dodging, and the key held for it: every lane a bottle in the air
+ * is falling down is ruled out, and the one Lyle is moving to, and Nick stands
+ * in what is left — the middle if he can. The school of dodging and the second
+ * half of the real fight (enemy2.shop, the same bottles and the same `centerx`)
+ * both play it.
+ */
+function dodger(h: Headless): { step(): void; stop(): void } {
   const props = h.session.propRuntime;
   let held = "";
   const hold = (key: string): void => {
@@ -99,24 +120,20 @@ export async function schoolOfDodging(h: Headless): Promise<void> {
     if (key) h.key(key);
     held = key;
   };
-  await h.until(
-    () => {
-      if (!fighting(h, "sdocombat.stag")) return true;
+  return {
+    step() {
       const danger = new Set<number>();
       for (const n of [1, 2, 3, 11, 12, 13]) {
         const b = props.get(`bottle${n}`);
-        if (b?.visible && b.stateName === "animated") danger.add(LANE[b.anchorX] ?? LANE[Math.round(b.anchorX)]);
+        if (b?.visible && b.stateName === "animated") danger.add(LANE[Math.round(b.anchorX)]);
       }
       const epos = Number(h.session.interp.globals.get("epos") ?? 0);
       if (EPOS_X[epos] !== undefined) danger.add(LANE[EPOS_X[epos]]);
       const stand = STANDS.find((s) => ![...danger].some((lane) => Math.abs(s.cx - lane) < 50)) ?? STANDS[0];
       hold(stand.key);
-      return false;
     },
-    "the school of dodging to end",
-    60_000,
-  );
-  hold("");
+    stop: () => hold(""),
+  };
 }
 
 /** where a click makes each strike (sscombat.shop think: above `topline` 200 is overhead, else by side of 320) */
@@ -171,4 +188,60 @@ export async function schoolOfStriking(h: Headless): Promise<void> {
     "the school of striking to end",
     60_000,
   );
+}
+
+/**
+ * The real fight on the dock (Fight1.pupp realfight → `combat.stag`, Lyle as
+ * `enemy1.shop`): both halves at once. combat.shop's `trackarm` guards by the
+ * same zones as the school of defense and its `think` strikes by the same lines
+ * as the school of striking, so the player guards while Lyle winds up and
+ * strikes, in turn and at a hand's pace, while he is open. Won when Lyle's life
+ * runs out (enemy1.shop `death`, fightstat "n"); lost when Nick's does ("l").
+ */
+export async function fightLyle(h: Headless): Promise<void> {
+  if (!fighting(h, "combat.stag")) fail(`the fight is not up (stage ${h.session.stageName})`);
+  const props = h.session.propRuntime;
+  let next = 0;
+  let held: { x: number; y: number; for: number } | null = null;
+  const letGo = (): void => {
+    if (held) h.mouseUp(held.x, held.y);
+    held = null;
+  };
+  const dodge = dodger(h);
+  await h.until(
+    () => {
+      if (!fighting(h, "combat.stag")) return true;
+      const view = enemyView(h);
+      const nick = props.get("nick")?.stateName ?? "";
+      // the second half: beaten with the sword, Lyle backs off and throws
+      // (combat.shop opens enemy2.shop), and Nick dodges as in the school
+      if (props.get("enemy")?.shop.name === "enemy2.shop") {
+        letGo();
+        dodge.step();
+        return false;
+      }
+      dodge.stop();
+      // the swing is under way, or the button has been down long enough: let go
+      if (held && (nick.startsWith("strike") || ++held.for > 10)) letGo();
+      const guard = guardFor(view);
+      if (guard) {
+        letGo();
+        h.session.setPointer(guard.x, guard.y);
+        return false;
+      }
+      if (held) return false;
+      const open = !/^(block|hurt|fall|death)/.test(view.toLowerCase());
+      const strength = Number(props.get("nick strength")?.deg ?? 0);
+      if (open && strength >= 6 && !nick.startsWith("strike")) {
+        const s = STRIKES[next++ % STRIKES.length];
+        h.mouseDown(s.x, s.y);
+        held = { x: s.x, y: s.y, for: 0 };
+      } else h.session.setPointer(OPEN.x, OPEN.y);
+      return false;
+    },
+    "the fight with Lyle to end",
+    60_000,
+  );
+  letGo();
+  dodge.stop();
 }

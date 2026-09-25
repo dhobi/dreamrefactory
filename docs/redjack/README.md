@@ -111,9 +111,36 @@ CPU goes, waiting on the game's state and never on a duration.
   soundtrack, so the audio is still decoded.
 - `tests.yml` runs the suites on every pull request when the rip is linked.
 
-The first suite, `intro`, runs from the cold boot through the three films to
-the first room, `liznite` at Node52, and checks that no script error was logged
-on the way.
+`intro` runs from the cold boot through the three films to the first room,
+`liznite` at Node52, and checks that no script error was logged on the way.
+
+`day1` plays the whole first night, the stowaway's way:
+- Bone, Lyle, Jan in the woods and Lyle's rescue at Node54, which puts the fire out;
+- the bar: the bartender's door, the mug of ale and Captain Justice;
+- the lighthouse, the cave, the trunk with the sword and pistol, and Patch's story;
+- Lyle's three lessons and the fight with him on the dock;
+- Bone's last two talks, which send him and Cross out to the ship;
+- the charcoal from the dead fire, the X on the crate, and into the crate, until
+  day two begins aboard with `nickdisc.move`.
+
+Each step checks the flag the script it cites sets.
+
+The moves are the player's, in two files:
+- [`route.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/route.ts)
+  walks a room by its exits (turn to the exit, then up), clicks what `hittest`
+  names, pans or rests on the screen edge to bring a thing out of the scroll
+  margin, answers conversations by the text of a choice, and drags an item out of
+  the inventory onto its target.
+- [`fight.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/fight.ts)
+  reads Lyle off the screen and answers with the pointer and the arrows: the
+  guard where his wind-up says, the lane no bottle is falling down, the three
+  strikes in turn at a hand's pace, and in the fight both, with the button held.
+
+Playing it this way found several engine gaps, each fixed from RedJack.exe where
+it could be read and marked as a reading where it could not: puppets opened by a
+bare name, the stage header's main-script field, a room opened at a node it
+lacks, `actorstar` ending a walk, `endanim`, key releases, and shops closed by the
+name they give themselves.
 
 ## What does not work yet
 

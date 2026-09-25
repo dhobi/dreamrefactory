@@ -20,8 +20,8 @@
  * wrong says where.
  */
 import { fail, headless, ok, pass } from "./harness";
-import { fighting, schoolOfDefense, schoolOfDodging, schoolOfStriking } from "./fight";
-import { ai, clickOn, converse, face, global, goTo, waitNear } from "./route";
+import { fightLyle, fighting, schoolOfDefense, schoolOfDodging, schoolOfStriking } from "./fight";
+import { ai, clickOn, converse, drag, face, global, goTo, waitNear } from "./route";
 
 const h = await headless();
 await h.until(() => h.room() === "liznite" && h.owner() === "world", "the first room", 60_000);
@@ -170,5 +170,72 @@ await h.until(() => fighting(h, "sscombat.stag"), "the school of striking to ope
 await schoolOfStriking(h);
 if (!passed("striking")) fail(`the school of striking ends ${await ai(h, "nick", "fightstat")}, not passed`);
 ok(`the school of striking, passed "${await ai(h, "nick", "fightstat")}" — all three of Lyle's lessons`);
+
+// and the fight itself: realfight sets lylephase 1 (which Bone waits for) and
+// runs combat.stag
+await converse(h, ["I want to fight !"], "Lyle: the real fight");
+await h.until(() => fighting(h, "combat.stag"), "the fight to open", 3_000);
+await fightLyle(h);
+if ((await ai(h, "nick", "fightstat")) !== "n") fail(`Nick loses the fight with Lyle (fightstat ${await ai(h, "nick", "fightstat")})`);
+if ((await ai(h, "lyle", "lylephase")) !== "1") fail("the fight with Lyle sets lylephase 1");
+ok("beat Lyle on the dock, sword and bottles (fightstat n, lylephase 1)");
+
+// Lyle has the last word about the fight (fight1.pupp "after fight")
+if (h.owner() === "puppet" || h.host.director.awaitingChoice) await converse(h, [], "Lyle, after the fight");
+await h.settle("after the fight");
+
+// Bone again, now that Lyle is beaten: bone1.pupp comeback (bonephase 1 → 2),
+// then crates, which sends him and Cross out to the ship (stopactor, bonephase 1)
+await goTo(h, "Node48");
+await face(h, "bone");
+await waitNear(h, "bone", 65_000);
+await clickOn(h, "bone");
+await converse(h, ["This is your ship?"], "Bone comes back");
+if ((await ai(h, "bone", "bonephase")) !== "2") fail(`comeback sets bonephase 2; it is ${await ai(h, "bone", "bonephase")}`);
+await clickOn(h, "bone");
+await converse(h, ["What are you doing?"], "Bone and the crates");
+if (h.session.actorRuntime.get("bone")?.visible) fail("crates sends Bone out to the ship");
+ok("Bone and Cross have gone out to the ship: the boxes marked with an X go aboard");
+
+// the charcoal, from the fire Lyle put out: lpfirepit at Node58 opens
+// firepit.stag once its view is "off", and the stick in it is the charcoal
+// (liznite.shop: addinven ("charcoal")); its button closes the stage
+await goTo(h, "Node58");
+await clickOn(h, "lpfirepit");
+await h.until(() => h.session.stageName === "firepit.stag" && h.running().length === 0, "the fire pit to open", 3_000);
+await clickOn(h, "stick");
+await h.until(() => h.session.propRuntime.get("charcoal")?.owner === "nick" && h.running().length === 0, "the charcoal into the inventory", 2_000);
+await clickOn(h, "button10");
+await h.until(() => h.session.stageName !== "firepit.stag", "the fire pit to close", 2_000);
+await h.settle("the fire pit to close");
+ok("the charcoal, from the dead fire");
+
+// the crate at Node47 opens crate.stag ("the crate" sends a click to Bone while
+// he is there — he is not, now)
+await goTo(h, "Node47");
+await clickOn(h, "the crate");
+await h.until(() => h.session.stageName === "crate.stag" && h.running().length === 0, "the crate to open", 3_000);
+await clickOn(h, "chest");
+await h.until(() => !!h.session.propRuntime.get("charcoal")?.visible && h.running().length === 0, "the chest to open", 2_000);
+// the charcoal onto the crate's side: inven.shop draws the X (crate.stag drawx),
+// and the mark's own endanim turns the crate to "crate1x" and the view to "x"
+await drag(h, "charcoal", "crate2");
+await h.until(() => h.session.propRuntime.get("the crate")?.stateName === "x" && h.running().length === 0, "the X on the crate", 3_000);
+await h.until(() => String(h.session.currentFlat).toLowerCase() === "crate1x 1" && h.running().length === 0, "the marked crate", 3_000);
+ok("the crate is marked with an X, as the ones that go aboard are");
+await clickOn(h, "crate2x");
+await h.until(() => h.running().length === 0, "zooming in on the crate", 3_000);
+// ...and in: crate.stag's getin plays incrate.move and loadship.move, sets
+// stowed and calls advanceday — day two starts on the Marauder
+const films = h.logs.length;
+await clickOn(h, "getin");
+// advanceday's day-one case: the stowaway is found (nickdisc.move) and Justice
+// has words for him (justice1b.pupp) — the first thing day two asks of the player
+await h.until(() => global(h, "day") === "2" && h.room() === "ship" && h.host.director.awaitingChoice, "day two, on the ship", 20_000);
+const played = h.logs.slice(films).filter((l) => l.startsWith("movie: ")).map((l) => l.split(" ")[1]);
+for (const film of ["incrate.move", "loadship.move", "nickdisc.move"]) {
+  if (!played.includes(film)) fail(`stowing away plays ${film}; it played ${played.join(", ")}`);
+}
+ok(`stowed away (${played.join(", ")}): day two begins aboard, found out, with Justice asking`);
 
 pass("day1");

@@ -150,7 +150,8 @@ export async function face(h: Headless, name: string): Promise<{ x: number; y: n
   if (!at) fail(`${h.room()}/${h.node()}: "${name}" is nowhere on screen`);
   const inMargin = (p: { x: number; y: number }): boolean =>
     p.x < margin || p.y < margin || p.x >= width - margin || p.y >= height - margin;
-  if (!inMargin(at)) return at;
+  // `scrollmargin` answers false while the room is hidden, as it is behind a stage
+  if (!inMargin(at) || !h.session.setVisible || h.session.maze?.view !== "node") return at;
   for (let hover = 0; at && inMargin(at); hover++) {
     if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin`);
     h.session.setPointer(at.x, at.y);
@@ -220,4 +221,25 @@ export function distanceTo(h: Headless, who: string): number {
  */
 export async function waitNear(h: Headless, who: string, hotdist: number): Promise<void> {
   await h.until(() => distanceTo(h, who) < hotdist && h.idle(), `${who} to come within ${hotdist}`);
+}
+
+/**
+ * Use one thing on another the way the inventory wants it: press on `what`,
+ * carry it with the button held — inven.shop `stdmove` follows the pointer in a
+ * `while stilldown ()` loop — and let go over `onto`, which is where the item's
+ * own test looks (`pointinbutton`, `pointinprop`, `pointinactor`).
+ */
+export async function drag(h: Headless, what: string, onto: string): Promise<void> {
+  const to = findOnScreen(h, onto) ?? fail(`${h.node()}: nothing called "${onto}" to drop ${what} on`);
+  const from = findOnScreen(h, what) ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
+  h.mouseDown(from.x, from.y);
+  await h.frame(3);
+  const steps = 12;
+  for (let i = 1; i <= steps; i++) {
+    h.session.setPointer(Math.round(from.x + ((to.x - from.x) * i) / steps), Math.round(from.y + ((to.y - from.y) * i) / steps));
+    await h.frame(1);
+  }
+  h.mouseUp(to.x, to.y);
+  await h.frame(3);
+  await h.until(() => h.running().length === 0, `dropping ${what} on ${onto}`, 3_000);
 }

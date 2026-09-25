@@ -2968,8 +2968,9 @@ export class GameSession {
 
   /**
    * The key an open shop is held under, for a name a script closes it by: the
-   * name itself, then the name without its extension, as {@link sendEvent}'s
-   * lookup allows — and in DreamFactory 5 the name the shop gives itself. RedJack's
+   * name itself — and in DreamFactory 5 only, then the name without its
+   * extension, as {@link sendEvent}'s lookup allows, and the name the shop
+   * gives itself. RedJack's
    * fight lessons close their shops that way: `sdcombat.shop`, `sdocombat.shop`
    * and `sscombat.shop` all call themselves "combat" and their opponents "enemy1"
    * or "enemy2", and each stage's `closestage` says `closeshopfile ("combat")`.
@@ -2979,12 +2980,10 @@ export class GameSession {
   private openShopKey(name: string): string {
     const lower = name.toLowerCase();
     const shops = this.propRuntime.shops;
-    if (shops.has(lower)) return lower;
+    if (shops.has(lower) || !this.isV5) return lower;
     const stem = (n: string): string => n.replace(/\.[a-z0-9]{1,4}$/, "");
     for (const key of shops.keys()) if (stem(key) === stem(lower)) return key;
-    if (this.isV5) {
-      for (const [key, shop] of shops) if (shop.shp.refName.toLowerCase() === lower) return key;
-    }
+    for (const [key, shop] of shops) if (shop.shp.refName.toLowerCase() === lower) return key;
     return lower;
   }
 
