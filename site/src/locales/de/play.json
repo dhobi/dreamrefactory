@@ -6,6 +6,8 @@
   "keys": "<b>←</b> <b>→</b> drehen &nbsp;·&nbsp; <b>↑</b> gehen &nbsp;·&nbsp; <b>Esc</b> Zeile überspringen &nbsp;·&nbsp; <b>M</b> Karte &nbsp;·&nbsp; <b>O</b> Hotspots &nbsp;·&nbsp; <b>X</b> Details &nbsp;·&nbsp; <b>0</b>–<b>9</b> Ton &nbsp;·&nbsp; <b>F1</b> <b>F2</b> Helligkeit",
   "fullscreen": "⛶ Vollbild",
   "fullscreenTitle": "Vollbild (4:3 mit Balken)",
+  "stretch": "auf Bildschirm strecken",
+  "stretchTitle": "Im Vollbild den ganzen Bildschirm füllen statt das originale 4:3 zu behalten — das Bild wird dafür gestreckt",
   "reportBug": "🪲 Fehler melden",
   "reportBugTitle": "Etwas melden, das die Portierung falsch macht",
   "bugShotClipboard": "Das Bild des Bildschirms liegt in der Zwischenablage — im Issue einfügen.",

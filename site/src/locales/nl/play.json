@@ -6,6 +6,8 @@
   "keys": "<b>←</b> <b>→</b> draaien &nbsp;·&nbsp; <b>↑</b> lopen &nbsp;·&nbsp; <b>Esc</b> regel overslaan &nbsp;·&nbsp; <b>M</b> kaart &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>0</b>–<b>9</b> geluid &nbsp;·&nbsp; <b>F1</b> <b>F2</b> helderheid",
   "fullscreen": "⛶ Volledig scherm",
   "fullscreenTitle": "Volledig scherm (4:3 met balken)",
+  "stretch": "uitrekken tot vullend",
+  "stretchTitle": "In volledig scherm het hele scherm vullen in plaats van het originele 4:3 te houden — het beeld wordt daarvoor uitgerekt",
   "reportBug": "🪲 Bug melden",
   "reportBugTitle": "Iets melden dat de port verkeerd doet",
   "bugShotClipboard": "Het scherm staat op je klembord — plak het in het issue.",

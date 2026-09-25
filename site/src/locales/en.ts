@@ -175,6 +175,9 @@ export const en = {
       "<b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp; <b>Esc</b> skip line &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>O</b> hotspots &nbsp;·&nbsp; <b>X</b> details &nbsp;·&nbsp; <b>0</b>–<b>9</b> sound &nbsp;·&nbsp; <b>F1</b> <b>F2</b> brightness" as Html,
     fullscreen: "⛶ Fullscreen" as Text,
     fullscreenTitle: "Fullscreen (letterboxed 4:3)" as Text,
+    stretch: "stretch to fill" as Text,
+    stretchTitle:
+      "In fullscreen, fill the whole display instead of keeping the original 4:3 — the picture is stretched to fit" as Text,
     reportBug: "🪲 Report a bug" as Text,
     reportBugTitle: "Report something the port gets wrong" as Text,
     // what became of the screenshot the button took. GitHub accepts no image in

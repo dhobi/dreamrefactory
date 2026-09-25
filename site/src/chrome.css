@@ -650,6 +650,19 @@ body.fs-faux .fsexit:focus-visible {
   color: var(--text-bright);
 }
 
+/* The stretch box beside every Fullscreen button (engine/src/web/stretch.ts).
+   A quiet label and not a second button: it is a setting the button reads,
+   picked once for a display, and it should not compete with the thing it
+   qualifies. */
+.stretchopt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text-mute);
+}
+
 /* ---- utilities -------------------------------------------------------- */
 
 .spacer,

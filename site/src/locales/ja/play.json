@@ -6,6 +6,8 @@
   "keys": "<b>←</b> <b>→</b> 旋回 &nbsp;·&nbsp; <b>↑</b> 前進 &nbsp;·&nbsp; <b>Esc</b> セリフを飛ばす &nbsp;·&nbsp; <b>M</b> マップ &nbsp;·&nbsp; <b>O</b> ホットスポット &nbsp;·&nbsp; <b>X</b> 詳細 &nbsp;·&nbsp; <b>0</b>–<b>9</b> 音 &nbsp;·&nbsp; <b>F1</b> <b>F2</b> 明るさ",
   "fullscreen": "⛶ 全画面",
   "fullscreenTitle": "全画面（4:3 レターボックス）",
+  "stretch": "画面いっぱいに引き伸ばす",
+  "stretchTitle": "全画面時に元の 4:3 を保たず、画面全体に引き伸ばして表示します",
   "reportBug": "🪲 不具合を報告",
   "reportBugTitle": "この移植版がおかしい点を報告します",
   "bugShotClipboard": "画面の画像をクリップボードにコピーしました — Issue に貼り付けてください。",

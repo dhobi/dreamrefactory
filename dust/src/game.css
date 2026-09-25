@@ -1242,6 +1242,13 @@ a.bmc img {
   max-width: none;
   max-height: none;
 }
+/* The player's other answer: the whole display, out of 4:3. Both sides
+   given, so `aspect-ratio` has nothing to derive and steps aside; the
+   pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
+#stage.fs.stretch #screen {
+  width: 100dvw;
+  height: 100dvh;
+}
 /* The hint no longer has to give way to anything: it WRAPS. The strip could
    not, being one line of fixed height, so the sentence ellipsized and the
    title attribute carried the rest — which a phone cannot hover to read.

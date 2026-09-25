@@ -103,6 +103,13 @@
   border-radius: 0;
   box-shadow: none;
 }
+/* The player's other answer: the whole display, out of 4:3. Both sides
+   given, so `aspect-ratio` has nothing to derive and steps aside; the
+   pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
+#stage.fs.stretch #screen {
+  width: 100dvw;
+  height: 100dvh;
+}
 /* keep the map overlay pinned to the SCREEN's corner, not the viewport's,
    by sharing the screen's grid cell instead of #stage's padding box */
 #stage.fs #minimap {

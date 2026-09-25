@@ -30,6 +30,7 @@ import {
   MOVE_SPEED_MS,
 } from "@dreamfactory/engine/runtime/session";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "./cursor-art";
@@ -145,6 +146,8 @@ const help = document.getElementById("help");
  *  Absent on /speedrun/: a route is timed against one edition, English. */
 const editionPicker = document.getElementById("editionPicker");
 const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
+/** whether fullscreen stretches the picture to the display (engine/src/web/stretch.ts) */
+const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
 const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 /** where the bug button says what became of the screenshot */
 const bugNote = document.getElementById("bugNote");
@@ -200,6 +203,7 @@ const mapCtx = minimap.getContext("2d")!;
 // which is the whole of what engine/src/web/fullscreen.ts is for. The twelve
 // lines that used to be here were a fourth copy of the same broken detection.
 installFullscreen(fsBtn, stage, { report: log });
+installStretch(stretchBox, stage, "taoot.picture.stretch");
 
 /** every game file the page has seen, plus the dev-server manifest */
 const files = new FileStore();
@@ -431,8 +435,12 @@ function showCursor(name: string): void {
   const rect = screen.getBoundingClientRect();
   // the scale the PICTURE is shown at: the canvas is the framebuffer (512x384)
   // and CSS stretches it, so a cursor at 1x would be half the size the artist
-  // drew it at against a doubled picture
-  screen.style.cursor = cursors.css(name || "arrow", rect.width / screen.width);
+  // drew it at against a doubled picture. Per axis, for a stretched fullscreen.
+  screen.style.cursor = cursors.css(
+    name || "arrow",
+    rect.width / screen.width,
+    rect.height / screen.height,
+  );
 }
 /**
  * Redrawn whenever the PICTURE changes size, which a window resize is only one
