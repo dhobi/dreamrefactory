@@ -9,9 +9,9 @@ to the next, where every earlier game had fixed views and a turn ring.
 What runs here is a **prototype**: the real `GameHost` and `GameSession`
 pointed at the three discs, on port 5179 with
 `npm run dev -w redjack`. It boots, you can walk the rooms and look round them,
-the films, props, actors and puppets play, and the fights' stage opens. It has
-not been played through from start to finish, and there is no playthrough test
-for it yet.
+the films, props, actors and puppets play, and the fights' stage opens. The
+first day plays through headless (see [Machine suites](#machine-suites)); days
+two and three have not been played through yet.
 
 ## What was found
 
