@@ -96,7 +96,7 @@ export async function goTo(h: Headless, to: string): Promise<void> {
 }
 
 /**
- * Where the boot's `hittest` answers `name` on screen now, nearest the middle,
+ * Where the boot's `hittest` answers `name` on screen now, in the middle of it,
  * or null. A coarse
  * grid first and a fine one only if that misses, so a big target is found in
  * a few hundred tests and a small one still is.
@@ -108,22 +108,50 @@ export function findOnScreen(h: Headless, name: string): { x: number; y: number 
     for (let y = grid / 2; y < height; y += grid)
       for (let x = grid / 2; x < width; x += grid)
         if (same(h.session.hitTestAt(x, y).name, name)) hits.push({ x, y });
-    // the hit nearest the middle: a click within the boot's `margin` of an edge
-    // is a scroll, not a click on what is under it (boot scrollmargin)
-    const d = (p: { x: number; y: number }): number => (p.x - width / 2) ** 2 + (p.y - height / 2) ** 2;
-    if (hits.length) return hits.reduce((a, b) => (d(b) < d(a) ? b : a));
+    // the hit nearest the middle of the thing: its edge is the first pixel an
+    // animating actor takes away (Lyle crouches), and {@link face} deals with
+    // a thing that is in the scroll margin
+    if (!hits.length) continue;
+    const cx = hits.reduce((a, p) => a + p.x, 0) / hits.length;
+    const cy = hits.reduce((a, p) => a + p.y, 0) / hits.length;
+    const d = (p: { x: number; y: number }): number => (p.x - cx) ** 2 + (p.y - cy) ** 2;
+    return hits.reduce((a, b) => (d(b) < d(a) ? b : a));
   }
   return null;
 }
 
-/** click on what `hittest` calls `name`, turning round to find it if it is behind us */
-export async function clickOn(h: Headless, name: string): Promise<void> {
+/**
+ * Bring what `hittest` calls `name` onto the screen and out of the boot's
+ * scroll margin, where a click scrolls instead of reaching it. Turning ("right")
+ * finds it if it is behind; resting the pointer on the edge it is near brings it
+ * in the way `idle ()` turns the view (boot tracknodescroll). Answers where it is.
+ */
+export async function face(h: Headless, name: string): Promise<{ x: number; y: number }> {
   let at = findOnScreen(h, name);
   for (let turn = 0; !at && turn < 8; turn++) {
     await press(h, "right", `looking for ${name}`);
     at = findOnScreen(h, name);
   }
   if (!at) fail(`${h.room()}/${h.node()}: "${name}" is nowhere on screen`);
+  const margin = Number(global(h, "margin") || 0);
+  const { width, height } = h.host.director.screen;
+  const inMargin = (p: { x: number; y: number }): boolean =>
+    p.x < margin || p.y < margin || p.x >= width - margin || p.y >= height - margin;
+  if (!inMargin(at)) return at;
+  for (let hover = 0; at && inMargin(at); hover++) {
+    if (hover === 400) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin`);
+    h.session.setPointer(at.x, at.y);
+    await h.frame(1);
+    at = findOnScreen(h, name);
+  }
+  h.session.setPointer(width / 2, height / 2);
+  await h.settle(`the view to stop on ${name}`);
+  return findOnScreen(h, name) ?? fail(`${h.node()}: "${name}" is gone once the view stopped`);
+}
+
+/** click on what `hittest` calls `name`, {@link face}d first */
+export async function clickOn(h: Headless, name: string): Promise<void> {
+  const at = await face(h, name);
   h.click(at.x, at.y);
   await h.frame(3);
 }
@@ -162,4 +190,21 @@ export async function ai(h: Headless, who: string, flag: string): Promise<string
 /** a global the way the scripts read it */
 export function global(h: Headless, name: string): string {
   return String(h.session.interp.globals.get(name) ?? "");
+}
+
+/** how far `who` stands from the player, as the cast's `nearactor` measures it: `calcdist` on x and y */
+export function distanceTo(h: Headless, who: string): number {
+  const cam = h.session.maze?.camera();
+  const a = h.session.actorRuntime.get(who);
+  if (!cam || !a) fail(`no ${!cam ? "camera" : `actor ${who}`} to measure from`);
+  return Math.hypot(a.worldX - cam.x, a.worldY - cam.y);
+}
+
+/**
+ * Let the world run until `who` is within the room's `hotdist` — the actors that
+ * pace (the bartender walks between his two stars) are only talked to when they
+ * come near, and a click on one too far away is a click on the room, which walks.
+ */
+export async function waitNear(h: Headless, who: string, hotdist: number): Promise<void> {
+  await h.until(() => distanceTo(h, who) < hotdist && h.idle(), `${who} to come within ${hotdist}`);
 }

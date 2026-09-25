@@ -20,7 +20,7 @@
  * wrong says where.
  */
 import { fail, headless, ok, pass } from "./harness";
-import { ai, clickOn, converse, goTo } from "./route";
+import { ai, clickOn, converse, face, goTo, waitNear } from "./route";
 
 const h = await headless();
 await h.until(() => h.room() === "liznite" && h.owner() === "world", "the first room", 60_000);
@@ -60,5 +60,43 @@ await clickOn(h, "door l2b");
 await converse(h, ["I want to come inside."], "the bartender's door");
 if (h.room() !== "bar") fail(`the door opens onto bar.sett; we are in ${h.room()}/${h.node()}`);
 ok(`in the bar at ${h.node()} (bartendphase ${await ai(h, "bartend", "bartendphase")})`);
+
+// the bartender inside (bar1.pupp inbar): the mug of ale for Lyle, then
+// Captain Justice (justice1.pupp)
+// gang.cast hotdist: 1100000 in the bar; only Scene35 is that near his stars
+await goTo(h, "Scene35");
+await face(h, "bartend");
+await waitNear(h, "bartend", 1_100_000);
+await clickOn(h, "bartend");
+await converse(
+  h,
+  ["Where's all the action?", "Could I have a mug of ale?", "Thanks for letting me in.",
+    "Have you seen anyone strange", "Introduce me.",
+    // justice1.pupp bar → occupation → job → hire → useful: a sword, a fight and the shark
+    "Yes, I came to get an ale", "I'm an aspiring pirate.", "Do you need men on your pirate ship?",
+    "What does a person have to do", "I want to join your crew.", "A sword and experience.",
+    "How long will you be here?"],
+  "the bartender and Justice",
+);
+if (h.session.propRuntime.get("mug")?.owner !== "nick") fail(`the bartender gives Nick the mug; it is ${h.session.propRuntime.get("mug")?.owner}`);
+ok(`the mug of ale, and Captain Justice met (justphase ${await ai(h, "justice", "justphase")})`);
+
+// back out to the town (bar.sett quad "door b2l" at Scene34 → liznite Node37)
+await goTo(h, "Scene34");
+await clickOn(h, "door b2l");
+await h.settle("leaving the bar");
+if (h.room() !== "liznite") fail(`the bar door opens onto liznite; we are in ${h.room()}`);
+ok("back in town");
+
+// the ale to Lyle, who waits in the woods by Node54 after the rescue
+// (lyle1.pupp ale: the mug goes to him, alephase 2, and he is off to the dock)
+await goTo(h, "Node54");
+await face(h, "lyle");
+await waitNear(h, "lyle", 65_000); // gang.cast hotdist in liznite
+await clickOn(h, "lyle");
+await converse(h, [], "the ale for Lyle");
+if ((await ai(h, "lyle", "alephase")) !== "2") fail(`the ale sets alephase 2; it is ${await ai(h, "lyle", "alephase")}`);
+if (h.session.propRuntime.get("mug")?.owner !== "lyle") fail(`the mug goes to Lyle; it is ${h.session.propRuntime.get("mug")?.owner}`);
+ok("Lyle has his ale (alephase 2) and will teach Nick on the dock");
 
 pass("day1");
