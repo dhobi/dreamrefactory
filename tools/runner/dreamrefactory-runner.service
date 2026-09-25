@@ -54,9 +54,13 @@ ExecStart=/usr/bin/docker run --rm \
     --env DUST_GAMEFILES=/srv/dust/gamefiles \
     --env TIMELAPSE_GAMEFILES=/srv/timelapse/gamefiles \
     --env SKULLCRACKER_GAMEFILES=/srv/skullcracker/gamefiles \
+    --env REDJACK_GAMEFILES=/srv/redjack/gamefiles \
     --env RUNNER_LABELS=self-hosted,linux,x64,dreamrefactory-gamefiles \
     --volume /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro \
     --volume /srv/dust/gamefiles:/srv/dust/gamefiles:ro \
+    --volume /srv/timelapse/gamefiles:/srv/timelapse/gamefiles:ro \
+    --volume /srv/skullcracker/gamefiles:/srv/skullcracker/gamefiles:ro \
+    --volume /srv/redjack/gamefiles:/srv/redjack/gamefiles:ro \
     --security-opt no-new-privileges:true \
     --cap-drop ALL \
     --init \

@@ -8,6 +8,7 @@
  * cmd 4 = integer literal  (info: the value)
  * cmd 5 = variable name    (info: like string)
  * cmd 6 = line break       (info: indent level in tabs)
+ * cmd 7 = a commented-out line (DreamFactory 5 only; info: like string)
  * anything else = command/operator ID (see OPCODES)
  */
 
@@ -16,12 +17,19 @@ const STRING = 3;
 const INTEGER = 4;
 const VARIABLE = 5;
 const BREAK = 6;
+/**
+ * A line the author commented out, kept as its source text — DreamFactory 5's,
+ * and not in any v1 or v4 script. RedJack's `boot()` comments out an `if
+ * isdebugging()` / `endif` pair and leaves the menu-building lines between them
+ * live, so a comment is exactly as inert as it looks: the decoder drops it.
+ */
+const COMMENT = 7;
 
 /** every token is one fixed-width record: u16 cmd, u32 info, u16 pad */
 const SEGMENT = 8;
 
 import { pstrAt, writePstrAt } from "./binary";
-import { OPCODES } from "./opcodes";
+import { DF5_OPCODES, OPCODES } from "./opcodes";
 
 export { OPCODES } from "./opcodes";
 
@@ -66,8 +74,11 @@ export function decodeScript(data: Uint8Array): Token[] {
       case BREAK:
         tokens.push({ kind: "break", indent: info });
         break;
+      case COMMENT:
+        break;
       default: {
-        const name = OPCODES.get(cmd);
+        // v5's additions only ever fill gaps in the v4 table (see DF5_OPCODES)
+        const name = OPCODES.get(cmd) ?? DF5_OPCODES.get(cmd);
         if (!name) throw new Error(`script: unknown opcode ${cmd}`);
         tokens.push({ kind: "op", id: cmd, name });
       }

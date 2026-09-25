@@ -544,6 +544,14 @@ link in [the click priority chain](../runtime/host.md#the-click-priority-chain).
 Chained movies (types 3/4/5 above) share a five-deep call stack and one
 `playmovie()` wait — details in [the browser host](../runtime/host.md#movieplayer).
 
+## DreamFactory 5 (RedJack)
+
+RedJack's `.move` films are this format behind v5's 24-byte container prefix,
+with the palette taken out of the segment header and put into every frame, and
+most records a few bytes longer. `mov-v5.ts` reads one into the same `MovFile`,
+so the player is the one above. The offsets, and the depth map behind each
+frame, are in [DreamFactory 5's containers](dreamfactory-5.md#the-film-move).
+
 ## DreamFactory 1 (Dust)
 
 The **model** survives: a chain of segments, a frame state machine, click

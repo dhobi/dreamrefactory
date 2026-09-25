@@ -561,6 +561,22 @@ export class AudioLibrary {
     return null;
   }
 
+  /**
+   * Play a bank's loops in another order — DreamFactory 5's `themeorder`, whose
+   * list is 1-based into the loop records as the stored order is. False when no
+   * bank of that name is open or the list names none of its loops.
+   */
+  setThemeOrder(bankName: string, order: number[]): boolean {
+    const hit = this.find(bankName);
+    if (!hit) return false;
+    const records = readBankTables(hit.entry.file).loopRecords;
+    const chunks = order.map((o) => records[o - 1]?.containerLoc).filter((c): c is number => c !== undefined);
+    if (!chunks.length) return false;
+    hit.entry.bank.loopChunks = chunks;
+    this.cache.delete(`theme:${hit.entry.bank.trackName}`);
+    return true;
+  }
+
   /** concatenated loop-chunk music of a bank (for playtheme) */
   theme(bankName?: string): DecodedAudio | null {
     const candidates = bankName

@@ -125,6 +125,16 @@ jobs:
             echo "::warning::SKULLCRACKER_GAMEFILES (${SKULLCRACKER_GAMEFILES:-unset}) is not a directory — Skull Cracker's disc-reading tests will skip. Set it in the runner's .env to cover them."
           fi
 
+          # RedJack's three discs, OPTIONAL like the two above:
+          # `engine/tests/df5-room.ts` reads `redjack/gamefiles` and skips its
+          # corpus half without it.
+          if [ -n "${REDJACK_GAMEFILES:-}" ] && [ -d "${REDJACK_GAMEFILES:-}" ]; then
+            ln -sfn "$REDJACK_GAMEFILES" redjack/gamefiles
+            echo "redjack:          $(ls redjack/gamefiles | tr '\n' ' ')"
+          else
+            echo "::warning::REDJACK_GAMEFILES (${REDJACK_GAMEFILES:-unset}) is not a directory — RedJack's disc-reading tests will skip. Set it in the runner's .env to cover them."
+          fi
+
       # No setup-node here: the runner's own Node is used, so a run does not
       # re-download a toolchain onto a machine that already has one.
       - name: Report the toolchain

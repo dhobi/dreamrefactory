@@ -18,6 +18,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   });
   r("closesetfile", async () => {
     await session.currentBinding?.closeSet();
+    await session.maze?.closeSet();
     session.currentSetName = "none";
   });
   r("currentset", () => session.currentSetName);
@@ -33,8 +34,17 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // SCENE NAME ("sceneNNN") teleports to that scene — paired with the following
   // currentview("viewNNN") it's how TAOOT's halls cross to the other side of the ship
   // (HALLC/HALLA keydown toggle hallside then cut to the mirrored view).
-  r("currentscene", (_i, [dir]) => {
+  r("currentscene", async (_i, [dir]) => {
     if (dir === undefined) return session.currentSceneName();
+    // a DreamFactory 5 room: a direction turns or walks a scene's views, a
+    // name goes to another node or scene (engine/src/runtime/maze.ts)
+    if (session.maze) {
+      const d = toStr(dir);
+      const low = d.toLowerCase();
+      if (low === "left" || low === "right" || low === "strait") await session.maze.move(low);
+      else await session.maze.setScene(d);
+      return;
+    }
     const d = toStr(dir).toLowerCase();
     if (d.startsWith("scene")) session.onSceneJump(d);
     else session.onNavigate(d);
@@ -472,7 +482,14 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       turnleft: "turnleft", turnhalfleft: "turnleft",
       turnright: "turnright", turnhalfright: "turnright",
     } as const;
-    const dir = DIR[name as keyof typeof DIR];
+    /**
+     * ...except in a DreamFactory 5 game, where 24020 is not `turnhalfleft` but
+     * `photodissolve` — RedJack.exe's own command table names it so, and v5
+     * has no 24021. It is how RedJack brings up its control panel and crosses
+     * into a new day, and read as the first leg of a Timelapse turn it held the
+     * screen on a half-pushed picture waiting for a second leg that never came.
+     */
+    const dir = session.isV5 && name === "turnhalfleft" ? "dissolve" : DIR[name as keyof typeof DIR];
     if (!dir) return;
     const from = session.captureFrame?.() ?? null;
     if (!from) return;

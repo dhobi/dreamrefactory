@@ -207,6 +207,7 @@ function walkStmts(body: Stmt[], onCall: (c: CallExpr) => void): void {
           walkExpr(c.match, onCall);
           walkStmts(c.body, onCall);
         }
+        if (s.default_) walkStmts(s.default_, onCall);
         break;
       case "while":
         walkExpr(s.cond, onCall);

@@ -1,0 +1,263 @@
+/*
+ * RedJack's page, in the PROJECT's palette for now.
+ *
+ * No RedJack design yet — no title card, no colours sampled out of its box art —
+ * so this wears site/src/theme.css, the black-and-green the front door and the
+ * editors wear, and adds only the layout a game page needs: the picture, the log
+ * over it, and the rows of controls under it. Every colour below is a role from
+ * the chrome's contract (site/src/chrome.css), so the day this game gets a palette
+ * of its own it replaces the import and nothing under it changes.
+ */
+@import "@dreamfactory/site/theme.css";
+
+/* ---- the page --------------------------------------------------------- */
+
+body {
+  /* no page scroll sideways at phone width, whatever a long log line does */
+  overflow-x: hidden;
+}
+
+#stage {
+  position: relative;
+  width: min(100%, 1280px);
+  padding: 12px 16px 0;
+}
+
+/* ---- the loading gauge and the button that replaces it ---------------- */
+
+#boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 8px auto 14px;
+  width: min(100%, 460px);
+}
+#gauge {
+  width: 100%;
+}
+#bar {
+  height: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--inset);
+  overflow: hidden;
+}
+#charge {
+  height: 100%;
+  background: var(--accent);
+  transition: width 380ms ease-out;
+}
+#bootline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  font: 12px/1.4 var(--font-mono);
+  color: var(--text-dim);
+}
+#bootsay {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#start {
+  display: none;
+  min-width: 10rem;
+}
+#boot.ready #gauge {
+  display: none;
+}
+#boot.ready #start {
+  display: inline-block;
+}
+body.playing #boot {
+  display: none;
+}
+
+/* ---- the picture ------------------------------------------------------ */
+
+#frame {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 1280px;
+  border: 1px solid var(--border);
+  background: #000;
+  line-height: 0;
+}
+/* the canvas is the engine's 640x480 doubled (src/main.ts); the page only ever
+   shrinks it, which is soft at worst, never a non-integer nearest upscale */
+#screen {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  image-rendering: auto;
+  touch-action: none;
+}
+
+#netbusy {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 70%);
+  pointer-events: none;
+}
+#netbusy span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgb(255 255 255 / 16%);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: netspin 700ms linear infinite;
+}
+/* `display: flex` above beats the UA's `[hidden]` */
+#netbusy[hidden] {
+  display: none;
+}
+@keyframes netspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #netbusy span {
+    animation: none;
+  }
+}
+
+/* ---- the log, a panel over the picture -------------------------------- */
+
+#log {
+  position: absolute;
+  inset: 12px 16px 0;
+  margin: 0;
+  z-index: 4;
+  overflow: auto;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(3px);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: 12px/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#log[hidden] {
+  display: none;
+}
+/* its two voices: a step the boot took, and something it had to complain about */
+#log b {
+  color: var(--accent);
+  font-weight: normal;
+}
+#log i {
+  color: var(--alarm, #e07a6a);
+  font-style: normal;
+}
+
+/* ---- the controls under it -------------------------------------------- */
+
+#under {
+  width: min(100%, 1280px);
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#under .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* a row whose only child is an empty error line is not a row */
+#under .bar:has(> #err:empty:only-child) {
+  display: none;
+}
+#err {
+  color: var(--alarm, #e07a6a);
+  font: 12px/1.4 var(--font-mono);
+}
+#loc {
+  margin: 0;
+  font: 12px/1.5 var(--font-mono);
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+#loc:empty {
+  display: none;
+}
+.k {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: 11px/1.5 var(--font-mono);
+  color: var(--text-bright);
+}
+#under .keyhint,
+#under .touchhint {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+#under .touchhint,
+#under .bar.touchonly {
+  display: none;
+}
+#swipeOpts label {
+  margin-right: 10px;
+}
+/* the hint that fits the pointer: keys for a mouse, the gesture for glass —
+   `hover: none` too, so a touchscreen laptop keeps its keys line */
+@media (pointer: coarse) and (hover: none) {
+  #under .keyhint {
+    display: none;
+  }
+  #under .touchhint {
+    display: inline;
+  }
+  #under .bar.touchonly {
+    display: flex;
+  }
+}
+
+/* ---- fullscreen ------------------------------------------------------- */
+
+/* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
+   engine/src/web/fullscreen.ts pins the stage over the viewport instead */
+#stage.fs {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  width: 100dvw;
+  height: 100dvh;
+  padding: 0;
+  background: #000;
+}
+#stage.fs #boot {
+  display: none;
+}
+#stage.fs #frame {
+  border: 0;
+  width: auto;
+  max-width: none;
+}
+#stage.fs #screen {
+  width: min(100dvw, calc(100dvh * 4 / 3));
+  height: min(100dvh, calc(100dvw * 3 / 4));
+}

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- where the site's root is from THIS page: its own directory -->
+    <meta name="site-root" content="./" />
+    <title>RedJack: Revenge of the Brethren RE</title>
+    <meta name="theme-color" content="#000000" />
+    <!-- the chrome every page in the project shares; no RedJack palette yet, so
+         the project's own (src/theme.css says why) -->
+    <link rel="stylesheet" href="/src/theme.css" />
+  </head>
+  <body class="booting deep">
+    <!-- The same band every page carries. No logo yet: the brand is words. -->
+    <header class="topbar">
+      <a
+        class="brand"
+        href="./"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1998 release"
+      >
+        <span class="brand-text">
+          <b>RedJack</b>
+          <span>Revenge of the Brethren RE</span>
+        </span>
+      </a>
+      <!-- this page's OWN version, filled by main.ts from this package's
+           package.json, so the number a bug report names is this page's -->
+      <span class="version" id="ver"></span>
+      <nav class="topnav">
+        <a href="../" title="dreamREfactory — the engine, and the other games">dreamREfactory</a>
+        <a href="../docs/">Docs</a>
+        <a href="https://github.com/dhobi/dreamrefactory">Source</a>
+      </nav>
+    </header>
+
+    <div id="stage">
+      <div id="boot">
+        <div id="gauge">
+          <div
+            id="bar"
+            role="progressbar"
+            aria-label="reading the discs"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div id="charge" style="width: 0%"></div>
+          </div>
+          <div id="bootline">
+            <span id="bootsay">reading the discs…</span>
+            <span id="bootpct">0%</span>
+          </div>
+        </div>
+        <!-- the gesture an AudioContext needs, asked for once the disc is read -->
+        <button id="start" class="primary" type="button">Enter</button>
+      </div>
+      <div id="frame">
+        <!-- 1280x960: the engine's own 640x480, doubled (src/main.ts) -->
+        <canvas id="screen" width="1280" height="960"></canvas>
+        <!-- the game is waiting on the network, once the wait is long enough -->
+        <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+      </div>
+      <!-- the boot's own account of itself; `b` opens it, and an error opens it
+           by itself -->
+      <pre id="log" hidden></pre>
+    </div>
+
+    <div id="under">
+      <div class="bar">
+        <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">⛶ Fullscreen</button>
+        <!-- a prefilled GitHub issue with the screen on the clipboard
+             (site/src/bug-report.ts, shared with the other pages) -->
+        <button id="bugBtn" type="button" title="Report something the port gets wrong">
+          🪲 Report a bug
+        </button>
+        <span id="bugNote" class="note"></span>
+        <button id="logBtn" type="button" title="The boot log, in full (b)">▤ Boot log</button>
+        <!-- RedJack's own keys, off its ReadMe: the arrows move, space is the
+             control panel, esc skips a film, F1 is the fight help -->
+        <span
+          class="keyhint"
+          title="arrows move · space opens the control panel · esc skips a film · F1 fight help · b opens the boot log"
+          ><span class="k">←</span><span class="k">↑</span><span class="k">→</span><span class="k">↓</span>
+          move <span class="k">space</span> panel <span class="k">esc</span> skip
+          <span class="k">F1</span> help <span class="k">b</span> log</span
+        >
+        <span
+          class="touchhint"
+          title="drag to look round · flick up to walk on, down to back away, sideways to turn · tap a hotspot to use it · hold two fingers to zoom · double-tap for escape · SPACE opens the panel"
+          >drag look · flick walk · <span class="k">2 fingers</span> zoom · <span class="k">2-tap</span> esc</span
+        >
+      </div>
+      <!-- the game's own controls for a finger: the one key a phone lacks, and
+           which way a swipe reads -->
+      <div class="bar touchonly">
+        <button id="spacekey" type="button" title="the control panel">SPACE</button>
+        <span id="swipeOpts" hidden
+          ><label title="a swipe from right to left turns right, not left"
+            ><input type="checkbox" id="swipeInvertTurn" /><span class="k">invert ←/→</span></label
+          ><label title="a swipe downwards walks on, not one upwards"
+            ><input type="checkbox" id="swipeInvertWalk" /><span class="k">invert ↑</span></label
+          ></span
+        >
+      </div>
+      <div class="bar">
+        <span id="err"></span>
+      </div>
+      <div class="bar">
+        <pre id="loc"></pre>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

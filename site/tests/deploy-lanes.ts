@@ -28,7 +28,10 @@
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { GAMES } from "@dreamfactory/site/games";
+import { GAMES, UNLISTED } from "@dreamfactory/site/games";
+
+/** every game with a lane: the listed ones and the unlisted ones that deploy anyway */
+const DEPLOYED = [...GAMES, ...UNLISTED];
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const workflow = readFileSync(`${ROOT}/.github/workflows/deploy.yml`, "utf8");
@@ -41,9 +44,9 @@ const places = (target: string): { where: string; found: boolean }[] => [
   { where: "the tag-to-target shell", found: workflow.includes(`== ${target}-v*`) },
 ];
 
-test("every game in the registry has all four halves of a deploy lane", () => {
+test("every deployed game has all four halves of a deploy lane", () => {
   const missing: string[] = [];
-  for (const game of GAMES) {
+  for (const game of DEPLOYED) {
     for (const p of places(game.dir)) if (!p.found) missing.push(`${game.dir}: not in ${p.where}`);
   }
   expect(
@@ -59,7 +62,7 @@ test("and the site itself, which is the same lane with a different remote", () =
 });
 
 test("no tag pattern releases something that is not a game or the site", () => {
-  const known = new Set(["site", ...GAMES.map((g) => g.dir)]);
+  const known = new Set(["site", ...DEPLOYED.map((g) => g.dir)]);
   const trigger = /tags: \[([^\]]*)\]/.exec(workflow)?.[1] ?? "";
   const targets = [...trigger.matchAll(/"([a-z]+)-v\*"/g)].map((m) => m[1]);
   expect(targets.length, `no tag patterns found in the trigger: ${trigger}`).toBeGreaterThan(1);
@@ -73,7 +76,7 @@ test("each lane has the build script it runs", () => {
   // to be in THAT package rather than at the root — a lane without it fails after
   // the checkout rather than before the tag. The root has no per-game build script
   // any more: each package carries its own, and `npm run build` fans out.
-  for (const target of ["site", ...GAMES.map((g) => g.dir)]) {
+  for (const target of ["site", ...DEPLOYED.map((g) => g.dir)]) {
     const pkg = JSON.parse(readFileSync(`${ROOT}/${target}/package.json`, "utf8")) as {
       scripts?: Record<string, string>;
     };
@@ -113,7 +116,7 @@ test("the release tool releases exactly what the workflow can release", () => {
   const listed = [...(/const TARGETS = \[([^\]]*)\]/.exec(release)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map(
     (m) => m[1],
   );
-  expect(new Set(listed)).toEqual(new Set(["site", ...GAMES.map((g) => g.dir)]));
+  expect(new Set(listed)).toEqual(new Set(["site", ...DEPLOYED.map((g) => g.dir)]));
 });
 
 test("a pushed tag is not taken on trust — the run has to appear", () => {

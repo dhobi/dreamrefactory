@@ -7,6 +7,8 @@ export type Expr =
   | { t: "me" }
   | { t: "target" }
   | { t: "var"; name: string }
+  /** one element of a DreamFactory 5 array — `jrep [ index ]` */
+  | { t: "index"; name: string; index: Expr }
   | CallExpr
   | { t: "bin"; op: string; l: Expr; r: Expr }
   | { t: "un"; op: "not" | "-"; e: Expr };
@@ -22,10 +24,11 @@ export interface CallExpr {
 
 export type Stmt =
   | { t: "decl"; kind: "global" | "local" | "dumpglobal" | "dumplocal"; names: string[] }
-  | { t: "assign"; name: string; value: Expr }
+  | { t: "assign"; name: string; value: Expr; index?: Expr }
   | { t: "callstmt"; call: CallExpr }
   | { t: "if"; cond: Expr; then: Stmt[]; else_?: Stmt[] }
-  | { t: "switch"; subject: Expr; cases: { match: Expr; body: Stmt[] }[] }
+  /** `default_`: DreamFactory 5's `default` arm (keyword 4032), run when no case matches */
+  | { t: "switch"; subject: Expr; cases: { match: Expr; body: Stmt[] }[]; default_?: Stmt[] }
   | { t: "while"; cond: Expr; body: Stmt[] }
   | { t: "for"; varName: string; from: Expr; to: Expr; step?: Expr; body: Stmt[] }
   | { t: "exitcode" }

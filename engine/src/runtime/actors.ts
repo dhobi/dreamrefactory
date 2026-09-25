@@ -1,7 +1,9 @@
 import { CstFile, CastMember, CastPose } from "../df/cst";
 import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
-import { WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing } from "./geometry";
+import {
+  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
+} from "./geometry";
 import type { DrawSignature } from "./signature";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
@@ -75,6 +77,14 @@ export class ActorInstance {
   step = 0;
   scale = 0;
   zclip = 0;
+  /** DreamFactory 5's `actorink`: opacity in eighths, as {@link PropInstance.ink} */
+  ink = 8;
+  /** DreamFactory 5's `actorflip`: bit 1 mirrors the picture across, bit 2 turns it upside down */
+  flip = 0;
+  /** `actoristrue3d` — kept for the script; an actor always faces the camera, so it draws as before */
+  true3d = false;
+  /** `actorbrightness`: added to each colour channel, -255..255 */
+  bright: [number, number, number] = [0, 0, 0];
   speed = 0;
   /**
    * `actorturn` — degrees of facing per service pass while turning. 16, not 0:
@@ -310,7 +320,9 @@ export class ActorRuntime {
     // so its own facing IS the angle to match, and an actor no script ever turns
     // (Dust's booth targets, all of them) takes the frame nearest angle 0, the
     // one drawn front-on.
-    const rel = cam ? (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff : Number(a.deg) & 0xff;
+    const rel = cam?.v5
+      ? cam.v5.facing(a.worldX, a.worldY, Number(a.deg) || 0)
+      : cam ? (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff : Number(a.deg) & 0xff;
     let cf = step[0];
     let best = angleApart(cf.angle, rel);
     for (const f of step) {
@@ -344,6 +356,8 @@ export class ActorRuntime {
       // Behind the camera is projectPoint's own answer (it returns null on
       // depth <= 0). zclip is NOT a second cull — see occludeAt.
       if (!proj) continue;
+      // a v5 room's far limit, less the actor's zclip (SettFile.far)
+      if (cam.v5 && proj.depth - Number(a.zclip) >= cam.v5.far) continue;
       out.push({ a, proj });
     }
     return out.sort((x, y) => y.proj.depth - x.proj.depth);
@@ -421,12 +435,17 @@ export class ActorRuntime {
   rect(a: ActorInstance, proj: { x: number; y: number; depth: number }, cam: WorldCamera) {
     const f = this.frameFor(a, cam);
     if (!f) return null;
-    const k = (a.scale * this.refScale(a) * ACTOR_SCALE_CORRECTION) / (1000 * proj.depth);
+    // a v5 room sizes it as it does a prop (RedJack.exe's 0x406bf0 is 0x42caa0's
+    // twin), lowered by the actor record's +0x50 — its cast member's (CastMember.depthRef)
+    const k = cam.v5
+      ? cam.v5.size(a.worldX, a.worldY, a.worldZ, a.scale, a.member.depthRef ?? 0)
+      : (a.scale * this.refScale(a) * ACTOR_SCALE_CORRECTION) / (1000 * proj.depth);
     return {
       f,
       k,
-      x: proj.x - Math.round(f.posXraw * k),
-      y: proj.y - Math.round(f.posYraw * k),
+      // `actorflip` mirrors the hot spot with the picture, as propflip does
+      x: proj.x - Math.round((a.flip & 1 ? f.width - f.posXraw : f.posXraw) * k),
+      y: proj.y - Math.round((a.flip & 2 ? f.height - f.posYraw : f.posYraw) * k),
       w: Math.max(1, Math.round(f.width * k)),
       h: Math.max(1, Math.round(f.height * k)),
     };
@@ -445,7 +464,9 @@ export class ActorRuntime {
   screenRect(a: ActorInstance) {
     const f = this.frameFor(a, null);
     if (!f) return null;
-    return { f, x: a.anchorX - f.posXraw, y: a.anchorY - f.posYraw, w: f.width, h: f.height };
+    const ax = a.flip & 1 ? f.width - f.posXraw : f.posXraw;
+    const ay = a.flip & 2 ? f.height - f.posYraw : f.posYraw;
+    return { f, x: a.anchorX - ax, y: a.anchorY - ay, w: f.width, h: f.height };
   }
 
   /** visible 2D actors, far to near — `dist` descending, so low draws last */
@@ -466,19 +487,21 @@ export class ActorRuntime {
     for (const a of this.screenDrawList()) {
       const r = this.screenRect(a);
       if (!r) continue;
+      // a v5 sprite colours through its own palette (df/shp.ts)
+      const pal32 = brightPalette(r.f.palette ?? paletteRGBA, a.bright);
+      const alpha = inkAlpha(a.ink);
       for (let y = 0; y < r.f.height; y++) {
         const ty = r.y + y;
         if (ty < 0 || ty >= height) continue;
+        const sy = a.flip & 2 ? r.f.height - 1 - y : y;
         for (let x = 0; x < r.f.width; x++) {
           const tx = r.x + x;
           if (tx < 0 || tx >= width) continue;
-          const s = y * r.f.width + x;
+          const s = sy * r.f.width + (a.flip & 1 ? r.f.width - 1 - x : x);
           if (!r.f.opaque[s]) continue;
           const pal = r.f.indexed[s] * 4;
           const d = (ty * width + tx) * 4;
-          rgba[d] = paletteRGBA[pal];
-          rgba[d + 1] = paletteRGBA[pal + 1];
-          rgba[d + 2] = paletteRGBA[pal + 2];
+          inkPixel(rgba, d, pal32, pal, alpha);
         }
       }
     }
@@ -514,22 +537,24 @@ export class ActorRuntime {
   ): void {
     const r = this.rect(a, proj, cam);
     if (!r) return;
-    const level = occ ? this.occludeAt(a, proj.depth, occ) : 0;
+    const level = occ ? this.occludeAt(a, hiddenBy(proj), occ) : 0;
+    // a v5 sprite colours through its own palette (df/shp.ts)
+    if (r.f.palette) paletteRGBA = r.f.palette;
+    paletteRGBA = brightPalette(paletteRGBA, a.bright);
+    const alpha = inkAlpha(a.ink);
     const maxY = Math.min(cam.clipH, height, r.y + r.h);
     const maxX = Math.min(cam.clipW, width, r.x + r.w);
     for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
-      const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+      let sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+      if (a.flip & 2) sy = r.f.height - 1 - sy;
       for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
-        const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+        let sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+        if (a.flip & 1) sx = r.f.width - 1 - sx;
         const s = sy * r.f.width + sx;
         if (!r.f.opaque[s]) continue;
         // scenery in front of the actor hides this pixel (SET Z image)
         if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
-        const pal = r.f.indexed[s] * 4;
-        const d = (ty * width + tx) * 4;
-        rgba[d] = paletteRGBA[pal];
-        rgba[d + 1] = paletteRGBA[pal + 1];
-        rgba[d + 2] = paletteRGBA[pal + 2];
+        inkPixel(rgba, (ty * width + tx) * 4, paletteRGBA, r.f.indexed[s] * 4, alpha);
       }
     }
   }
@@ -552,9 +577,10 @@ export class ActorRuntime {
       if (!a.visible) continue;
       sig.ref(a.member).str(a.setName).str(a.poseName);
       sig.num(a.worldX).num(a.worldY).num(a.worldZ);
-      sig.num(a.deg).num(a.step).num(a.scale).num(a.zclip);
+      sig.num(a.deg).num(a.step).num(a.scale).num(a.zclip).num(a.ink);
       // the 2D half: where it is painted, and where in the screen order
       sig.bool(a.worldSpace).num(a.anchorX).num(a.anchorY).num(a.dist);
+      sig.num(a.flip).num(a.bright[0]).num(a.bright[1]).num(a.bright[2]);
     }
   }
 
@@ -578,7 +604,9 @@ export class ActorRuntime {
       const r = this.screenRect(a);
       if (!r) continue;
       if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
-      if (!r.f.opaque[(y - r.y) * r.f.width + (x - r.x)]) continue;
+      const lx = a.flip & 1 ? r.f.width - 1 - (x - r.x) : x - r.x;
+      const ly = a.flip & 2 ? r.f.height - 1 - (y - r.y) : y - r.y;
+      if (!r.f.opaque[ly * r.f.width + lx]) continue;
       return a;
     }
     if (!cam) return null;
@@ -588,11 +616,13 @@ export class ActorRuntime {
       const r = this.rect(a, proj, cam);
       if (!r) continue;
       if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
-      const sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
-      const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+      let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
+      let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+      if (a.flip & 1) sx = r.f.width - 1 - sx;
+      if (a.flip & 2) sy = r.f.height - 1 - sy;
       if (!r.f.opaque[sy * r.f.width + sx]) continue;
       // a click landing on scenery that occludes the actor doesn't reach them
-      if (occ && sceneryOccludes(occ, x, y, this.occludeAt(a, proj.depth, occ))) continue;
+      if (occ && sceneryOccludes(occ, x, y, this.occludeAt(a, hiddenBy(proj), occ))) continue;
       return a;
     }
     return null;

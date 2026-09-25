@@ -27,6 +27,10 @@ word "flat".
 | **Actor** | A character sprite standing or walking in the room, drawn from a CST file. [→ Actors](engine/runtime/characters.md#actors-sprites-in-the-world) |
 | **Star / actor mark** | A named world-point in a SET's actor table where an actor can be placed. [→ Actors](engine/runtime/characters.md#actors-sprites-in-the-world) |
 | **Z layer** | The hidden depth image shipped alongside a background, recording how far away each pixel is — which is how a character gets hidden behind a chair. [→ the Z layer](engine/formats/image-codec.md#the-z-layer-a-hidden-depth-map) |
+| **Node** | DreamFactory 5's standpoint: a point in a RedJack room you look round from in every direction, instead of turning between fixed views. [→ SETT](engine/formats/sett.md) |
+| **Sphere** | What you see at a node: a panorama in tiles, each with its own palette and depth map. [→ the sphere](engine/formats/sett.md#the-sphere-sphr) |
+| **Quad** | DreamFactory 5's hotspot: a rectangle set in the room and projected through the camera, so it stays on the thing as you look round. [→ the quads](engine/formats/sett.md#the-quads-bli3) |
+| **Facer** | A DreamFactory 5 prop drawn as a flat picture in the room that turns to face the camera. Every prop is one until a script says otherwise. [→ pictures that stand in the room](engine/runtime/rooms-v5.md#pictures-that-stand-in-the-room) |
 | **Flat** | One full-screen 512×384 screen inside a stage file, with its own scripts and click regions. [→ Flats](engine/formats/stg.md#flats-full-screen-background-images) |
 | **Stage** | An `.STG` file: the deck map, the inventory, the UI band, the mini-games. Holds one or more flats. [→ STG](engine/formats/stg.md) |
 | **Overlay** | A flat pushed on top of another rather than replacing it — how the inventory opens over what's behind it. [→ the overlay stack](engine/runtime/stage-ui.md#the-overlay-stack-transtoflat-transfromflat) |

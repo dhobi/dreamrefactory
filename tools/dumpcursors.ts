@@ -36,6 +36,13 @@
  * same 308 bytes, the same hotspot) under the names an older build's numeric
  * resource ids left behind. Nothing names them, and they are dropped.
  *
+ * Nothing CAN name them: a script's string becomes `CURS.<string>`, dot and
+ * all, and these have no dot. RedJack.exe has seven, and only `CURS2000` is a
+ * copy (of `WATCH`); the other six are leftover art, two of them drawn with
+ * screen inversion. They are dropped too, and said so. Its `CURS.MAGIC` is the
+ * one 8bpp cursor in any of these builds, and no script on RedJack's discs asks
+ * for it, so it is left out rather than read.
+ *
  * ## What is written
  *
  * The two 1bpp planes exactly as the resource holds them — the colour plane then
@@ -57,6 +64,8 @@ interface Cursor {
   hy: number;
   /** 32x32 colour plane then 32x32 AND mask, top-down, 4 bytes a row */
   planes: Uint8Array;
+  /** it has a pixel that inverts the screen (see where this is set) */
+  inverts: boolean;
 }
 
 const CURSOR_W = 32;
@@ -153,18 +162,24 @@ function cursors(pe: Buffer): Cursor[] {
     const count = pe.readUInt16LE(group.offset + 4);
     if (count !== 1) throw new Error(`${group.name}: ${count} candidates, expected 1`);
     const dir = group.offset + 6;
-    const w = pe.readUInt16LE(dir);
-    // the DIRECTORY's height is the image's, the DIB header's is doubled (colour
-    // plane plus mask); this is the honest one
-    const h = pe.readUInt16LE(dir + 2);
-    const bpp = pe.readUInt16LE(dir + 6);
     const ordinal = pe.readUInt16LE(dir + 12);
     const leaf = byOrdinal.get(ordinal);
     if (!leaf) throw new Error(`${group.name}: no CURSOR ${ordinal}`);
-    if (bpp !== 1 || w !== CURSOR_W || h !== 2 * CURSOR_H) {
+    const o = leaf.offset;
+    // The size is read off the cursor's own DIB header, whose height is doubled
+    // (colour plane plus mask). The group directory's copy is not to be trusted:
+    // RedJack.exe's resource compiler wrote garbage there for every cursor.
+    const w = pe.readInt32LE(o + 8);
+    const h = pe.readInt32LE(o + 12);
+    const bpp = pe.readUInt16LE(o + 18);
+    if (bpp !== 1) {
+      // RedJack's MAGIC is 8bpp, and no script on its discs names it
+      console.log(`  ${group.name}: ${bpp}bpp, not monochrome — left out`);
+      continue;
+    }
+    if (w !== CURSOR_W || h !== 2 * CURSOR_H) {
       throw new Error(`${group.name}: ${w}x${h} ${bpp}bpp — this reads 32x32 monochrome`);
     }
-    const o = leaf.offset;
     const hx = pe.readUInt16LE(o);
     const hy = pe.readUInt16LE(o + 2);
     const hdr = pe.readUInt32LE(o + 4); // BITMAPINFOHEADER, 40
@@ -186,12 +201,11 @@ function cursors(pe: Buffer): Cursor[] {
       }
     }
     // AND=1 with colour=1 is Windows' "invert the screen here", which no CSS
-    // cursor can do. Nothing in these builds asks for it, and this is the guard
-    // that keeps that true — engine/src/web/cursors.ts renders three states.
-    for (let i = 0; i < PLANE; i++) {
-      if (planes[i] & planes[PLANE + i]) throw new Error(`${group.name}: uses screen inversion`);
-    }
-    out.push({ name: group.name.replace(/^CURS\./, "").toLowerCase(), hx, hy, planes });
+    // cursor can do. No cursor a script can name uses it, and the writer below
+    // refuses one that does — engine/src/web/cursors.ts renders three states.
+    let inverts = false;
+    for (let i = 0; i < PLANE; i++) if (planes[i] & planes[PLANE + i]) inverts = true;
+    out.push({ name: group.name.replace(/^CURS\./, "").toLowerCase(), hx, hy, planes, inverts });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -224,15 +238,17 @@ const FALLBACK: Record<string, string> = {
   watch: "wait", sight: "crosshair", hyperlink: "pointer", none: "none",
 };
 
-function emit(cs: Cursor[], constName: string, source: string, dropped: string[]): string {
+function emit(cs: Cursor[], constName: string, source: string, dropped: { name: string; twin: boolean }[]): string {
   const rows = cs.map((c) => {
     const b64 = Buffer.from(c.planes).toString("base64");
     const fallback = FALLBACK[c.name] ?? "pointer";
     return `  ${c.name}: { hx: ${c.hx}, hy: ${c.hy}, fallback: "${fallback}",\n    bits: "${b64}" },`;
   });
-  const also = dropped.length
-    ? `, minus ${dropped.length === 1 ? "one that is a duplicate" : `${dropped.length} that are duplicates`} under an old numeric name (${dropped.join(", ")})`
-    : "";
+  const also = !dropped.length
+    ? ""
+    : dropped.every((d) => d.twin)
+      ? `, minus ${dropped.length === 1 ? "one that is a duplicate" : `${dropped.length} that are duplicates`} under an old numeric name (${dropped.map((d) => d.name).join(", ")})`
+      : `, minus the ${dropped.length} under old numeric names that no script can name (${dropped.map((d) => d.name).join(", ")})`;
   return `/**
  * The mouse cursors this game's engine build carries — GENERATED, do not edit.
  *
@@ -280,10 +296,10 @@ if (argv.includes("--show")) {
   const dropped = found.filter((c) => /^curs\d+$/.test(c.name));
   for (const d of dropped) {
     const twin = keep.find((c) => same(c, d));
-    if (!twin) throw new Error(`${d.name} is not a duplicate of anything kept — it would be lost`);
-    console.log(`  ${d.name} = ${twin.name}, dropped`);
+    console.log(twin ? `  ${d.name} = ${twin.name}, dropped` : `  ${d.name}: no script can name it, dropped`);
   }
+  for (const c of keep) if (c.inverts) throw new Error(`${c.name}: uses screen inversion`);
   const out = flag("--out") ?? join(here, "..", "timelapse/src/cursor-art.ts");
-  writeFileSync(out, emit(keep, flag("--const") ?? "TL_CURSORS", file.replace(/^.*gamefiles\//, ""), dropped.map((d) => d.name)));
+  writeFileSync(out, emit(keep, flag("--const") ?? "TL_CURSORS", file.replace(/^.*gamefiles\//, ""), dropped.map((d) => ({ name: d.name, twin: keep.some((c) => same(c, d)) }))));
   console.log(`wrote ${out} (${keep.length} cursors)`);
 }

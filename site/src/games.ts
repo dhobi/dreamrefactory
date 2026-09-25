@@ -260,6 +260,37 @@ export const SKULLCRACKER: GameEditions = {
   developer: "CyberFlix",
 };
 
+/**
+ * *RedJack: Revenge of the Brethren* — CyberFlix's last game, and the only one on
+ * DreamFactory 5.
+ *
+ * NOT in {@link GAMES} yet, and that is deliberate rather than an oversight:
+ * `GAMES` is the list with a front door, a mark and the editors' source picker,
+ * and this game is a prototype page with none of them. It is declared so that
+ * page can name itself in a bug report and say which screen it draws, and it is
+ * in {@link UNLISTED}, so it deploys; it joins `GAMES` the day it gets a door.
+ */
+export const REDJACK: GameEditions = {
+  title: "RedJack: Revenge of the Brethren",
+  short: "RedJack",
+  dir: "redjack",
+  mark: "mark-redjack.svg",
+  editions: [{ code: "", name: "English", encoding: DEFAULT_ENCODING }],
+  storageKey: "redjack.edition",
+  fallback: "",
+  // 640×480, which its BOOTFILE's container 0 says and its `billsdoublebuffer`
+  // asks the machine for. No band measured yet.
+  screen: { width: 640, height: 480 },
+  developer: "CyberFlix",
+};
+
+/**
+ * Games that deploy (a lane in `deploy.yml`, a target in `tools/release.mts`)
+ * but are not in {@link GAMES}: their page is on the host at its own path and
+ * nothing on the site links to it.
+ */
+export const UNLISTED: readonly GameEditions[] = [REDJACK];
+
 /** the code every edition-less path is treated as belonging to — see `editionOfUrl` */
 export const NEUTRAL = "";
 

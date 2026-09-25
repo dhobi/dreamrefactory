@@ -77,7 +77,27 @@ export interface AudioChunkHeader {
   /** uncompressed size in bytes: v40 samples are 8-bit, v41 samples 16-bit */
   byteSize: number;
   dataStart: number;
+  /** DreamFactory 5's IMA ADPCM, which only a v5 `SOUN` chunk can say it is */
+  ima?: boolean;
 }
+
+/**
+ * DreamFactory 5's sound chunk: `00 00 05 00 "NUOS"` — the v5 tag and the
+ * fourCC SOUN written backwards — in front of the SAME header v4 has at the SAME
+ * offsets (codec 0x1a, rate 0x1c, size 0x24, data 0x2c). RedJack.exe's
+ * streamer (0x46ff40, `wave.c`) decodes three ways off it:
+ *
+ *   - codec 1: v4's V40, byte for byte (the step-pair tables at 0x4c13f8);
+ *   - codec 2 with the word at 0x18 clear: v4's V41 (0x470a98);
+ *   - codec 2 with it set: IMA ADPCM, which v4 never had (0x470729, the
+ *     standard 89-step table at 0x4c1618). It comes in blocks listed from 0x2c —
+ *     `u32 count` at 0x28, then `count + 1` offsets — each opening with a
+ *     3-byte header (i16 predictor, u8 step index) and then nibbles, low first.
+ */
+const V5_MAGIC = 0x00050000;
+const V5_SOUN = 0x534f554e;
+const OFF_V5_IMA = 0x18;
+const OFF_V5_BLOCKS = 0x28;
 
 /** null when the bytes are not a sound container — the editor's probe */
 export function readAudioHeader(
@@ -87,7 +107,17 @@ export function readAudioHeader(
   if (data.length < MIN_HEADER) return null;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const le = little(order);
-  if (view.getInt32(0, le) !== MAGIC) return null;
+  const magic = view.getInt32(0, le);
+  if (magic === V5_MAGIC && view.getUint32(4, le) === V5_SOUN) {
+    return {
+      codec: view.getInt16(OFF_CODEC, le),
+      sampleRate: view.getInt32(OFF_RATE, le),
+      byteSize: view.getInt32(OFF_SIZE, le),
+      dataStart: view.getInt32(OFF_DATA_START, le),
+      ima: view.getInt16(OFF_CODEC, le) === 2 && view.getInt16(OFF_V5_IMA, le) !== 0,
+    };
+  }
+  if (magic !== MAGIC) return null;
   return {
     codec: view.getInt16(OFF_CODEC, le),
     sampleRate: view.getInt32(OFF_RATE, le),
@@ -102,6 +132,7 @@ export function decodeAudioContainer(data: Uint8Array, order: ByteOrder = PC): D
     throw new Error("audio container: bad magic");
   }
   const { codec, sampleRate, byteSize, dataStart } = header;
+  if (header.ima) return { sampleRate, samples: decodeIma(data, byteSize >> 1, order) };
 
   if (codec === 1) {
     return { sampleRate, samples: decodeV40(data, dataStart, byteSize) };
@@ -161,6 +192,49 @@ function decodeV40(data: Uint8Array, start: number, byteSize: number): Float32Ar
  *   0x00..0x7f  delta    — multiples of 32 in [-2048, 2016]
  *   0x80..0xff  absolute — multiples of 512 in [-32768, 32256]
  */
+const IMA_STEP = [
+  7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66,
+  73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408,
+  449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066,
+  2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630,
+  9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794,
+  32767,
+];
+const IMA_INDEX = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8];
+
+/** v5's IMA ADPCM blocks, as RedJack.exe 0x470729 decodes them */
+function decodeIma(data: Uint8Array, numSamples: number, order: ByteOrder): Float32Array {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const le = little(order);
+  const blocks = view.getInt32(OFF_V5_BLOCKS, le);
+  const out = new Float32Array(numSamples);
+  let n = 0;
+  for (let b = 0; b < blocks && n < numSamples; b++) {
+    let at = view.getInt32(OFF_DATA_START + b * 4, le);
+    const end = Math.min(data.length, b + 1 <= blocks ? view.getInt32(OFF_DATA_START + (b + 1) * 4, le) : data.length);
+    if (at + 3 > end) break;
+    let pred = view.getInt16(at, le);
+    let index = Math.min(88, Math.max(0, data[at + 2]));
+    at += 3;
+    out[n++] = pred / 32768;
+    const nibble = (code: number): void => {
+      const step = IMA_STEP[index];
+      let diff = step >> 3;
+      if (code & 4) diff += step;
+      if (code & 2) diff += step >> 1;
+      if (code & 1) diff += step >> 2;
+      pred = Math.max(-32768, Math.min(32767, code & 8 ? pred - diff : pred + diff));
+      index = Math.min(88, Math.max(0, index + IMA_INDEX[code]));
+      if (n < numSamples) out[n++] = pred / 32768;
+    };
+    for (; at < end && n < numSamples; at++) {
+      nibble(data[at] & 0xf);
+      nibble(data[at] >> 4);
+    }
+  }
+  return n === numSamples ? out : out.subarray(0, n);
+}
+
 const v41Delta = (b: number): number => (b < 0x40 ? b : b - 0x80) * 32;
 const v41Absolute = (b: number): number => {
   const n = b & 0x7f;

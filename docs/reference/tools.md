@@ -15,6 +15,7 @@ own directory instead:
 | [`tools/`](https://github.com/dhobi/dreamrefactory/tree/master/tools) | any rip: the dumpers, `parse`, `scancmds`, `scandeg`, the manifest, the shared encoders and the Vite plugins |
 | [`taoot/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tools) | *Titanic*: the `TI.EXE` mining tools, the flow map, the deck-map and developer-menu extractors, the language chooser and the intro film |
 | [`dust/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/dust/tools) | *Dust*: the v1 SET sweep, the shipped-saves thread, the flat click-regions, and its title card |
+| [`redjack/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/redjack/tools) | *RedJack*: `rjdis`, the `RedJack.exe` disassembler |
 | [`site/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/site/tools) | the front door's artwork |
 
 The **[browser editors](../editors/README.md)** are the other half of the
@@ -74,6 +75,31 @@ candidates.
 | [`exetable.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/exetable.ts) | locates and extracts the command-name → opcode-ID table embedded in `TI.EXE` — the ground truth behind [`engine/src/df/opcodes.ts`](../engine/formats/script-container.md#command-ids-the-opcode-table). It reads **any** DreamFactory build, which also maps the v1/v4 divergence: `npx tsx taoot/tools/exetable.ts dust/gamefiles/dustcd/INSTALL/ALT31/DF.EXE` gives DreamFactory 1's 302 commands against Titanic's 349, and twenty ids mean different things in the two (the table is in `opcodes.ts`) |
 | [`disasmcmd.mts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/disasmcmd.mts) | `npx tsx taoot/tools/disasmcmd.mts calcvectx calcdeg` — disassembles (via capstone-wasm) the `TI.EXE` handler for a named command, resolving it through the interpreter's recovered per-band jump tables and following one level of calls. It also takes a **raw address**, with an optional byte count: `disasmcmd.mts 0x4277f0:900` reads 900 bytes from there **linearly — through the `ret`s**, which is the point. A handler that answers several ways has a `ret` per answer, so stopping at the first one (what the named form does, deliberately) shows only its error path; `hittest`'s [six answers](../taoot/verification.md) needed the whole body. This is the workhorse for recovering [builtin semantics](builtins.md) one command at a time. **It reads DF.EXE too**, in the raw-address form: `TAOOT_TIEXE=dust/gamefiles/dustcd/INSTALL/ALT31/DF.EXE npx tsx taoot/tools/disasmcmd.mts 0x4135c0:140` — Dust's engine is 346 KB in the installer tree, and reading the two engines side by side shows where a SHP, a STG and a CST name their main script (#325). Only the raw form: the named form goes through TI.EXE's own jump tables |
 | [`scancmds.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/scancmds.mts) | diffs the commands the shipped scripts *actually invoke* against the registered builtins (detecting no-op bodies) and regenerates `builtins_todo.md` — the work-remaining list, in three sections: unimplemented, stubbed, and stubs nothing calls |
+
+## Mining `RedJack.exe`
+
+DreamFactory 5 is settled in its own executable,
+`redjack/gamefiles/RJDisk1/RedJack/RedJack.exe`, the way
+[Skull Cracker's](../skullcracker/) is in `SC.EXE`.
+[`rjdis.mts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tools/rjdis.mts)
+reads it, modelled on `skullcracker/tools/scdis.mts`:
+
+| Mode | What it prints |
+|---|---|
+| `at 0x401000:200` | a disassembly from an address |
+| `func 0x4012a0` | the whole function an address is in |
+| `callers 0x4012a0` | every call site of a function |
+| `bytes 0x53544550` | where a 32-bit literal is in the code |
+| `find 640` | instructions that mention a number |
+| `str "move.c"` | code that pushes a string's address |
+| `cmd propflip` | a script command's handlers, by name or id |
+
+`cmd` is the way in to any command. RedJack.exe runs a statement and a value
+through different tables, each indexed by the command's id, so a getter and a
+setter of one name are two functions, and it prints both. A function's start
+is taken to be the nearest call target at or before an address, so a function
+nothing calls is not found; `find` can fall out of step with the instructions,
+and `bytes` does not.
 
 ## The flow map, and the graphs the navigator walks
 

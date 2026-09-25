@@ -7,10 +7,14 @@ is about one particular game — where a page cites *Titanic* or *Dust*, it is
 citing the evidence, because the machinery was recovered from what those two
 discs actually contain.
 
-Two generations of it ship in this repository: **DreamFactory 1** is what *Dust: A Tale of the
+Three generations of it ship in this repository: **DreamFactory 1** is what *Dust: A Tale of the
 Wired West* ran on in 1995, and **DreamFactory 4** is what *Titanic: Adventure
 Out of Time* ran on in 1996. Two years apart, the same lineage, and different
 enough on disk that several formats have a `-v1` page of their own.
+**DreamFactory 5** is *RedJack*'s (1998): v4's formats with the palette moved
+into every picture, and a new kind of room, looked round from points rather than
+turned through fixed views
+([its containers](formats/dreamfactory-5.md), [its rooms](formats/sett.md)).
 
 ## Start with these
 
@@ -36,8 +40,9 @@ imports no other package — no game, and not `site/` — a rule enforced by
 
 Where the two generations differ, the difference is a **separate reader** and
 not a branch, which is why `src/df/` carries `set-v1.ts`, `mov-v1.ts`,
-`snd.ts` and `savegame-v1.ts` beside their v4 siblings. The version is always
-asked rather than guessed: both engines put the tag as an i32 at container 0 +
-0x02, the one field that never moved.
+`snd.ts` and `savegame-v1.ts` beside their v4 siblings, and `sett.ts`,
+`mov-v5.ts` and `image-v5.ts` for v5. The version is always asked rather than
+guessed: v1 and v4 put the tag as an i32 at container 0 + 0x02, and v5 keeps it
+there as a u16, with the container's kind straight after it.
 
 Back to [Documentation](../README.md).

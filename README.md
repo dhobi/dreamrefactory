@@ -36,10 +36,10 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Six sites build out of this one repository, each from its own root and its own
+Seven sites build out of this one repository, each from its own root and its own
 port, so they can run at once. **The two that are about the whole project come
 first, then one port per game in the order the engine shipped them** — so the next
-game to be ported takes 5179 and nothing has to move:
+game to be ported takes 5180 and nothing has to move:
 
 | | | |
 |---|---|---|
@@ -49,6 +49,7 @@ game to be ported takes 5179 and nothing has to move:
 | `npm run dev -w dust` | 5176 | Dust |
 | `npm run dev -w timelapse` | 5177 | Timelapse |
 | `npm run dev -w skullcracker` | 5178 | Skull Cracker |
+| `npm run dev -w redjack` | 5179 | RedJack — a prototype page, DreamFactory 5 |
 
 Each package owns its own commands. `-w <package>` runs one of them — `npm run
 speedrun -w taoot`, `npm run test:browser -w skullcracker` — and the root has only
@@ -104,6 +105,7 @@ Dependencies point one way only, and there is a test that says so
     dust          ←  engine, site
     timelapse     ←  engine, site
     skullcracker  ←  engine, site
+    redjack       ←  engine, site
 
 Nothing shared imports a game. The five palettes — Titanic's abyss-and-brass,
 Dust's dusk-and-ember, Timelapse's glass-and-chrome, Skull Cracker's

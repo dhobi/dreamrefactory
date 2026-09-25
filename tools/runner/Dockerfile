@@ -78,6 +78,7 @@ ENV TAOOT_GAMEFILES=/srv/taoot/gamefiles
 ENV DUST_GAMEFILES=/srv/dust/gamefiles
 ENV TIMELAPSE_GAMEFILES=/srv/timelapse/gamefiles
 ENV SKULLCRACKER_GAMEFILES=/srv/skullcracker/gamefiles
+ENV REDJACK_GAMEFILES=/srv/redjack/gamefiles
 
 # No CMD arguments: the entrypoint registers, runs exactly one job, and exits.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

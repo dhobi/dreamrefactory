@@ -174,3 +174,88 @@ export const OPCODES: ReadonlyMap<number, string> = new Map([
   [24016, "turnleft"], [24017, "turnup"], [24018, "turndown"],
   [24019, "nodraw"], [24020, "turnhalfleft"], [24021, "turnhalfright"],
 ]);
+
+/**
+ * The ids DreamFactory 5 added — decode-only, and a FALLBACK to {@link OPCODES}
+ * rather than a second table.
+ *
+ * Read out of *RedJack*'s `RedJack.exe` (1998; its installer calls the engine
+ * "DreamFactory 5.0"), whose command table is the same idea as `ti.exe`'s in a
+ * new shape: 6-byte `{u32 name pointer, u16 id}` records, sorted by name, with
+ * the pointer landing on a flag byte just before each name. It has 488 ids, and
+ * against the table above they divide three ways:
+ *
+ *   - **the same id and the same name** — nearly all of them. The bands did not
+ *     move and nothing was renumbered, which is why a v5 script decodes at all.
+ *   - **the same id under a new name** — twenty, and most are one idea respelt:
+ *     `deg` became `head` (`actordeg`→`actorhead`, `calcdeg`→`calchead`,
+ *     `turntodeg`→`turntohead`), the current-thing getters became `set*`
+ *     (`currentview`→`setview`, `currentscene`→`setscene`), `commandkey`
+ *     became `controlkey`, and the `net*` family was rewritten. These keep their
+ *     v4 names here, because the v4 names are what the interpreter implements.
+ *     Two are NOT the same thing and are decoded wrongly for it: 16026 is
+ *     `sysparam` in v5 (RedJack asks `sysparam(10)` for the screen depth, and
+ *     `sysparam(7)` for the mouse button), and 24020 is `photodissolve`, not
+ *     `turnhalfleft`. The interpreter answers both by the game's engine
+ *     (GameSession.isV5): `propspeed` hands a v5 game to `sysparam`
+ *     (builtins/maze.ts), and `visualeffect` makes `turnhalfleft` a dissolve.
+ *   - **ids v4 never had** — this table. Each one sits in a gap in the one above, so
+ *     falling back to it cannot change how a v1 or v4 script decodes.
+ *
+ * Kept out of {@link OPCODE_IDS} (see script.ts): the encoder writes v4, and
+ * `cameraxyz` is 20063 above and ALSO 16101 here, so a reverse map over both
+ * would not be one.
+ */
+export const DF5_OPCODES: ReadonlyMap<number, string> = new Map([
+  [4030, "permanent"], [4031, "dumppermanent"], [4032, "default"], [4033, "["],
+  [4034, "]"], [12111, "createmenu"], [12112, "appenditem"],
+  [12113, "drawmenus"], [12114, "clearmenus"], [12115, "changeitem"],
+  [12116, "actorseek"], [12117, "propseek"], [12118, "profilestart"],
+  [12119, "launchexit"], [12120, "playqt"], [12121, "actorsound"],
+  [12122, "propsound"], [12123, "launchroad"], [12124, "flatwarm"],
+  [12125, "scenewarm"], [12126, "roadwarm"], [12127, "deletefile"],
+  [12128, "buildfilenames"], [12129, "quadscript"], [12130, "sendtoquad"],
+  [12131, "playdvd"], [12132, "plaympeg"], [12133, "opentextfile"],
+  [12134, "savetextfile"], [12135, "cleantextfile"], [12136, "addtextstring"],
+  [12137, "netcatchup"], [12138, "netsync"], [12139, "flushcache"],
+  [12140, "playactivemovie"], [12141, "playsmacker"], [16057, "stageorigin"],
+  [16058, "cmdkeyitem"], [16059, "actorink"], [16060, "propink"],
+  [16061, "propsnap"], [16062, "actorsnap"], [16063, "checkitem"],
+  [16064, "grayitem"], [16065, "stageflat"], [16066, "doublebuffer"],
+  [16067, "camerapitch"], [16068, "camerafov"], [16069, "actorflip"],
+  [16070, "propflip"], [16071, "screenbrightness"], [16072, "screencontrast"],
+  [16073, "actorbrightness"], [16074, "actorcontrast"], [16075, "actorlitby"],
+  [16076, "propbrightness"], [16077, "propcontrast"], [16078, "proplitby"],
+  [16079, "moviebrightness"], [16080, "moviecontrast"],
+  [16081, "puppetbrightness"], [16082, "puppetcontrast"],
+  [16083, "setbrightness"], [16084, "setcontrast"], [16085, "stagebrightness"],
+  [16086, "stagecontrast"], [16087, "nodequality"], [16088, "cameraroll"],
+  [16089, "themeorder"], [16090, "registrystring"], [16091, "registrynumber"],
+  [16092, "singlebuffer"], [16093, "proppitch"], [16094, "proproll"],
+  [16095, "propisfacer"], [16096, "actorpitch"], [16097, "actorroll"],
+  [16098, "actorisfacer"], [16099, "propistrue3d"], [16100, "actoristrue3d"],
+  [16101, "cameraxyz"], [20122, "stagewidth"], [20123, "stageheight"],
+  [20124, "isdebugging"], [20125, "countmenus"], [20126, "countitems"],
+  [20127, "indextoitem"], [20128, "indextomenu"], [20129, "countpermanents"],
+  [20130, "indextopermanent"], [20131, "actororder"], [20132, "proporder"],
+  [20133, "soundticks"], [20134, "calcand"], [20135, "calcor"],
+  [20136, "calcleft"], [20137, "calcright"], [20138, "calcset"],
+  [20139, "calcclear"], [20140, "profilestop"], [20141, "countexits"],
+  [20142, "indextoexit"], [20143, "degdiff"], [20144, "degmask"],
+  [20145, "setwidth"], [20146, "setheight"], [20147, "copylocal"],
+  [20148, "degtosimple"], [20149, "simpletodeg"], [20150, "nearexit"],
+  [20151, "nodescroll"], [20152, "calcrgb"], [20153, "spacebar"],
+  [20155, "setdepth"], [20156, "setcolor"], [20157, "key"],
+  [20158, "volumename"], [20159, "filename"], [20160, "diskspace"],
+  [20161, "countfilenames"], [20162, "indextofilename"], [20163, "pointinquad"],
+  [20164, "countquads"], [20165, "indextoquad"], [20166, "sendtoquadfx"],
+  [20167, "calcpoint"], [20168, "soundexists"], [20169, "themeexists"],
+  [20170, "hasmem"], [20171, "serial"], [20172, "norepeat"],
+  [20173, "stagecolor"], [20174, "counttextstrings"],
+  [20175, "indextotextstring"], [20176, "netclientlatency"],
+  [20177, "netrandom"], [20178, "nettick"], [20179, "netidtostring"],
+  [20180, "stringtonetid"], [20181, "stringtoascii"], [20182, "asciitostring"],
+  [20183, "countfoldernames"], [20184, "indextofoldername"],
+  [20185, "countpuppetsounds"], [20186, "indextopuppetsoundname"],
+  [20187, "indextopuppetsubtitle"],
+]);

@@ -17,6 +17,13 @@ export interface CachedFrame {
    * seamless with the still-camera worldCamera().
    */
   cam?: { x: number; y: number; z: number; deg: number };
+  /**
+   * The frame already in colour, one RGBA pixel per `pixels` index would-be.
+   * A DreamFactory 5 room's frames are: every tile and film frame carries its
+   * own palette, so there is no one CLUT for the director to index through, and
+   * `pixels` is empty (engine/src/web/maze-view.ts).
+   */
+  rgba?: Uint8ClampedArray;
 }
 
 /**

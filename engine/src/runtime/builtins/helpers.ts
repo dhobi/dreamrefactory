@@ -165,7 +165,15 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // calcvectx/calcvecty: scripts place things relative to the player's facing,
   // e.g. `calcvectx(currentdeg()+64, dist)`, `if currentdeg() > 128`. TI.EXE
   // (0x408c50) returns the camera degree, or -1 if no scene is active.
-  r("currentdeg", () => {
+  r("currentdeg", (_i, [deg]) => {
+    // DreamFactory 5 (RedJack's rooms): a heading in 2^24ths of a turn, and a
+    // setter too — `gotonode` points the camera with `currentdeg (simpletodeg (head))`
+    const maze = session.maze;
+    if (maze) {
+      if (deg === undefined) return maze.heading;
+      maze.setHeading(toNum(deg));
+      return;
+    }
     const lis = session.listener();
     return lis ? lis.deg & 0xff : -1;
   });
@@ -404,8 +412,12 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
       // "titanic2:data:". 93 basenames ship on both discs — the public rooms in
       // their pre- and post-sinking state — so the host has to follow the swap
       // or half the game draws the wrong act's scenery.
-      const vol = /^titanic([12]):/i.exec(value);
-      if (vol) session.onDiscChange?.(Number(vol[1]) as 1 | 2);
+      //
+      // RedJack's `resetpaths` does the same with `"RJ" @ disk`, one disc per
+      // day (`advanceday`): `path (5, "RJDisk2:movies:")`. Its three discs each
+      // carry a different `death.move`, so the film you die to is the day's.
+      const vol = (session.isV5 ? /^rjdisk([1-3]):/i : /^titanic([12]):/i).exec(value);
+      if (vol) session.onDiscChange?.(Number(vol[1]));
     }
     return 0;
   });

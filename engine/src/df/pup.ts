@@ -218,16 +218,37 @@ export interface PupAnimFrame {
  * layer; anchors are screen positions the frame's stored offset is
  * subtracted from (the background sits at the view centre 256,132).
  */
+/**
+ * DreamFactory 5's puppet (RedJack's `.pupp`): PHED, PLYR, TALK, PAGE, BASE,
+ * FRMR, SPRI and SOUN containers behind the 24-byte v5 prefix, and — measured on
+ * every one of the rip's — v4's structure throughout with ONE thing gone: the
+ * 2048-byte palette at 58 in the header, because each v5 sprite brings its own.
+ * So everything in the header past it sits 0x800 earlier (the idle timers at
+ * 0x3a/0x4a, the band and the name at 0x5a, the line count at 0x6e and the
+ * 312-byte lines from 0x70), while the script table (TALK), the stance table
+ * (PAGE) and a stance (BASE, the same 2904 bytes) are v4's to the byte. A line's
+ * animation (FRMR) is v4's 82-byte records after a 22-byte header.
+ */
+const V5_SHIFT = 0x800;
+const V5_FRMR_RECORDS = 0x16;
+const isV5 = (d: Uint8Array, kind: string): boolean =>
+  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;
+
 export function readAnimLogic(pup: PupFile, location: number): PupAnimFrame[] {
   const c = pup.file.containers[location]?.data;
-  if (!c || c.length < 82 || c.length % 82 !== 0) return [];
+  if (!c) return [];
+  // v5 (FRMR): the same records behind a 22-byte header, counted at 0x14
+  const v5 = isV5(c, "FRMR");
+  if (!v5 && (c.length < 82 || c.length % 82 !== 0)) return [];
+  const base = v5 ? V5_FRMR_RECORDS : 0;
   const dv = new DataView(c.buffer, c.byteOffset, c.byteLength);
   const le = little(pup.file.order);
+  const n = v5 ? Math.min(dv.getInt16(0x14, le), Math.floor((c.length - base) / 82)) : c.length / 82;
   const out: PupAnimFrame[] = [];
-  for (let r = 0; r < c.length / 82; r++) {
+  for (let r = 0; r < n; r++) {
     const layers: { frame: number; y: number; x: number }[] = [];
     for (let l = 0; l < 11; l++) {
-      const o = r * 82 + 16 + l * 6;
+      const o = base + r * 82 + 16 + l * 6;
       layers.push({
         frame: dv.getInt16(o, le),
         y: dv.getInt16(o + 2, le),
@@ -263,12 +284,13 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
    */
   const order = file.order;
   const r0 = new BinaryReader(c0, 0, order);
+  const shift = isV5(c0, "PHED") ? V5_SHIFT : 0;
 
   const dialogue = new Map<string, PupDialogue>();
-  r0.seek(2158);
+  r0.seek(2158 - shift);
   const dcount = r0.i16();
   for (let i = 0; i < dcount; i++) {
-    const o = 2160 + i * 312;
+    const o = 2160 - shift + i * 312;
     r0.seek(o);
     const stance = r0.i16();
     r0.seek(o + 8);
@@ -364,20 +386,21 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
 
   // the four idle intervals: minima then maxima, both 4×i32 (see idleTimers)
   const idleTimers = [0, 1, 2, 3].map((i) => {
-    r0.seek(0x83a + i * 4);
+    r0.seek(0x83a - shift + i * 4);
     const minTicks = r0.i32();
-    r0.seek(0x84a + i * 4);
+    r0.seek(0x84a - shift + i * 4);
     return { minTicks, maxTicks: r0.i32() };
   });
 
-  r0.seek(0x85a);
+  r0.seek(0x85a - shift);
   const bandLocation = r0.i32();
   // the puppet's own name, in the 16 bytes before the dialogue count
   const pupName = r0.pstr(15);
 
   return {
     file,
-    paletteRaw: c0.subarray(58, 58 + 2048),
+    // v5 keeps no puppet palette: its sprites carry their own (df/shp.ts)
+    paletteRaw: shift ? new Uint8Array(2048) : c0.subarray(58, 58 + 2048),
     dialogue,
     scripts,
     stances,

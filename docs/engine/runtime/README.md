@@ -49,6 +49,10 @@ Read in any order — each names its own prerequisites.
    a bare filename resolves through two selectors (disc and language), the code
    page a tree's text is in, and the language chooser: this port's
    own DreamFactory stage, scripts and all.
+10. **[Rooms in play — DreamFactory 5](rooms-v5.md)** — RedJack's rooms: the
+   scripts that do the moving, the camera sprites are drawn through, how big a
+   sprite is, pictures that stand in the room, and the two depth sources that
+   hide a sprite, at a node and on film.
 
 ## Where the code lives
 

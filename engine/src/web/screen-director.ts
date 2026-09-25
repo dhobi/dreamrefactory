@@ -114,6 +114,19 @@ export function dimPalette(base: Uint8ClampedArray, dim: ClutDim): Uint8ClampedA
 export interface RoomLayer {
   /** which engine wrote the room — v1 merges actors and props into one depth list */
   readonly roomVersion: DfVersion;
+  /**
+   * Draw actors and world props as one list, far to near, as a v1 room does.
+   * A DreamFactory 5 room asks for it: RedJack.exe's placement stamps actors
+   * and props alike with their distance at record +0x44 (0x406bf0, 0x42caa0).
+   */
+  readonly spritesByDepth?: boolean;
+  /**
+   * The sprite under a point, where the room decides it rather than the
+   * director's props-then-room order: RedJack.exe's `hittest` walks actors and
+   * props as one list by distance (MazeView.spriteHitTest). Null is "no sprite
+   * here"; a room without it keeps the props-first path.
+   */
+  spriteHitTest?(x: number, y: number): { name: string; type: string } | null;
   /** is the camera mid-turn, mid-walk or mid-road? */
   readonly roomAnimating: boolean;
   /** the view frame on the screen now, or null before the first settle */
@@ -191,6 +204,12 @@ export interface RoomLayer {
    */
   armRoomNav(): unknown;
   disarmRoomNav(prev: unknown): void;
+  /**
+   * Does the room answer the pointer itself? A DreamFactory 5 room runs the
+   * BOOTFILE's `idle ()` every frame, which sends `setcursor` where the pointer
+   * is (engine/src/web/maze-view.ts); a hover on top of that would send it twice.
+   */
+  readonly ownsHover?: boolean;
 }
 
 export class ScreenDirector {
@@ -243,7 +262,7 @@ export class ScreenDirector {
     // and does nothing where there is no room to reveal
     this.movies = new MoviePlayer(session, () => this.revealRoom());
     this.movies.onLog = (l) => this.onLog(l);
-    this.puppetView = new PuppetView(session);
+    this.puppetView = new PuppetView(session, size);
     // clut/mixclut palette dimming (the darkroom light switch, and Dust's map)
     session.onClut = (target, dim) => this.setClut(target, dim);
     // Snapshot the frame that is actually on screen. captureFrame runs from a
@@ -323,7 +342,7 @@ export class ScreenDirector {
       const f = this.room?.roomFrame();
       if (!f) return null;
       const rgba = new Uint8ClampedArray(f.width * f.height * 4);
-      indexedToRGBA(f.pixels, f.width, f.height, this.room!.roomPalette(), rgba);
+      this.roomToRGBA(f, rgba);
       return { rgba, width: f.width, height: f.height };
     };
     // return the promise so playmovie() blocks the script until the movie ends
@@ -357,9 +376,14 @@ export class ScreenDirector {
      * Timelapse's do.
      */
     session.hitTestAt = (x, y) => {
-      const prop = this.propAtPointer(x, y);
-      // the INSTANCE's name, which is what the group's script switches on
-      if (prop) return { name: prop.name || prop.group.name, type: "prop" };
+      if (this.room?.spriteHitTest) {
+        const sprite = this.room.spriteHitTest(x, y);
+        if (sprite) return sprite;
+      } else {
+        const prop = this.propAtPointer(x, y);
+        // the INSTANCE's name, which is what the group's script switches on
+        if (prop) return { name: prop.name || prop.group.name, type: "prop" };
+      }
       const inRoom = this.room?.roomHitTest(x, y);
       if (inRoom) return inRoom;
       // `currentFlat` is "none" between openstagefile and the first flat, and a
@@ -518,6 +542,9 @@ export class ScreenDirector {
     sig.ref(s.fade.snapshot).num(s.fade.level);
     sig.str(this.movies.playingFile ?? "").num(this.movies.framePos);
     sig.ref(this.room?.roomFrame() ?? null).ref(s.stageCtrl.flatImage());
+    // DreamFactory 5's `screenbrightness`, added to the whole picture at present
+    sig.num(s.screenBright[0]).num(s.screenBright[1]).num(s.screenBright[2]);
+    sig.num(s.screenContrast[0]).num(s.screenContrast[1]).num(s.screenContrast[2]);
     // the xray aperture — a drag moves nothing else on the screen, so without
     // this the reveal would be painted once and then hold while the light moved
     const xr = s.plugins.xray;
@@ -630,6 +657,7 @@ export class ScreenDirector {
             width: cur.width,
             height: cur.height,
             palette: this.room!.roomPalette(),
+            rgba: cur.rgba,
           }
         : this.puppetBackdrop,
     );
@@ -663,6 +691,8 @@ export class ScreenDirector {
   }
 
   private paint(ctx: CanvasRenderingContext2D): void {
+    this.screen.bright = this.session.screenBright;
+    this.screen.contrast = this.session.screenContrast;
     const owner = this.screenOwner();
     if (owner === "puppet") {
       this.compositePuppetScreen();
@@ -890,6 +920,19 @@ export class ScreenDirector {
     if (w.dir === "turnleft" || w.dir === "turnright") return this.pushTurn(w.dir);
     if (!this.session.wiping) return;
     const { rgba, width, height } = w.from;
+    // a DreamFactory 5 `photodissolve`: the old screen fades into the new one,
+    // over the same steps a wipe takes
+    if (w.dir === "dissolve") {
+      if (width !== this.screen.width || height !== this.screen.height) return;
+      const a = Math.max(0, Math.min(1, (w.steps - w.step) / w.steps));
+      const frame = this.screen.frame;
+      for (let i = 0, n = width * height * 4; i < n; i += 4) {
+        frame[i] += (rgba[i] - frame[i]) * a;
+        frame[i + 1] += (rgba[i + 1] - frame[i + 1]) * a;
+        frame[i + 2] += (rgba[i + 2] - frame[i + 2]) * a;
+      }
+      return;
+    }
     // how much of the old screen is still standing, in columns
     const kept = Math.max(0, Math.min(width, Math.round((width * (w.steps - w.step)) / w.steps)));
     if (kept <= 0) return;
@@ -1024,6 +1067,12 @@ export class ScreenDirector {
    * Its own method because a MOVIE needs it too. A clip is a rectangle painted
    * over the screen, not a screen of its own (see {@link paint}).
    */
+  /** a room frame in colour: through the room's CLUT, or as it came when it has none */
+  private roomToRGBA(f: CachedFrame, out: Uint8ClampedArray): void {
+    if (f.rgba) out.set(f.rgba.subarray(0, f.width * f.height * 4));
+    else indexedToRGBA(f.pixels, f.width, f.height, this.room!.roomPalette(), out);
+  }
+
   paintWorldInto(): "flat" | "set" | null {
     // stage flat active: the full screen — flat image as background, the room
     // view composited into the top region, props over everything
@@ -1065,12 +1114,14 @@ export class ScreenDirector {
       const flatPal = this.flatPalette(flat.palette);
       const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
       indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
-      this.screen.blitTop(fbuf, flat.width, flat.height);
+      // a v5 fight moves its stage about (`stageorigin`); everywhere else it is 0,0
+      const at = this.session.stageOrigin;
+      this.screen.blitAt(fbuf, flat.width, flat.height, at.x, at.y);
       if (this.session.viewShowing && cur) {
         // straight over the flat's top rows — scratch is free again, the flat
         // is already in the framebuffer
         const vbuf = this.screen.scratchFor(cur.width * cur.height * 4);
-        indexedToRGBA(cur.pixels, cur.width, cur.height, this.room!.roomPalette(), vbuf);
+        this.roomToRGBA(cur, vbuf);
         this.screen.blitTop(vbuf, cur.width, cur.height);
       }
       // ...and the xray aperture, between the picture and the props: what it lets
@@ -1093,7 +1144,7 @@ export class ScreenDirector {
     if (!cur) return null;
     this.screen.clearFrame();
     const buf = this.screen.scratchFor(cur.width * cur.height * 4);
-    indexedToRGBA(cur.pixels, cur.width, cur.height, this.room!.roomPalette(), buf);
+    this.roomToRGBA(cur, buf);
     this.screen.blitTop(buf, cur.width, cur.height);
     this.compositeWorld(this.screen.frame, this.room!.roomPropPalette(), this.room!.roomCamera());
     return "set";
@@ -1131,7 +1182,7 @@ export class ScreenDirector {
      * measured against TAOOT and no TI.EXE evidence has been read either way —
      * so the merge is gated on the room's own version.
      */
-    if (cam && this.room?.roomVersion === 1) {
+    if (cam && (this.room?.roomVersion === 1 || this.room?.spritesByDepth)) {
       const ar = this.session.actorRuntime;
       const pr = this.session.propRuntime;
       const jobs = [
@@ -1176,9 +1227,13 @@ export class ScreenDirector {
       this.session.actorRuntime.composite(data, width, height, palette, cam, occ);
     }
     this.session.actorRuntime.compositeScreen(data, width, height, palette);
+    // Over a v4 room only the boot's UI shops draw (see PropRuntime.drawList). A
+    // DreamFactory 5 game has no such split: its screen props are all over the
+    // room, and its scripts put away what should not show — RedJack's credits
+    // (credits.shop) roll over liznite's first node.
     this.session.propRuntime.composite(
       data, width, height, palette, -Infinity, cam,
-      animating || this.session.viewShowing,
+      (animating || this.session.viewShowing) && !this.session.isV5,
       occ,
     );
   }
@@ -1410,7 +1465,7 @@ export class ScreenDirector {
     // hidden puppet (blackjack table between prompts) lets clicks reach the flat
     if (this.session.puppet?.visible) {
       // above the answer band = on the picture, which is the repeat (#3)
-      this.session.puppetCtrl.puppetPress(this.puppetView.bevelAt(x, y), y < PUPPET_ART_H);
+      this.session.puppetCtrl.puppetPress(this.puppetView.bevelAt(x, y), y < this.puppetView.artH);
       return;
     }
     // `lockevents` freezes the world: the scripts set it when the game is doing
@@ -1714,6 +1769,7 @@ export class ScreenDirector {
     // ignoring them. Same position as the gate in clickDispatch, and for the same
     // reason: the puppet above it still answers.
     if (truthy(this.session.interp.globals.get("lockevents") ?? 0)) return "watch";
+    if (this.room?.ownsHover && this.session.viewShowing) return this.session.cursorName;
     const hit = this.session.hitTestAt(x, y);
     const point = this.session.pointerPoint();
     const caller = this.session.boot?.name ?? "boot script";

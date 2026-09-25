@@ -7,7 +7,8 @@
     "taoot",
     "dust",
     "timelapse",
-    "skullcracker"
+    "skullcracker",
+    "redjack"
   ],
   "type": "module",
   "scripts": {
@@ -40,6 +41,6 @@
     "vitepress-plugin-mermaid": "^2.0.17",
     "vitest": "^4.1.10"
   },
-  "description": "The CyberFlix DreamFactory engine, reimplemented, and the games that run on it. A workspace: engine/, taoot/, dust/, timelapse/, skullcracker/, site/, plus the tools any rip can use.",
+  "description": "The CyberFlix DreamFactory engine, reimplemented, and the games that run on it. A workspace: engine/, taoot/, dust/, timelapse/, skullcracker/, redjack/, site/, plus the tools any rip can use.",
   "//scripts": "Nothing here names a game. Cross-cutting work fans out over the workspaces (`--if-present`, so a package opts in by having the script), and each package's own commands live in its own package.json — run one with `-w <package>`, e.g. `npm run dev -w taoot`."
 }

@@ -38,6 +38,10 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
     // no such handler exists, so the branch read the handler's absence as a
     // refusal and the game quit on the player instead of offering the dialog.
     "sendtobootfx",
+    // ...and DreamFactory 5's: `sendtoscenefx` asks a node for a value (every
+    // room's `gotosaver` reads a node's `specialexit` through it), and a quad —
+    // a room's clickable thing — is sent to by name
+    "sendtoscenefx", "sendtoquad", "sendtoquadfx",
   ]) {
     interp.registerSpecial(cmd, async (ip, argExprs, frame) => {
       /**
@@ -85,7 +89,13 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
         // target its non-fx sibling does, and matching the exact name sent it to
         // the STAGE instead — the one place in this loop where the fx suffix
         // would have changed which object answered.
-        targetName = cmd.startsWith("sendtoboot") ? "boot" : (session.stageScript?.name ?? "main.stg");
+        // ...and in a DreamFactory 5 room, `sendtoset` its set: RedJack's boot
+        // sends a click near an edge on with `sendtoset (mousedown (thepoint))`
+        targetName = cmd.startsWith("sendtoboot")
+          ? "boot"
+          : cmd === "sendtoset" && session.maze?.main
+            ? session.maze.main.name
+            : (session.stageScript?.name ?? "main.stg");
         deferred = argExprs[0];
       } else {
         targetName = toStr(await ip.evalExpr(argExprs[0], frame));

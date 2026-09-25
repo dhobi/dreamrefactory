@@ -67,7 +67,7 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
       provide: index.provider,
       // the disk index is synchronous; the host only needs a promise
       load: async (name) => index.provider(name),
-      setDisc: (disc) => index.setDisc(disc),
+      setDisc: (disc) => index.setDisc(disc as 1 | 2),
       // the host skips a redundant swap on this, and `setpath` writes three
       // volume-prefixed slots per call — so without it a single disc change
       // logged three times and dropped the shared files three times

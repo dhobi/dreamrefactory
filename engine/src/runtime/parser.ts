@@ -30,6 +30,11 @@ const OP = {
   LOCAL: 4003,
   DUMPLOCAL: 4028,
   DUMPGLOBAL: 4029,
+  // DreamFactory 5's (engine/src/df/opcodes.ts DF5_OPCODES)
+  PERMANENT: 4030,
+  DUMPPERMANENT: 4031,
+  LBRACK: 4033,
+  RBRACK: 4034,
   EXITCODE: 4005,
   IF: 4006,
   ENDIF: 4007,
@@ -37,6 +42,11 @@ const OP = {
   SWITCH: 4009,
   ENDSWITCH: 4010,
   CASE: 4011,
+  /**
+   * DreamFactory 5's `default` arm of a switch. The id is in DF5_OPCODES only,
+   * a gap in v4's table, so no v1 or v4 script can contain it.
+   */
+  DEFAULT: 4032,
   FOR: 4012,
   TO: 4013,
   STEP: 4014,
@@ -162,7 +172,7 @@ class Parser {
    */
   private atSwitchBoundary(): boolean {
     const t = this.peek();
-    return t?.kind === "op" && (t.id === OP.CASE || t.id === OP.ENDSWITCH);
+    return t?.kind === "op" && (t.id === OP.CASE || t.id === OP.DEFAULT || t.id === OP.ENDSWITCH);
   }
   /** skip the rest of the line (comments, unparseable noise) */
   private skipLine(): void {
@@ -315,21 +325,38 @@ class Parser {
         case OP.GLOBAL:
         case OP.LOCAL:
         case OP.DUMPGLOBAL:
-        case OP.DUMPLOCAL: {
+        case OP.DUMPLOCAL:
+        case OP.PERMANENT:
+        case OP.DUMPPERMANENT: {
           this.pos++;
+          // A v5 `permanent` is a global that outlives the session — RedJack keeps
+          // its key bindings and `numgames` in them — so it is declared as one
+          // here. What makes it OUTLIVE a session is not modelled yet.
           const kind =
-            t.id === OP.GLOBAL ? "global"
+            t.id === OP.GLOBAL || t.id === OP.PERMANENT ? "global"
             : t.id === OP.LOCAL ? "local"
-            : t.id === OP.DUMPGLOBAL ? "dumpglobal"
+            : t.id === OP.DUMPGLOBAL || t.id === OP.DUMPPERMANENT ? "dumpglobal"
             : "dumplocal";
           const names: string[] = [];
+          // v5 writes `dumpglobal (oldtheme)` as well as the bare form
+          const wrapped = this.atOp(OP.LPAREN);
+          if (wrapped) this.pos++;
           for (;;) {
             const n = this.next();
             if (n?.kind !== "var") throw new ParseError(`expected name after ${kind}`);
             names.push(n.name);
+            // a v5 ARRAY — `global jrep [ 20 ]`. The size is not kept: an element
+            // is a variable of its own (see the "index" expression), so there is
+            // nothing to allocate, and no script reads outside what it declared.
+            if (this.atOp(OP.LBRACK)) {
+              this.pos++;
+              this.parseExpr();
+              this.expectOp(OP.RBRACK, "]");
+            }
             if (this.atOp(OP.COMMA)) this.pos++;
             else break;
           }
+          if (wrapped) this.expectOp(OP.RPAREN, ")");
           return { t: "decl", kind, names };
         }
         /**
@@ -385,16 +412,22 @@ class Parser {
           const subject = this.parseExpr();
           // dead statements before the first case exist in the corpus; the
           // engine jumps straight to the matching case, so parse and drop them
-          this.parseBlock([OP.CASE, OP.ENDSWITCH]);
+          const arms = [OP.CASE, OP.DEFAULT, OP.ENDSWITCH];
+          this.parseBlock(arms);
           const cases: { match: Expr; body: Stmt[] }[] = [];
-          while (this.atOp(OP.CASE)) {
-            this.pos++;
-            const match = this.parseExpr();
-            const body = this.parseBlock([OP.CASE, OP.ENDSWITCH]);
-            cases.push({ match, body });
+          let default_: Stmt[] | undefined;
+          for (;;) {
+            if (this.atOp(OP.CASE)) {
+              this.pos++;
+              const match = this.parseExpr();
+              cases.push({ match, body: this.parseBlock(arms) });
+            } else if (this.atOp(OP.DEFAULT)) {
+              this.pos++;
+              default_ = this.parseBlock(arms);
+            } else break;
           }
           this.expectCloser(OP.ENDSWITCH, "endswitch");
-          return { t: "switch", subject, cases };
+          return default_ ? { t: "switch", subject, cases, default_ } : { t: "switch", subject, cases };
         }
         case OP.WHILE: {
           this.pos++;
@@ -439,6 +472,14 @@ class Parser {
       if (this.isOp(after, OP.ASSIGN_EQ)) {
         this.pos += 2;
         return { t: "assign", name: t.name, value: this.parseExpr() };
+      }
+      if (this.isOp(after, OP.LBRACK)) {
+        // `jrep [ index ] = 1`, a v5 array element
+        this.pos += 2;
+        const index = this.parseExpr();
+        this.expectOp(OP.RBRACK, "]");
+        this.expectOp(OP.ASSIGN_EQ, "=");
+        return { t: "assign", name: t.name, index, value: this.parseExpr() };
       }
       if (this.isOp(after, OP.LPAREN)) {
         const call = this.parseExpr();
@@ -492,6 +533,12 @@ class Parser {
         return { t: "str", v: t.value };
       case "var":
         if (this.atOp(OP.LPAREN)) return this.parseCallArgs({ name: t.name });
+        if (this.atOp(OP.LBRACK)) {
+          this.pos++;
+          const index = this.parseExpr();
+          this.expectOp(OP.RBRACK, "]");
+          return { t: "index", name: t.name, index };
+        }
         return { t: "var", name: t.name };
       case "op":
         switch (t.id) {
@@ -528,6 +575,12 @@ class Parser {
     while (!this.atOp(OP.RPAREN)) {
       args.push(this.parseExpr());
       if (this.atOp(OP.COMMA)) this.pos++;
+      // A call still open at the end of its line is closed there. One shipped
+      // v5 line needs it — RedJack's `senemy1.shop` has
+      // `sendtoprop ("loop 2", setpulse ("-2,-2,-2,1,1,1,1,1,1")`, a paren
+      // short, and its compiler took it — and no v1 or v4 script can reach it,
+      // since every one of them parses without.
+      else if (this.peek()?.kind === "break") return { t: "call", name: callee.name, id: callee.id, args };
     }
     this.pos++; // )
     return { t: "call", name: callee.name, id: callee.id, args };

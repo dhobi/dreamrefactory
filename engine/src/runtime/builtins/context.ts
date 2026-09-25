@@ -128,6 +128,12 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
     },
     findStar: (name) => {
       const n = toStr(name ?? "").toLowerCase();
+      // a v5 room's stars are its MARK's (df/sett.ts), in the camera's own axes;
+      // this answers in a v4 star's, whose Y and Z the placements swap back
+      const mark = session.maze?.star(n);
+      if (mark) {
+        return { identifier: mark.name, positionX: mark.x, positionY: mark.z, positionZ: mark.y, rotation8: 0 } as Actor;
+      }
       // the open set first — its record is the live one, and a star it carries
       // is the one a script standing in it means
       return (

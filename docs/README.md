@@ -30,9 +30,12 @@ adventure and its levels are in a PowerPC binary, so what runs here is its film
 layer and its menu, not its game; see
 **[Skull Cracker](skullcracker/)**.
 
-*Redjack: Revenge of the Brethren* (1998, the studio's last, published by THQ) is
-still **not** claimed: no source consulted attributes it to the engine, and its
-own write-ups describe several purpose-built engines instead.
+**And so does *Redjack: Revenge of the Brethren*** (1998, the studio's last,
+published by THQ). No source consulted attributes it to the engine, and its own
+write-ups describe several purpose-built engines instead, but every one of its
+data files is a DreamFactory container whose container 0 says **version 5**, and
+the executable calls itself "DreamFactory 5.0". It is the only DreamFactory 5
+game here, and the first with a real camera; see **[RedJack](redjack/)**.
 
 Three of them play here — two of them CyberFlix's own and the third GTE
 Interactive Media's:
@@ -43,7 +46,9 @@ discs). The first two are two years apart and different enough on disk that
 several formats have a `-v1` page of their own; the third is the same generation
 as Titanic and still nothing like it, because it ships no `.SET` file at all. A
 fourth, **[Skull Cracker](skullcracker/)**, is read but not played: its discs open
-completely and its films run, and there is no game under them to boot.
+completely and its films run, and there is no game under them to boot. A fifth,
+**[RedJack](redjack/)** (1998, DreamFactory 5), runs as a prototype: it boots and
+its rooms, films and characters play, and it has not been played through.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you
@@ -96,7 +101,8 @@ than of the engine: **[Titanic](taoot/)** — its mission flow, its timed sinkin
 its six editions and how the port was verified against it — **[Dust](dust/)** —
 what DreamFactory 1 does differently, and where its music lives — and
 **[Timelapse](timelapse/)** — a game with no rooms, navigated by the shape of the
-cursor.
+cursor — and **[RedJack](redjack/)** — DreamFactory 5, and what it found in its
+own executable.
 
 Two pages are outside the order, for reading out of order:
 **[the glossary](glossary.md)** (one line per term, when a word you don't know
@@ -152,6 +158,11 @@ first; every format doc after it builds on it.
   *writes*: a serialized memory dump, and how it's read and patched back.
 - **[Saved games, DF1 (`.rtd`)](engine/formats/savegame-v1.md)** — the same
   container three years earlier, and the four record strides that moved.
+- **[DreamFactory 5's containers](engine/formats/dreamfactory-5.md)** — RedJack's
+  files: the 24 bytes every container now opens with, and the palette that moved
+  into each picture.
+- **[SETT — rooms, nodes & spheres](engine/formats/sett.md)** — DreamFactory 5's
+  room: points you look round from, joined by films.
 
 ### Runtime — how the port plays the game
 
@@ -178,6 +189,8 @@ with them — the behaviour recovered from the games' own binaries (`TI.EXE`, an
   language, the two selectors a bare filename resolves through, the code page
   its text is in, and the chooser this port wrote as a real
   DreamFactory stage.
+- **[Rooms in play — DreamFactory 5](engine/runtime/rooms-v5.md)** — RedJack's
+  camera, how big a sprite is and what hides it.
 
 ### Editors — reading the formats back out
 

@@ -63,7 +63,7 @@ with every job green (see the note on the `full` job's name).
 | [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + every package's playthrough) self-hosted, and in it Skull Cracker's machine suites — the game stood up headless on the rip ([how](../skullcracker/verification.md)). The `full` job's NAME is a required status check — renaming it blocks every PR |
 | [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
-| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*` or `skullcracker-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the five is an error rather than a default. [Releasing and deploying](deploy.md) |
+| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*` or `redjack-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the six is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
 **`full-run-<game>`** label — `full-run-taoot`, `full-run-dust`,
@@ -187,9 +187,10 @@ against).
     ln -sfn "$TAOOT_GAMEFILES"        taoot/gamefiles
     ln -sfn "$DUST_GAMEFILES"         dust/gamefiles
     ln -sfn "$SKULLCRACKER_GAMEFILES" skullcracker/gamefiles
+    ln -sfn "$REDJACK_GAMEFILES"      redjack/gamefiles
 ```
 
-Titanic's is required; the other two are warnings, because those suites skip a
+Titanic's is required; the other three are warnings, because those suites skip a
 missing rip rather than failing on it (Dust's playthrough excepted, above).
 
 The link must come after the checkout: `actions/checkout` cleans with
@@ -201,11 +202,11 @@ the checkout is gone by the time the tests run. Remaking it costs nothing; the
 anywhere: `<GAME>_GAMEFILES` follows from the `game` input, so adding a game
 there is a label rather than an edit.
 
-**All four games have a variable. Three are mounted.** `TIMELAPSE_GAMEFILES` is
-declared beside the others but its volume is still commented out and nothing
-links it — Timelapse has no suite that reads a rip yet.
+**All five games have a variable and a volume.** `tests.yml` links four of
+them; `TIMELAPSE_GAMEFILES` is mounted but nothing links it, since Timelapse has
+no suite that reads a rip yet.
 
-Do not uncomment a volume before the rip is on the host: a bind mount of a path
+Do not add a new game's volume before its rip is on the host: a bind mount of a path
 that does not exist does not fail, it makes Docker CREATE it, empty and
 root-owned, and an empty rip is harder to diagnose than a missing one. The
 opposite mistake — a variable set but its volume left out — names a path that

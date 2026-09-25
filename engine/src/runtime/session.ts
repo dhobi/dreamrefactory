@@ -1,7 +1,7 @@
 import { readContainerFile } from "../df/container";
 import { RawSaveFile } from "../df/savegame";
 import { Actor, SetFile, StarPathPoint, readSetFile, readStarPath } from "../df/set";
-import { detectVersion } from "../df/version";
+import { detectVersion, versionOf } from "../df/version";
 import { readSetFileAsV4 } from "../df/set-v1-to-v4";
 import { readShpFile } from "../df/shp";
 import { sniffScript } from "../df/script";
@@ -296,6 +296,12 @@ export class GameSession {
   cameraHiBias = 0;
   /** the active set's script binding (SetScripts) — set by its constructor */
   currentBinding: import("./setscripts").SetScripts | null = null;
+  /**
+   * The open DreamFactory 5 room, when there is one — RedJack's `.sett` is not a
+   * SET and has no {@link currentBinding}; its nodes, quads and camera are
+   * here (engine/src/runtime/maze.ts).
+   */
+  maze: import("./maze").MazeRuntime | null = null;
   builtinsRegistered = false;
 
   onLog: (line: string) => void = () => {};
@@ -322,10 +328,11 @@ export class GameSession {
    * host hook: the game swapped CDs. A multi-disc title's `setpath(disk)` writes
    * a volume name into the resource search path at each story transition
    * (TAOOT: `titanic<N>:`, with 93 basenames shipping on both discs — the public
-   * rooms, once per act), so the host's file lookup has to follow which one is
-   * mounted.
+   * rooms, once per act; RedJack: `RJDisk<N>:`, one per day, whose three discs
+   * each carry their own `death.move`), so the host's file lookup has to follow
+   * which one is mounted. 1-based.
    */
-  onDiscChange: ((disc: 1 | 2) => void) | null = null;
+  onDiscChange: ((disc: number) => void) | null = null;
 
   /**
    * Host hook: a hotspot's `mousedown` chain has run to completion.
@@ -528,7 +535,7 @@ export class GameSession {
      * in the original too rather than a variation on the wipes (see
      * ScreenDirector.pushTurn for the evidence).
      */
-    dir: "" as "" | "left" | "right" | "open" | "close" | "turnleft" | "turnright",
+    dir: "" as "" | "left" | "right" | "open" | "close" | "turnleft" | "turnright" | "dissolve",
     /**
      * How far a turn travels, as a fraction of the screen: 1, or 0.5 for the
      * `half` pair. That is what "half" names, and it is in the binary rather than
@@ -1194,6 +1201,7 @@ export class GameSession {
      * nothing that was already working.
      */
     const propOwn = /^sendtoprop(fx)?$/.test(cmd) && !!evTarget;
+    const room = this.maze;
     const { value, ran, passed, visited } = await this.runHandlerChain(
       chain,
       handler,
@@ -1212,6 +1220,9 @@ export class GameSession {
     // scenery on the smokestack platform, and `passcode`s everywhere else — onto
     // the shop main's distance-gated `cursor("touch")`. Without this the passcode
     // was a dead end and the notebook had no cursor at all.
+    // ...and nor does its containment: a door's script is parented to the room
+    // it leads OUT of (see runHandlerChain)
+    if (room && this.maze !== room && inst && room.owns(inst)) return value;
     if ((!ran || passed) && inst) {
       return this.resolveViaContainment(cmd, inst, handler, args, evTarget, value, visited, parent);
     }
@@ -1267,6 +1278,7 @@ export class GameSession {
       (flatFirst?.script.codes.has(handler) ? flatFirst : null) ??
       (ACTOR_ADDRESSEE.test(cmd) ? this.castScripts.get(targetName.toLowerCase()) : null) ??
       this.currentBinding?.findInstance(targetName) ??
+      this.maze?.findInstance(targetName) ??
       this.findGlobalInstance(targetName);
     if (!inst && cmd === "sendtostage") inst = this.stageScript;
     /**
@@ -1374,8 +1386,15 @@ export class GameSession {
     handler = "",
   ): ScriptInstance[] {
     const chain = inst ? [inst] : [];
-    if (cmd === "sendtoscene" || cmd === "sendtoset") {
-      const main = this.currentBinding?.main;
+    // a DreamFactory 5 quad sits in the node you are looking from: quad → node
+    // → set → stage, as a v4 hotspot's object → scene → set → stage
+    if ((cmd === "sendtoquad" || cmd === "sendtoquadfx") && this.maze) {
+      for (const link of [this.maze.nodeScript(), this.maze.main, this.stageScript]) {
+        if (link && !chain.includes(link)) chain.push(link);
+      }
+    }
+    if (cmd === "sendtoscene" || cmd === "sendtoscenefx" || cmd === "sendtoset") {
+      const main = this.currentBinding?.main ?? this.maze?.main;
       if (main && main !== inst) chain.push(main);
       if (this.stageScript && this.stageScript !== inst) chain.push(this.stageScript);
     }
@@ -1509,8 +1528,17 @@ export class GameSession {
     let ran = false;
     let passed = false;
     const visited: ScriptInstance[] = [];
+    const room = this.maze;
     for (const link of chain) {
       if (!link || !link.script.codes.has(handler)) continue;
+      /**
+       * A DreamFactory 5 room's scripts stop answering once the room is gone.
+       * RedJack's doors are a `mousedown` that does `gotonode` into the next room
+       * and then `passcode`s, and the rest of the chain was the room just left:
+       * its main's `mousedown` ran `keydown ("up")` in the new room and turned
+       * you to its nearest exit the moment you arrived.
+       */
+      if (room && this.maze !== room && room.owns(link)) continue;
       ran = true;
       visited.push(link);
       const res = await this.interp.runHandler(link, handler, args, ctxFor(link), parent);
@@ -1845,6 +1873,7 @@ export class GameSession {
     if (!boot || this.bootScripts.length) return;
     try {
       const file = readContainerFile(boot);
+      this.isV5 = versionOf(file.containers[0]?.data ?? new Uint8Array()) === 5;
       for (let i = 1; i < file.containers.length; i++) {
         const inst = this.instanceFrom(file.containers[i].data, `boot${i}`);
         if (inst) this.bootScripts.push(inst);
@@ -2188,7 +2217,7 @@ export class GameSession {
    * touched.
    */
   eraseTextUnderProp(p: PropInstance): void {
-    const r = p.screenRect();
+    const r = p.screenRect(this.propRuntime.origin);
     if (!r) return;
     for (let i = this.textOverlay.length - 1; i >= 0; i--) {
       const b = this.textEntryBox(this.textOverlay[i]);
@@ -2213,6 +2242,12 @@ export class GameSession {
   pointerY = 0;
   /** whether a mouse button is currently held (button() builtin) */
   pointerDown = false;
+  /**
+   * Which button the last press was: 1 the left, 2 the right. DreamFactory 5's
+   * `sysparam (7)`, which RedJack's rooms ask in `mousedown` to zoom on a
+   * right-click. The page sets it; v4 has no way to ask.
+   */
+  pointerButton = 1;
   /**
    * Whether SHIFT was held for the press being handled — the `shiftkey()` builtin.
    *
@@ -2245,6 +2280,29 @@ export class GameSession {
    */
   altDown = false;
   metaDown = false;
+  /**
+   * DreamFactory 5's `spacebar ()`: is the space bar down NOW. Live state, not a
+   * press snapshot like {@link shiftDown} — RedJack.exe asks
+   * `GetAsyncKeyState`, and the scripts poll it from loops that play a chest or
+   * a crate open until it is. The page that runs the game keeps it.
+   */
+  spaceDown = false;
+  /** DreamFactory 5's `screenbrightness`: added to every channel of the screen, -255..255 */
+  screenBright: [number, number, number] = [0, 0, 0];
+  /** DreamFactory 5's `screencontrast`: a gamma per channel, -128..128, 0 as painted */
+  screenContrast: [number, number, number] = [0, 0, 0];
+  /**
+   * DreamFactory 5's `stageorigin`: where the open stage's top-left is drawn.
+   * A fight moves it to shake the screen; props with `propsnap` go with it.
+   */
+  get stageOrigin(): { x: number; y: number } {
+    return { ...this.propRuntime.origin };
+  }
+  set stageOrigin(at: { x: number; y: number }) {
+    Object.assign(this.propRuntime.origin, at);
+  }
+  /** the colour depth `doublebuffer` last asked for, which `sysparam (10)` answers */
+  screenDepth = 32;
   /** engine time of the last `button()`/`stilldown()` — see {@link pollingInput} */
   private lastInputPoll = -Infinity;
   /** a script just read the button state: it owns this press (`button`, `stilldown`) */
@@ -2504,6 +2562,14 @@ export class GameSession {
    * that opened a Dust room and forgot to declare itself still saves a Dust save.
    */
   dfVersion: 1 | 4 = 4;
+
+  /**
+   * Is this a DreamFactory 5 game (RedJack)? Read off the BOOTFILE when its
+   * scripts load. Only what the scripts' ids MEAN hangs on it — a handful of
+   * ids v5 gave new jobs (see engine/src/df/opcodes.ts); the rooms announce
+   * themselves ({@link maze}).
+   */
+  isV5 = false;
 
   /** is this a DreamFactory 1 game? — see {@link dfVersion} */
   get isV1(): boolean {
