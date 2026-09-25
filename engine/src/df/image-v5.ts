@@ -55,6 +55,12 @@ export function paletteV5(data: Uint8Array): Uint8ClampedArray {
 }
 
 /** decode a v5 frame into `fb` — which, as in v4, may hold the frame before it */
+/** a v5 frame's size without its pixels — the header decodeFrameV5 reads first */
+export function frameSizeV5(data: Uint8Array): { width: number; height: number } {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return { width: view.getInt16(V5_SIZE_AT + 2, true), height: view.getInt16(V5_SIZE_AT, true) };
+}
+
 export function decodeFrameV5(data: Uint8Array, fb: FrameBuffer): DecodedFrame {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const h = view.getInt16(V5_SIZE_AT, true);

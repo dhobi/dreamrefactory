@@ -825,6 +825,14 @@ export class GameSession {
    * so a stuck loop MUST still hit the 100k guard instead of hanging forever.
    */
   hasRealFrames = false;
+  /**
+   * False when nothing will ever look at a film's pixels — a machine suite
+   * (redjack/tests/machine) — so a DreamFactory 5 film reads each frame's size
+   * and palette and skips the decode, and a v5 room skips drawing its sphere
+   * (maze-view.ts), which between them are most of what a headless run would
+   * otherwise spend its time on. Every page leaves it true.
+   */
+  drawsPictures = true;
   realYieldSeq = 0;
   /**
    * The host advances movie frames, so `playmovie` may block the way TI.EXE's
@@ -2641,8 +2649,46 @@ export class GameSession {
    */
   currentSetFile = "";
 
+  /**
+   * The file a DreamFactory 5 script means by a bare name. RedJack.exe's typed
+   * open (0x43c840, behind opencastfile, openstagefile, openshopfile,
+   * openpuppetfile, opensetfile and opentrackfile) appends the type's extension
+   * when the name has no `.` before a four- or three-letter extension
+   * (0x43c88e, which counts in the Pascal string past its length byte), so `runpuppet ("lyle1", "savednick")` — liznite's Node54 —
+   * opens `lyle1.pupp`. The older engines are handed their names unchanged.
+   */
+  typedName(fileName: string, ext: "cast" | "stag" | "shop" | "pupp" | "sett" | "trak"): string {
+    const name = toStr(fileName);
+    if (!this.isV5) return name;
+    const n = name.length;
+    if (n >= 5 && (name[n - 5] === "." || name[n - 4] === ".")) return name;
+    return `${name}.${ext}`;
+  }
+
+  /**
+   * DreamFactory 5's `endanim`: an animation has played through, and the thing
+   * playing it hears so. RedJack's casts and shops chain their animations on it
+   * — Lyle's `butt pick` → `sit down` → `crouch`, Bone's `idle` back to `stand`,
+   * and liznite.shop's `mark crate`, whose `endanim` is what draws the X on the
+   * crate the day ends in. RedJack.exe names it in its event table (0x4b9990,
+   * the fifteenth). The moment is a reading, not yet traced in Acto.c: a prop at
+   * its last frame (where it holds), an actor's pose each time its play script
+   * comes round, which a pose of one picture never does. The older engines have
+   * no such event, and their scripts never answer it.
+   */
+  endAnim(cmd: "sendtoactor" | "sendtoprop", names: string[]): void {
+    if (!this.isV5) return;
+    for (const name of names) {
+      const key = name.toLowerCase();
+      const inst = cmd === "sendtoactor" ? this.castScripts.get(key) : this.propScripts.get(key);
+      if (!inst?.script.codes.has("endanim")) continue;
+      void this.track(this.sendEvent(cmd, key, "endanim", [], "anim"), `endanim ${key}`);
+    }
+  }
+
   /** engine primitive behind boot's changeset(): switch to another set */
   async openSetFile(fileName: string, sceneName = "", viewName = ""): Promise<void> {
+    fileName = this.typedName(fileName, "sett");
     const key = fileName.toLowerCase();
     this.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
     this.lastRotation = this.currentRotation ? this.currentRotation() : null;
@@ -2697,6 +2743,7 @@ export class GameSession {
   }
 
   async openTrackFile(fileName: string): Promise<boolean> {
+    fileName = this.typedName(fileName, "trak");
     const key = toStr(fileName).toLowerCase();
     // A title may name theme tracks by REGION rather than by set — TAOOT names
     // them by deck: recept1c's theme is deckd.trk, halla's is decka.trk (see
@@ -2780,6 +2827,7 @@ export class GameSession {
    * their scripts. Idempotent — sets call opencastfile("extra.cst") freely.
    */
   async openCastFile(fileName: string): Promise<boolean> {
+    fileName = this.typedName(fileName, "cast");
     const key = fileName.toLowerCase();
     if (this.castMains.has(key)) return true;
     await this.ensureFile(key);
@@ -2919,11 +2967,33 @@ export class GameSession {
   }
 
   /**
+   * The key an open shop is held under, for a name a script closes it by: the
+   * name itself — and in DreamFactory 5 only, then the name without its
+   * extension, as {@link sendEvent}'s lookup allows, and the name the shop
+   * gives itself. RedJack's
+   * fight lessons close their shops that way: `sdcombat.shop`, `sdocombat.shop`
+   * and `sscombat.shop` all call themselves "combat" and their opponents "enemy1"
+   * or "enemy2", and each stage's `closestage` says `closeshopfile ("combat")`.
+   * Matched by file name only, none of them ever closed, and by the third lesson
+   * three `nick`s and three `enemy`s were answering one click.
+   */
+  private openShopKey(name: string): string {
+    const lower = name.toLowerCase();
+    const shops = this.propRuntime.shops;
+    if (shops.has(lower) || !this.isV5) return lower;
+    const stem = (n: string): string => n.replace(/\.[a-z0-9]{1,4}$/, "");
+    for (const key of shops.keys()) if (stem(key) === stem(lower)) return key;
+    for (const [key, shop] of shops) if (shop.shp.refName.toLowerCase() === lower) return key;
+    return lower;
+  }
+
+  /**
    * Load a SHP file session-wide: register its props + prop scripts and fire
    * its openshop handler. Shops opened by the boot script (house.shp,
    * inven.shp) stay loaded across set changes.
    */
   async openShop(fileName: string): Promise<boolean> {
+    fileName = this.typedName(fileName, "shop");
     const key = fileName.toLowerCase();
     // Already loaded: re-run its openshop handler without rebuilding the props
     // (which would drop their state). A stage opens its shop on entry via
@@ -2998,7 +3068,7 @@ export class GameSession {
   }
 
   async closeShop(fileName: string): Promise<void> {
-    const key = fileName.toLowerCase();
+    const key = this.openShopKey(fileName);
     const main = this.shopMains.get(key);
     if (main) {
       try {

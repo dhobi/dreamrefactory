@@ -76,10 +76,20 @@ export class MazeView implements RoomLayer {
       this.onLog(`? ${name}(${args.map((a) => JSON.stringify(a)).join(", ")})`);
   }
 
-  /** open the set and stand at `scene` (its first when it names none), at `view` in a scene */
+  /**
+   * Open the set and stand at `scene` (its first when it names none), at `view`
+   * in a scene.
+   *
+   * A name the set does not have opens it at its first too. The shipped scripts
+   * name one: after Patch vanishes in the cave, patch1.pupp runs `opensetfile
+   * ("rjcave.sett", "node21", "node")`, and rjcave has only nodes 27 to 29 — so
+   * without this the room stood nowhere, with nothing to click and no way out.
+   * rjcave's first is Node27, the chest Nick was standing at. This is a reading
+   * of what the game needs, not yet traced in RedJack.exe's Scen.c (0x43f6e0).
+   */
   async start(scene: string, view = ""): Promise<void> {
     await this.maze.openSet();
-    await this.maze.enterNode(scene, view);
+    if (!(await this.maze.enterNode(scene, view)) && scene) await this.maze.enterNode("", view);
   }
 
   private sphere(container: number): SphereImage {
@@ -95,6 +105,13 @@ export class MazeView implements RoomLayer {
 
   private redraw(): void {
     const m = this.maze;
+    // nobody looks (session.drawsPictures): the frame changes identity and
+    // nothing else — the depth a hit test asks for is roomOcclusion's own render
+    if (!this.session.drawsPictures) {
+      this.frame = { ...this.frame, pixels: new Uint8Array(0) };
+      this.dirty = false;
+      return;
+    }
     // a walk, a turn, or a scene's view: a film frame
     const w = m.walk ?? m.shot;
     if (w) {
@@ -306,6 +323,11 @@ export class MazeView implements RoomLayer {
     if (onScreen) return asProp(onScreen);
     const cam = showing ? this.roomCamera() : null;
     if (!cam) return null;
+    // Occlusion only ever takes a hit away, so with no sprite under the point
+    // there is nothing for it to decide — and it is a render of the view's depth
+    // whenever the camera has moved, which `idle ()` hit-testing the pointer every
+    // frame of a scroll or a walk would otherwise pay each frame.
+    if (!s.propRuntime.propAt(x, y, cam, showing) && !s.actorRuntime.actorAt(x, y, cam)) return null;
     const occ = this.roomOcclusion();
     const prop = s.propRuntime.propAt(x, y, cam, showing, occ);
     const actor = s.actorRuntime.actorAt(x, y, cam, occ);

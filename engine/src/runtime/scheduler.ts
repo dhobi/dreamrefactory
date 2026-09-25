@@ -994,7 +994,7 @@ export class Scheduler {
     // of that draw. Deliberately NOT in serviceFrameLoops — that path runs at the
     // browser's display rate, and a walk cycle is paced by the 50 ms pass in the
     // original, not by how fast the host can paint.
-    this.session.actorRuntime.advanceAnimation();
+    this.session.endAnim("sendtoactor", this.session.actorRuntime.advanceAnimation());
   }
 
   /**

@@ -391,6 +391,17 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   // form returns the star the actor was last placed on (endwalk checks
   // for "custom" placements)
   acc("actorstar", "", (a) => a.starName, (a, starName) => {
+    /*
+     * In DreamFactory 5, setting an actor's star ends the walk it is on, first
+     * and whatever the value names: Acto.c's setter calls 0x41b810 (0x401dcf),
+     * which clears the actor's slots in the walk table (0x4c3d40, sixteen of
+     * 0x80 bytes — the routine `stopwalk` is) before it looks the star up. No
+     * `endwalk` fires and the pose stays as it was: the walk is simply gone. Lyle's `mousedown` in gang.cast
+     * relies on it: `walkandtalk` has just sent him walking back to where the
+     * talk found him when `actorstar ("lyle", "lyledock2")` puts him on the dock,
+     * where every later lesson and fight expects him ("I'll be on the dock").
+     */
+    if (session.isV5) session.scheduler.walks.delete(a.name.toLowerCase());
     // placing at a real star teleports the actor there; a value that isn't a
     // star (the "walkonpath"/"custom"/"resume" sentinels, or a packed point)
     // is just stored — the walk-resume logic reads these back

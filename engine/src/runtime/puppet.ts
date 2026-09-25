@@ -191,6 +191,7 @@ export class PuppetController {
   } | null = null;
 
   async openPuppetFile(fileName: string): Promise<boolean> {
+    fileName = this.session.typedName(fileName, "pupp");
     const key = toStr(fileName).toLowerCase();
     await this.session.ensureFile(key);
     const data = this.session.files(key);

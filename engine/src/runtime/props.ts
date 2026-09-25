@@ -594,7 +594,9 @@ export class PropRuntime {
    * State animations play ONCE and hold the last frame (door opens and
    * stays open) — continuous animation is scripted explicitly via makeloop.
    */
-  tick(now: number, frameMs: number): void {
+  /** answers the props whose animation reached its last frame this tick (see GameSession.endAnim) */
+  tick(now: number, frameMs: number): string[] {
+    const ended: string[] = [];
     for (const p of this.props.values()) {
       if (!p.visible || p.frameLocked || !p.animating) continue;
       const st = p.state();
@@ -609,9 +611,13 @@ export class PropRuntime {
       if (now - p.lastTick >= frameMs) {
         p.lastTick = now;
         p.frameIdx++;
-        if (p.frameIdx >= last) p.animating = false; // hold last frame
+        if (p.frameIdx >= last) {
+          p.animating = false; // hold last frame
+          ended.push(p.name);
+        }
       }
     }
+    return ended;
   }
 
   /**

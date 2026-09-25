@@ -33,7 +33,7 @@ import {
   readMovFileV1,
 } from "@dreamfactory/engine/df/mov-v1";
 import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
-import { decodeFrameV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
+import { decodeFrameV5, frameSizeV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import {
   FrameBuffer,
@@ -338,8 +338,17 @@ export class MoviePlayer {
     const fb = new FrameBuffer();
     const frames: MovieImage[] = [];
     let shown: Uint8Array | null = null;
+    let blank: Uint8Array | null = null;
     for (const f of seg.frames) {
       const data = mov.file.containers[f.locationFrame].data;
+      if (seg.dfV5 && !this.session.drawsPictures) {
+        // nobody draws it (session.drawsPictures): one blank of the frame's size,
+        // shared, stands in for the picture, and the film paces as it would
+        const { width, height } = frameSizeV5(data);
+        if (!blank || blank.length !== width * height) blank = new Uint8Array(width * height);
+        frames.push({ pixels: blank, width, height, palette: paletteV5(data) });
+        continue;
+      }
       if (seg.dfV5) {
         const d = decodeFrameV5(data, fb);
         frames.push({ pixels: fb.pixels.slice(0, d.width * d.height), width: d.width, height: d.height, palette: paletteV5(data) });

@@ -25,6 +25,7 @@ export class StageController {
 
   /** engine primitive: load an STG stage and activate its first flat */
   async openStageFile(fileName: string): Promise<boolean> {
+    fileName = this.session.typedName(fileName, "stag");
     const key = toStr(fileName).toLowerCase();
     if (this.session.stageName === key) return true;
     if (this.stageFile) await this.closeStageFile();
