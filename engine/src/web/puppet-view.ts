@@ -132,6 +132,16 @@ function clutColor(paletteRaw: Uint8Array, index: number): string {
   return `rgb(${ch(3, 0)}, ${ch(5, 1)}, ${ch(7, 2)})`;
 }
 
+/**
+ * A DreamFactory 5 colour, 0x00RRGGBB. RedJack.exe keeps `puppetparam` slots 3
+ * and 4 as `calcrgb` values (`and 0xffffff`, 0x42fe9c/0x42feb3) and hands slot 3
+ * straight to the answer rows' text colour (0x430dc3), so it names no palette.
+ */
+function rgbColor(v: number): string {
+  const ch = (shift: number, i: 0 | 1 | 2): number => displayChannel((v >> shift) & 0xff, i);
+  return `rgb(${ch(16, 0)}, ${ch(8, 1)}, ${ch(0, 2)})`;
+}
+
 /** a v5 sprite's RGBA palette in v4's 8-byte-per-entry shape, for clutColor */
 function rawFromRGBA(rgba: Uint8ClampedArray): Uint8Array {
   const out = new Uint8Array(256 * 8);
@@ -548,7 +558,9 @@ export class PuppetView {
     }
     // the answer rows, straight onto the band artwork (0x440e30)
     const rects = this.bevelRects();
-    ctx.fillStyle = clutColor(pal, this.param(PARAM.bevelColor, 250));
+    const ink = (slot: number, fallback: number): string =>
+      this.session.isV5 ? rgbColor(this.param(slot, fallback)) : clutColor(pal, this.param(slot, fallback));
+    ctx.fillStyle = ink(PARAM.bevelColor, 250);
     rects.forEach((r, i) => ctx.fillText(p.bevels[i].text, r.x + marginX, r.y + BASELINE));
     // QuickDraw frames INSIDE the rect, so a 3-px pen insets by half of it
     const frame = (i: number): void => {
@@ -572,7 +584,7 @@ export class PuppetView {
     } else if (p.chosen !== null && p.chosen < rects.length) {
       // the answer you picked stays framed while the character answers it,
       // until the script's next puppetclear
-      ctx.strokeStyle = clutColor(pal, this.param(PARAM.chosenColor, 251));
+      ctx.strokeStyle = ink(PARAM.chosenColor, 251);
       frame(p.chosen);
     }
     ctx.restore();
