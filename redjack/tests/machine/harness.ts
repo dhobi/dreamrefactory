@@ -89,6 +89,8 @@ export interface Headless {
   node(): string;
   /** a click as the page makes one, not awaited — a modal film would stall the pump */
   click(x: number, y: number): () => boolean;
+  /** a key coming up, as the page hands the arrows' releases over */
+  keyUp(name: string): void;
   /** a key as the page hands one over */
   key(name: string, special?: boolean): () => boolean;
 }
@@ -217,12 +219,13 @@ export async function headless(): Promise<Headless> {
     queueMicrotask(park);
     return () => done;
   };
+  const keyUp = (name: string): void => void host.director.keyUp(name);
   const key = (name: string, special = false): (() => boolean) => {
     let done = false;
     void host.director.keyDown(name, special).then(() => (done = true));
     return () => done;
   };
-  return { host, session, logs, idle, running: () => [...running.values()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
+  return { host, session, logs, idle, keyUp, running: () => [...running.values()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
 }
 
 export class SuiteFailure extends Error {}

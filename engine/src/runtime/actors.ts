@@ -291,11 +291,24 @@ export class ActorRuntime {
    * do not, and the port used to advance only walkers, so the stoker shovelled
    * one frozen frame of coal.
    */
-  advanceAnimation(): void {
+  /** answers the actors whose pose came round to its first step again (see GameSession.endAnim) */
+  advanceAnimation(): string[] {
+    const ended: string[] = [];
     for (const a of this.actors.values()) {
-      const n = a.pose()?.play.length ?? 0;
+      const pose = a.pose();
+      const n = pose?.play.length ?? 0;
       if (n > 0) a.step = (a.step + 1) % n;
+      if (n > 1 && a.step === 0) ended.push(a.name);
+      // A pose with no pictures at all is over as soon as it starts, and says so
+      // once: gang.cast's Lyle has a `sit down` of 568 bytes, the header and no
+      // frame record, between his `butt pick` and the `crouch` its `endanim`
+      // puts him in. `actorpose` resets the step, so a step of 1 is "told".
+      if (pose && pose.steps.length === 0 && a.step === 0) {
+        a.step = 1;
+        ended.push(a.name);
+      }
     }
+    return ended;
   }
 
   /**

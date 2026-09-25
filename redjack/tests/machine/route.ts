@@ -134,13 +134,20 @@ export function findOnScreen(h: Headless, name: string): { x: number; y: number 
  */
 export async function face(h: Headless, name: string): Promise<{ x: number; y: number }> {
   let at = findOnScreen(h, name);
+  const margin = Number(global(h, "margin") || 0);
+  const { width, height } = h.host.director.screen;
   for (let turn = 0; !at && turn < 8; turn++) {
     await press(h, "right", `looking for ${name}`);
     at = findOnScreen(h, name);
   }
+  // a node with one exit does not turn on "right": pan the view round instead,
+  // the pointer resting on the right edge (boot region/tracknodescroll)
+  for (let pan = 0; !at && pan < 40; pan++) {
+    h.session.setPointer(width - 4, height / 2);
+    await h.frame(4);
+    at = findOnScreen(h, name);
+  }
   if (!at) fail(`${h.room()}/${h.node()}: "${name}" is nowhere on screen`);
-  const margin = Number(global(h, "margin") || 0);
-  const { width, height } = h.host.director.screen;
   const inMargin = (p: { x: number; y: number }): boolean =>
     p.x < margin || p.y < margin || p.x >= width - margin || p.y >= height - margin;
   if (!inMargin(at)) return at;

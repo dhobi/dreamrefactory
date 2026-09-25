@@ -20,7 +20,8 @@
  * wrong says where.
  */
 import { fail, headless, ok, pass } from "./harness";
-import { ai, clickOn, converse, face, goTo, waitNear } from "./route";
+import { fighting, schoolOfDefense, schoolOfDodging, schoolOfStriking } from "./fight";
+import { ai, clickOn, converse, face, global, goTo, waitNear } from "./route";
 
 const h = await headless();
 await h.until(() => h.room() === "liznite" && h.owner() === "world", "the first room", 60_000);
@@ -142,5 +143,32 @@ await clickOn(h, "door lh2l");
 await h.settle("out of the lighthouse");
 if (h.room() !== "liznite") fail(`the lighthouse door opens onto liznite; we are in ${h.room()}`);
 ok(`back in town at ${h.node()}, armed`);
+
+// Lyle's school, on the dock by Node49 (lyledock2): fight1.pupp learntofight.
+// Each lesson is a fight stage, and passing it ("a" or "e") adds it to the
+// `classespassed` global that realfight asks for all three of
+await goTo(h, "Node49");
+await face(h, "lyle");
+await waitNear(h, "lyle", 65_000);
+await clickOn(h, "lyle");
+await converse(h, ["I want to learn defense.", "I'm ready."], "Lyle's school: defense");
+await h.until(() => fighting(h, "sdcombat.stag"), "the school of defense to open", 3_000);
+await schoolOfDefense(h);
+const passed = (lesson: string): boolean => global(h, "classespassed").includes(lesson);
+if (!passed("defense")) fail(`the school of defense ends ${await ai(h, "nick", "fightstat")}, not passed`);
+ok(`the school of defense, passed "${await ai(h, "nick", "fightstat")}" (${global(h, "totalblocked")} of ${global(h, "totalstrikes")} blocked)`);
+
+// Lyle grades it ("after fight") and offers the school again
+await converse(h, ["I want to learn dodging.", "I'm ready."], "Lyle's school: dodging");
+await h.until(() => fighting(h, "sdocombat.stag"), "the school of dodging to open", 3_000);
+await schoolOfDodging(h);
+if (!passed("dodging")) fail(`the school of dodging ends ${await ai(h, "nick", "fightstat")}, not passed`);
+ok(`the school of dodging, passed "${await ai(h, "nick", "fightstat")}"`);
+
+await converse(h, ["I want to learn striking.", "Let's fight."], "Lyle's school: striking");
+await h.until(() => fighting(h, "sscombat.stag"), "the school of striking to open", 3_000);
+await schoolOfStriking(h);
+if (!passed("striking")) fail(`the school of striking ends ${await ai(h, "nick", "fightstat")}, not passed`);
+ok(`the school of striking, passed "${await ai(h, "nick", "fightstat")}" — all three of Lyle's lessons`);
 
 pass("day1");

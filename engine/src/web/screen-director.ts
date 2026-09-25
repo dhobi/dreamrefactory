@@ -468,7 +468,7 @@ export class ScreenDirector {
     this.room?.refreshRoomGamma();
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
     // the census in SetViewer.advanceRoom for why that is 50 ms and not 90.
-    this.session.propRuntime.tick(now, ENGINE_STEP_MS);
+    this.session.endAnim("sendtoprop", this.session.propRuntime.tick(now, ENGINE_STEP_MS));
     this.session.tickFade(now);
     this.session.tickWipe(now);
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service
@@ -1353,6 +1353,26 @@ export class ScreenDirector {
     // `getframeaction` table.
     if (this.room) return this.room.roomKeyDown(keyName);
     return this.runBootKeyRouter(keyName);
+  }
+
+  /**
+   * A key coming up — DreamFactory 5 only. The BOOTFILE's `keyup` router
+   * (RedJack's container 1) maps the arrows as its `keydown` does and hands the
+   * release to the scene, or to the stage's flat while a stage is up; the fight
+   * lessons stop Nick leaning on it (sdocombat.stag `keyup` → the x tracker's
+   * `lean ("-l")`). Nothing sent a release before, so a lean never ended. A
+   * film owns its keys and a release means nothing to it.
+   */
+  async keyUp(keyName: string): Promise<boolean> {
+    if (!this.session.isV5 || this.movies.playing) return false;
+    const router = this.session.bootScripts.find((b) => b.script.codes.has("keyup"));
+    if (!router) return false;
+    try {
+      await this.session.interp.runHandler(router, "keyup", [keyName], { me: router.name, target: keyName });
+    } catch (e) {
+      this.onLog(`script error in ${router.name}.keyup: ${(e as Error).message}`);
+    }
+    return true;
   }
 
   /**

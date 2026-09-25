@@ -680,6 +680,9 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
   // `spacebar ()` is the key as it is now, so it is kept here as it goes down and up
   addEventListener("keyup", (e) => {
     if (e.key === " ") s.spaceDown = false;
+    // the arrows come up too: the fight lessons lean on the key held, and stop on its release
+    const arrow = ARROWS[e.key];
+    if (arrow && !focusOwnsKey(e.target, e.key)) void host.director.keyUp(arrow);
   });
   addEventListener("blur", () => (s.spaceDown = false));
 
