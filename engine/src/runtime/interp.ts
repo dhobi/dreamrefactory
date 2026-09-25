@@ -209,6 +209,10 @@ export class Interpreter {
    */
   private readonly liveHandlers: { inst: ScriptInstance; handler: string }[] = [];
 
+  /** told the name of every handler as it starts; the host's cold boot listens
+   *  for the day machine with it (GameHost.coldBoot) */
+  onHandler: ((handler: string) => void) | null = null;
+
   /** whether `inst` is already running `handler` further up the dispatch stack */
   isRunning(inst: ScriptInstance, handler: string): boolean {
     return this.liveHandlers.some((h) => h.inst === inst && h.handler === handler);
@@ -332,6 +336,7 @@ export class Interpreter {
     const prevEvent = this.currentEvent;
     this.currentEvent = ++this.handlerSeq;
     this.liveHandlers.push({ inst, handler });
+    this.onHandler?.(handler);
     try {
       const sig = await this.execBlock(block.body, frame);
       return {
@@ -390,6 +395,11 @@ export class Interpreter {
         }
         return NORMAL;
       case "assign":
+        if (st.index) {
+          const key = this.elementKey(st.name, await this.evalExpr(st.index, frame));
+          this.setElement(st.name, key, await this.evalExpr(st.value, frame), frame);
+          return NORMAL;
+        }
         this.setVar(st.name, await this.evalExpr(st.value, frame), frame);
         return NORMAL;
       case "callstmt":
@@ -410,7 +420,7 @@ export class Interpreter {
             return this.execBlock(st.cases[j].body, frame);
           }
         }
-        return NORMAL;
+        return st.default_ ? this.execBlock(st.default_, frame) : NORMAL;
       }
       case "while": {
         // The guard catches a synchronous infinite loop (a data bug that would
@@ -473,6 +483,8 @@ export class Interpreter {
         return frame.ctx.target;
       case "var":
         return this.getVar(e.name, frame);
+      case "index":
+        return this.getVar(this.elementKey(e.name, await this.evalExpr(e.index, frame)), frame);
       case "call":
         return (await this.evalCall(e, frame)) ?? 0;
       case "un": {
@@ -560,6 +572,23 @@ export class Interpreter {
     if (frame.locals.has(name)) return frame.locals.get(name)!;
     if (this.globals.has(name)) return this.globals.get(name)!;
     return 0;
+  }
+
+  /**
+   * A v5 array element's own variable name. `jrep [ 3 ]` is `jrep[3]`, kept in
+   * whichever scope `jrep` was declared in (see {@link setElement}) — so an
+   * element needs no storage the interpreter does not already have, and a save
+   * carries it like any other variable.
+   */
+  elementKey(name: string, index: Value): string {
+    return `${name}[${toStr(index)}]`;
+  }
+
+  /** an element lives where its array was declared: a local, else a global */
+  setElement(name: string, key: string, v: Value, frame: Frame): void {
+    if (frame.locals.has(name) || frame.locals.has(key)) frame.locals.set(key, v);
+    else if (this.globals.has(name)) this.setGlobal(key, v);
+    else frame.locals.set(key, v);
   }
 
   setVar(name: string, v: Value, frame: Frame): void {

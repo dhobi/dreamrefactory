@@ -17,6 +17,11 @@
  *
  * And one thing changed in kind rather than in layout: a v1 SET has no turn
  * rings and no roads. See {@link file://./set-v1.ts}.
+ *
+ * *RedJack* (1998) writes **version 5**, with the tag narrowed to a u16 and the
+ * container's kind after it ({@link versionOf}). Its readers are its own —
+ * sett.ts, mov-v5.ts, image-v5.ts, and v5 branches in the others keyed on that
+ * kind — so it is not one of the {@link DfVersion}s below.
  */
 
 import { ByteOrder, PC, little } from "./byte-order";
@@ -60,7 +65,14 @@ export function versionOf(container0: Uint8Array, order: ByteOrder = PC): number
     return view.getUint16(MAC_VERSION_OFFSET, false);
   }
   if (container0.length < VERSION_OFFSET + 4) return 0;
-  return view.getInt32(VERSION_OFFSET, true);
+  const v = view.getInt32(VERSION_OFFSET, true);
+  // DreamFactory 5 (RedJack, 1998) narrowed the tag to a u16 and put the file's
+  // own four-character code straight after it, backwards — `00 00 05 00 "TOOB"`
+  // for a BOOTFILE, `"EZAM"` for a room — so read as an i32 it is garbage in the
+  // high half. Answered as 5 and NOT as a known version: v5 has readers of its
+  // own (see the top of this file), and none of the v4 ones reads it.
+  if (v >>> 16 && view.getUint16(VERSION_OFFSET, true) === 5) return 5;
+  return v;
 }
 
 /** is this a version this port knows how to read? */

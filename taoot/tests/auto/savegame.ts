@@ -213,7 +213,7 @@ async function newSession(sink: AudioSink = new NullAudioSink()): Promise<GameSe
   // its own view of the data, starting on disc 1 and following setpath(disk)
   const index = gamefiles(root);
   const session = new GameSession(index.provider, sink);
-  session.onDiscChange = (disc) => index.setDisc(disc);
+  session.onDiscChange = (disc) => index.setDisc(disc as 1 | 2);
   session.onSetChange = async (fileName, sceneName, viewName) => {
     const set = session.loadSet(fileName);
     if (!set) return;

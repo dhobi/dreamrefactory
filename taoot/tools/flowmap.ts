@@ -118,6 +118,8 @@ function exprToStr(e: Expr): string {
       return "target";
     case "var":
       return e.name;
+    case "index":
+      return `${e.name}[${exprToStr(e.index)}]`;
     case "call":
       return `${e.name}(${e.args.map(exprToStr).join(", ")})`;
     case "un":
@@ -149,6 +151,10 @@ function collectVars(e: Expr, out: string[]): void {
   switch (e.t) {
     case "var":
       out.push(e.name);
+      break;
+    case "index":
+      out.push(e.name);
+      collectVars(e.index, out);
       break;
     case "call":
       for (const a of e.args) collectVars(a, out);

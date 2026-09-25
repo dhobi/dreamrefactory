@@ -279,3 +279,40 @@ those `= "1"` tests fails under a space-joined reading.
 `savegame`, `opengame` — see [Saving & loading](../engine/runtime/saves.md).
 
 Back to the [reference index](README.md).
+
+## DreamFactory 5 — `maze.ts` and `df5.ts`
+
+RedJack's commands, each read out of `RedJack.exe`
+(`npx tsx redjack/tools/rjdis.mts cmd NAME` prints a command's handlers). Every
+one answers only in a v5 game. Several of the ids are in v4's table too, so in
+any other game they stay the unknown commands they always were. What they do in
+a room is on [Rooms in play](../engine/runtime/rooms-v5.md).
+
+**The room** (`maze.ts`): the angle arithmetic `simpletodeg`, `degtosimple`,
+`degmask`, `degdiff` and `calcturn`; the camera's `camerapitch` and
+`camerafov`; the exits `countexits`, `indextoexit`, `nearexit`, `nodescroll`
+and `launchexit`; the quads `pointinquad` and `quadscript`; `nodequality`; and
+`sysparam`. `cameraxyz`, `playerxyz` and `scenexyz` answer from the room's
+camera and nodes in a v5 game, and v4's `propspeed` id is `sysparam` there.
+
+**Everything else** (`df5.ts`):
+
+| Commands | What they do |
+|---|---|
+| `proporder`, `actororder` | where a sprite is in its animation: 1 the length of the order it plays, 2 the step it is on, 3 the picture at that step, 7 how many pictures the view has |
+| `propistrue3d`, `propisfacer`, `proppitch`, `actoristrue3d` | a prop drawn as a flat picture set in the room ([pictures that stand in the room](../engine/runtime/rooms-v5.md#pictures-that-stand-in-the-room)) |
+| `actorflip` | `propflip`'s twin: 1 mirrors across, 2 upside down. `propflip` itself now works on screen props as well |
+| `propbrightness`, `actorbrightness`, `screenbrightness`, `screencontrast` | [colour](../engine/runtime/rooms-v5.md#colour): a number added to each channel, and a gamma |
+| `stageflat`, `stageorigin`, `propsnap` | [the fights' stage](../engine/runtime/rooms-v5.md#the-fights-stage): v5's `gotoflat`/`currentflat`, where the stage is drawn, and the props that move with it |
+| `themeorder` | the order a theme's loops play in, 1-based into its bank's loop records; if the theme is playing, it restarts in the new order |
+| `calcpoint` | a room point's screen point, or (32000, 32000) behind the camera |
+| `calcrgb` | one colour, 0x00RRGGBB |
+| `spacebar` | whether the space bar is held down now |
+| `doublebuffer`, `singlebuffer` | the control panel's 16- or 32-bit switch. The canvas is true-colour either way, so a switch always works and `sysparam (10)` answers the depth asked for |
+| `flatwarm`, `castwarm`, `flushcache`, `reboot` | no-ops: loading ahead of need, dropping what was loaded, and a restart only reached behind `isdebugging ()` |
+| `isdebugging` | 0, as in the shipped game |
+
+**Still unknown in v5:** the menu-building commands (`createmenu`,
+`appenditem`, `cmdkeyitem`, `clearmenus`, `drawmenus`), which build a debug
+menu that `menuvisible (isdebugging ())` keeps hidden, and copying game files to the hard
+disk (`buildfilenames`, `countfilenames`, `indextofilename`, `copylocal`).

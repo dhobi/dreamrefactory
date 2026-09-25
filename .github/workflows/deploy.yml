@@ -2,15 +2,16 @@ name: Deploy
 
 # Publishing to www.danielhobi.ch/dreamrefactory.
 #
-# FIVE builds share that one directory, and each releases on its own tag:
+# SIX builds share that one directory, and each releases on its own tag:
 #
 #   site-v0.1.0        the front door and the format editors → /dreamrefactory/
 #   taoot-v0.9.51      Titanic                              → /dreamrefactory/taoot/
 #   dust-v0.3.1        Dust                                 → /dreamrefactory/dust/
 #   timelapse-v0.1.0   Timelapse                            → /dreamrefactory/timelapse/
 #   skullcracker-v0.1.0 Skull Cracker                       → /dreamrefactory/skullcracker/
+#   redjack-v0.1.1     RedJack (unlinked prototype)          → /dreamrefactory/redjack/
 #
-# The documentation is the sixth thing in that tree and does NOT release on a
+# The documentation is the seventh thing in that tree and does NOT release on a
 # tag — it goes out on any push that touches it (docs.yml → /dreamrefactory/docs/).
 #
 # Adding a game to this lane is four lines and nothing else, because everything
@@ -32,7 +33,7 @@ name: Deploy
 #
 # The trap this leaves is `npm version`, which writes a bare `v0.9.51` that
 # nothing here listens for. Pass `--no-git-tag-version` and tag by hand, which is
-# the hand that knows which of the five it is.
+# the hand that knows which of the six it is.
 #
 # And the trap NOTHING here can catch: **GitHub creates no workflow run at all
 # when more than three tags arrive in one push.** Not the excess ones — none of
@@ -55,15 +56,15 @@ name: Deploy
 
 on:
   push:
-    tags: ["site-v*", "taoot-v*", "dust-v*", "timelapse-v*", "skullcracker-v*"]
+    tags: ["site-v*", "taoot-v*", "dust-v*", "timelapse-v*", "skullcracker-v*", "redjack-v*"]
   workflow_dispatch:
     inputs:
       target:
-        description: Which of the five to build and upload
+        description: Which of the six to build and upload
         required: true
         default: site
         type: choice
-        options: [site, taoot, dust, timelapse, skullcracker]
+        options: [site, taoot, dust, timelapse, skullcracker, redjack]
 
 # One upload of a given TARGET at a time, and never cancel one in flight: a
 # half-written mirror is a half-broken site.
@@ -94,6 +95,7 @@ concurrency:
     || (startsWith(github.ref_name, 'dust-v') && 'dust')
     || (startsWith(github.ref_name, 'timelapse-v') && 'timelapse')
     || (startsWith(github.ref_name, 'skullcracker-v') && 'skullcracker')
+    || (startsWith(github.ref_name, 'redjack-v') && 'redjack')
     || github.ref_name }}
   cancel-in-progress: false
 
@@ -123,7 +125,7 @@ jobs:
 
       - run: npm ci
 
-      # Which of the five is this? The tag says so itself; a manual dispatch
+      # Which of the six is this? The tag says so itself; a manual dispatch
       # says so in its input.
       - name: Which release is this
         id: what
@@ -135,8 +137,9 @@ jobs:
           elif [[ "${GITHUB_REF_NAME}" == dust-v*  ]]; then target=dust
           elif [[ "${GITHUB_REF_NAME}" == timelapse-v* ]]; then target=timelapse
           elif [[ "${GITHUB_REF_NAME}" == skullcracker-v* ]]; then target=skullcracker
+          elif [[ "${GITHUB_REF_NAME}" == redjack-v* ]]; then target=redjack
           else
-            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v*, dust-v*, timelapse-v* or skullcracker-v*"
+            echo "::error::tag $GITHUB_REF_NAME names no target — tag site-v*, taoot-v*, dust-v*, timelapse-v*, skullcracker-v* or redjack-v*"
             exit 1
           fi
           echo "target=$target" >> "$GITHUB_OUTPUT"

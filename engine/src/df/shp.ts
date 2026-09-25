@@ -70,6 +70,12 @@ export interface PropGroup {
   location: number;
   scriptContainerLocation: number;
   states: PropState[];
+  /**
+   * v5 only: the i16 at 0x14, which RedJack.exe copies into the prop (`0x4275a4`)
+   * and its sprite sizer scales by `propscale` / 1000 and lowers the prop by
+   * before it takes the depth (`0x4358d0`). Most groups hold 0.
+   */
+  depthRef?: number;
 }
 
 export interface ShpFile {
@@ -152,11 +158,49 @@ export const SHOP_REF_NAME_FIELD = 15;
 export const GROUP_NAME_FIELD = 47;
 export const STATE_ID_FIELD = 15;
 
+/**
+ * DreamFactory 5's shop (RedJack's `.shop`), whose containers are SHOP, PROP,
+ * VIEW and SPRI behind the 24-byte v5 prefix (`00 00 05 00` and a fourCC
+ * written backwards).
+ *
+ *   - SHOP, container 0: no palette — each sprite carries its own — so what v4
+ *     keeps past it closes up: the main script at 0x24, the name at 0x28, the
+ *     group count at 0x38 and the 16-byte group table from 0x3c.
+ *   - PROP, a group: v4's layout at v4's offsets, unchanged (script 38, name 42,
+ *     count 90, 32-byte entries from 94).
+ *   - VIEW, a state: v4's with 448 bytes more in front — the play order at
+ *     0x1ee, its step count at 0x230, the frame count at 0x232 and the 44-byte
+ *     frame records from 0x236, each as v4's (degree +40, reference scale +42).
+ *   - SPRI, a picture: see {@link decodeShpFrame}.
+ */
+const C0_V5 = { mainScript: 0x24, refName: 0x28, groupCount: 0x38, groupTable: 0x3c } as const;
+const STATE_V5 = { playOrder: 0x1ee, playOrderCount: 0x230, frameCount: 0x232, frames: 0x236 } as const;
+
+/** is this container DreamFactory 5's, and of this four-character kind? */
+export const isV5 = (d: Uint8Array, kind: string): boolean =>
+  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;
+
 export function readShpFile(data: Uint8Array): ShpFile {
   const file = readContainerFile(data);
   const containers = file.containers;
   const c0 = containers[0].data;
   const r = new BinaryReader(c0);
+
+  if (isV5(c0, "SHOP")) {
+    r.seek(C0_V5.mainScript);
+    const mainScriptLocation = r.i32();
+    r.seek(C0_V5.refName);
+    const refName = r.pstr();
+    r.seek(C0_V5.groupCount);
+    const groupCount = r.i32();
+    const groups: PropGroup[] = [];
+    for (let g = 0; g < groupCount; g++) {
+      r.seek(C0_V5.groupTable + g * C0.groupEntrySize);
+      groups.push(readGroup(r.i32(), containers, STATE_V5));
+    }
+    // an empty stand-in: every v5 sprite brings its own palette
+    return { file, refName, mainScriptLocation, paletteRaw: new Uint8Array(256 * 8), groups };
+  }
 
   r.seek(C0.version);
   const version = r.i32();
@@ -180,7 +224,11 @@ export function readShpFile(data: Uint8Array): ShpFile {
   return { file, refName, mainScriptLocation, paletteRaw, groups };
 }
 
-function readGroup(location: number, containers: Container[]): PropGroup {
+function readGroup(
+  location: number,
+  containers: Container[],
+  at: { playOrder: number; playOrderCount: number; frameCount: number; frames: number } = STATE,
+): PropGroup {
   const r = new BinaryReader(containers[location].data);
   r.seek(GROUP.scriptLocation);
   const scriptContainerLocation = r.i32();
@@ -197,13 +245,13 @@ function readGroup(location: number, containers: Container[]): PropGroup {
     const identifier = r.pstr(STATE_ID_FIELD);
     const ed = containers[entryLoc].data;
     const ev = new DataView(ed.buffer, ed.byteOffset, ed.byteLength);
-    const subCount = ev.getInt32(STATE.frameCount, true);
+    const subCount = ev.getInt32(at.frameCount, true);
     const frames: number[] = [];
     const refScales: number[] = [];
     const degrees: number[] = [];
     const records: number[] = [];
     for (let s = 0; s < subCount; s++) {
-      const rec = STATE.frames + STATE.frameSize * s;
+      const rec = at.frames + STATE.frameSize * s;
       records.push(rec);
       frames.push(ev.getInt32(rec, true));
       degrees.push(ev.getInt16(rec + STATE.frameDegree, true));
@@ -213,9 +261,9 @@ function readGroup(location: number, containers: Container[]): PropGroup {
     // many 1-based frame indices from +46. Kept as a SEQUENCE — the frames stay in
     // stored order and playOrder says what to show when — because the steps repeat
     // and so cannot be expressed as a permutation of the frames.
-    const orderCount = Math.max(0, Math.min(ev.getInt16(STATE.playOrderCount, true), STATE.maxPlayOrder));
+    const orderCount = Math.max(0, Math.min(ev.getInt16(at.playOrderCount, true), STATE.maxPlayOrder));
     const order: number[] = [];
-    for (let s = 0; s < orderCount; s++) order.push(ev.getInt16(STATE.playOrder + 2 * s, true) - 1);
+    for (let s = 0; s < orderCount; s++) order.push(ev.getInt16(at.playOrder + 2 * s, true) - 1);
     // Ten states in the corpus name frames that do not exist (BLKJACK's
     // `winner`, WIRELESS's tuner lights and FIGHT's two duel lamps all have one
     // frame and a table reaching for a second) — a table authored against art
@@ -261,7 +309,12 @@ function readGroup(location: number, containers: Container[]): PropGroup {
     });
   }
   orientToSettledPose(states, containers);
-  return { name, location, scriptContainerLocation, states };
+  const group: PropGroup = { name, location, scriptContainerLocation, states };
+  if (at !== STATE) {
+    const d = containers[location].data;
+    group.depthRef = new DataView(d.buffer, d.byteOffset, d.byteLength).getInt16(0x14, true);
+  }
+  return group;
 }
 
 /**
@@ -341,7 +394,20 @@ export interface ShpFrame {
   indexed: Uint8Array;
   /** 1 = opaque, 0 = transparent, width*height */
   opaque: Uint8Array;
+  /**
+   * A DreamFactory 5 sprite's OWN palette, as RGBA. Absent on v1 and v4, whose
+   * sprites draw through the palette of whatever they are drawn over.
+   */
+  palette?: Uint8ClampedArray;
 }
+
+/**
+ * A DreamFactory 5 SPRI: the v5 prefix, then height 0x1a, width 0x1c, the raw
+ * position 0x20/0x22, a 256-entry {blue, green, red, reserved} palette at 0x24,
+ * and from 0x424 exactly v4's run stream below — a row-size word and the four
+ * run kinds, landing on the width on every row of RedJack's props.
+ */
+const SPRI = { height: 0x1a, width: 0x1c, posY: 0x20, posX: 0x22, palette: 0x24, pixels: 0x424 } as const;
 
 /**
  * Transparent-image codec used by SHP/STG/prop frames.
@@ -351,14 +417,27 @@ export interface ShpFrame {
  */
 export function decodeShpFrame(data: Uint8Array): ShpFrame {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const height = view.getInt16(0, true);
-  const width = view.getInt16(2, true);
-  const posYraw = view.getInt16(4, true);
-  const posXraw = view.getInt16(6, true);
+  const v5 = isV5(data, "SPRI");
+  const at = v5 ? SPRI : { height: 0, width: 2, posY: 4, posX: 6, pixels: 8 };
+  const height = view.getInt16(at.height, true);
+  const width = view.getInt16(at.width, true);
+  const posYraw = view.getInt16(at.posY, true);
+  const posXraw = view.getInt16(at.posX, true);
+  let palette: Uint8ClampedArray | undefined;
+  if (v5) {
+    palette = new Uint8ClampedArray(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      const p = SPRI.palette + i * 4;
+      palette[i * 4] = data[p + 2];
+      palette[i * 4 + 1] = data[p + 1];
+      palette[i * 4 + 2] = data[p];
+      palette[i * 4 + 3] = 255;
+    }
+  }
 
   const indexed = new Uint8Array(width * height);
   const opaque = new Uint8Array(width * height);
-  let inPos = 8;
+  let inPos = at.pixels;
   let outPos = 0;
 
   for (let row = 0; row < height; row++) {
@@ -396,7 +475,9 @@ export function decodeShpFrame(data: Uint8Array): ShpFrame {
     }
   }
 
-  return { width, height, posYraw, posXraw, indexed, opaque };
+  return palette
+    ? { width, height, posYraw, posXraw, indexed, opaque, palette }
+    : { width, height, posYraw, posXraw, indexed, opaque };
 }
 
 /**

@@ -399,7 +399,8 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       a.worldX = star.positionX;
       a.worldY = star.positionZ;
       a.worldZ = star.positionY;
-      a.deg = star.rotation8 & 0xff;
+      // a v5 star has no facing (see propstar)
+      if (!session.isV5) a.deg = star.rotation8 & 0xff;
     }
     a.starName = toStr(starName).toLowerCase();
     // A star this set has never heard of. Dust's are qualified by set
@@ -411,11 +412,24 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     if (star) a.worldSpace = true; // as for actorxyz: a real placement in the world
   });
   acc("actordeg", 0, (a) => a.deg, (a, v) => {
-    a.deg = toNum(v) & 0xff;
+    // a v5 angle is a whole turn in 2²⁴ parts (engine/src/runtime/maze.ts)
+    a.deg = toNum(v) & (session.isV5 ? 0xffffff : 0xff);
   });
   acc("actorpose", "", (a) => a.poseName, (a, v) => {
     a.poseName = toStr(v).toLowerCase();
     a.step = 0;
+  });
+  // actorink (a, n): propink's twin (0x403e90 takes 1..9 and refuses the rest),
+  // and like it DreamFactory 5's alone — the older engines never had it
+  acc("actorink", 8, (a) => a.ink, (a, v) => {
+    const n = Math.trunc(Number(v));
+    if (n >= 1 && n <= 9) a.ink = n;
+  });
+  const actorink = ctx.interp.builtins.get("actorink")!;
+  ctx.interp.builtins.set("actorink", (i, args, call, frame) => {
+    if (session.isV5) return actorink(i, args, call, frame);
+    i.onUnknown("actorink", args);
+    return 0;
   });
   acc("actorscale", 0, (a) => a.scale, (a, v) => {
     a.scale = toNum(v);

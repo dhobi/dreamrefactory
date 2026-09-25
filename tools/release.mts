@@ -2,7 +2,7 @@
  * Cut and push the release tags, one push at a time, and prove each one started
  * a deploy.
  *
- *   npm run release -- taoot dust timelapse skullcracker
+ *   npm run release -- taoot dust timelapse skullcracker redjack
  *   npm run release -- --dry-run taoot
  *   npm run release                      # every package whose version has no tag
  *
@@ -54,7 +54,7 @@ const RUN_APPEARS_MS = 90_000;
 const POLL_MS = 5_000;
 
 /** everything `deploy.yml` can release — the games, and the site around them */
-const TARGETS = ["site", "taoot", "dust", "timelapse", "skullcracker"] as const;
+const TARGETS = ["site", "taoot", "dust", "timelapse", "skullcracker", "redjack"] as const;
 type Target = (typeof TARGETS)[number];
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));

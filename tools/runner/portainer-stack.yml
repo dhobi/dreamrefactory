@@ -50,6 +50,7 @@ services:
       DUST_GAMEFILES: /srv/dust/gamefiles
       TIMELAPSE_GAMEFILES: /srv/timelapse/gamefiles
       SKULLCRACKER_GAMEFILES: /srv/skullcracker/gamefiles
+      REDJACK_GAMEFILES: /srv/redjack/gamefiles
 
       # What `runs-on:` in .github/workflows/*.yml selects on. Change it here and
       # there together, or jobs queue forever against a label nothing answers to
@@ -63,12 +64,14 @@ services:
       # could corrupt the thing the whole suite compares against.
       - /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro
       - /srv/dust/gamefiles:/srv/dust/gamefiles:ro
-      # Uncomment once that game's rip is actually on the host. A bind mount of a
-      # path that does not exist does not fail — Docker CREATES it, empty and
-      # root-owned, and the suite then reports an empty rip rather than a missing
-      # one, which is the more confusing of the two to debug from a Portainer log.
-      # - /srv/timelapse/gamefiles:/srv/timelapse/gamefiles:ro
-      # - /srv/skullcracker/gamefiles:/srv/skullcracker/gamefiles:ro
+      - /srv/timelapse/gamefiles:/srv/timelapse/gamefiles:ro
+      - /srv/skullcracker/gamefiles:/srv/skullcracker/gamefiles:ro
+      - /srv/redjack/gamefiles:/srv/redjack/gamefiles:ro
+      # A new game's line goes in only once its rip is actually on the host. A
+      # bind mount of a path that does not exist does not fail — Docker CREATES
+      # it, empty and root-owned, and the suite then reports an empty rip rather
+      # than a missing one, which is the more confusing of the two to debug from
+      # a Portainer log.
 
     # NO docker socket. Portainer makes it a one-line temptation; mounting
     # /var/run/docker.sock hands any job root on the host and makes everything

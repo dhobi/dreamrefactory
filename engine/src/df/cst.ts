@@ -98,6 +98,13 @@ export interface CastMember {
   logicLocation: number;
   scriptLocation: number;
   poses: CastPose[];
+  /**
+   * v5 only: the i16 at 0x14 of the member's record, which RedJack.exe copies
+   * into the actor (`0x40134b`, the twin of a prop group's — PropGroup.depthRef)
+   * and the sprite sizer lowers the actor by. Nick and the walk-ons hold 0; the
+   * people you talk to, -120 to -370.
+   */
+  depthRef?: number;
 }
 
 export interface CstFile {
@@ -168,17 +175,33 @@ const POSE = {
 export const MEMBER_NAME_FIELD = 47;
 export const POSE_NAME_FIELD = 15;
 
+/**
+ * DreamFactory 5's cast (RedJack's `.cast`) is a shop by another name — CAST,
+ * ACTO, POSE and SPRI where a shop has SHOP, PROP, VIEW and SPRI, and each at
+ * the offsets its shop twin has (engine/src/df/shp.ts): no palette in the
+ * header, so the main script at 0x24, the member count at 0x38 and the table
+ * from 0x3c; a member (ACTO) at v4's own offsets; a pose (POSE) with 448 bytes
+ * more in front, so the play list at 0x1ee, its count at 0x230, the frame count
+ * at 0x232 and the frames from 0x236. The frames are v5 sprites with their own
+ * palettes, which `decodeShpFrame` reads.
+ */
+const C0_V5 = { mainScript: 0x24, memberCount: 0x38, memberTable: 0x3c } as const;
+const POSE_V5 = { play: 0x1ee, playCount: 0x230, frameCount: 0x232, frames: 0x236 } as const;
+
 export function readCstFile(data: Uint8Array): CstFile {
   const file = readContainerFile(data);
   const c0 = file.containers[0].data;
+  const v5 = c0.length > 8 && c0[2] === 5 && String.fromCharCode(c0[7], c0[6], c0[5], c0[4]) === "CAST";
+  const H = v5 ? { ...C0, ...C0_V5 } : C0;
+  const PO = v5 ? { ...POSE, ...POSE_V5 } : POSE;
   const r0 = new BinaryReader(c0);
-  r0.seek(C0.mainScript);
+  r0.seek(H.mainScript);
   const mainScriptLocation = r0.i32();
-  r0.seek(C0.memberCount);
+  r0.seek(H.memberCount);
   const count = r0.i32();
   const members: CastMember[] = [];
   for (let i = 0; i < count; i++) {
-    r0.seek(C0.memberTable + i * C0.memberEntrySize);
+    r0.seek(H.memberTable + i * C0.memberEntrySize);
     const logicLocation = r0.i32();
     const p = file.containers[logicLocation].data;
     const rp = new BinaryReader(p);
@@ -196,11 +219,11 @@ export function readCstFile(data: Uint8Array): CstFile {
       const poseName = rp.pstr(POSE_NAME_FIELD);
       const sc = file.containers[setLoc].data;
       const rs = new BinaryReader(sc);
-      rs.seek(POSE.frameCount);
+      rs.seek(PO.frameCount);
       const frameCount = rs.i32();
       const steps: CastFrame[][] = [];
       for (let fi = 0; fi < frameCount; fi++) {
-        const base = POSE.frames + fi * POSE.frameSize;
+        const base = PO.frames + fi * POSE.frameSize;
         rs.seek(base);
         const location = rs.i32();
         rs.seek(base + POSE.frameStep);
@@ -217,11 +240,11 @@ export function readCstFile(data: Uint8Array): CstFile {
       // the play script, read after the steps so it can be checked against them:
       // a table naming a picture the pose does not have is not evidence about
       // anything, and the corpus has one (`qwerty`, one step over no frames)
-      rs.seek(POSE.playCount);
+      rs.seek(PO.playCount);
       const playCount = Math.max(0, Math.min(rs.i16(), POSE.maxPlay));
       const play: number[] = [];
       for (let pi = 0; pi < playCount; pi++) {
-        rs.seek(POSE.play + 2 * pi);
+        rs.seek(PO.play + 2 * pi);
         play.push(rs.i16() - 1);
       }
       const usable = play.length > 0 && play.every((v) => v >= 0 && v < steps.length);
@@ -234,11 +257,14 @@ export function readCstFile(data: Uint8Array): CstFile {
         record,
       });
     }
-    members.push({ name: name.toLowerCase(), logicLocation, scriptLocation, poses });
+    const member: CastMember = { name: name.toLowerCase(), logicLocation, scriptLocation, poses };
+    if (v5) member.depthRef = new DataView(p.buffer, p.byteOffset, p.byteLength).getInt16(0x14, true);
+    members.push(member);
   }
   return {
     file,
-    paletteRaw: c0.subarray(C0.palette, C0.palette + 2048),
+    // v5 has no cast palette; its sprites carry their own
+    paletteRaw: v5 ? new Uint8Array(2048) : c0.subarray(C0.palette, C0.palette + 2048),
     mainScriptLocation,
     members,
   };

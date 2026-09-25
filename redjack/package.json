@@ -1,0 +1,14 @@
+{
+  "name": "@dreamfactory/redjack",
+  "version": "0.1.1",
+  "private": true,
+  "description": "RedJack: Revenge of the Brethren (1998) — CyberFlix's last game, on DreamFactory 5. A prototype page: the engine boots its BOOTFILE and says how far it gets.",
+  "type": "module",
+  "//scripts": "Run from anywhere with `-w redjack`; npm sets the working directory to this package, which is why every path here is relative to it and `vite` finds the config beside this file with no --config.",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "build": "vite build",
+    "manifest": "tsx ../tools/mkmanifest.ts ../dist/redjack gamefiles public"
+  }
+}

@@ -22,6 +22,8 @@ import { detectVersion } from "@dreamfactory/engine/df/version";
 import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
 import { parseSave } from "@dreamfactory/engine/df/savegame";
 import { SetViewer } from "./viewer";
+import { MazeView } from "./maze-view";
+import { isSett, readSettFile, SettFile } from "@dreamfactory/engine/df/sett";
 import { ScreenPresenter } from "./screen-presenter";
 import { ScreenDirector } from "./screen-director";
 import { ScreenSize } from "./screen";
@@ -83,10 +85,10 @@ export interface HostFiles {
   /** fetch/read by lowercase basename; null when it doesn't exist. `onBytes`, where
    *  the source streams, reports each chunk — {@link GameHost.preload}'s bar */
   load(name: string, onBytes?: (n: number) => void): Promise<Uint8Array | null>;
-  /** follow BOOTFILE's setpath(disk) to the other CD */
-  setDisc(disc: 1 | 2): void;
+  /** follow BOOTFILE's setpath(disk) to another CD, 1-based */
+  setDisc(disc: number): void;
   /** the disc in play, if the source tracks one (skips a redundant swap) */
-  activeDisc?(): 1 | 2;
+  activeDisc?(): number;
   /** the edition tree in play, which is what says how its text bytes decode */
   activeEdition?(): string;
   /** WHICH code page that is. No DF file says (engine/src/df/text.ts), so the
@@ -325,8 +327,8 @@ export class GameHost {
     // the boot's setpath(disk) -> which CD's copy of a both-discs room we read
     this.session.onDiscChange = (disc) => {
       if (this.files.activeDisc?.() === disc) return;
-      this.files.setDisc(disc as 1 | 2);
-      this.ui.log(`disc ${disc} (titanic${disc}) mounted`);
+      this.files.setDisc(disc);
+      this.ui.log(`disc ${disc} (${this.session.isV5 ? "rjdisk" : "titanic"}${disc}) mounted`);
     };
     // forceupdate() is one pass of TI.EXE's main loop: service the world, then
     // RENDER a frame — and rendering is what advances a turn or walk animation.
@@ -366,6 +368,10 @@ export class GameHost {
       const data = await this.files.load(fileName);
       if (!data) {
         this.ui.log(`cannot travel to ${fileName}: file not available`);
+        return;
+      }
+      if (isSett(data)) {
+        await this.activateMaze(fileName, data, sceneName, viewName);
         return;
       }
       if (!this.parseInto(fileName, data, (m) => this.ui.log(m))) return;
@@ -436,6 +442,45 @@ export class GameHost {
   }
 
   /**
+   * Put a DreamFactory 5 room on screen — RedJack's `.sett`, which is not a
+   * SET: nodes on a sphere, not scenes of views (engine/src/web/maze-view.ts).
+   * The room it replaces, of either kind, is released first; `openset` and the
+   * arrival node's `openscene` run before this returns, which is what
+   * `gotonode` needs, since it points the camera the moment `changeset` does.
+   */
+  private async activateMaze(name: string, data: Uint8Array, scene: string, viewName = ""): Promise<void> {
+    let sett: SettFile;
+    try {
+      sett = readSettFile(data);
+    } catch (e) {
+      this.ui.log(`cannot parse ${name}: ${(e as Error).message}`);
+      return;
+    }
+    const session = this.session;
+    if (this.currentKey && this.currentKey !== name) await this.releaseSet(this.currentKey);
+    this.maze?.release();
+    this.current = null;
+    this.currentKey = name;
+    session.currentSetFile = name.toLowerCase().replace(/\.sett$/, "");
+    await session.ensureBooted();
+    const view = new MazeView(sett, session, this.director, {
+      width: this.director.screen.width,
+      height: this.director.screen.height,
+    });
+    view.onLog = (l) => this.ui.log(l);
+    this.maze = view;
+    this.director.setRoom(view);
+    this.ui.showStage();
+    await view.start(scene, viewName);
+    this.ui.log(
+      `${sett.name}: ${sett.nodes.length} node(s), ${sett.scenes.length} scene(s), ${sett.roads.length} road(s); at ${view.maze.sceneName}`,
+    );
+  }
+
+  /** the DreamFactory 5 room on screen, if that is what is */
+  private maze: MazeView | null = null;
+
+  /**
    * Put an already-parsed set on screen: build its viewer, run its opening
    * lifecycle, and hand the room to the player.
    *
@@ -460,6 +505,8 @@ export class GameHost {
     // wrong name and leave 32 MB resident.
     if (this.currentKey && this.currentKey !== name) await this.releaseSet(this.currentKey);
     this.currentKey = name;
+    this.maze?.release();
+    this.maze = null;
     // Direct activation (set list / a dev jump) bypasses openSetFile — and with
     // it the boot's changeset, whose closeset -> putdownsound stops the room's
     // scheduled work. Nothing else will: loops are keyed by scene/prop name on
@@ -850,10 +897,30 @@ export class GameHost {
      */
     const films = session.onPlayMovie;
     if (opts.tour !== undefined) session.onPlayMovie = () => {};
+    /*
+     * ...but a boot can reach its first day by another road, and then the day
+     * must not be advanced again. RedJack's does: `boot()` opens `control.stag`,
+     * whose `openstage` starts a new game, and `newgame` ends with
+     * `sendtopost (advanceday ())` — which the stage fallback above does not
+     * cover. The port's own advance below then ran day 1 straight after day 0:
+     * `endemo.move` over the liznite credits, and on to the ship.
+     */
+    let advanced = false;
+    session.interp.onHandler = (h) => {
+      if (h === "advanceday" || h === "advancetour") advanced = true;
+    };
     try {
       await session.runGlobal("boot");
     } finally {
       session.suppressStageBootFallback = false;
+      session.interp.onHandler = null;
+    }
+    // (a DreamFactory 5 boot only: the older games keep the path they were
+    // measured on)
+    if (advanced && session.isV5) {
+      session.onPlayMovie = films;
+      this.startAtHalfMix();
+      return;
     }
     // The host left currentset() = the landing room. The day-advance ->
     // changeset() records `oldset = currentset()` BEFORE opening the room, so

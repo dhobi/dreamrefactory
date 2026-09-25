@@ -1,4 +1,5 @@
 import { FrameBuffer, decodeFrame, paletteToRGBA } from "../df/image";
+import { decodeFrameV5, isV5Frame, paletteV5 } from "../df/image-v5";
 import { StgFile, StgRegion, readStgFile, readStgRegions } from "../df/stg";
 import { Frame, ScriptInstance, Value, toStr } from "./interp";
 import type { GameSession } from "./session";
@@ -172,6 +173,8 @@ export class StageController {
     this.session.currentFlat = "none";
     this.stageFile = null;
     this.session.stageName = "none";
+    // a v5 stage's `stageorigin` is the open stage's, and goes with it
+    this.session.stageOrigin = { x: 0, y: 0 };
     this.session.stageScript = null;
     this.session.flatScripts.clear();
     this.session.flatNames = [];
@@ -563,12 +566,15 @@ export class StageController {
           fb.ensure(under.width, under.height);
           fb.pixels.set(under.pixels.subarray(0, Math.min(under.pixels.length, fb.pixels.length)));
         }
-        const d = decodeFrame(stg.file.containers[flat.locationFrame].data, fb);
+        const art = stg.file.containers[flat.locationFrame].data;
+        // a v5 flat is a v5 picture, and brings its own palette (image-v5.ts)
+        const v5 = stg.version === 5 && isV5Frame(art);
+        const d = v5 ? decodeFrameV5(art, fb) : decodeFrame(art, fb);
         img = {
           pixels: fb.pixels.slice(0, d.width * d.height),
           width: d.width,
           height: d.height,
-          palette: paletteToRGBA(stg.paletteRaw, 256),
+          palette: v5 ? paletteV5(art) : paletteToRGBA(stg.paletteRaw, 256),
         };
         this.flatImageCache.set(key, img);
       } catch (e) {

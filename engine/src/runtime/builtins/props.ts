@@ -13,7 +13,7 @@ import { accessorFamily, BuiltinCtx } from "./context";
  * (`propstar`) that read the current set's named world points.
  */
 export function registerPropBuiltins(ctx: BuiltinCtx): void {
-  const { session, r, log, findStar, sceneCell } = ctx;
+  const { session, interp, r, log, findStar, sceneCell } = ctx;
 
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
@@ -346,6 +346,30 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   acc("propspeed", 0, (p) => p.speed, (p, v) => {
     p.speed = Number(v) || 0;
   });
+  // propink (p, n): DreamFactory 5's opacity in eighths (PropInstance.ink). The
+  // setter takes 1..9 and refuses anything else (0x42a46b). Only a v5 game
+  // gets it: to the older engines it stays the unknown command it always was
+  acc("propink", 8, (p) => p.ink, (p, v) => {
+    const n = Math.trunc(Number(v));
+    if (n >= 1 && n <= 9) p.ink = n;
+  });
+  // propflip (p, n): DreamFactory 5's mirror, bits 1 across and 2 upside down
+  // (PropInstance.flip) — stored as given, as 0x42a1f0 does. v5 only, like propink
+  acc("propflip", 0, (p) => p.flip, (p, v) => {
+    p.flip = Math.trunc(Number(v)) || 0;
+  });
+  const propflip = interp.builtins.get("propflip")!;
+  interp.builtins.set("propflip", (i, args, call, frame) => {
+    if (session.isV5) return propflip(i, args, call, frame);
+    i.onUnknown("propflip", args);
+    return 0;
+  });
+  const propink = interp.builtins.get("propink")!;
+  interp.builtins.set("propink", (i, args, call, frame) => {
+    if (session.isV5) return propink(i, args, call, frame);
+    i.onUnknown("propink", args);
+    return 0;
+  });
   // ONE prop table, whoever asks: `countprops` is `mov ecx, [0x489f18]`
   // (0x418660) and `indextoprop` bounds-checks that same dword before walking the
   // table at [0x489f14] in 158-byte records (0x418710). No calling shop enters
@@ -441,7 +465,9 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       p.worldX = star.positionX;
       p.worldY = star.positionZ;
       p.worldZ = star.positionY;
-      p.deg = star.rotation8 & 0xff;
+      // a v5 star is a point and no more: RedJack.exe's `propstar` (0x428430)
+      // copies its three coordinates and leaves the facing alone
+      if (!session.isV5) p.deg = star.rotation8 & 0xff;
     }
     p.starName = toStr(starName).toLowerCase();
     /**

@@ -1,12 +1,16 @@
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
-import { WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing } from "./geometry";
+import {
+  WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha,
+  inkPixel,
+} from "./geometry";
 import type { DrawSignature } from "./signature";
+import { TURN } from "../df/sett";
 
 // Projection/camera types live in the neutral ./geometry module; re-exported
 // here so existing consumers keep resolving them from "./props" (viewer.ts's
 // import("./engine/props").WorldCamera, and tests importing projectPoint).
 export type { WorldCamera } from "./geometry";
-export { projectPoint } from "./geometry";
+export { projectPoint, inkAlpha } from "./geometry";
 
 /**
  * A named world point of a set, as much of one as {@link PropRuntime.settleStars}
@@ -168,6 +172,22 @@ export function playSequence(st: PropState, variant: number[] | null): number[] 
 }
 
 /**
+ * A true-3D prop's picture as a plane in the room — see {@link PropRuntime.cardOf}.
+ * `o` is the frame's top-left corner, `r` one frame pixel to the right and `d`
+ * one down, all in room units; `n` is the side it faces.
+ */
+interface Card {
+  f: ShpFrame;
+  o: [number, number, number];
+  r: [number, number, number];
+  d: [number, number, number];
+  n: [number, number, number];
+  box: { x0: number; y0: number; x1: number; y1: number };
+}
+const NO_ORIGIN: Readonly<{ x: number; y: number }> = { x: 0, y: 0 };
+const dot3 = (a: readonly number[], b: readonly number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/**
  * Runtime state of props loaded from SHP ("shop") files.
  *
  * Props are screen-space overlays: each visible prop draws its current
@@ -253,6 +273,37 @@ export class PropInstance {
    * crossing takes. Nothing in Titanic reads it.
    */
   speed = 0;
+  /**
+   * `propink` — DreamFactory 5's opacity, in eighths: 8 (a new prop's, 0x4275de)
+   * is opaque and 1 all but gone. The blitter takes ink n as an alpha of
+   * n·255·32 >> 8 (0x44c25d) and only 8 skips the blend; 9 is accepted, and is
+   * opaque too. RedJack's credits fade their titles in and out by it, a step a
+   * frame, and wait for the step to reach 1 or 7 — so a prop whose ink cannot
+   * change never finishes fading.
+   */
+  ink = 8;
+  /**
+   * DreamFactory 5's `propflip`: bit 0 mirrors the picture across, bit 1 turns
+   * it upside down — the prop record's +0x98, which RedJack.exe's placement
+   * (`0x42caa0`) reads to mirror the frame's hot spot with it — for a room prop
+   * and for a screen one alike (0x42ce81). A true-3D prop turns half round
+   * instead ({@link PropRuntime.cardOf}).
+   */
+  flip = 0;
+  /**
+   * DreamFactory 5's `propistrue3d`: drawn as a flat picture standing in the
+   * room ({@link PropRuntime.cardOf}), turned by `deg` and tilted by
+   * {@link pitch}, instead of a sprite square to the screen.
+   */
+  true3d = false;
+  /** `propisfacer`: a true-3D picture turned to the camera — RedJack.exe's default (0x427783) */
+  facer = true;
+  /** `proppitch`: a true-3D picture's tilt, in 2²⁴ths of a turn; a quarter lays it flat */
+  pitch = 0;
+  /** `propsnap`: a screen prop that moves with the stage's `stageorigin` */
+  snap = false;
+  /** `propbrightness`: added to each colour channel, -255..255 */
+  bright: [number, number, number] = [0, 0, 0];
   /** placed with propxyz: drawn via world→screen projection */
   worldSpace = false;
   /** name of the star the prop was placed on (propstar getter) */
@@ -377,11 +428,25 @@ export class PropInstance {
    * A world-space prop's rect is the projected one ({@link PropRuntime.
    * worldRect}) and depends on a camera, which is why that one is not this.
    */
-  screenRect(): { x: number; y: number; w: number; h: number } | null {
+  screenRect(origin = NO_ORIGIN): { x: number; y: number; w: number; h: number } | null {
     const st = this.state();
     if (!st || !st.frames.length) return null;
     const f = this.shop.frame(this.currentFrame(st));
-    return { x: this.anchorX - f.posXraw, y: this.anchorY - f.posYraw, w: f.width, h: f.height };
+    return { ...this.screenCorner(f, origin), w: f.width, h: f.height };
+  }
+
+  /**
+   * Where a frame's top-left lands on the screen: the anchor less the hot spot,
+   * the hot spot mirrored with the picture (DreamFactory 5's `propflip`, 0x42ce81),
+   * and moved with the stage for a `propsnap` prop (0x42cf2f).
+   */
+  screenCorner(f: ShpFrame, origin = NO_ORIGIN): { x: number; y: number } {
+    const ax = this.flip & 1 ? f.width - f.posXraw : f.posXraw;
+    const ay = this.flip & 2 ? f.height - f.posYraw : f.posYraw;
+    return {
+      x: this.anchorX - ax + (this.snap ? origin.x : 0),
+      y: this.anchorY - ay + (this.snap ? origin.y : 0),
+    };
   }
 }
 
@@ -575,6 +640,8 @@ export class PropRuntime {
 
   /** the set currently displayed — world props only draw in their own set */
   currentSet = "";
+  /** DreamFactory 5's `stageorigin`, which `propsnap` props are drawn from (GameSession.stageOrigin) */
+  readonly origin = { x: 0, y: 0 };
 
   /**
    * Everything {@link composite} would read out of these props, hashed — the
@@ -595,7 +662,7 @@ export class PropRuntime {
    * {@link worldDrawList} — they are directly above and below it for that reason.
    */
   drawSignature(sig: DrawSignature): void {
-    sig.num(this.props.size).str(this.currentSet);
+    sig.num(this.props.size).str(this.currentSet).num(this.origin.x).num(this.origin.y);
     for (const p of this.props.values()) {
       sig.bool(p.visible).bool(p.hidden);
       if (!p.visible) continue;
@@ -604,11 +671,13 @@ export class PropRuntime {
       // the variant a deg-split state is playing — frameIdx indexes into THIS
       sig.num(p.frameOrder ? p.frameOrder.length : -1);
       if (p.frameOrder) for (const i of p.frameOrder) sig.num(i);
-      sig.num(p.anchorX).num(p.anchorY).num(p.dist);
+      sig.num(p.anchorX).num(p.anchorY).num(p.dist).num(p.ink);
+      sig.num(p.flip).bool(p.snap).num(p.bright[0]).num(p.bright[1]).num(p.bright[2]);
       sig.bool(p.worldSpace).bool(p.directional).any(p.deg);
       if (!p.worldSpace) continue;
       sig.str(p.setName);
-      sig.num(p.worldX).num(p.worldY).num(p.worldZ).num(p.scale).num(p.zclip);
+      sig.num(p.worldX).num(p.worldY).num(p.worldZ).num(p.scale).num(p.zclip).num(p.flip);
+      sig.bool(p.true3d).bool(p.facer).num(p.pitch);
     }
   }
 
@@ -622,6 +691,8 @@ export class PropRuntime {
       // as for actors: behind-the-camera is projectPoint's answer, and zclip is
       // an occlusion bias rather than a clip plane (see occludeAt)
       if (!proj) continue;
+      // ...and a v5 room has a far limit, which zclip does move (SettFile.far)
+      if (cam.v5 && proj.depth - Number(p.zclip) >= cam.v5.far) continue;
       out.push({ p, proj });
     }
     return out.sort((a, b) => b.proj.depth - a.proj.depth);
@@ -636,6 +707,7 @@ export class PropRuntime {
    */
   private worldFrameIdx(p: PropInstance, nFrames: number, cam: WorldCamera): number {
     if (!p.directional || nFrames < 2) return p.currentFrameIdx(p.state()!);
+    if (cam.v5) return frameIndexForDegree(p.state()!, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0));
     const camBearing = bearing(cam.x - p.worldX, cam.y - p.worldY);
     // the facing to depict is the prop's orientation relative to the camera;
     // pick the frame whose stored degree matches it (the frames' degrees are
@@ -652,12 +724,16 @@ export class PropRuntime {
     // refScale is the frame record's i16 @+42 (uniformly 96 across TAOOT's shipped
     // shops — the same field GANG.CST stores for actors); the old hardcoded 180
     // was a fit that ballooned near props (e.g. the wireless message slips).
-    const k = (p.scale * (st.refScales[idx] ?? 96)) / (1000 * proj.depth);
+    const k = cam.v5
+      ? cam.v5.size(p.worldX, p.worldY, p.worldZ, p.scale, p.group.depthRef ?? 0)
+      : (p.scale * (st.refScales[idx] ?? 96)) / (1000 * proj.depth);
+    const ax = p.flip & 1 ? f.width - f.posXraw : f.posXraw;
+    const ay = p.flip & 2 ? f.height - f.posYraw : f.posYraw;
     return {
       f,
       k,
-      x: proj.x - Math.round(f.posXraw * k),
-      y: proj.y - Math.round(f.posYraw * k),
+      x: proj.x - Math.round(ax * k),
+      y: proj.y - Math.round(ay * k),
       w: Math.max(1, Math.round(f.width * k)),
       h: Math.max(1, Math.round(f.height * k)),
     };
@@ -676,9 +752,12 @@ export class PropRuntime {
       const p = list[i];
       const st = p.state()!;
       const f = p.shop.frame(p.currentFrame(st));
-      const lx = x - (p.anchorX - f.posXraw);
-      const ly = y - (p.anchorY - f.posYraw);
+      const at = p.screenCorner(f, this.origin);
+      let lx = x - at.x;
+      let ly = y - at.y;
       if (lx < 0 || ly < 0 || lx >= f.width || ly >= f.height) continue;
+      if (p.flip & 1) lx = f.width - 1 - lx;
+      if (p.flip & 2) ly = f.height - 1 - ly;
       if (f.opaque[ly * f.width + lx]) return p;
     }
     if (cam) {
@@ -708,16 +787,25 @@ export class PropRuntime {
       const world = this.worldDrawList(cam);
       for (let i = world.length - 1; i >= 0; i--) {
         const { p, proj } = world[i];
+        if (p.true3d && cam.v5) {
+          const c = this.cardOf(p, cam, cam.v5);
+          const t = c && this.cardTexel(c, cam.v5, x, y);
+          if (!t || !c!.f.opaque[t.i]) continue;
+          if (occ && sceneryOccludes(occ, x, y, this.occludeAt(p, t.axial, occ))) continue;
+          return p;
+        }
         const r = this.worldRect(p, proj, cam);
         if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
-        const sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
-        const sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+        let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
+        let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+        if (p.flip & 1) sx = r.f.width - 1 - sx;
+        if (p.flip & 2) sy = r.f.height - 1 - sy;
         if (!r.f.opaque[sy * r.f.width + sx]) continue;
         // a world prop is only clickable where it is actually drawn: scenery
         // nearer than the prop hides that pixel in composite() (the SET Z map),
         // so a hit there must miss too — else props are clickable THROUGH walls
         // (the click hit-test used to ignore occlusion entirely).
-        if (occ && sceneryOccludes(occ, x, y, this.occludeAt(p, proj.depth, occ))) continue;
+        if (occ && sceneryOccludes(occ, x, y, this.occludeAt(p, hiddenBy(proj), occ))) continue;
         return p;
       }
     }
@@ -734,6 +822,79 @@ export class PropRuntime {
   }
 
   /**
+   * A true-3D prop (DreamFactory 5's `propistrue3d`) as the plane RedJack.exe
+   * draws it: 0x42caa0 hands the 3D renderer (0x456540) the prop's pose —
+   * heading, pitch and roll, then its point — its `propscale` over 1000, and the
+   * frame's size and hot spot, and the renderer's corners are the frame's
+   * rectangle measured from the hot spot (0x45b700). So one frame pixel is
+   * scale/1000 room units, as big as the sprite it would otherwise be.
+   *
+   * A facer (0x42cbfc) takes the bearing from the prop to the camera for its
+   * heading; the others keep their `propdeg`. `propflip` turns the plane half
+   * round rather than mirroring the picture (0x42cc3b, 0x42cc5c): bit 1 on the
+   * heading, bit 2 on the pitch.
+   *
+   * Which way the picture's right and down run, for a given heading, is not read
+   * off the renderer's matrix (0x456540 builds it from the three angles in floats
+   * and it has not been followed through); it is taken to be the camera's own
+   * convention (MazeRuntime.spriteCamera), which puts a facer's picture square
+   * and unmirrored in front of you — the one case that can be checked by eye.
+   */
+  private cardOf(p: PropInstance, cam: WorldCamera, v5: SpriteCamera): Card | null {
+    const st = p.state();
+    if (!st) return null;
+    const f = p.shop.frame(st.frames[this.worldFrameIdx(p, st.frames.length, cam)]);
+    const eye = v5.ray(cam.cx, cam.cy);
+    const turn = (v: number): number => (v * 2 * Math.PI) / TURN;
+    let h = p.facer ? Math.atan2(eye.y - p.worldY, eye.x - p.worldX) : turn(Number(p.deg) || 0);
+    let pitch = turn(p.pitch);
+    if (p.flip & 1) h += Math.PI;
+    if (p.flip & 2) pitch += Math.PI;
+    const k = p.scale / 1000;
+    const [sH, cH, sP, cP] = [Math.sin(h), Math.cos(h), Math.sin(pitch), Math.cos(pitch)];
+    const n: [number, number, number] = [cH * cP, sH * cP, sP];
+    const r: [number, number, number] = [-sH * k, cH * k, 0];
+    const d: [number, number, number] = [cH * sP * k, sH * sP * k, -cP * k];
+    const o: [number, number, number] = [
+      p.worldX - r[0] * f.posXraw - d[0] * f.posYraw,
+      p.worldY - r[1] * f.posXraw - d[1] * f.posYraw,
+      p.worldZ - r[2] * f.posXraw - d[2] * f.posYraw,
+    ];
+    // on the screen: round its four corners, or all of it if one is behind you
+    let box = { x0: 0, y0: 0, x1: cam.clipW, y1: cam.clipH };
+    const corners = [[0, 0], [f.width, 0], [0, f.height], [f.width, f.height]].map(([u, v]) =>
+      v5.project(o[0] + r[0] * u + d[0] * v, o[1] + r[1] * u + d[1] * v, o[2] + r[2] * u + d[2] * v),
+    );
+    if (corners.every((c) => c)) {
+      const xs = corners.map((c) => c!.x);
+      const ys = corners.map((c) => c!.y);
+      box = {
+        x0: Math.max(0, Math.min(...xs) - 1),
+        y0: Math.max(0, Math.min(...ys) - 1),
+        x1: Math.min(cam.clipW, Math.max(...xs) + 2),
+        y1: Math.min(cam.clipH, Math.max(...ys) + 2),
+      };
+    }
+    return { f, o, r, d, n, box };
+  }
+
+  /** the picture's pixel a screen point sees on a card, and its depth along the view */
+  private cardTexel(c: Card, v5: SpriteCamera, sx: number, sy: number): { i: number; axial: number } | null {
+    const ray = v5.ray(sx + 0.5, sy + 0.5);
+    const dir = [ray.dx, ray.dy, ray.dz];
+    const facing = dot3(dir, c.n);
+    if (Math.abs(facing) < 1e-9) return null;
+    const t = dot3([c.o[0] - ray.x, c.o[1] - ray.y, c.o[2] - ray.z], c.n) / facing;
+    if (t <= 0) return null;
+    const q = [ray.x + t * dir[0] - c.o[0], ray.y + t * dir[1] - c.o[1], ray.z + t * dir[2] - c.o[2]];
+    const u = Math.floor(dot3(q, c.r) / dot3(c.r, c.r));
+    const v = Math.floor(dot3(q, c.d) / dot3(c.d, c.d));
+    if (u < 0 || v < 0 || u >= c.f.width || v >= c.f.height) return null;
+    // the ray is one unit deep per unit along it, so how far along is how deep
+    return { i: v * c.f.width + u, axial: t };
+  }
+
+  /**
    * Blit ONE world prop — the world half of {@link composite}'s loop body,
    * callable per entry so the viewer can interleave world props and actors
    * into a single far-to-near pass on a v1 set (see Viewer.compositeWorld).
@@ -747,24 +908,42 @@ export class PropRuntime {
     cam: WorldCamera,
     occ: Occlusion | null = null,
   ): void {
+    if (p.true3d && cam.v5) {
+      const c = this.cardOf(p, cam, cam.v5);
+      if (!c) return;
+      const pal = brightPalette(c.f.palette ?? paletteRGBA, p.bright);
+      const alpha = inkAlpha(p.ink);
+      for (let ty = c.box.y0; ty < Math.min(c.box.y1, height); ty++) {
+        for (let tx = c.box.x0; tx < Math.min(c.box.x1, width); tx++) {
+          const t = this.cardTexel(c, cam.v5, tx, ty);
+          if (!t || !c.f.opaque[t.i]) continue;
+          // each pixel at its own depth: a card seen edge-on runs into the scenery
+          if (occ && sceneryOccludes(occ, tx, ty, this.occludeAt(p, t.axial, occ))) continue;
+          inkPixel(rgba, (ty * width + tx) * 4, pal, c.f.indexed[t.i] * 4, alpha);
+        }
+      }
+      return;
+    }
     const r = this.worldRect(p, proj, cam);
     // scenery nearer than the prop hides it, same SET Z image as actors —
     // without this the smoke table / plants drew over pillars in front
-    const level = occ ? this.occludeAt(p, proj.depth, occ) : 0;
+    const level = occ ? this.occludeAt(p, hiddenBy(proj), occ) : 0;
     const maxY = Math.min(cam.clipH, height, r.y + r.h);
     const maxX = Math.min(cam.clipW, width, r.x + r.w);
+    // a v5 sprite colours through its own palette (df/shp.ts)
+    if (r.f.palette) paletteRGBA = r.f.palette;
+    paletteRGBA = brightPalette(paletteRGBA, p.bright);
+    const a = inkAlpha(p.ink);
     for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
-      const sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+      let sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
+      if (p.flip & 2) sy = r.f.height - 1 - sy;
       for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
-        const sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+        let sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
+        if (p.flip & 1) sx = r.f.width - 1 - sx;
         const s = sy * r.f.width + sx;
         if (!r.f.opaque[s]) continue;
         if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
-        const pal = r.f.indexed[s] * 4;
-        const d = (ty * width + tx) * 4;
-        rgba[d] = paletteRGBA[pal];
-        rgba[d + 1] = paletteRGBA[pal + 1];
-        rgba[d + 2] = paletteRGBA[pal + 2];
+        inkPixel(rgba, (ty * width + tx) * 4, paletteRGBA, r.f.indexed[s] * 4, a);
       }
     }
   }
@@ -789,21 +968,20 @@ export class PropRuntime {
       if (p.anchorY < minAnchorY) continue;
       const st = p.state()!;
       const f = p.shop.frame(p.currentFrame(st));
-      const dx = p.anchorX - f.posXraw;
-      const dy = p.anchorY - f.posYraw;
+      const { x: dx, y: dy } = p.screenCorner(f, this.origin);
+      // a v5 sprite colours through its own palette (df/shp.ts)
+      const pal32 = brightPalette(f.palette ?? paletteRGBA, p.bright);
+      const a = inkAlpha(p.ink);
       for (let y = 0; y < f.height; y++) {
         const ty = dy + y;
         if (ty < 0 || ty >= height) continue;
+        const sy = p.flip & 2 ? f.height - 1 - y : y;
         for (let x = 0; x < f.width; x++) {
           const tx = dx + x;
           if (tx < 0 || tx >= width) continue;
-          const s = y * f.width + x;
+          const s = sy * f.width + (p.flip & 1 ? f.width - 1 - x : x);
           if (!f.opaque[s]) continue;
-          const pal = f.indexed[s] * 4;
-          const d = (ty * width + tx) * 4;
-          rgba[d] = paletteRGBA[pal];
-          rgba[d + 1] = paletteRGBA[pal + 1];
-          rgba[d + 2] = paletteRGBA[pal + 2];
+          inkPixel(rgba, (ty * width + tx) * 4, pal32, f.indexed[s] * 4, a);
         }
       }
     }

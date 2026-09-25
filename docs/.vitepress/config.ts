@@ -24,6 +24,7 @@ const rewrites = {
   "dust/README.md": "dust/index.md",
   "timelapse/README.md": "timelapse/index.md",
   "skullcracker/README.md": "skullcracker/index.md",
+  "redjack/README.md": "redjack/index.md",
   "editors/README.md": "editors/index.md",
   "reference/README.md": "reference/index.md",
 };
@@ -35,7 +36,7 @@ export default withMermaid(
     lang: "en-US",
     title: "dreamREfactory",
     description:
-      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4).",
+      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4), and RedJack (DreamFactory 5).",
     lastUpdated: true,
     /**
      * FALSE, and it has to be. `cleanUrls` emits links without `.html` and relies
@@ -82,6 +83,7 @@ export default withMermaid(
         { text: "Titanic", link: "/taoot/" },
         { text: "Timelapse", link: "/timelapse/" },
         { text: "Skull Cracker", link: "/skullcracker/" },
+        { text: "RedJack", link: "/redjack/" },
         { text: "Editors", link: "/editors/" },
         { text: "Glossary", link: "/glossary" },
         // Points at the section index rather than a page inside it, like every
@@ -126,6 +128,7 @@ export default withMermaid(
             { text: "4 · Titanic: Adventure Out of Time", link: "/taoot/" },
             { text: "5 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
             { text: "6 · Skull Cracker", link: "/skullcracker/" },
+            { text: "7 · RedJack", link: "/redjack/" },
             { text: "Glossary", link: "/glossary" },
           ],
         },
@@ -156,6 +159,8 @@ export default withMermaid(
             { text: "SBK — Skull Cracker's sprite books", link: "/engine/formats/sbk" },
             { text: "Saved games (.ti)", link: "/engine/formats/savegame" },
             { text: "Saved games, DF1 (.rtd)", link: "/engine/formats/savegame-v1" },
+            { text: "DreamFactory 5's containers", link: "/engine/formats/dreamfactory-5" },
+            { text: "SETT — rooms, nodes & spheres", link: "/engine/formats/sett" },
           ],
         },
         {
@@ -169,6 +174,7 @@ export default withMermaid(
             { text: "Audio — channels & volumes", link: "/engine/runtime/audio" },
             { text: "Saving & loading", link: "/engine/runtime/saves" },
             { text: "The browser host", link: "/engine/runtime/host" },
+            { text: "Rooms in play — DreamFactory 5", link: "/engine/runtime/rooms-v5" },
           ],
         },
         {
@@ -228,6 +234,11 @@ export default withMermaid(
             // the same name Titanic's carries, for the same reason
             { text: "How it is checked", link: "/skullcracker/verification" },
           ],
+        },
+        {
+          text: "RedJack",
+          collapsed: false,
+          items: [{ text: "Overview", link: "/redjack/" }],
         },
         {
           text: "Editors — the browser tools",

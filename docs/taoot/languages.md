@@ -35,7 +35,7 @@ axes of ambiguity, not one:
 
 | Axis | Why the same name repeats | Who selects |
 |------|---------------------------|-------------|
-| **Disc** | 93 basenames ship on both CDs — the public rooms once per act (before and after the sinking) | BOOTFILE's `setpath(disk)`, via the `onDiscChange` host hook. Which *directories* the two discs are is read from the same handler (`currentcd("Titanic1")`) rather than matched by name: a game with no `setpath` — the demo — has one volume and nothing is on a disc |
+| **Disc** | 93 basenames ship on both CDs — the public rooms once per act (before and after the sinking) | BOOTFILE's `setpath(disk)`, via the `onDiscChange` host hook (RedJack's `resetpaths` goes the same way, with `RJDisk<N>:` volumes; see [RedJack](../redjack/#three-discs-one-day-each)). Which *directories* the two discs are is read from the same handler (`currentcd("Titanic1")`) rather than matched by name: a game with no `setpath` — the demo — has one volume and nothing is on a disc |
 | **Edition** | every file exists once per edition tree | the chooser, the edition row, or `?edition=` — via `FileStore.setEdition` |
 
 Both resolve the same way — an active selection, then a documented fallback:

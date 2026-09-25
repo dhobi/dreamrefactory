@@ -280,6 +280,13 @@ export interface MovSegment {
    * {@link file://./mov-v1.ts}; the player keys and aliases only when it is.
    */
   dfV1?: boolean;
+  /**
+   * A DreamFactory 5 film (engine/src/df/mov-v5.ts): every frame container
+   * carries its OWN palette and is decoded by image-v5.ts, and
+   * {@link paletteRaw} is only the first frame's, kept for callers that ask a
+   * segment for one.
+   */
+  dfV5?: boolean;
 }
 
 export interface MovFile extends MovSegment {

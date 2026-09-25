@@ -224,5 +224,10 @@ the same prop art tints correctly in whatever room it appears in. See
 | [SHP](shp.md) | prop frames (transparent variant) |
 | [STG](stg.md) | full-screen UI / map images |
 
+DreamFactory 5 keeps this codec and moves the palette into each picture, so a
+v5 frame or sprite is colourised through its own colours rather than the room's,
+and a film frame's depth map lists its own distances instead of steps of one
+size. See [DreamFactory 5's containers](dreamfactory-5.md#the-picture-step).
+
 Next: see how the room world is assembled around these frames in
 **[SET](set.md)**.

@@ -26,6 +26,32 @@ export interface WorldCamera {
   /** viewport clip (world props only draw inside the set view) */
   clipW: number;
   clipH: number;
+  /**
+   * A DreamFactory 5 room's camera, which is a real one — heading, pitch, roll
+   * and a field of view — so the flat one above does not describe it. When it is
+   * here, {@link projectPoint} and the sprite runtimes' sizing ask it instead.
+   */
+  v5?: SpriteCamera;
+}
+
+/** RedJack.exe's sprite camera (engine/src/runtime/maze.ts builds it) */
+export interface SpriteCamera {
+  /**
+   * The screen point of a world point; its distance, which sprites sort by and
+   * the room's far limit cuts at; and its depth along the view, which is what
+   * the scenery hides it by — 0x435740 hands back both (the square root, then
+   * the depth it was taken from), and the placement tests them apart (0x42cb7e,
+   * 0x42ce18).
+   */
+  project(x: number, y: number, z: number): { x: number; y: number; depth: number; axial: number } | null;
+  /** pixels on screen per pixel of the frame, for a sprite at this point */
+  size(x: number, y: number, z: number, scale: number, ref: number): number;
+  /** how far a sprite can be, less its zclip, and still be drawn (SettFile.far) */
+  far: number;
+  /** the camera's point and the way through a screen point from it, at depth 1 */
+  ray(sx: number, sy: number): { x: number; y: number; z: number; dx: number; dy: number; dz: number };
+  /** the view angle (0..255) a sprite facing `deg` ({@link TURN}ths) shows the camera */
+  facing(x: number, y: number, deg: number): number;
 }
 
 /**
@@ -36,7 +62,8 @@ export interface WorldCamera {
  * sprite's level, i.e. where the scenery is farther-or-equal.
  */
 export interface Occlusion {
-  z: Uint8Array;
+  /** v4's levels; a v5 room's distances, with a scale of 1 (engine/src/web/maze-view.ts) */
+  z: ArrayLike<number>;
   w: number;
   h: number;
   scale: number;
@@ -75,7 +102,8 @@ export function projectPoint(
   x: number,
   y: number,
   z: number,
-): { x: number; y: number; depth: number } | null {
+): { x: number; y: number; depth: number; axial?: number } | null {
+  if (cam.v5) return cam.v5.project(x, y, z);
   const dx = x - cam.x;
   const dy = y - cam.y;
   const dz = z - cam.z;
@@ -90,6 +118,12 @@ export function projectPoint(
     depth,
   };
 }
+
+/**
+ * The depth scenery hides a projected sprite by: along the view in a v5 room
+ * ({@link SpriteCamera.project}), and the one depth there is anywhere else.
+ */
+export const hiddenBy = (proj: { depth: number; axial?: number }): number => proj.axial ?? proj.depth;
 
 /** a world point's quantized depth level (groundOffset defaults to 0; TI.EXE 0x41140e) */
 export function depthLevel(depth: number, occ: Occlusion): number {
@@ -109,4 +143,47 @@ export function sceneryOccludes(occ: Occlusion, x: number, y: number, level: num
  */
 export function bearing(dx: number, dy: number): number {
   return Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
+}
+
+/** a sprite's ink as the blitter's alpha, 0..255 (see PropInstance.ink, ActorInstance.ink) */
+export function inkAlpha(ink: number): number {
+  return ink >= 8 || ink < 0 ? 255 : (ink * 255 * 32) >> 8;
+}
+
+const brightened = new WeakMap<Uint8ClampedArray, Map<string, Uint8ClampedArray>>();
+/**
+ * A palette with DreamFactory 5's brightness added to each channel
+ * (`propbrightness`, `actorbrightness`); the palette itself when it is 0,0,0.
+ * Kept per palette, so a lit sprite costs one copy and not one per frame.
+ */
+export function brightPalette(pal: Uint8ClampedArray, [r, g, b]: readonly [number, number, number]): Uint8ClampedArray {
+  if (!r && !g && !b) return pal;
+  let byKey = brightened.get(pal);
+  if (!byKey) brightened.set(pal, (byKey = new Map()));
+  const key = `${r},${g},${b}`;
+  let out = byKey.get(key);
+  if (!out) {
+    out = new Uint8ClampedArray(pal.length);
+    for (let i = 0; i < pal.length; i += 4) {
+      out[i] = pal[i] + r;
+      out[i + 1] = pal[i + 1] + g;
+      out[i + 2] = pal[i + 2] + b;
+      out[i + 3] = pal[i + 3];
+    }
+    byKey.set(key, out);
+  }
+  return out;
+}
+
+/** one sprite pixel over the frame at alpha `a` — a plain copy when opaque */
+export function inkPixel(rgba: Uint8ClampedArray, d: number, pal: Uint8ClampedArray, i: number, a: number): void {
+  if (a === 255) {
+    rgba[d] = pal[i];
+    rgba[d + 1] = pal[i + 1];
+    rgba[d + 2] = pal[i + 2];
+    return;
+  }
+  rgba[d] += ((pal[i] - rgba[d]) * a) / 255;
+  rgba[d + 1] += ((pal[i + 1] - rgba[d + 1]) * a) / 255;
+  rgba[d + 2] += ((pal[i + 2] - rgba[d + 2]) * a) / 255;
 }

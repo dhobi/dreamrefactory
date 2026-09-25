@@ -32,6 +32,8 @@ import {
   movFileFromV1,
   readMovFileV1,
 } from "@dreamfactory/engine/df/mov-v1";
+import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
+import { decodeFrameV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import {
   FrameBuffer,
@@ -48,6 +50,8 @@ interface MovieImage {
   pixels: Uint8Array;
   width: number;
   height: number;
+  /** a v5 frame's own palette (image-v5.ts); absent, the segment's is used */
+  palette?: Uint8ClampedArray;
 }
 
 /** cross-movie call stack limit, matching TI.EXE */
@@ -223,7 +227,8 @@ export class MoviePlayer {
     }
     return {
       ...f,
-      palette: m.palette,
+      // a v5 frame brings its own palette, run through the same display gamma
+      palette: f.palette ? displayPalette(f.palette) : m.palette,
       originX: m.seg.originX,
       originY: m.seg.originY,
     };
@@ -298,7 +303,9 @@ export class MoviePlayer {
       mov =
         detectVersion(data) === 1
           ? movFileFromV1(readMovFileV1(data))
-          : readMovFile(data);
+          : isMovV5(data)
+            ? readMovFileV5(data)
+            : readMovFile(data);
     } catch (e) {
       this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
       return false;
@@ -332,7 +339,13 @@ export class MoviePlayer {
     const frames: MovieImage[] = [];
     let shown: Uint8Array | null = null;
     for (const f of seg.frames) {
-      const d = decodeFrame(mov.file.containers[f.locationFrame].data, fb, mov.file.order);
+      const data = mov.file.containers[f.locationFrame].data;
+      if (seg.dfV5) {
+        const d = decodeFrameV5(data, fb);
+        frames.push({ pixels: fb.pixels.slice(0, d.width * d.height), width: d.width, height: d.height, palette: paletteV5(data) });
+        continue;
+      }
+      const d = decodeFrame(data, fb, mov.file.order);
       const pixels = fb.pixels.slice(0, d.width * d.height);
       if (seg.dfV1) {
         compositeFrameV1(pixels, shown);

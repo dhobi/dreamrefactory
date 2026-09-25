@@ -6,9 +6,9 @@ Everything is published under <https://www.danielhobi.ch/dreamrefactory/>, and
 **a release is a tag**. Nothing deploys from an ordinary push to master except
 the documentation.
 
-## Six things in one directory
+## Seven things in one directory
 
-Five builds and a doc set share that one hosting directory, and each goes out on
+Six builds and a doc set share that one hosting directory, and each goes out on
 its own:
 
 | tag | build | lands at |
@@ -18,13 +18,14 @@ its own:
 | `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's three pages (the game, `/collection/`, the unlisted `/speedrun/`) |
 | `timelapse-v0.1.0` | `npm run build -w timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
 | `skullcracker-v0.1.0` | `npm run build -w skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
+| `redjack-v0.1.1` | `npm run build -w redjack` | `/dreamrefactory/redjack/` — RedJack's one page, a prototype that nothing on the site links to yet |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |
 
 ```bash
 # in the package that is releasing:
 npm version 0.9.1 --no-git-tag-version -w @dreamfactory/taoot
 # commit and merge, then from master:
-npm run release -- taoot            # or several: taoot dust timelapse skullcracker
+npm run release -- taoot            # or several: taoot dust timelapse skullcracker redjack
 npm run release                     # everything whose version has no tag yet
 npm run release -- --dry-run        # what it would do, and nothing else
 ```
@@ -32,7 +33,7 @@ npm run release -- --dry-run        # what it would do, and nothing else
 **Do not let `npm version` cut the tag.** It writes a bare `v0.9.1`, which no
 pattern here listens for — the tag would push and deploy nothing at all,
 silently. `--no-git-tag-version` keeps it to the files and leaves the tag to the
-hand that knows which of the five it is.
+hand that knows which of the six it is.
 
 **Do not `git push --tags` a multi-game release.** GitHub creates **no workflow
 run at all** when more than three tags arrive in a single push — not merely the
@@ -88,7 +89,7 @@ a superseded bundle is dead weight rather than a stale page.
 
 | | |
 |---|---|
-| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `site/package.json` | the sources of truth — semver |
+| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `redjack/package.json`, `site/package.json` | the sources of truth — semver |
 | each package's `vite.config.ts` | substitutes its own for `__APP_VERSION__` at build time |
 | [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
 | [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |

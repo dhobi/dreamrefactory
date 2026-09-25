@@ -186,8 +186,59 @@ export interface BankTables {
   singles: BankChunk[];
 }
 
+/**
+ * DreamFactory 5's loop table — a bank's STHM and a film's MTHM. The count and
+ * the order sit where v4 has them, behind the 24-byte v5 prefix (0x1c, 0x1e),
+ * but the order table is longer, so the record count is at 0x222. The RECORDS
+ * then differ between the two, measured on every table in the rip: a bank's are
+ * v4's own 26 bytes from 0x226 (container +4, name +10), a film's are 34 from
+ * 0x228 (container +10, name +16) — RedJack's `liznite.trak` steps `010`, `020`
+ * … by 26 and `intro.move` steps `e1`, `e2` … by 34.
+ */
+const V5_PREFIX = 0x18;
+const V5_LOOP_RECORDS = {
+  bank: { first: 0x226, size: 26, loc: 4, name: 10 },
+  film: { first: 0x228, size: 34, loc: 10, name: 16 },
+} as const;
+const V5_LOOP = { count: 0x1c, order: 0x1e, records: 0x222 } as const;
+
+export function readLoopTableV5(
+  data: Uint8Array,
+  kind: keyof typeof V5_LOOP_RECORDS,
+  byteOrder: ByteOrder = PC,
+): LoopTable {
+  const REC = V5_LOOP_RECORDS[kind];
+  if (data.length < REC.first) return { order: [], records: [] };
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const le = little(byteOrder);
+  const records: BankChunk[] = [];
+  const n = v.getInt16(V5_LOOP.records, le);
+  for (let i = 0; i < n; i++) {
+    const at = REC.first + i * REC.size;
+    if (at + REC.size > data.length) break;
+    records.push({
+      identifier: new BinaryReader(data, at + REC.name, byteOrder).pstr(CHUNK_ID_FIELD),
+      containerLoc: v.getInt32(at + REC.loc, le),
+      idOffset: at + REC.name,
+      follow: "",
+    });
+  }
+  const order: number[] = [];
+  const loops = v.getInt16(V5_LOOP.count, le);
+  for (let i = 0; i < loops && V5_LOOP.order + i * 2 < V5_LOOP.records; i++) order.push(v.getInt16(V5_LOOP.order + i * 2, le));
+  return { order, records };
+}
+
+/** is this a DreamFactory 5 container of this four-character kind? */
+const isV5 = (d: Uint8Array, kind: string): boolean =>
+  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;
+
 export function readBankTables(file: DFContainerFile): BankTables {
   const c0 = file.containers[0].data;
+  // A v5 bank (SHED) keeps v4's header offsets — the loop table at 28, the
+  // one-shot table at 32, the name at 36 — and its one-shot table (SSND) is
+  // v4's behind the 24-byte prefix; only the loop table (STHM) is its own.
+  const v5 = isV5(c0, "SHED");
   const byteOrder = file.order ?? PC;
   const v0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
   const chunkInfo2Loc = v0.getInt32(BANK_CHUNKINFO2_AT, little(byteOrder));
@@ -199,7 +250,9 @@ export function readBankTables(file: DFContainerFile): BankTables {
   const loopLoc = loopInfoLoc > 0 && loopInfoLoc < file.containers.length ? loopInfoLoc : 0;
   const hasLoops = loopLoc > 0 && file.containers[loopLoc].data.length >= LOOP_TABLE_MIN;
   const { order, records } = hasLoops
-    ? readLoopTable(file.containers[loopLoc].data, byteOrder)
+    ? v5
+      ? readLoopTableV5(file.containers[loopLoc].data, "bank", byteOrder)
+      : readLoopTable(file.containers[loopLoc].data, byteOrder)
     : { order: [], records: [] };
 
   const oneShotTable =
@@ -213,7 +266,11 @@ export function readBankTables(file: DFContainerFile): BankTables {
     loopOrder: order,
     loopRecords: records,
     singles: oneShotTable
-      ? readOneShotChunks(file.containers[oneShotTable].data, CHUNK_ID_FIELD, 0, byteOrder)
+      ? v5
+        ? readOneShotChunks(file.containers[oneShotTable].data.subarray(V5_PREFIX), CHUNK_ID_FIELD, 0, byteOrder).map(
+            (c) => ({ ...c, idOffset: c.idOffset + V5_PREFIX }),
+          )
+        : readOneShotChunks(file.containers[oneShotTable].data, CHUNK_ID_FIELD, 0, byteOrder)
       : [],
   };
 }

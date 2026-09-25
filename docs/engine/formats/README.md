@@ -256,3 +256,9 @@ One format here belongs to a game with no interpreter at all:
 **[SBK](sbk.md)**, Skull Cracker's sprite books. Its cels are SHP's transparent
 codec unchanged, and what is its own is the arrangement — a cel directory, a
 named level plan, and a parallax backdrop.
+
+And one generation of the engine has a page of its own:
+**[DreamFactory 5's containers](dreamfactory-5.md)**, RedJack's. The cabinet is
+this one, but every drawer now opens with 24 bytes saying what kind it is, and
+every picture carries its own palette. Its room is a format of its own,
+**[SETT](sett.md)**.

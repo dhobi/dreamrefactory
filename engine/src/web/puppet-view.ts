@@ -23,19 +23,15 @@ import { displayChannel, displayPalette, screenGammaGeneration } from "./screen-
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import type { DrawSignature } from "@dreamfactory/engine/runtime/signature";
 /**
- * The conversation screen is 512×384, and deliberately still a constant.
- *
- * Not because the engine's screen is — it is not, see screen.ts — but because
- * this layout is measured against the only two games that have puppets at all,
- * and they are both that size: Titanic ships 316 `.pup` files and Dust 39, and
- * both declare 512×384 in every stage header. Timelapse is 640×480 and ships
- * NONE, so there is no third geometry to generalise to and no way to check a
- * guess at one. The bevel heights, the subtitle band and the two anchors below
- * are pixel facts about those two games' art.
- *
- * If a fourth title ever turns up with puppets at another size, this is the file
- * that has to grow a screen of its own — and the note in {@link PUPPET_ART_H} is
- * where the room-view split it derives would move to.
+ * The conversation screen's geometry is TI.EXE's, measured against the two
+ * 512×384 games with puppets — Titanic's 316 `.pup` files and Dust's 39 — and
+ * the constants below are that size's numbers. Every one of them is something
+ * the original COMPUTES from its screen (the band is the bottom 120 px, the
+ * subtitle the 40 above it, the band plate anchored at (W/2, H-60)), so a
+ * {@link PuppetView} is built for the screen it draws on and lays the same
+ * formulas against it: RedJack's puppets are 640×480 and draw right that way.
+ * The fixed sizes — 24-px rows, five of them, a 40-px caption bar — are kept,
+ * which is a reading of RedJack's art rather than of RedJack.exe yet.
  */
 import { SCREEN_W, SCREEN_H } from "./screen";
 
@@ -45,6 +41,11 @@ export interface PuppetBackdrop {
   width: number;
   height: number;
   palette: Uint8ClampedArray;
+  /**
+   * The view already in colour, for a room that has no CLUT (a DreamFactory 5
+   * one — see CachedFrame.rgba). `pixels` still identifies the frame.
+   */
+  rgba?: Uint8ClampedArray;
 }
 
 /**
@@ -131,7 +132,42 @@ function clutColor(paletteRaw: Uint8Array, index: number): string {
   return `rgb(${ch(3, 0)}, ${ch(5, 1)}, ${ch(7, 2)})`;
 }
 
+/** a v5 sprite's RGBA palette in v4's 8-byte-per-entry shape, for clutColor */
+function rawFromRGBA(rgba: Uint8ClampedArray): Uint8Array {
+  const out = new Uint8Array(256 * 8);
+  for (let i = 0; i < 256; i++) {
+    out[i * 8 + 3] = rgba[i * 4];
+    out[i * 8 + 5] = rgba[i * 4 + 1];
+    out[i * 8 + 7] = rgba[i * 4 + 2];
+  }
+  return out;
+}
+
 export class PuppetView {
+  /**
+   * The palette the puppet's TEXT is inked from. A v1/v4 puppet has one in its
+   * header; a DreamFactory 5 one does not (df/pup.ts), and its answer band is
+   * the sprite the answers are drawn on, so the ink comes out of the band's own
+   * palette — a reading, not yet one checked against RedJack.exe.
+   */
+  private inkPalette(pup: { paletteRaw: Uint8Array; file: { containers: { data: Uint8Array }[] }; bandLocation: number }): Uint8Array {
+    const v5 = pup.file.containers[0]?.data[2] === 5;
+    if (!v5) return pup.paletteRaw;
+    const cached = this.inks.get(pup);
+    if (cached) return cached;
+    let ink = pup.paletteRaw;
+    const band = pup.file.containers[pup.bandLocation]?.data;
+    try {
+      const pal = band && decodeShpFrame(band).palette;
+      if (pal) ink = rawFromRGBA(pal);
+    } catch {
+      /* no band to ink from: the empty palette stands */
+    }
+    this.inks.set(pup, ink);
+    return ink;
+  }
+  private inks = new WeakMap<object, Uint8Array>();
+
   /**
    * Cached layer composite of the active puppet stance — and of the ROOM behind
    * it, which is why the backdrop's own two buffers are part of what identifies
@@ -154,7 +190,33 @@ export class PuppetView {
   /** the active puppet's answer-band plate, decoded once */
   private band: { key: string; frame: ShpFrame } | null = null;
 
-  constructor(private readonly session: GameSession) {}
+  /**
+   * The conversation geometry, from the screen the game runs on. Every figure
+   * below is one TI.EXE computes from its screen (see the constants above the
+   * class), so at 512×384 these ARE the constants — and RedJack, the one game
+   * with puppets at 640×480, gets the same layout laid against its own edges.
+   */
+  readonly W: number;
+  readonly H: number;
+  /** the region the close-up draws in — the screen above the answer band */
+  readonly artH: number;
+  private readonly subtitleTop: number;
+  private readonly bandAnchorX: number;
+  private readonly bandAnchorY: number;
+  private readonly wrapLimit: number;
+
+  constructor(
+    private readonly session: GameSession,
+    size: { width: number; height: number } = { width: SCREEN_W, height: SCREEN_H },
+  ) {
+    this.W = size.width;
+    this.H = size.height;
+    this.artH = this.H - BAND_H;
+    this.subtitleTop = this.artH - SUBTITLE_H;
+    this.bandAnchorX = this.W / 2;
+    this.bandAnchorY = this.H - 60;
+    this.wrapLimit = this.W - 16;
+  }
 
   /** a `puppetparam` slot, or TI.EXE's own default for it if never written */
   private param(slot: number, fallback: number): number {
@@ -192,7 +254,7 @@ export class PuppetView {
     if (!p) return [];
     return p.bevels
       .slice(0, MAX_BEVELS)
-      .map((_, i) => ({ x: 0, y: PUPPET_ART_H + i * BEVEL_H, w: SCREEN_W, h: BEVEL_H }));
+      .map((_, i) => ({ x: 0, y: this.artH + i * BEVEL_H, w: this.W, h: BEVEL_H }));
   }
 
   /**
@@ -208,13 +270,13 @@ export class PuppetView {
    * CJK-aware wrapper (see {@link wrapText}) rather than vanishing.
    */
   private subtitleLines(text: string, measure: (s: string) => number): string[] {
-    if (measure(text) < WRAP_LIMIT) return [text];
+    if (measure(text) < this.wrapLimit) return [text];
     for (let i = text.length - 1; i >= 0; i--) {
       if (text[i] !== " ") continue;
       const head = text.slice(0, i);
-      if (measure(head) < WRAP_LIMIT) return [head, text.slice(i + 1)];
+      if (measure(head) < this.wrapLimit) return [head, text.slice(i + 1)];
     }
-    return wrapText(text, WRAP_LIMIT, measure).slice(0, 2);
+    return wrapText(text, this.wrapLimit, measure).slice(0, 2);
   }
 
   /** the choice-bevel index under a screen position, or -1 */
@@ -228,23 +290,23 @@ export class PuppetView {
   }
 
   /**
-   * Composite the puppet's pixels into `dest`, a full SCREEN_W×SCREEN_H RGBA
+   * Composite the puppet's pixels into `dest`, a full this.W×this.H RGBA
    * framebuffer owned by the caller (see engine/src/web/screen.ts).
    *
    * Two regions, from two sources: the close-up itself into the top
-   * {@link PUPPET_ART_H} rows, and the PUP's own answer band
+   * {@link this.artH} rows, and the PUP's own answer band
    * ({@link PupFile.bandLocation}) into the 120 below it. The canvas-drawn
    * text — subtitle strip and answer rows — is {@link drawOverlay}, kept
    * separate so the caller controls where the fade lands relative to it.
    */
   composite(dest: Uint8ClampedArray, backdrop: PuppetBackdrop | null): void {
     const p = this.session.puppet!;
-    const W = SCREEN_W;
-    const H = PUPPET_ART_H;
+    const W = this.W;
+    const H = this.artH;
     // while a subtitle shows, the layers are clipped 40 px shorter still — the
     // caption bar is cut out of the picture, not added below it (0x440981)
     const showingSubtitle = !!p.subtitle && this.session.subtitlesOn();
-    const clipY = showingSubtitle ? SUBTITLE_TOP : H;
+    const clipY = showingSubtitle ? this.subtitleTop : H;
     // layer state for this instant: animLogic playback while a line is
     // spoken (~30 records/s: lip sync, blinks, gestures), else the held
     // pose from the last record
@@ -291,8 +353,11 @@ export class PuppetView {
       // (SMETH1: all-247 plate), not a backdrop
       const rgba = new Uint8ClampedArray(W * H * 4);
       if (backdrop) {
-        const view = new Uint8ClampedArray(backdrop.width * backdrop.height * 4);
-        indexedToRGBA(backdrop.pixels, backdrop.width, backdrop.height, backdrop.palette, view);
+        let view = backdrop.rgba;
+        if (!view) {
+          view = new Uint8ClampedArray(backdrop.width * backdrop.height * 4);
+          indexedToRGBA(backdrop.pixels, backdrop.width, backdrop.height, backdrop.palette, view);
+        }
         for (let y = 0; y < backdrop.height && y < H; y++) {
           rgba.set(view.subarray(y * backdrop.width * 4, (y + 1) * backdrop.width * 4), y * W * 4);
         }
@@ -336,6 +401,8 @@ export class PuppetView {
             // the record's anchor minus the frame's stored offset
             const dx = st.x - f.posXraw;
             const dy = st.y - f.posYraw;
+            // a v5 sprite colours through its own palette (df/shp.ts)
+            const lp = f.palette ? displayPalette(f.palette) : pal;
             for (let yy = 0; yy < f.height; yy++) {
               const ty = dy + yy;
               if (ty < 0 || ty >= clipY) continue;
@@ -346,9 +413,9 @@ export class PuppetView {
                 if (!f.opaque[s]) continue;
                 const c = f.indexed[s] * 4;
                 const d = (ty * W + tx) * 4;
-                rgba[d] = pal[c];
-                rgba[d + 1] = pal[c + 1];
-                rgba[d + 2] = pal[c + 2];
+                rgba[d] = lp[c];
+                rgba[d + 1] = lp[c + 1];
+                rgba[d + 2] = lp[c + 2];
                 rgba[d + 3] = 255;
               }
             }
@@ -396,19 +463,19 @@ export class PuppetView {
       }
     }
     const f = this.band.frame;
-    const pal = displayPalette(paletteToRGBA(p.pup.paletteRaw, 256));
-    const dx = BAND_ANCHOR_X - f.posXraw;
-    const dy = BAND_ANCHOR_Y - f.posYraw;
+    const pal = displayPalette(f.palette ?? paletteToRGBA(p.pup.paletteRaw, 256));
+    const dx = this.bandAnchorX - f.posXraw;
+    const dy = this.bandAnchorY - f.posYraw;
     for (let yy = 0; yy < f.height; yy++) {
       const ty = dy + yy;
-      if (ty < 0 || ty >= SCREEN_H) continue;
+      if (ty < 0 || ty >= this.H) continue;
       for (let xx = 0; xx < f.width; xx++) {
         const tx = dx + xx;
-        if (tx < 0 || tx >= SCREEN_W) continue;
+        if (tx < 0 || tx >= this.W) continue;
         const s = yy * f.width + xx;
         if (!f.opaque[s]) continue;
         const c = f.indexed[s] * 4;
-        const d = (ty * SCREEN_W + tx) * 4;
+        const d = (ty * this.W + tx) * 4;
         dest[d] = pal[c];
         dest[d + 1] = pal[c + 1];
         dest[d + 2] = pal[c + 2];
@@ -462,7 +529,7 @@ export class PuppetView {
    */
   drawOverlay(ctx: CanvasRenderingContext2D): void {
     const p = this.session.puppet!;
-    const pal = p.pup.paletteRaw;
+    const pal = this.inkPalette(p.pup);
     const marginX = this.param(PARAM.marginX, 8);
     ctx.save();
     ctx.textAlign = "left";
@@ -472,11 +539,11 @@ export class PuppetView {
     // most two lines of it (0x441ef0)
     if (p.subtitle && this.session.subtitlesOn()) {
       ctx.fillStyle = "#000";
-      ctx.fillRect(0, SUBTITLE_TOP, SCREEN_W, SUBTITLE_H);
+      ctx.fillRect(0, this.subtitleTop, this.W, SUBTITLE_H);
       ctx.fillStyle = clutColor(pal, SUBTITLE_COLOR);
       const lines = this.subtitleLines(p.subtitle, (s) => ctx.measureText(s).width);
       lines.forEach((ln, i) =>
-        ctx.fillText(ln, SUBTITLE_MARGIN_X, SUBTITLE_TOP + BASELINE + i * LINE_PITCH),
+        ctx.fillText(ln, SUBTITLE_MARGIN_X, this.subtitleTop + BASELINE + i * LINE_PITCH),
       );
     }
     // the answer rows, straight onto the band artwork (0x440e30)

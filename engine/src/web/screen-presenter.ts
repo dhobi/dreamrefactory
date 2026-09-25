@@ -107,17 +107,22 @@ export class ScreenPresenter {
   }
 
   /** {@link blitTop} at an offset — where a movie segment's header places its
-   *  picture on the screen (0,0 for everything but the letterboxed films) */
+   *  picture on the screen (0,0 for everything but the letterboxed films), and
+   *  where a DreamFactory 5 fight has moved its stage to (`stageorigin`), which
+   *  can be above or left of the screen */
   blitAt(src: Uint8ClampedArray, w: number, h: number, x: number, y: number): void {
     if (!x && !y) {
       this.blitTop(src, w, h);
       return;
     }
+    const top = Math.max(0, -y);
+    const left = Math.max(0, -x);
     const rows = Math.min(h, this.height - y);
     const cols = Math.min(w, this.width - x);
-    for (let row = 0; row < rows; row++) {
-      const s = row * w * 4;
-      this.frame.set(src.subarray(s, s + cols * 4), ((row + y) * this.width + x) * 4);
+    if (cols <= left) return;
+    for (let row = top; row < rows; row++) {
+      const s = (row * w + left) * 4;
+      this.frame.set(src.subarray(s, s + (cols - left) * 4), ((row + y) * this.width + x + left) * 4);
     }
   }
 
@@ -166,8 +171,47 @@ export class ScreenPresenter {
       }
       this.presented = img;
     }
+    const [r, g, b] = this.bright;
+    const [cr, cg, cb] = this.contrast;
+    if (r || g || b || cr || cg || cb) {
+      // on the way out, so the framebuffer itself stays the picture and nothing
+      // composited over it later is lit twice
+      if (!this.lit || this.lit.width !== this.width) this.lit = ctx.createImageData(this.width, this.height);
+      const [lr, lg, lb] = [this.curve(cr, r), this.curve(cg, g), this.curve(cb, b)];
+      const out = this.lit.data;
+      const src = this.frame;
+      for (let i = 0; i < src.length; i += 4) {
+        out[i] = lr[src[i]];
+        out[i + 1] = lg[src[i + 1]];
+        out[i + 2] = lb[src[i + 2]];
+        out[i + 3] = src[i + 3];
+      }
+      ctx.putImageData(this.lit, 0, 0);
+      return;
+    }
     if (img.data !== this.frame) img.data.set(this.frame);
     ctx.putImageData(img, 0, 0);
+  }
+
+  /** DreamFactory 5's `screenbrightness`, added to each channel as the frame is presented */
+  bright: readonly [number, number, number] = [0, 0, 0];
+  /** ...and its `screencontrast`, a gamma per channel (see builtins/df5.ts) */
+  contrast: readonly [number, number, number] = [0, 0, 0];
+  private lit: ImageData | null = null;
+  private curves = new Map<string, Uint8ClampedArray>();
+
+  /** one channel's 256 levels through a contrast's gamma, then a brightness added */
+  private curve(contrast: number, add: number): Uint8ClampedArray {
+    const key = `${contrast},${add}`;
+    let lut = this.curves.get(key);
+    if (!lut) {
+      const m = Math.max(0, Math.min(256, 128 - contrast));
+      const e = m === 256 ? 1024 : m / (256 - m);
+      lut = new Uint8ClampedArray(256);
+      for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * Math.pow(v / 255, e)) + add;
+      this.curves.set(key, lut);
+    }
+    return lut;
   }
 
   /** paint the persistent drawstring() text layer over the composited frame */

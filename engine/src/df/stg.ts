@@ -71,7 +71,7 @@ export interface StgRegion {
 export interface StgFile {
   file: DFContainerFile;
   /** which engine wrote it — 1 is Dust's `.FLT`, 4 is Titanic's `.STG` */
-  version: DfVersion;
+  version: StgVersion;
   paletteRaw: Uint8Array;
   /**
    * The stage's OWN name, as `currentstage()` answers it — not its filename.
@@ -164,12 +164,19 @@ const C0_BY_VERSION = {
   // (measured: two NULs on all 20 of Dust's, which is how the field was mistaken
   // for absent).
   1: { palette: 36, flatCount: 2100, flats: 2104, flatSize: 28, screen: 0x1c, mainScript: 32, refName: 2084 },
+  // DreamFactory 5 (RedJack) has no palette here — each flat's picture carries
+  // its own (image-v5.ts) — so v4's fields past it close up by 0x800, less the
+  // eight the 24-byte v5 container prefix and a moved screen size take: the name
+  // is 0x40, the count 0x50 and the flats from 0x54. A flat is 50 bytes, v4's
+  // 46 with four more after its first word (as a v5 film's frame record is).
+  5: { palette: -1, flatCount: 0x50, flats: 0x54, flatSize: 50, screen: 0x30, mainScript: 0x28, refName: 0x40 },
 } as const;
 
 /** the flat record. `-1` is a field the version does not store. */
 const FLAT_BY_VERSION = {
   4: { condition: 0, script: 6, frame: 10, clickLogic: 14, height: 22, width: 24, name: 30 },
   1: { condition: -1, script: 0, frame: 4, clickLogic: 8, height: -1, width: -1, name: 12 },
+  5: { condition: 0, script: 10, frame: 14, clickLogic: 18, height: 26, width: 28, name: 34 },
 } as const;
 
 /**
@@ -180,11 +187,18 @@ const FLAT_BY_VERSION = {
  * 420 = 4 + 13*32.
  */
 const REGION_BY_VERSION = {
-  4: { count: 1028, first: 1032 },
-  1: { count: 0, first: 4 },
+  4: { count: 1028, first: 1032, size: 32, top: 4, script: 12, name: 16 },
+  1: { count: 0, first: 4, size: 32, top: 4, script: 12, name: 16 },
+  // v5's FLAT container: the count straight after the prefix, and each region
+  // v4's with eight more bytes in front (a word that is 1 on every one shipped)
+  5: { count: 0x1c, first: 0x20, size: 40, top: 12, script: 20, name: 24 },
 } as const;
 
-const REGION = { size: 32, top: 4, script: 12, name: 16 } as const;
+/** the v4 record, which the stage BUILDER writes (stg-build.ts) */
+const REGION = REGION_BY_VERSION[4];
+
+/** the stage versions this reader knows: v1, v4, and v5's own tables */
+export type StgVersion = DfVersion | 5;
 
 /** characters that fit the name fields (the length byte is not counted) */
 export const FLAT_NAME_FIELD = 15;
@@ -199,8 +213,9 @@ export const STAGE_NAME_FIELD = 15;
  * right, i32 scriptContainer, char[16] name}. Verified across all MAP.STG
  * decks (size always == 1032 + count*32).
  */
-export function readStgRegions(data: Uint8Array, version: DfVersion = 4): StgRegion[] {
+export function readStgRegions(data: Uint8Array, version: StgVersion = 4): StgRegion[] {
   const at = REGION_BY_VERSION[version];
+  const REGION = at;
   if (data.length < at.first) return [];
   const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const count = v.getInt32(at.count, true);
@@ -237,7 +252,8 @@ export function readStgFile(data: Uint8Array): StgFile {
    * which never mattered because there was only ever one layout. Widening a
    * reader should add a case, not take one away.
    */
-  const version: DfVersion = versionOf(c0) === 1 ? 1 : 4;
+  const tag = versionOf(c0);
+  const version: StgVersion = tag === 1 ? 1 : tag === 5 ? 5 : 4;
   const C0 = C0_BY_VERSION[version];
   const FLAT = FLAT_BY_VERSION[version];
   // a v1 flat stores no size of its own, so it is the whole screen — which is
@@ -245,7 +261,8 @@ export function readStgFile(data: Uint8Array): StgFile {
   const screenW = v.getInt16(C0.screen, true);
   const screenH = v.getInt16(C0.screen + 2, true);
 
-  const paletteRaw = c0.subarray(C0.palette, C0.palette + 256 * 8);
+  // v5 keeps no stage palette: an empty one, and each flat's own is used
+  const paletteRaw = C0.palette < 0 ? new Uint8Array(256 * 8) : c0.subarray(C0.palette, C0.palette + 256 * 8);
   // the stage's own name — see StgFile.refName
   let refName = "";
   if (c0.length > C0.refName) {
@@ -309,7 +326,7 @@ export function patchFlatName(stg: StgFile, flatIdx: number, name: string): stri
   patchContainerData(stg.file, 0, (d) => {
     stored = writeNameAt(d, flat.record + name0, name, FLAT_NAME_FIELD);
     // the palette is a window into container 0, which the copy just replaced
-    stg.paletteRaw = d.subarray(pal, pal + 256 * 8);
+    if (pal >= 0) stg.paletteRaw = d.subarray(pal, pal + 256 * 8);
   });
   flat.name = stored;
   return stored;
@@ -328,7 +345,7 @@ export function patchRegionName(
 ): string {
   let stored = region.name;
   patchContainerData(stg.file, flat.locationClickLogic, (d) => {
-    stored = writeNameAt(d, region.record + REGION.name, name, REGION_NAME_FIELD);
+    stored = writeNameAt(d, region.record + REGION_BY_VERSION[stg.version].name, name, REGION_NAME_FIELD);
   });
   region.name = stored;
   return stored;
@@ -355,7 +372,7 @@ export function patchRegionRect(
   };
   const ok = patchContainerData(stg.file, flat.locationClickLogic, (d) => {
     const v = new DataView(d.buffer, d.byteOffset, d.byteLength);
-    const at = region.record + REGION.top;
+    const at = region.record + REGION_BY_VERSION[stg.version].top;
     v.setInt16(at, next.top, true);
     v.setInt16(at + 2, next.left, true);
     v.setInt16(at + 4, next.bottom, true);
