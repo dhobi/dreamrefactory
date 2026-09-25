@@ -1,5 +1,5 @@
 /**
- * Run every machine suite — `tests/machine/*.ts` but the harness — each in a
+ * Run every machine suite — `tests/machine/*.ts` but the harness and the route — each in a
  * process of its own (the game keeps its world in module state, one per
  * process), several at a time, and say which failed.
  *
@@ -14,7 +14,8 @@ import { join, resolve } from "node:path";
 const dir = resolve(import.meta.dirname, "../tests/machine");
 const want = process.argv.slice(2);
 const suites = readdirSync(dir)
-  .filter((f) => f.endsWith(".ts") && f !== "harness.ts")
+  // the suites, not the modules they are written in (and not a scratch dot-file)
+  .filter((f) => f.endsWith(".ts") && !f.startsWith(".") && f !== "harness.ts" && f !== "route.ts")
   .map((f) => f.slice(0, -3))
   .filter((s) => !want.length || want.includes(s))
   .sort();

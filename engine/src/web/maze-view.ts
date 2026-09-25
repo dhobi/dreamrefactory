@@ -95,6 +95,13 @@ export class MazeView implements RoomLayer {
 
   private redraw(): void {
     const m = this.maze;
+    // nobody looks (session.drawsPictures): the frame changes identity and
+    // nothing else — the depth a hit test asks for is roomOcclusion's own render
+    if (!this.session.drawsPictures) {
+      this.frame = { ...this.frame, pixels: new Uint8Array(0) };
+      this.dirty = false;
+      return;
+    }
     // a walk, a turn, or a scene's view: a film frame
     const w = m.walk ?? m.shot;
     if (w) {

@@ -828,8 +828,9 @@ export class GameSession {
   /**
    * False when nothing will ever look at a film's pixels — a machine suite
    * (redjack/tests/machine) — so a DreamFactory 5 film reads each frame's size
-   * and palette and skips the decode, which is most of what a headless run
-   * would otherwise spend its time on. Every page leaves it true.
+   * and palette and skips the decode, and a v5 room skips drawing its sphere
+   * (maze-view.ts), which between them are most of what a headless run would
+   * otherwise spend its time on. Every page leaves it true.
    */
   drawsPictures = true;
   realYieldSeq = 0;
@@ -2648,8 +2649,25 @@ export class GameSession {
    */
   currentSetFile = "";
 
+  /**
+   * The file a DreamFactory 5 script means by a bare name. RedJack.exe's typed
+   * open (0x43c840, behind opencastfile, openstagefile, openshopfile,
+   * openpuppetfile, opensetfile and opentrackfile) appends the type's extension
+   * when the name has no `.` before a four- or three-letter extension
+   * (0x43c88e, which counts in the Pascal string past its length byte), so `runpuppet ("lyle1", "savednick")` — liznite's Node54 —
+   * opens `lyle1.pupp`. The older engines are handed their names unchanged.
+   */
+  typedName(fileName: string, ext: "cast" | "stag" | "shop" | "pupp" | "sett" | "trak"): string {
+    const name = toStr(fileName);
+    if (!this.isV5) return name;
+    const n = name.length;
+    if (n >= 5 && (name[n - 5] === "." || name[n - 4] === ".")) return name;
+    return `${name}.${ext}`;
+  }
+
   /** engine primitive behind boot's changeset(): switch to another set */
   async openSetFile(fileName: string, sceneName = "", viewName = ""): Promise<void> {
+    fileName = this.typedName(fileName, "sett");
     const key = fileName.toLowerCase();
     this.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
     this.lastRotation = this.currentRotation ? this.currentRotation() : null;
@@ -2704,6 +2722,7 @@ export class GameSession {
   }
 
   async openTrackFile(fileName: string): Promise<boolean> {
+    fileName = this.typedName(fileName, "trak");
     const key = toStr(fileName).toLowerCase();
     // A title may name theme tracks by REGION rather than by set — TAOOT names
     // them by deck: recept1c's theme is deckd.trk, halla's is decka.trk (see
@@ -2787,6 +2806,7 @@ export class GameSession {
    * their scripts. Idempotent — sets call opencastfile("extra.cst") freely.
    */
   async openCastFile(fileName: string): Promise<boolean> {
+    fileName = this.typedName(fileName, "cast");
     const key = fileName.toLowerCase();
     if (this.castMains.has(key)) return true;
     await this.ensureFile(key);
@@ -2931,6 +2951,7 @@ export class GameSession {
    * inven.shp) stay loaded across set changes.
    */
   async openShop(fileName: string): Promise<boolean> {
+    fileName = this.typedName(fileName, "shop");
     const key = fileName.toLowerCase();
     // Already loaded: re-run its openshop handler without rebuilding the props
     // (which would drop their state). A stage opens its shop on entry via
