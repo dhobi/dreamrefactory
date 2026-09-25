@@ -12,7 +12,7 @@
  *   - {@link converse} answers a conversation by clicking the plaque whose text
  *     the route names, and fails if the game offers something else.
  */
-import type { MazeFilm } from "@dreamfactory/engine/df/sett";
+import { TURN, type MazeFilm } from "@dreamfactory/engine/df/sett";
 import { fail, type Headless } from "./harness";
 
 /** the room's nodes by the name the scripts use, and its exits as node names */
@@ -69,7 +69,13 @@ export async function step(h: Headless, to: string): Promise<void> {
   const exits = graph(h).get([...graph(h).keys()].find((n) => same(n, here))!) ?? [];
   const want = exits.findIndex((n) => same(n, to)) + 1;
   if (!want) fail(`${h.room()}/${here} has no exit to ${to} (it has ${exits.join(", ")})`);
-  for (let turn = 0; maze.nearExit(here, maze.heading) !== want; turn++) {
+  // the set's keydown walks only when the exit `nearexit` finds is within 30° —
+  // with few exits the nearest can still be well off to the side
+  const off = (): number => {
+    const d = Math.abs(((maze.exitField(here, want, 1) - maze.heading) % TURN + TURN) % TURN);
+    return Math.min(d, TURN - d);
+  };
+  for (let turn = 0; maze.nearExit(here, maze.heading) !== want || off() >= TURN / 12; turn++) {
     if (turn > exits.length + 1) fail(`${here}: turning never faced the exit to ${to}`);
     await press(h, "right", `turning towards ${to}`);
   }
@@ -103,7 +109,7 @@ export async function goTo(h: Headless, to: string): Promise<void> {
  */
 export function findOnScreen(h: Headless, name: string): { x: number; y: number } | null {
   const { width, height } = h.host.director.screen;
-  for (const grid of [16, 4]) {
+  for (const grid of [16, 8]) {
     const hits: { x: number; y: number }[] = [];
     for (let y = grid / 2; y < height; y += grid)
       for (let x = grid / 2; x < width; x += grid)
@@ -139,9 +145,9 @@ export async function face(h: Headless, name: string): Promise<{ x: number; y: n
     p.x < margin || p.y < margin || p.x >= width - margin || p.y >= height - margin;
   if (!inMargin(at)) return at;
   for (let hover = 0; at && inMargin(at); hover++) {
-    if (hover === 400) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin`);
+    if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin`);
     h.session.setPointer(at.x, at.y);
-    await h.frame(1);
+    await h.frame(4);
     at = findOnScreen(h, name);
   }
   h.session.setPointer(width / 2, height / 2);

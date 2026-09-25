@@ -99,4 +99,48 @@ if ((await ai(h, "lyle", "alephase")) !== "2") fail(`the ale sets alephase 2; it
 if (h.session.propRuntime.get("mug")?.owner !== "lyle") fail(`the mug goes to Lyle; it is ${h.session.propRuntime.get("mug")?.owner}`);
 ok("Lyle has his ale (alephase 2) and will teach Nick on the dock");
 
+// the sword: Lyle's "a cave, underneath the lighthouse". liznite Node36's
+// "door l2lh" → lhouse.sett; "door lh2c" at Node11 plays downcave.move into
+// rjcave.sett; the "chest" quad at node27 opens trunk.stag, and taking the
+// sword takes the pistol with it (inven.shop addinven)
+await goTo(h, "Node36");
+await clickOn(h, "door l2lh");
+await h.settle("the lighthouse door");
+if (h.room() !== "lhouse") fail(`the lighthouse door opens onto lhouse.sett; we are in ${h.room()}`);
+await goTo(h, "Node11");
+await clickOn(h, "door lh2c");
+await h.settle("down to the cave");
+if (h.room() !== "rjcave") fail(`the cave door leads to rjcave.sett; we are in ${h.room()}`);
+await goTo(h, "Node27");
+await clickOn(h, "chest");
+await h.until(() => !!h.session.propRuntime.get("sword")?.visible && h.running().length === 0, "the trunk to open", 5_000);
+await clickOn(h, "sword");
+// the sword comes with the pistol (inven.shop addinven)
+const owns = (what: string): boolean => h.session.propRuntime.get(what)?.owner === "nick";
+await h.until(() => owns("sword") && owns("pistol") && h.running().length === 0, "the sword and pistol into the inventory", 2_000);
+const dir = h.host.director as any;
+// the lid closes the trunk and the stage (trunk.stag closechest)
+await clickOn(h, "lid");
+// and Patch, of RedJack's crew, is waiting in the cave (patch1.pupp incave)
+await converse(
+  h,
+  ["Who are you?", "You look like some kind of sailor.", "What happened to the treasure?", "When is the reunion?",
+    "Who was the traitor?", "How many Brethren are left?", "Hasn't anyone tried", "Where is this island?",
+    "What should I do?"],
+  "Patch, in the cave",
+);
+ok("the sword and the pistol, from the trunk in the cave");
+
+// out the way we came: rjcave "ladder" at node29 (upcave.move → lhouse Node15),
+// lhouse "door lh2l" at Node10 → liznite Node36
+await goTo(h, "Node29");
+await clickOn(h, "ladder");
+await h.settle("up the ladder");
+if (h.room() !== "lhouse") fail(`the ladder leads up into lhouse.sett; we are in ${h.room()}`);
+await goTo(h, "Node10");
+await clickOn(h, "door lh2l");
+await h.settle("out of the lighthouse");
+if (h.room() !== "liznite") fail(`the lighthouse door opens onto liznite; we are in ${h.room()}`);
+ok(`back in town at ${h.node()}, armed`);
+
 pass("day1");

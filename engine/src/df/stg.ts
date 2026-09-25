@@ -169,7 +169,11 @@ const C0_BY_VERSION = {
   // eight the 24-byte v5 container prefix and a moved screen size take: the name
   // is 0x40, the count 0x50 and the flats from 0x54. A flat is 50 bytes, v4's
   // 46 with four more after its first word (as a v5 film's frame record is).
-  5: { palette: -1, flatCount: 0x50, flats: 0x54, flatSize: 50, screen: 0x30, mainScript: 0x28, refName: 0x40 },
+  // The main script is at 0x34: Flat.c's open keeps it (0x412d5b → 0x4c78a4) and
+  // runs the stage's handlers out of that container (0x414510 → 0x43beb0). 0x28
+  // is something else, and only control.stag has a 1 there too — trunk.stag says
+  // 53 and its openstage never ran, so the cave's chest never opened.
+  5: { palette: -1, flatCount: 0x50, flats: 0x54, flatSize: 50, screen: 0x30, mainScript: 0x34, refName: 0x40 },
 } as const;
 
 /** the flat record. `-1` is a field the version does not store. */
