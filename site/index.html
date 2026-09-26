@@ -309,6 +309,40 @@
           color 120ms linear,
           border-color 120ms linear;
       }
+      /* ------------------------------------------------------------------
+         HOW FAR ALONG, on the card: a corner ribbon, the "fork me on GitHub"
+         sash across the top-left at 45 degrees. Three words, most mature first —
+         GOOD (plays through), PLAYABLE, WALKABLE — and a colour each, running
+         from the accent's green down to the panel's grey, so the order reads
+         without the words. The door's own `overflow: hidden` trims the sash's
+         ends to the card's rounded corner.
+         ------------------------------------------------------------------ */
+      .door .ribbon {
+        position: absolute;
+        top: 1.35rem;
+        left: -2.6rem;
+        z-index: 2;
+        width: 9.5rem;
+        padding: 0.22rem 0;
+        transform: rotate(-45deg);
+        text-align: center;
+        font-family: var(--font-mono);
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+        pointer-events: none;
+      }
+      .door .ribbon.good {
+        background: #1c8a2e;
+      }
+      .door .ribbon.playable {
+        background: #b7791f;
+      }
+      .door .ribbon.walkable {
+        background: #5a6472;
+      }
       /* it comes up with the card, so the credit is legible exactly when the
          card is the one being looked at */
       .door:hover .studio {
@@ -522,6 +556,7 @@
 
       <div class="doors games">
         <a class="door game" href="./taoot/">
+          <span class="ribbon good">GOOD</span>
           <span class="art"
             ><img src="/card-taoot.png" alt="" width="340" height="120"
           /></span>
@@ -535,6 +570,7 @@
           </p>
         </a>
         <a class="door game" href="./dust/">
+          <span class="ribbon playable">PLAYABLE</span>
           <span class="art"
             ><img src="/card-dust.png" alt="" width="340" height="125"
           /></span>
@@ -547,6 +583,7 @@
           </p>
         </a>
         <a class="door game" href="./timelapse/">
+          <span class="ribbon walkable">WALKABLE</span>
           <span class="art"
             ><img src="/card-timelapse.png" alt="" width="340" height="143"
           /></span>
@@ -560,6 +597,7 @@
           </p>
         </a>
         <a class="door game" href="./skullcracker/">
+          <span class="ribbon walkable">WALKABLE</span>
           <span class="art"
             ><img src="/card-skullcracker.png" alt="" width="340" height="145"
           /></span>
