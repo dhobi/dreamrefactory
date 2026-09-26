@@ -2710,21 +2710,21 @@ export class GameSession {
    * — Lyle's `butt pick` → `sit down` → `crouch`, Bone's `idle` back to `stand`,
    * and liznite.shop's `mark crate`, whose `endanim` is what draws the X on the
    * crate the day ends in. RedJack.exe names it in its event table (0x4b9990,
-   * the fifteenth). The moment is a reading, not yet traced in Acto.c: a prop at
-   * its last frame (where it holds), an actor's pose each time its play script
-   * comes round, which a pose of one picture never does — and only while it is
-   * SHOWN, part of the same reading: a sprite put away is not animating. The
-   * cannon's dinghies are why: an explosion's `endanim` hides the dinghy and
-   * counts it sunk (cannon.cast), and a hidden one still coming round counted
-   * the same wreck again, until the game ended with two afloat. The older
-   * engines have no such event, and their scripts never answer it.
+   * the fifteenth). A prop hears it at the last frame of a view that plays once
+   * (PropState.playsOnce), where it holds, and only while shown — a prop put away
+   * is not animating. An actor hears it from Acto.c's service (0x408481): once,
+   * at the last step of a pose that plays once (CastPose.playsOnce), shown or
+   * not. The cannon's dinghies are what a pose going round would get wrong: an
+   * explosion's `endanim` hides the dinghy and counts it sunk (cannon.cast), and
+   * a second telling counted the same wreck again. The older engines have no
+   * such event, and their scripts never answer it.
    */
   endAnim(cmd: "sendtoactor" | "sendtoprop", names: string[]): void {
     if (!this.isV5) return;
     for (const name of names) {
       const key = name.toLowerCase();
-      const shown = cmd === "sendtoactor" ? this.actorRuntime.get(key)?.visible : this.propRuntime.get(key)?.visible;
-      if (!shown) continue;
+      // an actor hears it hidden or not (RedJack.exe 0x408481 asks only the flag)
+      if (cmd === "sendtoprop" && !this.propRuntime.get(key)?.visible) continue;
       const inst = cmd === "sendtoactor" ? this.castScripts.get(key) : this.propScripts.get(key);
       if (!inst?.script.codes.has("endanim")) continue;
       void this.track(this.sendEvent(cmd, key, "endanim", [], "anim"), `endanim ${key}`);

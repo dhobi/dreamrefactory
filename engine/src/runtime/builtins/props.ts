@@ -170,7 +170,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       // entering a state plays its frames once (a door opens and holds open); a
       // single-frame state has nothing to animate. A prop only made visible
       // (never propview'd) keeps animating=false and holds frame 0.
-      p.animating = !!st && p.frameCount(st) > 1;
+      // (a DreamFactory 5 view that plays once says so even with one picture)
+      p.animating = !!st && (p.frameCount(st) > 1 || st.playsOnce === true);
     }
   });
   r("propxy", (_i, [n, x, y]) => {

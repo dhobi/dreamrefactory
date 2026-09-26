@@ -100,8 +100,8 @@ the day's first room and cast, and often plays a film or starts a talk. Each
 puppet file keeps a talk per day, and a mini game is a stage, or a room of
 its own such as the cannons.
 
-Days one to four are played by the [machine suites](#machine-suites). Days five
-to seven are read from the scripts and not yet played, so their rows say what
+Days one to five are played by the [machine suites](#machine-suites). Days six
+and seven are read from the scripts and not yet played, so their rows say what
 the scripts hold, not what has been seen to work.
 
 | Day | Where (disc) | Talks | Mini games | How it ends |
@@ -110,7 +110,7 @@ the scripts hold, not what has been seen to work.
 | 2 | The Marauder (ship, disc 1) | Justice (the oath, then his cabin), Lyle, Sullivan (Anne) and her letter | The cannons: four dinghies to sink | Justice's last word, and the voyage (`montage.move`) |
 | 3 | Port Royal (ptroyal, disc 2) | Justice, Erzulie, the constable, Anne at the jail window, the soldier | The alley fight with Jan and his second (`jcombat`); the jail escape (rum, a rock from the wall, the keys); the street fight's three waves (`bfight`) | Justice is murdered, and Nick is tried at sea (`trialset.move`) |
 | 4 | RedJack's island (rjbeach, disc 3) | Anne, RedJack in a dream, Rockfish | The totems (`totem`); the gem lifts at the skull's teeth (`gem`); the lava's pillars; the flame corridor and its switch; the swinging chain; the skeleton, beaten with a vine (`scombat2`); RedJack's lockbox; the crate and its crowbar; the horn caves and the squid door; lighting the beach's fire pit with the torch | Rockfish answers the fire and takes Nick to Blackbeard (`rock3.pupp`) |
-| 5 | Blackbeard's island (bb1, disc 2) | Rockfish, Blackbeard, Bone, Cross, Lyle, the pirates, Anne | The lift (`elevator`), the drink (`drink`), the charcoal (`charcoal`), the mine carts with the harpoon (mc1–mc3), the fight with Bone (`bcombat`) | Bone beaten; `arrive.move` |
+| 5 | Blackbeard's island (bb1, disc 2) | Rockfish, Lyle, Denton, Blackbeard, Bone | The lift's handle (`elevator`); Blackbeard's drink (`drink`), with Lyle's sulphur and a coal from the bin by the dock (`charcoal`); the mine carts with the harpoon gun, three sets of Jan's men (mc1–mc3); the fight with Bone (`bcombat`) | Bone beaten, and Blackbeard sends Nick to Cartagena (`arrive.move`) |
 | 6 | Cartagena (lock1, disc 2) | Marquez, Elizabeth and Jake in their cages, Rockfish, Anne | The lock's valves (`topvalves`, `botvalves`), the switch (`switch`), the fight in the hold (`tcombat`), the shield in the study (`shield`) | Marquez in his study (`marqintro.move`) |
 | 7 | RedJack's island again (rjbeach, disc 3) | Blackbeard, Cross, Elizabeth, Jake, Lyle, Marquez, Patch, Rockfish, Anne | The Spaniard on the beach (`spancombat`), Marquez (`mcombat`), the ballista | The ending |
 
@@ -179,9 +179,19 @@ CPU goes, waiting on the game's state and never on a duration.
 - the crate's crowbar and horn, link1's scepter lock, the horn caves and the
   torch, and the fire pit: the suite ends on day five at Blackbeard's.
 
+`day5` plays the first four days, then Blackbeard's island:
+- Rockfish at the dock, and the lift's handle dragged through its slot;
+- Rockfish's test in the lounge, a drink for Blackbeard: Lyle's sulphur, a coal
+  from the bin downstairs, and the bar's bottles and ale, counted as
+  `checkmix` counts them;
+- Blackbeard's roar, his talk and his story, until he passes out and Jan's men
+  attack;
+- the mine carts, three sets of Jan's men shot with the harpoon (`mine.ts`), the
+  crash, and the sword fight with Bone: the suite ends on day six at Cartagena.
+
 Each step checks the flag the script it cites sets.
 
-The moves are the player's, in five files:
+The moves are the player's, in six files:
 - [`route.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/route.ts)
   walks a room by its exits (turn to the exit, then up), clicks what `hittest`
   names, pans or rests on the screen edge to bring a thing out of the scroll
@@ -207,6 +217,10 @@ The moves are the player's, in five files:
 - [`lava.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/lava.ts)
   holds the skull's other puzzles: the pillars, the flames, the chain and the
   vine.
+- [`mine.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/mine.ts)
+  rides the mine carts. It steers the view with the pointer onto the nearest
+  man, and fires when the harpoon, flown the way the launcher's script flies
+  it, would land on anyone: a man, or a dagger or bomb on its way.
 
 Playing it this way found several engine gaps, each fixed from RedJack.exe where
 it could be read and marked as a reading where it could not: puppets opened by a
@@ -222,7 +236,8 @@ Day two found more, each read from RedJack.exe:
 - a click left consumed by the last key's `exitcode`;
 - screen props drawn in a room but not clickable there.
 
-One more is a reading: a hidden sprite hears no `endanim`.
+One more was a reading, that a hidden sprite hears no `endanim`. Day five
+found it wrong for actors, and the exe says otherwise (below).
 
 Day three found more:
 - `sendtoshop` reaching a shop by the name it gives itself;
@@ -246,6 +261,26 @@ Day four found more:
   empty (RedJack.exe 0x44e1ac);
 - `propdeg` showing a frame by index where no frame carries the degree, as
   the chest and its lid need (common.shop open and close).
+
+Day five found more, each read from RedJack.exe:
+- a view's and a pose's play list: at 0x2e, as in v4, not the 0x1ee the
+  readers assumed, so no v5 play list had ever been read (the stepper
+  0x42d198);
+- a view or pose that borrows another's pictures: the u32 at +0x10 names it,
+  and the lift's rope goes up on its way-down pictures played backwards
+  (0x42d1a8);
+- how views and poses step (0x42c89e, 0x4069ee): step 0 on the first pass,
+  then by the clock at the step time held at +0x22e, in sixtieths of a second,
+  or one step a pass without one. A view or pose that plays once holds its
+  last step and hears `endanim` once, and any other goes round without one.
+  Actors step and hear it shown or not (0x408481), which is how Jan's men in
+  the mine finish their first pose in cover before they show themselves;
+- `pointinactor` asking the one actor's own sprite (0x406860), where the port
+  asked what was on top: the harpoon is drawn at the very point it asks
+  about;
+- `idle ()` stopping at the first harpoon: a loop fired in the pass counted as
+  a script holding the engine. A v5 room now asks what held the engine as the
+  pass began.
 
 ## What does not work yet
 

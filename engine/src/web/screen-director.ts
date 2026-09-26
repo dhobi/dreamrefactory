@@ -465,6 +465,7 @@ export class ScreenDirector {
     // reading stops moving and every delta below it is zero, which is the
     // original's own state under a blocking file dialog (GameSession.gameTime).
     now = this.session.gameTime(now);
+    this.lockedAtPass = this.inputLocked;
     this.room?.refreshRoomGamma();
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
     // the census in SetViewer.advanceRoom for why that is 50 ms and not 90.
@@ -1291,6 +1292,14 @@ export class ScreenDirector {
       this.session.fading
     );
   }
+
+  /**
+   * {@link inputLocked} as the pass began, before this pass's endanims and loops
+   * were sent: what holds the engine across passes — a script suspended in a
+   * `forceupdate`, a walk, a film — and not what the pass itself runs to its end.
+   * A DreamFactory 5 room's `idle ()` asks this (MazeView.advanceRoom).
+   */
+  lockedAtPass = false;
 
   /** gate for NEW user input: also waits for running/suspended scripts */
   get inputLocked(): boolean {

@@ -17,7 +17,7 @@
  * So the route is found on those rules, and walked a hop at a time.
  */
 import { fail, type Headless } from "./harness";
-import { face, step } from "./route";
+import { face, findOnScreen, step } from "./route";
 
 const ROCK = new Set(["node10", "scene12", "scene13", "scene29", "scene35", "scene37", "scene40"]);
 const DOWN_AT_FIRST = new Set(["scene11", "scene14", "scene17", "scene18", "scene24"]);
@@ -132,12 +132,16 @@ export async function runTheFlames(h: Headless, done: () => boolean): Promise<nu
 export async function swingTheChain(h: Headless, to: string): Promise<void> {
   const tick = (): number => Math.floor((h.session.clock.now * 3) / 50);
   const chain = h.session.propRuntime.get("chain") ?? fail("no chain in the hub");
-  const at = await face(h, "chain");
+  // the prop, not the room's quad of the same name
+  await face(h, "chain", "prop");
+  // it swings as it hangs, so it is looked for again at the moment of the click
+  let at: { x: number; y: number } | null = null;
   await h.until(() => {
     const d = tick() - Number(chain.value);
-    return d >= 0 && d <= 30;
+    at = d >= 0 && d <= 30 ? findOnScreen(h, "chain", "prop") : null;
+    return !!at;
   }, "a fresh swing of the chain", 2_000);
-  h.click(at.x, at.y);
+  h.click(at!.x, at!.y);
   await h.until(() => h.node().toLowerCase() === to.toLowerCase() && h.idle(), `the chain to ${to}`, 3_000);
 }
 

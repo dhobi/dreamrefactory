@@ -218,7 +218,7 @@ export async function playDay4(h: Headless): Promise<void> {
     h,
     [
       "We got marooned.", "No.", "To some.", "Murder.", "Yes.", "He's dead.", "You've got to help me.",
-      "What do you think of this tattoo.", "When can I see Blackbeard?", "Are you afraid of him?",
+      "What do you think of this tattoo.",
     ],
     "Rockfish",
     { thenAsks: true },

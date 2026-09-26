@@ -315,6 +315,10 @@ turn.
 `propis3d` (`props.ts`) answers and sets the prop's own 3D flag in a v5 game
 (0x429d60), and 0 in every other.
 
+`pointinactor` (`pointer.ts`) asks the one actor in a v5 game: whether its own
+sprite covers the point, whatever is drawn over it (0x406860). The older
+engines answer from the hit test, which names only what is on top.
+
 **Everything else** (`df5.ts`):
 
 | Commands | What they do |

@@ -46,8 +46,21 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
    */
   r("pointinactor", (_i, [name, point]) => {
     const pt = toNum(point ?? 0);
-    const hit = session.hitTestAt(pointX(pt), pointY(pt));
     const want = toStr(name ?? "").toLowerCase();
+    // DreamFactory 5 asks the actor alone (ActorRuntime.covers); the older
+    // engines' answer is the hit test's
+    if (session.isV5) {
+      const a = session.actorRuntime.get(want);
+      // through the camera the room's sprites are drawn with (MazeView.roomCamera)
+      const m = session.maze;
+      const at = m?.camera();
+      const v5 = m?.spriteCamera(m.size.width, m.size.height);
+      const cam = m && at && v5
+        ? { x: at.x, y: at.y, z: at.z, deg: 0, f: 0, cx: m.size.width / 2, cy: m.size.height / 2, clipW: m.size.width, clipH: m.size.height, v5 }
+        : null;
+      return a && session.actorRuntime.covers(a, pointX(pt), pointY(pt), cam) ? 1 : 0;
+    }
+    const hit = session.hitTestAt(pointX(pt), pointY(pt));
     return hit.type === "actor" && hit.name.toLowerCase() === want ? 1 : 0;
   });
   r("pointinset", (_i, [point]) => {

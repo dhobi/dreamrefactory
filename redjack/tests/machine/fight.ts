@@ -222,7 +222,9 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
   const dodge = dodger(h);
   await h.until(
     () => {
-      if (!fighting(h, stage)) return true;
+      // the stage closes on a win, or a talk opens over it (benemy1.shop's
+      // `die` asks Blackbeard's questions with Bone's stage still up)
+      if (!fighting(h, stage) || h.host.director.awaitingChoice) return true;
       const view = enemyView(h);
       const nick = props.get("nick")?.stateName ?? "";
       // the second half: beaten with the sword, Lyle backs off and throws

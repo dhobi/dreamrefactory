@@ -1,3 +1,4 @@
+import { TICKS_PER_PASS } from "./actors";
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 import {
   WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha,
@@ -372,6 +373,8 @@ export class PropInstance {
    * openstage made it visible, so the puzzle started with the case open + empty.
    */
   animating = false;
+  /** DreamFactory 5: the sixtieths of a second since the view's first pass (see PropState.frameTicks) */
+  passTicks = 0;
 
   constructor(
     readonly group: PropGroup,
@@ -600,6 +603,36 @@ export class PropRuntime {
     for (const p of this.props.values()) {
       if (!p.visible || p.frameLocked || !p.animating) continue;
       const st = p.state();
+      if (st && st.playsOnce !== undefined) {
+        // DreamFactory 5 steps a view as it does a pose (RedJack.exe 0x42c89e–
+        // 0x42c931, ActorRuntime.advanceAnimation): step 0 on the first pass,
+        // then by the view's step time on the clock or one a pass; a view that
+        // plays once holds its last step and says so, and any other goes round
+        const n = st.playCount === 1 ? 1 : p.frameCount(st);
+        if (!p.lastTick) {
+          p.lastTick = now;
+          p.passTicks = 0;
+          if (n <= 1) {
+            p.animating = false;
+            if (st.playsOnce) ended.push(p.name);
+          }
+          continue;
+        }
+        if (now - p.lastTick < frameMs) continue;
+        p.lastTick = now;
+        const rate = st.frameTicks ?? 0;
+        let e: number;
+        if (rate > 0) {
+          p.passTicks += TICKS_PER_PASS;
+          e = Math.floor(p.passTicks / rate);
+        } else e = p.frameIdx + 1;
+        if (st.playsOnce && e >= n - 1) {
+          p.frameIdx = Math.max(0, n - 1);
+          p.animating = false;
+          ended.push(p.name);
+        } else p.frameIdx = n > 0 ? e % n : 0;
+        continue;
+      }
       // the variant's length, not the container's: a state holding one animation
       // per degree must stop at the end of the one being played (degVariantFrames)
       const last = st ? p.frameCount(st) - 1 : 0;

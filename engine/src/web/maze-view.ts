@@ -222,7 +222,12 @@ export class MazeView implements RoomLayer {
   advanceRoom(now: number): CachedFrame | null {
     if (this.maze.walkStep(now)) this.dirty = true;
     else if (
-      !this.maze.walk && !this.idling && !this.dir.inputLocked && !this.session.puppet?.visible && this.pointerInside()
+      // between scripts, as the original's event loop calls it: a loop this
+      // pass fired and ran to its end is part of the pass, not a script holding
+      // the engine. The mine's harpoons fly on a loop every pass, and asking
+      // `inputLocked` here stopped idle — and the view's turning — at the first
+      // shot (ScreenDirector.lockedAtPass)
+      !this.maze.walk && !this.idling && !this.dir.lockedAtPass && !this.session.puppet?.visible && this.pointerInside()
     ) {
       void this.idle();
     }

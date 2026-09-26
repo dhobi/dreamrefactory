@@ -88,6 +88,17 @@ export interface CastPose {
    */
   play: number[];
   frameCount: number;
+  /**
+   * DreamFactory 5 only: bit 0 of the pose's flags word at 0x14, which
+   * `actorpose` copies into the actor (0x407490, as `propview` does a view's).
+   * RedJack.exe's stepper holds such a pose on its last step and marks it
+   * (0x406a54–0x406a72), and the service sends the marked actors `endanim`,
+   * once each (0x408481–0x4084bf). A pose without it goes round and never says
+   * so.
+   */
+  playsOnce?: boolean;
+  /** DreamFactory 5 only: the pose's step time, as a view's (PropState.frameTicks; `actorpose` 0x4074a4) */
+  frameTicks?: number;
   /** byte offset of this 32-byte record in the member's logic container —
    *  where the pose name is stored (edit target, see {@link patchPoseName}) */
   record: number;
@@ -180,13 +191,14 @@ export const POSE_NAME_FIELD = 15;
  * ACTO, POSE and SPRI where a shop has SHOP, PROP, VIEW and SPRI, and each at
  * the offsets its shop twin has (engine/src/df/shp.ts): no palette in the
  * header, so the main script at 0x24, the member count at 0x38 and the table
- * from 0x3c; a member (ACTO) at v4's own offsets; a pose (POSE) with 448 bytes
- * more in front, so the play list at 0x1ee, its count at 0x230, the frame count
- * at 0x232 and the frames from 0x236. The frames are v5 sprites with their own
- * palettes, which `decodeShpFrame` reads.
+ * from 0x3c; a member (ACTO) at v4's own offsets; a pose (POSE) laid out as a
+ * v5 view: the play list at v4's 0x2e with room for 257 steps, its count at
+ * 0x230, the frame count at 0x232 and the frames from 0x236, and the flags word
+ * at 0x14 whose bit 0 says the pose plays once (see CastPose.playsOnce). The
+ * frames are v5 sprites with their own palettes, which `decodeShpFrame` reads.
  */
 const C0_V5 = { mainScript: 0x24, memberCount: 0x38, memberTable: 0x3c } as const;
-const POSE_V5 = { play: 0x1ee, playCount: 0x230, frameCount: 0x232, frames: 0x236 } as const;
+const POSE_V5 = { play: 0x2e, playCount: 0x230, maxPlay: (0x230 - 0x2e) / 2, frameCount: 0x232, frames: 0x236 } as const;
 
 export function readCstFile(data: Uint8Array): CstFile {
   const file = readContainerFile(data);
@@ -217,7 +229,13 @@ export function readCstFile(data: Uint8Array): CstFile {
       const setLoc = rp.i32();
       rp.seek(record + LOGIC.poseName);
       const poseName = rp.pstr(POSE_NAME_FIELD);
-      const sc = file.containers[setLoc].data;
+      const own = file.containers[setLoc].data;
+      // v5: a pose may draw another pose's pictures — the u32 at 0x10 names its
+      // container, as a view's does (engine/src/df/shp.ts STATE_V5); its play
+      // list and its flags stay its own. Jan's men in the mine `duck`,
+      // `leanout` and `leanthrow` on the pictures of `raise` and `leaning`.
+      const source = v5 && own.length >= 0x14 ? new DataView(own.buffer, own.byteOffset, own.byteLength).getUint32(0x10, true) : 0;
+      const sc = source && file.containers[source] ? file.containers[source].data : own;
       const rs = new BinaryReader(sc);
       rs.seek(PO.frameCount);
       const frameCount = rs.i32();
@@ -240,12 +258,13 @@ export function readCstFile(data: Uint8Array): CstFile {
       // the play script, read after the steps so it can be checked against them:
       // a table naming a picture the pose does not have is not evidence about
       // anything, and the corpus has one (`qwerty`, one step over no frames)
-      rs.seek(PO.playCount);
-      const playCount = Math.max(0, Math.min(rs.i16(), POSE.maxPlay));
+      const ro = new BinaryReader(own);
+      ro.seek(PO.playCount);
+      const playCount = Math.max(0, Math.min(ro.i16(), PO.maxPlay));
       const play: number[] = [];
       for (let pi = 0; pi < playCount; pi++) {
-        rs.seek(PO.play + 2 * pi);
-        play.push(rs.i16() - 1);
+        ro.seek(PO.play + 2 * pi);
+        play.push(ro.i16() - 1);
       }
       const usable = play.length > 0 && play.every((v) => v >= 0 && v < steps.length);
       poses.push({
@@ -255,6 +274,8 @@ export function readCstFile(data: Uint8Array): CstFile {
         play: usable ? play : steps.map((_, i) => i),
         frameCount,
         record,
+        ...(v5 && own.length >= 0x18 ? { playsOnce: (new DataView(own.buffer, own.byteOffset, own.byteLength).getUint32(0x14, true) & 1) === 1 } : {}),
+        ...(v5 && own.length >= 0x230 ? { frameTicks: new DataView(own.buffer, own.byteOffset, own.byteLength).getInt16(0x22e, true) } : {}),
       });
     }
     const member: CastMember = { name: name.toLowerCase(), logicLocation, scriptLocation, poses };
