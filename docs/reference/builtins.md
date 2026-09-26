@@ -111,6 +111,11 @@ the script put up**, which one stage in the game relies on.
 `countprops`, `indextoprop`, `error`. See [SHP](../engine/formats/shp.md) for the placement
 model (`propxy` screen-space vs `propxyz` world-space).
 
+In DreamFactory 5, `propdeg` only stores the degree, masked to 24 bits
+(RedJack.exe 0x428880). The frame it picks is picked where the prop is drawn:
+of the frames in the group the view's step names, the one whose angle is
+nearest (see [DreamFactory 5](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet)).
+
 `countprops`/`indextoprop` enumerate **one game-wide table** — the union of every
 open shop, in the order the shops opened — and not the asking script's own shop.
 TI.EXE keeps a single count at `0x489f18` and a single table at `0x489f14`
@@ -212,6 +217,12 @@ bottom row while the questions above it move. It is 0x4402e0's own loop rather
 than a shuffle of our choosing (`bevelCount * 5` swaps, two independent
 `rand(bevelCount)` draws each), because the number of draws is what advances
 the script random stream and every story coin after it is a function of that.
+
+`puppetevent`'s argument is a wait, in DreamFactory 5: RedJack.exe (0x42f140)
+waits that many sixtieths of a second for a plaque and answers -2 when they
+run out, and waits for good on a negative one. Marquez's `puppetevent (0)`
+straight after an answer is a look for a click, not a question. Titanic's and
+Dust's waits still ignore the argument.
 
 ## Pointer & text — `pointer.ts`
 

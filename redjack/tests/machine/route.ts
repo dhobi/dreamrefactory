@@ -226,6 +226,8 @@ export async function converse(
 ): Promise<void> {
   const dir = h.host.director;
   const left = [...answers];
+  let answered = "";
+  let stale = 0;
   // a talk opened with `openpuppetfile` and `sendtopuppet` rather than
   // `runpuppet` (Erzulie's, from her set's openset) asks without the puppet
   // owning the screen
@@ -237,8 +239,16 @@ export async function converse(
       continue;
     }
     if (!dir.awaitingChoice) break;
-    const want = left.shift();
     const offered = dir.choices.map((c) => c.text);
+    // the plaques just answered, up again: a talk that looks for a click a tick
+    // long before it clears them (marquez2.pupp `puppetevent (0)`) is not asking
+    if (offered.join("|") === answered) {
+      await h.frame(4);
+      if (dir.awaitingChoice && dir.choices.map((c) => c.text).join("|") === answered && ++stale < 5) continue;
+      if (!dir.awaitingChoice) continue;
+    }
+    stale = 0;
+    const want = left.shift();
     // the talk hands on to the next thing that asks (Justice's last word on the
     // ship is the day's last; the next day opens on a question of its own)
     if (want === undefined && opts.thenAsks) return;
@@ -247,6 +257,7 @@ export async function converse(
     if (i < 0) fail(`${what}: no "${want}" among ${offered.join(" | ")}`);
     const r = dir.choiceRects[i];
     h.click(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2));
+    answered = offered.join("|");
     await h.frame(3);
   }
   if (left.length) fail(`${what}: ended with ${left.length} answer(s) unused: ${left.join(" | ")}`);

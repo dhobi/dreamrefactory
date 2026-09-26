@@ -144,7 +144,8 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
     const p = session.propRuntime.get(toStr(n));
     const st = p?.state();
     if (!p || !st || !st.frames.length) return 0;
-    const f = p.shop.frame(st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
+    // the frame drawn: a v5 view's is picked by step and degree (v5FrameIndex)
+    const f = p.shop.frame(st.steps ? p.currentFrame(st) : st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
     const x0 = p.anchorX - f.posXraw, y0 = p.anchorY - f.posYraw;
     const pt = toNum(point ?? 0);
     const x = pointX(pt), y = pointY(pt);

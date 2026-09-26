@@ -348,3 +348,115 @@ export async function shootout(h: Headless, done: () => boolean): Promise<number
   );
   return shots;
 }
+
+/**
+ * The torturer's whip, the first half of the fight in Cartagena's torture
+ * chamber (tcombat.stag, tenemy1.shop). The whip cracks from one side at the
+ * strike's tenth tick (`checkforhit`, `hitframe` 10), and misses only a Nick
+ * leaned all the way to the other: `centerx` 0 for a lash from the left, -199
+ * for one from the right. The arrows lean him (tcombat.shop "loop 4" `lean`,
+ * `strafe`: 60 a pass from the middle, -100) and letting go brings him back
+ * (`antilean`). Two lashes dodged, the stage steps him a node closer
+ * (`advance`); at the fourth node the torturer's dropped sword lies in reach
+ * (tenemy1.shop fsword, `znode = 4`), and taking it up opens the second half
+ * (tcombat.shop `nextenemy`, tenemy2.shop) — a sword fight, for
+ * {@link cauldronFight}.
+ */
+export async function whipFight(h: Headless): Promise<void> {
+  if (!fighting(h, "tcombat.stag")) fail(`the whip: the stage is not up (stage ${h.session.stageName})`);
+  let held = "";
+  let looks = 0;
+  const lean = (side: string): void => {
+    if (side === held) return;
+    if (held && !side) h.keyUp(held);
+    if (side) h.key(side);
+    held = side;
+  };
+  await h.until(
+    () => {
+      if (!fighting(h, "tcombat.stag")) return true;
+      if (h.session.propRuntime.get("enemy")?.shop.name === "tenemy2.shop") return true;
+      const [kind, side] = enemyView(h).toLowerCase().split(" ");
+      // a lash from the left is dodged leaning left, and the other way round
+      lean(kind === "s" && (side === "left" || side === "right") ? side : "");
+      // a look for the sword every tenth pass: a search of the whole screen is dear
+      if (!held && Number(h.session.interp.globals.get("znode")) === 4 && ++looks % 10 === 1) {
+        const sword = findOnScreen(h, "fsword", "prop", [16]);
+        if (sword) h.click(sword.x, sword.y);
+      }
+      return false;
+    },
+    "the torturer's whip",
+    20_000,
+  );
+  lean("");
+  if (!fighting(h, "tcombat.stag")) fail(`the whip: the fight ended before the sword was taken up (wonfight ${h.session.interp.globals.get("wonfight")})`);
+}
+
+/**
+ * The torturer's second half (tenemy2.shop), which no sword stroke wins:
+ * tcombat.shop `Edamage` stops on its first line, `exitcode`, so a hit only
+ * makes him stagger (`hurt`, `fall back`). He is beaten by the cauldron beside
+ * him. Clicked while Nick stands at the sixth or seventh node (tenemy2.shop
+ * couldron, `znode = 6 | znode = 7`), it tips its coals at his feet
+ * (`coals.move`) and he dances; a stroke that lands while he dances wins
+ * (`checkforEhit` → "safe win" `win`, `twin.move`, `wonfight`).
+ *
+ * Every stroke steps Nick a node closer (tcombat.shop `think` → `advance`, up
+ * to `maxZnodes` 8), and "down" steps him back (`retreat`, no nearer than 5).
+ * So he guards where the wind-up says, as in {@link duel}, strikes his way in
+ * to the sixth node or backs off to the seventh, clicks the cauldron, and
+ * strikes while the torturer dances.
+ */
+export async function cauldronFight(h: Headless): Promise<void> {
+  if (!fighting(h, "tcombat.stag")) fail(`the cauldron: the stage is not up (stage ${h.session.stageName})`);
+  const g = (name: string): number => Number(h.session.interp.globals.get(name) ?? 0);
+  let held = 0;
+  let wait = 0;
+  await h.until(
+    () => {
+      if (!fighting(h, "tcombat.stag")) return true;
+      const view = enemyView(h).toLowerCase();
+      if (held && --held === 0) h.mouseUp(320, 300);
+      if (held) return false;
+      const guard = guardFor(view);
+      if (guard) {
+        h.session.setPointer(guard.x, guard.y);
+        return false;
+      }
+      h.session.setPointer(OPEN.x, OPEN.y);
+      if (wait > 0) {
+        wait--;
+        return false;
+      }
+      // he dances on the coals: strike (the bottom row, clear of every guard)
+      if (view === "dance") {
+        h.mouseDown(260, 300);
+        held = 4;
+        return false;
+      }
+      if (g("imbeingused") !== 0 || view !== "idle") return false;
+      const node = g("znode");
+      if (node > 7) {
+        h.key("down");
+        h.keyUp("down");
+        wait = 10;
+        return false;
+      }
+      if (node >= 6) {
+        const cauldron = findOnScreen(h, "couldron", "prop", [16]);
+        if (cauldron) h.click(cauldron.x, cauldron.y);
+        wait = 10;
+      } else {
+        // "up" is refused while he is aggressive (tcombat.stag keydown), and a
+        // stroke steps Nick in (tcombat.shop `think` → `advance`)
+        h.mouseDown(260, 300);
+        held = 4;
+      }
+      return false;
+    },
+    "the fight in the torture chamber to end",
+    30_000,
+  );
+  if (held) h.mouseUp(320, 300);
+}

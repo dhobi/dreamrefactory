@@ -127,9 +127,25 @@ room.
 - **PROP, ACTO** (a group or member): v4's layout at v4's offsets. One new field
   is used, the i16 at 0x14, which lowers the sprite before its depth is taken
   (see [how big a sprite is](../runtime/rooms-v5.md#how-big-a-sprite-is)).
-- **VIEW, POSE** (a state or pose): v4's with 448 bytes more in front, so the
-  play order is at 0x1ee, its step count at 0x230, the frame count at 0x232,
-  and the 44-byte frame records from 0x236.
+- **VIEW, POSE** (a state or pose): the play list at v4's 0x2e, with room for
+  257 steps before its step count at 0x230; the frame count at 0x232, and the
+  44-byte frame records from 0x236. More fields, each read from RedJack.exe:
+  - the u32 at 0x10, when not 0, names another view whose pictures this one
+    plays (0x42d1a8);
+  - bit 0 of the flags word at 0x14 means the view plays once and ends with
+    `endanim`;
+  - the i16 at 0x22e is the step time, in sixtieths of a second.
+
+  A step of the play list names a **group** of frames, not a frame: the value
+  there less 1 (0x42d198). A frame record keeps its group in the i16 at +8 and
+  its angle in the i32 at +0x26, in 2^24ths of a turn (v4's i16 at +40 is only
+  the top half of that angle). At each step the engine draws, from the step's
+  group, the frame whose angle is nearest the prop's degree, measured the
+  shorter way round (0x42d0e0, 0x41dfc0). For a screen prop that degree is its
+  `propdeg`. For a prop in the room it is the `propdeg` less the bearing from
+  the prop to the camera (0x42cb3e). Most views count their frames by small
+  numbers there: the fights' health bars 1 to 10, the inventory chest 0 to
+  12, the torturer's cauldron its nodes, 5 to 8.
 - **PHED** (a puppet's header): v4's without the palette at 58, so its idle
   timers are at 0x3a/0x4a, the name at 0x5a, the line count at 0x6e and the
   312-byte lines from 0x70. TALK, PAGE and BASE are v4's to the byte; FRMR is

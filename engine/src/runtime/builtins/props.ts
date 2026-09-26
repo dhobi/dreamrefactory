@@ -127,6 +127,16 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     p.stateName = toStr(v).toLowerCase();
     p.lastTick = 0;
     const st = p.state();
+    // a DreamFactory 5 view is stepped from its first step, and draws what its
+    // play list and the prop's degree pick at each (PropInstance.currentFrameIdx);
+    // one of a single step stands still unless its end is an event
+    if (st?.steps) {
+      p.frameOrder = null;
+      p.frameIdx = 0;
+      p.frameLocked = false;
+      p.animating = st.steps.length > 1 || st.playsOnce === true;
+      return;
+    }
     // A prop holds a deg-matched frame instead of animating in two cases, and only
     // one of them is a judgement call:
     //
@@ -292,7 +302,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // deck map "buttons" highlight: 9 frames, deg 0..7 = deck 1..8, deg 8 = none).
   // The pinned frame overrides auto-animation until propview() changes state.
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
-    p.deg = v;
+    // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
+    p.deg = session.isV5 ? (Math.trunc(Number(v) || 0) & 0xffffff) : v;
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a
     // 32-view card table, a 21-view fire). Clamping it as a frame index froze
@@ -302,23 +313,12 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       p.directional = true;
       return;
     }
-    // DreamFactory 5 (RedJack.exe 0x428880 stores the value, masked to 24 bits):
-    // a view whose frames carry the degree shows that frame — the fights' life
-    // and strength bars — and one whose frames do not is shown by INDEX. The
-    // inventory chest and its lid store 0 on every frame, and common.shop opens
-    // them with `propdeg (me, i)` from 1 to 12 and 0 to 4 and closes them with
-    // the same counts backwards, which no animation could play; pinned to the
-    // first frame as a missing degree, they stayed shut over what they hold.
-    if (session.isV5) {
-      const cur = p.state();
-      const n = Math.trunc(Number(v) || 0);
-      if (cur && cur.frames.length && !cur.degrees.includes(n)) {
-        p.frameOrder = null;
-        p.frameIdx = Math.max(0, Math.min(cur.frames.length - 1, n));
-        p.frameLocked = true;
-        return;
-      }
-    }
+    // DreamFactory 5 only stores the value, masked to 24 bits (RedJack.exe
+    // 0x428880), and stops nothing: the frame it picks is picked where the
+    // prop is drawn, nearest in angle among the frames of the step shown
+    // (v5FrameIndex) — the fights' life and strength bars count 1 to 10 there,
+    // the inventory chest 0 to 12, the torturer's cauldron the nodes 5 to 8
+    if (p.state()?.steps) return;
     // A selector prop's frames carry stored degrees (SHP +40) that are usually
     // offset from the frame index — TAOOT's blackjack score readout holds 2,3,…,21,
     // BUST=22, BLACKJACK=23, so propdeg(total) must pick the frame WHOSE DEGREE

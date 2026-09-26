@@ -58,7 +58,8 @@ async function rideTheLift(h: Headless, to: string): Promise<void> {
   await h.until(() => h.room() === to && (h.session.stageName !== "elevator.stag" || h.host.director.awaitingChoice), `off the lift at ${to}`, 1_000);
 }
 
-const films = (h: Headless, from: number): string[] =>
+/** the films played since log line `from`, by name */
+export const films = (h: Headless, from: number): string[] =>
   h.logs.slice(from).filter((l) => l.startsWith("movie: ")).map((l) => l.split(" ")[1]);
 
 /**

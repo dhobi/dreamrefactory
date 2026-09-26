@@ -53,6 +53,21 @@ export interface PropState {
    * six-step swing once per variant).
    */
   playOrder: number[] | null;
+  /**
+   * DreamFactory 5 only: the group each frame belongs to (the i16 at +8 of its
+   * record), index for index with {@link frames}. A step of the play list
+   * names a group, not a frame; see {@link steps}.
+   */
+  groups?: number[];
+  /**
+   * DreamFactory 5 only: the play list as RedJack.exe reads it — at each step
+   * the 0-based GROUP whose frames may be drawn (0x42d198: `word [view + 0x2e
+   * + step * 2] - 1`), and of those the one whose angle ({@link degrees}, here
+   * in 2^24ths of a turn) is nearest the prop's `propdeg`, or for a prop in the
+   * room its facing from the camera (0x42d202–0x42d229). A view with no list
+   * is one step of group 0.
+   */
+  steps?: number[];
   /** true when the state's frames form a real ANIMATION — it has a play script
    *  that accounts for the whole state (an "open" swing lists 1..N, "close" lists
    *  N..1), or its degrees repeat (one animation per variant).
@@ -211,6 +226,10 @@ const STATE_V5 = {
   frameCount: 0x232,
   frames: 0x236,
   frameSource: 0x10,
+  /** in each 44-byte frame record: the i16 group the frame belongs to, and its
+   *  angle, an i32 in 2^24ths of a turn (RedJack.exe 0x42d202, 0x42d211) */
+  frameGroup: 8,
+  frameAngle: 0x26,
 } as const;
 
 /** is this container DreamFactory 5's, and of this four-character kind? */
@@ -291,11 +310,17 @@ function readGroup(
     const refScales: number[] = [];
     const degrees: number[] = [];
     const records: number[] = [];
+    const groups: number[] = [];
     for (let s = 0; s < subCount; s++) {
       const rec = at.frames + STATE.frameSize * s;
       records.push(rec);
       frames.push(fv.getInt32(rec, true));
-      degrees.push(fv.getInt16(rec + STATE.frameDegree, true));
+      // v5 keeps the whole angle at +0x26; the i16 at +40 is only its top half,
+      // which is 0 for the small numbers most views count their frames by
+      if (at === STATE_V5) {
+        degrees.push(fv.getInt32(rec + STATE_V5.frameAngle, true) & 0xffffff);
+        groups.push(fv.getInt16(rec + STATE_V5.frameGroup, true));
+      } else degrees.push(fv.getInt16(rec + STATE.frameDegree, true));
       refScales.push(fv.getInt16(rec + STATE.frameRefScale, true) || 96);
     }
     // The play script (see PropState.playOrder): a step count at +112 and that
@@ -314,7 +339,7 @@ function readGroup(
     // rope's `idle` is step 1 of `start down`'s 21.
     if (source && order.length === 1 && order[0] >= 0 && order[0] < subCount) {
       const keep = order[0];
-      for (const list of [frames, degrees, refScales, records]) list.splice(0, list.length, list[keep]);
+      for (const list of [frames, degrees, refScales, records, groups]) list.splice(0, list.length, list[keep]);
     }
     let playOrder: number[] | null =
       order.length > 1 && order.every((v) => v >= 0 && v < subCount) ? order : null;
@@ -356,6 +381,7 @@ function readGroup(
       // v5: the view's flags word, bit 0 "plays once" (see PropState.playsOnce)
       ...(at === STATE_V5 && ed.length >= 0x18 ? { playsOnce: (ev.getUint32(0x14, true) & 1) === 1 } : {}),
       ...(at === STATE_V5 && ed.length >= 0x230 ? { frameTicks: ev.getInt16(0x22e, true), playCount: orderCount } : {}),
+      ...(at === STATE_V5 ? { groups, steps: order.length ? order : [0] } : {}),
     });
   }
   orientToSettledPose(states, containers);
@@ -411,7 +437,8 @@ function orientToSettledPose(states: PropState[], containers: Container[]): void
   }
   if (!settled.size) return;
   for (const s of states) {
-    if (!s.animated || s.frames.length < 2) continue;
+    // a v5 view says its order itself (PropState.steps)
+    if (!s.animated || s.frames.length < 2 || s.steps) continue;
     const m = /^(open|close)(.+)$/.exec(s.identifier.toLowerCase());
     if (!m) continue;
     const pose = settled.get(`idle${m[2]}`);

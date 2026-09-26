@@ -100,9 +100,9 @@ the day's first room and cast, and often plays a film or starts a talk. Each
 puppet file keeps a talk per day, and a mini game is a stage, or a room of
 its own such as the cannons.
 
-Days one to five are played by the [machine suites](#machine-suites). Days six
-and seven are read from the scripts and not yet played, so their rows say what
-the scripts hold, not what has been seen to work.
+Days one to six are played by the [machine suites](#machine-suites). Day seven
+is read from the scripts and not yet played, so its row says what the scripts
+hold, not what has been seen to work.
 
 | Day | Where (disc) | Talks | Mini games | How it ends |
 |---|---|---|---|---|
@@ -111,7 +111,7 @@ the scripts hold, not what has been seen to work.
 | 3 | Port Royal (ptroyal, disc 2) | Justice, Erzulie, the constable, Anne at the jail window, the soldier | The alley fight with Jan and his second (`jcombat`); the jail escape (rum, a rock from the wall, the keys); the street fight's three waves (`bfight`) | Justice is murdered, and Nick is tried at sea (`trialset.move`) |
 | 4 | RedJack's island (rjbeach, disc 3) | Anne, RedJack in a dream, Rockfish | The totems (`totem`); the gem lifts at the skull's teeth (`gem`); the lava's pillars; the flame corridor and its switch; the swinging chain; the skeleton, beaten with a vine (`scombat2`); RedJack's lockbox; the crate and its crowbar; the horn caves and the squid door; lighting the beach's fire pit with the torch | Rockfish answers the fire and takes Nick to Blackbeard (`rock3.pupp`) |
 | 5 | Blackbeard's island (bb1, disc 2) | Rockfish, Lyle, Denton, Blackbeard, Bone | The lift's handle (`elevator`); Blackbeard's drink (`drink`), with Lyle's sulphur and a coal from the bin by the dock (`charcoal`); the mine carts with the harpoon gun, three sets of Jan's men (mc1–mc3); the fight with Bone (`bcombat`) | Bone beaten, and Blackbeard sends Nick to Cartagena (`arrive.move`) |
-| 6 | Cartagena (lock1, disc 2) | Marquez, Elizabeth and Jake in their cages, Rockfish, Anne | The lock's valves (`topvalves`, `botvalves`), the switch (`switch`), the fight in the hold (`tcombat`), the shield in the study (`shield`) | Marquez in his study (`marqintro.move`) |
+| 6 | Cartagena (lock1–lock3, dock, hold, torture, study; disc 2) | Anne, Rockfish, Elizabeth and Jake in their cage, Marquez | The lock: its valves, the pipe, the raft and the two chains (`botvalves`, `lock2.pupp`), and the rope cut with the sword; the torturer's fight, the whip and then the cauldron (`tcombat`); the study's four shields (`shield`), the gearboxes (`switch`) and the switch that lowers the cage | Marquez in his study (`marqintro.move`), and the voyage to RedJack's island (`cartrj.move`) |
 | 7 | RedJack's island again (rjbeach, disc 3) | Blackbeard, Cross, Elizabeth, Jake, Lyle, Marquez, Patch, Rockfish, Anne | The Spaniard on the beach (`spancombat`), Marquez (`mcombat`), the ballista | The ending |
 
 Some things lie off the suites' route. The bar's darts and the shark in the
@@ -189,9 +189,24 @@ CPU goes, waiting on the game's state and never on a duration.
 - the mine carts, three sets of Jan's men shot with the harpoon (`mine.ts`), the
   crash, and the sword fight with Bone: the suite ends on day six at Cartagena.
 
+`day6` plays the first five days, then Cartagena:
+- the lock: Anne turns the valve with Nick standing in the drain, and he goes
+  down alone. The lock door opens only while the lock above is drained, and
+  filling it with the door open drowns him. So he goes through and shuts it,
+  asks through the pipe for the fill valve and the raft, and drains the lock
+  himself at the bottom valves;
+- Rockfish's talk on the raft, the two chains held, and the rope cut with the
+  sword: the raft runs out to the dock without Rockfish;
+- the hold, and the torture chamber's fight. No sword stroke hurts the
+  torturer (tcombat.shop `Edamage` stops on its first line); he is beaten by
+  tipping the cauldron's coals at his feet and striking while he dances;
+- the study key, the four shields' symbols, the gearboxes' levers, and the
+  switch that lowers the cage; Elizabeth, and Marquez in his study: the suite
+  ends on day seven at RedJack's beach.
+
 Each step checks the flag the script it cites sets.
 
-The moves are the player's, in six files:
+The moves are the player's:
 - [`route.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/route.ts)
   walks a room by its exits (turn to the exit, then up), clicks what `hittest`
   names, pans or rests on the screen edge to bring a thing out of the scroll
@@ -205,6 +220,8 @@ The moves are the player's, in six files:
   strikes in turn at a hand's pace, and in the fight both, with the button held.
   The same duel fights Jan, closing in when he steps back. In the street fight
   it clicks each man it sees and leads the view with the pointer toward the rest.
+  In the torture chamber it leans away from each lash of the whip, takes up the
+  sword at the fourth step, and then tips the cauldron and strikes.
 - [`cannons.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/cannons.ts)
   aims with the arrows and fires with a click. For each tilt it follows the
   ball the way the cannon ball's script will, and uses the room's own projection
@@ -260,7 +277,8 @@ Day four found more:
 - the film header's two action-frame names, which the v5 reader had left
   empty (RedJack.exe 0x44e1ac);
 - `propdeg` showing a frame by index where no frame carries the degree, as
-  the chest and its lid need (common.shop open and close).
+  the chest and its lid seemed to need (common.shop open and close). Day six
+  found the degrees misread, and the exe says otherwise (below).
 
 Day five found more, each read from RedJack.exe:
 - a view's and a pose's play list: at 0x2e, as in v4, not the 0x1ee the
@@ -282,8 +300,29 @@ Day five found more, each read from RedJack.exe:
   a script holding the engine. A v5 room now asks what held the engine as the
   pass began.
 
+Day six found more, each read from RedJack.exe:
+- which frame a view draws. A step of the play list names a group of frames,
+  and of those the engine draws the one whose angle is nearest the prop's
+  degree (0x42d0e0). The angle is an i32 at +0x26 of the frame record, and the
+  port read only its top half, which is 0 for the small numbers most views
+  count their frames by. So the torturer's cauldron, whose frames are its
+  nodes 5 to 8, showed the empty frame it keeps for node 8 and could not be
+  clicked; the health bars and Nick's guard poses, numbered from 1, were
+  shown one frame off; and the alley fighters' strikes, two frames to a step,
+  played at half speed (see
+  [the shop, the cast and the puppet](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet));
+- `propdeg` only stores the degree, masked to 24 bits (0x428880), and stops
+  nothing, so the day-four stand-in that showed a frame by index is gone;
+- `puppetevent`'s argument, a wait in sixtieths of a second that answers -2
+  when it runs out, where a negative one waits for good (0x42f140). Marquez's
+  `puppetevent (0)` just after an answer is a look, not a question, and waited
+  out as one his talk asked its first question twice.
+
 ## What does not work yet
 
+- **Ambient sounds run out.** From day four on the log reports
+  `makecricket: table full (16)`: the ambient loops never seem to be freed, so
+  later rooms lose theirs, as the lock's water does. Not yet read from the exe.
 - **Copying to the hard disk.** `buildfilenames` and `copylocal` copy game
   files off the disc. The port reads the discs directly, so they are left
   unknown.

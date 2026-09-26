@@ -88,6 +88,33 @@ export function frameIndexForDegree(st: PropState, deg: number): number {
 }
 
 /**
+ * The frame a DreamFactory 5 view draws at a step (RedJack.exe 0x42d0e0): of
+ * the frames in the group the step names ({@link PropState.steps}), the first
+ * whose angle is nearest `deg` round the turn (0x41dfc0 measures the shorter
+ * way, in 2^24ths); the search stops at an exact match (0x42d229). For a
+ * prop on the screen `deg` is its `propdeg` (0x42ce63), and for one in the
+ * room its `propdeg` less the bearing from it to the camera (0x42cb3e).
+ */
+export function v5FrameIndex(st: PropState, step: number, deg: number): number {
+  const steps = st.steps!;
+  const group = steps[Math.max(0, Math.min(step, steps.length - 1))];
+  const want = ((Math.round(deg) % 0x1000000) + 0x1000000) % 0x1000000;
+  let best = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < st.frames.length; i++) {
+    if (st.groups![i] !== group) continue;
+    const d = Math.abs(st.degrees[i] - want);
+    const dist = Math.min(d, 0x1000000 - d);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+      if (dist === 0) break;
+    }
+  }
+  return best < 0 ? 0 : best;
+}
+
+/**
  * Is this state a SELECTOR — frames that are alternatives chosen by degree —
  * rather than an animation to play?
  *
@@ -393,11 +420,14 @@ export class PropInstance {
 
   /** how many frames this prop will actually play — the variant's, if it has one */
   frameCount(st: PropState): number {
+    // a v5 view steps through its play list, whatever its frames number
+    if (st.steps) return st.steps.length;
     return this.frameOrder ? this.frameOrder.length : st.frames.length;
   }
 
   /** where `frameIdx` lands in `st.frames`/`st.refScales`, through the variant map */
   currentFrameIdx(st: PropState): number {
+    if (st.steps) return v5FrameIndex(st, this.frameIdx, Number(this.deg) || 0);
     // A selector's frame IS its degree, whether or not a script ever named the
     // state — see {@link isDegreeSelector}.
     //
@@ -608,7 +638,7 @@ export class PropRuntime {
         // 0x42c931, ActorRuntime.advanceAnimation): step 0 on the first pass,
         // then by the view's step time on the clock or one a pass; a view that
         // plays once holds its last step and says so, and any other goes round
-        const n = st.playCount === 1 ? 1 : p.frameCount(st);
+        const n = p.frameCount(st);
         if (!p.lastTick) {
           p.lastTick = now;
           p.passTicks = 0;
@@ -748,8 +778,12 @@ export class PropRuntime {
    * frameIdx, so animated world props are unaffected.
    */
   private worldFrameIdx(p: PropInstance, nFrames: number, cam: WorldCamera): number {
-    if (!p.directional || nFrames < 2) return p.currentFrameIdx(p.state()!);
-    if (cam.v5) return frameIndexForDegree(p.state()!, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0));
+    const st = p.state()!;
+    // a v5 prop in the room always picks by its facing from the camera, turned
+    // or not (0x42cb3e); `facing` answers in 256ths
+    if (cam.v5 && st.steps) return v5FrameIndex(st, p.frameIdx, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0) << 16);
+    if (!p.directional || nFrames < 2) return p.currentFrameIdx(st);
+    if (cam.v5) return frameIndexForDegree(st, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0));
     const camBearing = bearing(cam.x - p.worldX, cam.y - p.worldY);
     // the facing to depict is the prop's orientation relative to the camera;
     // pick the frame whose stored degree matches it (the frames' degrees are
