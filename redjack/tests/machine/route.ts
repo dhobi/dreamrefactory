@@ -114,9 +114,14 @@ const hitIs = (hit: { name: string; type: string }, name: string, type?: HitType
  * grid first and a fine one only if that misses, so a big target is found in
  * a few hundred tests and a small one still is.
  */
-export function findOnScreen(h: Headless, name: string, type?: HitType): { x: number; y: number } | null {
+export function findOnScreen(
+  h: Headless,
+  name: string,
+  type?: HitType,
+  grids: number[] = [16, 8],
+): { x: number; y: number } | null {
   const { width, height } = h.host.director.screen;
-  for (const grid of [16, 8]) {
+  for (const grid of grids) {
     const hits: { x: number; y: number }[] = [];
     for (let y = grid / 2; y < height; y += grid)
       for (let x = grid / 2; x < width; x += grid)
@@ -148,11 +153,22 @@ export async function face(h: Headless, name: string, type?: HitType): Promise<{
     at = findOnScreen(h, name, type);
   }
   // a node with one exit does not turn on "right": pan the view round instead,
-  // the pointer resting on the right edge (boot region/tracknodescroll)
-  for (let pan = 0; !at && pan < 40; pan++) {
-    h.session.setPointer(width - 4, height / 2);
-    await h.frame(4);
-    at = findOnScreen(h, name, type);
+  // the pointer resting on the right edge (boot region/tracknodescroll) — and
+  // look down, and up, the same way: the jail's keys lie on the floor below
+  const rest = [
+    { x: width - 4, y: height / 2, n: 40 },
+    { x: width / 2, y: height - 4, n: 30 },
+    { x: width - 4, y: height / 2, n: 40 },
+    { x: width / 2, y: 4, n: 60 },
+    { x: width - 4, y: height / 2, n: 40 },
+  ];
+  for (const r of rest) {
+    for (let pan = 0; !at && pan < r.n; pan++) {
+      h.session.setPointer(r.x, r.y);
+      await h.frame(4);
+      // the coarse grid alone while the view moves; the fine one once it is found
+      at = findOnScreen(h, name, type, [16]) && findOnScreen(h, name, type);
+    }
   }
   if (!at) fail(`${h.room()}/${h.node()}: "${name}" is nowhere on screen`);
   const inMargin = (p: { x: number; y: number }): boolean =>
@@ -193,7 +209,10 @@ export async function converse(
 ): Promise<void> {
   const dir = h.host.director;
   const left = [...answers];
-  await h.until(() => h.owner() === "puppet", `${what} to open`, 2_000);
+  // a talk opened with `openpuppetfile` and `sendtopuppet` rather than
+  // `runpuppet` (Erzulie's, from her set's openset) asks without the puppet
+  // owning the screen
+  await h.until(() => h.owner() === "puppet" || dir.awaitingChoice, `${what} to open`, 2_000);
   for (;;) {
     await h.until(() => dir.awaitingChoice || h.idle() || filmWaits(h), `${what}: a choice or the end`);
     if (filmWaits(h)) {
@@ -289,4 +308,38 @@ export async function drag(h: Headless, what: string, onto: string): Promise<voi
   h.mouseUp(to.x, to.y);
   await h.frame(3);
   await h.until(() => h.running().length === 0, `dropping ${what} on ${onto}`, 3_000);
+}
+
+/**
+ * Carry `what` to `where` with the button held and scrape it to and fro there,
+ * then let go — how the jail's cup, plate and spoon are rattled along the bars
+ * (jail.shop `stdmove`: every move of more than the bars' spacing across the
+ * window or the cell door rings, and letting go calls whoever is there).
+ */
+export async function rattle(h: Headless, what: string, where: { x: number; y: number }, strokes = 6): Promise<void> {
+  const from = findOnScreen(h, what) ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
+  h.mouseDown(from.x, from.y);
+  await h.frame(3);
+  const path: { x: number; y: number }[] = [];
+  for (let i = 1; i <= 8; i++) path.push({ x: from.x + ((where.x - from.x) * i) / 8, y: from.y + ((where.y - from.y) * i) / 8 });
+  for (let i = 0; i < strokes; i++) path.push({ x: where.x + (i % 2 ? 30 : -30), y: where.y });
+  for (const p of path) {
+    h.session.setPointer(Math.round(p.x), Math.round(p.y));
+    await h.frame(1);
+  }
+  h.mouseUp(where.x, where.y);
+  await h.frame(3);
+}
+
+/** carry `what` with the button held along a straight line to (x, y), and let go there */
+export async function carry(h: Headless, what: string, to: { x: number; y: number }, type?: HitType): Promise<void> {
+  const from = findOnScreen(h, what, type) ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
+  h.mouseDown(from.x, from.y);
+  await h.frame(3);
+  for (let i = 1; i <= 10; i++) {
+    h.session.setPointer(Math.round(from.x + ((to.x - from.x) * i) / 10), Math.round(from.y + ((to.y - from.y) * i) / 10));
+    await h.frame(1);
+  }
+  h.mouseUp(to.x, to.y);
+  await h.frame(3);
 }

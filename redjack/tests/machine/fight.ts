@@ -8,6 +8,7 @@
  * answers.
  */
 import { fail, type Headless } from "./harness";
+import { findOnScreen } from "./route";
 
 /** what the opponent shows: the `enemy` prop's view ("idle", "S left", …) */
 export const enemyView = (h: Headless): string => h.session.propRuntime.get("enemy")?.stateName ?? "";
@@ -198,11 +199,22 @@ export async function schoolOfStriking(h: Headless): Promise<void> {
  * strikes, in turn and at a hand's pace, while he is open. Won when Lyle's life
  * runs out (enemy1.shop `death`, fightstat "n"); lost when Nick's does ("l").
  */
-export async function fightLyle(h: Headless): Promise<void> {
-  if (!fighting(h, "combat.stag")) fail(`the fight is not up (stage ${h.session.stageName})`);
+export const fightLyle = (h: Headless): Promise<void> => duel(h, "combat.stag", "the fight with Lyle");
+
+/**
+ * A sword fight on a fight stage, played as {@link fightLyle} explains: guard
+ * where the wind-up says, strike while the opponent is open. The alley's
+ * `jcombat.stag` is the same Nick (jcombat.shop is combat.shop with a few lines
+ * moved), and its opponents step back out of reach — J1.shop `retreat` sets the
+ * enemy's `propdeg` to 1 — where "up" closes in again (jcombat.stag keydown →
+ * `advance`). A second half of bottles (enemy2.shop) is dodged.
+ */
+export async function duel(h: Headless, stage: string, what: string): Promise<void> {
+  if (!fighting(h, stage)) fail(`${what}: the stage is not up (stage ${h.session.stageName})`);
   const props = h.session.propRuntime;
   let next = 0;
   let held: { x: number; y: number; for: number } | null = null;
+  let closing = 0;
   const letGo = (): void => {
     if (held) h.mouseUp(held.x, held.y);
     held = null;
@@ -210,7 +222,7 @@ export async function fightLyle(h: Headless): Promise<void> {
   const dodge = dodger(h);
   await h.until(
     () => {
-      if (!fighting(h, "combat.stag")) return true;
+      if (!fighting(h, stage)) return true;
       const view = enemyView(h);
       const nick = props.get("nick")?.stateName ?? "";
       // the second half: beaten with the sword, Lyle backs off and throws
@@ -221,6 +233,15 @@ export async function fightLyle(h: Headless): Promise<void> {
         return false;
       }
       dodge.stop();
+      // out of reach: close in, a press at a time
+      if (props.get("enemy")?.deg === 1 && props.get("enemy")?.visible) {
+        letGo();
+        if (closing-- <= 0) {
+          h.key("up");
+          closing = 10;
+        }
+        return false;
+      }
       // the swing is under way, or the button has been down long enough: let go
       if (held && (nick.startsWith("strike") || ++held.for > 10)) letGo();
       const guard = guardFor(view);
@@ -230,7 +251,7 @@ export async function fightLyle(h: Headless): Promise<void> {
         return false;
       }
       if (held) return false;
-      const open = !/^(block|hurt|fall|death)/.test(view.toLowerCase());
+      const open = !/^(block|hurt|fall|death|special|advance)/.test(view.toLowerCase());
       const strength = Number(props.get("nick strength")?.deg ?? 0);
       if (open && strength >= 6 && !nick.startsWith("strike")) {
         const s = STRIKES[next++ % STRIKES.length];
@@ -239,9 +260,89 @@ export async function fightLyle(h: Headless): Promise<void> {
       } else h.session.setPointer(OPEN.x, OPEN.y);
       return false;
     },
-    "the fight with Lyle to end",
+    `${what} to end`,
     60_000,
   );
   letGo();
   dodge.stop();
+}
+
+/**
+ * The street fight at Port Royal (ptroyal.cast `bfight` → bfight.cast): Jan's
+ * men drop from the roofs, run at Nick or shoot from the windows, and each dies
+ * to one click on him — bfight.cast's `mousedown` for the droppers and runners
+ * (enemy1), and for the sharpshooters (enemy2), whose `endanim` counts him.
+ * Three waves of 9, 9 and 5 (`deadgoal`, `nextphase`), the walk to the next
+ * street between them, and `endfight` after the last, which ends the day.
+ *
+ * So the gunner clicks any of them it sees, the one nearest first, and turns
+ * the barrel of the view with the arrows toward one it does not.
+ */
+export async function shootout(h: Headless, done: () => boolean): Promise<number> {
+  const actors = h.session.actorRuntime;
+  const foe = /^(dropper|runner|sharpshooter) \d+$/;
+  let shots = 0;
+  let cool = 0;
+  let search = 0;
+  let target: (typeof actors.actors extends Map<string, infer A> ? A : never) | undefined;
+  await h.until(
+    () => {
+      if (done()) return true;
+      const m = h.session.maze;
+      const cam = m?.camera();
+      const eye = m?.spriteCamera(640, 480);
+      if (!m || !cam || !eye || h.session.stageName !== "none" || m.view !== "node") return false;
+      if (cool-- > 0) return false;
+      const live = [...actors.actors.values()]
+        .filter((a) => foe.test(a.name) && a.visible && a.owner !== "dead")
+        .sort((a, b) => Math.hypot(a.worldX - cam.x, a.worldY - cam.y) - Math.hypot(b.worldX - cam.x, b.worldY - cam.y));
+      for (const a of live) {
+        const p = eye.project(a.worldX, a.worldY, a.worldZ);
+        if (!p || p.x < -40 || p.x >= 680) continue;
+        // over the sprite, from its feet up, until the room answers with him
+        for (let dy = 0; dy <= 240; dy += 10) {
+          for (const dx of [0, -12, 12, -24, 24]) {
+            const x = Math.round(p.x + dx);
+            const y = Math.round(p.y - dy);
+            if (x < 0 || x >= 640 || y < 0 || y >= 480) continue;
+            if (h.session.hitTestAt(x, y).name.toLowerCase() === a.name) {
+              h.click(x, y);
+              shots++;
+              cool = 2;
+              return false;
+            }
+          }
+        }
+      }
+      // the projection missed him: look for him, now and then, over the screen
+      for (const a of (search++ % 10 === 0 ? live : [])) {
+        const at = findOnScreen(h, a.name, "actor", [16]);
+        if (at) {
+          h.click(at.x, at.y);
+          shots++;
+          cool = 2;
+          return false;
+        }
+      }
+      // nobody in sight: look toward one, and stay with him until he is down.
+      // The fight sets the boot's `margin` to 310 (bfight.cast opencast), so
+      // anywhere but the middle of the screen scrolls the view that way
+      // (ptroyal.sett region/tracknodescroll): the pointer leads the eye
+      if (!target || !live.includes(target)) target = live[0];
+      const a = target;
+      if (a) {
+        const want = Math.atan2(a.worldY - cam.y, a.worldX - cam.x);
+        const off = ((want - cam.heading + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+        const p = eye.project(a.worldX, a.worldY, a.worldZ);
+        const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+        const x = !p || Math.abs(off) > 0.8 ? (off > 0 ? 4 : 636) : clamp(p.x, 4, 636);
+        const y = p ? clamp(p.y, 4, 476) : 240;
+        h.session.setPointer(Math.round(x), Math.round(y));
+      }
+      return false;
+    },
+    "the street fight to end",
+    60_000,
+  );
+  return shots;
 }

@@ -10,8 +10,8 @@ What runs here is a **prototype**: the real `GameHost` and `GameSession`
 pointed at the three discs, on port 5179 with
 `npm run dev -w redjack`. It boots, you can walk the rooms and look round them,
 the films, props, actors and puppets play, and the fights' stage opens. The
-first two days play through headless (see [Machine suites](#machine-suites));
-day three has not been played through yet.
+first three days play through headless (see [Machine suites](#machine-suites));
+the later days have not been played through yet.
 
 ## What was found
 
@@ -130,6 +130,16 @@ CPU goes, waiting on the game's state and never on a duration.
 - Justice's cabin, and his talk, which sails the Marauder to Port Royal: the
   suite ends on day three's first question.
 
+`day3` plays the first two days, then Port Royal:
+- Justice's watch, Erzulie's fortune, and Justice killed in the alley;
+- the fight with Jan and his second (`jcombat.stag`);
+- arrested, and the jail escape:
+  - Anne's rum at the window, which the constable drinks himself asleep on;
+  - a rock raked from the wall with the spoon, thrown to bring the rifle down;
+  - the keys onto the lock, and the trunk with the sword and pistol;
+- the street fight's three waves, and the trial at sea: the suite ends on day
+  four at RedJack's beach.
+
 Each step checks the flag the script it cites sets.
 
 The moves are the player's, in three files:
@@ -137,11 +147,15 @@ The moves are the player's, in three files:
   walks a room by its exits (turn to the exit, then up), clicks what `hittest`
   names, pans or rests on the screen edge to bring a thing out of the scroll
   margin, answers conversations by the text of a choice, and drags an item out of
-  the inventory onto its target.
+  the inventory onto its target. It also carries a thing with the button held,
+  scrapes it along the jail's bars, and looks down or up by resting on the
+  bottom or top edge.
 - [`fight.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/fight.ts)
   reads Lyle off the screen and answers with the pointer and the arrows: the
   guard where his wind-up says, the lane no bottle is falling down, the three
   strikes in turn at a hand's pace, and in the fight both, with the button held.
+  The same duel fights Jan, closing in when he steps back. In the street fight
+  it clicks each man it sees and leads the view with the pointer toward the rest.
 - [`cannons.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/cannons.ts)
   aims with the arrows and fires with a click. For each tilt it follows the
   ball the way the cannon ball's script will, and uses the room's own projection
@@ -163,6 +177,14 @@ Day two found more, each read from RedJack.exe:
 - screen props drawn in a room but not clickable there.
 
 One more is a reading: a hidden sprite hears no `endanim`.
+
+Day three found more:
+- `sendtoshop` reaching a shop by the name it gives itself;
+- `propis3d` as the prop's own flag in v5 (RedJack.exe 0x429d60), where the
+  port had always answered 0;
+- a v5 view's "plays once" flag (bit 0 at +0x14), which is on exactly the
+  views whose end a script answers. Only those now end with `endanim`, and the
+  jail spoon's `carrying` no longer runs round forever.
 
 ## What does not work yet
 

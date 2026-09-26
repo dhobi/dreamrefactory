@@ -54,7 +54,8 @@ In a DreamFactory 5 game the targets and the chains are RedJack.exe's.
 `sendtocast` finds only open casts (0x405370) and `sendtoprop` only props
 (0x42b550), so a room and a cast or prop of the same name (`ship.sett` and
 `ship.cast`, `cannon.sett` and the prop `cannon`) no longer take each other's
-events. The scene, set, actor, cast and prop chains end on the **post
+events. `sendtoshop` also finds a shop by the name it gives itself
+(`jcombat.shop` is "combat"). The scene, set, actor, cast and prop chains end on the **post
 script**, the BOOTFILE's library: the exe names the links as it builds them
 ("Scene Script: ", "Set Script: ", "Post Script: " for `sendtoscene` at
 0x440ab0).
@@ -310,6 +311,9 @@ camera and nodes in a v5 game, and v4's `propspeed` id is `sysparam` there.
 `calcdeg` take four coordinates, `(x1, y1, x2, y2)`, instead of two packed
 points (0x4185c0, 0x4184f0), and `calcdeg` answers a heading in 2^24ths of a
 turn.
+
+`propis3d` (`props.ts`) answers and sets the prop's own 3D flag in a v5 game
+(0x429d60), and 0 in every other.
 
 **Everything else** (`df5.ts`):
 

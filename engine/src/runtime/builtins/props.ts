@@ -24,7 +24,19 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // propis3d(name): whether a prop is a 3D world object rather than a 2D sprite.
   // The web build draws every prop as a screen-space overlay (see PropRuntime),
   // so none are 3D — return 0. (Kept explicit so it doesn't log as unknown.)
-  r("propis3d", () => 0);
+  //
+  // DreamFactory 5's props do stand in the room, and the flag is the prop's own:
+  // RedJack.exe's getter (0x429d60) answers a word of the prop record (+0x12).
+  // jail.shop's keys ask it — `if propis3d (me)` is keys on the floor, to pick
+  // up; otherwise keys in the hand, to carry — and with 0 the keys on the floor
+  // could only be dragged about.
+  r("propis3d", (_i, [n, v]) => {
+    const p = session.isV5 ? prop(n ?? "") : null;
+    if (!p) return 0;
+    if (v === undefined) return p.worldSpace ? 1 : 0;
+    p.worldSpace = truthy(v);
+    return 0;
+  });
   // propdelete(name): permanently remove a prop from the set (e.g. clearing
   // TAOOT's greenhouse plants). Distinct from prophide, which only toggles visibility.
   r("propdelete", (_i, [n]) => session.propRuntime.remove(toStr(n ?? "")));

@@ -63,6 +63,16 @@ export interface PropState {
    *  Measured: every such selector state in the corpus stores a step count of 1,
    *  so having a table at all is what tells the two apart. */
   animated: boolean;
+  /**
+   * DreamFactory 5 only: bit 0 of the view's flags word at +0x14, which
+   * RedJack.exe copies into the prop with the view (`propview` 0x428640 →
+   * 0x42d2f0, masked with ~0xe). Set on exactly the views whose end a script
+   * answers in `endanim` — liznite.shop's `mark crate`, the journal's `opening`
+   * and `closing`, the cannon's `firing` and `splash`, the jail spoon's
+   * `animated` — and clear on the ones that are held or loop, like the spoon's
+   * two-frame `carrying`. Read here as "plays once, and says so at the end".
+   */
+  playsOnce?: boolean;
 }
 
 export interface PropGroup {
@@ -306,6 +316,8 @@ function readGroup(
       degrees,
       playOrder,
       animated,
+      // v5: the view's flags word, bit 0 "plays once" (see PropState.playsOnce)
+      ...(at === STATE_V5 && ed.length >= 0x18 ? { playsOnce: (ev.getUint32(0x14, true) & 1) === 1 } : {}),
     });
   }
   orientToSettledPose(states, containers);

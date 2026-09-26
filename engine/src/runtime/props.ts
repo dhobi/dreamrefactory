@@ -613,7 +613,10 @@ export class PropRuntime {
         p.frameIdx++;
         if (p.frameIdx >= last) {
           p.animating = false; // hold last frame
-          ended.push(p.name);
+          // a v5 view says whether its end is an event (PropState.playsOnce): the
+          // jail spoon's `carrying` is not, and its endanim, which puts the spoon
+          // back under the pointer and sets `carrying` again, ran round forever
+          if (st.playsOnce !== false) ended.push(p.name);
         }
       }
     }

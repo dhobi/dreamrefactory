@@ -1313,9 +1313,15 @@ export class GameSession {
     // `sendtoprop ("cannon", fire ())` reached the room's main instead
     const propFirst =
       /^sendtoprop(fx)?$/.test(cmd) && this.isV5 ? this.propScriptFor(targetName.toLowerCase()) : null;
+    // ...and a shop by the names `closeshopfile` knows it by, the one it gives
+    // itself among them: jcombat.shop calls itself "combat", and the alley fight
+    // asks `sendtoshop ("combat", moveobjects ())` every step (see openShopKey)
+    const shopFirst =
+      /^sendtoshop(fx)?$/.test(cmd) && this.isV5 ? this.shopMains.get(this.openShopKey(targetName)) ?? null : null;
     let inst =
       castFirst ??
       propFirst ??
+      shopFirst ??
       (flatFirst?.script.codes.has(handler) ? flatFirst : null) ??
       (ACTOR_ADDRESSEE.test(cmd) ? this.castScripts.get(targetName.toLowerCase()) : null) ??
       this.currentBinding?.findInstance(targetName) ??
