@@ -70,6 +70,7 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import {
@@ -270,6 +271,8 @@ let currentRoom = "";
 // fullscreen to match, and the page fills itself there instead — the detection
 // and the way back out are engine/src/web/fullscreen.ts.
 installFullscreen(fsBtn, stageEl, { report: say });
+// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
+installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "dust.picture.stretch");
 
 /** how long the screenshot's fate stays on screen before it is taken down */
 const BUG_NOTE_MS = 6000;
@@ -1607,7 +1610,7 @@ let cursorShown = "";
 function showCursor(name: string): void {
   cursorShown = name;
   const rect = canvas.getBoundingClientRect();
-  canvas.style.cursor = cursors.css(name || "arrow", rect.width / canvas.width);
+  canvas.style.cursor = cursors.css(name || "arrow", rect.width / canvas.width, rect.height / canvas.height);
 }
 addEventListener("resize", () => showCursor(cursorShown));
 

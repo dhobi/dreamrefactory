@@ -70,6 +70,10 @@
     <div id="under">
       <div class="bar">
         <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">⛶ Fullscreen</button>
+        <!-- what fullscreen does with the display's own shape (engine/src/web/stretch.ts) -->
+        <label class="stretchopt" title="In fullscreen, fill the whole display instead of keeping the original 4:3 — the picture is stretched to fit"
+          ><input type="checkbox" id="stretchBox" /> <span>stretch to fill</span></label
+        >
         <!-- a prefilled GitHub issue with the screen on the clipboard
              (site/src/bug-report.ts, shared with the other pages) -->
         <button id="bugBtn" type="button" title="Report something the port gets wrong">

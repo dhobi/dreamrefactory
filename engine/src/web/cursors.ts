@@ -38,6 +38,10 @@
  * 120. Capped at {@link CURSOR_MAX_PX} because a larger cursor image is ignored
  * outright by every browser.
  *
+ * The two axes are scaled separately, because a fullscreen stretched to a wide
+ * display (./stretch.ts) shows the picture wider than it is tall — and a cursor
+ * scaled by the width alone would stand taller against it than the artist drew.
+ *
  * ## Three states, not four
  *
  * Windows monochrome cursors have a fourth: mask 1 with colour 1 inverts the
@@ -83,29 +87,34 @@ const b64 = (s: string): Uint8Array => {
  * answer — a hotspot, a plane order, a palette, an origin at the top — and it can
  * be checked without a browser in the room.
  */
-export function cursorPixels(art: CursorArt, scale = 1): { rgba: Uint8ClampedArray; width: number; height: number } {
+export function cursorPixels(
+  art: CursorArt,
+  scale = 1,
+  scaleY = scale,
+): { rgba: Uint8ClampedArray; width: number; height: number } {
   const planes = b64(art.bits);
   if (planes.length !== 2 * PLANE) throw new Error(`cursor art is ${planes.length} bytes, expected ${2 * PLANE}`);
-  const size = cursorSizeFor(scale);
-  const rgba = new Uint8ClampedArray(size * size * 4);
+  const width = cursorSizeFor(scale);
+  const height = cursorSizeFor(scaleY);
+  const rgba = new Uint8ClampedArray(width * height * 4);
   const stride = CURSOR_W >> 3;
   // destination -> source, so a fractional scale lands on whole source pixels
   // rather than blending any two of them together
-  for (let y = 0; y < size; y++) {
-    const sy = Math.min(CURSOR_H - 1, Math.floor((y * CURSOR_H) / size));
-    for (let x = 0; x < size; x++) {
-      const sx = Math.min(CURSOR_W - 1, Math.floor((x * CURSOR_W) / size));
+  for (let y = 0; y < height; y++) {
+    const sy = Math.min(CURSOR_H - 1, Math.floor((y * CURSOR_H) / height));
+    for (let x = 0; x < width; x++) {
+      const sx = Math.min(CURSOR_W - 1, Math.floor((x * CURSOR_W) / width));
       const i = sy * stride + (sx >> 3);
       const bit = 7 - (sx & 7);
       // mask 1 leaves the screen alone; mask 0 paints the colour plane, whose
       // palette is black at index 0 and white at index 1 in every one of these
       if ((planes[PLANE + i] >> bit) & 1) continue;
-      const p = (y * size + x) * 4;
+      const p = (y * width + x) * 4;
       rgba[p] = rgba[p + 1] = rgba[p + 2] = (planes[i] >> bit) & 1 ? 255 : 0;
       rgba[p + 3] = 255;
     }
   }
-  return { rgba, width: size, height: size };
+  return { rgba, width, height };
 }
 
 /**
@@ -126,17 +135,18 @@ export class CursorSheet {
   }
 
   /**
-   * `cursor(name)` as CSS, at the scale the picture is being shown at.
+   * `cursor(name)` as CSS, at the scale the picture is being shown at — across,
+   * and down if that differs (a stretched fullscreen; see the note at the top).
    *
    * An unknown name is `default` and not a thrown error: the name comes from a
    * game script, a cursor is cosmetic, and the shell that asks for one is in the
    * middle of a pointer move.
    */
-  css(name: string, scale = 1): string {
+  css(name: string, scale = 1, scaleY = scale): string {
     // Win32 resource lookup folds case and the scripts lean on it — Timelapse
     // spells two of these `HyperLink` and `None`. Keyed on the pixel SIZE rather
     // than the scale, so two window widths that want the same cursor share it.
-    const key = `${name.toLowerCase()}@${cursorSizeFor(scale)}`;
+    const key = `${name.toLowerCase()}@${cursorSizeFor(scale)}x${cursorSizeFor(scaleY)}`;
     const hit = this.cache.get(key);
     if (hit !== undefined) return hit;
     const value = this.build(key);
@@ -146,7 +156,7 @@ export class CursorSheet {
 
   private build(key: string): string {
     const [name, sizeText] = key.split("@");
-    const size = Number(sizeText);
+    const [width, height] = sizeText.split("x").map(Number);
     /**
      * `none` first, and by NAME rather than by art.
      *
@@ -160,19 +170,20 @@ export class CursorSheet {
     if (name === "none") return "none";
     const art = this.art[name];
     if (!art) return "default";
-    const k = size / CURSOR_W;
-    const url = this.dataUrl(art, k);
+    const kx = width / CURSOR_W;
+    const ky = height / CURSOR_H;
+    const url = this.dataUrl(art, kx, ky);
     if (!url) return art.fallback;
     // the hotspot moves with the art, and rounds the same way the art was
     // resampled so it stays on the pixel it names
-    return `url("${url}") ${Math.round(art.hx * k)} ${Math.round(art.hy * k)}, ${art.fallback}`;
+    return `url("${url}") ${Math.round(art.hx * kx)} ${Math.round(art.hy * ky)}, ${art.fallback}`;
   }
 
   /** the PNG, through a canvas — null in anything without a document */
-  private dataUrl(art: CursorArt, scale: number): string | null {
+  private dataUrl(art: CursorArt, scaleX: number, scaleY: number): string | null {
     if (typeof document === "undefined") return null;
     try {
-      const { rgba, width, height } = cursorPixels(art, scale);
+      const { rgba, width, height } = cursorPixels(art, scaleX, scaleY);
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;

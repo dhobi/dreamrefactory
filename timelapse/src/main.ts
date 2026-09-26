@@ -29,6 +29,7 @@ import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { ESCAPE_KEY, SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
@@ -143,6 +144,8 @@ const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
 // the `:fullscreen` pseudo because an iPhone has no element fullscreen to match,
 // and the page fills itself there instead — engine/src/web/fullscreen.ts.
 installFullscreen(fsBtn, stageEl, { report: say });
+// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
+installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "timelapse.picture.stretch");
 
 /** where the player is, for a bug report: the readout's own line, kept as it changes */
 let currentWhere = "";
@@ -807,7 +810,7 @@ let cursorShown = "";
 function showCursor(name: string): void {
   cursorShown = name;
   const rect = canvas.getBoundingClientRect();
-  canvas.style.cursor = cursors.css(name || "arrow", rect.width / SCREEN.width);
+  canvas.style.cursor = cursors.css(name || "arrow", rect.width / SCREEN.width, rect.height / SCREEN.height);
 }
 addEventListener("resize", () => showCursor(cursorShown));
 

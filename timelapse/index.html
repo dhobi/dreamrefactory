@@ -1113,6 +1113,13 @@
         max-width: none;
         max-height: none;
       }
+      /* The player's other answer: the whole display, out of 4:3. Both sides
+         given, so `aspect-ratio` has nothing to derive and steps aside; the
+         pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
+      #stage.fs.stretch #screen {
+        width: 100dvw;
+        height: 100dvh;
+      }
       /* the hint WRAPS rather than ellipsizing, which is the whole reason these
          are rows and not a one-line strip. Both hints keep their `title` anyway;
          it costs nothing and a mouse still gets the long form. */
@@ -1501,6 +1508,10 @@
         <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">
           ⛶ Fullscreen
         </button>
+        <!-- what fullscreen does with the display's own shape (engine/src/web/stretch.ts) -->
+        <label class="stretchopt" title="In fullscreen, fill the whole display instead of keeping the original 4:3 — the picture is stretched to fit"
+          ><input type="checkbox" id="stretchBox" /> <span>stretch to fill</span></label
+        >
         <!-- opens a prefilled GitHub issue and puts the screen on the clipboard,
              which is the only way an image reaches one (site/src/bug-report.ts,
              shared with the other two pages) -->

@@ -26,6 +26,7 @@ import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/au
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { ESCAPE_KEY, SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { TURN } from "@dreamfactory/engine/df/sett";
@@ -109,6 +110,8 @@ function ensureAudio(): void {
 
 // the STAGE, not the canvas: see #stage.fs in src/theme.css
 installFullscreen(document.getElementById("fsBtn") as HTMLButtonElement | null, stageEl, { report: say });
+// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
+installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "redjack.picture.stretch");
 
 /** where the player is, for a bug report: the readout's own line */
 let currentWhere = "";
@@ -212,7 +215,7 @@ function showCursor(name: string, force = false): void {
   if (name === cursorShown && !force) return;
   cursorShown = name;
   const rect = canvas.getBoundingClientRect();
-  canvas.style.cursor = cursors.css(name || "arrow", rect.width / SCREEN.width);
+  canvas.style.cursor = cursors.css(name || "arrow", rect.width / SCREEN.width, rect.height / SCREEN.height);
 }
 addEventListener("resize", () => showCursor(cursorShown, true));
 

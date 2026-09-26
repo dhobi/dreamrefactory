@@ -47,6 +47,7 @@ import { LEVEL_ORDER } from "@dreamfactory/engine/df/sbk";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
@@ -1001,6 +1002,8 @@ async function boot(): Promise<void> {
 // pseudo because an iPhone has no element fullscreen to match, and the page
 // fills itself there instead — engine/src/web/fullscreen.ts.
 installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: log });
+// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
+installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, $<HTMLDivElement>("stage"), "skullcracker.picture.stretch");
 
 /**
  * Whether this page offers to file a bug. It does now.

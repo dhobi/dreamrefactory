@@ -160,6 +160,25 @@ describe("Timelapse cursors", () => {
     }
   });
 
+  it("stretches a cursor the way a stretched fullscreen stretches the picture", () => {
+    // 640x480 filling a 1920x1080 display is 3x across and 2.25x down: the
+    // cursor is 96 wide and 72 tall, and each of its rows is a row of the
+    // uniform 3x one — the width doubling is untouched by the height's
+    const { width, height } = cursorPixels(TL_CURSORS.touch, 3, 2.25);
+    expect([width, height]).toEqual([96, 72]);
+    const wide = picture("touch", 3);
+    const { rgba } = cursorPixels(TL_CURSORS.touch, 3, 2.25);
+    for (let y = 0; y < height; y++) {
+      const sy = Math.floor((y * CURSOR_H) / height);
+      let line = "";
+      for (let x = 0; x < width; x++) {
+        const p = (y * width + x) * 4;
+        line += rgba[p + 3] === 0 ? " " : rgba[p] ? "." : "#";
+      }
+      expect(line).toBe(wide[sy * 3]);
+    }
+  });
+
   it("answers the fallback keyword where there is no canvas to draw a PNG on", () => {
     // this suite is `environment: "node"`, which is the same position a worker or
     // a blocked canvas context puts the shell in: a cursor is cosmetic, so the

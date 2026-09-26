@@ -261,3 +261,10 @@ body.playing #boot {
   width: min(100dvw, calc(100dvh * 4 / 3));
   height: min(100dvh, calc(100dvw * 3 / 4));
 }
+/* The player's other answer: the whole display, out of 4:3. Both sides
+   given, so `aspect-ratio` has nothing to derive and steps aside; the
+   pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
+#stage.fs.stretch #screen {
+  width: 100dvw;
+  height: 100dvh;
+}

@@ -109,6 +109,10 @@
       <div id="help" style="display: none">
         <div class="bar">
           <button id="fsBtn" title="Fullscreen (letterboxed 4:3)" data-i18n="play.fullscreen" data-i18n-attr="title:play.fullscreenTitle">⛶ Fullscreen</button>
+          <!-- what fullscreen does with the display's own shape (engine/src/web/stretch.ts) -->
+          <label class="stretchopt" title="In fullscreen, fill the whole display instead of keeping the original 4:3 — the picture is stretched to fit" data-i18n-attr="title:play.stretchTitle"
+            ><input type="checkbox" id="stretchBox" /> <span data-i18n="play.stretch">stretch to fill</span></label
+          >
           <!-- opens a prefilled GitHub issue and puts the screen on the
                clipboard, which is the only way an image reaches one
                (site/src/bug-report.ts) -->
