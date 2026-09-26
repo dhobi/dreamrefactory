@@ -92,6 +92,36 @@ a setter of the same name are two functions, and `cmd` prints both.
 was compiled from (`move.c`, `wave.c`, `high.c`, `Flat.c`), so
 `rjdis str "move.c"` lands in the film player.
 
+## The seven days
+
+The game is seven days, and the BOOTFILE's `advanceday` is where one day
+closes and the next one opens: a case for each day, which picks the disc, opens
+the day's first room and cast, and often plays a film or starts a talk. Each
+puppet file keeps a talk per day, and a mini game is a stage, or a room of
+its own such as the cannons.
+
+Days one to three are played by the [machine suites](#machine-suites). Days four to
+seven are read from the scripts and not yet played, so their rows say what the
+scripts hold, not what has been seen to work.
+
+| Day | Where (disc) | Talks | Mini games | How it ends |
+|---|---|---|---|---|
+| 1 | Hangman's Reef at night (liznite, disc 1) | Bone, Lyle, Patch, the bartender, Captain Justice | Lyle's three lessons (defense, dodging, striking) and the fight with him on the dock; the trunk; the fire pit; the crate | Nick hides in a marked crate and is loaded onto the Marauder |
+| 2 | The Marauder (ship, disc 1) | Justice (the oath, then his cabin), Lyle, Sullivan (Anne) and her letter | The cannons: four dinghies to sink | Justice's last word, and the voyage (`montage.move`) |
+| 3 | Port Royal (ptroyal, disc 2) | Justice, Erzulie, the constable, Anne at the jail window, the soldier | The alley fight with Jan and his second (`jcombat`); the jail escape (rum, a rock from the wall, the keys); the street fight's three waves (`bfight`) | Justice is murdered, and Nick is tried at sea (`trialset.move`) |
+| 4 | RedJack's island (rjbeach, disc 3) | Anne, Rockfish | The gem lifts at the skull's teeth (`gem`); the horn caves and their doors; lighting the beach's fire pit with the torch | Rockfish answers the fire and takes Nick to Blackbeard (`rock3.pupp`) |
+| 5 | Blackbeard's island (bb1, disc 2) | Rockfish, Blackbeard, Bone, Cross, Lyle, the pirates, Anne | The lift (`elevator`), the drink (`drink`), the charcoal (`charcoal`), the mine carts with the harpoon (mc1–mc3), the fight with Bone (`bcombat`) | Bone beaten; `arrive.move` |
+| 6 | Cartagena (lock1, disc 2) | Marquez, Elizabeth and Jake in their cages, Rockfish, Anne | The lock's valves (`topvalves`, `botvalves`), the switch (`switch`), the fight in the hold (`tcombat`), the shield in the study (`shield`) | Marquez in his study (`marqintro.move`) |
+| 7 | RedJack's island again (rjbeach, disc 3) | Blackbeard, Cross, Elizabeth, Jake, Lyle, Marquez, Patch, Rockfish, Anne | The Spaniard on the beach (`spancombat`), the skeleton (`scombat2`), Marquez (`mcombat`), the totems, the ballista, the lockbox at the top | The ending |
+
+Some things lie off the suites' route. The bar's darts and the shark in the
+bay are day one's, and killing the shark is the other way onto the ship,
+the one that leads to the Justice ending. Of the island's puzzles, only the
+gem lifts are tied to day four by the scripts themselves (`day = 4`). The
+totems, the ballista and the lockbox are placed on day seven here, where
+`diddart` and the other day-seven checks point. Until those days are played
+this is a reading.
+
 ## Machine suites
 
 RedJack is tested the way Skull Cracker is: the game runs in node on the three
