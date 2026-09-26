@@ -161,6 +161,7 @@ export async function headless(): Promise<Headless> {
       const id = ++serial;
       if (!idle) running.set(id, `${inst?.name ?? "?"}.${handler}`);
       if (!idle && tracing()) console.log(`  > ${inst?.name ?? "?"}.${handler}`);
+      if (process.env.STACK && handler === process.env.STACK) console.log("  running:", [...running.values()].join(" > "));
       try {
         return await runHandler(inst, handler, ...rest);
       } finally {
@@ -191,7 +192,9 @@ export async function headless(): Promise<Headless> {
     fail(
       `stuck waiting for ${what} (${max} passes, t=${Math.round(clock / 1000)}s, ${owner()} at ${room()}/${node()}` +
         `${host.director.busy ? ", director busy" : ""}${held.length ? `, held by ${held.join(", ")}` : ""}` +
-        `${running.size ? `, running ${[...running.values()].join(" > ")}` : ""})`,
+        `${running.size ? `, running ${[...running.values()].join(" > ")}` : ""}` +
+        `${session.maze?.walk ? ", walking" : ""}${host.director.quiescent ? "" : ", not quiescent"}` +
+        `${String(session.interp.globals.get("tnscrolling") ?? 0) === "1" ? ", scrolling" : ""})`,
     );
   };
   const owner = (): ReturnType<GameHost["director"]["screenOwner"]> => host.director.screenOwner();

@@ -687,7 +687,7 @@ export class Scheduler {
     const a = this.session.actorRuntime.get(key);
     if (this.walks.delete(key) && a && a.poseName === "walk") {
       a.poseName = "stand";
-      a.step = 0;
+      a.restartPose();
     }
   }
 
@@ -831,7 +831,7 @@ export class Scheduler {
         this.walks.delete(key);
         if (a.poseName === "walk") {
           a.poseName = "stand";
-          a.step = 0;
+          a.restartPose();
         }
         if (w.arriveStar !== undefined) a.starName = w.arriveStar;
         arrived.push(key);

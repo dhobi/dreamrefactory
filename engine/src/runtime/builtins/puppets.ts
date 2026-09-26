@@ -27,7 +27,9 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
   r("puppetbevel", (_i, [text, id]) =>
     session.puppetCtrl.puppetBevel(decodeText(toStr(text ?? ""), session.textEncoding()), toNum(id ?? 0)),
   );
-  r("puppetevent", (_i, [_timeout]) => session.puppetCtrl.puppetEvent());
+  // v5 honours the argument as a wait in ticks (PuppetController.puppetEvent)
+  r("puppetevent", (_i, [timeout]) =>
+    session.puppetCtrl.puppetEvent(session.isV5 && timeout !== undefined ? Math.trunc(toNum(timeout)) : -1));
   r("countpuppets", () => session.puppet?.scripts.size ?? 0);
   r("indextopuppet", (_i, [idx]) => {
     return [...(session.puppet?.scripts.keys() ?? [])][toNum(idx ?? 0) - 1] ?? "";

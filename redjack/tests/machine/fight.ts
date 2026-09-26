@@ -8,6 +8,7 @@
  * answers.
  */
 import { fail, type Headless } from "./harness";
+import { findOnScreen } from "./route";
 
 /** what the opponent shows: the `enemy` prop's view ("idle", "S left", …) */
 export const enemyView = (h: Headless): string => h.session.propRuntime.get("enemy")?.stateName ?? "";
@@ -198,11 +199,23 @@ export async function schoolOfStriking(h: Headless): Promise<void> {
  * strikes, in turn and at a hand's pace, while he is open. Won when Lyle's life
  * runs out (enemy1.shop `death`, fightstat "n"); lost when Nick's does ("l").
  */
-export async function fightLyle(h: Headless): Promise<void> {
-  if (!fighting(h, "combat.stag")) fail(`the fight is not up (stage ${h.session.stageName})`);
+export const fightLyle = (h: Headless): Promise<void> => duel(h, "combat.stag", "the fight with Lyle");
+
+/**
+ * A sword fight on a fight stage, played as {@link fightLyle} explains: guard
+ * where the wind-up says, strike while the opponent is open. The alley's
+ * `jcombat.stag` is the same Nick (jcombat.shop is combat.shop with a few lines
+ * moved), and its opponents step back out of reach — J1.shop `retreat` sets the
+ * enemy's `propdeg` to 1 — where "up" closes in again (jcombat.stag keydown →
+ * `advance`). A second half of bottles (enemy2.shop) is dodged.
+ */
+export async function duel(h: Headless, stage: string, what: string): Promise<void> {
+  if (!fighting(h, stage)) fail(`${what}: the stage is not up (stage ${h.session.stageName})`);
   const props = h.session.propRuntime;
   let next = 0;
   let held: { x: number; y: number; for: number } | null = null;
+  let aim: { x: number; y: number } | null = null;
+  let closing = 0;
   const letGo = (): void => {
     if (held) h.mouseUp(held.x, held.y);
     held = null;
@@ -210,7 +223,9 @@ export async function fightLyle(h: Headless): Promise<void> {
   const dodge = dodger(h);
   await h.until(
     () => {
-      if (!fighting(h, "combat.stag")) return true;
+      // the stage closes on a win, or a talk opens over it (benemy1.shop's
+      // `die` asks Blackbeard's questions with Bone's stage still up)
+      if (!fighting(h, stage) || h.host.director.awaitingChoice) return true;
       const view = enemyView(h);
       const nick = props.get("nick")?.stateName ?? "";
       // the second half: beaten with the sword, Lyle backs off and throws
@@ -221,27 +236,323 @@ export async function fightLyle(h: Headless): Promise<void> {
         return false;
       }
       dodge.stop();
+      // out of reach: close in, a press at a time
+      if (props.get("enemy")?.deg === 1 && props.get("enemy")?.visible) {
+        letGo();
+        if (closing-- <= 0) {
+          h.key("up");
+          closing = 10;
+        }
+        return false;
+      }
       // the swing is under way, or the button has been down long enough: let go
       if (held && (nick.startsWith("strike") || ++held.for > 10)) letGo();
       const guard = guardFor(view);
       if (guard) {
         letGo();
+        aim = null;
         h.session.setPointer(guard.x, guard.y);
         return false;
       }
       if (held) return false;
-      const open = !/^(block|hurt|fall|death)/.test(view.toLowerCase());
+      const open = !/^(block|hurt|fall|death|special|advance)/.test(view.toLowerCase());
       const strength = Number(props.get("nick strength")?.deg ?? 0);
       if (open && strength >= 6 && !nick.startsWith("strike")) {
-        const s = STRIKES[next++ % STRIKES.length];
-        h.mouseDown(s.x, s.y);
-        held = { x: s.x, y: s.y, for: 0 };
-      } else h.session.setPointer(OPEN.x, OPEN.y);
+        // the hand goes to the strike's point a pass before it presses: `think`
+        // reads the pointer and only then asks `stilldown ()`, which takes a
+        // frame, so a press made where the pointer jumped to is read where it
+        // was — every strike the same, and samestrike () has it blocked
+        if (!aim) {
+          aim = STRIKES[next++ % STRIKES.length];
+          h.session.setPointer(aim.x, aim.y);
+          return false;
+        }
+        h.mouseDown(aim.x, aim.y);
+        held = { x: aim.x, y: aim.y, for: 0 };
+        aim = null;
+      } else {
+        aim = null;
+        h.session.setPointer(OPEN.x, OPEN.y);
+      }
       return false;
     },
-    "the fight with Lyle to end",
+    `${what} to end`,
     60_000,
   );
   letGo();
   dodge.stop();
+}
+
+/**
+ * The street fight at Port Royal (ptroyal.cast `bfight` → bfight.cast): Jan's
+ * men drop from the roofs, run at Nick or shoot from the windows, and each dies
+ * to one click on him — bfight.cast's `mousedown` for the droppers and runners
+ * (enemy1), and for the sharpshooters (enemy2), whose `endanim` counts him.
+ * Three waves of 9, 9 and 5 (`deadgoal`, `nextphase`), the walk to the next
+ * street between them, and `endfight` after the last, which ends the day.
+ *
+ * So the gunner clicks any of them it sees, the one nearest first, and turns
+ * the barrel of the view with the arrows toward one it does not.
+ */
+export async function shootout(h: Headless, done: () => boolean): Promise<number> {
+  const actors = h.session.actorRuntime;
+  const foe = /^(dropper|runner|sharpshooter) \d+$/;
+  let shots = 0;
+  let cool = 0;
+  let search = 0;
+  let target: (typeof actors.actors extends Map<string, infer A> ? A : never) | undefined;
+  await h.until(
+    () => {
+      if (done()) return true;
+      const m = h.session.maze;
+      const cam = m?.camera();
+      const eye = m?.spriteCamera(640, 480);
+      if (!m || !cam || !eye || h.session.stageName !== "none" || m.view !== "node") return false;
+      if (cool-- > 0) return false;
+      const live = [...actors.actors.values()]
+        .filter((a) => foe.test(a.name) && a.visible && a.owner !== "dead")
+        .sort((a, b) => Math.hypot(a.worldX - cam.x, a.worldY - cam.y) - Math.hypot(b.worldX - cam.x, b.worldY - cam.y));
+      for (const a of live) {
+        const p = eye.project(a.worldX, a.worldY, a.worldZ);
+        if (!p || p.x < -40 || p.x >= 680) continue;
+        // over the sprite, from its feet up, until the room answers with him
+        for (let dy = 0; dy <= 240; dy += 10) {
+          for (const dx of [0, -12, 12, -24, 24]) {
+            const x = Math.round(p.x + dx);
+            const y = Math.round(p.y - dy);
+            if (x < 0 || x >= 640 || y < 0 || y >= 480) continue;
+            if (h.session.hitTestAt(x, y).name.toLowerCase() === a.name) {
+              h.click(x, y);
+              shots++;
+              cool = 2;
+              return false;
+            }
+          }
+        }
+      }
+      // the projection missed him: look for him, now and then, over the screen
+      for (const a of (search++ % 10 === 0 ? live : [])) {
+        const at = findOnScreen(h, a.name, "actor", [16]);
+        if (at) {
+          h.click(at.x, at.y);
+          shots++;
+          cool = 2;
+          return false;
+        }
+      }
+      // nobody in sight: look toward one, and stay with him until he is down.
+      // The fight sets the boot's `margin` to 310 (bfight.cast opencast), so
+      // anywhere but the middle of the screen scrolls the view that way
+      // (ptroyal.sett region/tracknodescroll): the pointer leads the eye
+      if (!target || !live.includes(target)) target = live[0];
+      const a = target;
+      if (a) {
+        const want = Math.atan2(a.worldY - cam.y, a.worldX - cam.x);
+        const off = ((want - cam.heading + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+        const p = eye.project(a.worldX, a.worldY, a.worldZ);
+        const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+        const x = !p || Math.abs(off) > 0.8 ? (off > 0 ? 4 : 636) : clamp(p.x, 4, 636);
+        const y = p ? clamp(p.y, 4, 476) : 240;
+        h.session.setPointer(Math.round(x), Math.round(y));
+      }
+      return false;
+    },
+    "the street fight to end",
+    60_000,
+  );
+  return shots;
+}
+
+/**
+ * The torturer's whip, the first half of the fight in Cartagena's torture
+ * chamber (tcombat.stag, tenemy1.shop). The whip cracks from one side at the
+ * strike's tenth tick (`checkforhit`, `hitframe` 10), and misses only a Nick
+ * leaned all the way to the other: `centerx` 0 for a lash from the left, -199
+ * for one from the right. The arrows lean him (tcombat.shop "loop 4" `lean`,
+ * `strafe`: 60 a pass from the middle, -100) and letting go brings him back
+ * (`antilean`). Two lashes dodged, the stage steps him a node closer
+ * (`advance`); at the fourth node the torturer's dropped sword lies in reach
+ * (tenemy1.shop fsword, `znode = 4`), and taking it up opens the second half
+ * (tcombat.shop `nextenemy`, tenemy2.shop) — a sword fight, for
+ * {@link cauldronFight}.
+ */
+export async function whipFight(h: Headless): Promise<void> {
+  if (!fighting(h, "tcombat.stag")) fail(`the whip: the stage is not up (stage ${h.session.stageName})`);
+  let held = "";
+  let looks = 0;
+  const lean = (side: string): void => {
+    if (side === held) return;
+    if (held && !side) h.keyUp(held);
+    if (side) h.key(side);
+    held = side;
+  };
+  await h.until(
+    () => {
+      if (!fighting(h, "tcombat.stag")) return true;
+      if (h.session.propRuntime.get("enemy")?.shop.name === "tenemy2.shop") return true;
+      const [kind, side] = enemyView(h).toLowerCase().split(" ");
+      // a lash from the left is dodged leaning left, and the other way round
+      lean(kind === "s" && (side === "left" || side === "right") ? side : "");
+      // a look for the sword every tenth pass: a search of the whole screen is dear
+      if (!held && Number(h.session.interp.globals.get("znode")) === 4 && ++looks % 10 === 1) {
+        const sword = findOnScreen(h, "fsword", "prop", [16]);
+        if (sword) h.click(sword.x, sword.y);
+      }
+      return false;
+    },
+    "the torturer's whip",
+    20_000,
+  );
+  lean("");
+  if (!fighting(h, "tcombat.stag")) fail(`the whip: the fight ended before the sword was taken up (wonfight ${h.session.interp.globals.get("wonfight")})`);
+}
+
+/**
+ * The torturer's second half (tenemy2.shop), which no sword stroke wins:
+ * tcombat.shop `Edamage` stops on its first line, `exitcode`, so a hit only
+ * makes him stagger (`hurt`, `fall back`). He is beaten by the cauldron beside
+ * him. Clicked while Nick stands at the sixth or seventh node (tenemy2.shop
+ * couldron, `znode = 6 | znode = 7`), it tips its coals at his feet
+ * (`coals.move`) and he dances; a stroke that lands while he dances wins
+ * (`checkforEhit` → "safe win" `win`, `twin.move`, `wonfight`).
+ *
+ * Every stroke steps Nick a node closer (tcombat.shop `think` → `advance`, up
+ * to `maxZnodes` 8), and "down" steps him back (`retreat`, no nearer than 5).
+ * So he guards where the wind-up says, as in {@link duel}, strikes his way in
+ * to the sixth node or backs off to the seventh, clicks the cauldron, and
+ * strikes while the torturer dances.
+ */
+export async function cauldronFight(h: Headless): Promise<void> {
+  if (!fighting(h, "tcombat.stag")) fail(`the cauldron: the stage is not up (stage ${h.session.stageName})`);
+  const g = (name: string): number => Number(h.session.interp.globals.get(name) ?? 0);
+  let held = 0;
+  let wait = 0;
+  await h.until(
+    () => {
+      if (!fighting(h, "tcombat.stag")) return true;
+      const view = enemyView(h).toLowerCase();
+      if (held && --held === 0) h.mouseUp(320, 300);
+      if (held) return false;
+      const guard = guardFor(view);
+      if (guard) {
+        h.session.setPointer(guard.x, guard.y);
+        return false;
+      }
+      h.session.setPointer(OPEN.x, OPEN.y);
+      if (wait > 0) {
+        wait--;
+        return false;
+      }
+      // he dances on the coals: strike (the bottom row, clear of every guard)
+      if (view === "dance") {
+        h.mouseDown(260, 300);
+        held = 4;
+        return false;
+      }
+      if (g("imbeingused") !== 0 || view !== "idle") return false;
+      const node = g("znode");
+      if (node > 7) {
+        h.key("down");
+        h.keyUp("down");
+        wait = 10;
+        return false;
+      }
+      if (node >= 6) {
+        const cauldron = findOnScreen(h, "couldron", "prop", [16]);
+        if (cauldron) h.click(cauldron.x, cauldron.y);
+        wait = 10;
+      } else {
+        // "up" is refused while he is aggressive (tcombat.stag keydown), and a
+        // stroke steps Nick in (tcombat.shop `think` → `advance`)
+        h.mouseDown(260, 300);
+        held = 4;
+      }
+      return false;
+    },
+    "the fight in the torture chamber to end",
+    30_000,
+  );
+  if (held) h.mouseUp(320, 300);
+}
+
+/**
+ * Marquez in the horn caves (mcombat.stag, menemy1.shop then menemy2.shop), a
+ * fight no sword stroke wins: mcombat.shop `Edamage` stops on its first line,
+ * as the torturer's does. He is beaten by the caves.
+ *
+ *   - **the door**: at the second node, where the fight opens, a switch in the
+ *     wall (`fswitch`) drops a door (`fdoor`) ten ticks after it is clicked,
+ *     and the door squashes him if he is striking then (`close`: his view "S
+ *     …" → `squash.move`, `nextenemy`, menemy2.shop). So the switch is
+ *     clicked while he has another swing to come. It is soon or never: his
+ *     kicks ("S kick") cannot be guarded, and each costs Nick 30 of his 150
+ *     and a node (menemy1.shop `checkforhit` sends him back first, which
+ *     turns Marquez's view to "advance", so `damage` does not see the kick's
+ *     5), and back at the switch's node he has to walk.
+ *   - **the stairs**: Marquez beaten back up to the sixteenth node
+ *     (`mstairs.move`), where Anne hangs, and clicking her there (`fanne`,
+ *     `endfight` from menemy2.shop's `initme`) wins (`mwin.move`,
+ *     `anneescape.move`). "Up" steps Nick on while Marquez's mood is not
+ *     "aggressive" — it starts spelt "agressive" and menemy2.shop's
+ *     `checkmood` never changes it — and a stroke steps him on too
+ *     (mcombat.shop `think` → `advance`).
+ *
+ * Nick guards where the wind-up says, as in {@link duel}, all the while.
+ */
+export async function marquezFight(h: Headless): Promise<void> {
+  if (!fighting(h, "mcombat.stag")) fail(`Marquez: the stage is not up (stage ${h.session.stageName})`);
+  const props = h.session.propRuntime;
+  const g = (name: string): number => Number(h.session.interp.globals.get(name) ?? 0);
+  let wait = 0;
+  let looks = 0;
+  let lever: { x: number; y: number } | null = null;
+  await h.until(
+    () => {
+      if (!fighting(h, "mcombat.stag")) return true;
+      if (h.host.director.movies.playing) return false;
+      const view = enemyView(h).toLowerCase();
+      const guard = guardFor(view);
+      h.session.setPointer((guard ?? OPEN).x, (guard ?? OPEN).y);
+      if (wait > 0) {
+        wait--;
+        return false;
+      }
+      const node = g("znode");
+      const second = props.get("enemy")?.shop.name === "menemy2.shop";
+      if (!second) {
+        // back to the switch's node if a kick sent him off it
+        if (node !== 2 && g("imbeingused") === 0 && !view.startsWith("s ")) {
+          h.key(node < 2 ? "up" : "down");
+          h.keyUp(node < 2 ? "up" : "down");
+          wait = 10;
+          return false;
+        }
+        // a strike with another swing to come: he is still striking when the
+        // door lands (menemy1.shop `strike`: each swing is eleven ticks, and
+        // `Spattern` ends in "x", back to idle)
+        const swings = String(h.session.interp.globals.get("spattern") ?? "").trim().split(" ");
+        const more = swings[g("attackphase")] ?? "x";
+        if (view.startsWith("s ") && more !== "x" && !props.get("fdoor")?.visible) {
+          lever ??= findOnScreen(h, "fswitch", "prop", [16]);
+          if (lever) h.click(lever.x, lever.y);
+          wait = 12;
+        }
+        return false;
+      }
+      if (node >= 16) {
+        if (++looks % 10 === 1) {
+          const anne = findOnScreen(h, "fanne", "prop", [16]);
+          if (anne) h.click(anne.x, anne.y);
+        }
+        return false;
+      }
+      if (guard || g("imbeingused") !== 0) return false;
+      h.key("up");
+      h.keyUp("up");
+      wait = 6;
+      return false;
+    },
+    "the fight with Marquez to end",
+    60_000,
+  );
 }

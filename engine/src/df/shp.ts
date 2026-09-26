@@ -53,6 +53,21 @@ export interface PropState {
    * six-step swing once per variant).
    */
   playOrder: number[] | null;
+  /**
+   * DreamFactory 5 only: the group each frame belongs to (the i16 at +8 of its
+   * record), index for index with {@link frames}. A step of the play list
+   * names a group, not a frame; see {@link steps}.
+   */
+  groups?: number[];
+  /**
+   * DreamFactory 5 only: the play list as RedJack.exe reads it — at each step
+   * the 0-based GROUP whose frames may be drawn (0x42d198: `word [view + 0x2e
+   * + step * 2] - 1`), and of those the one whose angle ({@link degrees}, here
+   * in 2^24ths of a turn) is nearest the prop's `propdeg`, or for a prop in the
+   * room its facing from the camera (0x42d202–0x42d229). A view with no list
+   * is one step of group 0.
+   */
+  steps?: number[];
   /** true when the state's frames form a real ANIMATION — it has a play script
    *  that accounts for the whole state (an "open" swing lists 1..N, "close" lists
    *  N..1), or its degrees repeat (one animation per variant).
@@ -63,6 +78,30 @@ export interface PropState {
    *  Measured: every such selector state in the corpus stores a step count of 1,
    *  so having a table at all is what tells the two apart. */
   animated: boolean;
+  /**
+   * DreamFactory 5 only: bit 0 of the view's flags word at +0x14, which
+   * RedJack.exe copies into the prop with the view (`propview` 0x428640 →
+   * 0x42d2f0, masked with ~0xe). Set on exactly the views whose end a script
+   * answers in `endanim` — liznite.shop's `mark crate`, the journal's `opening`
+   * and `closing`, the cannon's `firing` and `splash`, the jail spoon's
+   * `animated` — and clear on the ones that are held or loop, like the spoon's
+   * two-frame `carrying`. Read here as "plays once, and says so at the end".
+   */
+  playsOnce?: boolean;
+  /**
+   * DreamFactory 5 only: the i16 at 0x22e, which `propview` copies into the prop
+   * (0x42d354). Above 0 the view steps by the clock, one step every that many
+   * sixtieths of a second (the stepper 0x42c8b3 divides `0x469f80`, the
+   * milliseconds × 0.06, by it); at 0 or below, one step a service pass.
+   */
+  frameTicks?: number;
+  /**
+   * DreamFactory 5 only: the view's step count (0x230), which the stepper goes
+   * round (0x42c8e5). One step is a view that stands still whatever pictures it
+   * holds — the inventory chest's `base` holds its thirteen lid positions for
+   * `propdeg` to choose from, and stepping through them opened and shut it.
+   */
+  playCount?: number;
 }
 
 export interface PropGroup {
@@ -168,13 +207,30 @@ export const STATE_ID_FIELD = 15;
  *     group count at 0x38 and the 16-byte group table from 0x3c.
  *   - PROP, a group: v4's layout at v4's offsets, unchanged (script 38, name 42,
  *     count 90, 32-byte entries from 94).
- *   - VIEW, a state: v4's with 448 bytes more in front — the play order at
- *     0x1ee, its step count at 0x230, the frame count at 0x232 and the 44-byte
+ *   - VIEW, a state: the play order at v4's 0x2e, but room for 257 steps
+ *     before its step count at 0x230; the frame count at 0x232 and the 44-byte
  *     frame records from 0x236, each as v4's (degree +40, reference scale +42).
+ *     RedJack.exe's stepper reads frame `word [view + 0x2e + step * 2] - 1`
+ *     (0x42d198, the handle's 0x20 header counted) — and a view whose u32 at
+ *     0x10 is not 0 plays the frames of the view at that container location
+ *     instead of its own (0x42d1a8–0x42d1f0). The lift's rope is drawn once,
+ *     going down: "start up", "loop up" and "finish up" hold no pictures, only
+ *     the down views' location there and their steps listed backwards.
  *   - SPRI, a picture: see {@link decodeShpFrame}.
  */
 const C0_V5 = { mainScript: 0x24, refName: 0x28, groupCount: 0x38, groupTable: 0x3c } as const;
-const STATE_V5 = { playOrder: 0x1ee, playOrderCount: 0x230, frameCount: 0x232, frames: 0x236 } as const;
+const STATE_V5 = {
+  playOrder: 0x2e,
+  playOrderCount: 0x230,
+  maxPlayOrder: (0x230 - 0x2e) / 2,
+  frameCount: 0x232,
+  frames: 0x236,
+  frameSource: 0x10,
+  /** in each 44-byte frame record: the i16 group the frame belongs to, and its
+   *  angle, an i32 in 2^24ths of a turn (RedJack.exe 0x42d202, 0x42d211) */
+  frameGroup: 8,
+  frameAngle: 0x26,
+} as const;
 
 /** is this container DreamFactory 5's, and of this four-character kind? */
 export const isV5 = (d: Uint8Array, kind: string): boolean =>
@@ -227,7 +283,7 @@ export function readShpFile(data: Uint8Array): ShpFile {
 function readGroup(
   location: number,
   containers: Container[],
-  at: { playOrder: number; playOrderCount: number; frameCount: number; frames: number } = STATE,
+  at: { playOrder: number; playOrderCount: number; maxPlayOrder: number; frameCount: number; frames: number; frameSource?: number } = STATE,
 ): PropGroup {
   const r = new BinaryReader(containers[location].data);
   r.seek(GROUP.scriptLocation);
@@ -245,23 +301,33 @@ function readGroup(
     const identifier = r.pstr(STATE_ID_FIELD);
     const ed = containers[entryLoc].data;
     const ev = new DataView(ed.buffer, ed.byteOffset, ed.byteLength);
-    const subCount = ev.getInt32(at.frameCount, true);
+    // v5: the pictures may be another view's (see STATE_V5); the play order stays this one's
+    const source = at.frameSource !== undefined && ed.length >= at.frameSource + 4 ? ev.getUint32(at.frameSource, true) : 0;
+    const fd = source && containers[source] ? containers[source].data : ed;
+    const fv = new DataView(fd.buffer, fd.byteOffset, fd.byteLength);
+    const subCount = fv.getInt32(at.frameCount, true);
     const frames: number[] = [];
     const refScales: number[] = [];
     const degrees: number[] = [];
     const records: number[] = [];
+    const groups: number[] = [];
     for (let s = 0; s < subCount; s++) {
       const rec = at.frames + STATE.frameSize * s;
       records.push(rec);
-      frames.push(ev.getInt32(rec, true));
-      degrees.push(ev.getInt16(rec + STATE.frameDegree, true));
-      refScales.push(ev.getInt16(rec + STATE.frameRefScale, true) || 96);
+      frames.push(fv.getInt32(rec, true));
+      // v5 keeps the whole angle at +0x26; the i16 at +40 is only its top half,
+      // which is 0 for the small numbers most views count their frames by
+      if (at === STATE_V5) {
+        degrees.push(fv.getInt32(rec + STATE_V5.frameAngle, true) & 0xffffff);
+        groups.push(fv.getInt16(rec + STATE_V5.frameGroup, true));
+      } else degrees.push(fv.getInt16(rec + STATE.frameDegree, true));
+      refScales.push(fv.getInt16(rec + STATE.frameRefScale, true) || 96);
     }
     // The play script (see PropState.playOrder): a step count at +112 and that
     // many 1-based frame indices from +46. Kept as a SEQUENCE — the frames stay in
     // stored order and playOrder says what to show when — because the steps repeat
     // and so cannot be expressed as a permutation of the frames.
-    const orderCount = Math.max(0, Math.min(ev.getInt16(at.playOrderCount, true), STATE.maxPlayOrder));
+    const orderCount = Math.max(0, Math.min(ev.getInt16(at.playOrderCount, true), at.maxPlayOrder));
     const order: number[] = [];
     for (let s = 0; s < orderCount; s++) order.push(ev.getInt16(at.playOrder + 2 * s, true) - 1);
     // Ten states in the corpus name frames that do not exist (BLKJACK's
@@ -269,6 +335,12 @@ function readGroup(
     // frame and a table reaching for a second) — a table authored against art
     // that changed. Those are dropped whole rather than clamped: a step count
     // that disagrees with the frame count is not evidence about anything.
+    // A one-step view that borrows its pictures stands on the one it names: the
+    // rope's `idle` is step 1 of `start down`'s 21.
+    if (source && order.length === 1 && order[0] >= 0 && order[0] < subCount) {
+      const keep = order[0];
+      for (const list of [frames, degrees, refScales, records, groups]) list.splice(0, list.length, list[keep]);
+    }
     let playOrder: number[] | null =
       order.length > 1 && order.every((v) => v >= 0 && v < subCount) ? order : null;
     // A table SHORTER than the art it steps through is vestigial — left behind
@@ -306,6 +378,10 @@ function readGroup(
       degrees,
       playOrder,
       animated,
+      // v5: the view's flags word, bit 0 "plays once" (see PropState.playsOnce)
+      ...(at === STATE_V5 && ed.length >= 0x18 ? { playsOnce: (ev.getUint32(0x14, true) & 1) === 1 } : {}),
+      ...(at === STATE_V5 && ed.length >= 0x230 ? { frameTicks: ev.getInt16(0x22e, true), playCount: orderCount } : {}),
+      ...(at === STATE_V5 ? { groups, steps: order.length ? order : [0] } : {}),
     });
   }
   orientToSettledPose(states, containers);
@@ -361,7 +437,8 @@ function orientToSettledPose(states: PropState[], containers: Container[]): void
   }
   if (!settled.size) return;
   for (const s of states) {
-    if (!s.animated || s.frames.length < 2) continue;
+    // a v5 view says its order itself (PropState.steps)
+    if (!s.animated || s.frames.length < 2 || s.steps) continue;
     const m = /^(open|close)(.+)$/.exec(s.identifier.toLowerCase());
     if (!m) continue;
     const pose = settled.get(`idle${m[2]}`);

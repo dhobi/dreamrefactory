@@ -50,6 +50,17 @@ resolve the same single script as their siblings.
 `sendtobutton`/`sendtobuttonfx` take (flat, button, call) — see
 [Stage & UI](../engine/runtime/stage-ui.md#buttons-sendtobutton).
 
+In a DreamFactory 5 game the targets and the chains are RedJack.exe's.
+`sendtocast` finds only open casts (0x405370) and `sendtoprop` only props
+(0x42b550), so a room and a cast or prop of the same name (`ship.sett` and
+`ship.cast`, `cannon.sett` and the prop `cannon`) no longer take each other's
+events. `sendtoquad` finds only the room's quads (0x446190), so horn4.sett,
+which calls itself "horn", no longer takes its horn quad's click. `sendtoshop`
+also finds a shop by the name it gives itself (`jcombat.shop` is "combat"). The scene, set, actor, cast and prop chains end on the **post
+script**, the BOOTFILE's library: the exe names the links as it builds them
+("Scene Script: ", "Set Script: ", "Post Script: " for `sendtoscene` at
+0x440ab0).
+
 The last three `fx` forms are **Dust's**, and Titanic asks for none of them:
 `extra.cst`'s crowd router uses `sendtoflatfx`, `sendtopostfx` and
 `sendtoserverfx`. Registered as special forms, their deferred argument is
@@ -100,6 +111,15 @@ the script put up**, which one stage in the game relies on.
 `propdeg`, `propdist`, `propspeed`, `propvalue`, `propstar`, `starxyz`,
 `countprops`, `indextoprop`, `error`. See [SHP](../engine/formats/shp.md) for the placement
 model (`propxy` screen-space vs `propxyz` world-space).
+
+In DreamFactory 5, `propdeg` only stores the degree, masked to 24 bits
+(RedJack.exe 0x428880). The frame it picks is picked where the prop is drawn:
+of the frames in the group the view's step names, the one whose angle is
+nearest (see [DreamFactory 5](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet)).
+
+In DreamFactory 5, `propinstance` copies the whole prop record, placement
+included, and renames it (RedJack.exe 0x427922): the ballista's stone is placed
+as "brock" and flown as its copy.
 
 `countprops`/`indextoprop` enumerate **one game-wide table** — the union of every
 open shop, in the order the shops opened — and not the asking script's own shop.
@@ -203,6 +223,12 @@ than a shuffle of our choosing (`bevelCount * 5` swaps, two independent
 `rand(bevelCount)` draws each), because the number of draws is what advances
 the script random stream and every story coin after it is a function of that.
 
+`puppetevent`'s argument is a wait, in DreamFactory 5: RedJack.exe (0x42f140)
+waits that many sixtieths of a second for a plaque and answers -2 when they
+run out, and waits for good on a negative one. Marquez's `puppetevent (0)`
+straight after an answer is a look for a click, not a question. Titanic's and
+Dust's waits still ignore the argument.
+
 ## Pointer & text — `pointer.ts`
 
 `makepoint`, `pointx`, `pointy` (the packed point `(x<<16)|y`), `mouse`,
@@ -294,6 +320,20 @@ a room is on [Rooms in play](../engine/runtime/rooms-v5.md).
 and `launchexit`; the quads `pointinquad` and `quadscript`; `nodequality`; and
 `sysparam`. `cameraxyz`, `playerxyz` and `scenexyz` answer from the room's
 camera and nodes in a v5 game, and v4's `propspeed` id is `sysparam` there.
+
+**Shared names, v5 forms** (`helpers.ts`): `calcvectx` and `calcvecty` are
+`trunc (mag × cos/sin (angle × 2π / 2^24))` over the whole 32 bits (0x4356e0,
+0x435710), where v4 used a 0..255 table and a 16-bit magnitude. `calcdist` and
+`calcdeg` take four coordinates, `(x1, y1, x2, y2)`, instead of two packed
+points (0x4185c0, 0x4184f0), and `calcdeg` answers a heading in 2^24ths of a
+turn.
+
+`propis3d` (`props.ts`) answers and sets the prop's own 3D flag in a v5 game
+(0x429d60), and 0 in every other.
+
+`pointinactor` (`pointer.ts`) asks the one actor in a v5 game: whether its own
+sprite covers the point, whatever is drawn over it (0x406860). The older
+engines answer from the hit test, which names only what is on top.
 
 **Everything else** (`df5.ts`):
 

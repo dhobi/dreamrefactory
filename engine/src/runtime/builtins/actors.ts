@@ -428,7 +428,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   });
   acc("actorpose", "", (a) => a.poseName, (a, v) => {
     a.poseName = toStr(v).toLowerCase();
-    a.step = 0;
+    a.restartPose();
   });
   // actorink (a, n): propink's twin (0x403e90 takes 1..9 and refuses the rest),
   // and like it DreamFactory 5's alone — the older engines never had it

@@ -1185,6 +1185,23 @@ export class GameSession {
       }
     }
     /**
+     * DreamFactory 5 ends a scene's, a set's, an actor's and a cast's chain on
+     * the POST SCRIPT, the BOOTFILE's library: RedJack.exe names the links as it
+     * builds them — "Scene Script: ", "Set Script: ", "Post Script: " +
+     * "BootFile" for `sendtoscene` (0x440ab0), "Actor Script: ", "Cast Script: ",
+     * "Post Script: " for `sendtoactor` (0x404ff0), and the same for
+     * `sendtoset` (0x440de0) and `sendtocast` (0x405370), and "Prop Script: ",
+     * "Shop Script: ", "Post Script: " for `sendtoprop` (0x42b550). The library is the
+     * boot's second container, where `sendtopost (advanceday ())` lands.
+     *
+     * The cannon is what needs it: the boot routes a click in cannon.sett to the
+     * scene, the set's `mousedown` tilts the barrel and `passcode`s, and only the
+     * library's `mousedown` fires — `sendtoprop ("cannon", fire ())`. Not while
+     * the library is already running the handler, as for the keys above.
+     */
+    const post = this.isV5 && /^sendto(scene|set|actor|cast|prop)(fx)?$/.test(cmd) ? this.bootScripts[1] : undefined;
+    if (post && !chain.includes(post) && !this.interp.isRunning(post, handler)) chain.push(post);
+    /**
      * `me` is the PROP, not its sprite group, on the prop's own script.
      *
      * `me` is otherwise the running script's name, which is right for every
@@ -1282,7 +1299,37 @@ export class GameSession {
      */
     const flatFirst =
       cmd === "sendtoflat" ? this.flatScripts.get(targetName.toLowerCase()) : undefined;
+    /**
+     * DreamFactory 5's `sendtocast` looks among the open CASTS and nowhere else:
+     * RedJack.exe 0x405370 reads the name and walks the cast table (28-byte
+     * records, the name at +0xc) for it. The chain below finds the room first,
+     * and RedJack names a room and its cast alike — `sendtocast ("ship",
+     * initactors ())` went to ship.sett's main, which has no `initactors`, and
+     * the ship's crew never came aboard. Gated on v5.
+     */
+    const castFirst = cmd === "sendtocast" && this.isV5 ? this.castMainFor(targetName) : null;
+    // ...and its `sendtoprop` among the PROPS (0x42b550 finds the name in the prop
+    // table): cannon.shop's "cannon" is a prop in cannon.sett, and the boot's
+    // `sendtoprop ("cannon", fire ())` reached the room's main instead
+    const propFirst =
+      /^sendtoprop(fx)?$/.test(cmd) && this.isV5 ? this.propScriptFor(targetName.toLowerCase()) : null;
+    // ...and a shop by the names `closeshopfile` knows it by, the one it gives
+    // itself among them: jcombat.shop calls itself "combat", and the alley fight
+    // asks `sendtoshop ("combat", moveobjects ())` every step (see openShopKey)
+    const shopFirst =
+      /^sendtoshop(fx)?$/.test(cmd) && this.isV5 ? this.shopMains.get(this.openShopKey(targetName)) ?? null : null;
+    // ...and its `sendtoquad` among the room's QUADS (0x446570 → 0x446190 walks
+    // the set's 80-byte quad records, the name at +0x1c): horn4.sett calls itself
+    // "horn", as it does the quad the horn stands on, and the boot's
+    // `sendtoquad ("horn", mousedown (…))` reached the set's main, whose
+    // `mousedown` walks on — the horn could not be blown
+    const quadFirst =
+      /^sendtoquad(fx)?$/.test(cmd) && this.isV5 ? this.maze?.quadScript(targetName) ?? null : null;
     let inst =
+      castFirst ??
+      propFirst ??
+      shopFirst ??
+      quadFirst ??
       (flatFirst?.script.codes.has(handler) ? flatFirst : null) ??
       (ACTOR_ADDRESSEE.test(cmd) ? this.castScripts.get(targetName.toLowerCase()) : null) ??
       this.currentBinding?.findInstance(targetName) ??
@@ -2671,15 +2718,21 @@ export class GameSession {
    * — Lyle's `butt pick` → `sit down` → `crouch`, Bone's `idle` back to `stand`,
    * and liznite.shop's `mark crate`, whose `endanim` is what draws the X on the
    * crate the day ends in. RedJack.exe names it in its event table (0x4b9990,
-   * the fifteenth). The moment is a reading, not yet traced in Acto.c: a prop at
-   * its last frame (where it holds), an actor's pose each time its play script
-   * comes round, which a pose of one picture never does. The older engines have
-   * no such event, and their scripts never answer it.
+   * the fifteenth). A prop hears it at the last frame of a view that plays once
+   * (PropState.playsOnce), where it holds, and only while shown — a prop put away
+   * is not animating. An actor hears it from Acto.c's service (0x408481): once,
+   * at the last step of a pose that plays once (CastPose.playsOnce), shown or
+   * not. The cannon's dinghies are what a pose going round would get wrong: an
+   * explosion's `endanim` hides the dinghy and counts it sunk (cannon.cast), and
+   * a second telling counted the same wreck again. The older engines have no
+   * such event, and their scripts never answer it.
    */
   endAnim(cmd: "sendtoactor" | "sendtoprop", names: string[]): void {
     if (!this.isV5) return;
     for (const name of names) {
       const key = name.toLowerCase();
+      // an actor hears it hidden or not (RedJack.exe 0x408481 asks only the flag)
+      if (cmd === "sendtoprop" && !this.propRuntime.get(key)?.visible) continue;
       const inst = cmd === "sendtoactor" ? this.castScripts.get(key) : this.propScripts.get(key);
       if (!inst?.script.codes.has("endanim")) continue;
       void this.track(this.sendEvent(cmd, key, "endanim", [], "anim"), `endanim ${key}`);
@@ -2693,6 +2746,13 @@ export class GameSession {
     this.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
     this.lastRotation = this.currentRotation ? this.currentRotation() : null;
     this.currentSetFile = key.replace(/\.set$/, "");
+    // DreamFactory 5 opens every set visible: the loader RedJack.exe calls for
+    // `opensetfile` (0x43f6e0) writes 1 to the set's open flag and to its
+    // visible flag beside it (0x43f8e8, 0x43f8ed), whatever the last set was.
+    // advanceday closes liznite before the crate's stage, so the stage's
+    // `setvisible (true)` has no set to act on — and without this the ship
+    // opened hidden, and no key reached it.
+    if (this.isV5) this.setVisible = true;
     await this.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
   }
 
@@ -2880,6 +2940,8 @@ export class GameSession {
      *
      * The two closing halves stay unimplemented on purpose — no script on either
      * disc defines them, so firing them would add a dispatch nothing can receive.
+     * RedJack's casts do define `closecast`, and DreamFactory 5 fires it
+     * (closeCastFile).
      */
     for (const m of cst.members) {
       await this.fireHandler(this.castScripts.get(m.name), "openactor", m.name);
@@ -2888,8 +2950,21 @@ export class GameSession {
     return true;
   }
 
-  closeCastFile(fileName: string): void {
-    const key = fileName.toLowerCase();
+  async closeCastFile(fileName: string): Promise<void> {
+    /**
+     * DreamFactory 5 closes a cast by the name it was opened by, less its
+     * extension — `closecastfile ("cannon")`, `closecastfile ("bfight")` — as
+     * it opens one (typedName), and tells it first: RedJack.exe's dispatch
+     * strings include `", closecast()"`. The cannon's and the street fight's
+     * `closecast` put the boot's scroll `margin` back to 100; without them it
+     * stayed at the 310 they set, and on RedJack's beach every sprite right of
+     * the middle sat in a margin a click scrolls instead of reaching. And the
+     * casts themselves were never closed: the dinghies went on sailing, asking
+     * for stars in whatever room was open.
+     */
+    const key = (this.isV5 ? this.typedName(fileName, "cast") : fileName).toLowerCase();
+    const main = this.isV5 ? this.castMains.get(key) : undefined;
+    if (main) await this.fireHandler(main, "closecast", key, `closecast ${key}`);
     const cast = this.actorRuntime.casts.get(key);
     if (cast) {
       for (const m of cast.cst.members) this.castScripts.delete(m.name);
@@ -2929,6 +3004,16 @@ export class GameSession {
     if (own) return own;
     const group = this.propRuntime.get(name)?.group.name.toLowerCase();
     return group && group !== name ? this.propScripts.get(group) ?? null : null;
+  }
+
+  /** an open cast by the name it was opened under, or that name without its extension */
+  private castMainFor(name: string): ScriptInstance | null {
+    const lower = name.toLowerCase();
+    const stem = (n: string): string => n.replace(/\.[a-z0-9]{1,4}$/, "");
+    const exact = this.castMains.get(lower);
+    if (exact) return exact;
+    for (const [key, inst] of this.castMains) if (stem(key) === stem(lower)) return inst;
+    return null;
   }
 
   findGlobalInstance(name: string): ScriptInstance | null {

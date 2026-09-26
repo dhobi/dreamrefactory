@@ -531,8 +531,18 @@ export class PuppetController {
     p.speakSkip?.();
   }
 
-  /** modal wait for a choice; resolves with the clicked bevel's id */
-  puppetEvent(): Promise<number> {
+  /**
+   * Modal wait for a choice; resolves with the clicked bevel's id.
+   *
+   * `ticks`, DreamFactory 5's argument: how long to wait, in 60 Hz ticks, when
+   * it is not negative — RedJack.exe's `puppetevent` (0x42f140) sets its
+   * deadline at the tick count plus the argument (0x42f320–0x42f338), counts
+   * the ticks as they change, and past it answers -2 (0x42f461, 0x42f477).
+   * marquez2.pupp asks `puppetevent (0)` right after an answer, with the
+   * plaques it answered still up, before its `puppetclear`: a look, not a
+   * question. Waited out as one, the talk asked its first question twice.
+   */
+  puppetEvent(ticks = -1): Promise<number> {
     const p = this.puppet;
     if (!p) return Promise.resolve(-1);
     // a plaque is where a skip ends: the flag comes down before the wait (0x43f718)
@@ -548,13 +558,20 @@ export class PuppetController {
         // picked row, and must not inherit the last one's: `chosen` outlives its
         // own plaque until the script's next puppetclear, so recording it here
         // would frame a row of this list that was never touched.
-        p.lastPlaque = { bevels: [...p.bevels], chosen: id === -1 ? null : p.chosen };
+        p.lastPlaque = { bevels: [...p.bevels], chosen: id < 0 ? null : p.chosen };
         p.voiceQueue.length = 0;
         resolve(id);
       };
     });
     this.armIdleSlots(p);
     void this.runIdleSlots(p);
+    if (ticks >= 0) {
+      const waiter = p.eventWaiter;
+      // past the deadline on the first tick that changes after it
+      void this.session.clock.sleep(((ticks + 1) * 1000) / 60).then(() => {
+        if (p.eventWaiter === waiter) waiter?.(-2);
+      });
+    }
     return wait;
   }
 

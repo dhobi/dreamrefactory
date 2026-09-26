@@ -698,7 +698,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
       if (a?.poseName.startsWith("walk")) {
         const lj = `stand${a.poseName.slice(4)}`; // walklj -> standlj, walk -> stand
         a.poseName = a.member.poses.some((p) => p.name === lj) ? lj : "stand";
-        a.step = 0;
+        a.restartPose();
       }
       session.onLog(`loadgame: ${w.actor} was saved mid-walk — standing them at their saved position`);
     }

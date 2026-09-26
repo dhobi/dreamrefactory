@@ -1,3 +1,4 @@
+import { TICKS_PER_PASS } from "./actors";
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 import {
   WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha,
@@ -84,6 +85,33 @@ export function frameIndexForDegree(st: PropState, deg: number): number {
     }
   }
   return best;
+}
+
+/**
+ * The frame a DreamFactory 5 view draws at a step (RedJack.exe 0x42d0e0): of
+ * the frames in the group the step names ({@link PropState.steps}), the first
+ * whose angle is nearest `deg` round the turn (0x41dfc0 measures the shorter
+ * way, in 2^24ths); the search stops at an exact match (0x42d229). For a
+ * prop on the screen `deg` is its `propdeg` (0x42ce63), and for one in the
+ * room its `propdeg` less the bearing from it to the camera (0x42cb3e).
+ */
+export function v5FrameIndex(st: PropState, step: number, deg: number): number {
+  const steps = st.steps!;
+  const group = steps[Math.max(0, Math.min(step, steps.length - 1))];
+  const want = ((Math.round(deg) % 0x1000000) + 0x1000000) % 0x1000000;
+  let best = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < st.frames.length; i++) {
+    if (st.groups![i] !== group) continue;
+    const d = Math.abs(st.degrees[i] - want);
+    const dist = Math.min(d, 0x1000000 - d);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+      if (dist === 0) break;
+    }
+  }
+  return best < 0 ? 0 : best;
 }
 
 /**
@@ -372,6 +400,8 @@ export class PropInstance {
    * openstage made it visible, so the puzzle started with the case open + empty.
    */
   animating = false;
+  /** DreamFactory 5: the sixtieths of a second since the view's first pass (see PropState.frameTicks) */
+  passTicks = 0;
 
   constructor(
     readonly group: PropGroup,
@@ -390,11 +420,14 @@ export class PropInstance {
 
   /** how many frames this prop will actually play — the variant's, if it has one */
   frameCount(st: PropState): number {
+    // a v5 view steps through its play list, whatever its frames number
+    if (st.steps) return st.steps.length;
     return this.frameOrder ? this.frameOrder.length : st.frames.length;
   }
 
   /** where `frameIdx` lands in `st.frames`/`st.refScales`, through the variant map */
   currentFrameIdx(st: PropState): number {
+    if (st.steps) return v5FrameIndex(st, this.frameIdx, Number(this.deg) || 0);
     // A selector's frame IS its degree, whether or not a script ever named the
     // state — see {@link isDegreeSelector}.
     //
@@ -571,7 +604,7 @@ export class PropRuntime {
    * anchor but are drawn player-side vs dealer-side) — clobbering dst's group
    * with src's would collapse them onto each other, so leave an existing dst be.
    */
-  instance(src: string, dst: string): void {
+  instance(src: string, dst: string, whole = false): void {
     const s = this.props.get(String(src).toLowerCase());
     if (!s) return;
     if (this.props.has(String(dst).toLowerCase())) return; // dst is its own group: don't clobber
@@ -586,6 +619,31 @@ export class PropRuntime {
     p.worldSpace = s.worldSpace;
     p.directional = s.directional;
     p.setName = s.setName;
+    // DreamFactory 5 copies the whole prop record (RedJack.exe 0x427922, 254
+    // bytes) and renames it: the copy stands where its template stands. The
+    // ballista's stone is placed as "brock" (ballista.shop `launch`) and flown as
+    // "brock 1" (`throwrock`), which started at the world's origin
+    if (whole) {
+      p.anchorX = s.anchorX;
+      p.anchorY = s.anchorY;
+      p.screenPlaced = s.screenPlaced;
+      p.owner = s.owner;
+      p.value = s.value;
+      p.speed = s.speed;
+      p.ink = s.ink;
+      p.flip = s.flip;
+      p.true3d = s.true3d;
+      p.facer = s.facer;
+      p.pitch = s.pitch;
+      p.snap = s.snap;
+      p.bright = [...s.bright];
+      p.starName = s.starName;
+      p.worldX = s.worldX;
+      p.worldY = s.worldY;
+      p.worldZ = s.worldZ;
+      p.scale = s.scale;
+      p.zclip = s.zclip;
+    }
     this.props.set(String(dst).toLowerCase(), p);
   }
 
@@ -600,6 +658,36 @@ export class PropRuntime {
     for (const p of this.props.values()) {
       if (!p.visible || p.frameLocked || !p.animating) continue;
       const st = p.state();
+      if (st && st.playsOnce !== undefined) {
+        // DreamFactory 5 steps a view as it does a pose (RedJack.exe 0x42c89e–
+        // 0x42c931, ActorRuntime.advanceAnimation): step 0 on the first pass,
+        // then by the view's step time on the clock or one a pass; a view that
+        // plays once holds its last step and says so, and any other goes round
+        const n = p.frameCount(st);
+        if (!p.lastTick) {
+          p.lastTick = now;
+          p.passTicks = 0;
+          if (n <= 1) {
+            p.animating = false;
+            if (st.playsOnce) ended.push(p.name);
+          }
+          continue;
+        }
+        if (now - p.lastTick < frameMs) continue;
+        p.lastTick = now;
+        const rate = st.frameTicks ?? 0;
+        let e: number;
+        if (rate > 0) {
+          p.passTicks += TICKS_PER_PASS;
+          e = Math.floor(p.passTicks / rate);
+        } else e = p.frameIdx + 1;
+        if (st.playsOnce && e >= n - 1) {
+          p.frameIdx = Math.max(0, n - 1);
+          p.animating = false;
+          ended.push(p.name);
+        } else p.frameIdx = n > 0 ? e % n : 0;
+        continue;
+      }
       // the variant's length, not the container's: a state holding one animation
       // per degree must stop at the end of the one being played (degVariantFrames)
       const last = st ? p.frameCount(st) - 1 : 0;
@@ -613,7 +701,10 @@ export class PropRuntime {
         p.frameIdx++;
         if (p.frameIdx >= last) {
           p.animating = false; // hold last frame
-          ended.push(p.name);
+          // a v5 view says whether its end is an event (PropState.playsOnce): the
+          // jail spoon's `carrying` is not, and its endanim, which puts the spoon
+          // back under the pointer and sets `carrying` again, ran round forever
+          if (st.playsOnce !== false) ended.push(p.name);
         }
       }
     }
@@ -712,8 +803,12 @@ export class PropRuntime {
    * frameIdx, so animated world props are unaffected.
    */
   private worldFrameIdx(p: PropInstance, nFrames: number, cam: WorldCamera): number {
-    if (!p.directional || nFrames < 2) return p.currentFrameIdx(p.state()!);
-    if (cam.v5) return frameIndexForDegree(p.state()!, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0));
+    const st = p.state()!;
+    // a v5 prop in the room always picks by its facing from the camera, turned
+    // or not (0x42cb3e); `facing` answers in 256ths
+    if (cam.v5 && st.steps) return v5FrameIndex(st, p.frameIdx, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0) << 16);
+    if (!p.directional || nFrames < 2) return p.currentFrameIdx(st);
+    if (cam.v5) return frameIndexForDegree(st, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0));
     const camBearing = bearing(cam.x - p.worldX, cam.y - p.worldY);
     // the facing to depict is the prop's orientation relative to the camera;
     // pick the frame whose stored degree matches it (the frames' degrees are

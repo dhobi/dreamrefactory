@@ -222,7 +222,12 @@ export class MazeView implements RoomLayer {
   advanceRoom(now: number): CachedFrame | null {
     if (this.maze.walkStep(now)) this.dirty = true;
     else if (
-      !this.maze.walk && !this.idling && !this.dir.inputLocked && !this.session.puppet?.visible && this.pointerInside()
+      // between scripts, as the original's event loop calls it: a loop this
+      // pass fired and ran to its end is part of the pass, not a script holding
+      // the engine. The mine's harpoons fly on a loop every pass, and asking
+      // `inputLocked` here stopped idle — and the view's turning — at the first
+      // shot (ScreenDirector.lockedAtPass)
+      !this.maze.walk && !this.idling && !this.dir.lockedAtPass && !this.session.puppet?.visible && this.pointerInside()
     ) {
       void this.idle();
     }
@@ -261,7 +266,11 @@ export class MazeView implements RoomLayer {
   private pointerInside(): boolean {
     const { pointerX: x, pointerY: y } = this.session;
     if (!this.pointerMoved) this.pointerMoved = x !== this.pointerAtOpen[0] || y !== this.pointerAtOpen[1];
-    return this.pointerMoved && this.pointInRoomImage(x, y);
+    // ...or over a stage that has the screen: the boot's idle runs there too,
+    // and it is what fades the inventory chest in under the pointer (boot
+    // `chest`); its scrolling asks `scrollmargin`, which is false with the room
+    // hidden, so the room behind cannot turn
+    return this.pointerMoved && (this.pointInRoomImage(x, y) || !this.session.setVisible);
   }
   private pointerMoved = false;
   private readonly pointerAtOpen: [number, number];
@@ -318,7 +327,11 @@ export class MazeView implements RoomLayer {
   spriteHitTest(x: number, y: number): { name: string; type: string } | null {
     const s = this.session;
     const showing = s.viewShowing;
-    const onScreen = s.propRuntime.propAt(x, y, null, showing);
+    // every screen prop is clickable, as every one is drawn: a v5 room has no
+    // v4 split between the boot's UI shops and the room's (ScreenDirector's
+    // composite passes persistentOnly false for v5) — the cannon room's `ok`
+    // (cannon.shop) is a set shop's screen prop, and the only way out of it
+    const onScreen = s.propRuntime.propAt(x, y, null, false);
     const asProp = (p: NonNullable<typeof onScreen>) => ({ name: p.name || p.group.name, type: "prop" });
     if (onScreen) return asProp(onScreen);
     const cam = showing ? this.roomCamera() : null;
@@ -327,9 +340,9 @@ export class MazeView implements RoomLayer {
     // there is nothing for it to decide — and it is a render of the view's depth
     // whenever the camera has moved, which `idle ()` hit-testing the pointer every
     // frame of a scroll or a walk would otherwise pay each frame.
-    if (!s.propRuntime.propAt(x, y, cam, showing) && !s.actorRuntime.actorAt(x, y, cam)) return null;
+    if (!s.propRuntime.propAt(x, y, cam, false) && !s.actorRuntime.actorAt(x, y, cam)) return null;
     const occ = this.roomOcclusion();
-    const prop = s.propRuntime.propAt(x, y, cam, showing, occ);
+    const prop = s.propRuntime.propAt(x, y, cam, false, occ);
     const actor = s.actorRuntime.actorAt(x, y, cam, occ);
     if (actor && prop) {
       // an actor drawn over the world (not in the camera's list) is in front

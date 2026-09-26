@@ -212,8 +212,13 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
     // that ask a segment for one (editors, thumbnails)
     paletteRaw: v4PaletteOf(file, frames[0]?.locationFrame),
     frames,
-    actionFrame1: "",
-    actionFrame2: "",
+    // the two action frames, by name, where v4 keeps them: RedJack.exe's movie
+    // loop looks the pstrs at header +0x40 and +0x50 up among the frame names
+    // (0x44e1ac, 0x44e202) and sets `actionframe` 1 and 2 on reaching them
+    // (0x44e94c). The skull's dream is the one RedJack asks after: dream2.move's
+    // "newfile 1" is what hands Nick RedJack's key (top.sett skeleton)
+    actionFrame1: name(c0, 0x40),
+    actionFrame2: name(c0, 0x50),
     flags,
     keySkips: (flags & 1) !== 0,
     minHoldTicks: i32(HEAD.minHold),

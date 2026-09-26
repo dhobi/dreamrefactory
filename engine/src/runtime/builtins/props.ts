@@ -24,7 +24,19 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // propis3d(name): whether a prop is a 3D world object rather than a 2D sprite.
   // The web build draws every prop as a screen-space overlay (see PropRuntime),
   // so none are 3D — return 0. (Kept explicit so it doesn't log as unknown.)
-  r("propis3d", () => 0);
+  //
+  // DreamFactory 5's props do stand in the room, and the flag is the prop's own:
+  // RedJack.exe's getter (0x429d60) answers a word of the prop record (+0x12).
+  // jail.shop's keys ask it — `if propis3d (me)` is keys on the floor, to pick
+  // up; otherwise keys in the hand, to carry — and with 0 the keys on the floor
+  // could only be dragged about.
+  r("propis3d", (_i, [n, v]) => {
+    const p = session.isV5 ? prop(n ?? "") : null;
+    if (!p) return 0;
+    if (v === undefined) return p.worldSpace ? 1 : 0;
+    p.worldSpace = truthy(v);
+    return 0;
+  });
   // propdelete(name): permanently remove a prop from the set (e.g. clearing
   // TAOOT's greenhouse plants). Distinct from prophide, which only toggles visibility.
   r("propdelete", (_i, [n]) => session.propRuntime.remove(toStr(n ?? "")));
@@ -115,6 +127,16 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     p.stateName = toStr(v).toLowerCase();
     p.lastTick = 0;
     const st = p.state();
+    // a DreamFactory 5 view is stepped from its first step, and draws what its
+    // play list and the prop's degree pick at each (PropInstance.currentFrameIdx);
+    // one of a single step stands still unless its end is an event
+    if (st?.steps) {
+      p.frameOrder = null;
+      p.frameIdx = 0;
+      p.frameLocked = false;
+      p.animating = st.steps.length > 1 || st.playsOnce === true;
+      return;
+    }
     // A prop holds a deg-matched frame instead of animating in two cases, and only
     // one of them is a judgement call:
     //
@@ -158,7 +180,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       // entering a state plays its frames once (a door opens and holds open); a
       // single-frame state has nothing to animate. A prop only made visible
       // (never propview'd) keeps animating=false and holds frame 0.
-      p.animating = !!st && p.frameCount(st) > 1;
+      // (a DreamFactory 5 view that plays once says so even with one picture)
+      p.animating = !!st && (p.frameCount(st) > 1 || st.playsOnce === true);
     }
   });
   r("propxy", (_i, [n, x, y]) => {
@@ -273,13 +296,14 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // group (TAOOT: the bridge's tiling sky, SMOKE's extra plants/flames) — it copies
   // src's current display state, then the script repositions it via propxy.
   r("propinstance", (_i, [src, dst]) => {
-    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""));
+    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""), session.isV5);
   });
   // propdeg selects a discrete frame of a rotational/selector prop (TAOOT's
   // deck map "buttons" highlight: 9 frames, deg 0..7 = deck 1..8, deg 8 = none).
   // The pinned frame overrides auto-animation until propview() changes state.
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
-    p.deg = v;
+    // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
+    p.deg = session.isV5 ? (Math.trunc(Number(v) || 0) & 0xffffff) : v;
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a
     // 32-view card table, a 21-view fire). Clamping it as a frame index froze
@@ -289,6 +313,12 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       p.directional = true;
       return;
     }
+    // DreamFactory 5 only stores the value, masked to 24 bits (RedJack.exe
+    // 0x428880), and stops nothing: the frame it picks is picked where the
+    // prop is drawn, nearest in angle among the frames of the step shown
+    // (v5FrameIndex) — the fights' life and strength bars count 1 to 10 there,
+    // the inventory chest 0 to 12, the torturer's cauldron the nodes 5 to 8
+    if (p.state()?.steps) return;
     // A selector prop's frames carry stored degrees (SHP +40) that are usually
     // offset from the frame index — TAOOT's blackjack score readout holds 2,3,…,21,
     // BUST=22, BLACKJACK=23, so propdeg(total) must pick the frame WHOSE DEGREE

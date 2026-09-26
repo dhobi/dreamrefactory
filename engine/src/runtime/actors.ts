@@ -75,6 +75,18 @@ export class ActorInstance {
    * record at +0x22, with the script's length cached beside it at +0x24.
    */
   step = 0;
+  /** v5: the pose that plays once has come to its end and said `endanim` (RedJack.exe's flag bits 2 and 8) */
+  endTold = false;
+  /** v5: the pose has had its first pass (flag bit 4), and the sixtieths of a second since */
+  poseStarted = false;
+  poseTicks = 0;
+  /** begin the pose again — what `actorpose` does to the record (0x407483–0x40748a) */
+  restartPose(): void {
+    this.step = 0;
+    this.endTold = false;
+    this.poseStarted = false;
+    this.poseTicks = 0;
+  }
   scale = 0;
   zclip = 0;
   /** DreamFactory 5's `actorink`: opacity in eighths, as {@link PropInstance.ink} */
@@ -171,6 +183,9 @@ function angleApart(a: number, b: number): number {
   const d = (a - b) & 0xff;
   return Math.min(d, 256 - d);
 }
+
+/** the sixtieths of a second a 50 ms service pass is, on RedJack.exe's clock (0x469f80: ms × 0.06) */
+export const TICKS_PER_PASS = 3;
 
 export class ActorRuntime {
   readonly actors = new Map<string, ActorInstance>();
@@ -297,6 +312,34 @@ export class ActorRuntime {
     for (const a of this.actors.values()) {
       const pose = a.pose();
       const n = pose?.play.length ?? 0;
+      // DreamFactory 5 steps every actor, shown or not, and a pose's own flag
+      // says whether it plays once — held on its last step and told so, once —
+      // or goes round without a word (CastPose.playsOnce). Jan's men in the
+      // mine finish their first pose hidden, and only `wake` shows them.
+      if (pose?.playsOnce !== undefined) {
+        // RedJack.exe 0x4069ee–0x406a81: a pose held at its end is left alone;
+        // the first pass after `actorpose` shows step 0; after that the step is
+        // the clock's sixtieths since then over the pose's step time, or one
+        // more a pass when it has none; a pose that plays once stops on its last
+        // step and is marked for `endanim`, and any other goes round
+        if (a.endTold) continue;
+        let e: number;
+        const rate = pose.frameTicks ?? 0;
+        if (!a.poseStarted) {
+          a.poseStarted = true;
+          a.poseTicks = 0;
+          e = 0;
+        } else if (rate > 0) {
+          a.poseTicks += TICKS_PER_PASS;
+          e = Math.floor(a.poseTicks / rate);
+        } else e = a.step + 1;
+        if (pose.playsOnce && e >= n - 1) {
+          a.step = Math.max(0, n - 1);
+          a.endTold = true;
+          ended.push(a.name);
+        } else a.step = n > 0 ? e % n : 0;
+        continue;
+      }
       if (n > 0) a.step = (a.step + 1) % n;
       if (n > 1 && a.step === 0) ended.push(a.name);
       // A pose with no pictures at all is over as soon as it starts, and says so
@@ -595,6 +638,56 @@ export class ActorRuntime {
       sig.bool(a.worldSpace).num(a.anchorX).num(a.anchorY).num(a.dist);
       sig.num(a.flip).num(a.bright[0]).num(a.bright[1]).num(a.bright[2]);
     }
+  }
+
+  /**
+   * Do `a`'s own opaque pixels cover (x, y), whatever is drawn over them?
+   * DreamFactory 5's `pointinactor` (RedJack.exe 0x406860) asks the one actor:
+   * its sprite's rectangle (0x468f00), then that sprite's pixel (0x44c190). The
+   * mine's harpoon is what tells the two apart — it is drawn at the very point
+   * it asks about, over the man it hits.
+   */
+  covers(a: ActorInstance, x: number, y: number, cam: WorldCamera | null): boolean {
+    return this.spriteBox(a, cam)?.covers(x, y) ?? false;
+  }
+
+  /** where `a` is drawn on screen, and a test of its own opaque pixels there (see {@link covers}) */
+  spriteBox(
+    a: ActorInstance,
+    cam: WorldCamera | null,
+  ): { x: number; y: number; w: number; h: number; covers(x: number, y: number): boolean } | null {
+    for (const s of this.screenDrawList()) {
+      if (s !== a) continue;
+      const r = this.screenRect(a);
+      if (!r) return null;
+      return {
+        x: r.x, y: r.y, w: r.w, h: r.h,
+        covers: (x, y) => {
+          if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
+          const lx = a.flip & 1 ? r.f.width - 1 - (x - r.x) : x - r.x;
+          const ly = a.flip & 2 ? r.f.height - 1 - (y - r.y) : y - r.y;
+          return !!r.f.opaque[ly * r.f.width + lx];
+        },
+      };
+    }
+    if (!cam) return null;
+    for (const { a: d, proj } of this.drawList(cam)) {
+      if (d !== a) continue;
+      const r = this.rect(a, proj, cam);
+      if (!r) return null;
+      return {
+        x: r.x, y: r.y, w: r.w, h: r.h,
+        covers: (x, y) => {
+          if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
+          let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
+          let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+          if (a.flip & 1) sx = r.f.width - 1 - sx;
+          if (a.flip & 2) sy = r.f.height - 1 - sy;
+          return !!r.f.opaque[sy * r.f.width + sx];
+        },
+      };
+    }
+    return null;
   }
 
   /** front-most actor whose opaque pixels cover (x, y) — for talking */

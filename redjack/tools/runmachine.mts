@@ -1,5 +1,6 @@
 /**
- * Run every machine suite — `tests/machine/*.ts` but the harness and the route — each in a
+ * Run every machine suite — the `tests/machine/*.ts` that end in `pass (…)`; the others
+ * (the harness, the route, the fight and puzzle players) are what they are written in — each in a
  * process of its own (the game keeps its world in module state, one per
  * process), several at a time, and say which failed.
  *
@@ -7,7 +8,7 @@
  *   npx tsx tools/runmachine.mts speed foes  just these
  */
 import { spawn } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -15,7 +16,7 @@ const dir = resolve(import.meta.dirname, "../tests/machine");
 const want = process.argv.slice(2);
 const suites = readdirSync(dir)
   // the suites, not the modules they are written in (and not a scratch dot-file)
-  .filter((f) => f.endsWith(".ts") && !f.startsWith(".") && !["harness.ts", "route.ts", "fight.ts"].includes(f))
+  .filter((f) => f.endsWith(".ts") && !f.startsWith(".") && /\bpass\("/.test(readFileSync(join(dir, f), "utf8")))
   .map((f) => f.slice(0, -3))
   .filter((s) => !want.length || want.includes(s))
   .sort();
