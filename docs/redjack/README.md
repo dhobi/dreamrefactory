@@ -10,8 +10,8 @@ What runs here is a **prototype**: the real `GameHost` and `GameSession`
 pointed at the three discs, on port 5179 with
 `npm run dev -w redjack`. It boots, you can walk the rooms and look round them,
 the films, props, actors and puppets play, and the fights' stage opens. The
-first three days play through headless (see [Machine suites](#machine-suites));
-the later days have not been played through yet.
+first four days play through headless (see [Machine suites](#machine-suites));
+the last three have not been played through yet.
 
 ## What was found
 
@@ -100,27 +100,25 @@ the day's first room and cast, and often plays a film or starts a talk. Each
 puppet file keeps a talk per day, and a mini game is a stage, or a room of
 its own such as the cannons.
 
-Days one to three are played by the [machine suites](#machine-suites). Days four to
-seven are read from the scripts and not yet played, so their rows say what the
-scripts hold, not what has been seen to work.
+Days one to four are played by the [machine suites](#machine-suites). Days five
+to seven are read from the scripts and not yet played, so their rows say what
+the scripts hold, not what has been seen to work.
 
 | Day | Where (disc) | Talks | Mini games | How it ends |
 |---|---|---|---|---|
 | 1 | Hangman's Reef at night (liznite, disc 1) | Bone, Lyle, Patch, the bartender, Captain Justice | Lyle's three lessons (defense, dodging, striking) and the fight with him on the dock; the trunk; the fire pit; the crate | Nick hides in a marked crate and is loaded onto the Marauder |
 | 2 | The Marauder (ship, disc 1) | Justice (the oath, then his cabin), Lyle, Sullivan (Anne) and her letter | The cannons: four dinghies to sink | Justice's last word, and the voyage (`montage.move`) |
 | 3 | Port Royal (ptroyal, disc 2) | Justice, Erzulie, the constable, Anne at the jail window, the soldier | The alley fight with Jan and his second (`jcombat`); the jail escape (rum, a rock from the wall, the keys); the street fight's three waves (`bfight`) | Justice is murdered, and Nick is tried at sea (`trialset.move`) |
-| 4 | RedJack's island (rjbeach, disc 3) | Anne, Rockfish | The gem lifts at the skull's teeth (`gem`); the horn caves and their doors; lighting the beach's fire pit with the torch | Rockfish answers the fire and takes Nick to Blackbeard (`rock3.pupp`) |
+| 4 | RedJack's island (rjbeach, disc 3) | Anne, RedJack in a dream, Rockfish | The totems (`totem`); the gem lifts at the skull's teeth (`gem`); the lava's pillars; the flame corridor and its switch; the swinging chain; the skeleton, beaten with a vine (`scombat2`); RedJack's lockbox; the crate and its crowbar; the horn caves and the squid door; lighting the beach's fire pit with the torch | Rockfish answers the fire and takes Nick to Blackbeard (`rock3.pupp`) |
 | 5 | Blackbeard's island (bb1, disc 2) | Rockfish, Blackbeard, Bone, Cross, Lyle, the pirates, Anne | The lift (`elevator`), the drink (`drink`), the charcoal (`charcoal`), the mine carts with the harpoon (mc1–mc3), the fight with Bone (`bcombat`) | Bone beaten; `arrive.move` |
 | 6 | Cartagena (lock1, disc 2) | Marquez, Elizabeth and Jake in their cages, Rockfish, Anne | The lock's valves (`topvalves`, `botvalves`), the switch (`switch`), the fight in the hold (`tcombat`), the shield in the study (`shield`) | Marquez in his study (`marqintro.move`) |
-| 7 | RedJack's island again (rjbeach, disc 3) | Blackbeard, Cross, Elizabeth, Jake, Lyle, Marquez, Patch, Rockfish, Anne | The Spaniard on the beach (`spancombat`), the skeleton (`scombat2`), Marquez (`mcombat`), the totems, the ballista, the lockbox at the top | The ending |
+| 7 | RedJack's island again (rjbeach, disc 3) | Blackbeard, Cross, Elizabeth, Jake, Lyle, Marquez, Patch, Rockfish, Anne | The Spaniard on the beach (`spancombat`), Marquez (`mcombat`), the ballista | The ending |
 
 Some things lie off the suites' route. The bar's darts and the shark in the
 bay are day one's, and killing the shark is the other way onto the ship,
-the one that leads to the Justice ending. Of the island's puzzles, only the
-gem lifts are tied to day four by the scripts themselves (`day = 4`). The
-totems, the ballista and the lockbox are placed on day seven here, where
-`diddart` and the other day-seven checks point. Until those days are played
-this is a reading.
+the one that leads to the Justice ending. The ballista is placed on day seven,
+where the totems' day-seven case sends Nick to it (totem.shop `doballista`);
+until that day is played, that is a reading.
 
 ## Machine suites
 
@@ -170,9 +168,20 @@ CPU goes, waiting on the game's state and never on a duration.
 - the street fight's three waves, and the trial at sea: the suite ends on day
   four at RedJack's beach.
 
+`day4` plays the first three days, then RedJack's island:
+- the totems put to sleep, so the darts stay quiet;
+- the gem lifts at the skull's teeth, solved as a search (`gems.ts`);
+- the lava's pillars, crossed on the rules of which stand when (`lava.ts`);
+- the flame corridor, stepped between the bursts, and its switch;
+- the swinging chain, grabbed at the start of a swing, and the skeleton,
+  brought down by the vine while Nick leans;
+- the dream by RedJack's skeleton at the top, his key and lockbox, the journal;
+- the crate's crowbar and horn, link1's scepter lock, the horn caves and the
+  torch, and the fire pit: the suite ends on day five at Blackbeard's.
+
 Each step checks the flag the script it cites sets.
 
-The moves are the player's, in three files:
+The moves are the player's, in five files:
 - [`route.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/route.ts)
   walks a room by its exits (turn to the exit, then up), clicks what `hittest`
   names, pans or rests on the screen edge to bring a thing out of the scroll
@@ -191,6 +200,13 @@ The moves are the player's, in three files:
   ball the way the cannon ball's script will, and uses the room's own projection
   and hit test to ask whether the dinghy, where it will have sailed to by then,
   would be under the ball.
+- [`gems.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/gems.ts)
+  solves the gem lifts on paper, as a breadth-first search over the rules
+  gem.shop plays by, and then makes the clicks, checking each lift's level
+  against the model.
+- [`lava.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/lava.ts)
+  holds the skull's other puzzles: the pillars, the flames, the chain and the
+  vine.
 
 Playing it this way found several engine gaps, each fixed from RedJack.exe where
 it could be read and marked as a reading where it could not: puppets opened by a
@@ -215,6 +231,21 @@ Day three found more:
 - a v5 view's "plays once" flag (bit 0 at +0x14), which is on exactly the
   views whose end a script answers. Only those now end with `endanim`, and the
   jail spoon's `carrying` no longer runs round forever.
+
+Day four found more:
+- `closecastfile` by a bare name, and `closecast` fired (the dispatch
+  string `", closecast()"` is in RedJack.exe);
+- the flat's click regions and `pointinbutton` measured from the stage's
+  origin;
+- a v5 room never took the clicks queued while a script ran. It now takes
+  them at the start of a pass, as the v4 viewer does, and a press while a
+  script polls the button is queued, since RedJack's scripts flush what they
+  consume;
+- `idle ()` running behind a stage, where it fades the inventory chest in;
+- the film header's two action-frame names, which the v5 reader had left
+  empty (RedJack.exe 0x44e1ac);
+- `propdeg` showing a frame by index where no frame carries the degree, as
+  the chest and its lid need (common.shop open and close).
 
 ## What does not work yet
 

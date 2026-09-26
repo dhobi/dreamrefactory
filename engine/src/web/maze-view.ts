@@ -261,7 +261,11 @@ export class MazeView implements RoomLayer {
   private pointerInside(): boolean {
     const { pointerX: x, pointerY: y } = this.session;
     if (!this.pointerMoved) this.pointerMoved = x !== this.pointerAtOpen[0] || y !== this.pointerAtOpen[1];
-    return this.pointerMoved && this.pointInRoomImage(x, y);
+    // ...or over a stage that has the screen: the boot's idle runs there too,
+    // and it is what fades the inventory chest in under the pointer (boot
+    // `chest`); its scrolling asks `scrollmargin`, which is false with the room
+    // hidden, so the room behind cannot turn
+    return this.pointerMoved && (this.pointInRoomImage(x, y) || !this.session.setVisible);
   }
   private pointerMoved = false;
   private readonly pointerAtOpen: [number, number];

@@ -301,6 +301,23 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       p.directional = true;
       return;
     }
+    // DreamFactory 5 (RedJack.exe 0x428880 stores the value, masked to 24 bits):
+    // a view whose frames carry the degree shows that frame — the fights' life
+    // and strength bars — and one whose frames do not is shown by INDEX. The
+    // inventory chest and its lid store 0 on every frame, and common.shop opens
+    // them with `propdeg (me, i)` from 1 to 12 and 0 to 4 and closes them with
+    // the same counts backwards, which no animation could play; pinned to the
+    // first frame as a missing degree, they stayed shut over what they hold.
+    if (session.isV5) {
+      const cur = p.state();
+      const n = Math.trunc(Number(v) || 0);
+      if (cur && cur.frames.length && !cur.degrees.includes(n)) {
+        p.frameOrder = null;
+        p.frameIdx = Math.max(0, Math.min(cur.frames.length - 1, n));
+        p.frameLocked = true;
+        return;
+      }
+    }
     // A selector prop's frames carry stored degrees (SHP +40) that are usually
     // offset from the frame index — TAOOT's blackjack score readout holds 2,3,…,21,
     // BUST=22, BLACKJACK=23, so propdeg(total) must pick the frame WHOSE DEGREE

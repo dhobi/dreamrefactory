@@ -162,6 +162,7 @@ export async function face(h: Headless, name: string, type?: HitType): Promise<{
     { x: width / 2, y: 4, n: 60 },
     { x: width - 4, y: height / 2, n: 40 },
   ];
+  const panned = !at;
   for (const r of rest) {
     for (let pan = 0; !at && pan < r.n; pan++) {
       h.session.setPointer(r.x, r.y);
@@ -173,8 +174,24 @@ export async function face(h: Headless, name: string, type?: HitType): Promise<{
   if (!at) fail(`${h.room()}/${h.node()}: "${name}" is nowhere on screen`);
   const inMargin = (p: { x: number; y: number }): boolean =>
     p.x < margin || p.y < margin || p.x >= width - margin || p.y >= height - margin;
-  // `scrollmargin` answers false while the room is hidden, as it is behind a stage
-  if (!inMargin(at) || !h.session.setVisible || h.session.maze?.view !== "node") return at;
+  // a pan leaves the pointer on the edge and the view still turning, and a click
+  // while the view turns scrolls instead (boot scrollmargin → isnodescrolling):
+  // a thing found clear of the margin is clicked once the hand is back in the
+  // middle and the view has stopped (the skull's gem quad, found panning)
+  if (panned && !inMargin(at)) {
+    h.session.setPointer(width / 2, height / 2);
+    await h.settle(`the view to stop on ${name}`);
+    at = findOnScreen(h, name, type) ?? fail(`${h.node()}: "${name}" is gone once the view stopped`);
+  }
+  // `scrollmargin` answers false while the room is hidden, as it is behind a stage;
+  // and the boot asks it only of a quad, and of a prop or an actor at a distance
+  // of 0 or more (boot mousedown: `propdist (thename) >= 0 & scrollmargin`) — the
+  // jail's keys, nearer than that, take a click anywhere
+  const hit = h.session.hitTestAt(at.x, at.y);
+  const near =
+    (hit.type === "prop" && Number(h.session.propRuntime.get(hit.name)?.dist ?? 0) < 0) ||
+    (hit.type === "actor" && Number(h.session.actorRuntime.get(hit.name)?.dist ?? 0) < 0);
+  if (!inMargin(at) || near || !h.session.setVisible || h.session.maze?.view !== "node") return at;
   for (let hover = 0; at && inMargin(at); hover++) {
     if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin (at ${at.x},${at.y}, the middle answers ${h.session.hitTestAt(width / 2, height / 2).name})`);
     h.session.setPointer(at.x, at.y);
@@ -295,9 +312,11 @@ export async function waitNear(h: Headless, who: string, hotdist: number): Promi
  * `while stilldown ()` loop — and let go over `onto`, which is where the item's
  * own test looks (`pointinbutton`, `pointinprop`, `pointinactor`).
  */
-export async function drag(h: Headless, what: string, onto: string): Promise<void> {
-  const to = findOnScreen(h, onto) ?? fail(`${h.node()}: nothing called "${onto}" to drop ${what} on`);
-  const from = findOnScreen(h, what) ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
+export async function drag(h: Headless, what: string, onto: string, ontoType?: HitType): Promise<void> {
+  // the thing carried is always a prop; the target may share its name (horn3's
+  // quad "horn" is where the inventory's "horn" goes)
+  const to = findOnScreen(h, onto, ontoType) ?? fail(`${h.node()}: nothing called "${onto}" to drop ${what} on`);
+  const from = findOnScreen(h, what, "prop") ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
   h.mouseDown(from.x, from.y);
   await h.frame(3);
   const steps = 12;
@@ -342,4 +361,73 @@ export async function carry(h: Headless, what: string, to: { x: number; y: numbe
   }
   h.mouseUp(to.x, to.y);
   await h.frame(3);
+}
+
+/**
+ * Walk a room's old-style SCENES (fixed views, as v4's rooms were — the hub's
+ * flame corridor is twelve of them) back to its nodes: in each scene turn
+ * ("right") until the view faces a road that leads somewhere `wanted`, then
+ * "up" along it. Answers the scenes passed through.
+ */
+export async function walkScenes(
+  h: Headless,
+  wanted: (road: { to: number; toScene: number }, scene: string) => boolean,
+  max = 30,
+): Promise<string[]> {
+  const passed: string[] = [];
+  for (let hop = 0; h.session.maze?.scene; hop++) {
+    if (hop === max) fail(`the scenes never led out (${passed.join(" > ")})`);
+    const m = h.session.maze;
+    const sc = m.scene!;
+    passed.push(sc.name);
+    const goal = sc.views.find((v) => v.road && wanted(v.road, sc.name));
+    if (!goal) fail(`${sc.name} has no road the walk wants`);
+    for (let turn = 0; m.sceneView !== goal.name; turn++) {
+      if (turn > sc.views.length + 1) fail(`${sc.name}: turning never faced ${goal.name}`);
+      await press(h, "right", `turning to ${goal.name}`);
+    }
+    await press(h, "up", `walking out of ${sc.name}`);
+  }
+  return passed;
+}
+
+/**
+ * Open the inventory the way the player finds it after day one: the chest in
+ * the bottom left fades out unless the pointer is on its corner (boot `chest`,
+ * `mouseonchest`: x 15–149, y 366–475), so the hand goes there, the chest fades
+ * in, and it is clicked.
+ */
+export async function openInventory(h: Headless): Promise<void> {
+  const chest = h.session.propRuntime.get("chest") ?? fail("no inventory chest");
+  h.session.setPointer(80, 420);
+  await h.until(() => chest.visible && Number(chest.ink) >= 7, "the chest to fade in", 200);
+  const at = findOnScreen(h, "chest", "prop") ?? fail("the chest is not on screen");
+  h.click(at.x, at.y);
+  await h.until(() => h.running().length === 0, "the inventory to open", 400);
+  await h.frame(5);
+}
+
+/** close the inventory: a click on the open chest (common.shop chest: `propdeg` 12 is open) */
+export async function closeInventory(h: Headless): Promise<void> {
+  const chest = h.session.propRuntime.get("chest") ?? fail("no inventory chest");
+  if (Number(chest.deg) !== 12) return;
+  const at = findOnScreen(h, "chest", "prop") ?? fail("the open chest is not on screen");
+  h.click(at.x, at.y);
+  await h.until(() => Number(chest.deg) === 0 && h.running().length === 0, "the inventory to close", 400);
+  h.session.setPointer(320, 240);
+}
+
+/**
+ * Face a heading (whole degrees) by turning, a press at a time, and go "up" —
+ * the doors that are no exit of the node but a scripted jump the set's `keydown`
+ * makes when you face them (the hub's lava, the beach's way to the links)
+ */
+export async function upFacing(h: Headless, deg: number): Promise<void> {
+  const m = h.session.maze ?? fail("no room");
+  const at = (): number => Math.round((m.heading * 360) / TURN);
+  for (let i = 0; Math.abs(((at() - deg + 540) % 360) - 180) > 20; i++) {
+    if (i === 16) fail(`${h.node()}: turning never faced ${deg} degrees`);
+    await press(h, "right", `turning to ${deg} degrees`);
+  }
+  await press(h, "up", `going on at ${deg} degrees`);
 }

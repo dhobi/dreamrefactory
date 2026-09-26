@@ -2932,6 +2932,8 @@ export class GameSession {
      *
      * The two closing halves stay unimplemented on purpose — no script on either
      * disc defines them, so firing them would add a dispatch nothing can receive.
+     * RedJack's casts do define `closecast`, and DreamFactory 5 fires it
+     * (closeCastFile).
      */
     for (const m of cst.members) {
       await this.fireHandler(this.castScripts.get(m.name), "openactor", m.name);
@@ -2940,8 +2942,21 @@ export class GameSession {
     return true;
   }
 
-  closeCastFile(fileName: string): void {
-    const key = fileName.toLowerCase();
+  async closeCastFile(fileName: string): Promise<void> {
+    /**
+     * DreamFactory 5 closes a cast by the name it was opened by, less its
+     * extension — `closecastfile ("cannon")`, `closecastfile ("bfight")` — as
+     * it opens one (typedName), and tells it first: RedJack.exe's dispatch
+     * strings include `", closecast()"`. The cannon's and the street fight's
+     * `closecast` put the boot's scroll `margin` back to 100; without them it
+     * stayed at the 310 they set, and on RedJack's beach every sprite right of
+     * the middle sat in a margin a click scrolls instead of reaching. And the
+     * casts themselves were never closed: the dinghies went on sailing, asking
+     * for stars in whatever room was open.
+     */
+    const key = (this.isV5 ? this.typedName(fileName, "cast") : fileName).toLowerCase();
+    const main = this.isV5 ? this.castMains.get(key) : undefined;
+    if (main) await this.fireHandler(main, "closecast", key, `closecast ${key}`);
     const cast = this.actorRuntime.casts.get(key);
     if (cast) {
       for (const m of cast.cst.members) this.castScripts.delete(m.name);

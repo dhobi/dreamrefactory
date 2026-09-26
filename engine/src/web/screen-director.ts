@@ -472,6 +472,23 @@ export class ScreenDirector {
     this.session.tickFade(now);
     this.session.tickWipe(now);
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service
+    // A DreamFactory 5 room has no SetViewer, which is where a v4 room pops the
+    // clicks and keys made while a script ran (SetViewer.drainOneEvent). So they
+    // queued and were never taken: in RedJack's fights, where a loop is always
+    // running, a click on anything but the opponent went nowhere — the skeleton
+    // is beaten by clicking a vine. Popped here instead, one a pass, before the
+    // loops are served and while nothing holds the engine.
+    if (this.session.isV5 && !this.inputLocked && this.session.events.length) {
+      const e = this.session.events.take();
+      if (e?.kind === "keydown") void this.session.track(this.keyDown(e.key, e.special).then(() => {}), `queued key ${e.key}`);
+      else if (e) {
+        // the click is where it was made, and the pointer stays where the hand
+        // is now: a replay that left it at the old point left it in the scroll
+        // margin, and the view turned on its own
+        const { pointerX: px, pointerY: py } = this.session;
+        void this.session.track(this.click(e.x, e.y).then(() => this.session.setPointer(px, py)), `queued click ${e.x},${e.y}`);
+      }
+    }
     this.session.scheduler.serviceFrameLoops(); // sky drift, fence idle
     this.serviceCursor();
     if (this.movies.playing) {
@@ -1524,7 +1541,14 @@ export class ScreenDirector {
       // ...unless a script is polling the button right now, in which case this
       // press IS its input and queueing a second copy would replay it into
       // whatever comes next (GameSession.pollingInput).
-      if (!this.session.pollingInput()) this.session.events.post({ kind: "mousedown", x, y });
+      //
+      // Not in DreamFactory 5, whose scripts flush what they consume: RedJack's
+      // fights poll `stilldown ()` every frame from a `think` loop and call
+      // `flushevents ()` when a press is a strike, and a press they leave alone
+      // is the player's click on something else — the vine the skeleton is
+      // beaten with is clicked in the band below `think`'s strikes (y 384 on,
+      // sCombat.shop), and was dropped here.
+      if (this.session.isV5 || !this.session.pollingInput()) this.session.events.post({ kind: "mousedown", x, y });
       return;
     }
     // Over an overlay flat, a PROP outranks a click region, and this order is
@@ -1711,6 +1735,13 @@ export class ScreenDirector {
 
   /** the active overlay flat's named click-region under a point, or null */
   private flatRegionAt(x: number, y: number): { name: string } | null {
+    // a v5 flat is drawn at the stage's origin (`stageorigin`), and its regions are
+    // the flat's own coordinates: scombat2.stag's "Vine" is x 677–841 of a flat
+    // wider than the screen, in reach only once Nick leans and the origin moves
+    if (this.session.isV5) {
+      x -= this.session.stageOrigin.x;
+      y -= this.session.stageOrigin.y;
+    }
     return (
       this.session
         .stageCtrl.currentFlatRegions()

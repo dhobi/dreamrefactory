@@ -119,7 +119,9 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
     const region = session.stageCtrl.flatRegion(toStr(flat ?? ""), toStr(name ?? ""));
     if (!region) return 0;
     const pt = toNum(point ?? 0);
-    const x = pointX(pt), y = pointY(pt);
+    // on the flat, not the screen, in v5 (see ScreenDirector.flatRegionAt)
+    const o = session.isV5 ? session.stageOrigin : { x: 0, y: 0 };
+    const x = pointX(pt) - o.x, y = pointY(pt) - o.y;
     return x >= region.left && x <= region.right && y >= region.top && y <= region.bottom ? 1 : 0;
   });
   // pointinprop(name, point): is `point` inside the prop's drawn screen rect?
