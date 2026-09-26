@@ -708,11 +708,21 @@ export class ScreenDirector {
     };
   }
 
+  /**
+   * What the last painted frame was: the room's view over the band ("view"),
+   * or a picture of the whole screen with no view in it ("full": a flat such as
+   * a close-up, or a film reaching into the band's rows). A held or faded frame
+   * leaves it as it was. Read by a shell laying the picture out (TAOOT's TH
+   * mode, taoot/src/tylerhartman.ts); nothing here depends on it.
+   */
+  picture: "view" | "full" = "view";
+
   private paint(ctx: CanvasRenderingContext2D): void {
     this.screen.bright = this.session.screenBright;
     this.screen.contrast = this.session.screenContrast;
     const owner = this.screenOwner();
     if (owner === "puppet") {
+      this.picture = "view";
       this.compositePuppetScreen();
       this.screen.blit(ctx);
       // the subtitle band and choice bevels sit UNDER the fade, as they did
@@ -724,6 +734,8 @@ export class ScreenDirector {
     const movieFrame = owner === "movie" ? this.movies.frame : null;
     if (movieFrame) {
       const f = movieFrame;
+      // the room-view transitions are 512x264 at the top; a clip into the band is the whole screen's
+      this.picture = f.originY + f.height > 264 ? "full" : "view";
       // A clip is a RECTANGLE PAINTED OVER THE SCREEN, not a screen of its own.
       // WHERE it sits is the segment's own header field (MovSegment.originX/Y),
       // and the engine writes only those pixels — so whatever the screen was
@@ -786,6 +798,7 @@ export class ScreenDirector {
     }
     const drew = this.paintWorldInto();
     if (!drew) return; // nothing to draw: leave the canvas as it stands
+    this.picture = drew === "set" || this.session.viewShowing ? "view" : "full";
     this.coverWithWipe();
     /**
      * The album's photograph, INTO the framebuffer rather than onto the canvas.
