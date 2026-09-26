@@ -174,6 +174,7 @@ export default withMermaid(
             { text: "Audio — channels & volumes", link: "/engine/runtime/audio" },
             { text: "Saving & loading", link: "/engine/runtime/saves" },
             { text: "The browser host", link: "/engine/runtime/host" },
+            { text: "TH mode — the menu band tucked away", link: "/engine/runtime/th-mode" },
             { text: "Rooms in play — DreamFactory 5", link: "/engine/runtime/rooms-v5" },
           ],
         },

@@ -77,6 +77,7 @@ two rows are a *game's* code rather than the engine's, and are named as such.
 | The screen everything composites into | [`web/screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts), [`web/screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen.ts) | [Browser host](host.md) |
 | Movie playback | [`web/movie-player.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/movie-player.ts), [`df/mov-pace.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-pace.ts), [`df/mov-sound.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-sound.ts) | [Browser host](host.md), [MOV](../formats/mov.md) |
 | Page + input | [`taoot/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/main.ts) | [Browser host](host.md) |
+| The menu band tucked away on a wide display | [`web/tylerhartman.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/tylerhartman.ts) | [TH mode](th-mode.md) |
 | What a launch has to have in hand | [`runtime/bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts), [`web/host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | [The boot plan](host.md#the-boot-plan-what-a-game-says-it-needs) |
 
 The interpreter itself — scopes, operators, the event chain — is a language

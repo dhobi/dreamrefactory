@@ -1,9 +1,9 @@
 /**
- * TH mode's layout maths (src/tylerhartman.ts): where the view goes on a
+ * TH mode's layout maths (engine/src/web/tylerhartman.ts): where the view goes on a
  * 16:9 display, and the band's slide.
  */
 import { test, expect } from "vitest";
-import { SLIDE_MS, slideRows, viewBox } from "../../src/tylerhartman";
+import { SLIDE_MS, slideRows, viewBox } from "@dreamfactory/engine/web/tylerhartman";
 
 test("a 16:9 display holds the 512x264 view with thin bars, and fills when stretched", () => {
   const v = viewBox(1920, 1080, false);
