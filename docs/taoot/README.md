@@ -23,6 +23,9 @@ that stands on, see [the engine](../engine/).
     probe in the corpus, generated, with what each branch does
 - [Free roam](freeroam.md) — the guided tour `playmode.mov` offers, entered
   directly, and the six doors that answer one with a knock
+- [TH mode](../engine/runtime/th-mode.md) — the room alone on a wide display, the
+  menu band sliding in when it is wanted, after
+  [Tyler Hartman's fullscreen builds](https://github.com/TylerHartman/Titanic-Adventure-Out-Of-Time-Fullscreen)
 - [How we know it's right](verification.md) — what was checked, against what, and
   what "right" was allowed to mean
 

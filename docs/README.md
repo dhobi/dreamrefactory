@@ -182,6 +182,9 @@ with them — the behaviour recovered from the games' own binaries (`TI.EXE`, an
   and the in-browser saved-games UI.
 - **[The browser host](engine/runtime/host.md)** — the page and the boot it runs, the
   viewer, the screen everything composites into, the movie player, and input.
+- **[TH mode](engine/runtime/th-mode.md)** — Titanic and Dust on a wide display
+  with the menu band hidden until it is wanted, after
+  [Tyler Hartman's fullscreen builds](https://github.com/TylerHartman/Titanic-Adventure-Out-Of-Time-Fullscreen).
 - **[The low-memory game](taoot/low-memory.md)** — the smaller version of
   itself the game shipped with, what its own `lowmemory()` switches off, and why
   `.11K` is not 11 kHz.

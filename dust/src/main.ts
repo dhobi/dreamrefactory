@@ -71,6 +71,7 @@ import {
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
+import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import {
@@ -272,7 +273,24 @@ let currentRoom = "";
 // and the way back out are engine/src/web/fullscreen.ts.
 installFullscreen(fsBtn, stageEl, { report: say });
 // and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
-installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "dust.picture.stretch");
+const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
+installStretch(stretchBox, stageEl, "dust.picture.stretch");
+/**
+ * ...or TH mode, the menu band tucked away (engine/src/web/tylerhartman.ts).
+ * The page sizes its frame and stage from a 4:3 `--pic-h`, declared on :root
+ * and again on body.playing; an inline one on <body> outranks both, so the
+ * frame, the stage's height and the drop above it follow the view's shape.
+ */
+const thBox = document.getElementById("thBox") as HTMLInputElement | null;
+const th = new TylerHartman(stageEl, canvas, thBox, "dust.picture.th", {
+  screenW: FLAT_W,
+  screenH: FLAT_H,
+  onPage: (on) => {
+    if (on) document.body.style.setProperty("--pic-h", `calc(var(--pic-w) * 264 / ${FLAT_W})`);
+    else document.body.style.removeProperty("--pic-h");
+  },
+});
+excludeEachOther(thBox, stretchBox);
 
 /** how long the screenshot's fate stays on screen before it is taken down */
 const BUG_NOTE_MS = 6000;
@@ -1280,6 +1298,7 @@ function play(host: GameHost, files: DustFiles): void {
    */
   const dbg = {
     host,
+    th,
     session: host.session,
     get viewer() {
       return host.viewer;
@@ -1361,6 +1380,7 @@ function play(host: GameHost, files: DustFiles): void {
     // call (see files.ts's serverSetNames, and screen-director.ts).
     host.director.tick(now);
     host.director.render(ctx);
+    th.frame(!!host.director.currentRoom && host.director.picture === "view", host.director.awaitingChoice, now);
     const v = host.viewer;
     /*
      * The trace: where you are, and who else is here.
@@ -1613,11 +1633,18 @@ function showCursor(name: string): void {
   canvas.style.cursor = cursors.css(name || "arrow", rect.width / canvas.width, rect.height / canvas.height);
 }
 addEventListener("resize", () => showCursor(cursorShown));
+// ...and when TH scales the picture inside the same box
+th.onRescale = () => showCursor(cursorShown);
 
 canvas.addEventListener("pointerdown", (e) => {
   const host = playing;
   if (!host) return;
   if (savesOpen()) return; // the dialog owns the screen (see the keydown above)
+  // TH's right click is the band's, not the game's (engine/src/web/tylerhartman.ts)
+  if (th.on && e.button === 2) {
+    th.toggle();
+    return;
+  }
   const { x, y } = canvasCoords(e);
   host.session.setPointer(x, y);
   /**
@@ -1634,6 +1661,9 @@ canvas.addEventListener("pointerdown", (e) => {
    * ScreenDirector now, which is when `viewer` became null underneath this.
    */
   if (e.pointerType === "touch") {
+    // TH's right click, on a phone: a second finger makes it a two-finger
+    // tap, and each finger's own gesture is dropped
+    if (th.touchDown(e, (id) => touch.cancel({ pointerId: id, clientX: e.clientX, clientY: e.clientY }))) return;
     touch.down(e);
     return;
   }
@@ -1667,6 +1697,9 @@ addEventListener("pointermove", (e) => {
 });
 
 addEventListener("pointerup", (e) => {
+  if (th.on && e.button === 2) return;
+  // a finger of TH's two-finger tap lifts on nothing
+  if (th.touchUp(e)) return;
   if (touch.up(e)) return;
   const host = playing;
   if (!host?.viewer) return;
@@ -1763,7 +1796,16 @@ const touch = new TouchGestures({
 });
 
 /** a gesture the browser took away (a system edge-swipe): forget it, act on nothing */
-addEventListener("pointercancel", (e) => touch.cancel(e));
+addEventListener("pointercancel", (e) => {
+  th.touchUp(e);
+  touch.cancel(e);
+});
+
+// no browser menu over TH's right click. Not a toggle itself: a phone fires
+// this for a finger held down, which is half of every swipe to walk.
+canvas.addEventListener("contextmenu", (e) => {
+  if (th.on) e.preventDefault();
+});
 
 /** a key a gesture means, on the same route the keyboard uses */
 function sendGestureKey(ch: string, isEsc = false): void {

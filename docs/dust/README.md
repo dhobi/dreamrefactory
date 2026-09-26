@@ -30,6 +30,9 @@ The page boots off the real disc, through the same `GameHost` Titanic uses:
   the ones that ship beside the disc, which are
   [a whole playthrough](thread.md);
 - **the control panel**, a full-screen flat with its buttons drawn on it;
+- **[TH mode](../engine/runtime/th-mode.md)**, the room alone on a wide display
+  with the menu band sliding in when it is wanted, as on Titanic's page, after
+  [Tyler Hartman's fullscreen builds](https://github.com/TylerHartman/Titanic-Adventure-Out-Of-Time-Fullscreen);
 - **a collection page**, for how to run the 1995 DOS game instead of this port
   of it.
 
