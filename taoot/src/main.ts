@@ -31,6 +31,7 @@ import {
 } from "@dreamfactory/engine/runtime/session";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
+import { TylerHartman } from "./tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "./cursor-art";
@@ -148,6 +149,8 @@ const editionPicker = document.getElementById("editionPicker");
 const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
 /** whether fullscreen stretches the picture to the display (engine/src/web/stretch.ts) */
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
+/** whether fullscreen hides the menu band (./tylerhartman.ts) */
+const thBox = document.getElementById("thBox") as HTMLInputElement | null;
 const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 /** where the bug button says what became of the screenshot */
 const bugNote = document.getElementById("bugNote");
@@ -204,6 +207,25 @@ const mapCtx = minimap.getContext("2d")!;
 // lines that used to be here were a fourth copy of the same broken detection.
 installFullscreen(fsBtn, stage, { report: log });
 installStretch(stretchBox, stage, "taoot.picture.stretch");
+const th = new TylerHartman(stage, screen, thBox, "taoot.picture.th");
+// TH and the stretch are two answers to the same display, so ticking one
+// unticks the other; each box's own change handler stores the answer
+if (thBox && stretchBox) {
+  const exclusive = (on: HTMLInputElement, off: HTMLInputElement): void => {
+    on.addEventListener("change", () => {
+      if (!on.checked || !off.checked) return;
+      off.checked = false;
+      off.dispatchEvent(new Event("change"));
+    });
+  };
+  exclusive(thBox, stretchBox);
+  exclusive(stretchBox, thBox);
+  // both remembered from before they excluded each other: TH keeps it
+  if (thBox.checked && stretchBox.checked) {
+    stretchBox.checked = false;
+    stretchBox.dispatchEvent(new Event("change"));
+  }
+}
 
 /** every game file the page has seen, plus the dev-server manifest */
 const files = new FileStore();
@@ -450,6 +472,8 @@ function showCursor(name: string): void {
  * the canvas catches both, and asks nothing of whatever changed it.
  */
 new ResizeObserver(() => showCursor(cursorShown)).observe(screen);
+// ...and when TH scales the picture inside the same box (./tylerhartman.ts)
+th.onRescale = () => showCursor(cursorShown);
 
 /**
  * The bar the player watches while the game is fetched (GameHost.preload).
@@ -628,6 +652,7 @@ Object.defineProperty(window, "dbg", {
     intro: liveIntro,
     session,
     host,
+    th,
     snapshotState,
     seededRng,
     log: () => ({ lines: logLines.lines, dropped: logLines.dropped }),
@@ -1322,10 +1347,20 @@ function canvasCoords(e: { clientX: number; clientY: number }): {
   };
 }
 
+/** the fingers on the glass, for TH's two-finger tap */
+const fingers = new Set<number>();
+/** the fingers of a two-finger tap, whose lift is TH's and not a gesture's */
+const thFingers = new Set<number>();
+
 // Press/move/release so held-button drag loops work (`while stilldown()` in
 // the wireless knobs). pointerdown routes the mousedown (which may enter a
 // drag loop); pointermove keeps mouse() live; pointerup ends the loop.
 screen.addEventListener("pointerdown", (e) => {
+  // TH's right click is the band's, not the game's (./tylerhartman.ts)
+  if (th.on && e.button === 2) {
+    th.toggle();
+    return;
+  }
   const { x, y } = canvasCoords(e);
   session.setPointer(x, y);
   /**
@@ -1342,6 +1377,17 @@ screen.addEventListener("pointerdown", (e) => {
    * one is not the director's either; see the escape branch in `sendKey`.
    */
   if (e.pointerType === "touch") {
+    fingers.add(e.pointerId);
+    // TH's right click, on a phone: a second finger down makes it a two-finger
+    // tap, and the first finger's gesture is dropped (./tylerhartman.ts)
+    if (th.on && fingers.size === 2) {
+      for (const id of fingers) {
+        thFingers.add(id);
+        touch.cancel({ pointerId: id, clientX: e.clientX, clientY: e.clientY });
+      }
+      th.toggle();
+      return;
+    }
     touch.down(e);
     return;
   }
@@ -1378,6 +1424,10 @@ screen.addEventListener("pointerdown", (e) => {
 // still right when the release happens off-canvas (where it lands on no row,
 // so the answer is correctly discarded).
 window.addEventListener("pointerup", (e) => {
+  if (th.on && e.button === 2) return;
+  fingers.delete(e.pointerId);
+  // a finger of TH's two-finger tap lifts on nothing
+  if (thFingers.delete(e.pointerId)) return;
   if (touch.up(e)) return;
   session.pointerDown = false;
   // `shiftDown` is deliberately NOT cleared here. A press dispatch is async — it
@@ -1386,6 +1436,12 @@ window.addEventListener("pointerup", (e) => {
   // carried until the next press says otherwise, which is the question scripts
   // actually ask.
   host.director.release(session.pointerX, session.pointerY);
+});
+
+// no browser menu over TH's right click. Not a toggle itself: a phone fires
+// this for a finger held down, which is half of every swipe to walk.
+screen.addEventListener("contextmenu", (e) => {
+  if (th.on) e.preventDefault();
 });
 
 // ---------------------------------------------------------------------------
@@ -1531,7 +1587,11 @@ screen.addEventListener("pointermove", (e) => {
 });
 
 /** a gesture the browser took away (a system edge-swipe): forget it, act on nothing */
-window.addEventListener("pointercancel", (e) => touch.cancel(e));
+window.addEventListener("pointercancel", (e) => {
+  fingers.delete(e.pointerId);
+  thFingers.delete(e.pointerId);
+  touch.cancel(e);
+});
 
 /**
  * How the player has asked the two swipe axes to read, and where the answers
@@ -2102,6 +2162,7 @@ window.addEventListener("keydown", (e) => {
 function loop(now: number): void {
   host.director.tick(now);
   host.director.render(ctx);
+  th.frame(!!host.director.currentRoom && host.director.picture === "view", host.director.awaitingChoice, now);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
