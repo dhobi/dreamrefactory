@@ -296,7 +296,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // group (TAOOT: the bridge's tiling sky, SMOKE's extra plants/flames) — it copies
   // src's current display state, then the script repositions it via propxy.
   r("propinstance", (_i, [src, dst]) => {
-    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""));
+    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""), session.isV5);
   });
   // propdeg selects a discrete frame of a rotational/selector prop (TAOOT's
   // deck map "buttons" highlight: 9 frames, deg 0..7 = deck 1..8, deg 8 = none).

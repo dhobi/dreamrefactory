@@ -54,8 +54,9 @@ In a DreamFactory 5 game the targets and the chains are RedJack.exe's.
 `sendtocast` finds only open casts (0x405370) and `sendtoprop` only props
 (0x42b550), so a room and a cast or prop of the same name (`ship.sett` and
 `ship.cast`, `cannon.sett` and the prop `cannon`) no longer take each other's
-events. `sendtoshop` also finds a shop by the name it gives itself
-(`jcombat.shop` is "combat"). The scene, set, actor, cast and prop chains end on the **post
+events. `sendtoquad` finds only the room's quads (0x446190), so horn4.sett,
+which calls itself "horn", no longer takes its horn quad's click. `sendtoshop`
+also finds a shop by the name it gives itself (`jcombat.shop` is "combat"). The scene, set, actor, cast and prop chains end on the **post
 script**, the BOOTFILE's library: the exe names the links as it builds them
 ("Scene Script: ", "Set Script: ", "Post Script: " for `sendtoscene` at
 0x440ab0).
@@ -115,6 +116,10 @@ In DreamFactory 5, `propdeg` only stores the degree, masked to 24 bits
 (RedJack.exe 0x428880). The frame it picks is picked where the prop is drawn:
 of the frames in the group the view's step names, the one whose angle is
 nearest (see [DreamFactory 5](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet)).
+
+In DreamFactory 5, `propinstance` copies the whole prop record, placement
+included, and renames it (RedJack.exe 0x427922): the ballista's stone is placed
+as "brock" and flown as its copy.
 
 `countprops`/`indextoprop` enumerate **one game-wide table** — the union of every
 open shop, in the order the shops opened — and not the asking script's own shop.

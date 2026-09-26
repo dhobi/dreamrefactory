@@ -214,6 +214,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
   const props = h.session.propRuntime;
   let next = 0;
   let held: { x: number; y: number; for: number } | null = null;
+  let aim: { x: number; y: number } | null = null;
   let closing = 0;
   const letGo = (): void => {
     if (held) h.mouseUp(held.x, held.y);
@@ -249,6 +250,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
       const guard = guardFor(view);
       if (guard) {
         letGo();
+        aim = null;
         h.session.setPointer(guard.x, guard.y);
         return false;
       }
@@ -256,10 +258,22 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
       const open = !/^(block|hurt|fall|death|special|advance)/.test(view.toLowerCase());
       const strength = Number(props.get("nick strength")?.deg ?? 0);
       if (open && strength >= 6 && !nick.startsWith("strike")) {
-        const s = STRIKES[next++ % STRIKES.length];
-        h.mouseDown(s.x, s.y);
-        held = { x: s.x, y: s.y, for: 0 };
-      } else h.session.setPointer(OPEN.x, OPEN.y);
+        // the hand goes to the strike's point a pass before it presses: `think`
+        // reads the pointer and only then asks `stilldown ()`, which takes a
+        // frame, so a press made where the pointer jumped to is read where it
+        // was — every strike the same, and samestrike () has it blocked
+        if (!aim) {
+          aim = STRIKES[next++ % STRIKES.length];
+          h.session.setPointer(aim.x, aim.y);
+          return false;
+        }
+        h.mouseDown(aim.x, aim.y);
+        held = { x: aim.x, y: aim.y, for: 0 };
+        aim = null;
+      } else {
+        aim = null;
+        h.session.setPointer(OPEN.x, OPEN.y);
+      }
       return false;
     },
     `${what} to end`,
@@ -459,4 +473,86 @@ export async function cauldronFight(h: Headless): Promise<void> {
     30_000,
   );
   if (held) h.mouseUp(320, 300);
+}
+
+/**
+ * Marquez in the horn caves (mcombat.stag, menemy1.shop then menemy2.shop), a
+ * fight no sword stroke wins: mcombat.shop `Edamage` stops on its first line,
+ * as the torturer's does. He is beaten by the caves.
+ *
+ *   - **the door**: at the second node, where the fight opens, a switch in the
+ *     wall (`fswitch`) drops a door (`fdoor`) ten ticks after it is clicked,
+ *     and the door squashes him if he is striking then (`close`: his view "S
+ *     …" → `squash.move`, `nextenemy`, menemy2.shop). So the switch is
+ *     clicked while he has another swing to come. It is soon or never: his
+ *     kicks ("S kick") cannot be guarded, and each costs Nick 30 of his 150
+ *     and a node (menemy1.shop `checkforhit` sends him back first, which
+ *     turns Marquez's view to "advance", so `damage` does not see the kick's
+ *     5), and back at the switch's node he has to walk.
+ *   - **the stairs**: Marquez beaten back up to the sixteenth node
+ *     (`mstairs.move`), where Anne hangs, and clicking her there (`fanne`,
+ *     `endfight` from menemy2.shop's `initme`) wins (`mwin.move`,
+ *     `anneescape.move`). "Up" steps Nick on while Marquez's mood is not
+ *     "aggressive" — it starts spelt "agressive" and menemy2.shop's
+ *     `checkmood` never changes it — and a stroke steps him on too
+ *     (mcombat.shop `think` → `advance`).
+ *
+ * Nick guards where the wind-up says, as in {@link duel}, all the while.
+ */
+export async function marquezFight(h: Headless): Promise<void> {
+  if (!fighting(h, "mcombat.stag")) fail(`Marquez: the stage is not up (stage ${h.session.stageName})`);
+  const props = h.session.propRuntime;
+  const g = (name: string): number => Number(h.session.interp.globals.get(name) ?? 0);
+  let wait = 0;
+  let looks = 0;
+  let lever: { x: number; y: number } | null = null;
+  await h.until(
+    () => {
+      if (!fighting(h, "mcombat.stag")) return true;
+      if (h.host.director.movies.playing) return false;
+      const view = enemyView(h).toLowerCase();
+      const guard = guardFor(view);
+      h.session.setPointer((guard ?? OPEN).x, (guard ?? OPEN).y);
+      if (wait > 0) {
+        wait--;
+        return false;
+      }
+      const node = g("znode");
+      const second = props.get("enemy")?.shop.name === "menemy2.shop";
+      if (!second) {
+        // back to the switch's node if a kick sent him off it
+        if (node !== 2 && g("imbeingused") === 0 && !view.startsWith("s ")) {
+          h.key(node < 2 ? "up" : "down");
+          h.keyUp(node < 2 ? "up" : "down");
+          wait = 10;
+          return false;
+        }
+        // a strike with another swing to come: he is still striking when the
+        // door lands (menemy1.shop `strike`: each swing is eleven ticks, and
+        // `Spattern` ends in "x", back to idle)
+        const swings = String(h.session.interp.globals.get("spattern") ?? "").trim().split(" ");
+        const more = swings[g("attackphase")] ?? "x";
+        if (view.startsWith("s ") && more !== "x" && !props.get("fdoor")?.visible) {
+          lever ??= findOnScreen(h, "fswitch", "prop", [16]);
+          if (lever) h.click(lever.x, lever.y);
+          wait = 12;
+        }
+        return false;
+      }
+      if (node >= 16) {
+        if (++looks % 10 === 1) {
+          const anne = findOnScreen(h, "fanne", "prop", [16]);
+          if (anne) h.click(anne.x, anne.y);
+        }
+        return false;
+      }
+      if (guard || g("imbeingused") !== 0) return false;
+      h.key("up");
+      h.keyUp("up");
+      wait = 6;
+      return false;
+    },
+    "the fight with Marquez to end",
+    60_000,
+  );
 }

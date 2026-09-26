@@ -604,7 +604,7 @@ export class PropRuntime {
    * anchor but are drawn player-side vs dealer-side) — clobbering dst's group
    * with src's would collapse them onto each other, so leave an existing dst be.
    */
-  instance(src: string, dst: string): void {
+  instance(src: string, dst: string, whole = false): void {
     const s = this.props.get(String(src).toLowerCase());
     if (!s) return;
     if (this.props.has(String(dst).toLowerCase())) return; // dst is its own group: don't clobber
@@ -619,6 +619,31 @@ export class PropRuntime {
     p.worldSpace = s.worldSpace;
     p.directional = s.directional;
     p.setName = s.setName;
+    // DreamFactory 5 copies the whole prop record (RedJack.exe 0x427922, 254
+    // bytes) and renames it: the copy stands where its template stands. The
+    // ballista's stone is placed as "brock" (ballista.shop `launch`) and flown as
+    // "brock 1" (`throwrock`), which started at the world's origin
+    if (whole) {
+      p.anchorX = s.anchorX;
+      p.anchorY = s.anchorY;
+      p.screenPlaced = s.screenPlaced;
+      p.owner = s.owner;
+      p.value = s.value;
+      p.speed = s.speed;
+      p.ink = s.ink;
+      p.flip = s.flip;
+      p.true3d = s.true3d;
+      p.facer = s.facer;
+      p.pitch = s.pitch;
+      p.snap = s.snap;
+      p.bright = [...s.bright];
+      p.starName = s.starName;
+      p.worldX = s.worldX;
+      p.worldY = s.worldY;
+      p.worldZ = s.worldZ;
+      p.scale = s.scale;
+      p.zclip = s.zclip;
+    }
     this.props.set(String(dst).toLowerCase(), p);
   }
 

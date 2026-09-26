@@ -100,9 +100,8 @@ the day's first room and cast, and often plays a film or starts a talk. Each
 puppet file keeps a talk per day, and a mini game is a stage, or a room of
 its own such as the cannons.
 
-Days one to six are played by the [machine suites](#machine-suites). Day seven
-is read from the scripts and not yet played, so its row says what the scripts
-hold, not what has been seen to work.
+All seven days are played by the [machine suites](#machine-suites), from the
+cold boot to the end of the game.
 
 | Day | Where (disc) | Talks | Mini games | How it ends |
 |---|---|---|---|---|
@@ -112,13 +111,11 @@ hold, not what has been seen to work.
 | 4 | RedJack's island (rjbeach, disc 3) | Anne, RedJack in a dream, Rockfish | The totems (`totem`); the gem lifts at the skull's teeth (`gem`); the lava's pillars; the flame corridor and its switch; the swinging chain; the skeleton, beaten with a vine (`scombat2`); RedJack's lockbox; the crate and its crowbar; the horn caves and the squid door; lighting the beach's fire pit with the torch | Rockfish answers the fire and takes Nick to Blackbeard (`rock3.pupp`) |
 | 5 | Blackbeard's island (bb1, disc 2) | Rockfish, Lyle, Denton, Blackbeard, Bone | The lift's handle (`elevator`); Blackbeard's drink (`drink`), with Lyle's sulphur and a coal from the bin by the dock (`charcoal`); the mine carts with the harpoon gun, three sets of Jan's men (mc1–mc3); the fight with Bone (`bcombat`) | Bone beaten, and Blackbeard sends Nick to Cartagena (`arrive.move`) |
 | 6 | Cartagena (lock1–lock3, dock, hold, torture, study; disc 2) | Anne, Rockfish, Elizabeth and Jake in their cage, Marquez | The lock: its valves, the pipe, the raft and the two chains (`botvalves`, `lock2.pupp`), and the rope cut with the sword; the torturer's fight, the whip and then the cauldron (`tcombat`); the study's four shields (`shield`), the gearboxes (`switch`) and the switch that lowers the cage | Marquez in his study (`marqintro.move`), and the voyage to RedJack's island (`cartrj.move`) |
-| 7 | RedJack's island again (rjbeach, disc 3) | Blackbeard, Cross, Elizabeth, Jake, Lyle, Marquez, Patch, Rockfish, Anne | The Spaniard on the beach (`spancombat`), Marquez (`mcombat`), the ballista | The ending |
+| 7 | RedJack's island again (rjbeach, horn caves, ballista; disc 3) | Blackbeard and Marquez face to face (`bbintro3.pupp`), Anne, Blackbeard on the galleons, and at the end Patch, RedJack, Lyle, Blackbeard, Jake, Elizabeth, Cross and Anne | The Spaniard's sword fight on the beach (`spancombat`); Marquez in the horn caves, beaten by a door and the stairs (`mcombat`); the horn, which sets the squid on him; a totem woken, and the ballista: two galleons to sink | Patch and RedJack on the beach, the crew's last words (`finishtheend`), `swimin.move`, and back to the menu |
 
 Some things lie off the suites' route. The bar's darts and the shark in the
 bay are day one's, and killing the shark is the other way onto the ship,
-the one that leads to the Justice ending. The ballista is placed on day seven,
-where the totems' day-seven case sends Nick to it (totem.shop `doballista`);
-until that day is played, that is a reading.
+the one that leads to the Justice ending.
 
 ## Machine suites
 
@@ -204,6 +201,18 @@ CPU goes, waiting on the game's state and never on a duration.
   switch that lowers the cage; Elizabeth, and Marquez in his study: the suite
   ends on day seven at RedJack's beach.
 
+`day7` plays the first six days, then RedJack's island again, to the end:
+- Blackbeard and Marquez on the beach, and the Spaniard's sword fight;
+- Marquez in the horn caves, behind the squid door. No sword stroke hurts him
+  either (mcombat.shop `Edamage` stops on its first line). A switch at the
+  fight's first step drops a door that squashes him if he is striking, and
+  then he is beaten back up the stairs to Anne;
+- the horn, blown with Marquez chained below it: the squid takes him;
+- a totem woken, which saves Blackbeard and sends Nick to the ballista, and
+  two galleons sunk before they reach the beach;
+- the end: Patch, RedJack, the crew's last words and `swimin.move`, and the
+  suite ends with the game back at its menu (`control.stag`).
+
 Each step checks the flag the script it cites sets.
 
 The moves are the player's:
@@ -221,7 +230,13 @@ The moves are the player's:
   The same duel fights Jan, closing in when he steps back. In the street fight
   it clicks each man it sees and leads the view with the pointer toward the rest.
   In the torture chamber it leans away from each lash of the whip, takes up the
-  sword at the fourth step, and then tips the cauldron and strikes.
+  sword at the fourth step, and then tips the cauldron and strikes. It puts the
+  pointer on a strike's point a pass before it presses, as a hand gets there
+  first: a strike reads the pointer before it asks `stilldown ()`, which takes
+  a frame, and a strike read at the wrong point is always the same one, which
+  the Spaniard then always blocks (spancombat.shop `samestrike`). Against
+  Marquez it pulls the door's switch as a strike begins that has another swing
+  to come, then presses up the stairs and clicks Anne.
 - [`cannons.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/cannons.ts)
   aims with the arrows and fires with a click. For each tilt it follows the
   ball the way the cannon ball's script will, and uses the room's own projection
@@ -238,6 +253,10 @@ The moves are the player's:
   rides the mine carts. It steers the view with the pointer onto the nearest
   man, and fires when the harpoon, flown the way the launcher's script flies
   it, would land on anyone: a man, or a dagger or bomb on its way.
+- [`ballista.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/ballista.ts)
+  fires the ballista the same way. It lays the view on the nearest galleon
+  afloat, finds the tilt whose stone, flown as the stone's script flies it,
+  lands on the galleon where it will have sailed to, steers there, and fires.
 
 Playing it this way found several engine gaps, each fixed from RedJack.exe where
 it could be read and marked as a reading where it could not: puppets opened by a
@@ -317,6 +336,18 @@ Day six found more, each read from RedJack.exe:
   when it runs out, where a negative one waits for good (0x42f140). Marquez's
   `puppetevent (0)` just after an answer is a look, not a question, and waited
   out as one his talk asked its first question twice.
+
+Day seven found more, each read from RedJack.exe:
+- `sendtoquad` finding the room of the same name first. It looks among the
+  room's quads and nowhere else (0x446570, 0x446190). horn4.sett calls
+  itself "horn", as it does the quad the horn stands on, so the click on the
+  horn reached the set's `mousedown`, which walks on, and the horn could not
+  be blown;
+- `propinstance` copies the whole prop record and renames it (0x427922), so
+  the copy stands where its template stands. The port copied the view and a
+  few flags, and the ballista's stone, placed as "brock" and flown as
+  "brock 1", flew from the world's origin. The mine carts' harpoons are
+  copies too, and now carry the rest of their template's record.
 
 ## What does not work yet
 

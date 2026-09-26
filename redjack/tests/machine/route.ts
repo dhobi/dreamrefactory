@@ -63,7 +63,7 @@ export async function press(h: Headless, key: string, what = key): Promise<void>
  * it is the one `nearexit` finds ahead, then "up". A node with more exits than
  * a turn visits in one lap has had its lap when the heading comes round again.
  */
-export async function step(h: Headless, to: string): Promise<void> {
+export async function step(h: Headless, to: string, arrived = (): boolean => same(h.node(), to)): Promise<void> {
   const maze = h.session.maze!;
   const here = h.node();
   const exits = graph(h).get([...graph(h).keys()].find((n) => same(n, here))!) ?? [];
@@ -80,7 +80,7 @@ export async function step(h: Headless, to: string): Promise<void> {
     await press(h, "right", `turning towards ${to}`);
   }
   // "up" scrolls to face the exit first and walks only when it is within 30°
-  for (let tries = 0; !same(h.node(), to) && !talking(h); tries++) {
+  for (let tries = 0; !arrived() && !talking(h); tries++) {
     if (tries === 3) fail(`${here}: "up" at the exit to ${to} left us at ${h.node()}`);
     await press(h, "up", `walking to ${to}`);
   }
@@ -93,11 +93,15 @@ export const talking = (h: Headless): boolean => h.host.director.awaitingChoice;
  * Walk to a node of this room by the shortest way. A node that starts a
  * conversation as you arrive (liznite's Node58, the first time) ends the walk
  * there with the question up, for the route to answer with {@link converse}.
+ * A road can end in another room — horn1's to its "Scene10" comes out in
+ * link2 — and `leaving` says so: the last hop is done when the room changes.
  */
-export async function goTo(h: Headless, to: string): Promise<void> {
-  for (const next of pathTo(h, to)) {
+export async function goTo(h: Headless, to: string, leaving = false): Promise<void> {
+  const room = h.room();
+  const path = pathTo(h, to);
+  for (const [i, next] of path.entries()) {
     if (talking(h)) fail(`walking to ${to}: a conversation opened at ${h.node()}`);
-    await step(h, next);
+    await step(h, next, leaving && i === path.length - 1 ? () => h.room() !== room : undefined);
   }
 }
 

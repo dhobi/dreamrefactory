@@ -1318,10 +1318,18 @@ export class GameSession {
     // asks `sendtoshop ("combat", moveobjects ())` every step (see openShopKey)
     const shopFirst =
       /^sendtoshop(fx)?$/.test(cmd) && this.isV5 ? this.shopMains.get(this.openShopKey(targetName)) ?? null : null;
+    // ...and its `sendtoquad` among the room's QUADS (0x446570 → 0x446190 walks
+    // the set's 80-byte quad records, the name at +0x1c): horn4.sett calls itself
+    // "horn", as it does the quad the horn stands on, and the boot's
+    // `sendtoquad ("horn", mousedown (…))` reached the set's main, whose
+    // `mousedown` walks on — the horn could not be blown
+    const quadFirst =
+      /^sendtoquad(fx)?$/.test(cmd) && this.isV5 ? this.maze?.quadScript(targetName) ?? null : null;
     let inst =
       castFirst ??
       propFirst ??
       shopFirst ??
+      quadFirst ??
       (flatFirst?.script.codes.has(handler) ? flatFirst : null) ??
       (ACTOR_ADDRESSEE.test(cmd) ? this.castScripts.get(targetName.toLowerCase()) : null) ??
       this.currentBinding?.findInstance(targetName) ??
