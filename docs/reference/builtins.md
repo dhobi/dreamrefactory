@@ -50,6 +50,15 @@ resolve the same single script as their siblings.
 `sendtobutton`/`sendtobuttonfx` take (flat, button, call) — see
 [Stage & UI](../engine/runtime/stage-ui.md#buttons-sendtobutton).
 
+In a DreamFactory 5 game the targets and the chains are RedJack.exe's.
+`sendtocast` finds only open casts (0x405370) and `sendtoprop` only props
+(0x42b550), so a room and a cast or prop of the same name (`ship.sett` and
+`ship.cast`, `cannon.sett` and the prop `cannon`) no longer take each other's
+events. The scene, set, actor, cast and prop chains end on the **post
+script**, the BOOTFILE's library: the exe names the links as it builds them
+("Scene Script: ", "Set Script: ", "Post Script: " for `sendtoscene` at
+0x440ab0).
+
 The last three `fx` forms are **Dust's**, and Titanic asks for none of them:
 `extra.cst`'s crowd router uses `sendtoflatfx`, `sendtopostfx` and
 `sendtoserverfx`. Registered as special forms, their deferred argument is
@@ -294,6 +303,13 @@ a room is on [Rooms in play](../engine/runtime/rooms-v5.md).
 and `launchexit`; the quads `pointinquad` and `quadscript`; `nodequality`; and
 `sysparam`. `cameraxyz`, `playerxyz` and `scenexyz` answer from the room's
 camera and nodes in a v5 game, and v4's `propspeed` id is `sysparam` there.
+
+**Shared names, v5 forms** (`helpers.ts`): `calcvectx` and `calcvecty` are
+`trunc (mag × cos/sin (angle × 2π / 2^24))` over the whole 32 bits (0x4356e0,
+0x435710), where v4 used a 0..255 table and a 16-bit magnitude. `calcdist` and
+`calcdeg` take four coordinates, `(x1, y1, x2, y2)`, instead of two packed
+points (0x4185c0, 0x4184f0), and `calcdeg` answers a heading in 2^24ths of a
+turn.
 
 **Everything else** (`df5.ts`):
 

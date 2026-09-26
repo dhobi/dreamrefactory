@@ -101,19 +101,26 @@ export async function goTo(h: Headless, to: string): Promise<void> {
   }
 }
 
+/** what `hittest` says a thing is: "prop", "actor", "quad", "button"… */
+export type HitType = string;
+const hitIs = (hit: { name: string; type: string }, name: string, type?: HitType): boolean =>
+  same(hit.name, name) && (!type || hit.type === type);
+
 /**
- * Where the boot's `hittest` answers `name` on screen now, in the middle of it,
+ * Where the boot's `hittest` answers `name` on screen now — of `type` when two
+ * things share the name (rjcave's trunk is the quad "chest", and the inventory's
+ * chest is a prop of the same name, over the bottom left of every room), in the middle of it,
  * or null. A coarse
  * grid first and a fine one only if that misses, so a big target is found in
  * a few hundred tests and a small one still is.
  */
-export function findOnScreen(h: Headless, name: string): { x: number; y: number } | null {
+export function findOnScreen(h: Headless, name: string, type?: HitType): { x: number; y: number } | null {
   const { width, height } = h.host.director.screen;
   for (const grid of [16, 8]) {
     const hits: { x: number; y: number }[] = [];
     for (let y = grid / 2; y < height; y += grid)
       for (let x = grid / 2; x < width; x += grid)
-        if (same(h.session.hitTestAt(x, y).name, name)) hits.push({ x, y });
+        if (hitIs(h.session.hitTestAt(x, y), name, type)) hits.push({ x, y });
     // the hit nearest the middle of the thing: its edge is the first pixel an
     // animating actor takes away (Lyle crouches), and {@link face} deals with
     // a thing that is in the scroll margin
@@ -132,20 +139,20 @@ export function findOnScreen(h: Headless, name: string): { x: number; y: number 
  * finds it if it is behind; resting the pointer on the edge it is near brings it
  * in the way `idle ()` turns the view (boot tracknodescroll). Answers where it is.
  */
-export async function face(h: Headless, name: string): Promise<{ x: number; y: number }> {
-  let at = findOnScreen(h, name);
+export async function face(h: Headless, name: string, type?: HitType): Promise<{ x: number; y: number }> {
+  let at = findOnScreen(h, name, type);
   const margin = Number(global(h, "margin") || 0);
   const { width, height } = h.host.director.screen;
   for (let turn = 0; !at && turn < 8; turn++) {
     await press(h, "right", `looking for ${name}`);
-    at = findOnScreen(h, name);
+    at = findOnScreen(h, name, type);
   }
   // a node with one exit does not turn on "right": pan the view round instead,
   // the pointer resting on the right edge (boot region/tracknodescroll)
   for (let pan = 0; !at && pan < 40; pan++) {
     h.session.setPointer(width - 4, height / 2);
     await h.frame(4);
-    at = findOnScreen(h, name);
+    at = findOnScreen(h, name, type);
   }
   if (!at) fail(`${h.room()}/${h.node()}: "${name}" is nowhere on screen`);
   const inMargin = (p: { x: number; y: number }): boolean =>
@@ -153,19 +160,19 @@ export async function face(h: Headless, name: string): Promise<{ x: number; y: n
   // `scrollmargin` answers false while the room is hidden, as it is behind a stage
   if (!inMargin(at) || !h.session.setVisible || h.session.maze?.view !== "node") return at;
   for (let hover = 0; at && inMargin(at); hover++) {
-    if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin`);
+    if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin (at ${at.x},${at.y}, the middle answers ${h.session.hitTestAt(width / 2, height / 2).name})`);
     h.session.setPointer(at.x, at.y);
     await h.frame(4);
-    at = findOnScreen(h, name);
+    at = findOnScreen(h, name, type);
   }
   h.session.setPointer(width / 2, height / 2);
   await h.settle(`the view to stop on ${name}`);
-  return findOnScreen(h, name) ?? fail(`${h.node()}: "${name}" is gone once the view stopped`);
+  return findOnScreen(h, name, type) ?? fail(`${h.node()}: "${name}" is gone once the view stopped`);
 }
 
 /** click on what `hittest` calls `name`, {@link face}d first */
-export async function clickOn(h: Headless, name: string): Promise<void> {
-  const at = await face(h, name);
+export async function clickOn(h: Headless, name: string, type?: HitType): Promise<void> {
+  const at = await face(h, name, type);
   h.click(at.x, at.y);
   await h.frame(3);
 }
@@ -174,17 +181,31 @@ export async function clickOn(h: Headless, name: string): Promise<void> {
  * Play a conversation to its end: every plaque the game offers is answered
  * with the next of `answers` (the start of its text is enough), and the game
  * offering none of the answer's text is a failure that prints what it did offer.
- * Ends when the room has the screen back.
+ * A frame of a film that waits for a click (a letter shown in the middle of a
+ * talk) is clicked through. Ends when the room has the screen back — or, with
+ * `thenAsks`, at the first question after the last answer.
  */
-export async function converse(h: Headless, answers: string[], what: string): Promise<void> {
+export async function converse(
+  h: Headless,
+  answers: string[],
+  what: string,
+  opts: { thenAsks?: boolean } = {},
+): Promise<void> {
   const dir = h.host.director;
   const left = [...answers];
   await h.until(() => h.owner() === "puppet", `${what} to open`, 2_000);
   for (;;) {
-    await h.until(() => dir.awaitingChoice || h.idle(), `${what}: a choice or the end`);
+    await h.until(() => dir.awaitingChoice || h.idle() || filmWaits(h), `${what}: a choice or the end`);
+    if (filmWaits(h)) {
+      await clickFilm(h);
+      continue;
+    }
     if (!dir.awaitingChoice) break;
     const want = left.shift();
     const offered = dir.choices.map((c) => c.text);
+    // the talk hands on to the next thing that asks (Justice's last word on the
+    // ship is the day's last; the next day opens on a question of its own)
+    if (want === undefined && opts.thenAsks) return;
     if (want === undefined) fail(`${what}: the game asks again (${offered.join(" | ")}) and the route has no answer`);
     const i = offered.findIndex((t) => t.toLowerCase().startsWith(want.toLowerCase()));
     if (i < 0) fail(`${what}: no "${want}" among ${offered.join(" | ")}`);
@@ -194,6 +215,18 @@ export async function converse(h: Headless, answers: string[], what: string): Pr
   }
   if (left.length) fail(`${what}: ended with ${left.length} answer(s) unused: ${left.join(" | ")}`);
   await h.settle(what);
+}
+
+/** a film on screen is standing on a frame that waits for a click (anne1.pupp letter: letter.move's "Letter 1") */
+export const filmWaits = (h: Headless): boolean => h.host.director.movies.waitingRegions.length > 0;
+
+/** click the first of the regions a waiting film frame offers, in its middle, and let the film go on */
+export async function clickFilm(h: Headless): Promise<void> {
+  const r = h.host.director.movies.waitingRegions[0];
+  const x = Math.round((r.x0 + r.x1) / 2);
+  const y = Math.round((r.y0 + r.y1) / 2);
+  h.click(x, y);
+  await h.until(() => !filmWaits(h) || h.host.director.movies.waitingRegions[0] !== r, `the film to take the click at ${x},${y}`, 2_000);
 }
 
 /** an ai flag the way the scripts read it: `sendtoactorfx (who, getai (flag))` */
@@ -212,6 +245,20 @@ export function distanceTo(h: Headless, who: string): number {
   const a = h.session.actorRuntime.get(who);
   if (!cam || !a) fail(`no ${!cam ? "camera" : `actor ${who}`} to measure from`);
   return Math.hypot(a.worldX - cam.x, a.worldY - cam.y);
+}
+
+/**
+ * Walk up to `who`: to the node of this room nearest where they stand. The
+ * cast's `nearactor` only answers a click from within the room's `hotdist`, so a
+ * player crosses the room first (Justice at his desk is out of reach from the
+ * cabin door, capts.sett Node10).
+ */
+export async function walkUpTo(h: Headless, who: string): Promise<void> {
+  const a = h.session.actorRuntime.get(who) ?? fail(`no actor ${who} in ${h.room()}`);
+  const nodes = (h.session.maze as unknown as { sett: { nodes: { name: string; x: number; y: number }[] } }).sett.nodes;
+  const d = (n: { x: number; y: number }): number => Math.hypot(n.x - a.worldX, n.y - a.worldY);
+  const nearest = nodes.reduce((m, n) => (d(n) < d(m) ? n : m));
+  if (!same(nearest.name, h.node())) await goTo(h, nearest.name);
 }
 
 /**

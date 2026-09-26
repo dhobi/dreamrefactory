@@ -1568,6 +1568,12 @@ export class ScreenDirector {
     // not (and the reference the port was built from).
     const dispatcher = this.session.bootScripts.find((b) => b.script.codes.has("mousedown"));
     if (dispatcher) {
+      // a click is a new event, not yet consumed — `eventConsumed` is the
+      // interpreter's, and the last key's `exitcode` left it set: RedJack's
+      // cannon.sett turns on the arrows, and the click that fires then stopped
+      // at the set's `passcode` instead of going on to the library that fires
+      // (the room's keys start the same way, MazeView.roomKeyDown)
+      if (this.session.isV5) this.session.interp.eventConsumed = false;
       try {
         await this.session.interp.runHandler(
           dispatcher, "mousedown", [this.session.pointerPoint()],

@@ -15,7 +15,7 @@ const dir = resolve(import.meta.dirname, "../tests/machine");
 const want = process.argv.slice(2);
 const suites = readdirSync(dir)
   // the suites, not the modules they are written in (and not a scratch dot-file)
-  .filter((f) => f.endsWith(".ts") && !f.startsWith(".") && !["harness.ts", "route.ts", "fight.ts"].includes(f))
+  .filter((f) => f.endsWith(".ts") && !f.startsWith(".") && !["harness.ts", "route.ts", "fight.ts", "cannons.ts"].includes(f))
   .map((f) => f.slice(0, -3))
   .filter((s) => !want.length || want.includes(s))
   .sort();

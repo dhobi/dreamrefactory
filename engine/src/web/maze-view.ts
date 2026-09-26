@@ -318,7 +318,11 @@ export class MazeView implements RoomLayer {
   spriteHitTest(x: number, y: number): { name: string; type: string } | null {
     const s = this.session;
     const showing = s.viewShowing;
-    const onScreen = s.propRuntime.propAt(x, y, null, showing);
+    // every screen prop is clickable, as every one is drawn: a v5 room has no
+    // v4 split between the boot's UI shops and the room's (ScreenDirector's
+    // composite passes persistentOnly false for v5) — the cannon room's `ok`
+    // (cannon.shop) is a set shop's screen prop, and the only way out of it
+    const onScreen = s.propRuntime.propAt(x, y, null, false);
     const asProp = (p: NonNullable<typeof onScreen>) => ({ name: p.name || p.group.name, type: "prop" });
     if (onScreen) return asProp(onScreen);
     const cam = showing ? this.roomCamera() : null;
@@ -327,9 +331,9 @@ export class MazeView implements RoomLayer {
     // there is nothing for it to decide — and it is a render of the view's depth
     // whenever the camera has moved, which `idle ()` hit-testing the pointer every
     // frame of a scroll or a walk would otherwise pay each frame.
-    if (!s.propRuntime.propAt(x, y, cam, showing) && !s.actorRuntime.actorAt(x, y, cam)) return null;
+    if (!s.propRuntime.propAt(x, y, cam, false) && !s.actorRuntime.actorAt(x, y, cam)) return null;
     const occ = this.roomOcclusion();
-    const prop = s.propRuntime.propAt(x, y, cam, showing, occ);
+    const prop = s.propRuntime.propAt(x, y, cam, false, occ);
     const actor = s.actorRuntime.actorAt(x, y, cam, occ);
     if (actor && prop) {
       // an actor drawn over the world (not in the camera's list) is in front

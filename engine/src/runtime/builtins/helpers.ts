@@ -1,4 +1,4 @@
-import { Value, toNum, toStr, truthy } from "../interp";
+import { Builtin, Value, toNum, toStr, truthy } from "../interp";
 import { bearing } from "../geometry";
 import { BuiltinCtx } from "./context";
 import { packPoint, pointX, pointY, s16 } from "../point";
@@ -179,7 +179,14 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   });
   // calcdeg(fromPacked, toPacked): bearing between two packed (x<<16|y)
   // points in the engine's 0..255 angle space (turntodeg targets)
-  r("calcdeg", (_i, [from, to]) => {
+  r("calcdeg", (_i, [from, to, x2, y2]) => {
+    // DreamFactory 5: four coordinates, not two packed points, and a heading in
+    // 2^24ths of a turn — RedJack.exe 0x4184f0 → 0x41df00:
+    // `ftol(atan2 (y2 - y1, x2 - x1) * 16777216 / 2π) & 0xffffff`
+    if (session.isV5) {
+      const t = Math.atan2(toNum(y2 ?? 0) - toNum(to ?? 0), toNum(x2 ?? 0) - toNum(from ?? 0));
+      return Math.trunc(t * 16777216 * (1 / (2 * Math.PI))) & 0xffffff;
+    }
     // signed halves, for the reason spelled out on calcdist below
     const fx = pointX(toNum(from ?? 0));
     const fy = pointY(toNum(from ?? 0));
@@ -218,7 +225,12 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
    * `calcdeg` above decodes the same pair and had the same bug; a bearing
    * computed from 65508 instead of −28 points the wrong way round.
    */
-  r("calcdist", (_i, [a, b]) => {
+  r("calcdist", (_i, [a, b, c, d]) => {
+    // DreamFactory 5: `calcdist (x1, y1, x2, y2)`, in floating point and
+    // truncated — RedJack.exe 0x4185c0 → 0x41df70
+    if (session.isV5) {
+      return Math.trunc(Math.hypot(toNum(a ?? 0) - toNum(c ?? 0), toNum(b ?? 0) - toNum(d ?? 0)));
+    }
     const ax = pointX(toNum(a ?? 0));
     const ay = pointY(toNum(a ?? 0));
     const bx = pointX(toNum(b ?? 0));
@@ -248,8 +260,22 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
       const entry = Math.round(16384 * trig(step)); // signed fixed-point table value
       return s16(Math.trunc((entry * s16(toNum(mag ?? 0))) / 16384));
     };
-  r("calcvectx", vecComponent(Math.cos));
-  r("calcvecty", vecComponent(Math.sin));
+  /**
+   * DreamFactory 5's are floating point over the whole 32 bits: RedJack.exe's
+   * cores (0x4356e0 for x, 0x435710 for y) are `ftol (mag * cos (angle * 2π *
+   * 2^-24))` — a heading in 2^24ths of a turn, as `currentdeg` answers there, and
+   * no table and no 16-bit magnitude. The v4 form masked RedJack's headings to
+   * their low byte, so every `calcvectx (currentdeg (), …)` pointed anywhere:
+   * walkandtalk's meeting point, the cannon's ball.
+   */
+  const vecComponentV5 =
+    (trig: (rad: number) => number) =>
+    (_i: unknown, [angle, mag]: Value[]) =>
+      Math.trunc(toNum(mag ?? 0) * trig(toNum(angle ?? 0) * 2 * Math.PI * 5.960464477539063e-8));
+  const byEngine = (v4: Builtin, v5: Builtin): Builtin => (i, args, call, frame) =>
+    (session.isV5 ? v5 : v4)(i, args, call, frame);
+  r("calcvectx", byEngine(vecComponent(Math.cos), vecComponentV5(Math.cos)));
+  r("calcvecty", byEngine(vecComponent(Math.sin), vecComponentV5(Math.sin)));
 
   // currentcd([name]): the mounted CD volume. The original verified the named
   // disc (TAOOT: "Titanic1"/"Titanic2") was in the drive and returned "" if absent;

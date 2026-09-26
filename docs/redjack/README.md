@@ -10,8 +10,8 @@ What runs here is a **prototype**: the real `GameHost` and `GameSession`
 pointed at the three discs, on port 5179 with
 `npm run dev -w redjack`. It boots, you can walk the rooms and look round them,
 the films, props, actors and puppets play, and the fights' stage opens. The
-first day plays through headless (see [Machine suites](#machine-suites)); days
-two and three have not been played through yet.
+first two days play through headless (see [Machine suites](#machine-suites));
+day three has not been played through yet.
 
 ## What was found
 
@@ -123,9 +123,16 @@ CPU goes, waiting on the game's state and never on a duration.
 - the charcoal from the dead fire, the X on the crate, and into the crate, until
   day two begins aboard with `nickdisc.move`.
 
+`day2` plays day one to get aboard, then the day at sea:
+- the oath to Justice, and the crew on deck;
+- Lyle introducing Sullivan, and her talk, with her father's letter;
+- the cannons, played out: four dinghies sunk (`cannons.ts`);
+- Justice's cabin, and his talk, which sails the Marauder to Port Royal: the
+  suite ends on day three's first question.
+
 Each step checks the flag the script it cites sets.
 
-The moves are the player's, in two files:
+The moves are the player's, in three files:
 - [`route.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/route.ts)
   walks a room by its exits (turn to the exit, then up), clicks what `hittest`
   names, pans or rests on the screen edge to bring a thing out of the scroll
@@ -135,12 +142,27 @@ The moves are the player's, in two files:
   reads Lyle off the screen and answers with the pointer and the arrows: the
   guard where his wind-up says, the lane no bottle is falling down, the three
   strikes in turn at a hand's pace, and in the fight both, with the button held.
+- [`cannons.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/cannons.ts)
+  aims with the arrows and fires with a click. For each tilt it follows the
+  ball the way the cannon ball's script will, and uses the room's own projection
+  and hit test to ask whether the dinghy, where it will have sailed to by then,
+  would be under the ball.
 
 Playing it this way found several engine gaps, each fixed from RedJack.exe where
 it could be read and marked as a reading where it could not: puppets opened by a
 bare name, the stage header's main-script field, a room opened at a node it
 lacks, `actorstar` ending a walk, `endanim`, key releases, and shops closed by the
 name they give themselves.
+
+Day two found more, each read from RedJack.exe:
+- `sendtocast` and `sendtoprop` finding a room of the same name first;
+- the scene, set, actor, cast and prop chains ending on the boot's library;
+- `calcvectx`, `calcvecty`, `calcdist` and `calcdeg` in their v5 forms;
+- a set opening hidden after a stage closed with no set open;
+- a click left consumed by the last key's `exitcode`;
+- screen props drawn in a room but not clickable there.
+
+One more is a reading: a hidden sprite hears no `endanim`.
 
 ## What does not work yet
 
