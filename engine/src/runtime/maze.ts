@@ -293,6 +293,10 @@ export class MazeRuntime {
   /** fire a lifecycle handler on one script, never throwing */
   private async fire(inst: ScriptInstance | null, handler: string): Promise<void> {
     if (!inst?.script.codes.has(handler)) return;
+    // A load reopens the room without its scripts: RedJack.exe's resume
+    // (0x43dd80) reaches no script runner, so neither `openset` nor the saved
+    // scene's `openscene` runs (docs/engine/formats/savegame-v5.md).
+    if (this.session.restoringSave) return;
     try {
       await this.session.interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
     } catch (e) {

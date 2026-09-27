@@ -138,6 +138,10 @@ CPU goes, waiting on the game's state and never on a duration.
   soundtrack, so the audio is still decoded.
 - `tests.yml` runs the suites on every pull request when the rip is linked.
 
+`saves` saves and loads, and loads the seven day saves; see [Saved
+games](#saved-games). It skips a day whose save `tools/mksaves.mts` has not
+written.
+
 `intro` runs from the cold boot through the three films to the first room,
 `liznite` at Node52, and checks that no script error was logged on the way.
 
@@ -363,6 +367,41 @@ Playing all seven days in one go found one more, read from RedJack.exe:
   The port walked a straight line, which ends on the same star and so failed
   no suite, but actors such as Port Royal's soldiers and runners cut their
   corners. `day3.ts` now checks that the soldiers walk their routes.
+
+## Saved games
+
+The control panel's SAVE and OPEN work (space opens the panel). They run
+`savegame ("2")` and `opengame ("2")`, and the port writes and reads RedJack's
+own `.save`, read out of RedJack.exe: [Saved games, DreamFactory
+5](../engine/formats/savegame-v5.md). The page keeps the files in the browser,
+in the same saved-games dialog as Titanic's and Dust's, and can download and
+upload them.
+
+A load does what RedJack.exe's does:
+- the game being left is closed with its scripts, so its casts, shops, room and
+  stage hear their `close…` events;
+- the saved casts, shops and tracks are opened again, the actors, props, loops,
+  crickets and walks restored, the globals replaced (not the `permanent`s, which
+  RedJack keeps in the BOOTFILE), and the saved room entered at its node or
+  scene with the camera as it was, with no script running at all;
+- the stage the save was taken on, the control panel, comes back on screen, and
+  its OK button returns to the game as it would after any visit;
+- the theme starts again from its beginning.
+
+**Seven saves, one a day, made by the port.** No save written by the original
+is available. `npx tsx tools/mksaves.mts` (from `redjack/`) plays the game with
+the machine suites and writes `gamefiles/save/day1.save` … `day7.save`, each at
+the first moment in its day where the original would let you save. Most days
+open inside a talk, so that moment comes as the talk ends, and day seven's
+opening is one script through the Spaniard's fight. The page lists them under
+*The seven days (made by this port)*. They are in RedJack's format, but only
+RedJack.exe can say whether it would read them.
+
+`tests/machine/saves.ts` checks them. It saves and loads in the first room, and
+saving the loaded game has to write the same file again. Then it loads each
+day's save into the running game, which has to arrive where the save was made,
+on its day, and write the same file again. Last, it plays day six to its end
+from `day6.save`.
 
 ## What does not work yet
 

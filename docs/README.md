@@ -158,6 +158,9 @@ first; every format doc after it builds on it.
   *writes*: a serialized memory dump, and how it's read and patched back.
 - **[Saved games, DF1 (`.rtd`)](engine/formats/savegame-v1.md)** — the same
   container three years earlier, and the four record strides that moved.
+- **[Saved games, DF5 (`.save`)](engine/formats/savegame-v5.md)** — RedJack's,
+  read out of RedJack.exe: tagged containers, and a load that closes the room
+  being left.
 - **[DreamFactory 5's containers](engine/formats/dreamfactory-5.md)** — RedJack's
   files: the 24 bytes every container now opens with, and the palette that moved
   into each picture.

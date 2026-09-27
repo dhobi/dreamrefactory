@@ -3,8 +3,8 @@
 *Prerequisite: nothing. This page is for playing the game. What the port is and
 how far it gets is the [RedJack overview](README.md).*
 
-RedJack has no disc saves to learn from: `redjack/gamefiles/save/` is empty. So
-this page comes from the headless playthrough instead. The day suites,
+RedJack has no disc saves to learn from: no save written by the original is
+available. So this page comes from the headless playthrough instead. The day suites,
 [`days/day1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/days/day1.ts)
 to
 [`days/day7.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/days/day7.ts),
@@ -58,8 +58,9 @@ The play page is at `/redjack/` on the site, or on your own machine with
   between two spots; wait for him to come close before you click him. A click on
   someone out of reach is a click on the room, which walks.
 - **Dying ends at the menu.** The BOOTFILE's `nickdeath` plays `death.move` and
-  opens the game's menu (`control.stag`). There are no disc saves to start
-  from.
+  opens the game's menu (`control.stag`). Save from the menu as you go. Its
+  OPEN also lists a save for the start of each day, made by this port (see
+  [Saved games](README.md#saved-games)).
 
 ---
 

@@ -330,10 +330,13 @@ class Parser {
         case OP.DUMPPERMANENT: {
           this.pos++;
           // A v5 `permanent` is a global that outlives the session — RedJack keeps
-          // its key bindings and `numgames` in them — so it is declared as one
-          // here. What makes it OUTLIVE a session is not modelled yet.
+          // its key bindings and `numgames` in them. It is a global to every
+          // script, and kept apart only so a save can leave it out: RedJack.exe
+          // keeps permanents in the BOOTFILE, not in a `.save` (savegame-v5.md).
+          // What makes it OUTLIVE a session is not modelled yet.
           const kind =
-            t.id === OP.GLOBAL || t.id === OP.PERMANENT ? "global"
+            t.id === OP.GLOBAL ? "global"
+            : t.id === OP.PERMANENT ? "permanent"
             : t.id === OP.LOCAL ? "local"
             : t.id === OP.DUMPGLOBAL || t.id === OP.DUMPPERMANENT ? "dumpglobal"
             : "dumplocal";
