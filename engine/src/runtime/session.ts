@@ -1932,6 +1932,7 @@ export class GameSession {
       // DreamFactory 5's slots 3 and 4 are 0x00RRGGBB colours, not clut indices:
       // RedJack.exe seeds white answers and a red frame (0x439d41)
       if (this.isV5) this.puppetParams.set(3, 0xffffff).set(4, 0xff0000);
+      if (this.isV5) this.audioLib.onSoundsClosed = (names) => names.forEach((n) => this.scheduler.stopCricket(n));
       for (let i = 1; i < file.containers.length; i++) {
         const inst = this.instanceFrom(file.containers[i].data, `boot${i}`);
         if (inst) this.bootScripts.push(inst);

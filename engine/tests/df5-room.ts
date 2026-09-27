@@ -58,6 +58,7 @@ function room(quads: MazeQuad[]): MazeRuntime {
     roads: [],
     quads,
     stars: [],
+    routes: [],
     first: "Scene1",
     far: 1350000,
   };
