@@ -8,7 +8,8 @@
     "dust",
     "timelapse",
     "skullcracker",
-    "redjack"
+    "redjack",
+    "lunicus"
   ],
   "type": "module",
   "scripts": {

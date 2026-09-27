@@ -15,6 +15,9 @@ enough on disk that several formats have a `-v1` page of their own.
 into every picture, and a new kind of room, looked round from points rather than
 turned through fixed views
 ([its containers](formats/dreamfactory-5.md), [its rooms](formats/sett.md)).
+Older than all three is what this port calls **DreamFactory 0**, *Lunicus*'s
+(1994): the same envelope with no version tag, so it is read by its own `-v0`
+readers and never detected ([its containers](formats/dreamfactory-0.md)).
 
 ## Start with these
 

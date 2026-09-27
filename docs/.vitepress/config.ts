@@ -25,6 +25,7 @@ const rewrites = {
   "timelapse/README.md": "timelapse/index.md",
   "skullcracker/README.md": "skullcracker/index.md",
   "redjack/README.md": "redjack/index.md",
+  "lunicus/README.md": "lunicus/index.md",
   "editors/README.md": "editors/index.md",
   "reference/README.md": "reference/index.md",
 };
@@ -36,7 +37,7 @@ export default withMermaid(
     lang: "en-US",
     title: "dreamREfactory",
     description:
-      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4), and RedJack (DreamFactory 5).",
+      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Lunicus (DreamFactory 0), Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4), and RedJack (DreamFactory 5).",
     lastUpdated: true,
     /**
      * FALSE, and it has to be. `cleanUrls` emits links without `.html` and relies
@@ -76,6 +77,7 @@ export default withMermaid(
       nav: [
         { text: "Home", link: "/" },
         { text: "Engine", link: "/engine/" },
+        { text: "Lunicus", link: "/lunicus/" },
         // oldest engine first, as the sidebar and the registry have it — and
         // Timelapse last of the three, which is both its shipping order and the
         // order the port learned them in
@@ -124,11 +126,12 @@ export default withMermaid(
             { text: "Documentation home", link: "/" },
             { text: "1 · How a DreamFactory game works", link: "/engine/how-a-game-works" },
             { text: "2 · Engine architecture", link: "/engine/architecture" },
-            { text: "3 · Dust: A Tale of the Wired West", link: "/dust/" },
-            { text: "4 · Titanic: Adventure Out of Time", link: "/taoot/" },
-            { text: "5 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
-            { text: "6 · Skull Cracker", link: "/skullcracker/" },
-            { text: "7 · RedJack", link: "/redjack/" },
+            { text: "3 · Lunicus", link: "/lunicus/" },
+            { text: "4 · Dust: A Tale of the Wired West", link: "/dust/" },
+            { text: "5 · Titanic: Adventure Out of Time", link: "/taoot/" },
+            { text: "6 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
+            { text: "7 · Skull Cracker", link: "/skullcracker/" },
+            { text: "8 · RedJack", link: "/redjack/" },
             { text: "Glossary", link: "/glossary" },
           ],
         },
@@ -160,6 +163,7 @@ export default withMermaid(
             { text: "Saved games (.ti)", link: "/engine/formats/savegame" },
             { text: "Saved games, DF1 (.rtd)", link: "/engine/formats/savegame-v1" },
             { text: "Saved games, DF5 (.save)", link: "/engine/formats/savegame-v5" },
+            { text: "DreamFactory 0's containers", link: "/engine/formats/dreamfactory-0" },
             { text: "DreamFactory 5's containers", link: "/engine/formats/dreamfactory-5" },
             { text: "SETT — rooms, nodes & spheres", link: "/engine/formats/sett" },
           ],
@@ -177,6 +181,14 @@ export default withMermaid(
             { text: "The browser host", link: "/engine/runtime/host" },
             { text: "TH mode — the menu band tucked away", link: "/engine/runtime/th-mode" },
             { text: "Rooms in play — DreamFactory 5", link: "/engine/runtime/rooms-v5" },
+          ],
+        },
+        {
+          text: "Lunicus",
+          collapsed: false,
+          items: [
+            { text: "Overview", link: "/lunicus/" },
+            { text: "Walkthrough", link: "/lunicus/walkthrough" },
           ],
         },
         {

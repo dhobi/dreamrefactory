@@ -140,6 +140,34 @@ export function decodeAudioContainer(data: Uint8Array, order: ByteOrder = PC): D
   return { sampleRate, samples: decodeV41(data, dataStart, byteSize) };
 }
 
+/**
+ * DreamFactory 0 (*Lunicus*, 1994) plays every sample in blocks of this many —
+ * a voice line's length, and a sound bank's, is stored as a count of them.
+ */
+export const V0_BLOCK_SAMPLES = 370;
+
+/**
+ * The rate LUNIRES.DLL opens the wave device at (0x1677: mono, 8-bit PCM, 22050
+ * Hz). LUNICUS.EXE imports no wave calls of its own; all output goes through it.
+ */
+export const V0_SAMPLE_RATE = 22050;
+
+/**
+ * A DreamFactory 0 sound: a talk file's voice line, or one entry of a sound bank
+ * (`citysoun.`, `moonsoun.`).
+ *
+ * No chunk header at all — no magic, no rate, no codec flag. The container is a
+ * u16 count of {@link V0_BLOCK_SAMPLES}-sample blocks and then the v40 stream,
+ * so it is Dust's 8-bit codec with the 48-byte header v1 added in front of it
+ * not yet invented. A block is about 16.8 ms, and a puppet track keys one
+ * frame per two of them ({@link file://./talk-v0.ts}).
+ */
+export function decodeAudioV0(data: Uint8Array): DecodedAudio {
+  if (data.length < 3) throw new Error(`v0 sound: ${data.length} bytes`);
+  const blocks = data[0] | (data[1] << 8);
+  return { sampleRate: V0_SAMPLE_RATE, samples: decodeV40(data, 2, blocks * V0_BLOCK_SAMPLES) };
+}
+
 /** wrap to signed 8-bit, the original decoder's arithmetic space */
 const i8 = (n: number): number => (n << 24) >> 24;
 

@@ -22,6 +22,17 @@
  * container's kind after it ({@link versionOf}). Its readers are its own —
  * sett.ts, mov-v5.ts, image-v5.ts, and v5 branches in the others keyed on that
  * kind — so it is not one of the {@link DfVersion}s below.
+ *
+ * *Lunicus* (1994) is older than all three, and this port calls it **version
+ * 0** — a name of ours, because what it lacks is exactly this tag. Its files are
+ * the same envelope (`container.ts` reads them unchanged, and LUNICUS.EXE
+ * rejects any whose first dword is not the same `0x00010000` as Dust's —
+ * 0x419807, "bad star file version"), but container 0 opens straight into its
+ * format's own fields, and the bytes at {@link VERSION_OFFSET} are whatever
+ * those fields are. So v0 CANNOT be detected: {@link detectVersion} on a Lunicus
+ * file returns noise, sometimes 1, 4 or 5. A caller knows it has one because it
+ * is loading Lunicus. The readers are the `-v0` files (image-v0.ts, maze-v0.ts,
+ * talk-v0.ts, and `decodeAudioV0` in audio.ts).
  */
 
 import { ByteOrder, PC, little } from "./byte-order";
