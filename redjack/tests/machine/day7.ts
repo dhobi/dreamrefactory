@@ -26,4 +26,9 @@ await playDay7(h);
 const errors = h.logs.filter((l) => /script error|cannot parse|not found on/i.test(l));
 if (errors.length) fail(`script errors on the way:\n  ${errors.slice(0, 5).join("\n  ")}`);
 ok("no script error in the seven days");
+// RedJack.exe frees a cricket when the bank holding its sound closes (0x447250),
+// so the sixteen slots never fill; the port used to keep them all and log this
+const full = h.logs.filter((l) => /table full/.test(l));
+if (full.length) fail(`${full.length} table-full drops, the first: ${full[0]}`);
+ok("no cricket or loop table ever full");
 pass("day7");

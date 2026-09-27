@@ -84,6 +84,16 @@ import { DFContainerFile, readContainerFile } from "./container";
  * RedJack.exe's `0x444550` looks a name up in that order, the first name of a
  * record before its second. The file may run on past the last record.
  *
+ * ## The routes (DRIV)
+ *
+ * That i32 at +0x22 is a DRIV's resource: the authored walk from the record's
+ * first star to its second, which `walkonpath` follows (RedJack.exe `0x444660`
+ * finds it by the two names in either order, `0x444890` by the destination
+ * alone for `"resume"`). The route's length is at 0x18 and the point count at
+ * 0x20, and from 0x34 each point is four i32s: x, y, z in the stars' axes, and
+ * its distance from the point before (0 on the first) — Titanic's star path
+ * with room for bigger numbers. `0x444c20` reverses one found backwards.
+ *
  * ## The quads (BLI3)
  *
  * The things a click can find: the count at 0x18, 80-byte records from 0x20
@@ -198,6 +208,14 @@ export interface MazeStar {
   z: number;
 }
 
+/** an authored walk between two stars (MARK +0x22, a DRIV), stored `a` to `b` */
+export interface MazeRoute {
+  a: string;
+  b: string;
+  /** in the stars' axes; `fromPrev` is the length of the leg arriving at the point */
+  points: { x: number; y: number; z: number; fromPrev: number }[];
+}
+
 export interface SettFile {
   file: DFContainerFile;
   name: string;
@@ -208,6 +226,8 @@ export interface SettFile {
   quads: MazeQuad[];
   /** in MARK's order, which is the order `propstar` looks them up in */
   stars: MazeStar[];
+  /** MARK's routes, in its order */
+  routes: MazeRoute[];
   /** the first node or scene in MAPR's order — where a room opened without one starts */
   first: string;
   /**
@@ -338,6 +358,7 @@ export function readSettFile(data: Uint8Array): SettFile {
   }
 
   const stars: MazeStar[] = [];
+  const routes: MazeRoute[] = [];
   for (const { data: d } of file.containers) {
     if (tagOf(d) !== "MARK") continue;
     const mv = view(d);
@@ -351,12 +372,30 @@ export function readSettFile(data: Uint8Array): SettFile {
         y: mv.getInt32(o + 4, true),
         z: mv.getInt32(o + 8, true),
       });
-      stars.push(at(r + 6, pstrAt(d, r + 0x12)));
-      if (mv.getInt32(r + 0x22, true)) stars.push(at(r + 0x26, pstrAt(d, r + 0x32)));
+      const a = at(r + 6, pstrAt(d, r + 0x12));
+      stars.push(a);
+      const driv = mv.getInt32(r + 0x22, true);
+      if (!driv) continue;
+      const b = at(r + 0x26, pstrAt(d, r + 0x32));
+      stars.push(b);
+      const p = c(driv);
+      if (!p || tagOf(p) !== "DRIV") continue;
+      const pv = view(p);
+      const points: MazeRoute["points"] = [];
+      for (let j = 0, n = pv.getInt32(0x20, true); j < n && 0x34 + j * 16 + 16 <= p.length; j++) {
+        const q = 0x34 + j * 16;
+        points.push({
+          x: pv.getInt32(q, true),
+          y: pv.getInt32(q + 4, true),
+          z: pv.getInt32(q + 8, true),
+          fromPrev: pv.getInt32(q + 12, true),
+        });
+      }
+      routes.push({ a: a.name, b: b.name, points });
     }
   }
 
-  return { file, name, mainScript, nodes, scenes, roads, quads, stars, first, far };
+  return { file, name, mainScript, nodes, scenes, roads, quads, stars, routes, first, far };
 }
 
 function readFilm(file: DFContainerFile, container: number): MazeFilm | null {

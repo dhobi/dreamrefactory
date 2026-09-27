@@ -648,12 +648,26 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
      * means one place in the whole game, while Titanic's are bare (`jones1`) and
      * a room's route table is the only thing that disambiguates them.
      */
+    /**
+     * A DreamFactory 5 room has no set: its routes are MARK's (df/sett.ts), in
+     * the stars' own axes, and RedJack.exe's `walkonpath` (0x41c820) looks them
+     * up the way TI.EXE does — the pair either way round (`0x444660`), or the
+     * destination alone for `"resume"` (`0x444890`), which trims the route to
+     * the actor on the way out (`0x444a80`). Only the open room's, as there:
+     * RedJack's star names are bare (`anne`, `const1`) and repeat room to room.
+     * The points are handed over in a v4 star path's (X, Z, Y) so the one
+     * conversion below serves both.
+     */
+    const room = set ? undefined : session.maze?.sett.routes.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
     const route = rec
       ? { a: rec.a.toLowerCase(), b: rec.b.toLowerCase(),
           points: readStarPath(set!.file.containers, rec.container, set!.version) }
-      : set?.version === 1
-        ? [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null
-        : null;
+      : room
+        ? { a: room.a.toLowerCase(), b: room.b.toLowerCase(),
+            points: room.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev })) }
+        : set?.version === 1
+          ? [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null
+          : null;
     if (route) {
       // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
       // ground plane's second axis and worldZ the height, as walktostar builds it.

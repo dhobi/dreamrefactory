@@ -120,6 +120,9 @@ point (three i32s) at +6 named at +0x12, and, when the i32 at +0x22 is not 0, a
 second point at +0x26 named at +0x32. A name is looked up in that order
 (`0x444550`).
 
+That i32 is the resource of a DRIV, so a record with two stars is a route
+between them (see below).
+
 ## The quads (BLI3)
 
 The things a click can find: the count at 0x18 and 80-byte records from 0x20.
@@ -130,9 +133,39 @@ the i32 point at +0x2c, turned by the double at +0x38 and pitched by the one at
 through the camera, and a click inside the outline is the quad's
 (`quadAt` in `engine/src/runtime/maze.ts`, topmost first).
 
+## The routes (DRIV)
+
+An authored walk from a MARK record's first star to its second, in the shape
+Titanic's star paths have: the route's length at 0x18, the point count at 0x20,
+and from 0x34 one 16-byte point per count, x, y and z and its distance from the
+point before (0 on the first). The first point is the first star and the last
+the second.
+
+`walkonpath (actor, from, to)` (0x41c820) looks the pair up in either order,
+`from` first (`0x444660`), or, when `from` is `"resume"`, by `to` alone
+(`0x444890`). A route found backwards is reversed, carrying each distance one
+point along (`0x444c20`). `walktostar` never reads them: it walks the straight
+line (`0x41cd30`).
+
+The port reads them into the room's `routes` and walks them with the walker
+Titanic's star paths use (`startPathWalk` in
+`engine/src/runtime/builtins/actors.ts`), only the open room's, since RedJack's
+star names repeat from room to room. Until it did, `walkonpath` walked the
+straight line. The walk ended on the same star and fired the same `endwalk`,
+so no suite failed, but most routes bend, and the actor cut the corner and
+arrived early. The day-three suite now checks that Port Royal's soldiers and
+runners walk their routes.
+
 ## Not read
 
-BLIS, NLIS, RLIS, SLIS and DRIV are in the rooms and are not read by the port.
-Nothing it plays has needed them so far.
+- **BLIS** is a view's list of *paintings*, flat rectangles with a name and a
+  script, found from a view's record in its SCEN. `countpaintings`,
+  `indextopainting` and a click's `"painting"` case read it. One room has one:
+  hub's `switch`, whose script sends `flipswitch` to the prop of the same name,
+  and the port delivers that click to the prop itself.
+- **NLIS, RLIS and SLIS**, one of each in every room, are not named anywhere in
+  `RedJack.exe`, so the game never loads them. Their counts are the room's
+  nodes (NLIS at 0x28), roads (RLIS at 0x1c) and scenes (SLIS at 0x20), the
+  same counts MAPR keeps. They look like lists the editor kept for itself.
 
 Back to [File formats](README.md).

@@ -100,6 +100,8 @@ the day's first room and cast, and often plays a film or starts a talk. Each
 puppet file keeps a talk per day, and a mini game is a stage, or a room of
 its own such as the cannons.
 
+To play it through step by step, see [the walkthrough](walkthrough.md).
+
 All seven days are played by the [machine suites](#machine-suites), from the
 cold boot to the end of the game.
 
@@ -349,11 +351,21 @@ Day seven found more, each read from RedJack.exe:
   "brock 1", flew from the world's origin. The mine carts' harpoons are
   copies too, and now carry the rest of their template's record.
 
+Playing all seven days in one go found one more, read from RedJack.exe:
+- a cricket, the engine's positional ambient sound, is freed when the bank
+  holding its sound closes: closing a bank calls `stopcricket` for each of its
+  sounds (0x447250). The port kept every cricket until a script stopped it, as
+  TI.EXE does, so from day four the sixteen slots were full
+  (`makecricket: table full (16)`) and later rooms lost their ambience, as the
+  lock's water did. `day7.ts` now checks that no table fills.
+- `walkonpath` follows the room's authored route between two stars, a DRIV
+  named by the MARK record that pairs them ([the routes](../engine/formats/sett.md#the-routes-driv)).
+  The port walked a straight line, which ends on the same star and so failed
+  no suite, but actors such as Port Royal's soldiers and runners cut their
+  corners. `day3.ts` now checks that the soldiers walk their routes.
+
 ## What does not work yet
 
-- **Ambient sounds run out.** From day four on the log reports
-  `makecricket: table full (16)`: the ambient loops never seem to be freed, so
-  later rooms lose theirs, as the lock's water does. Not yet read from the exe.
 - **Copying to the hard disk.** `buildfilenames` and `copylocal` copy game
   files off the disc. The port reads the discs directly, so they are left
   unknown.

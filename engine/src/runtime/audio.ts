@@ -474,6 +474,14 @@ export class AudioLibrary {
     return this.find(name)?.entry.bank.trackName.toLowerCase() ?? null;
   }
 
+  /**
+   * Told the one-shot names of every bank as it closes. DreamFactory 5 frees
+   * each cricket playing one of them there (RedJack.exe 0x447250 calls
+   * stopcricket for each sound of the closing bank), and the session sets this
+   * for a v5 title only: TI.EXE keeps a cricket until a script stops it.
+   */
+  onSoundsClosed?: (names: string[]) => void;
+
   /** close by file name or track name; the file names actually dropped */
   closeBank(name: string): string[] {
     const want = name.toLowerCase();
@@ -483,12 +491,14 @@ export class AudioLibrary {
       this.banks.delete(want);
       dropped.push(want);
       this.forget(want, entry.bank.trackName);
+      this.onSoundsClosed?.([...entry.bank.singles.keys()]);
     } else {
       for (const [key, e] of [...this.banks]) {
         if (e.bank.trackName.toLowerCase() !== want) continue;
         this.banks.delete(key);
         dropped.push(key);
         this.forget(key, e.bank.trackName);
+        this.onSoundsClosed?.([...e.bank.singles.keys()]);
       }
     }
     return dropped;

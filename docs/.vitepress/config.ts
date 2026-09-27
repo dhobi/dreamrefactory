@@ -239,7 +239,10 @@ export default withMermaid(
         {
           text: "RedJack",
           collapsed: false,
-          items: [{ text: "Overview", link: "/redjack/" }],
+          items: [
+            { text: "Overview", link: "/redjack/" },
+            { text: "Walkthrough", link: "/redjack/walkthrough" },
+          ],
         },
         {
           text: "Editors — the browser tools",
