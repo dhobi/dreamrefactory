@@ -109,7 +109,7 @@ function ensureAudio(): void {
 }
 
 // the STAGE, not the canvas: see #stage.fs in src/theme.css
-installFullscreen(document.getElementById("fsBtn") as HTMLButtonElement | null, stageEl, { report: say });
+installFullscreen(document.getElementById("fsBtn") as HTMLButtonElement | null, stageEl, { report: say, landscape: true });
 // and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
 installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "redjack.picture.stretch");
 

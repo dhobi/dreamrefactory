@@ -143,7 +143,7 @@ const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
 // UA, and the picture is a fixed 4:3 either way — see #stage.fs. A class and not
 // the `:fullscreen` pseudo because an iPhone has no element fullscreen to match,
 // and the page fills itself there instead — engine/src/web/fullscreen.ts.
-installFullscreen(fsBtn, stageEl, { report: say });
+installFullscreen(fsBtn, stageEl, { report: say, landscape: true });
 // and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
 installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "timelapse.picture.stretch");
 

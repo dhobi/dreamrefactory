@@ -205,7 +205,7 @@ const mapCtx = minimap.getContext("2d")!;
 // fullscreen to match: there the page pins the stage over the viewport itself,
 // which is the whole of what engine/src/web/fullscreen.ts is for. The twelve
 // lines that used to be here were a fourth copy of the same broken detection.
-installFullscreen(fsBtn, stage, { report: log });
+installFullscreen(fsBtn, stage, { report: log, landscape: true });
 installStretch(stretchBox, stage, "taoot.picture.stretch");
 const th = new TylerHartman(stage, screen, thBox, "taoot.picture.th");
 excludeEachOther(thBox, stretchBox);
@@ -489,6 +489,8 @@ const host = new GameHost(files, audioSink, {
   showStage: () => {
     booting.style.display = "none";
     stage.style.display = ""; // "" and not "block": index.html owns this box
+    // the picture is up: a phone on its side may take it fullscreen (fullscreen.ts)
+    document.body.classList.add("playing");
     // The pane is reset by the BOOT, not by arriving somewhere. showStage runs on
     // every set activation (GameHost.activateSet), so clearing here threw the log
     // away and shut the pane the player had opened at every changeset — 28 rooms
@@ -689,6 +691,8 @@ async function runLangChooser(available: string[]): Promise<string | null> {
   // the chooser owns the screen: show the canvas, take the boot text down
   booting.style.display = "none";
   stage.style.display = ""; // "" and not "block": index.html owns this box
+  // the picture is up: a phone on its side may take it fullscreen (fullscreen.ts)
+  document.body.classList.add("playing");
 
   let drawing = true;
   const draw = (): void => {
@@ -923,6 +927,8 @@ async function runNightdiveIntro(): Promise<Ownership> {
   liveIntro = intro;
   booting.style.display = "none";
   stage.style.display = ""; // "" and not "block": index.html owns this box
+  // the picture is up: a phone on its side may take it fullscreen (fullscreen.ts)
+  document.body.classList.add("playing");
 
   const onPointer = (e: PointerEvent): void => {
     ensureAudio(); // the first click is also the audio-unlock gesture

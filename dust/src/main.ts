@@ -271,7 +271,7 @@ let currentRoom = "";
 // A class and not the `:fullscreen` pseudo because an iPhone has no element
 // fullscreen to match, and the page fills itself there instead — the detection
 // and the way back out are engine/src/web/fullscreen.ts.
-installFullscreen(fsBtn, stageEl, { report: say });
+installFullscreen(fsBtn, stageEl, { report: say, landscape: true });
 // and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
 installStretch(stretchBox, stageEl, "dust.picture.stretch");

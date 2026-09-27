@@ -11,9 +11,14 @@
  * the desktop site as `Macintosh`, and the touch points are what give it away —
  * no Mac has any.
  *
- * Importing this also puts `mobile` on `<html>`, which is what both pages'
- * landscape rules hang on: a phone turned on its side gets the picture and
- * nothing else, and CSS alone answers every rotation after that.
+ * Importing this also puts `mobile` on `<html>`, for a page's own rules that
+ * differ on a phone. A phone turned on its side is not one of them any more: it
+ * goes into fullscreen, by the button's own route (`landscape` in
+ * {@link file://./fullscreen.ts}), so every game takes it and the picture options
+ * that key off `.fs` (stretch, TH mode) come with it.
+ *
+ * Lifted out of Skull Cracker, the first page to need it, when the other four
+ * took the landscape rule too.
  */
 export function isMobileBrowser(): boolean {
   const hints = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
@@ -23,5 +28,6 @@ export function isMobileBrowser(): boolean {
   return /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
 }
 
-export const MOBILE = isMobileBrowser();
-document.documentElement.classList.toggle("mobile", MOBILE);
+// guarded, because the engine's node tests import fullscreen.ts, and this with it
+export const MOBILE = typeof navigator !== "undefined" && isMobileBrowser();
+if (typeof document !== "undefined") document.documentElement.classList.toggle("mobile", MOBILE);
