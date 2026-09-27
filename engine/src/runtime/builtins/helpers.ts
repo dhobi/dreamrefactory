@@ -425,7 +425,7 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // `if substring(path(1), "titanic1:") = 1` (refuse to run off the CD): slot 0
   // stays "", so path(1) is never the CD volume and the check passes, as on a
   // hard-drive install.
-  const pathSlots: string[] = Array(9).fill("");
+  const pathSlots = session.pathSlots;
   r("path", (_i, [n, str]) => {
     const idx = toNum(n ?? 0);
     if (str === undefined) return idx >= 0 && idx <= 8 ? pathSlots[idx] : "";

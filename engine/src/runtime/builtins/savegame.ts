@@ -31,7 +31,16 @@ export function registerSaveGameBuiltins(ctx: BuiltinCtx): void {
   const { session, r, log } = ctx;
 
   r("savegame", async (_i, [version]) => {
-    const bytes = session.snapshotSave();
+    // RedJack.exe's two refusals, before any dialog (0x43c9b6, 0x43c9e9)
+    if (session.isV5 && session.puppetCtrl.puppet) {
+      await session.onNoteDialog("Can't save game with puppet open.");
+      return 0;
+    }
+    if (session.isV5 && session.maze?.walk) {
+      await session.onNoteDialog("Can't save game while travelling on road.");
+      return 0;
+    }
+    const bytes = session.snapshotSave(toStr(version ?? ""));
     if (!bytes) {
       log("savegame: nothing to save (no base save/template)");
       return 0;
@@ -58,7 +67,7 @@ export function registerSaveGameBuiltins(ctx: BuiltinCtx): void {
     // exactly as it was, with no ramp — in the original it was never repainted,
     // only uncovered.
     if (!bytes) return back();
-    if (!(await session.loadGame(bytes))) return back();
+    if (!(await session.loadGame(bytes, toStr(version ?? "")))) return back();
     // Loaded. The restore blacked the screen and rebuilt the room behind it;
     // what is showing now is the room, so stop holding the black over it.
     session.fade.level = 0;

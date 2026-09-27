@@ -129,6 +129,12 @@ export class Interpreter {
   /** case-insensitive, as the language is — see {@link CaselessMap} */
   readonly globals: Map<string, Value> = new CaselessMap<Value>();
   /**
+   * The globals declared `permanent` (DreamFactory 5), lowercased: global to
+   * every script, but not the save's to carry. RedJack.exe keeps them in the
+   * BOOTFILE and a `.save` holds only the `global`s (savegame-v5.md, "The globals").
+   */
+  readonly permanents = new Set<string>();
+  /**
    * Globals whose every change is announced through {@link onGlobalChange} —
    * a watch list, in the debugger's sense.
    *
@@ -365,8 +371,9 @@ export class Interpreter {
       case "noop":
         return NORMAL;
       case "decl":
-        if (st.kind === "global") {
+        if (st.kind === "global" || st.kind === "permanent") {
           for (const n of st.names) if (!this.globals.has(n)) this.globals.set(n, 0);
+          if (st.kind === "permanent") for (const n of st.names) this.permanents.add(n.toLowerCase());
         } else if (st.kind === "dumpglobal") {
           // `dumpglobal` DISCARDS the named globals — it is a statement, not a
           // declaration, whatever its shape suggests. All 64 sites in the corpus

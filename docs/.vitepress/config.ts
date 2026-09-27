@@ -159,6 +159,7 @@ export default withMermaid(
             { text: "SBK — Skull Cracker's sprite books", link: "/engine/formats/sbk" },
             { text: "Saved games (.ti)", link: "/engine/formats/savegame" },
             { text: "Saved games, DF1 (.rtd)", link: "/engine/formats/savegame-v1" },
+            { text: "Saved games, DF5 (.save)", link: "/engine/formats/savegame-v5" },
             { text: "DreamFactory 5's containers", link: "/engine/formats/dreamfactory-5" },
             { text: "SETT — rooms, nodes & spheres", link: "/engine/formats/sett" },
           ],

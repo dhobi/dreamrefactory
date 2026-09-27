@@ -41,6 +41,9 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { REDJACK } from "@dreamfactory/site/games";
 import { VERSION } from "@dreamfactory/site/version";
 import { RedJackFiles } from "./files";
+import { REDJACK_SAVES, seedRedJackSaves } from "./saves";
+import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
+import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { RJ_CURSORS } from "./cursor-art";
 
 const SCREEN = REDJACK.screen;
@@ -254,6 +257,19 @@ async function main(): Promise<void> {
   // poll loops advance (see timelapse/src/main.ts)
   host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
   host.session.hasRealFrames = true;
+
+  // Saved games: the control panel's SAVE and LOAD run `savegame ("2")` and
+  // `opengame ("2")`, which block on these hooks, and the shared dialog answers
+  // them (engine/src/web/save-browser.ts). Wired before the boot, since the
+  // boot is a script and a script may save.
+  useSaveKind(REDJACK_SAVES);
+  host.session.onSaveGame = async (bytes) => {
+    await browseForSave(bytes as Uint8Array, defaultSaveName(host), { log: (l) => say(`  ${l}`) });
+  };
+  host.session.onLoadGame = () => browseForLoad({ log: (l) => say(`  ${l}`) });
+  void seedRedJackSaves((name) => files.serverUrl(name)).then((n) => {
+    if (n) say(`listed ${n} of the port's day saves in the saved games`);
+  });
 
   progress(PLANNED, "reading the BOOTFILE");
   const boot = await files.load("bootfile");
@@ -693,6 +709,8 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
   addEventListener("blur", () => (s.spaceDown = false));
 
   addEventListener("keydown", (e) => {
+    // the saved-games dialog holds the keys while it is up, as the original's did
+    if (savesOpen()) return;
     if (e.key === " " && !focusOwnsKey(e.target, e.key)) s.spaceDown = true;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (focusOwnsKey(e.target, e.key)) return;
@@ -721,3 +739,11 @@ void main().catch((e) => {
   showLog(true);
   beginPlaying();
 });
+
+/** what the save dialog offers as a name: the room, and when */
+function defaultSaveName(host: GameHost): string {
+  const room = host.session.currentSetFile || "redjack";
+  const d = new Date();
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${room} - ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
+}

@@ -916,6 +916,26 @@
         ></a
       >
     </footer>
+    <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared
+         with Titanic and Dust, hence the ids). The control panel's SAVE and LOAD
+         run `savegame` / `opengame`, whose host hooks src/main.ts points here. -->
+    <div id="saveModal" class="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span id="saveModalTitle">Saved Games</span>
+          <button id="saveModalClose" type="button" title="Close">✕</button>
+        </div>
+        <div id="saveList" class="save-list"></div>
+        <div class="modal-foot">
+          <div id="saveNewRow">
+            <input id="saveNameInput" type="text" placeholder="save name" />
+            <button id="saveConfirmBtn" type="button">Save</button>
+          </div>
+          <button id="saveUploadBtn" type="button">⬆ Upload .save</button>
+          <input id="saveUploadInput" type="file" accept=".save" />
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

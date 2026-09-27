@@ -262,3 +262,9 @@ And one generation of the engine has a page of its own:
 this one, but every drawer now opens with 24 bytes saying what kind it is, and
 every picture carries its own palette. Its room is a format of its own,
 **[SETT](sett.md)**.
+
+The one file each game *writes* is its saved game: Titanic's
+**[`.ti`](savegame.md)**, Dust's **[`.rtd`](savegame-v1.md)**, the same
+envelope three years earlier, and RedJack's
+**[`.save`](savegame-v5.md)**, the same plan with every drawer tagged, read
+out of RedJack.exe since no save survives.

@@ -23,7 +23,7 @@ export interface CallExpr {
 }
 
 export type Stmt =
-  | { t: "decl"; kind: "global" | "local" | "dumpglobal" | "dumplocal"; names: string[] }
+  | { t: "decl"; kind: "global" | "permanent" | "local" | "dumpglobal" | "dumplocal"; names: string[] }
   | { t: "assign"; name: string; value: Expr; index?: Expr }
   | { t: "callstmt"; call: CallExpr }
   | { t: "if"; cond: Expr; then: Stmt[]; else_?: Stmt[] }

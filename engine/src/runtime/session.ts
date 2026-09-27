@@ -23,6 +23,7 @@ import { StageController } from "./stage";
 import { FileProvider } from "./setscripts";
 import { loadGame, snapshotSave } from "./saveload";
 import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
+import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "./bootplan";
@@ -252,6 +253,18 @@ export class GameSession {
    * own account: moving off the spot and back still fires it).
    */
   restoringSave = false;
+  /**
+   * {@link restoringSave} on a DreamFactory 5 game, where it mutes EVERY script.
+   *
+   * RedJack.exe's resume (0x43dd80) reopens the casts, shops, tracks, the room
+   * and the stage and reaches no script runner at all, so no `opencast`,
+   * `openactor`, `openshop`, `openprop`, `openstage`, `openflat`, `openset` or
+   * `openscene` runs on a load (docs/engine/formats/savegame-v5.md). The v4
+   * and v1 loads mute only the room's lifecycle, as they always have.
+   */
+  get restoringV5(): boolean {
+    return this.restoringSave && this.isV5;
+  }
 
   get boot(): ScriptInstance | null {
     return this.bootScripts[0] ?? null;
@@ -397,6 +410,12 @@ export class GameSession {
    * on. "" until the boot mounts one — a single-volume game never does.
    */
   mountedCd = "";
+  /**
+   * The engine's nine path slots, what `path (n)` answers and `path (n, s)` sets.
+   * On the session rather than in the builtin because a DreamFactory 5 save
+   * carries them (savegame-v5.md, the manifest's `+0x218`).
+   */
+  readonly pathSlots: string[] = Array(9).fill("");
 
   /**
    * Host hook: a movie sequence has fully ended and these are the files it
@@ -1133,6 +1152,8 @@ export class GameSession {
      */
     parent?: Frame,
   ): Promise<Value> {
+    // a DreamFactory 5 load runs no scripts while it rebuilds (see restoringV5)
+    if (this.restoringV5) return 0;
     const inst = this.resolveEventTarget(cmd, targetName, handler);
     const chain = this.buildEventChain(cmd, inst, handler);
     if (!chain.length) {
@@ -2636,14 +2657,18 @@ export class GameSession {
   }
 
   /** produce the bytes of a save capturing the current progress — the
-   *  patch-a-base-save logic lives in runtime/saveload.ts (and saveload-v1.ts) */
-  snapshotSave(): Uint8Array | null {
+   *  logic lives in runtime/saveload.ts (and saveload-v1.ts, saveload-v5.ts).
+   *  `version` is what `savegame` was given, which a v5 save stamps. */
+  snapshotSave(version?: string): Uint8Array | null {
+    if (this.isV5) return snapshotSaveV5(this, version || undefined);
     return this.isV1 ? snapshotSaveV1(this) : snapshotSave(this);
   }
 
   /** load a save (restore globals, travel to the saved room) — the restore
-   *  choreography lives in runtime/saveload.ts (and saveload-v1.ts) */
-  loadGame(bytes: Uint8Array): Promise<boolean> {
+   *  choreography lives in runtime/saveload.ts (and saveload-v1.ts, saveload-v5.ts).
+   *  `version` is what `opengame` was given, which a v5 load compares. */
+  loadGame(bytes: Uint8Array, version?: string): Promise<boolean> {
+    if (this.isV5) return loadGameV5(this, bytes, version || undefined);
     return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
   }
 
@@ -2683,6 +2708,7 @@ export class GameSession {
     label = `${me}.${handler}`,
   ): Promise<void> {
     if (!inst?.script.codes.has(handler)) return;
+    if (this.restoringV5) return;
     try {
       await this.interp.runHandler(inst, handler, [], { me, target: "" });
     } catch (e) {

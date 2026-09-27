@@ -62,6 +62,8 @@
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
 @import "@dreamfactory/site/chrome.css";
+/* the saved-games dialog, drawn in this palette's roles */
+@import "@dreamfactory/engine/web/save-browser.css";
 
 /* ---- hold: the ground --------------------------------------------------- */
 
