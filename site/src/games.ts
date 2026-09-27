@@ -264,11 +264,8 @@ export const SKULLCRACKER: GameEditions = {
  * *RedJack: Revenge of the Brethren* — CyberFlix's last game, and the only one on
  * DreamFactory 5.
  *
- * NOT in {@link GAMES} yet, and that is deliberate rather than an oversight:
- * `GAMES` is the list with a front door, a mark and the editors' source picker,
- * and this game is a prototype page with none of them. It is declared so that
- * page can name itself in a bug report and say which screen it draws, and it is
- * in {@link UNLISTED}, so it deploys; it joins `GAMES` the day it gets a door.
+ * It was UNLISTED while its page was a prototype with no door, no mark and no
+ * artwork; it joined {@link GAMES} with its logo.
  */
 export const REDJACK: GameEditions = {
   title: "RedJack: Revenge of the Brethren",
@@ -287,9 +284,9 @@ export const REDJACK: GameEditions = {
 /**
  * Games that deploy (a lane in `deploy.yml`, a target in `tools/release.mts`)
  * but are not in {@link GAMES}: their page is on the host at its own path and
- * nothing on the site links to it.
+ * nothing on the site links to it. None at the moment.
  */
-export const UNLISTED: readonly GameEditions[] = [REDJACK];
+export const UNLISTED: readonly GameEditions[] = [];
 
 /** the code every edition-less path is treated as belonging to — see `editionOfUrl` */
 export const NEUTRAL = "";
@@ -322,5 +319,8 @@ export function editionOfUrl(game: GameEditions, url: string): string {
  * year as Titanic, same studio, same file formats — and no interpreter, so it is
  * the only entry whose door does not lead to a playable game. Putting it after
  * the three keeps "these are DreamFactory adventures" true of the run of them.
+ *
+ * RedJack comes after it all the same: DreamFactory 5, the last engine and the
+ * last game, which is where oldest-engine-first puts it.
  */
-export const GAMES: readonly GameEditions[] = [DUST, TITANIC, TIMELAPSE, SKULLCRACKER];
+export const GAMES: readonly GameEditions[] = [DUST, TITANIC, TIMELAPSE, SKULLCRACKER, REDJACK];

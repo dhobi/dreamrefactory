@@ -1,5 +1,5 @@
 /**
- * The home-screen apps: four manifests, their icons, and the colour they are
+ * The home-screen apps: the manifests, their icons, and the colour they are
  * all supposed to be.
  *
  *   npx vitest run site/tests/app-icons.ts
@@ -22,7 +22,7 @@
  *     it picks, and finds out afterwards.
  *   - **No maskable icon.** Android crops an icon to a circle or a squircle and
  *     will not crop one that has not said it may be cropped — it shrinks it onto
- *     a WHITE disc instead, which on four games this dark is the most visible
+ *     a WHITE disc instead, which on games this dark is the most visible
  *     way to get this wrong and the one no desktop ever shows you.
  *   - **A colour that has drifted from the sheet.** `theme_color` paints the
  *     status bar and `background_color` the splash screen, both before a line of
@@ -49,6 +49,7 @@ const APPS = [
   { dir: "dust", short: "Dust", pages: ["dust/index.html"] },
   { dir: "timelapse", short: "Timelapse", pages: ["timelapse/index.html"] },
   { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html"] },
+  { dir: "redjack", short: "RedJack", pages: ["redjack/index.html"] },
 ] as const;
 
 interface Icon {

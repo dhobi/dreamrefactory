@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+     aria-label="RedJack">
+  <!--
+    The skull and crossbones off the title card, on a disc of the letters' red
+    with the bevel's gold round it — the card's two brand materials, with its
+    one emblem on them, cut down to 32 pixels.
+
+    What survives at this size is the silhouette: a dome, two sockets, a jaw and
+    an X of bones behind it. The cracks, the plank, the rivets and the coins all
+    go — a favicon is a shape at 16px.
+
+    A disc rather than the skull on transparency, which is where this departs
+    from the other four marks: a bone skull on its own is a pale blob beside a
+    tab full of them, and the red is what says RedJack before the shape does.
+
+    Every colour is measured out of redjack/public/redjack-logo.png (the census
+    in src/theme.css): bone #eed2ac falling to #d5b38c; the letters' #b70703
+    face into #580403 and #230201 in the cracks; the bevel's #f4b83f, #dc9022
+    and #814711.
+  -->
+  <defs>
+    <radialGradient id="face" cx=".42" cy=".34" r=".72">
+      <stop offset="0" stop-color="#b70703"/>
+      <stop offset=".55" stop-color="#970503"/>
+      <stop offset="1" stop-color="#580403"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4b83f"/>
+      <stop offset=".5" stop-color="#dc9022"/>
+      <stop offset="1" stop-color="#814711"/>
+    </linearGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eed2ac"/>
+      <stop offset="1" stop-color="#d5b38c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- the disc, with the letters' dark rule outside the gold -->
+  <circle cx="16" cy="16" r="15.2" fill="#230201"/>
+  <circle cx="16" cy="16" r="14.1" fill="url(#face)" stroke="url(#rim)" stroke-width="1.7"/>
+
+  <!-- the crossbones, behind the skull: two shafts and a knuckle at each end -->
+  <g fill="url(#bone)" stroke="#230201" stroke-width=".5">
+    <path d="M9.4 17.2l15.4 9.1-1.3 2.2-15.4-9.1z"/>
+    <path d="M22.6 17.2l-15.4 9.1 1.3 2.2 15.4-9.1z"/>
+    <circle cx="7.3" cy="18.4" r="1.6"/>
+    <circle cx="8.9" cy="16.2" r="1.6"/>
+    <circle cx="24.7" cy="18.4" r="1.6"/>
+    <circle cx="23.1" cy="16.2" r="1.6"/>
+    <circle cx="7.1" cy="26.5" r="1.6"/>
+    <circle cx="9.3" cy="28.3" r="1.5"/>
+    <circle cx="24.9" cy="26.5" r="1.6"/>
+    <circle cx="22.7" cy="28.3" r="1.5"/>
+  </g>
+
+  <!-- the dome and the jaw, one silhouette -->
+  <path d="M16 5.4c3.9 0 6.6 2.8 6.6 6.5 0 2-.8 3.5-2 4.4v2.4c0 1-.8 1.8-1.8 1.8h-5.6
+           c-1 0-1.8-.8-1.8-1.8v-2.4c-1.2-.9-2-2.4-2-4.4 0-3.7 2.7-6.5 6.6-6.5z"
+        fill="url(#bone)" stroke="#230201" stroke-width=".55"/>
+
+  <!-- the crack across the dome, which the card's skull has too -->
+  <path d="M16.9 5.7l-.9 1.9 1 1.2-.7 1.3" fill="none" stroke="#8a6a4c"
+        stroke-width=".6" stroke-linecap="round"/>
+
+  <!-- sockets, nose, teeth -->
+  <ellipse cx="13.4" cy="12.5" rx="2" ry="2.2" fill="#230201"/>
+  <ellipse cx="18.6" cy="12.5" rx="2" ry="2.2" fill="#230201"/>
+  <path d="M16 14.6l-1 1.8h2z" fill="#230201"/>
+  <path d="M14.4 18v2.3M16 18v2.3M17.6 18v2.3" stroke="#230201" stroke-width=".6"/>
+</svg>

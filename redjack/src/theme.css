@@ -1,270 +1,324 @@
 /*
- * RedJack's page, in the PROJECT's palette for now.
+ * RedJack's palette: the hold, the jack, brass, parchment, bone, and one piece
+ * of silver.
  *
- * No RedJack design yet — no title card, no colours sampled out of its box art —
- * so this wears site/src/theme.css, the black-and-green the front door and the
- * editors wear, and adds only the layout a game page needs: the picture, the log
- * over it, and the rows of controls under it. Every colour below is a role from
- * the chrome's contract (site/src/chrome.css), so the day this game gets a palette
- * of its own it replaces the import and nothing under it changes.
+ * Sampled from its own title card — REDJACK in weathered crimson slab letters,
+ * edged in a gold bevel, on a scrap of torn tan parchment; under them a split
+ * and blackened plank with a cracked bone skull and crossbones nailed to it,
+ * two brass rivets, a stack of gold coins and one silver one; and a parchment
+ * banner reading REVENGE OF THE BRETHREN in the letters' red. Warm all the way
+ * through, where Skull Cracker is hot and Timelapse is cold, and the one of the
+ * five that is MADE of something — paper, wood, metal — rather than lit.
+ *
+ * The SIXTH implementation of the contract in site/src/chrome.css: the same
+ * role names and the same top bar as the other five. This file used to be one
+ * `@import` of the project's black-and-green and a paragraph saying the game had
+ * no artwork to sample; the artwork arrived, so the paragraph became a palette
+ * and nothing under it had to move.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * A census of `public/redjack-logo.png` — the keyed card (tools/mkredjacklogo.ts),
+ * 390,948 opaque pixels, by hue family and then by quantised cell, each stop
+ * being the MEAN of the pixels in its cell:
+ *
+ *   orange, dark   21.4%   the plank, and the parchment's burnt edges
+ *   orange, mid    21.0%   the parchment in shadow, and the bevel's body
+ *   black          18.2%   the gaps between the planks and under the letters —
+ *                          #070402 is the single commonest colour, 9.3% alone
+ *   orange, light  17.3%   the parchment in the light, and the skull
+ *   red, dark       9.5%   the letters' shadow side and their cracks
+ *   red, lit        8.5%   the letters' face, #970503 the commonest at 1.6%
+ *   yellow, light   3.6%   the bevel's lit lip, where the gold catches
+ *   grey            0.4%   the silver coin. Nothing else in the artwork is cold.
+ *
+ * Two lines of that decide how the page works. Sixty per cent of the card is
+ * the one orange-brown family — wood, paper and brass are the same hue at three
+ * values — so no tan can mean "look here"; it is the material everything is
+ * made of. And the only thing in the picture that is not warm is a single
+ * silver piece of eight, 0.17% of it, sitting apart from the gold on the right
+ * of the plank. So silver is what LIVE means, spent as the illustrator spent
+ * it: one gleam among the brass.
+ *
+ * What the colours MEAN
+ * ---------------------
+ *   hold       it is ground — the plank's black and its darkest grain, so the
+ *              page is dark wood before it is dark
+ *   jack       it is the brand — the letters' crimson, and so never a state and
+ *              never a warning; it is on the one control that commits because
+ *              that control is dressed as a letter
+ *   brass      it is an edge, or it can be pressed — the bevel round every
+ *              letter, so a link and a rule are cut from the gold the brand is
+ *              framed in
+ *   parchment  it is a word — the scrap the letters are printed on
+ *   bone       it is the brightest word — the skull
+ *   silver     it is LIVE — the gauge's advancing glint, the network spinner,
+ *              `--ok`; nothing else
+ *
+ * `--mark` is bone rather than a seventh hue, for the reason these palettes
+ * keep arriving at: a second job wants a second VALUE more than a second hue.
  */
-@import "@dreamfactory/site/theme.css";
 
-/* ---- the page --------------------------------------------------------- */
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED. */
+@import "@dreamfactory/site/chrome.css";
 
-body {
-  /* no page scroll sideways at phone width, whatever a long log line does */
-  overflow-x: hidden;
-}
+/* ---- hold: the ground --------------------------------------------------- */
 
-#stage {
-  position: relative;
-  width: min(100%, 1280px);
-  padding: 12px 16px 0;
-}
-
-/* ---- the loading gauge and the button that replaces it ---------------- */
-
-#boot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin: 8px auto 14px;
-  width: min(100%, 460px);
-}
-#gauge {
-  width: 100%;
-}
-#bar {
-  height: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--inset);
-  overflow: hidden;
-}
-#charge {
-  height: 100%;
-  background: var(--accent);
-  transition: width 380ms ease-out;
-}
-#bootline {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 6px;
-  font: 12px/1.4 var(--font-mono);
-  color: var(--text-dim);
-}
-#bootsay {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#start {
-  display: none;
-  min-width: 10rem;
-}
-#boot.ready #gauge {
-  display: none;
-}
-#boot.ready #start {
-  display: inline-block;
-}
-body.playing #boot {
-  display: none;
+/*
+ * The plank and the dark between its boards. #070402 is 9.3% of the card on its
+ * own and #160a04 another 6.5%: brown-black with the red still in it, which is
+ * what old ship's timber is. The stops above them are the plank's own darkest
+ * cells, in order of lightness — #281609 is the commonest of the dark-orange
+ * family at 3.3%.
+ *
+ * It sits closer to Dust's ground than anything else on these pages does, and
+ * that is the census and not a choice: both games are warm and both cards were
+ * rendered on dark wood or leather. What separates them is everything drawn on
+ * top — Dust's is ember and leather, this one crimson, brass and parchment.
+ */
+:root {
+  --hold-1000: #070402;
+  --hold-900: #0d0703;
+  --hold-800: #160a04;
+  --hold-700: #1b1109;
+  --hold-600: #281609;
+  --hold-500: #361a08;
 }
 
-/* ---- the picture ------------------------------------------------------ */
+/* ---- plank: the grain, which is what a border is here ------------------ */
 
-#frame {
-  position: relative;
-  margin: 0 auto;
-  width: 100%;
-  max-width: 1280px;
-  border: 1px solid var(--border);
-  background: #000;
-  line-height: 0;
-}
-/* the canvas is the engine's 640x480 doubled (src/main.ts); the page only ever
-   shrinks it, which is soft at worst, never a non-integer nearest upscale */
-#screen {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 3;
-  image-rendering: auto;
-  touch-action: none;
+/*
+ * The lit grain on the boards behind the skull, #4e2c14 and #6f4a32 inside the
+ * plank's own cells. A border in the plank's grain reads as a joint between two
+ * boards rather than as a line drawn on the page.
+ */
+:root {
+  --plank-500: #3a2311;
+  --plank-400: #4e2c14;
+  --plank-300: #6f4a32;
+  --plank-200: #8c5530;
 }
 
-#netbusy {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: rgb(0 0 0 / 70%);
-  pointer-events: none;
-}
-#netbusy span {
-  display: block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgb(255 255 255 / 16%);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: netspin 700ms linear infinite;
-}
-/* `display: flex` above beats the UA's `[hidden]` */
-#netbusy[hidden] {
-  display: none;
-}
-@keyframes netspin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  #netbusy span {
-    animation: none;
-  }
+/* ---- jack: the letters -------------------------------------------------- */
+
+/*
+ * The red half of the picture (18.0% across its two families), and the ramp is
+ * the letters read from their shadow to their lit face. The saturation is the
+ * point: every cell here runs 92 to 97%, with green and blue channels of 2 to 9
+ * — desaturate a red this dark and it goes brown, and on a page of brown wood a
+ * brown red is not a brand at all.
+ *
+ *   #230201   the mean of the red below 12% lightness: the cracks
+ *   #580403   #670403 #760403   the shadow side, each ~1.5%
+ *   #970503   the commonest red, 1.6%: the face
+ *   #b70703   the face where it is lit
+ *
+ * There is no bright red on the card — the letters never go past #c50903 — and
+ * the page does not invent one. Where it needs red to be seen it puts brass
+ * round it, which is what the letters do.
+ */
+:root {
+  --jack-800: #230201;
+  --jack-700: #380402;
+  --jack-600: #580403;
+  --jack-500: #760403;
+  --jack-400: #970503;
+  --jack-300: #b70703;
+  --jack-200: #c50903;
 }
 
-/* ---- the log, a panel over the picture -------------------------------- */
+/* ---- brass: the bevel --------------------------------------------------- */
 
-#log {
-  position: absolute;
-  inset: 12px 16px 0;
-  margin: 0;
-  z-index: 4;
-  overflow: auto;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(3px);
-  border: 1px solid var(--border-strong);
-  color: var(--text);
-  font: 12px/1.6 var(--font-mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-#log[hidden] {
-  display: none;
-}
-/* its two voices: a step the boot took, and something it had to complain about */
-#log b {
-  color: var(--accent);
-  font-weight: normal;
-}
-#log i {
-  color: var(--alarm, #e07a6a);
-  font-style: normal;
+/*
+ * A scanline at y=180 across the J of JACK, going into the letter from its
+ * left edge:
+ *
+ *   x=540   #140302   the dark rule outside
+ *   x=542   #814711   the bevel's shaded foot
+ *   x=544   #eee3a0   its lit lip, the brightest pixel on the letter
+ *   x=548   #f4b83f   the bevel's face
+ *   x=550   #ecac31
+ *   x=554   #dd911f   falling away
+ *   x=558   #904b17   into the shadow
+ *   x=562   #9e0e02   the red face
+ *
+ * brass-100 is the census's lit-gold family (hue 40-50, 80%+ saturated, 2.1%),
+ * the mean of every pixel where the gold catches the light.
+ */
+:root {
+  --brass-700: #472408;
+  --brass-600: #814711;
+  --brass-500: #b5660e;
+  --brass-400: #dc9022;
+  --brass-300: #ecac31;
+  --brass-200: #f4b83f;
+  --brass-100: #f7d37b;
 }
 
-/* ---- the controls under it -------------------------------------------- */
+/* ---- parchment: every word on the page --------------------------------- */
 
-#under {
-  width: min(100%, 1280px);
-  padding: 8px 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-#under .bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-/* a row whose only child is an empty error line is not a row */
-#under .bar:has(> #err:empty:only-child) {
-  display: none;
-}
-#err {
-  color: var(--alarm, #e07a6a);
-  font: 12px/1.4 var(--font-mono);
-}
-#loc {
-  margin: 0;
-  font: 12px/1.5 var(--font-mono);
-  color: var(--text-dim);
-  white-space: pre-wrap;
-}
-#loc:empty {
-  display: none;
-}
-.k {
-  display: inline-block;
-  padding: 0 5px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  font: 11px/1.5 var(--font-mono);
-  color: var(--text-bright);
-}
-#under .keyhint,
-#under .touchhint {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--text-dim);
-  font-size: 13px;
-}
-#under .touchhint,
-#under .bar.touchonly {
-  display: none;
-}
-#swipeOpts label {
-  margin-right: 10px;
-}
-/* the hint that fits the pointer: keys for a mouse, the gesture for glass —
-   `hover: none` too, so a touchscreen laptop keeps its keys line */
-@media (pointer: coarse) and (hover: none) {
-  #under .keyhint {
-    display: none;
-  }
-  #under .touchhint {
-    display: inline;
-  }
-  #under .bar.touchonly {
-    display: flex;
-  }
+/*
+ * The scrap behind the letters and the banner under the plank. Its lit side is
+ * #e7b768 (1.3%, the commonest light orange) and the banner #f2cf8d; its shadow
+ * is #ae712e and #885827, which are also where the burnt edges go. Dim text on
+ * this page is paper in shadow rather than grey.
+ */
+:root {
+  --parchment-100: #f6d997;
+  --parchment-200: #f2cf8d;
+  --parchment-300: #e7b768;
+  --parchment-400: #d9a658;
+  --parchment-500: #ae712e;
+  --parchment-600: #885827;
+  --parchment-700: #583618;
 }
 
-/* ---- fullscreen ------------------------------------------------------- */
+/* ---- bone: the skull ---------------------------------------------------- */
 
-/* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
-   engine/src/web/fullscreen.ts pins the stage over the viewport instead */
-#stage.fs {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: grid;
-  place-items: center;
-  width: 100dvw;
-  height: 100dvh;
-  padding: 0;
-  background: #000;
+/*
+ * Inside the skull, #ecd2ac and #eed2ac are the lit dome, #d5b38c the cheek.
+ * Paler and pinker than the parchment it sits beside, which is the only thing
+ * that keeps a bone-white skull legible on a card that is nearly all tan.
+ */
+:root {
+  --bone-100: #eed2ac;
+  --bone-200: #ecc894;
+  --bone-300: #d5b38c;
 }
-#stage.fs #boot {
-  display: none;
+
+/* ---- silver: the one piece of eight ----------------------------------- */
+
+/*
+ * The coin on the right of the plank, and the only cold family in the card:
+ * 0.17% of it between 35% and 85% lightness, mean #85796f, lit to #beb7b0 where
+ * the relief catches. On this page it is the glint — used for what is live and
+ * for nothing that is merely there:
+ *
+ *   1  the advancing tip of the boot gauge
+ *   2  the network spinner in the corner of the picture
+ *   3  `--ok`
+ *
+ * Not for text, not for a border, not for the ground. A silver page would be
+ * a different game's.
+ */
+:root {
+  --silver-100: #eaeae8;
+  --silver-200: #beb7b0;
+  --silver-300: #a69c94;
+  --silver-400: #85796f;
+  --silver-500: #59504a;
 }
-#stage.fs #frame {
-  border: 0;
-  width: auto;
-  max-width: none;
+
+/* ---- the two extras the pages use ------------------------------------- */
+
+:root {
+  /* a warning is not the brand: it is the flame-lit streaks in the letters'
+     face (hue 8-22, 0.04% above 48% lightness), orange enough to be told from
+     the crimson and bright enough to read, 5.7:1 on the ground */
+  --alarm: #e65c25;
+  --ok: var(--silver-200);
 }
-#stage.fs #screen {
-  width: min(100dvw, calc(100dvh * 4 / 3));
-  height: min(100dvh, calc(100dvw * 3 / 4));
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  /* the letters are slab-cut wood type and the banner is a Clarendon-style
+     serif; the page carries no webfont for them, so the display face is the
+     platform's serif — the nearest thing on every system to type that was
+     printed rather than drawn */
+  --font-display: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  /* planks and brass fittings: square, but a sawn edge and not a machined one */
+  --radius: 3px;
+  --radius-lg: 4px;
+
+  /* what the title card sits in: the gold's own light, which is the one warm
+     thing on the card that shines rather than being lit */
+  --glow:
+    0 0 0 1px rgba(236, 172, 49, 0.24), 0 0 36px -6px rgba(236, 172, 49, 0.3);
 }
-/* The player's other answer: the whole display, out of 4:3. Both sides
-   given, so `aspect-ratio` has nothing to derive and steps aside; the
-   pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
-#stage.fs.stretch #screen {
-  width: 100dvw;
-  height: 100dvh;
+
+/* ---- the roles the chrome asks for ------------------------------------ */
+
+:root {
+  --bg: var(--hold-1000);
+  --panel: var(--hold-800);
+  --raised: var(--hold-700);
+  --inset: var(--hold-900);
+
+  --border: var(--plank-500);
+  --border-strong: var(--plank-400);
+  --border-hover: var(--brass-500);
+
+  --text: var(--parchment-300);
+  --text-bright: var(--bone-100);
+  --text-dim: var(--parchment-500);
+  --text-mute: var(--parchment-600);
+
+  /* brass and not the brand's red: the letters never get brighter than
+     #c50903, which is 3.3:1 on this ground, and a link has to be read. The
+     gold is 10:1 and it is what the red is framed in anyway */
+  --accent: var(--brass-300);
+  --accent-hover: var(--brass-100);
+  --accent-line: var(--brass-600);
+  --selection-bg: rgba(151, 5, 3, 0.45);
+
+  --mark: var(--bone-100);
+  --mark-glow: rgba(236, 172, 49, 0.32);
+
+  --topbar-top: var(--hold-600);
+  --topbar-bottom: var(--hold-1000);
+
+  /* the letters' red, thinned to a wash — the one place the brand is allowed
+     to be large and quiet */
+  --depth-light: rgba(151, 5, 3, 0.16);
+
+  --button-hover-bg: var(--hold-600);
+  --button-active-bg: var(--hold-500);
+  --state-border: var(--plank-300);
+
+  --rule-mid: var(--jack-400);
+  --rule-bright: var(--brass-200);
+
+  /* The one control that commits, and it is a LETTER: red face, gold bevel,
+     parchment label — the banner's own arrangement turned inside out. Parchment
+     on the face's #970503 is 6.0:1, and on its lit #b70703 at the hover still
+     4.6. */
+  --commit-face-bottom: var(--jack-400);
+  --commit-face-deep: var(--jack-600);
+  --commit-edge: var(--brass-300);
+  --commit-edge-hover: var(--brass-100);
+  --commit-text: var(--parchment-200);
+  --commit-text-hover: var(--parchment-100);
+
+  --menu-panel: var(--hold-700);
+  --shadow-drop: rgb(0 0 0 / 72%);
+}
+
+/* ---- the two densities ------------------------------------------------ */
+
+/*
+ * Same split the other pages carry: `deep` is the game page, as little chrome as
+ * it can get away with, and `work` is for a page with panels on it.
+ */
+body.deep {
+  --bg: var(--hold-1000);
+  --panel: var(--hold-900);
+  --raised: var(--hold-800);
+}
+body.work {
+  --bg: var(--hold-900);
+  --panel: var(--hold-700);
+  --raised: var(--hold-600);
+  --inset: var(--hold-1000);
+  --border: var(--plank-400);
+  --border-strong: var(--plank-300);
+  --gap: 0.65rem;
 }
