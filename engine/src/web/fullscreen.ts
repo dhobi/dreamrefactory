@@ -50,7 +50,28 @@
  * It is `position: fixed`, so it is out of flow on every page that takes it: the
  * play page letterboxes with a one-cell grid and an in-flow child would have
  * been auto-placed into a second row.
+ *
+ * ## A phone on its side
+ *
+ * Upright, a phone's picture shares the page with the controls under it;
+ * turned sideways the window is ~390px tall and the page's layout leaves a
+ * postage stamp. So with `landscape` on, a mobile browser ({@link isMobileBrowser})
+ * turned to landscape while the game is playing (`playing` on the body) goes
+ * into fullscreen by itself, and turning it back upright comes out again.
+ *
+ * It enters by the FAUX route, because the real one needs a user gesture and a
+ * rotation is not one. The first tap on the picture after that is, so it asks
+ * for the real thing then, where there is one: on Android that takes the
+ * browser's toolbars away too. The tap still reaches the game underneath. It is
+ * asked for once per turn of the phone, so a player who swipes real fullscreen
+ * away is left in the faux one rather than pulled back in on every tap.
+ *
+ * Because it is the button's own state, everything that keys off
+ * {@link FS_CLASS} follows: the letterbox, *stretch to fill*, TH mode. The ✕
+ * works too, and keeps the picture out of fullscreen until the phone has been
+ * turned upright and back.
  */
+import { isMobileBrowser } from "./mobile";
 
 /**
  * The class the stage wears while it is filling the screen — by EITHER route.
@@ -83,6 +104,12 @@ export interface FullscreenOptions {
   exitLabel?: string;
   /** where to say that the real API refused and the page took over */
   report?: (message: string) => void;
+  /**
+   * Go into fullscreen when a phone is turned on its side while the game plays
+   * (see "A phone on its side" above). Off by default: the speedrun pages share
+   * this module and have no game to be playing.
+   */
+  landscape?: boolean;
 }
 
 /**
@@ -168,10 +195,65 @@ export function installFullscreen(
   chip.textContent = "✕";
   chip.title = exitLabel;
   chip.setAttribute("aria-label", exitLabel);
-  chip.addEventListener("click", leave);
+  chip.addEventListener("click", () => {
+    if (auto) dismissed = true;
+    leave();
+  });
   stage.append(chip);
 
   // The UA's own exits — Escape, the browser's control, a swipe — come through
   // here and nowhere else, which is why the label is painted rather than flipped.
   document.addEventListener("fullscreenchange", paint);
+
+  /** whether turning the phone is what put the stage up */
+  let auto = false;
+  /** the ✕ was pressed while sideways: stay down until the phone is upright */
+  let dismissed = false;
+  /** the tap has asked for real fullscreen once this turn */
+  let upgraded = false;
+  // asked here rather than read once at import, so a test can be the phone
+  if (!opts.landscape || !isMobileBrowser()) return;
+  const sideways = matchMedia("(orientation: landscape)");
+  const sync = (): void => {
+    if (!sideways.matches) {
+      dismissed = false;
+      upgraded = false;
+    }
+    const want = sideways.matches && document.body.classList.contains("playing") && !dismissed;
+    const on = faux || document.fullscreenElement === stage;
+    if (want && !on) {
+      auto = true;
+      enterFaux();
+    } else if (!want && on && auto) {
+      auto = false;
+      leave();
+    } else if (!on) {
+      auto = false;
+    }
+  };
+  sideways.addEventListener("change", sync);
+  // `playing` arrives on the body when the boot hands over to the game; paint's
+  // own FAUX_CLASS lands here too, which sync answers by doing nothing
+  new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  // A swipe out of REAL fullscreen while still sideways: back to the faux one,
+  // which is what the phone's shape still asks for.
+  document.addEventListener("fullscreenchange", () => {
+    if (auto && !document.fullscreenElement) sync();
+  });
+  stage.addEventListener(
+    "pointerup",
+    () => {
+      if (!auto || !faux || !real || upgraded) return;
+      upgraded = true;
+      stage
+        .requestFullscreen()
+        .then(() => {
+          faux = false;
+          paint();
+        })
+        .catch((e: Error) => opts.report?.(`fullscreen: ${e.message} — staying in the page`));
+    },
+    true,
+  );
+  sync();
 }

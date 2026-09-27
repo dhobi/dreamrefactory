@@ -145,3 +145,86 @@ test("an iframe that was not granted the feature is not asked twice", () => {
   expect(request).not.toHaveBeenCalled();
   expect(doc.body.classList.contains("fs-faux")).toBe(true);
 });
+
+/**
+ * Be a phone for one test: a mobile user agent, an orientation the test turns,
+ * and the MutationObserver the module watches the body's `playing` with.
+ */
+function phone(doc: Document, ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)") {
+  const sideways = { matches: false, listeners: [] as (() => void)[] };
+  vi.stubGlobal("navigator", { userAgent: ua, maxTouchPoints: 5 });
+  vi.stubGlobal("matchMedia", () => ({
+    get matches() {
+      return sideways.matches;
+    },
+    addEventListener: (_: string, f: () => void) => sideways.listeners.push(f),
+  }));
+  // linkedom's observer is not wired to attribute changes, so the body's class
+  // list is watched by hand: the test calls `observed()` after changing it
+  const observers: (() => void)[] = [];
+  vi.stubGlobal(
+    "MutationObserver",
+    class {
+      constructor(private f: () => void) {}
+      observe() {
+        observers.push(this.f);
+      }
+    },
+  );
+  return {
+    turn(on: boolean) {
+      sideways.matches = on;
+      sideways.listeners.forEach((f) => f());
+    },
+    play() {
+      doc.body.classList.add("playing");
+      observers.forEach((f) => f());
+    },
+  };
+}
+
+test("a phone turned on its side while playing goes fullscreen, and comes back upright", () => {
+  const { doc, stage, btn } = page();
+  const p = phone(doc);
+  installFullscreen(btn, stage, { landscape: true });
+
+  // sideways during the boot is nothing yet: there is no game to fill with
+  p.turn(true);
+  expect(stage.classList.contains("fs")).toBe(false);
+  p.play();
+  expect(stage.classList.contains("fs")).toBe(true);
+  expect(doc.body.classList.contains("fs-faux")).toBe(true);
+
+  p.turn(false);
+  expect(stage.classList.contains("fs")).toBe(false);
+  vi.unstubAllGlobals();
+});
+
+test("the ✕ keeps a sideways phone out of fullscreen until it is turned upright and back", () => {
+  const { doc, stage, btn } = page();
+  const p = phone(doc);
+  installFullscreen(btn, stage, { landscape: true });
+  p.play();
+  p.turn(true);
+  expect(stage.classList.contains("fs")).toBe(true);
+
+  (stage.querySelector(".fsexit") as HTMLElement).click();
+  expect(stage.classList.contains("fs")).toBe(false);
+  p.turn(true);
+  expect(stage.classList.contains("fs")).toBe(false);
+
+  p.turn(false);
+  p.turn(true);
+  expect(stage.classList.contains("fs")).toBe(true);
+  vi.unstubAllGlobals();
+});
+
+test("a laptop turned landscape is not a phone on its side", () => {
+  const { doc, stage, btn } = page();
+  const p = phone(doc, "Mozilla/5.0 (X11; Linux x86_64) Chrome/140");
+  installFullscreen(btn, stage, { landscape: true });
+  p.play();
+  p.turn(true);
+  expect(stage.classList.contains("fs")).toBe(false);
+  vi.unstubAllGlobals();
+});

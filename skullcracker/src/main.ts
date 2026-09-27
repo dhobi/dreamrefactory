@@ -55,8 +55,8 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION, installVersion } from "@dreamfactory/site/version";
 import { SkullFiles } from "./files";
 import { SkullSave, readSkl, SKL } from "./savegame";
-// puts `mobile` on <html> for the landscape rules in index.html
-import "./mobile";
+// puts `mobile` on <html>, which index.html's fullscreen frame rule reads
+import "@dreamfactory/engine/web/mobile";
 import { Film } from "./film";
 import {
   DOSSIER,
@@ -1001,7 +1001,7 @@ async function boot(): Promise<void> {
 // take the moulding off in `#stage.fs`. A class and not the `:fullscreen`
 // pseudo because an iPhone has no element fullscreen to match, and the page
 // fills itself there instead — engine/src/web/fullscreen.ts.
-installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: log });
+installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: log, landscape: true });
 // and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
 installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, $<HTMLDivElement>("stage"), "skullcracker.picture.stretch");
 

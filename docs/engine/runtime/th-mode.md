@@ -34,8 +34,13 @@ exclude each other: ticking one unticks the other.
 
 ## What the player sees
 
-- **Walking about**: the room's view alone, in the page and in fullscreen (a
-  phone is rarely in fullscreen, so the page gets it too).
+- **Walking about**: the room's view alone, in the page and in fullscreen. A
+  phone often isn't in fullscreen, so the page gets it too. A phone turned on
+  its side while the game plays goes into fullscreen by itself, on every
+  game's page, and comes out when it is turned upright again. There, TH mode
+  and *stretch to fill* apply just as they do after the button
+  ([`fullscreen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/fullscreen.ts),
+  `landscape`).
 - **The band, when it is wanted**: the band slides in under the room over a
   quarter of a second, and the room squeezes up to make way rather than being
   covered. It comes in when

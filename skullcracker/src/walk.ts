@@ -54,7 +54,7 @@ import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import "./pad.css";
-import { MOBILE } from "./mobile";
+import { MOBILE } from "@dreamfactory/engine/web/mobile";
 import { SkullFiles } from "./files";
 import { writeSkl } from "./savegame";
 import { Film } from "./film";
