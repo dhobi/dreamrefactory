@@ -11,6 +11,7 @@
     "build": "vite build",
     "test": "tsx tools/runmachine.mts",
     "test:machine": "tsx tools/runmachine.mts",
-    "manifest": "tsx ../tools/mkmanifest.ts ../dist/redjack gamefiles public"
+    "manifest": "tsx ../tools/mkmanifest.ts ../dist/redjack gamefiles public",
+    "mklogo": "tsx tools/mkredjacklogo.ts"
   }
 }

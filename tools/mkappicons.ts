@@ -7,12 +7,12 @@
  * favicon ever wanted, in shapes a favicon never has to be: Android masks the
  * icon into a circle or a squircle and will shrink a square one into a white
  * disc rather than crop it, and iOS takes a single opaque PNG and rounds the
- * corners itself. Neither can be served by the marks as they stand — three of
- * the four are SVG, and Titanic's is a 128px PNG.
+ * corners itself. Neither can be served by the marks as they stand — all but
+ * one are SVG, and Titanic's is a 128px PNG.
  *
  * So this renders them, and renders them in a BROWSER. That is not laziness
  * about pulling in a rasteriser: the marks are the artwork the tab already
- * shows, three of them are vector and one is a photograph of a porthole, and the
+ * shows, all but one are vector and that one is a photograph of a porthole, and the
  * thing that has to agree about how they scale is the same engine that will draw
  * them on the phone. Playwright is already here for the browser suites.
  *
@@ -66,6 +66,7 @@ const GAMES: readonly Source[] = [
   { dir: "dust", mark: "public/dust-mark.svg", bg: "#0a0705" },
   { dir: "timelapse", mark: "public/timelapse-mark.svg", bg: "#04050e" },
   { dir: "skullcracker", mark: "public/skullcracker-mark.svg", bg: "#080202" },
+  { dir: "redjack", mark: "public/redjack-mark.svg", bg: "#070402" },
 ];
 
 /** every icon a game gets, as the manifest and the Apple tags name them */

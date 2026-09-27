@@ -86,6 +86,12 @@ export default defineConfig({
         port: 5178,
         what: "Skull Cracker",
       },
+      {
+        path: "redjack",
+        command: "npm run dev -w redjack",
+        port: 5179,
+        what: "RedJack",
+      },
     ]),
   ],
   server: {

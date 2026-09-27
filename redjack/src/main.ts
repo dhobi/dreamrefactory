@@ -180,6 +180,9 @@ async function waitForStart(): Promise<void> {
 function beginPlaying(): void {
   document.body.classList.remove("booting");
   document.body.classList.add("playing");
+  // the frame is `display: none` under the curtain, so a cursor sized while
+  // booting was sized for a 0x0 picture; size it again now there is one
+  showCursor(cursorShown, true);
 }
 
 /** the spinner in the corner of the picture, once a wait is long enough to be one */

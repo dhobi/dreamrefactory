@@ -4,7 +4,7 @@
  *
  *   npm run mklogo -w site
  *
- * Three images: the project's wordmark, and a card-sized piece of each ported
+ * The project's wordmark and a card-sized piece of each ported
  * game's own identity. A build step and not checked-in resizes, so every one is
  * derivable from its source and no asset on the page is a mystery. See
  * tools/logo-resize.ts for why the trimming and the filtering are what they are.
@@ -25,7 +25,8 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { encodePNG } from "../../tools/png";
+import { decodePNG, encodePNG } from "../../tools/png";
+import { keyCheckerboard } from "../../redjack/tools/mkredjacklogo";
 import { ResizeOptions, resizeLogo } from "../../tools/logo-resize";
 
 const at = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
@@ -35,6 +36,8 @@ interface Job {
   src: string;
   out: string;
   opts: ResizeOptions;
+  /** a key to run on the decoded source first, for artwork with no alpha of its own */
+  key?: (rgba: Uint8Array, width: number, height: number) => void;
 }
 
 const JOBS: Job[] = [
@@ -84,10 +87,25 @@ const JOBS: Job[] = [
     // whose bevels are the thing to lose
     opts: { width: 480, trim: "alpha" },
   },
+  {
+    what: "RedJack's title card",
+    src: at("../../redjack/assets/redjack-full.png"),
+    out: at("../public/card-redjack.png"),
+    // the artwork has a transparency checkerboard painted into it, and
+    // redjack/tools/mkredjacklogo.ts says how it comes out
+    key: keyCheckerboard,
+    opts: { width: 480, trim: "alpha", trimThreshold: 8 },
+  },
 ];
 
 for (const job of JOBS) {
-  const img = resizeLogo(new Uint8Array(readFileSync(job.src)), job.opts);
+  let bytes: Uint8Array = new Uint8Array(readFileSync(job.src));
+  if (job.key) {
+    const src = decodePNG(bytes);
+    job.key(src.rgba, src.width, src.height);
+    bytes = encodePNG(src.rgba, src.width, src.height, { compress: true });
+  }
+  const img = resizeLogo(bytes, job.opts);
   writeFileSync(job.out, encodePNG(img.rgba, img.width, img.height, { compress: true }));
   const before = readFileSync(job.src).length;
   const after = readFileSync(job.out).length;
