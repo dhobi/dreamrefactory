@@ -115,6 +115,14 @@ const painted = (): Promise<void> => page.evaluate(() => new Promise<void>((r) =
 let mouse: [number, number] | null = null;
 async function perform(g: Gesture): Promise<void> {
   if ("key" in g) return g.g === "keydown" ? page.keyboard.down(KEYS[g.key] ?? g.key) : page.keyboard.up(KEYS[g.key] ?? g.key);
+  if (g.g === "menu") {
+    // the bar's menu, then its item, as a hand does it (src/menu.ts)
+    const item = page.locator(`.wbar-item[data-id="${g.id}"]`);
+    await item.locator("xpath=ancestor::div[contains(@class,'wbar-menu')]").locator(".wbar-title").dispatchEvent("pointerdown");
+    await item.click();
+    mouse = null;
+    return;
+  }
   const p = at(g.x, g.y);
   if (!mouse || mouse[0] !== p[0] || mouse[1] !== p[1]) await page.mouse.move(p[0], p[1]);
   mouse = p;

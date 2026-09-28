@@ -38,7 +38,48 @@ const GROUND = 246;
 const isGround = (r: number, g: number, b: number): boolean =>
   Math.max(r, g, b) - Math.min(r, g, b) <= 8 && Math.min(r, g, b) >= 224;
 
-export function keyCheckerboard(rgba: Uint8Array, w: number, h: number): void {
+/**
+ * One square of the checkerboard exactly — colourless and at one of its two
+ * levels — which is narrower than {@link isGround}: a highlight on metal is
+ * near-white too, but it is never both levels side by side.
+ */
+const isSquare = (r: number, g: number, b: number): boolean => {
+  const hi = Math.max(r, g, b);
+  const lo = Math.min(r, g, b);
+  return hi - lo <= 3 && (lo >= 250 || (lo >= 237 && hi <= 244));
+};
+
+/**
+ * The checkerboard left inside a closed shape — the hole in an O, the gap a
+ * letter's serif closes off — which a flood from the border cannot reach. A
+ * patch of {@link isSquare} pixels is one of those when it is big enough to be
+ * squares and holds both of their levels, each a quarter of it at least; a
+ * chrome letter's specular spots are near-white but all one level.
+ */
+function enclosedSquares(rgba: Uint8Array, w: number, h: number): number[] {
+  const seen = new Uint8Array(w * h);
+  const square = (p: number): boolean => isSquare(rgba[p * 4], rgba[p * 4 + 1], rgba[p * 4 + 2]);
+  const seeds: number[] = [];
+  for (let p = 0; p < w * h; p++) {
+    if (seen[p] || !square(p)) continue;
+    const patch = [p];
+    seen[p] = 1;
+    let light = 0;
+    for (let k = 0; k < patch.length; k++) {
+      const q = patch[k];
+      if (rgba[q * 4] >= 250) light++;
+      const x = q % w;
+      for (const r of [x > 0 ? q - 1 : -1, x < w - 1 ? q + 1 : -1, q - w, q + w]) {
+        if (r >= 0 && r < w * h && !seen[r] && square(r)) (seen[r] = 1), patch.push(r);
+      }
+    }
+    const share = light / patch.length;
+    if (patch.length >= 250 && share >= 0.25 && share <= 0.75) for (const q of patch) seeds.push(q);
+  }
+  return seeds;
+}
+
+export function keyCheckerboard(rgba: Uint8Array, w: number, h: number, opts: { holes?: boolean } = {}): void {
   const ground = new Uint8Array(w * h);
   const stack: number[] = [];
   const push = (p: number): void => {
@@ -50,6 +91,7 @@ export function keyCheckerboard(rgba: Uint8Array, w: number, h: number): void {
   };
   for (let x = 0; x < w; x++) (push(x), push((h - 1) * w + x));
   for (let y = 0; y < h; y++) (push(y * w), push(y * w + w - 1));
+  if (opts.holes) for (const p of enclosedSquares(rgba, w, h)) push(p);
   while (stack.length) {
     const p = stack.pop()!;
     const x = p % w;

@@ -378,6 +378,29 @@ export class City {
   private *button(y: number, x: number): Co {
     const i = Panel.buttonAt(y, x);
     if (i < 0) return;
+    yield* this.press(i);
+  }
+
+  /**
+   * 0x417412: a menu command, between one thing and the next — File ▸ Save as
+   * the save button, Help ▸ Help as the help button, Settings ▸ Keys its
+   * dialog (0x417495), File ▸ Exit the game ended there and then (0x41745e), no
+   * confirmation, the title again.
+   */
+  private *command(c: { menu: number; item: number }): Co {
+    if (c.menu === 2 && c.item === 3) yield* this.press(1);
+    if (c.menu === 1 && c.item === 2) yield* this.press(0);
+    if (c.menu === 4 && c.item === 6) yield* this.m.keysDialog();
+    if (c.menu === 2 && c.item === 4) {
+      this.m.log("File ▸ Exit: the game ended, the title again");
+      Object.assign(this.p, { came: 0, elevator: 0, day: 0 });
+      this.m.quitAsked = true;
+      this.next = 0;
+    }
+  }
+
+  /** 0x4175c3 for button `i` */
+  private *press(i: number): Co {
     this.setMode(i);
     if (this.hud.mode === 0) yield* this.panel.help(this.day, () => this.showFrame(this.rest), this.clut);
     if (this.hud.mode === 1 && this.panel.save) yield* this.panel.save();
@@ -400,9 +423,10 @@ export class City {
       this.hud.mode = was;
       return;
     }
-    const modes: Record<string, number> = { h: 2, j: 3, k: 4, l: 5 };
-    if (k in modes) return this.setMode(modes[k]);
-    const kind = k === "w" || k === "ArrowUp" ? FORWARD : k === "a" || k === "ArrowLeft" ? LEFT : k === "d" || k === "ArrowRight" ? RIGHT : 0;
+    // 0x40666d: the key table's action — 1–3 a step, 4–7 navigation and the three weapons
+    const action = this.m.action(key);
+    if (action >= 4) return this.setMode(action - 2);
+    const kind = [0, FORWARD, LEFT, RIGHT][action] ?? 0;
     if (!kind) return;
     if (this.hud.mode === 2) this.setMode(3);
     while ((yield* this.move(kind)) && this.m.keysHeld.has(key)) {}
@@ -703,6 +727,11 @@ export class City {
         Object.assign(this.p, { elevator: 0, came: 0, day: 0 });
         yield* this.m.fadeOut();
         return 0;
+      }
+      const c = this.m.commands.shift();
+      if (c) {
+        yield* this.command(c);
+        continue;
       }
       const e = this.m.take();
       this.busy = !!e;

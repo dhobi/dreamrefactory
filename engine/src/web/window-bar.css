@@ -1,0 +1,244 @@
+/*
+ * The game window's menu bar (window-bar.ts) and its dialog boxes
+ * (window-dialog.ts): the classic grey Windows look, on the game's frame.
+ *
+ * These colours are the Windows system palette, not the page's: the bar is part
+ * of the game's window, as the canvas is, and draws the way that window did
+ * whichever site theme is around it. Every size is in `--wbar-s`, the frame's
+ * width over 512 (window-bar.ts keeps it), so the bar scales with the picture —
+ * an 8-point bar on a 512-pixel window, doubled on a doubled one.
+ */
+.wbar-frame {
+  --wbar-s: 1;
+}
+.wbar-frame,
+.wdlg-layer {
+  --wbar-face: #c0c0c0;
+  --wbar-light: #dfdfdf;
+  --wbar-hi: #ffffff;
+  --wbar-shadow: #808080;
+  --wbar-dark: #000000;
+  --wbar-select: #000080;
+  --wbar-select-text: #ffffff;
+  --wbar-px: max(1px, calc(var(--wbar-s, 1) * 1px));
+}
+
+.wbar {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: stretch;
+  height: calc(var(--wbar-s) * 18px);
+  padding: 0 calc(var(--wbar-s) * 2px);
+  background: var(--wbar-face);
+  border-bottom: var(--wbar-px) solid var(--wbar-shadow);
+  box-shadow: 0 var(--wbar-px) 0 var(--wbar-hi);
+  color: var(--wbar-dark);
+  font: calc(var(--wbar-s) * 11px) / 1 "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Arial, sans-serif;
+  line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.wbar[hidden] {
+  display: none;
+}
+.wbar u {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+.wbar-title,
+.wbar-item {
+  box-sizing: border-box;
+  cursor: default;
+}
+
+.wbar-menu {
+  position: relative;
+  display: flex;
+}
+.wbar-title {
+  display: flex;
+  align-items: center;
+  padding: 0 0.6em;
+  white-space: nowrap;
+}
+.wbar-title.hot {
+  background: var(--wbar-select);
+  color: var(--wbar-select-text);
+}
+
+.wbar-drop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 60;
+  min-width: 11em;
+  padding: calc(var(--wbar-s) * 3px);
+  background: var(--wbar-face);
+  box-shadow:
+    inset calc(var(--wbar-px) * -1) calc(var(--wbar-px) * -1) var(--wbar-dark),
+    inset var(--wbar-px) var(--wbar-px) var(--wbar-light),
+    inset calc(var(--wbar-px) * -2) calc(var(--wbar-px) * -2) var(--wbar-shadow),
+    inset calc(var(--wbar-px) * 2) calc(var(--wbar-px) * 2) var(--wbar-hi);
+}
+.wbar-drop[hidden] {
+  display: none;
+}
+.wbar-item {
+  display: grid;
+  grid-template-columns: 1.6em 1fr auto;
+  align-items: center;
+  width: 100%;
+  padding: 0.3em 1em 0.3em 0;
+  white-space: nowrap;
+}
+.wbar-check {
+  text-align: center;
+}
+.wbar-hint {
+  padding-left: 2.2em;
+}
+.wbar-item.hot {
+  background: var(--wbar-select);
+  color: var(--wbar-select-text);
+}
+.wbar-item.disabled {
+  color: var(--wbar-shadow);
+  text-shadow: var(--wbar-px) var(--wbar-px) 0 var(--wbar-hi);
+}
+.wbar-item.disabled.hot {
+  color: var(--wbar-shadow);
+  text-shadow: none;
+}
+.wbar-sep {
+  margin: calc(var(--wbar-s) * 3px) var(--wbar-px);
+  border-top: var(--wbar-px) solid var(--wbar-shadow);
+  border-bottom: var(--wbar-px) solid var(--wbar-hi);
+}
+
+/* Fullscreen (engine/src/web/fullscreen.ts puts `.fs` on the stage): the picture
+   has the whole screen, and the bar lies over its top edge, out of sight until
+   the pointer reaches it or a menu is up. */
+.fs .wbar-frame {
+  overflow: hidden;
+}
+.fs .wbar-frame > .wbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  transform: translateY(-110%);
+  transition: transform 0.12s ease-out;
+}
+.fs .wbar-frame > .wbar.reveal,
+.fs .wbar-frame > .wbar.active {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fs .wbar-frame > .wbar {
+    transition: none;
+  }
+}
+
+/* A dialog box (window-dialog.ts): a layer over the whole frame, which takes the
+   pointer as a modal dialog did, and the box centred on it. The controls sit at
+   their template's positions; the text is the system font's bold. */
+.wdlg-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wdlg {
+  padding: calc(var(--wbar-s, 1) * 3px);
+  background: var(--wbar-face);
+  color: var(--wbar-dark);
+  font: 700 calc(var(--wbar-s, 1) * 12px) / 1.25 "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Arial, sans-serif;
+  box-shadow:
+    inset calc(var(--wbar-px) * -1) calc(var(--wbar-px) * -1) var(--wbar-dark),
+    inset var(--wbar-px) var(--wbar-px) var(--wbar-light),
+    inset calc(var(--wbar-px) * -2) calc(var(--wbar-px) * -2) var(--wbar-shadow),
+    inset calc(var(--wbar-px) * 2) calc(var(--wbar-px) * 2) var(--wbar-hi),
+    0 calc(var(--wbar-s, 1) * 4px) calc(var(--wbar-s, 1) * 16px) rgb(0 0 0 / 0.35);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.wdlg-caption {
+  padding: calc(var(--wbar-s, 1) * 3px) calc(var(--wbar-s, 1) * 4px);
+  background: var(--wbar-select);
+  color: var(--wbar-select-text);
+  white-space: nowrap;
+}
+.wdlg-client {
+  position: relative;
+}
+.wdlg-client > * {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 0;
+  font: inherit;
+}
+.wdlg-static {
+  overflow: hidden;
+}
+.wdlg-center {
+  text-align: center;
+}
+/* `input.` and `:focus` too, to outrank a site's `input[type="text"]:focus` */
+.wdlg input.wdlg-edit,
+.wdlg input.wdlg-edit:focus,
+.wdlg input.wdlg-edit:focus-visible {
+  padding: 0 calc(var(--wbar-s, 1) * 3px);
+  border: 0;
+  border-radius: 0;
+  background: var(--wbar-hi);
+  color: var(--wbar-dark);
+  font: inherit;
+  box-shadow:
+    inset var(--wbar-px) var(--wbar-px) var(--wbar-shadow),
+    inset calc(var(--wbar-px) * 2) calc(var(--wbar-px) * 2) var(--wbar-dark),
+    inset calc(var(--wbar-px) * -1) calc(var(--wbar-px) * -1) var(--wbar-hi),
+    inset calc(var(--wbar-px) * -2) calc(var(--wbar-px) * -2) var(--wbar-light);
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* two classes deep, so a site's own `button` and `button:hover` rules lose */
+.wdlg .wdlg-button,
+.wdlg .wdlg-button:hover {
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+  transition: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--wbar-face);
+  color: var(--wbar-dark);
+  cursor: default;
+  box-shadow:
+    inset calc(var(--wbar-px) * -1) calc(var(--wbar-px) * -1) var(--wbar-dark),
+    inset var(--wbar-px) var(--wbar-px) var(--wbar-hi),
+    inset calc(var(--wbar-px) * -2) calc(var(--wbar-px) * -2) var(--wbar-shadow),
+    inset calc(var(--wbar-px) * 2) calc(var(--wbar-px) * 2) var(--wbar-light);
+}
+.wdlg .wdlg-button.wdlg-default {
+  outline: var(--wbar-px) solid var(--wbar-dark);
+  outline-offset: 0;
+}
+.wdlg .wdlg-button:active {
+  box-shadow:
+    inset var(--wbar-px) var(--wbar-px) var(--wbar-dark),
+    inset calc(var(--wbar-px) * 2) calc(var(--wbar-px) * 2) var(--wbar-shadow);
+}
+.wdlg input.wdlg-edit::selection {
+  background: var(--wbar-select);
+  color: var(--wbar-select-text);
+}
+/* Windows' dotted focus rectangle, inside the bevel, in place of a site's focus ring */
+.wdlg .wdlg-button:focus-visible {
+  outline: var(--wbar-px) dotted var(--wbar-dark);
+  outline-offset: calc(var(--wbar-s, 1) * -4px);
+}

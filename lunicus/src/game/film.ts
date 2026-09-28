@@ -27,6 +27,12 @@ export interface FilmHooks {
   word?: () => Co;
   deed?: () => Co;
   button?: (index: number) => void;
+  /**
+   * Asked on every tick a frame is held: something to play over the film
+   * first — the title's Help ▸ About and Help (0x417760), over the title's
+   * loop. It leaves the screen as it found it.
+   */
+  aside?: () => Co | null;
 }
 
 /** one film; answers how it ended and, for a chain, where to */
@@ -73,6 +79,12 @@ export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmH
     m.filmWaiting = waits;
     m.filmHotspots = waits ? live : [];
     for (let t = 0; waits || t < hold; t++) {
+      const aside = hooks.aside?.();
+      if (aside) {
+        yield* aside;
+        m.filmWaiting = waits;
+        m.filmHotspots = live;
+      }
       const e = m.take();
       if (e?.kind === "down") clicked = { x: e.x - film.left, y: e.y - film.top };
       if (e?.kind === "key" && e.key === ESCAPE) skipped = true;

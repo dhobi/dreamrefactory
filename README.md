@@ -36,10 +36,10 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Seven sites build out of this one repository, each from its own root and its own
+Eight sites build out of this one repository, each from its own root and its own
 port, so they can run at once. **The two that are about the whole project come
-first, then one port per game in the order the engine shipped them** — so the next
-game to be ported takes 5180 and nothing has to move:
+first, then one port per game in the order it was ported** — so the next game
+to be ported takes 5181 and nothing has to move:
 
 | | | |
 |---|---|---|
@@ -49,7 +49,8 @@ game to be ported takes 5180 and nothing has to move:
 | `npm run dev -w dust` | 5176 | Dust |
 | `npm run dev -w timelapse` | 5177 | Timelapse |
 | `npm run dev -w skullcracker` | 5178 | Skull Cracker |
-| `npm run dev -w redjack` | 5179 | RedJack — a prototype page, DreamFactory 5 |
+| `npm run dev -w redjack` | 5179 | RedJack, DreamFactory 5 |
+| `npm run dev -w lunicus` | 5180 | Lunicus, DreamFactory 0 |
 
 Each package owns its own commands. `-w <package>` runs one of them — `npm run
 speedrun -w taoot`, `npm run test:browser -w skullcracker` — and the root has only
@@ -89,6 +90,9 @@ Each top-level directory is a thing rather than a kind of file.
   `walk.html` beside it as the bench a level is opened on one at a time — and
   its own disassembler under `tools/`, because this game's logic is in `SC.EXE`
   and not in the data
+- **`lunicus/`** — Lunicus: one page and its own palette. No scripts at all: the
+  game is in `LUNICUS.EXE` and was ported from its disassembly, with the
+  machine suites under `tests/machine/` playing it through to the end
 - **`site/`** — the project's own web presence: the front door, the format
   editors, the chrome every page shares, and the UI-language axis
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as
@@ -106,12 +110,13 @@ Dependencies point one way only, and there is a test that says so
     timelapse     ←  engine, site
     skullcracker  ←  engine, site
     redjack       ←  engine, site
+    lunicus       ←  engine, site
 
-Nothing shared imports a game. The five palettes — Titanic's abyss-and-brass,
+Nothing shared imports a game. The palettes — Titanic's abyss-and-brass,
 Dust's dusk-and-ember, Timelapse's glass-and-chrome, Skull Cracker's
-gore-and-bone, the project's black-and-green — are five implementations of one
-39-role contract in `site/src/chrome.css`, which is structure and not a single
-colour.
+gore-and-bone, RedJack's wood-and-brass, Lunicus's navy, chrome and fire, the
+project's black-and-green — are implementations of one role contract in
+`site/src/chrome.css`, which is structure and not a single colour.
 
 ## Where it goes
 

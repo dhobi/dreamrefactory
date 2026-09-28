@@ -1,18 +1,19 @@
 /**
- * Lunicus's prototype page, laid out as RedJack's first one was.
+ * Lunicus's one page.
  *
  * *Lunicus* (1994) is the oldest game in the repository, on the engine
  * generation this port calls DreamFactory 0 (docs/engine/formats/dreamfactory-0.md).
- * In the project's own palette (no Lunicus design yet), and unbuilt on purpose: there is no `build` script, so the root's
- * `build --workspaces --if-present` passes it by.
+ * Built to `dist/lunicus` and released on a `lunicus-v*` tag like every game
+ * (.github/workflows/deploy.yml).
  *
  * Port 5180, the next one after RedJack's 5179.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
+import { siblingSignposts } from "../tools/vite-siblings";
 
 /** this file's own directory, not the working directory */
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -44,11 +45,29 @@ export default defineConfig({
   base: "./",
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
-  plugins: [replays(), gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") })],
+  plugins: [
+    replays(),
+    gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") }),
+    // the top bar links out of this package, and in dev those paths belong to
+    // other Vite roots (tools/vite-siblings.ts)
+    siblingSignposts([
+      { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
+      { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
+      { path: "taoot", command: "npm run dev -w taoot", port: 5175, what: "Titanic" },
+      { path: "dust", command: "npm run dev -w dust", port: 5176, what: "Dust" },
+      { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
+      { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
+      { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
+    ]),
+  ],
   server: {
     port: 5180,
     strictPort: true,
     // a CD rip is not a source tree; see the note in taoot/vite.config.ts
     watch: { ignored: ["**/gamefiles/**"] },
+  },
+  build: {
+    outDir: resolve(HERE, "../dist/lunicus"),
+    emptyOutDir: true,
   },
 });

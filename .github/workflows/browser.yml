@@ -50,6 +50,7 @@ on:
           - taoot
           - dust
           - skullcracker
+          - lunicus
       suite:
         description: "which browser suite — a script in THAT package (blank = that game's own full run; test:browser:endgame, test:browser:climb, …)"
         required: false

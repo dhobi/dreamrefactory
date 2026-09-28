@@ -68,6 +68,12 @@ export default defineConfig({
       emit: false,
     }),
     gamefilesManifest({
+      gamefiles: resolve(HERE, "../lunicus/gamefiles"),
+      publicDir: resolve(HERE, "../lunicus/public"),
+      mount: "/lunicus",
+      emit: false,
+    }),
+    gamefilesManifest({
       gamefiles: resolve(HERE, "../redjack/gamefiles"),
       publicDir: resolve(HERE, "../redjack/public"),
       mount: "/redjack",
@@ -90,6 +96,7 @@ export default defineConfig({
       { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
       { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
       { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
+      { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
     ]),
   ],
   server: {

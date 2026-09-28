@@ -19,7 +19,7 @@ import { Input, type Checkpoint, type Gesture, type Recording } from "../../src/
 
 export type { Checkpoint, Recording };
 
-const RIP = resolve(import.meta.dirname, "../../gamefiles/LUNICUS");
+export const RIP = resolve(import.meta.dirname, "../../gamefiles/LUNICUS");
 export const haveRip = (): boolean => existsSync(join(RIP, "lunicus/lunicus.exe"));
 
 /** the rip as the machine asks for it: paths under `LUNICUS/`, lowercase as ripped */
@@ -142,8 +142,8 @@ export function headless(opts: LunicusOptions = {}): Headless {
   const idle = (): boolean =>
     // the game won: the machine has stopped at the title
     game.won ||
-    (game.phase === "base" && !m.film && !game.base?.talkState.talk && m.events.length === 0 && baseIdle()) ||
-    (game.phase === "city" && !!game.city?.world && !game.city.busy && game.city.next === null && !m.film && m.events.length === 0);
+    (game.phase === "base" && !m.film && !game.base?.talkState.talk && m.events.length === 0 && m.commands.length === 0 && baseIdle()) ||
+    (game.phase === "city" && !!game.city?.world && !game.city.busy && game.city.next === null && !m.film && m.events.length === 0 && m.commands.length === 0);
   const baseIdle = (): boolean => {
     const b = game.base;
     return !!b && !b.busy && b.next === null && b.cam.frame === 0 && b.crew.every((c) => c.state === 0);

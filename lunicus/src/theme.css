@@ -1,207 +1,274 @@
 /*
- * Lunicus's page, in the PROJECT's palette — RedJack's first page's layout.
+ * Lunicus's palette: the crew's navy, chrome, the gold bevel, and fire.
  *
- * No Lunicus design yet — no title card, no colours sampled out of its box art —
- * so this wears site/src/theme.css, the black-and-green the front door and the
- * editors wear, and adds only the layout a game page needs: the picture, the log
- * over it, and the rows of controls under it. Every colour below is a role from
- * the chrome's contract (site/src/chrome.css), so the day this game gets a palette
- * of its own it replaces the import and nothing under it changes.
+ * Sampled from its own title card — LUNICUS in cracked chrome slab letters,
+ * each in a gold bevel with a dark rule round it; under them an olive gunship
+ * and its fighters flying out of an explosion; and under that the five faces
+ * of the base's crew in their navy uniforms. The one card of the six that is
+ * LIT from inside the picture: everything in it catches the fire's light.
+ *
+ * The seventh implementation of the contract in site/src/chrome.css, with the
+ * same role names and top bar as the others. This file used to be one `@import`
+ * of the project's black-and-green, plus a note that the game had no artwork to
+ * sample; the artwork arrived.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * A census of `public/lunicus-logo.png` — the keyed card (tools/mklunicuslogo.ts),
+ * by hue family and then by quantised cell, each stop the MEAN of its cell:
+ *
+ *   black          27.0%   the space the explosion is in, and every rule round
+ *                          a letter; #040202 alone is a fifth of the card
+ *   yellow, light  10.4%   the fire's white-hot heart, and the gold's lit lip
+ *   orange, mid     9.3%   the fire, #f95803 to #fb9704
+ *   orange, dark    8.4%   the bevel falling into shadow
+ *   yellow, mid     7.5%   the bevel's face, #fbb805 to #fce708
+ *   red, dark       7.3%   the fire's smoke, the explosion's edge
+ *   red, mid        5.7%   the flames' outer lick
+ *   yellow, dark    4.4%   the gunship's olive hull
+ *   blue, dark      3.2%   the uniforms — #020837, #040a48, #060a56
+ *   grey            7.5%   the chrome, across three values
+ *   blue, light     2.3%   the sky the chrome reflects, #a7bbe0 to #d7e8f6
+ *
+ * Two lines of that decide how the page works. Nearly half the card is FIRE,
+ * red through yellow, and it is the one thing on it that moves. So fire means
+ * live, as silver does on RedJack's page: the gauge burns, the spinner burns,
+ * and nothing that just sits there is on fire. The ground is not the card's
+ * commonest black, which is the warm black Dust, Skull Cracker and RedJack
+ * already stand on; it is the crew's navy, the 3% of the card that is cold
+ * and dark, which is the base these people live in.
+ *
+ * What the colours MEAN
+ * ---------------------
+ *   night   it is ground — the uniforms at their darkest; #040716 is the
+ *           commonest navy cell in the card's black
+ *   steel   it is a joint — the chrome in shadow, so a border is the edge of a
+ *           metal plate
+ *   chrome  it is a word — the letters' faces, and the sky they reflect for
+ *           the brightest word
+ *   gold    it is an edge, or it can be pressed — the bevel round every letter
+ *   fire    it is LIVE — the gauge's burn, the spinner, `--ok`; nothing else
  */
-@import "@dreamfactory/site/theme.css";
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED. */
+@import "@dreamfactory/site/chrome.css";
 /* the saved-games dialog, drawn in this palette's roles */
 @import "@dreamfactory/engine/web/save-browser.css";
+/* the game window's menu bar, on the frame over the picture (src/menu.ts) — in
+   the Windows system grey, not in these roles: it is the game's window */
+@import "@dreamfactory/engine/web/window-bar.css";
 
-/* ---- the page --------------------------------------------------------- */
+/* ---- night: the ground -------------------------------------------------- */
 
-body {
-  /* no page scroll sideways at phone width, whatever a long log line does */
-  overflow-x: hidden;
-}
-
-#stage {
-  position: relative;
-  width: min(100%, 1280px);
-  padding: 12px 16px 0;
-}
-
-/* ---- the loading gauge and the button that replaces it ---------------- */
-
-#boot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin: 8px auto 14px;
-  width: min(100%, 460px);
-}
-#gauge {
-  width: 100%;
-}
-#bar {
-  height: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--inset);
-  overflow: hidden;
-}
-#charge {
-  height: 100%;
-  background: var(--accent);
-  transition: width 380ms ease-out;
-}
-#bootline {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 6px;
-  font: 12px/1.4 var(--font-mono);
-  color: var(--text-dim);
-}
-#bootsay {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#start {
-  display: none;
-  min-width: 10rem;
-}
-#boot.ready #gauge {
-  display: none;
-}
-#boot.ready #start {
-  display: inline-block;
-}
-body.playing #boot {
-  display: none;
+/*
+ * The uniforms, read from their shadows up: #040716 in the black family, then
+ * the blue-dark cells #04082a, #020837, #040a48 and #060a56. The two stops
+ * between the first two are the same hue at the values a panel needs, which the
+ * card, being all folds of cloth, does not happen to hold on its own.
+ */
+:root {
+  --night-1000: #040716;
+  --night-900: #060b22;
+  --night-800: #04082a;
+  --night-700: #0a1034;
+  --night-600: #020837;
+  --night-500: #040a48;
+  --night-400: #060a56;
 }
 
-/* ---- the picture ------------------------------------------------------ */
+/* ---- steel: the chrome in shadow, which is what a border is here -------- */
 
-#frame {
-  position: relative;
-  margin: 0 auto;
-  width: 100%;
-  max-width: 1280px;
-  border: 1px solid var(--border);
-  background: #000;
-  line-height: 0;
-}
-/* the canvas is the game window's 512x384 doubled (src/main.ts); the page only ever
-   shrinks it, which is soft at worst, never a non-integer nearest upscale */
-#screen {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 3;
-  image-rendering: auto;
-  touch-action: none;
+/*
+ * The chrome's dark side: #2c2c2c and #3a3a44 in the grey-dark cells, then the
+ * sky's reflection going dark, #576a86 and #6a7686. A cold grey on a navy page
+ * reads as a plate's edge, not as a line drawn on it.
+ */
+:root {
+  --steel-600: #1d2238;
+  --steel-500: #2c2f44;
+  --steel-400: #3a3a44;
+  --steel-300: #576a86;
+  --steel-200: #6a7686;
 }
 
+/* ---- chrome: every word on the page ------------------------------------- */
 
-/* ---- the log, a panel over the picture -------------------------------- */
-
-#log {
-  position: absolute;
-  inset: 12px 16px 0;
-  margin: 0;
-  z-index: 4;
-  overflow: auto;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(3px);
-  border: 1px solid var(--border-strong);
-  color: var(--text);
-  font: 12px/1.6 var(--font-mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-#log[hidden] {
-  display: none;
-}
-/* its two voices: a step the boot took, and something it had to complain about */
-#log b {
-  color: var(--accent);
-  font-weight: normal;
-}
-#log i {
-  color: var(--alarm, #e07a6a);
-  font-style: normal;
+/*
+ * A scanline across the L's stem: #a6a4a2 to #b8b8b1 across the face, #e9e3da
+ * where it catches the light, then the grey family's mean #c2c2c0 and the
+ * mid-grey #7c7f80 where the face turns away. The lit chrome is warm, from the
+ * fire. The sky the letters reflect, #a7bbe0 and #d7e8f6, is the coldest light
+ * on the card, and it is the brightest word.
+ */
+:root {
+  --chrome-100: #fdfdf7;
+  --chrome-200: #e9e3da;
+  --chrome-300: #c2c2c0;
+  --chrome-400: #b5b6b5;
+  --chrome-500: #969694;
+  --chrome-600: #7c7f80;
+  --sky-100: #d7e8f6;
+  --sky-200: #a7bbe0;
 }
 
-/* ---- the controls under it -------------------------------------------- */
+/* ---- gold: the bevel ---------------------------------------------------- */
 
-#under {
-  width: min(100%, 1280px);
-  padding: 8px 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-#under .bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-/* a row whose only child is an empty error line is not a row */
-#under .bar:has(> #err:empty:only-child) {
-  display: none;
-}
-#err {
-  color: var(--alarm, #e07a6a);
-  font: 12px/1.4 var(--font-mono);
-}
-#loc {
-  margin: 0;
-  font: 12px/1.5 var(--font-mono);
-  color: var(--text-dim);
-  white-space: pre-wrap;
-}
-#loc:empty {
-  display: none;
-}
-.k {
-  display: inline-block;
-  padding: 0 5px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  font: 11px/1.5 var(--font-mono);
-  color: var(--text-bright);
-}
-#under .keyhint {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--text-dim);
-  font-size: 13px;
+/*
+ * A scanline down the I's top serif, from the rule outside into the chrome:
+ *
+ *   #0e0600   the dark rule
+ *   #f8f574   the bevel's lit lip, the brightest gold on the card
+ *   #efc034   #e3b83e   its face
+ *   #d57801   #c77401   turning
+ *   #b16b05   #864705   falling away
+ *   #733500   #572700   into the shadow side
+ *   #3e1c01   the foot
+ */
+:root {
+  --gold-100: #f8f574;
+  --gold-200: #efc034;
+  --gold-300: #e3b83e;
+  --gold-400: #d57801;
+  --gold-500: #b16b05;
+  --gold-600: #864705;
+  --gold-700: #572700;
+  --gold-800: #3e1c01;
+  --rule: #0e0600;
 }
 
-/* ---- fullscreen ------------------------------------------------------- */
+/* ---- fire: the explosion ------------------------------------------------ */
 
-/* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
-   engine/src/web/fullscreen.ts pins the stage over the viewport instead */
-#stage.fs {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: grid;
-  place-items: center;
-  width: 100dvw;
-  height: 100dvh;
-  padding: 0;
-  background: #000;
+/*
+ * The explosion from its heart outwards: the light-yellow family's #fdfca8, the
+ * yellow-mid face #fcd706 and #fbb805, orange-mid #fb9704, #fb7803 and #f95803,
+ * then the flames' red-mid #c92c13 and the smoke at their edge, #79140a and
+ * #560b07.
+ *
+ * Only for what is LIVE:
+ *
+ *   1  the boot gauge's burn
+ *   2  the network spinner in the corner of the picture
+ *   3  `--ok`
+ *
+ * Not for text, not for a border, not for the ground.
+ */
+:root {
+  --fire-100: #fdfca8;
+  --fire-200: #fcd706;
+  --fire-300: #fbb805;
+  --fire-400: #fb9704;
+  --fire-500: #fb7803;
+  --fire-600: #f95803;
+  --fire-700: #c92c13;
+  --fire-800: #79140a;
+  --fire-900: #560b07;
 }
-#stage.fs #boot {
-  display: none;
+
+/* ---- the two extras the pages use ------------------------------------- */
+
+:root {
+  /* A warning has to be told from the fire, so it is not orange: it is the
+     red-light cell #fb663a pushed towards pink, where the flames' reflection
+     lies on a face (red light, 0.1%). 7.3:1 on the ground. */
+  --alarm: #ff6f5e;
+  --ok: var(--fire-200);
 }
-#stage.fs #frame {
-  border: 0;
-  width: auto;
-  max-width: none;
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  /* the letters are a slab serif cut in metal; the page carries no webfont for
+     them, so the display face is the nearest slab each system has, then its
+     serif */
+  --font-display: Rockwell, "Rockwell Nova", "Roboto Slab", "DejaVu Serif", ui-serif, Georgia, serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  /* plates of metal with a bevel: square, the corner just broken */
+  --radius: 2px;
+  --radius-lg: 4px;
+
+  /* what the title card sits in: the fire's own light */
+  --glow:
+    0 0 0 1px rgba(239, 192, 52, 0.24), 0 0 36px -6px rgba(251, 120, 3, 0.32);
 }
-#stage.fs #screen {
-  width: min(100dvw, calc(100dvh * 4 / 3));
-  height: min(100dvh, calc(100dvw * 3 / 4));
+
+/* ---- the roles the chrome asks for ------------------------------------ */
+
+:root {
+  --bg: var(--night-1000);
+  --panel: var(--night-800);
+  --raised: var(--night-700);
+  --inset: var(--night-900);
+
+  --border: var(--steel-500);
+  --border-strong: var(--steel-400);
+  --border-hover: var(--gold-500);
+
+  --text: var(--chrome-300);
+  --text-bright: var(--sky-100);
+  --text-dim: var(--chrome-600);
+  --text-mute: var(--steel-300);
+
+  /* the bevel's gold and not the chrome: chrome is what the words are, and a
+     link has to be a different thing from a word. #efc034 is 11.7:1 here */
+  --accent: var(--gold-200);
+  --accent-hover: var(--gold-100);
+  --accent-line: var(--gold-600);
+  --selection-bg: rgba(251, 120, 3, 0.38);
+
+  --mark: var(--chrome-100);
+  --mark-glow: rgba(239, 192, 52, 0.32);
+
+  --topbar-top: var(--night-600);
+  --topbar-bottom: var(--night-1000);
+
+  /* the fire, thinned to a wash — the one place the brand is allowed to be
+     large and quiet */
+  --depth-light: rgba(251, 120, 3, 0.12);
+
+  --button-hover-bg: var(--night-600);
+  --button-active-bg: var(--night-500);
+  --state-border: var(--steel-300);
+
+  --rule-mid: var(--gold-500);
+  --rule-bright: var(--gold-200);
+
+  /* The one control that commits, and it is a LETTER: a chrome face in a gold
+     bevel, the navy the page is made of for its label. Navy on #b5b6b5 is 9.9:1. */
+  --commit-face-bottom: var(--chrome-400);
+  --commit-face-deep: var(--chrome-600);
+  --commit-edge: var(--gold-300);
+  --commit-edge-hover: var(--gold-100);
+  --commit-text: var(--night-1000);
+  --commit-text-hover: var(--night-1000);
+
+  --menu-panel: var(--night-700);
+  --shadow-drop: rgb(0 0 0 / 72%);
+}
+
+/* ---- the two densities ------------------------------------------------ */
+
+/*
+ * The same split the other pages carry: `deep` is the game page, with as little
+ * chrome as it can get away with, and `work` is for a page with panels on it.
+ */
+body.deep {
+  --bg: var(--night-1000);
+  --panel: var(--night-900);
+  --raised: var(--night-800);
+}
+body.work {
+  --bg: var(--night-900);
+  --panel: var(--night-700);
+  --raised: var(--night-600);
+  --inset: var(--night-1000);
+  --border: var(--steel-400);
+  --border-strong: var(--steel-300);
+  --gap: 0.65rem;
 }

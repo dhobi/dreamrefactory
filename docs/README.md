@@ -55,8 +55,8 @@ fourth, **[Skull Cracker](skullcracker/)**, is read but not played: its discs op
 completely and its films run, and there is no game under them to boot. A fifth,
 **[RedJack](redjack/)** (1998, DreamFactory 5), runs as a prototype: it boots and
 its rooms, films and characters play, and it has not been played through.
-A sixth, **[Lunicus](lunicus/)** (DreamFactory 0), runs as a prototype too, and
-the whole game plays, from the intro to its queen.
+A sixth, **[Lunicus](lunicus/)** (DreamFactory 0), plays from the intro to its
+queen, and saves.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you

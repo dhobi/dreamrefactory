@@ -22,10 +22,13 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION } from "@dreamfactory/site/version";
 import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND } from "./game/data";
 import { Lunicus } from "./game/game";
-import { GAME_KEYS, Input, type Recording } from "./game/input";
+import { Input, type Recording } from "./game/input";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
+import { windowDialogOpen } from "@dreamfactory/engine/web/window-dialog";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { LUNICUS_SAVES, seedLunicusSaves } from "./saves";
+import { installMenu } from "./menu";
+import { askHighScoreName, editKeys } from "./dialogs";
 
 import type { GameFiles, Speaker } from "./game/machine";
 
@@ -146,6 +149,17 @@ const files: GameFiles = {
  * ------------------------------------------------------------------------- */
 
 let audio: AudioContext | null = null;
+/** Sound ▸ Sound Off … Level 7: the device's volume, which every channel goes through */
+let master: GainNode | null = null;
+let volume = 1;
+const out = (): AudioNode => {
+  if (!master) {
+    master = audio!.createGain();
+    master.gain.value = volume;
+    master.connect(audio!.destination);
+  }
+  return master;
+};
 const playing = new Set<AudioBufferSourceNode>();
 const speaker: Speaker = {
   play(samples, rate) {
@@ -154,7 +168,7 @@ const speaker: Speaker = {
     buf.getChannelData(0).set(samples);
     const src = audio.createBufferSource();
     src.buffer = buf;
-    src.connect(audio.destination);
+    src.connect(out());
     src.onended = () => playing.delete(src);
     playing.add(src);
     src.start();
@@ -172,8 +186,12 @@ const speaker: Speaker = {
     ambience = audio.createBufferSource();
     ambience.buffer = buf;
     ambience.loop = true;
-    ambience.connect(audio.destination);
+    ambience.connect(out());
     ambience.start();
+  },
+  volume(level) {
+    volume = level;
+    if (master) master.gain.value = level;
   },
 };
 /** the ambience's channel: one source, looping */
@@ -208,7 +226,43 @@ const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
   browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => (complain(String(e)), done()));
 };
 
-const game = new Lunicus(files, { speaker, saver, seed: params.has("seed") ? Number(params.get("seed")) : Date.now() & 0xffff, log: say });
+/* ------------------------------------------------------------------------- *
+ * LUNICUS.SCO — the key table and the high scores (game/sco.ts) — kept in the
+ * browser, and the two dialogs that change it. A driven or replayed run plays a
+ * machine run's gestures, so it has the defaults and asks nothing: a player's
+ * own keys or a name dialog would part it from the run.
+ * ------------------------------------------------------------------------- */
+
+const SCO_KEY = "lunicus.sco";
+const OWN_SCO = !DRIVE && !REPLAY;
+function storedSco(): Uint8Array | undefined {
+  try {
+    const b64 = localStorage.getItem(SCO_KEY);
+    return b64 ? Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function keepSco(bytes: Uint8Array): void {
+  try {
+    localStorage.setItem(SCO_KEY, btoa(String.fromCharCode(...bytes)));
+  } catch (e) {
+    complain(`the high scores and keys could not be kept: ${String(e)}`);
+  }
+}
+
+const game = new Lunicus(files, {
+  speaker,
+  saver,
+  seed: params.has("seed") ? Number(params.get("seed")) : Date.now() & 0xffff,
+  log: say,
+  ...(OWN_SCO && {
+    sco: storedSco(),
+    keepSco,
+    keysDialog: (fields, defaults, done) => editKeys($("frame"), fields, defaults, done),
+    askName: (done) => askHighScoreName($("frame"), done),
+  }),
+});
 const m = game.m;
 const image = ctx.createImageData(SCREEN_W, SCREEN_H);
 const off = new OffscreenCanvas(SCREEN_W, SCREEN_H);
@@ -264,6 +318,7 @@ function frame(now: number): void {
   draw();
   const s = status();
   if (s !== lastStatus) locEl.textContent = lastStatus = s;
+  menu.sync();
   requestAnimationFrame(frame);
 }
 
@@ -295,7 +350,7 @@ addEventListener("mouseup", (e) => {
 document.addEventListener("keydown", (e) => {
   if (focusOwnsKey(e.target, e.key)) return;
   // the saved-games dialog is modal, as the EXE's was: the game gets no key while it is up
-  if (savesOpen()) return;
+  if (savesOpen() || windowDialogOpen()) return;
   if (e.key === "b") return toggleLog();
   if (!running) return;
   if (REPLAY) {
@@ -304,7 +359,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "[") pace = Math.max(0.25, pace / 2);
     return;
   }
-  if (e.repeat) return (GAME_KEYS.has(e.key.length === 1 ? e.key.toLowerCase() : e.key) && e.preventDefault(), undefined); // a held arrow is the machine's to repeat
+  if (e.repeat) return (input.takes(e.key) && e.preventDefault(), undefined); // a held arrow is the machine's to repeat
   if (input.keyDown(e.key)) e.preventDefault();
 });
 document.addEventListener("keyup", (e) => void (REPLAY || input.keyUp(e.key)));
@@ -346,7 +401,8 @@ function replayTick(r: Replay): void {
     if ("key" in g) {
       if (g.g === "keydown") input.keyDown(g.key);
       else input.keyUp(g.key);
-    } else if (g.g === "down") input.down(g.x, g.y);
+    } else if (g.g === "menu") input.menu(g.id);
+    else if (g.g === "down") input.down(g.x, g.y);
     else if (g.g === "up") input.up(g.x, g.y);
     else input.move(g.x, g.y);
   }
@@ -455,7 +511,8 @@ async function enter(): Promise<void> {
 }
 
 $("start").addEventListener("click", () => void enter().catch((e) => complain(String(e))));
-$("loadBtn").addEventListener("click", () =>
+/** File ▸ Open (0x4184cc): the saved-games dialog, then the file's game */
+const openSaved = (): void =>
   void (async () => {
     // a replay plays a recorded game: no other game goes in
     if (REPLAY) return;
@@ -463,6 +520,8 @@ $("loadBtn").addEventListener("click", () =>
     if (!bytes) return;
     if (!running) await enter();
     game.openGame(bytes);
-  })().catch((e) => complain(String(e))),
-);
+  })().catch((e) => complain(String(e)));
+$("loadBtn").addEventListener("click", openSaved);
+/** the game window's menu bar, on the frame over the picture (src/menu.ts) */
+const menu = installMenu($("frame"), game, input, { open: openSaved, live: () => running && !REPLAY && !savesOpen() && !windowDialogOpen() });
 void boot().catch((e) => complain(String(e)));

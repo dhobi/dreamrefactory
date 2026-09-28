@@ -290,6 +290,29 @@ export const REDJACK: GameEditions = {
 };
 
 /**
+ * *Lunicus* — CyberFlix's first game, and the only one on what this port calls
+ * DreamFactory 0.
+ *
+ * There is no BOOTFILE and no script in it: the whole game is in `LUNICUS.EXE`,
+ * which `lunicus/` was ported from by disassembly, as Skull Cracker's was. What
+ * the files share with the later engines is the container, in an older version
+ * the `-v0` readers take (docs/engine/formats/dreamfactory-0.md).
+ */
+export const LUNICUS: GameEditions = {
+  title: "Lunicus",
+  short: "Lunicus",
+  dir: "lunicus",
+  mark: "mark-lunicus.svg",
+  editions: [{ code: "", name: "English", encoding: DEFAULT_ENCODING }],
+  storageKey: "lunicus.edition",
+  fallback: "",
+  // the game window's 512×384 (src/main.ts doubles it), which its films and
+  // its views are drawn into; no band, because there are no sets
+  screen: { width: 512, height: 384 },
+  developer: "CyberFlix",
+};
+
+/**
  * Games that deploy (a lane in `deploy.yml`, a target in `tools/release.mts`)
  * but are not in {@link GAMES}: their page is on the host at its own path and
  * nothing on the site links to it. None at the moment.
@@ -330,5 +353,7 @@ export function editionOfUrl(game: GameEditions, url: string): string {
  *
  * RedJack comes after it all the same: DreamFactory 5, the last engine and the
  * last game, which is where oldest-engine-first puts it.
+ *
+ * And Lunicus comes first: DreamFactory 0 and 1994, the oldest of both.
  */
-export const GAMES: readonly GameEditions[] = [DUST, TITANIC, TIMELAPSE, SKULLCRACKER, REDJACK];
+export const GAMES: readonly GameEditions[] = [LUNICUS, DUST, TITANIC, TIMELAPSE, SKULLCRACKER, REDJACK];

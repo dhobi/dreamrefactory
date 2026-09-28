@@ -266,6 +266,32 @@ export class Base {
    * Clicks and keys
    * ----------------------------------------------------------------------- */
 
+  /** 0x4175c3: help, save or navigation pressed */
+  private *button(i: number): Co {
+    this.hud.mode = i;
+    if (i === 0) yield* this.panelUi.help(this.day, () => this.showRest(), this.clut);
+    if (i === 1 && this.panelUi.save) yield* this.panelUi.save();
+    if (this.hud.mode === 1) this.hud.mode = 2;
+  }
+
+  /**
+   * 0x417412: a menu command, between one thing and the next — File ▸ Save as
+   * the save button, Help ▸ Help as the help button, Settings ▸ Keys its
+   * dialog (0x417495), File ▸ Exit the game ended there and then (0x41745e), no
+   * confirmation, the title again.
+   */
+  private *command(c: { menu: number; item: number }): Co {
+    if (c.menu === 2 && c.item === 3) yield* this.button(1);
+    if (c.menu === 1 && c.item === 2) yield* this.button(0);
+    if (c.menu === 4 && c.item === 6) yield* this.m.keysDialog();
+    if (c.menu === 2 && c.item === 4) {
+      this.m.log("File ▸ Exit: the game ended, the title again");
+      Object.assign(this.p, { came: 0, elevator: 0, day: 0 });
+      this.m.quitAsked = true;
+      this.next = 0;
+    }
+  }
+
   /** 0x40cbd2: a mouse-down */
   *click(y: number, x: number): Co {
     if (!inRect(VIEW, y, x)) {
@@ -273,11 +299,7 @@ export class Base {
       const i = Panel.buttonAt(y, x);
       if (i < 0) return yield* this.mapClick(y, x);
       if (i > 2) return;
-      this.hud.mode = i;
-      if (i === 0) yield* this.panelUi.help(this.day, () => this.showRest(), this.clut);
-      if (i === 1 && this.panelUi.save) yield* this.panelUi.save();
-      if (this.hud.mode === 1) this.hud.mode = 2;
-      return;
+      return yield* this.button(i);
     }
     if (this.hud.mode === 2) {
       for (const f of this.crew) {
@@ -341,9 +363,10 @@ export class Base {
     }
   }
 
-  /** 0x40cd18: a key — the arrows, held, keep walking */
+  /** 0x40cd18: a key — a step's key, held, keeps walking */
   *key(key: string): Co {
-    const kind = key === "ArrowUp" ? FORWARD : key === "ArrowLeft" ? LEFT : key === "ArrowRight" ? RIGHT : 0;
+    // 0x40cd1b: the key table's first three actions are the steps; the modes are the city's
+    const kind = [0, FORWARD, LEFT, RIGHT][this.m.action(key)] ?? 0;
     if (!kind) return;
     while ((yield* this.move(kind)) && this.m.keysHeld.has(key)) {}
   }
@@ -557,6 +580,11 @@ export class Base {
   *run(): Co<number> {
     this.cam = camera(this.pose, this.pose.dir, 0, FORWARD);
     while (this.next === null) {
+      const c = this.m.commands.shift();
+      if (c) {
+        yield* this.command(c);
+        continue;
+      }
       const e = this.m.take();
       this.busy = !!e;
       if (e?.kind === "down") yield* this.click(e.y, e.x);

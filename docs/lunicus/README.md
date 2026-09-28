@@ -12,8 +12,8 @@ but none of them carries a version tag, so this port calls the generation
 ([DreamFactory 0's containers](../engine/formats/dreamfactory-0.md)). There are
 no scripts: the game's logic is all in `LUNICUS.EXE`.
 
-What runs here is a **prototype**, on port 5180 with `npm run dev -w lunicus`.
-It is not on the site's front page. The whole game plays: the station and its
+It runs on port 5180 with `npm run dev -w lunicus`, and it has a door on the
+site's front page. The whole game plays: the station and its
 crew, the three cities, the engine rooms and the hive, to the queen and back to
 the title. The machine suites play it through from the intro to the end
 ([Machine suites](#machine-suites)), and a browser suite replays that run on
@@ -116,6 +116,8 @@ as the CPU goes, waiting on the game's state and never on a duration.
   and one route serves days two to four, the city days.
 - `saveload` saves on the panel's button and opens the file back, and plays on
   from the opened game; see [Saved games](#saved-games).
+- `menu` gives the menu bar's commands on the title and in a game; see
+  [The menu bar](#the-menu-bar).
 
 The roll is seeded, so a run is the same run every time. The bot is not
 certain to win, though. The route wins on seed 1994, which the suites use, and
@@ -174,15 +176,113 @@ lists them under *Days two to six (made by this port)*.
 [`tests/browser/saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/browser/saves.ts)
 opens one on the page, saves through the dialog, and opens the saved file again.
 
+## The menu bar
+
+The window's menu bar is LUNIRES.DLL's resource `MENUS`, which LUNICUS.EXE
+loads at `0x4186db`: File, Edit, Settings, Sound and Help.
+[`tools/menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tools/menu.ts)
+writes it out as `src/menu.gen.ts`, and the page draws it with the engine's
+[`window-bar.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-bar.ts),
+on the picture's frame.
+
+**It is up on the title and nowhere else.** The EXE takes it off the window for
+the intro, for Help and About, and for the whole of a game (`0x418701`). In a
+game only its accelerators reach the game, the QUICKEYS table in the same DLL.
+
+WM_COMMAND (`0x40b80a`) turns an id into a Macintosh menu and item: the
+hundreds are the menu, and 600 and up is menu 1, Help. The title's handler
+(`0x418446`) takes every command; a level's (`0x417412`) takes only Save, Exit,
+Keys, Cache Mazes, Sound and Help.
+
+| Command | What it does |
+|---|---|
+| File ▸ New | a new game (`0x4184ec`), as a click on the title is |
+| File ▸ Open | the saved-games dialog, then the file's game (`0x4184cc`) |
+| File ▸ Save | in a game, the panel's save button (`0x4175c3`); grey on the title |
+| File ▸ Exit | on the title the EXE quits, and the page goes to the front door; in a game it ends the game with no question asked, the title again (`0x41745e`) |
+| Edit | grey in the resource; nothing handles it |
+| Settings ▸ Beginner … Expert | the difficulty a new game opens with (`0x41784b`), on the title only; Intermediate to start |
+| Settings ▸ Keys | the keys dialog (`dlog3`, `0x418b50`), on the title or, by Ctrl+K, in a game; see [Keys and high scores](#keys-and-high-scores) |
+| Settings ▸ Cache Mazes | a mark that follows the setting; the EXE copied the mazes to the hard disk, and a page has nowhere to copy them |
+| Sound ▸ Sound Off … Level 7 | the device's volume, level × 1/7 (`0x4209a8`); 7 to start, where the EXE reads the device's own |
+| Sound ▸ Theme | the ambience on or off (`0x4178e8`) |
+| Help ▸ About Lunicus | `about.move` over the title (`0x417760`); its credits go round until Esc |
+| Help ▸ Help | `help.move`, on the title, or in a game as the help button |
+
+The accelerators keep the DLL's one slip. The Sound Level 6 entry has no Ctrl
+flag, so the plain 6 key sets level 6 anywhere, and Ctrl+6 does nothing. A
+browser keeps Ctrl+N, Ctrl+T and Ctrl+W for itself, and most take Ctrl+1 to
+Ctrl+8 for their tabs, so those do not reach the page. New is a click on the
+title as well, and the rest are on the bar.
+
+None of these settings last beyond the page, and they did not in the EXE either.
+It kept only the keys and the high scores, in `lunicus.sco`.
+
+## Keys and high scores
+
+`lunicus.sco` is one 1040-byte block, which
+[`src/game/sco.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/src/game/sco.ts)
+reads and writes:
+
+- **The key table**, 256 bytes: one per character code, giving the action that
+  character is. The actions are 1 forward, 2 left, 3 right, 4 navigate,
+  5 bullets, 6 grenades and 7 rockets. The city and the base both look keys up
+  in it (`0x4173ff`), so W, A and D walk in the base as well as in the city.
+  The arrows are Macintosh character codes 0x1c to 0x1e, and the EXE puts them
+  back as forward, left and right whatever the file says (`0x417efb`).
+- **The high scores**: 4 difficulties, 7 places each, 28 bytes a place. Each
+  place is an i32 score and a Pascal-string name of at most 23 characters.
+
+The rip's file holds the EXE's defaults. The page keeps its own copy in the
+browser's `localStorage`, under `lunicus.sco`, in the same layout. It writes the
+copy as soon as the block changes, where the EXE wrote the file only as its
+window closed (`0x417ce4`). A page is not told when it closes. A driven or
+replayed run uses the defaults and asks nothing, so that it stays the machine
+run it replays.
+
+**The title's plate.** The band under the title's picture is picture 1 of
+`puppet.`, the Cyberflix plate, which the EXE loads as the title opens
+(`0x417039`). The current difficulty's seven places are drawn on its blank half
+(`0x417b01`). The font is LUNIRES.DLL's 0x3a16, which the DLL maps to Raven
+Digital (`0x401d8b`), and the pen is palette index 0, which is white. Changing
+the difficulty redraws the places.
+
+**A high score.** When the title opens again after a game (`0x41733d`), a score
+above the seventh place asks for a name in the High Score dialog (`dlog2`). OK
+with an empty name counts as Cancel, as it does at `0x418af9`. The name takes
+the seventh place, and the places are sorted best first (`0x417a44`), so a tie
+stays below the older score.
+
+**Settings ▸ Keys** is the Edit Keys dialog (`dlog3`, `0x418b72`). It has seven
+one-letter fields, each showing the letter (or digit) its action has now. OK
+binds each field's first character, in both cases for a letter (`0x418db1`).
+Default puts the EXE's own keys back in the fields, and Cancel keeps the table
+as it was. In a game the level waits and the sound stops while the dialog is up.
+
+Both dialogs are LUNIRES.DLL's own templates.
+[`tools/dialogs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tools/dialogs.ts)
+writes them out as `src/dialogs.gen.ts`, and the engine's
+[`window-dialog.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-dialog.ts)
+draws them on the picture's frame, every control where the template put it.
+Neither procedure handles IDCANCEL, so Esc closes neither of them, as in the EXE.
+The DLL has five more dialogs (Message, Quit, Pause, Sound, Progress), and no
+code in the EXE opens any of them.
+
+## The page
+
+The title card is `lunicus/assets/lunicus-full.png`. It came as a flat RGB
+render with a transparency checkerboard painted into it, as RedJack's did;
+[`mklunicuslogo.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tools/mklunicuslogo.ts)
+keys it out with RedJack's key, which also finds the squares the letters close
+in (`npm run mklogo -w lunicus`). The palette in
+[`src/theme.css`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/src/theme.css)
+is sampled from the keyed card: the crew's navy for the ground, chrome for
+text, the letters' gold bevel for edges and links, and fire for what is live.
+The favicon, `public/lunicus-mark.svg`, is the card's chrome L. The home-screen
+icons are rendered from it by `npx tsx tools/mkappicons.ts lunicus`.
+
 ## What does not work yet
 
-- **The menu bar.** The EXE has File, Settings and Sound menus. The page has
-  File ▸ New (a click on the title) and File ▸ Open (Load), and nothing else:
-  the difficulty is Intermediate unless a save says otherwise, and the sound
-  cannot be switched off from the game.
-- **The high scores.** `lunicus.sco` and its table (`0x41733d`) are not read.
-- **The about film.** Help ▸ About (`about.move`) is not offered; the panel's
-  help button plays `help.move`.
 - **The bot's odds.** The route wins on the seed the suites use, not on every
   seed. See [Machine suites](#machine-suites).
 

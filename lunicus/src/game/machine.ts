@@ -16,6 +16,7 @@
 import { decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import { SCREEN_H, SCREEN_W } from "./data";
 import type { BitmapFont } from "./font";
+import { actionOf, defaultSco, type Sco } from "./sco";
 import { Screen } from "./screen";
 
 export type Co<T = void> = Generator<void, T, void>;
@@ -45,6 +46,8 @@ export interface Speaker {
   stop(): void;
   /** the ambience's channel (the EXE's channel 3): these samples round and round, or silence */
   loop?(samples: Float32Array | null, sampleRate: number): void;
+  /** Sound ▸ Sound Off … Sound Level 7: the device's volume, 0 to 1 (0x4209a8 → waveOutSetVolume) */
+  volume?(level: number): void;
 }
 
 export const SILENT: Speaker = { play: () => {}, stop: () => {} };
@@ -171,11 +174,60 @@ export class Machine {
   ambience: { name: string; samples: Float32Array; rate: number } | null = null;
   ambiencePlaying = false;
 
-  /** 0x4195fe: the ambience from its start */
+  /** 0x4195fe: the ambience from its start — if Sound ▸ Theme is on */
   playAmbience(): void {
     if (!this.ambience) return;
     this.ambiencePlaying = true;
-    this.speaker.loop?.(this.ambience.samples, this.ambience.rate);
+    if (this.theme) this.speaker.loop?.(this.ambience.samples, this.ambience.rate);
+  }
+
+  /* ---- the menu bar's settings (src/menu.ts) --------------------------- */
+
+  /**
+   * Sound ▸ Sound Off … Sound Level 7, `[0x42c160]`, 0 to 7: the DEVICE's
+   * volume (0x4209a8 → waveOutSetVolume(n × 0xFFFF / 7)), not the samples'.
+   * The EXE starts from the device's own (0x4209c3), 7 where it cannot read
+   * one — which a page never can.
+   */
+  volume = 7;
+  /** Sound ▸ Theme, `[0x42c164]`: whether the ambience plays at all */
+  theme = true;
+  /**
+   * Settings ▸ Cache Mazes, `[0x42c16c]`: the EXE copied the mazes to the hard
+   * disk (0x40a795). A page has nothing to copy them to; the mark is kept.
+   */
+  cacheMazes = true;
+  /**
+   * Menu commands for the level to take between one thing and the next, as the
+   * EXE's queue holds event 7 for the state's handler (0x417412) — a film or
+   * a conversation leaves them waiting.
+   */
+  commands: { menu: number; item: number }[] = [];
+  /** File ▸ Exit in a game (0x41745e): the title again, and not for a death */
+  quitAsked = false;
+  /** LUNICUS.SCO's block (src/game/sco.ts): the key table and the high scores */
+  sco: Sco = defaultSco();
+  /**
+   * Settings ▸ Keys (0x418b50), for a level to wait on between one thing and
+   * the next; the game (game.ts) puts its dialog here
+   */
+  keysDialog: () => Co = function* () {};
+
+  /** 0x4173ff: the action a key is in the key table — 0 none, 1–3 a step, 4–7 a mode */
+  action(key: string): number {
+    return actionOf(this.sco.keys, key);
+  }
+
+  setVolume(level: number): void {
+    this.volume = level;
+    this.speaker.volume?.(level / 7);
+  }
+
+  /** 0x4178e8: Theme toggled, and the ambience started or its channel silenced */
+  setTheme(on: boolean): void {
+    this.theme = on;
+    if (!this.ambience || !this.ambiencePlaying) return;
+    this.speaker.loop?.(on ? this.ambience.samples : null, this.ambience.rate);
   }
 
   /** 0x42104b with its second flag: the ambience's channel silenced */

@@ -2,13 +2,16 @@
   "name": "@dreamfactory/lunicus",
   "version": "0.0.1",
   "private": true,
-  "description": "Lunicus (1994) \u2014 Cyberflix's first DreamFactory game, on what this port calls DreamFactory 0. A prototype page: the whole game plays \u2014 the moon base, its crew and briefings, the cities of days two to four with their tanks, jeeps, wasps, drones and node, day five's engine rooms and day six's hive, to the queen — with the radar, the base's floor map, help, and saved games (.LUN) through the shared dialog.",
+  "description": "Lunicus (1994) \u2014 Cyberflix's first DreamFactory game, on what this port calls DreamFactory 0. The whole game plays \u2014 the moon base, its crew and briefings, the cities of days two to four with their tanks, jeeps, wasps, drones and node, day five's engine rooms and day six's hive, to the queen — with the radar, the base's floor map, help, and saved games (.LUN) through the shared dialog.",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build": "vite build",
     "test": "tsx tools/runmachine.mts",
     "test:machine": "tsx tools/runmachine.mts",
     "test:browser": "tsx tests/browser/playthrough.ts",
-    "test:browser:saves": "tsx tests/browser/saves.ts"
+    "test:browser:saves": "tsx tests/browser/saves.ts",
+    "manifest": "tsx ../tools/mkmanifest.ts ../dist/lunicus gamefiles public",
+    "mklogo": "tsx tools/mklunicuslogo.ts"
   }
 }

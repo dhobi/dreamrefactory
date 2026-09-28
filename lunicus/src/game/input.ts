@@ -12,7 +12,8 @@ import type { Lunicus } from "./game";
 /** one gesture, as a recording keeps it: the tick it came before, and what it was */
 export type Gesture =
   | { t: number; g: "down" | "up" | "move"; x: number; y: number }
-  | { t: number; g: "keydown" | "keyup"; key: string };
+  | { t: number; g: "keydown" | "keyup"; key: string }
+  | { t: number; g: "menu"; id: number };
 
 /** a checkpoint of a recording: the state a replay must be in at tick `t` */
 export interface Checkpoint {
@@ -36,10 +37,12 @@ export interface Recording {
 }
 
 /**
- * the arrows and LUNICUS.EXE's own keys (table 0x428674): W A D walk, H J K L
- * the buttons, space a rocket — and the site's escape key (`.`), which skips a film
+ * the keys the game takes whatever the key table says: the arrows, space (a
+ * rocket) and the site's escape key (`.`), which skips a film. The rest are the
+ * table's (src/game/sco.ts — W A D walk and H J K L the modes, till Settings ▸
+ * Keys says otherwise).
  */
-export const GAME_KEYS = new Set(["ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown", ESCAPE_KEY, "w", "a", "d", "h", "j", "k", "l", " "]);
+const FIXED_KEYS = new Set(["ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown", ESCAPE_KEY, " "]);
 
 export class Input {
   constructor(
@@ -78,15 +81,29 @@ export class Input {
   keyDown(key: string): boolean {
     this.heard?.({ t: this.m.ticks, g: "keydown", key });
     if (this.game.phase === "title" && (key === "Enter" || key === " ")) return (this.game.newGame(), true);
-    if (!GAME_KEYS.has(key.length === 1 ? key.toLowerCase() : key)) return false;
+    if (!this.takes(key)) return false;
     this.m.keysHeld.add(key);
     this.m.events.push({ kind: "key", key: key === ESCAPE_KEY ? ESCAPE : key });
     return true;
   }
 
+  /** is this key the game's */
+  takes(key: string): boolean {
+    return FIXED_KEYS.has(key) || this.m.action(key) !== 0;
+  }
+
   keyUp(key: string): void {
     this.heard?.({ t: this.m.ticks, g: "keyup", key });
     this.m.keysHeld.delete(key);
+  }
+
+  /**
+   * A menu command, by its Win32 id (src/menu.gen.ts) — the bar's, or an
+   * accelerator's. Answers false for the ones the page does itself.
+   */
+  menu(id: number): boolean {
+    this.heard?.({ t: this.m.ticks, g: "menu", id });
+    return this.game.command(id);
   }
 
   /** a press and a release on the spot */

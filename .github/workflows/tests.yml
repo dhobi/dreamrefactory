@@ -86,8 +86,13 @@ jobs:
       # they point at never moves and is never copied into the workspace.
       - name: Link the rips into the workspace
         run: |
-          # TWO rips now, one per game package, because each game's build and
-          # suite resolve `gamefiles/` inside their own package.
+          # One rip per game package, because each game's build and suites
+          # resolve `gamefiles/` inside their own package.
+          #
+          # Where a variable comes from depends on the runner. The container
+          # (tools/runner/) sets every one in its Dockerfile and compose.yml, so
+          # there "not a directory" means the VOLUME is missing; a bare-metal
+          # runner (tools/setup-runner.sh) reads them from its .env.
           #
           # Titanic's is REQUIRED: most of the automatic suites and the whole
           # playthrough read it, and without it this job has nothing to do.
@@ -99,7 +104,7 @@ jobs:
           # WARNING with the consequence named, not an error.
           if [ -z "${TAOOT_GAMEFILES:-}" ] || [ ! -d "${TAOOT_GAMEFILES:-}" ]; then
             echo "::error::TAOOT_GAMEFILES (${TAOOT_GAMEFILES:-unset}) is not a directory."
-            echo "It is set in the runner's .env — see docs/reference/ci.md."
+            echo "In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
             exit 1
           fi
           ln -sfn "$TAOOT_GAMEFILES" taoot/gamefiles
@@ -109,7 +114,7 @@ jobs:
             ln -sfn "$DUST_GAMEFILES" dust/gamefiles
             echo "dust present:     $(ls dust/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::DUST_GAMEFILES (${DUST_GAMEFILES:-unset}) is not a directory — Dust's disc-reading tests will skip. Set it in the runner's .env to cover them."
+            echo "::warning::DUST_GAMEFILES (${DUST_GAMEFILES:-unset}) is not a directory — Dust's disc-reading tests will skip, and its playthrough, which cannot run without the disc, will FAIL if this change reaches it. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
           # Skull Cracker's, OPTIONAL for the same reason as Dust's: its suites
@@ -122,7 +127,7 @@ jobs:
             ln -sfn "$SKULLCRACKER_GAMEFILES" skullcracker/gamefiles
             echo "skullcracker:     $(ls skullcracker/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::SKULLCRACKER_GAMEFILES (${SKULLCRACKER_GAMEFILES:-unset}) is not a directory — Skull Cracker's disc-reading tests will skip. Set it in the runner's .env to cover them."
+            echo "::warning::SKULLCRACKER_GAMEFILES (${SKULLCRACKER_GAMEFILES:-unset}) is not a directory — Skull Cracker's disc-reading tests and machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
           # RedJack's three discs, OPTIONAL like the two above:
@@ -132,7 +137,28 @@ jobs:
             ln -sfn "$REDJACK_GAMEFILES" redjack/gamefiles
             echo "redjack:          $(ls redjack/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::REDJACK_GAMEFILES (${REDJACK_GAMEFILES:-unset}) is not a directory — RedJack's disc-reading tests will skip. Set it in the runner's .env to cover them."
+            echo "::warning::REDJACK_GAMEFILES (${REDJACK_GAMEFILES:-unset}) is not a directory — RedJack's disc-reading tests and machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+          fi
+
+          # Timelapse's four discs, OPTIONAL like the others: only its own
+          # machine suites read them, and that step skips without them. All
+          # four, because the whole game is played and its last world is on
+          # the fourth.
+          if [ -n "${TIMELAPSE_GAMEFILES:-}" ] && [ -d "${TIMELAPSE_GAMEFILES:-}" ]; then
+            ln -sfn "$TIMELAPSE_GAMEFILES" timelapse/gamefiles
+            echo "timelapse:        $(ls timelapse/gamefiles | tr '\n' ' ')"
+          else
+            echo "::warning::TIMELAPSE_GAMEFILES (${TIMELAPSE_GAMEFILES:-unset}) is not a directory — Timelapse's machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+          fi
+
+          # Lunicus's disc and its saves, OPTIONAL like the others: its machine
+          # suites skip without it, and so does the corpus half of
+          # `engine/tests/df0-formats.ts`, which reads `lunicus/gamefiles`.
+          if [ -n "${LUNICUS_GAMEFILES:-}" ] && [ -d "${LUNICUS_GAMEFILES:-}" ]; then
+            ln -sfn "$LUNICUS_GAMEFILES" lunicus/gamefiles
+            echo "lunicus:          $(ls lunicus/gamefiles | tr '\n' ' ')"
+          else
+            echo "::warning::LUNICUS_GAMEFILES (${LUNICUS_GAMEFILES:-unset}) is not a directory — Lunicus's disc-reading tests and machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
       # No setup-node here: the runner's own Node is used, so a run does not
@@ -165,6 +191,30 @@ jobs:
             npm test -w redjack
           else
             echo "::warning::no RedJack rip linked — its machine suites were skipped"
+          fi
+
+      # Timelapse's: the shared engine stood up in node on the four discs and
+      # played through the whole game, world by world
+      # (docs/timelapse/README.md#machine-suites). About a minute, so every
+      # pull request pays it.
+      - name: Timelapse machine suites
+        run: |
+          if [ -f timelapse/gamefiles/TLAPSE1/install/data/bootfile ]; then
+            npm test -w timelapse
+          else
+            echo "::warning::no Timelapse rip linked — its machine suites were skipped"
+          fi
+
+      # Lunicus's: the game ported from LUNICUS.EXE, stood up in node on the
+      # disc and played from the intro to the queen, as fast as the CPU goes
+      # (docs/lunicus/README.md#machine-suites). The browser playthrough is
+      # ten minutes and is browser.yml's, on a `full-run-lunicus` label.
+      - name: Lunicus machine suites
+        run: |
+          if [ -f lunicus/gamefiles/LUNICUS/lunicus/lunicus.exe ]; then
+            npm test -w lunicus
+          else
+            echo "::warning::no Lunicus rip linked — its machine suites were skipped"
           fi
 
       # Which playthroughs this change needs — and why the automatic suite above

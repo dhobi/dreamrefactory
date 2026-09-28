@@ -7,22 +7,646 @@
     <!-- where the site's root is from THIS page: its own directory -->
     <meta name="site-root" content="./" />
     <title>Lunicus RE</title>
-    <meta name="theme-color" content="#000000" />
-    <!-- the chrome every page in the project shares; no Lunicus palette yet, so
-         the project's own (src/theme.css says why) -->
+    <!-- the title card's chrome L in its gold bevel, in front of the fire, on
+         the crew's navy (public/lunicus-mark.svg says what survived) -->
+    <link rel="icon" type="image/svg+xml" href="/lunicus-mark.svg" />
+    <!-- Installed to a home screen, this page opens with no address bar — see
+         the note in skullcracker/index.html; site/tests/app-icons.ts holds every
+         value below to its source. -->
+    <link rel="manifest" href="/app.webmanifest" />
+    <link rel="apple-touch-icon" href="/lunicus-apple-touch-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Lunicus" />
+    <meta name="theme-color" content="#040716" />
+    <!-- the chrome every page in the project shares, in Lunicus's palette. The
+         build moves this <link> after the <style> below, so where the two
+         describe the same element this page wins by SPECIFICITY (`html body`),
+         never by order — site/tests/cascade.ts keeps it that way. -->
     <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      /* ------------------------------------------------------------------
+         The same page the other games have, in navy, chrome, gold and fire.
+
+         Two states and one movement between them:
+
+           body.booting  the title card, centred, with the gauge under it
+           body.playing  the title card small at the top, lapping over the
+                         picture's frame, and the picture underneath
+
+         What it composes with is in src/theme.css: the letters are chrome in
+         a gold bevel with a dark rule round it, and half the card is the fire
+         they stand in front of. So the page is the crew's navy, the frame is
+         a letter's bevel turned round the picture, the Enter button is a
+         letter, and the gauge is the one thing that burns.
+         ------------------------------------------------------------------ */
+
+      :root {
+        --pad: 16px;
+        /* the shared top bar's height, pinned as the other pages pin it: it is
+           a term in the height the picture gets */
+        --bar: 49px;
+        --stage-h: calc(100vh - var(--bar));
+        /* the ask under everything (#foot), which the title card leaves room
+           for so it is on screen before Enter and not a strip at the fold */
+        --foot: 70px;
+        /* the bevel round the picture: the rule, the gold, and the rule again */
+        --frame-w: clamp(6px, 0.8vw, 11px);
+        /* what the controls under the picture take — pinned, for the same
+           reason --bar is */
+        --under: 96px;
+        /* the width the picture can have across, which the risen card is sized
+           from (it cannot come from --pic-w, which pays for the card: a cycle) */
+        --fit-w: min(1024px, calc(100vw - 2 * var(--pad) - 2 * var(--frame-w)));
+        /* The risen card. The artwork is 900x672, 1.34:1 — squarer than
+           RedJack's — so a smaller share of the width gives the same height. */
+        --brand-h: clamp(56px, calc(var(--fit-w) * 0.12), 118px);
+        /* how far the card laps over the frame's top rail */
+        --bite: clamp(2px, calc(var(--brand-h) * 0.05), 7px);
+        --lap: calc(var(--frame-w) + var(--bite));
+        /* the picture: 512x384 art on a 1024x768 canvas, as large as the room
+           across and the room down (converted through 4:3) allow */
+        --pic-w: min(
+          1024px,
+          var(--fit-w),
+          /* ...but never below a size worth playing at: past that the page
+             scrolls down rather than shrinking the picture to a stamp */
+          max(
+              320px,
+              calc(
+                (
+                    100vh - var(--bar) - 2 * var(--pad) - var(--brand-h) +
+                      var(--lap) - 2 * var(--frame-w) - var(--under)
+                  ) *
+                  4 / 3
+              )
+            )
+        );
+      }
+
+      /* on a phone the shared bar wraps its links to a second line */
+      @media (max-width: 560px) {
+        :root {
+          --bar: 72px;
+        }
+      }
+
+      /* `html body`, not `body`: equal specificity is decided by ORDER, and the
+         order flips between dev and a build */
+      html body {
+        /* no page scroll sideways at phone width, whatever a long log line does */
+        overflow-x: hidden;
+      }
+
+      #stage {
+        position: relative;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--pad) 0;
+        gap: var(--pad);
+      }
+
+      /* ---- the curtain: the title card and the gauge ------------------- */
+
+      #curtain {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: calc(var(--gap) * 1.6);
+      }
+      /* centred in what the top bar leaves while booting */
+      body:not(.playing) #stage {
+        min-height: calc(var(--stage-h) - 2 * var(--pad) - var(--foot));
+      }
+      body:not(.playing) #curtain {
+        flex: 1 1 auto;
+      }
+      body.playing #curtain {
+        gap: 0;
+        /* the card laps over the frame's top rail, paying for #stage's gap
+           first; negative margin, so it gives the picture those pixels back */
+        margin-bottom: calc(-1 * (var(--pad) + var(--lap)));
+        position: relative;
+        z-index: 3;
+        /* decoration once the game runs: the canvas and the menu bar keep
+           every click */
+        pointer-events: none;
+      }
+      /* the light the card sits in: the explosion's, hot at the heart and
+         red at the edge, on the navy */
+      #curtain::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        width: min(1000px, 100%);
+        aspect-ratio: 2 / 1;
+        translate: -50% -50%;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(252, 215, 6, 0.14),
+          rgba(201, 44, 19, 0.14) 42%,
+          #0000 72%
+        );
+        transition: opacity 500ms ease-out;
+        pointer-events: none;
+      }
+      body.playing #curtain::before {
+        opacity: 0;
+      }
+
+      /* The card. `onerror` in the markup hides it and sets body.nobrand, so a
+         missing file closes the band up instead of leaving a broken frame. */
+      #brand {
+        position: relative;
+        display: block;
+        width: auto;
+        /* against the VIEWPORT: #curtain is shrink-to-fit and takes its width
+           from this image, so a percentage here is circular (Skull Cracker's
+           note, measured there) */
+        max-width: min(680px, calc(100vw - 2 * var(--pad)));
+        max-height: 52vh;
+        object-fit: contain;
+        filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.85))
+          drop-shadow(0 0 34px rgba(251, 120, 3, 0.18));
+        transition: max-height 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      body.playing #brand {
+        max-height: var(--brand-h);
+        filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.7));
+      }
+      body.nobrand #brand {
+        display: none;
+      }
+
+      /* ---- the gauge and the button, sharing one cell ------------------ */
+
+      /* A finished bar is a statement about the past: once the disc is read the
+         page only wants "press this" said. So both live in one grid cell and
+         `.ready` (src/main.ts) cross-fades them — the button never jumps. */
+      #boot {
+        position: relative;
+        display: grid;
+        grid-template-areas: "swap";
+        justify-items: center;
+        align-items: center;
+        width: min(30rem, calc(100vw - 2 * var(--pad)));
+        min-height: 3.4rem;
+      }
+      body.playing #boot {
+        display: none;
+      }
+      #gauge,
+      #start {
+        grid-area: swap;
+        transition:
+          opacity 260ms ease-out,
+          transform 320ms ease-out;
+      }
+      #gauge {
+        width: 100%;
+      }
+      #boot.ready #gauge {
+        opacity: 0;
+        transform: translateY(-30%);
+        pointer-events: none;
+      }
+
+      /* ------------------------------------------------------------------
+         THE GAUGE IS A TRACER SHOT.
+
+         Dust burns a fuse, Timelapse charges a conduit, Skull Cracker cracks a
+         plate, RedJack pours gold. On Lunicus's card the fighters come out of
+         the fire trailing streaks of it, so the gauge is a slot in a gold-
+         edged plate with the fire running along it, smoke-red where it has
+         been and white-hot where it is.
+
+           #bar     the slot — the night, sunk, in a bevel's gold
+           #charge  the width JS drives, the fire's trail; its ::after is the
+                    white-hot head
+         ------------------------------------------------------------------ */
+      #bar {
+        position: relative;
+        height: 12px;
+        border-radius: var(--radius);
+        background: linear-gradient(var(--rule), var(--night-900) 55%, var(--night-700));
+        box-shadow:
+          0 0 0 1px var(--gold-600),
+          0 0 0 2px var(--gold-300),
+          0 0 0 3px var(--rule),
+          inset 0 2px 3px rgb(0 0 0 / 80%);
+      }
+      #charge {
+        position: relative;
+        height: 100%;
+        border-radius: var(--radius) 0 0 var(--radius);
+        background:
+          linear-gradient(rgb(255 255 255 / 22%), #0000 45%, rgb(0 0 0 / 28%)),
+          linear-gradient(
+            90deg,
+            var(--fire-900),
+            var(--fire-700) 30%,
+            var(--fire-600) 60%,
+            var(--fire-400) 85%,
+            var(--fire-200)
+          );
+        box-shadow: 0 0 12px -2px rgba(251, 120, 3, 0.55);
+        transition: width 160ms linear;
+      }
+      /* the head: the shot itself, white at the heart */
+      #charge::after {
+        content: "";
+        position: absolute;
+        right: -3px;
+        top: -3px;
+        bottom: -3px;
+        width: 6px;
+        border-radius: 50%;
+        background: var(--fire-100);
+        box-shadow:
+          0 0 6px 2px rgba(252, 215, 6, 0.85),
+          0 0 16px 5px rgba(251, 120, 3, 0.5);
+      }
+      #charge[style*="width: 0%"]::after,
+      #charge[style*="width: 100%"]::after {
+        display: none;
+      }
+
+      #bootline {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0.65rem 0 0;
+        font: 12px/1.4 var(--font-mono);
+        color: var(--text-dim);
+      }
+      #bootsay {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* ------------------------------------------------------------------
+         THE BUTTON IS A LETTER: the chrome face, the gold bevel round it and
+         the dark rule outside that, with a navy label in the letters' slab
+         serif. Dust's and Skull Cracker's geometry — uppercase, wide tracking,
+         scale-in on `.ready` — in this card's materials.
+         ------------------------------------------------------------------ */
+      #start {
+        opacity: 0;
+        pointer-events: none;
+        font: 700 15px/1 var(--font-display);
+        text-transform: uppercase;
+        letter-spacing: 0.3em;
+        /* the tracking trails the last letter; pay it back on the left */
+        padding: 13px 24px 13px calc(24px + 0.3em);
+        color: var(--commit-text);
+        border: 0;
+        border-radius: var(--radius);
+        cursor: pointer;
+        background: linear-gradient(
+          var(--chrome-200),
+          var(--chrome-400) 46%,
+          var(--sky-200) 60%,
+          var(--chrome-600)
+        );
+        box-shadow:
+          inset 0 0 0 1px var(--gold-600),
+          inset 0 2px 0 rgba(253, 253, 247, 0.6),
+          0 0 0 2px var(--gold-300),
+          0 0 0 3px var(--rule),
+          0 10px 22px -10px #000;
+        text-shadow: 0 1px 0 rgba(253, 253, 247, 0.45);
+        transform: scale(0.94);
+        transition:
+          opacity 260ms ease-out,
+          transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
+          background 160ms ease-out,
+          box-shadow 160ms ease-out;
+      }
+      #boot.ready #start {
+        opacity: 1;
+        pointer-events: auto;
+        transform: none;
+      }
+      #start:hover {
+        background: linear-gradient(
+          var(--chrome-100),
+          var(--chrome-300) 46%,
+          var(--sky-100) 60%,
+          var(--chrome-500)
+        );
+        box-shadow:
+          inset 0 0 0 1px var(--gold-600),
+          inset 0 2px 0 rgba(253, 253, 247, 0.8),
+          0 0 0 2px var(--gold-100),
+          0 0 0 3px var(--rule),
+          0 0 24px -4px rgba(251, 120, 3, 0.55),
+          0 10px 22px -10px #000;
+      }
+      /* sky, not the accent: the accent is the gold the button is already
+         edged in, and a gold ring round a gold edge is not a ring */
+      #start:focus-visible {
+        outline: 2px solid var(--sky-100);
+        outline-offset: 5px;
+      }
+
+      /* ---- the picture, in its bevel --------------------------------- */
+
+      /* ------------------------------------------------------------------
+         The bevel is the frame's PADDING, so the canvas keeps its size, drawn
+         as the card draws one round a letter: the dark rule outside, the gold
+         lit on top and falling to its shadow side at the bottom, and a thin
+         rule again where it meets the picture.
+         ------------------------------------------------------------------ */
+      #frame {
+        position: relative;
+        width: var(--pic-w);
+        padding: var(--frame-w);
+        box-sizing: content-box;
+        border-radius: var(--radius-lg);
+        background-color: var(--gold-500);
+        background-repeat: no-repeat;
+        background-image:
+          linear-gradient(
+            180deg,
+            var(--gold-100) 0 1px,
+            var(--gold-200) 1px 45%,
+            var(--gold-400) 45% calc(100% - 1px),
+            var(--rule) calc(100% - 1px)
+          ),
+          linear-gradient(
+            0deg,
+            var(--gold-800) 0 1px,
+            var(--gold-700) 1px 45%,
+            var(--gold-600) 45% calc(100% - 1px),
+            var(--rule) calc(100% - 1px)
+          ),
+          linear-gradient(
+            90deg,
+            var(--gold-300) 0 1px,
+            var(--gold-400) 1px 50%,
+            var(--gold-500) 50% calc(100% - 1px),
+            var(--rule) calc(100% - 1px)
+          ),
+          linear-gradient(
+            270deg,
+            var(--gold-700) 0 1px,
+            var(--gold-600) 1px 50%,
+            var(--gold-500) 50% calc(100% - 1px),
+            var(--rule) calc(100% - 1px)
+          );
+        background-size:
+          100% var(--frame-w),
+          100% var(--frame-w),
+          var(--frame-w) 100%,
+          var(--frame-w) 100%;
+        background-position:
+          left top,
+          left bottom,
+          left top,
+          right top;
+        box-shadow:
+          0 0 0 2px var(--rule),
+          0 0 40px -8px rgba(251, 120, 3, 0.25),
+          0 26px 60px -24px #000;
+        line-height: 0;
+        /* a black 1024x768 rectangle above the Enter button reads as a failure */
+        display: none;
+      }
+      body.playing #frame {
+        display: block;
+        animation: frame-arrive 900ms cubic-bezier(0.28, 0.74, 0.22, 1) 180ms both;
+      }
+      @keyframes frame-arrive {
+        from {
+          opacity: 0;
+          transform: scale(0.985);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      /* the canvas is the game window's 512x384 doubled (src/main.ts); the page
+         only ever shrinks it, which is soft at worst, never a non-integer
+         nearest upscale */
+      #screen {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 4 / 3;
+        background: #000;
+        image-rendering: auto;
+        touch-action: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #brand,
+        #frame,
+        #start,
+        #gauge {
+          transition: none;
+          animation: none;
+        }
+      }
+
+      /* ---- the log, a panel over the stage ---------------------------- */
+
+      #log {
+        position: absolute;
+        inset: var(--pad) max(var(--pad), calc((100% - var(--pic-w)) / 2 - var(--frame-w))) 0;
+        margin: 0;
+        z-index: 4;
+        overflow: auto;
+        padding: 14px 16px;
+        background: color-mix(in srgb, var(--night-1000) 90%, transparent);
+        backdrop-filter: blur(3px);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+        color: var(--text);
+        font: 12px/1.6 var(--font-mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      #log[hidden] {
+        display: none;
+      }
+      /* its two voices: a step the boot took, and something it complained about */
+      #log b {
+        color: var(--accent);
+        font-weight: normal;
+      }
+      #log i {
+        color: var(--alarm);
+        font-style: normal;
+      }
+
+      /* ---- the controls under it -------------------------------------- */
+
+      #under {
+        width: calc(var(--pic-w) + 2 * var(--frame-w));
+        max-width: calc(100vw - 2 * var(--pad));
+        padding: 0 0 var(--pad);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #under .bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      /* while booting only an error has anything to say under the curtain */
+      body:not(.playing) #under .bar:not(:has(> #err)) {
+        display: none;
+      }
+      /* a row whose only child is an empty error line is not a row */
+      #under .bar:has(> #err:empty:only-child) {
+        display: none;
+      }
+      #err {
+        color: var(--alarm);
+        font: 12px/1.4 var(--font-mono);
+      }
+      #loc {
+        margin: 0;
+        font: 12px/1.5 var(--font-mono);
+        color: var(--text-dim);
+        white-space: pre-wrap;
+      }
+      #loc:empty {
+        display: none;
+      }
+      .k {
+        display: inline-block;
+        padding: 0 5px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+        font: 11px/1.5 var(--font-mono);
+        color: var(--text-bright);
+        background: var(--night-800);
+      }
+      #under .keyhint {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--text-dim);
+        font-size: 13px;
+      }
+
+      /* ---- fullscreen -------------------------------------------------- */
+
+      /* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
+         engine/src/web/fullscreen.ts pins the stage over the viewport instead */
+      #stage.fs {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: grid;
+        place-items: center;
+        width: 100dvw;
+        height: 100dvh;
+        gap: 0;
+        padding: 0;
+        min-height: 0;
+        background: #000;
+      }
+      #stage.fs #curtain {
+        display: none;
+      }
+      #stage.fs #frame {
+        margin: 0;
+        padding: 0;
+        width: auto;
+        background: none;
+        box-shadow: none;
+        border-radius: 0;
+        animation: none;
+      }
+      #stage.fs #frame > #screen {
+        width: min(100dvw, calc(100dvh * 4 / 3));
+        height: min(100dvh, calc(100dvw * 3 / 4));
+      }
+
+      /* ---- the ask, under everything ---------------------------------- */
+
+      /* Its own element below the controls, so it is on the title card too:
+         #under waits for the picture. The mark is public/bmc-mark.svg, the
+         shared art with its linework in `--border-hover` and the coffee in
+         `--accent`, as every page does it. */
+      #foot {
+        width: min(60rem, calc(100vw - 2 * var(--pad)));
+        margin: 0 auto var(--pad);
+        padding: 10px 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      /* Cookie by Ania Kruk, SIL Open Font License 1.1 — the licence travels
+         with the font at public/cookie-OFL.txt. Served from this origin. */
+      @font-face {
+        font-family: "Cookie";
+        src: url("/cookie.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      a.bmc {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        padding: 0.1rem 0.8rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        background: var(--raised);
+        color: var(--accent);
+        font-family: "Cookie", var(--font-display);
+        font-size: 1.05rem;
+        line-height: 1.85;
+        letter-spacing: 0.02em;
+        text-decoration: none;
+        transition:
+          border-color 110ms linear,
+          color 110ms linear,
+          transform 110ms ease-out;
+      }
+      a.bmc:hover {
+        border-color: var(--border-hover);
+        color: var(--accent-hover);
+        transform: translateY(-1px);
+      }
+      a.bmc:active {
+        transform: none;
+      }
+      a.bmc img {
+        height: 1.15em;
+        width: auto;
+        position: relative;
+        top: -0.06em;
+      }
+    </style>
   </head>
   <body class="booting deep">
-    <!-- The same band every page carries. No logo yet: the brand is words. -->
+    <!-- The same band every page carries, with this game's mark in it. -->
     <header class="topbar">
       <a
         class="brand"
         href="./"
         title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1994 release"
       >
+        <!-- the same mark as the favicon, at the same 30px as the other game
+             pages: the card's first letter, which is the part of it that
+             survives being this small -->
+        <img class="brand-mark" src="/lunicus-mark.svg" alt="" width="30" height="30" />
         <span class="brand-text">
           <b>Lunicus</b>
-          <span>prototype · DreamFactory 0</span>
+          <span>RE · DreamFactory 0</span>
         </span>
       </a>
       <!-- this page's OWN version, filled by main.ts from this package's
@@ -36,25 +660,39 @@
     </header>
 
     <div id="stage">
-      <div id="boot">
-        <div id="gauge">
-          <div
-            id="bar"
-            role="progressbar"
-            aria-label="reading the disc"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="0"
-          >
-            <div id="charge" style="width: 0%"></div>
+      <!-- The title card and the gauge under it: the whole page until the game
+           is running, a band at the top after. `onerror` removes the image
+           rather than leaving a broken frame: the logo is decoration. -->
+      <div id="curtain">
+        <img
+          id="brand"
+          src="./lunicus-logo.png"
+          alt="Lunicus"
+          onerror="
+            this.hidden = true;
+            document.body.classList.add('nobrand');
+          "
+        />
+        <div id="boot">
+          <div id="gauge">
+            <div
+              id="bar"
+              role="progressbar"
+              aria-label="reading the disc"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <div id="charge" style="width: 0%"></div>
+            </div>
+            <div id="bootline">
+              <span id="bootsay">reading the disc…</span>
+              <span id="bootpct">0%</span>
+            </div>
           </div>
-          <div id="bootline">
-            <span id="bootsay">reading the disc…</span>
-            <span id="bootpct">0%</span>
-          </div>
+          <!-- the gesture an AudioContext needs, asked for once the films are read -->
+          <button id="start" type="button">Enter</button>
         </div>
-        <!-- the gesture an AudioContext needs, asked for once the films are read -->
-        <button id="start" class="primary" type="button">Enter</button>
       </div>
       <div id="frame">
         <!-- 1024x768: the game window's 512x384, doubled (src/main.ts) -->
@@ -78,7 +716,7 @@
              floppy button saves -->
         <button id="loadBtn" type="button" title="Open a saved game (File ▸ Open)">📂 Load</button>
         <button id="logBtn" type="button" title="The boot log, in full (b)">▤ Boot log</button>
-        <span class="keyhint" title="the arrows walk and turn · a click walks toward it or uses what is ahead · esc skips a film or ends a talk · b opens the boot log"
+        <span class="keyhint" title="the arrows walk and turn · a click walks toward it or uses what is ahead · esc skips a film or ends a talk · b opens the boot log · Settings ▸ Keys changes the letters"
           ><span class="k">↑</span><span class="k">←</span><span class="k">→</span> walk <span class="k">click</span> go / use / fire
           <span class="k">H</span><span class="k">J</span><span class="k">K</span><span class="k">L</span> move · gun · grenades · rockets
           <span class="k">esc</span> skip <span class="k">b</span> log</span
@@ -91,6 +729,14 @@
         <pre id="loc"></pre>
       </div>
     </div>
+    <!-- The ask, below the controls strip, so it is there on the title card
+         too. `/bmc-mark.svg` is root-absolute because Vite rewrites a `public/`
+         path the markup names per page depth. -->
+    <footer id="foot">
+      <a class="bmc" href="https://buymeacoffee.com/danielhobi" rel="noopener"
+        ><img src="/bmc-mark.svg" alt="" width="35" height="50" /><span>Buy me a coffee</span></a
+      >
+    </footer>
     <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared
          with the other games, hence the ids). The panel's save button and the
          Load button above point here (src/main.ts). -->
