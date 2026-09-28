@@ -530,12 +530,29 @@ export class PropRuntime {
    * for what a latch did to them.
    */
 
+  /**
+   * Where a prop no script has placed is anchored: the middle of the 512x384
+   * screen, unless the game says otherwise ({@link HostOptions.propAnchor}).
+   *
+   * Timelapse says (0, 0). Its props' stored offsets are the negated
+   * top-left of where they belong on its 640x480 screen — every one negative,
+   * Egypt's well lever `e27.154a` at (-426, -342), a 127x138 picture that
+   * anchored at (256, 192) would start off the screen's right edge — and the
+   * scripts' own hand boxes agree: that lever's mousedown asks for x 488…528,
+   * y 343…401, inside its picture only from (0, 0). Titanic's never-placed
+   * props (the radio's tuner and power switch, the boiler's door) store
+   * positive, centred offsets that only (256, 192) puts on the screen.
+   */
+  defaultAnchor = { x: DEFAULT_ANCHOR_X, y: DEFAULT_ANCHOR_Y };
+
   addShop(name: string, shp: ShpFile): LoadedShop {
     const shop = new LoadedShop(name.toLowerCase(), shp);
     this.shops.set(shop.name, shop);
     for (const group of shp.groups) {
       const inst = new PropInstance(group, shop);
       inst.name = group.name;
+      inst.anchorX = this.defaultAnchor.x;
+      inst.anchorY = this.defaultAnchor.y;
       this.props.set(group.name.toLowerCase(), inst);
     }
     return shop;

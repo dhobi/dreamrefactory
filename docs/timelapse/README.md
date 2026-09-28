@@ -52,7 +52,7 @@ The page boots off the four discs through the same `GameHost` the other two use:
 - **the x-ray light**, a `plugin("xray")` aperture dragged over a flat to reveal
   a second flat through the light's own shape.
 
-Saved games are not wired up yet. Nor is `actorhitbox`, which the v1 corpus asks
+The whole game plays through, which the machine suites check (below). Saved games are not wired up yet. Nor is `actorhitbox`, which the v1 corpus asks
 for 32 times and this one never does.
 
 ## Four things that are only true here
@@ -98,6 +98,72 @@ has to live with: no string literal in the scripts says `i001.stg`, so nothing
 that walks the scripts looking for filenames can find the first stage. The
 BOOTFILE's own plan names seven resources; the six names of world I are written
 down in the port instead, and the page says so in its boot log.
+
+## Machine suites
+
+The whole game is played through headless, from `open.mov` to the last
+question it asks, the way RedJack's and Lunicus's are: the real `GameHost` on
+the four discs, stepped as fast as the CPU goes, waiting on the game's own
+globals and never on a duration.
+
+    npm test -w timelapse                        every suite
+    npx tsx tools/runmachine.mts maya            just this one (from timelapse/)
+
+One suite per world, each continuing from the one before, so `atlantis` is the
+whole game: `easter` (the camera, the lantern, the six masks, the time gate),
+`egypt`, `maya`, `anasazi` and `atlantis` (the robot trapped, the gene pods on
+the transmission panel, and the escape that leaves Atlantis to launch without
+you). The routes are in `tests/machine/worlds/`, one file a world.
+
+- **A route names the frame it wants.**
+  [`nav.ts`](https://github.com/dhobi/dreamrefactory/blob/master/timelapse/tests/machine/nav.ts)
+  reads every stage's `getframeaction` table off the disc and finds the keys by
+  a shortest path, pressed one at a time as a player presses them. It adds the
+  hotspots whose scripts move you (`jumptoframe`, `gotostage`), takes a way the
+  table computes at run time once the game has answered it, and leaves a
+  close-up by its `down` region.
+- **A puzzle is solved from its own script, not from a walkthrough.** The
+  crystals, the calendar's gears, the skeleton's joints, the skull pyramid's
+  ring of lights, the Sun temple's stones, the wheels of red and green: each
+  answer is read out of the handler that checks it, and where the script only
+  gives the rules (the geared calendar, the pyramid, the stones, the wheels) the
+  route searches for the moves.
+- **The action is aimed, not tried.** The arrow through the spire and the
+  energy ball at the robot are flown in the route with the formulas of
+  `arrowflight` and `FireBall`, for the wind or the robot as they are at that
+  moment, and let go when the flight hits. The spider maze is searched pixel by
+  pixel over the hit test, with the holes as jumps and the red spiders' beats
+  priced dear.
+- **`tests/machine/probe.ts`** plays any of the route's steps and then moves by
+  hand, printing each flat's scripts with `SRC=1`: how a route is written.
+  `tools/flats.mts` and `tools/props.mts` index the stages' flats and the shops'
+  props against the decompiled scripts.
+
+The roll is seeded (`SEED`, 19961031), so a run is the same run every time.
+
+Playing it through found these in the engine, each fixed:
+
+- **The last region wins** where two overlap (TI.EXE `0x44703b` walks a flat's
+  table backwards): the time gate's buttons lay inside its `down` region.
+- **A prop no script places is anchored at (0, 0)** here, not at the middle of
+  the screen: Timelapse's props store where they stand.
+- **A click made while a loop runs is replayed** when there is no room to do it.
+- **A film's first segment with more after it plays out** instead of waiting
+  for a click (`E020.Mov` after the red gem).
+- **`closeshopfile` finds a shop by its stem or its ref name**, as it already
+  did for DreamFactory 5: the snakes game's props stayed on the screen.
+- **`propxy (name, 3)` answers the point**, not x alone: the red spiders never
+  turned, and the Sun temple's stones shuffled off the board.
+- **A key is a tracked script**, as a click is (not in DreamFactory 5): a loop
+  fired into a step's transition and broke the gold heart's cooling.
+- **A script's own loops fire in its `forceupdate`** unless that would re-enter
+  one: the match could not light the Anasazi's fire while held.
+- **`pointinprop` tests the frame the prop shows, and its pixels** (TI.EXE
+  `0x417120`): the tablets' 45 glyphs are one group told apart by degree.
+- **`plugin ("scrollflat")` turns**: Atlantis calls `lefttoframe` directly.
+- **The BOOTFILE's `idle ()` runs** each pass for a game with no room: it
+  walks the robot, and `EndTimer` plays every ending.
+- **A container with no statement is no script**, and logs no parse error.
 
 ## The page
 

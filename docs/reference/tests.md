@@ -20,7 +20,7 @@ out; the rest builds its own fixtures and travels anywhere
 |---|---|---|
 | `taoot/` | `taoot/tests/auto/` | the engine driven against *Titanic*'s disc — nearly all the behavioural coverage, because that is the game the engine was recovered from |
 | `dust/` | `dust/tests/` | *Dust*'s own: its movies, its `.rtd` saves, its v1 movie playback, and its saloon games |
-| `timelapse/` | `timelapse/tests/` | *Timelapse*'s own: the mouse cursors out of its engine build, the half of its interface that says where the player may go |
+| `timelapse/` | `timelapse/tests/` | *Timelapse*'s own: the mouse cursors out of its engine build, the half of its interface that says where the player may go. Its machine suites, the whole game played headless world by world, are `timelapse/tests/machine/` and run with `npm test -w timelapse` ([Timelapse](../timelapse/README.md#machine-suites)) |
 | `engine/` | `engine/tests/` | what needs no game at all: the write-path scaffolding, the focus rule for keys, a screen with no room on it, what the parser tolerates around a handler, the opcodes Timelapse needs, touch gestures, a stage that moves on its own, and the geometry of a sliding turn |
 | `site/` | `site/tests/` | the shared layer: the layering rule, the chrome cascade, the six locale catalogues, and who the front page credits |
 

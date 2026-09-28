@@ -311,6 +311,8 @@ export function segmentInterval(
   frameCount: number,
   audioSec: number,
   segIdx: number,
+  /** how many segments the film has; a first segment with more after it is a lead-in */
+  segCount = 1,
 ): number {
   const hasRegions = mov.frames.some((f) => f.regions.length > 0);
   // an interactive movie paces on its own clock (or on clicks); only a
@@ -331,5 +333,12 @@ export function segmentInterval(
   // "no step frames -> wait for clicks" (a close-up's shape) cannot apply.
   // No shipped TAOOT segment needs this — they all step — it just refuses to hang.
   if (!interval && segIdx > 0 && !hasRegions) return NATIVE_FRAME_MS;
+  // Nor does a first segment that has more after it: it is a lead-in, not a
+  // close-up. Timelapse opens fifty films with one black frame of type 1 (exit
+  // the segment) and no regions — Egypt's `E020.Mov` after the red gem falls
+  // into the pool, Maya's `M023`…`M029`, most of the endgame's — and waiting
+  // for a click there left the screen black with the film's picture and
+  // narration still to come. No Titanic or Dust film has that shape.
+  if (!interval && segIdx === 0 && segCount > 1 && !hasRegions) return NATIVE_FRAME_MS;
   return interval;
 }

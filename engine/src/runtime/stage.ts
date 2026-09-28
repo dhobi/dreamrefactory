@@ -273,6 +273,26 @@ export class StageController {
     return this.regionsFor(this.session.currentFlat);
   }
 
+  /**
+   * The current flat's region under a point: the LAST of them that holds it.
+   *
+   * The engine walks a flat's region table from its end back to its start and
+   * takes the first it finds (TI.EXE `0x44703b`, the same bytes in Timelapse's
+   * TL.EXE and, with its v1 table, Dust's DF.EXE: `lea edi, [table + count*32]`
+   * … `sub edi, 0x20`), so where two regions overlap the later one is on top.
+   * Timelapse's time-gate console is the proof: its five buttons lie inside the
+   * `down` region that comes first, and with the first match winning none of
+   * them could be pressed. A v5 flat keeps the first match, which is what
+   * RedJack was checked against.
+   */
+  regionAt(x: number, y: number): StgRegion | null {
+    const regions = this.currentFlatRegions();
+    const inside = (r: StgRegion): boolean => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    if (this.session.isV5) return regions.find(inside) ?? null;
+    for (let i = regions.length - 1; i >= 0; i--) if (inside(regions[i])) return regions[i];
+    return null;
+  }
+
   /** names of a flat's clickable regions ("buttons") — countbuttons/indextobutton */
   flatButtonNames(flatName: string): string[] {
     return this.regionsFor(flatName).map((r) => r.name);
@@ -355,9 +375,7 @@ export class StageController {
   async stageClickAt(x: number, y: number): Promise<boolean> {
     const stg = this.stageFile;
     if (!stg) return false;
-    const hit = this.currentFlatRegions().find(
-      (r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom,
-    );
+    const hit = this.regionAt(x, y);
     if (!hit) return false;
     const region = this.session.instanceFrom(stg.file.containers[hit.script]?.data, hit.name || "region");
     // A region with no backing script is a bare hotspot. Two things may still

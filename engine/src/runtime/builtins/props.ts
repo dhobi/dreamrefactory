@@ -190,7 +190,14 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // getter: propxy(name, axis) — 1 = screen x, 2 = screen y. TAOOT's wireless
     // tuner reads the needle's y this way (its y position IS the frequency:
     // `propvalue("tunerneedle", propxy("tunerneedle", 2))`).
-    if (y === undefined) return toNum(x) === 2 ? p.anchorY : p.anchorX;
+    // 3 is both at once, as one point (TI.EXE 0x417697 answers the dword the two
+    // words make, y low and x high — makepoint's packing). Timelapse's red
+    // spiders find their goal with `if propxy (me, 3) = num`: answered x alone,
+    // none of them ever turned at a corner, and the maze's patrols froze.
+    if (y === undefined) {
+      const axis = toNum(x);
+      return axis === 3 ? packPoint(p.anchorX, p.anchorY) : axis === 2 ? p.anchorY : p.anchorX;
+    }
     p.anchorX = Number(x) || 0;
     p.anchorY = Number(y) || 0;
     p.screenPlaced = true; // ...and a save may now write it — see PropInstance

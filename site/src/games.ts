@@ -92,6 +92,12 @@ export interface GameEditions {
   /** the framebuffer this game's data is authored against — see {@link GameScreen} */
   screen: GameScreen;
   /**
+   * Where a prop no script has placed is anchored, when it is not the middle
+   * of the 512x384 screen — the engine's `PropRuntime.defaultAnchor` says why
+   * Timelapse's is (0, 0).
+   */
+  propAnchor?: { x: number; y: number };
+  /**
    * Who DEVELOPED it, which is not one answer for the three.
    *
    * CyberFlix wrote the DreamFactory engine and used it for *Dust* and *Titanic*.
@@ -220,6 +226,8 @@ export const TIMELAPSE: GameEditions = {
   // 640×480, said in the header of every one of its 155 stages — and no band,
   // because there are no sets to put above one
   screen: { width: 640, height: 480 },
+  // its props store where they stand on that screen, not offsets from its middle
+  propAnchor: { x: 0, y: 0 },
   // NOT CyberFlix: the engine is theirs and this game is not
   developer: "GTE Interactive Media",
 };

@@ -145,11 +145,32 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
     const st = p?.state();
     if (!p || !st || !st.frames.length) return 0;
     // the frame drawn: a v5 view's is picked by step and degree (v5FrameIndex)
-    const f = p.shop.frame(st.steps ? p.currentFrame(st) : st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
-    const x0 = p.anchorX - f.posXraw, y0 = p.anchorY - f.posYraw;
+    if (session.isV5) {
+      const f = p.shop.frame(st.steps ? p.currentFrame(st) : st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
+      const x0 = p.anchorX - f.posXraw, y0 = p.anchorY - f.posYraw;
+      const pt = toNum(point ?? 0);
+      const x = pointX(pt), y = pointY(pt);
+      return x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height ? 1 : 0;
+    }
+    /**
+     * Before DreamFactory 5, the frame the prop SHOWS — a degree selector's by
+     * its degree — and a point of its picture, not of its box: TI.EXE's
+     * `pointinprop` (0x417120) tests the box (0x435410) and then opens the
+     * frame and tests the pixel (0x4120b0 / 0x413540). Timelapse's Anasazi
+     * tablets are 45 instances of one `glyph` group told apart only by
+     * `propdeg`, each a strip across the stone whose box covers the ones after
+     * it: read as frame 0's box, every touch was glyph 0, and the tablets could
+     * not be read.
+     */
+    const f = p.shop.frame(p.currentFrame(st));
+    const { x: x0, y: y0 } = p.screenCorner(f);
     const pt = toNum(point ?? 0);
     const x = pointX(pt), y = pointY(pt);
-    return x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height ? 1 : 0;
+    if (!(x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height)) return 0;
+    let lx = x - x0;
+    const ly = y - y0;
+    if (p.flip & 1) lx = f.width - 1 - lx;
+    return f.opaque[ly * f.width + lx] ? 1 : 0;
   });
   // trackbut(bevel, x, y) is NOT a builtin: it is a BOOTFILE library code
   // TAOOT ships (0002), and every one of its ~50 call sites is a button region's

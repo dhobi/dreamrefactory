@@ -33,10 +33,8 @@
  * SECOND flat through the one on screen: the flashlight in world A, the glowstick
  * in the insect room, the x-ray specs in world E. See {@link XRayReveal}.
  *
- * **`scrollflat`** — 10 calls, and deliberately not implemented, because the game
- * itself does not reach them. It is the smooth turn: `lefttoframe` pans from the
- * mid-turn flat to the destination flat through the plugin. But the BOOTFILE
- * writes that handler TWICE —
+ * **`scrollflat`** — 10 calls: the smooth turn, `lefttoframe` panning from the
+ * mid-turn flat to the destination. The BOOTFILE writes that handler twice,
  *
  *     if minMemory
  *         lefttoframeMin (framenum)     / / gotoflat + visualeffect (turnhalfleft)
@@ -44,12 +42,10 @@
  *         lefttoframe (framenum)        / / plugin ("scrollflat", …)
  *     endif
  *
- * — and the `Min` twin does the same turn out of plain engine opcodes this port
- * already has. `minMemory` is set from {@link freemem}/{@link sysmem} (see
- * `builtins/helpers.ts`), which report a 1996-sized machine here for exactly this
- * reason: it routes Timelapse onto the path built out of primitives we have. So
- * these ten calls are unreachable in normal play, and a `scrollflat` that did
- * nothing would be worse than one that says so.
+ * and {@link freemem}/{@link sysmem} report a 1996-sized machine so the arrow
+ * keys take the `Min` twin. But not every turn goes through that choice:
+ * Atlantis's stasis room calls `lefttoframe` from its own flats. So the plugin
+ * changes the flat as the `Min` twin does, without the pan.
  *
  * **`camera`** — 4 `pluginfx` calls, and registered without a store behind it.
  * `pluginfx("camera", path(0))` opens the photo album at the application folder
