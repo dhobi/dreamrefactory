@@ -349,6 +349,12 @@ export class MoviePlayer {
         frames.push({ pixels: blank, width, height, palette: paletteV5(data) });
         continue;
       }
+      if (!this.session.drawsPictures && !seg.dfV5) {
+        // and a v1 or v4 film the same way: the frame record says its size
+        if (!blank || blank.length !== f.width * f.height) blank = new Uint8Array(f.width * f.height);
+        frames.push({ pixels: blank, width: f.width, height: f.height });
+        continue;
+      }
       if (seg.dfV5) {
         const d = decodeFrameV5(data, fb);
         frames.push({ pixels: fb.pixels.slice(0, d.width * d.height), width: d.width, height: d.height, palette: paletteV5(data) });
@@ -372,7 +378,7 @@ export class MoviePlayer {
     // editor computes differently is a preview of a film the game does not play.
     const audio = segmentAudio(seg);
     const audioSec = audio?.audioSec ?? 0;
-    const interval = segmentInterval(seg, frames.length, audioSec, segIdx);
+    const interval = segmentInterval(seg, frames.length, audioSec, segIdx, mov.segments.length);
 
     // now that the frame interval is known, play the soundtrack (finish() stops
     // the "voice" channel, so it can never outlive the movie). A segment that

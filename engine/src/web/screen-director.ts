@@ -479,7 +479,12 @@ export class ScreenDirector {
     // running, a click on anything but the opponent went nowhere — the skeleton
     // is beaten by clicking a vine. Popped here instead, one a pass, before the
     // loops are served and while nothing holds the engine.
-    if (this.session.isV5 && !this.inputLocked && this.session.events.length) {
+    //
+    // And a game with no room at all is the same case: Timelapse has no SET, so
+    // no SetViewer ever drained its queue. A click made while a flat's loop was
+    // running went nowhere — the spear's jab at Egypt's crocodile, whose
+    // `animtick` is running most of the time the beast's head is turned.
+    if ((this.session.isV5 || !this.room) && !this.inputLocked && this.session.events.length) {
       const e = this.session.events.take();
       if (e?.kind === "keydown") void this.session.track(this.keyDown(e.key, e.special).then(() => {}), `queued key ${e.key}`);
       else if (e) {
@@ -491,12 +496,42 @@ export class ScreenDirector {
       }
     }
     this.session.scheduler.serviceFrameLoops(); // sky drift, fence idle
+    this.serviceBootIdle();
     this.serviceCursor();
     if (this.movies.playing) {
       // a self-paced movie may finish mid-tick; fall back to the settled room
       return this.movies.tick(now) ?? this.room?.roomFrame() ?? null;
     }
     return this.room?.advanceRoom(now) ?? null;
+  }
+
+  /**
+   * The BOOTFILE's `idle ()`, once a pass while nothing else runs, for a game
+   * with no room — the null event of the original's event loop.
+   *
+   * A room has its own: DreamFactory 5's maze runs the boot's idle (MazeView),
+   * and Titanic's and Dust's do nothing in theirs but set the cursor, which the
+   * director does itself. Timelapse has no room, and its idle is game logic:
+   * `EndTimer`, which counts down the endgame and plays every one of its
+   * endings, and `sendtoflat (currentflat (), idle ())` for a flat that has
+   * asked for it with `idleon` — Atlantis's robot walks at you in its flat's
+   * `Idle`, and without it stood still at the back of the room for ever.
+   * Tracked as the heartbeat is (`trackIdle`): it must not read as a script the
+   * player started, or it would hold their input off.
+   */
+  private bootIdling = false;
+  private serviceBootIdle(): void {
+    if (this.room || this.session.isV5 || this.bootIdling || this.inputLocked || this.movies.playing) return;
+    const boot = this.session.bootScripts.find((b) => b.script.codes.has("idle"));
+    if (!boot) return;
+    this.bootIdling = true;
+    void this.session.trackIdle(
+      this.session.interp
+        .runHandler(boot, "idle", [], { me: boot.name, target: "" })
+        .catch((e) => this.onLog(`script error in ${boot.name}.idle: ${(e as Error).message}`))
+        .finally(() => (this.bootIdling = false)),
+      "boot idle",
+    );
   }
 
   /**
@@ -1362,6 +1397,21 @@ export class ScreenDirector {
       return true;
     }
     if (this.inputLocked) return false;
+    // TRACKED, as a click is (see press): a key is a script too, and the engine
+    // runs one at a time. Untracked, the scheduler read the engine as free while
+    // a step's transition was still running and fired loops into the middle of
+    // it — Timelapse's fire in the Jaguar temple animates by `flattick`, and the
+    // one that fired as you stepped away re-armed itself on the next flat, over
+    // the gold heart's cooling loop (the same (flat, name) key): the heart never
+    // cooled and the temple could not be finished.
+    // Not in DreamFactory 5: RedJack's duels are fought by keys while their
+    // loops run, and a tracked key held the fight's `think` off until the
+    // Spaniard's duel on day seven never ended (redjack/tests/machine/day7.ts).
+    if (this.session.isV5) return this.keyDispatch(keyName);
+    return this.session.track(this.keyDispatch(keyName), `key ${keyName}`);
+  }
+
+  private async keyDispatch(keyName: string): Promise<boolean> {
     // a full-screen overlay stage (TAOOT's deck map) handles keys itself — page
     // decks with arrows/letters — instead of the world turn/walk navigation
     const target = this.session.stageCtrl.keydownTarget();
@@ -1764,11 +1814,7 @@ export class ScreenDirector {
       x -= this.session.stageOrigin.x;
       y -= this.session.stageOrigin.y;
     }
-    return (
-      this.session
-        .stageCtrl.currentFlatRegions()
-        .find((rg) => x >= rg.left && x <= rg.right && y >= rg.top && y <= rg.bottom) ?? null
-    );
+    return this.session.stageCtrl.regionAt(x, y);
   }
 
   /**

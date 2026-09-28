@@ -1719,6 +1719,11 @@ export class GameSession {
     if (!data) return null;
     const tokens = sniffScript(data);
     if (!tokens) return null;
+    // a container with no statement in it at all is no script: Atlantis's flat
+    // z0001.143 holds sixteen bytes and a lone integer, the authoring tool's
+    // stub, and parsing it logged an error at every visit (tools/dumpscripts.ts
+    // skips the same containers, for the same reason)
+    if (!tokens.some((t) => t.kind === "op")) return null;
     try {
       const script = parseScript(tokens);
       return new ScriptInstance(owner, script);
@@ -3088,11 +3093,18 @@ export class GameSession {
    * or "enemy2", and each stage's `closestage` says `closeshopfile ("combat")`.
    * Matched by file name only, none of them ever closed, and by the third lesson
    * three `nick`s and three `enemy`s were answering one click.
+   *
+   * Not DreamFactory 5 only: Timelapse opens `e024.shp` and closes it as
+   * `closeshopfile ("e024")`, and closes each world's shop by its letter
+   * (`closeshopfile (curworldchar)`, whose refName is "E"), and Dust says
+   * `closeshopfile ("tumble")`. Matched exactly, none of those ever closed — the
+   * snakes game's `snake4` stayed on the screen, invisible and in the way of the
+   * pyramid door's fourth wheel, and every world left its props behind it.
    */
   private openShopKey(name: string): string {
     const lower = name.toLowerCase();
     const shops = this.propRuntime.shops;
-    if (shops.has(lower) || !this.isV5) return lower;
+    if (shops.has(lower)) return lower;
     const stem = (n: string): string => n.replace(/\.[a-z0-9]{1,4}$/, "");
     for (const key of shops.keys()) if (stem(key) === stem(lower)) return key;
     for (const [key, shop] of shops) if (shop.shp.refName.toLowerCase() === lower) return key;

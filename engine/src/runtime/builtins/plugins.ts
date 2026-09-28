@@ -170,13 +170,31 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
           if (!board) log(`pluginfx("checkmove"): called with no board`);
           return answer;
         }
-        case "scrollflat":
-          // Unreachable while the memory report keeps `minMemory` true, which is
-          // the whole point of that report. If this ever appears in a log, the
-          // turn transitions have moved onto a path this port does not implement
-          // and turning will have stopped working — so it says so loudly.
-          log(`plugin("scrollflat"): the smooth turn is not implemented — expected minMemory to route around it`);
+        case "scrollflat": {
+          /**
+           * The smooth turn, as its flat changes only: from the mid-turn flat
+           * to the destination, which is what `lefttoframeMin` does with plain
+           * opcodes (`gotoflat (namemid)`, `gotoflat (namedest)`).
+           *
+           * `minMemory` routes the arrow keys onto `lefttoframeMin`, but not
+           * every turn: Atlantis's stasis room calls `lefttoframe` from its
+           * flats' own scripts (`TurnToPod`, `PodOpen`), and a scrollflat that
+           * did nothing left the frame number on the tube and the picture on the
+           * wheels, the way into the robot's fight never opened, and the game
+           * could not be finished. The calls that set the pan up and tear it
+           * down (no flat names, or an inventory prop's) have nothing to show.
+           */
+          const [mid, dest] = [toStr(rest[0] ?? ""), toStr(rest[1] ?? "")];
+          const isFlat = (n: string): boolean => session.stageCtrl.flatToIndex(n) > 0;
+          if (rest.length >= 4 && isFlat(dest)) {
+            return (async () => {
+              if (isFlat(mid)) await session.stageCtrl.gotoFlat(mid);
+              await session.stageCtrl.gotoFlat(dest);
+              return 0;
+            })();
+          }
           return 0;
+        }
         default:
           log(`${cmd}("${name}"): unknown plugin`);
           return 0;

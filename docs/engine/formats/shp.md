@@ -112,7 +112,10 @@ against dragged inventory items, blackjack cards, and UI-band buttons) is:
 screenPosition = propxy − storedFrameOffset
 ```
 
-with a default anchor at **(256, 192)** — the centre of the 512×384 screen.
+with a default anchor at **(256, 192)** — the centre of the 512×384 screen —
+for Titanic and Dust, whose never-placed props store offsets centred on it.
+Timelapse's store where they stand on its 640×480 screen, so its default is
+**(0, 0)** (`propAnchor` in `site/src/games.ts`).
 The `propxy` command moves a prop in this screen space. UI-band props live
 below y=264 (e.g. `propxy(me, 256, 324)`).
 

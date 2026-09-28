@@ -1017,8 +1017,30 @@ export class Scheduler {
    */
   pumpFrameLoops(exceptName: string): void {
     const ex = String(exceptName).toLowerCase();
+    /**
+     * The caller's own loops are held back only when firing one would re-enter
+     * a handler that is already running — a loop's handler that yields a frame
+     * must not pump itself. Holding back EVERY loop of the caller's name was
+     * wider than that, and it is a game that cannot be finished: Timelapse's
+     * match (the Anasazi's `invmatch`) is struck inside its own `while
+     * stilldown()` mousedown, which arms `makeloop ("prop", me, "matchburn",
+     * 4)`; the flame reaches the twigs only while the match is held over them,
+     * and letting go docks it (`invdockloop`, the same (prop, name) key). Held
+     * back, `matchburn` never ran, and the fire could not be lit. TI.EXE's
+     * forceupdate is a service pass nested in the running script, so the
+     * match's own loop does fire while it is held.
+     */
+    const reenters = (l: GameLoop): boolean => {
+      if (l.name !== ex) return false;
+      const inst =
+        l.kind === "prop" ? this.session.propScripts.get(l.name)
+        : l.kind === "flat" ? this.session.flatScripts.get(l.name)
+        : l.kind === "actor" ? this.session.castScripts.get(l.name)
+        : undefined;
+      return !inst || this.session.interp.isRunning(inst, l.handler);
+    };
     // NOT gated on scriptBusy: the caller IS the busy script, yielding a frame
-    this.fireLoops((l) => l.period <= 1 && l.name !== ex);
+    this.fireLoops((l) => l.period <= 1 && !reenters(l));
     /**
      * ...and the COARSE loops the master service has already counted down.
      *
@@ -1038,7 +1060,7 @@ export class Scheduler {
      * original's own pass does, since its forceupdate IS a service pass.
      */
     this.fireNow(
-      this.loops.filter((l) => !l.paused && l.period > 1 && l.count <= 0 && l.name !== ex),
+      this.loops.filter((l) => !l.paused && l.period > 1 && l.count <= 0 && !reenters(l)),
     );
   }
 

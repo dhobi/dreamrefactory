@@ -189,6 +189,8 @@ const BOOT_FILE = "bootfile";
 export interface HostOptions {
   /** the game's screen, if it is not the DF4 512x384 (engine/src/web/screen.ts) */
   screen?: ScreenSize;
+  /** where a prop no script placed is anchored, if not (256, 192) — see PropRuntime.defaultAnchor */
+  propAnchor?: { x: number; y: number };
 }
 
 /** what a page can decide about a cold boot before it starts */
@@ -291,6 +293,7 @@ export class GameHost {
     // says 640x480 (Timelapse) instead of the DF4 default 512x384 that Titanic
     // and Dust share — see engine/src/web/screen.ts.
     this.director = new ScreenDirector(this.session, opts.screen);
+    if (opts.propAnchor) this.session.propRuntime.defaultAnchor = { ...opts.propAnchor };
     this.director.onLog = (l) => this.ui.log(l);
     this.session.onLog = (l) => this.ui.log(l);
     /**

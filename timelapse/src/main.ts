@@ -453,7 +453,7 @@ async function main(): Promise<void> {
       log: (l) => say(`  ${l}`),
       hud: (t) => t && say(`  hud: ${t}`),
     },
-    { screen: SCREEN },
+    { screen: SCREEN, propAnchor: TIMELAPSE.propAnchor },
   );
   /**
    * A real frame source before the boot runs, so `playmovie` is modal and the
