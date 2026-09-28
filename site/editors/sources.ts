@@ -28,6 +28,7 @@
  * row hides itself below two sources rather than insisting on one.
  */
 import { DfEncoding } from "@dreamfactory/engine/df/text";
+import { detectVersion } from "@dreamfactory/engine/df/version";
 import { uiLanguage } from "@dreamfactory/site/locales";
 import { siteUrl } from "@dreamfactory/site/site";
 import { GAMES, GameEditions, GameScreen, NEUTRAL, editionOfUrl } from "@dreamfactory/site/games";
@@ -206,6 +207,18 @@ export function encodingOf(source: Source): DfEncoding {
 export function screenOf(source: Source | null | undefined): GameScreen {
   return source?.game.screen ?? { width: 512, height: 384, band: 264 };
 }
+
+/**
+ * A DreamFactory 5 file — RedJack's `.pupp`, `.cast`, `.shop`, `.stag`, `.move`
+ * and `.trak`. Every editor READS one: the engine's readers take v5 at v5's
+ * offsets, and a v5 sprite, frame or flat brings its own palette. None WRITES
+ * one: the patches and the PNG encoders lay records out at v4's offsets, so
+ * an export would be bytes neither engine reads. Until there is a v5 write
+ * path, a v5 file opens read-only and its export button says why.
+ */
+export const isV5File = (bytes: Uint8Array): boolean => detectVersion(bytes) === 5;
+export const V5_READ_ONLY =
+  "DreamFactory 5 file (RedJack): shown through the v5 reader, read-only. Export needs a v5 write path.";
 
 /** files with one of these extensions, which is what every editor wants */
 export const byExtension =

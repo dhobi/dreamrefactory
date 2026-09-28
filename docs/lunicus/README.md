@@ -134,6 +134,13 @@ Playing it through this way found a good deal in the EXE:
   view's top rows black for a frame, and a heavy one drops the frame.
 - **The film player's tracked buttons.** A hotspot of type −1 is a button,
   and the elevators' floors are two of them.
+- **A frame can wait for its sound.** The player holds each frame for the
+  film's floor or the frame's own hold, whichever is longer, in sixtieths of a
+  second (`_portgetime` is `timeGetTime` × 3 / 50). A frame with bit 0 of its
+  flags is then held on until both sound channels are idle (`0x40e6e5` →
+  `0x420904`). The intro's lecture is one: its eighteen slides run at two a
+  second, and the last is held until the narration ends. The port kept only
+  the hold, so the next scene came early and the voice ran on over it.
 - **The ENTERING message** shows only when the level before was not a combat
   level (`0x40a4b2`).
 

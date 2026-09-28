@@ -48,8 +48,11 @@ async function until(done: (s: DriveState) => boolean, what: string, max = 20_00
   }
   return done(s) ? s : fail(`no ${what} by tick ${s.t}: ${JSON.stringify(s)}`);
 }
-const box = (await page.locator("#screen").boundingBox())!;
-const click = (x: number, y: number): Promise<void> => page.mouse.click(box.x + ((x + 0.5) * box.width) / SCREEN_W, box.y + ((y + 0.5) * box.height) / SCREEN_H);
+// measured at each click: the menu bar above the picture moves it (see playthrough.ts)
+const click = async (x: number, y: number): Promise<void> => {
+  const box = (await page.locator("#screen").boundingBox())!;
+  await page.mouse.click(box.x + ((x + 0.5) * box.width) / SCREEN_W, box.y + ((y + 0.5) * box.height) / SCREEN_H);
+};
 
 // a new game: the title, and a click on it
 await until((s) => s.phase === "title" && s.t > 3200, "title");

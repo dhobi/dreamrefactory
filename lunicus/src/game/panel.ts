@@ -186,7 +186,7 @@ export class Panel {
   *help(day: number, again: () => void, clut: Uint8ClampedArray): Co {
     const m = this.m;
     this.draw();
-    m.speaker.stop();
+    m.stopSound();
     m.stopAmbience();
     yield* m.fadeOut();
     yield* playFilm(m, "help.move", day);

@@ -50,6 +50,7 @@ interface DriveState {
   score: number;
   won: boolean;
   stopped: string;
+  screen: { x: number; y: number; width: number; height: number };
 }
 
 const t0 = Date.now();
@@ -103,12 +104,22 @@ await page.waitForFunction(() => (window as unknown as { lunicusDrive?: { runnin
 await page.evaluate((files) => (window as unknown as { lunicusDrive: { preload(p: string[]): Promise<void> } }).lunicusDrive.preload(files), rec.files);
 console.log(`ok    the page is up in drive mode, ${rec.files.length} files fetched (${secs()})`);
 
-const box = (await page.locator("#screen").boundingBox())!;
+/**
+ * Where the canvas is, as the page last said (`DriveState.screen`). Not
+ * measured once: the frame settles in over its first second, and the menu bar
+ * above the picture pushes it down on the title and gives it back in a game —
+ * a click aimed by a stale box lands that far off, which is how a replay once
+ * died in day three's city.
+ */
+let box = (await page.locator("#screen").boundingBox())!;
 const at = (x: number, y: number): [number, number] => [box.x + ((x + 0.5) * box.width) / SCREEN_W, box.y + ((y + 0.5) * box.height) / SCREEN_H];
 const KEYS: Record<string, string> = { " ": "Space" };
 
-const to = (t: number): Promise<DriveState> =>
-  page.evaluate((t) => (window as unknown as { lunicusDrive: { to(t: number): DriveState } }).lunicusDrive.to(t), t);
+const to = async (t: number): Promise<DriveState> => {
+  const s = await page.evaluate((t) => (window as unknown as { lunicusDrive: { to(t: number): DriveState } }).lunicusDrive.to(t), t);
+  box = s.screen;
+  return s;
+};
 /** two animation frames: the canvas shows what the machine has drawn */
 const painted = (): Promise<void> => page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 

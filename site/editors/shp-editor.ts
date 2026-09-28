@@ -18,7 +18,7 @@ import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
@@ -106,6 +106,9 @@ const frameLoc = (): number | undefined => state()?.frames[frameIdx];
 
 // --- loading ----------------------------------------------------------------
 
+/** a DreamFactory 5 file, open read-only (see `isV5File`) */
+let readOnly = false;
+
 function loadShp(bytes: Uint8Array, name: string): void {
   stopPlayback();
   let parsed: ShpFile;
@@ -123,7 +126,11 @@ function loadShp(bytes: Uint8Array, name: string): void {
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   frameCache.clear();
   edits.length = 0;
-  dirtyEl.textContent = "";
+  // a v5 file reads but cannot be written yet (sources.ts)
+  readOnly = isV5File(bytes);
+  dirtyEl.textContent = readOnly ? V5_READ_ONLY : "";
+  // a button that refuses when pressed is worse than one that says so first
+  ($("exportBtn") as HTMLButtonElement).disabled = readOnly;
   groupIdx = 0;
   stateIdx = 0;
   frameIdx = 0;
@@ -181,7 +188,7 @@ async function initServerShops(): Promise<void> {
   // the reader takes both (`readShpFile` accepts version 1 and 4 through one
   // layout — the PRP header did not move). Dust ships 14 of them and they were
   // invisible here, which is a third of its props.
-  const shops = filesIn(source, byExtension(".shp", ".prp"));
+  const shops = filesIn(source, byExtension(".shp", ".prp", ".shop"));
   if (!shops.length) return;
   const wrap = $("serverShops");
   const note = document.createElement("div");
@@ -244,7 +251,8 @@ function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!f.width || !f.height) return;
   const img = ctx.createImageData(f.width, f.height);
-  indexedToRGBA(f.indexed, f.width, f.height, palette, img.data);
+  // a v5 sprite brings its own palette; a v4 one is drawn through the file's
+  indexedToRGBA(f.indexed, f.width, f.height, f.palette ?? palette, img.data);
   for (let i = 0; i < f.width * f.height; i++) {
     if (!f.opaque[i]) img.data[i * 4 + 3] = 0;
   }
@@ -814,6 +822,10 @@ function download(blob: Blob, name: string): void {
 
 $("exportBtn").addEventListener("click", () => {
   if (!shp) return;
+  if (readOnly) {
+    log(V5_READ_ONLY);
+    return;
+  }
   const bytes = writeContainerFile(shp.file);
   try {
     readShpFile(bytes); // sanity: the export must read back as a shop

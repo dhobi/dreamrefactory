@@ -9,7 +9,7 @@
  * not play through waits for a click. Esc ends a film: the page's own key.
  */
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
-import { FLAG_PLAY_THROUGH, FLAG_STEP, nextFrameV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
+import { FLAG_PLAY_THROUGH, FLAG_STEP, FLAG_WAIT_SOUND, nextFrameV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
 import type { Co, Machine } from "./machine";
 
 export const ESCAPE = "Escape";
@@ -92,8 +92,13 @@ export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmH
       yield;
     }
     m.filmWaiting = false;
+    // a frame with bit 0 is held past its time until the sound has finished
+    // (0x40e6e5 → 0x420904): a narration's picture waits for its last word
+    function* soundDone(): Co {
+      if (frame.flags & FLAG_WAIT_SOUND) while (m.soundBusy()) yield;
+    }
     if (skipped) {
-      m.speaker.stop();
+      m.stopSound();
       yield* hooksLeft();
       return { end: "exit", to: "" };
     }
@@ -104,11 +109,13 @@ export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmH
       const type = hit ? Math.abs(hit.type) : 0;
       if (type === 1 || type === 3) return yield* hooksLeft(), { end: "exit", to: "" };
       if (type === 2 && hit) {
+        yield* soundDone();
         index = hit.target;
         continue;
       }
       if (waits) continue;
     }
+    yield* soundDone();
     const next = nextFrameV0(film, index);
     if (next < 0) {
       yield* hooksLeft();

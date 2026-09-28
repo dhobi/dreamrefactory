@@ -41,99 +41,11 @@
  * only); Esc ends the talk, as the EXE's key table (0x4174f6) does.
  */
 import { decodeFigureV0, decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
-import { paletteV0 } from "@dreamfactory/engine/df/mov-v0";
-import { readContainerFile } from "@dreamfactory/engine/df/container";
-import { readPuppetTrackV0, type TrackKeyV0 } from "@dreamfactory/engine/df/talk-v0";
+import { readPuppetTrackV0, readTalkFileV0 as readTalkFile, type TrackKeyV0 } from "@dreamfactory/engine/df/talk-v0";
 import { MENU_LINE, MENU_TOP, SCREEN_W, VIEW_H } from "./data";
 import { ESCAPE } from "./film";
 import type { Co, Machine } from "./machine";
 import { clip, inRect, type Rect } from "./screen";
-
-interface Line {
-  frames: number;
-  wave: number;
-  track: number;
-  subtitle: string;
-  name: string;
-}
-interface Question {
-  wave: number;
-  text: string;
-  name: string;
-}
-interface Entry {
-  hide: boolean;
-  next: number;
-  question: string;
-  answer: string;
-}
-
-const pstr = (d: Uint8Array, at: number): string => String.fromCharCode(...d.subarray(at + 1, at + 1 + d[at]));
-
-export interface TalkFile {
-  voicedQuestions: boolean;
-  palette: Uint8ClampedArray;
-  idleMin: number[];
-  idleMax: number[];
-  lines: Line[];
-  questions: Question[];
-  menus: Entry[][];
-  /** per layer, its pictures' containers */
-  layers: number[][];
-  containers: Uint8Array[];
-}
-
-export function readTalkFile(data: Uint8Array): TalkFile {
-  const file = readContainerFile(data);
-  const c = file.containers.map((x) => x.data);
-  const dv = (d: Uint8Array) => new DataView(d.buffer, d.byteOffset, d.byteLength);
-  const c0 = c[0];
-  const v0 = dv(c0);
-  const lines: Line[] = [];
-  for (let i = 0; i < v0.getInt16(0x842, true); i++) {
-    const r = 0x844 + i * 0x138;
-    lines.push({
-      frames: v0.getInt16(r + 6, true),
-      wave: v0.getInt32(r + 8, true),
-      track: v0.getInt32(r + 0xc, true),
-      subtitle: pstr(c0, r + 0x18),
-      name: pstr(c0, r + 0x118),
-    });
-  }
-  const v1 = dv(c[1]);
-  const questions: Question[] = [];
-  for (let i = 0; i < v1.getInt16(2, true); i++) {
-    const r = 4 + i * 0x128;
-    questions.push({ wave: v1.getInt32(r, true), text: pstr(c[1], r + 8), name: pstr(c[1], r + 0x108) });
-  }
-  const v2 = dv(c[2]);
-  const menus: Entry[][] = [];
-  for (let m = 0; (m + 1) * 0x174 <= c[2].length; m++) {
-    menus.push(
-      Array.from({ length: 5 }, (_, i) => {
-        const e = m * 0x174 + 0x20 + i * 0x44;
-        return { hide: v2.getInt16(e, true) !== 0, next: v2.getInt16(e + 2, true), question: pstr(c[2], e + 4), answer: pstr(c[2], e + 0x24) };
-      }),
-    );
-  }
-  const v3 = dv(c[3]);
-  const layers = Array.from({ length: 8 }, (_, l) => {
-    const r = l * 0x106;
-    const n = v3.getInt16(r + 2, true);
-    return Array.from({ length: Math.max(0, n) }, (_, k) => v3.getInt32(r + 8 + k * 4, true));
-  });
-  return {
-    voicedQuestions: v0.getUint16(8, true) !== 0,
-    palette: paletteV0(c0.subarray(0x22, 0x822)),
-    idleMin: [0, 1, 2, 3].map((k) => v0.getInt32(0x822 + 4 * k, true)),
-    idleMax: [0, 1, 2, 3].map((k) => v0.getInt32(0x832 + 4 * k, true)),
-    lines,
-    questions,
-    menus,
-    layers,
-    containers: c,
-  };
-}
 
 /** a talk file's number for the day's progress `[0x42d1c8]` (table 0x427168) */
 export const talkNumber = (progress: number): number => (progress <= 1 ? 1 : progress === 2 ? 2 : 3);
@@ -166,7 +78,7 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
   const ts: TalkState = { file: path, menu: [], line: null, played: [] };
   state.talk = ts;
   m.log(`talk ${path}: ${t.lines.length} lines, ${t.questions.length} questions`);
-  m.speaker.stop();
+  m.stopSound();
   yield* m.fadeOut();
 
   const pictures = new Map<number, FrameV0>();
@@ -253,7 +165,7 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
       const key = Math.min((m.ticks - start) >> 1, line.frames - 1);
       if (key !== prev && key >= 0) (drawKey(keys, prev, key), (prev = key));
       if (keyAbort()) {
-        m.speaker.stop();
+        m.stopSound();
         aborted = true;
         break;
       }
@@ -272,7 +184,7 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
     if (!wave) return false;
     m.sound(wave);
     for (let i = m.soundTicks(wave); i > 0; i--) {
-      if (keyAbort()) return (m.speaker.stop(), true);
+      if (keyAbort()) return (m.stopSound(), true);
       yield;
     }
     return false;
@@ -357,7 +269,7 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
     }
   } finally {
     ts.menu = [];
-    m.speaker.stop();
+    m.stopSound();
     yield* m.fadeOut();
     state.talk = null;
     m.log(`talk ${path} over: ${ts.played.join(", ")}`);

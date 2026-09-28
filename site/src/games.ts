@@ -112,6 +112,13 @@ export interface GameEditions {
    */
   developer: string;
   /**
+   * Every file in this game is DreamFactory 0 — a fact the bytes cannot state:
+   * a v0 container has no version tag, and reading one as though it had gives
+   * noise, sometimes 1, 4 or 5 (engine/src/df/version.ts). So a tool that opens
+   * this game's files has to be told, and this is where it asks. Only Lunicus.
+   */
+  dreamFactory0?: boolean;
+  /**
    * The game's little mark, as the FRONT-END serves it — `site/public/mark-*`,
    * which are copies of each game's own `<dir>/public/<dir>-mark.*` favicon.
    *
@@ -310,6 +317,7 @@ export const LUNICUS: GameEditions = {
   // its views are drawn into; no band, because there are no sets
   screen: { width: 512, height: 384 },
   developer: "CyberFlix",
+  dreamFactory0: true,
 };
 
 /**

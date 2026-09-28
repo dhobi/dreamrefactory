@@ -14,6 +14,7 @@
  * test, as fast as the CPU goes.
  */
 import { decodeAudioV0 } from "@dreamfactory/engine/df/audio";
+import { readBankV0 } from "@dreamfactory/engine/df/banks";
 import { SCREEN_H, SCREEN_W } from "./data";
 import type { BitmapFont } from "./font";
 import { actionOf, defaultSco, type Sco } from "./sco";
@@ -143,10 +144,30 @@ export class Machine {
     return null;
   }
 
+  /**
+   * The tick the sounds playing now end on. The EXE asks its two sound
+   * channels whether they are idle (0x420975; the ambience's is a third, and
+   * not asked); the machine keeps the answer as a tick, from each sound's
+   * length, so a run waits on it the same way whatever the page's audio does.
+   */
+  private soundEnds = 0;
+
   /** a v0 sound container, played */
   sound(data: Uint8Array): void {
     const { sampleRate, samples } = decodeAudioV0(data);
     if (samples.length) this.speaker.play(samples, sampleRate);
+    this.soundEnds = Math.max(this.soundEnds, this.ticks + this.soundTicks(data));
+  }
+
+  /** a sound is still playing on the two channels (0x420975 answering 0) */
+  soundBusy(): boolean {
+    return this.ticks < this.soundEnds;
+  }
+
+  /** every sound stopped, and nothing left to wait for */
+  stopSound(): void {
+    this.speaker.stop();
+    this.soundEnds = this.ticks;
   }
 
   /**
@@ -156,11 +177,7 @@ export class Machine {
    * round on a channel of its own (0x4195fe, 0x4206a9).
    */
   setAmbience(name: string, bank: Uint8Array[]): void {
-    const c0 = bank[0];
-    const v = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
-    const n = v.getInt16(0, true);
-    const pieces = v.getInt16(2, true);
-    const order = Array.from({ length: v.getInt16(4, true) }, (_, i) => v.getInt16(6 + 2 * i, true)).filter((k) => k >= 1 && k <= pieces);
+    const { sounds: n, pieces, order } = readBankV0(bank[0]);
     if (!order.length) throw new Error(`${name}: no ambience`);
     const decoded = order.map((k) => decodeAudioV0(bank[n + k]));
     const samples = new Float32Array(decoded.reduce((a, d) => a + d.samples.length, 0));

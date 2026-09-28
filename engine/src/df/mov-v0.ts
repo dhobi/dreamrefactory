@@ -1,4 +1,5 @@
 import { DFContainerFile, readContainerFile } from "./container";
+import type { MovClickRegion, MovFile, MovFrame } from "./mov";
 
 /**
  * DreamFactory 0's films — *Lunicus* (1994), the generation before Dust
@@ -39,9 +40,12 @@ import { DFContainerFile, readContainerFile } from "./container";
  *   +0x16  i16  action: 1 exit · 2 goto `target` · 3 exit and chain to the film
  *               named at +0x30 · 6 seen on five frames, all with +0x1a bit 4
  *   +0x18  i16  target, a 0-BASED frame
- *   +0x1a  i16  flags: bit 2 play through the hotspots rather than wait for a
- *               click · bit 4 step to the next frame whatever the action says
- *               (never set in Dust; set here on exactly the action-6 frames)
+ *   +0x1a  i16  flags: bit 0 hold the frame, once its time is up, until the
+ *               sound has finished (LUNICUS.EXE 0x40e6e5 → 0x420904, which
+ *               spins until both sound channels are idle) · bit 2 play through
+ *               the hotspots rather than wait for a click · bit 4 step to the
+ *               next frame whatever the action says (never set in Dust; set
+ *               here on exactly the action-6 frames)
  *   +0x1c  i16  picture container
  *   +0x20  i32  sound started with the frame, container |ref|, 0 = none
  *   +0x24  i32  where the frame's hotspots start in container 0 (Dust reads an
@@ -104,6 +108,7 @@ const FRAME_BYTES = 80;
 const HOTSPOT_BYTES: Record<number, number> = { [-1]: 14, 1: 14, 2: 16, 3: 46, 4: 48, 5: 14 };
 
 /** frame flags */
+export const FLAG_WAIT_SOUND = 1;
 export const FLAG_PLAY_THROUGH = 4;
 export const FLAG_STEP = 0x10;
 /** one tick of a hold, in milliseconds */
@@ -183,4 +188,93 @@ export function nextFrameV0(film: MovFileV0, index: number): number {
   if (f.flags & FLAG_STEP) return index + 1 < film.frames.length ? index + 1 : -1;
   if (f.action === 2) return Math.min(Math.max(f.target, 0), film.frames.length - 1);
   return -1;
+}
+
+/**
+ * A v0 film as the {@link MovFile} the format editors read, so the movie editor
+ * can show one without a player of its own ({@link file://./mov-v1.ts}'s
+ * `movFileFromV1` is the same bridge for Dust). It is a picture of the film,
+ * not a way to play it: Lunicus plays its films with its own loop
+ * (lunicus/src/game/film.ts), and nothing here goes back into a v0 file.
+ *
+ * The codes are v4's own ({@link file://./mov.ts}): 1 exit (from the last
+ * frame the film's end, 3 anywhere else, as for v1), 2 goto, 3 exit and chain;
+ * a frame with the step bit is v4's 6, advance one frame. A hotspot of type −1
+ * is an exit drawn as a button, so it is v4's 1.
+ */
+export function movFileFromV0(v0: MovFileV0): MovFile {
+  const count = v0.frames.length;
+  const frameName = (idx0: number): string => String(Math.max(0, Math.min(count - 1, idx0)) + 1);
+  const sounds = new Map<string, number>();
+  const soundRef = (c: number): string => {
+    if (c <= 0) return "";
+    sounds.set(String(c), c);
+    return String(c);
+  };
+  const frames = v0.frames.map((f, i): MovFrame => {
+    const last = i === count - 1;
+    let type: number;
+    let target = "";
+    let event = "";
+    if (f.flags & FLAG_STEP) type = 6;
+    else if (f.action === 1) type = last ? 1 : 3;
+    else if (f.action === 2) (type = 2), (target = frameName(f.target));
+    else if (f.action === 3) (type = 3), (event = f.chainTo);
+    else type = 6;
+    const regions = f.hotspots.map(
+      (h): MovClickRegion => ({
+        type: h.type === -1 ? 1 : h.type >= 1 && h.type <= 5 ? h.type : 6,
+        target: h.type === 2 ? frameName(h.target) : "",
+        y0: h.top,
+        x0: h.left,
+        y1: h.bottom,
+        x1: h.right,
+        sound: soundRef(h.sound),
+        event: "",
+        record: 0,
+      }),
+    );
+    return {
+      type,
+      height: v0.height,
+      width: v0.width,
+      locationFrame: f.picture,
+      // the logic is inline in the frame record, as in v1: no container to point at
+      locationClickRegion: 0,
+      record: FRAMES_AT + i * FRAME_BYTES,
+      name: String(i + 1),
+      sound: soundRef(f.sound),
+      event,
+      target,
+      regions,
+      holdTicks: f.holdTicks,
+      waitsForVoice: (f.flags & FLAG_WAIT_SOUND) !== 0,
+      holdsDeadline: false,
+      playsThroughRegions: (f.flags & FLAG_PLAY_THROUGH) !== 0,
+    };
+  });
+  const film: MovFile = {
+    file: v0.file,
+    bias: 0,
+    width: v0.width,
+    height: v0.height,
+    originX: v0.left,
+    originY: v0.top,
+    paletteRaw: v0.paletteRaw,
+    frames,
+    actionFrame1: "",
+    actionFrame2: "",
+    flags: 0,
+    keySkips: true,
+    minHoldTicks: v0.framerate,
+    audioChunks: [],
+    audioLoops: false,
+    sounds,
+    soundFollows: new Map(),
+    cues: [],
+    dfV0: true,
+    segments: [],
+  };
+  film.segments.push(film);
+  return film;
 }

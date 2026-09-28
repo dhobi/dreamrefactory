@@ -114,7 +114,7 @@ export default defineConfig({
       input: {
         // the front door
         main: join(HERE, "index.html"),
-        // the editors: a landing page and the eight format pages. They import
+        // the editors: a landing page and the nine format pages. They import
         // the file-format layer (engine/src/df/) and engine/src/web/screen.ts,
         // never the runtime, so they build as pages that happen to share a data
         // library with a game.
@@ -127,6 +127,7 @@ export default defineConfig({
         casts: join(HERE, "editors/casts.html"),
         movies: join(HERE, "editors/movies.html"),
         books: join(HERE, "editors/books.html"),
+        mazes: join(HERE, "editors/mazes.html"),
       },
     },
   },

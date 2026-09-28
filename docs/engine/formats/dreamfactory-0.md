@@ -165,8 +165,10 @@ film's frames 1 to 7 and a turn's 1 to 6, three ticks of 1/60 s apart
 four bytes each, where the cell at (x, y) is the dword at `4 + x*128 + y*4`. A
 cell of `-1` is not there. Any other cell holds one byte per facing, with facing
 0 in its top byte. The game reads these bytes (0x403602) and also writes them
-(0x40367a), so they change during play. On the base's floors a byte is what
-the facing looks at: 0 open floor, 2 an elevator, 3 a screen (the info and the
+(0x40367a), so they change during play. In every maze of the rip a byte is 0
+exactly where a step forward leaves the cell (`engine/tests/df0-formats.ts`
+checks it), so a byte that is not 0 is the wall the pose faces. On the base's
+floors a byte is what the facing looks at: 0 open floor, 2 an elevator, 3 a screen (the info and the
 galley on the lower floor), 5 a desk, 6 a bed, 9 the control panel or, on the
 upper floor, the scope, the greenhouse or the power status by facing, 0xfe the
 transporter end, and so on (0x401299 for the lower floor, 0x40103e the upper).

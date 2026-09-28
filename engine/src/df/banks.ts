@@ -423,3 +423,36 @@ export function patchChunkIdentifier(
   });
   return s;
 }
+
+/**
+ * A DreamFactory 0 sound bank — *Lunicus*'s `moonsoun.` and each combat day's
+ * `citysoun.` (LUNICUS.EXE 0x419136). Container 0 counts the bank's N sounds and
+ * M ambience pieces and gives the order the pieces are strung in:
+ *
+ *   0x00  i16  N, the sounds: containers 1 … N, a level's `sound(n)` being
+ *              container n + 1
+ *   0x02  i16  M, the pieces: containers N + 1 … N + M
+ *   0x04  i16  how many entries the order has (up to 64)
+ *   0x06  i16 × count  piece numbers, 1-based; one outside 1 … M is skipped
+ *
+ * The pieces, strung in that order, are the ambience, played round and round
+ * on a channel of its own (0x4195fe). Every entry is a bare v0 sound
+ * (`decodeAudioV0` in audio.ts). No names anywhere, and no version tag: a
+ * caller knows it has one because it is reading Lunicus.
+ */
+export interface BankV0 {
+  sounds: number;
+  pieces: number;
+  /** piece numbers, 1-based, in playing order */
+  order: number[];
+}
+
+export function readBankV0(c0: Uint8Array): BankV0 {
+  const v = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
+  if (c0.length < 6) throw new Error(`v0 bank: a ${c0.length}-byte header`);
+  const sounds = v.getInt16(0, true);
+  const pieces = v.getInt16(2, true);
+  const count = Math.min(Math.max(v.getInt16(4, true), 0), Math.floor((c0.length - 6) / 2));
+  const order = Array.from({ length: count }, (_, i) => v.getInt16(6 + 2 * i, true)).filter((k) => k >= 1 && k <= pieces);
+  return { sounds, pieces, order };
+}

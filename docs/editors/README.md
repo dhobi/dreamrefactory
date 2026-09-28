@@ -4,11 +4,12 @@ Pages the project's own site hosts — `npm run dev`, on 5173, beside the
 front door rather than beside either game. They are not CLIs and they
 need no `gamefiles/` directory: each one takes a file you give it, takes it
 apart into the pieces that format is made of, lets you change the parts that
-are safe to change, and hands the repacked file back. All but one do: the
-[sprite book viewer](books.md) only reads, because nothing in this project writes
-a `.SBK`.
+are safe to change, and hands the repacked file back. All but two do: the
+[sprite book viewer](books.md) and the [maze viewer](mazes.md) only read, because
+nothing in this project writes a `.SBK` or a DreamFactory 0 maze.
 
-Between them they cover **every container format the games ship**: rooms (SET),
+Between them they cover **every container format the DreamFactory 1 and 4 games
+ship**: rooms (SET),
 props (SHP, and DreamFactory 1's PRP), movies (MOV — logic only, for a reason
 [the page explains](movies.md#why-the-art-is-read-only)), screens (STG, and v1's
 FLT), sound (TRK/SFX/11K/SND), and characters twice over (PUP for the brains, CST
@@ -17,16 +18,36 @@ belongs to a game with no interpreter. The one file the game *writes* rather tha
 [save](../engine/formats/savegame.md), has
 [the saved-games browser](../engine/runtime/saves.md) instead.
 
+RedJack's DreamFactory 5 files open in the same editors, **read-only**: `.shop`,
+`.cast`, `.pupp`, `.stag`, `.move` and `.trak` go through the engine's v5 readers
+([DreamFactory 5's containers](../engine/formats/dreamfactory-5.md)), and each
+sprite, frame and flat is drawn in the palette it carries. Export stays off,
+because the patches and the PNG encoders write v4's layout. Its rooms, `.sett`,
+have no editor: a SETT is nodes and panoramas rather than scenes with a ring of
+views ([SETT](../engine/formats/sett.md)), so it is not a SET the set editor
+could be taught.
+
+Lunicus's DreamFactory 0 files open read-only too, picked from the Lunicus
+source: its films in the movie editor, its sound banks (`citysoun.`,
+`moonsoun.`) in the track editor and its talk files (`raife.1` … `guard.7`) in
+the puppet editor, where the player's questions are lines of their own (`q …`)
+beside the character's. A v0 file carries no version, so an editor does not
+guess it from the bytes; the source says so (`dreamFactory0` in
+`site/src/games.ts`). Its mazes have a page of their own, the
+[maze viewer](mazes.md). The pictures in `shared/` have no editor yet
+([DreamFactory 0's containers](../engine/formats/dreamfactory-0.md)).
+
 | Editor | Page | Format | Source |
 |--------|------|--------|--------|
-| [Set editor](sets.md) | `/editors/sets.html` | [SET](../engine/formats/set.md) — rooms, scenes, views | [`site/editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/set-editor.ts) |
-| [Shop editor](shops.md) | `/editors/shops.html` | [SHP / PRP](../engine/formats/shp.md) — props | [`site/editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shp-editor.ts) |
-| [Movie editor](movies.md) | `/editors/movies.html` | [MOV](../engine/formats/mov.md) — cutscenes & close-ups | [`site/editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/mov-editor.ts) |
-| [Stage editor](stages.md) | `/editors/stages.html` | [STG / FLT](../engine/formats/stg.md) — full-screen flats & UI | [`site/editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stg-editor.ts) |
-| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K / SND](../engine/formats/audio.md) — audio banks (`.SND` read-only) | [`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts) |
-| [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP](../engine/formats/pup-cst.md) — conversations | [`site/editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppet-editor.ts) |
-| [Cast editor](casts.md) | `/editors/casts.html` | [CST](../engine/formats/pup-cst.md) — actor sprites | [`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts) |
+| [Set editor](sets.md) | `/editors/sets.html` | [SET](../engine/formats/set.md) — rooms, scenes, views (not RedJack's `.sett`) | [`site/editors/set-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/set-editor.ts) |
+| [Shop editor](shops.md) | `/editors/shops.html` | [SHP / PRP / SHOP](../engine/formats/shp.md) — props (`.shop` read-only) | [`site/editors/shp-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/shp-editor.ts) |
+| [Movie editor](movies.md) | `/editors/movies.html` | [MOV / MOVE](../engine/formats/mov.md) — cutscenes & close-ups (`.move` and Lunicus's `.mov` read-only) | [`site/editors/mov-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/mov-editor.ts) |
+| [Stage editor](stages.md) | `/editors/stages.html` | [STG / FLT / STAG](../engine/formats/stg.md) — full-screen flats & UI (`.stag` read-only) | [`site/editors/stg-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/stg-editor.ts) |
+| [Track editor](tracks.md) | `/editors/tracks.html` | [TRK / SFX / 11K / SND / TRAK](../engine/formats/audio.md) — audio banks (`.SND`, `.trak` and Lunicus's banks read-only) | [`site/editors/track-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/track-editor.ts) |
+| [Puppet editor](puppets.md) | `/editors/puppets.html` | [PUP / PUPP](../engine/formats/pup-cst.md) — conversations (`.pupp` and Lunicus's talk files read-only) | [`site/editors/puppet-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/puppet-editor.ts) |
+| [Cast editor](casts.md) | `/editors/casts.html` | [CST / CAST](../engine/formats/pup-cst.md) — actor sprites (`.cast` read-only) | [`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts) |
 | [Sprite book viewer](books.md) | `/editors/books.html` | [SBK](../engine/formats/sbk.md) — Skull Cracker's cels & levels (read-only) | [`site/editors/sbk-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/sbk-editor.ts) |
+| [Maze viewer](mazes.md) | `/editors/mazes.html` | [MAZE](../engine/formats/dreamfactory-0.md) — Lunicus's grids, views & step films (read-only) | [`site/editors/maze-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/maze-editor.ts) |
 
 All of it lives in `site/editors/`: one HTML page and one module per editor,
 the `editor.css` all of them share, and an `index.html` that lists them — the

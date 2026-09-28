@@ -27,7 +27,10 @@ import { DFContainerFile } from "./container";
  * Otherwise it holds one byte per facing, dir 0 in its top byte and dir 3 in its
  * bottom one (the jump tables at 0x427418 and 0x427428). The game both reads
  * (0x403602) and writes (0x40367a) those bytes, so they are state and not only
- * layout; what their values mean has not been read yet.
+ * layout. In every maze of the rip a byte is 0 exactly where a step forward
+ * leaves the cell, so a byte that is not 0 is the wall the pose faces and says
+ * what that wall is: what a click on the view acts on. The values are the
+ * game's per place (lunicus/src/game/base.ts and city/city.ts, `use`).
  *
  * ## A transition
  *

@@ -14,13 +14,16 @@ import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, encodingOf, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
+import { byExtension, chosenSource, encodingOf, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
-import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
+import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
+import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
+import { paletteV0 } from "@dreamfactory/engine/df/mov-v0";
+import { pupFileFromV0 } from "@dreamfactory/engine/df/talk-v0";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { decodeShpFrame, encodeShpFrame, patchFrameAnchor, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
@@ -89,11 +92,22 @@ void (async () => {
   if (source) encoding = encodingOf(source);
 })();
 
-function loadPup(bytes: Uint8Array, name: string): void {
+/** a DreamFactory 5 file or a DreamFactory 0 talk file, open read-only */
+let readOnly = false;
+
+const V0_READ_ONLY =
+  "DreamFactory 0 talk file (Lunicus): shown through the v0 reader, read-only. Nothing writes a v0 talk file.";
+
+/**
+ * `v0`: the file is a DreamFactory 0 talk file, which its bytes cannot say (see
+ * `GameEditions.dreamFactory0`), so the caller does: one picked from Lunicus's
+ * tree is one (`raife.1`, `sasha.3`).
+ */
+function loadPup(bytes: Uint8Array, name: string, v0 = false): void {
   stopPlayback();
   let parsed: PupFile;
   try {
-    parsed = readPupFile(bytes, encoding);
+    parsed = v0 ? pupFileFromV0(bytes) : readPupFile(bytes, encoding);
   } catch (e) {
     // Say WHICH engine wrote it when the read fails.
     //
@@ -115,10 +129,15 @@ function loadPup(bytes: Uint8Array, name: string): void {
   }
   pup = parsed;
   fileName = name;
-  palette = paletteToRGBA(pup.paletteRaw, 256);
+  // a v0 palette is the Macintosh way round, entry 0 white (mov-v0.ts)
+  palette = pup.dfV0 ? paletteV0(pup.paletteRaw) : paletteToRGBA(pup.paletteRaw, 256);
   frameCache.clear();
   edits.length = 0;
-  dirtyEl.textContent = "";
+  // a v5 file reads but cannot be written yet (sources.ts), and a v0 one never
+  readOnly = v0 || isV5File(bytes);
+  dirtyEl.textContent = v0 ? V0_READ_ONLY : readOnly ? V5_READ_ONLY : "";
+  // a button that refuses when pressed is worse than one that says so first
+  ($("exportBtn") as HTMLButtonElement).disabled = readOnly;
   stanceIdx = 0;
   selected = null;
 
@@ -179,7 +198,13 @@ async function initServerPups(): Promise<void> {
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
   if (!source) return; // production / no dev server: upload only
-  const pups = filesIn(source, byExtension(".pup"));
+  const pups = filesIn(
+    source,
+    source.game.dreamFactory0
+      ? // a v0 talk file is a character and a number, `raife.1` … `guard.7`
+        (path) => /\/[a-z]+\.\d$/i.test(path)
+      : byExtension(".pup", ".pupp"),
+  );
   if (!pups.length) return;
   const wrap = $("serverPups");
   const note = document.createElement("div");
@@ -200,7 +225,7 @@ async function initServerPups(): Promise<void> {
         log(t("common.fetchFailed", { path: f.path, status: r.status }));
         return;
       }
-      loadPup(new Uint8Array(await r.arrayBuffer()), f.base);
+      loadPup(new Uint8Array(await r.arrayBuffer()), f.base, source.game.dreamFactory0 === true);
     });
     row.appendChild(b);
   }
@@ -224,7 +249,19 @@ function frameAt(loc: number): ShpFrame | null {
   let f = frameCache.get(loc) ?? null;
   if (!f) {
     try {
-      f = decodeShpFrame(pup.file.containers[loc].data);
+      const data = pup.file.containers[loc].data;
+      if (pup.dfV0) {
+        // a v0 picture: the backdrop and the head in the frame codec, the rest
+        // as figures (lunicus/src/game/talk.ts tries them in that order too);
+        // its anchor is where a track's position puts it, as a sprite's offset is
+        let v: ReturnType<typeof decodeFrameV0>;
+        try {
+          v = decodeFrameV0(data);
+        } catch {
+          v = decodeFigureV0(data);
+        }
+        f = { width: v.width, height: v.height, posYraw: v.anchorY, posXraw: v.anchorX, indexed: v.indexed, opaque: v.opaque };
+      } else f = decodeShpFrame(data);
     } catch {
       return null;
     }
@@ -241,7 +278,8 @@ function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!f.width || !f.height) return;
   const img = ctx.createImageData(f.width, f.height);
-  indexedToRGBA(f.indexed, f.width, f.height, palette, img.data);
+  // a v5 sprite brings its own palette; a v4 one is drawn through the file's
+  indexedToRGBA(f.indexed, f.width, f.height, f.palette ?? palette, img.data);
   for (let i = 0; i < f.width * f.height; i++) {
     if (!f.opaque[i]) img.data[i * 4 + 3] = 0;
   }
@@ -318,6 +356,8 @@ function composite(state: PupAnimFrame, ctx: CanvasRenderingContext2D, stanceOf 
       }
       const dx = st.x - f.posXraw;
       const dy = st.y - f.posYraw;
+      // a v5 sprite brings its own palette; a v4 one is drawn through the puppet's
+      const pal = f.palette ?? palette;
       for (let yy = 0; yy < f.height; yy++) {
         const ty = dy + yy;
         if (ty < 0 || ty >= screen.height) continue;
@@ -328,9 +368,9 @@ function composite(state: PupAnimFrame, ctx: CanvasRenderingContext2D, stanceOf 
           if (!f.opaque[s]) continue;
           const c = f.indexed[s] * 4;
           const d = (ty * screen.width + tx) * 4;
-          rgba[d] = palette[c];
-          rgba[d + 1] = palette[c + 1];
-          rgba[d + 2] = palette[c + 2];
+          rgba[d] = pal[c];
+          rgba[d + 1] = pal[c + 1];
+          rgba[d + 2] = pal[c + 2];
         }
       }
     }
@@ -377,7 +417,8 @@ $("playBtn").addEventListener("click", () => {
 
   let source: AudioBufferSourceNode | null = null;
   try {
-    const audio = decodeAudioContainer(pup.file.containers[line.audioLocation].data);
+    const data = pup.file.containers[line.audioLocation].data;
+    const audio = pup.dfV0 ? decodeAudioV0(data) : decodeAudioContainer(data);
     audioCtx ??= new AudioContext();
     const buf = audioCtx.createBuffer(1, audio.samples.length, audio.sampleRate);
     buf.getChannelData(0).set(audio.samples);
@@ -461,7 +502,8 @@ function buildLayers(): void {
     row.className = "layerrow";
     const name = document.createElement("span");
     name.className = "lname";
-    name.textContent = `${l} ${PUP_LAYERS[l]}`;
+    // a v0 puppet's eight layers have no names of their own
+    name.textContent = pup?.dfV0 ? `layer ${l}` : `${l} ${PUP_LAYERS[l]}`;
     row.appendChild(name);
     const thumbs = document.createElement("div");
     thumbs.className = "thumbs";
@@ -719,6 +761,10 @@ function download(blob: Blob, name: string): void {
 
 $("exportBtn").addEventListener("click", () => {
   if (!pup) return;
+  if (readOnly) {
+    log(V5_READ_ONLY);
+    return;
+  }
   const bytes = writeContainerFile(pup.file);
   try {
     readPupFile(bytes, encoding); // sanity: the export must read back as a puppet

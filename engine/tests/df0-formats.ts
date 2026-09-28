@@ -247,6 +247,25 @@ test("a maze's films tile its frames, every borrowed film exists, and every fram
   }
 });
 
+test("a maze's facing byte is 0 exactly where a step forward leaves the cell", () => {
+  if (skip()) return;
+  const DX = [0, 0, 1, -1];
+  const DY = [-1, 1, 0, 0];
+  for (const f of files.filter((f) => MAZES.test(base(f)))) {
+    const maze = readMazeV0(open(f));
+    for (let x = 0; x < maze.width; x++) {
+      for (let y = 0; y < maze.height; y++) {
+        const c = cellV0(maze, x, y);
+        if (!c) continue;
+        for (let dir = 0; dir < 4; dir++) {
+          const step = transitionV0(maze, { x, y, dir }, { x: x + DX[dir], y: y + DY[dir], dir });
+          expect(c[dir] === 0, `${f} ${x},${y} facing ${dir}: byte ${c[dir]}, ${step ? "a step" : "no step"}`).toBe(step !== null);
+        }
+      }
+    }
+  }
+});
+
 test("a film: every frame decodes at the header's size, its hotspots read in full, every sound is a v0 sound, the palette is the Mac way round", () => {
   if (skip()) return;
   // previews/ holds other games' demos, whose sounds are not Lunicus's

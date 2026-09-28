@@ -20,13 +20,15 @@ import { SndFile, readSndFile, sndLoopChunks } from "@dreamfactory/engine/df/snd
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t as tr, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
 import {
   DecodedAudio,
+  V0_SAMPLE_RATE,
   decodeAudioContainer,
+  decodeAudioV0,
   encodeAudioContainer,
   readAudioHeader,
 } from "@dreamfactory/engine/df/audio";
@@ -40,6 +42,7 @@ import {
   patchTrackName,
   readAudioBank,
   readBankTables,
+  readBankV0,
 } from "@dreamfactory/engine/df/banks";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -99,8 +102,36 @@ function bankTablesFromSnd(snd: SndFile): BankTables {
   };
 }
 
-/** see {@link bankTablesFromSnd} — a reshaped v1 bank cannot be written back */
-let readOnlyV1 = false;
+/**
+ * A DreamFactory 0 bank (Lunicus's `citysoun.`, `moonsoun.`; `readBankV0` in
+ * banks.ts), shown the way a v4 one is: its ambience pieces as the music, in
+ * the order container 0 strings them, and its sounds as the one-shots. It has
+ * no names, so each row is called by what the game calls it — `sound(n)` plays
+ * container n + 1 — and it has no tables to patch, so it is read-only like a
+ * `.SND`.
+ */
+function bankTablesFromV0(file: DFContainerFile): BankTables {
+  const bank = readBankV0(file.containers[0].data);
+  const chunk = (identifier: string, containerLoc: number): BankChunk => ({ identifier, containerLoc, idOffset: 0, follow: "" });
+  return {
+    trackName: "",
+    trackNameLimit: 0,
+    loopTable: 0,
+    oneShotTable: 0,
+    loopOrder: bank.order,
+    loopRecords: Array.from({ length: bank.pieces }, (_, i) => chunk(`piece ${i + 1}`, bank.sounds + 1 + i)),
+    singles: Array.from({ length: bank.sounds }, (_, i) => chunk(`sound ${i}`, 1 + i)),
+  };
+}
+
+/**
+ * A bank this page shows RESHAPED — a v1 `.SND` ({@link bankTablesFromSnd}) or
+ * a v0 bank ({@link bankTablesFromV0}) — says why it cannot be written back;
+ * null for a v4 bank, which can.
+ */
+let reshaped: string | null = null;
+/** the bank is DreamFactory 0: its tables are re-derived from container 0 */
+let bankV0 = false;
 /**
  * The v1 bank this page is showing, kept because `refresh()` re-derives the
  * tables on every render — a v4 bank is re-read from its container because a
@@ -115,6 +146,8 @@ let sndSource: SndFile | null = null;
 // than in markup (site/src/locales/en.ts says why).
 const V1_READ_ONLY =
   "DreamFactory 1 bank (.snd): shown through the v1 reader, read-only. Export needs a v1 write path.";
+const V0_READ_ONLY =
+  "DreamFactory 0 bank (Lunicus): shown through the v0 reader, read-only. Nothing writes a v0 bank.";
 let fileName = "bank.trk";
 /** human-readable notes of every edit, shown next to the export button */
 const edits: string[] = [];
@@ -137,8 +170,8 @@ function log(text: string): void {
  * one of the four callers below.
  */
 function refuseV1(): boolean {
-  if (!readOnlyV1) return false;
-  log(V1_READ_ONLY);
+  if (!reshaped) return false;
+  log(reshaped);
   return true;
 }
 
@@ -153,15 +186,25 @@ window.addEventListener("beforeunload", (e) => {
 
 // --- loading ----------------------------------------------------------------
 
-function loadBank(bytes: Uint8Array, name: string): void {
+/** a DreamFactory 5 bank, open read-only (see `isV5File`) */
+let readOnlyV5 = false;
+
+/**
+ * `v0`: the bank is DreamFactory 0, which its bytes cannot say (see
+ * `GameEditions.dreamFactory0`), so the caller does: one picked from Lunicus's
+ * tree is one.
+ */
+function loadBank(bytes: Uint8Array, name: string, v0 = false): void {
   stopPlayback();
   let parsed: DFContainerFile;
   let parsedTables: BankTables;
   try {
     parsed = readContainerFile(bytes);
-    readOnlyV1 = detectVersion(bytes) === 1;
-    sndSource = readOnlyV1 ? readSndFile(bytes) : null;
-    parsedTables = sndSource ? bankTablesFromSnd(sndSource) : readBankTables(parsed);
+    bankV0 = v0;
+    const v1 = !v0 && detectVersion(bytes) === 1;
+    reshaped = v0 ? V0_READ_ONLY : v1 ? V1_READ_ONLY : null;
+    sndSource = v1 ? readSndFile(bytes) : null;
+    parsedTables = v0 ? bankTablesFromV0(parsed) : sndSource ? bankTablesFromSnd(sndSource) : readBankTables(parsed);
   } catch (e) {
     log(tr("tracks.notReadableBank", { message: (e as Error).message }));
     return;
@@ -175,9 +218,11 @@ function loadBank(bytes: Uint8Array, name: string): void {
   fileName = name;
   decoded.clear();
   edits.length = 0;
-  dirtyEl.textContent = readOnlyV1 ? V1_READ_ONLY : "";
+  // a v5 bank reads but cannot be written yet (sources.ts)
+  readOnlyV5 = isV5File(bytes);
+  dirtyEl.textContent = reshaped ?? (readOnlyV5 ? V5_READ_ONLY : "");
   // a button that refuses when pressed is worse than one that says so first
-  ($("exportBtn") as HTMLButtonElement).disabled = readOnlyV1;
+  ($("exportBtn") as HTMLButtonElement).disabled = reshaped !== null || readOnlyV5;
   soundFilter = "";
   $<HTMLInputElement>("soundFilter").value = "";
 
@@ -219,7 +264,14 @@ async function initServerBanks(): Promise<void> {
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
   if (!source) return; // production / no dev server: upload only
-  const banks = filesIn(source, byExtension(".trk", ".sfx", ".11k", ".snd"));
+  const banks = filesIn(
+    source,
+    source.game.dreamFactory0
+      ? // a v0 bank has no ending; the game opens them as `moonsound` and
+        // `citysound`, which the disc's 8.3 names cut to `moonsoun.`, `citysoun.`
+        (path) => /soun\.$/i.test(path)
+      : byExtension(".trk", ".sfx", ".11k", ".snd", ".trak"),
+  );
   if (!banks.length) return;
   const wrap = $("serverBanks");
   const note = document.createElement("div");
@@ -240,7 +292,7 @@ async function initServerBanks(): Promise<void> {
         log(tr("common.fetchFailed", { path: f.path, status: r.status }));
         return;
       }
-      loadBank(new Uint8Array(await r.arrayBuffer()), f.base);
+      loadBank(new Uint8Array(await r.arrayBuffer()), f.base, source.game.dreamFactory0 === true);
     });
     row.appendChild(b);
   }
@@ -254,7 +306,8 @@ $("closeBtn").addEventListener("click", () => {
   file = null;
   tables = null;
   sndSource = null;
-  readOnlyV1 = false;
+  reshaped = null;
+  bankV0 = false;
   edits.length = 0;
   editor.style.display = "none";
   landing.style.display = "block";
@@ -268,7 +321,7 @@ function audioAt(loc: number): DecodedAudio | null {
   if (!decoded.has(loc)) {
     let a: DecodedAudio | null = null;
     try {
-      a = decodeAudioContainer(data);
+      a = bankV0 ? decodeAudioV0(data) : decodeAudioContainer(data);
     } catch {
       a = null;
     }
@@ -284,8 +337,13 @@ function chunkMeta(loc: number): string {
   const data = file?.containers[loc]?.data;
   if (!data) return tr("tracks.noSuchContainer", { loc });
   const bytes = data.length;
-  const header = readAudioHeader(data);
   const a = audioAt(loc);
+  // a v0 sound has no header to report: the rate is the wave device's
+  if (bankV0) {
+    if (!a) return tr("tracks.notDecodableSound", { loc, bytes });
+    return `@${loc} · ${seconds(a).toFixed(2)}s · ${(V0_SAMPLE_RATE / 1000).toFixed(1)} kHz · v0 · ${(bytes / 1024).toFixed(1)} KB`;
+  }
+  const header = readAudioHeader(data);
   if (!header || !a) return tr("tracks.notDecodableSound", { loc, bytes });
   return (
     `@${loc} · ${seconds(a).toFixed(2)}s · ${(header.sampleRate / 1000).toFixed(1)} kHz · ` +
@@ -595,7 +653,7 @@ function refresh(): void {
   // the rows are rebuilt, and with them the button a playback is showing on
   stopPlayback();
   resetObserver();
-  tables = sndSource ? bankTablesFromSnd(sndSource) : readBankTables(file);
+  tables = bankV0 ? bankTablesFromV0(file) : sndSource ? bankTablesFromSnd(sndSource) : readBankTables(file);
   buildFileBar();
   buildBank();
   buildMusic();
@@ -622,7 +680,7 @@ function buildBank(): void {
   // the other two mutations are guarded by refuseV1(); these two are inputs, and
   // disabling them refuses the edit AND stops the hint underneath reading
   // "0 characters fit the field" at a box you cannot type in
-  name.disabled = readOnlyV1;
+  name.disabled = reshaped !== null;
   $("bankInfo").textContent =
     tr("tracks.bankInfo", { max: t.trackNameLimit });
   name.onchange = () => {
@@ -753,7 +811,7 @@ function chunkRow(
   row.appendChild(lead);
 
   const id = document.createElement("input");
-  id.disabled = readOnlyV1;
+  id.disabled = reshaped !== null;
   id.type = "text";
   id.className = "ident";
   id.value = rec.identifier;
@@ -851,8 +909,8 @@ $<HTMLInputElement>("soundFilter").addEventListener("input", (e) => {
 // --- export -----------------------------------------------------------------
 
 $("exportBtn").addEventListener("click", () => {
-  if (readOnlyV1) {
-    log(V1_READ_ONLY);
+  if (reshaped || readOnlyV5) {
+    log(reshaped ?? V5_READ_ONLY);
     return;
   }
   if (!file) return;

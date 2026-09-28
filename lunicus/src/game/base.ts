@@ -519,7 +519,7 @@ export class Base {
     const p = this.p;
     if (this.floor === LOWER) {
       if (p.day !== 1) return this.say(MSG.briefingOver);
-      this.m.speaker.stop();
+      this.m.stopSound();
       this.m.stopAmbience();
       yield* this.m.fadeOut();
       this.films.push("brief.move");

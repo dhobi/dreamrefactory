@@ -79,7 +79,7 @@ const say = (line: string): void => {
 const toggleLog = (): void => void (logEl.hidden = !logEl.hidden);
 $("logBtn").addEventListener("click", toggleLog);
 
-installFullscreen($<HTMLButtonElement>("fsBtn"), stageEl, { report: say });
+installFullscreen($<HTMLButtonElement>("fsBtn"), stageEl, { report: say, landscape: true });
 
 const BUG_NOTE_MS = 6000;
 const bugNote = $("bugNote");
@@ -326,23 +326,37 @@ function frame(now: number): void {
  * Input
  * ------------------------------------------------------------------------- */
 
-const at = (e: MouseEvent): { x: number; y: number } => {
+/**
+ * A pointer event in the screen's pixels. Pointer events and not mouse events:
+ * a mouse event's position is rounded to whole CSS pixels, and with the canvas
+ * at a fractional place on the page (it is centred) and a screen pixel under
+ * two CSS pixels wide, that rounding can land a click in the pixel next door.
+ * A pointer event carries the position as it is.
+ *
+ * One over the canvas is on the screen by definition, so it is held inside it
+ * (a click on the canvas's very edge is still on its edge pixel); a release let
+ * go off the canvas keeps where it really was.
+ */
+const at = (e: PointerEvent): { x: number; y: number } => {
   const r = canvas.getBoundingClientRect();
-  return { x: Math.floor(((e.clientX - r.left) / r.width) * SCREEN_W), y: Math.floor(((e.clientY - r.top) / r.height) * SCREEN_H) };
+  const x = Math.floor(((e.clientX - r.left) / r.width) * SCREEN_W);
+  const y = Math.floor(((e.clientY - r.top) / r.height) * SCREEN_H);
+  if (e.target !== canvas) return { x, y };
+  return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
 };
 /** the one door the page's hands and the machine tests' share (game/input.ts) */
 const input = new Input(game);
-canvas.addEventListener("mousedown", (e) => {
+canvas.addEventListener("pointerdown", (e) => {
   if (!running || REPLAY) return;
   const p = at(e);
   input.down(p.x, p.y);
 });
-canvas.addEventListener("mousemove", (e) => {
+canvas.addEventListener("pointermove", (e) => {
   if (REPLAY) return;
   const p = at(e);
   input.move(p.x, p.y);
 });
-addEventListener("mouseup", (e) => {
+addEventListener("pointerup", (e) => {
   if (!running || REPLAY) return;
   const p = at(e);
   input.up(p.x, p.y);
@@ -426,6 +440,9 @@ interface DriveState {
   score: number;
   won: boolean;
   stopped: string;
+  /** where the canvas is on the page now, which the menu bar and the frame's
+   *  arrival move: what a driver aims its mouse by */
+  screen: { x: number; y: number; width: number; height: number };
 }
 if (DRIVE) {
   const state = (): DriveState => ({
@@ -436,12 +453,16 @@ if (DRIVE) {
     score: game.hud.score,
     won: game.won,
     stopped: game.stopped,
+    screen: (({ x, y, width, height }) => ({ x, y, width, height }))(canvas.getBoundingClientRect()),
   });
   const drive: Drive = {
     running: () => running,
     preload: async (paths) => void (await Promise.all(paths.map((p) => fetchBytes(p)))),
     to: (t) => {
       while (m.ticks < t) if (!game.tick()) break;
+      // the bar as the machine now has it, not as the last animation frame left
+      // it: it moves the canvas, and the driver aims by where the canvas is
+      menu.sync();
       return state();
     },
     state,
