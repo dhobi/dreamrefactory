@@ -23,9 +23,11 @@ RedJack's DreamFactory 5 files open in the same editors, **read-only**: `.shop`,
 ([DreamFactory 5's containers](../engine/formats/dreamfactory-5.md)), and each
 sprite, frame and flat is drawn in the palette it carries. Export stays off,
 because the patches and the PNG encoders write v4's layout. Its rooms, `.sett`,
-have no editor: a SETT is nodes and panoramas rather than scenes with a ring of
-views ([SETT](../engine/formats/sett.md)), so it is not a SET the set editor
-could be taught.
+have a page of their own, the [sett editor](setts.md): a SETT is nodes and
+panoramas rather than scenes with a ring of views
+([SETT](../engine/formats/sett.md)), so it is not a SET the set editor could be
+taught. It does export, because its edits are written over the bytes they came
+from rather than repacked.
 
 Lunicus's DreamFactory 0 files open read-only too, picked from the Lunicus
 source: its films in the movie editor, its sound banks (`citysoun.`,
@@ -48,6 +50,7 @@ guess it from the bytes; the source says so (`dreamFactory0` in
 | [Cast editor](casts.md) | `/editors/casts.html` | [CST / CAST](../engine/formats/pup-cst.md) — actor sprites (`.cast` read-only) | [`site/editors/cst-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/cst-editor.ts) |
 | [Sprite book viewer](books.md) | `/editors/books.html` | [SBK](../engine/formats/sbk.md) — Skull Cracker's cels & levels (read-only) | [`site/editors/sbk-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/sbk-editor.ts) |
 | [Maze viewer](mazes.md) | `/editors/mazes.html` | [MAZE](../engine/formats/dreamfactory-0.md) — Lunicus's grids, views & step films (read-only) | [`site/editors/maze-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/maze-editor.ts) |
+| [Sett editor](setts.md) | `/editors/setts.html` | [SETT](../engine/formats/sett.md) — RedJack's rooms: spheres, roads, scenes; quads & stars editable | [`site/editors/sett-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/sett-editor.ts) |
 
 All of it lives in `site/editors/`: one HTML page and one module per editor,
 the `editor.css` all of them share, and an `index.html` that lists them — the

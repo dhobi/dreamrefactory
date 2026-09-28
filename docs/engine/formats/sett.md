@@ -168,4 +168,12 @@ runners walk their routes.
   nodes (NLIS at 0x28), roads (RLIS at 0x1c) and scenes (SLIS at 0x20), the
   same counts MAPR keeps. They look like lists the editor kept for itself.
 
+## Editing one
+
+The [sett editor](../../editors/setts.md) edits a room's quads and stars. A room
+does not survive `writeContainerFile`: its records keep padding the writer
+drops, so a repack changes bytes nobody edited. The editor writes each edit over
+the bytes it was read from instead
+([`engine/src/df/sett-patch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/sett-patch.ts)).
+
 Back to [File formats](README.md).

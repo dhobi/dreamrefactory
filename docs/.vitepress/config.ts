@@ -271,6 +271,7 @@ export default withMermaid(
             { text: "The cast editor", link: "/editors/casts" },
             { text: "The sprite book viewer", link: "/editors/books" },
             { text: "The maze viewer", link: "/editors/mazes" },
+            { text: "The sett editor", link: "/editors/setts" },
           ],
         },
         {

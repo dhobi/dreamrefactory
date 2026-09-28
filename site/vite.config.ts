@@ -128,6 +128,7 @@ export default defineConfig({
         movies: join(HERE, "editors/movies.html"),
         books: join(HERE, "editors/books.html"),
         mazes: join(HERE, "editors/mazes.html"),
+        setts: join(HERE, "editors/setts.html"),
       },
     },
   },

@@ -14,6 +14,7 @@ import { test, expect } from "vitest";
 import { FrameBuffer } from "@dreamfactory/engine/df/image";
 import { decodeFrameV5, depthV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { MazeQuad, SettFile, TURN, exitsOf, readSettFile } from "@dreamfactory/engine/df/sett";
+import { patchQuad, patchStar } from "@dreamfactory/engine/df/sett-patch";
 import {
   MazeRuntime,
   calcTurn,
@@ -419,4 +420,44 @@ test("a film's picture carries the depths a sphere has, so sprites hide on film 
     }
   }
   expect(films).toBeGreaterThan(0);
+});
+
+test("the sett editor's patches write each edit where it was read, and no other byte", () => {
+  if (skip()) return;
+  let quads = 0;
+  let stars = 0;
+  for (const path of rooms) {
+    const before = new Uint8Array(readFileSync(path));
+    const bytes = before.slice();
+    const s = readSettFile(bytes);
+    // every quad and every star, the last of each renamed and moved
+    const q = s.quads.length - 1;
+    const st = s.stars.length - 1;
+    if (q >= 0) {
+      expect(patchQuad(s.file, q, { name: "edited", x: 1, y: -2, z: 3, heading: 0.5, pitch: -0.25, w: 40, h: 50 })).toBe(true);
+      quads++;
+    }
+    if (st >= 0) {
+      expect(patchStar(s.file, st, { name: "moved", x: 7, y: 8, z: -9 })).toBe(true);
+      stars++;
+    }
+    expect(patchQuad(s.file, s.quads.length, { x: 0 })).toBe(false);
+    expect(patchStar(s.file, s.stars.length, { x: 0 })).toBe(false);
+    const again = readSettFile(bytes);
+    if (q >= 0) {
+      expect(again.quads[q]).toEqual({ name: "edited", script: s.quads[q].script, x: 1, y: -2, z: 3, heading: 0.5, pitch: -0.25, w: 40, h: 50 });
+      expect(again.quads.slice(0, q)).toEqual(s.quads.slice(0, q));
+    }
+    if (st >= 0) {
+      expect(again.stars[st]).toEqual({ name: "moved", x: 7, y: 8, z: -9 });
+      expect(again.stars.slice(0, st)).toEqual(s.stars.slice(0, st));
+    }
+    // a quad's edit is 1 + 6 name bytes and its 44-byte shape; a star's 1 + 5 and 12
+    let changed = 0;
+    for (let i = 0; i < before.length; i++) if (before[i] !== bytes[i]) changed++;
+    expect(changed).toBeLessThanOrEqual((q >= 0 ? 7 + 44 : 0) + (st >= 0 ? 6 + 12 : 0));
+    expect(bytes.length).toBe(before.length);
+  }
+  expect(quads).toBeGreaterThan(0);
+  expect(stars).toBeGreaterThan(0);
 });

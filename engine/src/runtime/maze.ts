@@ -496,46 +496,7 @@ export class MazeRuntime {
    */
   quadOutline(q: MazeQuad, width: number, height: number): [number, number][] | null {
     const cam = this.camera();
-    if (!cam) return null;
-    const rotX = (p: number[], a: number): void => {
-      const c = Math.cos(a);
-      const s = Math.sin(a);
-      const y = p[1] * c + p[2] * s;
-      p[2] = p[2] * c - p[1] * s;
-      p[1] = y;
-    };
-    const rotY = (p: number[], a: number): void => {
-      const c = Math.cos(a);
-      const s = Math.sin(a);
-      const x = p[0] * c + p[2] * s;
-      p[2] = p[2] * c - p[0] * s;
-      p[0] = x;
-    };
-    const rotZ = (p: number[], a: number): void => {
-      const c = Math.cos(a);
-      const s = Math.sin(a);
-      const x = p[0] * c - p[1] * s;
-      p[1] = p[1] * c + p[0] * s;
-      p[0] = x;
-    };
-    const w = q.w / 2;
-    const h = q.h / 2;
-    const focal = width / (2 * Math.tan(cam.fov / 2));
-    const out: [number, number][] = [];
-    for (const [lx, ly] of [[-w, -h], [w, -h], [w, h], [-w, h]]) {
-      const p = [lx, ly, 0];
-      rotX(p, q.pitch);
-      rotY(p, q.heading);
-      p[0] += q.x + cam.y;
-      p[1] += q.y + cam.z;
-      p[2] += q.z - cam.x;
-      rotY(p, cam.heading);
-      rotX(p, cam.pitch);
-      rotZ(p, cam.roll);
-      if (p[2] <= 1) return null;
-      out.push([(p[0] / p[2]) * focal + width / 2, (p[1] / p[2]) * focal + height / 2]);
-    }
-    return out;
+    return cam ? projectQuad(q, cam, width, height) : null;
   }
 
   /** a star by name, as `0x444550` finds it: the first in MARK's order */
@@ -674,6 +635,53 @@ export class MazeRuntime {
     }
     return false;
   }
+}
+
+/**
+ * A quad's outline on a `width` × `height` screen through `cam`, or null when
+ * a corner is behind it — RedJack.exe's `0x497160`, which {@link MazeRuntime.quadOutline}
+ * asks with the room's own camera, and the SETT editor with the one it looks through.
+ */
+export function projectQuad(q: MazeQuad, cam: MazeCamera, width: number, height: number): [number, number][] | null {
+  const rotX = (p: number[], a: number): void => {
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const y = p[1] * c + p[2] * s;
+    p[2] = p[2] * c - p[1] * s;
+    p[1] = y;
+  };
+  const rotY = (p: number[], a: number): void => {
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const x = p[0] * c + p[2] * s;
+    p[2] = p[2] * c - p[0] * s;
+    p[0] = x;
+  };
+  const rotZ = (p: number[], a: number): void => {
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const x = p[0] * c - p[1] * s;
+    p[1] = p[1] * c + p[0] * s;
+    p[0] = x;
+  };
+  const w = q.w / 2;
+  const h = q.h / 2;
+  const focal = width / (2 * Math.tan(cam.fov / 2));
+  const out: [number, number][] = [];
+  for (const [lx, ly] of [[-w, -h], [w, -h], [w, h], [-w, h]]) {
+    const p = [lx, ly, 0];
+    rotX(p, q.pitch);
+    rotY(p, q.heading);
+    p[0] += q.x + cam.y;
+    p[1] += q.y + cam.z;
+    p[2] += q.z - cam.x;
+    rotY(p, cam.heading);
+    rotX(p, cam.pitch);
+    rotZ(p, cam.roll);
+    if (p[2] <= 1) return null;
+    out.push([(p[0] / p[2]) * focal + width / 2, (p[1] / p[2]) * focal + height / 2]);
+  }
+  return out;
 }
 
 /** point in polygon by crossings — `0x4a9330` counts quadrant windings, the same test */
