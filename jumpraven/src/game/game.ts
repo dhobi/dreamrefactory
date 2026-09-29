@@ -441,6 +441,14 @@ export class JumpRaven {
         if (this.heldKey) flight.key(this.keyAction(this.heldKey), true);
         yield* flight.frame();
 
+        if (w.weap.mart) {
+          // 0x42a3d7: docked under the weapons ship — the Mart, its film first
+          w.weap.mart = false;
+          yield* this.visitMart(1);
+          m.screen.setPalette(base);
+          flight.redraw();
+          flush();
+        }
         if (w.state < -100) {
           const lives = hud.lives();
           if (lives <= 0) {

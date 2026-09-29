@@ -148,6 +148,21 @@ export class Comms {
     if (this.m.roll(2) === 1) this.hinted = true;
   }
 
+  /**
+   * 0x414bce: the line playing cut, and who asked last the pilot, for line 0
+   * (`[0x4373e8]`, `[0x4373f0]`: 0, not 0x413af8's −1), the box to show it
+   * again, `[0x4373e0]` and `[0x4373e4]` clear (`[0x4373dc]`, cleared too,
+   * the port has no use for)
+   */
+  x414bce(): void {
+    this.stop();
+    this.who = PILOT;
+    this.line = 0;
+    this.shownLine = -1;
+    this.leaving = false;
+    this.hinted = false;
+  }
+
   /** 0x414b1a: the line playing stopped, its voice cut */
   private stop(): void {
     if (this.key < 0) return;

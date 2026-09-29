@@ -50,14 +50,14 @@ export interface CopterApi extends Vehicles {
 }
 
 export interface BossApi extends Enemy {
-  /** 0x403345 */
-  x403345(): number;
+  /** 0x403345: how many of its homing shells (kinds 2 and 3) are up (`[0x434580]`, never below 0) — the copilot's 0x405222, the chatter's 0x4140cd */
+  homing(): number;
   /** 0x404208: the boss is up and in cell (x, y) */
   at(x: number, y: number): boolean;
-  /** 0x4041c9: 1 while the boss is up (`[0x4345a8]` ≥ 0), 0 once it is down */
-  x4041c9(): number;
+  /** 0x4041c9: 1 while the boss is up (`[0x4345a8]` ≥ 0, falling included), 0 once it is down — the HUD's pods wait for 0 (0x4180b5); also its target count */
+  up(): number;
   /** 0x402ef5 (the EXE's arguments y, x): the boss set up over cell (x, y), 0x12c up (the pods' beacon, 0x417d70) */
-  x402ef5(x: number, y: number): void;
+  callIn(x: number, y: number): void;
 }
 
 export interface FuelApi extends Enemy {
@@ -66,7 +66,7 @@ export interface FuelApi extends Enemy {
   /** 0x40b112: where the station is, if it is up */
   where(): Obj | null;
   /** 0x4099f7: the station called in, just before its beacon is set (0x41839d) */
-  x4099f7(): void;
+  callIn(): void;
 }
 
 export interface WeapApi extends Enemy {
@@ -75,7 +75,9 @@ export interface WeapApi extends Enemy {
   /** 0x42aa99: where the weapons ship is, if it is up */
   where(): Obj | null;
   /** 0x429360: the weapons ship called in, just before its beacon is set (0x4183c1) */
-  x429360(): void;
+  callIn(): void;
+  /** 0x410540(1) is due (0x42a3d7): the craft came up under the waiting ship — the flight plays `mart.move` and the Mart after the frame, and clears this */
+  mart: boolean;
 }
 
 export interface CopilotApi {
@@ -183,6 +185,8 @@ export interface CommsApi {
   talking(): number;
   /** 0x414b8f: one time in two, `[0x4373e0]` set */
   x414b8f(): void;
+  /** 0x414bce: the line playing cut and the box's asking cleared — when the fuel station is killed or burning while its man talks (0x40af54, 0x40abd9) */
+  x414bce(): void;
 }
 
 /**

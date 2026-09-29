@@ -738,7 +738,7 @@ export class Hud implements HudApi {
     const w = this.w;
     const b = s.beacon;
     if (s.beaconKind === MARK_PODS) {
-      if (w.state === 2 && w.boss.x4041c9() <= 0 && this.landed()) w.state++;
+      if (w.state === 2 && w.boss.up() <= 0 && this.landed()) w.state++;
       return;
     }
     if (s.beaconKind === MARK_BAY) {
@@ -773,11 +773,11 @@ export class Hud implements HudApi {
     let k = w.roll(n);
     const at = this.x41842c(w.params.x43cf5a);
     if (fuel && --k <= 0) {
-      w.fuel.x4099f7();
+      w.fuel.callIn();
       return this.beacon(at.x, at.y, MARK_FUEL);
     }
     if (ammo && --k <= 0) {
-      w.weap.x429360();
+      w.weap.callIn();
       return this.beacon(at.x, at.y, MARK_AMMO);
     }
     if (bay && --k <= 0) {
@@ -830,7 +830,7 @@ export class Hud implements HudApi {
   x417d70(): void {
     const at = this.x41842c(this.w.params.x43cf5a << 1);
     this.beacon(at.x, at.y, MARK_PODS);
-    this.w.boss.x402ef5(at.x, at.y);
+    this.w.boss.callIn(at.x, at.y);
   }
 
   /** 0x418511: the world moved (dx, dy) — the beacon with it */

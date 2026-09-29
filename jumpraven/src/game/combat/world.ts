@@ -180,7 +180,10 @@ export type Enemy = Module & Targets & Hittable;
  * 0x43cf7e its shots' interval, 0x43cf82 how many bikes, 0x43cfae its strength
  * (bike.ts); 0x43cf9e the copter's speed, 0x43cfa2 its shots' interval,
  * 0x43cfa6 how many copters, 0x43cfaa its turn a frame, 0x43cfba its strength
- * (copter.ts).
+ * (copter.ts); 0x43cf5e the boss's shots' interval, 0x43cfbe its strength
+ * (boss.ts); 0x43cfc2 the fuel station's strength (fuel.ts), 0x43cfc6 the
+ * weapons ship's (weap.ts); 0x43cf5a the call-ins' ring, cells out (the HUD's
+ * 0x41842c; the pods' beacon twice it, 0x417d70).
  */
 export interface Params {
   x43cf5a: number; x43cf5e: number; x43cf62: number; x43cf6a: number; x43cf6e: number; x43cf72: number;

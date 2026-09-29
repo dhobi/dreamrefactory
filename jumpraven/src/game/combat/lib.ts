@@ -218,3 +218,45 @@ export function callShell(w: World, o: Obj): void {
   if (downFromCraft(w, (q - 0x40) & 0xff, o)) return void w.comms.ask(0, 0x1c);
   if (downFromCraft(w, (q + 0x40) & 0xff, o)) w.comms.ask(0, 0x1b);
 }
+
+/**
+ * 0x40ce63's cases (0x431558; the fuel station's 0x43133c, the weapons ship's
+ * 0x432b20): facing `angle`, `dx`, `dy` from the cell it is heading for, the
+ * three ways a street-bound thing may take without turning back, the first
+ * toward it by the longer way; a tie across is settled by a roll of 2 (the
+ * jeep keeps its own copy, src/game/combat/jeep.ts)
+ */
+export function waysToward(w: World, angle: number, dx: number, dy: number): [number, number, number] {
+  const ax = abs(dx);
+  const ay = abs(dy);
+  /** [p, q] if `yes`, or on a tie one time in two; else [q, p] */
+  const pair = (yes: boolean, tie: boolean, p: number, q: number): [number, number] =>
+    yes || (tie && w.roll(2) === 1) ? [p, q] : [q, p];
+  switch (angle) {
+    case 0:
+      if (ax > ay) {
+        if (dx < 0) return [0, ...pair(dy > 0, dy === 0, 0xc0, 0x40)];
+        return [...pair(dy > 0, dy === 0, 0xc0, 0x40), 0];
+      }
+      return dy < 0 ? [0x40, 0, 0xc0] : [0xc0, 0, 0x40];
+    case 0x40:
+      if (ax < ay) {
+        if (dy < 0) return [0x40, ...pair(dx < 0, dx === 0, 0, 0x80)];
+        return [...pair(dx < 0, dx === 0, 0, 0x80), 0x40];
+      }
+      return dx < 0 ? [0, 0x40, 0x80] : [0x80, 0x40, 0];
+    case 0x80:
+      if (ax > ay) {
+        if (dx > 0) return [0x80, ...pair(dy > 0, dy === 0, 0xc0, 0x40)];
+        return [...pair(dy > 0, dy === 0, 0xc0, 0x40), 0x80];
+      }
+      return dy < 0 ? [0x40, 0x80, 0xc0] : [0xc0, 0x80, 0x40];
+    case 0xc0:
+      if (ax < ay) {
+        if (dy > 0) return [0xc0, ...pair(dx < 0, dx === 0, 0, 0x80)];
+        return [...pair(dx < 0, dx === 0, 0, 0x80), 0xc0];
+      }
+      return dx < 0 ? [0, 0xc0, 0x80] : [0x80, 0xc0, 0];
+  }
+  throw new Error(`0x409eb4: facing ${angle}, no ways to choose`);
+}

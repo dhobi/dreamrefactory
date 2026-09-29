@@ -23,6 +23,9 @@ import { Jeep } from "./jeep";
 import { Tank } from "./tank";
 import { Bike } from "./bike";
 import { Copter } from "./copter";
+import { Boss } from "./boss";
+import { Fuel } from "./fuel";
+import { Weap } from "./weap";
 
 /**
  * A module that is not there: a count of 0, no hits, nothing where anything
@@ -56,9 +59,9 @@ export function* assemble(m: Machine, w: World, band: number, comms: Comms, hudS
   w.jeep = new Jeep(w, yield* file("jeep"));
   w.tank = new Tank(w, yield* file("tank"));
   w.copter = new Copter(w, yield* file("copt"));
-  w.boss = quiet("boss");
-  w.fuel = quiet("fuel");
-  w.weap = quiet("weap");
+  w.boss = new Boss(w, yield* file("boss"));
+  w.fuel = new Fuel(w, yield* file("fuel"));
+  w.weap = new Weap(w, yield* file("weap"));
   w.copilot = quiet("copilot");
   const mods = (list: unknown[]): Module[] => list.filter((x) => !String(x).startsWith("(no ")) as Module[];
   w.frameList = mods([w.bike, w.jeep, w.tank, w.copter, w.boss, w.fuel, w.weap, pyro, w.copilot]);
