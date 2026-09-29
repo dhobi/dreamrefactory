@@ -1,0 +1,298 @@
+/*
+ * Jump Raven's palette: the raven's night, its chrome head, the bronze rim,
+ * the letters' red, and the sunset over the drowned city.
+ *
+ * Sampled from its own title card — JUMP RAVEN in heavy red italic letters on a
+ * black band with a bronze rim, under the raven's spread blue-black wings and
+ * its silver head; under that the pilot on her indigo hovercraft, the
+ * statue's broken crown on the left, and New York under water against a sky
+ * that burns from violet down to gold.
+ *
+ * The eighth implementation of the contract in site/src/chrome.css, with the
+ * same role names and top bar as the others. This file used to wear the
+ * project's black-and-green, with a note that the game had no artwork to
+ * sample; the artwork arrived.
+ *
+ * Where the colours come from
+ * ---------------------------
+ * A census of `public/jumpraven-logo.png` (tools/mkjumpravenlogo.ts), by hue
+ * family and then by quantised cell, each stop the MEAN of its cell:
+ *
+ *   black          23.2%   the band the letters stand on, every rule, and the
+ *                          wings' deepest shadow; #030306 alone is 13%
+ *   blue, dark     16.2%   the wings — #03091d, #060b26, #091428, #161a38
+ *   red, mid        9.6%   the letters, #f70313 to #b80204
+ *   grey, dark      9.1%   the wings' blue-black again, #070b1c, #151925
+ *   orange          15.5%  the sunset, #f68a36 to #fda73a, and the rim's
+ *                          bronze falling into shadow, #572706 to #371805
+ *   blue, mid       6.6%   the hovercraft's hull, #1a1b87 to #3437b9
+ *   yellow          6.4%   the sky at the horizon, #fdc83a to #fee44a, and
+ *                          the craft's lamps, #fbeb05
+ *   violet          3.9%   the lit edges of the wing plates, #362a58 to
+ *                          #584467
+ *   grey, light     1.4%   the raven's head, #fafbfc down to #d8d9eb
+ *   blue, light     1.0%   the head turning away, #a6a8ca to #898bb5
+ *
+ * Two lines of that decide how the page works. Four tenths of the card is the
+ * RAVEN — its wings, the band under them — and it is blue-black, not the warm
+ * black Dust, Skull Cracker and RedJack stand on, nor Lunicus's navy: so the
+ * ground is the wings. And the one thing on the card that burns is the SKY,
+ * violet at the top and gold at the horizon, so the sunset means live, as
+ * Lunicus's fire does: the gauge, the spinner and `--ok`, and nothing that
+ * just sits there. The red is the name: it is on the one control that
+ * commits, and nowhere else.
+ *
+ * What the colours MEAN
+ * ---------------------
+ *   night   it is ground — the wings; #040814 is their commonest cell
+ *   dusk    it is a joint — the lit edge of a wing plate, so a border is the
+ *           edge of one
+ *   chrome  it is a word — the raven's head, cold and a little lavender
+ *   bronze  it is an edge, or it can be pressed — the rim round the band
+ *   red     it is the NAME — the letters; only the Enter button is made of it
+ *   sunset  it is LIVE — the gauge, the spinner, `--ok`; nothing else
+ *   indigo  it is pressed — the hovercraft's hull, for a button held down
+ */
+
+/* The structure comes first: an @import has to lead the file, and custom
+   properties resolve where they are USED. */
+@import "@dreamfactory/site/chrome.css";
+/* the saved-games dialog, drawn in this palette's roles */
+@import "@dreamfactory/engine/web/save-browser.css";
+
+/* ---- night: the ground -------------------------------------------------- */
+
+/*
+ * The wings, read from their shadows up: #040814 in the black family, then
+ * the blue-dark cells #03091d, #060b26, #091428, #091735 and #161a38. The
+ * stop between the first two is the same hue at the value a panel needs.
+ */
+:root {
+  --night-1000: #040814;
+  --night-900: #03091d;
+  --night-800: #060b26;
+  --night-700: #091428;
+  --night-600: #091735;
+  --night-500: #161a38;
+}
+
+/* ---- dusk: the wing plates' lit edges, which is what a border is -------- */
+
+/*
+ * A violet the wings catch from the sky: the violet-dark cells #261839,
+ * #362a58 and #46385a, and violet-mid #584467. On the blue-black ground it
+ * reads as a plate's edge, not a line drawn on it.
+ */
+:root {
+  --dusk-600: #261839;
+  --dusk-500: #362a58;
+  --dusk-400: #46385a;
+  --dusk-300: #584467;
+}
+
+/* ---- chrome: every word on the page ------------------------------------- */
+
+/*
+ * A scanline down the raven's head: #fafbfc where it catches the light,
+ * #eff0f7 and #e8e8ee across its face, then #d8d9eb, #bbbcd9, #a9aacc and
+ * #9498bc as it turns away, and #696e99 at its shadow edge. Cold, and a little
+ * lavender: it reflects the violet sky, not the fire.
+ */
+:root {
+  --chrome-100: #fafbfc;
+  --chrome-200: #eff0f7;
+  --chrome-300: #d8d9eb;
+  --chrome-400: #bbbcd9;
+  --chrome-500: #a9aacc;
+  --chrome-600: #9498bc;
+  --chrome-700: #696e99;
+}
+
+/* ---- bronze: the rim ---------------------------------------------------- */
+
+/*
+ * A scanline down the band's top rim, from the rule outside into the band:
+ *
+ *   #fce9ad   the lit lip, where a letter's top catches it too
+ *   #d8a364   the face
+ *   #b86d20   #b46218   turning
+ *   #572706   #482507   falling away
+ *   #371805   the foot
+ *   #140a06   the dark rule, the warmest cell of the black
+ *
+ * The stop between #b46218 and #572706 is the same hue at the value a bevel's
+ * middle needs, which a 2-pixel rim does not hold on its own.
+ */
+:root {
+  --bronze-100: #fce9ad;
+  --bronze-200: #d8a364;
+  --bronze-300: #b86d20;
+  --bronze-400: #b46218;
+  --bronze-500: #7f3e0f;
+  --bronze-600: #572706;
+  --bronze-700: #482507;
+  --bronze-800: #371805;
+  --rule: #140a06;
+}
+
+/* ---- red: the letters --------------------------------------------------- */
+
+/*
+ * A scanline through the J's stem: the rule, #f77562 where the face turns up
+ * to the light, #f70313 and #e90206 across it, #d90305 and #b80204 into its
+ * shade, and the red-dark #38130a it is cut from.
+ */
+:root {
+  --red-100: #f77562;
+  --red-200: #f70313;
+  --red-300: #e90206;
+  --red-400: #d90305;
+  --red-500: #b80204;
+  --red-900: #38130a;
+}
+
+/* ---- sunset: the sky ---------------------------------------------------- */
+
+/*
+ * The sky from the horizon up: the craft's lamps #fbeb05, the yellow-light
+ * cells #fee44a and #fdc83a, orange #fda73a, #f99735 and #f68a36, and then the
+ * violet it goes to overhead, #874967 and #694766.
+ *
+ * Only for what is LIVE:
+ *
+ *   1  the boot gauge
+ *   2  the network spinner in the corner of the picture
+ *   3  `--ok`
+ *
+ * Not for text, not for a border, not for the ground.
+ */
+:root {
+  --sunset-100: #fbeb05;
+  --sunset-200: #fee44a;
+  --sunset-300: #fdc83a;
+  --sunset-400: #fda73a;
+  --sunset-500: #f99735;
+  --sunset-600: #f68a36;
+  --sunset-800: #874967;
+  --sunset-900: #694766;
+}
+
+/* ---- indigo: the hovercraft --------------------------------------------- */
+
+/* the hull's blue-mid cells, darkest first */
+:root {
+  --indigo-800: #151878;
+  --indigo-700: #1a1b87;
+  --indigo-500: #2629a6;
+  --indigo-300: #3437b9;
+}
+
+/* ---- the two extras the pages use ------------------------------------- */
+
+:root {
+  /* A warning has to be told from the letters' red, which is the name: it is
+     the red-light cell #f77655 lifted towards pink, where the sunset lies on
+     the letters' tops. 7.9:1 on the ground. */
+  --alarm: #ff7a6a;
+  --ok: var(--sunset-300);
+}
+
+/* ---- typography and metrics ------------------------------------------- */
+
+:root {
+  /* the letters are a heavy sans leant forward; the page carries no webfont
+     for them, so the display face is the heaviest sans each system has — the
+     Enter button leans it (index.html) */
+  --font-display: "Arial Black", "Archivo Black", "Helvetica Neue", Impact, Arial, sans-serif;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --gap: 0.8rem;
+  /* the band and its letters are cut square, the corner just broken */
+  --radius: 2px;
+  --radius-lg: 4px;
+
+  /* what the title card sits in: the sunset's light */
+  --glow:
+    0 0 0 1px rgba(216, 163, 100, 0.24), 0 0 36px -6px rgba(253, 167, 58, 0.3);
+}
+
+/* ---- the roles the chrome asks for ------------------------------------ */
+
+:root {
+  --bg: var(--night-1000);
+  --panel: var(--night-800);
+  --raised: var(--night-700);
+  --inset: var(--night-900);
+
+  --border: var(--dusk-500);
+  --border-strong: var(--dusk-400);
+  --border-hover: var(--bronze-300);
+
+  --text: var(--chrome-300);
+  --text-bright: var(--chrome-100);
+  --text-dim: var(--chrome-600);
+  --text-mute: var(--chrome-700);
+
+  /* the rim's bronze and not the chrome: chrome is what the words are, and a
+     link has to be a different thing from a word. #d8a364 is 8.9:1 here */
+  --accent: var(--bronze-200);
+  --accent-hover: var(--bronze-100);
+  --accent-line: var(--bronze-600);
+  --selection-bg: rgba(52, 55, 185, 0.55);
+
+  --mark: var(--chrome-100);
+  --mark-glow: rgba(253, 167, 58, 0.32);
+
+  --topbar-top: var(--night-600);
+  --topbar-bottom: var(--night-1000);
+
+  /* the sunset, thinned to a wash — the one place the brand is allowed to be
+     large and quiet */
+  --depth-light: rgba(246, 138, 54, 0.1);
+
+  --button-hover-bg: var(--night-500);
+  --button-active-bg: var(--indigo-800);
+  --state-border: var(--dusk-300);
+
+  --rule-mid: var(--bronze-400);
+  --rule-bright: var(--bronze-200);
+
+  /* The one control that commits, and it is a LETTER: the red face in the
+     bronze rim, lit in the raven's chrome for its label — the night on the
+     red is 4.3:1 at best, #fafbfc on the face's #d90305 to #c70205 is 5.0 to
+     5.9:1 */
+  --commit-face-bottom: var(--red-400);
+  --commit-face-deep: var(--red-500);
+  --commit-edge: var(--bronze-200);
+  --commit-edge-hover: var(--bronze-100);
+  --commit-text: var(--chrome-100);
+  --commit-text-hover: var(--chrome-100);
+
+  --menu-panel: var(--night-700);
+  --shadow-drop: rgb(0 0 0 / 72%);
+}
+
+/* ---- the two densities ------------------------------------------------ */
+
+/*
+ * The same split the other pages carry: `deep` is the game page, with as little
+ * chrome as it can get away with, and `work` is for a page with panels on it.
+ */
+body.deep {
+  --bg: var(--night-1000);
+  --panel: var(--night-900);
+  --raised: var(--night-800);
+}
+body.work {
+  --bg: var(--night-900);
+  --panel: var(--night-700);
+  --raised: var(--night-600);
+  --inset: var(--night-1000);
+  --border: var(--dusk-400);
+  --border-strong: var(--dusk-300);
+  --gap: 0.65rem;
+}

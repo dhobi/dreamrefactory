@@ -6,7 +6,7 @@
  * run's gestures tick for tick (`tests/browser/playthrough.ts`).
  */
 import { ESCAPE_KEY } from "@dreamfactory/engine/web/keys";
-import { ESCAPE } from "./film";
+import { ESCAPE } from "@dreamfactory/engine/v0/film";
 import type { Lunicus } from "./game";
 
 /** one gesture, as a recording keeps it: the tick it came before, and what it was */

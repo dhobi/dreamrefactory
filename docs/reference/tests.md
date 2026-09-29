@@ -152,6 +152,23 @@ file; and that file opens back into the same game.
 | [`day2.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/machine/day2.ts) | days one and two from the intro: day two's briefing and the `.2` talks, the suit and the gun, the transporter onto a Los Angeles building's fifth floor, the city played by [`city-bot.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/machine/city-bot.ts) — it aims what it sees, turns to what lines up with it, takes the elevator down floor by floor and empties cabinets when its ammo runs low, and brings the node down once the ENEMIES bar is empty — then `cityrise.move` back to the station at progress 4, the lockers, and bed into day three |
 | [`day1.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/machine/day1.ts) | day one played from the intro to the bed: the title, a new game waking in bed at (4,6), the bed refusing before the briefing, the rooms of both floors and their films or HUD lines, a talk with each of the six crew members from the right talk file for the day's progress (`.1` before the briefing, `.3` after), the briefing moving the progress to 4, the elevators, the suit and gun lockers, the guard's line at the transporter, and sleep opening day two's lower floor. `DRAW=1` decodes every picture as the page does |
 
+## Jump Raven's own — `jumpraven/tests/machine/`
+
+Machine suites in Lunicus's shape: `npm test -w jumpraven` runs each in a
+process of its own (`jumpraven/tools/runmachine.mts`), the game machine
+(`jumpraven/src/game/`) stood up on the rip and stepped as fast as the CPU goes.
+Every gesture goes through `jumpraven/src/game/input.ts`. See
+[Jump Raven's machine suites](../jumpraven/README.md#machine-suites).
+
+| Suite | Verifies |
+|-------|----------|
+| `opening.ts`, `back.ts` | a run with nothing to open, the intro to the high scores; and the way back from a flight — the drop, the briefings, the damage screen and the debrief |
+| `flight.ts`, `combat.ts` | the city's moves, FLY and HOVER; the enemies firing at a craft sitting still, and a jeep shot until it blows up and is paid for |
+| `day1.ts` … `day3.ts` | each day's flight to its end, flown by the copilot, with PODS one pod from empty and the boss weak |
+| `wholegame.ts` | the intro, three days and the copilot's ending, chained, with the game set up |
+| `fairgame.ts` | the whole game won by `src/player.ts` with nothing set, on seed 7 |
+| `menu.ts`, `saves.ts`, `films.ts` | the menu bar and the HUD's buttons; the `.RVN` save written, read back and opened before the run and on the high scores screen; a film's voice cutting the one before it |
+
 ## The engine's own — `engine/tests/`
 
 None of these need a game. Where one also checks a rip, that half skips (loudly)

@@ -10,7 +10,7 @@ than from the source** — every container format decoded, the script language
 parsed and interpreted, and the games played in a browser with nothing installed.
 No DOSBox, no emulator.
 
-Six of its games are here. Four are adventures the interpreter runs:
+Seven of its games are here. Four are adventures the interpreter runs:
 
 | | | |
 |---|---|---|
@@ -19,12 +19,13 @@ Six of its games are here. Four are adventures the interpreter runs:
 | **[Timelapse: Ancient Civilizations](timelapse/)** | 1996 | DreamFactory 4 on four discs, and **no `.SET` anywhere** — its rooms are stage flats, and it navigates by the shape of the cursor |
 | **[RedJack: Revenge of the Brethren](redjack/)** | 1998 | DreamFactory 5, CyberFlix's last game, and the first with a real camera: rooms are points you look round from in every direction, joined by films |
 
-…and two have no interpreter to run, because they have nothing to interpret:
+…and three have no interpreter to run, because they have nothing to interpret:
 
 | | | |
 |---|---|---|
 | **[Skull Cracker](skullcracker/)** | 1996 | DreamFactory 4 with **no BOOTFILE and no script**: a beat-'em-up whose logic is compiled into the executable rather than authored in the data. It **plays** — films, menu, chooser, sixteen levels, the weapons, the bosses, the board and the credits — with the levels, the moves, the fights, the sounds and the mission read out of `SC.EXE` with a disassembler rather than scripted in the data |
 | **[Lunicus](lunicus/)** | 1994 | CyberFlix's first game, on what this port calls **DreamFactory 0**: no scripts at all. The whole game is ported from `LUNICUS.EXE` — the moon base, the cities, the engine rooms, the hive and the queen |
+| **[Jump Raven](jumpraven/)** | 1994 | CyberFlix's second game, on the same **DreamFactory 0**: a hovercraft shooter over a drowned New York, ported whole from `RAVEN.EXE` — the briefings, the Mart, six copilots, three days' flying and their bosses, to the copilot's ending. It saves, and it can play itself |
 
 **RE is for reverse-engineered.** This is a best-effort re-implementation and not
 a re-release: it needs a copy of a game's own data files, which it does not
@@ -38,10 +39,10 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Eight sites build out of this one repository, each from its own root and its own
+Nine sites build out of this one repository, each from its own root and its own
 port, so they can run at once. **The two that are about the whole project come
 first, then one port per game in the order it was ported** — so the next game
-to be ported takes 5181 and nothing has to move:
+to be ported takes 5182 and nothing has to move:
 
 | | | |
 |---|---|---|
@@ -53,6 +54,7 @@ to be ported takes 5181 and nothing has to move:
 | `npm run dev -w skullcracker` | 5178 | Skull Cracker |
 | `npm run dev -w redjack` | 5179 | RedJack, DreamFactory 5 |
 | `npm run dev -w lunicus` | 5180 | Lunicus, DreamFactory 0 |
+| `npm run dev -w jumpraven` | 5181 | Jump Raven, DreamFactory 0 |
 
 Each package owns its own commands. `-w <package>` runs one of them — `npm run
 speedrun -w taoot`, `npm run test:browser -w skullcracker` — and the root has only
@@ -99,6 +101,10 @@ Each top-level directory is a thing rather than a kind of file.
 - **`lunicus/`** — Lunicus: one page and its own palette. No scripts at all: the
   game is in `LUNICUS.EXE` and was ported from its disassembly, with the
   machine suites under `tests/machine/` playing it through to the end
+- **`jumpraven/`** — Jump Raven: the same kind of package on the same engine,
+  ported from `RAVEN.EXE`; its machine suites play it through, once with the
+  game set up and once by `src/player.ts`, which wins it with no shortcuts and
+  is what the page's `?autoplay` plays
 - **`site/`** — the project's own web presence: the front door, the format
   editors, the chrome every page shares, and the UI-language axis
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as
@@ -117,10 +123,12 @@ Dependencies point one way only, and there is a test that says so
     skullcracker  ←  engine, site
     redjack       ←  engine, site
     lunicus       ←  engine, site
+    jumpraven     ←  engine, site
 
 Nothing shared imports a game. The palettes — Titanic's abyss-and-brass,
 Dust's dusk-and-ember, Timelapse's glass-and-chrome, Skull Cracker's
-gore-and-bone, RedJack's wood-and-brass, Lunicus's navy, chrome and fire, the
+gore-and-bone, RedJack's wood-and-brass, Lunicus's navy, chrome and fire, Jump Raven's
+night, bronze and sunset, the
 project's black-and-green — are implementations of one role contract in
 `site/src/chrome.css`, which is structure and not a single colour.
 
@@ -138,6 +146,7 @@ package and the documentation, sharing one directory:
 | `/dreamrefactory/skullcracker/` | Skull Cracker — tag `skullcracker-v*` |
 | `/dreamrefactory/redjack/` | RedJack — tag `redjack-v*` |
 | `/dreamrefactory/lunicus/` | Lunicus — tag `lunicus-v*` |
+| `/dreamrefactory/jumpraven/` | Jump Raven — tag `jumpraven-v*` |
 | `/dreamrefactory/docs/` | the documentation — on any push that touches it |
 
 Each tag is checked against its own package's version. Sharing one directory is

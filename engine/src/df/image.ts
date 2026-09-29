@@ -50,11 +50,21 @@ export class FrameBuffer {
  * the back-reference offset of run mode 7 — and the run stream itself is bytes,
  * so a Macintosh frame is the same codec reading the same runs. Everything else
  * on this page is byte-addressed and needs no flag.
+ *
+ * `rows` is how a row's first byte is read. DreamFactory 0's decoder (RAVEN.EXE
+ * 0x409557, LUNICUS.EXE 0x404db3) compares the whole byte against the eighteen
+ * modes, 4, 8 … 0x48, and a byte that is none of them — a zero, a byte with its
+ * low bits set, anything past 0x48 — is a row that writes nothing: the byte is
+ * taken, the row is counted, and the output does not move. The last three
+ * frames of Jump Raven's `shared/miss2.mov` have such rows (after a row whose
+ * runs overrun it, which the EXE draws on into the next). The later engines'
+ * frames never have one, so their default stays the shift and the throw.
  */
 export function decodeFrame(
   data: Uint8Array,
   fb: FrameBuffer,
   order: ByteOrder = PC,
+  rows: "v4" | "v0" = "v4",
 ): DecodedFrame {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const le = little(order);
@@ -72,7 +82,9 @@ export function decodeFrame(
 
   for (let row = 0; row < height; row++) {
     let pixelsWritten = 0;
-    const rowMode = data[inPos++] >> 2;
+    const rowByte = data[inPos++];
+    if (rows === "v0" && (rowByte === 0 || rowByte & 3 || rowByte > 0x48)) continue;
+    const rowMode = rowByte >> 2;
 
     // NOTE: the first branch is intentionally NOT `else if` — rowMode 1 both
     // copies a full literal row AND (via the `<= 5` branch) sets the lookback
@@ -131,7 +143,8 @@ export function decodeFrame(
           out.fill(out[outPos - 1], outPos, outPos + count);
           break;
         case 5:
-          out.set(data.subarray(inPos, inPos + count), outPos);
+          // a row that overruns its width can run on past the last one
+          out.set(data.subarray(inPos, inPos + Math.max(0, Math.min(count, out.length - outPos))), outPos);
           inPos += count;
           break;
         case 6:
@@ -160,8 +173,10 @@ export function decodeFrame(
     }
   }
 
-  // Z layer follows if the container is not exhausted
-  const hasZ = inPos < data.length;
+  // Z layer follows if the container is not exhausted — but not in DreamFactory
+  // 0, whose decoder has none: 0x409557 returns what it read and the rest of
+  // the container is never looked at
+  const hasZ = rows === "v4" && inPos < data.length;
   if (hasZ) decodeZLayer(data, view, inPos, height, fb.zPixels, le);
 
   return { width, height, hasZ, zOffset: hasZ ? inPos : -1 };

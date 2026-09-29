@@ -55,12 +55,16 @@ ExecStart=/usr/bin/docker run --rm \
     --env TIMELAPSE_GAMEFILES=/srv/timelapse/gamefiles \
     --env SKULLCRACKER_GAMEFILES=/srv/skullcracker/gamefiles \
     --env REDJACK_GAMEFILES=/srv/redjack/gamefiles \
+    --env LUNICUS_GAMEFILES=/srv/lunicus/gamefiles \
+    --env JUMPRAVEN_GAMEFILES=/srv/jumpraven/gamefiles \
     --env RUNNER_LABELS=self-hosted,linux,x64,dreamrefactory-gamefiles \
     --volume /srv/taoot/gamefiles:/srv/taoot/gamefiles:ro \
     --volume /srv/dust/gamefiles:/srv/dust/gamefiles:ro \
     --volume /srv/timelapse/gamefiles:/srv/timelapse/gamefiles:ro \
     --volume /srv/skullcracker/gamefiles:/srv/skullcracker/gamefiles:ro \
     --volume /srv/redjack/gamefiles:/srv/redjack/gamefiles:ro \
+    --volume /srv/lunicus/gamefiles:/srv/lunicus/gamefiles:ro \
+    --volume /srv/jumpraven/gamefiles:/srv/jumpraven/gamefiles:ro \
     --security-opt no-new-privileges:true \
     --cap-drop ALL \
     --init \

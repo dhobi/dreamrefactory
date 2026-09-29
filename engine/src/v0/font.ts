@@ -1,8 +1,8 @@
 /**
- * LUNICUS.FON — the one font the game draws its text in ("Raven Digital", 12
- * point, 16 pixels high). The EXE adds it with `AddFontResourceA` at startup
- * (0x40b387) and every string it draws — the HUD's message line and a
- * conversation's menu — is in it.
+ * A DreamFactory 0 game's own font: LUNICUS.FON, RAVEN.FON — "Raven Digital",
+ * 12 point, 16 pixels high, in both. The EXE adds it with `AddFontResourceA` at
+ * startup (LUNICUS.EXE 0x40b387) and every string it draws — Lunicus's HUD
+ * message line and a conversation's menu — is in it.
  *
  * A .FON is a Windows NE module whose FONT resources are .FNT bitmap fonts. This
  * one has a single version-3 font: a 148-byte header, a table of {u16 width,

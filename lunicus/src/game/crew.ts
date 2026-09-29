@@ -27,7 +27,7 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { CELL, LOWER, UPPER } from "./data";
 import type { Co, Machine } from "./machine";
 import { corridor, project, type Camera, type Placed } from "./maze";
-import { clip, inRect, type Rect } from "./screen";
+import { clip, inRect, type Rect } from "@dreamfactory/engine/v0/screen";
 
 export interface Figure {
   /** the talk file's name, and the figure file's */

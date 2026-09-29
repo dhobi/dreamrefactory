@@ -51,6 +51,7 @@ const APPS = [
   { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html"] },
   { dir: "redjack", short: "RedJack", pages: ["redjack/index.html"] },
   { dir: "lunicus", short: "Lunicus", pages: ["lunicus/index.html"] },
+  { dir: "jumpraven", short: "Jump Raven", pages: ["jumpraven/index.html"] },
 ] as const;
 
 interface Icon {

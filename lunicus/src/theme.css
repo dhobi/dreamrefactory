@@ -14,7 +14,7 @@
  *
  * Where the colours come from
  * ---------------------------
- * A census of `public/lunicus-logo.png` — the keyed card (tools/mklunicuslogo.ts),
+ * A census of `public/lunicus-logo.png` as the first artwork made it (tools/mklunicuslogo.ts),
  * by hue family and then by quantised cell, each stop the MEAN of its cell:
  *
  *   black          27.0%   the space the explosion is in, and every rule round

@@ -164,8 +164,42 @@ export const V0_SAMPLE_RATE = 22050;
  */
 export function decodeAudioV0(data: Uint8Array): DecodedAudio {
   if (data.length < 3) throw new Error(`v0 sound: ${data.length} bytes`);
-  const blocks = data[0] | (data[1] << 8);
-  return { sampleRate: V0_SAMPLE_RATE, samples: decodeV40(data, 2, blocks * V0_BLOCK_SAMPLES) };
+  return { sampleRate: V0_SAMPLE_RATE, samples: decodeV40(data, 2, blocksV0(data) * V0_BLOCK_SAMPLES) };
+}
+
+/**
+ * A v0 sound's block count, in whichever byte order it was written.
+ *
+ * Every sound Lunicus itself plays stores it little-endian. Some are
+ * big-endian — `00 24` for 36 blocks — with the v40 stream behind them the
+ * same: 60 of the 502 frame sounds in *Jump Raven*'s films, and the demo films
+ * in both rips' `previews/`, which is what a Macintosh-authored sound put into
+ * a PC file looks like. The stream settles it: only one of the two counts
+ * lands its last sample on the container's last byte. Little-endian wins when
+ * both or neither do.
+ */
+export function blocksV0(data: Uint8Array): number {
+  const le = data[0] | (data[1] << 8);
+  const be = (data[0] << 8) | data[1];
+  if (le === be) return le;
+  const n = v40Samples(data, 2);
+  return n !== le * V0_BLOCK_SAMPLES && n === be * V0_BLOCK_SAMPLES ? be : le;
+}
+
+/** how many samples a v40 stream from `start` decodes to, or -1 if it does not end on the last byte */
+function v40Samples(data: Uint8Array, start: number): number {
+  let p = start + 1;
+  let n = 1;
+  while (p < data.length) {
+    const b = data[p++];
+    if (!(b & 0x80)) n++;
+    else if (!(b & 0x40)) {
+      const k = (b & 0x3f) + 1;
+      p += k;
+      n += 2 * k;
+    } else n += (b & 0x3f) + 1;
+  }
+  return p === data.length ? n : -1;
 }
 
 /** wrap to signed 8-bit, the original decoder's arithmetic space */

@@ -1,12 +1,12 @@
 /**
- * A conversation — LUNICUS.EXE's 0x415000, entered through 0x401570 with a
- * character's name and a line number.
+ * A conversation — LUNICUS.EXE's 0x415000, RAVEN.EXE's 0x41e5c4: the same code
+ * in both but for how the two lay out their buffers. Lunicus enters it through
+ * 0x401570 with a character's name and a line number (`raife.1`); Jump Raven
+ * names the file itself (`bati.pupp`, `lark.mupp`).
  *
  * ## The file
  *
- * `raife.1` is Raife's talk for progress 0–1 (before the day's briefing),
- * `.2` for 2 and `.3` for 3–4 (table 0x427168), unless the caller names a
- * number itself (the guard's 4 to 7). Its fourCC is 'PUPP', and:
+ * Its fourCC is 'PUPP', and:
  *
  *   c0  the character's side: +8 u16 "the player's questions are voiced";
  *       +0x0a the face's rect; +0x22 the palette (Macintosh order);
@@ -40,22 +40,40 @@
  * are one length. Only a key cuts a line short (0x4158ba reads keyDown events
  * only); Esc ends the talk, as the EXE's key table (0x4174f6) does.
  */
-import { decodeFigureV0, decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
-import { readPuppetTrackV0, readTalkFileV0 as readTalkFile, type TrackKeyV0 } from "@dreamfactory/engine/df/talk-v0";
-import { MENU_LINE, MENU_TOP, SCREEN_W, VIEW_H } from "./data";
+import { decodeFigureV0, decodeFrameV0, type FrameV0 } from "../df/image-v0";
+import { readPuppetTrackV0, readTalkFileV0 as readTalkFile, type TalkFileV0, type TrackKeyV0 } from "../df/talk-v0";
 import { ESCAPE } from "./film";
-import type { Co, Machine } from "./machine";
-import { clip, inRect, type Rect } from "./screen";
+import type { Co, MachineV0 as Machine } from "./machine";
+import { SCREEN_H, SCREEN_W, clip, inRect, type Rect } from "./screen";
 
-/** a talk file's number for the day's progress `[0x42d1c8]` (table 0x427168) */
-export const talkNumber = (progress: number): number => (progress <= 1 ? 1 : progress === 2 ? 2 : 3);
+/** the face: the window's top 264 rows (0x415000 sets 0x108 as the menu's top) */
+const VIEW_H = 0x108;
+/** a conversation's menu lines: 24 px each from y 264, the text at +8, +16 (LUNICUS.EXE 0x415f89, 0x415f24) */
+export const MENU_TOP = 0x108;
+export const MENU_LINE = 0x18;
 
-const FACE: Rect = [0, 0, VIEW_H, SCREEN_W];
 const MENU: Rect = [MENU_TOP, 0, MENU_TOP + 5 * MENU_LINE, SCREEN_W];
-/** the menu's ink and paper (0x415ebd: font 0x58 at 12, fore colour 0; 0x416331: 0x74 while pressed) */
+/**
+ * How a game dresses the menu. Lunicus's are the defaults: white paper, ink 0,
+ * and 0x74 while a line is pressed (LUNICUS.EXE 0x415ebd: font 0x58 at 12, fore
+ * colour 0; 0x416331). Jump Raven lays the menu on a picture — `puppet`'s
+ * container 0, five dark bars that RAVEN.EXE loads at startup (0x40f04d) and
+ * copies under the menu (0x41e8c1) — and writes in 0x19, pressed 0x28
+ * (0x41f4c4, 0x41f926). Its faces are 352 wide, not the window's 512: a
+ * keyframe's coordinates are the face's own, and the face goes into the window
+ * 80 in (0x41ef54, 0x41f2c3), between the two side panels the game draws
+ * before the talk.
+ */
+export interface TalkLook {
+  /** the face's width, and where its left edge lands in the window */
+  faceWidth?: number;
+  faceLeft?: number;
+  /** drawn with its top-left at the menu's (264, 0); none is white paper */
+  menuBackdrop?: FrameV0 | null;
+  ink?: number;
+  pressed?: number;
+}
 const PAPER = 255;
-const INK = 0;
-const PRESSED = 0x74;
 
 /** what a test sees of a talk as it goes */
 export interface TalkState {
@@ -69,76 +87,30 @@ export interface TalkState {
 }
 
 /**
- * Talk to `name`: the whole of 0x401570 but the maze's redraw, which the base
- * does when this returns.
+ * A conversation from the talk file the game names (`raife.1`, `bati.pupp`),
+ * looked for in the day's folder first: the whole of 0x415000. It fades in and
+ * out itself, but whatever was on the screen before is the caller's: Lunicus's
+ * wrapper fades it out first (0x401616), Jump Raven's draws the side panels
+ * (0x42696d).
  */
-export function* talk(m: Machine, name: string, number: number, day: number, state: { talk: TalkState | null }): Co {
-  const { path, data } = yield* m.file(`${name}.${number}`, day);
+export function* talk(m: Machine, file: string, day: number, state: { talk: TalkState | null }, look: TalkLook = {}): Co {
+  const FACE_LEFT = look.faceLeft ?? 0;
+  const INK = look.ink ?? 0;
+  const PRESSED = look.pressed ?? 0x74;
+  const menuPaper = (): void => {
+    if (look.menuBackdrop) m.screen.spriteAt(look.menuBackdrop, MENU_TOP, 0, MENU);
+    else m.screen.fill(MENU, PAPER);
+  };
+  const { path, data } = yield* m.file(file, day);
   const t = readTalkFile(data);
   const ts: TalkState = { file: path, menu: [], line: null, played: [] };
   state.talk = ts;
   m.log(`talk ${path}: ${t.lines.length} lines, ${t.questions.length} questions`);
   m.stopSound();
-  yield* m.fadeOut();
 
-  const pictures = new Map<number, FrameV0>();
-  const picture = (container: number): FrameV0 | null => {
-    let f = pictures.get(container);
-    if (!f) {
-      const d = t.containers[container];
-      if (!d) return null;
-      try {
-        f = decodeFrameV0(d);
-      } catch {
-        f = decodeFigureV0(d);
-      }
-      pictures.set(container, f);
-    }
-    return f;
-  };
-  const tracks = new Map<number, TrackKeyV0[]>();
-  const track = (container: number): TrackKeyV0[] => {
-    let k = tracks.get(container);
-    if (!k) tracks.set(container, (k = t.containers[container] ? readPuppetTrackV0(t.containers[container]) : []));
-    return k;
-  };
-
-  /** layers 0 and 1 as last drawn — the EXE keeps them composed apart (0x42befc) */
-  const base = new Uint8Array(SCREEN_W * VIEW_H);
-  let baseKey = "";
-  const drawKey = (keys: TrackKeyV0[], prev: number, key: number): void => {
-    if (!m.draws || !keys[key]) return;
-    let dirty: [number, number, number, number] = [...FACE];
-    if (prev >= 0) {
-      dirty = [0, 0, 0, 0];
-      for (let k = prev + 1; k <= key; k++) {
-        const d = keys[k].dirty;
-        if (d.bottom <= d.top || d.right <= d.left) continue;
-        dirty = dirty[2] <= dirty[0] ? [d.top, d.left, d.bottom, d.right] : [Math.min(dirty[0], d.top), Math.min(dirty[1], d.left), Math.max(dirty[2], d.bottom), Math.max(dirty[3], d.right)];
-      }
-      if (dirty[2] <= dirty[0] || dirty[3] <= dirty[1]) return;
-    }
-    dirty = clip(dirty, FACE);
-    const L = keys[key].layers;
-    const k01 = JSON.stringify([L[0], L[1]]);
-    if (k01 !== baseKey) {
-      baseKey = k01;
-      // compose layers 0 and 1 on the screen's face area, then keep that copy
-      m.screen.fill(FACE, PAPER);
-      for (let l = 0; l < 2; l++) {
-        const f = t.layers[l][L[l].frame] !== undefined ? picture(t.layers[l][L[l].frame]) : null;
-        if (f) m.screen.sprite(f, L[l].y, L[l].x, FACE);
-      }
-      for (let y = 0; y < VIEW_H; y++) base.set(m.screen.pixels.subarray(y * SCREEN_W, (y + 1) * SCREEN_W), y * SCREEN_W);
-    }
-    for (let y = dirty[0]; y < dirty[2]; y++) m.screen.pixels.set(base.subarray(y * SCREEN_W + dirty[1], y * SCREEN_W + dirty[3]), y * SCREEN_W + dirty[1]);
-    for (let l = 2; l < 8; l++) {
-      const list = t.layers[l];
-      const f = list[L[l].frame] !== undefined ? picture(list[L[l].frame]) : null;
-      if (f) m.screen.sprite(f, L[l].y, L[l].x, dirty);
-    }
-    m.screen.version++;
-  };
+  const drawer = new FaceDrawer(m, t, [0, FACE_LEFT, VIEW_H, FACE_LEFT + (look.faceWidth ?? SCREEN_W)]);
+  const track = (container: number): TrackKeyV0[] => drawer.track(container);
+  const drawKey = (keys: TrackKeyV0[], prev: number, key: number): void => drawer.draw(keys, prev, key);
 
   const lineNamed = (n: string): number => (n ? t.lines.findIndex((l) => l.name === n) : -1);
   const questionNamed = (n: string): number => (n ? t.questions.findIndex((q) => q.name === n) : -1);
@@ -192,7 +164,7 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
 
   // the face: the first line's first keyframe (0x415786), then the fade in
   if (t.lines[0]) drawKey(track(t.lines[0].track), -1, 0);
-  m.screen.fill(MENU, PAPER);
+  menuPaper();
   yield* m.fadeIn(t.palette);
 
   let menuAt = 0;
@@ -200,7 +172,7 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
   const asked = [0];
   let rows: number[] = [];
   const drawMenu = (): number => {
-    m.screen.fill(MENU, PAPER);
+    menuPaper();
     rows = [];
     ts.menu = [];
     t.menus[stack[menuAt]]?.forEach((e, i) => {
@@ -273,5 +245,86 @@ export function* talk(m: Machine, name: string, number: number, day: number, sta
     yield* m.fadeOut();
     state.talk = null;
     m.log(`talk ${path} over: ${ts.played.join(", ")}`);
+  }
+}
+
+/**
+ * A talk file's face, drawn keyframe by keyframe where the game puts it
+ * (LUNICUS.EXE 0x415941, RAVEN.EXE 0x41ef34 — and RAVEN.EXE's comms box,
+ * 0x4145ff, the same drawer for a face 92 by 125). A keyframe's coordinates
+ * are the face's own; `face` is where it lands in the window. Layers 0 and 1
+ * are composed apart and kept (LUNICUS.EXE 0x42befc), and the others drawn over
+ * them in the rectangle the keyframes since the last one dirtied.
+ */
+export class FaceDrawer {
+  private readonly pictures = new Map<number, FrameV0>();
+  private readonly tracks = new Map<number, TrackKeyV0[]>();
+  /** layers 0 and 1 as last drawn, the whole window's size for simplicity */
+  private readonly base = new Uint8Array(SCREEN_W * SCREEN_H);
+  private baseKey = "";
+
+  constructor(
+    private readonly m: Machine,
+    readonly t: TalkFileV0,
+    readonly face: Rect,
+  ) {}
+
+  picture(container: number): FrameV0 | null {
+    let f = this.pictures.get(container);
+    if (!f) {
+      const d = this.t.containers[container];
+      if (!d) return null;
+      try {
+        f = decodeFrameV0(d);
+      } catch {
+        f = decodeFigureV0(d);
+      }
+      this.pictures.set(container, f);
+    }
+    return f;
+  }
+
+  track(container: number): TrackKeyV0[] {
+    let k = this.tracks.get(container);
+    if (!k) this.tracks.set(container, (k = this.t.containers[container] ? readPuppetTrackV0(this.t.containers[container]) : []));
+    return k;
+  }
+
+  /** keyframe `key` of a track, `prev` the one on screen now (-1: none, draw it whole) */
+  draw(keys: TrackKeyV0[], prev: number, key: number): void {
+    const { m, t, face, base } = this;
+    if (!m.draws || !keys[key]) return;
+    const [top, left] = face;
+    let dirty: [number, number, number, number] = [...face];
+    if (prev >= 0) {
+      dirty = [0, 0, 0, 0];
+      for (let k = prev + 1; k <= key; k++) {
+        const d = keys[k].dirty;
+        if (d.bottom <= d.top || d.right <= d.left) continue;
+        const r: [number, number, number, number] = [d.top + top, d.left + left, d.bottom + top, d.right + left];
+        dirty = dirty[2] <= dirty[0] ? r : [Math.min(dirty[0], r[0]), Math.min(dirty[1], r[1]), Math.max(dirty[2], r[2]), Math.max(dirty[3], r[3])];
+      }
+      if (dirty[2] <= dirty[0] || dirty[3] <= dirty[1]) return;
+    }
+    dirty = clip(dirty, face);
+    const L = keys[key].layers;
+    const k01 = JSON.stringify([L[0], L[1]]);
+    if (k01 !== this.baseKey) {
+      this.baseKey = k01;
+      // compose layers 0 and 1 on the screen's face area, then keep that copy
+      m.screen.fill(face, PAPER);
+      for (let l = 0; l < 2; l++) {
+        const f = t.layers[l][L[l].frame] !== undefined ? this.picture(t.layers[l][L[l].frame]) : null;
+        if (f) m.screen.sprite(f, L[l].y + top, L[l].x + left, face);
+      }
+      for (let y = face[0]; y < face[2]; y++) base.set(m.screen.pixels.subarray(y * SCREEN_W + face[1], y * SCREEN_W + face[3]), y * SCREEN_W + face[1]);
+    }
+    for (let y = dirty[0]; y < dirty[2]; y++) m.screen.pixels.set(base.subarray(y * SCREEN_W + dirty[1], y * SCREEN_W + dirty[3]), y * SCREEN_W + dirty[1]);
+    for (let l = 2; l < 8; l++) {
+      const list = t.layers[l];
+      const f = list[L[l].frame] !== undefined ? this.picture(list[L[l].frame]) : null;
+      if (f) m.screen.sprite(f, L[l].y + top, L[l].x + left, dirty);
+    }
+    m.screen.version++;
   }
 }

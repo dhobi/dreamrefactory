@@ -49,13 +49,13 @@
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { BAR_FULL, FORWARD, FRAME_TICKS, LEFT, RIGHT, SCREEN_W, VIEW_H, VIEW_W, WALK_RECTS, dayOf } from "../data";
-import { playFilm, type FilmHooks } from "../film";
+import { playFilm, type FilmHooks } from "@dreamfactory/engine/v0/film";
 import type { Co, Machine } from "../machine";
 import { INDOORS, MazeView, OUTDOORS, camera, moved } from "../maze";
 import { Panel } from "../panel";
 import type { Progress } from "../base";
-import { inRect, type Rect } from "../screen";
-import { talk, type TalkState } from "../talk";
+import { inRect, type Rect } from "@dreamfactory/engine/v0/screen";
+import { talk, type TalkState } from "@dreamfactory/engine/v0/talk";
 import { combatParams } from "./params";
 import { JEEP, TANK, Vehicle } from "./vehicle";
 import { Drone, dronesTarget } from "./drone";
@@ -685,7 +685,9 @@ export class City {
       m.clear();
     }
     m.screen.setPalette(this.cluts.CLUT130);
-    yield* talk(m, "queen", 1, this.day, this.talkState);
+    // the fade out Lunicus's talks start with (0x401570's, at 0x401616)
+    yield* m.fadeOut();
+    yield* talk(m, "queen.1", this.day, this.talkState);
     m.clear();
     this.films.push("final.move");
     yield* playFilm(m, "final.move", this.day);

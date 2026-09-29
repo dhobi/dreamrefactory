@@ -12,7 +12,7 @@ import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { CELL } from "../data";
 import type { Machine } from "../machine";
 import { corridor, project, type Camera, type MazeView, type Placed, type Pose } from "../maze";
-import { clip, type Rect } from "../screen";
+import { clip, type Rect } from "@dreamfactory/engine/v0/screen";
 import type { Hud } from "../panel";
 import type { CombatParams } from "./params";
 

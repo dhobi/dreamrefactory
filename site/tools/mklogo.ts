@@ -27,7 +27,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodePNG, encodePNG } from "../../tools/png";
 import { keyCheckerboard } from "../../redjack/tools/mkredjacklogo";
-import { keyLunicus } from "../../lunicus/tools/mklunicuslogo";
+import { keyJumpRaven } from "../../jumpraven/tools/mkjumpravenlogo";
 import { ResizeOptions, resizeLogo } from "../../tools/logo-resize";
 
 const at = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
@@ -101,9 +101,16 @@ const JOBS: Job[] = [
     what: "Lunicus's title card",
     src: at("../../lunicus/assets/lunicus-full.png"),
     out: at("../public/card-lunicus.png"),
-    // RedJack's checkerboard again, closed inside the letters as well
-    // (lunicus/tools/mklunicuslogo.ts)
-    key: keyLunicus,
+    // its own alpha, nothing to key (lunicus/tools/mklunicuslogo.ts)
+    opts: { width: 480, trim: "alpha", trimThreshold: 8 },
+  },
+  {
+    what: "Jump Raven's title card",
+    src: at("../../jumpraven/assets/jumpraven-full.png"),
+    out: at("../public/card-jumpraven.png"),
+    // a flat white ground, keyed as RedJack's checkerboard is, with the patch
+    // the band shuts in found as well (jumpraven/tools/mkjumpravenlogo.ts)
+    key: keyJumpRaven,
     opts: { width: 480, trim: "alpha", trimThreshold: 8 },
   },
 ];

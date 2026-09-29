@@ -35,7 +35,7 @@ const DEFAULT_WIDTH = 900;
 const GROUND = 246;
 
 /** colourless and near-white: a square of the checkerboard, or a blend of two */
-const isGround = (r: number, g: number, b: number): boolean =>
+export const isGround = (r: number, g: number, b: number): boolean =>
   Math.max(r, g, b) - Math.min(r, g, b) <= 8 && Math.min(r, g, b) >= 224;
 
 /**
@@ -79,7 +79,12 @@ function enclosedSquares(rgba: Uint8Array, w: number, h: number): number[] {
   return seeds;
 }
 
-export function keyCheckerboard(rgba: Uint8Array, w: number, h: number, opts: { holes?: boolean } = {}): void {
+export function keyCheckerboard(
+  rgba: Uint8Array,
+  w: number,
+  h: number,
+  opts: { holes?: boolean; seeds?: readonly number[] } = {},
+): void {
   const ground = new Uint8Array(w * h);
   const stack: number[] = [];
   const push = (p: number): void => {
@@ -92,6 +97,8 @@ export function keyCheckerboard(rgba: Uint8Array, w: number, h: number, opts: { 
   for (let x = 0; x < w; x++) (push(x), push((h - 1) * w + x));
   for (let y = 0; y < h; y++) (push(y * w), push(y * w + w - 1));
   if (opts.holes) for (const p of enclosedSquares(rgba, w, h)) push(p);
+  // ground a caller found shut in some other way (jumpraven/tools/mkjumpravenlogo.ts)
+  for (const p of opts.seeds ?? []) push(p);
   while (stack.length) {
     const p = stack.pop()!;
     const x = p % w;

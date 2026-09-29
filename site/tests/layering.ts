@@ -75,6 +75,7 @@ const ALLOWED: Record<string, string[]> = {
   skullcracker: ["engine", "site"],
   redjack: ["engine", "site"],
   lunicus: ["engine", "site"],
+  jumpraven: ["engine", "site"],
 };
 
 for (const [pkg, allowed] of Object.entries(ALLOWED)) {

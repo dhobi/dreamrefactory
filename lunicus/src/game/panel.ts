@@ -10,9 +10,9 @@ import {
   BAR_AMMO, BAR_ENEMIES, BAR_ENERGY, BAR_FULL, BAR_LOW, BAR_SHIELDS, BUTTON_LEFT, BUTTON_TOP, INK, INK_WARN, MESSAGE_RECT,
   MESSAGE_TICKS, MESSAGES, SCREEN_W, VIEW_H, VIEW_W,
 } from "./data";
-import { playFilm } from "./film";
+import { playFilm } from "@dreamfactory/engine/v0/film";
 import type { Co, Machine } from "./machine";
-import type { Rect } from "./screen";
+import type { Rect } from "@dreamfactory/engine/v0/screen";
 
 /** the HUD's numbers, 0 to 10000 each but the score, and its message */
 export interface Hud {

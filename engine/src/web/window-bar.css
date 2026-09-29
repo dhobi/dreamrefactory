@@ -187,6 +187,20 @@
 .wdlg-center {
   text-align: center;
 }
+/* a radio button or check box and its text, left to right as Windows drew them */
+.wdlg-mark {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--wbar-s, 1) * 4px);
+  white-space: nowrap;
+  cursor: default;
+}
+.wdlg-mark input {
+  width: calc(var(--wbar-s, 1) * 13px);
+  height: calc(var(--wbar-s, 1) * 13px);
+  margin: 0;
+  flex: none;
+}
 /* `input.` and `:focus` too, to outrank a site's `input[type="text"]:focus` */
 .wdlg input.wdlg-edit,
 .wdlg input.wdlg-edit:focus,

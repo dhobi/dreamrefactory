@@ -74,6 +74,12 @@ export default defineConfig({
       emit: false,
     }),
     gamefilesManifest({
+      gamefiles: resolve(HERE, "../jumpraven/gamefiles"),
+      publicDir: resolve(HERE, "../jumpraven/public"),
+      mount: "/jumpraven",
+      emit: false,
+    }),
+    gamefilesManifest({
       gamefiles: resolve(HERE, "../redjack/gamefiles"),
       publicDir: resolve(HERE, "../redjack/public"),
       mount: "/redjack",
@@ -97,6 +103,7 @@ export default defineConfig({
       { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
       { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
       { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
+      { path: "jumpraven", command: "npm run dev -w jumpraven", port: 5181, what: "Jump Raven" },
     ]),
   ],
   server: {

@@ -32,6 +32,16 @@ import { DFContainerFile } from "./container";
  * what that wall is: what a click on the view acts on. The values are the
  * game's per place (lunicus/src/game/base.ts and city/city.ts, `use`).
  *
+ * ## Jump Raven's grid
+ *
+ * *Jump Raven*'s `citymaze` (RAVEN.EXE's loader, 0x40435c, is Lunicus's a month
+ * older) keeps a different grid in container 1: i16 width and height, then the
+ * pose the player starts from (0x40495f), then 32x32 cells of TWO bytes, the
+ * cell at (x, y) the i16 at `0x0a + x*64 + y*2`. A cell is solid when it is not
+ * 0 (0x4049a4), and the city WRAPS: a cell off one edge is the cell on the
+ * other (0x4049cd). The game reads and writes cells (0x404a5e, 0x404aa1).
+ * {@link readMazeV0} tells the two apart by the container's size.
+ *
  * ## A transition
  *
  *   0x00  pose  from
@@ -68,8 +78,15 @@ export interface MazeTransitionV0 {
 export interface MazeV0 {
   width: number;
   height: number;
-  /** 32x32 cells, `-1` where there is none; see {@link cellV0} */
+  /**
+   * 32x32 cells: Lunicus's four facing bytes packed, `-1` where there is none
+   * ({@link cellV0}); Jump Raven's i16 cells, 0 open ({@link solidV0})
+   */
   cells: Int32Array;
+  /** which grid the file keeps */
+  grid: "facings" | "words";
+  /** Jump Raven's grid: the pose the player starts from */
+  start?: PoseV0;
   transitions: MazeTransitionV0[];
 }
 
@@ -92,7 +109,9 @@ export function readMazeV0(file: DFContainerFile): MazeV0 {
   const width = v1.getInt16(0, true);
   const height = v1.getInt16(2, true);
   const cells = new Int32Array(GRID_STRIDE * GRID_STRIDE);
-  for (let i = 0; i < cells.length && 4 + i * 4 + 4 <= c1.length; i++) cells[i] = v1.getInt32(4 + i * 4, true);
+  const words = c1.length === WORD_GRID_BYTES;
+  if (words) for (let i = 0; i < cells.length; i++) cells[i] = v1.getInt16(0x0a + i * 2, true);
+  else for (let i = 0; i < cells.length && 4 + i * 4 + 4 <= c1.length; i++) cells[i] = v1.getInt32(4 + i * 4, true);
 
   const raw = Array.from({ length: c0.length / RECORD }, (_, r) => {
     const at = r * RECORD;
@@ -106,7 +125,22 @@ export function readMazeV0(file: DFContainerFile): MazeV0 {
   const starts = [...new Set(raw.map((t) => t.firstFrame))].sort((a, b) => a - b);
   const length = new Map(starts.map((s, i) => [s, (starts[i + 1] ?? file.containers.length) - s]));
   const transitions = raw.map((t) => ({ ...t, frames: length.get(t.firstFrame)! }));
-  return { width, height, cells, transitions };
+  return { width, height, cells, grid: words ? "words" : "facings", ...(words && { start: pose(v1, 4) }), transitions };
+}
+
+/** Jump Raven's grid: width, height, start pose and 32x32 i16 cells */
+const WORD_GRID_BYTES = 0x0a + GRID_STRIDE * GRID_STRIDE * 2;
+
+/** Jump Raven's grid (0x4049a4): is the cell solid — the grid wrapping at its edges */
+export function solidV0(maze: MazeV0, x: number, y: number): boolean {
+  return wordCellV0(maze, x, y) !== 0;
+}
+
+/** Jump Raven's grid (0x404a5e, wrapping as 0x4049a4 does): the cell's i16 */
+export function wordCellV0(maze: MazeV0, x: number, y: number): number {
+  const w = ((x % maze.width) + maze.width) % maze.width;
+  const h = ((y % maze.height) + maze.height) % maze.height;
+  return maze.cells[w * GRID_STRIDE + h];
 }
 
 /** the four facing bytes of a cell, dir 0 first, or null where there is no cell */

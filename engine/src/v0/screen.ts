@@ -1,11 +1,15 @@
 /**
- * The game window: 512x384 palette indices and the palette they are shown in.
- * The machine draws here and nowhere else; a page turns it into pixels, a test
- * reads it or ignores it.
+ * The game window of a DreamFactory 0 game: 512x384 palette indices and the
+ * palette they are shown in. LUNICUS.EXE and RAVEN.EXE both draw into a window
+ * of this size; the machine draws here and nowhere else, a page turns it into
+ * pixels, a test reads it or ignores it.
  */
-import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
+import type { FrameV0 } from "../df/image-v0";
 import type { BitmapFont } from "./font";
-import { SCREEN_H, SCREEN_W } from "./data";
+
+/** the window, 512x384 in both games */
+export const SCREEN_W = 512;
+export const SCREEN_H = 384;
 
 /** {top, left, bottom, right}, the Macintosh way, bottom and right exclusive */
 export type Rect = readonly [number, number, number, number];
@@ -28,6 +32,40 @@ export class Screen {
     const [t, l, b, rt] = clip(r, FULL);
     for (let y = t; y < b; y++) this.pixels.fill(index, y * SCREEN_W + l, y * SCREEN_W + rt);
     this.version++;
+  }
+
+  /**
+   * The rect's pixels inverted: each index's bits flipped, which in a
+   * Macintosh palette is the colour opposite — what XOR with the black pen
+   * does on the 8-bit window.
+   */
+  invert(r: Rect): void {
+    const [t, l, b, rt] = clip(r, FULL);
+    for (let y = t; y < b; y++) for (let x = l; x < rt; x++) this.pixels[y * SCREEN_W + x] ^= 0xff;
+    this.version++;
+  }
+
+  /**
+   * A frame `pen` pixels thick just inside the rect, inverted: `_portframerect`
+   * with a `pen`-square pen in XOR mode (RAVEN.EXE 0x427373, a button held down:
+   * pen 3, mode 1). Drawn twice it is gone.
+   */
+  invertFrame(r: Rect, pen: number): void {
+    const [t, l, b, rt] = r;
+    if (b - t <= 2 * pen || rt - l <= 2 * pen) return this.invert(r);
+    this.invert([t, l, t + pen, rt]);
+    this.invert([b - pen, l, b, rt]);
+    this.invert([t + pen, l, b - pen, l + pen]);
+    this.invert([t + pen, rt - pen, b - pen, rt]);
+  }
+
+  /** a frame `pen` pixels thick just inside the rect, in one ink (`_portframerect` in copy mode) */
+  frame(r: Rect, pen: number, index: number): void {
+    const [t, l, b, rt] = r;
+    this.fill([t, l, t + pen, rt], index);
+    this.fill([b - pen, l, b, rt], index);
+    this.fill([t, l, b, l + pen], index);
+    this.fill([t, rt - pen, b, rt], index);
   }
 
   /** `w`-wide rows of indices, their top-left at (top, left) */

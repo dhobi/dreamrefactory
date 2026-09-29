@@ -115,7 +115,8 @@ export interface GameEditions {
    * Every file in this game is DreamFactory 0 — a fact the bytes cannot state:
    * a v0 container has no version tag, and reading one as though it had gives
    * noise, sometimes 1, 4 or 5 (engine/src/df/version.ts). So a tool that opens
-   * this game's files has to be told, and this is where it asks. Only Lunicus.
+   * this game's files has to be told, and this is where it asks. Lunicus and
+   * Jump Raven.
    */
   dreamFactory0?: boolean;
   /**
@@ -297,8 +298,7 @@ export const REDJACK: GameEditions = {
 };
 
 /**
- * *Lunicus* — CyberFlix's first game, and the only one on what this port calls
- * DreamFactory 0.
+ * *Lunicus* — CyberFlix's first game, on what this port calls DreamFactory 0.
  *
  * There is no BOOTFILE and no script in it: the whole game is in `LUNICUS.EXE`,
  * which `lunicus/` was ported from by disassembly, as Skull Cracker's was. What
@@ -315,6 +315,27 @@ export const LUNICUS: GameEditions = {
   fallback: "",
   // the game window's 512×384 (src/main.ts doubles it), which its films and
   // its views are drawn into; no band, because there are no sets
+  screen: { width: 512, height: 384 },
+  developer: "CyberFlix",
+  dreamFactory0: true,
+};
+
+/**
+ * *Jump Raven* — CyberFlix's second game, a hovercraft shooter over a drowned
+ * New York, on the same DreamFactory 0 as Lunicus.
+ *
+ * No scripts either: the story, the shops and the flying are all `RAVEN.EXE`,
+ * which `jumpraven/` was ported from by disassembly, as Lunicus's was.
+ */
+export const JUMPRAVEN: GameEditions = {
+  title: "Jump Raven",
+  short: "Jump Raven",
+  dir: "jumpraven",
+  mark: "mark-jumpraven.svg",
+  editions: [{ code: "", name: "English", encoding: DEFAULT_ENCODING }],
+  storageKey: "jumpraven.edition",
+  fallback: "",
+  // the game window's 512×384 (src/main.ts doubles it), as Lunicus's
   screen: { width: 512, height: 384 },
   developer: "CyberFlix",
   dreamFactory0: true,
@@ -362,6 +383,7 @@ export function editionOfUrl(game: GameEditions, url: string): string {
  * RedJack comes after it all the same: DreamFactory 5, the last engine and the
  * last game, which is where oldest-engine-first puts it.
  *
- * And Lunicus comes first: DreamFactory 0 and 1994, the oldest of both.
+ * And Lunicus comes first: DreamFactory 0 and 1994, the oldest of both; Jump
+ * Raven, the same engine and the same year, after it.
  */
-export const GAMES: readonly GameEditions[] = [LUNICUS, DUST, TITANIC, TIMELAPSE, SKULLCRACKER, REDJACK];
+export const GAMES: readonly GameEditions[] = [LUNICUS, JUMPRAVEN, DUST, TITANIC, TIMELAPSE, SKULLCRACKER, REDJACK];
