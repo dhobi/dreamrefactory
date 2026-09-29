@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+     aria-label="Jump Raven">
+  <!--
+    The title card's first letter, as it is drawn there: a heavy red J leant
+    forward, in a bronze rim with a dark rule round it, in front of the sunset
+    over the drowned city, on a disc of the raven's blue-black.
+
+    What survives at 16px is the letter and the sky behind it. The raven's
+    wings and head, the pilot, the hovercraft and the skyline all go.
+
+    A disc, as Lunicus's and RedJack's are: a red letter on transparency is a
+    stray blot among a tab strip's icons, and the night is what it reads
+    against.
+
+    Every colour is measured out of jumpraven/public/jumpraven-logo.png (the
+    census in src/theme.css): the letters' #f77562 lit edge, #f70313 face and
+    #b80204 shade; the rim's #fce9ad, #d8a364, #b46218 and #572706; the rule's
+    #140a06; the sky's #fdc83a, #f68a36 and #874967; the wings' #091735 and
+    #040814.
+  -->
+  <defs>
+    <radialGradient id="night" cx=".5" cy=".4" r=".62">
+      <stop offset="0" stop-color="#091735"/>
+      <stop offset="1" stop-color="#040814"/>
+    </radialGradient>
+    <radialGradient id="sky" cx=".5" cy=".78" r=".6">
+      <stop offset="0" stop-color="#fdc83a"/>
+      <stop offset=".3" stop-color="#f68a36"/>
+      <stop offset=".62" stop-color="#874967" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#874967" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fce9ad"/>
+      <stop offset=".35" stop-color="#d8a364"/>
+      <stop offset=".7" stop-color="#b46218"/>
+      <stop offset="1" stop-color="#572706"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="#f77562"/>
+      <stop offset=".3" stop-color="#f70313"/>
+      <stop offset="1" stop-color="#b80204"/>
+    </linearGradient>
+    <clipPath id="disc"><circle cx="16" cy="16" r="14.4"/></clipPath>
+  </defs>
+  <circle cx="16" cy="16" r="15.2" fill="url(#rim)"/>
+  <circle cx="16" cy="16" r="14.4" fill="url(#night)"/>
+  <g clip-path="url(#disc)">
+    <circle cx="16" cy="24" r="16" fill="url(#sky)"/>
+  </g>
+  <!-- the J: a flag at the top, the stem, the hook; leant as the letters are -->
+  <g transform="translate(3.4 0) skewX(-12)">
+    <path d="M10 5.5H24V10H22.5V20.5Q22.5 26.5 16.5 26.5H13.5Q7.5 26.5 7.5 21V18.5H12.5V20.5Q12.5 22 14 22H15.5Q17 22 17 20.5V10H10Z"
+          fill="none" stroke="#140a06" stroke-width="3.4" stroke-linejoin="round"/>
+    <path d="M10 5.5H24V10H22.5V20.5Q22.5 26.5 16.5 26.5H13.5Q7.5 26.5 7.5 21V18.5H12.5V20.5Q12.5 22 14 22H15.5Q17 22 17 20.5V10H10Z"
+          fill="url(#red)" stroke="url(#rim)" stroke-width="1.3" stroke-linejoin="round"/>
+  </g>
+</svg>

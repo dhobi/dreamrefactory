@@ -69,6 +69,7 @@ const GAMES: readonly Source[] = [
   { dir: "skullcracker", mark: "public/skullcracker-mark.svg", bg: "#080202" },
   { dir: "redjack", mark: "public/redjack-mark.svg", bg: "#070402" },
   { dir: "lunicus", mark: "public/lunicus-mark.svg", bg: "#040716" },
+  { dir: "jumpraven", mark: "public/jumpraven-mark.svg", bg: "#040814" },
 ];
 
 /** `npx tsx tools/mkappicons.ts lunicus` renders that game's alone */

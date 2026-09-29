@@ -98,6 +98,12 @@ export default defineConfig({
         port: 5180,
         what: "Lunicus",
       },
+      {
+        path: "jumpraven",
+        command: "npm run dev -w jumpraven",
+        port: 5181,
+        what: "Jump Raven",
+      },
     ]),
   ],
   server: {

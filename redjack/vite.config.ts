@@ -48,6 +48,7 @@ export default defineConfig({
       { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
       { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
       { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
+      { path: "jumpraven", command: "npm run dev -w jumpraven", port: 5181, what: "Jump Raven" },
     ]),
   ],
   server: {
