@@ -179,6 +179,8 @@ function where(): string {
   const t = game.talkState.talk;
   if (t) return `briefing: ${t.file}${t.line ? ` · ${t.line}` : ""}`;
   if (m.film) return m.where;
+  const f = game.flight;
+  if (f) return `flying, day ${game.level === 3 ? 1 : game.level === 5 ? 2 : 3} · ${f.fly ? "FLY" : "HOVER"} (T switches) · ${f.pose.x},${f.pose.y} facing ${"NSEW"[f.pose.dir]} — no enemies yet: the flying is ported as far as the city`;
   if (game.mart) return `the Mart · cash ${game.records.score}${game.mart.selected ? ` · selected tier ${game.mart.selected.tier + 1} of kind ${game.mart.selected.kind}` : ""}`;
   if (game.phase === "scores") return "the high scores screen — PLAY starts a game";
   return m.where || game.phase;

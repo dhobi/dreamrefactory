@@ -4,6 +4,7 @@
  *   npx tsx jumpraven/tools/match.mts                 the table, Raven VA → Lunicus VA
  *   npx tsx jumpraven/tools/match.mts lu 0x40e038     the Raven function for a Lunicus one
  *   npx tsx jumpraven/tools/match.mts rv 0x40d000     the Lunicus function for a Raven one
+ *   npx tsx jumpraven/tools/match.mts self 0x401ca4 0x40cded   two Raven functions side by side
  *   npx tsx jumpraven/tools/match.mts diff 0x41e5c4   a Raven function beside its Lunicus pair,
  *                                                     where the two differ (addresses masked)
  *
@@ -96,10 +97,10 @@ if (mode === "lu") {
   const want = Number(arg), f = containing(rv, want)!;
   const p = pairs.get(f.va);
   console.log(p ? `raven ${hex(f.va)} (+${want - f.va}) = lunicus ${hex(p.lu)} (score ${p.score.toFixed(2)})` : `raven ${hex(f.va)}: no pair`);
-} else if (mode === "diff") {
+} else if (mode === "diff" || mode === "self") {
   const r = containing(rv, Number(arg))!;
   const p = pairs.get(r.va);
-  const l = p ? lu.find((f) => f.va === p.lu) : containing(lu, Number(process.argv[4]));
+  const l = mode === "self" ? containing(rv, Number(process.argv[4])) : p ? lu.find((f) => f.va === p.lu) : containing(lu, Number(process.argv[4]));
   if (!l) throw new Error(`raven ${hex(r.va)}: no pair (give the Lunicus VA as a third argument)`);
   // an LCS over the masked instructions, printed as a diff
   const a = r.ops, b = l.ops;
