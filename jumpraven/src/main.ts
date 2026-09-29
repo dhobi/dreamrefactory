@@ -28,6 +28,9 @@ import { Input } from "./game/input";
 import type { GameFiles, Speaker } from "./game/machine";
 import { askHighScoreName, askQuit, editKeys, pause, soundDialog } from "./dialogs";
 import { installMenu } from "./menu";
+import { TouchGestures, type GestureKey } from "@dreamfactory/engine/web/touch";
+import { VIEW } from "./game/flight";
+import { inRect } from "./game/screens";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { JUMPRAVEN_SAVES } from "./saves";
@@ -323,20 +326,43 @@ const at = (e: PointerEvent): { x: number; y: number } => {
   if (e.target !== canvas) return { x, y };
   return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
 };
+/** a gesture's key, as `KeyboardEvent.key` names it */
+const GESTURE_KEYS: Record<GestureKey, string> = { uparrow: "ArrowUp", downarrow: "ArrowDown", leftarrow: "ArrowLeft", rightarrow: "ArrowRight", ".": "Escape" };
+/**
+ * A finger (engine/src/web/touch.ts): a double tap is Esc — on a phone the
+ * only way to skip a film, whose taps go to its hotspots — and a swipe an
+ * arrow, which flies. In a flight the panels take a press at once; the view
+ * waits to see whether the finger swipes, and a tap there fires on lift, a
+ * hold fires and aims as a held mouse does.
+ */
+const touch = new TouchGestures({
+  coords: (e) => (running && !windowDialogOpen() && !savesOpen() ? at(e as PointerEvent) : null),
+  ownedByGame: (x, y) => game.phase === "flying" && !inRect(VIEW, x, y),
+  press: (x, y) => input.down(x, y),
+  release: (x, y) => input.up(x, y),
+  sendKey: (key) => {
+    const k = GESTURE_KEYS[key];
+    input.keyDown(k);
+    input.keyUp(k);
+  },
+});
 canvas.addEventListener("pointerdown", (e) => {
   if (!running || windowDialogOpen() || savesOpen()) return;
+  if (e.pointerType === "touch") return void touch.down(e);
   const p = at(e);
   input.down(p.x, p.y);
 });
 addEventListener("pointermove", (e) => {
   const p = at(e);
   input.move(p.x, p.y);
+  touch.move(e);
 });
 addEventListener("pointerup", (e) => {
-  if (!running) return;
+  if (touch.up(e) || !running) return;
   const p = at(e);
   input.up(p.x, p.y);
 });
+addEventListener("pointercancel", (e) => touch.cancel(e));
 document.addEventListener("keydown", (e) => {
   if (focusOwnsKey(e.target, e.key) || windowDialogOpen() || savesOpen()) return;
   const ctrl = e.ctrlKey || e.metaKey;
