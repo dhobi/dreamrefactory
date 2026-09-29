@@ -30,7 +30,7 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import { cellV0, readMazeV0, type MazeTransitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
 import { CELL, CELL_CENTRE, FORWARD, FORWARD_DX, FORWARD_DY, HEADING, LEFT, RIGHT, STEP_CLIP, TURN_CLIP, TURN_LEFT, TURN_RIGHT, VIEW_H, VIEW_W } from "./data";
-import type { Rect } from "./screen";
+import type { Rect } from "@dreamfactory/engine/v0/screen";
 
 export type Pose = PoseV0;
 

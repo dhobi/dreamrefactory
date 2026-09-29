@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readMovFileV0 } from "../../../engine/src/df/mov-v0";
-import { playOneFilm } from "../../src/game/film";
+import { playOneFilm } from "@dreamfactory/engine/v0/film";
 import { Machine } from "../../src/game/machine";
 import { RIP, diskFiles, fail, ok, pass } from "./harness";
 

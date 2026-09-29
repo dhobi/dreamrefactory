@@ -1,16 +1,18 @@
 /**
- * A film played the way LUNICUS.EXE's player (0x40e038) plays it: in its rect
- * on the screen — top-left at 0,0 for every film in the rip, so a 384-wide one
- * covers the maze view and leaves the panel standing — in its own palette, a
- * frame held for its hold in ticks, and a click given to the frame's hotspots.
+ * A film played the way LUNICUS.EXE's player (0x40e038) plays it — and
+ * RAVEN.EXE's (0x411464), the same code a month older: in its rect on the
+ * screen — top-left at 0,0 for every film in either rip, so a 384-wide one
+ * covers Lunicus's maze view and leaves the panel standing — in its own
+ * palette, a frame held for its hold in ticks, and a click given to the
+ * frame's hotspots.
  *
- * What a hotspot does is Dust's reading ({@link file://../../../engine/src/df/mov-v0.ts}):
+ * What a hotspot does is Dust's reading ({@link file://../df/mov-v0.ts}):
  * types 1 and 3 end the film, 2 jumps to a frame, and a frame whose hotspots do
  * not play through waits for a click. Esc ends a film: the page's own key.
  */
-import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
-import { FLAG_PLAY_THROUGH, FLAG_STEP, FLAG_WAIT_SOUND, nextFrameV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
-import type { Co, Machine } from "./machine";
+import { FrameBuffer, decodeFrame } from "../df/image";
+import { FLAG_PLAY_THROUGH, FLAG_STEP, FLAG_WAIT_SOUND, nextFrameV0, paletteV0, readMovFileV0 } from "../df/mov-v0";
+import type { Co, MachineV0 as Machine } from "./machine";
 
 export const ESCAPE = "Escape";
 

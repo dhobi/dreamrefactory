@@ -37,11 +37,11 @@ import {
   BAR_FULL, FORWARD, LEFT, LOWER, MSG, RIGHT, UPPER, VIEW_H, VIEW_W, WALK_RECTS, dayOf, floorOf, FRAME_TICKS, CELL,
 } from "./data";
 import { clickFigure, drawnAt, live, loadCrew, type Drawn, type Figure } from "./crew";
-import { playFilm } from "./film";
+import { playFilm } from "@dreamfactory/engine/v0/film";
 import type { Co, Machine } from "./machine";
 import { MazeView, camera, moved, type Camera, type Pose } from "./maze";
 import { Panel, type Hud } from "./panel";
-import { inRect, type Rect } from "./screen";
+import { inRect, type Rect } from "@dreamfactory/engine/v0/screen";
 import { talk, talkNumber, type TalkState } from "./talk";
 
 /** everything a saved game would hold, and what a machine test reads */

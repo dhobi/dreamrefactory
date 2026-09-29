@@ -56,10 +56,11 @@ import type { MovClickRegion, MovFile, MovFrame } from "./mov";
  *
  * A hotspot is Dust's typed record: {i16 type, i16 top, left, bottom, right,
  * i16 sound, …}, 14 bytes for types 1 and 5, 16 for 2 (with a 0-based target at
- * +0x0e), 46 for 3 and 48 for 4 — and a type Dust never has, -1, in the 14-byte
- * shape: LUNICUS.EXE's player negates a negative type (0x40eb01) and tracks the
- * press before it acts, so −1 is an exit drawn as a button — the elevators'
- * floor buttons, whose index the player hands the level. The intro's frames each carry one full-screen
+ * +0x0e), 46 for 3 and 48 for 4 — and negative types Dust never has, each in
+ * its positive type's shape: LUNICUS.EXE's player negates a negative type
+ * (0x40eb01) and tracks the press before it acts, so −1 is an exit drawn as a
+ * button — the elevators' floor buttons, whose index the player hands the
+ * level. Lunicus has only −1; *Jump Raven*'s films have −1 to −5. The intro's frames each carry one full-screen
  * type-1 box and play through it: a click anywhere skips the film.
  */
 
@@ -105,7 +106,7 @@ const PALETTE_AT = 0x22;
 const PALETTE_BYTES = 256 * 8;
 const FRAMES_AT = 0x8a2;
 const FRAME_BYTES = 80;
-const HOTSPOT_BYTES: Record<number, number> = { [-1]: 14, 1: 14, 2: 16, 3: 46, 4: 48, 5: 14 };
+const HOTSPOT_BYTES: Record<number, number> = { 1: 14, 2: 16, 3: 46, 4: 48, 5: 14 };
 
 /** frame flags */
 export const FLAG_WAIT_SOUND = 1;
@@ -128,7 +129,7 @@ export function readMovFileV0(data: Uint8Array): MovFileV0 {
     for (let k = 0, p = v.getInt32(r + 0x24, true); k < v.getInt16(r, true); k++) {
       if (p < 0 || p + 2 > c0.length) break;
       const type = v.getInt16(p, true);
-      const size = HOTSPOT_BYTES[type];
+      const size = HOTSPOT_BYTES[Math.abs(type)];
       if (!size || p + size > c0.length) break;
       hotspots.push({
         type,
@@ -137,7 +138,7 @@ export function readMovFileV0(data: Uint8Array): MovFileV0 {
         bottom: v.getInt16(p + 6, true),
         right: v.getInt16(p + 8, true),
         sound: v.getInt16(p + 0xa, true),
-        target: type === 2 ? v.getInt16(p + 0xe, true) : -1,
+        target: Math.abs(type) === 2 ? v.getInt16(p + 0xe, true) : -1,
       });
       p += size;
     }
@@ -199,8 +200,8 @@ export function nextFrameV0(film: MovFileV0, index: number): number {
  *
  * The codes are v4's own ({@link file://./mov.ts}): 1 exit (from the last
  * frame the film's end, 3 anywhere else, as for v1), 2 goto, 3 exit and chain;
- * a frame with the step bit is v4's 6, advance one frame. A hotspot of type −1
- * is an exit drawn as a button, so it is v4's 1.
+ * a frame with the step bit is v4's 6, advance one frame. A hotspot of a
+ * negative type is its positive type drawn as a button, so −1 is v4's 1.
  */
 export function movFileFromV0(v0: MovFileV0): MovFile {
   const count = v0.frames.length;
@@ -223,8 +224,8 @@ export function movFileFromV0(v0: MovFileV0): MovFile {
     else type = 6;
     const regions = f.hotspots.map(
       (h): MovClickRegion => ({
-        type: h.type === -1 ? 1 : h.type >= 1 && h.type <= 5 ? h.type : 6,
-        target: h.type === 2 ? frameName(h.target) : "",
+        type: Math.abs(h.type) >= 1 && Math.abs(h.type) <= 5 ? Math.abs(h.type) : 6,
+        target: Math.abs(h.type) === 2 ? frameName(h.target) : "",
         y0: h.top,
         x0: h.left,
         y1: h.bottom,

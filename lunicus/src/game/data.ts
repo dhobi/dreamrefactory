@@ -4,8 +4,7 @@
  */
 
 /** the window: 512x384, the maze view its top-left 384x264 (0x40aa48) */
-export const SCREEN_W = 512;
-export const SCREEN_H = 384;
+export { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/v0/screen";
 export const VIEW_W = 384;
 export const VIEW_H = 264;
 

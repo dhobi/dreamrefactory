@@ -43,9 +43,9 @@
 import { decodeFigureV0, decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readPuppetTrackV0, readTalkFileV0 as readTalkFile, type TrackKeyV0 } from "@dreamfactory/engine/df/talk-v0";
 import { MENU_LINE, MENU_TOP, SCREEN_W, VIEW_H } from "./data";
-import { ESCAPE } from "./film";
+import { ESCAPE } from "@dreamfactory/engine/v0/film";
 import type { Co, Machine } from "./machine";
-import { clip, inRect, type Rect } from "./screen";
+import { clip, inRect, type Rect } from "@dreamfactory/engine/v0/screen";
 
 /** a talk file's number for the day's progress `[0x42d1c8]` (table 0x427168) */
 export const talkNumber = (progress: number): number => (progress <= 1 ? 1 : progress === 2 ? 2 : 3);

@@ -1,11 +1,15 @@
 /**
- * The game window: 512x384 palette indices and the palette they are shown in.
- * The machine draws here and nowhere else; a page turns it into pixels, a test
- * reads it or ignores it.
+ * The game window of a DreamFactory 0 game: 512x384 palette indices and the
+ * palette they are shown in. LUNICUS.EXE and RAVEN.EXE both draw into a window
+ * of this size; the machine draws here and nowhere else, a page turns it into
+ * pixels, a test reads it or ignores it.
  */
-import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
+import type { FrameV0 } from "../df/image-v0";
 import type { BitmapFont } from "./font";
-import { SCREEN_H, SCREEN_W } from "./data";
+
+/** the window, 512x384 in both games */
+export const SCREEN_W = 512;
+export const SCREEN_H = 384;
 
 /** {top, left, bottom, right}, the Macintosh way, bottom and right exclusive */
 export type Rect = readonly [number, number, number, number];

@@ -49,12 +49,12 @@
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { BAR_FULL, FORWARD, FRAME_TICKS, LEFT, RIGHT, SCREEN_W, VIEW_H, VIEW_W, WALK_RECTS, dayOf } from "../data";
-import { playFilm, type FilmHooks } from "../film";
+import { playFilm, type FilmHooks } from "@dreamfactory/engine/v0/film";
 import type { Co, Machine } from "../machine";
 import { INDOORS, MazeView, OUTDOORS, camera, moved } from "../maze";
 import { Panel } from "../panel";
 import type { Progress } from "../base";
-import { inRect, type Rect } from "../screen";
+import { inRect, type Rect } from "@dreamfactory/engine/v0/screen";
 import { talk, type TalkState } from "../talk";
 import { combatParams } from "./params";
 import { JEEP, TANK, Vehicle } from "./vehicle";
