@@ -68,6 +68,12 @@ export default defineConfig({
       emit: false,
     }),
     gamefilesManifest({
+      gamefiles: resolve(HERE, "../lunicus/gamefiles"),
+      publicDir: resolve(HERE, "../lunicus/public"),
+      mount: "/lunicus",
+      emit: false,
+    }),
+    gamefilesManifest({
       gamefiles: resolve(HERE, "../redjack/gamefiles"),
       publicDir: resolve(HERE, "../redjack/public"),
       mount: "/redjack",
@@ -90,6 +96,7 @@ export default defineConfig({
       { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
       { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
       { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
+      { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
     ]),
   ],
   server: {
@@ -107,7 +114,7 @@ export default defineConfig({
       input: {
         // the front door
         main: join(HERE, "index.html"),
-        // the editors: a landing page and the eight format pages. They import
+        // the editors: a landing page and the nine format pages. They import
         // the file-format layer (engine/src/df/) and engine/src/web/screen.ts,
         // never the runtime, so they build as pages that happen to share a data
         // library with a game.
@@ -120,6 +127,8 @@ export default defineConfig({
         casts: join(HERE, "editors/casts.html"),
         movies: join(HERE, "editors/movies.html"),
         books: join(HERE, "editors/books.html"),
+        mazes: join(HERE, "editors/mazes.html"),
+        setts: join(HERE, "editors/setts.html"),
       },
     },
   },

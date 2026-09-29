@@ -19,7 +19,7 @@ import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
@@ -138,6 +138,9 @@ const frameLoc = (): number | undefined => pose()?.steps[stepIdx]?.[dirIdx]?.loc
 
 // --- loading ----------------------------------------------------------------
 
+/** a DreamFactory 5 file, open read-only (see `isV5File`) */
+let readOnly = false;
+
 function loadCst(bytes: Uint8Array, name: string): void {
   stopPlayback();
   let parsed: CstFile;
@@ -167,7 +170,11 @@ function loadCst(bytes: Uint8Array, name: string): void {
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   frameCache.clear();
   edits.length = 0;
-  dirtyEl.textContent = "";
+  // a v5 file reads but cannot be written yet (sources.ts)
+  readOnly = isV5File(bytes);
+  dirtyEl.textContent = readOnly ? V5_READ_ONLY : "";
+  // a button that refuses when pressed is worse than one that says so first
+  ($("exportBtn") as HTMLButtonElement).disabled = readOnly;
   memberIdx = 0;
   poseIdx = 0;
   stepIdx = 0;
@@ -214,7 +221,7 @@ async function initServerCasts(): Promise<void> {
   // before any of this rip's actors are drawn — see the note on `screen`
   if (source) screen = screenOf(source);
   if (!source) return; // production / no dev server: upload only
-  const casts = filesIn(source, byExtension(".cst"));
+  const casts = filesIn(source, byExtension(".cst", ".cast"));
   if (!casts.length) return;
   const wrap = $("serverCasts");
   const note = document.createElement("div");
@@ -277,7 +284,8 @@ function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!f.width || !f.height) return;
   const img = ctx.createImageData(f.width, f.height);
-  indexedToRGBA(f.indexed, f.width, f.height, palette, img.data);
+  // a v5 sprite brings its own palette; a v4 one is drawn through the file's
+  indexedToRGBA(f.indexed, f.width, f.height, f.palette ?? palette, img.data);
   for (let i = 0; i < f.width * f.height; i++) {
     if (!f.opaque[i]) img.data[i * 4 + 3] = 0;
   }
@@ -909,6 +917,10 @@ function download(blob: Blob, name: string): void {
 
 $("exportBtn").addEventListener("click", () => {
   if (!cst) return;
+  if (readOnly) {
+    log(V5_READ_ONLY);
+    return;
+  }
   const bytes = writeContainerFile(cst.file);
   try {
     readCstFile(bytes); // sanity: the export must read back as a cast

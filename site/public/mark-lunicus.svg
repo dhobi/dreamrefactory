@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+     aria-label="Lunicus">
+  <!--
+    The title card's first letter, as it is drawn there: a chrome slab L in a
+    gold bevel with a dark rule round it, in front of the explosion the ship
+    flies out of, on a disc of the crew's navy.
+
+    What survives at 16px is the letter and the fire behind it. The ship, the
+    fighters, the five faces and the cracks in the chrome all go.
+
+    A disc, as RedJack's is: a chrome letter on transparency is a pale blob
+    among a tab strip's icons, and the navy is what the letter reads against.
+
+    Every colour is measured out of lunicus/public/lunicus-logo.png (the census
+    in src/theme.css): the chrome's #e9e3da lit edge, #b5b6b5 face and #a7bbe0
+    sky in it; the bevel's #f8f574, #efc034, #c77401 and #733500; the rule's
+    #0e0600; the fire's #fcd706, #fb7803 and #c92c13; the uniforms' #060a56
+    and #020837.
+  -->
+  <defs>
+    <radialGradient id="night" cx=".5" cy=".42" r=".62">
+      <stop offset="0" stop-color="#060a56"/>
+      <stop offset="1" stop-color="#020837"/>
+    </radialGradient>
+    <radialGradient id="fire" cx=".62" cy=".44" r=".5">
+      <stop offset="0" stop-color="#fdfca8"/>
+      <stop offset=".22" stop-color="#fcd706"/>
+      <stop offset=".5" stop-color="#fb7803"/>
+      <stop offset=".78" stop-color="#c92c13" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#c92c13" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8f574"/>
+      <stop offset=".35" stop-color="#efc034"/>
+      <stop offset=".7" stop-color="#c77401"/>
+      <stop offset="1" stop-color="#733500"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2=".35" y2="1">
+      <stop offset="0" stop-color="#e9e3da"/>
+      <stop offset=".45" stop-color="#b5b6b5"/>
+      <stop offset=".6" stop-color="#a7bbe0"/>
+      <stop offset="1" stop-color="#7c7f80"/>
+    </linearGradient>
+    <clipPath id="disc"><circle cx="16" cy="16" r="14.4"/></clipPath>
+  </defs>
+  <circle cx="16" cy="16" r="15.2" fill="url(#rim)"/>
+  <circle cx="16" cy="16" r="14.4" fill="url(#night)"/>
+  <g clip-path="url(#disc)">
+    <circle cx="19.5" cy="14" r="14" fill="url(#fire)"/>
+  </g>
+  <!-- the slab L: a serif at the top of the stem, a flared foot -->
+  <path id="L" d="M8 6.5H18.5V9.5H16V20.5H21V17H24.5V25.5H8V22.5H10.5V9.5H8Z"
+        fill="none" stroke="#0e0600" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M8 6.5H18.5V9.5H16V20.5H21V17H24.5V25.5H8V22.5H10.5V9.5H8Z"
+        fill="url(#chrome)" stroke="url(#rim)" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

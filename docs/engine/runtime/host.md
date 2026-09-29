@@ -26,6 +26,8 @@ other half: the page, its DOM, and which disc it reads.
 | [`puppet-view.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/puppet-view.ts) | conversation rendering (see [Characters](characters.md)) |
 | [`keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/keys.ts) | whether a keypress belongs to whatever has focus or to the game — see [Keys](#keys) |
 | [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) | the saved-games UI and its IndexedDB store, parameterised on a `SaveKind` so each game gets its own database |
+| [`window-bar.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-bar.ts) | a game window's menu bar, attached to the frame that holds the canvas: the menus as a Win32 resource spells them, the Windows keys, fullscreen reveal |
+| [`window-dialog.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-dialog.ts) | a game window's dialog box on the same frame: a Win32 dialog template drawn as laid out, modal over the picture, with the dialog manager's keys |
 
 **The page around it** — a game's own `src/`. Titanic's is the fuller one and
 is what this page's examples are drawn from; Dust's is three files, because one

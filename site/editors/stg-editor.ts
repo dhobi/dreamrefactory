@@ -14,10 +14,11 @@
  * exports the file it read (see taoot/tests/auto/stg-editor.ts).
  */
 import { FrameBuffer, decodeFrame, encodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
+import { decodeFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
@@ -51,6 +52,8 @@ interface FlatImage {
   /** byte offset of this container's Z layer, or -1 — kept so a PNG import can
    *  carry it over unchanged (flats do not normally have one) */
   zOffset: number;
+  /** a v5 flat's own palette (a STEP carries one); a v1/v4 flat uses the stage's */
+  palette?: Uint8ClampedArray;
 }
 
 let stg: StgFile | null = null;
@@ -84,6 +87,9 @@ const flat = () => stg!.flats[flatIdx];
 
 // --- loading ----------------------------------------------------------------
 
+/** a DreamFactory 5 file, open read-only (see `isV5File`) */
+let readOnly = false;
+
 function loadStg(bytes: Uint8Array, name: string): void {
   let parsed: StgFile;
   try {
@@ -100,7 +106,11 @@ function loadStg(bytes: Uint8Array, name: string): void {
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   imageCache.clear();
   edits.length = 0;
-  dirtyEl.textContent = "";
+  // a v5 file reads but cannot be written yet (sources.ts)
+  readOnly = isV5File(bytes);
+  dirtyEl.textContent = readOnly ? V5_READ_ONLY : "";
+  // a button that refuses when pressed is worse than one that says so first
+  ($("exportBtn") as HTMLButtonElement).disabled = readOnly;
   flatIdx = 0;
   hoveredRegion = -1;
 
@@ -147,7 +157,7 @@ async function initServerStages(): Promise<void> {
   // at different offsets, and both the reader and the patches take their tables
   // from the file's own version tag (`C0_BY_VERSION`, `FLAT_BY_VERSION`), so an
   // edit lands on the byte the name came out of. Dust ships 20 of them.
-  const stages = filesIn(source, byExtension(".stg", ".flt"));
+  const stages = filesIn(source, byExtension(".stg", ".flt", ".stag"));
   if (!stages.length) return;
   const wrap = $("serverStages");
   const note = document.createElement("div");
@@ -201,12 +211,14 @@ function imageAt(loc: number): FlatImage | null {
     if (!data) return null;
     try {
       const fb = new FrameBuffer();
-      const d = decodeFrame(data, fb);
+      const v5 = isV5Frame(data);
+      const d = v5 ? decodeFrameV5(data, fb) : decodeFrame(data, fb);
       img = {
         pixels: fb.pixels.slice(0, d.width * d.height),
         width: d.width,
         height: d.height,
         zOffset: d.zOffset,
+        ...(v5 ? { palette: paletteV5(data) } : {}),
       };
     } catch {
       return null;
@@ -222,7 +234,7 @@ function imageToCanvas(img: FlatImage, canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext("2d")!;
   if (!img.width || !img.height) return;
   const data = ctx.createImageData(img.width, img.height);
-  indexedToRGBA(img.pixels, img.width, img.height, palette, data.data);
+  indexedToRGBA(img.pixels, img.width, img.height, img.palette ?? palette, data.data);
   ctx.putImageData(data, 0, 0);
 }
 
@@ -300,7 +312,7 @@ $("regionBtn").classList.add("on");
 function refresh(): void {
   if (!stg) return;
   const f = flat();
-  regions = f ? readStgRegions(stg.file.containers[f.locationClickLogic]?.data ?? new Uint8Array(0)) : [];
+  regions = f ? readStgRegions(stg.file.containers[f.locationClickLogic]?.data ?? new Uint8Array(0), stg.version) : [];
   buildFileBar();
   buildFlatFields();
   buildRegions();
@@ -624,6 +636,10 @@ function download(blob: Blob, name: string): void {
 
 $("exportBtn").addEventListener("click", () => {
   if (!stg) return;
+  if (readOnly) {
+    log(V5_READ_ONLY);
+    return;
+  }
   const bytes = writeContainerFile(stg.file);
   try {
     readStgFile(bytes); // sanity: the export must read back as a stage

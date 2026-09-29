@@ -281,6 +281,13 @@ export interface MovSegment {
    */
   dfV1?: boolean;
   /**
+   * A DreamFactory 0 film (engine/src/df/mov-v0.ts), which only the format
+   * editors read as a MovFile: its {@link paletteRaw} is stored the Macintosh
+   * way round (entry 0 white) and is read with `paletteV0`, never
+   * `paletteToRGBA`, and its sounds are v0 sounds (`decodeAudioV0`).
+   */
+  dfV0?: boolean;
+  /**
    * A DreamFactory 5 film (engine/src/df/mov-v5.ts): every frame container
    * carries its OWN palette and is decoded by image-v5.ts, and
    * {@link paletteRaw} is only the first frame's, kept for callers that ask a

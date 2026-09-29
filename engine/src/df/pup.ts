@@ -3,6 +3,7 @@ import { little } from "./byte-order";
 import { DFContainerFile, readContainerFile } from "./container";
 import { DEFAULT_ENCODING, DfEncoding, decodeText, encodeText } from "./text";
 import { versionOf } from "./version";
+import { readPuppetTrackV0 } from "./talk-v0";
 
 /**
  * PUP ("puppet") files — the conversation close-ups. One file per
@@ -204,6 +205,13 @@ export interface PupFile {
   idleTimers: { minTicks: number; maxTicks: number }[];
   /** what the subtitles were decoded with, and what an edit re-encodes to */
   encoding: DfEncoding;
+  /**
+   * A DreamFactory 0 talk file (Lunicus; `pupFileFromV0` in talk-v0.ts), which
+   * only the format editors read as a PupFile: its palette is the Macintosh way
+   * round (`paletteV0`), its pictures are v0 pictures (image-v0.ts), its sounds
+   * v0 sounds, and a line's animation is a v0 puppet track.
+   */
+  dfV0?: boolean;
 }
 
 /** one animation tick: per-layer frame + anchor (frame -1 = hidden) */
@@ -237,6 +245,15 @@ const isV5 = (d: Uint8Array, kind: string): boolean =>
 export function readAnimLogic(pup: PupFile, location: number): PupAnimFrame[] {
   const c = pup.file.containers[location]?.data;
   if (!c) return [];
+  // v0: a puppet track, eight layers a keyframe, one keyframe per two ticks
+  if (pup.dfV0) {
+    if (!location) return [];
+    try {
+      return readPuppetTrackV0(c).map((k) => ({ layers: k.layers.map(({ frame, y, x }) => ({ frame, y, x })) }));
+    } catch {
+      return [];
+    }
+  }
   // v5 (FRMR): the same records behind a 22-byte header, counted at 0x14
   const v5 = isV5(c, "FRMR");
   if (!v5 && (c.length < 82 || c.length % 82 !== 0)) return [];

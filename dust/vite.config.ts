@@ -92,6 +92,12 @@ export default defineConfig({
         port: 5179,
         what: "RedJack",
       },
+      {
+        path: "lunicus",
+        command: "npm run dev -w lunicus",
+        port: 5180,
+        what: "Lunicus",
+      },
     ]),
   ],
   server: {

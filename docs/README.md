@@ -37,6 +37,12 @@ data files is a DreamFactory container whose container 0 says **version 5**, and
 the executable calls itself "DreamFactory 5.0". It is the only DreamFactory 5
 game here, and the first with a real camera; see **[RedJack](redjack/)**.
 
+**And the oldest of them, *Lunicus*** (dated 1994 on its disc), is one too, in a
+form older than any: every data file opens with the container's envelope, and
+not one carries a version tag. This port calls it **DreamFactory 0**. There are
+no scripts; the whole game is in `LUNICUS.EXE`, and it was ported from its
+disassembly. See **[Lunicus](lunicus/)**.
+
 Three of them play here — two of them CyberFlix's own and the third GTE
 Interactive Media's:
 **[Dust: A Tale of the Wired West](dust/)** (1995, DreamFactory 1),
@@ -49,6 +55,8 @@ fourth, **[Skull Cracker](skullcracker/)**, is read but not played: its discs op
 completely and its films run, and there is no game under them to boot. A fifth,
 **[RedJack](redjack/)** (1998, DreamFactory 5), runs as a prototype: it boots and
 its rooms, films and characters play, and it has not been played through.
+A sixth, **[Lunicus](lunicus/)** (DreamFactory 0), plays from the intro to its
+queen, and saves.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you
@@ -101,8 +109,9 @@ than of the engine: **[Titanic](taoot/)** — its mission flow, its timed sinkin
 its six editions and how the port was verified against it — **[Dust](dust/)** —
 what DreamFactory 1 does differently, and where its music lives — and
 **[Timelapse](timelapse/)** — a game with no rooms, navigated by the shape of the
-cursor — and **[RedJack](redjack/)** — DreamFactory 5, and what it found in its
-own executable.
+cursor — **[RedJack](redjack/)** — DreamFactory 5, and what it found in its
+own executable — and **[Lunicus](lunicus/)** — DreamFactory 0, a game whose
+logic is all in its executable, played through by machine and in a browser.
 
 Two pages are outside the order, for reading out of order:
 **[the glossary](glossary.md)** (one line per term, when a word you don't know
@@ -161,6 +170,9 @@ first; every format doc after it builds on it.
 - **[Saved games, DF5 (`.save`)](engine/formats/savegame-v5.md)** — RedJack's,
   read out of RedJack.exe: tagged containers, and a load that closes the room
   being left.
+- **[DreamFactory 0's containers](engine/formats/dreamfactory-0.md)** — *Lunicus*'s
+  files (1994): the envelope with no version tag, a frame codec that copies from
+  its own compressed stream, and mazes of shared films.
 - **[DreamFactory 5's containers](engine/formats/dreamfactory-5.md)** — RedJack's
   files: the 24 bytes every container now opens with, and the palette that moved
   into each picture.

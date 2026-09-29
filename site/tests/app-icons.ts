@@ -50,6 +50,7 @@ const APPS = [
   { dir: "timelapse", short: "Timelapse", pages: ["timelapse/index.html"] },
   { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html"] },
   { dir: "redjack", short: "RedJack", pages: ["redjack/index.html"] },
+  { dir: "lunicus", short: "Lunicus", pages: ["lunicus/index.html"] },
 ] as const;
 
 interface Icon {

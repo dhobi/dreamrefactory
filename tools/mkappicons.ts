@@ -1,7 +1,8 @@
 /**
  * The home-screen icons, from each game's own mark.
  *
- *   npm run mkappicons
+ *   npm run mkappicons                  (every game)
+ *   npx tsx tools/mkappicons.ts lunicus (one)
  *
  * A web app installed to a phone's home screen needs raster icons at sizes no
  * favicon ever wanted, in shapes a favicon never has to be: Android masks the
@@ -67,7 +68,11 @@ const GAMES: readonly Source[] = [
   { dir: "timelapse", mark: "public/timelapse-mark.svg", bg: "#04050e" },
   { dir: "skullcracker", mark: "public/skullcracker-mark.svg", bg: "#080202" },
   { dir: "redjack", mark: "public/redjack-mark.svg", bg: "#070402" },
+  { dir: "lunicus", mark: "public/lunicus-mark.svg", bg: "#040716" },
 ];
+
+/** `npx tsx tools/mkappicons.ts lunicus` renders that game's alone */
+const only = process.argv.slice(2);
 
 /** every icon a game gets, as the manifest and the Apple tags name them */
 function outputs(dir: string): { file: string; size: number; scale: number; bg: boolean }[] {
@@ -81,7 +86,7 @@ function outputs(dir: string): { file: string; size: number; scale: number; bg: 
 
 const browser = await chromium.launch();
 try {
-  for (const game of GAMES) {
+  for (const game of GAMES.filter((g) => !only.length || only.includes(g.dir))) {
     const path = join(ROOT, game.dir, game.mark);
     const bytes = readFileSync(path);
     const mime = game.mark.endsWith(".svg") ? "image/svg+xml" : "image/png";

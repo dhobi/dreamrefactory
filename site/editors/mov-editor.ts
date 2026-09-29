@@ -19,11 +19,11 @@ import { FrameBuffer, decodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfa
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf } from "./sources";
+import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY } from "./sources";
 import { siteUrl } from "@dreamfactory/site/site";
 import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
-import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
+import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import {
   NATIVE_FRAME_MS,
   TICK_MS,
@@ -39,6 +39,9 @@ import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { movFileFromV1, readMovFileV1 } from "@dreamfactory/engine/df/mov-v1";
+import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
+import { movFileFromV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
+import { decodeFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import {
   MOV_ACTIONS,
   MOV_NAME_FIELD,
@@ -105,11 +108,17 @@ let fileName = "movie.mov";
  * version. So a v1 container opens READ-ONLY: export refuses, and says why.
  * Making it editable means a v1 write path, which is parsing work rather than
  * plumbing.
+ *
+ * A DreamFactory 5 `.move` is read the same way the player reads it
+ * (`readMovFileV5`), and is read-only for the same reason: its records sit at
+ * v5's offsets, and the patches write v4's.
  */
-let readOnlyV1 = false;
+let readOnly: string | null = null;
 
 // Hard-coded English, like every string this repo builds in TypeScript rather
 // than in markup (site/src/locales/en.ts says why).
+const V0_READ_ONLY =
+  "DreamFactory 0 film (Lunicus): shown through the v0 reader, read-only. Nothing writes a v0 film.";
 const V1_READ_ONLY =
   "DreamFactory 1 container: shown through the v1 conversion, read-only. Export needs a v1 write path.";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
@@ -132,6 +141,8 @@ let playing: { stop: () => void } | null = null;
 let fb = new FrameBuffer();
 let cursor = -1;
 let decoded: { width: number; height: number } | null = null;
+/** the last decoded frame's own palette, when it is a v5 one */
+let framePalette: Uint8ClampedArray | null = null;
 
 function log(text: string): void {
   statusEl.textContent = text;
@@ -150,16 +161,29 @@ const frame = (): MovFrame | undefined => segment()?.frames[frameIdx];
 
 // --- loading ----------------------------------------------------------------
 
-function loadMov(bytes: Uint8Array, name: string): void {
+/**
+ * `v0`: the file is DreamFactory 0, which its bytes cannot say (see
+ * `GameEditions.dreamFactory0`), so the caller does: a film picked from
+ * Lunicus's tree is one. Read as anything else, a v0 film is noise — two dozen
+ * of Lunicus's pass for v1 and one for v4.
+ */
+function loadMov(bytes: Uint8Array, name: string, v0 = false): void {
   stopPlayback();
   let parsed: MovFile;
   try {
     // the same line the movie player uses (engine/src/web/movie-player.ts)
-    readOnlyV1 = detectVersion(bytes) === 1;
-    parsed = readOnlyV1 ? movFileFromV1(readMovFileV1(bytes)) : readMovFile(bytes);
+    const v1 = !v0 && detectVersion(bytes) === 1;
+    const v5 = !v0 && !v1 && isMovV5(bytes);
+    readOnly = v0 ? V0_READ_ONLY : v1 ? V1_READ_ONLY : v5 ? V5_READ_ONLY : null;
+    parsed = v0
+      ? movFileFromV0(readMovFileV0(bytes))
+      : v1
+        ? movFileFromV1(readMovFileV1(bytes))
+        : v5
+          ? readMovFileV5(bytes)
+          : readMovFile(bytes);
     // a button that refuses when pressed is worse than one that says so first
-    ($("exportBtn") as HTMLButtonElement).disabled = readOnlyV1;
-    if (readOnlyV1) $("dirty").textContent = V1_READ_ONLY;
+    ($("exportBtn") as HTMLButtonElement).disabled = readOnly !== null;
   } catch (e) {
     log(t("common.notReadable", { ext: ".mov", message: (e as Error).message }));
     return;
@@ -167,12 +191,15 @@ function loadMov(bytes: Uint8Array, name: string): void {
   mov = parsed;
   fileName = name;
   segIdx = 0;
-  palette = paletteToRGBA(parsed.paletteRaw, 256);
+  // a v0 palette is the Macintosh way round, entry 0 white (mov-v0.ts)
+  palette = parsed.dfV0 ? paletteV0(parsed.paletteRaw) : paletteToRGBA(parsed.paletteRaw, 256);
   edits.length = 0;
-  dirtyEl.textContent = "";
+  // after the reset of everything else, or the read-only note is wiped with it
+  dirtyEl.textContent = readOnly ?? "";
   frameIdx = 0;
   hoveredRegion = -1;
   fb = new FrameBuffer();
+  framePalette = null;
   cursor = -1;
   decoded = null;
 
@@ -215,7 +242,7 @@ async function initServerMovies(): Promise<void> {
   const source = chosenSource(await listSources());
   if (source) screen = screenOf(source);
   if (!source) return; // production / no dev server: upload only
-  const movies = filesIn(source, byExtension(".mov"));
+  const movies = filesIn(source, byExtension(".mov", ".move"));
   if (!movies.length) return;
   const wrap = $("serverMovies");
   const note = document.createElement("div");
@@ -236,7 +263,7 @@ async function initServerMovies(): Promise<void> {
         log(t("common.fetchFailed", { path: f.path, status: r.status }));
         return;
       }
-      loadMov(new Uint8Array(await r.arrayBuffer()), f.base);
+      loadMov(new Uint8Array(await r.arrayBuffer()), f.base, source.game.dreamFactory0 === true);
     });
     row.appendChild(b);
   }
@@ -278,7 +305,14 @@ function decodeUpTo(index: number): number {
     const data = loc ? mov.file.containers[loc]?.data : undefined;
     if (data) {
       try {
-        decoded = decodeFrame(data, fb);
+        if (isV5Frame(data)) {
+          // a v5 frame is a whole picture with its own palette (image-v5.ts)
+          decoded = decodeFrameV5(data, fb);
+          framePalette = paletteV5(data);
+        } else {
+          decoded = decodeFrame(data, fb);
+          framePalette = null;
+        }
         count++;
       } catch {
         // a frame that doesn't decode leaves the buffer as it was, which is what
@@ -310,7 +344,7 @@ function paintFrame(): void {
     return;
   }
   const img = ctx.createImageData(w, h);
-  indexedToRGBA(fb.pixels, w, h, palette, img.data);
+  indexedToRGBA(fb.pixels, w, h, framePalette ?? palette, img.data);
   ctx.putImageData(img, 0, 0);
 }
 
@@ -681,7 +715,8 @@ function filmSound(name: string): void {
   if (loc === undefined) return;
   let voice: Voice | null = null;
   try {
-    const audio = decodeAudioContainer(mov.file.containers[loc].data);
+    const data = mov.file.containers[loc].data;
+    const audio = mov.dfV0 ? decodeAudioV0(data) : decodeAudioContainer(data);
     voice = playPcm(audio.samples, audio.sampleRate);
   } catch {
     // a sound this build cannot decode is silence, not a stopped film
@@ -731,7 +766,7 @@ function enterFilmSegment(idx: number, now: number, startFrame = 0): void {
   fb = new FrameBuffer();
   cursor = -1;
   decoded = null;
-  palette = paletteToRGBA(seg.paletteRaw, 256);
+  palette = seg.dfV0 ? paletteV0(seg.paletteRaw) : paletteToRGBA(seg.paletteRaw, 256);
   film.segStart = now;
   film.cuesFired.clear();
   film.soundJump = null;
@@ -985,7 +1020,7 @@ function goToSegment(idx: number): void {
   fb = new FrameBuffer();
   cursor = -1;
   decoded = null;
-  palette = paletteToRGBA(segment()!.paletteRaw, 256);
+  palette = segment()!.dfV0 ? paletteV0(segment()!.paletteRaw) : paletteToRGBA(segment()!.paletteRaw, 256);
   refresh();
 }
 
@@ -1623,8 +1658,8 @@ function download(blob: Blob, name: string): void {
 
 $("exportBtn").addEventListener("click", () => {
   if (!mov) return;
-  if (readOnlyV1) {
-    log(V1_READ_ONLY);
+  if (readOnly) {
+    log(readOnly);
     return;
   }
   const bytes = writeContainerFile(mov.file);

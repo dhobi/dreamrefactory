@@ -74,6 +74,7 @@ const ALLOWED: Record<string, string[]> = {
   timelapse: ["engine", "site"],
   skullcracker: ["engine", "site"],
   redjack: ["engine", "site"],
+  lunicus: ["engine", "site"],
 };
 
 for (const [pkg, allowed] of Object.entries(ALLOWED)) {
