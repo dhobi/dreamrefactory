@@ -21,6 +21,8 @@ import { Hud, type HudState } from "./hud";
 import { Pyro } from "./pyro";
 import { Jeep } from "./jeep";
 import { Tank } from "./tank";
+import { Bike } from "./bike";
+import { Copter } from "./copter";
 
 /**
  * A module that is not there: a count of 0, no hits, nothing where anything
@@ -50,10 +52,10 @@ export function* assemble(m: Machine, w: World, band: number, comms: Comms, hudS
   const hud = new Hud(w, readPictures(yield* file("panel")), comms, hudState);
   w.pyro = pyro;
   w.hud = hud;
-  w.bike = quiet("bike");
+  w.bike = new Bike(w, yield* file("bike"));
   w.jeep = new Jeep(w, yield* file("jeep"));
   w.tank = new Tank(w, yield* file("tank"));
-  w.copter = quiet("copter");
+  w.copter = new Copter(w, yield* file("copt"));
   w.boss = quiet("boss");
   w.fuel = quiet("fuel");
   w.weap = quiet("weap");
