@@ -175,3 +175,46 @@ export function aimAt(w: World, s: EnemyShot, speed: number): boolean {
   s.vz = Math.trunc(dz / n);
   return n <= 1;
 }
+
+/**
+ * 0x41444c: `o` is down heading `a` from the craft, fewer than five cells
+ * along its row or column, no block between (its own cell counted)
+ */
+export function downFromCraft(w: World, a: number, o: Obj): boolean {
+  const cx = w.cam.cellX;
+  const cy = w.cam.cellY;
+  switch (a) {
+    case 0:
+      if (o.cellY !== cy || o.cellX <= cx || cx + 5 <= o.cellX) return false;
+      for (let k = cx + 1; k <= o.cellX; k++) if (w.solid(k, cy)) return false;
+      return true;
+    case 0x40:
+      if (o.cellX !== cx || o.cellY <= cy || cy + 5 <= o.cellY) return false;
+      for (let k = cy + 1; k <= o.cellY; k++) if (w.solid(cx, k)) return false;
+      return true;
+    case 0x80:
+      if (o.cellY !== cy || o.cellX >= cx || cx - 5 >= o.cellX) return false;
+      for (let k = cx - 1; k >= o.cellX; k--) if (w.solid(k, cy)) return false;
+      return true;
+    case 0xc0:
+      if (o.cellX !== cx || o.cellY >= cy || cy - 5 >= o.cellY) return false;
+      for (let k = cy - 1; k >= o.cellY; k--) if (w.solid(cx, k)) return false;
+      return true;
+  }
+  throw new Error(`0x41444c: a heading of ${a} is no quarter (0x41e28a 0x6b, 0x57)`);
+}
+
+/**
+ * 0x41438a (the comms' range): an enemy's shell fired from `o` — unless the
+ * copilot navigates, a line is playing (`[0x4373f8]` ≥ 0) or the craft is on
+ * the move, the pilot calls where it came from, of the craft's quarter
+ * (heading + 0x20): behind (line 0x1a), the left (0x1c) or the right (0x1b)
+ */
+export function callShell(w: World, o: Obj): void {
+  const [navigates] = w.hud.x417617();
+  if (navigates !== 0 || w.comms.keyframe() >= 0 || w.speed !== 0) return;
+  const q = (w.cam.angle + 0x20) & 0xc0;
+  if (downFromCraft(w, (q + 0x80) & 0xff, o)) return void w.comms.ask(0, 0x1a);
+  if (downFromCraft(w, (q - 0x40) & 0xff, o)) return void w.comms.ask(0, 0x1c);
+  if (downFromCraft(w, (q + 0x40) & 0xff, o)) w.comms.ask(0, 0x1b);
+}

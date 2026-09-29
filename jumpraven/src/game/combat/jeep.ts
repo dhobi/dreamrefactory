@@ -166,18 +166,18 @@ export function drawVehicle(w: World, o: Obj, pics: (FrameV0 | undefined)[]): { 
   if (depth < 0x80) depth = 0x80;
   const r = w.sprite(pics[d + (h << 5)], p.y, p.x, depth, mirror);
   if (depth < 0x140 || !r) return null;
-  const rect: Rect = [r[0], r[1], r[2], r[3]];
-  const wide = rect[3] - rect[1];
+  let [top, left, bottom, right] = r;
+  const wide = right - left;
   if (wide < 0x14) {
-    rect[1] += (wide >> 1) - 0xa;
-    rect[3] = rect[1] + 0x14;
+    left += (wide >> 1) - 0xa;
+    right = left + 0x14;
   }
-  const high = rect[2] - rect[0];
+  const high = bottom - top;
   if (high < 0x14) {
-    rect[0] += (high >> 1) - 0xa;
-    rect[2] = rect[0] + 0x14;
+    top += (high >> 1) - 0xa;
+    bottom = top + 0x14;
   }
-  return { rect, depth };
+  return { rect: [top, left, bottom, right], depth };
 }
 
 /** 0x40db7a / 0x425c34 (pyro's 0xe0 … by distance), 0x40dac4 / 0x425a93 (0x108 … into ours, 0xe0 … into a block, 8 … flying): a shot's picture by `base` */
@@ -207,6 +207,13 @@ export function moveBullet(w: World, s: VehicleShot): void {
   }
   drawShot(w, s, s.met === 2 ? 0x108 : s.met ? 0xe0 : 8);
   if (s.met) s.on = 0;
+}
+
+/** a record's object alone, the EXE's `movsd` ×6 into a local */
+export function objOf(r: Obj): Obj {
+  const o = newObj();
+  setObj(o, r);
+  return o;
 }
 
 /**
@@ -611,7 +618,7 @@ export class Jeep implements JeepApi {
     const dx = j.x - j.last.x;
     const dy = j.y - j.last.y;
     const dz = j.z - j.last.z;
-    const at = copyObj(j);
+    const at = objOf(j);
     at.z += 4;
     w.pyro.burst(at, dx, dy, dz);
     if (j.pod) w.pyro.drop(at, dx, dy, dz);
@@ -652,7 +659,7 @@ export class Jeep implements JeepApi {
   nth(k: number): { obj: Obj; kind: number; flag: number; dying: number } {
     for (const r of this.recs) {
       if (r.self >= 0) k--;
-      if (k < 0) return { obj: copyObj(r), kind: KIND.jeep, flag: r.pod, dying: 0 };
+      if (k < 0) return { obj: objOf(r), kind: KIND.jeep, flag: r.pod, dying: 0 };
     }
     throw new Error("0x40de30: no such jeep (0x41e28a 0x6b, 0x24)");
   }

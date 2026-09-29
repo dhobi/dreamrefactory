@@ -38,7 +38,7 @@ export interface JeepApi extends Vehicles {
 export interface TankApi extends Vehicles {
   /** 0x4260bc: another tank than `self` is in cell (x, y), or going to it */
   occupied(x: number, y: number, self: number): boolean;
-  /** 0x425412 */
+  /** 0x425412: how many of the tanks' homing shells are up (`[0x43a1ec]`, never below 0) */
   x425412(): number;
 }
 
@@ -82,7 +82,7 @@ export interface CopilotApi {
   reset(): void;
   frame(): void;
   shift(dx: number, dy: number): void;
-  /** 0x404e11: an enemy facing `heading` was just killed — the copilot's count of the craft sitting still */
+  /** 0x404e11: a shell fired at the craft by an enemy facing `heading` (the tank's 0x425584, the copter's, the boss's) — the copilot's count of the craft sitting still: while its slide, height and speed stay as they were it counts each, and apart those not fired along its heading or the reverse; a move starts both again */
   x404e11(heading: number): void;
 }
 
@@ -177,6 +177,8 @@ export interface PyroApi {
 export interface CommsApi {
   /** 0x4142b9: a line asked for — `who` 0 the pilot … 4 the enemy */
   ask(who: number, line: number): void;
+  /** `[0x4373f8]`: the keyframe of the line playing, −1 when none is (0x41438a reads it) */
+  keyframe(): number;
   /** 0x414bb4: whose line is playing, −1 for none */
   talking(): number;
   /** 0x414b8f: one time in two, `[0x4373e0]` set */

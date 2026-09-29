@@ -173,7 +173,10 @@ export type Enemy = Module & Targets & Hittable;
  * The difficulty's numbers (0x421f0a, by `[0x439fb0]` 1 to 4): named by
  * address until a module that reads one names it. Known: 0x43cf6a the jeep's
  * speed, 0x43cf6e its shots' interval, 0x43cf72 how many jeeps, 0x43cfb2 a
- * jeep's strength; 0x43cf82 how many bikes, 0x43cf92 tanks, 0x43cfa6 copters.
+ * jeep's strength (src/game/combat/jeep.ts); 0x43cf8a the tank's speed,
+ * 0x43cf8e its shots' interval, 0x43cf92 how many tanks, 0x43cf96 its turn a
+ * frame, 0x43cfb6 its strength (tank.ts); 0x43cf82 how many bikes, 0x43cfa6
+ * copters.
  */
 export interface Params {
   x43cf5a: number; x43cf5e: number; x43cf62: number; x43cf6a: number; x43cf6e: number; x43cf72: number;

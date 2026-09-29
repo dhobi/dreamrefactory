@@ -101,6 +101,11 @@ export class Comms {
     return t.idleMin[k] + this.m.roll(Math.max(1, t.idleMax[k] - t.idleMin[k]));
   }
 
+  /** `[0x4373f8]`, which 0x41438a reads (src/game/combat/lib.ts) */
+  keyframe(): number {
+    return this.key;
+  }
+
   /** 0x4142b9: a line asked for */
   ask(who: number, line: number): void {
     const playing = this.key >= 0 && this.line >= 0;
