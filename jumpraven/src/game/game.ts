@@ -35,9 +35,11 @@ import { Mart, type MartState } from "./mart";
 import { PILOTS, Pilots, type PilotsState } from "./pilots";
 import { DEFAULT_BAND, Music } from "./music";
 import { BONUS_ACCURACY, accuracy, accuracyScreen, damage } from "./debrief";
+import { Flight, readPanel, type FlightState } from "./flight";
+import { readContainerFile as readFile } from "@dreamfactory/engine/df/container";
 import { newRecords, startGame, type Records } from "./records";
 
-export type Phase = "boot" | "story" | "scores" | "not-ported" | "quit";
+export type Phase = "boot" | "story" | "scores" | "flying" | "not-ported" | "quit";
 
 export interface JumpRavenOptions {
   speaker?: Speaker;
@@ -74,6 +76,10 @@ export class JumpRaven {
   pilots: PilotsState | null = null;
   /** `[0x43b304]`: the band the player flies to (src/game/music.ts) */
   readonly band = { value: DEFAULT_BAND };
+  /** the flight while one is up */
+  flight: FlightState | null = null;
+  /** the key held down last, as RAVEN.EXE repeats it (message 7 with `[0x43b2cc]`) */
+  private heldKey: string | null = null;
   /** the screen between the briefings that is up, by name — what a machine test waits on */
   screen: "mart" | "pilots" | "music" | "damage" | "accuracy" | null = null;
   sco!: Sco;
@@ -353,9 +359,44 @@ export class JumpRaven {
     }
   }
 
-  /** levels 3, 5 and 7: 0x40b190 */
+  /**
+   * A key's action in RAVEN.SCO's table (0x420efb): the browser's arrows are
+   * the Macintosh's 0x1c to 0x1f, a letter or space its own character
+   */
+  keyAction(key: string): number {
+    const code = ({ ArrowLeft: 0x1c, ArrowRight: 0x1d, ArrowUp: 0x1e, ArrowDown: 0x1f } as Record<string, number>)[key] ?? (key.length === 1 ? key.charCodeAt(0) : -1);
+    return code >= 0 && code < 0x100 ? this.sco.keys[code] : 0;
+  }
+
+  /**
+   * Levels 3, 5 and 7: 0x40b190, as far as it is ported — the city and the
+   * moves through it (src/game/flight.ts). Nothing yet ends a flight.
+   */
   private *flying(): Co<number> {
-    return this.notPorted(`the flying, day ${this.day}`, "0x40b190");
+    const m = this.m;
+    this.phase = "flying";
+    const city = readFile((yield* m.file("citymaze", this.day)).data);
+    const panel = readPanel((yield* m.file("panel", this.day)).data);
+    const flight = new Flight(m, city, panel);
+    this.flight = flight.state;
+    this.played.push("citymaze");
+    m.screen.setPalette(this.palette);
+    flight.begin();
+    try {
+      for (;;) {
+        for (let e = m.take(); e; e = m.take()) {
+          if (e.kind === "key") {
+            this.heldKey = e.key;
+            flight.key(this.keyAction(e.key), false);
+          } else if (e.kind === "up") this.heldKey = null;
+        }
+        if (this.heldKey && !m.keysHeld.has(this.heldKey)) this.heldKey = null;
+        if (this.heldKey) flight.key(this.keyAction(this.heldKey), true);
+        yield* flight.frame();
+      }
+    } finally {
+      this.flight = null;
+    }
   }
 
   /* ---- the high scores screen ------------------------------------------ */

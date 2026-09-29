@@ -44,8 +44,9 @@ export class Input {
     return true;
   }
 
+  /** Esc, and in flight every key RAVEN.SCO's table gives an action */
   takes(key: string): boolean {
-    return KEYS.has(key);
+    return KEYS.has(key) || (this.game.phase === "flying" && this.game.keyAction(key) !== 0);
   }
 
   keyUp(key: string): void {

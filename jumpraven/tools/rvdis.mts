@@ -8,6 +8,8 @@
  *   npx tsx jumpraven/tools/rvdis.mts callers 0x4012a0     every call site of a function
  *   npx tsx jumpraven/tools/rvdis.mts find 640             instructions mentioning a number
  *   npx tsx jumpraven/tools/rvdis.mts str "Flat.c"         code that pushes a string's address
+ *   npx tsx jumpraven/tools/rvdis.mts map 0x404000:0x40c000  every function in a range: size, callers,
+ *                                                          its Lunicus pair and the strings it pushes
  *   npx tsx jumpraven/tools/rvdis.mts sum 0x40b190         a function's callees, strings and globals,
  *                                                          each callee with its LUNICUS.EXE pair
  *                                                          (jumpraven/tools/match.mts writes the pairs
@@ -185,6 +187,31 @@ if (mode === "at") {
     }
   }
   console.log(`\n${hits} instruction(s)`);
+} else if (mode === "map") {
+  const [from, to] = arg.split(":").map(Number);
+  const pairsFile = "out/jumpraven/pairs.json";
+  const pairs: Record<string, string> = existsSync(pairsFile) ? JSON.parse(readFileSync(pairsFile, "utf8")) : {};
+  const callers = new Map<number, number>();
+  for (let off = text.raw; off < text.raw + text.rsize - 5; off++) {
+    if (data[off] !== 0xe8) continue;
+    const t = vaOf(off, text) + 5 + dv.getInt32(off + 1, true);
+    callers.set(t, (callers.get(t) ?? 0) + 1);
+  }
+  for (const start of CALL_TARGETS.filter((t) => t >= from && t < to)) {
+    const end = entryAfter(start);
+    const strs = new Set<string>();
+    const off = fileOff(start);
+    try {
+      for (const i of cs.disasm(data.subarray(off, off + (end - start)), { address: start })) {
+        for (const m of i.opStr.matchAll(/0x(4[0-9a-f]{5})\b/g)) {
+          const t = parseInt(m[1], 16);
+          const str = i.mnemonic === "push" ? cstr(t) ?? cstr(t + 1) : null;
+          if (str && str.length > 2) strs.add(str);
+        }
+      }
+    } catch { /* data */ }
+    console.log(`${start.toString(16)} ${String(end - start).padStart(5)}B ×${callers.get(start) ?? 0}${pairs[start] ? " =lu" + pairs[start].replace("0x", "") : ""} ${[...strs].map((x) => JSON.stringify(x)).join(" ")}`);
+  }
 } else if (mode === "sum") {
   const start = entryBefore(Number(arg));
   const end = entryAfter(start);

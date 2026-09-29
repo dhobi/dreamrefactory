@@ -3,7 +3,8 @@
  * 0x420840): a run with nothing to open starts at level 0 — the intro, which
  * chains to the second intro, the first briefing (`bati.pupp`), the tutorial —
  * and goes to the high scores screen. HELP plays its film and comes back; PLAY
- * starts day one's briefings, which run until the first screen not ported yet.
+ * starts day one's briefings: the Mart, the copilots, the music, and the first
+ * flight.
  *
  *   npx tsx tests/machine/opening.ts        (from jumpraven/)
  */
@@ -96,8 +97,8 @@ until("bat5", () => game.talkState.talk?.file === "DAY1/BAT5.PUP");
 key("Escape");
 until("trans.move", () => m.film === "trans.move");
 key("Escape");
-until("the flying", () => game.phase === "not-ported");
-if (!/the flying, day 1/.test(game.stopped)) fail(`stopped at the wrong place: ${game.stopped}`);
+until("the flying", () => game.flight !== null);
+if (game.level !== 3) fail(`the first flight is level ${game.level}, not 3`);
 ok(`day one's briefings done in ${(m.ticks / 60).toFixed(0)} s of game time: ${game.played.join(", ")}`);
-ok(`stops where the port ends: ${game.stopped}`);
+ok(`and the Bronx's flight begins, at ${JSON.stringify(game.flight!.pose)}`);
 pass("opening");
