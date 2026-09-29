@@ -6,10 +6,20 @@
  * Continue, pressed while that voice speaks, jumps to frame 62 and ITS voice —
  * which speaks in the first's place, not over it.
  *
+ * And every frame of every film on the disc decodes as DreamFactory 0's frame
+ * decoder reads it (RAVEN.EXE 0x409557, `decodeFrame(…, "v0")`): a row byte that
+ * is none of its eighteen modes is a row that draws nothing. The last three
+ * frames of `shared/miss2.mov` have such rows, and come out rough; the film
+ * loops from its last frame back to its third, and that one is whole again.
+ *
  *   npx tsx tests/machine/films.ts        (from jumpraven/)
  */
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
+import { readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
 import { SCORE_BUTTONS } from "../../src/game/data";
-import { fail, ok, pass, start } from "./harness";
+import { RIP, fail, ok, pass, start } from "./harness";
 
 /** what the speaker was told, in order, and how many one-shot sounds it holds */
 const heard: string[] = [];
@@ -35,4 +45,37 @@ const after = heard.slice(before);
 if (sounding !== 1) fail(`${sounding} voices at once after Continue: ${after.join(", ")}`);
 if (after[0] !== "stop") fail(`the first voice was not stopped for the second: ${after.join(", ")}`);
 ok(`jet.move's Continue in its first voice: the voice stopped, the next one alone (${m.where})`);
+
+// every frame of every film, as the film player decodes them
+{
+  const walk = (d: string): string[] => readdirSync(d).flatMap((n) => (statSync(join(d, n)).isDirectory() ? walk(join(d, n)) : [join(d, n)]));
+  let films = 0;
+  let frames = 0;
+  for (const path of walk(RIP).filter((p) => /\.mov$/i.test(p))) {
+    const film = readMovFileV0(new Uint8Array(readFileSync(path)));
+    const fb = new FrameBuffer();
+    film.frames.forEach((f, i) => {
+      try {
+        decodeFrame(film.file.containers[f.picture].data, fb, undefined, "v0");
+      } catch (e) {
+        fail(`${path.slice(RIP.length + 1)} frame ${i + 1}: ${(e as Error).message}`);
+      }
+      frames++;
+    });
+    films++;
+  }
+  ok(`every frame decodes: ${frames} in ${films} films`);
+
+  const miss2 = readMovFileV0(new Uint8Array(readFileSync(join(RIP, "SHARED/MISS2.MOV"))));
+  const fb = new FrameBuffer();
+  const show = (i: number): Uint8Array => (decodeFrame(miss2.file.containers[miss2.frames[i].picture].data, fb, undefined, "v0"), fb.pixels.slice());
+  let third: Uint8Array | null = null;
+  for (let i = 0; i < miss2.frames.length; i++) {
+    const px = show(i);
+    if (i === 2) third = px;
+  }
+  const again = show(2);
+  if (miss2.frames.at(-1)!.target !== 2 || String(again) !== String(third)) fail("miss2.mov's third frame is not whole again after the loop");
+  ok("miss2.mov: the loop's rough frames 30 to 32, and its third frame whole again after them");
+}
 pass("films");

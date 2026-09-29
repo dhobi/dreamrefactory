@@ -287,7 +287,7 @@ const GREY = Uint8ClampedArray.from({ length: 1024 }, (_, i) => (i % 4 === 3 ? 2
 function drawFrame(container: number): void {
   const data = containers[container];
   if (!data) return;
-  const d = decodeFrame(data, fb);
+  const d = decodeFrame(data, fb, undefined, "v0");
   view.width = d.width;
   view.height = d.height;
   const img = viewCtx.createImageData(d.width, d.height);

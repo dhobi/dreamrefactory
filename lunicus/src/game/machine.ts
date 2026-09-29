@@ -5,8 +5,6 @@
  * bank's ambience, the menu bar's settings and LUNICUS.SCO.
 
  */
-import { decodeAudioV0 } from "@dreamfactory/engine/df/audio";
-import { readBankV0 } from "@dreamfactory/engine/df/banks";
 import { MachineV0, type Co } from "@dreamfactory/engine/v0/machine";
 import { actionOf, defaultSco, type Sco } from "./sco";
 
@@ -32,34 +30,6 @@ export class Machine extends MachineV0 {
     return null;
   }
 
-  /**
-   * The bank's ambience (0x419136): its first container counts N sounds, M
-   * pieces and a sequence of up to 64 piece numbers; the pieces (containers
-   * N + 1 … N + M) are strung in that order and the string played round and
-   * round on a channel of its own (0x4195fe, 0x4206a9).
-   */
-  setAmbience(name: string, bank: Uint8Array[]): void {
-    const { sounds: n, pieces, order } = readBankV0(bank[0]);
-    if (!order.length) throw new Error(`${name}: no ambience`);
-    const decoded = order.map((k) => decodeAudioV0(bank[n + k]));
-    const samples = new Float32Array(decoded.reduce((a, d) => a + d.samples.length, 0));
-    let at = 0;
-    for (const d of decoded) samples.set(d.samples, at), (at += d.samples.length);
-    this.ambience = { name, samples, rate: decoded[0].sampleRate };
-    this.log(`ambience: ${name}, ${order.length} pieces of ${pieces} round and round`);
-  }
-
-  /** `[0x42c294]` the ambience strung, and whether it plays */
-  ambience: { name: string; samples: Float32Array; rate: number } | null = null;
-  ambiencePlaying = false;
-
-  /** 0x4195fe: the ambience from its start — if Sound ▸ Theme is on */
-  playAmbience(): void {
-    if (!this.ambience) return;
-    this.ambiencePlaying = true;
-    if (this.theme) this.speaker.loop?.(this.ambience.samples, this.ambience.rate);
-  }
-
   /* ---- the menu bar's settings (src/menu.ts) --------------------------- */
 
   /**
@@ -69,8 +39,6 @@ export class Machine extends MachineV0 {
    * one — which a page never can.
    */
   volume = 7;
-  /** Sound ▸ Theme, `[0x42c164]`: whether the ambience plays at all */
-  theme = true;
   /**
    * Settings ▸ Cache Mazes, `[0x42c16c]`: the EXE copied the mazes to the hard
    * disk (0x40a795). A page has nothing to copy them to; the mark is kept.
@@ -100,18 +68,5 @@ export class Machine extends MachineV0 {
   setVolume(level: number): void {
     this.volume = level;
     this.speaker.volume?.(level / 7);
-  }
-
-  /** 0x4178e8: Theme toggled, and the ambience started or its channel silenced */
-  setTheme(on: boolean): void {
-    this.theme = on;
-    if (!this.ambience || !this.ambiencePlaying) return;
-    this.speaker.loop?.(on ? this.ambience.samples : null, this.ambience.rate);
-  }
-
-  /** 0x42104b with its second flag: the ambience's channel silenced */
-  stopAmbience(): void {
-    this.ambiencePlaying = false;
-    this.speaker.loop?.(null, 0);
   }
 }

@@ -26,8 +26,6 @@ export class Machine extends MachineV0 {
    * volume (0x421644 → 0x428c68), 7 from the start (0x42087d)
    */
   volume = 7;
-  /** the Sound dialog's Theme, `[0x439fb8]` (0x42091a): the flight's theme tune — which is not ported, so only the mark */
-  theme = true;
   /** Settings ▸ Cache Mazes, `[0x439fc0]` (0x420924): the EXE copied the mazes to the hard disk; a page has nowhere to, so only the mark */
   cacheMazes = true;
 

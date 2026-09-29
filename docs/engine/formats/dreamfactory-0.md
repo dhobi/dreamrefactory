@@ -60,8 +60,13 @@ Three things differ inside:
   here it is set on exactly the frames with action 6, and such a frame holds
   and goes on (the intro's pause before its title) rather than waiting.
 
-The frames are the [v4 frame codec](image-codec.md), and every frame sound is a
-v0 sound. Films call each other by the game's own names (`flip.move`), while
+The frames are the [v4 frame codec](image-codec.md), as DreamFactory 0's own
+decoder reads it (RAVEN.EXE 0x409557, LUNICUS.EXE 0x404db3): a row's first byte
+is compared whole against the eighteen modes, 4, 8 … 0x48, and a byte that is
+none of them is a row that draws nothing and does not move the output, where the
+later engines' reader shifts the byte's low bits away. There is no depth layer
+after the rows; whatever follows them is not read. `decodeFrame(…, "v0")` reads
+a frame this way. Every frame sound is a v0 sound. Films call each other by the game's own names (`flip.move`), while
 the files are 8.3 names (`flip.mov`).
 
 ## Pictures

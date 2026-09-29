@@ -219,7 +219,7 @@ export class MazeView {
   draw(container: number, draws: boolean): Uint8Array | null {
     this.shown = container;
     if (!draws) return null;
-    decodeFrame(this.containers[container], this.fb);
+    decodeFrame(this.containers[container], this.fb, undefined, "v0");
     return this.fb.pixels;
   }
 

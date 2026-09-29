@@ -347,7 +347,7 @@ export class JumpRaven {
     this.asking = false;
     if (!answer) return;
     if (answer.volume !== m.volume) m.setVolume(answer.volume);
-    if (answer.theme !== m.theme) (m.theme = answer.theme), m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
+    if (answer.theme !== m.theme) m.setTheme(answer.theme), m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
   }
 
   /**
@@ -597,6 +597,8 @@ export class JumpRaven {
     (w.copilot as Copilot).steer = (k: number) => void (flight.state.queue = [k]);
     // 0x40bb03: the comms box starts the flight over (the pilot's opener)
     this.comms.reset();
+    // 0x40bb53 → 0x4233ba: the band's theme tune, round and round, if Theme is on
+    m.playAmbience();
     // 0x40ed51: the flight's palette and its flashes are RAVENRES.DLL's (0x85; 0x81, 0x83)
     const dll = yield* m.own("RAVENRES.DLL");
     const base = readClutV0(dll, "CLUT133");
@@ -718,6 +720,8 @@ export class JumpRaven {
         }
       }
     } finally {
+      // 0x40bb6a → 0x4231da: the bank closed, and its theme with it
+      m.stopAmbience();
       this.flight = null;
       this.world = null;
     }
@@ -733,6 +737,9 @@ export class JumpRaven {
     const m = this.m;
     const k = hud.menu();
     m.log(`the HUD's ${["SAVE", "HELP", "SOUND", "KEYS", "PAUSE", "QUIT"][k]}`);
+    // 0x4210b4: every channel silenced for the button's action, the theme's too
+    m.stopSound();
+    m.stopAmbience();
     hud.frame();
     let next: number | null = null;
     switch (k) {
@@ -762,6 +769,8 @@ export class JumpRaven {
     hud.setMenu(-1);
     hud.redraw();
     flight.redraw();
+    // 0x421176 → 0x4233ba: and the theme from its start again
+    if (next === null) m.playAmbience();
     return next;
   }
 

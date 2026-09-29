@@ -71,16 +71,24 @@ until("the high scores again", () => game.phase === "scores" && game.titleUp);
 if (asked.filter((a) => a === "quit").length !== 2) fail(`asked ${asked.join(", ")}`);
 ok("Ctrl+Q, OK: the high scores screen");
 
-// the HUD's buttons in flight
+// the HUD's buttons in flight, and the band's theme tune on channel 3
 {
+  /** what channel 3 was told, in order: the samples' length, or 0 for silence */
+  const looped: number[] = [];
   const f = start({
     start: { level: 3 },
+    speaker: { play: () => {}, stop: () => {}, loop: (s) => void looped.push(s ? s.length : 0) },
     askQuit: (done) => done(true),
     pause: (done) => (asked.push("pause"), done()),
     soundDialog: (v, theme, done) => (asked.push(`sound ${v} ${theme}`), done(answers.sound)),
     keysDialog: (fields, defaults, done) => (asked.push("flight keys"), done(null)),
   });
   f.until("the flight", () => f.game.world !== null);
+  // 0x40bb53 → 0x4233ba: the chosen band's (tek, the default) pieces strung, round and round
+  if (!f.m.ambience || f.m.ambience.name !== "tek" || looped.length !== 1 || looped[0] !== f.m.ambience.samples.length) {
+    fail(`the flight's theme: ${f.m.ambience?.name} ${looped.join(",")}`);
+  }
+  ok(`the flight's theme: the band's pieces strung (${(looped[0] / f.m.ambience.rate).toFixed(1)} s) and looped`);
   const hud = f.game.world!.hud as unknown as { menuButton(k: number): { x: number; y: number } };
   const press = (k: number): void => {
     const p = hud.menuButton(k);
@@ -89,6 +97,10 @@ ok("Ctrl+Q, OK: the high scores screen");
   press(2);
   f.until("SOUND", () => f.game.m.volume === 4);
   if (asked.at(-1) !== "sound 7 true" || f.game.m.theme) fail(`SOUND opened as ${asked.at(-1)}, theme ${f.game.m.theme}`);
+  // 0x4210b4 silences the theme for the dialog; Theme off, 0x4233ba does not start it again
+  f.until("the button up again", () => f.game.world?.hud.menu() === -1);
+  if (looped.slice(1).some((n) => n !== 0) || f.m.ambiencePlaying !== true) fail(`the theme after SOUND with Theme off: ${looped.join(",")}`);
+  ok("the HUD's SOUND: the theme silenced for its dialog, and left silent with Theme off");
   press(3);
   f.until("KEYS", () => asked.at(-1) === "flight keys");
   press(4);
@@ -97,6 +109,7 @@ ok("Ctrl+Q, OK: the high scores screen");
   ok("the HUD's SOUND, KEYS and PAUSE: their dialogs, the button up again after");
   press(5);
   f.until("QUIT's OK: the high scores", () => f.game.phase === "scores");
+  if (f.m.ambiencePlaying || looped.at(-1) !== 0) fail(`the theme after the flight: ${looped.join(",")}`);
   ok("the HUD's QUIT, OK: the high scores");
 }
 pass("menu");

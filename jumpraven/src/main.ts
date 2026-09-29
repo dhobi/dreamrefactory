@@ -174,6 +174,8 @@ const out = (): AudioNode => {
   return master;
 };
 const playing = new Set<AudioBufferSourceNode>();
+/** the theme's channel: one source, looping */
+let theme: AudioBufferSourceNode | null = null;
 const speaker: Speaker = {
   play(samples, rate) {
     if (!audio) return;
@@ -189,6 +191,19 @@ const speaker: Speaker = {
   stop() {
     for (const s of playing) s.stop();
     playing.clear();
+  },
+  // channel 3: the band's theme tune in a flight, round and round
+  loop(samples, rate) {
+    theme?.stop();
+    theme = null;
+    if (!audio || !samples) return;
+    const buf = audio.createBuffer(1, samples.length, rate);
+    buf.getChannelData(0).set(samples);
+    theme = audio.createBufferSource();
+    theme.buffer = buf;
+    theme.loop = true;
+    theme.connect(out());
+    theme.start();
   },
   volume(level) {
     volume = level;
@@ -447,6 +462,9 @@ async function boot(): Promise<void> {
 async function enter(): Promise<void> {
   audio ??= new AudioContext();
   await audio.resume();
+  // a theme asked for before there was sound to play it on (a saved game
+  // opened before Enter starts in a flight)
+  if (m.ambiencePlaying && !theme) m.playAmbience();
   document.body.classList.add("playing");
   if (running) return;
   running = true;

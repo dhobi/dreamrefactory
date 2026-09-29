@@ -176,9 +176,33 @@ the letters' red for the Enter button alone, and the sunset for what is live.
 The logo was keyed off its white ground by `jumpraven/tools/mkjumpravenlogo.ts`.
 On a phone a double tap is Esc and a swipe an arrow.
 
-## What does not work yet
+## Sound
 
-- The flight's theme tune (`0x4233ba`): the Sound dialog's Theme is only its mark.
-- The comms box's chatter in flight, one branch of `0x413c6d`.
-- `SHARED/MISS2.MOV` frames 30 to 32 do not decode.
-- The radar's paper is palette index 0, white here; Windows may have shown it black.
+A film's sounds go on channels 1 and 2, and a new one takes the channel from the
+one before it (`0x428536`), so a film's second voice speaks in the first's
+place, not over it. The flight's **theme tune** is the band chosen at the
+briefing: its bank (`hiphop`, `tek`, `grunge` or `metal` in each day's folder)
+holds sixty sounds and a set of music pieces with the order to string them in,
+and the string plays round and round on channel 3 (`0x422ef6`, `0x4233ba`). The
+Sound dialog's Theme turns it on and off; the HUD's buttons silence it for their
+action and start it again after (`0x4210b4`, `0x421176`); the flight's end stops
+it (`0x4231da`). It is Lunicus's ambience, the same code, now in
+`engine/src/v0/machine.ts` for both.
+
+On a quiet tick in flight the pilot talks (`0x413cfd` …): the opener, what the
+copilot has taken over, the enemy breaking in over the radio, the shields, the
+wreckage, and what the beacon marks ahead. `combat` pins it.
+
+## Faithful, though it looks wrong
+
+- **The last three frames of `shared/miss2.mov`**, the Hawk missile turning in
+  the Mart, come out rough for a moment each time round its loop. The frames'
+  rows run past their width, and the next rows start with bytes that are none of
+  the eighteen row modes, which DreamFactory 0's decoder (`0x409557`) skips
+  without drawing. A port of that loop instruction by instruction reads the
+  bytes the same way the engine's decoder now does, so the original drew the
+  same, and the loop's third frame is whole again after them. `films` checks
+  every frame of every film decodes.
+- **The radar is white.** `0x41885f` clears it to palette index 0 and draws the
+  marks on it, and index 0 is white in the flight's palette: the marks are red,
+  green and pure blue, which read on white and not on black.

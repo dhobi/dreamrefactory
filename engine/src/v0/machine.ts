@@ -16,6 +16,7 @@
  * test, as fast as the CPU goes.
  */
 import { V0_BLOCK_SAMPLES, V0_SAMPLE_RATE, blocksV0, decodeAudioV0 } from "../df/audio";
+import { readBankV0 } from "../df/banks";
 import type { BitmapFont } from "./font";
 import { SCREEN_H, SCREEN_W, Screen } from "./screen";
 
@@ -146,6 +147,54 @@ export abstract class MachineV0 {
   /** a sound is still playing on the two channels (LUNICUS.EXE 0x420975 answering 0) */
   soundBusy(): boolean {
     return this.ticks < this.soundEnds;
+  }
+
+  /* ---- the ambience: a bank's music, round and round on channel 3 --------- */
+
+  /**
+   * The bank's ambience (LUNICUS.EXE 0x419136, RAVEN.EXE 0x422ef6): its first
+   * container counts N sounds, M pieces and a sequence of up to 64 piece
+   * numbers; the pieces (containers N + 1 … N + M) are strung in that order and
+   * the string played round and round on a channel of its own (LUNICUS.EXE
+   * 0x4195fe, RAVEN.EXE 0x4233ba → 0x428972). Lunicus's is a place's sound;
+   * Jump Raven's is the band the player chose, the flight's theme tune.
+   */
+  setAmbience(name: string, bank: Uint8Array[]): void {
+    const { sounds: n, pieces, order } = readBankV0(bank[0]);
+    if (!order.length) throw new Error(`${name}: no ambience`);
+    const decoded = order.map((k) => decodeAudioV0(bank[n + k]));
+    const samples = new Float32Array(decoded.reduce((a, d) => a + d.samples.length, 0));
+    let at = 0;
+    for (const d of decoded) samples.set(d.samples, at), (at += d.samples.length);
+    this.ambience = { name, samples, rate: decoded[0].sampleRate };
+    this.log(`ambience: ${name}, ${order.length} pieces of ${pieces} round and round`);
+  }
+
+  /** the ambience strung (LUNICUS.EXE `[0x42c294]`, RAVEN.EXE `[0x43a1e8]`), and whether it plays */
+  ambience: { name: string; samples: Float32Array; rate: number } | null = null;
+  ambiencePlaying = false;
+
+  /** Sound ▸ Theme (LUNICUS.EXE `[0x42c164]`, RAVEN.EXE `[0x439fb8]`): whether the ambience plays at all */
+  theme = true;
+
+  /** the ambience from its start — if Theme is on (LUNICUS.EXE 0x4195fe, RAVEN.EXE 0x4233ba) */
+  playAmbience(): void {
+    if (!this.ambience) return;
+    this.ambiencePlaying = true;
+    this.speaker.loop?.(this.theme ? this.ambience.samples : null, this.ambience.rate);
+  }
+
+  /** Theme toggled, and the ambience started or its channel silenced (LUNICUS.EXE 0x4178e8) */
+  setTheme(on: boolean): void {
+    this.theme = on;
+    if (!this.ambience || !this.ambiencePlaying) return;
+    this.speaker.loop?.(on ? this.ambience.samples : null, this.ambience.rate);
+  }
+
+  /** the ambience's channel silenced (LUNICUS.EXE 0x42104b, RAVEN.EXE 0x4292cc with its second flag) */
+  stopAmbience(): void {
+    this.ambiencePlaying = false;
+    this.speaker.loop?.(null, 0);
   }
 
   /** every sound stopped, and nothing left to wait for */

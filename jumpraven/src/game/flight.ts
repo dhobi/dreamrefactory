@@ -194,7 +194,7 @@ export class Flight {
 
   /** a city frame, container `c`, decoded over the last (0x40454c, 0x404693: its depth layer too) */
   private show(c: number): void {
-    const r = decodeFrame(this.city.containers[c].data, this.fb);
+    const r = decodeFrame(this.city.containers[c].data, this.fb, undefined, "v0");
     if (r.hasZ) this.haveZ = true;
   }
 

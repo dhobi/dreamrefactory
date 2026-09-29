@@ -80,7 +80,7 @@ export function* playOneFilm(
     const frame = film.frames[index];
     m.where = `${path} · frame ${index + 1} of ${film.frames.length}`;
     if (m.draws && decoded !== frame.picture) {
-      decodeFrame(film.file.containers[frame.picture].data, fb);
+      decodeFrame(film.file.containers[frame.picture].data, fb, undefined, "v0");
       m.screen.put(fb.pixels, film.width, film.height, film.top, film.left);
       decoded = frame.picture;
     }

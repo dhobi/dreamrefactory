@@ -14,6 +14,11 @@ import { fail, ok, pass, start } from "./harness";
 const { game, m, until, click } = start({ start: { level: 3, records: { ammo: [AMMO_FULL, 0, 0, 0, 0, 0] } } });
 until("the flight", () => game.world !== null);
 const w = game.world!;
+// the pilot's chatter (comms.ts, 0x413cfd …): every line the box is asked for, and when
+const said: { who: number; line: number; at: number }[] = [];
+const flown = m.ticks;
+const ask = game.comms.ask.bind(game.comms);
+game.comms.ask = (who: number, line: number) => (said.push({ who, line, at: m.ticks - flown }), ask(who, line));
 w.hud.choose(0);
 const shields0 = game.records.bars[0];
 
@@ -64,4 +69,10 @@ if (game.records.tally.shots[0] <= 0 || game.records.tally.hits[0] <= 0) fail(`l
 ok(`a jeep shot in ${m.ticks - t0} ticks: ${game.records.tally.shots[0]} laser shots, ${game.records.tally.hits[0]} hits, cash ${game.records.score}`);
 if (game.records.bars[0] >= shields0) fail(`the shields never went down (${game.records.bars[0]})`);
 ok(`the shields ${shields0} → ${game.records.bars[0]} under fire`);
+// 100 … 200 ticks in, with no COPILOT button down, line 4 (`[0x4373cc]`); then remarks
+const opener = said.find((s) => s.who === 0);
+if (!opener || opener.line !== 4 || opener.at < 100 || opener.at > 200 + 60) fail(`the pilot's first line: ${JSON.stringify(opener)}`);
+const remarks = said.filter((s) => s.who === 0 && s.at > opener.at).length;
+if (!remarks) fail("the pilot said nothing after the opener");
+ok(`the pilot's chatter: line 4 at tick ${opener.at} of the flight, then ${remarks} more before the jeep was down`);
 pass("combat");

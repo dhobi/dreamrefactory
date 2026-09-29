@@ -35,7 +35,12 @@ export function* assemble(m: Machine, w: World, band: number, comms: Comms, hudS
   const file = function* (name: string): Co<Uint8Array> {
     return (yield* m.file(name, day)).data;
   };
-  w.setBank(readContainerBank(yield* file(BANKS[band] ?? BANKS[1])));
+  // 0x422ef6: the band's bank — its sounds, and its pieces strung into the
+  // flight's theme tune, which 0x4233ba plays round and round (game.ts)
+  const bankName = BANKS[band] ?? BANKS[1];
+  const bank = readContainerBank(yield* file(bankName));
+  w.setBank(bank);
+  m.setAmbience(bankName, bank);
   w.comms = comms;
   const pyro = new Pyro(w, yield* file("play"), yield* file("pyro"));
   const hud = new Hud(w, readPictures(yield* file("panel")), comms, hudState);
