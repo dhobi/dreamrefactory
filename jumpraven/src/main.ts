@@ -179,6 +179,7 @@ function where(): string {
   const t = game.talkState.talk;
   if (t) return `briefing: ${t.file}${t.line ? ` · ${t.line}` : ""}`;
   if (m.film) return m.where;
+  if (game.mart) return `the Mart · cash ${game.records.score}${game.mart.selected ? ` · selected tier ${game.mart.selected.tier + 1} of kind ${game.mart.selected.kind}` : ""}`;
   if (game.phase === "scores") return "the high scores screen — PLAY starts a game";
   return m.where || game.phase;
 }

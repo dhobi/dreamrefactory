@@ -35,14 +35,37 @@ export class Screen {
   }
 
   /**
-   * The rect's pixels inverted, as `_portinvertrect` does on the 8-bit window
-   * (RAVEN.EXE 0x427373, a button held down): each index's bits flipped, which
-   * in a Macintosh palette is the colour opposite.
+   * The rect's pixels inverted: each index's bits flipped, which in a
+   * Macintosh palette is the colour opposite — what XOR with the black pen
+   * does on the 8-bit window.
    */
   invert(r: Rect): void {
     const [t, l, b, rt] = clip(r, FULL);
     for (let y = t; y < b; y++) for (let x = l; x < rt; x++) this.pixels[y * SCREEN_W + x] ^= 0xff;
     this.version++;
+  }
+
+  /**
+   * A frame `pen` pixels thick just inside the rect, inverted: `_portframerect`
+   * with a `pen`-square pen in XOR mode (RAVEN.EXE 0x427373, a button held down:
+   * pen 3, mode 1). Drawn twice it is gone.
+   */
+  invertFrame(r: Rect, pen: number): void {
+    const [t, l, b, rt] = r;
+    if (b - t <= 2 * pen || rt - l <= 2 * pen) return this.invert(r);
+    this.invert([t, l, t + pen, rt]);
+    this.invert([b - pen, l, b, rt]);
+    this.invert([t + pen, l, b - pen, l + pen]);
+    this.invert([t + pen, rt - pen, b - pen, rt]);
+  }
+
+  /** a frame `pen` pixels thick just inside the rect, in one ink (`_portframerect` in copy mode) */
+  frame(r: Rect, pen: number, index: number): void {
+    const [t, l, b, rt] = r;
+    this.fill([t, l, t + pen, rt], index);
+    this.fill([b - pen, l, b, rt], index);
+    this.fill([t, l, b, l + pen], index);
+    this.fill([t, rt - pen, b, rt], index);
   }
 
   /** `w`-wide rows of indices, their top-left at (top, left) */

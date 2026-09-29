@@ -25,6 +25,8 @@ export type FilmEnd = "exit" | "chain" | "call" | "return";
 
 /** a press held on a button hotspot is at least this long, in ticks (RAVEN.EXE 0x427373) */
 const PRESS_TICKS = 10;
+/** and its frame is this thick (0x427382: `_portpensize(3, 3)`) */
+const PRESS_PEN = 3;
 
 /**
  * What a film tells the level it plays over (0x40ad60 messages 9, 10, 11): a
@@ -126,7 +128,7 @@ export function* playOneFilm(
       let hit: (typeof live)[number] | undefined;
       for (const h of live) {
         if (!(x >= h.left && x <= h.right && y >= h.top && y <= h.bottom)) continue;
-        if (h.type < 0 && !(yield* trackPress(m, [h.top + film.top, h.left + film.left, h.bottom + film.top, h.right + film.left]))) continue;
+        if (h.type < 0 && !(yield* trackPress(m, [h.top + film.top, h.left + film.left, h.bottom + film.top + 1, h.right + film.left + 1]))) continue;
         hit = h;
         break;
       }
@@ -164,16 +166,17 @@ export function* playOneFilm(
 }
 
 /**
- * A button held down (RAVEN.EXE 0x427373, LUNICUS.EXE 0x41d0a7): the rect
- * inverted while the pointer is on it, at least {@link PRESS_TICKS} from the
- * press; true if it is let go on the button.
+ * A button held down (RAVEN.EXE 0x427373, LUNICUS.EXE 0x41d0a7): a 3-pixel frame
+ * inverted round it while the pointer is on it (`_portframerect` in XOR with a
+ * 3 by 3 pen), at least {@link PRESS_TICKS} from the press; true if it is let
+ * go on the button. `rect` is the Macintosh way, bottom and right exclusive.
  */
 export function* trackPress(m: Machine, rect: readonly [number, number, number, number]): Co<boolean> {
-  const on = (): boolean => m.pointer.y >= rect[0] && m.pointer.y <= rect[2] && m.pointer.x >= rect[1] && m.pointer.x <= rect[3];
-  const inverted: [number, number, number, number] = [rect[0], rect[1], rect[2] + 1, rect[3] + 1];
+  const on = (): boolean => m.pointer.y >= rect[0] && m.pointer.y < rect[2] && m.pointer.x >= rect[1] && m.pointer.x < rect[3];
   const pressed = m.ticks;
   let lit = true;
-  m.screen.invert(inverted);
+  const flip = (): void => ((lit = !lit), m.screen.invertFrame(rect, PRESS_PEN));
+  m.screen.invertFrame(rect, PRESS_PEN);
   for (;;) {
     const i = m.events.findIndex((e) => e.kind === "up");
     if (i >= 0 || !m.mouseHeld) {
@@ -183,13 +186,14 @@ export function* trackPress(m: Machine, rect: readonly [number, number, number, 
       }
       break;
     }
-    if (on() !== lit) (lit = !lit), m.screen.invert(inverted);
+    if (on() !== lit) flip();
     yield;
   }
   while (m.ticks - pressed < PRESS_TICKS) yield;
-  if (on() !== lit) (lit = !lit), m.screen.invert(inverted);
-  if (lit) m.screen.invert(inverted);
-  return lit;
+  if (on() !== lit) flip();
+  const hit = lit;
+  if (lit) m.screen.invertFrame(rect, PRESS_PEN);
+  return hit;
 }
 
 /**

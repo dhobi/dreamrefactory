@@ -30,6 +30,12 @@ import {
 } from "./data";
 import { Machine, type Co, type GameFiles, type Speaker } from "./machine";
 import { qualifies, readSco, sortPlaces, writeSco, type Sco } from "./sco";
+import { Comms, DEALER, ENEMY, FUEL, PILOT, REPAIR } from "./comms";
+import { Mart, type MartState } from "./mart";
+import { PILOTS, Pilots, type PilotsState } from "./pilots";
+import { DEFAULT_BAND, Music } from "./music";
+import { BONUS_ACCURACY, accuracy, accuracyScreen, damage } from "./debrief";
+import { newRecords, startGame, type Records } from "./records";
 
 export type Phase = "boot" | "story" | "scores" | "not-ported" | "quit";
 
@@ -45,17 +51,12 @@ export interface JumpRavenOptions {
   keepSco?: (bytes: Uint8Array) => void;
   /** the high-score dialog (DLOG2, 0x4227c1): `done` with the name, or null for Cancel */
   askName?: (done: (name: string | null) => void) => void;
-}
-
-/**
- * What a game holds between its levels, as RAVEN.EXE keeps it in `0x437888`…
- * and around. The flying is not ported, so most of it is only ever set.
- */
-export interface Records {
-  /** `[0x43788c]`: the score; a new game starts it at 1000 (0x42232b) */
-  score: number;
-  /** `[0x43b300]`: the pilot, 0 to 5 — which `trans<n>.move` ends the game (0x4268b3) */
-  pilot: number;
+  /**
+   * A machine test's shortcut: a new game opened straight at this level, the
+   * records changed as given — how the way back from a flight is played while
+   * the flying is not ported
+   */
+  start?: { level: number; difficulty?: number; records?: Partial<Records> };
 }
 
 export class JumpRaven {
@@ -65,7 +66,16 @@ export class JumpRaven {
   level = OPENING;
   /** `[0x439fb0]`: Settings ▸ Training … Expert */
   difficulty = DEFAULT_DIFFICULTY;
-  readonly records: Records = { score: 0, pilot: 0 };
+  readonly records: Records = newRecords();
+  readonly comms: Comms;
+  /** the Mart while it is up, for a machine test */
+  mart: MartState | null = null;
+  /** COPILOT SELECTION while it is up */
+  pilots: PilotsState | null = null;
+  /** `[0x43b304]`: the band the player flies to (src/game/music.ts) */
+  readonly band = { value: DEFAULT_BAND };
+  /** the screen between the briefings that is up, by name — what a machine test waits on */
+  screen: "mart" | "pilots" | "music" | "damage" | "accuracy" | null = null;
   sco!: Sco;
   /** why the machine stopped, when it did */
   stopped = "";
@@ -82,6 +92,7 @@ export class JumpRaven {
 
   constructor(files: GameFiles, private readonly opts: JumpRavenOptions = {}) {
     this.m = new Machine(files, opts.speaker, opts.seed ?? 1994, opts.draws ?? true, opts.log);
+    this.comms = new Comms(this.m);
   }
 
   /** one tick; false once the machine has stopped */
@@ -103,6 +114,13 @@ export class JumpRaven {
       yield* this.startup();
       // 0x40f989 → 0x422489: no saved game to open, so level 0
       this.level = OPENING;
+      const start = this.opts.start;
+      if (start) {
+        startGame(this.records);
+        Object.assign(this.records, start.records ?? {});
+        this.difficulty = start.difficulty ?? this.difficulty;
+        this.level = start.level;
+      }
       for (;;) {
         this.phase = this.level === HIGH_SCORES ? "scores" : "story";
         const next = isFlying(this.level) ? yield* this.flying() : this.level === HIGH_SCORES ? yield* this.highScores() : yield* this.story();
@@ -135,6 +153,10 @@ export class JumpRaven {
     this.sco = sco ?? readSco(yield* m.own("RAVEN.SCO"));
     this.puppet = readContainerFile((yield* m.file("puppet", 1)).data).containers.map((c) => c.data);
     this.palette = paletteV0(readMovFileV0((yield* m.file("intro.move", 1)).data).paletteRaw);
+    // 0x40efa4 …: the five comms heads, the pilot's Lark's until one is chosen
+    for (const [who, name] of [[PILOT, "lark.mupp"], [DEALER, "weap.mupp"], [FUEL, "fuel.mupp"], [REPAIR, "rbay.mupp"], [ENEMY, "enem.mupp"]] as const) {
+      yield* this.comms.load(who, name, 1);
+    }
     m.log(`Jump Raven: ${this.sco.places.length} score tables, difficulty ${DIFFICULTY_NAMES[this.difficulty - 1]}`);
   }
 
@@ -174,9 +196,13 @@ export class JumpRaven {
       m.screen.spriteAt(this.picture(k), LEFT_PANEL[0], LEFT_PANEL[1], LEFT_PANEL);
       m.screen.spriteAt(this.picture(k + 1), RIGHT_PANEL[0], RIGHT_PANEL[1], RIGHT_PANEL);
     }
-    const look: TalkLook = { menuBackdrop: m.draws ? this.picture(PUPPET_MENU) : null, ink: TALK_INK, pressed: TALK_PRESSED, faceWidth: FACE_WIDTH, faceLeft: FACE_LEFT };
-    yield* talk(m, file, this.day, this.talkState, look);
+    yield* talk(m, file, this.day, this.talkState, this.look());
     m.clear();
+  }
+
+  /** how every talk of the game looks (src/game/data.ts) */
+  private look(): TalkLook {
+    return { menuBackdrop: this.m.draws ? this.picture(PUPPET_MENU) : null, ink: TALK_INK, pressed: TALK_PRESSED, faceWidth: FACE_WIDTH, faceLeft: FACE_LEFT };
   }
 
   /**
@@ -203,13 +229,13 @@ export class JumpRaven {
     const steps = (list: (() => Co)[]) => list;
     const f = (name: string) => () => this.film(name);
     const b = (name: string) => () => this.briefing(name);
-    const mart = () => this.notPorted("the Mart", "0x410540");
-    const pilots = () => this.notPorted("choosing the pilot", "0x418878");
-    const gangs = () => this.notPorted("the screen after bat4", "0x414bfc");
-    const orders = () => this.notPorted("the screen after bate", "0x408a68");
-    const debrief = () => this.notPorted("the debrief", "0x401000");
-    const briefings = steps([b("bat1.pupp"), f("enem.move"), b("bat2.pupp"), mart, b("bat3.pupp"), pilots, b("bat4.pupp"), gangs, b("bat5.pupp"), f("trans.move")]);
-    const back = steps([f("drop.move"), b("batg.pupp"), f("anim.move"), b("bate.pupp"), orders, debrief]);
+    const mart = () => this.visitMart(0);
+    const pilots = () => this.choosePilot();
+    const music = () => this.chooseMusic();
+    const damages = () => this.damage();
+    const debrief = () => this.debrief();
+    const briefings = steps([b("bat1.pupp"), f("enem.move"), b("bat2.pupp"), mart, b("bat3.pupp"), pilots, b("bat4.pupp"), music, b("bat5.pupp"), f("trans.move")]);
+    const back = steps([f("drop.move"), b("batg.pupp"), f("anim.move"), b("bate.pupp"), damages, debrief]);
     const run = function* (list: (() => Co)[], quit: () => boolean): Co<boolean> {
       for (const step of list) {
         yield* step();
@@ -244,6 +270,87 @@ export class JumpRaven {
       }
     }
     throw new Error(`level ${this.level} is no story level`);
+  }
+
+  /**
+   * 0x410540: the Mart — the window kept, faded out, `mart.move` or
+   * `newman.move` first if asked for (1, 2), the Mart itself, and the window
+   * as it was
+   */
+  private *visitMart(film: 0 | 1 | 2): Co {
+    const m = this.m;
+    const saved = m.screen.pixels.slice();
+    yield* m.fadeOut();
+    if (film) yield* this.film(film === 1 ? "mart.move" : "newman.move");
+    const mart = new Mart(m, this.records, this.comms, (yield* m.file("mart", this.day)).data);
+    this.mart = mart.state;
+    this.screen = "mart";
+    this.played.push("mart");
+    yield* mart.run(this.day, this.palette);
+    mart.close();
+    this.mart = null;
+    this.screen = null;
+    m.screen.pixels.set(saved);
+    m.screen.version++;
+  }
+
+  /**
+   * 0x418878: COPILOT SELECTION, and the comms box's pilot changed with the
+   * choice (0x4188a3)
+   */
+  private *choosePilot(): Co {
+    const m = this.m;
+    const before = this.records.pilot;
+    yield* m.fadeOut();
+    const pilots = new Pilots(m, this.records, (yield* m.file("pilot", this.day)).data, this.difficulty, this.level);
+    this.pilots = pilots.state;
+    this.screen = "pilots";
+    this.played.push("pilots");
+    yield* pilots.run(this.day, this.palette, this.talkState, this.look());
+    this.pilots = null;
+    this.screen = null;
+    if (this.records.pilot !== before) yield* this.comms.load(PILOT, `${PILOTS[this.records.pilot]}.mupp`, this.day);
+  }
+
+  /** a screen between the briefings: faded out to, then run (0x414bfc, 0x408a68 …) */
+  private *between(name: NonNullable<JumpRaven["screen"]>, run: () => Co): Co {
+    yield* this.m.fadeOut();
+    this.screen = name;
+    this.played.push(name);
+    try {
+      yield* run();
+    } finally {
+      this.screen = null;
+    }
+  }
+
+  /** 0x414bfc: the band */
+  private *chooseMusic(): Co {
+    const file = (yield* this.m.file("music", this.day)).data;
+    yield* this.between("music", () => new Music(this.m, this.band, file).run(this.day, this.palette));
+  }
+
+  /** 0x408a68: the day's damage */
+  private *damage(): Co {
+    const file = (yield* this.m.file("damage", this.day)).data;
+    yield* this.between("damage", () => damage(this.m, this.records, file, this.palette));
+  }
+
+  /**
+   * 0x401000: the debrief — `bata.pupp` for 60% or better, `batb.pupp` under
+   * it, between the side panels (0x42696d), then the accuracy and its bonus
+   */
+  private *debrief(): Co {
+    const m = this.m;
+    yield* this.briefing(accuracy(this.records.tally) >= BONUS_ACCURACY ? "bata.pupp" : "batb.pupp");
+    const file = (yield* m.file("accuracy", this.day)).data;
+    this.screen = "accuracy";
+    this.played.push("accuracy");
+    try {
+      yield* accuracyScreen(m, this.records, file, this.palette);
+    } finally {
+      this.screen = null;
+    }
   }
 
   /** levels 3, 5 and 7: 0x40b190 */
@@ -328,10 +435,9 @@ export class JumpRaven {
     return null;
   }
 
-  /** File ▸ New (0x4222fb(1)): the records afresh, and level 2 */
+  /** File ▸ New (0x4222fb(1)): the records afresh (src/game/records.ts), and level 2 */
   private *play(): Co<number> {
-    this.records.score = 1000;
-    this.records.pilot = 0;
+    startGame(this.records);
     yield* this.m.fadeOut();
     return 2;
   }
