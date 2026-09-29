@@ -30,10 +30,10 @@ table rot behind a green tick.
 
 ## What a change decides for itself
 
-One thing in `tests.yml` looks at the diff: **which playthroughs to run**. The
+One thing in `tests.yml` looks at the diff: **which games' machine suites run**. The
 automatic suite is not filtered, for arithmetic reasons. Measured on the run that merged #333, the job is
 168 s: about 80 s of checkout, rip-linking and `npm ci` that no filter can touch,
-~15 s of automatic suite, and **73 s of playthrough that belongs to one game**. So
+~15 s of automatic suite, and **73 s of Titanic's machine suites, which belong to one game**. So
 a change confined to Dust's package would pay 73 s for Titanic's route and gain
 nothing, while filtering the suite would save a fifth as much and risk the one
 failure this repository cannot afford — a change landing green with its tests
@@ -41,11 +41,11 @@ unrun.
 
 The rule is deliberately blunt. Only a diff confined to GAME PACKAGES — or to
 prose — narrows anything; `engine/`, `site/`, `tools/`, a root config, a workflow
-or anything else runs every playthrough, because everything depends on those. A
-game package with no playthrough of its own narrows to nothing at all, so a
-Dust-only or Skull Cracker-only change runs none.
+or anything else runs every game, because everything depends on those. A change
+confined to Skull Cracker's package runs Skull Cracker's machine suites and no
+other game's.
 
-Prose is dropped before any of that: a playthrough drives the rip and asserts a
+Prose is dropped before any of that: a machine suite drives the rip and asserts a
 recorded trace, and neither is reachable from `docs/` or from markdown anywhere.
 Whatever does read those — the front-door and manifest suites walk the tree — is
 in the automatic suite, which is never filtered. Measured over the last forty
@@ -55,6 +55,10 @@ package, so this narrows six of forty and leaves the rest unchanged.
 And it decides rather than skips. A `paths:` filter that skips the job would make
 the required status check never report, and a pull request waits on that forever
 with every job green (see the note on the `full` job's name).
+
+Each game is a step of its own ("Titanic machine suites", "Dust machine suites",
+and so on for all six), and a change that cannot reach a game shows its step as
+skipped.
 
 ## The four workflows
 
@@ -162,11 +166,12 @@ its own root, so Titanic's tree goes to `taoot/gamefiles` and Dust's disc to
 
 Titanic's is **required**. Dust's automatic suites skip the disc rather than
 failing without it (`dust/tests/` passes with no rip present), but Dust's
-playthrough (`dust/vitest.playthrough.config.ts`) is selected whenever a change
-can reach its route, and that suite does NOT skip: a run asked for by name that
-reports its rungs passed having played none is the one result it exists to
+machine suites (`dust/vitest.machine.config.ts`) do NOT skip: a run that
+reports its rungs passed having played none is the one result they exist to
 prevent. So an unset `DUST_GAMEFILES` is only a warning for the automatic
-suites, and a hard failure for any change that touches `dust/`.
+suites, and a hard failure, from the "Dust machine suites" step, for any change
+that touches `dust/`. The same holds for every game: a machine-suites step that
+runs without its rip fails with an error rather than skip.
 
 Set it beside `TAOOT_GAMEFILES` in the runner's own `.env` — not in GitHub; no
 secret and no repository variable is involved — and restart the service, which
@@ -474,7 +479,7 @@ in `tests.yml`. The list is written as the *inverse* (the suites that need the
 rip) so that a missed entry fails visibly rather than going silently untested.
 
 Dust's automatic suites make the other bargain and **skip** without a disc. Its
-playthrough does not, by design: a suite that is selected by name, for a change that reaches the thing it checks, must
-not be able to report a pass it did not earn.
+machine suites do not, by design: a suite that runs for a change that reaches
+the thing it checks must not be able to report a pass it did not earn.
 
 Back to the [reference index](README.md).

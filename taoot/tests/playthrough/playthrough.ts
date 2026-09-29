@@ -1,8 +1,8 @@
 /**
  * The playthrough: the game plays itself, and its state trace is the assertion.
  *
- *   npm run test:playthrough
- *   TAOOT_RECORD=1 npm run test:playthrough    # re-record the golden traces
+ *   npm run test:machine
+ *   TAOOT_RECORD=1 npm run test:machine    # re-record the golden traces
  *
  * Unlike the scenario tests in auto/regression.ts, which jump to a state and
  * probe it, a segment (segments.ts) drives the game the way a player does —

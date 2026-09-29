@@ -145,7 +145,7 @@ npm test                 # the fast gate, whole repository: scenarios, savegames
                          # recovered builtins, the editors' write path, text and
                          # audio encodings — Titanic's own half is taoot/tests/auto/
 npm run test:watch       # vitest in watch mode
-npm run test:playthrough # the game played, not probed (headless, virtual clock)
+npm run test:machine # the game played, not probed (headless, virtual clock)
 npm run test:browser -w taoot     # Playwright against a live dev server (needs npm run dev)
 npm run test:browser:lang -w taoot # pick a language in a real browser (needs 2+ language trees)
 npm run test:browser:demo -w taoot # the 1996 demo's menu — the edition that opens no room
@@ -168,7 +168,7 @@ prop ownership) at each story beat, so a route is written as inputs and a
 divergence names the beat that caused it. Routes name destinations rather than
 coordinates — `goto("gym")` works out the nine rooms and the gestures itself
 (see [taoot/tests/playthrough/nav/](tests/playthrough/nav)). Re-record with
-`TAOOT_RECORD=1 npm run test:playthrough`; the suite inventory and the commands
+`TAOOT_RECORD=1 npm run test:machine`; the suite inventory and the commands
 are in [docs/reference/tests.md](../docs/reference/tests.md), and what the
 playthrough is *for* — with the bugs it has caught that nothing else would — is
 in [docs/taoot/verification.md](../docs/taoot/verification.md). The route itself — what its

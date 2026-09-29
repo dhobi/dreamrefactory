@@ -20,7 +20,7 @@
  * Segment 1 is the boot, so it is played from the boot. Every later segment
  * CONTINUES the game the one before it left standing (see LEAVES_AT), exactly as
  * the headless run does, and loads the same `.ti` checkpoint its headless twin
- * starts from (out/checkpoints, written by `npm run test:playthrough`) only when
+ * starts from (out/checkpoints, written by `npm run test:machine`) only when
  * there is no such game — a filtered run, or a segment after a segment that threw.
  * Loading is why you can watch mission 1 without sitting through
  * the crossing first; carrying is why the trace compares against a golden recorded
@@ -860,7 +860,7 @@ async function finishSegment1(page: Page, trace: unknown[]): Promise<unknown[]> 
  * ran and still caught a route break; only the trace diff stands aside.
  */
 function compare(trace: unknown[], goldenFile: string, label: string, carried = true): number {
-  if (!existsSync(goldenFile)) throw new Error(`no golden trace at ${goldenFile} — run npm run test:playthrough first`);
+  if (!existsSync(goldenFile)) throw new Error(`no golden trace at ${goldenFile} — run npm run test:machine first`);
   if (!carried) {
     console.log(`${label}: loaded, not carried — trace not compared (${trace.length} beats)`);
     return 0;
@@ -950,7 +950,7 @@ async function loadCheckpoint(page: Page, name: string): Promise<boolean> {
   await waitFor(page, "!dbg.session.scriptBusy", "the boot to hand the game over", 120_000);
   const file = checkpoint(name);
   if (!existsSync(file)) {
-    throw new Error(`no checkpoint at ${file} — run npm run test:playthrough to write one`);
+    throw new Error(`no checkpoint at ${file} — run npm run test:machine to write one`);
   }
   const bytes = [...new Uint8Array(readFileSync(file))];
   // FIRED, never awaited — the same shape as headless resume(), for the same two

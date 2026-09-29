@@ -415,7 +415,7 @@ audio playback, and saving/loading.
   and saves, and the layering rule itself. **Prefer extending `regression.ts`
   over writing throwaway tests.** The full map is **[the test
   reference](../reference/tests.md)**.
-- `npm run test:playthrough` — the game *played* from the boot to the ending, 27
+- `npm run test:machine` — the game *played* from the boot to the ending, 27
   segments carried as one session, asserting a recorded state trace per beat.
   What that buys, and the bugs it has caught that nothing else could, is
   **[how we know it's right](../taoot/verification.md)**.

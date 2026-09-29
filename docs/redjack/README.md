@@ -6,12 +6,13 @@ first time the engine has a real camera: a room is a set of points you stand at
 and look round from in every direction, joined by films that walk you from one
 to the next, where every earlier game had fixed views and a turn ring.
 
-What runs here is a **prototype**: the real `GameHost` and `GameSession`
-pointed at the three discs, on port 5179 with
-`npm run dev -w redjack`. It boots, you can walk the rooms and look round them,
-the films, props, actors and puppets play, and the fights' stage opens. The
-first four days play through headless (see [Machine suites](#machine-suites));
-the last three have not been played through yet.
+What runs here is the real `GameHost` and `GameSession` pointed at the three
+discs, on port 5179 with `npm run dev -w redjack`. You walk the rooms and look
+round them, the films, props, actors and puppets play, the fights and puzzles
+work, and games save and load. All seven days play through headless, to the
+end of the game and back at its menu (see [Machine suites](#machine-suites)).
+What is still missing is listed under
+[What does not work yet](#what-does-not-work-yet).
 
 ## What was found
 
@@ -136,7 +137,7 @@ CPU goes, waiting on the game's state and never on a duration.
   size and palette but skips decoding its pixels. That is most of the time a
   headless run would otherwise take. The film still paces by its own
   soundtrack, so the audio is still decoded.
-- `tests.yml` runs the suites on every pull request when the rip is linked.
+- `tests.yml` runs the suites on a pull request that can reach RedJack (its package, or anything shared such as `engine/`), when the rip is linked.
 
 `saves` saves and loads, and loads the seven day saves; see [Saved
 games](#saved-games). It skips a day whose save `tools/mksaves.mts` has not

@@ -53,15 +53,15 @@ jobs:
   # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's
   # correctness claims actually bottom out in: the full automatic suite, then
-  # the playthrough.
+  # each game's machine suites, the whole game played in node.
   # ---------------------------------------------------------------------------
   full:
     # DO NOT RENAME. This string is the status check's name, and branch
     # protection requires it by that exact name — a rename makes the required
     # check never report and every pull request waits for it forever, green
     # jobs and all. (Learned the hard way: #333 renamed this to "playthroughs"
-    # and blocked itself.) The step below carries the plural instead, where it
-    # costs nothing.
+    # and blocked itself.) Its steps carry the games' names instead, where
+    # that costs nothing.
     name: full auto suite + playthrough
     # A fork's pull request must never reach the machine that holds the rip:
     # `pull_request` checks out the PR's head, and that head is the fork's code.
@@ -74,8 +74,8 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, dreamrefactory-gamefiles]
     steps:
-      # Full history, because the step that picks the playthroughs diffs against
-      # the base commit and the default depth of 1 does not contain it.
+      # Full history, because the step that picks the games diffs against the
+      # base commit and the default depth of 1 does not contain it.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -101,7 +101,9 @@ jobs:
           # than failing without it — `dust/tests/` passes 15 tests with no rip
           # present at all. Demanding it here was stricter than the tests are, and
           # it blocked a host that has never needed Dust's disc. Unset is a
-          # WARNING with the consequence named, not an error.
+          # WARNING with the consequence named, not an error. That holds for
+          # the automatic suite only: every game's machine-suites step below
+          # FAILS without its rip when the change reaches that game.
           if [ -z "${TAOOT_GAMEFILES:-}" ] || [ ! -d "${TAOOT_GAMEFILES:-}" ]; then
             echo "::error::TAOOT_GAMEFILES (${TAOOT_GAMEFILES:-unset}) is not a directory."
             echo "In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
@@ -114,7 +116,7 @@ jobs:
             ln -sfn "$DUST_GAMEFILES" dust/gamefiles
             echo "dust present:     $(ls dust/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::DUST_GAMEFILES (${DUST_GAMEFILES:-unset}) is not a directory — Dust's disc-reading tests will skip, and its playthrough, which cannot run without the disc, will FAIL if this change reaches it. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+            echo "::warning::DUST_GAMEFILES (${DUST_GAMEFILES:-unset}) is not a directory — Dust's disc-reading tests will skip, and its machine suites, which cannot run without the disc, will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
           # Skull Cracker's, OPTIONAL for the same reason as Dust's: its suites
@@ -127,7 +129,7 @@ jobs:
             ln -sfn "$SKULLCRACKER_GAMEFILES" skullcracker/gamefiles
             echo "skullcracker:     $(ls skullcracker/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::SKULLCRACKER_GAMEFILES (${SKULLCRACKER_GAMEFILES:-unset}) is not a directory — Skull Cracker's disc-reading tests and machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+            echo "::warning::SKULLCRACKER_GAMEFILES (${SKULLCRACKER_GAMEFILES:-unset}) is not a directory — Skull Cracker's disc-reading tests will skip, and its machine suites will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
           # RedJack's three discs, OPTIONAL like the two above:
@@ -137,28 +139,28 @@ jobs:
             ln -sfn "$REDJACK_GAMEFILES" redjack/gamefiles
             echo "redjack:          $(ls redjack/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::REDJACK_GAMEFILES (${REDJACK_GAMEFILES:-unset}) is not a directory — RedJack's disc-reading tests and machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+            echo "::warning::REDJACK_GAMEFILES (${REDJACK_GAMEFILES:-unset}) is not a directory — RedJack's disc-reading tests will skip, and its machine suites will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
           # Timelapse's four discs, OPTIONAL like the others: only its own
-          # machine suites read them, and that step skips without them. All
+          # machine suites read them, and that step fails without them. All
           # four, because the whole game is played and its last world is on
           # the fourth.
           if [ -n "${TIMELAPSE_GAMEFILES:-}" ] && [ -d "${TIMELAPSE_GAMEFILES:-}" ]; then
             ln -sfn "$TIMELAPSE_GAMEFILES" timelapse/gamefiles
             echo "timelapse:        $(ls timelapse/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::TIMELAPSE_GAMEFILES (${TIMELAPSE_GAMEFILES:-unset}) is not a directory — Timelapse's machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+            echo "::warning::TIMELAPSE_GAMEFILES (${TIMELAPSE_GAMEFILES:-unset}) is not a directory — Timelapse's machine suites will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
           # Lunicus's disc and its saves, OPTIONAL like the others: its machine
-          # suites skip without it, and so does the corpus half of
-          # `engine/tests/df0-formats.ts`, which reads `lunicus/gamefiles`.
+          # suites fail without it, and the corpus half of
+          # `engine/tests/df0-formats.ts`, which reads `lunicus/gamefiles`, skips.
           if [ -n "${LUNICUS_GAMEFILES:-}" ] && [ -d "${LUNICUS_GAMEFILES:-}" ]; then
             ln -sfn "$LUNICUS_GAMEFILES" lunicus/gamefiles
             echo "lunicus:          $(ls lunicus/gamefiles | tr '\n' ' ')"
           else
-            echo "::warning::LUNICUS_GAMEFILES (${LUNICUS_GAMEFILES:-unset}) is not a directory — Lunicus's disc-reading tests and machine suites will skip. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+            echo "::warning::LUNICUS_GAMEFILES (${LUNICUS_GAMEFILES:-unset}) is not a directory — Lunicus's disc-reading tests will skip, and its machine suites will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
       # No setup-node here: the runner's own Node is used, so a run does not
@@ -168,83 +170,35 @@ jobs:
 
       - run: npm ci
 
-      - name: Automatic suite
-        run: npm test
-
-      # Skull Cracker's game, headless: its machine suites stand the game up in
-      # node on the rip and step it frame by frame (docs/skullcracker/
-      # verification.md). About twenty seconds, so every pull request pays it.
-      # Without the rip there is no game to stand up, so it skips like the rest.
-      - name: Skull Cracker machine suites
-        run: |
-          if [ -d skullcracker/gamefiles/SKULL ]; then
-            npm test -w skullcracker
-          else
-            echo "::warning::no Skull Cracker rip linked — its machine suites were skipped"
-          fi
-
-      # RedJack's, the same way: the shared engine stood up in node on the three
-      # discs, stepped as fast as the CPU goes, with no film pixels decoded.
-      - name: RedJack machine suites
-        run: |
-          if [ -f redjack/gamefiles/RJDisk1/RedJack/bootfile.boot ]; then
-            npm test -w redjack
-          else
-            echo "::warning::no RedJack rip linked — its machine suites were skipped"
-          fi
-
-      # Timelapse's: the shared engine stood up in node on the four discs and
-      # played through the whole game, world by world
-      # (docs/timelapse/README.md#machine-suites). About a minute, so every
-      # pull request pays it.
-      - name: Timelapse machine suites
-        run: |
-          if [ -f timelapse/gamefiles/TLAPSE1/install/data/bootfile ]; then
-            npm test -w timelapse
-          else
-            echo "::warning::no Timelapse rip linked — its machine suites were skipped"
-          fi
-
-      # Lunicus's: the game ported from LUNICUS.EXE, stood up in node on the
-      # disc and played from the intro to the queen, as fast as the CPU goes
-      # (docs/lunicus/README.md#machine-suites). The browser playthrough is
-      # ten minutes and is browser.yml's, on a `full-run-lunicus` label.
-      - name: Lunicus machine suites
-        run: |
-          if [ -f lunicus/gamefiles/LUNICUS/lunicus/lunicus.exe ]; then
-            npm test -w lunicus
-          else
-            echo "::warning::no Lunicus rip linked — its machine suites were skipped"
-          fi
-
-      # Which playthroughs this change needs — and why the automatic suite above
-      # is deliberately NOT filtered the same way.
+      # Which games' machine suites this change needs — and why the automatic
+      # suite below is deliberately NOT filtered the same way. Each game's step
+      # below asks this one: its own package in the diff, or `all`.
       #
-      # Measured on the run that merged #333: the playthrough is 73 s of this
-      # job's 168 s, and it is ONE GAME's. A change confined to another game's
+      # Measured on the run that merged #333: Titanic's machine suites are
+      # 73 s of this job's 168 s, and they are ONE GAME's. A change confined to another game's
       # package pays all of it for nothing. The automatic suite is ~15 s of the
       # same job — filtering that would save a fifth as much and could, if the
       # mapping were ever wrong, let a change land with its tests unrun. So the
-      # suite always runs in full and only the playthroughs are chosen: the
+      # suite always runs in full and only these machine suites are chosen: the
       # saving is taken where the seconds are, and the safety net stays under
       # everything.
       #
       # Conservative by construction. ONLY a change confined to game packages —
       # or to prose, which reaches nothing — narrows anything; touch `engine/`,
-      # `site/`, `tools/`, a root config or a workflow and every playthrough runs,
+      # `site/`, `tools/`, a root config or a workflow and every game runs,
       # because everything depends on those.
       #
       # It decides rather than SKIPS, and that is not a style choice: a required
       # status check that never reports blocks a pull request forever with its
       # jobs green (see the note on this job's name). So the job always runs and
       # this step always exits 0 — "nothing to run" is a result, not an absence.
-      - name: Which playthroughs this change needs
+      - name: Which games this change needs
         id: pt
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           if [ -z "${BASE:-}" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
-            echo "no base commit to compare against — running every playthrough"
+            echo "no base commit to compare against — running every game"
             echo "all=1" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -257,12 +211,12 @@ jobs:
           while IFS= read -r f; do
             [ -n "$f" ] || continue
 
-            # Prose cannot reach a playthrough. A playthrough drives the rip and
+            # Prose cannot reach a machine suite. One drives the rip and
             # asserts a recorded trace; neither is reachable from `docs/` or from
             # any markdown, VitePress config included. Anything that DOES read
             # this — the front-door and manifest suites read the tree — is in the
             # automatic suite above, which is never filtered, so dropping these
-            # here narrows the playthroughs and nothing else.
+            # here narrows the machine suites and nothing else.
             case "$f" in
               docs/*|*.md) continue ;;
             esac
@@ -272,7 +226,7 @@ jobs:
             # under one every game depends on, is a change this cannot reason
             # about — so it runs all of them.
             if [ "$d" = "$f" ] || [ ! -f "$d/package.json" ] || [ "$d" = engine ] || [ "$d" = site ]; then
-              echo "  -> '$f' is not confined to a game package; running every playthrough"
+              echo "  -> '$f' is not confined to a game package; running every game"
               all=1
               break
             fi
@@ -284,27 +238,76 @@ jobs:
             exit 0
           fi
 
-          want=""
-          for g in $games; do
-            [ -f "$g/vitest.playthrough.config.ts" ] && want="$want $g"
-          done
           echo "changed game packages:${games:- none}"
-          echo "playthroughs to run:${want:- none}"
-          echo "games=$want" >> "$GITHUB_OUTPUT"
+          # padded, so a step can ask for ' dust ' and never match a prefix
+          echo "games=$games " >> "$GITHUB_OUTPUT"
 
-      # Timed by ticks and gestures rather than by wall clock, so this number is
-      # not a budget — it has come in anywhere from 77 s to 137 s on the same
-      # green code, which is why nothing here asserts on seconds.
-      - name: Playthroughs
-        env:
-          ALL: ${{ steps.pt.outputs.all }}
-          GAMES: ${{ steps.pt.outputs.games }}
+      - name: Automatic suite
+        run: npm test
+
+      # Titanic's game, headless: its machine suites play it from the boot to
+      # the ending on a virtual clock, asserting a recorded state trace
+      # (docs/reference/tests.md). Its rip is required, so there is no skip.
+      - name: Titanic machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' taoot ')
+        run: npm run test:machine -w taoot
+
+      # Dust's, the same way, rung by rung from the first day to Bloodstone.
+      # No skip either: without the disc the suite fails rather than report
+      # rungs it never played (docs/reference/ci.md).
+      - name: Dust machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' dust ')
+        run: npm run test:machine -w dust
+
+      # Skull Cracker's game, headless: its machine suites stand the game up in
+      # node on the rip and step it frame by frame (docs/skullcracker/
+      # verification.md). About twenty seconds.
+      # Without the rip there is no game to stand up, so it skips like the rest.
+      - name: Skull Cracker machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' skullcracker ')
         run: |
-          if [ "${ALL:-}" = "1" ]; then
-            # the root script fans out over every package that has one
-            npm run test:playthrough
-          elif [ -z "${GAMES// /}" ]; then
-            echo "no playthrough is affected by this change"
+          if [ -d skullcracker/gamefiles/SKULL ]; then
+            npm test -w skullcracker
           else
-            for g in $GAMES; do npm run test:playthrough -w "$g"; done
+            echo "::error::no Skull Cracker rip linked — its machine suites cannot run, and a change that reaches Skull Cracker does not pass without them. Link SKULLCRACKER_GAMEFILES (docs/reference/ci.md)."
+            exit 1
+          fi
+
+      # RedJack's, the same way: the shared engine stood up in node on the three
+      # discs, stepped as fast as the CPU goes, with no film pixels decoded.
+      - name: RedJack machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' redjack ')
+        run: |
+          if [ -f redjack/gamefiles/RJDisk1/RedJack/bootfile.boot ]; then
+            npm test -w redjack
+          else
+            echo "::error::no RedJack rip linked — its machine suites cannot run, and a change that reaches RedJack does not pass without them. Link REDJACK_GAMEFILES (docs/reference/ci.md)."
+            exit 1
+          fi
+
+      # Timelapse's: the shared engine stood up in node on the four discs and
+      # played through the whole game, world by world
+      # (docs/timelapse/README.md#machine-suites). About a minute.
+      - name: Timelapse machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' timelapse ')
+        run: |
+          if [ -f timelapse/gamefiles/TLAPSE1/install/data/bootfile ]; then
+            npm test -w timelapse
+          else
+            echo "::error::no Timelapse rip linked — its machine suites cannot run, and a change that reaches Timelapse does not pass without them. Link TIMELAPSE_GAMEFILES (docs/reference/ci.md)."
+            exit 1
+          fi
+
+      # Lunicus's: the game ported from LUNICUS.EXE, stood up in node on the
+      # disc and played from the intro to the queen, as fast as the CPU goes
+      # (docs/lunicus/README.md#machine-suites). The browser playthrough is
+      # ten minutes and is browser.yml's, on a `full-run-lunicus` label.
+      - name: Lunicus machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' lunicus ')
+        run: |
+          if [ -f lunicus/gamefiles/LUNICUS/lunicus/lunicus.exe ]; then
+            npm test -w lunicus
+          else
+            echo "::error::no Lunicus rip linked — its machine suites cannot run, and a change that reaches Lunicus does not pass without them. Link LUNICUS_GAMEFILES (docs/reference/ci.md)."
+            exit 1
           fi

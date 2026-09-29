@@ -29,7 +29,7 @@ its own budget:
 
 | Category | Directory | Command | What it is |
 |----------|-----------|---------|------------|
-| **playthrough** | `taoot/tests/playthrough/` | `npm run test:playthrough` | the game *played* from the boot to the ending, asserting a recorded state trace — 27 segments plus 3 property tests, ~75 s |
+| **playthrough** | `taoot/tests/playthrough/` | `npm run test:machine` | the game *played* from the boot to the ending, asserting a recorded state trace — 27 segments plus 3 property tests, ~75 s |
 | **browser** | `taoot/tests/browser/` | `npm run test:browser -w taoot` | the same route through real mouse and keyboard events against a live dev server, diffed against the same trace — ~39 min, because it costs what the game costs |
 
 A playthrough segment covers minutes of game time and the route grows as it
@@ -183,7 +183,7 @@ when the rip is not there.
 ## Running the playthrough
 
 ```
-npm run test:playthrough                  # all 27 segments, headless, ~75 s
+npm run test:machine                  # all 27 segments, headless, ~75 s
 npx vitest run taoot/tests/playthrough/playthrough.ts -t "playthrough 13"   # one segment
 TAOOT_RECORD=1 npx vitest run taoot/tests/playthrough/playthrough.ts        # re-record the goldens
 ```
@@ -199,8 +199,8 @@ one function per segment; the segment-by-segment table of what each crosses is
 ## Dust's playthrough — the other kind of evidence
 
 ```
-npm run test:playthrough -w dust                                            # the whole route
-npm run test:playthrough -w dust -- -t "D2A_001 → D2A_002"                    # one rung
+npm run test:machine -w dust                                            # the whole route
+npm run test:machine -w dust -- -t "D2A_001 → D2A_002"                    # one rung
 ```
 
 Titanic's playthrough asserts a **recorded** trace: the game as this project
@@ -303,7 +303,7 @@ recorded one. `watch:mission1` is the whole mission and grows a segment at a tim
 `SEGMENTS` picks which stretches to play, and picking a subset changes how it
 starts: a segment whose predecessor isn't in the run has no live game to continue,
 so it loads the same `.ti` checkpoint its headless twin starts from
-(`out/checkpoints`, written by `npm run test:playthrough`). That lets you
+(`out/checkpoints`, written by `npm run test:machine`). That lets you
 watch mission 1 without sitting through the crossing — and it is also why a
 filtered run's trace comparison may stand down, since
 [a golden speaks for one mode](../taoot/verification.md#one-game-carried-not-a-chain-of-loads).

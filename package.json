@@ -20,7 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:portable": "NO_GAMEFILES=1 vitest run",
-    "test:playthrough": "npm run test:playthrough --workspaces --if-present",
+    "test:machine": "npm run test:machine --workspaces --if-present",
     "manifest": "npm run manifest --workspaces --if-present",
     "docs:dev": "vitepress dev docs --port 5174",
     "docs:build": "vitepress build docs",

@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "build": "vite build",
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/taoot gamefiles public",
-    "test:playthrough": "vitest run --config vitest.playthrough.config.ts",
+    "test:machine": "vitest run --config vitest.machine.config.ts",
     "test:browser": "tsx tests/browser/demo.ts && tsx tests/browser/menu-movie.ts && tsx tests/browser/playthrough.ts",
     "test:browser:demo": "tsx tests/browser/demo.ts",
     "test:browser:endgame": "tsx tests/browser/endgame.ts",

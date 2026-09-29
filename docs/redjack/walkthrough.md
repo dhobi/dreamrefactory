@@ -36,7 +36,7 @@ How to read it:
 ## Before you start
 
 The play page is at `/redjack/` on the site, or on your own machine with
-`npm run dev -w redjack` (port 5179). It is a prototype: see
+`npm run dev -w redjack` (port 5179). What is still missing is under
 [What does not work yet](README.md#what-does-not-work-yet).
 
 - **The arrow keys walk.** Left and right turn to the next way out of where you

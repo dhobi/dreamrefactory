@@ -10,19 +10,21 @@ than from the source** — every container format decoded, the script language
 parsed and interpreted, and the games played in a browser with nothing installed.
 No DOSBox, no emulator.
 
-Four of its games are here. Three are adventures the interpreter runs:
+Six of its games are here. Four are adventures the interpreter runs:
 
 | | | |
 |---|---|---|
 | **[Titanic: Adventure Out of Time](taoot/)** | 1996 | DreamFactory 4 — six languages, the 1996 demo, a timed endgame |
 | **[Dust: A Tale of the Wired West](dust/)** | 1995 | DreamFactory 1 — one disc, and the engine two years earlier |
 | **[Timelapse: Ancient Civilizations](timelapse/)** | 1996 | DreamFactory 4 on four discs, and **no `.SET` anywhere** — its rooms are stage flats, and it navigates by the shape of the cursor |
+| **[RedJack: Revenge of the Brethren](redjack/)** | 1998 | DreamFactory 5, CyberFlix's last game, and the first with a real camera: rooms are points you look round from in every direction, joined by films |
 
-…and the fourth has no interpreter to run, because it has nothing to interpret:
+…and two have no interpreter to run, because they have nothing to interpret:
 
 | | | |
 |---|---|---|
 | **[Skull Cracker](skullcracker/)** | 1996 | DreamFactory 4 with **no BOOTFILE and no script**: a beat-'em-up whose logic is compiled into the executable rather than authored in the data. It **plays** — films, menu, chooser, sixteen levels, the weapons, the bosses, the board and the credits — with the levels, the moves, the fights, the sounds and the mission read out of `SC.EXE` with a disassembler rather than scripted in the data |
+| **[Lunicus](lunicus/)** | 1994 | CyberFlix's first game, on what this port calls **DreamFactory 0**: no scripts at all. The whole game is ported from `LUNICUS.EXE` — the moon base, the cities, the engine rooms, the hive and the queen |
 
 **RE is for reverse-engineered.** This is a best-effort re-implementation and not
 a re-release: it needs a copy of a game's own data files, which it does not
@@ -59,7 +61,7 @@ fans out over the workspaces rather than naming a game. A new game brings its ow
 scripts and the root does not change.
 
 Add `-- --host` to reach one from another machine. A link from one site to
-another **404s in dev with a page telling you which server serves it** — six
+another **404s in dev with a page telling you which server serves it** — separate
 Vite roots cannot be one origin, and the deployed tree has no such problem
 (`tools/vite-siblings.ts` explains why a proxy cannot fix it).
 
@@ -81,7 +83,8 @@ Each top-level directory is a thing rather than a kind of file.
     the screen, the save store
 - **`taoot/`** — Titanic: its four pages, six editions and the demo, its own
   tools, and the suites that play it through to the end
-- **`dust/`** — Dust: two pages, its own disc, its own tools
+- **`dust/`** — Dust: three pages (the game, the collection, the speedrun), its
+  own disc, its own tools
 - **`timelapse/`** — Timelapse: one page, four discs, and its own palette. The
   engine's screen with no room on it (`engine/src/web/screen-director.ts`) is what
   makes it possible
@@ -90,6 +93,9 @@ Each top-level directory is a thing rather than a kind of file.
   `walk.html` beside it as the bench a level is opened on one at a time — and
   its own disassembler under `tools/`, because this game's logic is in `SC.EXE`
   and not in the data
+- **`redjack/`** — RedJack: one page on three discs. Its rooms (`.sett`) have
+  their own reader and runtime in `engine/`, and its machine suites are under
+  `tests/machine/`
 - **`lunicus/`** — Lunicus: one page and its own palette. No scripts at all: the
   game is in `LUNICUS.EXE` and was ported from its disassembly, with the
   machine suites under `tests/machine/` playing it through to the end
@@ -120,8 +126,8 @@ project's black-and-green — are implementations of one role contract in
 
 ## Where it goes
 
-Published under **<https://www.danielhobi.ch/dreamrefactory/>**, six things
-sharing one directory:
+Published under **<https://www.danielhobi.ch/dreamrefactory/>**, one site per
+package and the documentation, sharing one directory:
 
 | | |
 |---|---|
@@ -130,6 +136,8 @@ sharing one directory:
 | `/dreamrefactory/dust/` | Dust — tag `dust-v*` |
 | `/dreamrefactory/timelapse/` | Timelapse — tag `timelapse-v*` |
 | `/dreamrefactory/skullcracker/` | Skull Cracker — tag `skullcracker-v*` |
+| `/dreamrefactory/redjack/` | RedJack — tag `redjack-v*` |
+| `/dreamrefactory/lunicus/` | Lunicus — tag `lunicus-v*` |
 | `/dreamrefactory/docs/` | the documentation — on any push that touches it |
 
 Each tag is checked against its own package's version. Sharing one directory is
@@ -140,13 +148,15 @@ safe because the upload only ever adds and overwrites — see
 ## Tests
 
 ```bash
-npm test                 # the automatic suite
-npm run test:playthrough # the game played end to end, by the clock it runs on
-npm run test:browser -w taoot     # Playwright against a live dev server
+npm test                        # the automatic suite
+npm run test:machine            # every game played end to end, headless
+npm run test:machine -w lunicus # one game's
+npm run test:browser -w taoot   # Playwright against a live dev server
 ```
 
 Most of it reads the original game files, which is why the full suite runs on a
-self-hosted runner and only the portable part runs on GitHub's
+self-hosted runner, where each game's machine suites run when a change can
+reach that game, and only the portable part runs on GitHub's
 ([Continuous integration](docs/reference/ci.md)). The inventory of what each suite
 covers is in [Tests](docs/reference/tests.md).
 
