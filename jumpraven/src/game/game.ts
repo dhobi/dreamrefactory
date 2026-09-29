@@ -39,6 +39,9 @@ import { Flight, VIEW, readPanel, type FlightState } from "./flight";
 import { PARAMS, World } from "./combat/world";
 import { newHudState, type HudState } from "./combat/hud";
 import { assemble } from "./combat/index";
+import type { HudApi } from "./combat/api";
+import { Rbay } from "./rbay";
+import type { Copilot } from "./combat/copilot";
 import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
 import { readMazeV0 } from "@dreamfactory/engine/df/maze-v0";
 import { readContainerFile as readFile } from "@dreamfactory/engine/df/container";
@@ -91,7 +94,7 @@ export class JumpRaven {
   /** the key held down last, as RAVEN.EXE repeats it (message 7 with `[0x43b2cc]`) */
   private heldKey: string | null = null;
   /** the screen between the briefings that is up, by name — what a machine test waits on */
-  screen: "mart" | "pilots" | "music" | "damage" | "accuracy" | null = null;
+  screen: "mart" | "pilots" | "music" | "damage" | "accuracy" | "rbay" | null = null;
   sco!: Sco;
   /** why the machine stopped, when it did */
   stopped = "";
@@ -396,6 +399,10 @@ export class JumpRaven {
     const flight = new Flight(m, w, city, panel);
     const hud = yield* assemble(m, w, this.band.value, this.comms, this.hudState);
     flight.hudFrame = () => hud.frame();
+    // 0x40b779: the copilot's navigation puts one move in the queue
+    (w.copilot as Copilot).steer = (k: number) => void (flight.state.queue = [k]);
+    // 0x40bb03: the comms box starts the flight over (the pilot's opener)
+    this.comms.reset();
     // 0x40ed51: the flight's palette and its flashes are RAVENRES.DLL's (0x85; 0x81, 0x83)
     const dll = yield* m.own("RAVENRES.DLL");
     const base = readClutV0(dll, "CLUT133");
@@ -446,6 +453,15 @@ export class JumpRaven {
           w.weap.mart = false;
           yield* this.visitMart(1);
           m.screen.setPalette(base);
+          flight.redraw();
+          flush();
+        }
+        if (hud.bay) {
+          // 0x41f990: landed at the repair bay
+          hud.bay = false;
+          flush();
+          yield* flight.overView(() => this.repairBay(hud, base));
+          hud.redraw();
           flight.redraw();
           flush();
         }
@@ -503,6 +519,23 @@ export class JumpRaven {
       this.flight = null;
       this.world = null;
     }
+  }
+
+  /** 0x41f990: `rbay.move`, and the bay's screen (src/game/rbay.ts) */
+  private *repairBay(hud: HudApi, palette: Uint8ClampedArray): Co {
+    const m = this.m;
+    yield* m.fadeOut();
+    yield* this.film("rbay.move");
+    const bay = new Rbay(m, hud, this.comms, (yield* m.file("rbay", this.day)).data, (name) => this.film(name));
+    this.screen = "rbay";
+    this.played.push("rbay");
+    try {
+      yield* bay.run(palette);
+    } finally {
+      this.screen = null;
+    }
+    yield* m.fadeOut();
+    m.screen.setPalette(palette);
   }
 
   /* ---- the high scores screen ------------------------------------------ */

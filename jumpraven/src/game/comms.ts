@@ -30,11 +30,62 @@
  * starts, with its voice (0x41496f); a playing line shows the keyframe its
  * clock has reached, one per two ticks, and is over at its last keyframe, the
  * voice cut there if still going (0x414a9d, 0x414b1a).
+ *
+ * ## The chatter in flight (0x413c6d with its flag set, 0x413cf3 … 0x414158)
+ *
+ * On a quiet tick in flight the box is the pilot's again (another head's line
+ * over, 0x414105), and the pilot, in this order, says:
+ *
+ *   - once, 100 … 200 ticks into the flight (`[0x4373cc]`, 0x413af8), line 4
+ *     if no COPILOT button is down
+ *   - line 0x1e, the copilot has the navigation (`[0x4373dc]`, 0x414b65 when
+ *     the beacon goes up)
+ *   - line 0x20, the Mart was left by CONTINUE (`[0x4373e4]`)
+ *   - one of lines 0x21 … 0x23 (a roll of 4, never the last one again; a 4
+ *     says nothing) after the enemy broke in (`[0x4373e0]`, 0x414b8f)
+ *   - 150 … 350 ticks after the last line began (`[0x4373c8]`), a remark by a
+ *     roll of 6 (table 0x431ae8): the copilots (9 all three buttons down,
+ *     0xa none), the shields (0xe under 0x21c0, else 0xf), 0x10 or 0x11, 5
+ *     with wreckage about; or a 5 or 6 lets the enemy break in (lines 0, 4,
+ *     6, 7 by a roll of 4, never the last again: table 0x431af8)
+ *   - else, facing a quarter, that what the beacon marks is ahead within five
+ *     cells, once for each beacon (`[0x437404]`, table 0x431b08): 6 the fuel
+ *     station, 7 the weapons ship, 0x24 the pods, 8 the repair bay
+ *   - and then, with two or more homing things up, one time in eight line
+ *     0xb; else the idle racks come round as ever.
+ *
+ * With the flag clear (the Mart) all of these are forgotten each quiet tick
+ * (0x414120).
  */
 import { readTalkFileV0, type TalkFileV0, type TrackKeyV0 } from "@dreamfactory/engine/df/talk-v0";
 import { FaceDrawer } from "@dreamfactory/engine/v0/talk";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { Co, Machine } from "./machine";
+
+/**
+ * What the flight's chatter asks of the flight (src/game/combat/lib.ts's
+ * chatterOf gives the world's)
+ */
+export interface Chatter {
+  /** 0x417617: the three COPILOT buttons (navigation, HOVER, weapons) */
+  copilots(): [number, number, number];
+  /** 0x417917: the shields */
+  shields(): number;
+  /** 0x41d6c3: the wreckage pieces that are targets */
+  wreckage(): number;
+  /** 0x417d4d: what the beacon marks, −1 for none */
+  beacon(): number;
+  /** the craft's heading is a quarter's (`[0x43cd1c]` & 0x3f is 0) */
+  squared(): boolean;
+  /**
+   * 0x41444c: what the beacon marks — the fuel station for 0 (0x40b04c), the
+   * weapons ship for 1 (0x42aa01), else the beacon's cell — is down the
+   * craft's heading within five cells
+   */
+  ahead(kind: number): boolean;
+  /** 0x407cb5 + 0x403345 + 0x425412: the homing things up, the copters' missiles, the boss's, the tanks' shells */
+  homing(): number;
+}
 
 export const PILOT = 0;
 export const FUEL = 1;
@@ -78,6 +129,17 @@ export class Comms {
    * on the next quiet tick in flight (line 0x20, 0x413d82)
    */
   leaving = false;
+  /** `[0x4373c8]`: when the pilot next remarks (ticks), 0 not yet */
+  private remarkAt = 0;
+  /** `[0x4373cc]`: when the pilot opens the flight (ticks), 0 once done */
+  private openAt = 0;
+  /** `[0x4373dc]`: the copilot has the navigation — the pilot says so (0x414b65) */
+  navSaid = false;
+  /** `[0x4373d4]`, `[0x4373d8]`: the enemy's last line and the pilot's last answer (by their rolls) */
+  private lastEnemy = -1;
+  private lastAnswer = -1;
+  /** `[0x437404]`: the beacon last called ahead */
+  private called = -1;
   /** every line started, as `who:line` — what a machine test reads */
   readonly spoken: string[] = [];
 
@@ -121,18 +183,32 @@ export class Comms {
     }
     this.who = who;
     this.line = line;
+    this.navSaid = false;
+    this.leaving = false;
     this.shownLine = -1;
+    this.hinted = false;
   }
 
-  /** 0x413af8: the line stopped and forgotten, the pilot on the box again */
+  /** 0x413af8: the line stopped and forgotten, the pilot on the box again; the flight's opening 100 … 200 ticks off */
   reset(): void {
     this.stop();
     this.hinted = false;
-    this.leaving = false;
     this.shownWho = -1;
     this.shownLine = -1;
     this.line = -1;
+    this.lastEnemy = -1;
+    this.lastAnswer = -1;
+    this.remarkAt = 0;
+    this.leaving = false;
+    this.navSaid = false;
+    this.called = -1;
     this.who = PILOT;
+    this.openAt = this.m.roll(0x64) + this.m.ticks + 0x64;
+  }
+
+  /** 0x414b65: the beacon went up — with the copilot navigating, the pilot says so (`navigates` 0x417617's first) */
+  x414b65(navigates: number): void {
+    if (navigates !== 0) this.navSaid = true;
   }
 
   /** 0x414bb4: whose line is playing, −1 while none is */
@@ -140,7 +216,7 @@ export class Comms {
     return this.who >= 0 && this.key >= 0 ? this.who : -1;
   }
 
-  /** `[0x4373e0]`, set by 0x414b8f; read by the flight's chatter (0x413c6d, not ported yet) */
+  /** `[0x4373e0]`: the enemy broke in (0x414b8f) — the pilot answers (0x413da7) */
   hinted = false;
 
   /** 0x414b8f: one time in two, `[0x4373e0]` set */
@@ -151,14 +227,14 @@ export class Comms {
   /**
    * 0x414bce: the line playing cut, and who asked last the pilot, for line 0
    * (`[0x4373e8]`, `[0x4373f0]`: 0, not 0x413af8's −1), the box to show it
-   * again, `[0x4373e0]` and `[0x4373e4]` clear (`[0x4373dc]`, cleared too,
-   * the port has no use for)
+   * again, `[0x4373e0]`, `[0x4373e4]` and `[0x4373dc]` clear
    */
   x414bce(): void {
     this.stop();
     this.who = PILOT;
     this.line = 0;
     this.shownLine = -1;
+    this.navSaid = false;
     this.leaving = false;
     this.hinted = false;
   }
@@ -170,12 +246,22 @@ export class Comms {
     if (this.voiced) this.m.stopSound();
   }
 
-  /**
-   * 0x413c6d with its flag clear — the Mart's idle: one step of the box. (With
-   * it set, in flight, the pilot's chatter is decided here too; that is the
-   * flying's, not ported yet.)
-   */
+  /** 0x413c6d with its flag clear — the Mart's idle: one step of the box */
   tick(): void {
+    this.step(null);
+  }
+
+  /** 0x413c6d(1): a step of the box in flight, the pilot's chatter with it */
+  flightTick(f: Chatter): void {
+    this.step(f);
+  }
+
+  /** 0x413c6d's ticks: roll(200) + the time + 150 (0x413cbe, 0x413f83, 0x414136) */
+  private later(): number {
+    return this.m.roll(0xc8) + this.m.ticks + 0x96;
+  }
+
+  private step(f: Chatter | null): void {
     const m = this.m;
     const head = this.heads[this.who];
     if (!head) return;
@@ -189,14 +275,112 @@ export class Comms {
     if (this.line !== this.shownLine) {
       this.shownLine = this.line;
       this.start(head);
+      this.remarkAt = this.later();
     }
     if (this.key >= 0) return this.advance(head);
-    // 0x414120: nothing playing — the idle racks come round
+    if (f) {
+      if (this.chatter(f)) return;
+    } else {
+      // 0x414120
+      this.hinted = false;
+      this.openAt = 0;
+      this.leaving = false;
+      this.navSaid = false;
+      this.remarkAt = this.later();
+    }
+    // 0x414158: nothing playing — the idle racks come round
     for (let k = 0; k < 4; k++) {
       if (m.ticks < head.next[k]) continue;
       head.next[k] = m.ticks + this.wait(head.talk, k);
       this.ask(this.who, k);
     }
+  }
+
+  /**
+   * 0x413cfd … 0x414158: the pilot's chatter on a quiet tick in flight; true
+   * when the tick is done, false when the idle racks come round after it
+   */
+  private chatter(f: Chatter): boolean {
+    const m = this.m;
+    const sum = (): number => {
+      const [nav, hover, arms] = f.copilots();
+      return nav + hover + arms;
+    };
+    if (this.who !== PILOT) {
+      // 0x414105
+      this.who = PILOT;
+      this.line = 0;
+      this.shownLine = -1;
+      return true;
+    }
+    if (this.openAt !== 0) {
+      if (m.ticks > this.openAt) {
+        if (sum() === 0) this.ask(PILOT, 4);
+        this.openAt = 0;
+      }
+      return true;
+    }
+    if (this.navSaid) {
+      this.ask(PILOT, 0x1e);
+      this.navSaid = false;
+      return true;
+    }
+    if (this.leaving) {
+      this.ask(PILOT, 0x20);
+      this.leaving = false;
+      return true;
+    }
+    if (this.hinted) {
+      let k: number;
+      do k = m.roll(4);
+      while (k === this.lastAnswer);
+      this.lastAnswer = k;
+      if (k <= 3) this.ask(PILOT, 0x20 + k);
+      this.hinted = false;
+      return true;
+    }
+    if (this.remarkAt !== 0 && m.ticks > this.remarkAt) {
+      switch (m.roll(6)) {
+        case 1: {
+          const n = sum();
+          if (n >= 3) this.ask(PILOT, 9);
+          if (n <= 0) this.ask(PILOT, 0xa);
+          break;
+        }
+        case 2:
+          this.ask(PILOT, f.shields() < 0x21c0 ? 0xe : 0xf);
+          break;
+        case 3:
+          this.ask(PILOT, m.roll(2) === 1 ? 0x10 : 0x11);
+          break;
+        case 4:
+          if (f.wreckage() !== 0) this.ask(PILOT, 5);
+          break;
+        default: {
+          let k: number;
+          do k = m.roll(4);
+          while (k === this.lastEnemy);
+          this.lastEnemy = k;
+          this.ask(ENEMY, [0, 4, 6, 7][k - 1]);
+          this.x414b8f();
+        }
+      }
+      this.remarkAt = this.later();
+      return true;
+    }
+    const kind = f.beacon();
+    if (kind !== this.called && f.squared()) {
+      if (kind === -1) this.called = kind;
+      else if (kind >= 0 && kind <= 3 && f.ahead(kind)) {
+        this.ask(PILOT, [6, 7, 0x24, 8][kind]);
+        this.called = kind;
+      }
+    }
+    if (f.homing() >= 2 && m.roll(8) === 1) {
+      this.ask(PILOT, 0xb);
+      return true;
+    }
+    return false;
   }
 
   /** 0x41496f */

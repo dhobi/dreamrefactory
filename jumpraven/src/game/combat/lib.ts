@@ -2,7 +2,8 @@
  * RAVEN.EXE's shared library helpers the actors call (0x426124 … 0x429314),
  * each by its address — the ones world.ts does not already hold.
  */
-import { dist, cosMul, sinMul, abs, CENTRE_X, CENTRE_Y, FOCAL, type Obj, type Pt, type World } from "./world";
+import type { Chatter } from "../comms";
+import { dist, cosMul, sinMul, abs, newObj, CENTRE_X, CENTRE_Y, FOCAL, type Obj, type Pt, type World } from "./world";
 
 /** 0x427b47: `o` is in a block — never above 500 up */
 export function inBlock(w: World, o: Obj): boolean {
@@ -259,4 +260,33 @@ export function waysToward(w: World, angle: number, dx: number, dy: number): [nu
       return dx < 0 ? [0, 0xc0, 0x80] : [0x80, 0xc0, 0];
   }
   throw new Error(`0x409eb4: facing ${angle}, no ways to choose`);
+}
+
+/**
+ * What the comms box's chatter in flight (0x413c6d(1), src/game/comms.ts)
+ * reads of the world, each by the EXE's call
+ */
+export function chatterOf(w: World): Chatter {
+  const beacon = (): { n: number; at: Obj } => {
+    const out = { n: -1 };
+    const at = newObj();
+    w.hud.x417d4d(out, at);
+    return { n: out.n, at };
+  };
+  return {
+    copilots: () => w.hud.x417617(),
+    shields: () => w.hud.shields(),
+    wreckage: () => w.pyro.x41d6c3(),
+    beacon: () => beacon().n,
+    squared: () => (w.cam.angle & 0x3f) === 0,
+    ahead: (kind) => {
+      const o = kind === 0 ? w.fuel.nth(0).obj : kind === 1 ? w.weap.nth(0).obj : beacon().at;
+      return downFromCraft(w, w.cam.angle, o);
+    },
+    homing: () => {
+      const missiles = w.copter.missiles();
+      const boss = w.boss.homing();
+      return missiles + (boss + w.tank.x425412());
+    },
+  };
 }

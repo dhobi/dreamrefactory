@@ -53,10 +53,9 @@
  * 0x434ed0, 0x434eec, the waypoint 0x434e90) are the object's own, so they
  * start at 0 each flight here, where the EXE carries them over.
  */
-import type { CopilotApi } from "./api";
+import type { CopilotApi, Shot } from "./api";
 import { downFromCraft, turnToward, unproject } from "./lib";
 import { abs, cosMul, dist, newObj, setObj, sinMul, type Obj, type World } from "./world";
-import type { Shot } from "./api";
 
 /** the flight's moves (src/game/flight.ts): a step, a left turn, a right turn */
 const UP = 1;
@@ -231,7 +230,7 @@ export class Copilot implements CopilotApi {
   // ---- HOVER -------------------------------------------------------------------
 
   /** the slide held within ±step, which 0x404e7c takes back toward the centre line */
-  private held_(step: number): number {
+  private centred(step: number): number {
     let b = this.w.slide;
     if (-step > this.w.slide) b = -step;
     if (b > step) b = step;
@@ -246,7 +245,7 @@ export class Copilot implements CopilotApi {
     const at = newObj();
     w.hud.x417d4d(mark, at);
     if (mark.n !== -1 && at.cellX === c.cellX && at.cellY === c.cellY && w.moveFrame < 0) {
-      const b = this.held_(step);
+      const b = this.centred(step);
       if (mark.n === 1) {
         const ship = w.weap.nth(0).obj;
         if (ship.cellX === c.cellX && ship.cellY === c.cellY) return w.pyro.slide(-b, step);
@@ -261,7 +260,7 @@ export class Copilot implements CopilotApi {
       for (let k = 0; k < n; k++) {
         w.pyro.x41d6de(k, o);
         if (o.z > 0 || o.cellX !== c.cellX || o.cellY !== c.cellY) continue;
-        return w.pyro.slide(-this.held_(step), -step);
+        return w.pyro.slide(-this.centred(step), -step);
       }
     }
     if (this.dodging) {
@@ -274,7 +273,7 @@ export class Copilot implements CopilotApi {
     }
     if (this.shells < this.dodgeAfter) {
       if (this.settleAt !== 0 && w.m.ticks > this.settleAt) {
-        w.pyro.slide(-this.held_(step), -step);
+        w.pyro.slide(-this.centred(step), -step);
         if (w.slide === 0 && c.z === 0x46) this.settleAt = 0;
       }
       return;
@@ -312,7 +311,6 @@ export class Copilot implements CopilotApi {
     let y2 = c.cellY;
     const dy = c.cellY - t.cellY;
     const dx = c.cellX - t.cellX;
-    let want: number;
     if (dx === 0 && dy === 0) {
       if (kind !== 0 && kind !== 1) return;
       // over the fuel station or the weapons ship: face it; not there, face the enemies (0x406b5b)
@@ -353,7 +351,7 @@ export class Copilot implements CopilotApi {
       }
     }
     // a cell short of the pods while the boss is up, it waits
-    const waits = (): boolean => kind === 2 && abs(dx) <= 1 && abs(dy) <= 1 && w.boss.x4041c9() !== 0;
+    const waits = (): boolean => kind === 2 && abs(dx) <= 1 && abs(dy) <= 1 && w.boss.up() !== 0;
     if (ok1 && c.angle === h1 && !w.solid(x1, y1)) {
       if (!waits()) this.steer(UP);
       return;
@@ -362,7 +360,7 @@ export class Copilot implements CopilotApi {
       if (!waits()) this.steer(UP);
       return;
     }
-    want = h1;
+    let want = h1;
     if (w.solid(x1, y1)) {
       if (w.solid(x2, y2)) return;
       want = h2;
@@ -519,10 +517,7 @@ export class Copilot implements CopilotApi {
   /** 0x4055ae: the first enemy down the heading within five cells, into `out`; what it is, 0 none */
   private pick(out: Obj): number {
     const w = this.w;
-    const lists: [{ nth(k: number): { obj: Obj; dying: number } }, number, number][] = [
-      [w.boss, w.boss.x4041c9(), T_BOSS],
-    ];
-    const tryList = (m: { nth(k: number): { obj: Obj; dying: number } }, n: number): boolean => {
+    const first = (m: { nth(k: number): { obj: Obj; dying: number } }, n: number): boolean => {
       for (let k = 0; k < n; k++) {
         const t = m.nth(k);
         if (t.dying !== 0 || !downFromCraft(w, w.cam.angle, t.obj)) continue;
@@ -531,11 +526,11 @@ export class Copilot implements CopilotApi {
       }
       return false;
     };
-    if (tryList(lists[0][0], lists[0][1])) return T_BOSS;
-    if (tryList(w.copter, w.copter.count())) return T_COPTER;
-    if (tryList(w.tank, w.tank.count())) return T_TANK;
-    if (tryList(w.jeep, w.jeep.count())) return T_JEEP;
-    if (tryList(w.bike, w.bike.count())) return T_BIKE;
+    if (first(w.boss, w.boss.up())) return T_BOSS;
+    if (first(w.copter, w.copter.count())) return T_COPTER;
+    if (first(w.tank, w.tank.count())) return T_TANK;
+    if (first(w.jeep, w.jeep.count())) return T_JEEP;
+    if (first(w.bike, w.bike.count())) return T_BIKE;
     return 0;
   }
 
@@ -560,7 +555,7 @@ export class Copilot implements CopilotApi {
         hud.x417d4d(mark, at);
         if (mark.n !== -1 && at.cellX === w.cam.cellX && at.cellY === w.cam.cellY && w.moveFrame < 0) return DEFENSIVE;
       }
-      const homing = w.tank.x425412() + (w.copter.missiles() + w.boss.x403345());
+      const homing = w.tank.x425412() + (w.copter.missiles() + w.boss.homing());
       if (hud.tier(DEFENSIVE) === 1 && level === 5 && w.roll(10) <= this.defensive && homing > 0 && w.pyro.x41b6bd() === 0) return DEFENSIVE;
       if (hud.tier(DEFENSIVE) === 2 && level === 3 && w.roll(10) <= this.defensive && homing > 0 && w.pyro.x41b6bd() === 0) return DEFENSIVE;
       if (hud.tier(DEFENSIVE) === 3 && w.roll(10) <= this.defensive && homing > 0 && w.pyro.x41b6bd() === 0) return DEFENSIVE;

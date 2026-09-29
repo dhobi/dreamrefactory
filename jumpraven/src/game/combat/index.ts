@@ -9,8 +9,7 @@
  *   targets  0x40c545  jeep, tank, copter, boss, bike, fuel, weap, the craft, the wreckage
  *   hits     0x41b70b  bike, tank, copter, boss, jeep, fuel, weap
  *   reset    0x40c4b5  pyro, bike, jeep, tank, copter, boss, fuel, weap
- *
- * A module not ported yet stands in as {@link quiet}: nothing of it is up.
+
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import type { Co, Machine } from "../machine";
@@ -26,20 +25,7 @@ import { Copter } from "./copter";
 import { Boss } from "./boss";
 import { Fuel } from "./fuel";
 import { Weap } from "./weap";
-
-/**
- * A module that is not there: a count of 0, no hits, nothing where anything
- * is asked for
- */
-function quiet<T>(name: string): T {
-  return new Proxy({} as object, {
-    get: (_, k) => {
-      if (k === "then") return undefined;
-      if (k === "toString") return () => `(no ${name})`;
-      return k === "where" || k === "pick" ? () => null : () => 0;
-    },
-  }) as T;
-}
+import { Copilot } from "./copilot";
 
 /** the band's bank by `[0x43b304]` (0x40ba15) */
 export const BANKS = ["hiphop", "tek", "grunge", "metal"];
@@ -62,12 +48,12 @@ export function* assemble(m: Machine, w: World, band: number, comms: Comms, hudS
   w.boss = new Boss(w, yield* file("boss"));
   w.fuel = new Fuel(w, yield* file("fuel"));
   w.weap = new Weap(w, yield* file("weap"));
-  w.copilot = quiet("copilot");
-  const mods = (list: unknown[]): Module[] => list.filter((x) => !String(x).startsWith("(no ")) as Module[];
+  w.copilot = new Copilot(w);
+  const mods = (list: unknown[]): Module[] => list as Module[];
   w.frameList = mods([w.bike, w.jeep, w.tank, w.copter, w.boss, w.fuel, w.weap, pyro, w.copilot]);
   w.shiftList = mods([pyro, w.bike, w.jeep, w.tank, w.copter, w.boss, w.fuel, w.weap, hud, w.copilot]);
-  w.targetList = [w.jeep, w.tank, w.copter, w.boss, w.bike, w.fuel, w.weap, pyro.craftTargets, pyro.wreckTargets].filter((x) => !String(x).startsWith("(no "));
-  w.hitList = [w.bike, w.tank, w.copter, w.boss, w.jeep, w.fuel, w.weap].filter((x) => !String(x).startsWith("(no "));
+  w.targetList = [w.jeep, w.tank, w.copter, w.boss, w.bike, w.fuel, w.weap, pyro.craftTargets, pyro.wreckTargets];
+  w.hitList = [w.bike, w.tank, w.copter, w.boss, w.jeep, w.fuel, w.weap];
   w.resetList = mods([pyro, w.bike, w.jeep, w.tank, w.copter, w.boss, w.fuel, w.weap]);
   for (const r of w.resetList) r.reset();
   w.copilot.reset();

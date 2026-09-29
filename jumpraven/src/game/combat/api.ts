@@ -81,8 +81,11 @@ export interface WeapApi extends Enemy {
 }
 
 export interface CopilotApi {
+  /** 0x404b20: a flight's start (0x40c4de) — the pilot's numbers, the counts zeroed */
   reset(): void;
+  /** 0x404d26: a frame, last of 0x40c517's list */
   frame(): void;
+  /** 0x406df9: the world moved — its waypoint with it */
   shift(dx: number, dy: number): void;
   /** 0x404e11: a shell fired at the craft by an enemy facing `heading` (the tank's 0x425584, the copter's, the boss's) — the copilot's count of the craft sitting still: while its slide, height and speed stay as they were it counts each, and apart those not fired along its heading or the reverse; a move starts both again */
   x404e11(heading: number): void;

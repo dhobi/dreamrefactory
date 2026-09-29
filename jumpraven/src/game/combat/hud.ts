@@ -54,9 +54,9 @@ import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { BitmapFont } from "@dreamfactory/engine/v0/font";
 import { SCREEN_H, SCREEN_W, type Rect } from "@dreamfactory/engine/v0/screen";
 import { AMMO_FULL } from "../records";
-import { PILOT, REPAIR, type Comms } from "../comms";
+import { PILOT, REPAIR, type Chatter, type Comms } from "../comms";
 import type { HudApi } from "./api";
-import { turnToward } from "./lib";
+import { chatterOf, turnToward } from "./lib";
 import { World, abs, dist, inside, newObj, setObj, type Obj } from "./world";
 
 /** `panel`'s pictures (0x415094: 0x33 of them), by what each is */
@@ -229,6 +229,8 @@ export class Hud implements HudApi {
    * bay's screen and clears this (the beacon is already off, 0x418254).
    */
   bay = false;
+  /** what the comms box's chatter reads of the world (src/game/combat/lib.ts) */
+  private chatter: Chatter | null = null;
 
   constructor(
     private readonly w: World,
@@ -384,8 +386,8 @@ export class Hud implements HudApi {
       this.copy(LEFT, this.rect[PIC.snow]);
     }
     if (!s.videoOut) {
-      // 0x413c6d(1): the comms box's tick in flight (its flight branch is comms.ts's to port)
-      this.comms?.tick();
+      // 0x413c6d(1): the comms box's tick in flight, the pilot's chatter with it
+      this.comms?.flightTick((this.chatter ??= chatterOf(this.w)));
       this.clip = WHOLE;
     }
     if (s.nav !== sh.nav) {
@@ -810,7 +812,8 @@ export class Hud implements HudApi {
     s.beaconOn = 1;
     this.shown.beaconOn = -1;
     this.w.soundOver(0x3a);
-    // 0x414b65: with the copilot navigating, the pilot says so (comms' [0x4373dc]; its flight branch is not ported)
+    // 0x414b65: with the copilot navigating, the pilot says so (comms' `[0x4373dc]`)
+    this.comms?.x414b65(this.s.nav);
   }
 
   /** 0x417d33: the beacon off */
