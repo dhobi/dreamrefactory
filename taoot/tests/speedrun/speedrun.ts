@@ -10,7 +10,7 @@
  *   SHEET=taoot/tests/speedrun/any.sheet npm run speedrun -w taoot
  *
  * This is NOT a test and does not gate anything. `npm run test:browser:playthrough -w taoot`
- * is still the browser gate and `npm run test:playthrough` is still the oracle;
+ * is still the browser gate and `npm run test:machine` is still the oracle;
  * both are untouched by everything in this directory, goldens included. What this
  * does is play the game as fast as a human legally can and say how long it took.
  *

@@ -10,8 +10,8 @@ import { defineConfig } from "vitest/config";
  * `npm test` stays a commit-time gate while the playthrough grows a mission at
  * a time.
  *
- *   npm run test:playthrough -w taoot
- *   TAOOT_RECORD=1 npm run test:playthrough -w taoot   # re-record the traces
+ *   npm run test:machine -w taoot
+ *   TAOOT_RECORD=1 npm run test:machine -w taoot   # re-record the traces
  */
 export default defineConfig({
   test: {

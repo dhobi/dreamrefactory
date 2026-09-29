@@ -12,7 +12,7 @@ the conventions a new segment will trip on. The suites that run it are
 continuous session and the closing narration comes out `mission = "good"` — all
 four artifacts the ending is scored on in Frank's hands, `onehappens`,
 `twohappens` and `revhappens` all false. Both hosts agree: `npm run
-test:playthrough` **30/30** headless, and the browser gate **91 beats over 27
+test:machine` **30/30** headless, and the browser gate **91 beats over 27
 segments with no divergence at all** — every one of them carried, zero checkpoint
 loads, 23.7 min, ending on `credits.mov`.
 
@@ -81,7 +81,7 @@ spends most of its time replaying untouched segments.
 
 | while | run | cost |
 |-------|-----|------|
-| writing a segment | `npm test && npm run test:playthrough` | ~2 min |
+| writing a segment | `npm test && npm run test:machine` | ~2 min |
 | that segment's cross-host check | `SEGMENTS=13 npm run test:browser:seg -w taoot` | 20 s – 5 min |
 | a mission is finished | `npm run test:browser:m0 -w taoot` / `:m1` / `:m2` | 1 – 8 min |
 | before a long break, or after touching nav/aim/drivers | `npm run test:browser -w taoot` | ~24 min |
@@ -94,8 +94,8 @@ on; none of them the game's own pace.
 
 ```
 npm test                        # the gate
-npm run test:playthrough        # 27 segments + 3 property tests — writes out/checkpoints/*.ti
-TAOOT_RECORD=1 npx vitest run --config taoot/vitest.playthrough.config.ts   # re-record goldens
+npm run test:machine        # 27 segments + 3 property tests — writes out/checkpoints/*.ti
+TAOOT_RECORD=1 npx vitest run --config taoot/vitest.machine.config.ts   # re-record goldens
 TAOOT_RECHECKPOINT=1 …          # …and rebuild the .ti checkpoints (after a save change)
 npm run watch:m2p0 -w taoot              # watch segment 7 in a real window
 SEGMENTS=9 npx tsx taoot/tests/browser/playthrough.ts    # one segment alone, ~35 s

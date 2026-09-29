@@ -11,7 +11,7 @@ import { defineConfig } from "vitest/config";
  *
  * Two categories are deliberately not here, and both are excluded by living
  * somewhere this glob cannot reach rather than by a list that could rot:
- * playthroughs (`taoot/vitest.playthrough.config.ts` — minutes of game time per
+ * playthroughs (`taoot/vitest.machine.config.ts` — minutes of game time per
  * segment, its own budget) and browser suites (each package's `tests/browser/`,
  * which need a live dev server and are run by `tsx`).
  */

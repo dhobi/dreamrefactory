@@ -51,10 +51,11 @@ Interactive Media's:
 discs). The first two are two years apart and different enough on disk that
 several formats have a `-v1` page of their own; the third is the same generation
 as Titanic and still nothing like it, because it ships no `.SET` file at all. A
-fourth, **[Skull Cracker](skullcracker/)**, is read but not played: its discs open
-completely and its films run, and there is no game under them to boot. A fifth,
-**[RedJack](redjack/)** (1998, DreamFactory 5), runs as a prototype: it boots and
-its rooms, films and characters play, and it has not been played through.
+fourth, **[Skull Cracker](skullcracker/)**, has no script to interpret: its logic
+is in `SC.EXE`, and it plays from its films and menu through its sixteen levels
+with that logic read out of the executable. A fifth,
+**[RedJack](redjack/)** (1998, DreamFactory 5), plays from its first day to its
+end, and saves.
 A sixth, **[Lunicus](lunicus/)** (DreamFactory 0), plays from the intro to its
 queen, and saves.
 

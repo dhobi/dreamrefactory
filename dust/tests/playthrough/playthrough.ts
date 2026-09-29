@@ -1,7 +1,7 @@
 /**
  * Dust, played — one rung of the disc's own playthrough at a time.
  *
- *   npm run test:playthrough -w dust
+ *   npm run test:machine -w dust
  *
  * The claim this suite makes is one Titanic's route cannot: **both ends were
  * written by `DF.EXE` in 1995.** A segment loads the shipped save its rung
