@@ -52,7 +52,7 @@ import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { BikeApi } from "./api";
 import { aimAt, downTheLine, inBlock, meets, tooFar, turnToward, type EnemyShot } from "./lib";
-import { abs, copyObj, cosMul, dist, inside, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
+import { KIND, abs, copyObj, cosMul, dist, inside, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
 
 /** `pyro`'s pictures the bikes draw (0x4379d0 + 4·index; src/game/combat/pyro.ts PIC) */
 const SHELL = 0x08;
@@ -291,8 +291,7 @@ export class Bike implements BikeApi {
     pic += h * 0x21;
     const rect = w.sprite(this.pics[pic], p.y, p.x, depth, mirror);
     if (depth < 0x140 || !rect) return;
-    widen(rect);
-    r.rect = rect;
+    r.rect = widen(rect);
     r.depth = depth;
     r.shown = 1;
   }
@@ -681,11 +680,11 @@ export class Bike implements BikeApi {
     return this.recs.filter((r) => r.self >= 0).length;
   }
 
-  /** 0x402d39: the k-th bike up; its kind is 0 (it answers nothing but the eax it zeroed, {@link KIND}.bike) */
+  /** 0x402d39: the k-th bike up, KIND.bike (0: it answers the eax it zeroed) */
   nth(k: number): { obj: Obj; kind: number; flag: number; dying: number } {
     for (const r of this.recs) {
       if (r.self >= 0) k--;
-      if (k < 0) return { obj: objOf(r), kind: 0, flag: r.pod, dying: r.state === DYING ? 1 : 0 };
+      if (k < 0) return { obj: objOf(r), kind: KIND.bike, flag: r.pod, dying: r.state === DYING ? 1 : 0 };
     }
     throw new Error("0x402d39: no such bike (0x41e28a 0x6b, 4)");
   }
@@ -712,15 +711,17 @@ export class Bike implements BikeApi {
 }
 
 /** 0x401be4 / 0x4075b8: a rect narrower or shorter than 0x14 widened to 0x14 about its middle (the aim's) */
-export function widen(r: Rect): void {
-  const wd = r[3] - r[1];
+export function widen(r: Rect): Rect {
+  let [top, left, bottom, right] = r;
+  const wd = right - left;
   if (wd < 0x14) {
-    r[1] += (wd >> 1) - 0xa;
-    r[3] = r[1] + 0x14;
+    left += (wd >> 1) - 0xa;
+    right = left + 0x14;
   }
-  const ht = r[2] - r[0];
+  const ht = bottom - top;
   if (ht < 0x14) {
-    r[0] += (ht >> 1) - 0xa;
-    r[2] = r[0] + 0x14;
+    top += (ht >> 1) - 0xa;
+    bottom = top + 0x14;
   }
+  return [top, left, bottom, right];
 }

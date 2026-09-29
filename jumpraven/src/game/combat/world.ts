@@ -115,9 +115,10 @@ export interface Pt {
 
 /**
  * What 0x40c5d5 answers of a target, the kinds the copilot and the HUD tell
- * apart (each module's `nth` returns its kind)
+ * apart (each module's `nth` returns its kind; the bike's 0x402d39 answers
+ * only the eax it zeroed, 0)
  */
-export const KIND = { fuel: 1, weap: 2, player: 3, jeep: 4, tank: 5, copter: 6, boss: 7, debris: 8 } as const;
+export const KIND = { bike: 0, fuel: 1, weap: 2, player: 3, jeep: 4, tank: 5, copter: 6, boss: 7, debris: 8 } as const;
 
 /** a draw list item, the EXE's 40 bytes (0x40e2a8) */
 export interface DrawItem {
@@ -175,8 +176,11 @@ export type Enemy = Module & Targets & Hittable;
  * speed, 0x43cf6e its shots' interval, 0x43cf72 how many jeeps, 0x43cfb2 a
  * jeep's strength (src/game/combat/jeep.ts); 0x43cf8a the tank's speed,
  * 0x43cf8e its shots' interval, 0x43cf92 how many tanks, 0x43cf96 its turn a
- * frame, 0x43cfb6 its strength (tank.ts); 0x43cf82 how many bikes, 0x43cfa6
- * copters.
+ * frame, 0x43cfb6 its strength (tank.ts); 0x43cf7a the bike's speed,
+ * 0x43cf7e its shots' interval, 0x43cf82 how many bikes, 0x43cfae its strength
+ * (bike.ts); 0x43cf9e the copter's speed, 0x43cfa2 its shots' interval,
+ * 0x43cfa6 how many copters, 0x43cfaa its turn a frame, 0x43cfba its strength
+ * (copter.ts).
  */
 export interface Params {
   x43cf5a: number; x43cf5e: number; x43cf62: number; x43cf6a: number; x43cf6e: number; x43cf72: number;

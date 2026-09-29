@@ -86,6 +86,8 @@ export class JumpRaven {
   hudState: HudState = newHudState();
   /** the flight while one is up */
   flight: FlightState | null = null;
+  /** the flight's world while one is up (src/game/combat/world.ts), for a machine test */
+  world: World | null = null;
   /** the key held down last, as RAVEN.EXE repeats it (message 7 with `[0x43b2cc]`) */
   private heldKey: string | null = null;
   /** the screen between the briefings that is up, by name — what a machine test waits on */
@@ -401,6 +403,7 @@ export class JumpRaven {
     flight.palettes(base, cluts);
     hud.reset();
     this.flight = flight.state;
+    this.world = w;
     this.played.push("citymaze");
     m.screen.setPalette(base);
     flight.begin();
@@ -490,6 +493,7 @@ export class JumpRaven {
       }
     } finally {
       this.flight = null;
+      this.world = null;
     }
   }
 

@@ -43,10 +43,10 @@ export interface TankApi extends Vehicles {
 }
 
 export interface CopterApi extends Vehicles {
-  /** 0x407cb5 */
-  x407cb5(): number;
-  /** 0x408a03 */
-  x408a03(a: number, b: number, c: number): number;
+  /** 0x407cb5: the copters' homing missiles up (`[0x434f04]`), for the copilot (0x4051a4) and the chatter (0x413c6d) */
+  missiles(): number;
+  /** 0x408a03: another copter than `self` (−1 for any: the weapons ship's 0x42aa3d) is in cell (x, y), or going to it */
+  occupied(x: number, y: number, self: number): boolean;
 }
 
 export interface BossApi extends Enemy {
@@ -70,8 +70,8 @@ export interface FuelApi extends Enemy {
 }
 
 export interface WeapApi extends Enemy {
-  /** 0x42aa71 */
-  x42aa71(): number;
+  /** 0x42aa71: the weapons ship is up and in cell (x, y) (the copters' 0x4089ae) */
+  x42aa71(x: number, y: number): boolean;
   /** 0x42aa99: where the weapons ship is, if it is up */
   where(): Obj | null;
   /** 0x429360: the weapons ship called in, just before its beacon is set (0x4183c1) */
