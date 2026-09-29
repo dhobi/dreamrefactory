@@ -19,6 +19,25 @@ export function dosName(name: string): string {
 }
 
 export class Machine extends MachineV0 {
+  /* ---- the menu bar's settings (src/menu.ts) --------------------------- */
+
+  /**
+   * Sound ▸ Sound Off … Sound Level 7, `[0x439fb4]`, 0 to 7: the device's
+   * volume (0x421644 → 0x428c68), 7 from the start (0x42087d)
+   */
+  volume = 7;
+  /** the Sound dialog's Theme, `[0x439fb8]` (0x42091a): the flight's theme tune — which is not ported, so only the mark */
+  theme = true;
+  /** Settings ▸ Cache Mazes, `[0x439fc0]` (0x420924): the EXE copied the mazes to the hard disk; a page has nowhere to, so only the mark */
+  cacheMazes = true;
+
+  /** 0x421644(level + 1) */
+  setVolume(level: number): void {
+    this.volume = level;
+    this.speaker.volume?.(level / 7);
+    this.log(`Sound ▸ ${level ? `Sound Level ${level}` : "Sound Off"}`);
+  }
+
   /** the day's folder, then `SHARED\` (0x40ea4a, the day's folder named by 0x40e8df) */
   resolve(name: string, day: number): string | null {
     const file = dosName(name);

@@ -10,10 +10,14 @@
  *   - runs the clock: a tick per 1/60 s of wall time, at most a few behind
  *   - draws the screen when its version moves, and plays its sounds
  *   - hands in input: a mouse-down or -up in the 512x384 screen's pixels, a key
+ *   - puts up the menu bar (src/menu.ts) and the EXE's dialogs (src/dialogs.ts),
+ *     and keeps RAVEN.SCO — the keys and the high scores — in the browser
  *
  * The machine tests (`tests/machine/`) drive the same machine with no page.
  */
+import "@dreamfactory/engine/web/window-bar.css";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { openWindowDialog, windowDialogOpen } from "@dreamfactory/engine/web/window-dialog";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION } from "@dreamfactory/site/version";
@@ -21,6 +25,8 @@ import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND } from "./game/data";
 import { JumpRaven } from "./game/game";
 import { Input } from "./game/input";
 import type { GameFiles, Speaker } from "./game/machine";
+import { askHighScoreName, askQuit, editKeys, pause, soundDialog } from "./dialogs";
+import { installMenu } from "./menu";
 
 const SCALE = 2;
 const RIP = "gamefiles/RAVEN/";
@@ -135,6 +141,17 @@ const files: GameFiles = {
  * ------------------------------------------------------------------------- */
 
 let audio: AudioContext | null = null;
+/** Sound ▸ Sound Off … Level 7: the device's volume, which every sound goes through */
+let master: GainNode | null = null;
+let volume = 1;
+const out = (): AudioNode => {
+  if (!master) {
+    master = audio!.createGain();
+    master.gain.value = volume;
+    master.connect(audio!.destination);
+  }
+  return master;
+};
 const playing = new Set<AudioBufferSourceNode>();
 const speaker: Speaker = {
   play(samples, rate) {
@@ -143,7 +160,7 @@ const speaker: Speaker = {
     buf.getChannelData(0).set(samples);
     const src = audio.createBufferSource();
     src.buffer = buf;
-    src.connect(audio.destination);
+    src.connect(out());
     src.onended = () => playing.delete(src);
     playing.add(src);
     src.start();
@@ -152,13 +169,46 @@ const speaker: Speaker = {
     for (const s of playing) s.stop();
     playing.clear();
   },
+  volume(level) {
+    volume = level;
+    if (master) master.gain.value = level;
+  },
 };
 
 /* ------------------------------------------------------------------------- *
  * The machine
  * ------------------------------------------------------------------------- */
 
-const game = new JumpRaven(files, { speaker, seed: Date.now() & 0xffff, log: say });
+const SCO_KEY = "jumpraven.sco";
+function storedSco(): Uint8Array | undefined {
+  try {
+    const b64 = localStorage.getItem(SCO_KEY);
+    return b64 ? Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function keepSco(bytes: Uint8Array): void {
+  try {
+    localStorage.setItem(SCO_KEY, btoa(String.fromCharCode(...bytes)));
+  } catch (e) {
+    complain(`the high scores and keys could not be kept: ${String(e)}`);
+  }
+}
+
+const frameEl = $("frame");
+const game = new JumpRaven(files, {
+  speaker,
+  seed: Date.now() & 0xffff,
+  log: say,
+  sco: storedSco(),
+  keepSco,
+  askName: (done) => askHighScoreName(frameEl, done),
+  askQuit: (done) => askQuit(frameEl, done),
+  pause: (done) => pause(frameEl, done),
+  soundDialog: (v, theme, done) => soundDialog(frameEl, v, theme, done),
+  keysDialog: (fields, defaults, done) => editKeys(frameEl, fields, defaults, done),
+});
 const m = game.m;
 const input = new Input(game);
 const image = ctx.createImageData(SCREEN_W, SCREEN_H);
@@ -190,6 +240,24 @@ function where(): string {
   return m.where || game.phase;
 }
 
+/** the game window's menu bar, on the frame over the picture (src/menu.ts) */
+const menu = installMenu(frameEl, game, input, {
+  // saved games are not ported yet: the EXE's Open dialog is the next piece
+  open: () => say("File ▸ Open: saved games are not ported yet"),
+  // 0x422431: MessageBox(“Available Memory: %d”) — what the browser will say of its heap, if anything
+  memory: () => {
+    const mem = (performance as { memory?: { jsHeapSizeLimit: number; usedJSHeapSize: number } }).memory;
+    const text = mem ? `Available Memory: ${mem.jsHeapSizeLimit - mem.usedJSHeapSize}` : "Available Memory: the browser does not say";
+    openWindowDialog(frameEl, { title: "Memory", w: 137, h: 50, controls: [
+      { id: 103, kind: "static", text, x: 5, y: 8, w: 127, h: 20, center: true },
+      { id: 101, kind: "button", text: "OK", x: 45, y: 32, w: 46, h: 11, default: true },
+    ] }, { onCommand: (id, d) => id === 101 && d.close() });
+  },
+  // File ▸ Exit closed the window (0x4222fb(4)); a page leaves for the front door
+  exit: () => (location.href = new URL("../", location.href).href),
+  live: () => running && !windowDialogOpen(),
+});
+
 let running = false;
 let last = 0;
 let owed = 0;
@@ -205,6 +273,7 @@ function frame(now: number): void {
     running = false;
   }
   draw();
+  menu.sync();
   const s = where();
   if (s !== lastStatus) locEl.textContent = lastStatus = s;
   requestAnimationFrame(frame);
@@ -228,7 +297,7 @@ const at = (e: PointerEvent): { x: number; y: number } => {
   return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
 };
 canvas.addEventListener("pointerdown", (e) => {
-  if (!running) return;
+  if (!running || windowDialogOpen()) return;
   const p = at(e);
   input.down(p.x, p.y);
 });
@@ -242,10 +311,11 @@ addEventListener("pointerup", (e) => {
   input.up(p.x, p.y);
 });
 document.addEventListener("keydown", (e) => {
-  if (focusOwnsKey(e.target, e.key)) return;
-  if (e.key === "b") return toggleLog();
+  if (focusOwnsKey(e.target, e.key) || windowDialogOpen()) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (e.key === "b" && !ctrl) return toggleLog();
   if (!running || e.repeat) return;
-  if (input.keyDown(e.key)) e.preventDefault();
+  if (input.keyDown(e.key, ctrl)) e.preventDefault();
 });
 document.addEventListener("keyup", (e) => input.keyUp(e.key));
 

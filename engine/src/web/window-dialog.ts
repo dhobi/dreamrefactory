@@ -25,7 +25,7 @@
 /** one control, in the template's dialog units */
 export interface WindowControl {
   id: number;
-  kind: "button" | "edit" | "static";
+  kind: "button" | "edit" | "static" | "radio" | "check";
   text: string;
   x: number;
   y: number;
@@ -36,6 +36,7 @@ export interface WindowControl {
   /** a static's SS_CENTER */
   center?: boolean;
 }
+
 
 export interface WindowDialogTemplate {
   title: string;
@@ -50,6 +51,10 @@ export interface WindowDialog {
   /** an edit field's text (GetDlgItemText) */
   text(id: number): string;
   setText(id: number, text: string): void;
+  /** a radio button's or check box's mark (IsDlgButtonChecked) */
+  checked(id: number): boolean;
+  /** CheckDlgButton: a radio button checked unchecks the dialog's others */
+  check(id: number, on: boolean): void;
   /** take it down (EndDialog) */
   close(): void;
 }
@@ -69,6 +74,7 @@ export interface WindowDialogOptions {
 export const IDCANCEL = 2;
 
 let open = 0;
+let groups = 0;
 
 /** a dialog is up: the game should hear no key and the menu bar take none */
 export function windowDialogOpen(): boolean {
@@ -98,6 +104,8 @@ export function openWindowDialog(frame: HTMLElement, t: WindowDialogTemplate, op
   layer.append(box);
 
   const edits = new Map<number, HTMLInputElement>();
+  const marks = new Map<number, HTMLInputElement>();
+  const group = `wdlg${++groups}`;
   const focusable: HTMLElement[] = [];
   let defaultId = -1;
   let closed = false;
@@ -105,6 +113,8 @@ export function openWindowDialog(frame: HTMLElement, t: WindowDialogTemplate, op
     el: box,
     text: (id) => edits.get(id)?.value ?? "",
     setText: (id, text) => void (edits.has(id) && (edits.get(id)!.value = text)),
+    checked: (id) => marks.get(id)?.checked ?? false,
+    check: (id, on) => void (marks.has(id) && (marks.get(id)!.checked = on)),
     close,
   };
   const command = (id: number): void => {
@@ -132,6 +142,18 @@ export function openWindowDialog(frame: HTMLElement, t: WindowDialogTemplate, op
       edits.set(c.id, e);
       focusable.push(e);
       el = e;
+    } else if (c.kind === "radio" || c.kind === "check") {
+      // BS_AUTORADIOBUTTON, BS_AUTOCHECKBOX: the dialog's radio buttons are one group
+      const label = document.createElement("label");
+      label.className = "wdlg-mark";
+      const box = document.createElement("input");
+      box.type = c.kind === "radio" ? "radio" : "checkbox";
+      if (c.kind === "radio") box.name = group;
+      box.addEventListener("click", () => command(c.id));
+      label.append(box, c.text);
+      marks.set(c.id, box);
+      focusable.push(box);
+      el = label;
     } else {
       el = document.createElement("div");
       el.className = c.center ? "wdlg-static wdlg-center" : "wdlg-static";

@@ -36,8 +36,12 @@ export class Input {
     this.m.events.push({ kind: "up", x, y });
   }
 
-  /** a key down (named as `KeyboardEvent.key` names it); answers whether the game took it */
-  keyDown(key: string): boolean {
+  /**
+   * A key down (named as `KeyboardEvent.key` names it), `ctrl` with Ctrl or ⌘
+   * held; answers whether the game took it
+   */
+  keyDown(key: string, ctrl = false): boolean {
+    if (ctrl) return this.game.controlKey(key);
     if (!this.takes(key)) return false;
     this.m.keysHeld.add(key);
     this.m.events.push({ kind: "key", key: key === ESCAPE_KEY ? ESCAPE : key });
@@ -51,6 +55,11 @@ export class Input {
 
   keyUp(key: string): void {
     this.m.keysHeld.delete(key);
+  }
+
+  /** a menu command, by its Win32 id (src/menu.gen.ts); false for the ones the page does itself */
+  menu(id: number): boolean {
+    return this.game.command(id);
   }
 
   click(x: number, y: number): void {

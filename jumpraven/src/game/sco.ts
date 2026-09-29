@@ -67,3 +67,38 @@ export function qualifies(sco: Sco, difficulty: number, score: number): boolean 
   const list = sco.places[difficulty - 1];
   return score > 1000 && score > list[PLACES - 1].score;
 }
+
+/** the Edit Keys dialog's six fields' actions, 1 to 6 (DLOG3's 108 … 113, 0x422950) */
+export const KEY_ACTIONS = ["Up", "Down", "Left", "Right", "Hover/Fly", "Defense"] as const;
+
+/** 0x421e84: what the dialog shows for an action — the first letter bound to it, else digit, else the space; "" for none */
+export function keyFor(keys: Uint8Array, action: number): string {
+  for (let c = 0x41; c <= 0x5a; c++) if (keys[c] === action) return String.fromCharCode(c);
+  for (let c = 0x30; c <= 0x39; c++) if (keys[c] === action) return String.fromCharCode(c);
+  return keys[0x20] === action ? " " : "";
+}
+
+/**
+ * The dialog's OK (0x422a18): the table emptied, each field's first character
+ * bound — a letter in both cases (0x422b86) — and the arrows put back
+ * (0x421ee5: up 1, down 2, left 3, right 4). `fields` in {@link KEY_ACTIONS} order.
+ */
+export function bindKeys(fields: readonly string[]): Uint8Array {
+  const t = new Uint8Array(0x100);
+  fields.forEach((f, i) => {
+    let c = f.length ? f.charCodeAt(0) & 0xff : 0;
+    if (c >= 0x61 && c <= 0x7a) c -= 0x20;
+    t[c] = i + 1;
+    if (c >= 0x41) t[c | 0x20] = i + 1;
+  });
+  t[0x1e] = 1;
+  t[0x1f] = 2;
+  t[0x1c] = 3;
+  t[0x1d] = 4;
+  return t;
+}
+
+/** the EXE's own table (0x432358), the dialog's Default: W S A D, T, the space */
+export function defaultKeys(): Uint8Array {
+  return bindKeys(["W", "S", "A", "D", "T", " "]);
+}

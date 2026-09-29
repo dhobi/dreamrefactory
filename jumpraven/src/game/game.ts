@@ -29,7 +29,7 @@ import {
   dayOf, isFlying, type ScoreButton,
 } from "./data";
 import { Machine, type Co, type GameFiles, type Speaker } from "./machine";
-import { qualifies, readSco, sortPlaces, writeSco, type Sco } from "./sco";
+import { KEY_ACTIONS, bindKeys, defaultKeys, keyFor, qualifies, readSco, sortPlaces, writeSco, type Sco } from "./sco";
 import { Comms, DEALER, ENEMY, FUEL, PILOT, REPAIR } from "./comms";
 import { Mart, type MartState } from "./mart";
 import { PILOTS, Pilots, type PilotsState } from "./pilots";
@@ -62,6 +62,14 @@ export interface JumpRavenOptions {
   keepSco?: (bytes: Uint8Array) => void;
   /** the high-score dialog (DLOG2, 0x4227c1): `done` with the name, or null for Cancel */
   askName?: (done: (name: string | null) => void) => void;
+  /** DLOG6 (0x422bda), "Are you sure that you want to quit and go to the high scores screen?": true for OK */
+  askQuit?: (done: (ok: boolean) => void) => void;
+  /** DLOG7 (0x422c76), "Jump Raven paused...": `done` on its OK */
+  pause?: (done: () => void) => void;
+  /** DLOG8 (0x422ce1), Sound: the volume (0 to 7) and Theme it opens on; `done` with OK's, or null for Cancel */
+  soundDialog?: (volume: number, theme: boolean, done: (answer: { volume: number; theme: boolean } | null) => void) => void;
+  /** DLOG3 (0x422950), Edit Keys: the six fields in {@link KEY_ACTIONS} order and the Default button's; `done` with OK's, or null for Cancel */
+  keysDialog?: (fields: string[], defaults: string[], done: (fields: string[] | null) => void) => void;
   /**
    * A machine test's shortcut: a new game opened straight at this level, the
    * records changed as given — how the way back from a flight is played while
@@ -103,6 +111,16 @@ export class JumpRaven {
   readonly talkState: { talk: TalkState | null } = { talk: null };
   /** PLAY, or File ▸ New, waiting for the level to let go */
   private newAsked = false;
+  /** the menu bar is up: the high scores screen, and not while a film plays over it (0x422558 / 0x422501) */
+  titleUp = false;
+  /** a dialog of the page's is up: the EXE's were modal */
+  asking = false;
+  /** Help ▸ About or Help, or Settings ▸ Keys, asked for on the high scores screen, for its loop to run */
+  private titleAsked: "about.move" | "help.move" | "keys" | null = null;
+  /** `[0x43cd74]`: Ctrl+Q heard in the story (0x421009), asked about after its step (0x426b0a) */
+  private quitKey = false;
+  /** `[0x43b2f8]` (0x40f940): the game runs; File ▸ Exit ends it (0x42240d) */
+  private running = true;
   private run: Co | null = null;
   private puppet: Uint8Array[] = [];
   private pictures = new Map<number, FrameV0>();
@@ -227,10 +245,132 @@ export class JumpRaven {
 
   /**
    * 0x426b0a, asked after every film and talk of the story: whether the player
-   * quit to the high scores in the middle (⌘Q, then DLOG6's OK). The page has
-   * no ⌘Q yet, so this only ever answers no.
+   * quit to the high scores in the middle — Ctrl+Q heard (⌘Q on the
+   * Macintosh), then DLOG6's OK
    */
-  private quitAsked(): boolean {
+  private *quitAsked(): Co<boolean> {
+    if (!this.running) return true;
+    if (!this.quitKey) return false;
+    this.quitKey = false;
+    return yield* this.askQuit();
+  }
+
+  /** 0x422bda: DLOG6, the question; true for OK */
+  private *askQuit(): Co<boolean> {
+    const ask = this.opts.askQuit;
+    if (!ask) return this.m.log("Quit: no dialog to show, so OK"), true;
+    let ok: boolean | undefined;
+    this.asking = true;
+    ask((a) => (ok = a));
+    while (ok === undefined) yield;
+    this.asking = false;
+    this.m.log(`Quit: ${ok ? "OK" : "Cancel"}`);
+    return ok;
+  }
+
+  /** 0x422c76: DLOG7, until its OK */
+  private *pauseDialog(): Co {
+    const ask = this.opts.pause;
+    if (!ask) return this.m.log("Pause: no dialog to show");
+    let done = false;
+    this.asking = true;
+    ask(() => (done = true));
+    while (!done) yield;
+    this.asking = false;
+  }
+
+  /**
+   * 0x422ce1: DLOG8 — the volume's radio button (none for Sound Off: 0x67 + 0
+   * is the dialog's text) and Theme; OK sets the volume checked and toggles
+   * Theme if it changed (0x421644), Cancel nothing
+   */
+  private *soundDialog(): Co {
+    const m = this.m;
+    const ask = this.opts.soundDialog;
+    if (!ask) return m.log("Sound: no dialog to show");
+    let answer: { volume: number; theme: boolean } | null | undefined;
+    this.asking = true;
+    ask(m.volume, m.theme, (a) => (answer = a));
+    while (answer === undefined) yield;
+    this.asking = false;
+    if (!answer) return;
+    if (answer.volume !== m.volume) m.setVolume(answer.volume);
+    if (answer.theme !== m.theme) (m.theme = answer.theme), m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
+  }
+
+  /**
+   * 0x422950: Settings ▸ Keys, DLOG3 — each field the key its action has
+   * (0x421e84); OK empties the table, binds each field's first character
+   * (0x422b86) and puts the arrows back (0x421ee5), and RAVEN.SCO is written;
+   * Default is the EXE's own table (0x432358), Cancel the table as it was
+   */
+  private *keys(): Co {
+    const m = this.m;
+    const ask = this.opts.keysDialog;
+    if (!ask) return m.log("Settings ▸ Keys: no dialog to show");
+    let answer: string[] | null | undefined;
+    this.asking = true;
+    ask(KEY_ACTIONS.map((_, i) => keyFor(this.sco.keys, i + 1)), KEY_ACTIONS.map((_, i) => keyFor(defaultKeys(), i + 1)), (a) => (answer = a));
+    while (answer === undefined) yield;
+    this.asking = false;
+    if (!answer) return;
+    this.sco.keys = bindKeys(answer);
+    m.log(`Settings ▸ Keys: ${KEY_ACTIONS.map((a, i) => `${a} ${keyFor(this.sco.keys, i + 1) || "-"}`).join(", ")}`);
+    this.opts.keepSco?.(writeSco(this.sco));
+  }
+
+  /**
+   * A menu command by its Win32 id (src/menu.gen.ts), as WM_COMMAND brings
+   * it: menu 2 to 5 by the hundreds, anything else menu 1 (Help) from 600, the
+   * item the rest. The bar is up only on the high scores screen, whose
+   * handler (0x422275) takes them all: Help (0x4214cd), File (0x4222fb),
+   * Settings (0x4215c5), Sound (0x421644). Answers false for the ones the page
+   * does itself — File ▸ Open's dialog, File ▸ Exit, Help ▸ Memory's box.
+   */
+  command(id: number): boolean {
+    const menu = id >= 200 && id < 600 ? Math.floor(id / 100) : 1;
+    const item = id - (menu === 1 ? 600 : menu * 100);
+    const m = this.m;
+    if (!this.titleUp || this.asking) return true;
+    switch (menu) {
+      case 1:
+        if (item === 3) return false;
+        if (item === 1 || item === 2) this.titleAsked = item === 1 ? "about.move" : "help.move";
+        return true;
+      case 2:
+        if (item === 1) this.newAsked = true;
+        // 0x4222fb(4): the game over, and the window with it
+        if (item === 4) this.running = false;
+        return item !== 2 && item !== 4;
+      case 4:
+        if (item >= 1 && item <= 4) {
+          // 0x4215c5: the new difficulty checked, and the screen its places (0x421dcb)
+          this.difficulty = item;
+          m.log(`Settings ▸ ${DIFFICULTY_NAMES[item - 1]}`);
+          this.drawScores();
+        }
+        if (item === 6) this.titleAsked = "keys";
+        if (item === 7) m.cacheMazes = !m.cacheMazes;
+        return true;
+      case 5:
+        if (item >= 1 && item <= 8) m.setVolume(item - 1);
+        return true;
+    }
+    return true;
+  }
+
+  /**
+   * 0x420fbd, the films' and the story's screens' key filter: with Ctrl (⌘
+   * on the Macintosh) a . is Esc, Q asks to quit once the step is done
+   * (0x421009) and 0 to 7 are Sound ▸ Sound Off … Sound Level 7. Answers
+   * whether it took the key.
+   */
+  controlKey(key: string): boolean {
+    if (this.phase !== "story" || this.asking) return false;
+    const k = key.toLowerCase();
+    if (k === ".") return this.m.events.push({ kind: "key", key: ESCAPE }), true;
+    if (k === "q") return (this.quitKey = true), true;
+    if (k >= "0" && k <= "7" && k.length === 1) return this.m.setVolume(Number(k)), true;
     return false;
   }
 
@@ -256,10 +396,10 @@ export class JumpRaven {
     const debrief = () => this.debrief();
     const briefings = steps([b("bat1.pupp"), f("enem.move"), b("bat2.pupp"), mart, b("bat3.pupp"), pilots, b("bat4.pupp"), music, b("bat5.pupp"), f("trans.move")]);
     const back = steps([f("drop.move"), b("batg.pupp"), f("anim.move"), b("bate.pupp"), damages, debrief]);
-    const run = function* (list: (() => Co)[], quit: () => boolean): Co<boolean> {
+    const run = function* (list: (() => Co)[], quit: () => Co<boolean>): Co<boolean> {
       for (const step of list) {
         yield* step();
-        if (quit()) return false;
+        if (yield* quit()) return false;
       }
       return true;
     };
@@ -435,7 +575,15 @@ export class JumpRaven {
             // 0x40b1d2: a press in the view aims and fires there; anywhere else is the panels'
             aiming = inRect(VIEW, e.x, e.y);
             if (aiming) w.pyro.aim({ y: e.y - VIEW[0], x: e.x - VIEW[1] }, true);
-            else hud.click(e.y, e.x);
+            else {
+              hud.click(e.y, e.x);
+              // 0x40b245: a menu button pressed is acted on there and then
+              if (hud.menu() !== -1) {
+                const next = yield* this.systemMenu(hud, flight, base);
+                flush();
+                if (next !== null) return next;
+              }
+            }
           }
         }
         // 0x40b24f: held, the aim follows the pointer, kept inside the view
@@ -521,6 +669,48 @@ export class JumpRaven {
     }
   }
 
+  /**
+   * 0x421094: a menu button of the HUD's pressed — the button drawn down
+   * (0x416025), its action, and the button up again (0x42117b). SAVE's
+   * dialog is not ported yet; HELP is `help.move` over the flight; SOUND,
+   * KEYS and PAUSE are their dialogs; QUIT asks, and OK is the high scores.
+   */
+  private *systemMenu(hud: HudApi, flight: Flight, palette: Uint8ClampedArray): Co<number | null> {
+    const m = this.m;
+    const k = hud.menu();
+    m.log(`the HUD's ${["SAVE", "HELP", "SOUND", "KEYS", "PAUSE", "QUIT"][k]}`);
+    hud.frame();
+    let next: number | null = null;
+    switch (k) {
+      case 0:
+        m.log("  saved games are not ported yet");
+        break;
+      case 1:
+        yield* flight.overView(function* (this: JumpRaven) {
+          yield* m.fadeOut();
+          yield* this.film("help.move");
+        }.bind(this));
+        m.screen.setPalette(palette);
+        break;
+      case 2:
+        yield* this.soundDialog();
+        break;
+      case 3:
+        yield* this.keys();
+        break;
+      case 4:
+        yield* this.pauseDialog();
+        break;
+      case 5:
+        if (yield* this.askQuit()) next = HIGH_SCORES;
+        break;
+    }
+    hud.setMenu(-1);
+    hud.redraw();
+    flight.redraw();
+    return next;
+  }
+
   /** 0x41f990: `rbay.move`, and the bay's screen (src/game/rbay.ts) */
   private *repairBay(hud: HudApi, palette: Uint8ClampedArray): Co {
     const m = this.m;
@@ -570,8 +760,10 @@ export class JumpRaven {
     this.drawScores();
     if (qualifies(this.sco, this.difficulty, this.records.score) && this.opts.askName) {
       let answer: string | null | undefined;
+      this.asking = true;
       this.opts.askName((name) => (answer = name));
       while (answer === undefined) yield;
+      this.asking = false;
       if (answer) {
         places[places.length - 1] = { score: this.records.score, name: answer };
         sortPlaces(places);
@@ -579,21 +771,55 @@ export class JumpRaven {
         this.drawScores();
       }
     }
-    for (;;) {
-      if (this.newAsked) {
-        this.newAsked = false;
-        return yield* this.play();
+    // 0x420a59: the menu bar up
+    this.titleUp = true;
+    try {
+      for (;;) {
+        const next = yield* this.titleStep();
+        if (next !== null) return next;
+        yield;
       }
+    } finally {
+      this.titleUp = false;
+    }
+  }
+
+  /** one turn of the high scores screen: what the menu bar asked for, else a press on a button */
+  private *titleStep(): Co<number | null> {
+    const m = this.m;
+    if (!this.running) return this.quit();
+    if (this.newAsked) {
+      this.newAsked = false;
+      return yield* this.play();
+    }
+    const asked = this.titleAsked;
+    this.titleAsked = null;
+    if (asked === "keys") yield* this.keys();
+    else if (asked) {
+      // 0x4214cd: the bar down, a fade, the film, the bar up, the screen again
+      m.log(`Help ▸ ${asked === "about.move" ? "About Raven" : "Help"}`);
+      this.titleUp = false;
+      yield* m.fadeOut();
+      yield* this.film(asked);
+      m.clear();
+      this.drawScores();
+      this.titleUp = true;
+    }
+    {
       const e = m.take();
       if (e?.kind === "down") {
         const button = SCORE_BUTTONS.find((b) => e.y >= b.rect[0] && e.y <= b.rect[2] && e.x >= b.rect[1] && e.x <= b.rect[3]);
-        if (button && (yield* trackPress(m, button.rect))) {
-          const next = yield* this.button(button.what);
-          if (next !== null) return next;
-        }
+        if (button && (yield* trackPress(m, button.rect))) return yield* this.button(button.what);
       }
-      yield;
     }
+    return null;
+  }
+
+  /** File ▸ Exit, or QUIT (0x4222fb(4)): the window closes. A page has nothing to close. */
+  private quit(): number {
+    this.phase = "quit";
+    this.stopped = "QUIT: the game is over — reload the page to play again";
+    return -1;
   }
 
   /** a button let go on: its film, PLAY's new game or QUIT; null stays on the screen */
@@ -601,17 +827,14 @@ export class JumpRaven {
     const m = this.m;
     m.log(`high scores: ${what.toUpperCase()}`);
     if (what === "play") return yield* this.play();
-    if (what === "quit") {
-      // File ▸ Exit (0x4222fb(4)): the window closes. A page has nothing to close.
-      this.phase = "quit";
-      this.stopped = "QUIT: the game is over — reload the page to play again";
-      return -1;
-    }
+    if (what === "quit") return this.quit();
     // 0x420ad7: the menu bar down, the screen faded, the film, the screen again
+    this.titleUp = false;
     yield* m.fadeOut();
     yield* this.film(BUTTON_FILMS[what]!);
     m.clear();
     this.drawScores();
+    this.titleUp = true;
     return null;
   }
 

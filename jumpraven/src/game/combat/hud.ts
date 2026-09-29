@@ -847,6 +847,12 @@ export class Hud implements HudApi {
 
   // ---- the clicks -------------------------------------------------------------
 
+  /** a menu button's middle in the window's pixels (0 SAVE … 5 QUIT), where a machine test clicks it */
+  menuButton(k: number): { x: number; y: number } {
+    const r = this.rect[PIC.menu + k];
+    return { y: LEFT.top + ((r[0] + r[2]) >> 1), x: LEFT.left + ((r[1] + r[3]) >> 1) };
+  }
+
   /** 0x415c7b: a click on the panels, in the window's pixels */
   click(y: number, x: number): void {
     const s = this.s;
