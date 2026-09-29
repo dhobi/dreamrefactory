@@ -92,6 +92,10 @@ export class JumpRaven {
   readonly comms: Comms;
   /** the Mart while it is up, for a machine test */
   mart: MartState | null = null;
+  /** the Mart itself while it is up, for a machine test's hands */
+  martScreen: Mart | null = null;
+  /** the repair bay while it is up, for a machine test's hands */
+  bay: Rbay | null = null;
   /** COPILOT SELECTION while it is up */
   pilots: PilotsState | null = null;
   /** `[0x43b304]`: the band the player flies to (src/game/music.ts) */
@@ -491,11 +495,13 @@ export class JumpRaven {
     if (film) yield* this.film(film === 1 ? "mart.move" : "newman.move");
     const mart = new Mart(m, this.records, this.comms, (yield* m.file("mart", this.day)).data);
     this.mart = mart.state;
+    this.martScreen = mart;
     this.screen = "mart";
     this.played.push("mart");
     yield* mart.run(this.day, this.palette);
     mart.close();
     this.mart = null;
+    this.martScreen = null;
     this.screen = null;
     m.screen.pixels.set(saved);
     m.screen.version++;
@@ -780,11 +786,13 @@ export class JumpRaven {
     yield* this.film("rbay.move");
     const bay = new Rbay(m, hud, this.comms, (yield* m.file("rbay", this.day)).data, (name) => this.film(name));
     this.screen = "rbay";
+    this.bay = bay;
     this.played.push("rbay");
     try {
       yield* bay.run(palette);
     } finally {
       this.screen = null;
+      this.bay = null;
     }
     yield* m.fadeOut();
     m.screen.setPalette(palette);

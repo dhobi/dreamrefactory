@@ -104,6 +104,15 @@ export class Rbay {
     return [s.v, s.h + PANEL_RIGHT, s.v + 0x96, s.h + PANEL_RIGHT + 0x78];
   }
 
+  /** where a machine test presses: REPAIR, CONTINUE, and each system — its slot, whether it is out, what it costs */
+  targets(): { repair: Rect; cont: Rect; systems: { name: string; slot: Rect; out: boolean; cost: number }[] } {
+    return {
+      repair: this.rect(BUTTON_REPAIR),
+      cont: this.rect(BUTTON_CONTINUE),
+      systems: SYSTEMS.map((s, k) => ({ name: s.name, slot: this.slot(k), out: s.out(this.hud), cost: s.cost })),
+    };
+  }
+
   /** 0x41fcca: the screen, until CONTINUE */
   *run(palette: Uint8ClampedArray): Co {
     const m = this.m;

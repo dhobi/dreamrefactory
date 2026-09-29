@@ -125,6 +125,11 @@ export class Mart {
     this.state = { stock, selected: null };
   }
 
+  /** where a machine test presses BUY and CONTINUE */
+  targets(): { buy: Rect; cont: Rect } {
+    return { buy: this.rect(BUY), cont: this.rect(CONTINUE) };
+  }
+
   /** 0x4107ef: the screen, until CONTINUE, faded in to the game's palette */
   *run(day: number, palette: Uint8ClampedArray): Co {
     const m = this.m;

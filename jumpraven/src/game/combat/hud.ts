@@ -853,6 +853,12 @@ export class Hud implements HudApi {
     return { y: LEFT.top + ((r[0] + r[2]) >> 1), x: LEFT.left + ((r[1] + r[3]) >> 1) };
   }
 
+  /** a COPILOT button's middle in the window's pixels (0 NAVIGATION, 1 HOVER CONTROL, 2 ARMS CONTROL) */
+  copilotButton(k: number): { x: number; y: number } {
+    const r = this.rect[PIC.copilot + k];
+    return { y: LEFT.top + ((r[0] + r[2]) >> 1), x: LEFT.left + ((r[1] + r[3]) >> 1) };
+  }
+
   /** 0x415c7b: a click on the panels, in the window's pixels */
   click(y: number, x: number): void {
     const s = this.s;
