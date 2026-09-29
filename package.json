@@ -9,7 +9,8 @@
     "timelapse",
     "skullcracker",
     "redjack",
-    "lunicus"
+    "lunicus",
+    "jumpraven"
   ],
   "type": "module",
   "scripts": {

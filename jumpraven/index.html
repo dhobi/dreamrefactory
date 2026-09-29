@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- where the site's root is from THIS page: its own directory -->
+    <meta name="site-root" content="./" />
+    <title>Jump Raven RE</title>
+    <meta name="theme-color" content="#000000" />
+    <!-- the chrome every page in the project shares; no Jump Raven palette yet,
+         so the project's own (src/theme.css says why) -->
+    <link rel="stylesheet" href="/src/theme.css" />
+  </head>
+  <body class="booting deep nobrand">
+    <!-- The same band every page carries. No logo yet: the brand is words. -->
+    <header class="topbar">
+      <a
+        class="brand"
+        href="./"
+        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1994 release"
+      >
+        <span class="brand-text">
+          <b>Jump Raven</b>
+          <span>prototype · DreamFactory 0</span>
+        </span>
+      </a>
+      <!-- this page's OWN version, filled by main.ts from this package's
+           package.json, so the number a bug report names is this page's -->
+      <span class="version" id="ver"></span>
+      <nav class="topnav">
+        <a href="../" title="dreamREfactory — the engine, and the other games">dreamREfactory</a>
+        <a href="../docs/">Docs</a>
+        <a href="https://github.com/dhobi/dreamrefactory">Source</a>
+      </nav>
+    </header>
+
+    <div id="stage">
+      <!-- The title card and the gauge under it: the whole page until the game
+           is running. No card yet — the logo follows with the design — so the
+           curtain holds the gauge alone. -->
+      <div id="curtain">
+        <div id="boot">
+          <div id="gauge">
+            <div
+              id="bar"
+              role="progressbar"
+              aria-label="reading the disc"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <div id="charge" style="width: 0%"></div>
+            </div>
+            <div id="bootline">
+              <span id="bootsay">reading the disc…</span>
+              <span id="bootpct">0%</span>
+            </div>
+          </div>
+          <!-- the gesture an AudioContext needs, asked for once the films are read -->
+          <button id="start" class="primary" type="button">Enter</button>
+        </div>
+      </div>
+      <div id="frame">
+        <!-- 1024x768: the game window's 512x384, doubled (src/main.ts) -->
+        <canvas id="screen" width="1024" height="768"></canvas>
+      </div>
+      <!-- the boot's own account of itself; `b` opens it, and an error opens it
+           by itself -->
+      <pre id="log" hidden></pre>
+    </div>
+
+    <div id="under">
+      <div class="bar">
+        <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">⛶ Fullscreen</button>
+        <!-- a prefilled GitHub issue with the screen on the clipboard
+             (site/src/bug-report.ts, shared with the other pages) -->
+        <button id="bugBtn" type="button" title="Report something the port gets wrong">
+          🪲 Report a bug
+        </button>
+        <span id="bugNote" class="note"></span>
+        <!-- File ▸ Open: the saved games (.RVN), the shared dialog. Nothing reads
+             a .RVN yet, so the button waits for the game -->
+        <button id="loadBtn" type="button" title="Open a saved game — not yet: nothing reads a .RVN" disabled>📂 Load</button>
+        <button id="logBtn" type="button" title="The boot log, in full (b)">▤ Boot log</button>
+        <span class="keyhint" title="a click or esc skips a film · b opens the boot log"
+          ><span class="k">click</span> <span class="k">esc</span> skip <span class="k">b</span> log</span
+        >
+      </div>
+      <div class="bar">
+        <span id="err"></span>
+      </div>
+      <div class="bar">
+        <pre id="loc"></pre>
+      </div>
+    </div>
+    <!-- The ask, below the controls strip. `/bmc-mark.svg` is root-absolute
+         because Vite rewrites a `public/` path the markup names per page depth. -->
+    <footer id="foot">
+      <a class="bmc" href="https://buymeacoffee.com/danielhobi" rel="noopener"
+        ><img src="/bmc-mark.svg" alt="" width="35" height="50" /><span>Buy me a coffee</span></a
+      >
+    </footer>
+    <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared
+         with the other games, hence the ids). Nothing opens it yet. -->
+    <div id="saveModal" class="modal">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span id="saveModalTitle">Saved Games</span>
+          <button id="saveModalClose" type="button" title="Close">✕</button>
+        </div>
+        <div id="saveList" class="save-list"></div>
+        <div class="modal-foot">
+          <div id="saveNewRow">
+            <input id="saveNameInput" type="text" placeholder="save name" />
+            <button id="saveConfirmBtn" type="button">Save</button>
+          </div>
+          <button id="saveUploadBtn" type="button">⬆ Upload .RVN</button>
+          <input id="saveUploadInput" type="file" accept=".rvn,.RVN" />
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

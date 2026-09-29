@@ -38,10 +38,10 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Eight sites build out of this one repository, each from its own root and its own
+Nine sites build out of this one repository, each from its own root and its own
 port, so they can run at once. **The two that are about the whole project come
 first, then one port per game in the order it was ported** — so the next game
-to be ported takes 5181 and nothing has to move:
+to be ported takes 5182 and nothing has to move:
 
 | | | |
 |---|---|---|
@@ -53,6 +53,7 @@ to be ported takes 5181 and nothing has to move:
 | `npm run dev -w skullcracker` | 5178 | Skull Cracker |
 | `npm run dev -w redjack` | 5179 | RedJack, DreamFactory 5 |
 | `npm run dev -w lunicus` | 5180 | Lunicus, DreamFactory 0 |
+| `npm run dev -w jumpraven` | 5181 | Jump Raven, DreamFactory 0 (prototype) |
 
 Each package owns its own commands. `-w <package>` runs one of them — `npm run
 speedrun -w taoot`, `npm run test:browser -w skullcracker` — and the root has only
