@@ -288,6 +288,9 @@ function where(): string {
   if (m.film) return `${m.where}`;
   const t = b?.talkState.talk ?? game.city?.talkState.talk;
   if (t) return `talking: ${t.file}${t.line ? ` · ${t.line}` : ""}`;
+  // a floor's maze is fetched after the floor is up (Base.enter): in a browser
+  // that is a frame or more with no maze to name
+  if (b && !b.maze) return "loading the floor…";
   if (b) return `${b.maze.name} · level ${game.progress.level} (day ${b.day}) · ${b.pose.x},${b.pose.y} facing ${"NSEW"[b.pose.dir]} · progress ${game.progress.day}`;
   const c = game.city;
   if (c?.world) {
@@ -316,8 +319,14 @@ function frame(now: number): void {
     running = false;
   }
   draw();
-  const s = status();
-  if (s !== lastStatus) locEl.textContent = lastStatus = s;
+  // the status line is a readout: if it ever throws, say so and keep the game
+  // running rather than dropping out of the frame loop for good
+  try {
+    const s = status();
+    if (s !== lastStatus) locEl.textContent = lastStatus = s;
+  } catch (e) {
+    console.error("status line:", e);
+  }
   menu.sync();
   requestAnimationFrame(frame);
 }
