@@ -228,3 +228,50 @@ test("a laptop turned landscape is not a phone on its side", () => {
   expect(stage.classList.contains("fs")).toBe(false);
   vi.unstubAllGlobals();
 });
+
+test("really fullscreen, Escape is the game's: the page holds it, and lets go on the way out", async () => {
+  const { doc, stage, btn } = page();
+  (stage as unknown as { requestFullscreen: unknown }).requestFullscreen = () => {
+    grantFullscreen(doc, stage);
+    return Promise.resolve();
+  };
+  Object.defineProperty(doc, "fullscreenEnabled", { value: true, configurable: true });
+  const lock = vi.fn(() => Promise.resolve());
+  const unlock = vi.fn();
+  vi.stubGlobal("navigator", { keyboard: { lock, unlock } });
+  try {
+    installFullscreen(btn, stage);
+    btn.click();
+    await Promise.resolve();
+    expect(lock).toHaveBeenCalledWith(["Escape"]);
+    expect(unlock).not.toHaveBeenCalled();
+    // holding Escape, or the browser's control: the UA leaves, the key comes back
+    grantFullscreen(doc, null);
+    expect(unlock).toHaveBeenCalledOnce();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a browser without keyboard lock, or one that refuses it, keeps Escape as its way out", async () => {
+  const { doc, stage, btn } = page();
+  (stage as unknown as { requestFullscreen: unknown }).requestFullscreen = () => {
+    grantFullscreen(doc, stage);
+    return Promise.resolve();
+  };
+  Object.defineProperty(doc, "fullscreenEnabled", { value: true, configurable: true });
+  const lines: string[] = [];
+  vi.stubGlobal("navigator", { keyboard: { lock: () => Promise.reject(new Error("not allowed")), unlock: () => {} } });
+  try {
+    installFullscreen(btn, stage, { report: (l) => lines.push(l) });
+    btn.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(stage.classList.contains("fs")).toBe(true);
+    expect(lines).toEqual(["fullscreen: Escape not held (not allowed)"]);
+    vi.stubGlobal("navigator", {});
+    grantFullscreen(doc, null);
+    expect(stage.classList.contains("fs")).toBe(false);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

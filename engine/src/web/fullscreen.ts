@@ -39,7 +39,15 @@
  *
  * ## The way out
  *
- * Real fullscreen has Escape and the UA says so. Faux fullscreen has neither —
+ * Real fullscreen has Escape and the UA says so — which is a clash, because the
+ * games want Escape too: it skips a film, a speech, an intro. So while the stage
+ * is really fullscreen the page asks the Keyboard Lock API for Escape
+ * ({@link lockEscape}). Where it is granted (Chromium on a desktop) a press goes
+ * to the game, and the way out is to HOLD Escape, which the browser's own banner
+ * says as it goes in; the button and ✕ still work. Where it is not (Firefox,
+ * Safari) nothing changes, and Escape leaves fullscreen as before.
+ *
+ * Faux fullscreen has neither —
  * and it is the phone case, where there is no Escape key to have. The button
  * that turned it on is under the picture, which the picture is now covering. So
  * this hangs a small ✕ in the corner of the stage, shown only while the page is
@@ -203,7 +211,12 @@ export function installFullscreen(
 
   // The UA's own exits — Escape, the browser's control, a swipe — come through
   // here and nowhere else, which is why the label is painted rather than flipped.
-  document.addEventListener("fullscreenchange", paint);
+  // Both ways into real fullscreen (the button, a phone turned) arrive here too,
+  // so this is where Escape is taken and given back.
+  document.addEventListener("fullscreenchange", () => {
+    paint();
+    lockEscape(document.fullscreenElement === stage, opts.report);
+  });
 
   /** whether turning the phone is what put the stage up */
   let auto = false;
@@ -256,4 +269,26 @@ export function installFullscreen(
     true,
   );
   sync();
+}
+
+/** the Keyboard Lock API, where there is one (Chromium): not in the DOM lib yet */
+interface KeyboardLock {
+  lock?: (codes?: string[]) => Promise<void>;
+  unlock?: () => void;
+}
+
+/**
+ * Take Escape from the browser while the stage is really fullscreen, and give it
+ * back when it is not. `navigator.keyboard.lock` only holds keys in fullscreen
+ * and a secure context; anywhere else, or on a browser without it, it rejects or
+ * is missing, and Escape keeps its usual meaning.
+ */
+export function lockEscape(on: boolean, report?: (line: string) => void): void {
+  const kb = (globalThis.navigator as { keyboard?: KeyboardLock } | undefined)?.keyboard;
+  if (!kb) return;
+  if (!on) {
+    kb.unlock?.();
+    return;
+  }
+  kb.lock?.(["Escape"]).catch((e: Error) => report?.(`fullscreen: Escape not held (${e.message})`));
 }
