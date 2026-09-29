@@ -359,7 +359,7 @@ export class Flight {
       const k = s.move.frame;
       this.show(s.move.first + k);
       this.place(k);
-    }
+    } else w.speed = 0; // 0x40c244: at rest the craft is still
     this.compose();
     while (m.ticks < this.lastFrame + FRAME_TICKS) yield;
     this.lastFrame = m.ticks;
