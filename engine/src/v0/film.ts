@@ -84,7 +84,7 @@ export function* playOneFilm(
       m.screen.put(fb.pixels, film.width, film.height, film.top, film.left);
       decoded = frame.picture;
     }
-    if (frame.sound && film.file.containers[frame.sound]) m.sound(film.file.containers[frame.sound].data);
+    if (frame.sound && film.file.containers[frame.sound]) filmSound(m, film.file.containers[frame.sound].data);
     yield* hooksAt(index);
 
     const hold = Math.max(frame.holdTicks, film.framerate);
@@ -136,7 +136,7 @@ export function* playOneFilm(
         hooks.button?.(live.indexOf(hit));
         // the hotspot's own sound (0x4134db)
         const click = hit.sound ? film.file.containers[Math.abs(hit.sound)] : undefined;
-        if (click) m.sound(click.data);
+        if (click) filmSound(m, click.data);
       }
       const type = hit ? Math.abs(hit.type) : 0;
       if (type === 1 || (type === 3 && !hit!.film)) return yield* hooksLeft(), over;
@@ -163,6 +163,18 @@ export function* playOneFilm(
   }
   yield* hooksLeft();
   return over;
+}
+
+/**
+ * A film's sound, a frame's or a hotspot's (RAVEN.EXE 0x4134db → 0x428b82,
+ * LUNICUS.EXE 0x41010f): it goes on channels 1 and 2, and a channel frees the
+ * sound it holds before it takes the next (0x428536, LUNICUS.EXE 0x4202d7).
+ * So a narration is cut by the next one — jet.move's Continue, pressed while
+ * its first voice speaks, starts the second in its place, not over it.
+ */
+function filmSound(m: Machine, data: Uint8Array): void {
+  m.stopSound();
+  m.sound(data);
 }
 
 /**
