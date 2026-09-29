@@ -1,5 +1,5 @@
 /**
- * Jump Raven's prototype page: the game machine (`src/game/`) driven at sixty
+ * Jump Raven's page: the game machine (`src/game/`) driven at sixty
  * ticks a second, its screen drawn doubled, the mouse and keys handed in.
  *
  * Everything the game does is in the machine, so the page only

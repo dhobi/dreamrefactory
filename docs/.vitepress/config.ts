@@ -26,6 +26,7 @@ const rewrites = {
   "skullcracker/README.md": "skullcracker/index.md",
   "redjack/README.md": "redjack/index.md",
   "lunicus/README.md": "lunicus/index.md",
+  "jumpraven/README.md": "jumpraven/index.md",
   "editors/README.md": "editors/index.md",
   "reference/README.md": "reference/index.md",
 };
@@ -37,7 +38,7 @@ export default withMermaid(
     lang: "en-US",
     title: "dreamREfactory",
     description:
-      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Lunicus (DreamFactory 0), Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4), and RedJack (DreamFactory 5).",
+      "How CyberFlix's DreamFactory engine works, and how this project reimplemented it — from a game's main flow down to each DFile container format. Lunicus and Jump Raven (DreamFactory 0), Dust (DreamFactory 1), Titanic, Timelapse and Skull Cracker (DreamFactory 4), and RedJack (DreamFactory 5).",
     lastUpdated: true,
     /**
      * FALSE, and it has to be. `cleanUrls` emits links without `.html` and relies
@@ -78,6 +79,7 @@ export default withMermaid(
         { text: "Home", link: "/" },
         { text: "Engine", link: "/engine/" },
         { text: "Lunicus", link: "/lunicus/" },
+        { text: "Jump Raven", link: "/jumpraven/" },
         // oldest engine first, as the sidebar and the registry have it — and
         // Timelapse last of the three, which is both its shipping order and the
         // order the port learned them in
@@ -127,11 +129,12 @@ export default withMermaid(
             { text: "1 · How a DreamFactory game works", link: "/engine/how-a-game-works" },
             { text: "2 · Engine architecture", link: "/engine/architecture" },
             { text: "3 · Lunicus", link: "/lunicus/" },
-            { text: "4 · Dust: A Tale of the Wired West", link: "/dust/" },
-            { text: "5 · Titanic: Adventure Out of Time", link: "/taoot/" },
-            { text: "6 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
-            { text: "7 · Skull Cracker", link: "/skullcracker/" },
-            { text: "8 · RedJack", link: "/redjack/" },
+            { text: "4 · Jump Raven", link: "/jumpraven/" },
+            { text: "5 · Dust: A Tale of the Wired West", link: "/dust/" },
+            { text: "6 · Titanic: Adventure Out of Time", link: "/taoot/" },
+            { text: "7 · Timelapse: Ancient Civilizations", link: "/timelapse/" },
+            { text: "8 · Skull Cracker", link: "/skullcracker/" },
+            { text: "9 · RedJack", link: "/redjack/" },
             { text: "Glossary", link: "/glossary" },
           ],
         },
@@ -190,6 +193,11 @@ export default withMermaid(
             { text: "Overview", link: "/lunicus/" },
             { text: "Walkthrough", link: "/lunicus/walkthrough" },
           ],
+        },
+        {
+          text: "Jump Raven",
+          collapsed: false,
+          items: [{ text: "Overview", link: "/jumpraven/" }],
         },
         {
           text: "Dust: A Tale of the Wired West",

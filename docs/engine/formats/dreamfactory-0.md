@@ -14,13 +14,17 @@ else (0x419807, *"bad star file version"*; the engine calls its files "stars").
 Because the tag is missing, **v0 cannot be detected**. The bytes where
 `detectVersion` looks are just the first fields of whatever format the file is,
 and they read as noise, sometimes even as 1, 4 or 5. A caller knows it has a v0
-file because it is loading Lunicus.
+file because it is loading Lunicus, or *Jump Raven* (1994), CyberFlix's second
+game, which is DreamFactory 0 too and whose `RAVEN.EXE` is a month older than
+LUNICUS.EXE. What Jump Raven's files do differently is noted in each section
+below.
 
 There are no rooms, puppets or casts in the later sense, and no script
 containers have turned up. The game's logic is in LUNICUS.EXE, which names its
 films in its own code; `lunicus/tools/ludis.mts` disassembles it, and
-`lunicus/src/game/` is the port of what day one needs. The files hold
-pictures, sounds, conversations and mazes.
+`lunicus/src/game/` is the port of the game. Jump Raven's is the same:
+`jumpraven/tools/rvdis.mts` and `jumpraven/src/game/`. The files hold pictures,
+sounds, conversations and mazes.
 
 Readers: [`image-v0.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/image-v0.ts),
 [`maze-v0.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/maze-v0.ts),
@@ -109,6 +113,13 @@ before the 48-byte header was put in front of it. Output goes through
 LUNIRES.DLL, which opens the device at 22050 Hz, mono, 8-bit (0x1677), so a
 block is about 16.8 ms. The sound banks (`citysoun.`, `moonsoun.`) have a table
 in container 0 and one sound in each container after it.
+
+**Jump Raven's block counts can be big-endian.** Every sound Lunicus plays
+stores its count little-endian; 60 of the 502 frame sounds in Jump Raven's films
+store it the other way round (`00 24` for 36 blocks), as do the demo films in
+both rips' `previews/`, with the same v40 stream behind them. The stream settles
+which: only one of the two counts ends on the container's last byte.
+`blocksV0` in `audio.ts` reads either.
 
 ## Conversations
 
@@ -202,6 +213,13 @@ first frame to the next film's, and the owned films tile the file's containers
 from 2 to the end. The frames are 384×264 in the [v4 frame codec](image-codec.md),
 and each film is a delta chain decoded from its first frame.
 
+**Jump Raven's city grid is words.** Its `citymaze` (one per day) keeps
+container 1 as i16 width and height, the pose the flight starts from, and then
+32×32 i16 cells, 0 where the craft can go; the grid is read as wrapping round at
+its edges (0x4049a4), so the city is 4 by 4 cells round four blocks with no
+edge. The reader tells the two grids apart by the container's size (0x0a bytes
+and the cells), and `solidV0` and `wordCellV0` in `maze-v0.ts` read it.
+
 ## Saved games
 
 A saved game is a `.LUN` file ("Lunicus (.LUN)" in the dialog, 0x4187b3; on
@@ -230,3 +248,37 @@ A save holds neither the suit nor the gun, nor the crew's places, nor which
 cabinets are empty. File ▸ Open (0x4184cc) sets the difficulty, empties the
 HUD and adds the file's numbers back, selects navigation, and goes to the
 file's level, which opens as any level does.
+
+### Jump Raven's `.RVN`
+
+Jump Raven's save is 0x94 bytes, again with no container and no header
+("Jump Raven (.RVN)", 0x4225b3; on the Mac type `RSAV`, creator `RAVE`).
+RAVEN.EXE builds the record on its stack and writes it whole (0x4218a8), and
+File ▸ Open reads it back into `0x439ee8` (0x421487) and applies it (0x421199).
+Little-endian words, but for the score and the four tallies, which are dwords.
+[`jumpraven/src/game/rvn.ts`](https://github.com/dhobi/dreamrefactory/blob/master/jumpraven/src/game/rvn.ts)
+reads and writes it.
+
+| Offset | Type | Holds |
+|---|---|---|
+| 0x00 | i16 | the difficulty, 1 … 4 (`[0x439fb0]`) |
+| 0x02 | i16 | the level (`[0x43b2fc]`) |
+| 0x04 | i16 | the copilot, 0 … 5 (`[0x43b300]`) |
+| 0x06 | i16 | the band (`[0x43b304]`) |
+| 0x08 | i32 | the score, which the Mart spends |
+| 0x0c | i16 × 6 | the ammunition: lasers, shells, rockets, missiles, bombs, the defensive |
+| 0x18 | i16 | PODS |
+| 0x1a | i16 | the lives |
+| 0x1c | i16 | SHLD |
+| 0x1e | i16 | FUEL |
+| 0x20 | i32 × 6 | the copilot's shots, per weapon |
+| 0x38 | i32 × 6 | the copilot's hits |
+| 0x50 | i32 × 6 | the player's shots |
+| 0x68 | i32 × 6 | the player's hits |
+| 0x80 | i16 × 4 | the kills: jeeps, bikes, tanks, helicopters |
+| 0x88 | i16 × 6 | each weapon's tier |
+
+It holds nothing of a flight, so a save made in one opens at that flight's
+start. Open sets the difficulty, zeroes the records (0x415f51) and adds each
+field back through its own adder, which keeps it in range: the score not below
+0, the lives 0 to 4, the bars and the ammunition 0 to 0x4380.

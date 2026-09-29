@@ -29,7 +29,7 @@
  * (k·64 + 64) / 8 round (0x40bdac, 0x40be78). The eye is 0x80 behind the
  * craft (0x40b9cc) and 0xa0 up. In HOVER the craft also slides across the
  * street, −70 to 70, and rises, 70 to 250 (0x419511) — which the pictures in
- * the view, not ported yet, follow; the city's own frames do not.
+ * the view follow (src/game/combat/world.ts); the city's own frames do not.
  *
  * ## The keys (0x40b640)
  *
@@ -181,7 +181,7 @@ export class Flight {
     w.poseDir = p.dir;
   }
 
-  /** the panels round the view (the HUD's own drawing, 0x416025, is not ported yet) */
+  /** the panels round the view, which the HUD draws its gauges over each frame (0x416025, src/game/combat/hud.ts) */
   drawPanels(): void {
     const m = this.m;
     if (!m.draws) return;

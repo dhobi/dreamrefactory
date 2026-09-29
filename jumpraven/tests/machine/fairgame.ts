@@ -1,7 +1,7 @@
 /**
  * The whole game won with no shortcuts, on Intermediate: the intro to the high
- * scores, PLAY, three days and the pilot's ending — played by tests/machine/
- * src/player.ts through the page's own door, the copilot flying, every pod picked
+ * scores, PLAY, three days and the pilot's ending — played by src/player.ts
+ * through the page's own door, the copilot flying, every pod picked
  * up and every boss killed at full strength.
  *
  * Unlike wholegame.ts nothing is set in the game: the player shops, mends at

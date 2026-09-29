@@ -3,8 +3,8 @@
  * the briefings, the damage screen, the debrief — `bata.pupp` for an accuracy
  * of 60% or better and its LEVEL BONUS, `batb.pupp` under it — and then the
  * next day's briefings, or for a Training game `training.move` and the high
- * scores. The flying is not ported, so each run opens its level straight away
- * with the flying's tally made up (JumpRavenOptions.start).
+ * scores. Each run opens its level straight away with the flying's tally made
+ * up (JumpRavenOptions.start), so the way back is played without the flight.
  *
  *   npx tsx tests/machine/back.ts        (from jumpraven/)
  */

@@ -20,13 +20,14 @@ its own:
 | `skullcracker-v0.1.0` | `npm run build -w skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
 | `redjack-v0.1.1` | `npm run build -w redjack` | `/dreamrefactory/redjack/` — RedJack's one page |
 | `lunicus-v0.1.0` | `npm run build -w lunicus` | `/dreamrefactory/lunicus/` — Lunicus's one page |
+| `jumpraven-v0.1.0` | `npm run build -w jumpraven` | `/dreamrefactory/jumpraven/` — Jump Raven's one page |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |
 
 ```bash
 # in the package that is releasing:
 npm version 0.9.1 --no-git-tag-version -w @dreamfactory/taoot
 # commit and merge, then from master:
-npm run release -- taoot            # or several: taoot dust timelapse skullcracker redjack lunicus
+npm run release -- taoot            # or several: taoot dust timelapse skullcracker redjack lunicus jumpraven
 npm run release                     # everything whose version has no tag yet
 npm run release -- --dry-run        # what it would do, and nothing else
 ```
@@ -90,7 +91,7 @@ a superseded bundle is dead weight rather than a stale page.
 
 | | |
 |---|---|
-| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `redjack/package.json`, `lunicus/package.json`, `site/package.json` | the sources of truth — semver |
+| `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `redjack/package.json`, `lunicus/package.json`, `jumpraven/package.json`, `site/package.json` | the sources of truth — semver |
 | each package's `vite.config.ts` | substitutes its own for `__APP_VERSION__` at build time |
 | [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
 | [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |

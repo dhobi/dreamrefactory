@@ -1,5 +1,5 @@
 /**
- * The flying, as far as it is ported (RAVEN.EXE 0x40b190): day one's city,
+ * The flying's city and its moves (RAVEN.EXE 0x40b190): day one's city,
  * `citymaze` — 4 by 4 cells that wrap round four blocks — from its start pose,
  * FLY by T (the key table's action 5), a step and turns by the arrows, each
  * move eight frames three ticks apart, and a step into a block refused.

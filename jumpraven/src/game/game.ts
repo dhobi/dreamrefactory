@@ -13,9 +13,10 @@
  *   a level     0x410491: the old level closed, the day's folder set from the
  *               new one (0x40e8df), and the new one opened
  *
- * The story (the even levels) is ported whole but for the screens between its
- * briefings — the Mart, the pilots, the debrief — and the flying (levels 3, 5
- * and 7) is not ported: the machine stops at the first of them and says so.
+ * The story (the even levels) and its screens between the briefings — the
+ * Mart, the pilots, the debrief — are ported whole, and so is the flying
+ * (levels 3, 5 and 7, 0x40b190): the city, the enemies, the copilot, the
+ * repair bay and each day's boss (src/game/combat/).
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
@@ -75,8 +76,8 @@ export interface JumpRavenOptions {
   saver?: (bytes: Uint8Array, name: string, done: () => void) => void;
   /**
    * A machine test's shortcut: a new game opened straight at this level, the
-   * records changed as given — how the way back from a flight is played while
-   * the flying is not ported
+   * records changed as given — how a suite plays one day, or the way back from
+   * a flight, without flying the days before it
    */
   start?: { level: number; difficulty?: number; records?: Partial<Records> };
 }

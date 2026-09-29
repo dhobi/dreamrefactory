@@ -41,7 +41,9 @@ game here, and the first with a real camera; see **[RedJack](redjack/)**.
 form older than any: every data file opens with the container's envelope, and
 not one carries a version tag. This port calls it **DreamFactory 0**. There are
 no scripts; the whole game is in `LUNICUS.EXE`, and it was ported from its
-disassembly. See **[Lunicus](lunicus/)**.
+disassembly. See **[Lunicus](lunicus/)**. ***Jump Raven*** is the same
+engine, its executable a month older than Lunicus's, and was ported from its
+disassembly the same way; see **[Jump Raven](jumpraven/)**.
 
 Three of them play here — two of them CyberFlix's own and the third GTE
 Interactive Media's:
@@ -57,7 +59,8 @@ with that logic read out of the executable. A fifth,
 **[RedJack](redjack/)** (1998, DreamFactory 5), plays from its first day to its
 end, and saves.
 A sixth, **[Lunicus](lunicus/)** (DreamFactory 0), plays from the intro to its
-queen, and saves.
+queen, and saves. A seventh, **[Jump Raven](jumpraven/)** (DreamFactory 0),
+plays its three days to the copilot's ending, saves, and can play itself.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you
@@ -111,8 +114,10 @@ its six editions and how the port was verified against it — **[Dust](dust/)** 
 what DreamFactory 1 does differently, and where its music lives — and
 **[Timelapse](timelapse/)** — a game with no rooms, navigated by the shape of the
 cursor — **[RedJack](redjack/)** — DreamFactory 5, and what it found in its
-own executable — and **[Lunicus](lunicus/)** — DreamFactory 0, a game whose
-logic is all in its executable, played through by machine and in a browser.
+own executable — **[Lunicus](lunicus/)** — DreamFactory 0, a game whose
+logic is all in its executable, played through by machine and in a browser —
+and **[Jump Raven](jumpraven/)** — the same engine again, and a player that
+wins it.
 
 Two pages are outside the order, for reading out of order:
 **[the glossary](glossary.md)** (one line per term, when a word you don't know
@@ -172,7 +177,7 @@ first; every format doc after it builds on it.
   read out of RedJack.exe: tagged containers, and a load that closes the room
   being left.
 - **[DreamFactory 0's containers](engine/formats/dreamfactory-0.md)** — *Lunicus*'s
-  files (1994): the envelope with no version tag, a frame codec that copies from
+  and *Jump Raven*'s files (1994): the envelope with no version tag, a frame codec that copies from
   its own compressed stream, and mazes of shared films.
 - **[DreamFactory 5's containers](engine/formats/dreamfactory-5.md)** — RedJack's
   files: the 24 bytes every container now opens with, and the palette that moved

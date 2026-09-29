@@ -1,7 +1,7 @@
 /**
  * What a game holds between its levels, as RAVEN.EXE keeps it from 0x437858
  * on. File ▸ New fills it (0x4222fb(1)); the Mart spends and fills the
- * weapons; the flying (not ported yet) uses it all.
+ * weapons; the flying uses it all.
  */
 
 /** a full load of anything: a weapon's ammunition, and the three bars (0x417c81, 0x417fd5 …) */
