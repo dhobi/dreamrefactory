@@ -195,6 +195,7 @@ against).
     ln -sfn "$TIMELAPSE_GAMEFILES"    timelapse/gamefiles
     ln -sfn "$REDJACK_GAMEFILES"      redjack/gamefiles
     ln -sfn "$LUNICUS_GAMEFILES"      lunicus/gamefiles
+    ln -sfn "$JUMPRAVEN_GAMEFILES"    jumpraven/gamefiles
 ```
 
 Titanic's is required; the others are warnings, because those suites skip a

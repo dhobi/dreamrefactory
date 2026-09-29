@@ -163,6 +163,16 @@ jobs:
             echo "::warning::LUNICUS_GAMEFILES (${LUNICUS_GAMEFILES:-unset}) is not a directory — Lunicus's disc-reading tests will skip, and its machine suites will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
           fi
 
+          # Jump Raven's disc, OPTIONAL like the others: its machine suites fail
+          # without it. The variable names the directory holding RAVEN/, as
+          # jumpraven/gamefiles does.
+          if [ -n "${JUMPRAVEN_GAMEFILES:-}" ] && [ -d "${JUMPRAVEN_GAMEFILES:-}" ]; then
+            ln -sfn "$JUMPRAVEN_GAMEFILES" jumpraven/gamefiles
+            echo "jumpraven:        $(ls jumpraven/gamefiles | tr '\n' ' ')"
+          else
+            echo "::warning::JUMPRAVEN_GAMEFILES (${JUMPRAVEN_GAMEFILES:-unset}) is not a directory — Jump Raven's machine suites will FAIL if this change reaches them. In the runner container that is a volume in tools/runner/compose.yml; on a bare-metal runner, its .env. See docs/reference/ci.md."
+          fi
+
       # No setup-node here: the runner's own Node is used, so a run does not
       # re-download a toolchain onto a machine that already has one.
       - name: Report the toolchain
@@ -309,5 +319,18 @@ jobs:
             npm test -w lunicus
           else
             echo "::error::no Lunicus rip linked — its machine suites cannot run, and a change that reaches Lunicus does not pass without them. Link LUNICUS_GAMEFILES (docs/reference/ci.md)."
+            exit 1
+          fi
+
+      # Jump Raven's: the game ported from RAVEN.EXE, stood up in node on the
+      # disc and played from the intro to the pilot's ending — once with the
+      # game set, once by the fair player that shops, mends and flies for itself.
+      - name: Jump Raven machine suites
+        if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' jumpraven ')
+        run: |
+          if [ -f jumpraven/gamefiles/RAVEN/RAVEN/RAVEN.EXE ]; then
+            npm test -w jumpraven
+          else
+            echo "::error::no Jump Raven rip linked — its machine suites cannot run, and a change that reaches Jump Raven does not pass without them. Link JUMPRAVEN_GAMEFILES (docs/reference/ci.md)."
             exit 1
           fi
