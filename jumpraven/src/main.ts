@@ -337,7 +337,7 @@ const GESTURE_KEYS: Record<GestureKey, string> = { uparrow: "ArrowUp", downarrow
  */
 const touch = new TouchGestures({
   coords: (e) => (running && !windowDialogOpen() && !savesOpen() ? at(e as PointerEvent) : null),
-  ownedByGame: (x, y) => game.phase === "flying" && !inRect(VIEW, x, y),
+  ownedByGame: (x, y) => game.phase === "flying" && !m.film && !inRect(VIEW, x, y),
   press: (x, y) => input.down(x, y),
   release: (x, y) => input.up(x, y),
   sendKey: (key) => {

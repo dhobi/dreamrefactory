@@ -20,7 +20,8 @@ import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION } from "@dreamfactory/site/version";
-import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND } from "./game/data";
+import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND, VIEW_H, VIEW_W } from "./game/data";
+import { TouchGestures, type GestureKey } from "@dreamfactory/engine/web/touch";
 import { Lunicus } from "./game/game";
 import { Input, type Recording } from "./game/input";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
@@ -355,8 +356,25 @@ const at = (e: PointerEvent): { x: number; y: number } => {
 };
 /** the one door the page's hands and the machine tests' share (game/input.ts) */
 const input = new Input(game);
+/** a gesture's key, as `KeyboardEvent.key` names it */
+const GESTURE_KEYS: Record<GestureKey, string> = { uparrow: "ArrowUp", downarrow: "ArrowDown", leftarrow: "ArrowLeft", rightarrow: "ArrowRight", ".": "Escape" };
+/**
+ * A finger (engine/src/web/touch.ts): a double tap is Esc — on a phone the
+ * only way to skip a film, whose taps go to its hotspots — and a swipe an
+ * arrow, which walks and turns. In a level the panel beside and under the
+ * maze view takes a press at once; the view waits to see whether the finger
+ * swipes, and a tap there is a click on lift.
+ */
+const touch = new TouchGestures({
+  coords: (e) => (running && !REPLAY && !savesOpen() && !windowDialogOpen() ? at(e as PointerEvent) : null),
+  ownedByGame: (x, y) => (game.phase === "base" || game.phase === "city") && !m.film && (x >= VIEW_W || y >= VIEW_H),
+  press: (x, y) => input.down(x, y),
+  release: (x, y) => input.up(x, y),
+  sendKey: (key) => input.press(GESTURE_KEYS[key]),
+});
 canvas.addEventListener("pointerdown", (e) => {
   if (!running || REPLAY) return;
+  if (e.pointerType === "touch") return void touch.down(e);
   const p = at(e);
   input.down(p.x, p.y);
 });
@@ -365,11 +383,13 @@ canvas.addEventListener("pointermove", (e) => {
   const p = at(e);
   input.move(p.x, p.y);
 });
+addEventListener("pointermove", (e) => touch.move(e));
 addEventListener("pointerup", (e) => {
-  if (!running || REPLAY) return;
+  if (touch.up(e) || !running || REPLAY) return;
   const p = at(e);
   input.up(p.x, p.y);
 });
+addEventListener("pointercancel", (e) => touch.cancel(e));
 document.addEventListener("keydown", (e) => {
   if (focusOwnsKey(e.target, e.key)) return;
   // the saved-games dialog is modal, as the EXE's was: the game gets no key while it is up
