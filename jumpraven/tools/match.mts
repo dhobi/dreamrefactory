@@ -4,6 +4,8 @@
  *   npx tsx jumpraven/tools/match.mts                 the table, Raven VA → Lunicus VA
  *   npx tsx jumpraven/tools/match.mts lu 0x40e038     the Raven function for a Lunicus one
  *   npx tsx jumpraven/tools/match.mts rv 0x40d000     the Lunicus function for a Raven one
+ *   npx tsx jumpraven/tools/match.mts diff 0x41e5c4   a Raven function beside its Lunicus pair,
+ *                                                     where the two differ (addresses masked)
  *
  * The two engines are a month apart (RAVEN.EXE 1994-06-14, LUNICUS.EXE
  * 1994-07-19) and share most of their code, and Lunicus's has been read
@@ -94,6 +96,24 @@ if (mode === "lu") {
   const want = Number(arg), f = containing(rv, want)!;
   const p = pairs.get(f.va);
   console.log(p ? `raven ${hex(f.va)} (+${want - f.va}) = lunicus ${hex(p.lu)} (score ${p.score.toFixed(2)})` : `raven ${hex(f.va)}: no pair`);
+} else if (mode === "diff") {
+  const r = containing(rv, Number(arg))!;
+  const p = pairs.get(r.va);
+  const l = p ? lu.find((f) => f.va === p.lu) : containing(lu, Number(process.argv[4]));
+  if (!l) throw new Error(`raven ${hex(r.va)}: no pair (give the Lunicus VA as a third argument)`);
+  // an LCS over the masked instructions, printed as a diff
+  const a = r.ops, b = l.ops;
+  const dp = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  console.log(`raven ${hex(r.va)} (${a.length}) vs lunicus ${hex(l.va)} (${b.length}): ${dp[0][0]} in common`);
+  let i = 0, j = 0, same = 0;
+  const flush = () => { if (same) console.log(`   … ${same} the same`); same = 0; };
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { same++; i++; j++; }
+    else if (j < b.length && (i === a.length || dp[i][j + 1] >= dp[i + 1][j])) { flush(); console.log(`lu ${b[j++]}`); }
+    else { flush(); console.log(`rv ${a[i++]}`); }
+  }
+  flush();
 } else {
   for (const f of rv) { const p = pairs.get(f.va); console.log(`${hex(f.va)} ${p ? hex(p.lu) + " " + p.score.toFixed(2) : "-"} ${f.ops.length}`); }
   mkdirSync("out/jumpraven", { recursive: true });

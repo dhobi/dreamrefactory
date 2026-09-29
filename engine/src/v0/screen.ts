@@ -34,6 +34,17 @@ export class Screen {
     this.version++;
   }
 
+  /**
+   * The rect's pixels inverted, as `_portinvertrect` does on the 8-bit window
+   * (RAVEN.EXE 0x427373, a button held down): each index's bits flipped, which
+   * in a Macintosh palette is the colour opposite.
+   */
+  invert(r: Rect): void {
+    const [t, l, b, rt] = clip(r, FULL);
+    for (let y = t; y < b; y++) for (let x = l; x < rt; x++) this.pixels[y * SCREEN_W + x] ^= 0xff;
+    this.version++;
+  }
+
   /** `w`-wide rows of indices, their top-left at (top, left) */
   put(src: Uint8Array, w: number, h: number, top: number, left: number): void {
     for (let y = 0; y < h; y++) {

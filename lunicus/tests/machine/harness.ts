@@ -14,7 +14,7 @@ import { Lunicus, type LunicusOptions } from "../../src/game/game";
 import type { GameFiles } from "../../src/game/machine";
 import { drawnAt } from "../../src/game/crew";
 import { moved, type Pose } from "../../src/game/maze";
-import type { TalkState } from "../../src/game/talk";
+import type { TalkState } from "@dreamfactory/engine/v0/talk";
 import { Input, type Checkpoint, type Gesture, type Recording } from "../../src/game/input";
 
 export type { Checkpoint, Recording };

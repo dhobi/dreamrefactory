@@ -55,7 +55,7 @@ import { INDOORS, MazeView, OUTDOORS, camera, moved } from "../maze";
 import { Panel } from "../panel";
 import type { Progress } from "../base";
 import { inRect, type Rect } from "@dreamfactory/engine/v0/screen";
-import { talk, type TalkState } from "../talk";
+import { talk, type TalkState } from "@dreamfactory/engine/v0/talk";
 import { combatParams } from "./params";
 import { JEEP, TANK, Vehicle } from "./vehicle";
 import { Drone, dronesTarget } from "./drone";
@@ -685,7 +685,9 @@ export class City {
       m.clear();
     }
     m.screen.setPalette(this.cluts.CLUT130);
-    yield* talk(m, "queen", 1, this.day, this.talkState);
+    // the fade out Lunicus's talks start with (0x401570's, at 0x401616)
+    yield* m.fadeOut();
+    yield* talk(m, "queen.1", this.day, this.talkState);
     m.clear();
     this.films.push("final.move");
     yield* playFilm(m, "final.move", this.day);

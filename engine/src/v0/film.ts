@@ -16,7 +16,15 @@ import type { Co, MachineV0 as Machine } from "./machine";
 
 export const ESCAPE = "Escape";
 
-export type FilmEnd = "exit" | "chain";
+/**
+ * How a film ended: it is over, it chains to another (`to`), it calls another
+ * and wants to be come back to at `back`, or it goes back to its caller
+ * (RAVEN.EXE 0x411d4d: hotspot and frame types 3, 4 and 5).
+ */
+export type FilmEnd = "exit" | "chain" | "call" | "return";
+
+/** a press held on a button hotspot is at least this long, in ticks (RAVEN.EXE 0x427373) */
+const PRESS_TICKS = 10;
 
 /**
  * What a film tells the level it plays over (0x40ad60 messages 9, 10, 11): a
@@ -37,8 +45,14 @@ export interface FilmHooks {
   aside?: () => Co | null;
 }
 
-/** one film; answers how it ended and, for a chain, where to */
-export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmHooks = {}): Co<{ end: FilmEnd; to: string }> {
+/** one film, from frame `start`; answers how it ended and, for a chain or a call, where to */
+export function* playOneFilm(
+  m: Machine,
+  name: string,
+  day: number,
+  hooks: FilmHooks = {},
+  start = 0,
+): Co<{ end: FilmEnd; to: string; back: number }> {
   const { path, data } = yield* m.file(name, day);
   const film = readMovFileV0(data);
   const head = film.file.containers[0].data;
@@ -57,8 +71,9 @@ export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmH
   m.log(`▶ ${path} — ${film.frames.length} frames`);
   m.screen.setPalette(paletteV0(film.paletteRaw));
   const fb = new FrameBuffer();
-  let index = 0;
+  let index = Math.min(Math.max(start, 0), film.frames.length - 1);
   let decoded = -1;
+  const over = { end: "exit" as FilmEnd, to: "", back: 0 };
   while (index >= 0 && index < film.frames.length) {
     const frame = film.frames[index];
     m.where = `${path} · frame ${index + 1} of ${film.frames.length}`;
@@ -102,14 +117,30 @@ export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmH
     if (skipped) {
       m.stopSound();
       yield* hooksLeft();
-      return { end: "exit", to: "" };
+      return over;
     }
     if (clicked) {
+      // the hotspots in their order (0x411f13): a button (a negative type)
+      // counts only if the press is let go on it, and a miss goes on to the next
       const { x, y } = clicked;
-      const hit = live.find((h) => x >= h.left && x <= h.right && y >= h.top && y <= h.bottom);
-      if (hit) hooks.button?.(live.indexOf(hit));
+      let hit: (typeof live)[number] | undefined;
+      for (const h of live) {
+        if (!(x >= h.left && x <= h.right && y >= h.top && y <= h.bottom)) continue;
+        if (h.type < 0 && !(yield* trackPress(m, [h.top + film.top, h.left + film.left, h.bottom + film.top, h.right + film.left]))) continue;
+        hit = h;
+        break;
+      }
+      if (hit) {
+        hooks.button?.(live.indexOf(hit));
+        // the hotspot's own sound (0x4134db)
+        const click = hit.sound ? film.file.containers[Math.abs(hit.sound)] : undefined;
+        if (click) m.sound(click.data);
+      }
       const type = hit ? Math.abs(hit.type) : 0;
-      if (type === 1 || type === 3) return yield* hooksLeft(), { end: "exit", to: "" };
+      if (type === 1 || (type === 3 && !hit!.film)) return yield* hooksLeft(), over;
+      if (type === 3) return yield* hooksLeft(), { end: "chain", to: hit!.film, back: 0 };
+      if (type === 4) return yield* hooksLeft(), { end: "call", to: hit!.film, back: hit!.target };
+      if (type === 5) return yield* hooksLeft(), { end: "return", to: "", back: 0 };
       if (type === 2 && hit) {
         yield* soundDone();
         index = hit.target;
@@ -121,24 +152,75 @@ export function* playOneFilm(m: Machine, name: string, day: number, hooks: FilmH
     const next = nextFrameV0(film, index);
     if (next < 0) {
       yield* hooksLeft();
-      return frame.action === 3 && frame.chainTo ? { end: "chain", to: frame.chainTo } : { end: "exit", to: "" };
+      if (frame.action === 3 && frame.chainTo) return { end: "chain", to: frame.chainTo, back: 0 };
+      if (frame.action === 4 && frame.chainTo) return { end: "call", to: frame.chainTo, back: frame.target };
+      if (frame.action === 5) return { end: "return", to: "", back: 0 };
+      return over;
     }
     index = next;
   }
   yield* hooksLeft();
-  return { end: "exit", to: "" };
+  return over;
 }
 
-/** a film and every film it chains to (the intro chains to the title, `flip.move`) */
+/**
+ * A button held down (RAVEN.EXE 0x427373, LUNICUS.EXE 0x41d0a7): the rect
+ * inverted while the pointer is on it, at least {@link PRESS_TICKS} from the
+ * press; true if it is let go on the button.
+ */
+export function* trackPress(m: Machine, rect: readonly [number, number, number, number]): Co<boolean> {
+  const on = (): boolean => m.pointer.y >= rect[0] && m.pointer.y <= rect[2] && m.pointer.x >= rect[1] && m.pointer.x <= rect[3];
+  const inverted: [number, number, number, number] = [rect[0], rect[1], rect[2] + 1, rect[3] + 1];
+  const pressed = m.ticks;
+  let lit = true;
+  m.screen.invert(inverted);
+  for (;;) {
+    const i = m.events.findIndex((e) => e.kind === "up");
+    if (i >= 0 || !m.mouseHeld) {
+      if (i >= 0) {
+        const [e] = m.events.splice(i, 1);
+        if (e.kind === "up") m.pointer = { x: e.x, y: e.y };
+      }
+      break;
+    }
+    if (on() !== lit) (lit = !lit), m.screen.invert(inverted);
+    yield;
+  }
+  while (m.ticks - pressed < PRESS_TICKS) yield;
+  if (on() !== lit) (lit = !lit), m.screen.invert(inverted);
+  if (lit) m.screen.invert(inverted);
+  return lit;
+}
+
+/**
+ * A film and every film it chains to (Lunicus's intro chains to the title,
+ * `flip.move`) or calls: a call is kept on a stack five deep (0x4370f4) and a
+ * return goes back to the caller at the frame the call named — Jump Raven's
+ * help film calls each topic's film, and each ends by coming back.
+ */
 export function* playFilm(m: Machine, name: string, day: number, hooks: FilmHooks = {}): Co {
   let at = name;
+  let from = 0;
+  const calls: { name: string; frame: number }[] = [];
   try {
-    for (let guard = 0; guard < 16; guard++) {
+    // unbounded, as the EXE's loop is: a help film is called and returned from for as long as the player browses it
+    for (;;) {
       m.film = at;
-      const { end, to } = yield* playOneFilm(m, at, day, hooks);
-      if (end !== "chain") return;
-      m.log(`  chains to ${to}`);
-      at = to;
+      const { end, to, back } = yield* playOneFilm(m, at, day, hooks, from);
+      if (end === "exit") return;
+      if (end === "return") {
+        const up = calls.pop();
+        if (!up) return;
+        m.log(`  back to ${up.name}`);
+        (at = up.name), (from = up.frame);
+        continue;
+      }
+      if (end === "call") {
+        if (calls.length >= 5) return;
+        calls.push({ name: at, frame: back });
+        m.log(`  calls ${to}`);
+      } else m.log(`  chains to ${to}`);
+      (at = to), (from = 0);
     }
   } finally {
     m.film = null;

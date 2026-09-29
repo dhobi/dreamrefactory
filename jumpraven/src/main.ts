@@ -1,31 +1,33 @@
 /**
- * Jump Raven's prototype page: the disc read, and the intro played on it.
+ * Jump Raven's prototype page: the game machine (`src/game/`) driven at sixty
+ * ticks a second, its screen drawn doubled, the mouse and keys handed in.
  *
- * Nothing of the game itself is ported yet — RAVEN.EXE has not been
- * disassembled — so the page is the structure every game page has (the gauge,
- * Enter, the picture doubled, fullscreen, the bug report, the boot log and the
- * status line) around the one thing the files alone can do: play a film. Enter
- * plays `intro.move`, which chains to `intro2.move`, and then the page says how
- * far the port goes.
+ * Everything the game does is in the machine, so the page only
+ *
+ *   - serves the rip: the files the machine asks for, fetched in the
+ *     background while it waits (`GameFiles.want`); the opening's are read
+ *     before Enter
+ *   - runs the clock: a tick per 1/60 s of wall time, at most a few behind
+ *   - draws the screen when its version moves, and plays its sounds
+ *   - hands in input: a mouse-down or -up in the 512x384 screen's pixels, a key
+ *
+ * The machine tests (`tests/machine/`) drive the same machine with no page.
  */
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION } from "@dreamfactory/site/version";
-import { playFilm, type Co, type FilmHost } from "./film";
+import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND } from "./game/data";
+import { JumpRaven } from "./game/game";
+import { Input } from "./game/input";
+import type { GameFiles, Speaker } from "./game/machine";
 
-const SCREEN_W = 512;
-const SCREEN_H = 384;
 const SCALE = 2;
-const TICKS_PER_SECOND = 60;
+const RIP = "gamefiles/RAVEN/";
+/** what the opening reads before its first briefing, fetched before Enter */
+const PRELOAD = ["RAVEN/RAVEN.FON", "RAVEN/RAVEN.SCO", "SHARED/PUPPET", "DAY1/INTRO.MOV", "DAY1/INTRO2.MOV"];
 /** a tab left in the background comes back to this many ticks of catching up, not minutes */
 const MAX_CATCH_UP = 6;
-const RIP = "gamefiles/RAVEN/";
-/** where RAVEN.EXE looks for a film it names (its `day1\` and `shared\`) */
-const FILM_DIRS = ["DAY1/", "SHARED/"];
-/** the opening, fetched before Enter */
-const PRELOAD = ["DAY1/INTRO.MOV", "DAY1/INTRO2.MOV"];
-const FIRST_FILM = "intro.move";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("screen");
@@ -119,12 +121,14 @@ function fetchBytes(path: string, onProgress?: (got: number) => void): Promise<U
   return p;
 }
 
-/** a film's file from the name the game calls it by: `intro2.move` → DAY1/INTRO2.MOV */
-function filmPath(name: string): string | null {
-  const file = name.replace(/\.move$/i, ".mov").toUpperCase();
-  for (const dir of FILM_DIRS) if (RIP + dir + file in sizes) return dir + file;
-  return null;
-}
+const files: GameFiles = {
+  has: (p) => RIP + p in sizes,
+  get: (p) => bytes.get(p) ?? null,
+  want: (p) => {
+    if (!fetching.has(p)) say(`reading ${p} (${(sizes[RIP + p] / 1e6).toFixed(1)} MB)…`);
+    void fetchBytes(p);
+  },
+};
 
 /* ------------------------------------------------------------------------- *
  * Sound
@@ -132,45 +136,10 @@ function filmPath(name: string): string | null {
 
 let audio: AudioContext | null = null;
 const playing = new Set<AudioBufferSourceNode>();
-
-/* ------------------------------------------------------------------------- *
- * The screen and the clock
- * ------------------------------------------------------------------------- */
-
-const image = ctx.createImageData(SCREEN_W, SCREEN_H);
-const off = new OffscreenCanvas(SCREEN_W, SCREEN_H);
-const offCtx = off.getContext("2d")!;
-let skip = false;
-
-const host: FilmHost = {
-  film(name) {
-    const path = filmPath(name);
-    if (!path) throw new Error(`no film ${name} in ${FILM_DIRS.join(" or ")}`);
-    const got = bytes.get(path);
-    if (!got && !fetching.has(path)) {
-      say(`reading ${path} (${(sizes[RIP + path] / 1e6).toFixed(1)} MB)…`);
-      void fetchBytes(path);
-    }
-    return got ?? null;
-  },
-  show(pixels, width, height, top, left, palette) {
-    const px = image.data;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const c = pixels[y * width + x] * 4;
-        const o = ((top + y) * SCREEN_W + left + x) * 4;
-        px[o] = palette[c];
-        px[o + 1] = palette[c + 1];
-        px[o + 2] = palette[c + 2];
-        px[o + 3] = 255;
-      }
-    }
-    offCtx.putImageData(image, 0, 0);
-    ctx.drawImage(off, 0, 0, SCREEN_W * SCALE, SCREEN_H * SCALE);
-  },
-  play({ samples, sampleRate }) {
+const speaker: Speaker = {
+  play(samples, rate) {
     if (!audio) return;
-    const buf = audio.createBuffer(1, samples.length, sampleRate);
+    const buf = audio.createBuffer(1, samples.length, rate);
     buf.getChannelData(0).set(samples);
     const src = audio.createBufferSource();
     src.buffer = buf;
@@ -179,54 +148,99 @@ const host: FilmHost = {
     playing.add(src);
     src.start();
   },
-  stopSound() {
+  stop() {
     for (const s of playing) s.stop();
     playing.clear();
   },
-  soundBusy: () => playing.size > 0,
-  skipped() {
-    const was = skip;
-    skip = false;
-    return was;
-  },
-  log: say,
-  where: (line) => void (locEl.textContent = line),
 };
 
-function* opening(): Co {
-  yield* playFilm(host, FIRST_FILM);
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  locEl.textContent = "the intro is as far as the port goes — the game itself is not ported yet";
-  step("the end of the intro: RAVEN.EXE is not ported yet");
+/* ------------------------------------------------------------------------- *
+ * The machine
+ * ------------------------------------------------------------------------- */
+
+const game = new JumpRaven(files, { speaker, seed: Date.now() & 0xffff, log: say });
+const m = game.m;
+const input = new Input(game);
+const image = ctx.createImageData(SCREEN_W, SCREEN_H);
+const off = new OffscreenCanvas(SCREEN_W, SCREEN_H);
+const offCtx = off.getContext("2d")!;
+let drawn = -1;
+
+function draw(): void {
+  if (m.screen.version === drawn) return;
+  drawn = m.screen.version;
+  m.screen.rgba(image.data);
+  offCtx.putImageData(image, 0, 0);
+  ctx.drawImage(off, 0, 0, SCREEN_W * SCALE, SCREEN_H * SCALE);
 }
 
-let co: Co | null = null;
+function where(): string {
+  if (game.phase === "not-ported" || game.phase === "quit") return `${game.stopped}`;
+  const t = game.talkState.talk;
+  if (t) return `briefing: ${t.file}${t.line ? ` · ${t.line}` : ""}`;
+  if (m.film) return m.where;
+  if (game.phase === "scores") return "the high scores screen — PLAY starts a game";
+  return m.where || game.phase;
+}
+
+let running = false;
 let last = 0;
 let owed = 0;
+let lastStatus = "";
 function frame(now: number): void {
-  if (!co) return;
+  if (!running) return;
   owed = Math.min(owed + ((now - last) * TICKS_PER_SECOND) / 1000, MAX_CATCH_UP);
   last = now;
   try {
-    for (; owed >= 1 && co; owed--) if (co.next().done) co = null;
+    for (; owed >= 1; owed--) if (!game.tick()) break;
   } catch (e) {
     complain(String(e));
-    co = null;
+    running = false;
   }
-  if (co) requestAnimationFrame(frame);
+  draw();
+  const s = where();
+  if (s !== lastStatus) locEl.textContent = lastStatus = s;
+  requestAnimationFrame(frame);
 }
 
 /* ------------------------------------------------------------------------- *
  * Input
  * ------------------------------------------------------------------------- */
 
-canvas.addEventListener("pointerdown", () => void (co && (skip = true)));
+/**
+ * A pointer event in the screen's pixels. Pointer events and not mouse events:
+ * a mouse event's position is rounded to whole CSS pixels, and with the canvas
+ * at a fractional place on the page that rounding can land a click in the pixel
+ * next door (Lunicus's page says more).
+ */
+const at = (e: PointerEvent): { x: number; y: number } => {
+  const r = canvas.getBoundingClientRect();
+  const x = Math.floor(((e.clientX - r.left) / r.width) * SCREEN_W);
+  const y = Math.floor(((e.clientY - r.top) / r.height) * SCREEN_H);
+  if (e.target !== canvas) return { x, y };
+  return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
+};
+canvas.addEventListener("pointerdown", (e) => {
+  if (!running) return;
+  const p = at(e);
+  input.down(p.x, p.y);
+});
+addEventListener("pointermove", (e) => {
+  const p = at(e);
+  input.move(p.x, p.y);
+});
+addEventListener("pointerup", (e) => {
+  if (!running) return;
+  const p = at(e);
+  input.up(p.x, p.y);
+});
 document.addEventListener("keydown", (e) => {
   if (focusOwnsKey(e.target, e.key)) return;
   if (e.key === "b") return toggleLog();
-  if (e.key === "Escape" && co) (skip = true), e.preventDefault();
+  if (!running || e.repeat) return;
+  if (input.keyDown(e.key)) e.preventDefault();
 });
+document.addEventListener("keyup", (e) => input.keyUp(e.key));
 
 /* ------------------------------------------------------------------------- *
  * The boot
@@ -268,15 +282,15 @@ async function boot(): Promise<void> {
   gauge(1, "ready");
   $("boot").classList.add("ready");
   document.body.classList.remove("booting");
-  step("ready — Enter plays the intro");
+  step("ready — Enter plays the intro; Esc skips a film or ends a briefing");
 }
 
 async function enter(): Promise<void> {
   audio ??= new AudioContext();
   await audio.resume();
   document.body.classList.add("playing");
-  if (co) return;
-  co = opening();
+  if (running) return;
+  running = true;
   last = performance.now();
   requestAnimationFrame(frame);
 }

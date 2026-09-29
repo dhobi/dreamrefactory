@@ -2,11 +2,13 @@
   "name": "@dreamfactory/jumpraven",
   "version": "0.0.1",
   "private": true,
-  "description": "Jump Raven (1994) — CyberFlix's second game, a hovercraft shooter over a drowned New York, on the same DreamFactory 0 as Lunicus. A prototype page: it reads the disc and plays the intro.",
+  "description": "Jump Raven (1994) — CyberFlix's second game, a hovercraft shooter over a drowned New York, on the same DreamFactory 0 as Lunicus. Being ported from RAVEN.EXE: the opening, the high scores screen and the story's briefings play.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "tsx tools/runmachine.mts",
+    "test:machine": "tsx tools/runmachine.mts",
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/jumpraven gamefiles public"
   }
 }

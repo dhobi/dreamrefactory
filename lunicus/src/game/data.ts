@@ -146,6 +146,3 @@ export const INK = 0x78;
 export const BUTTON_LEFT = [0, 64, 128, 320, 384, 448];
 export const BUTTON_TOP = 0x147;
 
-/** a conversation's menu lines: 24 px each from y 264, the text at +8, +16 (0x415f89, 0x415f24) */
-export const MENU_TOP = 0x108;
-export const MENU_LINE = 0x18;

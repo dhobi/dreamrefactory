@@ -125,9 +125,10 @@ A talk file is one character on one day: `raife.1`, `sasha.3` and so on, plus
 | 5 … | the talking head's pictures, the other layers' |
 | then | pairs of a voice line and the puppet track that animates it |
 
-The talk itself (0x415000) is in `lunicus/src/game/talk.ts`: which file a
-character talks from on a day, how a menu is drawn and chosen from, and how a
-line's keyframe follows the clock.
+The talk itself (LUNICUS.EXE 0x415000, RAVEN.EXE 0x41e5c4, the same code) is
+in `engine/src/v0/talk.ts`: how a menu is drawn and chosen from, and how a
+line's keyframe follows the clock. Which file a Lunicus character talks from on
+a day is `talkNumber` in `lunicus/src/game/base.ts`.
 
 A **puppet track** is a list of 76-byte keyframes:
 

@@ -42,7 +42,10 @@ import type { Co, Machine } from "./machine";
 import { MazeView, camera, moved, type Camera, type Pose } from "./maze";
 import { Panel, type Hud } from "./panel";
 import { inRect, type Rect } from "@dreamfactory/engine/v0/screen";
-import { talk, talkNumber, type TalkState } from "./talk";
+import { talk, type TalkState } from "@dreamfactory/engine/v0/talk";
+
+/** a talk file's number for the day's progress `[0x42d1c8]` (table 0x427168): `raife.1` before the day's briefing, `.2` at 2, `.3` at 3–4 */
+export const talkNumber = (progress: number): number => (progress <= 1 ? 1 : progress === 2 ? 2 : 3);
 
 /** everything a saved game would hold, and what a machine test reads */
 export interface Progress {
@@ -554,7 +557,9 @@ export class Base {
     const n = number >= 1 ? number : talkNumber(this.p.day);
     // 0x401602: the effects and the ambience silenced for the talk, the ambience again after it (0x40164d)
     this.m.stopAmbience();
-    yield* talk(this.m, name, n, this.day, this.talkState);
+    // 0x401616: the view faded out before the talk
+    yield* this.m.fadeOut();
+    yield* talk(this.m, `${name}.${n}`, this.day, this.talkState);
     this.m.playAmbience();
     this.m.screen.setPalette(this.clut.map(() => 0));
     this.showRest();
