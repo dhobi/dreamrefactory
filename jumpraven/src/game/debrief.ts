@@ -31,12 +31,12 @@ const INK = 0x19;
 export const BONUS_ACCURACY = 60;
 export const LEVEL_BONUS = 1000;
 
-/** each count's bounty and where it is written (0x408c70) */
+/** each count's bounty and where it is written (0x408c70): each counter is the one its enemy's kill adds to (the jeep's 0x40dcf4 …) */
 const BOUNTIES: { kill: keyof Tally["kills"]; price: number; x: number; y: number }[] = [
   { kill: "bike", price: 15, x: 0x46, y: 0xa1 },
-  { kill: "copter", price: 25, x: 0x12e, y: 0xa1 },
+  { kill: "jeep", price: 25, x: 0x12e, y: 0xa1 },
   { kill: "tank", price: 55, x: 0x46, y: 0x13e },
-  { kill: "jeep", price: 35, x: 0x12e, y: 0x13e },
+  { kill: "copter", price: 35, x: 0x12e, y: 0x13e },
 ];
 
 const sum = (a: number[]): number => a.reduce((x, y) => x + y, 0);

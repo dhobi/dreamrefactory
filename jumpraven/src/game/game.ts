@@ -35,9 +35,15 @@ import { Mart, type MartState } from "./mart";
 import { PILOTS, Pilots, type PilotsState } from "./pilots";
 import { DEFAULT_BAND, Music } from "./music";
 import { BONUS_ACCURACY, accuracy, accuracyScreen, damage } from "./debrief";
-import { Flight, readPanel, type FlightState } from "./flight";
+import { Flight, VIEW, readPanel, type FlightState } from "./flight";
+import { PARAMS, World } from "./combat/world";
+import { newHudState, type HudState } from "./combat/hud";
+import { assemble } from "./combat/index";
+import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
+import { readMazeV0 } from "@dreamfactory/engine/df/maze-v0";
 import { readContainerFile as readFile } from "@dreamfactory/engine/df/container";
-import { newRecords, startGame, type Records } from "./records";
+import { AMMO_FULL, newRecords, startGame, type Records } from "./records";
+import { inRect } from "./screens";
 
 export type Phase = "boot" | "story" | "scores" | "flying" | "not-ported" | "quit";
 
@@ -76,6 +82,8 @@ export class JumpRaven {
   pilots: PilotsState | null = null;
   /** `[0x43b304]`: the band the player flies to (src/game/music.ts) */
   readonly band = { value: DEFAULT_BAND };
+  /** the HUD's own state, which a new game zeroes (0x415f51) and the flights carry on from one to the next */
+  hudState: HudState = newHudState();
   /** the flight while one is up */
   flight: FlightState | null = null;
   /** the key held down last, as RAVEN.EXE repeats it (message 7 with `[0x43b2cc]`) */
@@ -123,6 +131,7 @@ export class JumpRaven {
       const start = this.opts.start;
       if (start) {
         startGame(this.records);
+        this.hudState = newHudState();
         Object.assign(this.records, start.records ?? {});
         this.difficulty = start.difficulty ?? this.difficulty;
         this.level = start.level;
@@ -369,30 +378,115 @@ export class JumpRaven {
   }
 
   /**
-   * Levels 3, 5 and 7: 0x40b190, as far as it is ported — the city and the
-   * moves through it (src/game/flight.ts). Nothing yet ends a flight.
+   * Levels 3, 5 and 7: 0x40b190. The city, its modules (src/game/combat/),
+   * and after every frame what the frame left (0x40b447): the craft lost —
+   * a new one from the Mart while there are lives (`newman.move`), DEADMAN
+   * and the high scores when there are none; the PODS bar empty — the pods
+   * come down (`pods.move`) and the boss is called in; the boss done — the
+   * next level.
    */
   private *flying(): Co<number> {
     const m = this.m;
     this.phase = "flying";
     const city = readFile((yield* m.file("citymaze", this.day)).data);
     const panel = readPanel((yield* m.file("panel", this.day)).data);
-    const flight = new Flight(m, city, panel);
+    const w = new World(m, readMazeV0(city), this.records, PARAMS[this.difficulty], this.difficulty, this.day);
+    const flight = new Flight(m, w, city, panel);
+    const hud = yield* assemble(m, w, this.band.value, this.comms, this.hudState);
+    flight.hudFrame = () => hud.frame();
+    // 0x40ed51: the flight's palette and its flashes are RAVENRES.DLL's (0x85; 0x81, 0x83)
+    const dll = yield* m.own("RAVENRES.DLL");
+    const base = readClutV0(dll, "CLUT133");
+    const cluts: Record<number, Uint8ClampedArray> = { 0x81: readClutV0(dll, "CLUT129"), 0x83: readClutV0(dll, "CLUT131") };
+    flight.palettes(base, cluts);
+    hud.reset();
     this.flight = flight.state;
     this.played.push("citymaze");
-    m.screen.setPalette(this.palette);
+    m.screen.setPalette(base);
     flight.begin();
+    /** `[0x4365f8]`: the press that is held began in the view */
+    let aiming = false;
+    /** 0x40f18d: the events waiting dropped, the held key let go */
+    const flush = (): void => {
+      while (m.take());
+      this.heldKey = null;
+      aiming = false;
+    };
     try {
       for (;;) {
         for (let e = m.take(); e; e = m.take()) {
           if (e.kind === "key") {
             this.heldKey = e.key;
             flight.key(this.keyAction(e.key), false);
-          } else if (e.kind === "up") this.heldKey = null;
+          } else if (e.kind === "up") {
+            this.heldKey = null;
+            aiming = false;
+          } else if (e.kind === "down") {
+            // 0x40b1d2: a press in the view aims and fires there; anywhere else is the panels'
+            aiming = inRect(VIEW, e.x, e.y);
+            if (aiming) w.pyro.aim({ y: e.y - VIEW[0], x: e.x - VIEW[1] }, true);
+            else hud.click(e.y, e.x);
+          }
+        }
+        // 0x40b24f: held, the aim follows the pointer, kept inside the view
+        if (aiming && m.mouseHeld) {
+          const y = Math.min(Math.max(m.pointer.y, VIEW[0]), VIEW[2] - 1);
+          const x = Math.min(Math.max(m.pointer.x, VIEW[1]), VIEW[3] - 1);
+          w.pyro.aim({ y: y - VIEW[0], x: x - VIEW[1] }, false);
         }
         if (this.heldKey && !m.keysHeld.has(this.heldKey)) this.heldKey = null;
         if (this.heldKey) flight.key(this.keyAction(this.heldKey), true);
         yield* flight.frame();
+
+        if (w.state < -100) {
+          const lives = hud.lives();
+          if (lives <= 0) {
+            // 0x40b55a: no lives left
+            yield* m.fadeOut();
+            yield* this.film("deadman.move");
+            m.clear();
+            return HIGH_SCORES;
+          }
+          // 0x40b469: a new craft, everything full but the tiers, one life fewer, and the Mart
+          const score = hud.score();
+          const pods = hud.pods();
+          hud.zero();
+          this.comms.reset();
+          for (const r of w.resetList) r.reset();
+          hud.addScore(score);
+          for (let k = 0; k < 6; k++) hud.setAmmo(k, AMMO_FULL);
+          hud.x417fd5(pods);
+          hud.addLives(lives - 1);
+          hud.addShields(AMMO_FULL);
+          hud.addFuel(AMMO_FULL);
+          hud.redraw();
+          hud.x417d33();
+          yield* this.visitMart(2);
+          this.comms.reset();
+          m.screen.setPalette(base);
+          flight.redraw();
+          flush();
+        } else if (w.state === 1 && hud.pods() <= 0) {
+          // 0x40b5b8: the pods come down, the station and the ship go, the boss is called in
+          w.state++;
+          yield* flight.overView(() => this.film("pods.move"));
+          m.screen.setPalette(base);
+          w.fuel.reset();
+          w.weap.reset();
+          hud.x417d33();
+          flush();
+          hud.redraw();
+          flight.redraw();
+          hud.x417d70();
+        } else if (w.state === 3) {
+          // 0x40b60a: the level done
+          w.state++;
+          hud.x417fd5(AMMO_FULL);
+          hud.redraw();
+          hud.x417d33();
+          flush();
+          return this.level + 1;
+        }
       }
     } finally {
       this.flight = null;
@@ -479,6 +573,7 @@ export class JumpRaven {
   /** File ▸ New (0x4222fb(1)): the records afresh (src/game/records.ts), and level 2 */
   private *play(): Co<number> {
     startGame(this.records);
+    this.hudState = newHudState();
     yield* this.m.fadeOut();
     return 2;
   }

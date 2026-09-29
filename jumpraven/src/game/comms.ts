@@ -119,6 +119,30 @@ export class Comms {
     this.shownLine = -1;
   }
 
+  /** 0x413af8: the line stopped and forgotten, the pilot on the box again */
+  reset(): void {
+    this.stop();
+    this.hinted = false;
+    this.leaving = false;
+    this.shownWho = -1;
+    this.shownLine = -1;
+    this.line = -1;
+    this.who = PILOT;
+  }
+
+  /** 0x414bb4: whose line is playing, −1 while none is */
+  talking(): number {
+    return this.who >= 0 && this.key >= 0 ? this.who : -1;
+  }
+
+  /** `[0x4373e0]`, set by 0x414b8f; read by the flight's chatter (0x413c6d, not ported yet) */
+  hinted = false;
+
+  /** 0x414b8f: one time in two, `[0x4373e0]` set */
+  x414b8f(): void {
+    if (this.m.roll(2) === 1) this.hinted = true;
+  }
+
   /** 0x414b1a: the line playing stopped, its voice cut */
   private stop(): void {
     if (this.key < 0) return;

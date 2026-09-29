@@ -21,9 +21,10 @@ export interface Records {
   /** `[0x4378c8]`, up to 4: a new game adds 4 (0x422346) */
   lives: number;
   /**
-   * `[0x4378bc]`, `[0x4378c0]`, `[0x4378c4]`: three bars of up to {@link AMMO_FULL},
-   * each filled by a new game (0x42233e, 0x422356, 0x422364) — which is which
-   * is the flying's, not read yet
+   * The right panel's bars, each up to {@link AMMO_FULL} and filled by a new
+   * game (0x42233e, 0x422356, 0x422364): `[0x4378bc]` SHLD, the shields
+   * (0x417dac); `[0x4378c0]` PODS (0x417fd5 — empty, the pods are down,
+   * 0x40b5af); `[0x4378c4]` FUEL (0x417fa9)
    */
   bars: [number, number, number];
   /** the flying's tally, which the debrief reads (src/game/debrief.ts) */
@@ -37,7 +38,7 @@ export interface Records {
  * the damage screen's pictures (DAY2\DAMAGE), where each count is drawn.
  */
 export interface Tally {
-  /** `[0x43cf76]` $15, `[0x43cf66]` $25, `[0x43cf86]` $55, `[0x43cf9a]` $35 */
+  /** `[0x43cf76]` bikes $15 (0x402bd9), `[0x43cf66]` jeeps $25 (0x40dcf4), `[0x43cf86]` tanks $55 (0x425db8), `[0x43cf9a]` copters $35 (0x408658) */
   kills: { bike: number; copter: number; tank: number; jeep: number };
   /** `[0x43cffa + 4k]`, `[0x43d012 + 4k]` */
   shots: number[];
