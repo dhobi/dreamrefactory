@@ -22,13 +22,14 @@
  * Intermediate (0x4380 / `[0x43cf62]`), so a day is some 230 kills.
  */
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import type { JumpRaven } from "../../src/game/game";
-import type { Input } from "../../src/game/input";
-import type { World } from "../../src/game/combat/world";
-import { UP } from "../../src/game/flight";
-import { cell, PRICES, worth } from "../../src/game/mart";
-import { portrait } from "../../src/game/pilots";
-import { AMMO_FULL, KINDS } from "../../src/game/records";
+import type { JumpRaven } from "./game/game";
+import type { Input } from "./game/input";
+import type { World } from "./game/combat/world";
+import { UP } from "./game/flight";
+import { cell, PRICES, worth } from "./game/mart";
+import { portrait } from "./game/pilots";
+import { SCORE_BUTTONS } from "./game/data";
+import { AMMO_FULL, KINDS } from "./game/records";
 
 /** where each screen's CONTINUE is, for the screens with nothing to choose */
 const CONTINUE = { x: 8 + 50, y: 329 + 16 };
@@ -74,11 +75,19 @@ export class Player {
     private readonly cash: { keep: number; reserve: number } = { keep: KEEP, reserve: RESERVE },
   ) {}
 
-  /** one tick's worth of hands */
+  /** PLAY pressed once on the high scores screen, for the page's autoplay (the machine tests press it themselves) */
+  playsOnce = false;
+
+  /** one tick's worth of hands, before the tick */
   step(): void {
     const g = this.game;
     const m = g.m;
     const w = g.world;
+    if (this.playsOnce && g.phase === "scores" && g.titleUp && !g.asking && m.ticks % PACE === 0) {
+      this.playsOnce = false;
+      const r = SCORE_BUTTONS.find((b) => b.what === "play")!.rect;
+      return this.click({ x: (r[1] + r[3]) >> 1, y: (r[0] + r[2]) >> 1 });
+    }
     if (w && !g.screen) this.fly(w);
     if (m.ticks % PACE !== 0) return;
     if (g.screen) return this.screen();

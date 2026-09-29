@@ -34,6 +34,7 @@ import { inRect } from "./game/screens";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { JUMPRAVEN_SAVES } from "./saves";
+import { Player } from "./player";
 
 const SCALE = 2;
 const RIP = "gamefiles/RAVEN/";
@@ -41,6 +42,19 @@ const RIP = "gamefiles/RAVEN/";
 const PRELOAD = ["RAVEN/RAVEN.FON", "RAVEN/RAVEN.SCO", "SHARED/PUPPET", "DAY1/INTRO.MOV", "DAY1/INTRO2.MOV"];
 /** a tab left in the background comes back to this many ticks of catching up, not minutes */
 const MAX_CATCH_UP = 6;
+
+/**
+ * `?autoplay` (or `?autoplay=<seed>`): the page plays the game itself — the
+ * machine tests' player (src/player.ts), a tick's worth of hands before each
+ * tick, through the same door as the mouse and keys. `&speed=<n>` runs the
+ * clock n times as fast (1 to 32). The player wins about one game in four;
+ * the seed a machine test won with need not win here, where the files arrive
+ * and the sounds end in their own time.
+ */
+const params = new URLSearchParams(location.search);
+const AUTOPLAY = params.has("autoplay");
+const AUTO_SEED = Number(params.get("autoplay")) || 0;
+const SPEED = AUTOPLAY ? Math.min(32, Math.max(1, Number(params.get("speed")) || 1)) : 1;
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("screen");
@@ -212,11 +226,12 @@ const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
 const frameEl = $("frame");
 const game = new JumpRaven(files, {
   speaker,
-  seed: Date.now() & 0xffff,
+  seed: AUTO_SEED || Date.now() & 0xffff,
   log: say,
   sco: storedSco(),
-  keepSco,
-  askName: (done) => askHighScoreName(frameEl, done),
+  // an autoplay's scores are the player's, not yours: the table is not kept, and it signs its own
+  keepSco: AUTOPLAY ? undefined : keepSco,
+  askName: AUTOPLAY ? (done) => done("Autoplay") : (done) => askHighScoreName(frameEl, done),
   askQuit: (done) => askQuit(frameEl, done),
   pause: (done) => pause(frameEl, done),
   soundDialog: (v, theme, done) => soundDialog(frameEl, v, theme, done),
@@ -225,6 +240,7 @@ const game = new JumpRaven(files, {
 });
 const m = game.m;
 const input = new Input(game);
+const player = AUTOPLAY ? Object.assign(new Player(game, input), { playsOnce: true }) : null;
 const image = ctx.createImageData(SCREEN_W, SCREEN_H);
 const off = new OffscreenCanvas(SCREEN_W, SCREEN_H);
 const offCtx = off.getContext("2d")!;
@@ -267,6 +283,15 @@ const openSaved = (): void =>
     game.openGame(bytes);
     await enter();
   })().catch((e) => complain(String(e)));
+/** the autoplay's button: a fresh page that plays itself, or back to the one you play */
+const autoBtn = $("autoBtn");
+if (AUTOPLAY) autoBtn.textContent = "⏹ Stop autoplay";
+autoBtn.addEventListener("click", () => {
+  const u = new URL(location.href);
+  if (AUTOPLAY) ["autoplay", "speed"].forEach((k) => u.searchParams.delete(k));
+  else (u.searchParams.set("autoplay", ""), u.searchParams.set("speed", "4"));
+  location.href = u.href;
+});
 const loadBtn = $("loadBtn") as HTMLButtonElement;
 loadBtn.addEventListener("click", openSaved);
 
@@ -293,10 +318,13 @@ let owed = 0;
 let lastStatus = "";
 function frame(now: number): void {
   if (!running) return;
-  owed = Math.min(owed + ((now - last) * TICKS_PER_SECOND) / 1000, MAX_CATCH_UP);
+  owed = Math.min(owed + ((now - last) * TICKS_PER_SECOND * SPEED) / 1000, MAX_CATCH_UP * SPEED);
   last = now;
   try {
-    for (; owed >= 1; owed--) if (!game.tick()) break;
+    for (; owed >= 1; owed--) {
+      if (player && !windowDialogOpen() && !savesOpen()) player.step();
+      if (!game.tick()) break;
+    }
   } catch (e) {
     complain(String(e));
     running = false;
@@ -305,7 +333,8 @@ function frame(now: number): void {
   menu.sync();
   loadBtn.disabled = !game.canOpen;
   const s = where();
-  if (s !== lastStatus) locEl.textContent = lastStatus = s;
+  const shown = player ? `autoplay${SPEED > 1 ? ` ×${SPEED}` : ""}, seed ${AUTO_SEED || "random"} · ${s}` : s;
+  if (shown !== lastStatus) locEl.textContent = lastStatus = shown;
   requestAnimationFrame(frame);
 }
 
@@ -347,7 +376,7 @@ const touch = new TouchGestures({
   },
 });
 canvas.addEventListener("pointerdown", (e) => {
-  if (!running || windowDialogOpen() || savesOpen()) return;
+  if (!running || windowDialogOpen() || savesOpen() || player) return;
   if (e.pointerType === "touch") return void touch.down(e);
   const p = at(e);
   input.down(p.x, p.y);
@@ -367,7 +396,7 @@ document.addEventListener("keydown", (e) => {
   if (focusOwnsKey(e.target, e.key) || windowDialogOpen() || savesOpen()) return;
   const ctrl = e.ctrlKey || e.metaKey;
   if (e.key === "b" && !ctrl) return toggleLog();
-  if (!running || e.repeat) return;
+  if (!running || e.repeat || player) return;
   if (input.keyDown(e.key, ctrl)) e.preventDefault();
 });
 document.addEventListener("keyup", (e) => input.keyUp(e.key));

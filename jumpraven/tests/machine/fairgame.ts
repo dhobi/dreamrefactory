@@ -1,7 +1,7 @@
 /**
  * The whole game won with no shortcuts, on Intermediate: the intro to the high
  * scores, PLAY, three days and the pilot's ending — played by tests/machine/
- * player.ts through the page's own door, the copilot flying, every pod picked
+ * src/player.ts through the page's own door, the copilot flying, every pod picked
  * up and every boss killed at full strength.
  *
  * Unlike wholegame.ts nothing is set in the game: the player shops, mends at
@@ -16,7 +16,7 @@
 import { SCORE_BUTTONS } from "../../src/game/data";
 import { PILOTS } from "../../src/game/pilots";
 import { fail, ok, pass, start } from "./harness";
-import { Player } from "./player";
+import { Player } from "../../src/player";
 
 const SEED = 7;
 const { game, m, until, click, input } = start({ seed: SEED });
