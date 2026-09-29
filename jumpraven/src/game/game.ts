@@ -47,6 +47,7 @@ import { readMazeV0 } from "@dreamfactory/engine/df/maze-v0";
 import { readContainerFile as readFile } from "@dreamfactory/engine/df/container";
 import { AMMO_FULL, newRecords, startGame, type Records } from "./records";
 import { inRect } from "./screens";
+import { readRvn, writeRvn, type SavedGame } from "./rvn";
 
 export type Phase = "boot" | "story" | "scores" | "flying" | "not-ported" | "quit";
 
@@ -70,6 +71,8 @@ export interface JumpRavenOptions {
   soundDialog?: (volume: number, theme: boolean, done: (answer: { volume: number; theme: boolean } | null) => void) => void;
   /** DLOG3 (0x422950), Edit Keys: the six fields in {@link KEY_ACTIONS} order and the Default button's; `done` with OK's, or null for Cancel */
   keysDialog?: (fields: string[], defaults: string[], done: (fields: string[] | null) => void) => void;
+  /** the HUD's SAVE (0x4225b3, "Jump Raven (.RVN)"): the page stores the file as `name` or not, then `done` */
+  saver?: (bytes: Uint8Array, name: string, done: () => void) => void;
   /**
    * A machine test's shortcut: a new game opened straight at this level, the
    * records changed as given — how the way back from a flight is played while
@@ -119,6 +122,8 @@ export class JumpRaven {
   private titleAsked: "about.move" | "help.move" | "keys" | null = null;
   /** `[0x43cd74]`: Ctrl+Q heard in the story (0x421009), asked about after its step (0x426b0a) */
   private quitKey = false;
+  /** File ▸ Open's game, waiting for the high scores screen's loop — or, before the run, for the startup (0x422489) */
+  private opened: SavedGame | null = null;
   /** `[0x43b2f8]` (0x40f940): the game runs; File ▸ Exit ends it (0x42240d) */
   private running = true;
   private run: Co | null = null;
@@ -145,12 +150,35 @@ export class JumpRaven {
     this.newAsked = true;
   }
 
+  /**
+   * File ▸ Open: a `.RVN` file's game (src/game/rvn.ts). The bar is up only on
+   * the high scores screen, whose loop opens it; handed in before the run has
+   * started, it is the saved game the EXE was started with (0x422489), and the
+   * run opens it in place of the intro. Throws for a file that is no save.
+   */
+  openGame(bytes: Uint8Array): void {
+    const s = readRvn(bytes);
+    this.opened = s;
+    this.m.log(`File ▸ Open: level ${s.level}, ${DIFFICULTY_NAMES[s.difficulty - 1] ?? s.difficulty}, pilot ${PILOTS[s.pilot] ?? s.pilot}, cash ${s.records.score}`);
+  }
+
+  /** whether File ▸ Open would be taken now: before the run, or on the high scores screen */
+  get canOpen(): boolean {
+    return this.run === null || (this.titleUp && !this.asking);
+  }
+
+  /** the HUD's SAVE (0x4218a8): the game as it would open again */
+  saveBytes(): Uint8Array {
+    return writeRvn({ difficulty: this.difficulty, level: this.level, pilot: this.records.pilot, band: this.band.value, records: this.records });
+  }
+
   private *main(): Co {
     const m = this.m;
     try {
       yield* this.startup();
-      // 0x40f989 → 0x422489: no saved game to open, so level 0
+      // 0x40f989 → 0x422489: level 0, unless there is a saved game to open
       this.level = OPENING;
+      if (this.opened) this.level = yield* this.applyOpened();
       const start = this.opts.start;
       if (start) {
         startGame(this.records);
@@ -202,6 +230,25 @@ export class JumpRaven {
     let f = this.pictures.get(k);
     if (!f) this.pictures.set(k, (f = decodeFrameV0(this.puppet[k])));
     return f;
+  }
+
+  /**
+   * 0x421199: the saved game put back — the difficulty (0x4215c5), the
+   * records zeroed (0x415f51) and the comms box's line forgotten (0x413af8),
+   * then each field added back; the band; the pilot's head in the comms box if
+   * the pilot changed (0x413763); and the file's level, to go to (0x410491).
+   */
+  private *applyOpened(): Co<number> {
+    const s = this.opened!;
+    this.opened = null;
+    if (s.difficulty >= 1 && s.difficulty <= 4) this.difficulty = s.difficulty;
+    const before = this.records.pilot;
+    Object.assign(this.records, s.records);
+    this.hudState = newHudState();
+    this.comms.reset();
+    this.band.value = s.band;
+    if (s.pilot !== before) yield* this.comms.load(PILOT, `${PILOTS[s.pilot]}.mupp`, this.day);
+    return s.level;
   }
 
   /** 0x410491: the level closed, the new one's folder set, the new one opened */
@@ -671,8 +718,8 @@ export class JumpRaven {
 
   /**
    * 0x421094: a menu button of the HUD's pressed — the button drawn down
-   * (0x416025), its action, and the button up again (0x42117b). SAVE's
-   * dialog is not ported yet; HELP is `help.move` over the flight; SOUND,
+   * (0x416025), its action, and the button up again (0x42117b). SAVE writes
+   * a `.RVN`; HELP is `help.move` over the flight; SOUND,
    * KEYS and PAUSE are their dialogs; QUIT asks, and OK is the high scores.
    */
   private *systemMenu(hud: HudApi, flight: Flight, palette: Uint8ClampedArray): Co<number | null> {
@@ -683,7 +730,7 @@ export class JumpRaven {
     let next: number | null = null;
     switch (k) {
       case 0:
-        m.log("  saved games are not ported yet");
+        yield* this.save();
         break;
       case 1:
         yield* flight.overView(function* (this: JumpRaven) {
@@ -709,6 +756,21 @@ export class JumpRaven {
     hud.redraw();
     flight.redraw();
     return next;
+  }
+
+  /**
+   * The HUD's SAVE: the name asked for (0x4225b3) and the record written
+   * (0x4218a8) — the page's saved-games dialog both — and the flight on.
+   */
+  private *save(): Co {
+    const m = this.m;
+    const saver = this.opts.saver;
+    if (!saver) return m.log("  SAVE: nowhere to save to");
+    let done = false;
+    this.asking = true;
+    saver(this.saveBytes(), `Day ${this.day}`, () => (done = true));
+    while (!done) yield;
+    this.asking = false;
   }
 
   /** 0x41f990: `rbay.move`, and the bay's screen (src/game/rbay.ts) */
@@ -788,6 +850,8 @@ export class JumpRaven {
   private *titleStep(): Co<number | null> {
     const m = this.m;
     if (!this.running) return this.quit();
+    // 0x4222fb(2): File ▸ Open's file read (0x421487) and put back (0x421199)
+    if (this.opened) return yield* this.applyOpened();
     if (this.newAsked) {
       this.newAsked = false;
       return yield* this.play();

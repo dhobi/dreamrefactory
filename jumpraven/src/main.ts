@@ -12,6 +12,7 @@
  *   - hands in input: a mouse-down or -up in the 512x384 screen's pixels, a key
  *   - puts up the menu bar (src/menu.ts) and the EXE's dialogs (src/dialogs.ts),
  *     and keeps RAVEN.SCO — the keys and the high scores — in the browser
+ *   - keeps the saved games (`.RVN`) in the shared saved-games dialog
  *
  * The machine tests (`tests/machine/`) drive the same machine with no page.
  */
@@ -27,6 +28,9 @@ import { Input } from "./game/input";
 import type { GameFiles, Speaker } from "./game/machine";
 import { askHighScoreName, askQuit, editKeys, pause, soundDialog } from "./dialogs";
 import { installMenu } from "./menu";
+import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
+import { useSaveKind } from "@dreamfactory/engine/web/save-store";
+import { JUMPRAVEN_SAVES } from "./saves";
 
 const SCALE = 2;
 const RIP = "gamefiles/RAVEN/";
@@ -196,6 +200,12 @@ function keepSco(bytes: Uint8Array): void {
   }
 }
 
+/** the saved games: the HUD's SAVE writes through the shared dialog, File ▸ Open and Load read through it */
+useSaveKind(JUMPRAVEN_SAVES);
+const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
+  browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => (complain(String(e)), done()));
+};
+
 const frameEl = $("frame");
 const game = new JumpRaven(files, {
   speaker,
@@ -208,6 +218,7 @@ const game = new JumpRaven(files, {
   pause: (done) => pause(frameEl, done),
   soundDialog: (v, theme, done) => soundDialog(frameEl, v, theme, done),
   keysDialog: (fields, defaults, done) => editKeys(frameEl, fields, defaults, done),
+  saver,
 });
 const m = game.m;
 const input = new Input(game);
@@ -240,10 +251,25 @@ function where(): string {
   return m.where || game.phase;
 }
 
+/**
+ * File ▸ Open (0x4222fb(2)) and the Load button: the saved-games dialog, then
+ * the file's game — on the high scores screen, where the EXE's bar was, or
+ * before Enter, as a save the EXE was started with (0x422489)
+ */
+const openSaved = (): void =>
+  void (async () => {
+    if (!game.canOpen) return say("File ▸ Open: only on the high scores screen, where the game's menu bar is");
+    const bytes = await browseForLoad({ log: (l) => say(`  ${l}`) });
+    if (!bytes || !game.canOpen) return;
+    game.openGame(bytes);
+    await enter();
+  })().catch((e) => complain(String(e)));
+const loadBtn = $("loadBtn") as HTMLButtonElement;
+loadBtn.addEventListener("click", openSaved);
+
 /** the game window's menu bar, on the frame over the picture (src/menu.ts) */
 const menu = installMenu(frameEl, game, input, {
-  // saved games are not ported yet: the EXE's Open dialog is the next piece
-  open: () => say("File ▸ Open: saved games are not ported yet"),
+  open: openSaved,
   // 0x422431: MessageBox(“Available Memory: %d”) — what the browser will say of its heap, if anything
   memory: () => {
     const mem = (performance as { memory?: { jsHeapSizeLimit: number; usedJSHeapSize: number } }).memory;
@@ -255,7 +281,7 @@ const menu = installMenu(frameEl, game, input, {
   },
   // File ▸ Exit closed the window (0x4222fb(4)); a page leaves for the front door
   exit: () => (location.href = new URL("../", location.href).href),
-  live: () => running && !windowDialogOpen(),
+  live: () => running && !windowDialogOpen() && !savesOpen(),
 });
 
 let running = false;
@@ -274,6 +300,7 @@ function frame(now: number): void {
   }
   draw();
   menu.sync();
+  loadBtn.disabled = !game.canOpen;
   const s = where();
   if (s !== lastStatus) locEl.textContent = lastStatus = s;
   requestAnimationFrame(frame);
@@ -297,7 +324,7 @@ const at = (e: PointerEvent): { x: number; y: number } => {
   return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
 };
 canvas.addEventListener("pointerdown", (e) => {
-  if (!running || windowDialogOpen()) return;
+  if (!running || windowDialogOpen() || savesOpen()) return;
   const p = at(e);
   input.down(p.x, p.y);
 });
@@ -311,7 +338,7 @@ addEventListener("pointerup", (e) => {
   input.up(p.x, p.y);
 });
 document.addEventListener("keydown", (e) => {
-  if (focusOwnsKey(e.target, e.key) || windowDialogOpen()) return;
+  if (focusOwnsKey(e.target, e.key) || windowDialogOpen() || savesOpen()) return;
   const ctrl = e.ctrlKey || e.metaKey;
   if (e.key === "b" && !ctrl) return toggleLog();
   if (!running || e.repeat) return;

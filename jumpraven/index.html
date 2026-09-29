@@ -79,9 +79,9 @@
           🪲 Report a bug
         </button>
         <span id="bugNote" class="note"></span>
-        <!-- File ▸ Open: the saved games (.RVN), the shared dialog. Nothing reads
-             a .RVN yet, so the button waits for the game -->
-        <button id="loadBtn" type="button" title="Open a saved game — not yet: nothing reads a .RVN" disabled>📂 Load</button>
+        <!-- File ▸ Open: the saved games (.RVN), the shared dialog — on the high
+             scores screen, or before Enter; the HUD's SAVE button saves -->
+        <button id="loadBtn" type="button" title="Open a saved game (File ▸ Open) — on the high scores screen, or before Enter">📂 Load</button>
         <button id="logBtn" type="button" title="The boot log, in full (b)">▤ Boot log</button>
         <span class="keyhint" title="a click or esc skips a film or ends a briefing · in flight a click in the view fires the chosen weapon there, space fires the defensive, T is HOVER/FLY and the arrows (or W A S D) fly or slide · b opens the boot log"
           ><span class="k">esc</span> skip <span class="k">click</span> fire <span class="k">space</span> defensive <span class="k">T</span> hover / fly <span class="k">↑</span><span class="k">←</span><span class="k">→</span> fly
@@ -103,7 +103,8 @@
       >
     </footer>
     <!-- The saved-games dialog, driven by engine/src/web/save-browser.ts (shared
-         with the other games, hence the ids). Nothing opens it yet. -->
+         with the other games, hence the ids). The HUD's SAVE and the Load button
+         above point here (src/main.ts). -->
     <div id="saveModal" class="modal">
       <div class="modal-box">
         <div class="modal-head">
