@@ -192,13 +192,21 @@ export interface BankTables {
  * but the order table is longer, so the record count is at 0x222. The RECORDS
  * then differ between the two, measured on every table in the rip: a bank's are
  * v4's own 26 bytes from 0x226 (container +4, name +10), a film's are 34 from
- * 0x228 (container +10, name +16) — RedJack's `liznite.trak` steps `010`, `020`
- * … by 26 and `intro.move` steps `e1`, `e2` … by 34.
+ * the same 0x226 (container +12, name +18) — RedJack's `liznite.trak` steps
+ * `010`, `020` … by 26 and `intro.move` steps `e1`, `e2` … by 34.
+ *
+ * A film's start is RedJack.exe's, not a stride that happens to divide: move.c
+ * copies each record as 34 bytes from `table + 0x226 + 34·i` (0x44dee6, 8
+ * dwords and a word) and takes the container at +12 (0x44defb) and the name at
+ * +18 (0x44df15). Read from 0x228 instead, the same fields land at +10 and +16
+ * and every record but the last reads the same — the last one runs 2 bytes off
+ * the end of a table that ends exactly, and was dropped. That silenced
+ * `arrive.move`'s `silence` and looped its music in its place (#379).
  */
 const V5_PREFIX = 0x18;
 const V5_LOOP_RECORDS = {
   bank: { first: 0x226, size: 26, loc: 4, name: 10 },
-  film: { first: 0x228, size: 34, loc: 10, name: 16 },
+  film: { first: 0x226, size: 34, loc: 12, name: 18 },
 } as const;
 const V5_LOOP = { count: 0x1c, order: 0x1e, records: 0x222 } as const;
 
