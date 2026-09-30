@@ -58,6 +58,7 @@ import {
   readMovFile,
 } from "@dreamfactory/engine/df/mov";
 import type { GameScreen } from "@dreamfactory/site/games";
+import type { FilmEnding } from "@dreamfactory/engine/df/mov-film";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -1635,7 +1636,7 @@ function buildPalette(): void {
 
 // --- PNG export (one way only) ----------------------------------------------
 
-const baseName = (): string => fileName.replace(/\.mov$/i, "").toLowerCase();
+const baseName = (): string => fileName.replace(/\.move?$/i, "").toLowerCase();
 
 $("pngExportBtn").addEventListener("click", () => {
   const f = frame();
@@ -1644,6 +1645,58 @@ $("pngExportBtn").addEventListener("click", () => {
   src.toBlob((blob) => {
     if (blob) download(blob, `${baseName()}.f${frameIdx}${f.name ? `.${f.name}` : ""}.png`);
   }, "image/png");
+});
+
+/** why the video ends where it does, in words */
+function videoEnding(e: FilmEnding): string {
+  switch (e.kind) {
+    case "click":
+      return t("movies.videoEndsClick", { n: e.segIdx + 1, i: e.frame });
+    case "loop":
+      return t("movies.videoEndsLoop", { n: e.segIdx + 1, i: e.frame, to: e.to });
+    case "chain":
+      return t("movies.videoEndsChain", { n: e.segIdx + 1, i: e.frame, event: e.event });
+    case "long":
+      return t("movies.videoEndsLong");
+    default:
+      return "";
+  }
+}
+
+$("videoExportBtn").addEventListener("click", async () => {
+  const m = mov;
+  if (!m) return;
+  const btn = $<HTMLButtonElement>("videoExportBtn");
+  const label = btn.textContent;
+  stopFilm();
+  stopPlayback();
+  btn.disabled = true;
+  log(t("movies.videoEncoding"));
+  try {
+    // the encoder and its muxer load on the first export, not with the page
+    const { encodeFilmVideo } = await import("./film-video");
+    const video = await encodeFilmVideo(m, screen, (f) => {
+      btn.textContent = `${Math.round(f * 100)}%`;
+    });
+    if (!video) {
+      log(t("movies.videoNone"));
+      return;
+    }
+    download(video.blob, `${baseName()}.${video.extension.replace(/^\./, "")}`);
+    log(
+      t("movies.videoDone", {
+        secs: (video.timeline.ms / 1000).toFixed(1),
+        size: `${video.width}×${video.height}`,
+        codecs: video.codecs,
+        mb: (video.blob.size / 1e6).toFixed(1),
+      }) + videoEnding(video.timeline.ending),
+    );
+  } catch (e) {
+    log(t("movies.videoFailed", { error: e instanceof Error ? e.message : String(e) }));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 });
 
 // --- export -----------------------------------------------------------------

@@ -13,6 +13,8 @@
   "previewNote": "<b>Klik op de afbeelding</b> en de film doet wat hij met die klik zou doen — naar het doelbeeld van een gebied springen, of de uitgang of de koppeling naar een ander bestand melden. Een klik buiten elk gebied doet niets, precies als in het spel.",
   "readonlyNote": "Beelden zijn <b>delta-gecodeerd in één ketting</b>, dus deze pagina decodeert 0…N om beeld N te tonen — teruggaan speelt de ketting vanaf het begin opnieuw af. Dat is ook waarom de afbeeldingen alleen-lezen zijn: een vervangen beeld zou alles erna laten decoderen tegen een afbeelding die er niet meer is.",
   "exportFramePng": "⬇ Dit beeld als PNG exporteren",
+  "exportVideo": "⬇ De film als video exporteren",
+  "exportVideoTitle": "de film als video wegschrijven, zoals hij vanzelf afspeelt — elk segment met zijn soundtrack, tot waar hij op een klik zou wachten of zou herhalen",
   "prevTitle": "het vorige beeld",
   "nextTitle": "het volgende beeld",
   "movieHead": "Film",
@@ -120,5 +122,13 @@
   "filmEnd": "de film eindigt — {frames} in {secs} s",
   "filmCue": "cue op tick {tick} → “{target}”",
   "filmNoPacing": "hier brengt niets het beeld verder — geen stap, geen geluidsband, geen regio's: in het spel is dit een close-up die blijft staan tot je hem wegklikt",
+  "videoEncoding": "de film wordt als video gecodeerd…",
+  "videoNone": "deze browser kan geen video coderen (hij heeft geen WebCodecs-video-encoder)",
+  "videoDone": "video opgeslagen: {secs} s op {size}, {codecs}, {mb} MB",
+  "videoFailed": "de video-export is mislukt: {error}",
+  "videoEndsClick": " — hij eindigt in segment {n}, beeld {i}, dat op een klik wacht",
+  "videoEndsLoop": " — hij eindigt in segment {n}, beeld {i}, dat terugspringt naar beeld {to}",
+  "videoEndsChain": " — hij eindigt in segment {n}, beeld {i}, dat doorgaat naar “{event}”",
+  "videoEndsLong": " — afgekapt na 20 minuten",
   "filmResume": "verder vanaf het gekozen beeld, op het tempo en met het geluid van het spel"
 }

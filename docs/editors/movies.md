@@ -62,6 +62,35 @@ at a later segment lands in that segment's header rather than in container 0,
 which is only the *first* segment's header. A single-segment movie patches
 container 0, because a `MovFile` **is** its first segment.
 
+### The film as a video
+
+**⬇ Export the film as video** writes the film out as an `.mp4` (#435), in the
+browser and without uploading anything. A movie is a state machine and a video
+is not, so what goes in is the part that **plays by itself**: every segment in
+order, on the same holds, bed and entry sounds as **▶▶ Play the film**, up to
+the first place the film would stop playing on its own —
+
+- a frame that **waits for a click**, or a segment with nothing to pace it: held
+  for two seconds, and the video ends on it;
+- a **jump back** to a frame already shown (the camel ride, the fires), which the
+  game would loop for ever;
+- a **chain** to another file, or a return.
+
+The status line says which it was. Timed cues and a sound's follow-on frame are
+not taken, since each moves the picture on a sound's clock rather than the film's.
+
+Each frame goes in for exactly as long as it is held, so the video keeps the
+film's own uneven timing. The picture is scaled up by a whole number, with no
+smoothing, until it is at least 720 pixels tall (a 640×480 film comes out
+1280×960). The codecs are whatever the browser can encode: H.264 in an MP4 where
+it has that, with AAC sound or else Opus (Chromium on Linux has no AAC encoder,
+and QuickTime will not play Opus); WebM with VP9 or VP8 where it has no H.264.
+The clock is
+[`engine/src/df/mov-film.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/mov-film.ts),
+the encoding
+[`site/editors/film-video.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/film-video.ts)
+(WebCodecs and [Mediabunny](https://mediabunny.dev)).
+
 ## See also
 
 - [MOV — movies & inspectable objects](../engine/formats/mov.md) — what the structures are

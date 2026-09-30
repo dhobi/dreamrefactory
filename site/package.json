@@ -18,5 +18,8 @@
     "./locales/*": "./src/locales/*.ts",
     "./chrome.css": "./src/chrome.css",
     "./theme.css": "./src/theme.css"
+  },
+  "dependencies": {
+    "mediabunny": "^1.61.0"
   }
 }
