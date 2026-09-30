@@ -130,5 +130,6 @@
   "videoEndsLoop": " — hij eindigt in segment {n}, beeld {i}, dat terugspringt naar beeld {to}",
   "videoEndsChain": " — hij eindigt in segment {n}, beeld {i}, dat doorgaat naar “{event}”",
   "videoEndsLong": " — afgekapt na 20 minuten",
+  "videoClicks": " · {n}× geklikt waar de film op de speler wacht",
   "filmResume": "verder vanaf het gekozen beeld, op het tempo en met het geluid van het spel"
 }

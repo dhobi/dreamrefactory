@@ -3,21 +3,25 @@
  * play under it — so it can be written out as a video file (#435).
  *
  * A movie is not a video: it is a state machine that may stop for a click or
- * loop for as long as the player looks at it. What a video can hold is the part
- * that plays by itself, so this walks the machine the way the movie editor's
- * "Play the film" does (site/editors/mov-editor.ts), with the same shared rules
- * — {@link frameHoldMs}, {@link segmentInterval}, {@link soundtrackFor},
- * {@link bedRuntimeMs} — on a clock that runs as fast as the walk rather than in
- * real time, and stops where the film would stop playing by itself:
+ * loop for as long as the player looks at it. This walks the machine the way the
+ * movie editor's "Play the film" does (site/editors/mov-editor.ts), with the
+ * same shared rules — {@link frameHoldMs}, {@link segmentInterval},
+ * {@link soundtrackFor}, {@link bedRuntimeMs} — on a clock that runs as fast as
+ * the walk rather than in real time, and it plays the viewer's part too, so that
+ * an interactive film shows what it is FOR rather than its first frame:
  *
- *   * a frame that waits for a click, or a film with no pacing at all (a
- *     close-up held until clicked away): the frame is held {@link HELD_MS} and
- *     the video ends there;
- *   * a jump BACK to a frame already shown (the camel ride, the fires): the game
- *     would loop there for ever, and the video ends at the jump;
- *   * a chain to another file (types 3 and 4) or a return (5): the film's own
- *     part is over;
- *   * {@link MAX_MS}, as a backstop.
+ *   * a frame that waits for a click (or a segment with nothing to pace it) is
+ *     held {@link HELD_MS}, and then clicked: of its regions, the one that leads
+ *     to the nearest frame not yet shown. `camelsee.mov` opens on a still whose
+ *     click starts the gallop — ended there, its video was the still;
+ *   * a loop — a jump back to a frame already shown — plays {@link LOOP_PASSES}
+ *     times, or for {@link LOOP_MS} if it is short, and is then clicked out of
+ *     the same way, if its frame has a region
+ *     that plays through (the gallop's frames each lead into the horses
+ *     stopping);
+ *
+ * and the video ends where no click leads anywhere new, at a chain to another
+ * file (types 3 and 4) or a return (5), or at {@link MAX_MS} as a backstop.
  *
  * Two things the player does that this does not: timed cues (only the demo's
  * tour.mov has any) and a sound that names a frame to jump to when it ends
@@ -33,8 +37,12 @@ import { segmentAudio, soundtrackFor } from "./mov-sound";
 import { compositeFrameV1 } from "./mov-v1";
 import { paletteV0 } from "./mov-v0";
 
-/** how long a frame the film stops on is held before the video ends */
+/** how long a frame that waits for a click is held before it is clicked */
 export const HELD_MS = 2000;
+/** a loop plays at least this many times before the walk clicks out of it... */
+export const LOOP_PASSES = 2;
+/** ...and a short one for at least this long (the camels' gallop is 0.7 s) */
+export const LOOP_MS = 5000;
 /** the longest video this will lay out; no shipped film comes near it */
 export const MAX_MS = 20 * 60 * 1000;
 
@@ -59,6 +67,7 @@ export interface FilmSound {
 /** why the video ends where it does */
 export type FilmEnding =
   | { kind: "end" }
+  /** a frame that waits for a click, and no click on it leads anywhere new */
   | { kind: "click"; segIdx: number; frame: number }
   | { kind: "loop"; segIdx: number; frame: number; to: number }
   | { kind: "chain"; segIdx: number; frame: number; event: string }
@@ -69,6 +78,8 @@ export interface FilmTimeline {
   sounds: FilmSound[];
   ms: number;
   ending: FilmEnding;
+  /** how many clicks the walk took where the film waits or loops */
+  clicks: number;
 }
 
 /** a named event sound of a segment, decoded, or null if it has none it can read */
@@ -83,12 +94,37 @@ function eventSound(mov: MovFile, seg: MovSegment, name: string): { samples: Flo
   }
 }
 
+/** where an action code takes the walk: a frame, out of the segment, or to an end */
+type Step = { to: number } | { exit: true } | { stop: FilmEnding };
+
+function stepOf(seg: MovSegment, segIdx: number, i: number, type: number, target: string, event: string): Step {
+  switch (type) {
+    case 6:
+      return i + 1 < seg.frames.length ? { to: i + 1 } : { exit: true };
+    case 7:
+      return { to: Math.max(0, i - 1) };
+    case 2: {
+      const to = seg.frames.findIndex((g) => g.name.toLowerCase() === target.toLowerCase());
+      return to < 0 ? { stop: { kind: "end" } } : { to };
+    }
+    case 3:
+    case 4:
+      return { stop: { kind: "chain", segIdx, frame: i, event } };
+    case 5:
+      return { stop: { kind: "end" } };
+    default:
+      // 1 = exit the segment
+      return { exit: true };
+  }
+}
+
 export function filmTimeline(mov: MovFile): FilmTimeline {
   const shots: FilmShot[] = [];
   const sounds: FilmSound[] = [];
   let t = 0;
   let bed: FilmSound | null = null;
   let ending: FilmEnding = { kind: "end" };
+  let clicks = 0;
   /** an event sound starts and plays out, unless the film ends first */
   const fire = (seg: MovSegment, name: string): number => {
     const a = eventSound(mov, seg, name);
@@ -122,59 +158,78 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
       sounds.push(bed);
     }
 
+    /** how many times each frame has been entered */
+    const entered = new Map<number, number>();
+    /** when each frame was last entered */
+    const enteredAt = new Map<number, number>();
+    /**
+     * The viewer's click on frame `i`: of its regions, the one leading to the
+     * nearest frame not yet shown — forward first, then from the top — with its
+     * sound. Null if none leads anywhere new.
+     */
+    const click = (i: number): number | null => {
+      let best: { to: number; key: number; sound: string } | null = null;
+      for (const r of seg.frames[i].regions) {
+        const step = stepOf(seg, segIdx, i, r.type, r.target, r.event);
+        if (!("to" in step) || entered.has(step.to)) continue;
+        const key = step.to > i ? step.to - i : n + step.to;
+        if (!best || key < best.key) best = { to: step.to, key, sound: r.sound };
+      }
+      if (!best) return null;
+      clicks++;
+      if (best.sound) fire(seg, best.sound);
+      return best.to;
+    };
+
     let i = 0;
     let voiceEnds = t;
-    const shown = new Set<number>();
     for (;;) {
       if (t >= MAX_MS) {
         ending = { kind: "long" };
         break walk;
       }
-      shown.add(i);
+      entered.set(i, (entered.get(i) ?? 0) + 1);
+      enteredAt.set(i, t);
       const f = seg.frames[i];
       if (f.sound) voiceEnds = Math.max(voiceEnds, fire(seg, f.sound));
       if (frameWaits(seg, i) || !interval) {
         hold(segIdx, i, HELD_MS);
-        ending = { kind: "click", segIdx, frame: i };
-        break walk;
+        const to = click(i);
+        if (to === null) {
+          ending = { kind: "click", segIdx, frame: i };
+          break walk;
+        }
+        i = to;
+        continue;
       }
       let ms = frameHoldMs(seg, i);
       // a frame authored to wait for the spoken line waits for it (flags bit 0)
       if (f.waitsForVoice) ms = Math.max(ms, voiceEnds - t);
       hold(segIdx, i, ms);
 
-      let next: number;
-      switch (f.type) {
-        case 6:
-          next = i + 1;
-          break;
-        case 7:
-          next = i - 1;
-          break;
-        case 2:
-          next = seg.frames.findIndex((g) => g.name.toLowerCase() === f.target.toLowerCase());
-          if (next < 0) break walk;
-          break;
-        case 3:
-        case 4:
-          ending = { kind: "chain", segIdx, frame: i, event: f.event };
-          break walk;
-        case 5:
-          break walk;
-        default:
-          // 1 = exit the segment
-          next = n;
-      }
-      if (next >= n) continue walk;
-      if (next < 0 || shown.has(next)) {
-        ending = { kind: "loop", segIdx, frame: i, to: Math.max(0, next) };
+      const step = stepOf(seg, segIdx, i, f.type, f.target, f.event);
+      if ("stop" in step) {
+        ending = step.stop;
         break walk;
       }
-      i = next;
+      if ("exit" in step) continue walk;
+      const passes = entered.get(step.to) ?? 0;
+      const loopMs = t - (enteredAt.get(step.to) ?? t);
+      if (passes === 0 || passes < Math.max(LOOP_PASSES, Math.ceil(LOOP_MS / Math.max(1, loopMs)))) {
+        i = step.to;
+        continue;
+      }
+      // the loop has played: click out of it, or end on it
+      const to = click(i);
+      if (to === null) {
+        ending = { kind: "loop", segIdx, frame: i, to: step.to };
+        break walk;
+      }
+      i = to;
     }
   }
   for (const s of sounds) s.untilMs = Math.min(s.untilMs, t);
-  return { shots, sounds, ms: t, ending };
+  return { shots, sounds, ms: t, ending, clicks };
 }
 
 /** the film's sound mixed down to one mono track at `rate` */

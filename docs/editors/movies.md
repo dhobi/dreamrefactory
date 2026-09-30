@@ -66,18 +66,21 @@ container 0, because a `MovFile` **is** its first segment.
 
 **⬇ Export the film as video** writes the film out as an `.mp4` (#435), in the
 browser and without uploading anything. A movie is a state machine and a video
-is not, so what goes in is the part that **plays by itself**: every segment in
-order, on the same holds, bed and entry sounds as **▶▶ Play the film**, up to
-the first place the film would stop playing on its own —
+is not, so the export plays the viewer's part as well: every segment in order, on
+the same holds, bed and entry sounds as **▶▶ Play the film**, and where the film
+would wait for the player it clicks for them —
 
-- a frame that **waits for a click**, or a segment with nothing to pace it: held
-  for two seconds, and the video ends on it;
-- a **jump back** to a frame already shown (the camel ride, the fires), which the
-  game would loop for ever;
-- a **chain** to another file, or a return.
+- a frame that **waits for a click** is held for two seconds and then clicked: of
+  its regions, the one that leads to the nearest frame not yet shown.
+  `camelsee.mov` opens on a still, and its click starts the gallop;
+- a **loop** (a jump back to a frame already shown) plays twice, or for five
+  seconds if it is short, and is then clicked out of the same way if its frame
+  has a region: the gallop's frames each lead into the horses stopping.
 
-The status line says which it was. Timed cues and a sound's follow-on frame are
-not taken, since each moves the picture on a sound's clock rather than the film's.
+The video ends where no click leads anywhere new, at a loop with no way out, or
+at a **chain** to another file or a return. The status line says how many clicks
+it took and where it ended. Timed cues and a sound's follow-on frame are not
+taken, since each moves the picture on a sound's clock rather than the film's.
 
 Each frame goes in for exactly as long as it is held, so the video keeps the
 film's own uneven timing. The picture is scaled up by a whole number, with no

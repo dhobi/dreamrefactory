@@ -8,7 +8,7 @@ import { test, expect } from "vitest";
 import { buildMovBytes, MovBuildFrame } from "@dreamfactory/engine/df/mov-build";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
-import { FilmPictures, FilmTimeline, HELD_MS, filmTimeline, mixFilmSound } from "@dreamfactory/engine/df/mov-film";
+import { FilmPictures, FilmTimeline, HELD_MS, LOOP_MS, filmTimeline, mixFilmSound } from "@dreamfactory/engine/df/mov-film";
 import { TICK_MS } from "@dreamfactory/engine/df/mov-pace";
 
 const W = 8, H = 6;
@@ -37,7 +37,7 @@ test("a cutscene plays straight through on its holds", () => {
   expect(tl.ending).toEqual({ kind: "end" });
 });
 
-test("a jump back to a frame already shown ends the video there", () => {
+test("a loop plays for a while, and ends the video if nothing clicks out of it", () => {
   const tl = filmTimeline(
     film([
       { name: "a", art: art(1), type: 6 },
@@ -45,8 +45,35 @@ test("a jump back to a frame already shown ends the video there", () => {
       { name: "c", art: art(1), type: 2, target: "a" },
     ]),
   );
-  expect(tl.shots.map((s) => s.frame)).toEqual([0, 1, 2]);
+  const loopMs = 18 * TICK_MS;
+  const passes = Math.ceil(LOOP_MS / loopMs);
+  expect(tl.shots.map((s) => s.frame)).toEqual(Array.from({ length: passes }, () => [0, 1, 2]).flat());
   expect(tl.ending).toEqual({ kind: "loop", segIdx: 0, frame: 2, to: 0 });
+});
+
+test("a film that waits for a click is clicked through, the way camelsee.mov's gallop starts and stops", () => {
+  const all = { top: 0, left: 0, bottom: H, right: W };
+  const through = 1 << 2;
+  const tl = filmTimeline(
+    film([
+      // a still: one region to the end, one to the gallop — the nearer is taken
+      { name: "still", art: art(1), type: 6, regions: [{ ...all, type: 2, target: "halt" }, { ...all, type: 2, target: "run1" }] },
+      // the gallop loops, and a click on it leads into the horses stopping
+      { name: "run1", art: art(2), type: 6, flags: through, regions: [{ ...all, type: 2, target: "slow" }] },
+      { name: "run2", art: art(1), type: 2, target: "run1", flags: through, regions: [{ ...all, type: 2, target: "slow" }] },
+      { name: "slow", art: art(2), type: 6 },
+      { name: "halt", art: art(1), type: 1 },
+    ]),
+  );
+  const frames = tl.shots.map((s) => s.frame);
+  expect(frames[0]).toBe(0);
+  expect(tl.shots[0].ms).toBe(HELD_MS);
+  expect(frames.slice(-2)).toEqual([3, 4]);
+  // the gallop ran for the loop's minimum before the click
+  const gallop = tl.shots.filter((s) => s.frame === 1 || s.frame === 2).reduce((a, s) => a + s.ms, 0);
+  expect(gallop).toBeGreaterThanOrEqual(LOOP_MS);
+  expect(tl.clicks).toBe(2);
+  expect(tl.ending).toEqual({ kind: "end" });
 });
 
 test("a forward jump skips the frames between", () => {
@@ -60,7 +87,7 @@ test("a forward jump skips the frames between", () => {
   expect(tl.shots.map((s) => s.frame)).toEqual([0, 2]);
 });
 
-test("a frame that waits for a click is held, and the video ends on it", () => {
+test("a frame that waits for a click no region leads on from is held, and the video ends on it", () => {
   const tl = filmTimeline(
     film([
       { name: "a", art: art(1), type: 6 },
@@ -87,6 +114,7 @@ test("the mix places each sound on the clock, loops a bed and cuts it off", () =
     shots: [],
     ms: 1000,
     ending: { kind: "end" },
+    clicks: 0,
     sounds: [
       { atMs: 0, untilMs: 1000, sampleRate: 10, samples: new Float32Array([0.5, 0, 0, 0]), loop: true },
       { atMs: 500, untilMs: 1000, sampleRate: 10, samples: new Float32Array([0.25]), loop: false },

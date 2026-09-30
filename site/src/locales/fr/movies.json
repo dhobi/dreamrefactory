@@ -130,5 +130,6 @@
   "videoEndsLoop": " — elle se termine au segment {n}, image {i}, qui revient à l'image {to}",
   "videoEndsChain": " — elle se termine au segment {n}, image {i}, qui enchaîne sur « {event} »",
   "videoEndsLong": " — coupée à 20 minutes",
+  "videoClicks": " · {n} clic(s) là où le film attend le joueur",
   "filmResume": "lecture à partir de l'image sélectionnée, au rythme et avec le son du jeu"
 }

@@ -130,5 +130,6 @@
   "videoEndsLoop": " — es endet in Segment {n}, Bild {i}, das zu Bild {to} zurückspringt",
   "videoEndsChain": " — es endet in Segment {n}, Bild {i}, das zu „{event}“ weitergeht",
   "videoEndsLong": " — nach 20 Minuten abgeschnitten",
+  "videoClicks": " · {n}× geklickt, wo der Film auf den Spieler wartet",
   "filmResume": "weiter ab dem gewählten Einzelbild, getaktet und vertont wie im Spiel"
 }
