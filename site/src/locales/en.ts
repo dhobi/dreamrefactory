@@ -737,6 +737,7 @@ export const en = {
     videoEndsLoop: " — it ends on segment {n}, frame {i}, which loops back to frame {to}" as Text,
     videoEndsChain: " — it ends on segment {n}, frame {i}, which goes on to “{event}”" as Text,
     videoEndsLong: " — cut at 20 minutes" as Text,
+    videoClicks: " · clicked {n}× where the film waits for the player" as Text,
     fileStatsTail: "({waiting} wait for a click) · {regions} regions · {w}×{h}" as Text,
     // a film is a chain of segments played back to back; the picker shows one
     segmentLabel: "segment" as Text,

@@ -1689,7 +1689,9 @@ $("videoExportBtn").addEventListener("click", async () => {
         size: `${video.width}×${video.height}`,
         codecs: video.codecs,
         mb: (video.blob.size / 1e6).toFixed(1),
-      }) + videoEnding(video.timeline.ending),
+      }) +
+        (video.timeline.clicks ? t("movies.videoClicks", { n: video.timeline.clicks }) : "") +
+        videoEnding(video.timeline.ending),
     );
   } catch (e) {
     log(t("movies.videoFailed", { error: e instanceof Error ? e.message : String(e) }));
