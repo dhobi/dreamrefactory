@@ -41,6 +41,17 @@ export function isV5Frame(data: Uint8Array): boolean {
   return data.length > V5_PIXELS_AT && data[2] === 5 && data[3] === 0 && data[4] === 0x50 && data[7] === 0x53;
 }
 
+/**
+ * Does this picture stand on its own? The word at 0x24 is 1 on one that writes
+ * every pixel and 0 on a DELTA, which keeps the pixels of whatever was drawn
+ * before it. Measured, not read out of the exe: on every flat of every RedJack
+ * stage it is 1 and a decode is the same over any buffer, and on the delta flats
+ * of #441's `v130a.stag` (another v5 game's) it is 0 and none of them is.
+ */
+export function isKeyFrameV5(data: Uint8Array): boolean {
+  return data.length > 0x28 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(0x24, true) === 1;
+}
+
 /** a v5 frame's own palette, as RGBA */
 export function paletteV5(data: Uint8Array): Uint8ClampedArray {
   const rgba = new Uint8ClampedArray(256 * 4);

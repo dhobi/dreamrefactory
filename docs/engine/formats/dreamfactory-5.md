@@ -66,6 +66,7 @@ decoder `0x492850`):
 |---|---|---|
 | 0x18 | u32 | where the pixel stream ends, and a depth map starts |
 | 0x20 | i16, i16 | height, width |
+| 0x24 | u32 | 1 on a whole picture, 0 on a **delta** that keeps what was drawn before it (measured, #441) |
 | 0x28 | 256 × {blue, green, red, 0} | **this picture's palette** |
 | 0x428 | | the pixel stream |
 

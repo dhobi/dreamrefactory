@@ -14,7 +14,7 @@
  * exports the file it read (see taoot/tests/auto/stg-editor.ts).
  */
 import { FrameBuffer, decodeFrame, encodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { decodeFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
+import { decodeFrameV5, frameSizeV5, isKeyFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
@@ -198,10 +198,16 @@ $("closeBtn").addEventListener("click", () => {
 // --- flat art ---------------------------------------------------------------
 
 /**
- * Decode a flat's image. Unlike a SET's turn ring, a flat is self-contained —
- * the engine decodes one into a fresh FrameBuffer (StageController.flatImage)
- * because nothing delta-codes against the flat before it — so each can be
- * decoded on its own.
+ * Decode a flat's image — over the flat before it in the table.
+ *
+ * A flat can be a DELTA that keeps the pixels of the one drawn before it: an
+ * animated stage plays its flats in order, and the game decodes each over the
+ * screen it is on (StageController.flatImage). Decoded onto a blank buffer, a
+ * delta shows only what it changed and the rest is palette index 0 — white on
+ * the v5 stage of #441, black on Timelapse. The table order is the play order,
+ * so seeding from the previous flat is what the game shows; a flat that writes
+ * every pixel comes out the same whatever it was seeded with, and a v5 one that
+ * says it does (isKeyFrameV5) is not seeded at all.
  */
 function imageAt(loc: number): FlatImage | null {
   if (!stg) return null;
@@ -212,6 +218,11 @@ function imageAt(loc: number): FlatImage | null {
     try {
       const fb = new FrameBuffer();
       const v5 = isV5Frame(data);
+      const under = v5 && isKeyFrameV5(data) ? null : previousImage(loc, data, v5);
+      if (under) {
+        fb.ensure(under.width, under.height);
+        fb.pixels.set(under.pixels);
+      }
       const d = v5 ? decodeFrameV5(data, fb) : decodeFrame(data, fb);
       img = {
         pixels: fb.pixels.slice(0, d.width * d.height),
@@ -226,6 +237,21 @@ function imageAt(loc: number): FlatImage | null {
     imageCache.set(loc, img);
   }
   return img;
+}
+
+/**
+ * The picture a flat's art is drawn over: the flat before it, if that is the
+ * same size. The size is the art's own header's, not the flat record's — on the
+ * delta flats of #441 the record says 253×399 for a 640×480 picture.
+ */
+function previousImage(loc: number, data: Uint8Array, v5: boolean): FlatImage | null {
+  const flats = stg?.flats ?? [];
+  const i = flats.findIndex((f) => f.locationFrame === loc);
+  if (i < 1) return null;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const size = v5 ? frameSizeV5(data) : { width: view.getInt16(2, true), height: view.getInt16(0, true) };
+  const under = imageAt(flats[i - 1].locationFrame);
+  return under && under.width === size.width && under.height === size.height ? under : null;
 }
 
 function imageToCanvas(img: FlatImage, canvas: HTMLCanvasElement): void {
@@ -585,7 +611,8 @@ async function importPng(file: File): Promise<void> {
   const zBlock = sameSize && old.zOffset >= 0 ? container.data.subarray(old.zOffset) : undefined;
   const data = encodeFrame(pixels, bmp.width, bmp.height, zBlock);
   stg.file.containers[f.locationFrame] = { id: container.id, data };
-  imageCache.delete(f.locationFrame);
+  // every flat after it may be drawn over it
+  imageCache.clear();
   markEdit(t("stages.artEdit", { loc: f.locationFrame, file: file.name }));
   log(
     t("stages.artReplaced", {

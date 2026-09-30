@@ -12,7 +12,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "vitest";
 import { FrameBuffer } from "@dreamfactory/engine/df/image";
-import { decodeFrameV5, depthV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
+import { decodeFrameV5, depthV5, isKeyFrameV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
+import { readStgFile } from "@dreamfactory/engine/df/stg";
 import { MazeQuad, SettFile, TURN, exitsOf, readSettFile } from "@dreamfactory/engine/df/sett";
 import { patchQuad, patchStar } from "@dreamfactory/engine/df/sett-patch";
 import {
@@ -460,4 +461,57 @@ test("the sett editor's patches write each edit where it was read, and no other 
   }
   expect(quads).toBeGreaterThan(0);
   expect(stars).toBeGreaterThan(0);
+});
+
+test("a v5 flat that says it stands alone decodes the same over any screen (#441)", () => {
+  const stages: string[] = [];
+  const find = (dir: string): void => {
+    for (const n of readdirSync(dir)) {
+      const p = `${dir}/${n}`;
+      if (statSync(p).isDirectory()) find(p);
+      else if (/\.stag$/i.test(n)) stages.push(p);
+    }
+  };
+  if (existsSync(ROOT)) find(ROOT);
+  if (!stages.length) return void console.warn(`no RedJack stages under ${ROOT} — skipping`);
+  let flats = 0;
+  for (const p of stages) {
+    const stg = readStgFile(new Uint8Array(readFileSync(p)));
+    for (const f of stg.flats) {
+      const art = stg.file.containers[f.locationFrame].data;
+      const cold = new FrameBuffer();
+      const d = decodeFrameV5(art, cold);
+      const over = new FrameBuffer();
+      over.ensure(d.width, d.height);
+      over.pixels.fill(77);
+      decodeFrameV5(art, over);
+      // every RedJack flat is a whole picture; a delta (0 here) keeps what was there
+      expect(isKeyFrameV5(art), `${p} ${f.name}`).toBe(true);
+      const n = d.width * d.height;
+      expect(over.pixels.subarray(0, n).every((x, i) => x === cold.pixels[i]), `${p} ${f.name}`).toBe(true);
+      flats++;
+    }
+  }
+  expect(flats).toBeGreaterThan(0);
+});
+
+test("a v5 picture's key word is 1 on a whole picture and 0 on a delta", () => {
+  const frame = (key: number): Uint8Array => {
+    // 2×1: one row, mode 1 (literal) for the key, mode 10 (keep) for the delta
+    const d = new Uint8Array(0x428 + 3);
+    d.set([0, 0, 5, 0, 0x50, 0x45, 0x54, 0x53]);
+    const v = new DataView(d.buffer);
+    v.setInt16(0x20, 1, true);
+    v.setInt16(0x22, 2, true);
+    v.setUint32(0x24, key, true);
+    d.set(key ? [1 << 2, 9, 9] : [10 << 2], 0x428);
+    return d;
+  };
+  expect(isKeyFrameV5(frame(1))).toBe(true);
+  expect(isKeyFrameV5(frame(0))).toBe(false);
+  // the delta keeps the screen it is drawn over
+  const fb = new FrameBuffer();
+  decodeFrameV5(frame(1), fb);
+  decodeFrameV5(frame(0), fb);
+  expect([...fb.pixels.subarray(0, 2)]).toEqual([9, 9]);
 });
