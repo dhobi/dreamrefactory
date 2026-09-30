@@ -137,3 +137,23 @@ test.skipIf(!existsSync(ARRIVE))("arrive.move lays out end to end under its soun
   expect(pcm.length).toBe(Math.ceil((tl.ms / 1000) * 48000));
   expect(pcm.some((s) => s !== 0)).toBe(true);
 });
+
+const CAMELSEE = "taoot/gamefiles/en/titanic1/movies/camelsee.mov";
+
+test.skipIf(!existsSync(CAMELSEE))("camelsee.mov gallops, and its sounds take turns the way the game plays them", () => {
+  const mov = readMovFile(new Uint8Array(readFileSync(CAMELSEE)));
+  const tl = filmTimeline(mov);
+  // the still, then the gallop, then the click at the gallop's jump back leads
+  // into the horses stopping (HORSE 85…88), not straight to the last frame
+  expect(tl.shots[0]).toMatchObject({ frame: 0, ms: HELD_MS });
+  expect(tl.shots.slice(-5).map((s) => s.frame)).toEqual([85, 86, 87, 88, 89]);
+  expect(tl.clicks).toBe(2);
+  // one event sound at a time: each cuts off the one before, as the game's
+  // "sound" channel does, so the 2.5 s gallop sound never plays over itself
+  const events = tl.sounds.filter((s) => !s.loop);
+  for (let k = 1; k < events.length; k++) expect(events[k - 1].untilMs).toBeLessThanOrEqual(events[k].atMs);
+  // ...and the last is the click's own, camelend, heard out to its end
+  const last = events.at(-1)!;
+  expect(last.atMs).toBe(tl.shots.at(-5)!.atMs);
+  expect(last.untilMs - last.atMs).toBeCloseTo((last.samples.length / last.sampleRate) * 1000);
+});

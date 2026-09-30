@@ -125,13 +125,24 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
   let bed: FilmSound | null = null;
   let ending: FilmEnding = { kind: "end" };
   let clicks = 0;
-  /** an event sound starts and plays out, unless the film ends first */
+  /**
+   * The event sound playing, if any. A film's event sounds share ONE channel
+   * and each cuts off the one before it — `MoviePlayer.playSound` plays them on
+   * "sound" without `overlap` — so a sound fired on every pass of a loop
+   * restarts rather than piling up: camelsee.mov's 2.5 s gallop fires on a
+   * 0.7 s loop, and mixed on top of each other four of them played at once.
+   */
+  let playing: FilmSound | null = null;
+  /** the click's sound, which the frame it leads to does not fire again */
+  let clickSound = "";
+  /** an event sound starts, cutting off the one before; answers when it ends */
   const fire = (seg: MovSegment, name: string): number => {
     const a = eventSound(mov, seg, name);
-    if (!a) return t;
-    const until = t + (a.samples.length / a.sampleRate) * 1000;
-    sounds.push({ atMs: t, untilMs: until, sampleRate: a.sampleRate, samples: a.samples, loop: false });
-    return until;
+    if (!a) return playing ? playing.untilMs : t;
+    if (playing) playing.untilMs = Math.min(playing.untilMs, t);
+    playing = { atMs: t, untilMs: t + (a.samples.length / a.sampleRate) * 1000, sampleRate: a.sampleRate, samples: a.samples, loop: false };
+    sounds.push(playing);
+    return playing.untilMs;
   };
   const hold = (segIdx: number, frame: number, ms: number): void => {
     shots.push({ segIdx, frame, atMs: t, ms });
@@ -158,6 +169,8 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
       sounds.push(bed);
     }
 
+    /** when the event sound playing ends, for a frame that waits for it */
+    let voiceEnds = t;
     /** how many times each frame has been entered */
     const entered = new Map<number, number>();
     /** when each frame was last entered */
@@ -177,12 +190,12 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
       }
       if (!best) return null;
       clicks++;
-      if (best.sound) fire(seg, best.sound);
+      if (best.sound) voiceEnds = fire(seg, best.sound);
+      clickSound = best.sound;
       return best.to;
     };
 
     let i = 0;
-    let voiceEnds = t;
     for (;;) {
       if (t >= MAX_MS) {
         ending = { kind: "long" };
@@ -191,7 +204,10 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
       entered.set(i, (entered.get(i) ?? 0) + 1);
       enteredAt.set(i, t);
       const f = seg.frames[i];
-      if (f.sound) voiceEnds = Math.max(voiceEnds, fire(seg, f.sound));
+      // the frame a click leads into may name the click's own sound: one
+      // authored moment, one playback (MoviePlayer.enterFrame)
+      if (f.sound && f.sound.toLowerCase() !== clickSound.toLowerCase()) voiceEnds = fire(seg, f.sound);
+      clickSound = "";
       if (frameWaits(seg, i) || !interval) {
         hold(segIdx, i, HELD_MS);
         const to = click(i);
@@ -213,6 +229,13 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
         break walk;
       }
       if ("exit" in step) continue walk;
+      // only a jump BACK closes a loop: stepping on into a frame the loop has
+      // shown is going round it, and deciding there clicked out of the gallop
+      // one frame after its jump instead of at it
+      if (step.to > i) {
+        i = step.to;
+        continue;
+      }
       const passes = entered.get(step.to) ?? 0;
       const loopMs = t - (enteredAt.get(step.to) ?? t);
       if (passes === 0 || passes < Math.max(LOOP_PASSES, Math.ceil(LOOP_MS / Math.max(1, loopMs)))) {
