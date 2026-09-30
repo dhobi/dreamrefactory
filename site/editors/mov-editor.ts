@@ -723,8 +723,11 @@ function filmSound(name: string): void {
     // a sound this build cannot decode is silence, not a stopped film
   }
   if (!voice) return;
-  film.voices = film.voices.filter((v) => !v.done);
-  film.voices.push(voice);
+  // one channel, as in the game: a new event sound cuts off the one before
+  // (MoviePlayer.playSound plays them on "sound" without overlap), or a sound
+  // fired on every pass of a loop piles up on itself
+  for (const v of film.voices) v.stop();
+  film.voices = [voice];
   const follows = seg.soundFollows.get(name.toLowerCase());
   const target = follows ? frameIndexOf(follows) : -1;
   film.soundJump = target < 0 ? null : { frame: target, voice };
