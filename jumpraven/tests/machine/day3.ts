@@ -1,10 +1,13 @@
 /**
  * Day three's flight (level 7) to its end, flown by the copilot (flyday.ts).
  *
- *   npx tsx tests/machine/day3.ts        (from jumpraven/)
+ *   npm test -w jumpraven -- day3
  */
+import { test } from "vitest";
 import { flyDay } from "./flyday";
-import { pass } from "./harness";
+import { pass, haveRip } from "./harness";
 
-flyDay(7);
-pass("day3");
+test.skipIf(!haveRip())("day3", async () => {
+  flyDay(7);
+  pass("day3");
+});

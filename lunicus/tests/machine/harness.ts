@@ -4,8 +4,8 @@
  * as the CPU goes and waits on the game's STATE, never on a duration.
  *
  * The shape is RedJack's (`redjack/tests/machine/harness.ts`): one suite per
- * file, one game per process, `ok`/`FAIL`/`PASS` lines that
- * `tools/runmachine.mts` reads.
+ * file, one game per process (vitest's forks, `vitest.machine.config.ts`), and
+ * `ok`/`FAIL`/`PASS` lines in the log.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -47,9 +47,8 @@ export function fail(why: string): never {
   console.log(`FAIL  ${why}`);
   throw new SuiteFailure(why);
 }
-export function pass(what: string): never {
+export function pass(what: string): void {
   console.log(`PASS  ${what}`);
-  process.exit(0);
 }
 
 export const checkpointOf = (game: Lunicus, what: string): Checkpoint => ({

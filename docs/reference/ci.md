@@ -60,13 +60,14 @@ Each game is a step of its own ("Titanic machine suites", "Dust machine suites",
 and so on for all six), and a change that cannot reach a game shows its step as
 skipped.
 
-## The four workflows
+## The workflows
 
 | Workflow | Trigger | What |
 |---|---|---|
 | [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + every package's playthrough) self-hosted, and in it Skull Cracker's, Timelapse's, RedJack's, Lunicus's and Jump Raven's machine suites — each game stood up headless on its rip ([Skull Cracker's](../skullcracker/verification.md), [Timelapse's](../timelapse/README.md#machine-suites), [RedJack's](../redjack/README.md#machine-suites), [Lunicus's](../lunicus/README.md#machine-suites), [Jump Raven's](../jumpraven/README.md#machine-suites)). The `full` job's NAME is a required status check — renaming it blocks every PR |
 | [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
+| [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | push to master, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage). Not a check: it gates nothing |
 | [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*` or `lunicus-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
@@ -76,6 +77,33 @@ package directory and nothing else: the workflow reads the game out of it and
 derives the rest (which rip to link, which Vite config to serve, which package
 the suite is a script of), so a game added later needs a label rather than an
 edit. Two games labelled on one PR are two runs and do not cancel each other.
+
+## Coverage
+
+`npm run coverage` ([`tools/coverage.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/coverage.mts))
+runs every package's automatic suites and every game's machine suites in one
+vitest run with V8 coverage on
+([`vitest.coverage.config.ts`](https://github.com/dhobi/dreamrefactory/blob/master/vitest.coverage.config.ts)),
+and sums what ran by directory: the engine's `src/` without `web/`, which is the
+browser shell a node suite can mostly not reach, and each game's own `src/`,
+measured by every suite that runs it. The numbers are lines, and a file nothing
+loads counts, at 0. The table lands in `coverage/summary.md`.
+
+A game's badge is its own `src/` and nothing else, so it reads differently for
+the two kinds of game. Lunicus, Jump Raven and Skull Cracker are ported from
+their executables, and their `src/` is the game. Titanic, Dust, Timelapse and
+RedJack are run by the engine's interpreter: their game is their data and the
+engine, which is where their suites count, and their `src/` is mostly the page
+around it, which a node suite does not reach.
+
+[`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml)
+does the same on each push to master, on the runner that holds the rips, and
+force-pushes the badge files — one [shields.io endpoint](https://shields.io/badges/endpoint-badge)
+JSON a badge, `coverage-<key>.json` — to the `badges` branch as a single commit.
+The README's badges are `img.shields.io/endpoint?url=` that file's raw URL, so a
+new number shows a few minutes after the run, once shields' and GitHub's caches
+turn over. A run with a failing suite publishes nothing, and it runs everything
+rather than the games a change reaches, so a badge is always a whole run's.
 
 ## Setting the runner up
 

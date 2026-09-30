@@ -1,7 +1,7 @@
 /**
  * Does the player move at the speed `SC.EXE` moves them at?
  *
- *   npx tsx tests/machine/speed.ts        (from skullcracker/)
+ *   npm test -w skullcracker -- speed
  *
  * The chain, all of it out of the executable:
  *
@@ -18,53 +18,56 @@
  *
  * Measured in engine frames, exactly: nothing here waits on a clock.
  */
-import { FPS, fail, headless, ok, pass } from "./harness";
+import { test } from "vitest";
+import { FPS, fail, headless, ok, pass, haveRip } from "./harness";
 
-// no creatures: a werewolf stands east of the spawn, and its shove (`0x430680`)
-// is SC's but is not the speed this file measures
-const h = await headless("level=1&foes=0");
-const { game } = h;
-ok(`the street opens at x ${game.p.x}`);
+test.skipIf(!haveRip())("speed", async () => {
+  // no creatures: a werewolf stands east of the spawn, and its shove (`0x430680`)
+  // is SC's but is not the speed this file measures
+  const h = await headless("level=1&foes=0");
+  const { game } = h;
+  ok(`the street opens at x ${game.p.x}`);
 
-/** hold the keys, let the speed settle, then measure px/s over whole frames */
-let wasRunning = false;
-const rate = (keys: ("right" | "up")[], frames: number): number => {
-  for (const k of keys) h.hold(k, true);
-  h.frame(10);
-  const x0 = game.p.x;
-  h.frame(frames);
-  const x1 = game.p.x;
-  wasRunning = game.p.running;
-  for (const k of keys) h.hold(k, false);
-  h.frame(10);
-  return (Math.abs(x1 - x0) * FPS) / frames;
-};
+  /** hold the keys, let the speed settle, then measure px/s over whole frames */
+  let wasRunning = false;
+  const rate = (keys: ("right" | "up")[], frames: number): number => {
+    for (const k of keys) h.hold(k, true);
+    h.frame(10);
+    const x0 = game.p.x;
+    h.frame(frames);
+    const x1 = game.p.x;
+    wasRunning = game.p.running;
+    for (const k of keys) h.hold(k, false);
+    h.frame(10);
+    return (Math.abs(x1 - x0) * FPS) / frames;
+  };
 
-// 1. the walk, settled at 12 a frame
-const walk = rate(["right"], 30);
-if (walk !== 180) fail(`the walk is ${walk}px/s, wanted 180 (dx 95 / 12, settled at 12 by 0x4302a4)`);
-ok(`walks at ${walk}px/s — twelve a frame`);
+  // 1. the walk, settled at 12 a frame
+  const walk = rate(["right"], 30);
+  if (walk !== 180) fail(`the walk is ${walk}px/s, wanted 180 (dx 95 / 12, settled at 12 by 0x4302a4)`);
+  ok(`walks at ${walk}px/s — twelve a frame`);
 
-// 2. the run: W held
-const run = rate(["right", "up"], 30);
-if (run !== 330) fail(`the run is ${run}px/s, wanted 330 (dx 180 / 12, settled at 22)`);
-if (!wasRunning) fail(`holding W did not make the player run`);
-ok(`runs at ${run}px/s — twenty-two a frame`);
+  // 2. the run: W held
+  const run = rate(["right", "up"], 30);
+  if (run !== 330) fail(`the run is ${run}px/s, wanted 330 (dx 180 / 12, settled at 22)`);
+  if (!wasRunning) fail(`holding W did not make the player run`);
+  ok(`runs at ${run}px/s — twenty-two a frame`);
 
-// 3. W at the foot of the ladder climbs instead
-await h.load("level=1&x=9700&foes=0");
-const y0 = game.p.y;
-h.hold("up", true);
-h.frame(9);
-if (!game.p.climbing) fail(`W at the foot of the ladder did not climb`);
-const y1 = game.p.y;
-if (y1 >= y0) fail(`W on the ladder went from y${y0} to y${y1} — it ran instead of climbing`);
-const span = 36;
-h.frame(span);
-const y2 = game.p.y;
-h.hold("up", false);
-const climb = ((y1 - y2) * FPS) / span;
-if (Math.abs(climb - 131.25) > 1) fail(`the climb is ${climb}px/s, wanted 131 (35px a rung, 4 frames a rung)`);
-ok(`and on the ladder the same key climbs, y ${y0} to y ${y2} at ${climb}px/s`);
+  // 3. W at the foot of the ladder climbs instead
+  await h.load("level=1&x=9700&foes=0");
+  const y0 = game.p.y;
+  h.hold("up", true);
+  h.frame(9);
+  if (!game.p.climbing) fail(`W at the foot of the ladder did not climb`);
+  const y1 = game.p.y;
+  if (y1 >= y0) fail(`W on the ladder went from y${y0} to y${y1} — it ran instead of climbing`);
+  const span = 36;
+  h.frame(span);
+  const y2 = game.p.y;
+  h.hold("up", false);
+  const climb = ((y1 - y2) * FPS) / span;
+  if (Math.abs(climb - 131.25) > 1) fail(`the climb is ${climb}px/s, wanted 131 (35px a rung, 4 frames a rung)`);
+  ok(`and on the ladder the same key climbs, y ${y0} to y ${y2} at ${climb}px/s`);
 
-pass(`the walk, the run and the ladder all move at the executable's rates`);
+  pass(`the walk, the run and the ladder all move at the executable's rates`);
+});

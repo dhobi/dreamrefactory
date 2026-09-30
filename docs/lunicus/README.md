@@ -97,7 +97,7 @@ in node on the rip, with no page and no clock, and each suite steps it as fast
 as the CPU goes, waiting on the game's state and never on a duration.
 
     npm test -w lunicus                          every suite
-    npx tsx tools/runmachine.mts day3            just these (from lunicus/)
+    npm test -w lunicus -- day3                  just these
 
 - [`tests/machine/harness.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/machine/harness.ts)
   walks the station by the maze's own transitions, clicks a crew member's
@@ -177,8 +177,8 @@ middle of a level. The page keeps the files in the browser, in the same
 saved-games dialog as RedJack's, and can download and upload them.
 
 **Five saves, one a day, made by the port.** No save written by the original is
-available. `SAVES=gamefiles/save npx tsx tests/machine/day6.ts` (from
-`lunicus/`) writes `day2.lun` … `day6.lun` at the start of each day, and the page
+available. `SAVES=gamefiles/save npm test -w lunicus -- day6`
+writes `day2.lun` … `day6.lun` at the start of each day, and the page
 lists them under *Days two to six (made by this port)*.
 [`tests/browser/saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/browser/saves.ts)
 opens one on the page, saves through the dialog, and opens the saved file again.

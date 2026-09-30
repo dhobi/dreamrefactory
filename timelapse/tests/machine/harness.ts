@@ -6,7 +6,7 @@
  *
  * The shape is RedJack's (`redjack/tests/machine/harness.ts`): one suite per
  * file, one game per process, `ok`/`FAIL`/`PASS` lines that
- * `tools/runmachine.mts` reads, and a pump that is one `director.tick(now)` a
+ * `vitest.machine.config.ts` runs a process each, and a pump that is one `director.tick(now)` a
  * pass. What differs is what this game is:
  *
  *   - **no room at all.** There is no `.SET` on any disc, so there is no
@@ -310,7 +310,6 @@ export function fail(why: string): never {
   throw new SuiteFailure(why);
 }
 /** the suite's last word — and its end, since a film or a loop still armed would keep node up */
-export function pass(what: string): never {
+export function pass(what: string): void {
   console.log(`PASS  ${what}`);
-  process.exit(0);
 }

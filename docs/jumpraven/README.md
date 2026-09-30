@@ -109,7 +109,7 @@ duration. Every gesture goes through
 the door the page's own mouse and keys use.
 
     npm test -w jumpraven                        every suite
-    npx tsx tests/machine/fairgame.ts            just one (from jumpraven/)
+    npm test -w jumpraven -- fairgame            just one
 
 - `opening`, `back` and `flight` — the intro to the high scores, the way back
   from a flight, and the city's moves.

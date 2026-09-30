@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "tsx tools/runmachine.mts",
-    "test:machine": "tsx tools/runmachine.mts",
+    "test": "vitest run --config vitest.machine.config.ts",
+    "test:machine": "vitest run --config vitest.machine.config.ts",
     "test:browser": "tsx tests/browser/playthrough.ts",
     "test:browser:saves": "tsx tests/browser/saves.ts",
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/lunicus gamefiles public",

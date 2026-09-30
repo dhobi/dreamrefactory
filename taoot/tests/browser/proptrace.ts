@@ -3,7 +3,7 @@
  * headless host emits — so the two can be diffed.
  *
  *   PROPTRACE=light PROPTRACE_FILE=/tmp/br.txt npx tsx taoot/tests/browser/playthrough.ts
- *   PROPTRACE=light PROPTRACE_FILE=/tmp/hl.txt npx vitest run --config vitest.machine.config.ts
+ *   PROPTRACE=light PROPTRACE_FILE=/tmp/hl.txt npm test -w taoot
  *   sed -i 's| @frame=.*||' /tmp/br.txt /tmp/hl.txt && diff /tmp/hl.txt /tmp/br.txt
  *
  * The line is formatted by the ENGINE (GameSession.tracePropOwner), not here.

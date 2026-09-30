@@ -2,6 +2,15 @@
 
 # dreamREfactory
 
+[![engine coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-engine.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![Titanic coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-taoot.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![Dust coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-dust.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![Timelapse coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-timelapse.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![RedJack coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-redjack.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![Skull Cracker coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-skullcracker.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![Lunicus coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-lunicus.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+[![Jump Raven coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-jumpraven.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
+
 CyberFlix built a game engine. Bill Appleton's **DreamFactory** was a CD-ROM
 authoring system, and it carried *Lunicus*, *Jump Raven* and the studio's
 adventures, and was licensed to studios outside CyberFlix besides.

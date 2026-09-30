@@ -127,7 +127,7 @@ discs, with no page and no clock, and each suite steps the engine as fast as the
 CPU goes, waiting on the game's state and never on a duration.
 
     npm test -w redjack                          every suite
-    npx tsx tools/runmachine.mts intro           just these (from redjack/)
+    npm test -w redjack -- intro                 just these
 
 - [`tests/machine/harness.ts`](https://github.com/dhobi/dreamrefactory/blob/master/redjack/tests/machine/harness.ts)
   serves the discs as the page does, including each disc's own

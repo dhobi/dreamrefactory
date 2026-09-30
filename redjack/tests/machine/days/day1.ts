@@ -2,7 +2,7 @@
  * Day one, played: Hangman's Reef at night, from the first room to the crate
  * that carries Nick onto the Marauder.
  *
- *   npx tsx tests/machine/day1.ts        (from redjack/, the suite that plays it)
+ *   npm test -w redjack -- day1        the suite that plays it
  *
  * The day ends when `crate.stag`'s inside is clicked: `incrate.move`,
  * `loadship.move`, `setai ("stowed", "1")` and `advanceday ()`. What stands in

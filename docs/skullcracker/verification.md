@@ -43,7 +43,7 @@ the rest.
 
 ```
 npm test -w skullcracker                              every suite
-npx tsx tools/runmachine.mts speed foes               just these (from skullcracker/)
+npm test -w skullcracker -- speed foes                just these
 ```
 
 The runner gives each suite a process of its own — the game keeps its world in
