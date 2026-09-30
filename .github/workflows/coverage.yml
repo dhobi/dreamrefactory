@@ -6,17 +6,19 @@ name: Coverage
 # Not part of the gate. tests.yml runs only the machine suites a change
 # reaches, which is right for a check and wrong for a number: a badge measured
 # on a partial run would move with whatever the last merge touched. So this
-# runs every suite of every game on each push to master, and publishes the
-# badge files to the `badges` branch, which the README's badges read through
-# shields.io. A failing suite publishes nothing, so a badge is only ever a
-# whole run's.
+# runs every suite of every game, and publishes the badge files to the
+# `badges` branch, which the README's badges read through shields.io. A
+# failing suite publishes nothing, so a badge is only ever a whole run's.
+#
+# Nightly rather than on every push: it holds the one self-hosted runner for
+# about twenty minutes, which a pull request's checks would queue behind.
+# 04:00 UTC, clear of browser.yml's 02:00 and its ~39 minutes.
 
 on:
-  push:
-    branches: [master]
+  schedule:
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
-# a newer master supersedes the run in flight: only the last one's numbers matter
 concurrency:
   group: coverage
   cancel-in-progress: true
@@ -27,8 +29,8 @@ permissions:
 jobs:
   coverage:
     name: coverage
-    # the runner that holds the rips, as tests.yml's full job; master only, so
-    # no fork's code ever reaches it from here
+    # the runner that holds the rips, as tests.yml's full job; a schedule and a
+    # manual run both check out master, so no fork's code ever reaches it
     runs-on: [self-hosted, linux, x64, dreamrefactory-gamefiles]
     steps:
       - uses: actions/checkout@v7
