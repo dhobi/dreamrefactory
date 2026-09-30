@@ -13,6 +13,8 @@
   "previewNote": "<b>Auf das Bild klicken</b>, und der Film tut, was er mit diesem Klick täte — zum Zielbild einer Region springen oder den Ausgang bzw. die Verkettung zu einer anderen Datei melden. Ein Klick außerhalb jeder Region tut nichts, genau wie im Spiel.",
   "readonlyNote": "Einzelbilder sind <b>in einer Kette delta-kodiert</b>, diese Seite dekodiert also 0…N, um Bild N zu zeigen — zurückzugehen spielt die Kette von vorn ab. Das ist auch der Grund, warum die Grafik schreibgeschützt ist: Ein ersetztes Bild ließe alles danach gegen ein Bild dekodieren, das nicht mehr da ist.",
   "exportFramePng": "⬇ Dieses Einzelbild als PNG exportieren",
+  "exportVideo": "⬇ Den Film als Video exportieren",
+  "exportVideoTitle": "den Film als Video schreiben, so wie er von selbst abläuft — jedes Segment mit seiner Tonspur, bis dorthin, wo er auf einen Klick wartet oder sich wiederholt",
   "prevTitle": "das Einzelbild davor",
   "nextTitle": "das Einzelbild danach",
   "movieHead": "Film",
@@ -120,5 +122,13 @@
   "filmEnd": "der Film endet — {frames} in {secs} s gezeigt",
   "filmCue": "Cue bei Tick {tick} → „{target}“",
   "filmNoPacing": "hier bringt nichts das Bild weiter — kein Schritt, keine Tonspur, keine Regionen: im Spiel ist das eine Nahaufnahme, die bis zum Wegklicken stehen bleibt",
+  "videoEncoding": "der Film wird als Video kodiert…",
+  "videoNone": "dieser Browser kann kein Video kodieren (er hat keinen WebCodecs-Videoencoder)",
+  "videoDone": "Video gespeichert: {secs} s in {size}, {codecs}, {mb} MB",
+  "videoFailed": "der Videoexport ist fehlgeschlagen: {error}",
+  "videoEndsClick": " — es endet in Segment {n}, Bild {i}, das auf einen Klick wartet",
+  "videoEndsLoop": " — es endet in Segment {n}, Bild {i}, das zu Bild {to} zurückspringt",
+  "videoEndsChain": " — es endet in Segment {n}, Bild {i}, das zu „{event}“ weitergeht",
+  "videoEndsLong": " — nach 20 Minuten abgeschnitten",
   "filmResume": "weiter ab dem gewählten Einzelbild, getaktet und vertont wie im Spiel"
 }

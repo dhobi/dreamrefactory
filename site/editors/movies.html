@@ -254,7 +254,7 @@
       </div>
       <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
       <div id="serverMovies"></div>
-      <input id="fileInput" type="file" accept=".mov,.MOV" />
+      <input id="fileInput" type="file" accept=".mov,.MOV,.move,.MOVE" />
     </div>
 
     <div id="editor">
@@ -314,6 +314,8 @@
                 everything after it decoding against a picture that is gone.</span>
               </div>
               <div><button id="pngExportBtn" data-i18n="movies.exportFramePng">⬇ Export this frame as PNG</button></div>
+              <!-- the film as it plays by itself, as an .mp4 (film-video.ts) -->
+              <div><button id="videoExportBtn" title="write the film out as a video, the way it plays by itself — every segment with its soundtrack, up to where it would stop for a click or loop" data-i18n="movies.exportVideo" data-i18n-attr="title:movies.exportVideoTitle">⬇ Export the film as video</button></div>
             </div>
           </div>
           <div id="scrub">

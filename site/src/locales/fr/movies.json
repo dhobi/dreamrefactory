@@ -13,6 +13,8 @@
   "previewNote": "<b>Cliquez sur l'image</b> et le film fait ce qu'il ferait de ce clic — sauter à l'image cible d'une région, ou signaler la sortie ou l'enchaînement vers un autre fichier. Un clic hors de toute région ne fait rien, exactement comme dans le jeu.",
   "readonlyNote": "Les images sont <b>encodées en delta dans une seule chaîne</b>, donc cette page décode 0…N pour afficher l'image N — revenir en arrière rejoue la chaîne depuis le début. C'est aussi pourquoi les images sont en lecture seule : une image remplacée laisserait tout ce qui suit décoder contre une image qui n'existe plus.",
   "exportFramePng": "⬇ Exporter cette image en PNG",
+  "exportVideo": "⬇ Exporter le film en vidéo",
+  "exportVideoTitle": "écrire le film en vidéo, tel qu'il se joue tout seul — chaque segment avec sa bande-son, jusqu'à l'endroit où il attendrait un clic ou tournerait en boucle",
   "prevTitle": "l'image précédente",
   "nextTitle": "l'image suivante",
   "movieHead": "Film",
@@ -120,5 +122,13 @@
   "filmEnd": "le film se termine — {frames} en {secs} s",
   "filmCue": "repère au tick {tick} → « {target} »",
   "filmNoPacing": "rien ici ne fait avancer l'image — aucune action de pas, aucune bande-son, aucune région : dans le jeu c'est un gros plan qui reste jusqu'au clic",
+  "videoEncoding": "encodage du film en vidéo…",
+  "videoNone": "ce navigateur ne sait pas encoder de vidéo (il n'a pas d'encodeur vidéo WebCodecs)",
+  "videoDone": "vidéo enregistrée : {secs} s en {size}, {codecs}, {mb} Mo",
+  "videoFailed": "l'export vidéo a échoué : {error}",
+  "videoEndsClick": " — elle se termine au segment {n}, image {i}, qui attend un clic",
+  "videoEndsLoop": " — elle se termine au segment {n}, image {i}, qui revient à l'image {to}",
+  "videoEndsChain": " — elle se termine au segment {n}, image {i}, qui enchaîne sur « {event} »",
+  "videoEndsLong": " — coupée à 20 minutes",
   "filmResume": "lecture à partir de l'image sélectionnée, au rythme et avec le son du jeu"
 }

@@ -675,6 +675,8 @@ export const en = {
     readonlyNote:
       "Frames are <b>delta-encoded in one chain</b>, so this page decodes 0…N to show frame N — going back replays the chain from the start. It is also why art is read-only: a replaced frame would leave everything after it decoding against a picture that is gone." as Html,
     exportFramePng: "⬇ Export this frame as PNG" as Text,
+    exportVideo: "⬇ Export the film as video" as Text,
+    exportVideoTitle: "write the film out as a video, the way it plays by itself — every segment with its soundtrack, up to where it would stop for a click or loop" as Text,
     prevTitle: "the frame before this one" as Text,
     nextTitle: "the frame after this one" as Text,
     movieHead: "Movie" as Text,
@@ -726,6 +728,15 @@ export const en = {
     filmEnd: "the film ends — {frames} shown in {secs}s" as Text,
     filmCue: "cue at tick {tick} → “{target}”" as Text,
     filmNoPacing: "nothing here advances a frame — no step action, no soundtrack, no regions: in game this is a close-up held until it is clicked away" as Text,
+    // the film written out as a video (site/editors/film-video.ts)
+    videoEncoding: "encoding the film as a video…" as Text,
+    videoNone: "this browser cannot encode video (it has no WebCodecs video encoder)" as Text,
+    videoDone: "video saved: {secs}s at {size}, {codecs}, {mb} MB" as Text,
+    videoFailed: "the video export failed: {error}" as Text,
+    videoEndsClick: " — it ends on segment {n}, frame {i}, which waits for a click" as Text,
+    videoEndsLoop: " — it ends on segment {n}, frame {i}, which loops back to frame {to}" as Text,
+    videoEndsChain: " — it ends on segment {n}, frame {i}, which goes on to “{event}”" as Text,
+    videoEndsLong: " — cut at 20 minutes" as Text,
     fileStatsTail: "({waiting} wait for a click) · {regions} regions · {w}×{h}" as Text,
     // a film is a chain of segments played back to back; the picker shows one
     segmentLabel: "segment" as Text,
