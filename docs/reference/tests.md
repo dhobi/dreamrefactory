@@ -107,7 +107,7 @@ Dust's rip as optional; the ones that stub what they read need no rip at all.
 ## Lunicus's own — `lunicus/tests/machine/`
 
 Machine suites, not in `npm test`: `npm test -w lunicus` runs each in a process
-of its own (`lunicus/tools/runmachine.mts`, RedJack's runner). A suite stands
+of its own (vitest, `lunicus/vitest.machine.config.ts`). A suite stands
 the game machine (`lunicus/src/game/`) up on the rip read from disk and steps
 its 1/60 s ticks as fast as the CPU goes, waiting on the game's state and never
 on a duration.
@@ -135,7 +135,7 @@ on its own clock, with the sound on. `[` and `]` halve and double the pace.
 [`tests/browser/saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/browser/saves.ts)
 (`npm run test:browser:saves -w lunicus`) checks the page's saved games in drive
 mode: the Load button lists the port's day saves (`gamefiles/save/`, written by
-`SAVES=gamefiles/save npx tsx tests/machine/day6.ts`) and opens Day 4 onto its
+`SAVES=gamefiles/save npm test -w lunicus -- day6`) and opens Day 4 onto its
 lower floor; the panel's save button brings up the dialog and keeps a named
 file; and that file opens back into the same game.
 
@@ -155,7 +155,7 @@ file; and that file opens back into the same game.
 ## Jump Raven's own — `jumpraven/tests/machine/`
 
 Machine suites in Lunicus's shape: `npm test -w jumpraven` runs each in a
-process of its own (`jumpraven/tools/runmachine.mts`), the game machine
+process of its own (`jumpraven/vitest.machine.config.ts`), the game machine
 (`jumpraven/src/game/`) stood up on the rip and stepped as fast as the CPU goes.
 Every gesture goes through `jumpraven/src/game/input.ts`. See
 [Jump Raven's machine suites](../jumpraven/README.md#machine-suites).

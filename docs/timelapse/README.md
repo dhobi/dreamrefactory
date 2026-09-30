@@ -107,7 +107,7 @@ the four discs, stepped as fast as the CPU goes, waiting on the game's own
 globals and never on a duration.
 
     npm test -w timelapse                        every suite
-    npx tsx tools/runmachine.mts maya            just this one (from timelapse/)
+    npm test -w timelapse -- maya                just this one
 
 One suite per world, each continuing from the one before, so `atlantis` is the
 whole game: `easter` (the camera, the lantern, the six masks, the time gate),

@@ -2,7 +2,7 @@
  * A probe for writing a route: the game booted headless, any of the route's
  * steps played, then a few moves by hand, each reporting where it landed and
  * what can be touched there. Not a suite (it never says `pass`), so
- * `tools/runmachine.mts` leaves it out.
+ * `vitest.machine.config.ts` leaves it out: it has no `test(`.
  *
  *   npx tsx tests/machine/probe.ts "<steps>::<moves>" "<steps after>"     (from timelapse/)
  *

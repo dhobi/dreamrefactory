@@ -4,8 +4,8 @@
  * fast as the CPU goes and waits on the game's STATE, never on a duration.
  *
  * The shape is Lunicus's (`lunicus/tests/machine/harness.ts`): one suite per
- * file, one game per process, `ok`/`FAIL`/`PASS` lines that
- * `tools/runmachine.mts` reads.
+ * file, one game per process (vitest's forks, `vitest.machine.config.ts`), and
+ * `ok`/`FAIL`/`PASS` lines in the log.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -38,17 +38,14 @@ export function fail(why: string): never {
   console.log(`FAIL  ${why}`);
   throw new SuiteFailure(why);
 }
-export function pass(what: string): never {
+export function pass(what: string): void {
   console.log(`PASS  ${what}`);
-  process.exit(0);
 }
 
 /** a game on the rip, and the hands to play it with */
 export function start(opts: JumpRavenOptions = {}) {
-  if (!haveRip()) {
-    console.log(`PASS  skipped: no Jump Raven rip at ${RIP}`);
-    process.exit(0);
-  }
+  // a suite skips without the rip before it gets here (test.skipIf)
+  if (!haveRip()) fail(`no Jump Raven rip at ${RIP}`);
   const game = new JumpRaven(diskFiles(), { draws: false, ...opts });
   const m = game.m;
   /** tick until `done` holds; fails after `limit` ticks, naming what it waited for */

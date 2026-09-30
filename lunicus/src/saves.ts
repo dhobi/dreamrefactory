@@ -2,7 +2,7 @@
  * Lunicus's saved games on the page: the kind of file the shared dialog keeps
  * (engine/src/web/save-store.ts), and the port's own saves in `gamefiles/save/`
  * — one at the start of each of days two to six, written by the machine route
- * (`SAVES=gamefiles/save npx tsx tests/machine/day6.ts`) — put into its list once.
+ * (`SAVES=gamefiles/save npm test -w lunicus -- day6`) — put into its list once.
  * No save made by the original is available, so they sit in a folder of their
  * own that says so, apart from the player's.
  */

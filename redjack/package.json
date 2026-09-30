@@ -9,8 +9,8 @@
     "dev": "vite",
     "preview": "vite preview",
     "build": "vite build",
-    "test": "tsx tools/runmachine.mts",
-    "test:machine": "tsx tools/runmachine.mts",
+    "test": "vitest run --config vitest.machine.config.ts",
+    "test:machine": "vitest run --config vitest.machine.config.ts",
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/redjack gamefiles public",
     "mklogo": "tsx tools/mkredjacklogo.ts"
   }

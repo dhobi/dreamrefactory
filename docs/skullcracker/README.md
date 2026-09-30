@@ -422,7 +422,7 @@ a level with no class anywhere.
 - `skullcracker/src/game.ts` — **the game itself**, headless: the world, `tick()`
   and the level loader, with no page in it; `src/walk.ts` is the page around it
 - `skullcracker/src/random.ts` — `SC.EXE`'s own dice, reseeded as each level starts
-- `skullcracker/tools/runmachine.mts` — **every machine suite**, a process each:
+- `skullcracker/vitest.machine.config.ts` — **every machine suite**, a process each:
   `npm test -w skullcracker`, or name the ones you want — see
   [how it is checked](verification.md)
 - `skullcracker/tests/machine/harness.ts` — the game stood up headless on the rip,

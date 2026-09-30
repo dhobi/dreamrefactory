@@ -6,6 +6,7 @@
  * One game per process: `game.ts` keeps its world in module state, as the page
  * does, so a suite that wants a fresh level calls {@link Headless.load} again.
  */
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { buildManifest } from "../../../tools/manifest";
@@ -102,6 +103,9 @@ export async function headless(query = ""): Promise<Headless> {
   };
   return h;
 }
+
+/** is the rip linked? a suite skips without it (test.skipIf) */
+export const haveRip = (): boolean => existsSync(join(PKG, "gamefiles/SKULL"));
 
 /** the suites' own voice, the same three words the browser suites print */
 export class SuiteFailure extends Error {}

@@ -5,7 +5,7 @@
  *
  * The shape is Skull Cracker's (`skullcracker/tests/machine/harness.ts`): one
  * suite per file, one game per process, `ok`/`FAIL`/`PASS` lines that
- * `tools/runmachine.mts` reads. The pump is Dust's
+ * `vitest.machine.config.ts` runs a process each. The pump is Dust's
  * (`dust/tests/playthrough/harness.ts`), because RedJack is not a core of its
  * own but the DreamFactory engine, and a pass of that is `director.tick(now)`.
  *
@@ -255,7 +255,6 @@ export function fail(why: string): never {
   throw new SuiteFailure(why);
 }
 /** the suite's last word — and its end, since a film or a loop still armed would keep node up */
-export function pass(what: string): never {
+export function pass(what: string): void {
   console.log(`PASS  ${what}`);
-  process.exit(0);
 }

@@ -28,10 +28,12 @@
     "docs:preview": "vitepress preview docs",
     "dump": "tsx tools/dumpset.ts",
     "mkappicons": "tsx tools/mkappicons.ts",
-    "release": "tsx tools/release.mts"
+    "release": "tsx tools/release.mts",
+    "coverage": "tsx tools/coverage.mts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "capstone-wasm": "^1.0.3",
     "linkedom": "^0.18.13",
     "mermaid": "^11.4.0",

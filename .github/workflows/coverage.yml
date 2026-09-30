@@ -1,0 +1,60 @@
+name: Coverage
+
+# How much of the engine, and of each game's own code, the tests run: the
+# badges on the README (docs/reference/ci.md#coverage).
+#
+# Not part of the gate. tests.yml runs only the machine suites a change
+# reaches, which is right for a check and wrong for a number: a badge measured
+# on a partial run would move with whatever the last merge touched. So this
+# runs every suite of every game, and publishes the badge files to the
+# `badges` branch, which the README's badges read through shields.io. A
+# failing suite publishes nothing, so a badge is only ever a whole run's.
+#
+# Nightly rather than on every push: it holds the one self-hosted runner for
+# about twenty minutes, which a pull request's checks would queue behind.
+# 04:00 UTC, clear of browser.yml's 02:00 and its ~39 minutes.
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: coverage
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  coverage:
+    name: coverage
+    # the runner that holds the rips, as tests.yml's full job; a schedule and a
+    # manual run both check out master, so no fork's code ever reaches it
+    runs-on: [self-hosted, linux, x64, dreamrefactory-gamefiles]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Link the rips into the workspace
+        run: tools/runner/link-rips.sh
+
+      - run: npm ci
+
+      - name: Every suite, with coverage
+        run: npm run coverage
+
+      - name: The numbers
+        run: cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # One commit on a branch of its own, force-pushed: the badges' history
+      # is not worth keeping, and nothing on master changes.
+      - name: Publish the badges
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd coverage/badges
+          git init -q -b badges
+          git add .
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Coverage badges for ${GITHUB_SHA::7}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges

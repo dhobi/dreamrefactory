@@ -35,3 +35,6 @@ tsconfig.tsbuildinfo
 # the moment a verb changes.
 .legs.json
 .legs.green.json
+
+# `npm run coverage` (tools/coverage.mts): the raw data, the reports and the badge files
+/coverage
