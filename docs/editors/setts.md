@@ -22,6 +22,28 @@ What the room's scripts do as you arrive is not run: no props, no actors, no
 camera turned for you. So a frame that has no picture of its own is black, as
 darts' first scene is, and the page says so.
 
+## Villains' Revenge's rooms
+
+Disney's Villains' Revenge (1999) runs on the same engine, and its `.sett`
+files open here too, by upload; it is not a game on the site. Most are one
+node or one scene. The Wonderland hedge maze, `Title/v131/v131.sett` on disc 2,
+is different: a kit rather than a map.
+
+- **Its five nodes stand at one point.** They are five looks of a junction,
+  each with its own sphere. The map draws them as one mark labelled with all
+  five, and each click on it steps to the next.
+- **None of its 44 roads joins a node.** Both ends are -1, and no film
+  arrives anywhere. They are listed under **roads joined to no place**, with ▶
+  and ◀ for the two films. A film played from there ends on its last frame,
+  which is drawn on the map, and **standing at** is left empty until you pick
+  a place.
+
+Which junction is where is in the level's shop, `Data/v131/v131.shop` on disc
+1, not in the room. `computepathval` packs up to four rails and the next maze
+cell into one variable per path. `GetNextScene` picks the node to show, and the
+heading to face, from the rail the path arrived by. Rails 29–43 leave a
+junction, 1–13 are corridor and 14–28 arrive at one.
+
 ## Exporting
 
 **Export .sett** downloads the room with the edits in it. It is not repacked. The

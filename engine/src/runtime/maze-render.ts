@@ -19,10 +19,6 @@ import { SphrPatch, readSphere } from "../df/sett";
  */
 
 const TAU = Math.PI * 2;
-/** the finest patch any shipped sphere has is 22.5° across; cells are that */
-const CELL = Math.PI / 8;
-const CELLS_X = 16;
-const CELLS_Y = 8;
 
 interface Tile {
   pixels: Uint8Array;
@@ -38,8 +34,18 @@ export const DEPTH_FAR = 0x7fffffff;
 
 export class SphereImage {
   private readonly tiles: Tile[] = [];
-  /** for each 22.5° cell, the deepest tile that covers it */
+  /**
+   * For each cell, the deepest tile that covers it. A cell is as wide as the
+   * sphere's finest patch, so no tile is ever asked for a pixel outside it:
+   * RedJack's finest are 22.5° across, so its grid is the 22.5° one it always
+   * was; Villains' Revenge's go down to 11.25° (Wonderland's `v131.sett` is
+   * full of them), and on a 22.5° grid one of those stood for a whole cell,
+   * its edge pixels smeared across the rest.
+   */
   private readonly cells: Tile[] = [];
+  private readonly cell: number;
+  private readonly cellsX: number;
+  private readonly cellsY: number;
 
   /** what a pixel no tile covers reads: black, or as far as there is */
   private readonly none: number;
@@ -54,6 +60,12 @@ export class SphereImage {
   constructor(file: DFContainerFile, container: number, depth = false) {
     this.none = depth ? DEPTH_FAR : 0xff000000;
     const patches = readSphere(file, container);
+    // the finest patch's width, kept to a power of two of the root's
+    const finest = Math.min(Math.PI / 8, ...patches.filter((p) => p.half > 0).map((p) => 2 * p.half));
+    this.cell = Math.PI / 2 ** Math.min(8, Math.round(Math.log2(Math.PI / finest)));
+    this.cellsX = Math.round(TAU / this.cell);
+    this.cellsY = Math.round(Math.PI / this.cell);
+    const { cell, cellsX, cellsY } = this;
     const tileOf = new Map<SphrPatch, Tile>();
     for (const p of patches) {
       const d = file.containers[depth ? p.depth : p.picture]?.data;
@@ -85,10 +97,10 @@ export class SphereImage {
       }
     }
     // walk the tree for each cell, keeping the deepest decoded patch
-    for (let cy = 0; cy < CELLS_Y; cy++) {
-      for (let cx = 0; cx < CELLS_X; cx++) {
-        const lon = (cx + 0.5) * CELL;
-        const lat = (cy + 0.5) * CELL;
+    for (let cy = 0; cy < cellsY; cy++) {
+      for (let cx = 0; cx < cellsX; cx++) {
+        const lon = (cx + 0.5) * cell;
+        const lat = (cy + 0.5) * cell;
         let p: SphrPatch | undefined = patches[0];
         let best = p ? tileOf.get(p) : undefined;
         while (p) {
@@ -99,7 +111,7 @@ export class SphereImage {
           p = next;
           best = tileOf.get(p) ?? best;
         }
-        if (best) this.cells[cy * CELLS_X + cx] = best;
+        if (best) this.cells[cy * cellsX + cx] = best;
       }
     }
   }
@@ -156,15 +168,15 @@ export class SphereImage {
     }
     const { lon: rl, lat: rt } = this.rays;
     const base = Math.PI - heading;
-    const cells = this.cells;
+    const { cells, cell, cellsX, cellsY } = this;
     for (let gy = 0, i = 0; gy < gh; gy++) {
       for (let gx = 0; gx < gw; gx++, i++) {
         let lon = (base + rl[i]) % TAU;
         if (lon < 0) lon += TAU;
         const lat = rt[i];
-        const cx = Math.min(CELLS_X - 1, (lon / CELL) | 0);
-        const cy = Math.min(CELLS_Y - 1, Math.max(0, (lat / CELL) | 0));
-        const t = cells[cy * CELLS_X + cx];
+        const cx = Math.min(cellsX - 1, (lon / cell) | 0);
+        const cy = Math.min(cellsY - 1, Math.max(0, (lat / cell) | 0));
+        const t = cells[cy * cellsX + cx];
         let px = this.none;
         if (t) {
           const tx = Math.min(255, ((lon - t.lon0) / t.scale) | 0);

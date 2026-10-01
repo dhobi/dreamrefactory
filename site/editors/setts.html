@@ -74,6 +74,25 @@
         text-align: left;
         margin-bottom: 0.25rem;
       }
+      #freeRoads {
+        max-height: 16rem;
+        overflow: auto;
+        font-size: 0.85rem;
+      }
+      #freeRoads summary {
+        cursor: pointer;
+        color: var(--text-dim);
+      }
+      .freeRoad {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        margin-top: 0.2rem;
+      }
+      .freeRoad span {
+        flex: 1;
+        font-family: var(--font-mono);
+      }
       #place {
         max-width: 100%;
       }
@@ -240,6 +259,7 @@
                 <button id="rightBtn" title="turn right (→)">⟳ right</button>
               </div>
               <div id="exits"></div>
+              <details id="freeRoads"></details>
               <label><input type="checkbox" id="showQuads" checked /> show the quads</label>
               <label><input type="checkbox" id="slow" /> slow motion <span class="muted">(a quarter of the game's pace)</span></label>
               <div id="previewInfo" class="mono"></div>

@@ -24,6 +24,19 @@
  * What the room's scripts do as you arrive — the props they put up, the
  * actors, the camera they turn — is not run: this is the room, not the game.
  *
+ * ## Roads that join nothing
+ *
+ * Not every `.sett` is a map. Disney's Villains' Revenge (1999, the same
+ * engine) builds its Wonderland hedge maze, `v131.sett`, as a kit: five nodes,
+ * five looks of a junction, all at one point, and 44 roads whose ends name no
+ * node (both ids -1). Its shop (`v131.shop`) strings rails into paths with
+ * `computepathval` and picks the node to show from the rail it arrived by
+ * (`GetNextScene`), so which junction is where lives in the scripts, not here.
+ * Those roads are listed under "roads joined to no place" and play on their
+ * own; one ends on its last frame, since there is nowhere in the room to arrive.
+ * Places that share a point share one mark on the map, and clicking it again
+ * steps to the next of them.
+ *
  * ## Editing
  *
  * A quad's name and shape, and a star's name and point, are written over the
@@ -31,7 +44,7 @@
  * file you loaded with only those bytes changed. It is not repacked: the
  * container writer does not keep a v5 room's padding.
  */
-import { readSettFile, exitsOf, type MazeFilm, type MazeNode, type MazeQuad, type MazeScene, type SettFile } from "@dreamfactory/engine/df/sett";
+import { readSettFile, exitsOf, type MazeFilm, type MazeNode, type MazeQuad, type MazeRoad, type MazeScene, type SettFile } from "@dreamfactory/engine/df/sett";
 import { patchQuad, patchStar, SETT_NAME_MAX } from "@dreamfactory/engine/df/sett-patch";
 import { FilmFrames, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
 import { inPolygon, projectQuad, walkFrameMs, type MazeCamera } from "@dreamfactory/engine/runtime/maze";
@@ -87,6 +100,8 @@ let sceneView = 0;
 /** the film frame on screen: a scene's view, or a walk under way */
 let shot: { film: MazeFilm; frame: number } | null = null;
 let walking = false;
+/** a road that joins no place was played: the view rests on its last frame */
+let adrift = false;
 /** the camera at a node, radians */
 let heading = 0;
 let pitch = 0;
@@ -152,11 +167,12 @@ function loadRoom(data: Uint8Array, name: string): void {
   editor.style.display = "flex";
   $("fileName").textContent = name;
   $("fileStats").textContent =
-    `${parsed.name} · ${parsed.nodes.length} nodes · ${parsed.scenes.length} scenes · ${parsed.roads.length} roads · ` +
+    `${parsed.name ? `${parsed.name} · ` : ""}${parsed.nodes.length} nodes · ${parsed.scenes.length} scenes · ${parsed.roads.length} roads · ` +
     `${parsed.quads.length} quads · ${parsed.stars.length} stars · ${parsed.routes.length} routes · ${parsed.file.containers.length} containers`;
   log("");
   markDirty();
   buildPlaces();
+  buildFreeRoads();
   buildQuads();
   buildStars();
   buildScripts();
@@ -308,6 +324,7 @@ function goTo(name: string, viewIndex?: number): void {
   node = p.node ?? null;
   scene = p.node ? null : p.scene!;
   shot = null;
+  adrift = false;
   if (scene) standAt(scene, viewIndex ?? nearestView(scene, heading));
   ($<HTMLSelectElement>("place")).value = name;
   buildExits();
@@ -318,6 +335,7 @@ function goTo(name: string, viewIndex?: number): void {
 async function play(f: MazeFilm, from: number, turn: boolean): Promise<void> {
   if (walking || !f.frames.length) return;
   walking = true;
+  adrift = false;
   const slow = (): number => ($<HTMLInputElement>("slow").checked ? 4 : 1);
   let i = from;
   shot = { film: f, frame: i };
@@ -352,7 +370,12 @@ function arrive(f: MazeFilm): void {
   const toScene = f.toScene ? sett!.scenes.find((s) => s.scen === f.toScene) : undefined;
   if (to) goTo(to.name);
   else if (toScene) goTo(toScene.name);
-  else {
+  else if (isFree(f)) {
+    // nowhere to arrive: stay on the last frame, and let any place be picked
+    adrift = true;
+    $<HTMLSelectElement>("place").value = "";
+    show();
+  } else {
     shot = null;
     show();
   }
@@ -507,6 +530,7 @@ function showInfo(): void {
   const cam = camera();
   const lines: string[] = [];
   if (walking && shot) lines.push(`on film @${shot.film.container}, frame ${shot.frame + 1} of ${shot.film.frames.length}`);
+  else if (adrift && shot) lines.push(`the end of ${roadOf(shot.film)} (film @${shot.film.container}): it arrives at no place`);
   else if (node) lines.push(`node ${node.name} (id ${node.id}) · NODE @${node.node} · SPHR @${node.sphere}`);
   else if (scene) {
     const v = scene.views[sceneView];
@@ -546,6 +570,43 @@ function endOf(f: MazeFilm): string {
 
 const roadOf = (f: MazeFilm): string => sett!.roads.find((r) => r.films.includes(f))?.name ?? "";
 
+/** a film that arrives at no node and no scene of this room */
+const isFree = (f: MazeFilm): boolean => endOf(f) === "nowhere";
+
+/**
+ * A road no node's exits can reach: neither end names a node, and no film of it
+ * arrives anywhere. RedJack has none; Villains' Revenge's Wonderland is made of
+ * them (see the module comment).
+ */
+const isFreeRoad = (r: MazeRoad): boolean =>
+  r.films.length > 0 && r.films.every(isFree) && !sett!.nodes.some((n) => n.id === r.a || n.id === r.b);
+
+function buildFreeRoads(): void {
+  const wrap = $("freeRoads");
+  wrap.replaceChildren();
+  const free = sett!.roads.filter(isFreeRoad);
+  wrap.style.display = free.length ? "" : "none";
+  if (!free.length) return;
+  const sum = document.createElement("summary");
+  sum.textContent = `roads joined to no place (${free.length})`;
+  wrap.appendChild(sum);
+  for (const r of free) {
+    const line = document.createElement("div");
+    line.className = "freeRoad";
+    const name = document.createElement("span");
+    name.textContent = r.name;
+    line.appendChild(name);
+    r.films.forEach((f, i) => {
+      const b = document.createElement("button");
+      b.textContent = i ? "◀" : "▶";
+      b.title = `${r.name}, ${i ? "back" : "there"} · film @${f.container} · ${f.frames.length} frames`;
+      b.addEventListener("click", () => void play(f, 0, false));
+      line.appendChild(b);
+    });
+    wrap.appendChild(line);
+  }
+}
+
 function buildExits(): void {
   const wrap = $("exits");
   wrap.replaceChildren();
@@ -553,7 +614,11 @@ function buildExits(): void {
   const exits = exitsOf(sett!, node);
   const head = document.createElement("div");
   head.className = "muted";
-  head.textContent = exits.length ? "exits, as the scripts number them:" : "no exits";
+  head.textContent = exits.length
+    ? "exits, as the scripts number them:"
+    : sett!.roads.some(isFreeRoad)
+      ? "no exits: this room's roads join no place (below)"
+      : "no exits";
   wrap.appendChild(head);
   exits.forEach((f, i) => {
     const b = document.createElement("button");
@@ -664,21 +729,26 @@ function drawMap(): void {
     g.lineTo(x, y + 4);
     g.stroke();
   });
-  // the places, named
-  g.font = "11px ui-monospace, monospace";
-  for (const n of s.nodes) {
-    const [x, y] = toMap(n.x, n.y);
-    g.fillStyle = C.node;
+  // the film on screen, when it is a road that joins no place
+  if (shot && (walking || adrift) && isFree(shot.film)) {
+    g.strokeStyle = C.picked;
+    g.lineWidth = 2;
     g.beginPath();
-    g.arc(x, y, 4, 0, Math.PI * 2);
-    g.fill();
-    g.fillText(n.name, x + 6, y - 5);
+    shot.film.frames.forEach((fr, i) => (i ? g.lineTo(...toMap(fr.x, fr.y)) : g.moveTo(...toMap(fr.x, fr.y))));
+    g.stroke();
+    g.lineWidth = 1;
   }
-  for (const sc of s.scenes) {
-    const [x, y] = toMap(sc.x, sc.y);
-    g.fillStyle = C.scene;
-    g.fillRect(x - 4, y - 4, 8, 8);
-    g.fillText(sc.name, x + 6, y - 5);
+  // the places, named: those at one point share a mark and a label
+  g.font = "11px ui-monospace, monospace";
+  for (const st of placeStacks()) {
+    const [x, y] = st.at;
+    g.fillStyle = st.places[0].kind === "node" ? C.node : C.scene;
+    if (st.places[0].kind === "node") {
+      g.beginPath();
+      g.arc(x, y, 4, 0, Math.PI * 2);
+      g.fill();
+    } else g.fillRect(x - 4, y - 4, 8, 8);
+    g.fillText(st.places.map((p) => p.name).join(" · "), x + 6, y - 5);
   }
   // you, and the way you look
   const cam = camera();
@@ -704,6 +774,21 @@ function drawMap(): void {
   $("mapStats").textContent = `${s.nodes.length + s.scenes.length} places · ${s.roads.length} roads`;
 }
 
+/** the room's nodes and scenes, gathered by the map point they fall on */
+function placeStacks(): { at: [number, number]; places: { kind: "node" | "scene"; name: string }[] }[] {
+  const out = new Map<string, { at: [number, number]; places: { kind: "node" | "scene"; name: string }[] }>();
+  const add = (kind: "node" | "scene", name: string, x: number, y: number): void => {
+    const at = toMap(x, y);
+    const key = `${Math.round(at[0])},${Math.round(at[1])}`;
+    const st = out.get(key) ?? { at, places: [] };
+    st.places.push({ kind, name });
+    out.set(key, st);
+  };
+  for (const n of sett!.nodes) add("node", n.name, n.x, n.y);
+  for (const sc of sett!.scenes) add("scene", sc.name, sc.x, sc.y);
+  return [...out.values()];
+}
+
 function buildLegend(): void {
   const wrap = $("legend");
   wrap.replaceChildren();
@@ -725,19 +810,25 @@ function buildLegend(): void {
 }
 
 /** what is under a map point: a place first, then a quad or a star */
-function mapHit(e: MouseEvent): { kind: "place" | "quad" | "star"; i: number; name: string } | null {
+function mapHit(e: MouseEvent): { kind: "place" | "quad" | "star"; i: number; name: string; say: string } | null {
   if (!sett) return null;
   const r = map.getBoundingClientRect();
   const x = ((e.clientX - r.left) * map.width) / r.width;
   const y = ((e.clientY - r.top) * map.height) / r.height;
   const near = (p: [number, number]): number => Math.hypot(p[0] - x, p[1] - y);
-  type Hit = { kind: "place" | "quad" | "star"; i: number; name: string; d: number };
+  type Hit = { kind: "place" | "quad" | "star"; i: number; name: string; say: string; d: number };
   const found: { best: Hit | null } = { best: null };
-  const offer = (kind: Hit["kind"], i: number, name: string, d: number, reach: number): void => {
-    if (d <= reach && (!found.best || d < found.best.d)) found.best = { kind, i, name, d };
+  const offer = (kind: Hit["kind"], i: number, name: string, d: number, reach: number, say = name): void => {
+    if (d <= reach && (!found.best || d < found.best.d)) found.best = { kind, i, name, say, d };
   };
-  sett.nodes.forEach((n, i) => offer("place", i, n.name, near(toMap(n.x, n.y)), 9));
-  sett.scenes.forEach((s, i) => offer("place", i, s.name, near(toMap(s.x, s.y)), 9));
+  placeStacks().forEach((st, i) => {
+    // a stack answers with the place after the one you stand at, so clicking
+    // it again steps through them
+    const names = st.places.map((p) => p.name);
+    const k = names.indexOf(placeName());
+    const name = names[adrift ? 0 : (k + 1) % names.length];
+    offer("place", i, name, near(st.at), 9, names.length > 1 ? `${name} (of ${names.join(" · ")})` : name);
+  });
   if (found.best) return found.best;
   sett.quads.forEach((q, i) => offer("quad", i, q.name, near(toMap(...quadAt(q))), 8));
   sett.stars.forEach((s, i) => offer("star", i, s.name, near(toMap(s.x, s.y)), 8));
@@ -746,7 +837,7 @@ function mapHit(e: MouseEvent): { kind: "place" | "quad" | "star"; i: number; na
 
 map.addEventListener("mousemove", (e) => {
   const h = mapHit(e);
-  $("mapSay").textContent = h ? `${h.kind === "place" ? "" : `${h.kind} `}${h.name}` : "";
+  $("mapSay").textContent = h ? `${h.kind === "place" ? "" : `${h.kind} `}${h.say}` : "";
 });
 map.addEventListener("click", (e) => {
   const h = mapHit(e);
