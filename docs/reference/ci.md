@@ -65,9 +65,9 @@ skipped.
 | Workflow | Trigger | What |
 |---|---|---|
 | [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + every package's playthrough) self-hosted, and in it Skull Cracker's, Timelapse's, RedJack's, Lunicus's and Jump Raven's machine suites — each game stood up headless on its rip ([Skull Cracker's](../skullcracker/verification.md), [Timelapse's](../timelapse/README.md#machine-suites), [RedJack's](../redjack/README.md#machine-suites), [Lunicus's](../lunicus/README.md#machine-suites), [Jump Raven's](../jumpraven/README.md#machine-suites)). The `full` job's NAME is a required status check — renaming it blocks every PR |
-| [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly 02:00 UTC, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
+| [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly from 02:17 Swiss time, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
-| [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 04:00 UTC, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage). Not a check: it gates nothing |
+| [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage). Not a check: it gates nothing |
 | [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*` or `lunicus-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
@@ -97,7 +97,7 @@ engine, which is where their suites count, and their `src/` is mostly the page
 around it, which a node suite does not reach.
 
 [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml)
-does the same every night at 04:00 UTC (about twenty minutes, too long to hold
+does the same every night at 01:17 Swiss time (about twenty minutes, too long to hold
 the one runner on every merge), on the runner that holds the rips, and
 force-pushes the badge files — one [shields.io endpoint](https://shields.io/badges/endpoint-badge)
 JSON a badge, `coverage-<key>.json` — to the `badges` branch as a single commit.
@@ -134,7 +134,8 @@ fails at the first `actions/checkout` of the job.
 ### On a machine of its own
 
 The usual case — the runner belongs on a box that is always on, not on a
-laptop, because the nightly browser run needs it awake at 02:00.
+laptop, because the nightly runs need it awake from 01:17 to about 06:00 Swiss
+time.
 
 **That host needs no clone.** The runner makes its own checkout under `_work/`
 on every run, so a clone beside it would only go stale. Two things have to be there: the runner and the rip.

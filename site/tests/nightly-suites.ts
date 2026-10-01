@@ -120,3 +120,21 @@ test("each nightly is headed with the game it is really running", () => {
     expect(name, `the job name distinguishes ${cron}`).toContain(`'${cron}'`);
   }
 });
+
+test("every nightly is on Swiss time and off the hour", () => {
+  // GitHub reads a cron with no timezone as UTC, and names the start of every
+  // hour as when its scheduler is busiest: on the hour in UTC, these fired 4½
+  // to 7 hours late every night of late September 2026. Coverage is a nightly
+  // too, so its workflow is held to the same.
+  for (const file of ["browser.yml", "coverage.yml"]) {
+    const text = readFileSync(join(ROOT, ".github/workflows", file), "utf8");
+    const crons = [...text.matchAll(/^(\s*)- cron: "([^"]+)".*\n\1  timezone: "([^"]+)"/gm)];
+    const all = [...text.matchAll(/^\s*- cron: "([^"]+)"/gm)];
+    expect(all.length, `${file} has nightlies`).toBeGreaterThan(0);
+    expect(crons.length, `every cron in ${file} names its timezone`).toBe(all.length);
+    for (const [, , cron, zone] of crons) {
+      expect(zone, `${file}: ${cron}`).toBe("Europe/Zurich");
+      expect(cron.split(" ")[0], `${file}: ${cron} is off the hour`).not.toBe("0");
+    }
+  }
+});

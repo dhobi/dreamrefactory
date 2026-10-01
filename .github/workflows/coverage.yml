@@ -12,11 +12,13 @@ name: Coverage
 #
 # Nightly rather than on every push: it holds the one self-hosted runner for
 # about twenty minutes, which a pull request's checks would queue behind.
-# 04:00 UTC, clear of browser.yml's 02:00 and its ~39 minutes.
+# 01:17 Swiss time, done before browser.yml's first nightly at 02:17; off the
+# hour for the reason given there.
 
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "17 1 * * *"
+      timezone: "Europe/Zurich"
   workflow_dispatch:
 
 concurrency:
