@@ -35,10 +35,19 @@ on:
     # Titanic's ~39 min) because cron on GitHub is best-effort and can be delayed
     # under load; when two do collide they queue rather than clash, the runner
     # taking one job at a time and the concurrency groups below being distinct.
-    - cron: "0 2 * * *" # Titanic, the route
-    - cron: "0 3 * * *" # Dust, the three short suites
-    - cron: "0 4 * * *" # Dust, the legs
-    - cron: "0 5 * * *" # Skull Cracker, the page suites
+    #
+    # Swiss nights, in Swiss time, so summer time moves nothing. And at :17,
+    # not on the hour: GitHub names the start of every hour as when its
+    # scheduler is busiest. On the hour in UTC, every one of these fired 4½ to
+    # 7 hours late, every night of late September 2026.
+    - cron: "17 2 * * *" # Titanic, the route
+      timezone: "Europe/Zurich"
+    - cron: "17 3 * * *" # Dust, the three short suites
+      timezone: "Europe/Zurich"
+    - cron: "17 4 * * *" # Dust, the legs
+      timezone: "Europe/Zurich"
+    - cron: "17 5 * * *" # Skull Cracker, the page suites
+      timezone: "Europe/Zurich"
   workflow_dispatch:
     inputs:
       game:
@@ -75,9 +84,9 @@ on:
 concurrency:
   group: >-
     browser-${{ github.ref }}-${{ inputs.game || github.event.label.name
-    || (github.event.schedule == '0 3 * * *' && 'dust-browser')
-    || (github.event.schedule == '0 4 * * *' && 'dust-legs')
-    || (github.event.schedule == '0 5 * * *' && 'skullcracker-all')
+    || (github.event.schedule == '17 3 * * *' && 'dust-browser')
+    || (github.event.schedule == '17 4 * * *' && 'dust-legs')
+    || (github.event.schedule == '17 5 * * *' && 'skullcracker-all')
     || 'taoot-nightly' }}
   cancel-in-progress: true
 
@@ -91,9 +100,9 @@ jobs:
     # it was actually running. site/tests/nightly-suites.ts holds all three.
     name: >-
       browser suite — ${{ inputs.game || github.event.label.name
-      || (github.event.schedule == '0 3 * * *' && 'dust (nightly)')
-      || (github.event.schedule == '0 4 * * *' && 'dust legs (nightly)')
-      || (github.event.schedule == '0 5 * * *' && 'skullcracker (nightly)')
+      || (github.event.schedule == '17 3 * * *' && 'dust (nightly)')
+      || (github.event.schedule == '17 4 * * *' && 'dust legs (nightly)')
+      || (github.event.schedule == '17 5 * * *' && 'skullcracker (nightly)')
       || 'taoot (nightly)' }}
     # On `labeled`, only a `full-run-<game>` label starts a run — every other
     # label edit on every PR would otherwise boot a 39-minute job. Forks are
@@ -152,10 +161,10 @@ jobs:
               # Titanic. The `schedule:` list above and this case are the pair
               # site/tests/nightly-suites.ts holds together.
               case "$SCHEDULE" in
-                "0 2 * * *") game=taoot;        suite=test:browser ;;
-                "0 3 * * *") game=dust;         suite=test:browser ;;
-                "0 4 * * *") game=dust;         suite=speedrun:legs ;;
-                "0 5 * * *") game=skullcracker; suite=test:browser:all ;;
+                "17 2 * * *") game=taoot;        suite=test:browser ;;
+                "17 3 * * *") game=dust;         suite=test:browser ;;
+                "17 4 * * *") game=dust;         suite=speedrun:legs ;;
+                "17 5 * * *") game=skullcracker; suite=test:browser:all ;;
                 *)
                   echo "::error::no game is mapped to the cron '$SCHEDULE' — see the table in browser.yml"
                   exit 1
