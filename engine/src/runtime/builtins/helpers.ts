@@ -1,5 +1,5 @@
 import { Builtin, Value, toNum, toStr, truthy } from "../interp";
-import { bearing } from "../geometry";
+import { bearing, bearingV5 } from "../geometry";
 import { BuiltinCtx } from "./context";
 import { packPoint, pointX, pointY, s16 } from "../point";
 import { decodeText, encodeText } from "../../df/text";
@@ -184,8 +184,7 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     // 2^24ths of a turn — RedJack.exe 0x4184f0 → 0x41df00:
     // `ftol(atan2 (y2 - y1, x2 - x1) * 16777216 / 2π) & 0xffffff`
     if (session.isV5) {
-      const t = Math.atan2(toNum(y2 ?? 0) - toNum(to ?? 0), toNum(x2 ?? 0) - toNum(from ?? 0));
-      return Math.trunc(t * 16777216 * (1 / (2 * Math.PI))) & 0xffffff;
+      return bearingV5(toNum(x2 ?? 0) - toNum(from ?? 0), toNum(y2 ?? 0) - toNum(to ?? 0));
     }
     // signed halves, for the reason spelled out on calcdist below
     const fx = pointX(toNum(from ?? 0));

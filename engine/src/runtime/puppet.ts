@@ -247,6 +247,13 @@ export class PuppetController {
       defaultPose: pose,
       defaultStance: stance,
     };
+    // DreamFactory 5 puts the arrow up for a conversation, over whatever a
+    // script last asked for: RedJack.exe's Pupp.c calls its `CURS.ARROW` setter
+    // (0x46a150 / 0x46a230) from 0x42e6b0, 0x42eed0 and 0x431550. The cast's
+    // `walkandtalk` has just said `cursor ("watch")`, and without this the
+    // hourglass stood over every choice (#446). It is the engine's current
+    // cursor afterwards too, as the original's is, until a script names another.
+    if (this.session.isV5) this.session.cursorName = "arrow";
     this.session.onLog(`puppet opened: ${key} (${pup.dialogue.size} lines, ${pup.scripts.length} scripts)`);
     return true;
   }

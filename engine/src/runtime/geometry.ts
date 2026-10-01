@@ -145,6 +145,15 @@ export function bearing(dx: number, dy: number): number {
   return Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
 }
 
+/**
+ * DreamFactory 5's bearing, in 2^24ths of a turn rather than 256ths — RedJack.exe
+ * 0x41df00: `ftol(atan2 (dy, dx) * 16777216 / 2π) & 0xffffff`, truncating where
+ * the older engines round. What `calcdeg` answers and what `actordeg` holds.
+ */
+export function bearingV5(dx: number, dy: number): number {
+  return Math.trunc(Math.atan2(dy, dx) * 16777216 * (1 / (2 * Math.PI))) & 0xffffff;
+}
+
 /** a sprite's ink as the blitter's alpha, 0..255 (see PropInstance.ink, ActorInstance.ink) */
 export function inkAlpha(ink: number): number {
   return ink >= 8 || ink < 0 ? 255 : (ink * 255 * 32) >> 8;

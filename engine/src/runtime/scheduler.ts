@@ -1,6 +1,6 @@
 import { PlayHandle } from "./audio";
 import { ENGINE_STEP_MS } from "./clock";
-import { bearing } from "./geometry";
+import { bearing, bearingV5 } from "./geometry";
 import type { GameSession } from "./session";
 
 /** TI.EXE's fixed table sizes for scheduled loops and crickets */
@@ -440,7 +440,7 @@ export class Scheduler {
     this.walks.set(name.toLowerCase(), {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx, dy, dz, dist, progress: 0, paused: false, arriveStar,
-      turnTo: bearing(dx, dy),
+      turnTo: this.heading(dx, dy),
     });
   }
 
@@ -548,7 +548,7 @@ export class Scheduler {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx: 0, dy: 0, dz: 0,
       dist: Math.max(1, Math.floor(cum)), progress: 0, paused: false, arriveStar,
-      turnTo: bearing(second.x - first.x, second.y - first.y),
+      turnTo: this.heading(second.x - first.x, second.y - first.y),
       path,
     });
   }
@@ -585,8 +585,9 @@ export class Scheduler {
   startTurn(name: string, deg: number): void {
     const a = this.session.actorRuntime.get(name);
     if (!a) return;
-    const target = deg & 0xff;
-    if ((a.deg & 0xff) === target) {
+    const mask = this.turnUnits - 1;
+    const target = deg & mask;
+    if ((a.deg & mask) === target) {
       // nothing to turn: leave any running walk alone and record no turn
       return;
     }
@@ -662,7 +663,8 @@ export class Scheduler {
   }
 
   /**
-   * Step a 0..255 facing toward `target` by at most `by`, the short way round.
+   * Step a facing toward `target` by at most `by`, the short way round — in
+   * 256ths of a turn, or DreamFactory 5's 2^24ths ({@link turnUnits}).
    *
    * TI.EXE's `0x445080`, which the walk service calls once per pass with the
    * actor's `actorturn` and a wrap of 0xff: it compares "forwards the long way"
@@ -676,10 +678,28 @@ export class Scheduler {
    */
   private stepDeg(cur: number, target: number, by: number): number {
     const step = Math.max(1, Math.abs(Math.trunc(by)));
-    const diff = (target - cur) & 0xff;
+    const turn = this.turnUnits;
+    const diff = (target - cur) & (turn - 1);
     if (diff === 0) return target;
-    if (diff <= step || 256 - diff <= step) return target;
-    return (cur + (diff < 128 ? step : -step)) & 0xff;
+    if (diff <= step || turn - diff <= step) return target;
+    return (cur + (diff < turn / 2 ? step : -step)) & (turn - 1);
+  }
+
+  /**
+   * A whole turn in the units a facing is held in: 256 for the older engines,
+   * 2^24 for DreamFactory 5, whose `actordeg`, `calcdeg` and `actorturn` all
+   * count in 2^24ths (RedJack's `stdturn` is 1,050,000 a pass, about 22°). Walks
+   * reckoned in 256ths there gave every RedJack walk a facing within a degree of
+   * 0, whichever way the actor went: Lyle crossing to you at liznite's Node58
+   * looking off to the side (#447).
+   */
+  private get turnUnits(): number {
+    return this.session.isV5 ? 0x1000000 : 0x100;
+  }
+
+  /** the facing of a delta vector, in {@link turnUnits} */
+  private heading(dx: number, dy: number): number {
+    return this.session.isV5 ? bearingV5(dx, dy) : bearing(dx, dy);
   }
 
   stopWalk(name: string): void {
@@ -821,7 +841,7 @@ export class Scheduler {
         a.worldX = Math.round(from.x + (to.x - from.x) * u);
         a.worldY = Math.round(from.y + (to.y - from.y) * u);
         a.worldZ = Math.round(from.z + (to.z - from.z) * u);
-        a.deg = bearing(to.x - from.x, to.y - from.y);
+        a.deg = this.heading(to.x - from.x, to.y - from.y);
       } else {
         a.worldX = Math.round(w.sx + w.dx * t);
         a.worldY = Math.round(w.sy + w.dy * t);
@@ -971,6 +991,7 @@ export class Scheduler {
   private serviceStep(): void {
     this.serviceWalks();
     this.silenceAbsentCrickets();
+    if (this.session.isV5) this.replaceCricketsV5();
     for (let i = this.crickets.length - 1; i >= 0; i--) {
       const c = this.crickets[i];
       if (c.paused) continue;
@@ -1175,27 +1196,89 @@ export class Scheduler {
     }
   }
 
+  /**
+   * Where a cricket sounds from the camera as it stands: its volume and pan, or
+   * null when it is out of earshot.
+   */
+  private cricketPlace(c: Cricket): { volume: number; pan: number } | null {
+    if (this.session.isV5) return this.cricketPlaceV5(c);
+    const lis = this.session.listener();
+    if (!lis) return { volume: 1, pan: 0 };
+    const dx = c.x - lis.x;
+    const dy = c.y - lis.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist >= c.radius) return null;
+    // linear falloff (exact TI curve unrecovered); pan = sine of the
+    // bearing relative to the camera facing, same convention as the
+    // projection's lateral axis (positive = right of screen)
+    let pan = 0;
+    if (dist > 1) {
+      const th = ((lis.deg & 0xff) / 256) * 2 * Math.PI;
+      const lateral = dy * Math.cos(th) - dx * Math.sin(th);
+      pan = Math.max(-1, Math.min(1, lateral / dist));
+    }
+    return { volume: 1 - dist / c.radius, pan };
+  }
+
+  /**
+   * DreamFactory 5's cricket, as RedJack.exe's service places one (0x41d810)
+   * against the room camera (x, y at 0x4c7a44/0x4c7a48, heading at 0x4c7a38):
+   *
+   *  - out of earshot at `radius` and beyond, by the truncated ground distance;
+   *  - volume `255 − trunc(dist · 255 / radius)`, the 0..255 that wave.c's setter
+   *    (0x471fc0) turns into DirectSound attenuation;
+   *  - pan from the bearing to the sound against the camera's heading, folded so
+   *    that a sound behind pans as the one in front of it: dead ahead is 128,
+   *    a quarter turn anticlockwise 0 (full left at 0x4721e0), clockwise 255.
+   *
+   * There was no v5 rule before: a v5 room sets no {@link GameSession.listener},
+   * so every one of RedJack's sounds played at full volume and centred wherever
+   * it was — liznite's surf, dock and fire, radii of 200,000 to 400,000 units,
+   * all at once and over Lyle (#447).
+   */
+  private cricketPlaceV5(c: Cricket): { volume: number; pan: number } | null {
+    const cam = this.session.maze?.camera();
+    if (!cam) return { volume: 1, pan: 0 };
+    const dx = c.x - cam.x;
+    const dy = c.y - cam.y;
+    const dist = Math.trunc(Math.sqrt(dx * dx + dy * dy));
+    if (dist >= c.radius) return null;
+    const volume = 255 - Math.trunc((dist * 255) / c.radius);
+    const heading = Math.round((cam.heading * 0x1000000) / (2 * Math.PI)) & 0xffffff;
+    let rel = (bearingV5(dx, dy) - heading + 0x800000) & 0xffffff;
+    if (rel > 0xc00000) rel = 0x1800000 - rel;
+    if (rel < 0x400000) rel = 0x800000 - rel;
+    const pan = 255 - Math.trunc(((rel - 0x400000) * 255) / 0x800000);
+    return { volume: volume / 255, pan: pan < 128 ? (pan - 128) / 128 : (pan - 128) / 127 };
+  }
+
+  /** the camera a v5 cricket was last placed against — 0x41d851 re-places only when it moved */
+  private cricketCamera = "";
+
+  /**
+   * Re-place every playing v5 cricket when the camera has moved, and stop the
+   * ones it has left the radius of; they start again from the service once it
+   * is back in range (RedJack.exe 0x41d9e9 / 0x41db51).
+   */
+  private replaceCricketsV5(): void {
+    const cam = this.session.maze?.camera();
+    const at = cam ? `${cam.x},${cam.y},${cam.heading}` : "";
+    if (at === this.cricketCamera) return;
+    this.cricketCamera = at;
+    for (const c of this.crickets) {
+      if (!c.handle || c.handle.done) continue;
+      const place = this.cricketPlace(c);
+      if (place) c.handle.place?.(place.volume, place.pan);
+      else c.handle.stop();
+    }
+  }
+
   private fireCricket(c: Cricket): void {
     const audio = this.session.audioLib.sound(c.name);
     if (!audio) return;
-    let volume = 1;
-    let pan = 0;
-    const lis = this.session.listener();
-    if (lis) {
-      const dx = c.x - lis.x;
-      const dy = c.y - lis.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist >= c.radius) return; // out of earshot (counts as fired)
-      // linear falloff (exact TI curve unrecovered); pan = sine of the
-      // bearing relative to the camera facing, same convention as the
-      // projection's lateral axis (positive = right of screen)
-      volume = 1 - dist / c.radius;
-      if (dist > 1) {
-        const th = ((lis.deg & 0xff) / 256) * 2 * Math.PI;
-        const lateral = dy * Math.cos(th) - dx * Math.sin(th);
-        pan = Math.max(-1, Math.min(1, lateral / dist));
-      }
-    }
+    const place = this.cricketPlace(c);
+    if (!place) return; // out of earshot (counts as fired)
+    const { volume, pan } = place;
     // a soundloop-flagged cricket starts once and keeps looping in place
     // (handle.done stays false, so the re-fire check never triggers again) —
     // this is how sets run positional ambience: soundloop("motor", true)

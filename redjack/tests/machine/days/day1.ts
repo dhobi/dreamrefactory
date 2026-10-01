@@ -19,6 +19,7 @@
  * Each step checks the flag the script it cites sets, so a route that goes
  * wrong says where.
  */
+import { bearingV5 } from "@dreamfactory/engine/runtime/geometry";
 import { fail, ok, type Headless } from "../harness";
 import { fightLyle, fighting, schoolOfDefense, schoolOfDodging, schoolOfStriking } from "../fight";
 import { ai, clickOn, converse, drag, face, global, goTo, waitNear } from "../route";
@@ -37,8 +38,15 @@ export async function playDay1(h: Headless): Promise<void> {
   if ((await ai(h, "bone", "bonephase")) !== "1") fail(`Bone's first talk ends in bonephase 1; it is ${await ai(h, "bone", "bonephase")}`);
   ok("met Bone (bonephase 1)");
 
-  // Lyle, on the beach: Node58's openscene has him jump Nick the first time
+  // Lyle, on the beach: Node58's openscene has him jump Nick the first time,
+  // walking up to him first (gang.cast `walkandtalk`) — and facing the way he
+  // walks, which RedJack's 2^24ths of a turn had him not doing (#447)
+  const facing = watchFacing(h, "lyle");
   await goTo(h, "Node58");
+  facing.stop();
+  if (!facing.passes) fail("Lyle never walked up to Nick at Node58");
+  if (facing.off.length) fail(`Lyle walked to Nick facing off his way on ${facing.off.length} of ${facing.passes} passes: ${facing.off.slice(0, 3).join("; ")}`);
+  ok(`Lyle walked up facing his way (${facing.passes} passes)`);
   await converse(h, ["Who are you?", "All right then.", "Nick.", "Were you left behind", "Goodbye."], "meeting Lyle");
   if ((await ai(h, "nick", "metlyle")) !== "1") fail("Lyle's intro sets metlyle");
   ok(`met Lyle on the beach (metlyle 1, janstalk ${await ai(h, "nick", "janstalk")})`);
@@ -239,4 +247,39 @@ export async function playDay1(h: Headless): Promise<void> {
     if (!played.includes(film)) fail(`stowing away plays ${film}; it played ${played.join(", ")}`);
   }
   ok(`stowed away (${played.join(", ")}): day two begins aboard, found out, with Justice asking`);
+}
+
+/**
+ * Every movement pass of `who`'s straight-line walk, checked against the
+ * bearing of the walk: the mover writes the position once a pass, after the turn
+ * phase has landed the facing, so a pass whose facing is not the walk's own
+ * bearing is an actor walking sideways. Watched by trapping the position write
+ * on the actor's own record, which leaves the engine's code untouched.
+ */
+function watchFacing(h: Headless, who: string): { passes: number; off: string[]; stop(): void } {
+  const a = h.session.actorRuntime.get(who);
+  if (!a) fail(`no actor ${who}`);
+  const out = { passes: 0, off: [] as string[], stop: () => void delete (a as { worldX?: number }).worldX };
+  let x = a.worldX;
+  Object.defineProperty(a, "worldX", {
+    configurable: true,
+    enumerable: true,
+    get: () => x,
+    set: (v: number) => {
+      x = v;
+      const w = h.session.scheduler.walks.get(who);
+      if (!w || w.turnTo !== undefined || w.turnOnly || w.path) return;
+      out.passes++;
+      const want = bearingV5(w.dx, w.dy);
+      const d = Math.abs(((Number(a.deg) - want + 0x800000) & 0xffffff) - 0x800000);
+      if (d > 0x10000) out.off.push(`deg ${Number(a.deg)} against ${want}`);
+    },
+  });
+  // `delete` takes the trap away; the position it held goes back as a field
+  const stop = out.stop;
+  out.stop = () => {
+    stop();
+    a.worldX = x;
+  };
+  return out;
 }

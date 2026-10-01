@@ -319,7 +319,9 @@ async function main(): Promise<void> {
     host.director.render(plateCtx);
     ctx.drawImage(plate, 0, 0, canvas.width, canvas.height);
     showLocation(host);
-    showCursor(host.session.cursorHidden ? "none" : host.session.cursorName);
+    // a conversation keeps the arrow however a script inside it changes the
+    // cursor: RedJack.exe's puppet code sets `CURS.ARROW` as it runs (#446)
+    showCursor(host.session.cursorHidden ? "none" : host.session.puppet?.visible ? "arrow" : host.session.cursorName);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
