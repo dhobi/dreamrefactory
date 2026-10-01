@@ -24,6 +24,13 @@ export interface PlayOpts {
 export interface PlayHandle {
   readonly done: boolean;
   stop(): void;
+  /**
+   * Move a sound that is already playing: a new volume and pan, as
+   * {@link PlayOpts} has them. A DreamFactory 5 cricket is re-placed whenever
+   * the camera moves (RedJack.exe 0x41d810), so the surf swells as you walk to
+   * the water instead of keeping the level it started at.
+   */
+  place?(volume: number, pan: number): void;
 }
 
 export interface AudioSink {
@@ -118,6 +125,10 @@ export class DeferredAudioSink implements AudioSink {
       stop() {
         h.stopped = true;
         h.real?.stop();
+      },
+      place(volume, pan) {
+        h.opts = { ...h.opts, volume, pan };
+        h.real?.place?.(volume, pan);
       },
     };
   }
@@ -220,6 +231,10 @@ export class NullAudioSink implements AudioSink {
         return !opts?.loop || call.stopped || call.displaced;
       },
       stop: () => (call.stopped = true),
+      place: (volume, pan) => {
+        call.volume = volume;
+        call.pan = pan;
+      },
     };
   }
 
@@ -370,17 +385,21 @@ export class WebAudioSink implements AudioSink {
     src.buffer = buffer;
     src.loop = !!opts?.loop;
     let head: AudioNode = src;
-    if (opts?.volume !== undefined && opts.volume < 1) {
-      const g = this.ctx.createGain();
-      g.gain.value = Math.max(0, Math.min(1, opts.volume));
-      head.connect(g);
-      head = g;
+    // a play given a place at all gets both nodes, so it can be moved later
+    const placed = opts?.volume !== undefined || opts?.pan !== undefined;
+    let gain: GainNode | null = null;
+    let panner: StereoPannerNode | null = null;
+    if (placed || (opts?.volume !== undefined && opts.volume < 1)) {
+      gain = this.ctx.createGain();
+      gain.gain.value = Math.max(0, Math.min(1, opts?.volume ?? 1));
+      head.connect(gain);
+      head = gain;
     }
-    if (opts?.pan) {
-      const p = this.ctx.createStereoPanner();
-      p.pan.value = Math.max(-1, Math.min(1, opts.pan));
-      head.connect(p);
-      head = p;
+    if (placed || opts?.pan) {
+      panner = this.ctx.createStereoPanner();
+      panner.pan.value = Math.max(-1, Math.min(1, opts?.pan ?? 0));
+      head.connect(panner);
+      head = panner;
     }
     head.connect(this.gains[channel]);
     const entry = { src, done: false };
@@ -405,6 +424,10 @@ export class WebAudioSink implements AudioSink {
           }
           entry.done = true;
         }
+      },
+      place: (volume, pan) => {
+        if (gain) gain.gain.value = Math.max(0, Math.min(1, volume));
+        if (panner) panner.pan.value = Math.max(-1, Math.min(1, pan));
       },
     };
   }

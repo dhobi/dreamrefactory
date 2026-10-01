@@ -369,6 +369,24 @@ Playing all seven days in one go found one more, read from RedJack.exe:
   no suite, but actors such as Port Royal's soldiers and runners cut their
   corners. `day3.ts` now checks that the soldiers walk their routes.
 
+Players' reports found three more, each read from RedJack.exe:
+- a walk faces its heading in 2^24ths of a turn, the unit of `actordeg`,
+  `calcdeg` (0x41df00) and `actorturn` (the cast's `stdturn` is 1,050,000, about
+  22° a pass). The port worked walks and turns out in Titanic's 256ths, so every
+  walk faced within a degree of 0: Lyle crossed the beach to Nick at Node58
+  looking off to the side (#447). `day1.ts` now checks his facing on every pass
+  of that walk;
+- a cricket is placed against the room camera, and placed again whenever the
+  camera moves (0x41d810): volume `255 − dist · 255 / radius`, pan from its
+  bearing against the camera's heading, and stopped once the camera leaves its
+  radius. A RedJack room told the port nothing about its camera, so every
+  sound of the room played at full volume and centred, wherever it was:
+  liznite's surf, dock and fire drowned Lyle out (#447);
+- a conversation shows the arrow. RedJack.exe's puppet code sets `CURS.ARROW`
+  (0x46a150 from 0x42e6b0, 0x42eed0 and 0x431550), over the `cursor ("watch")`
+  the cast's `walkandtalk` has just asked for, which stood over every answer
+  as an hourglass (#446).
+
 ## Saved games
 
 The control panel's SAVE and OPEN work (space opens the panel). They run
