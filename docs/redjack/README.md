@@ -422,6 +422,14 @@ day's save into the running game, which has to arrive where the save was made,
 on its day, and write the same file again. Last, it plays day six to its end
 from `day6.save`.
 
+The saves are not part of the rip, so the self-hosted runner only has the ones
+copied to it. After `mksaves.mts` writes them again, copy them over too, or CI
+goes on checking the old ones:
+
+```
+cp redjack/gamefiles/save/day*.save /srv/redjack/gamefiles/save/
+```
+
 ## What does not work yet
 
 - **Copying to the hard disk.** `buildfilenames` and `copylocal` copy game
