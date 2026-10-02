@@ -8,8 +8,8 @@
  * who then cannot open it at all and has nothing to report but "it doesn't
  * work". So the false starts are the interesting cases here, not the happy one.
  */
-import { describe, expect, test } from "vitest";
-import { KONAMI, konamiWatcher } from "../../src/konami";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { KONAMI, installKonami, konamiWatcher } from "../../src/konami";
 
 /** feed a whole sequence, and say how many times the door opened */
 function type(keys: readonly string[]): number {
@@ -82,5 +82,78 @@ describe("the Konami code", () => {
   test("it fires once per completion", () => {
     expect(type([...CODE, "a", "a", "a"])).toBe(1);
     expect(type([...CODE, ...CODE])).toBe(2);
+  });
+});
+
+/**
+ * The listener the front page installs, fed the way the browser feeds it.
+ *
+ * The page is not in node, so `window` is a stand-in that holds the one handler;
+ * the events are the fields the listener reads. What is pinned is which
+ * keystrokes it lets through to the matcher — a held key, a chord, and an arrow
+ * that belongs to the language menu are not the player typing the code.
+ */
+describe("the front page's listener", () => {
+  let handler: ((e: Partial<KeyboardEvent>) => void) | null = null;
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** install it on a stand-in window, and say how often it opened */
+  function install(): { press: (e: Partial<KeyboardEvent>) => void; opened: () => number; remove: () => void } {
+    handler = null;
+    vi.stubGlobal("window", {
+      addEventListener: (type: string, h: (e: Partial<KeyboardEvent>) => void) => {
+        expect(type).toBe("keydown");
+        handler = h;
+      },
+      removeEventListener: (_type: string, h: unknown) => {
+        if (h === handler) handler = null;
+      },
+    });
+    let opened = 0;
+    const remove = installKonami(() => opened++);
+    return {
+      press: (e) => handler?.({ repeat: false, ctrlKey: false, metaKey: false, altKey: false, target: null, ...e }),
+      opened: () => opened,
+      remove,
+    };
+  }
+  const code = (press: (e: Partial<KeyboardEvent>) => void) => CODE.forEach((key) => press({ key }));
+
+  test("typed on the page, the code opens it", () => {
+    const page = install();
+    code(page.press);
+    expect(page.opened()).toBe(1);
+  });
+
+  test("auto-repeat is one press, so a held arrow is not two of the code's ups", () => {
+    const page = install();
+    page.press({ key: "ArrowUp" });
+    page.press({ key: "ArrowUp", repeat: true });
+    // had the repeat counted, it would have been the code's second up, and the
+    // rest of the code would complete it
+    CODE.slice(2).forEach((key) => page.press({ key }));
+    expect(page.opened()).toBe(0);
+  });
+
+  test("a chord with ctrl, meta or alt is not part of the code", () => {
+    const page = install();
+    CODE.slice(0, 8).forEach((key) => page.press({ key }));
+    page.press({ key: "b", ctrlKey: true });
+    page.press({ key: "a", metaKey: true });
+    expect(page.opened()).toBe(0);
+  });
+
+  test("arrows that work the language menu are the menu's, not the code's", () => {
+    const page = install();
+    const select = { tagName: "SELECT" } as unknown as EventTarget;
+    CODE.forEach((key) => page.press({ key, target: select }));
+    expect(page.opened()).toBe(0);
+  });
+
+  test("removing the listener stops it hearing anything", () => {
+    const page = install();
+    page.remove();
+    code(page.press);
+    expect(page.opened()).toBe(0);
   });
 });

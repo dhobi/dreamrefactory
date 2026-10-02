@@ -139,12 +139,6 @@ export const EXTRA_EDITIONS: readonly { code: string; name: string }[] = TITANIC
   .filter((e) => !(e.code in CHOOSER_LABELS))
   .map((e) => ({ code: e.code, name: e.name }));
 
-/** every edition code, languages first — the order a picker lists them in */
-export const editionCodes = (): string[] => [
-  ...LANGUAGES.map((l) => l.code),
-  ...EXTRA_EDITIONS.map((e) => e.code),
-];
-
 /** what an edition is called in the page's own chrome: its endonym, or its name */
 export function editionName(code: string): string {
   const lower = code.toLowerCase();

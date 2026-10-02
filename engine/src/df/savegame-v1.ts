@@ -1166,10 +1166,14 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       slots = recordSlots(globals.data);
       return [made];
     };
+    /** why a name has no record: its length, or (in a base that could not be
+     *  grown — see ensureVarRoom) the room */
+    const homeless = (name: string): string =>
+      name.length > 15 ? "longer than a record's 15 characters" : "no record and no free node in the base";
     for (const [name, value] of patch.numGlobals) {
       const at = slotFor(name);
       if (at === null) {
-        drop(name, "no record and no free node in the base");
+        drop(name, homeless(name));
         continue;
       }
       for (const slot of at) {
@@ -1186,7 +1190,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
     for (const [name, text] of patch.strGlobals ?? []) {
       const at = slotFor(name);
       if (at === null) {
-        drop(name, "no record and no free node in the base");
+        drop(name, homeless(name));
         continue;
       }
       const off = poolIntern(globals.data, pool, text);

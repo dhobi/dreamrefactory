@@ -289,5 +289,66 @@ test.skipIf(!haveRip())("city", async () => {
   if (h.until(() => !!tumbling(), 90) < 0) fail(`0x451e5a ends the fall in the tumble, 1830..1834; ${crowSay()}`);
   ok(`...and the fall ends in the tumble: ${crowSay()}`);
 
+  /**
+   * 9. a blow on a crow — `0x4520d0`, which has no health test in it, so one is
+   *    all it takes. It is worth 0x50 (`0x40d450`), it throws one feather, or
+   *    four when the blow beats 50 (`cmp ax, 0x32`, `0x45213f`), and the bird
+   *    tumbles. A feather loops `0x476ea0` as it falls and `0x452035` lets it go
+   *    the frame it is found on the ground.
+   */
+  {
+    const standing = () => crows().filter((c) => c.state !== "tumble" && c.state !== "fall");
+    const [soft, hard] = standing();
+    if (!soft || !hard) fail(`CITY's room should still hold two crows nobody has hit; ${crowSay()}`);
+    game.feathers.length = 0;
+    const score = game.stats.score;
+    const thrown = (): number => game.feathers.length;
+    game.strikeCrow(soft, 50);
+    if (thrown() !== 1) fail(`a blow of 50 is not over 0x32: one feather, not ${thrown()}`);
+    game.strikeCrow(hard, 51);
+    if (thrown() !== 5) fail(`a blow over 0x32 throws four more; there are ${thrown()}`);
+    if (game.stats.score !== score + 2 * 0x50) fail(`each crow is worth 0x50: the score went ${score} -> ${game.stats.score}`);
+    if (soft.state !== "tumble" || hard.state !== "tumble") fail(`a struck crow tumbles: ${soft.state}, ${hard.state}`);
+    // the cels a feather shows, while it falls: 1890..1899, round and round —
+    // watched on the four over the tank, which has a floor under all of them
+    // (9b has the one that drifts out over CITY's fall)
+    const four = game.feathers.slice(1);
+    const seen = new Set<number>();
+    const landed = h.until(() => {
+      for (const f of four) if (!f.grounded) seen.add(game.featherCel(f));
+      return four.every((f) => f.grounded);
+    }, 300);
+    if (landed < 0) fail(`the four feathers over the tank should land; ${JSON.stringify(four)}`);
+    // `0x452035` finds it on the ground at the head of its next frame, and lets it go
+    h.frame(1);
+    if (four.some((f) => game.feathers.includes(f))) fail(`0x452035 lets a feather go once it is found on the ground`);
+    if ([...seen].some((c) => c < 1890 || c > 1899) || seen.size < 2) fail(`a feather loops 1890..1899 as it falls; it showed ${[...seen].join(" ")}`);
+    ok(`one blow takes a crow: +0x50 each, one feather for 50 and four for 51, and the feathers fall through ${seen.size} cels and are gone in ${landed} frames`);
+  }
+
+  /**
+   * 9b. ...and a feather over CITY's fall ends too. West of x690 the floor is
+   *     the ledge at 3925, east of it the fall's at 7250, and the mover
+   *     `0x42fd80` has two ways to find a thing on the ground: the floor within
+   *     8 of its foot (`0x42ff56`), and a WALL — a floor more than fifty above
+   *     the foot at the new point (`0x42fedc`), which undoes the move and sets
+   *     the same `obj+0x2e` (`0x42fef3`, `0x430296`). `0x452035` lets either go.
+   *     Nothing else removes one, and before the wall a feather that drifted
+   *     west under the ledge fell, stepped, for ever.
+   */
+  {
+    game.feathers.length = 0;
+    const face = { x: 720, y: 4600, vx: -6, vy: 5, mirror: false, age: 0, grounded: false };
+    const fall = { x: 900, y: 4000, vx: 0, vy: 1, mirror: false, age: 0, grounded: false };
+    game.feathers.push(face, fall);
+    const gone = (f: object): boolean => !game.feathers.includes(f as never);
+    const atFace = h.until(() => gone(face), 20);
+    if (atFace < 0) fail(`a feather under the ledge's face meets it as a wall (0x42fedc) and goes; it is at ${face.x},${face.y}`);
+    if (face.x < 690) fail(`the wall undoes the move into it (0x42fef3); it got to x${face.x}`);
+    const down = h.until(() => gone(fall), 200);
+    if (down < 0 || Math.abs(fall.y - 7250) > 60) fail(`a feather over the fall lands on its floor at 7250 and goes; it is at ${fall.y}`);
+    ok(`a feather meeting the ledge's face goes in ${atFace} frames, and one over the fall lands on 7250 and goes in ${down}`);
+  }
+
   pass(`CITY's planks give way, its crows wake and burn, its probes fire, its werecs throw and its first step is passable`);
 });

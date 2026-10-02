@@ -240,6 +240,41 @@ test("closing hands the action-frame set back, so boot() can ask its own", async
   expect(session.movieActions.size).toBe(0);
 });
 
+test("a build that never generated the film skips it rather than holding the boot", async () => {
+  const intro = new NightdiveIntro(newSession());
+  expect(await intro.open({ load: async () => null })).toBe(false);
+  // nothing is playing, so there is nothing to wait for
+  await intro.done;
+  expect(intro.answer()).toBe("unanswered");
+});
+
+test("the page's cursor answers only over the question's two buttons", async () => {
+  const { intro } = await openIntro();
+  // where YES will be is not a button while the film is still running
+  const probe = await openIntro();
+  playToQuestion(probe.intro);
+  const yes = centre(probe.intro, "yes");
+  expect(intro.clickableAt(yes.x, yes.y)).toBe(false);
+  playToQuestion(intro);
+  expect(intro.clickableAt(yes.x, yes.y)).toBe(true);
+  const no = centre(intro, "gog");
+  expect(intro.clickableAt(no.x, no.y)).toBe(true);
+  expect(intro.clickableAt(2, 2)).toBe(false);
+});
+
+test("drawing it puts the current frame down whole, at the frame's own origin", async () => {
+  const { intro } = await openIntro();
+  playToQuestion(intro);
+  const puts: { width: number; height: number; x: number; y: number; lit: boolean }[] = [];
+  const ctx = {
+    createImageData: (width: number, height: number) => ({ width, height, data: new Uint8ClampedArray(width * height * 4) }),
+    putImageData: (img: { width: number; height: number; data: Uint8ClampedArray }, x: number, y: number) =>
+      puts.push({ width: img.width, height: img.height, x, y, lit: img.data.some((v, i) => i % 4 !== 3 && v > 0) }),
+  } as unknown as CanvasRenderingContext2D;
+  intro.render(ctx);
+  expect(puts).toEqual([{ width: SCREEN_W, height: SCREEN_H, x: 0, y: 0, lit: true }]);
+});
+
 // --- which editions get it --------------------------------------------------
 
 test("English only: no other edition plays the intro", () => {

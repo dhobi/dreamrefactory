@@ -1,7 +1,7 @@
 /**
- * Lunicus, the whole game as far as it is ported: the opening, a new game and
- * the moon base's days. `new Lunicus(files).start()` gives a machine that
- * advances a tick per `tick()`.
+ * Lunicus, the whole game: the opening, a new game, the moon base's floors, the
+ * cities and their buildings, the engine rooms and the hive. `new
+ * Lunicus(files).start()` gives a machine that advances a tick per `tick()`.
  *
  * ## The run (LUNICUS.EXE)
  *
@@ -13,8 +13,9 @@
  *                  from the level, and the new one opened with the old one's
  *                  number — a base floor is `Base`
  *
- * The city, the buildings and the hive (the levels that are no base floor)
- * are not ported: the machine stops there and says so.
+ * A level that is neither a base floor nor a place (`placeOf`) is no level the
+ * game has: 3 and 4, which nothing reaches and only a hand-made `.LUN` can
+ * name. The machine stops there and says so.
  */
 import { Base, readBank, readPanel, type Progress } from "./base";
 import { Panel, newHud, type Hud } from "./panel";
@@ -48,10 +49,6 @@ export interface LunicusOptions {
    * EXE's own dialog made it wait.
    */
   saver?: (bytes: Uint8Array, name: string, done: () => void) => void;
-  /** skip the intro and the title: start a new game at once */
-  quick?: boolean;
-  /** a probe's shortcut: open this level with this progress and HUD, no films before it */
-  start?: { level: number; progress?: Partial<Progress>; hud?: Partial<Hud> };
   log?: (line: string) => void;
   /** LUNICUS.SCO as the page kept it (1040 bytes, src/game/sco.ts); none is the defaults */
   sco?: Uint8Array;
@@ -394,10 +391,7 @@ export class Lunicus {
     const puppet = (yield* m.file("puppet", 1)).data;
     if (m.draws) this.plate = decodeFrameV0(readContainerFile(puppet).containers[1].data);
 
-    if (this.opts.start) {
-      Object.assign(this.progress, { came: 1, elevator: 0, day: 0 }, this.opts.start.progress, { level: this.opts.start.level });
-      Object.assign(this.hud, this.opts.start.hud);
-    } else yield* this.title(!this.opts.quick);
+    yield* this.title(true);
 
     const ui = new Panel(m, this.hud, panel, () => dayOf(this.progress.level));
     ui.save = () => this.saveDialog(ui, clut);
@@ -441,7 +435,7 @@ export class Lunicus {
       } else {
         this.phase = "not-ported";
         this.city = null;
-        this.stopped = `level ${level} (day ${dayOf(level)}'s ${placeOf(level) === 2 ? "engine rooms" : "hive"}) is not ported`;
+        this.stopped = `level ${level} is neither a base floor nor a place in the city — no level the game has`;
         m.log(this.stopped);
         return;
       }

@@ -21,8 +21,9 @@ import { DFContainerFile, readContainerFile, writeContainerFile } from "@dreamfa
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { cellV0, ownsFilmV0, readMazeV0, transitionV0 } from "@dreamfactory/engine/df/maze-v0";
-import { nextFrameV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
-import { TALK_BACKDROP, TALK_FIRST_FRAME, isEmptySlotV0, readPuppetTrackV0 } from "@dreamfactory/engine/df/talk-v0";
+import { movFileFromV0, nextFrameV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
+import { readAnimLogic } from "@dreamfactory/engine/df/pup";
+import { TALK_BACKDROP, TALK_FIRST_FRAME, isEmptySlotV0, pupFileFromV0, readPuppetTrackV0, readTalkFileV0 } from "@dreamfactory/engine/df/talk-v0";
 import { SAVE_V0_SIZE, isSaveV0, readSaveV0, writeSaveV0 } from "@dreamfactory/engine/df/savegame-v0";
 
 const u16 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff];
@@ -289,6 +290,59 @@ test("a film: every frame decodes at the header's size, its hotspots read in ful
   // the intro is the boot's first film, and it hands over to the title by name
   const intro = readMovFileV0(new Uint8Array(readFileSync(join(ROOT, "day1/intro.mov"))));
   expect(intro.frames.at(-1)!.chainTo).toBe("flip.move");
+});
+
+test("the movie editor's picture of a film: a frame for each, its picture, and a goto to a frame that exists", () => {
+  if (skip()) return;
+  for (const f of files.filter((f) => /\.mov$/.test(f))) {
+    const v0 = readMovFileV0(new Uint8Array(readFileSync(f)));
+    const film = movFileFromV0(v0);
+    expect(film.frames.length, f).toBe(v0.frames.length);
+    expect(film.segments).toEqual([film]);
+    const names = new Set(film.frames.map((fr) => fr.name));
+    film.frames.forEach((fr, i) => {
+      expect(fr.locationFrame, `${f} #${i}`).toBe(v0.frames[i].picture);
+      if (fr.type === 2) expect(names.has(fr.target), `${f} #${i} → ${fr.target}`).toBe(true);
+      for (const r of fr.regions) if (r.type === 2) expect(names.has(r.target), `${f} #${i} hotspot`).toBe(true);
+      // every sound named is one the film keeps
+      for (const s of [fr.sound, ...fr.regions.map((r) => r.sound)]) if (s) expect(film.sounds.get(s), f).toBe(Number(s));
+    });
+    // a film that ends hands over by name, which the picture keeps as v4's exit-and-chain
+    const last = v0.frames.at(-1)!;
+    if (last.action === 3) expect(film.frames.at(-1)!.event, f).toBe(last.chainTo);
+  }
+});
+
+test("the puppet editor's picture of a talk file: every line and question by name, and each line's track", () => {
+  if (skip()) return;
+  let tracks = 0;
+  for (const f of files.filter((f) => TALK.test(base(f)))) {
+    const bytes = new Uint8Array(readFileSync(f));
+    const t = readTalkFileV0(bytes);
+    const pup = pupFileFromV0(bytes);
+    expect(pup.dfV0).toBe(true);
+    expect(pup.stances).toHaveLength(1);
+    expect(pup.stances[0].layers.length, f).toBe(t.layers.length);
+    expect(pup.idleTimers.length).toBe(t.idleMin.length);
+    for (const l of t.lines) {
+      const d = pup.dialogue.get(l.name.toLowerCase())!;
+      expect(d.text, `${f} ${l.name}`).toBe(l.subtitle);
+      const anim = readAnimLogic(pup, d.animLogicLocation);
+      // a track is a keyframe for each two blocks of its voice, as the rip test above says
+      if (d.animLogicLocation && !isEmptySlotV0(pup.file.containers[d.animLogicLocation].data)) {
+        expect(anim.length, `${f} ${l.name}`).toBeGreaterThan(0);
+        expect(anim[0].layers).toHaveLength(8);
+        tracks++;
+      }
+    }
+    for (const q of t.questions) {
+      const d = pup.dialogue.get(`q ${q.name}`.toLowerCase())!;
+      expect(d.audioLocation, `${f} q ${q.name}`).toBe(q.wave);
+      // a question has a voice and no face
+      expect(readAnimLogic(pup, d.animLogicLocation)).toEqual([]);
+    }
+  }
+  expect(tracks).toBeGreaterThan(0);
 });
 
 test("a saved game (.LUN): 26 little-endian bytes in LUNICUS.EXE's order, the score the one dword, read back as written", () => {

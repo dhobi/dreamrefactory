@@ -37,7 +37,10 @@ export class RedJackFiles implements HostFiles {
   private urls = new Map<string, string>();
   private cache = new Map<string, Uint8Array>();
   /** one fetch per name however many callers ask at once */
-  private inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
+  /** each download under way, by name, with the address it is reading — after a
+   *  disc change a name can be wanted from one disc while a copy from the other
+   *  is still arriving, and the two are not the same download */
+  private inFlight = new Map<string, { src: string; flight: Promise<{ bytes: Uint8Array | null; streamed: boolean }> }>();
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
   /** basename → size in bytes, from the manifest */
   private sizes = new Map<string, number>();
@@ -129,36 +132,51 @@ export class RedJackFiles implements HostFiles {
     }
     const src = this.urls.get(key);
     if (!src) return null;
-    const started = !this.inFlight.has(key);
+    const running = this.inFlight.get(key);
+    const started = running?.src !== src;
     const flight =
-      this.inFlight.get(key) ??
-      (async () => {
-        const res = await fetch(src);
-        if (!res.ok) return { bytes: null, streamed: false };
-        const bytes = res.body
-          ? await this.readStream(key, res.body, onBytes)
-          : new Uint8Array(await res.arrayBuffer());
-        this.cache.set(key, bytes);
-        this.loads.push(key);
-        this.onBackgroundLoad?.(key, bytes);
-        return { bytes, streamed: res.body !== null };
-      })();
-    this.inFlight.set(key, flight);
-    if (started) this.onBusyChange?.(this.inFlight.size);
+      !started && running
+        ? running.flight
+        : (async () => {
+            const res = await fetch(src);
+            if (!res.ok) return { bytes: null, streamed: false };
+            const bytes = res.body
+              ? await this.readStream(key, src, res.body, onBytes)
+              : new Uint8Array(await res.arrayBuffer());
+            // a disc change while this was arriving made it the wrong copy:
+            // hand it to whoever asked for it, but do not keep it
+            if (this.urls.get(key) === src) {
+              this.cache.set(key, bytes);
+              this.loads.push(key);
+              this.onBackgroundLoad?.(key, bytes);
+            }
+            return { bytes, streamed: res.body !== null };
+          })();
+    if (started) {
+      const was = this.inFlight.size;
+      this.inFlight.set(key, { src, flight });
+      if (this.inFlight.size !== was) this.onBusyChange?.(this.inFlight.size);
+    }
     try {
       const { bytes, streamed } = await flight;
       // the owner of a streamed fetch has been told chunk by chunk already
       if (bytes && (!streamed || !started)) onBytes?.(bytes.byteLength);
       return bytes;
     } finally {
-      this.partial.delete(key);
-      if (this.inFlight.delete(key)) this.onBusyChange?.(this.inFlight.size);
+      // only this download's own entry: a newer one for the other disc's copy
+      // may have taken the name since
+      if (this.inFlight.get(key)?.flight === flight) {
+        this.partial.delete(key);
+        this.inFlight.delete(key);
+        this.onBusyChange?.(this.inFlight.size);
+      }
     }
   }
 
   /** drain a response body, reporting each chunk, then join it into one array */
   private async readStream(
     key: string,
+    src: string,
     body: ReadableStream<Uint8Array>,
     onBytes?: (n: number) => void,
   ): Promise<Uint8Array> {
@@ -170,7 +188,8 @@ export class RedJackFiles implements HostFiles {
       if (done) break;
       chunks.push(value);
       total += value.byteLength;
-      this.partial.set(key, total);
+      // the bar counts the copy the game will get, not one a disc change orphaned
+      if (this.urls.get(key) === src) this.partial.set(key, total);
       this.onChunk?.(key, value.byteLength);
       onBytes?.(value.byteLength);
     }

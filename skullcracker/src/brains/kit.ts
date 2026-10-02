@@ -467,7 +467,8 @@ export interface BrainCtx {
   /**
    * Kill every one of a class where it stands — `0x4263e0`.
    *
-   * The bishop's death calls it once: every bat on the level takes a lift of
+   * The bishop's death calls it once: every bat on the LEVEL — the class list
+   * `[0x46ecc4]`, whichever room each is in, as {@link every} — takes a lift of
    * −40, pays `0x40d450(0x46)` and plays its own two-cel death `0x46f140`.
    * Nothing else in the game clears a class this way.
    */

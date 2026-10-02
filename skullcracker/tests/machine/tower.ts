@@ -257,6 +257,43 @@ test.skipIf(!haveRip())("tower", async () => {
     game.spawnedHere().pop();
     ok(`a bat thrown past the east wall, x${r.right + 40}, stays in the bishop's room`);
   }
+  {
+    const b = bishop();
+    // the bishop killed above is still lying there with its death not yet run,
+    // and the death takes the swarm with it: at its script's end `0x426258`
+    // throws its twelve — as many as the class's cap lets out (`hatchAt`) — and
+    // `0x4263e0` slays every bat there is, each thrown up and paying its own
+    // seventy (`0x42640c`). "Every bat there is" is the LEVEL's: it walks the
+    // class list `[0x46ecc4]` — every object `0x430d40` filed under the bat
+    // class, and `0x41e78c` made one for every `initbat` in the book with the
+    // room test off (`0x41e748`) — not the bishop's room. So one bat is moved to
+    // the bottom room first, and it falls with the rest
+    const lvl = game.level!;
+    const elsewhere = lvl.spawned[0];
+    if (lvl.spawned.indexOf(game.spawnedHere()) === 0) fail(`the bishop's room is not the level's first`);
+    const n0 = game.spawnedHere().length;
+    game.hatchAt(b, "initbat", { x: b.x, y: b.y, facing: 1 });
+    const far = game.spawnedHere().length > n0 ? game.spawnedHere().pop()! : bats()[0];
+    if (!far) fail(`a bat to send to another room`);
+    const here = game.spawnedHere();
+    if (here.includes(far)) here.splice(here.indexOf(far), 1);
+    far.x = lvl.rooms[0].left + 200;
+    far.y = lvl.rooms[0].top + 100;
+    elsewhere.push(far);
+    const allBats = () => lvl.spawned.flat().filter((e) => e.kind === "initbat");
+    const score = game.stats.score;
+    const flying = allBats().filter((e) => e.state !== "dead").length;
+    const deadBefore = new Set(allBats().filter((e) => e.state === "dead"));
+    if (h.until(() => !!b.hatched, 120) < 0) fail(`the bishop's death should run to its end and hatch; clock ${b.clock}`);
+    const left = allBats().filter((e) => e.state !== "dead");
+    if (left.length !== 0) fail(`0x4263e0 slays every bat on the level; ${left.length} still fly, the one in room 1 ${far.state}`);
+    const slain = allBats().filter((e) => e.state === "dead" && !deadBefore.has(e));
+    if (!slain.includes(far) || !far.threw) fail(`the bat in another room dies thrown too (0x4263e0 walks [0x46ecc4]); it is ${far.state}`);
+    if (slain.length < flying || slain.some((e) => !e.threw))
+      fail(`the ${flying} already up, and what it throws, all die thrown; ${slain.length} died, ${slain.filter((e) => !e.threw).length} not thrown`);
+    if (game.stats.score - score !== 70 * slain.length) fail(`each bat pays seventy: ${slain.length} paid ${game.stats.score - score}`);
+    ok(`the bishop's death slays all ${slain.length} bats on the level — ${flying} that were up, one of them in another room, and ${slain.length - flying} it threw — for ${game.stats.score - score}`);
+  }
   // ...and fought from east of the goal — see {@link bishopStep}
   await go("&x=17950&y=15300");
   const before = game.stats.score;

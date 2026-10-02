@@ -86,11 +86,6 @@ export function versionOf(container0: Uint8Array, order: ByteOrder = PC): number
   return v;
 }
 
-/** is this a version this port knows how to read? */
-export function isKnownVersion(v: number): v is DfVersion {
-  return v === 1 || v === 4;
-}
-
 /**
  * The tag straight out of raw file bytes, without opening the envelope.
  *

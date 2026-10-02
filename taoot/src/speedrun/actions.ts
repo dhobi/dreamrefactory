@@ -292,15 +292,13 @@ export const TITANIC_ACTIONS: ActionTable = {
     args: [2, 2],
     wait: "quiet",
     sig: "dial(valve1, 10)",
-    help: "set a named dial or lever to a number — dial boiler 6, dial coal 3",
+    help: "set a named dial or lever to a number — dial valve3 19, dial coal 3",
     run: async (c) => {
       const [name, value] = c.step.args;
       const want = Number(value);
       if (!Number.isFinite(want)) throw new Error(`dial needs a number, got "${value}"`);
       const { TURBINE_DIALS, PATTY_DIALS, COAL_LEVER, turnDial, setLever } = await import("./nav/dials");
       const key = name.toLowerCase();
-      // the coal lever slides and the rest turn, which is two different swings —
-      // dials.ts keeps them apart and so must the lookup
       // the coal lever SLIDES and the rest turn, which is two different swings —
       // dials.ts keeps them apart and so must the lookup. It answers to both its
       // prop name (`slider`, which is what the goldens and TURBINE.SHP call it)

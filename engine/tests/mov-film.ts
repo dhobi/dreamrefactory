@@ -9,7 +9,7 @@ import { buildMovBytes, MovBuildFrame } from "@dreamfactory/engine/df/mov-build"
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
 import { FilmPictures, FilmTimeline, HELD_MS, LOOP_MS, filmTimeline, mixFilmSound } from "@dreamfactory/engine/df/mov-film";
-import { TICK_MS } from "@dreamfactory/engine/df/mov-pace";
+import { BED_STRETCH_LIMIT, NATIVE_FRAME_MS, TICK_MS, framesLoop, isBed } from "@dreamfactory/engine/df/mov-pace";
 
 const W = 8, H = 6;
 const art = (colour: number) => new Uint8Array(W * H).fill(colour);
@@ -121,6 +121,23 @@ test("the mix places each sound on the clock, loops a bed and cuts it off", () =
     ],
   };
   expect(Array.from(mixFilmSound(tl, 10))).toEqual([0.5, 0, 0, 0, 0.5, 0.25, 0, 0, 0.5, 0]);
+});
+
+test("the movie editor's two notes: a soundtrack far past its picture, and a picture that jumps back", () => {
+  // a bed is more than BED_STRETCH_LIMIT native frames of sound for each picture
+  const limit = (NATIVE_FRAME_MS * BED_STRETCH_LIMIT * 10) / 1000;
+  expect(isBed(limit * 1.01, 10)).toBe(true);
+  expect(isBed(limit, 10)).toBe(false);
+
+  // a goto (2) or a hotspot jump (4) back to itself or an earlier frame loops;
+  // forward does not, nor a target no frame is called
+  const loop = (type: number, target: string) =>
+    framesLoop(film([{ name: "a", art: art(1), type: 6 }, { name: "B", art: art(2), type, target }, { name: "c", art: art(1), type: 1 }]));
+  expect(loop(2, "a")).toBe(true);
+  expect(loop(4, "b")).toBe(true);
+  expect(loop(2, "c")).toBe(false);
+  expect(loop(2, "nowhere")).toBe(false);
+  expect(loop(6, "a")).toBe(false);
 });
 
 const ARRIVE = "redjack/gamefiles/RJDisk2/movies/arrive.move";

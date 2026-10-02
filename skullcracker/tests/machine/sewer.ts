@@ -31,7 +31,7 @@ import { FOES } from "../../src/foes";
 import { EYEBALL, eyeball, eyeballReacts } from "../../src/brains/eyeball";
 import { OX, OX_PIT, ox as oxBrain, oxReacts } from "../../src/brains/ox";
 import { TICK_SCALE, install, type BrainCtx, type CastKit, type Enemy } from "../../src/brains/kit";
-import { FPS, fail, headless, ok, pass, haveRip } from "./harness";
+import { FPS, fail, headless, ok, pass, recordSound, haveRip } from "./harness";
 import type { FoeAnim } from "../../src/foes";
 
 test.skipIf(!haveRip())("sewer", async () => {
@@ -689,6 +689,48 @@ test.skipIf(!haveRip())("sewer", async () => {
     if (game.stats.health >= hp0) fail(`0x43e2fc: the shake takes ten a frame; health ${hp0} -> ${game.stats.health}`);
     if (game.p.hidden || game.p.act !== "downFront") fail(`0x43e38c / 0x43e3a1: let go into the knockdown and drawn again; ${game.p.act}, hidden ${game.p.hidden}`);
     ok(`and it carries him ${posed} frames in the spawn pose, shakes ${hp0 - game.stats.health} health out of him and drops him down (0x43e259, 0x43e2f5)`);
+  }
+
+  /**
+   * The thing on the entrance's bush — `initbush` with param 1 makes a second
+   * object that sits on the first (`0x435b30`). With the player within 0x12c
+   * across, the bush idle and its wait run out, it plays 0x29 and lashes, eleven
+   * cels at two frames (`0x472ba8`), riding ten above the bush, and lifts the
+   * bush on 5023 ten a frame to the top of its travel (`0x43f0b0`). At the
+   * lash's end it idles and sends the bush back down on 5020 (`0x43f0d0`), and
+   * the bush idles again at the bottom. 287 across is inside the reach and
+   * outside the fifty a lifted bush grabs from (`0x43f04d`).
+   */
+  {
+    await go("x=2270&y=16112&foes=0");
+    const partner = game.hereOf((l) => l.bushes).find((b) => b.variant === 1);
+    if (!partner?.partner) fail(`the entrance's bush at x1983 carries a partner`);
+    const bush = partner.partner;
+    const heard = recordSound(game);
+    bush.state = "idle";
+    partner.state = "idle";
+    partner.wait = -1;
+    h.frame();
+    // (read back through a function: the stores above narrow the two states)
+    const states = (): string => `${partner.state} ${bush.state}`;
+    if (states() !== "lash liftUp") fail(`0x43edb0: within 0x12c it lashes and lifts the bush; ${partner.state}, ${bush.state}`);
+    if (!heard.some((c) => c.call === "effect" && c.args[0] === 0x29)) fail(`the lash plays 0x29`);
+    if (!(partner.wait >= 10 && partner.wait <= 50)) fail(`it reseeds its wait to 10 + 0x434540(40); ${partner.wait}`);
+    let highest = bush.y;
+    let rode = true;
+    // on the frame it starts it is still sitting ON the bush; from the next it rides
+    let first = true;
+    const lashed = h.until(() => {
+      highest = Math.min(highest, bush.y);
+      if (!first && partner.state === "lash" && (partner.x !== bush.x || partner.y !== bush.y - 10)) rode = false;
+      first = false;
+      return partner.state !== "lash";
+    }, 60);
+    if (lashed < 0 || !rode) fail(`the lash rides ten above the bush and ends; ${partner.state}, rode ${rode}`);
+    if (highest !== bush.top || states() !== "idle liftDown") fail(`the bush rises to the top of its travel (y${bush.top}) and is sent down; reached y${highest}, ${bush.state}`);
+    if (h.until(() => bush.state === "idle", 60) < 0) fail(`the bush sinks back and idles; ${bush.state} at y${bush.y}`);
+    if (bush.y < bush.top + 0x50) fail(`...at the bottom of its travel, not y${bush.y}`);
+    ok(`the entrance bush's partner lashes for ${lashed + 1} frames, lifting the bush to y${highest} and sending it back down`);
   }
 
   pass(`SEWER's doors are locks, its levers are keys, and three of them can be walked to`);
