@@ -60,6 +60,21 @@ export interface PuppetBackdrop {
 const BEVEL_H = 24;
 const MAX_BEVELS = 5;
 const BAND_H = BEVEL_H * MAX_BEVELS;
+
+/**
+ * Show each answer's id beside its text, as `[101]` (#377).
+ *
+ * A speedrun sheet answers a conversation by id, `say([103,102,101])`, and the
+ * ids are the script's, not on screen: finding them meant reading the puppet's
+ * script, person by person. With this on, every answer row ends in its id, in
+ * brackets and in a colour of its own, so it cannot be mistaken for anything
+ * the game says. Off in play; the speedrun workbench turns it on, and Titanic's
+ * hotspot toggle (O) turns it on and off with the hotspots.
+ */
+export const replyIds = { shown: false };
+
+/** the dim grey the ids are drawn in: no palette entry, so nothing of the game's */
+const REPLY_ID_INK = "#9a9a9a";
 /** the region the close-up itself draws in — the screen above the band */
 export const PUPPET_ART_H = SCREEN_H - BAND_H;
 /**
@@ -521,8 +536,8 @@ export class PuppetView {
     const state = this.session.puppetCtrl.puppetFrame();
     sig.num(state ? state.layers.length : -1);
     if (state) for (const l of state.layers) sig.num(l.frame).num(l.x).num(l.y);
-    sig.num(p.bevels.length);
-    for (const b of p.bevels) sig.str(b.text);
+    sig.num(p.bevels.length).bool(replyIds.shown);
+    for (const b of p.bevels) sig.str(b.text).num(b.id);
     sig.num(p.chosen ?? -1);
     const press = p.press;
     sig.num(press ? press.index : -1).bool(!!press && this.pressHeld(press));
@@ -562,6 +577,15 @@ export class PuppetView {
       this.session.isV5 ? rgbColor(this.param(slot, fallback)) : clutColor(pal, this.param(slot, fallback));
     ctx.fillStyle = ink(PARAM.bevelColor, 250);
     rects.forEach((r, i) => ctx.fillText(p.bevels[i].text, r.x + marginX, r.y + BASELINE));
+    if (replyIds.shown) {
+      const answer = ctx.fillStyle;
+      ctx.fillStyle = REPLY_ID_INK;
+      rects.forEach((r, i) => {
+        const after = r.x + marginX + ctx.measureText(p.bevels[i].text).width;
+        ctx.fillText(` [${p.bevels[i].id}]`, after, r.y + BASELINE);
+      });
+      ctx.fillStyle = answer;
+    }
     // QuickDraw frames INSIDE the rect, so a 3-px pen insets by half of it
     const frame = (i: number): void => {
       const r = rects[i];

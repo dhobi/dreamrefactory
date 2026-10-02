@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/lunicus",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Lunicus (1994) — Cyberflix's first DreamFactory game, on what this port calls DreamFactory 0. The whole game plays — the moon base, its crew and briefings, the cities of days two to four with their tanks, jeeps, wasps, drones and node, day five's engine rooms and day six's hive, to the queen — with the radar, the base's floor map, help, and saved games (.LUN) through the shared dialog.",
   "type": "module",
