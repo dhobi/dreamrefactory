@@ -7178,6 +7178,25 @@ test("a load and a restart both arrive from nowhere", async () => {
   );
 });
 
+// --- 82a. the boot after quit() is busy, as the first one is -----------------
+// The page tracks its launch boot (`session.track(host.coldBoot(), "coldBoot")`,
+// taoot/src/main.ts) and `host.restart` booted untracked, so through the second
+// boot nothing was in flight: between playmode.mov and the first day's
+// datebed.mov the game read as idle, a speedrun's `skipMovie(until: quiet)`
+// stopped there, and its next click landed under the date film (#378). Asked at
+// the day-advance, which is where the first day's film is played from.
+test("the boot after quit() counts as busy, as the launch boot does", async () => {
+  const { host, session } = await newHost();
+  const run = session.runGlobal.bind(session);
+  let busyAtAdvance: boolean | null = null;
+  session.runGlobal = (name, ...rest) => {
+    if (name === "advanceday") busyAtAdvance = session.scriptBusy;
+    return run(name, ...rest);
+  };
+  await host.restart({ tour: false });
+  check("the restart's boot is in flight when it advances the day", busyAtAdvance === true, `busy=${busyAtAdvance}`);
+});
+
 // --- 82b. a load puts the watch and the bag back ON the band ----------------
 // The #143 restore reads the prop record verbatim — but `worldSpace` stayed the
 // port's own live flag, and the London flat (the boot's landing room) places

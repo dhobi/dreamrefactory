@@ -774,12 +774,18 @@ export class GameHost {
    * the Play / Guided Tour menu, then the flat — so there is nothing to write
    * here beyond the teardown that has to come first.
    *
-   * Not tracked by the session on purpose: prepareRestart awaits `settle()`, and a
-   * restart added to `inflight` would be waiting for itself.
+   * The restart as a whole is not tracked by the session, on purpose:
+   * prepareRestart awaits `settle()`, and a restart added to `inflight` would be
+   * waiting for itself. The BOOT is, once the teardown is behind it, exactly as a
+   * launch tracks it (taoot/src/main.ts). Left untracked, the game read as idle
+   * all through the second boot: between `playmode.mov` and the first day's
+   * `datebed.mov` nothing was in flight, a speedrun's `skipMovie(until: quiet)`
+   * stopped there, and the next line's click landed under the date film, whose
+   * ESC then let the close-up it opened play on (#378).
    */
   async restart(opts: ColdBootOptions = {}): Promise<void> {
     await this.session.prepareRestart();
-    await this.coldBoot(opts);
+    await this.session.track(this.coldBoot(opts), "coldBoot");
   }
 
   async coldBoot(opts: ColdBootOptions = {}): Promise<void> {
