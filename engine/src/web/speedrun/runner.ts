@@ -59,7 +59,8 @@ export interface Timing {
   /** wall ms with the loading taken out — what the action cost the route */
   ms: number;
   frames: number;
-  /** ms of it spent waiting on the network, and therefore not in `ms` */
+  /** ms of it spent waiting on the network or with the tab hidden (#375), and
+   *  therefore not in `ms` */
   loading: number;
   /** ms of `after:` padding inside it — dead time, called out separately */
   padded: number;
