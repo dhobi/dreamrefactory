@@ -68,8 +68,7 @@ const BAND_H = BEVEL_H * MAX_BEVELS;
  * ids are the script's, not on screen: finding them meant reading the puppet's
  * script, person by person. With this on, every answer row ends in its id, in
  * brackets and in a colour of its own, so it cannot be mistaken for anything
- * the game says. Off in play; the speedrun workbench turns it on, and Titanic's
- * hotspot toggle (O) turns it on and off with the hotspots.
+ * the game says. Off in play; only the speedrun workbench turns it on.
  */
 export const replyIds = { shown: false };
 

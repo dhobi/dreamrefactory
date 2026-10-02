@@ -33,7 +33,6 @@ import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
-import { replyIds } from "@dreamfactory/engine/web/puppet-view";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "./cursor-art";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
@@ -2095,8 +2094,6 @@ window.addEventListener("keydown", (e) => {
     case "O":
       if (!v) return;
       v.showHotspots = !v.showHotspots;
-      // and the answers' ids with them, the conversation's own hotspots (#377)
-      replyIds.shown = v.showHotspots;
       break;
     default: {
       // Everything else goes to the game, because that is what the original does:
