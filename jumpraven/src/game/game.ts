@@ -620,6 +620,22 @@ export class JumpRaven {
     };
     try {
       for (;;) {
+        // The main loop's order (0x40f9b9 … 0x40fac6): the held key's repeat
+        // (message 7, 0x40f9e9) and the held button's aim (message 5,
+        // 0x40fa28, only while 0x41d7ef finds it still down) come before the
+        // new event is taken (0x40fa45: a press is message 4, 0x40fa93), and
+        // the frame (message 13, 0x40fac6) after it. So the frame after a
+        // press always sees the press flag (0x419678's `[0x439bdc]`) set,
+        // however long the button stays down; the next turn's held aim
+        // clears it.
+        // 0x40b24f: held, the aim follows the pointer, kept inside the view
+        if (aiming && m.mouseHeld) {
+          const y = Math.min(Math.max(m.pointer.y, VIEW[0]), VIEW[2] - 1);
+          const x = Math.min(Math.max(m.pointer.x, VIEW[1]), VIEW[3] - 1);
+          w.pyro.aim({ y: y - VIEW[0], x: x - VIEW[1] }, false);
+        }
+        if (this.heldKey && !m.keysHeld.has(this.heldKey)) this.heldKey = null;
+        if (this.heldKey) flight.key(this.keyAction(this.heldKey), true);
         for (let e = m.take(); e; e = m.take()) {
           if (e.kind === "key") {
             this.heldKey = e.key;
@@ -642,14 +658,6 @@ export class JumpRaven {
             }
           }
         }
-        // 0x40b24f: held, the aim follows the pointer, kept inside the view
-        if (aiming && m.mouseHeld) {
-          const y = Math.min(Math.max(m.pointer.y, VIEW[0]), VIEW[2] - 1);
-          const x = Math.min(Math.max(m.pointer.x, VIEW[1]), VIEW[3] - 1);
-          w.pyro.aim({ y: y - VIEW[0], x: x - VIEW[1] }, false);
-        }
-        if (this.heldKey && !m.keysHeld.has(this.heldKey)) this.heldKey = null;
-        if (this.heldKey) flight.key(this.keyAction(this.heldKey), true);
         yield* flight.frame();
 
         if (w.weap.mart) {

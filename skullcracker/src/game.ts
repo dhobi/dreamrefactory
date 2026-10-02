@@ -2123,7 +2123,9 @@ export async function loadLevel(index: number): Promise<void> {
           right: e.right,
           param: e.param,
         })),
-        ...placed(sbk, r, "initvfan", [FAN.v.stopped], (e) => ({
+        // `0x410cdd` makes every `initvfan` in the BOOK — no room test (see
+        // {@link filedIn}) — and all five of MAZE's points lie between rooms
+        ...filedIn(sbk, rooms, r, "initvfan", [FAN.v.stopped], (e) => ({
           x: e.pointX,
           y: e.pointY,
           horizontal: false,
@@ -6025,14 +6027,12 @@ export function takeHits(): void {
     // a drip keeps its velocity in pixels a FRAME already (see {@link stepGoop})
     if (hit(cel, d.x, d.y, 1, d.vx, d.vy)) return;
   }
-  // ...and level eight's water, on whichever of its cels carries a box
-  for (const [slot, clock] of columns) {
-    const q = hereOf((l) => l.sprinklers).find((w) => w.slot === slot);
-    if (!q) continue;
-    const cel = celRec(lvl.sbk, columnCel(clock));
-    if (!cel?.strike) continue;
-    if (hit(cel, q.x, q.y, 1, 0, 0)) return;
-  }
+  // ...and level eight's water is not in this list: it never hurts the player.
+  // The column is born out of `0x42f550` with `obj+0x1a = 0` (`0x42f5af`), and
+  // neither its creation (`0x44088a`..`0x440919`) nor its think (`0x4409a0`)
+  // arms it, so the hit pass passes it over at `0x430367`; its cels 150..158
+  // carry no strike box either (`0x430379`), and its own handler `0x440a80`
+  // answers 0 to anything that lands on it. The scald is kragg's alone (`0x440bb0`)
 }
 
 /** the things spawned in the player's room, or none */
@@ -6641,6 +6641,47 @@ export function placed<T>(
       continue;
     if (!cels.every((id) => sbk.byId.has(id))) continue;
     out.push(make(e));
+  }
+  return out;
+}
+
+/**
+ * Every record of one name filed in this room, for a class the EXE makes for
+ * the whole level rather than for a room.
+ *
+ * `0x410b10` (chapter four's setup, MAZE among its levels) gathers each name
+ * with `0x40b850(name, room, 0, buf)` — the third argument is the room test, and
+ * with it 0 the collector skips both the room rect fetch (`0x40b881`) and the
+ * `0x434200` overlap test (`0x40b8e3`): every record in the book is copied out
+ * and handed to its creator, wherever its point stands. MAZE's five `initvfan`
+ * points sit at the TOP of their shafts, between rooms (2200,7239 is under
+ * room 1's bottom and over room 0's top), so the point test {@link placed} uses
+ * would drop them all.
+ *
+ * The port still files each thing under a room, because a room is what it draws
+ * ({@link hereOf}); a record whose point is in no room goes under the first room
+ * its own rect overlaps — for every vertical fan that is the room its shaft
+ * opens into, and only one. Each is filed once, so the level-wide steps over
+ * `.flat()` see it once.
+ */
+export function filedIn<T>(
+  sbk: SbkFile,
+  rooms: readonly SbkRoom[],
+  room: SbkRoom,
+  name: string,
+  cels: readonly number[],
+  make: (e: SbkEntity) => T,
+): T[] {
+  if (!cels.every((id) => sbk.byId.has(id))) return [];
+  const holds = (r: SbkRoom, e: SbkEntity): boolean =>
+    e.pointY >= r.top && e.pointY <= r.bottom && e.pointX >= r.left && e.pointX <= r.right;
+  const overlaps = (r: SbkRoom, e: SbkEntity): boolean =>
+    e.top <= r.bottom && e.bottom >= r.top && e.left <= r.right && e.right >= r.left;
+  const out: T[] = [];
+  for (const e of sbk.entities) {
+    if (!e.isEntity || e.name !== name) continue;
+    const home = rooms.find((r) => holds(r, e)) ?? rooms.find((r) => overlaps(r, e));
+    if (home === room) out.push(make(e));
   }
   return out;
 }
@@ -10236,8 +10277,10 @@ export function raiseSprinkler(e: Enemy): void {
  *
  * A column rises through seven cels, sprays while its context's own `0x15e`
  * frames run down, and goes. The boss pays three health a frame for being in one
- * (`0x440bf9`) and the player pays the blow the spraying cels carry, which is
- * the same rule every other strike box in the game follows.
+ * (`0x440bf9`); the player pays nothing — the column is never armed (`obj+0x1a`
+ * stays at `0x42f550`'s 0, so `0x430367` skips it), its cels carry no strike box,
+ * and nothing else in SC.EXE reads the sprinkler tables (`0x4a7000` is read only
+ * by `0x440800`, the slots at `0x473728` only by `0x440bb0` and `0x441b60`).
  */
 export function stepColumns(): void {
   const all = hereOf((l) => l.sprinklers);
@@ -11191,18 +11234,35 @@ export function stepCrows(): void {
     }
   }
   // and the feathers: `0x452035` lets one go the frame it is found on the
-  // ground; until then it loops its script and falls at one pixel a frame²
+  // ground (`obj+0x2e`); until then it loops its script and falls at one pixel
+  // a frame². What finds it on the ground is the mover `0x42fd80`, and it has
+  // two ways to: the floor at or above its foot (`0x42ff56`, within 8), and the
+  // WALL — a region floor more than fifty above the foot at the new point
+  // (`0x42fedc`). The wall undoes the move, takes `obj+0xc` back out of the x,
+  // zeroes `obj+0xa` (`0x42fef3`..`0x42ff0c`) and sets the same `obj+0x2e`
+  // (`di = 1` at `0x42fef3`, stored at `0x430296`). So a feather that drifts
+  // under a ledge's face — CITY's crow at x837 is over the fall, whose floor is
+  // at 7250, beside the ledge's at 3925 — is done the frame it meets the face;
+  // nothing else in the class (`0x451aa0`) ever removes one
   feathers = feathers.filter((f) => !f.grounded);
   for (const f of feathers) {
     f.age += 1;
     const art = lvl ? celRec(lvl.sbk, featherCel(f)) : undefined;
     const ext = art ? art.height - art.posY : 0;
-    const wasFoot = f.y + ext;
+    const wasX = f.x;
+    const wasY = f.y;
     f.x += f.vx;
     f.y += f.vy;
-    const floor = f.vy >= 0 ? regionFloorUnder(f.x, wasFoot, f.y + ext) : null;
-    if (floor !== null) {
-      f.y = floor - ext;
+    const g = groundAt(f.x);
+    if (g !== null && g + CLIMB_PX < f.y + ext) {
+      f.x = wasX - f.vx;
+      f.y = wasY;
+      f.vy = 0;
+      f.grounded = true;
+      continue;
+    }
+    if (g !== null && g - 8 <= f.y + ext) {
+      f.y = g - ext;
       f.vy = 0;
       f.grounded = true;
     } else f.vy += CROW.feather.gravity;
@@ -13218,9 +13278,15 @@ export const BRAIN_CTX: BrainCtx = {
   /**
    * `0x4263e0` — every one of them, where it stands, with the lift and the
    * award its own death carries.
+   *
+   * Every one on the LEVEL: it walks the class's own list (`[0x46ecc4]` for the
+   * bat, `0x4263e1`), which holds whatever `0x430d40` filed under the class —
+   * and `0x41e450` makes a bat for every `initbat` in the book with
+   * `0x40b850`'s room test off (`push 0` at `0x41e748`). Nothing on the walk
+   * asks which room a bat is in.
    */
   slayAll: (kind) => {
-    for (const q of spawnedHere()) {
+    for (const q of (level?.spawned ?? []).flat()) {
       if (q.kind !== kind || q.state === "dead") continue;
       const kid = FOES[kind];
       if (!kid.death) continue;

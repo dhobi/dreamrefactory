@@ -387,6 +387,9 @@ test.skipIf(!haveRip())("sound", async () => {
     g.window = { AudioContext: FakeContext };
     try {
       const sounds = new Sounds(game.files);
+      // the first gain the context makes is the page's master
+      sounds.resume();
+      const master = gains[0];
       await sounds.open("STREETS");
       sounds.listen(0, 0);
       sounds.setMusic(false);
@@ -415,6 +418,66 @@ test.skipIf(!haveRip())("sound", async () => {
       if (sources.length !== was + 1 || !sources.at(-1)!.loop) fail(`a record armed by 0x40ee90 plays looping`);
       sounds.loop(2, false, true);
       if (sources.at(-1)!.loop) fail(`...and 0x40ee90(…, 0) lets the playing one go`);
+      // `0x40eee0` → `0x427da0(record, 0)`: its volume to nothing wherever it
+      // plays — the two sides `route` gave it are the last two gains made
+      const [left, right] = gains.slice(-2);
+      if (!(left.value > 0 && right.value > 0)) fail(`the looping voice should be audible before it is silenced`);
+      sounds.mute(2, true);
+      if (left.value !== 0 || right.value !== 0) fail(`0x40eee0 silences the playing record; its sides are ${left.value} ${right.value}`);
+      ok(`a record armed by 0x40ee90 loops, lets go when disarmed, and 0x40eee0 silences it where it plays`);
+
+      // The slider, `[0x479180]`: ten steps clamped to 0…9 (`0x45d743`), and step
+      // 0 is not silence. The curve is this page's — `0.7 · (v + 1) / 10` — so
+      // step 9 is the 0.7 the page played at before there was a slider.
+      const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+      const step = (): number => sounds.volume;
+      if (step() !== 9 || !near(master.value, 0.7)) fail(`the slider opens at step 9, gain 0.7; it is ${sounds.volume}, ${master.value}`);
+      sounds.setVolume(0);
+      if (step() !== 0 || !near(master.value, 0.07)) fail(`step 0 is not silence: gain ${master.value}`);
+      sounds.setVolume(14);
+      if (step() !== 9) fail(`0x45d743 clamps the slider to 9; it took ${sounds.volume}`);
+      sounds.setVolume(3.9);
+      if (step() !== 3 || !near(master.value, 0.28)) fail(`a step is a whole one: 3.9 should be step 3 at 0.28, got ${sounds.volume} at ${master.value}`);
+      // ...and the page's own mute (nothing in SC.EXE's key table is one) is
+      // silence over whatever the slider says, and gives it back as it was
+      if (sounds.silent || sounds.toggle() !== true || !sounds.silent || master.value !== 0)
+        fail(`the page's mute should silence the master; it is ${master.value}`);
+      sounds.setVolume(6);
+      if (master.value !== 0) fail(`moving the slider while muted must not unmute: ${master.value}`);
+      if (sounds.toggle() !== false || !near(master.value, 0.49)) fail(`unmuting gives back the slider's step 6, 0.49; got ${master.value}`);
+      ok(`the slider is ten steps over 0.07…0.7 and the mute sits over it`);
+
+      // the chapter's own bank answers `effect` (`0x40ef30` on `0x4a5870`), and
+      // the status line names the two banks without their extension
+      if (!sounds.on || sounds.theme !== "theme01" || sounds.sfx !== "woods") fail(`STREETS opens theme01 and woods; it says ${sounds.theme} / ${sounds.sfx}, on ${sounds.on}`);
+      // on a mixer of its own: the character's sounds above hold both channels,
+      // and they outrank the whole chapter bank
+      const fresh = new Sounds(game.files);
+      await fresh.open("STREETS");
+      fresh.listen(0, 0);
+      fresh.setMusic(false);
+      const fx = started.length;
+      fresh.effect(0, 0, 0);
+      await new Promise((r) => setTimeout(r, 20));
+      if (started.length !== fx + 1) fail(`effect(0) at the eye should play woods.snd's record 0; ${started.length - fx} started`);
+      ok(`an effect plays out of the chapter's bank, ${fresh.sfx}`);
+
+      // ...and a bank the rip does not have, or cannot read, is a miss and not
+      // a failure: the level opens, and plays nothing out of it
+      const broken = new Sounds({
+        load: async (name: string) => (name === "theme01.snd" ? new Uint8Array([1, 2, 3, 4]) : null),
+      } as unknown as typeof game.files);
+      await broken.open("STREETS");
+      if (!broken.on || broken.misses.join() !== "theme01.snd,woods.snd,skulz.snd")
+        fail(`an unreadable theme and two missing banks are three misses, in order; ${broken.misses.join()}, on ${broken.on}`);
+      const none = started.length;
+      broken.listen(0, 0);
+      broken.effect(0, 0, 0);
+      broken.own(0, 0, 0);
+      broken.pump();
+      await new Promise((r) => setTimeout(r, 20));
+      if (started.length !== none) fail(`with no banks nothing plays; ${started.length - none} started`);
+      ok(`a missing or unreadable bank is noted and stays silent`);
     } finally {
       g.window = had;
     }

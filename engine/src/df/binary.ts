@@ -26,16 +26,8 @@ export class BinaryReader {
     this.pos = pos;
   }
 
-  u8(): number {
-    return this.bytes[this.pos++];
-  }
   i16(): number {
     const v = this.view.getInt16(this.pos, this.little);
-    this.pos += 2;
-    return v;
-  }
-  u16(): number {
-    const v = this.view.getUint16(this.pos, this.little);
     this.pos += 2;
     return v;
   }
@@ -53,12 +45,6 @@ export class BinaryReader {
   f64be(): number {
     const v = this.view.getFloat64(this.pos, false);
     this.pos += 8;
-    return v;
-  }
-  /** big-endian float (dfet: swapEndians for float) */
-  f32be(): number {
-    const v = this.view.getFloat32(this.pos, false);
-    this.pos += 4;
     return v;
   }
   /**

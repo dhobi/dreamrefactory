@@ -24,7 +24,8 @@ import { FOES } from "../../src/foes";
 import { SLURP, slurp } from "../../src/brains/slurp";
 import { COP, cop } from "../../src/brains/cop";
 import { TICK_SCALE, install, type BrainCtx, type Enemy } from "../../src/brains/kit";
-import { FPS, fail, headless, ok, pass, haveRip } from "./harness";
+import { ALARM } from "../../src/props";
+import { FPS, fail, headless, ok, pass, haveRip, recordSound } from "./harness";
 
 test.skipIf(!haveRip())("maze", async () => {
   /**
@@ -172,7 +173,7 @@ test.skipIf(!haveRip())("maze", async () => {
   ok(`a TCop is 250 health and ${copPay} points — the most outside a boss`);
 
   // 3. the slurp — sixty health, and a repertoire of its own
-  await go("&x=2100&y=7600");
+  await go("&x=1000&y=7600");
   const sl = nearestPlated();
   if (sl?.kind !== "initslurp" || sl.hp !== 60 || sl.max !== 60)
     fail(`0x411a74 gives it 0x40e300(0x3c); the nearest is ${sl?.kind} ${sl?.hp}/${sl?.max}`);
@@ -197,9 +198,9 @@ test.skipIf(!haveRip())("maze", async () => {
   // 3b. ...and it goes up in goo. `0x4150b6`, in the frame after the killing
   //     blow: `0x40cba0(point, 0x78, 0)` — the spray's full twenty gobs, and no
   //     hitter, so they leave every way at once (`0x40ce7d`)
-  await go("&x=2100&y=7600");
+  await go("&x=1000&y=7600");
   const pop = nearestPlated();
-  if (pop?.kind !== "initslurp") fail(`a slurp should be nearest at x2100; it is ${pop?.kind}`);
+  if (pop?.kind !== "initslurp") fail(`a slurp should be nearest at x1000; it is ${pop?.kind}`);
   pop.hp = 1;
   const gobsWere = game.gobs.length;
   game.strikeFoe(pop, 5, { dx: 0, dy: 0 }, 1, pop.y, { top: 0, left: 0, bottom: 1, right: 1 });
@@ -214,7 +215,7 @@ test.skipIf(!haveRip())("maze", async () => {
 
   // 4. the cage doors: a shut one is an OBSTACLE, which is `0x411460` appending
   //    its own rect to the same table the level's `obstacle` records fill
-  await go("&x=2100&y=7600");
+  await go("&x=1950&y=7600");
   const cages = game.hereOf((l) => l.cages);
   const cageAt = (x: number) => cages.find((c) => c.x === x);
   const c1160 = cageAt(1160);
@@ -222,13 +223,15 @@ test.skipIf(!haveRip())("maze", async () => {
   const c1859 = cageAt(1859);
   if (!c1859 || c1859.param !== 4 || c1859.state !== "open" || game.cageCel(c1859) !== 0)
     fail(`a record with a NEGATIVE param opens open, and draws nothing`);
-  h.hold("left", true);
+  h.hold("right", true);
   h.frame(48);
-  h.hold("left", false);
+  h.hold("right", false);
   h.frame(4);
-  // the cage at x2061 is shut and its rect runs 2008..2115, so a walk west out of
-  // x2115 does not start: 0x411460 has already made it wall
-  if (game.p.x < 2000) fail(`the shut cage at x2061 should stop a walk west; got to x ${game.p.x}`);
+  // the cage at x2061 is shut and its rect runs 2008..2115, so a walk east out of
+  // x1950 stops at its west face: 0x411460 has already made it wall. (Walked from
+  // the west: east of it is the shaft of the vertical fan at x2200, whose rect
+  // runs 2086..2304 down to the floor, and it sucks for the first 42 frames.)
+  if (game.p.x > 2010) fail(`the shut cage at x2061 should stop a walk east; got to x ${game.p.x}`);
   ok(`the shut cage at x2061 holds a walk at x ${game.p.x}, and the open one draws nothing`);
 
   // 5. ...and a COP opens one. `0x414664` is inside the cop's own think: within
@@ -310,6 +313,41 @@ test.skipIf(!haveRip())("maze", async () => {
   }
   ok(`a sucking fan drops every key inside 270, and its kill drops them too`);
 
+  // 6c. the five VERTICAL fans exist, and they work the six alarms. `0x410cdd`
+  //     makes every `initvfan` in the book — `0x40b850`'s room test is off (its
+  //     third argument, 0 at `0x410c99`) — though all five points stand between
+  //     rooms, at the tops of their shafts. Each is filed once, under the room
+  //     its rect opens into; `0x4159e1` quiets its alarms as it stops sucking
+  //     and `0x415c5a` sets them flashing as it starts again (`0x415dc0`)
+  await go("&x=1000&y=7600");
+  {
+    const vfans = game.level!.fans.flat().filter((f) => !f.horizontal);
+    const where = vfans.map((f) => `${f.x},${f.y} p${f.param} in ${game.level!.fans.findIndex((r) => r.includes(f)) + 1}`);
+    if (vfans.length !== 5 || new Set(vfans).size !== 5)
+      fail(`MAZE has five vertical fans (0x410cdd, no room test); the level holds ${where.join("; ")}`);
+    const f0 = vfans.find((f) => f.x === 2200 && f.y === 7239);
+    if (!f0 || !game.level!.fans[0].includes(f0)) fail(`the fan at 2200,7239 tops region 1's shaft: ${where.join("; ")}`);
+    const alarms = game.level!.alarms.flat();
+    const mine = alarms.filter((a) => a.param === f0.param);
+    if (!mine.length) fail(`an alarm carries the param of the fan at x2200`);
+    const calls = recordSound(game);
+    const was = { state: f0.state, on: mine.some((a) => a.on) };
+    let quietSeen = false;
+    const cels = new Set<number>();
+    h.until(() => {
+      if (f0.state === "stop") quietSeen = mine.every((a) => !a.on);
+      if (f0.state === "suck" && quietSeen) for (const a of mine) cels.add(game.alarmCel(a));
+      return quietSeen && f0.state === "suck" && cels.size > 1;
+    }, 240);
+    if (!quietSeen || !mine.every((a) => a.on))
+      fail(`the alarms go quiet as the fan stops (0x4159e1) and flash as it sucks again (0x415c5a): fan ${was.state} -> ${f0.state}, alarms ${mine.map((a) => a.on).join(" ")}`);
+    if ([...cels].every((c) => c === ALARM.quiet)) fail(`a flashing alarm sweeps its cels; saw ${[...cels].join(" ")}`);
+    const swept = (): boolean => calls.some((c) => c.call === "effect" && c.args[0] === ALARM.sound);
+    h.until(swept, 60);
+    if (!swept()) fail(`each sweep round sounds ${ALARM.sound} (0x412fea)`);
+  }
+  ok(`MAZE's five vertical fans stand between its rooms and work its alarms: quiet as one stops, flashing and sounding as it sucks again`);
+
   // 7. the big guns — `0x4115b0` makes two objects of one record and `0x4135b0`
   //    runs them through eight script kinds. Standing inside the rect takes it
   //    the whole way round; the bolt it fires is the BLASTER's, out of the same
@@ -319,6 +357,9 @@ test.skipIf(!haveRip())("maze", async () => {
   if (!gun) fail(`a big gun stands over x1850`);
   const states: string[] = [];
   const gunCels = new Set<number>();
+  /** the hatch's cel each time it changes — `0x46c238`'s four tags. The walk in
+   *  has already opened it, so it is shut again here and watched from tag 0. */
+  const hatchRun: number[] = [game.hatchCel(Object.assign(gun, { hatch: 0, hatchClock: 0 }))];
   let bolt: number | null = null;
   // the shot's own records and where it left the gun — see `GUNBOLT`
   const shotCels: number[] = [];
@@ -330,6 +371,8 @@ test.skipIf(!haveRip())("maze", async () => {
     if (states[states.length - 1] !== gun.state) states.push(gun.state);
     const cel = game.gunCel(gun);
     if (cel) gunCels.add(cel);
+    const hatch = game.hatchCel(gun);
+    if (hatchRun[hatchRun.length - 1] !== hatch) hatchRun.push(hatch);
     if (bolt === null && game.bolts.length) {
       shot = game.bolts[0];
       bolt = shot.vx;
@@ -355,7 +398,27 @@ test.skipIf(!haveRip())("maze", async () => {
     fail(`the shot starts 45 along the gun's facing at its own height (0x412af4); from ${JSON.stringify(shotFrom)}, gun ${JSON.stringify(shotAt)}`);
   if (shotCels[0] !== 10102 || shotCels.slice(1, 5).join() !== "10103,10104,10105,10105")
     fail(`tag 0 is 10102 once, then tag 1 round from its second record; saw ${shotCels.join(" ")}`);
+  // the hatch over it opens first: tag 1 is 10070 10071 10070 10071 and then
+  // 10072..10074, and tag 2 holds 10074 while you stay under it
+  if (hatchRun[0] !== 10070 || !hatchRun.join(" ").includes("10070 10071 10070 10071 10072 10073 10074"))
+    fail(`0x46c238 tag 1 opens the hatch 10070 10071 10070 10071 10072 10073 10074; it showed ${hatchRun.join(" ")}`);
+  ok(`the hatch opens on 0x46c238 tag 1 and holds on tag 2: ${hatchRun.join(" ")}`);
   ok(`a big gun drops, unfolds and fires its own shot at you: ${states.slice(0, 6).join(" -> ")}, vx ${bolt}, on ${shotCels.join(" ")}`);
+
+  // ...and with nobody under it tag 2 hands to tag 3, which holds open
+  // fourteen frames and then closes back down to 10070 — tag 0
+  {
+    game.p.x = 1600;
+    const shutting: number[] = [];
+    const shut = h.until(() => {
+      const c = game.hatchCel(gun);
+      if (shutting[shutting.length - 1] !== c) shutting.push(c);
+      return gun.hatch === 0;
+    }, 120);
+    if (shut < 0 || game.hatchCel(gun) !== 10070 || !shutting.join(" ").includes("10074 10073 10072 10071 10070 10071 10070"))
+      fail(`0x46c238 tag 3 closes the hatch 10074 … 10073 10072 10071 10070 10071 10070; it showed ${shutting.join(" ")}, tag ${gun.hatch}`);
+    ok(`...and shuts on tag 3 when nobody is under it: ${shutting.join(" ")}`);
+  }
 
   // ...and the shot is a hundred-strength blow to the player (`0x413bed`): the
   // hit pass trades its thirty a frame into him, `0x42f910`'s length of it

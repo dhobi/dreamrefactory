@@ -182,9 +182,3 @@ export function sndLoopChunks(snd: SndFile): number[] {
   if (snd.loops <= 1 || snd.loops > snd.chunks.length) return [];
   return snd.chunks.slice(snd.chunks.length - snd.loops).map((c) => c.containerLoc);
 }
-
-/** the container a named sound lives in, or -1 — the one thing callers want */
-export function sndContainerOf(snd: SndFile, name: string): number {
-  const want = name.toLowerCase();
-  return snd.chunks.find((c) => c.identifier.toLowerCase() === want)?.containerLoc ?? -1;
-}

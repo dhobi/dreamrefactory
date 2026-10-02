@@ -39,9 +39,11 @@ import {
   LEVEL_ORDER,
   arrivalIn,
   isMidpoint,
+  isSbkFile,
   levelNumber,
   nearestLayer,
   placementRate,
+  placementZ,
   rasteriseGround,
   readRooms,
   readSbkFile,
@@ -644,4 +646,23 @@ test("every region rasterises to a floor with no gap in it", () => {
   expect(regions).toBe(48);
   // curbs and shaft walls: the polyline is a staircase, not a graph of y over x
   expect(steps).toBeGreaterThan(0);
+});
+
+/**
+ * What the sbk editor leans on before it reads a book, and to lay one out.
+ *
+ * `.sbk` is also a RIFF SoundFont's extension, so the editor asks the fourCC
+ * first; and it paints the placements in the order SC.EXE's compositor does,
+ * p3, p0, the actors, p4, p1, p2.
+ */
+test("a book is told from a SoundFont by its fourCC, and is painted plane 3 first, plane 2 last", () => {
+  if (skip()) return;
+  for (const path of books) expect(isSbkFile(new Uint8Array(readFileSync(path))), name(path)).toBe(true);
+  expect(isSbkFile(new TextEncoder().encode("RIFF\0\0\0\0sfbk"))).toBe(false);
+  expect(isSbkFile(new Uint8Array(3))).toBe(false);
+
+  const z = (plane: number): number => placementZ({ plane } as Parameters<typeof placementZ>[0]);
+  expect([3, 0, 4, 1, 2].map(z)).toEqual([0, 1, 3, 4, 5]);
+  // a plane the table does not know paints with the actors
+  expect(z(9)).toBe(2);
 });

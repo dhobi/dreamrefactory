@@ -261,11 +261,18 @@ export class Mart {
     field(VALUE, sel ? (sel.tier === OWN ? worth(this.r, sel.kind) : PRICES[sel.kind][sel.tier]) : 0, VALUE_INK);
   }
 
-  /** 0x410f1d: a player who spent nothing gets every first-tier weapon they can afford */
+  /**
+   * 0x410f1d: a player who leaves with exactly 1000 (0x410f40) gets every
+   * first-tier weapon they can afford — each kind, in order, full (0x417c81),
+   * its tier set to 0 (0x417cc1) and its price taken off (0x41802a). As in
+   * the EXE, a kind already owned is not passed over: it too is put back to
+   * the first tier and paid for again.
+   */
   close(): void {
     const r = this.r;
     if (r.score !== 1000) return;
     for (let kind = 0; kind < 6; kind++) {
+      // 0x410f5c: never fails — the six first-tier prices come to 902 — but the EXE checks it, so it is kept
       if (r.score < PRICES[kind][0]) continue;
       r.ammo[kind] = AMMO_FULL;
       r.tier[kind] = 0;

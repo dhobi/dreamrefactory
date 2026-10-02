@@ -29,6 +29,7 @@ import { test } from "vitest";
 import { fail, headless, ok, pass, recordSound, haveRip } from "./harness";
 import { FOE_SFX } from "../../src/sound";
 import { FOES, type FoeAnim } from "../../src/foes";
+import { SPRINKLER } from "../../src/props";
 import {
   kragg,
   kraggGate,
@@ -783,6 +784,47 @@ test.skipIf(!haveRip())("arcade", async () => {
     if (game.p.hidden || game.p.act !== "downFront")
       fail(`0x4414ba / 0x4414c3: let go, drawn again and knocked down; hidden ${game.p.hidden}, act ${game.p.act}`);
     ok(`kragg carries him unseen for ${run} frames, ${drained} health out of him and into itself, and throws him down (0x4413a8)`);
+  }
+
+  /**
+   * 9. a column of water. `0x441b20` sends up the sprinkler whose rect the BOSS
+   *    is in, and the column then runs `0x473748`'s three tags: seven cels up at
+   *    two frames each, the spray looped for its context's 0x15e frames, and the
+   *    eight cels of going, after which the slot is free again.
+   *
+   *
+   *    And it never hurts the player standing in it. The column is never armed:
+   *    `0x42f550` makes it with `obj+0x1a = 0` (`0x42f5af`), nothing in its
+   *    creation or its think `0x4409a0` sets it, and the hit pass skips an
+   *    unarmed hitter at `0x430367` — nor do cels 150..158 carry a strike box
+   *    (`0x430379`). The scald is the boss's only (`0x440bb0`).
+   */
+  {
+    const q = game.hereOf((l) => l.sprinklers)[0];
+    await go(`&x=${q.x}&foes=0`);
+    game.raiseSprinkler({ x: q.left, y: q.top } as Enemy);
+    if (game.columns.get(q.slot) !== 0 || !game.raised.has(q.slot)) fail(`0x441b20 sends up slot ${q.slot} when the boss is over it`);
+    const run: number[] = [];
+    const hp0 = game.stats.health;
+    const lives0 = game.stats.lives;
+    let frames = 0;
+    for (; frames < 500 && game.columns.has(q.slot); frames++) {
+      const c = game.columnCel(game.columns.get(q.slot)!);
+      if (run[run.length - 1] !== c) run.push(c);
+      // keep him in the water the whole time it stands
+      game.p.x = q.x;
+      h.frame();
+    }
+    if (game.stats.health !== hp0 || game.stats.lives !== lives0 || game.p.act)
+      fail(`the water is never armed (0x42f5af, 0x430367) and hurts nobody but kragg; standing in it took health ${hp0} -> ${game.stats.health}, lives ${lives0} -> ${game.stats.lives}, act ${game.p.act}`);
+    const life = SPRINKLER.life + SPRINKLER.sink.cels.length * SPRINKLER.sink.hold;
+    if (frames !== life) fail(`a column stands for 0x15e frames and then sinks through eight cels at two: ${life}; it stood ${frames}`);
+    if (run.slice(0, 7).join() !== SPRINKLER.rise.cels.join()) fail(`it rises through 150..156 first; it showed ${run.slice(0, 7).join(" ")}`);
+    const spray = run.slice(7, -SPRINKLER.sink.cels.length);
+    if (!spray.length || spray.some((c) => !(SPRINKLER.spray.cels as readonly number[]).includes(c))) fail(`then it sprays on tag 1's cels; it showed ${spray.join(" ")}`);
+    if (run.slice(-SPRINKLER.sink.cels.length).join() !== SPRINKLER.sink.cels.join()) fail(`and goes on tags 2 and 3's eight; it ended ${run.slice(-8).join(" ")}`);
+    if (game.columnCel(life + 50) !== SPRINKLER.sink.cels.at(-1)) fail(`past its end a column holds the last cel of the going`);
+    ok(`a sprinkler goes up for ${frames} frames: ${run.slice(0, 7).join(" ")}, the spray, and ${run.slice(-8).join(" ")} — and never hurts him`);
   }
 
   pass("ARCADE is one room, one boss out of reach, and a goal that waits for it");

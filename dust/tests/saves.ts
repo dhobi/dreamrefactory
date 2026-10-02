@@ -19,13 +19,14 @@ import { fileURLToPath } from "node:url";
 import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
-import { applyPatchV1, parseSaveV1, v1Index } from "@dreamfactory/engine/df/savegame-v1";
+import { applyPatchV1, parseSaveV1, v1Index, type SavedWalkV1 } from "@dreamfactory/engine/df/savegame-v1";
 import { snapshotSaveV1 } from "@dreamfactory/engine/runtime/saveload-v1";
 import { parseScript } from "@dreamfactory/engine/runtime/parser";
 import { ScriptInstance } from "@dreamfactory/engine/runtime/interp";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { decodeScript } from "@dreamfactory/engine/df/script";
 import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
+import { NODE_STRIDE, decodeVarSlots } from "@dreamfactory/engine/df/save-vars";
 
 /** `7 + 5` — the containers every v1 save has, whatever it had open (v1Index) */
 const FIXED_V1_CONTAINERS = 12;
@@ -1060,4 +1061,154 @@ test("a load stops the script the abandoned game was running (#344)", async () =
     "the dispatch came back",
   ).toBe(true);
   expect(session.scriptBusy, "and nothing is left running").toBe(false);
+});
+
+// ---- what the writer cannot carry ----
+//
+// "a patched Dust save reads back what was written into it" patches what fits.
+// These are the rest, and the promise is the one v4's writer keeps: whatever a
+// base save has no room for is REPORTED (onDrop, which the page shows), and the
+// save that comes out still reads.
+
+const WALK = (actor: string, over: Partial<SavedWalkV1> = {}): SavedWalkV1 => ({
+  actor, star: "", startX: 256, startY: 256, startZ: 0, dx: 256, dy: 0, dz: 0,
+  dist: 256, progress: 64, turnTo: -1, deg: 0, turnOnly: false, hasPath: false, ...over,
+});
+
+test("every record a Dust save has no room for is reported, and the rest is written", () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const base = readSaveFile(earliest(files).bytes);
+  const drops: string[] = [];
+  const out = applyPatchV1(base, {
+    numGlobals: new Map(),
+    strGlobals: new Map([["handitem", "x".repeat(200_000)]]),
+    openSet: { transitionRegister: 1, actorRegister: 2, eyeHeight: 62, cameraSetback: 64, clut: new Uint8Array(12) },
+    props: [{ name: "nosuchprop", owner: "stranger" }],
+    actors: [{ name: "nosuchactor", owner: "stranger" }],
+    loops: [
+      { kind: "scene", name: "first", handler: "fx", period: 5 },
+      { kind: "planet", name: "odd", handler: "fx", period: 5 },
+      ...Array.from({ length: 32 }, (_, i) => ({ kind: "actor", name: `l${i}`, handler: "fx", period: 1 })),
+    ],
+    walks: [
+      WALK("leroy", { hasPath: true, star: "town.leroy1" }),
+      ...Array.from({ length: 16 }, (_, i) => WALK(`w${i}`)),
+    ],
+    onDrop: (name, why) => void drops.push(`${name}: ${why}`),
+  });
+  expect(drops).toEqual([
+    'handitem: no room in the string pool for "' + "x".repeat(200_000) + '"',
+    "clut: 12 bytes of palette, 2048 needed",
+    "nosuchprop: the base has no prop record with that name",
+    "nosuchactor: the base has no cast record with that name",
+    'odd: unknown loop kind "planet"',
+    "l31: more than 32 loops — the table has no more slots",
+    "leroy: walking an authored route — written as the straight line",
+    "w15: more than 16 walks — the table has no more slots",
+  ]);
+
+  const after = parseSaveV1(out);
+  expect(after.loops.map((l) => l.name)).toEqual(["first", ...Array.from({ length: 31 }, (_, i) => `l${i}`)]);
+  // the route is the straight line: its destination is start + delta, and what is
+  // LEFT of it, not what is done
+  expect(after.walks.map((w) => w.actor)).toEqual(["leroy", ...Array.from({ length: 15 }, (_, i) => `w${i}`)]);
+  expect(after.walks[0]).toMatchObject({ star: "town.leroy1", hasPath: false });
+  // no slot names a waypoint container, so none is left behind
+  expect(after.raw.containers.length).toBe(v1Index(after.raw).walks + 1);
+});
+
+test("new globals grow the base to fit, and only a name too long for its field is refused", () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const base = readSaveFile(earliest(files).bytes);
+  // a base already at the end of its node array: ensureVarRoom grows it (#357)
+  const gi = v1Index(base).globals;
+  const last = decodeVarSlots(base.containers[gi].data).at(-1)!;
+  base.containers[gi].data = base.containers[gi].data.slice(0, last.valueSlot + 2 * NODE_STRIDE);
+
+  // a patch carries the whole session, the base's own globals included — a
+  // record the patch leaves out is one the writer may recycle (ensureVarRoom)
+  const before = parseSaveV1(writeSaveFile(readSaveFile(earliest(files).bytes)));
+  const fresh = new Map(Array.from({ length: 40 }, (_, i) => [`fresh${i}`, i] as [string, number]));
+  const long = "sixteencharacter";
+  const drops: string[] = [];
+  const out = applyPatchV1(base, {
+    numGlobals: new Map([...before.numGlobals, ...fresh, [long, 1]]),
+    strGlobals: new Map([...before.strGlobals, ["freshtext", "hello"], [`${long}s`, "x"]]),
+    onDrop: (name, why) => void drops.push(`${name}: ${why}`),
+  });
+  expect(drops).toEqual([
+    `${long}: longer than a record's 15 characters`,
+    `${long}s: longer than a record's 15 characters`,
+  ]);
+  const after = parseSaveV1(out);
+  for (const [n, v] of fresh) expect(after.numGlobals.get(n), n).toBe(v);
+  expect(after.strGlobals.get("freshtext")).toBe("hello");
+  // and what the base already held is still there
+  for (const [n, v] of before.numGlobals) expect(after.numGlobals.get(n), n).toBe(v);
+  for (const [n, v] of before.strGlobals) expect(after.strGlobals.get(n), n).toBe(v);
+});
+
+test("a room's eye stands back from the cell along whichever way it faces", () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const base = readSaveFile(earliest(files).bytes);
+  // c1 @472/474, the eye; the rule is the one all 61 shipped saves obey
+  const eye = (facing: number): [number, number] => {
+    const out = readSaveFile(
+      applyPatchV1(base, {
+        numGlobals: new Map(),
+        standpoint: { set: "town", cellX: 4, cellZ: 6, facing, deg: 0, camX: 0, camY: 0 },
+        openSet: { transitionRegister: 1, actorRegister: 2, eyeHeight: 62, cameraSetback: 64 },
+      }),
+    );
+    const c1 = out.containers[1].data;
+    const dv = new DataView(c1.buffer, c1.byteOffset, c1.byteLength);
+    return [dv.getUint16(472, true), dv.getUint16(474, true)];
+  };
+  const [cx, cy] = [4 * 256 + 128, 6 * 256 + 128];
+  expect([1, 2, 3, 4].map(eye)).toEqual([
+    [cx, cy + 64],
+    [cx, cy - 64],
+    [cx - 64, cy],
+    [cx + 64, cy],
+  ]);
+});
+
+test("a set file the base's manifest cannot name is reported", () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const base = readSaveFile(earliest(files).bytes);
+  new DataView(base.containers[1].data.buffer, base.containers[1].data.byteOffset).setUint32(396, 0x7fff_0001, true);
+  const drops: string[] = [];
+  applyPatchV1(base, {
+    numGlobals: new Map(),
+    standpoint: { set: "apoth", setFile: "apoth.set", cellX: 2, cellZ: 5, facing: 3, deg: 0, camX: 0, camY: 0 },
+    onDrop: (name, why) => void drops.push(`${name}: ${why}`),
+  });
+  expect(drops).toEqual(["apoth.set: the base's manifest has no record for the open set"]);
+});
+
+test("a load refuses a save of another title, and one that is not a Dust save, before it touches the session", async () => {
+  const files = dustSaves();
+  if (!files.length) return;
+  const session = new GameSession(() => null, new NullAudioSink());
+  session.dfVersion = 1;
+  const logs: string[] = [];
+  session.onLog = (m) => void logs.push(m);
+  session.interp.globals.set("day", 99);
+
+  const bytes = earliest(files).bytes.slice();
+  // the title in container 0 (from 1536; the position table before it holds a
+  // stale copy the reader never looks at), any case: one letter changed
+  const at = Buffer.from(bytes).toString("latin1").toLowerCase().indexOf("dust 0.3", 1536);
+  expect(at).toBeGreaterThan(0);
+  bytes[at + 7] = 0x39; // "dust 0.9"
+  expect(await session.loadGame(bytes)).toBe(false);
+  expect(logs.at(-1)).toMatch(/^opengame: saved game is from a different version \("dust 0\.9"\)$/i);
+
+  expect(await session.loadGame(new Uint8Array([1, 2, 3, 4]))).toBe(false);
+  expect(logs.at(-1)).toMatch(/^opengame: not a valid Dust save/);
+  expect(session.interp.globals.get("day")).toBe(99);
 });

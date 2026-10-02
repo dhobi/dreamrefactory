@@ -415,6 +415,17 @@ const GOTO: Action = {
      * why both halves of that are needed. Each pass: answer anything open,
      * settle, read the room, plan, walk it.
      */
+    /** there: face the way asked, and say how many plans it took */
+    const arrive = async (set: string, goal: { name: string }, plans: number): Promise<void> => {
+      if (want) {
+        await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
+      }
+      c.say(
+        `${set} ${goal.name} (${x},${z})` +
+          (spent ? `, ${spent} road(s)${plans > 1 ? ` over ${plans} plans` : ""}` : ", already there"),
+      );
+      await c.d.settle(c.wait, `the walk to ${x},${z}`, c.budget);
+    };
     for (let attempt = 1; attempt <= tries; attempt++) {
       await clearOrSay();
       await c.d.settle("quiet", `the room before planning the walk to ${x},${z}`, c.budget);
@@ -501,19 +512,9 @@ const GOTO: Action = {
         );
       }
 
-      // ARRIVED, which is asked at the top of the pass rather than the bottom so
-      // that a walk the world finished for us costs nothing
-      if (room.here === goal.name) {
-        if (want) {
-          await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
-        }
-        c.say(
-          `${room.set} ${goal.name} (${x},${z})` +
-            (spent ? `, ${spent} road(s)${attempt > 1 ? ` over ${attempt} plans` : ""}` : ", already there"),
-        );
-        await c.d.settle(c.wait, `the walk to ${x},${z}`, c.budget);
-        return;
-      }
+      // ARRIVED, asked at the top of the pass as well as at the end of a walk:
+      // a walk the world finished for us costs nothing
+      if (room.here === goal.name) return arrive(room.set, goal, attempt - 1);
 
       // where every view id lives, so a road can say which cell it joins
       const at = new Map<number, { scene: string; view: string }>();
@@ -657,6 +658,9 @@ const GOTO: Action = {
             `the walk ended at ${ended} rather than ${goal.name} — the world moved while we walked`,
           );
         }
+        // and arriving is noticed HERE, not at the top of a next pass: there may
+        // be none (`tries: 1`), and this plan is the one that got us there
+        if (ended === goal.name) return arrive(room.set, goal, attempt);
       } catch (e) {
         /*
          * A walk that stops is USUALLY somebody talking, and the next pass

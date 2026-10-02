@@ -13,7 +13,9 @@ import {
   parseSave,
   applyPatch,
   globalsCapacity,
+  saveIndex,
   type RawSaveFile,
+  type SavedWalk,
 } from "@dreamfactory/engine/df/savegame";
 import { readShpFile } from "@dreamfactory/engine/df/shp";
 import { readSetFile } from "@dreamfactory/engine/df/set";
@@ -721,6 +723,21 @@ test("loadGame puts the frame counter back where the save left it", async () => 
 test("loadGame rejects a non-save / foreign file", async () => {
   const session = await newSession();
   expect(await session.loadGame(new Uint8Array([1, 2, 3, 4]))).toBe(false);
+});
+
+test("loadGame refuses a save from another version of the game, before it touches the session", async () => {
+  const session = await newSession();
+  const logs: string[] = [];
+  session.onLog = (l) => void logs.push(l);
+  const bytes = new Uint8Array(readFileSync(GYM()));
+  // "Titanic 1.0" in container 0, one letter changed: a save of a version that never shipped
+  const at = Buffer.from(bytes).indexOf("Titanic 1.0");
+  expect(at).toBeGreaterThan(0);
+  bytes[at + 8] = 0x32; // "Titanic 2.0"
+  const before = session.interp.globals.get("mission");
+  expect(await session.loadGame(bytes)).toBe(false);
+  expect(logs.at(-1)).toBe('opengame: saved game is from a different version ("Titanic 2.0")');
+  expect(session.interp.globals.get("mission")).toBe(before);
 });
 
 // ---- inventory (held items) ----------------------------------------------
@@ -3028,4 +3045,142 @@ test("a load stops the script the abandoned game was running (#340)", async () =
   // why it must not be allowed to read it
   check("mission is the checkpoint's", session.interp.globals.get("mission") !== "good",
     String(session.interp.globals.get("mission")));
+});
+
+// ---- what the writer and the reader refuse ----
+//
+// Everything above patches a shipped save with what fits in it. These are the
+// other cases, and each is a promise about a broken save: that the reader says
+// which part of a file is wrong instead of reading garbage into a session, and
+// that the writer REPORTS every value the base has no room for (onDrop, which
+// the page shows) instead of writing a save that loads into a different game.
+
+function GYM(): string {
+  return savePath("1", "03 - Found the Gymnasium.ti");
+}
+
+test("a file that is not a save, or a save missing a part, is refused with the part named", () => {
+  const bytes = new Uint8Array(readFileSync(GYM()));
+  const bad = (edit: (b: Uint8Array) => void): Uint8Array => {
+    const b = bytes.slice();
+    edit(b);
+    return b;
+  };
+  expect(() => readSaveFile(bad((b) => (b[0] ^= 1)))).toThrow(/fourCC/);
+  expect(() => readSaveFile(bad((b) => (b[32] = 0x58)))).toThrow(/signature/);
+
+  // the gymnasium save has three tracks open: 7 + 3·3 containers before the
+  // globals, then the globals, the pool and the three service tables
+  const broken = (edit: (raw: RawSaveFile) => void): (() => void) => () => {
+    const raw = readSaveFile(bytes);
+    edit(raw);
+    saveIndex(raw);
+  };
+  expect(broken(() => {})).not.toThrow();
+  expect(broken((raw) => (raw.containers.length = 11))).toThrow(/fewer than the 12/);
+  expect(broken((raw) => (raw.containers[6].data = raw.containers[6].data.slice(1)))).toThrow(/not a multiple of 40/);
+  expect(broken((raw) => (raw.containers.length = 20))).toThrow(/3 open tracks needs 21 containers, file has 20/);
+  expect(broken((raw) => (raw.containers[8].data = new Uint8Array(raw.containers[8].data.length + 104)))).toThrow(
+    /track 0 array 1 is \d+ bytes, descriptor says/,
+  );
+  expect(broken((raw) => (raw.containers[18].data = raw.containers[18].data.slice(1)))).toThrow(/container 18 should be the loops table/);
+
+  // a container whose position points into the header is an empty one, not a read
+  const raw = readSaveFile(bad((b) => new DataView(b.buffer).setUint32(1024 + 4 * 5, 0, true)));
+  expect(raw.containers[5].data.length).toBe(0);
+});
+
+test("every value a patch cannot store is reported, and the rest is still written", () => {
+  const save = parseSave(new Uint8Array(readFileSync(GYM())));
+  const drops: string[] = [];
+  const onDrop = (name: string, why: string) => void drops.push(`${name}: ${why}`);
+  const long = "sixteen-letters!";
+  const place = { set: "deckbd", star: "s1", pose: "stand", visible: true, deg: 0, x: 0, y: 0, z: 0, speed: 0, turn: 0, scale: 0, zclip: 0 };
+  const walk = (actor: string, over: Partial<SavedWalk> = {}): SavedWalk => ({
+    actor, type: 1, hasPayload: false, paused: false, turnTo: -1, deg: 0,
+    startX: 0, startY: 0, startZ: 0, destX: 10, destY: 0, destZ: 0, progress: 0, dist: 10, star: "", ...over,
+  });
+  const out = applyPatch(save.raw, {
+    numGlobals: new Map([["mission", 2]]),
+    set: save.set, scene: save.scene, view: save.view,
+    disk: "Titanic2-and-then-some",
+    actors: [
+      // a character the base has no record for and that has nothing to say: skipped, not reported
+      { name: "nobody", owner: "none", value: 0 },
+      { name: long, owner: "none", value: 0, placement: place },
+      { name: "bx", owner: long, value: 0 },
+      { name: "charl", owner: "none", value: 0, placement: { ...place, star: long } },
+    ],
+    scheduler: {
+      loops: [
+        { kind: "actor", name: "tick", handler: "ontick", period: 0 },
+        { kind: "cast", name: "x", handler: "y", period: 5 },
+        { kind: "scene", name: long, handler: "y", period: 5 },
+      ],
+      crickets: [{ name: long, set: "deckbd", x: 0, y: 0, radius: 1, base: 1, jitter: 0, next: 0 }],
+      walks: [
+        walk("asea", { paused: true }),
+        walk("bx", { star: long }),
+        walk("charl", { type: 3 }),
+        ...Array.from({ length: 16 }, (_, i) => walk(`w${i}`)),
+      ],
+    },
+    theme: { track: "nosuch.trk", chunks: [{ index: 1, name: "a" }], order: [1] },
+    onDrop,
+  });
+  expect(drops).toEqual([
+    "disk(Titanic2-and-then-some): longer than the 8-byte label it replaces",
+    `actor(${long}): no record in the base save and none appendable`,
+    `actorowner(bx): "${long}" is longer than the record's 15 characters`,
+    `actorstar(charl): "${long}" is longer than the record's 15 characters`,
+    "makeloop(cast, x): kind or name not representable",
+    `makeloop(scene, ${long}): kind or name not representable`,
+    `makecricket(${long}): name not representable`,
+    "walk(bx): actor or arrival star not representable",
+    "walk(charl): a route with no waypoints",
+    "walk(w15): the walks table holds 16 slots",
+    "theme(nosuch.trk): the base save has no such track open — the room will load silent",
+  ]);
+
+  // what fitted is there: the global, one loop (its period at least 1), the walks
+  // up to the table's sixteen, the first of them paused
+  const back = parseSave(out);
+  expect(back.numGlobals.get("mission")).toBe(2);
+  expect(back.disk).toBe(save.disk);
+  expect(back.loops.map((l) => [l.kind, l.name, l.period])).toEqual([["actor", "tick", 1]]);
+  expect(back.crickets).toEqual([]);
+  expect(back.walks.map((w) => w.actor)).toEqual(["asea", ...Array.from({ length: 15 }, (_, i) => `w${i}`)]);
+  expect(back.walks[0].paused).toBe(true);
+  // and no track is left playing: a theme that could not be written is silence,
+  // not whatever the base had on
+  expect(back.theme).toBeNull();
+});
+
+test("a theme whose loop table could not be read is reported; none at all is written as silence", () => {
+  const save = parseSave(new Uint8Array(readFileSync(GYM())));
+  expect(save.theme?.track).toBe("decka.trk");
+  const base = { numGlobals: new Map<string, number>(), set: save.set, scene: save.scene, view: save.view };
+  const drops: string[] = [];
+  const unread = applyPatch(save.raw, { ...base, theme: { track: "DECKA.TRK", chunks: [], order: [] }, onDrop: (n, w) => void drops.push(`${n}: ${w}`) });
+  expect(drops).toEqual(["theme(decka.trk): the bank's loop table was not readable — the room will load silent"]);
+  expect(parseSave(unread).theme).toBeNull();
+  expect(parseSave(applyPatch(save.raw, { ...base, theme: null })).theme).toBeNull();
+  // and a readable one is what comes back
+  const played = applyPatch(save.raw, { ...base, theme: { track: "decka.trk", volume: 200, chunks: [{ index: 3, name: "a" }, { index: 4, name: "b" }], order: [2, 9] } });
+  expect(parseSave(played).theme).toMatchObject({ track: "decka.trk", volume: 200 });
+});
+
+test("a set file the save's manifest cannot name is reported, and the location is still written", () => {
+  const save = parseSave(new Uint8Array(readFileSync(GYM())));
+  const raw = readSaveFile(writeSaveFile(save.raw));
+  // point C1's set id at a record no manifest entry has
+  new DataView(raw.containers[1].data.buffer, raw.containers[1].data.byteOffset).setUint32(544, 0xdeadbeef, true);
+  const drops: string[] = [];
+  const out = applyPatch(raw, {
+    numGlobals: new Map(), set: "deckbd", scene: "scene1", view: "view1",
+    setFile: { file: "deckbd.set", actorRegister: 1, sceneRegister: 2, sceneCount: 3 },
+    onDrop: (n, w) => void drops.push(`${n}: ${w}`),
+  });
+  expect(drops).toEqual(["setFile(deckbd.set): the set id at C1 @544 matches no manifest record"]);
+  expect(parseSave(out).set).toBe("deckbd");
 });

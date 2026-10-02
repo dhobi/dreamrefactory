@@ -9,6 +9,8 @@
  */
 import { test, expect } from "vitest";
 import { TABLE, isSaveV5, readSaveV5, saveVersionMatches, writeSaveV5, type SaveGameV5 } from "@dreamfactory/engine/df/savegame-v5";
+import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
+import { GameSession } from "@dreamfactory/engine/runtime/session";
 
 const slots = (t: { slots: number; stride: number }): Uint8Array => new Uint8Array(t.slots * t.stride);
 
@@ -85,4 +87,19 @@ test("the loader refuses what RedJack.exe refuses", () => {
   expect(saveVersionMatches("2", "2")).toBe(true);
   expect(saveVersionMatches("Titanic 1.0", "titanic 1.0")).toBe(true);
   expect(saveVersionMatches("2", "2 ")).toBe(false);
+});
+
+test("opengame refuses another version's save, or a file that is not one, before it touches the session", async () => {
+  const session = new GameSession(() => null, new NullAudioSink());
+  session.isV5 = true;
+  const logs: string[] = [];
+  session.onLog = (l) => void logs.push(l);
+  session.interp.globals.set("day", 1);
+
+  const bytes = writeSaveV5(sample());
+  expect(await session.loadGame(bytes, "3")).toBe(false);
+  expect(logs.at(-1)).toBe("opengame: This saved game is from a different version of this title.");
+  expect(await session.loadGame(bytes.slice(0, 100), "2")).toBe(false);
+  expect(logs.at(-1)).toBe("opengame: This is not a valid saved game file.");
+  expect(session.interp.globals.get("day")).toBe(1);
 });

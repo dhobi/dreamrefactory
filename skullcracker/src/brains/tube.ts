@@ -617,8 +617,8 @@ function waver(e: Enemy, k: BrainCtx): boolean {
   }
   /**
    * `0x4194df` — read, store one less, and return while the value READ was
-   * still at or above zero. The creator seeds it 0, so the first two visits are
-   * spent and the third rolls.
+   * still at or above zero. The creator seeds it 0, so the first visit reads 0 and
+   * is spent, and the second reads −1 and rolls.
    */
   const beat = e.beat ?? 0;
   e.beat = beat - 1;

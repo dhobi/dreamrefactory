@@ -12,7 +12,7 @@ import { test, expect } from "vitest";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { LangChooser, chooserOrder, preselectedEdition } from "../../src/lang-chooser";
-import { LANGUAGES, LANG_GLOBAL, LANG_STAGE } from "../../src/languages";
+import { EXTRA_EDITIONS, LANGUAGES, LANG_GLOBAL, LANG_STAGE, editionName } from "../../src/languages";
 import { readStgFile, readStgRegions } from "@dreamfactory/engine/df/stg";
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import { sniffScript } from "@dreamfactory/engine/df/script";
@@ -158,6 +158,56 @@ test("closing it hands the stage back, and leaves no global behind", async () =>
   expect(session.interp.globals.has(LANG_GLOBAL)).toBe(false);
 });
 
+/**
+ * A canvas context that records what was drawn: the image put down, and every
+ * rectangle filled over it. Enough for `render`, which is a blit and a dimming.
+ */
+function recordingContext() {
+  const puts: { width: number; height: number; x: number; y: number; data: Uint8ClampedArray }[] = [];
+  const fills: [number, number, number, number][] = [];
+  const ctx = {
+    fillStyle: "",
+    createImageData: (width: number, height: number) => ({ width, height, data: new Uint8ClampedArray(width * height * 4) }),
+    putImageData: (img: { width: number; height: number; data: Uint8ClampedArray }, x: number, y: number) =>
+      puts.push({ ...img, x, y }),
+    fillRect: (x: number, y: number, w: number, h: number) => fills.push([x, y, w, h]),
+    save: () => {},
+    restore: () => {},
+  };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, puts, fills };
+}
+
+test("a build without the stage does not open it, so the page can boot a default instead", async () => {
+  const session = new GameSession(() => null, new NullAudioSink());
+  session.onLog = () => {};
+  expect(await new LangChooser(session, ["en"]).open()).toBe(false);
+});
+
+test("drawing it dims exactly the buttons with no data behind them, over the whole flat", async () => {
+  const { chooser } = await openChooser(["en", "de"]);
+  const { ctx, puts, fills } = recordingContext();
+  chooser.render(ctx);
+  // the flat, at full screen size and at the origin, actually painted
+  expect(puts).toHaveLength(1);
+  expect(puts[0]).toMatchObject({ width: SCREEN_W, height: SCREEN_H, x: 0, y: 0 });
+  expect(puts[0].data.some((v, i) => i % 4 !== 3 && v !== 0)).toBe(true);
+  // one veil per missing language, on that button's own rectangle from the STG
+  const missing = chooser.buttons().filter((b) => !b.available);
+  expect(missing.map((b) => b.code).sort()).toEqual(
+    LANGUAGES.map((l) => l.code).filter((c) => c !== "en" && c !== "de").sort(),
+  );
+  expect(fills).toEqual(
+    missing.map(({ region: r }) => [r.left, r.top, r.right - r.left, r.bottom - r.top]),
+  );
+});
+
+test("with every language installed nothing is dimmed", async () => {
+  const { chooser } = await openChooser();
+  const { ctx, fills } = recordingContext();
+  chooser.render(ctx);
+  expect(fills).toEqual([]);
+});
+
 // --- picking without asking -------------------------------------------------
 
 test("an explicit choice beats a remembered one, which beats asking", () => {
@@ -187,6 +237,15 @@ test("the demo counts as chosen, though the chooser could never offer it", () =>
   expect(preselectedEdition({ available: ["demo"] })).toBe("demo");
   // what the chooser can draw is still the six, in the stage's order
   expect(chooserOrder(available)).toEqual(["en", "de"]);
+});
+
+test("an edition is named by its endonym, a cut by its name, and anything else by its code", () => {
+  // the play page's log and dev panel say "edition: Deutsch (gamefiles/de/)"
+  for (const l of LANGUAGES) expect(editionName(l.code.toUpperCase())).toBe(l.name);
+  for (const e of EXTRA_EDITIONS) expect(editionName(e.code)).toBe(e.name);
+  expect(EXTRA_EDITIONS.map((e) => e.code)).toContain("demo");
+  // an unknown tree is still nameable — as itself, unchanged
+  expect(editionName("Klingon")).toBe("Klingon");
 });
 
 test("the chooser offers the stage's order, not the manifest's", () => {
