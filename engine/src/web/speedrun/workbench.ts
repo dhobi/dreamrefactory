@@ -266,8 +266,13 @@ const showClock = (at: number): void => {
   clockEl.textContent = ms(at);
 };
 
+/** the page's hidden total at Play, so a finished run can say what of its
+ *  removal was the tab rather than the network (#375) */
+let hiddenAtPlay = 0;
+
 function startClock(): void {
   clockFrom = { ms: performance.now(), loading: loadClock.ms };
+  hiddenAtPlay = loadClock.hiddenMs;
   showClock(0);
   clockEl.classList.add("live");
   if (clockTick !== null) window.clearInterval(clockTick);
@@ -332,7 +337,8 @@ const LOAD_SHOWN_MS = 100;
  * that says so. It is also the number that says what to DO — a leg that removed
  * twenty seconds is a leg to warm the cache for rather than to tune. Absent
  * over a warm cache, which is what a tuning run should be
- * ({@link LOAD_SHOWN_MS}).
+ * ({@link LOAD_SHOWN_MS}). Time with the tab hidden is in it too (#375): the
+ * game was stopped for that as well, and the finished line names it apart.
  *
  * Headed, because none of it is self-evident: four bare numbers in a row is a
  * puzzle, and "28f" only says frames to somebody who already knows. English
@@ -816,8 +822,13 @@ async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
       // line somebody copies into an issue, and "12.4s" with no word about the
       // network is a number that cannot be compared with the one they ran
       // yesterday over a colder cache (#251).
+      // ...and the tab's share named apart from it (#375): `loading` holds both,
+      // and a run that was looked away from should say so, not just be shorter
+      const hidden = Math.min(result.total.loading, loadClock.hiddenMs - hiddenAtPlay);
+      const network = result.total.loading - hidden;
       const removed =
-        result.total.loading >= LOAD_SHOWN_MS ? `, ${ms(result.total.loading)} of loading removed` : "";
+        (network >= LOAD_SHOWN_MS ? `, ${ms(network)} of loading removed` : "") +
+        (hidden >= LOAD_SHOWN_MS ? `, ${ms(hidden)} with the tab hidden removed` : "");
       say(
         `finished — ${ms(result.total.ms)}, ${result.total.frames} engine frames${removed}`,
         "good",

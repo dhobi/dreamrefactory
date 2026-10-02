@@ -1,6 +1,8 @@
 /**
  * The load remover: how long the page has spent waiting on the network
- * ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
+ * ([#251](https://github.com/dhobi/dreamrefactory/issues/251)), and out of
+ * sight ([#375](https://github.com/dhobi/dreamrefactory/issues/375), see
+ * {@link LoadClock.hide}).
  *
  * A speedrun timer is supposed to measure a route, and a route run in a browser
  * spends part of its wall time downloading the game. That part is not the
@@ -232,12 +234,12 @@ export class LoadClock {
    * browser's own entry for it is as fresh as it will ever be. A fetch nobody
    * announced (an id this never saw) is ignored rather than guessed at.
    */
-  end(id: number): void {
+  end(id: number, verdict?: Served): void {
     const f = this.live.get(id);
     if (!f) return;
     this.live.delete(id);
     const at = this.ports.now();
-    const how = this.ports.served(f.url) ?? (at - f.from >= CACHE_GRACE_MS ? "network" : "cache");
+    const how = verdict ?? this.ports.served(f.url) ?? (at - f.from >= CACHE_GRACE_MS ? "network" : "cache");
     // ONLY `network`. A cache hit and a read off this machine are both what the
     // original did off its CD, and its clock counted them (#369).
     if (how === "network" && this.period) this.period.spans.push({ from: f.from, to: at });
@@ -269,7 +271,53 @@ export class LoadClock {
   get waiting(): boolean {
     return this.period !== null && this.ports.now() - this.period.from >= CACHE_GRACE_MS;
   }
+
+  /*
+   * The page hidden (#375): the other thing the game is stopped for that is no
+   * part of the route.
+   *
+   * A hidden tab gets no animation frames, so the game does not advance, and the
+   * audio is suspended with it (WebAudioSink.followPageLifecycle); come back and
+   * it carries on from the same frame. The wall clock does not stop, so a run
+   * with a tab switch in it was charged for every second spent elsewhere — ten,
+   * in the report, for one look at another tab on the way down to G deck.
+   *
+   * So a hidden page is one more wait in the same stopwatch, a span that always
+   * counts. Being the same stopwatch is the point: a download that goes on while
+   * the tab is hidden is one stretch of stopped game, and the period's union
+   * takes it out once rather than twice. Nothing can be gained by hiding the tab
+   * on purpose, because nothing moves while it is hidden.
+   */
+  private hiddenFrom: number | null = null;
+  private hiddenDone = 0;
+
+  /** the page went out of sight; a second call while hidden is nothing */
+  hide(): void {
+    if (this.hiddenFrom !== null) return;
+    this.hiddenFrom = this.ports.now();
+    this.begin(HIDDEN, "");
+  }
+
+  /** and came back */
+  show(): void {
+    if (this.hiddenFrom === null) return;
+    this.hiddenDone += this.ports.now() - this.hiddenFrom;
+    this.hiddenFrom = null;
+    this.end(HIDDEN, "network");
+  }
+
+  /**
+   * How long the page has been hidden in all, monotonic like {@link ms} — which
+   * already includes it. Kept apart only so a run can say how much of what it
+   * removed was the tab and how much the network.
+   */
+  get hiddenMs(): number {
+    return this.hiddenDone + (this.hiddenFrom === null ? 0 : this.ports.now() - this.hiddenFrom);
+  }
 }
+
+/** the id the hidden page waits under — the store's own ids count up from 0 */
+const HIDDEN = -1;
 
 /**
  * The page's one load clock.
@@ -303,8 +351,11 @@ export const loadClock = new LoadClock({
  * returns; a page that never stops can ignore it.
  */
 export function watchLoads(files: HostFiles, clock: LoadClock = loadClock): () => void {
-  if (!files.onWire) return () => {};
-  return files.onWire((e: WireEvent) => {
+  // the tab as well as the wire: a page that wants its loading removed wants
+  // the time it spent out of sight removed for the same reason (#375)
+  const unwatchPage = watchVisibility(clock);
+  if (!files.onWire) return unwatchPage;
+  const unwatchWire = files.onWire((e: WireEvent) => {
     // Only the fetches the game is STOPPED for. `provide`'s background fetches
     // are the engine having asked, been told "not yet", and carried on — the run
     // is progressing while they land, so removing them would credit a route for
@@ -313,6 +364,37 @@ export function watchLoads(files: HostFiles, clock: LoadClock = loadClock): () =
     if (e.done) clock.end(e.id);
     else clock.begin(e.id, e.url);
   });
+  return () => {
+    unwatchPage();
+    unwatchWire();
+  };
+}
+
+/**
+ * Tell a clock when the page is out of sight (#375).
+ *
+ * `visibilitychange` covers a tab switch and a minimised window; `pagehide` is
+ * what a phone sends when the page is frozen without ever being "hidden", the
+ * same pair the audio sink follows. Read once at the start too, since a page can
+ * be opened in a background tab. No `document` (node) is no page to watch.
+ */
+export function watchVisibility(
+  clock: LoadClock = loadClock,
+  doc: Pick<Document, "hidden" | "addEventListener" | "removeEventListener"> | undefined = globalThis.document,
+  win: Pick<Window, "addEventListener" | "removeEventListener"> | undefined = globalThis.window,
+): () => void {
+  if (!doc || !win) return () => {};
+  const sync = (): void => (doc.hidden ? clock.hide() : clock.show());
+  const hide = (): void => clock.hide();
+  doc.addEventListener("visibilitychange", sync);
+  win.addEventListener("pagehide", hide);
+  win.addEventListener("pageshow", sync);
+  sync();
+  return () => {
+    doc.removeEventListener("visibilitychange", sync);
+    win.removeEventListener("pagehide", hide);
+    win.removeEventListener("pageshow", sync);
+  };
 }
 
 /** a host that is this machine — see the `local` verdict */
