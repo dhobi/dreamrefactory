@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/redjack",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "RedJack: Revenge of the Brethren (1998) — CyberFlix's last game, on DreamFactory 5. The whole game plays on the shared engine, from the first day to the end, with saved games; its machine suites play all seven days headless.",
   "type": "module",

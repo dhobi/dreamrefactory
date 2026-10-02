@@ -68,6 +68,7 @@ import {
   type ActionTable,
 } from "./action";
 import { loadClock } from "../load-clock";
+import { replyIds } from "../puppet-view";
 import { formatBytes, formatEta, formatRate, warmCache, type WarmFile } from "../cache-warmup";
 import { attachEditor } from "./editor";
 import { attachRecorder } from "./recorder";
@@ -1871,6 +1872,8 @@ sheetEl.addEventListener("input", () => {
  * guarded against — it is simply not a thing a page does.
  */
 export function startWorkbench(open: Workbench): void {
+  // a sheet answers by id, so the workbench shows them (#377)
+  replyIds.shown = true;
   host = open;
   KEYS = saveKeys(open.game);
   PANEL = panelKeys(open.game);
