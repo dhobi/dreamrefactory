@@ -94,13 +94,13 @@ describe("RedJack's kind of save", () => {
     expect(REDJACK_SAVES.valid(new TextEncoder().encode("not a save at all"))).toBe(false);
   });
 
-  it.skipIf(!existsSync(SHIPPED))("takes every day save the port ships (needs the rip)", () => {
+  // the day saves are written by tools/mksaves.mts, not shipped in the rip: a
+  // rip with an empty save/ folder (the CI runner's) has nothing to check
+  const DAYS = [1, 2, 3, 4, 5, 6, 7].map((day) => `${SHIPPED}/day${day}.save`);
+  it.skipIf(!DAYS.every((f) => existsSync(f)))("takes every day save the port ships (needs tools/mksaves.mts's output)", () => {
     // what tools/mksaves.mts wrote: if the store refused one, the dialog would
     // silently list six days
-    for (let day = 1; day <= 7; day++) {
-      const bytes = new Uint8Array(readFileSync(`${SHIPPED}/day${day}.save`));
-      expect(REDJACK_SAVES.valid(bytes), `day${day}.save`).toBe(true);
-    }
+    for (const f of DAYS) expect(REDJACK_SAVES.valid(new Uint8Array(readFileSync(f))), f).toBe(true);
   });
 
   it("keeps the player's saves apart from the port's, and lists the player's first", () => {
