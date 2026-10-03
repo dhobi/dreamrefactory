@@ -1,0 +1,127 @@
+{
+  "notice": [
+    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank and clip names do.",
+    "Titanic: Adventure Out of Time voices these clips and never prints them. This is our best-effort transcript of the audio, made so that a player who cannot hear them can read them (#50).",
+    "Each 'text' was produced by speech recognition (Whisper large-v3-turbo, run locally on the English edition's sound banks) and then corrected by hand: names the recogniser cannot know (Zeitel, the Rubaiyat, Willie), and plain mishearings.",
+    "'heard' is what the recogniser wrote, kept wherever the text differs from it. 'guess': true marks a line whose wording is uncertain even after correction.",
+    "'who' names the speaker, shown before the words because captions can be up together (the radio and the landlady). The names were assigned from the lines' content and the clips' names; correct them by ear too.",
+    "'speakers' names who says the lines read from the game's own puppets (the ending, the films' voice-overs), by puppet file, or by puppet#line where one puppet holds several voices. Assigned by us, not the game.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop as the engine assembles it: the bedsit radio's first station reads the news.",
+    "'listened': true marks a line someone has checked by ear. Where it is missing, the line is only as good as the recogniser and the context.",
+    "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
+  ],
+  "edition": "en",
+  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), English; German for the fencing master, who speaks German in the English edition",
+  "speakers": {
+    "narrate.pup": "Carlson",
+    "narrate.pup#01": "Boss",
+    "narrate.pup#02": "Boss",
+    "narrate.pup#03": "Boss",
+    "narrate.pup#04 e": "Boss",
+    "narrate.pup#05 e": "Boss",
+    "narrate.pup#06": "Boss",
+    "narrate.pup#07": "Boss",
+    "narrate.pup#pt.01": "Narrator",
+    "narrate.pup#pt.02": "Narrator",
+    "narrate.pup#pt.03": "Narrator",
+    "narrate.pup#pt.04": "Narrator",
+    "narrate.pup#pt.05": "Narrator",
+    "narrate.pup#pt.06": "Narrator",
+    "narrate.pup#pt.07": "Narrator",
+    "penny1.pup": "Penny",
+    "penny2.pup": "Penny",
+    "smeth1.pup": "Smeth",
+    "cash1.pup": "Cash",
+    "burns1.pup": "Burns",
+    "morrow1.pup": "Morrow",
+    "morrow2.pup": "Morrow",
+    "stok1.pup": "Stoker",
+    "trask1.pup": "Trask",
+    "wilzeit1.pup": "Willie",
+    "shay1.pup": "Shailagh",
+    "csea1.pup": "Seaman",
+    "bsea2.pup": "Seaman",
+    "blkjack2.pup": "Dealer"
+  },
+  "banks": {
+    "zgossip1.sfx": {
+      "z3.01": { "text": "We have a problem, Zeitel.", "who": "Sasha", "heard": "We have a problem, Zidal.", "listened": true },
+      "z3.02": { "text": "Which is?", "who": "Zeitel", "heard": "which is", "listened": true },
+      "z3.03": { "text": "The Rubaiyat. It was not at your drop point.", "who": "Sasha", "heard": "The ruby aunt, it was not at your drop point.", "listened": true },
+      "z3.04": { "text": "You are sure?", "who": "Zeitel", "listened": true },
+      "z3.05": { "text": "Most definitely.", "who": "Sasha", "listened": true },
+      "z3.06": { "text": "But I put it there myself. What happened?", "who": "Zeitel", "heard": "But I put it there myself, of what happened.", "listened": true },
+      "z3.07": { "text": "There's a third party on board. An agent working against you. Against us.", "who": "Sasha", "listened": true },
+      "z3.08": { "text": "How do you know?", "who": "Zeitel", "listened": true },
+      "z3.09": { "text": "My servant saw them at the drop.", "who": "Sasha", "listened": true },
+      "z3.10": { "text": "They now have the Rubaiyat.", "who": "Sasha", "heard": "They now have the ruby art.", "listened": true },
+      "z3.11": { "text": "This could ruin me, Zeitel, if I were found out.", "who": "Sasha", "heard": "This could ruin me, Seidel, if I were found out.", "listened": true }
+    },
+    "zgossip2.sfx": {
+      "z2.01": { "text": "The drop. It worked as you said. I have it. The Rubaiyat's mine.", "who": "Sasha", "heard": "The drop. It worked as you said. I have it. The Rubiot's mine.", "listened": true },
+      "z2.02": { "text": "I hope you appreciate it.", "who": "Zeitel", "listened": true },
+      "z2.03": { "text": "More so the profit it brings.", "who": "Sasha", "heard": "more so the profit it brings.", "listened": true },
+      "z2.04": { "text": "What will you do with it?", "who": "Zeitel", "listened": true },
+      "z2.05": { "text": "There's an American tycoon who collects rare manuscripts. He'll pay a fortune and ask no questions.", "who": "Sasha", "listened": true },
+      "z2.06": { "text": "But there's just one problem, Colonel.", "who": "Sasha", "listened": true },
+      "z2.07": { "text": "Which is?", "who": "Zeitel", "heard": "which is", "listened": true },
+      "z2.08": { "text": "There's a third party on board. An agent working against you. Against us.", "who": "Sasha", "listened": true },
+      "z2.09": { "text": "How do you know?", "who": "Zeitel", "listened": true },
+      "z2.10": { "text": "My servant who retrieved the Rubaiyat encountered them.", "who": "Sasha", "heard": "My servant who retrieved the rubyat encountered them.", "listened": true }
+    },
+    "zgossip3.sfx": {
+      "z1.01": { "text": "We should take precautions.", "who": "Zeitel", "listened": true },
+      "z1.02": { "text": "What about the painting? Did your associate bring it up from the cargo hold?", "who": "Sasha", "listened": true },
+      "z1.03": { "text": "No, I don't have it.", "who": "Zeitel", "listened": true },
+      "z1.04": { "text": "No? But I put it there myself.", "who": "Sasha", "listened": true },
+      "z1.05": { "text": "Sasha, I've discovered a traitor. Don't look so startled. It is not you.", "who": "Zeitel", "listened": true },
+      "z1.06": { "text": "You mean Haderlitz, your associate?", "who": "Sasha", "listened": true },
+      "z1.07": { "text": "No longer my associate, I am afraid.", "who": "Zeitel", "listened": true },
+      "z1.09": { "text": "They leave us an intellectual, and intellectuals aren't smart enough for espionage.", "who": "Zeitel", "listened": true },
+      "z1.10": { "text": "Now, I must recover the painting, and its plans. I fear this third party may already have possession of it.", "who": "Zeitel", "listened": true },
+      "z1.11": { "text": "And Haderlitz?", "who": "Sasha", "heard": "And hey, let's...", "listened": true },
+      "z1.12": { "text": "Thank you for asking. Willie will bring no further harm to the Fatherland, I assure you.", "who": "Zeitel", "heard": "Thank you for asking, Billy will bring no further harm to the fatherland, I assure you.", "listened": true },
+      "z1.13": { "text": "Let us plan.", "who": "Zeitel", "listened": true }
+    },
+    "bedsit1.trk": {
+      "door1": { "text": "Sneaking out, are ya? I want my money!", "who": "Landlady", "listened": true },
+      "door2": { "text": "They said you was important once. Not now. You're just old, old and broke.", "who": "Landlady", "listened": true },
+      "door3": { "text": "When do I get my money? When?", "who": "Landlady", "listened": true },
+      "lady2": { "text": "About time, you're awake. You're two weeks late with the rent.", "who": "Landlady", "heard": "Mom, you're awake. You're two weeks late with the rent.", "listened": true },
+      "lady3": { "text": "War or no war, a tenant in arrears is not a tenant I'll put up with.", "who": "Landlady", "heard": "War or no war, a tenant in a raise is not a tenant I'll put up with.", "listened": true },
+      "lady4": { "text": "You don't pay bar today, it's the street I promise.", "who": "Landlady", "listened": true }
+    },
+    "unilib.trk": {
+      "conk.come": { "text": "Come in.", "who": "Conk", "listened": true },
+      "ga.enter": { "text": "Enter.", "who": "Georgia", "listened": true },
+      "max.cmere": { "text": "Come here.", "who": "Max", "listened": true },
+      "sasha.away": { "text": "Good night.", "who": "Sasha", "listened": true },
+      "shay.jack": { "text": "Jack, is that you? I'll be right out.", "who": "Shailagh", "listened": true }
+    },
+    "fence.trk": {
+      "en guard": { "text": "En garde!", "who": "Fencing master", "heard": "On garde.", "listened": true },
+      "prez": { "text": "Prêts?", "who": "Fencing master", "heard": "Right.", "listened": true },
+      "allez": { "text": "Allez!", "who": "Fencing master", "heard": "Allé!", "listened": true },
+      "allons y": { "text": "Allons-y.", "who": "Fencing master", "listened": true },
+      "et la": { "text": "Et là!", "who": "Fencing master", "heard": "Ella.", "guess": true, "listened": true },
+      "touche": { "text": "Touché.", "who": "Fencing master", "listened": true },
+      "sehr gut": { "text": "Sehr gut!", "who": "Fencing master", "heard": "Very good!", "listened": true },
+      "mist": { "text": "Mist!", "who": "Fencing master", "heard": "Mist.", "listened": true },
+      "verdammt": { "text": "Ach, verdammt!", "who": "Fencing master", "heard": "Ah, verdammt!", "listened": true },
+      "ach": { "text": "Ach!", "who": "Fencing master", "heard": "Ah!", "listened": true }
+    }
+  },
+  "tracks": {
+    "bedrad1.trk": [
+      { "from": 1.7, "to": 4.3, "text": "Once again today's top stories.", "who": "Radio" },
+      { "from": 5, "to": 8, "text": "London has endured another night of German bombing.", "who": "Radio" },
+      { "from": 8.8, "to": 11.7, "text": "Most damage was concentrated in the East End.", "who": "Radio" },
+      { "from": 12.7, "to": 17.6, "text": "The RAF has struck enemy aerodromes in Le Havre and the Low Countries.", "who": "Radio", "heard": "The RAF has struck enemy aerodromes in La Havre and the Low Countries." },
+      { "from": 18.6, "to": 23.1, "text": "In Russia, further German losses are reported around Leningrad.", "who": "Radio" },
+      { "from": 24, "to": 28.3, "text": "In Asia, the American fortress at Corregidor is still defiant,", "who": "Radio" },
+      { "from": 28.3, "to": 32.9, "text": "but Japanese forces are reported nearing the Burmese oil fields.", "who": "Radio" },
+      { "from": 33.8, "to": 35.5, "text": "And that concludes the news summary.", "who": "Radio" },
+      { "from": 36.3, "to": 38.4, "text": "We now return you to our music program.", "who": "Radio" }
+    ]
+  }
+}

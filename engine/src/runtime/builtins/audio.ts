@@ -24,6 +24,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
       return;
     }
     voice = { name: toStr(name).toLowerCase(), handle: session.audio.play(channel, audio, { overlap }) };
+    // the clip's words, if the game has them (#50; GameSession.captionSources)
+    session.captionClip(voice.name, voice.handle);
   };
   /**
    * `currentvoice()`: the voice line playing, or `"none"` when idle.
@@ -62,6 +64,7 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   r("halttheme", () => {
     session.audio.halt("theme");
     session.currentThemeName = "none";
+    session.themeStarted(null);
   });
   // sounddone/voicedone: scripts spin `while not voicedone() endwhile` to wait
   // for a line/SFX to finish (TAOOT's Enigma power switch, many puppet beats). That
@@ -125,6 +128,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
     }
     session.audio.play("theme", theme, { loop: true });
     session.currentThemeName = n === undefined ? "none" : toStr(n);
+    // a theme with timed words — TAOOT's radio news (#50; GameSession.themeCaptionSources)
+    session.themeStarted(n === undefined ? null : session.audioLib.bankOf(toStr(n)), theme.samples.length / theme.sampleRate);
     applyThemeVolume(n === undefined ? "" : toStr(n));
   });
   // playnewtheme(name): swap the looping theme to a specific track/bank. Puzzle

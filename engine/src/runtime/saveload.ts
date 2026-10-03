@@ -914,6 +914,7 @@ export function restoreProps(session: GameSession, inventory: SavedProp[]): void
 async function restoreTheme(session: GameSession, save: SaveGame): Promise<void> {
   session.audio.halt("theme");
   session.currentThemeName = "none";
+  session.themeStarted(null);
   for (const bank of save.trackFiles) await session.openTrackFile(bank);
   const t = save.theme;
   if (!t) return;
@@ -925,6 +926,7 @@ async function restoreTheme(session: GameSession, save: SaveGame): Promise<void>
   }
   session.audio.play("theme", theme, { loop: true });
   session.currentThemeName = t.track;
+  session.themeStarted(session.audioLib.bankOf(t.track), theme.samples.length / theme.sampleRate);
   session.setThemeVolume(toNum(session.interp.globals.get("themevolume") ?? 255));
   if (t.extras > 0) {
     session.onLog(`loadgame: ${t.extras} additional saved sound loop(s) not restored (re-armed by the room)`);

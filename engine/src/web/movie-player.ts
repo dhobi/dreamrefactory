@@ -204,6 +204,12 @@ export class MoviePlayer {
     return m ? Math.min(m.pos, m.frames.length - 1) : -1;
   }
 
+  /** how far through the active clip playback is, 0..1, or -1 when none is playing */
+  get progress(): number {
+    const m = this.active;
+    return m && m.frames.length ? Math.min(m.pos, m.frames.length - 1) / m.frames.length : -1;
+  }
+
   /** the frame to paint right now (with the movie's own palette and where on
    *  the screen the segment says it sits — see MovSegment.originX), or null */
   get frame():
@@ -244,6 +250,8 @@ export class MoviePlayer {
   private played = new Set<string>();
 
   async play(fileName: string, startFrame = 0): Promise<void> {
+    // the puppets whose lines the film voices, read before its first frame (#50)
+    this.session.prepareMovieCaptions(fileName);
     const chained = this.resolveWhenDone !== null;
     // fresh top-level play: reset the action-frame set the script will query
     if (!chained) this.session.movieActions.clear();
@@ -653,6 +661,8 @@ export class MoviePlayer {
     this.eventSounds = this.eventSounds.filter((h) => !h.done);
     const handle = this.session.audio.play("sound", snd);
     this.eventSounds.push(handle);
+    // a sound named by a puppet line's ident is that line, voiced (#50)
+    this.session.captionMovieSound(m.fileName, name, handle);
     // ...and the sound may carry the picture on when it ends
     // (MovSegment.soundFollows). Armed here and cleared by any sound that names
     // no frame, exactly as the original stores the lookup unconditionally: that

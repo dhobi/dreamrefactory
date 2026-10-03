@@ -137,6 +137,18 @@ export interface StarRoute {
   points: StarPathPoint[];
 }
 
+/** one caption: what is said, and by whom when that is known (#50) */
+export interface CaptionLine {
+  who?: string;
+  text: string;
+}
+
+/** a caption for a stretch of a looping theme, in seconds from the loop's start */
+export interface TimedCaption extends CaptionLine {
+  from: number;
+  to: number;
+}
+
 export class GameSession {
   readonly interp = new Interpreter();
   readonly audioLib = new AudioLibrary();
@@ -770,6 +782,15 @@ export class GameSession {
     readonly audio: AudioSink,
   ) {
     registerGameBuiltins(this); // core + game families, see builtins/index.ts
+    // a transcript's words arrive with their bank, however it was opened (#50)
+    this.audioLib.onBankOpened = (bank, sounds) => {
+      const source = this.captionSources.get(bank);
+      if (!source || !("words" in source)) return;
+      for (const clip of sounds) {
+        const line = source.words[clip];
+        if (line?.text) this.soundWords.set(clip, line);
+      }
+    };
     this.interp.realYieldSeq = () => this.realYieldSeq;
     // a watched global reads on the pane like the scripts' own message() lines
     this.interp.onGlobalChange = (name, from, to) =>
@@ -1919,6 +1940,8 @@ export class GameSession {
     this.scheduler.reset();
     for (const channel of ["sound", "voice", "theme"] as const) this.audio.halt(channel);
     this.currentThemeName = "none";
+    this.themeStarted(null);
+    this.captions = [];
     this.puppetCtrl.closePuppetFile();
     this.fade.queue.length = 0;
     this.fade.snapshot = null;
@@ -2105,6 +2128,185 @@ export class GameSession {
   /** subtitles-enabled (puppetparam slot 7); the viewer gates subtitle text on it */
   subtitlesOn(): boolean {
     return (this.puppetParams.get(7) ?? 1) !== 0;
+  }
+  /**
+   * Subtitle the lines the original only lets you hear, too (#50; see
+   * {@link import("./puppet").heardSubtitle}). The port's own setting, not a
+   * puppetparam: a save does not carry it, and the subtitles switch above still
+   * turns every line off.
+   */
+  everyLineSubtitled = false;
+  /**
+   * Sound bank → where the words of its clips are (#50). A game's own
+   * knowledge, set by its page, in one of two forms:
+   *
+   *  - `puppet`: a puppet file whose lines are the clips' words, line ident =
+   *    clip name unless `line` says otherwise. TAOOT's ending plays
+   *    `voicesound("n.05")` out of NARREND.SFX, and NARRATE.PUP — a puppet no
+   *    script ever opens — holds `n.05` as text. Read when the bank is opened
+   *    by `opentrackfile` ({@link openTrackFile}), before the first clip.
+   *  - `words`: the clips' words outright — a transcript the game does not
+   *    ship (TAOOT: taoot/src/captions/*.json, which says so at length).
+   *    Taken whichever way the bank is opened ({@link AudioLibrary.onBankOpened}).
+   *
+   * `who` names the speaker, because captions can be up at the same time —
+   * the London flat's radio reads the news while the landlady shouts through
+   * the door — and two lines with no names on them read as one conversation.
+   * See {@link captionLines} for what is done with them.
+   */
+  readonly captionSources = new Map<
+    string,
+    { puppet: string; line?: (clip: string) => string; who?: string } | { words: Readonly<Record<string, CaptionLine>> }
+  >();
+  /**
+   * Sound bank → timed lines for its THEME, the looping track (#50): TAOOT's
+   * bedsit radio reads the news on the first station, and that bulletin is the
+   * track, not a clip. Seconds from the start of the loop, as the track is
+   * assembled ({@link AudioLibrary.theme}); see {@link themeStarted}.
+   */
+  readonly themeCaptionSources = new Map<string, readonly TimedCaption[]>();
+  /** the theme playing, if its bank has timed lines: where it started, and how long a loop is */
+  private themeNow: { bank: string; lines: readonly TimedCaption[]; at: number; seconds: number } | null = null;
+  /**
+   * A theme has started (`bank` = the FILE it is from, which for TAOOT's radio
+   * is not the track's own name — all three stations call themselves
+   * "bedrad1.trk") or stopped (`null`). Every place a theme starts calls it —
+   * the `playtheme` opcode, a room's own music, each loader's restore — and
+   * {@link captionLines} checks besides that the track playing is still this
+   * bank's, so a start that forgot to say would leave no caption rather than
+   * a wrong one (#50: the London radio's news, read out over the gymnasium).
+   */
+  themeStarted(bank: string | null, seconds = 0): void {
+    const key = bank?.toLowerCase();
+    const lines = key ? this.themeCaptionSources.get(key) : undefined;
+    this.themeNow = key && lines && seconds > 0 ? { bank: key, lines, at: this.clock.now, seconds } : null;
+  }
+  /**
+   * Movie → the puppet lines its voice-over was recorded from (#50). TAOOT's
+   * `cash.mov` speaks CASH1.PUP's starred `*CONK.MOV: (VO)` lines word for
+   * word, and nothing prints them. A game's own knowledge, set by its page.
+   * The lines are read the first time the movie plays ({@link movieCaption}).
+   */
+  readonly movieCaptionSources = new Map<string, { puppet: string; lines: string[]; who?: string }>();
+  /** movie → its lines' words, once read; null while being read */
+  private readonly movieWords = new Map<string, string[] | null>();
+  /**
+   * The caption for a movie at a point in it (0..1), or null. A movie carries
+   * no timing for its words, so each line is given a share of the movie by its
+   * length: near enough for a few short lines of one speaker, and the reason
+   * this is only used where a movie IS a few short lines.
+   */
+  movieCaption(movie: string, progress: number): CaptionLine | null {
+    if (!this.everyLineSubtitled || !this.subtitlesOn() || progress < 0) return null;
+    const key = movie.toLowerCase();
+    const source = this.movieCaptionSources.get(key);
+    if (!source) return null;
+    const lines = this.movieWords.get(key);
+    if (lines === undefined) {
+      this.movieWords.set(key, null);
+      void this.puppetCtrl.spokenWords(source.puppet).then((words) => {
+        this.movieWords.set(key, source.lines.map((l) => words.get(l.toLowerCase()) ?? "").filter(Boolean));
+      });
+      return null;
+    }
+    if (!lines?.length) return null;
+    const total = lines.reduce((a, l) => a + l.length, 0);
+    let at = progress * total;
+    for (const line of lines) {
+      if (at < line.length) return { who: source.who, text: line };
+      at -= line.length;
+    }
+    return { who: source.who, text: lines[lines.length - 1] };
+  }
+  /**
+   * Film → { its frame sound → the puppet whose line that sound is } (#50).
+   * TAOOT's films play voice lines out of their own sound tables, named by the
+   * line's ident — `zeit.mov` plays Penny's `penny1.132` over the photograph —
+   * and the words are that puppet line's. A game's own index, set by its page.
+   */
+  readonly movieSoundSources = new Map<string, Readonly<Record<string, string>>>();
+  /** who a puppet line is said by, for its caption — the game's own answer, if it has one */
+  speakerOf: (puppet: string, line: string) => string | undefined = () => undefined;
+  /** each puppet's lines as caption words, read once ({@link import("./puppet").PuppetController.spokenWords}) */
+  private readonly puppetWords = new Map<string, Map<string, string> | Promise<Map<string, string>>>();
+  private wordsOf(puppet: string): Map<string, string> | null {
+    const got = this.puppetWords.get(puppet);
+    if (got instanceof Map) return got;
+    if (!got) {
+      this.puppetWords.set(
+        puppet,
+        this.puppetCtrl.spokenWords(puppet).then((words) => {
+          this.puppetWords.set(puppet, words);
+          return words;
+        }),
+      );
+    }
+    return null;
+  }
+  /**
+   * A film is starting: read the puppets its sounds are lines of, so the
+   * first line is captioned the moment it plays. Only with the setting on —
+   * TAOOT's NARRATE.PUP is 8 MB, and the game's first film (`bedcards.mov`,
+   * the boss) is one of its users.
+   */
+  prepareMovieCaptions(movie: string): void {
+    if (!this.everyLineSubtitled) return;
+    for (const puppet of new Set(Object.values(this.movieSoundSources.get(movie.toLowerCase()) ?? {}))) this.wordsOf(puppet);
+  }
+  /** a film has played one of its sounds: caption it if it is a puppet line */
+  captionMovieSound(movie: string, sound: string, handle: { done: boolean }): void {
+    if (!this.everyLineSubtitled) return;
+    const line = sound.toLowerCase();
+    const puppet = this.movieSoundSources.get(movie.toLowerCase())?.[line];
+    if (!puppet) return;
+    const show = (words: Map<string, string>): void => {
+      const text = words.get(line);
+      if (!text || handle.done) return;
+      this.captions = this.captions.filter((c) => !c.handle.done);
+      this.captions.push({ who: this.speakerOf(puppet, line), text, handle });
+    };
+    const ready = this.wordsOf(puppet);
+    if (ready) show(ready);
+    else void (this.puppetWords.get(puppet) as Promise<Map<string, string>>).then(show);
+  }
+  /** clip name → its words and speaker, from {@link captionSources} */
+  readonly soundWords = new Map<string, CaptionLine>();
+  /**
+   * The clips playing that have words, while they play: added by
+   * {@link captionClip}, each over when its handle is done — the clip's end,
+   * `haltvoice`/`haltsound`, or the next clip on its channel.
+   */
+  captions: (CaptionLine & { handle: { done: boolean } })[] = [];
+  /**
+   * A clip has started: caption it if it has words (#50). Called from every
+   * place a clip can start — `voicesound`, the sound channel, and a cricket,
+   * which is how TAOOT's London landlady shouts through the door. Answers
+   * whether it had any.
+   */
+  captionClip(name: string, handle: { done: boolean }): boolean {
+    const line = this.soundWords.get(name.toLowerCase());
+    this.captions = this.captions.filter((c) => !c.handle.done && c.handle !== handle);
+    if (line) this.captions.push({ ...line, handle });
+    return !!line;
+  }
+  /**
+   * What the screen should caption right now (#50), top to bottom: the theme's
+   * line, then the clips in the order they started. Only with
+   * {@link everyLineSubtitled}, and the game's own subtitles switch still wins.
+   * (A playing movie's line is added by the screen, which knows where the film
+   * is — {@link movieCaption}.)
+   */
+  captionLines(): CaptionLine[] {
+    if (!this.everyLineSubtitled || !this.subtitlesOn()) return [];
+    const out: CaptionLine[] = [];
+    const t = this.themeNow;
+    if (t && this.audioLib.bankOf(this.currentThemeName) === t.bank) {
+      const sec = ((this.clock.now - t.at) / 1000) % t.seconds;
+      const line = t.lines.find((l) => sec >= l.from && sec < l.to);
+      if (line) out.push({ who: line.who, text: line.text });
+    }
+    for (const c of this.captions) if (!c.handle.done) out.push({ who: c.who, text: c.text });
+    return out;
   }
   /**
    * wave (sampled-audio) master volume, 0..9 — the CTL.STG settings dial reads
@@ -2850,7 +3052,16 @@ export class GameSession {
       this.onLog(`opentrackfile: "${fileName}" not available`);
       return false;
     }
-    return this.audioLib.openBank(key, data);
+    const opened = this.audioLib.openBank(key, data);
+    const source = this.captionSources.get(key);
+    if (opened && source && "puppet" in source) {
+      const lines = await this.puppetCtrl.spokenWords(source.puppet);
+      for (const clip of this.audioLib.soundNames(key)) {
+        const text = lines.get((source.line?.(clip) ?? clip).toLowerCase());
+        if (text) this.soundWords.set(clip, { who: source.who, text });
+      }
+    }
+    return opened;
   }
 
   /** prop-group script instances of loaded shops, by lowercase prop name */

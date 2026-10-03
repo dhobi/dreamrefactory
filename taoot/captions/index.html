@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Caption editor - Titanic - Adventure Out Of Time RE</title>
+    <!-- a helper for contributors, reached from issue #50 and the docs, not a page to search for -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="site-root" content="../" />
+    <link rel="icon" type="image/png" href="/taoot-mark.png" />
+    <link rel="stylesheet" href="/src/theme.css" />
+    <style>
+      main {
+        max-width: 72rem;
+        margin: 0 auto;
+        padding: 1.2rem var(--pad, 1rem) 4rem;
+      }
+      .warn {
+        border: 1px solid var(--alarm);
+        border-radius: var(--radius, 4px);
+        padding: 0.6rem 0.8rem;
+        margin: 0.8rem 0;
+        font-size: 0.9rem;
+      }
+      .warn b {
+        color: var(--alarm);
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin: 0.6rem 0;
+      }
+      #status,
+      #count,
+      #fileNote {
+        color: var(--text-dim);
+        font-size: 0.85rem;
+      }
+      #status {
+        position: sticky;
+        top: 0;
+        background: var(--bg);
+        padding: 0.3rem 0;
+        z-index: 1;
+      }
+      h2 {
+        font-family: var(--font-mono);
+        font-size: 0.95rem;
+        margin: 1.4rem 0 0.4rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.2rem;
+      }
+      .clip {
+        display: grid;
+        grid-template-columns: auto 7rem 1fr 8rem auto auto;
+        gap: 0.2rem 0.5rem;
+        align-items: center;
+        padding: 0.25rem 0.3rem;
+        border-radius: var(--radius, 4px);
+      }
+      .clip.here {
+        background: var(--panel);
+      }
+      .clip .name {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .clip input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        padding: 0.25rem 0.4rem;
+        background: var(--inset, transparent);
+        color: var(--text);
+        border: 1px solid var(--border-strong);
+        border-radius: 3px;
+      }
+      .clip label {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .clip .notes {
+        grid-column: 3 / -1;
+        display: flex;
+        flex-direction: column;
+        font-size: 0.78rem;
+        color: var(--text-dim);
+      }
+      .clip .notes b {
+        font-weight: 600;
+      }
+      .clip input.who {
+        font-size: 0.85rem;
+      }
+      @media (max-width: 40rem) {
+        .clip {
+          grid-template-columns: auto 1fr;
+        }
+        .clip input.words,
+        .clip .notes {
+          grid-column: 1 / -1;
+        }
+      }
+    </style>
+  </head>
+  <body class="deep">
+    <header class="topbar">
+      <a class="brand" href="../" title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original 1996 release">
+        <img class="brand-mark" src="/taoot-mark.png" alt="" width="30" height="30" />
+        <span class="brand-text">
+          <b>Titanic</b>
+          <span>Adventure Out Of Time RE</span>
+        </span>
+      </a>
+      <nav class="topnav">
+        <a href="../play/" class="playway">Play</a>
+        <a href="../collection/">Collection</a>
+        <a href="../../">dreamREfactory</a>
+        <a href="https://github.com/dhobi/dreamrefactory/issues/50">Issue #50</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Caption editor</h1>
+      <p>
+        Titanic speaks some lines it never prints: the radio news and the landlady at the London flat,
+        the Sasha and Zeitel gossip on the boat deck, the voices behind cabin doors, the fencing master. The port can
+        caption them for players who cannot hear them, but only from a transcript. Here you can listen
+        to each clip in your language and write down what is really said.
+      </p>
+      <div class="warn">
+        <b>Not original data.</b> These captions do not come from the game's files. They are a
+        best-effort transcript: a speech recogniser's first draft, corrected by hand. Please write what
+        you hear, not a better line, and who says it. Tick <i>guess</i> where you are unsure and
+        <i>listened</i> once you have checked a line by ear.
+      </div>
+      <div class="bar"><span>Edition:</span><span id="editionPicker"></span></div>
+      <div id="fileNote"></div>
+      <div class="bar">
+        <button type="button" id="send" title="Open a new GitHub issue with the lines you changed, ready to submit">Send to GitHub</button>
+        <button type="button" id="save" title="Download the file in the repository's layout">Save .json</button>
+        <button type="button" id="copy">Copy to clipboard</button>
+        <button type="button" id="reset" title="Throw away this browser's edits for this edition">Reset</button>
+        <span id="count"></span>
+      </div>
+      <p id="fileHelp" style="font-size: 0.85rem; color: var(--text-dim)">
+        Your edits stay in this browser until you send or save them. <i>Send to GitHub</i> opens a new
+        issue with the lines you changed, for you to submit (a GitHub account is needed). Or save the
+        file and put it in <code>taoot/src/captions/</code> in a pull request. Keys: <kbd>Enter</kbd> next clip and play it,
+        <kbd>Shift</kbd>+<kbd>Enter</kbd> previous, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> play again.
+      </p>
+      <div id="status"></div>
+      <div id="clips"></div>
+    </main>
+    <script type="module" src="/src/captions-editor.ts"></script>
+  </body>
+</html>

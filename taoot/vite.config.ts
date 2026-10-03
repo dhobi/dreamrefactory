@@ -158,6 +158,9 @@ export default defineConfig({
         // The collection page: the physical release's box and CD artwork, and
         // the offline DBGL downloads that sit beside the rip on the host.
         collection: join(HERE, "collection/index.html"),
+        // The caption editor (#50): listen to the voice clips the game never
+        // prints and correct their transcript, taoot/src/captions/*.json.
+        captions: join(HERE, "captions/index.html"),
         // The bedsit as a solid, walked in the browser — the room BEDSIT1.SET
         // never had, worked out of the depth images it ships for occluding
         // actors. Unlisted like the workbench, and carrying no game data at all:

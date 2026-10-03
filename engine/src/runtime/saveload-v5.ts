@@ -316,6 +316,7 @@ export async function loadGameV5(session: GameSession, bytes: Uint8Array, versio
   if (theme) {
     session.audio.play("theme", theme, { loop: true });
     session.currentThemeName = track;
+    session.themeStarted(session.audioLib.bankOf(track), theme.samples.length / theme.sampleRate);
     const asked = session.volumeForTrack(track);
     session.setThemeVolume(asked ?? toNum(session.interp.globals.get("themevolume") ?? 255), track);
   }

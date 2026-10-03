@@ -252,6 +252,21 @@
           >
         </div>
 
+        <!-- Ours, not the original's (#50): the lines TI.EXE voices and never
+             prints — a studio note's words, a sound written in capitals —
+             subtitled too, for a player who cannot hear them
+             (engine/src/runtime/puppet.ts heardSubtitle). The game's own
+             subtitles switch still turns every line off. -->
+        <div class="bar">
+          <span class="seclabel" data-i18n="play.subtitlesLabel">Subtitles</span>
+          <label
+            title="Also subtitle what the original only lets you hear: what Penny says over her cut-aways, and sounds such as breaking glass"
+            data-i18n-attr="title:play.everyLineTitle"
+            ><input type="checkbox" id="everyLineBox" />
+            <span data-i18n="play.everyLine">every line that is heard</span></label
+          >
+        </div>
+
         <div class="bar">
           <span class="keys" data-i18n-html="play.keys">
             <b>←</b> <b>→</b> turn &nbsp;·&nbsp; <b>↑</b> walk &nbsp;·&nbsp;
