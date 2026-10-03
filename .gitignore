@@ -38,3 +38,6 @@ tsconfig.tsbuildinfo
 
 # `npm run coverage` (tools/coverage.mts): the raw data, the reports and the badge files
 /coverage
+
+# editor settings are each contributor's own
+/.vscode/

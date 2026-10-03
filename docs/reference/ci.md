@@ -67,7 +67,7 @@ skipped.
 | [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + every package's playthrough) self-hosted, and in it Skull Cracker's, Timelapse's, RedJack's, Lunicus's and Jump Raven's machine suites — each game stood up headless on its rip ([Skull Cracker's](../skullcracker/verification.md), [Timelapse's](../timelapse/README.md#machine-suites), [RedJack's](../redjack/README.md#machine-suites), [Lunicus's](../lunicus/README.md#machine-suites), [Jump Raven's](../jumpraven/README.md#machine-suites)). The `full` job's NAME is a required status check — renaming it blocks every PR |
 | [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly from 02:17 Swiss time, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
-| [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage). Not a check: it gates nothing |
+| [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage) — then the [SonarQube Cloud](#sonarqube-cloud) analysis. Not a check: it gates nothing |
 | [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*` or `lunicus-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
@@ -107,6 +107,28 @@ turn over, and are at most a day behind master. A run with a failing suite
 publishes nothing, and it runs everything rather than the games a change
 reaches, so a badge is always a whole run's. `gh workflow run coverage.yml`
 runs it now.
+
+## SonarQube Cloud
+
+[SonarQube Cloud](https://sonarcloud.io/project/overview?id=dhobi_dreamrefactory)
+analyses master as the last step of that same nightly run, and reads the LCOV
+report the run has just written (`coverage/vitest/lcov.info`), so coverage is
+measured once and Sonar's figure is the badges' figure.
+[`sonar-project.properties`](https://github.com/dhobi/dreamrefactory/blob/master/sonar-project.properties)
+says what it looks at: the code that ships, not the suites, the hand-run tools
+or generated tables. It also leaves out of the coverage figure what the coverage
+run does not measure (the browser shell, the site, the bedsit), which it would
+otherwise count as untested.
+
+It needs two things set outside the repository: a `SONAR_TOKEN` secret (a token
+from the project's Administration → Analysis Method page), and Automatic
+Analysis switched off on that page, since Sonar refuses a CI scan while it is
+on. A pull request from this repository gets the scan alone, as `tests.yml`'s
+`sonar` job, without coverage: measuring it there would mean the whole
+coverage run per change. The job leaves every file out of coverage
+(`sonar.coverage.exclusions=**/*`), so the gate's coverage condition has no lines
+to judge; without that, Sonar counts a file with no report as 0% covered. A fork's pull
+request is not scanned, since it cannot read the token.
 
 ## Setting the runner up
 

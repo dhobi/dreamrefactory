@@ -36,6 +36,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, dreamrefactory-gamefiles]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # blame for every line, which is how SonarQube Cloud tells new code
+          # from old (the last step)
+          fetch-depth: 0
 
       - name: Link the rips into the workspace
         run: tools/runner/link-rips.sh
@@ -60,3 +64,12 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "Coverage badges for ${GITHUB_SHA::7}"
           git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
+
+      # SonarQube Cloud's analysis of master, with the LCOV report the run
+      # above just wrote (sonar-project.properties says where): coverage is
+      # measured once, here, and Sonar shows the same numbers as the badges. Last,
+      # so a Sonar outage never holds the badges back.
+      - name: SonarQube Cloud
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
