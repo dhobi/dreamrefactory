@@ -211,6 +211,7 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
 async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<void> {
   session.audio.halt("theme");
   session.currentThemeName = "none";
+  session.themeStarted(null);
   const t = save.theme;
   // the playing bank first, then the one the loop belongs to: both are files
   const opened: string[] = [];
@@ -244,6 +245,7 @@ async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<v
   // the name a script gets back from `currenttheme (2)` and hands to `playtheme`,
   // which is the bank's INSIDE name and not the file it came out of
   session.currentThemeName = session.audioLib.trackNameOf(playing) ?? playing;
+  session.themeStarted(session.audioLib.bankOf(playing), theme.samples.length / theme.sampleRate);
   session.setThemeVolume(toNum(session.interp.globals.get("themevolume") ?? 255));
   session.onLog(`opengame: theme "${session.currentThemeName}" resumed from ${playing}`);
 }

@@ -933,6 +933,7 @@ export class SetViewer implements RoomLayer {
     if (theme) {
       this.session.audio.play("theme", theme, { loop: true });
       this.session.currentThemeName = key;
+      this.session.themeStarted(key, theme.samples.length / theme.sampleRate);
     }
   }
 

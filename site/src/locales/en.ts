@@ -182,6 +182,10 @@ export const en = {
     stretch: "stretch to fill" as Text,
     stretchTitle:
       "In fullscreen, fill the whole display instead of keeping the original 4:3 — the picture is stretched to fit" as Text,
+    subtitlesLabel: "Subtitles" as Text,
+    everyLine: "every line that is heard" as Text,
+    everyLineTitle:
+      "Also subtitle what the original only lets you hear: what Penny says over her cut-aways, and sounds such as breaking glass" as Text,
     reportBug: "🪲 Report a bug" as Text,
     reportBugTitle: "Report something the port gets wrong" as Text,
     // what became of the screenshot the button took. GitHub accepts no image in

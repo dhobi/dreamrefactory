@@ -78,6 +78,7 @@ import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { stateDump } from "@dreamfactory/engine/web/debug-panel";
 import { SPINE } from "./state-spine";
 import { bindRememberedBox, installStateList } from "@dreamfactory/engine/web/state-list";
+import { installCaptions } from "./captions";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import {
   GestureKey,
@@ -152,6 +153,8 @@ const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
 /** whether fullscreen hides the menu band (engine/src/web/tylerhartman.ts) */
 const thBox = document.getElementById("thBox") as HTMLInputElement | null;
+/** whether the lines the original only lets you hear are subtitled too (#50) */
+const everyLineBox = document.getElementById("everyLineBox") as HTMLInputElement | null;
 const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 /** where the bug button says what became of the screenshot */
 const bugNote = document.getElementById("bugNote");
@@ -518,6 +521,8 @@ const host = new GameHost(files, audioSink, {
  */
 host.director.onCursor = showCursor;
 const session = host.session;
+// the lines the original voices and never prints (engine/src/runtime/puppet.ts heardSubtitle)
+if (everyLineBox) bindRememberedBox(everyLineBox, "taoot.subtitles.everyLine", (on) => (session.everyLineSubtitled = on));
 
 // dialog builtins -> native browser dialogs; quit reloads to the boot screen
 session.onNoteDialog = (message) => {
@@ -1077,6 +1082,8 @@ async function initServerBrowser(): Promise<void> {
   // what decides which copy a basename resolves to (FileStore.setEdition).
   const { code, asked } = await resolveEdition();
   files.setEdition(code);
+  // where this edition's uncaptioned voice has words, before any bank opens (src/captions.ts)
+  installCaptions(session, code);
   // and the row says what actually booted, which is not always what the picker
   // guessed: it is drawn before this resolves, and its guess for a reader who has
   // never chosen is their UI language, while the game's own door is the chooser.
@@ -2143,3 +2150,4 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+

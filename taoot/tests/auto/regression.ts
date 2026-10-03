@@ -29,7 +29,11 @@ import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../play
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { readPupFile, type PupAnimFrame, type PupDialogue } from "@dreamfactory/engine/df/pup";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
-import { subtitled } from "@dreamfactory/engine/runtime/puppet";
+import { readAudioBank } from "@dreamfactory/engine/df/banks";
+import { heardSubtitle, subtitled } from "@dreamfactory/engine/runtime/puppet";
+import { NARRATION_BANK, NARRATION_WORDS } from "../../src/narration";
+import { formatCaptions, installCaptions } from "../../src/captions";
+import MOVIE_SOUNDS from "../../src/movie-lines.json";
 import type { CallExpr } from "@dreamfactory/engine/runtime/ast";
 import { sniffScript, scriptToText } from "@dreamfactory/engine/df/script";
 import { parseScript } from "@dreamfactory/engine/runtime/parser";
@@ -7547,6 +7551,289 @@ test("a puppet line beginning with '*' is heard but not printed", async () => {
   const said = await speak("penny1.078");
   check("a line still prints", said.startsWith("I don't have any information"),
     `subtitle=${JSON.stringify(said)}`);
+});
+
+// --- 87b. ...unless the player asks to read every line that is heard ---------
+// #50: the setting under the picture (`everyLineSubtitled`) prints what 87
+// keeps dark, for a player who cannot hear it — the words under a studio note,
+// and a sound written in capitals as a bracketed caption — and nothing for the
+// animation labels and stage directions, which are silent or already on screen.
+test("subtitle every line prints the heard lines behind a note, and no animation label", async () => {
+  const { session } = await newHost();
+  const said = (pupName: string, id: string): string => {
+    const pup = readPupFile(session.files(pupName)!, session.textEncoding());
+    return heardSubtitle(pup.dialogue.get(id)!);
+  };
+  const cases: [string, string, string][] = [
+    // the note goes, the words stay: with a colon, without, under a voice-over
+    ["penny1.pup", "penny1.070", "Zeitel's Titanic contact is a London art dealer named Sasha Barbicon."],
+    ["penny1.pup", "penny1.079", "They say he smuggles art. And he's not above selling stolen merchandise."],
+    ["penny1.pup", "penny1.113", "It's a plan for Allied troop deployment in France! If Germany ever invaded France, they'd have destroyed us!"],
+    ["smeth1.pup", "smeth1.098", "Ahem...Excuse me."],
+    ["shay1.pup", "shay1.40", "On the other hand, perhaps we'll get rich."],
+    // a sound, as a caption prints one
+    ["shahack2.pup", "line09c2a", "[Sound of crashing glass, cries startle everyone]"],
+    ["charl2.pup", "charl2.03", "[He drinks]"],
+    ["blkjack2.pup", "blkjack2.34", "[Trademark laugh]"],
+    // what stays dark: a direction the player is watching, an empty note, a fidget
+    ["purs1.pup", "purs1.23", ""],
+    ["morrow2.pup", "morrow2.56", ""],
+    ["penny1.pup", "idle 1", ""],
+    // and a line the original prints is printed as it was
+    ["penny1.pup", "penny1.078", "I don't have any information about Vlad, but the other fellow, look here..."],
+  ];
+  for (const [pupName, id, want] of cases) {
+    const got = said(pupName, id);
+    check(`${id} → ${JSON.stringify(want)}`, got === want, `got ${JSON.stringify(got)}`);
+  }
+
+  // no animation label in any puppet is ever printed as a sound
+  const labels: string[] = [];
+  for (const name of gamefiles(root).names(/\.pup$/i)) {
+    const pup = readPupFile(session.files(name.toLowerCase())!, session.textEncoding());
+    for (const d of pup.dialogue.values()) {
+      if (!d.text.startsWith("*")) continue;
+      const out = heardSubtitle(d);
+      if (/^\* ?[a-z][a-z ]*\d?$/.test(d.text) && out) labels.push(`${name} ${d.ident}: ${out}`);
+    }
+  }
+  check("no `*blink`, `*looks around` or `*idle 2` is printed", labels.length === 0, labels.join(" | "));
+
+  // and it reaches the screen only while the setting is on
+  await session.puppetCtrl.openPuppetFile("penny1.pup");
+  const speak = async (id: string): Promise<string> => {
+    void session.puppetCtrl.puppetSpeak(id).catch(() => {});
+    await drain();
+    const shown = session.puppet?.subtitle ?? "(no puppet)";
+    session.puppet?.speakSkip?.();
+    await drain();
+    return shown;
+  };
+  session.everyLineSubtitled = true;
+  const on = await speak("penny1.070");
+  session.everyLineSubtitled = false;
+  const off = await speak("penny1.070");
+  check("on, Penny's Sasha line prints", on.startsWith("Zeitel's Titanic contact"), `subtitle=${JSON.stringify(on)}`);
+  check("off again, it does not", off === "", `subtitle=${JSON.stringify(off)}`);
+});
+
+// --- 87b2. every caption names a clip that is really there -------------------
+// The transcripts in src/captions/ are keyed by bank and clip name, and the
+// first English file was keyed by the names its WAV exports were saved under —
+// `allons_y` for the bank's `allons y` — so four fencing captions named clips
+// that did not exist, and the caption editor's play buttons for them were silent.
+test("every caption file's clips exist in that edition's sound banks", () => {
+  const dir = new URL("../../src/captions/", import.meta.url);
+  const missing: string[] = [];
+  let clips = 0;
+  for (const name of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+    const file = JSON.parse(readFileSync(new URL(name, dir), "utf8")) as { edition: string; banks: Record<string, Record<string, unknown>> };
+    const tree = gamefiles(root, file.edition);
+    for (const [bank, wanted] of Object.entries(file.banks)) {
+      const path = tree.resolve(bank);
+      const have = path ? readAudioBank(readContainerFile(new Uint8Array(readFileSync(path)))).singles : new Map();
+      for (const clip of Object.keys(wanted)) {
+        clips++;
+        if (!have.has(clip)) missing.push(`${name}: ${bank} "${clip}"`);
+      }
+    }
+  }
+  check("the caption files name some clips", clips > 50, `clips=${clips}`);
+  check("and every one is in its bank", missing.length === 0, missing.join(" | "));
+});
+
+// --- 87c. ...and the ending's narration, from the puppet nothing opens -------
+// #50: NARREND.STG voices the ending clip by clip out of NARREND.SFX and prints
+// none of it; NARRATE.PUP is the script those clips were read from
+// (src/narration.ts). Each clip the ending's play lists can reach must find its
+// words — and the RIGHT words, which for a split sentence is not the line of
+// the same name.
+test("the ending's narration clips are captioned with NARRATE.PUP's lines", async () => {
+  const { session } = await newHost();
+  session.captionSources.set(NARRATION_BANK, NARRATION_WORDS);
+  check("narend.sfx opens", await session.openTrackFile("narend.sfx"));
+  const words = (clip: string): string => session.soundWords.get(clip)?.text ?? "";
+
+  check("n.05: the direction goes, the clip's name goes",
+    words("n.05") === "The World War followed.", JSON.stringify(words("n.05")));
+  check("n.19: a pause in the middle goes",
+    words("n.19") === "Adolph Hitler, who makes a lucrative career to this day...", JSON.stringify(words("n.19")));
+  // a split sentence: the bank's second half is a letter later than the puppet's
+  check("clip n.14b is line n.14a",
+    words("n.14b") === "They were soon forgotten in a dusty Whitehall file.", JSON.stringify(words("n.14b")));
+  check("clip n.46b is line n.46a, not line n.46b",
+    words("n.46b") === "There were totalitarian stirrings in Germany as well.", JSON.stringify(words("n.46b")));
+  check("clip n.46c is line n.46b",
+    words("n.46c").startsWith("But with no strongman"), JSON.stringify(words("n.46c")));
+  check("a sound effect has no words", words("paper") === "" && words("siren") === "");
+
+  // every clip the ending plays, from its play lists (NARREND.STG); "proz" is
+  // the good ending, whose last words are in prozac.mov rather than a clip
+  const lists = [
+    "1,21", "2,15,16", "3,01,04,05", "3,02,04,05", "3,03,04,05", "3,13,14,14b",
+    "4,07,11,11b,12", "5,22,23,24,25,26", "5,35,36,37,38,nuke.01",
+    "6,17,17b,18,18b,19,20", "6,28,29,29b,30,30b,germsov.01", "6,31,32,33,33b,34,nazi.01",
+    "7,39,39b,40,41,41b,42,soviet.01", "7,50,51,51b,52,53,54,proz",
+    "8,44,45,46,46b,46c,47,48,soviet.01", "8,55,55b,56,57,58,59,60,nochange.01",
+  ];
+  const missing: string[] = [];
+  for (const list of lists) {
+    for (const w of list.split(",").slice(1)) {
+      if (w === "proz") continue;
+      const clip = w.includes(".") ? w : `n.${w}`;
+      if (!words(clip)) missing.push(clip);
+    }
+  }
+  check("every clip the ending plays has words", missing.length === 0, missing.join(" "));
+
+  // voicesound sets the caption, and the screen shows it only while the clip
+  // plays, with the setting on and the game's subtitles on
+  const call = (name: string, args: unknown[] = []): void => {
+    void session.interp.builtins.get(name)!(
+      session.interp, args as never, { me: "", target: "" } as never, undefined as never,
+    );
+  };
+  call("voicesound", ["n.23"]);
+  check("voicesound captions its clip", session.captions.at(-1)?.text === "The Czar's secret police were grateful...",
+    JSON.stringify(session.captions.at(-1)));
+  const playing = { done: false };
+  session.captions = [{ who: "Carlson", text: "words", handle: playing }];
+  const shown = (): string => session.captionLines().map((c) => `${c.who}: ${c.text}`).join(" | ");
+  session.everyLineSubtitled = false;
+  check("off: nothing on screen", shown() === "");
+  session.everyLineSubtitled = true;
+  check("on: the words, with who says them", shown() === "Carlson: words", shown());
+  session.puppetParams.set(7, 0);
+  check("the game's subtitles switch still wins", shown() === "");
+  session.puppetParams.set(7, 1);
+  playing.done = true;
+  check("the clip over, the caption goes", shown() === "");
+});
+
+// --- 87d. ...the transcripts, and the two films that talk -------------------
+// #50, the rest of it: src/captions/en.json's words reach their clips however
+// the bank was opened — by `opentrackfile` (the gossip), or as a room's own
+// bank (the landlady's BEDSIT1.TRK) — and whichever way the clip starts:
+// `voicesound`, the sound channel, or a cricket. And the two films whose
+// voice-over is a puppet's starred lines are captioned from them, line by line
+// through the film.
+test("transcripts caption their clips and the radio, each named, and cash.mov and penote.mov their puppet lines", async () => {
+  const { session } = await newHost();
+  installCaptions(session, "en");
+  session.everyLineSubtitled = true;
+  const call = (name: string, args: unknown[] = []): void => {
+    void session.interp.builtins.get(name)!(
+      session.interp, args as never, { me: "", target: "" } as never, undefined as never,
+    );
+  };
+
+  await session.openTrackFile("zgossip1.sfx");
+  const word = (clip: string): string => {
+    const w = session.soundWords.get(clip);
+    return w ? `${w.who}: ${w.text}` : "";
+  };
+  check("an opentrackfile bank's words arrive, with the speaker", word("z3.01") === "Sasha: We have a problem, Zeitel.", word("z3.01"));
+  // a room's own bank is opened straight into the library, not by opentrackfile
+  session.audioLib.openBank("bedsit1.trk", session.files("bedsit1.trk")!);
+  check("a room bank's words arrive", word("door2").startsWith("Landlady: They said you was important once"), word("door2"));
+  check("a clip with no text in the file gets none", !session.soundWords.has("oldcar"));
+
+  // the sound channel captions too, and a sound effect leaves the caption alone
+  const shown = (): string => session.captionLines().map((c) => `${c.who}: ${c.text}`).join(" | ");
+  const live = { done: false };
+  session.captions = [];
+  session.captionClip("door1", live);
+  session.scheduler.playSound("oldcar", true);
+  check("a clip's caption stays up over a sound effect", shown() === "Landlady: Sneaking out, are ya? I want my money!", shown());
+  session.scheduler.playSound("door1", true);
+  check("the sound channel captions a clip with words",
+    session.captions.some((c) => c.text === "Sneaking out, are ya? I want my money!" && c.handle !== live));
+
+  // the radio: its news is the TRACK, and the caption follows the loop's clock.
+  // The second station's bank calls its track "bedrad1.trk" too; the caption
+  // belongs to the FILE, so it must be the first station's file that talks.
+  session.audioLib.openBank("bedrad1.trk", session.files("bedrad1.trk")!);
+  call("playtheme", ["bedrad1.trk"]); // what BOOTFILE's playnewtheme calls
+  const t0 = session.clock.now;
+  session.captions = [{ who: "Landlady", text: "Sneaking out, are ya?", handle: live }];
+  session.clock.advance(t0 + 6000);
+  check("six seconds in, the radio and the landlady at once, each named",
+    shown() === "Radio: London has endured another night of German bombing. | Landlady: Sneaking out, are ya?", shown());
+  session.clock.advance(t0 + 60_000);
+  session.captions = [];
+  check("in the music after the news, nothing", shown() === "", shown());
+  session.clock.advance(t0 + 60_000 + (78.3 - 60 + 5.5) * 1000);
+  check("and round the loop, the news again", shown().startsWith("Radio: London has endured"), shown());
+  // a theme started some other way — a save loaded on the ship, a room's own
+  // music — must not inherit the radio's lines (#50: the London news read out
+  // over the gymnasium). The loaders say so; this is the guard for one that does not.
+  session.currentThemeName = "gym.trk";
+  check("another room's music, started without a word, does not read the news", shown() === "", shown());
+  call("playtheme", ["bedrad1.trk"]);
+  call("halttheme");
+  check("the radio off, its caption goes", shown() === "", shown());
+  // the second station is music, though its track also says "bedrad1.trk"
+  call("closetrackfile", ["bedrad1.trk"]);
+  session.audioLib.openBank("bedrad2.trk", session.files("bedrad2.trk")!);
+  call("playtheme", ["bedrad1.trk"]);
+  session.clock.advance(session.clock.now + 6000);
+  check("the second station, under the same track name, has no news", shown() === "", shown());
+  call("halttheme");
+
+  // the films: nothing until the puppet is read, then each line in its share
+  const film = (movie: string, at: number): string => {
+    const c = session.movieCaption(movie, at);
+    return c ? `${c.who}: ${c.text}` : "";
+  };
+  film("cash.mov", 0);
+  await drain();
+  await drain();
+  check("cash.mov, whose voice is its soundtrack, opens on the first line", film("cash.mov", 0) === "Cash: You know his wife, Beatrix, the designer? Such an eye!", film("cash.mov", 0));
+  check("...and ends on the last", film("cash.mov", 0.99) === "Cash: White Star's best officer-or 'was'...", film("cash.mov", 0.99));
+
+  // the films that voice puppet lines as frame sounds: each line as it plays,
+  // with its puppet's words and speaker — Penny over the Zeitel photograph in
+  // the gymnasium, the boss at the very start, the last words of an ending
+  const sounded = async (movie: string, sound: string): Promise<string> => {
+    session.captions = [];
+    session.prepareMovieCaptions(movie);
+    session.captionMovieSound(movie, sound, { done: false });
+    for (let i = 0; i < 4; i++) await drain();
+    return shown();
+  };
+  check("zeit.mov: Penny names Zeitel over his photograph",
+    (await sounded("zeit.mov", "penny1.132")).startsWith("Penny: A German colonel named Zeitel."), shown());
+  check("bedcards.mov: the boss, not Carlson", (await sounded("bedcards.mov", "01")).startsWith("Boss: See here!"), shown());
+  check("boom.mov: the ending's last line, without its direction",
+    (await sounded("boom.mov", "final.01")) === "Carlson: If only the past could be changed...", shown());
+  check("tour9.mov: the tour's studio note goes",
+    (await sounded("tour9.mov", "smeth1.116")) === "Smeth: The Line has instructed me to relay the following information.", shown());
+  check("penote.mov: Smeth's VO-- note goes",
+    (await sounded("penote.mov", "smeth1.096")).startsWith("Smeth: Two thousand two hundred onboard"), shown());
+  check("a film's other sounds are not captioned", (await sounded("rub.mov", "rubopen")) === "", shown());
+  check("a film nobody listed has none", film("berg.mov", 0.5) === "");
+  session.everyLineSubtitled = false;
+  check("and none of it without the setting", film("cash.mov", 0) === "");
+});
+
+// --- 87e. the films' voiced lines all have words, and the editor writes the file back as it is
+test("every film sound in movie-lines.json is a puppet line with words, and the caption file round-trips", async () => {
+  const { session } = await newHost();
+  const missing: string[] = [];
+  let sounds = 0;
+  for (const [movie, lines] of Object.entries(MOVIE_SOUNDS.films)) {
+    for (const [sound, puppet] of Object.entries(lines)) {
+      sounds++;
+      const words = await session.puppetCtrl.spokenWords(puppet);
+      if (!words.get(sound)) missing.push(`${movie} ${sound} (${puppet})`);
+    }
+  }
+  check("the index names over a hundred voiced lines", sounds > 100, `sounds=${sounds}`);
+  check("and every one has words", missing.length === 0, missing.join(" | "));
+
+  const path = new URL("../../src/captions/en.json", import.meta.url);
+  const text = readFileSync(path, "utf8");
+  check("en.json is exactly what the caption editor would export", formatCaptions(JSON.parse(text)) === text);
 });
 
 // --- 88. the puppet knows its own name -------------------------------------

@@ -95,6 +95,82 @@ export function subtitled(line: PupDialogue): boolean {
   return !/^ *$/.test(line.raw);
 }
 
+/**
+ * The note a starred line's text opens with: `*SASHA.MOV:`, `*TOUR1.MOV VO`,
+ * `*TOUR10.MOV: (VO)`, `*VO--`, `*VOICE OVER`, and the German edition's
+ * misspellings of them (`*TOUR10MOV.VO`, `*TOUR 10.MOV VO`, `*TOUR4. MOV VO`,
+ * `*TOUR10.MOV : (VO)`), and `*tour2.mov vo`. `VO` must stand alone, so a
+ * sentence that starts with "Vor…" is not a note.
+ */
+const STUDIO_NOTE = /^\*\s*(?:([A-Za-z0-9 _]*\.?\s*(?:MOV|mov)(?![A-Za-z])\.?\s*:?)\s*)?(\(VO\)|VOICE OVER|VO(?![A-Za-z])|vo(?![A-Za-z]))?[-:\s]*/;
+
+/**
+ * What a line {@link subtitled} keeps off the screen says, when the player has
+ * asked to read every line that is heard (#50) — "" for one that says nothing.
+ *
+ * Not the original's: TI.EXE prints none of these. It is the port's answer to a
+ * deaf or hard-of-hearing player, who otherwise misses what Penny says over and
+ * after her cut-aways (PENNY1's Sasha, Ruby and Ochrana lines) in four of the six
+ * editions. Two kinds of starred line are worth printing:
+ *
+ *  - a spoken line under a studio note ({@link STUDIO_NOTE}) — the note goes and
+ *    the words stay, which is what the Japanese and Dutch translators did by hand;
+ *  - a sound written in capitals (`*SOUND OF CRASHING GLASS, CRIES STARTLE
+ *    EVERYONE`, `*TRADEMARK LAUGH`, `*HE DRINKS.`, `*(VO) WHISTLING ROW YOUR
+ *    BOAT`), printed in brackets as a caption prints a sound.
+ *
+ * The rest stay dark: the lower-case animation names (`*blink`, `*looks
+ * around`, `*idle 2 gesture` — a few hundred of them, and silent) and the one
+ * stage direction for something the player is already watching (`*Purser holds
+ * the cufflink.`). An `idle N` line is the puppet's fidget whatever it says.
+ */
+export function heardSubtitle(line: PupDialogue): string {
+  if (subtitled(line)) return line.text;
+  if (!line.text.startsWith("*") || /^idle [1-4]$/i.test(line.ident)) return "";
+  const note = STUDIO_NOTE.exec(line.text)!;
+  const words = line.text.slice(note[0].length).trim();
+  if (!words) return "";
+  // a translator who wrote the sound out after the English note
+  // (`*TRADEMARK LAUGH　ホッホッホッ`) has already captioned it
+  const written = /^[A-Z][A-Z .,]*[\s　]+([^\x00-\x7f].*)$/.exec(words);
+  if (written) return written[1];
+  // capitals and no small letters: a sound, not a sentence
+  if (/[A-Z]/.test(words) && !/[a-z]/.test(words)) {
+    const sound = words.replace(/[.\s]+$/, "").toLowerCase();
+    return `[${sound[0].toUpperCase()}${sound.slice(1)}]`;
+  }
+  return note[1] || note[2] ? words : "";
+}
+
+/**
+ * A narration line's words, without the script's own markings, for a caption
+ * (#50; see {@link GameSession.captionSources}) — "" if nothing is left.
+ *
+ * TAOOT's NARRATE.PUP is the script the ending's voice clips were read from,
+ * and it reads like one (as do the starred lines a movie's voice-over was read
+ * from — `*CONK.MOV: (VO) You know his wife…`, `*VO--Ahem...Excuse me.`): the clip's own name at the end (`(n.05)`, and once
+ * `(propzac.01)`), studio notes in front (`BOSS.MOV: VO`, `NARRATOR VO`), and
+ * the actor's directions in capitals — at the start (`SOULFULLY`, `WITH
+ * IRONY`, `MIT BEDAUERN`) and inside the sentence (`IRONIC LAUGH`, `SLIGHT
+ * PAUSE`, `KLEINE PAUSE`, `EERIE FADE OUT`). All of that goes. A single word in
+ * capitals inside a sentence stays: that is the French edition's emphasis
+ * ("ce qui SERAIT arrivé", "mais QUAND il le fera!"), not a direction.
+ */
+export function spokenText(text: string): string {
+  const CAPS = "[A-ZÄÖÜÀÂÇÉÈÊËÎÏÔÛÙ]{2,}[.,]?";
+  return text
+    .replace(/\(\s*[\w.]+\s*\)\s*$/, "")
+    .replace(/^\*\s*/, "")
+    .replace(/^[A-Za-z0-9_ ]*\.\s*MOV\s*:?/, "")
+    .replace(/^\s*\(VO\)/, "")
+    .replace(new RegExp(`^\\s*(?:${CAPS}\\s*)+`), "")
+    .replace(/^[-:\s]+/, "")
+    .replace(new RegExp(`(?:${CAPS}\\s+){1,}${CAPS}\\s*`, "g"), "")
+    .replace(/\s+([,.!?])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export class PuppetController {
   constructor(private readonly session: GameSession) {}
 
@@ -322,8 +398,9 @@ export class PuppetController {
    */
   private async playLine(p: NonNullable<PuppetController["puppet"]>, line: PupDialogue): Promise<void> {
     // The line is always HEARD; whether its text is printed is a separate
-    // question, and one the record answers — see {@link subtitled}.
-    p.subtitle = subtitled(line) ? line.text : "";
+    // question, and one the record answers — see {@link subtitled} — unless
+    // the player has asked to read every line that is heard (#50)
+    p.subtitle = this.session.everyLineSubtitled ? heardSubtitle(line) : subtitled(line) ? line.text : "";
     // the line's stance first, before a single frame of it is drawn: the layer
     // tables the animLogic records index are the ones it was animated against
     // (0x4406c7, before the playback loop). In a two-character puppet this is
@@ -378,6 +455,28 @@ export class PuppetController {
       return p.anim.frames[Math.max(0, Math.min(idx, p.anim.frames.length - 1))];
     }
     return p.pose;
+  }
+
+  /**
+   * A puppet file's lines as words to caption, by lowercase ident (#50; see
+   * {@link GameSession.captionSources}). A file that will not read gives none,
+   * which leaves its clips uncaptioned — what they were.
+   */
+  async spokenWords(fileName: string): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const key = fileName.toLowerCase();
+    await this.session.ensureFile(key);
+    const data = this.session.files(key);
+    if (!data) return out;
+    try {
+      for (const line of readPupFile(data, this.session.textEncoding()).dialogue.values()) {
+        const words = spokenText(line.text);
+        if (words) out.set(line.ident.toLowerCase(), words);
+      }
+    } catch (e) {
+      this.session.onLog(`captions: ${fileName}: ${(e as Error).message}`);
+    }
+    return out;
   }
 
   puppetClear(): void {

@@ -59,6 +59,11 @@ import { DfVersion } from "@dreamfactory/engine/df/version";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { DrawSignature } from "@dreamfactory/engine/runtime/signature";
+import { subtitleFont, wrapText } from "./fonts";
+import type { CaptionLine } from "@dreamfactory/engine/runtime/session";
+
+/** the speaker's name in a caption (#50): a warm yellow, apart from the white of the words */
+const CAPTION_WHO = "#f2d36b";
 import { Value, truthy } from "@dreamfactory/engine/runtime/interp";
 import type { ShpFrame } from "@dreamfactory/engine/df/shp";
 import type { Occlusion } from "@dreamfactory/engine/runtime/actors";
@@ -573,7 +578,62 @@ export class ScreenDirector {
     // composites; skipping through shouldPaint instead would cache the held
     // picture's signature and could strand it on the canvas.
     if (this.screenOwner() === "held") return;
-    if (this.screen.shouldPaint(this.buildSignature(ctx))) this.paint(ctx);
+    if (!this.screen.shouldPaint(this.buildSignature(ctx))) return;
+    this.paint(ctx);
+    this.drawCaption(ctx);
+  }
+
+  /**
+   * A voice clip's words, over everything (#50; GameSession.captionText).
+   *
+   * Not the original's — TI.EXE prints nothing while TAOOT's ending narrates —
+   * so it is drawn the way the original draws the thing nearest to it, a
+   * puppet's subtitle: Arial 12 in white on a black strip across the bottom,
+   * 8 px in, a line every 16. On top of the fade, because the ending's last
+   * line is spoken over a black screen and a caption under the black would be
+   * no caption. As many lines as the words need: the narration runs longer
+   * than any subtitle, and the strip grows upward to hold it.
+   */
+  /** every caption up now: the session's, then the playing movie's (GameSession.movieCaption) */
+  private captionNow(): CaptionLine[] {
+    const lines = this.session.captionLines();
+    const file = this.movies.playingFile;
+    const film = file ? this.session.movieCaption(file, this.movies.progress) : null;
+    return film ? [...lines, film] : lines;
+  }
+
+  private drawCaption(ctx: CanvasRenderingContext2D): void {
+    const captions = this.captionNow();
+    if (!captions.length) return;
+    const W = this.screen.width;
+    const H = this.screen.height;
+    ctx.save();
+    ctx.font = subtitleFont(12);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    const measure = (t: string): number => ctx.measureText(t).width;
+    // each caption is "Who: words", the name in its own colour so that two
+    // speakers at once — the radio and the landlady — read as two
+    const rows: { text: string; who: string }[] = [];
+    for (const c of captions) {
+      const who = c.who ? `${c.who}: ` : "";
+      wrapText(who + c.text, W - 16, measure).forEach((ln, i) => rows.push({ text: ln, who: i === 0 ? who : "" }));
+    }
+    const top = H - 8 - rows.length * 16;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, top, W, H - top);
+    rows.forEach((r, i) => {
+      const y = top + 16 + i * 16;
+      let x = 8;
+      if (r.who && r.text.startsWith(r.who)) {
+        ctx.fillStyle = CAPTION_WHO;
+        ctx.fillText(r.who, x, y);
+        x += measure(r.who);
+      }
+      ctx.fillStyle = "#fff";
+      ctx.fillText(r.who && r.text.startsWith(r.who) ? r.text.slice(r.who.length) : r.text, x, y);
+    });
+    ctx.restore();
   }
 
   /**
@@ -628,6 +688,8 @@ export class ScreenDirector {
     // a reveal moves the seam every pass while everything behind it stands still,
     // so the step has to be in here or the frame is skipped as already-drawn
     sig.num(s.wipe.step).str(s.wipe.dir).num(s.wipe.span).bool(s.wipe.settled);
+    // a voice clip's caption, which comes and goes with the clip (#50)
+    for (const c of this.captionNow()) sig.str(c.who ?? "").str(c.text);
     return sig;
   }
 

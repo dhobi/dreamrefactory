@@ -454,13 +454,17 @@ export class WebAudioSink implements AudioSink {
 export class AudioLibrary {
   private banks = new Map<string, { file: DFContainerFile; bank: AudioBank }>();
   private cache = new Map<string, DecodedAudio>();
+  /** a bank has just been opened, with its one-shot sounds' names — the session's captions hook in here */
+  onBankOpened?: (name: string, sounds: string[]) => void;
 
   openBank(name: string, data: Uint8Array): boolean {
     const key = name.toLowerCase();
     if (this.banks.has(key)) return true;
     try {
       const file = readContainerFile(data);
-      this.banks.set(key, { file, bank: readAudioBank(file) });
+      const bank = readAudioBank(file);
+      this.banks.set(key, { file, bank });
+      this.onBankOpened?.(key, [...bank.singles.keys()]);
       return true;
     } catch {
       return false;
@@ -482,6 +486,11 @@ export class AudioLibrary {
    * left running. Same for `closetrackfile("gossip")` (GANG.CST) and
    * `opentrackfile("sink0.11k"); playnewtheme("sink0.trk")` (BOOTFILE).
    */
+  /** the FILE a bank or track name resolves to — TAOOT's three radio stations all call their track "bedrad1.trk" */
+  bankOf(name: string): string | null {
+    return this.find(name)?.key ?? null;
+  }
+
   private find(name: string): { key: string; entry: { file: DFContainerFile; bank: AudioBank } } | null {
     const want = name.toLowerCase();
     const direct = this.banks.get(want);

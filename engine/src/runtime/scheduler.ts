@@ -359,6 +359,7 @@ export class Scheduler {
     }
     const handle = this.session.audio.play("sound", audio, { overlap, volume, pan });
     this.soundChannels[overlap ? 1 : 0] = { name: key, handle };
+    this.session.captionClip(key, handle); // #50
   }
 
   /** haltsound(n): stop the sound channel INCLUDING tracked looping sounds */
@@ -1295,6 +1296,8 @@ export class Scheduler {
     // left both channels reading empty, so the gate never held and all five of
     // her lines started 1.3 s apart over each other.
     this.soundChannels[1] = { name: c.name, handle: c.handle };
+    // ...and is how the landlady SPEAKS, so it is captioned like any line (#50)
+    if (!this.loopFlags.has(c.name)) this.session.captionClip(c.name, c.handle);
   }
 
   private async fireLoop(l: GameLoop): Promise<void> {
