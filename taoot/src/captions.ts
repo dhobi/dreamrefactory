@@ -137,6 +137,24 @@ export const MOVIE_BED_LINES: Record<string, { puppet: string; chunks: (string |
   "penote.mov": { puppet: "smeth1.pup", chunks: ["smeth1.096", "smeth1.097", null] },
 };
 
+/**
+ * Where a talking track's lines fall in an edition that recorded it anew, for
+ * an edition with no transcript file yet: the caption editor starts its lines
+ * here instead of at the English seconds. The bedsit radio's news is read at
+ * its own pace in each language — French 74.4 s and Russian 80.0 s of track
+ * against English 78.3 s — so the English timings cut its lines short (Dutch
+ * and Japanese ship the English recording). Taken from speech recognition
+ * (Whisper large-v3-turbo), each line widened a little where silence allows.
+ */
+export const TRACK_TIMINGS: Record<string, Record<string, [from: number, to: number][]>> = {
+  fr: {
+    "bedrad1.trk": [[1.7, 4.2], [4.5, 7.5], [8, 10.5], [11.2, 15.8], [16.7, 20.8], [21, 25], [25, 28.2], [28.2, 31.3], [31.5, 34.7]],
+  },
+  ru: {
+    "bedrad1.trk": [[1.6, 4.2], [4.2, 9.6], [9.6, 13.7], [13.7, 18.9], [18.9, 24], [24, 28.3], [28.3, 33.8], [33.8, 37.4], [37.4, 40.4]],
+  },
+};
+
 /** tell the session where an edition's words are — once the edition is known, before any bank opens */
 export function installCaptions(session: GameSession, edition: string): void {
   // speaker names are words like any other: the edition's own, else English's

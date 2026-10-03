@@ -32,7 +32,8 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { readAudioBank } from "@dreamfactory/engine/df/banks";
 import { heardSubtitle, subtitled } from "@dreamfactory/engine/runtime/puppet";
 import { NARRATION_BANK, NARRATION_WORDS } from "../../src/narration";
-import { formatCaptions, installCaptions } from "../../src/captions";
+import { CAPTION_FILES, TRACK_TIMINGS, formatCaptions, installCaptions } from "../../src/captions";
+import { AudioLibrary } from "@dreamfactory/engine/runtime/audio";
 import MOVIE_SOUNDS from "../../src/movie-lines.json";
 import type { CallExpr } from "@dreamfactory/engine/runtime/ast";
 import { sniffScript, scriptToText } from "@dreamfactory/engine/df/script";
@@ -7877,6 +7878,33 @@ test("every film sound in movie-lines.json is a puppet line with words, and the 
     const text = readFileSync(new URL(name, dir), "utf8");
     check(`${name} is exactly what the caption editor would export`, formatCaptions(JSON.parse(text)) === text);
   }
+});
+
+// --- 87f. each edition's radio news is timed by its own recording
+// The bedsit radio's news is read anew in French, German and Russian, at its
+// own pace; de.json first kept the English seconds and the caption editor cut
+// its lines off mid-word. An edition whose track differs from English times it
+// in its file or in TRACK_TIMINGS, and every line ends inside that track.
+test("each edition's radio news is timed by its own recording", () => {
+  const en = readFileSync(gamefiles(root, "en").resolve("bedrad1.trk")!);
+  const english = (CAPTION_FILES.en.tracks?.["bedrad1.trk"] ?? []).map((l) => `${l.from}-${l.to}`).join(" ");
+  let own = 0;
+  for (const edition of ["de", "fr", "ru", "nl", "ja"]) {
+    const path = gamefiles(root, edition).resolve("bedrad1.trk");
+    if (!path) continue;
+    const bytes = readFileSync(path);
+    const lib = new AudioLibrary();
+    lib.openBank("bedrad1.trk", new Uint8Array(bytes));
+    const theme = lib.theme("bedrad1.trk")!;
+    const seconds = theme.samples.length / theme.sampleRate;
+    const times: [number, number][] =
+      CAPTION_FILES[edition]?.tracks?.["bedrad1.trk"]?.map((l) => [l.from, l.to]) ?? TRACK_TIMINGS[edition]?.["bedrad1.trk"] ?? [];
+    if (bytes.equals(en)) continue;
+    own++;
+    check(`${edition}: its own recording has its own timings`, times.length === 9 && times.map(([f, t]) => `${f}-${t}`).join(" ") !== english);
+    check(`${edition}: every line ends inside its ${seconds.toFixed(1)} s track, in order`, times.every(([f, t], i) => f < t && t <= seconds && (i === 0 || f >= times[i - 1][1])));
+  }
+  check("three editions record the news anew", own === 3, `own=${own}`);
 });
 
 // --- 88. the puppet knows its own name -------------------------------------
