@@ -125,8 +125,9 @@ from the project's Administration → Analysis Method page), and Automatic
 Analysis switched off on that page, since Sonar refuses a CI scan while it is
 on. A pull request from this repository gets the scan alone, as `tests.yml`'s
 `sonar` job, without coverage: measuring it there would mean the whole
-coverage run per change. The job names no coverage report, so Sonar computes
-no coverage for it and the gate's coverage condition does not apply. A fork's pull
+coverage run per change. The job leaves every file out of coverage
+(`sonar.coverage.exclusions=**/*`), so the gate's coverage condition has no lines
+to judge; without that, Sonar counts a file with no report as 0% covered. A fork's pull
 request is not scanned, since it cannot read the token.
 
 ## Setting the runner up

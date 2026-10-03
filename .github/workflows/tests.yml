@@ -72,10 +72,10 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # no report named, so no coverage computed: naming the nightly's
-          # report, which is not here, reads as every new line untested and
-          # fails the gate's coverage condition
-          args: -Dsonar.javascript.lcov.reportPaths=
+          # every file out of coverage, so the gate's coverage condition has no
+          # lines to judge: without the nightly's report, Sonar's zero-coverage
+          # sensor would count every new line untested and fail the gate on it
+          args: -Dsonar.coverage.exclusions=**/*
 
   # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's
