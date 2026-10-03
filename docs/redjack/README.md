@@ -139,6 +139,15 @@ CPU goes, waiting on the game's state and never on a duration.
   soundtrack, so the audio is still decoded.
 - `tests.yml` runs the suites on a pull request that can reach RedJack (its package, or anything shared such as `engine/`), when the rip is linked.
 
+`rooms` is every room on the discs read without a game tick: each road's
+films arrive at a node or a scene, every picture a film or a node's sphere
+shows is there, every script reads (116 are the authoring tool's empty stubs,
+eight zero bytes and no statement), and every film, room or puppet a script
+names by a literal is on a disc. Five are not, and are listed in the suite:
+`hub`'s `runmble.move` (the disc's is `rumble.move`), `jail4`'s
+`solier2.pupp` (the disc's is `soldier2.pupp`), and on day 1 `ptroyal`'s
+`manin.move`, `mandown.move` and `sewer.sett`, which did not ship.
+
 `saves` saves and loads, and loads the seven day saves; see [Saved
 games](#saved-games). It skips a day whose save `tools/mksaves.mts` has not
 written.

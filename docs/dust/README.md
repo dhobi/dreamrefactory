@@ -79,9 +79,12 @@ list; the short version is that the shell is three modules, because one volume
 and one edition need much less than six editions and two CDs.
 
 Its suites are `dust/tests/` — the movie layout against the whole disc, the
-player on a clock, and the `.rtd` round trip — and all three **skip** rather
-than fail without a rip, which is why the CI runner treats Dust's disc as
-optional ([Continuous integration](../reference/ci.md)). Its tools are
+player on a clock, the `.rtd` round trip, every set read without a game tick
+(`sets.ts`), and the play page itself run in node (`page.ts`) — and the ones
+that open the disc **skip** rather than fail without a rip, which is why the
+CI runner treats Dust's disc as optional ([Continuous
+integration](../reference/ci.md)). The [test reference](../reference/tests.md#dusts-suites--dusttests)
+lists them all. Its tools are
 `dust/tools/`: `dustsets.ts`, the sweep the v1 SET reader was built against, and
 `mkdustlogo.ts` for the title card.
 

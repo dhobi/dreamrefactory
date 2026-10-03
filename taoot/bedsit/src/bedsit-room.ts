@@ -914,6 +914,17 @@ export class Builder {
     let nx = e1[1] * e2[2] - e1[2] * e2[1];
     let ny = e1[2] * e2[0] - e1[0] * e2[2];
     let nz = e1[0] * e2[1] - e1[1] * e2[0];
+    // a quad that is a triangle — `a` on `b` or on `d` — has no edge pair at
+    // `a`, and its normal came out ZERO, which the shader lights as nothing (two
+    // of the window wall's did). The diagonals give the same plane, wound the
+    // same way, whenever the quad has any area at all.
+    if (!nx && !ny && !nz) {
+      const p: V3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const q: V3 = [d[0] - b[0], d[1] - b[1], d[2] - b[2]];
+      nx = p[1] * q[2] - p[2] * q[1];
+      ny = p[2] * q[0] - p[0] * q[2];
+      nz = p[0] * q[1] - p[1] * q[0];
+    }
     const len = Math.hypot(nx, ny, nz) || 1;
     nx /= len; ny /= len; nz /= len;
     if (towards && nx * towards[0] + ny * towards[1] + nz * towards[2] < 0) { nx = -nx; ny = -ny; nz = -nz; }
