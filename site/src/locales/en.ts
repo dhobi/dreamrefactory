@@ -436,6 +436,10 @@ export const en = {
       "An actor is a <b>world-space</b> sprite: it draws at its projected world point minus its stored offset, both scaled by <code>k = actorscale × refScale / (1000 × depth)</code>. The cross is the world point; <b>k</b> is that scale, so 0.5 is roughly twice as far away." as Html,
     posesHead: "Poses" as Text,
     spritesHead: "Sprites" as Text,
+    soundsHead: "Sounds" as Text,
+    soundsNote: "kept in the cast, unnamed" as Text,
+    soundRow: "sound @{loc} — {secs} s, {rate} Hz" as Text,
+    soundBroken: "sound @{loc} — will not decode: {message}" as Text,
     spriteAnchorNote: "— the point the sprite hangs off, scaled with it" as Text,
 
     previewHead: "<b>{name}</b> · pose “{pose}” · step {step}/{steps} · direction {dir} ({compass})" as Text,
