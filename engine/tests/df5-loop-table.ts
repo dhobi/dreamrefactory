@@ -15,7 +15,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { test, expect } from "vitest";
 import { readLoopTableV5 } from "@dreamfactory/engine/df/banks";
-import { readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
+import { bedOrder, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
 
 /** a film loop table of `names`, laid out as move.c reads it, `short` bytes cut off its end */
 function filmTable(names: string[], order: number[], short: number): Uint8Array {
@@ -52,4 +52,19 @@ test.skipIf(!existsSync(ARRIVE))("arrive.move holds silence after its music inst
   const [music, ...rest] = seg.audioChunks;
   expect(rest.length).toBe(8);
   expect(rest.every((c) => c !== music)).toBe(true);
+});
+
+// Villains' Revenge's long films stream their track: records named by disc
+// offset, the order listing only the first 48 (#460)
+test("a streamed track plays every record, not just the order's first 48", () => {
+  const names = Array.from({ length: 60 }, (_, i) => `disk ${i * 8192}`);
+  const first48 = Array.from({ length: 48 }, (_, i) => i + 1);
+  expect(bedOrder(first48, names)).toEqual(names.map((_, i) => i + 1));
+});
+
+test("a bed of named records keeps its order", () => {
+  // dream2.move: one record in the order, six more for its one-shots
+  const names = ["1gloop", "2gloopbreath", "3gloopspook", "4", "5", "6", "7"];
+  expect(bedOrder([1], names)).toEqual([1]);
+  expect(bedOrder([1, 2, 2, 2], ["music", "silence"])).toEqual([1, 2, 2, 2]);
 });
