@@ -52,8 +52,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # SonarQube Cloud's look at a pull request: the scan alone, on GitHub's
-  # machines, without coverage — the quality gate has no coverage condition,
-  # and coverage is measured once a night by coverage.yml, which also scans
+  # machines, without coverage — coverage is measured once a night by
+  # coverage.yml, which also scans
   # master (docs/reference/ci.md#sonarqube-cloud). Not on a push to master,
   # where a scan without coverage would blank master's until the next night,
   # and not for a fork's pull request, which cannot read SONAR_TOKEN.
@@ -71,6 +71,11 @@ jobs:
       - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          # no report named, so no coverage computed: naming the nightly's
+          # report, which is not here, reads as every new line untested and
+          # fails the gate's coverage condition
+          args: -Dsonar.javascript.lcov.reportPaths=
 
   # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's
