@@ -7825,6 +7825,25 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
     (await sounded("penote.mov", "smeth1.096")).startsWith("Smeth: Two thousand two hundred onboard"), shown());
   check("brncl.mov: Burns's line, whose ident the film's name field cut to 15 characters",
     (await sounded("brncl.mov", "Burns Correctio")).startsWith("Burns: There they are, the steel tycoon Conklin"), shown());
+  // penote.mov: the frames name Smethells' lines, but the voice is the film's
+  // looping bed — line, line, paper — so the caption follows the bed's clock
+  session.captions = [];
+  session.prepareMovieCaptions("penote.mov");
+  const bed = { done: false };
+  const b0 = session.clock.now;
+  session.captionMovieBed("penote.mov", [6.55, 9.2, 3.02], true, bed);
+  for (let i = 0; i < 4; i++) await drain();
+  const at = (sec: number): string => {
+    session.clock.advance(b0 + sec * 1000);
+    return shown();
+  };
+  check("penote.mov: the bed's first chunk is Smethells' first line",
+    at(1).startsWith("Smeth: Two thousand two hundred onboard"), shown());
+  check("...its second chunk the second", at(8).startsWith("Smeth: Even if it is nineteen-twelve"), shown());
+  check("...the paper says nothing", at(17) === "", shown());
+  check("...and round the loop, the first line again", at(19).startsWith("Smeth: Two thousand two hundred onboard"), shown());
+  bed.done = true;
+  check("the film over, nothing", shown() === "", shown());
   check("a film's other sounds are not captioned", (await sounded("rub.mov", "rubopen")) === "", shown());
   // the opening credits' narration is in the film's own sound table and in no
   // puppet: its words are the transcript's

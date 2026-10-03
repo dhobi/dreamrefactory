@@ -126,6 +126,17 @@ export const MOVIE_LINES: Record<string, { puppet: string; lines: string[] }> = 
   "cash.mov": { puppet: "cash1.pup", lines: ["cash01.42", "cash01.43", "cash01.44", "cash01.45", "cash01.46"] },
 };
 
+/**
+ * The one film whose voice is its BED, chunk by chunk: penote.mov, Smethells
+ * reading Pringle's telegram. Its frames name `smeth1.096` and `smeth1.097`,
+ * but the film has no clip by either name — the two lines are the bed's first
+ * two chunks and its third is the paper, looping while the telegram is up
+ * (GameSession.captionMovieBed).
+ */
+export const MOVIE_BED_LINES: Record<string, { puppet: string; chunks: (string | null)[] }> = {
+  "penote.mov": { puppet: "smeth1.pup", chunks: ["smeth1.096", "smeth1.097", null] },
+};
+
 /** tell the session where an edition's words are — once the edition is known, before any bank opens */
 export function installCaptions(session: GameSession, edition: string): void {
   // speaker names are words like any other: the edition's own, else English's
@@ -138,6 +149,7 @@ export function installCaptions(session: GameSession, edition: string): void {
     session.movieCaptionSources.set(movie, { ...source, who: speakerOf(source.puppet, "") });
   }
   for (const [movie, sounds] of Object.entries(MOVIE_SOUNDS.films)) session.movieSoundSources.set(movie, sounds);
+  for (const [movie, source] of Object.entries(MOVIE_BED_LINES)) session.movieBedSources.set(movie, source);
   for (const [bank, clips] of Object.entries(CAPTION_FILES[edition]?.banks ?? {})) {
     const words = Object.fromEntries(
       Object.entries(clips)
