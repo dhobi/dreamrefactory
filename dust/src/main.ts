@@ -48,7 +48,6 @@
  * second — a price worth paying to make the rendering unarguable rather than
  * clever, and a price the game does not pay because it does not need to.
  */
-import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { DF_CURSORS } from "./cursor-art";
 import {
@@ -57,6 +56,9 @@ import {
   paletteToRGBA,
   indexedToRGBA,
 } from "@dreamfactory/engine/df/image";
+import { VIEW_H, VIEW_W, decodeSetFrames, setSummary, stillAt as stillOf, turnsFrom, walkFrom, walkerKey } from "./walker";
+import { defaultSaveName, keyAction, screenPoint } from "./input";
+import { NetMeter } from "./meter";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import {
   readSetFileV1,
@@ -105,9 +107,6 @@ import { VERSION } from "@dreamfactory/site/version";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { DUST } from "@dreamfactory/site/games";
 
-/** the frame as the file stores it */
-const VIEW_W = 512;
-const VIEW_H = 264;
 /**
  * The screen, at the size the play page uses — 1024x768.
  *
@@ -423,12 +422,8 @@ const HEAD_STEPS: ReadonlyArray<readonly [number, string]> = [
  * minute it spent arriving. On a slow connection that was the entire experience
  * of this loader — a frozen bar under a number that was never true.
  */
-const WINDOW_MS = 3000;
-/** the least window worth dividing by; under it there is no number to give */
-const SETTLE_MS = 900;
 const TICK_MS = 250;
-const netSamples: { t: number; bytes: number }[] = [];
-let netTotal = 0;
+const meter = new NetMeter();
 let meterTimer = 0;
 /**
  * What is still to come, once anything knows: the boot's own prefetch list,
@@ -448,8 +443,7 @@ let rateShown = false;
 
 /** every chunk of every fetch the loading page makes */
 function netChunk(bytes: number): void {
-  netSamples.push({ t: performance.now(), bytes });
-  netTotal += bytes;
+  meter.chunk(bytes, performance.now());
 }
 
 /**
@@ -459,22 +453,9 @@ function netChunk(bytes: number): void {
  * the boot just loaded) is better than a stale number.
  */
 function meterTick(): void {
-  const now = performance.now();
-  while (netSamples.length && now - netSamples[0].t > WINDOW_MS) netSamples.shift();
-  const span = netSamples.length ? now - netSamples[0].t : 0;
-  const got = netSamples.reduce((a, x) => a + x.bytes, 0);
-  const rate = span >= SETTLE_MS ? got / (span / 1000) : 0;
-  if (rate) {
-    const left = bytesLeft?.() ?? 0;
-    // "12 of 95 MB" rather than "12 MB so far", once there is a total to be a
-    // fraction of. The total is what has come down plus what is still owed, so
-    // it grows if the boot asks for something the plan did not name — which is
-    // the honest direction for it to move.
-    const scale = left
-      ? `${fmtSize(netTotal)} of ${fmtSize(netTotal + left)}`
-      : `${fmtSize(netTotal)} so far`;
-    const eta = left ? fmtLeft(left / rate) : "";
-    bootSayEl.textContent = `${fmtRate(rate)} · ${scale}${eta ? ` · ${eta}` : ""}`;
+  const caption = meter.caption(performance.now(), bytesLeft?.() ?? 0);
+  if (caption) {
+    bootSayEl.textContent = caption;
     rateShown = true;
   } else if (rateShown) {
     bootSayEl.textContent = idleCaption;
@@ -518,39 +499,6 @@ async function fetchWatched(url: string, from: number, to: number): Promise<Resp
   return new Response(stream, { headers: res.headers, status: res.status });
 }
 
-/** "1.4 MB/s" or "830 KB/s" — whichever reads as a number rather than as noise */
-function fmtRate(bytesPerSecond: number): string {
-  return bytesPerSecond >= 1024 * 1024
-    ? `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
-    : `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
-}
-
-/**
- * "~4 min left", "~35 s left", or nothing at all when the answer is "any moment
- * now" or too wild to print.
- *
- * Rounded coarsely on purpose — to five seconds under a minute and a half, to
- * whole minutes above it. The rate it divides is a three-second average, so the
- * raw figure jitters by a second or two between ticks; a countdown that flickers
- * reads as broken even when every value it shows is true. And it is a tilde
- * rather than a colon-separated clock, because it is an estimate from the last
- * three seconds of a connection that is free to change its mind.
- */
-function fmtLeft(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 3) return "";
-  if (seconds > 3 * 3600) return ""; // not an estimate, a symptom
-  // clamped at 85 so the seconds branch cannot round its way to "~90 s left",
-  // which is a minute and a half wearing the wrong unit
-  if (seconds < 90) return `~${Math.min(85, Math.max(5, Math.round(seconds / 5) * 5))} s left`;
-  return `~${Math.round(seconds / 60)} min left`;
-}
-
-/** "13.1 MB" or "412 KB" — how much has actually come down the wire */
-function fmtSize(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
 
 /** the bar only ever goes forwards, whatever order the answers arrive in */
 let burnt = 0;
@@ -705,56 +653,8 @@ let live: Loaded | null = null;
 let at: V1Standpoint | null = null;
 let animating = false;
 
-const key = (s: V1Standpoint): string => `${s.x},${s.z},${s.facing}`;
-
-/**
- * The rotational order of the facing IDs, read out of the file rather than
- * assumed.
- *
- * The IDs are not in compass order — APOTH turns 1 -> 3 -> 2 -> 4 -> 1 one way
- * round and the reverse the other — so "which way is right" cannot come from
- * comparing numbers. Every cell carries both cycles as eight turn records, so
- * the answer is simply the two turns leaving the standpoint we are on, taken in
- * the order the register stores them: the register groups one whole cycle before
- * the other, which makes the first the consistent sense across the set.
- */
-function turnsFrom(set: SetFileV1, s: V1Standpoint): V1Transition[] {
-  return set.transitions.filter(
-    (t) => t.kind === "turn" && key(t.from) === key(s),
-  );
-}
-function walkFrom(set: SetFileV1, s: V1Standpoint): V1Transition | undefined {
-  return set.transitions.find(
-    (t) => t.kind === "walk" && key(t.from) === key(s),
-  );
-}
-
-/**
- * The picture of standing at a standpoint.
- *
- * The HI-RES still first — the big frame at the tail of a slot, which every
- * standpoint on the disc has exactly one of (see `set-v1.ts`). That is what the
- * original shows you while you are stopped; the move's own frames are the low-res
- * ones it flicks through on the way. Preferring it is not just fidelity, it is
- * also visibly sharper.
- *
- * Falling back to a move's last frame covers the standpoint whose still failed to
- * decode. Its arrival frame is the same view at lower detail, which is a better
- * answer than a black screen.
- */
-function stillAt(l: Loaded, s: V1Standpoint): Uint8Array | null {
-  for (const t of l.set.transitions) {
-    if (key(t.from) !== key(s) || t.departureStill < 0) continue;
-    const px = l.frames.get(t.departureStill);
-    if (px) return px;
-  }
-  for (const t of l.set.transitions) {
-    if (key(t.to) !== key(s) || !t.frames.length) continue;
-    const px = l.frames.get(t.frames[t.frames.length - 1]);
-    if (px) return px;
-  }
-  return null;
-}
+/** the picture of standing at a standpoint (src/walker.ts) */
+const stillAt = (l: Loaded, s: V1Standpoint): Uint8Array | null => stillOf(l.set, l.frames, s);
 
 const rgbaOf = (l: Loaded): Uint8ClampedArray =>
   paletteToRGBA(l.set.cluts[l.clut]?.raw ?? l.set.paletteRaw, 256);
@@ -872,41 +772,12 @@ async function load(name: string, span?: { from: number; to: number }): Promise<
 
   // decode every frame in FILE order, into one buffer, keeping each result —
   // see the note at the top of this file on why the order is not optional
-  const file = readContainerFile(bytes);
-  const fb = new FrameBuffer();
-  const frames = new Map<number, Uint8Array>();
-  for (let i = 0; i < file.containers.length; i++) {
-    const c = file.containers[i];
-    if (c.gap || c.data.length < 8) continue;
-    try {
-      const d = decodeFrame(c.data, fb);
-      if (d.width === VIEW_W && d.height === VIEW_H) {
-        frames.set(i, fb.pixels.slice(0, VIEW_W * VIEW_H));
-      }
-    } catch {
-      /* not a frame — scripts, registers and the header all live here too */
-    }
-  }
+  const frames = decodeSetFrames(bytes);
 
   clearScreen();
   live = { name, set, frames, clut: 0 };
   at = set.transitions[0]?.from ?? { x: 0, z: 0, facing: 1 };
-  const cells = new Set(set.transitions.map((t) => `${t.from.x},${t.from.z}`))
-    .size;
-  const stills = new Set(
-    set.transitions
-      .filter((t) => t.departureStill >= 0)
-      .map((t) => key(t.from)),
-  ).size;
-  say(
-    `${name}: v1 · ${set.gridWidth}x${set.gridHeight} grid, ${cells} standpoints · ` +
-      `${set.transitions.length} moves · ${frames.size} frames · ${stills} stills · ${set.actors.length} cast · ` +
-      `clut ${live.clut + 1}/${set.cluts.length}` +
-      (panel
-        ? ` · panel ${BOOT_FLAT} (${panel.regions.length} buttons)`
-        : " · no panel") +
-      (set.warnings.length ? ` · ${set.warnings.length} warnings` : ""),
-  );
+  say(setSummary(name, set, frames.size, live.clut, panel ? { flat: BOOT_FLAT, buttons: panel.regions.length } : null));
   show();
 }
 
@@ -919,13 +790,14 @@ addEventListener("keydown", (e) => {
   // boot finishes, so without this an arrow pressed in the speedrun editor
   // walked the camera instead of moving the caret
   if (focusOwnsKey(e.target, e.key)) return;
+  const what = walkerKey(e.key);
   const turns = turnsFrom(live.set, at);
-  if (e.key === "ArrowRight" && turns[0]) void move(turns[0]);
-  else if (e.key === "ArrowLeft" && turns[1]) void move(turns[1]);
-  else if (e.key === "ArrowUp") {
+  if (what === "right" && turns[0]) void move(turns[0]);
+  else if (what === "left" && turns[1]) void move(turns[1]);
+  else if (what === "up") {
     const w = walkFrom(live.set, at);
     if (w) void move(w);
-  } else if (e.key === "c" || e.key === "C") {
+  } else if (what === "clut") {
     live.clut = (live.clut + 1) % Math.max(1, live.set.cluts.length);
     say(`clut ${live.clut + 1}/${live.set.cluts.length}`);
     show();
@@ -1141,7 +1013,7 @@ async function runBoot(): Promise<void> {
   // (engine/src/runtime/session.ts).
   host.session.dfVersion = 1;
   host.session.onSaveGame = async (bytes) => {
-    await browseForSave(bytes as Uint8Array, defaultSaveName(host), {
+    await browseForSave(bytes as Uint8Array, defaultSaveName(host.session.currentSetFile, new Date()), {
       log: say,
     });
   };
@@ -1465,12 +1337,13 @@ addEventListener("keydown", (e) => {
    * `SELECT` is one of the things `focusOwnsKey` answers for, so that check is
    * gone rather than kept beside this one.
    */
-  if (focusOwnsKey(e.target, e.key)) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // which key is whose: src/input.ts
+  const act = keyAction(e);
+  if (!act) return;
   // a saved-games dialog is a modal: while it is up the game hears nothing, or
   // an arrow pressed while picking a save walks you down the street behind it
   if (savesOpen()) return;
-  if (e.key === "b" || e.key === "B") {
+  if ("log" in act) {
     e.preventDefault();
     // inert where the log is a column rather than an overlay — there is nothing
     // to toggle it to, which is the same rule Titanic's X follows
@@ -1494,16 +1367,7 @@ addEventListener("keydown", (e) => {
    */
   const host = playing;
   if (!host) return;
-  const arrow: Record<string, string> = {
-    ArrowUp: "uparrow",
-    ArrowDown: "downarrow",
-    ArrowLeft: "leftarrow",
-    ArrowRight: "rightarrow",
-  };
-  const name =
-    arrow[e.key] ?? (e.key === " " ? " " : e.key === "Escape" ? "." : null);
-  const ch = name ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
-  if (!ch) return;
+
   /**
    * Was this key HELD, rather than pressed?
    *
@@ -1525,8 +1389,8 @@ addEventListener("keydown", (e) => {
    * Dust-only, and not because it would be wrong on the play page: no TAOOT script
    * mentions `isrepeat` at all, in any of the six editions.
    */
-  host.session.interp.globals.set("isrepeat", e.repeat ? 1 : 0);
-  void host.session.track(host.director.keyDown(ch, e.key === "Escape"));
+  host.session.interp.globals.set("isrepeat", act.repeat ? 1 : 0);
+  void host.session.track(host.director.keyDown(act.key, act.escape));
   e.preventDefault();
 });
 
@@ -1540,15 +1404,8 @@ addEventListener("keydown", (e) => {
 useSaveKind(DUST_SAVES);
 
 /** the pointer, in the canvas's own 512x384 coordinates */
-function canvasCoords(e: { clientX: number; clientY: number }): {
-  x: number;
-  y: number;
-} {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: Math.floor(((e.clientX - r.left) / r.width) * FLAT_W),
-    y: Math.floor(((e.clientY - r.top) / r.height) * FLAT_H),
-  };
+function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
+  return screenPoint(e, canvas.getBoundingClientRect(), { width: FLAT_W, height: FLAT_H });
 }
 
 /**
@@ -1819,19 +1676,6 @@ function sendGestureKey(ch: string, isEsc = false): void {
   void host.session.track(host.director.keyDown(ch, isEsc));
 }
 
-/**
- * The name the save dialog offers: where you are, and when.
- *
- * The room rather than the day or the clock, because that is what a player
- * recognises a save by in a list of them — and the disc's own five are named the
- * same way by hand (START, DOG, GOTBONE).
- */
-function defaultSaveName(host: GameHost): string {
-  const room = host.session.currentSetFile?.replace(/\.set$/i, "") || "dust";
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${room} - ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
-}
 
 /**
  * Boot the game. If it cannot produce a viewer, show the set browser instead.

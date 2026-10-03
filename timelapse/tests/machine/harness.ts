@@ -42,7 +42,7 @@ export const STEP = ENGINE_STEP_MS;
 export const SEED = Number(process.env.SEED ?? 19961031);
 
 /** every file of the four discs by lowercase basename, lowest disc first */
-function indexDiscs(): Map<string, string> {
+export function indexDiscs(): Map<string, string> {
   const found = new Map<string, string>();
   const walk = (dir: string, skipInstall: boolean): void => {
     for (const entry of readdirSync(dir).sort()) {

@@ -115,6 +115,15 @@ whole game: `easter` (the camera, the lantern, the six masks, the time gate),
 the transmission panel, and the escape that leaves Atlantis to launch without
 you). The routes are in `tests/machine/worlds/`, one file a world.
 
+`stages` is the rest of the map, which no route reaches: every stage's
+`getframeaction` table and every hotspot that moves you, read off the four
+discs without a game tick, each way out of each frame landing on a frame that
+exists. Five do not, and are listed in the suite with the script line that
+says so: two words in a035's second `case 100`/`case 102`, which the switch
+never reaches, and three of the game's own — i004 frame 604's left and right
+(`J.363`, `J.463`, frames no Indus stage has) and i006 frame 958's forward
+with the lantern unlit (`J.862`, which is i005's).
+
 - **A route names the frame it wants.**
   [`nav.ts`](https://github.com/dhobi/dreamrefactory/blob/master/timelapse/tests/machine/nav.ts)
   reads every stage's `getframeaction` table off the disc and finds the keys by

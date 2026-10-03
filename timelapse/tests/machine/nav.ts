@@ -32,6 +32,9 @@ export interface Spot {
 }
 const id = (s: Spot): string => `${s.stage}:${s.frame}`;
 
+/** what reading the tables needs: the discs, not a running game */
+export type Discs = Pick<Headless, "file">;
+
 /** a stage's file, as `gotostage` builds the name */
 export const stageFile = (world: string, stage: number): string => `${world.toLowerCase()}${String(stage).padStart(3, "0")}.stg`;
 
@@ -40,7 +43,7 @@ type Table = Map<number, string[][]>;
 const tables = new Map<string, Table>();
 
 /** the stage's scripts, decompiled, the way `tools/dumpscripts.ts` writes them */
-export function stageScripts(h: Headless, world: string, stage: number): string[] {
+export function stageScripts(h: Discs, world: string, stage: number): string[] {
   const bytes = h.file(stageFile(world, stage));
   if (!bytes) return [];
   const out: string[] = [];
@@ -51,7 +54,7 @@ export function stageScripts(h: Headless, world: string, stage: number): string[
   return out;
 }
 
-export function tableOf(h: Headless, world: string, stage: number): Table {
+export function tableOf(h: Discs, world: string, stage: number): Table {
   const key = stageFile(world, stage);
   let t = tables.get(key);
   if (t) return t;
@@ -96,7 +99,7 @@ export function tableOf(h: Headless, world: string, stage: number): Table {
  */
 type Hotspot = { region: string; to: Spot };
 const hotspots = new Map<string, Map<number, Hotspot[]>>();
-export function hotspotsOf(h: Headless, world: string, stage: number): Map<number, Hotspot[]> {
+export function hotspotsOf(h: Discs, world: string, stage: number): Map<number, Hotspot[]> {
   const key = stageFile(world, stage);
   let out = hotspots.get(key);
   if (out) return out;
@@ -132,7 +135,9 @@ export function hotspotsOf(h: Headless, world: string, stage: number): Map<numbe
 /** where one word goes from `from`, or null for none the plan can use */
 export function target(from: Spot, word: string): Spot | null {
   const [verb, ...n] = word.split(".").map((w, i) => (i ? Number(w) : w)) as [string, ...number[]];
-  switch (verb) {
+  // upper-cased as `transitionaction`'s switch compares, caselessly: e002's
+  // "s.1.1.137" and m010's "j.252" are exits the game takes
+  switch (verb.toUpperCase()) {
     case "J":
     case "TL":
     case "TR":

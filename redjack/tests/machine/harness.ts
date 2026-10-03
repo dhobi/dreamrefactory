@@ -40,7 +40,7 @@ export const SEED = 19980101;
 const ALIASES: Record<string, string> = { bootfile: "bootfile.boot" };
 
 /** every file of the three discs by lowercase basename, then by disc */
-function indexDiscs(): Map<string, Map<number, string>> {
+export function indexDiscs(): Map<string, Map<number, string>> {
   const found = new Map<string, Map<number, string>>();
   for (const disc of DISCS) {
     const walk = (dir: string): void => {

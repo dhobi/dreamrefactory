@@ -31,7 +31,7 @@ import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/au
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
-import { ESCAPE_KEY, SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
+import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
@@ -40,6 +40,9 @@ import { TIMELAPSE } from "@dreamfactory/site/games";
 import { VERSION } from "@dreamfactory/site/version";
 import { TL_CURSORS } from "./cursor-art";
 import { TimelapseFiles } from "./files";
+import { isNavRegion, keyAction, screenPoint } from "./input";
+import { bugLine, exitsHtml, whereHtml } from "./location";
+import { NetMeter, fmtSize } from "./meter";
 
 /**
  * This game's screen, and it is NOT the engine's default.
@@ -246,26 +249,9 @@ function progress(f: number, label?: string): void {
   }
 }
 
-/**
- * The network meter: one rolling window for the whole loading page.
- *
- * Sampled per CHUNK and read on a TIMER, and both halves matter. Measured per
- * completed file instead, `open.mov` reports nothing for as long as it takes to
- * arrive and then one enormous figure at the moment it lands — and on a slow
- * connection that silence is the entire experience of this loader.
- *
- * Dust's page has the same meter over its own 95 MB. Two copies rather than one
- * shared module, for now, because they differ in what they can promise: Dust
- * counts FETCHES against a plan of eight, and this counts BYTES, because two of
- * its thirteen files are three quarters of the download. The day a third page
- * wants one, it moves to `site/`.
- */
-const WINDOW_MS = 3000;
-/** the least window worth dividing by; under it there is no number to give */
-const SETTLE_MS = 900;
+/** the network meter (src/meter.ts), read on a timer while the prefetch runs */
 const TICK_MS = 250;
-const netSamples: { t: number; bytes: number }[] = [];
-let netTotal = 0;
+const meter = new NetMeter();
 let meterTimer = 0;
 /** what is still to come, once the list is known */
 let bytesLeft: (() => number) | null = null;
@@ -274,60 +260,20 @@ let idleCaption = "";
 /** is the caption currently a rate, and therefore mine to replace? */
 let rateShown = false;
 
-function netChunk(bytes: number): void {
-  netSamples.push({ t: performance.now(), bytes });
-  netTotal += bytes;
-}
-
 /**
  * Show the rate while bytes are arriving and get out of the way when they are
  * not: a rate that survives the transfer it measured is the misleading thing,
  * and the name of the file being opened is better than a stale number.
  */
 function meterTick(): void {
-  const now = performance.now();
-  while (netSamples.length && now - netSamples[0].t > WINDOW_MS) netSamples.shift();
-  const span = netSamples.length ? now - netSamples[0].t : 0;
-  const got = netSamples.reduce((a, x) => a + x.bytes, 0);
-  const rate = span >= SETTLE_MS ? got / (span / 1000) : 0;
-  if (rate) {
-    const left = bytesLeft?.() ?? 0;
-    // "12 of 70 MB" rather than "12 MB so far", once there is a total to be a
-    // fraction of — and the total is what has come down plus what is still owed,
-    // so it GROWS if the game asks for something this list did not name, which is
-    // the honest direction for it to move
-    const scale = left ? `${fmtSize(netTotal)} of ${fmtSize(netTotal + left)}` : `${fmtSize(netTotal)} so far`;
-    const eta = left ? fmtLeft(left / rate) : "";
-    bootSayEl.textContent = `${fmtRate(rate)} · ${scale}${eta ? ` · ${eta}` : ""}`;
+  const caption = meter.caption(performance.now(), bytesLeft?.() ?? 0);
+  if (caption) {
+    bootSayEl.textContent = caption;
     rateShown = true;
   } else if (rateShown) {
     bootSayEl.textContent = idleCaption;
     rateShown = false;
   }
-}
-
-/** "1.4 MB/s" or "830 KB/s" — whichever reads as a number rather than as noise */
-const fmtRate = (bps: number): string =>
-  bps >= 1024 * 1024 ? `${(bps / (1024 * 1024)).toFixed(1)} MB/s` : `${Math.max(1, Math.round(bps / 1024))} KB/s`;
-
-/** "13.1 MB" or "412 KB" — how much has actually come down the wire */
-const fmtSize = (bytes: number): string =>
-  bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-
-/**
- * "~4 min left", "~35 s left", or nothing at all when the answer is "any moment"
- * or too wild to print.
- *
- * Rounded coarsely on purpose — to five seconds under a minute and a half, to
- * whole minutes above. The rate it divides is a three-second average, so the raw
- * figure jitters between ticks, and a countdown that flickers reads as broken
- * even when every value it shows is true.
- */
-function fmtLeft(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 3) return "";
-  if (seconds > 3 * 3600) return ""; // not an estimate, a symptom
-  if (seconds < 90) return `~${Math.min(85, Math.max(5, Math.round(seconds / 5) * 5))} s left`;
-  return `~${Math.round(seconds / 60)} min left`;
 }
 
 /** a real pause, for the one place that wants to be SEEN rather than be quick */
@@ -442,7 +388,7 @@ async function main(): Promise<void> {
   }
   progress(INDEXED, `indexed ${files.size} names across four discs`);
   say(`indexed ${files.size} names across the rip`);
-  files.onChunk = (_name, bytes) => netChunk(bytes);
+  files.onChunk = (_name, bytes) => meter.chunk(bytes, performance.now());
   watchNetwork(files);
   meterTimer = window.setInterval(meterTick, TICK_MS);
 
@@ -676,52 +622,6 @@ async function main(): Promise<void> {
   );
 }
 
-/**
- * Where you are, and which way you are looking.
- *
- * Timelapse ships no `.SET` on any of its four discs, so there is no scene and
- * view to read the way there is in Titanic — but that does not mean the position
- * is unknowable. The BOOTFILE keeps it in globals and builds every flat name out
- * of them: `framename` is `curworldchar @ frametype @ region @ "." @ frame`, so
- * `i0001.330` is world I, an ordinary view (`0`), region 001, frame 330. The
- * FRAME is both the standpoint and the facing — turning left changes it exactly
- * as walking does — which is why there is no separate bearing to report.
- *
- * The game agrees, and says so itself: its `showloc()` is
- *
- *     message ("stage " @ curstagename @ ", region " @ numtostring (curregionnum)
- *              @ ", frame " @ numtostring (curframenum))
- *
- * fired after every move when `debugging` is on. This is that, plus the exits,
- * and without turning `debugging` on — which the game also reads for its
- * developer clicks (`optionkey() & shiftkey()` opens prop scripts and a testing
- * dialog) and would change how the game plays.
- */
-const EXITS = ["forward", "back", "left", "right", "back-left", "back-right"] as const;
-const ARROWS = ["↑", "↓", "←", "→", "↙", "↘"] as const;
-
-/**
- * One slot of a `getframeaction` string, in words.
- *
- * The table is six space-separated words, one per direction, and the verbs are
- * the ones `transitionaction` switches on: `J` jumps to a frame, `TL`/`TR` turn
- * to one, `G` crosses to another region, `S` to another stage. `X` is the game
- * saying NO — a direction it does not offer from here, which is worth showing as
- * such rather than as a blank, because a refused key is the commonest thing to
- * mistake for a broken one.
- */
-function exitText(word: string): string {
-  if (!word || word === "X") return "—";
-  const [verb, ...rest] = word.split(".");
-  const where = rest.join(".");
-  if (verb === "J") return `→${where}`;
-  if (verb === "TL") return `↺${where}`;
-  if (verb === "TR") return `↻${where}`;
-  if (verb === "G") return `region ${rest[0]}, frame ${rest[1] ?? "?"}`;
-  if (verb === "S") return `stage ${where}`;
-  return word;
-}
-
 let lastLoc = "";
 
 /**
@@ -736,32 +636,23 @@ async function showLocation(host: GameHost): Promise<void> {
   const key = `${s.stageName}|${s.currentFlat}|${frame}`;
   if (key === lastLoc || s.scriptBusy) return;
   lastLoc = key;
-  /**
-   * The same line a bug report carries, so an issue says where it was opened —
-   * and the FLAT leads it.
-   *
-   * A bug report's title is the first segment of this (site/src/bug-report.ts),
-   * and led by the world it read "Bug in world I" on every report this game will
-   * ever produce. The flat name is the one identifier that is unique and compact:
-   * `i0001.100.6` is world I, region 001, frame 100, variant 6 — which is both
-   * what a triager would grep the discs for and what `tl.jump()` takes.
-   */
-  currentWhere =
-    `flat ${s.currentFlat} · world ${g("curworldchar") || "?"} · ` +
-    `stage ${g("curstagename") || s.stageName} · region ${g("curregionnum")} · frame ${frame}`;
-  const where =
-    `<b>world ${g("curworldchar") || "?"}</b>  stage ${g("curstagename") || s.stageName}  ` +
-    `region ${g("curregionnum")}  <b>frame ${frame}</b>  <i>${esc(s.currentFlat)}</i>`;
+  const place = {
+    world: g("curworldchar"),
+    stage: g("curstagename") || s.stageName,
+    region: g("curregionnum"),
+    frame,
+    flat: s.currentFlat,
+  };
+  currentWhere = bugLine(place);
+  const where = whereHtml(place);
   locEl.innerHTML = where;
   if (s.stageName === "none") return;
-  // the stage's own table of where each direction leads
+  // the stage's own table of where each direction leads (src/location.ts)
   const action = String(
     (await s.sendEvent("sendtostagefx", s.stageName, "getframeaction", [Number(frame)], s.stageName)) ?? "",
   );
   if (lastLoc !== key) return; // moved again while we asked
-  const words = action.trim().split(/\s+/);
-  const exits = EXITS.map((name, i) => `${ARROWS[i]} ${esc(exitText(words[i]))}`).join("   ");
-  locEl.innerHTML = `${where}\n<i>${exits}</i>`;
+  locEl.innerHTML = `${where}\n<i>${exitsHtml(action)}</i>`;
 }
 
 /**
@@ -771,11 +662,7 @@ async function showLocation(host: GameHost): Promise<void> {
  * plate, and the engine's coordinates are the 640x480 the game thinks in.
  */
 function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: Math.round(((e.clientX - r.left) / r.width) * SCREEN.width),
-    y: Math.round(((e.clientY - r.top) / r.height) * SCREEN.height),
-  };
+  return screenPoint(e, canvas.getBoundingClientRect(), SCREEN);
 }
 
 /**
@@ -815,29 +702,6 @@ function showCursor(name: string): void {
 addEventListener("resize", () => showCursor(cursorShown));
 
 /**
- * The four region names Timelapse navigates with.
- *
- * Not a guess and not a heuristic: measured across all 156 stages, `up`, `down`,
- * `left` and `right` are **27,179 of the 29,105** clickable regions on the discs
- * — 93.4%, over 7,967 flats — and the remainder are objects (`hyperlink`,
- * `lefteye`, `hive`, `button10`…). Each one's `mousedown` is a single
- * `sendtoboot(keydown("right"))` and its `setcursor` shows a `goright` arrow, so
- * the game's primary navigation is a click on the edge of the picture with the
- * cursor as the affordance.
- *
- * Which is exactly why they are suppressed on a TOUCHSCREEN. The cursor does not
- * exist there — nothing hovers — so the affordance that makes edge-clicking
- * legible is missing, while the edge of the picture is precisely where a thumb
- * rests. And they are `button` regions, so without this they would take a finger
- * IMMEDIATELY, which means a swipe begun anywhere near an edge navigated by click
- * instead of swiping at all.
- *
- * Nothing is lost by it: the four directions these cover are the four a swipe
- * sends, and both routes end in the same `getframeaction` table.
- */
-const NAV_REGIONS = new Set(["up", "down", "left", "right"]);
-
-/**
  * Is this a machine that navigates by finger?
  *
  * `maxTouchPoints` OR the media query, the test the other two shells use: a laptop
@@ -859,12 +723,11 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
 
   /**
    * A navigation hotspot, on a machine that has no cursor to reveal it — the
-   * edge regions a finger must not be given. See {@link NAV_REGIONS}.
+   * edge regions a finger must not be given (src/input.ts, NAV_REGIONS).
    */
   const navHotspot = (x: number, y: number): boolean => {
     if (!COARSE) return false;
-    const hit = s.hitTestAt(x, y);
-    return hit.type === "button" && NAV_REGIONS.has(hit.name.toLowerCase());
+    return isNavRegion(s.hitTestAt(x, y));
   };
 
   /**
@@ -971,47 +834,13 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
    */
   document.getElementById("spacekey")?.addEventListener("click", () => sendKey(SPACE_KEY));
 
+  // which key is whose: src/input.ts
   addEventListener("keydown", (e) => {
-    if (e.metaKey || e.ctrlKey) return;
-    /**
-     * A key that belongs to whatever has focus is not the game's.
-     *
-     * This listens on `window`, and the page has buttons — and a focused button
-     * is worked with SPACE, which is exactly the key one of them sends. Without
-     * this, tabbing to it and pressing space would fire the control AND the game,
-     * and the `preventDefault` below would stop it being pressed by keyboard at
-     * all. `focusOwnsKey` is the shared rule (engine/src/web/keys.ts): a text
-     * field takes every key, a button takes Space and Enter, and the arrows still
-     * walk while a control has focus.
-     */
-    if (focusOwnsKey(e.target, e.key)) return;
-    // Escape is `"."` with the special marker, which is what the movie player
-    // tests for — `"esc"` is a name nothing in the engine answers to, so it
-    // reached the script chain and skipped no film (see ESCAPE_KEY)
-    if (e.key === "Escape") {
-      e.preventDefault();
-      sendKey(ESCAPE_KEY, true);
-      return;
-    }
-    /**
-     * `b` is the log, and it does NOT go on to the game.
-     *
-     * Safe to take, and checked rather than assumed: the BOOTFILE's key router
-     * (container 1, `keydown`) answers to the arrows, `w`/`s`/`a`/`d`, `z`/`c`
-     * and the space — `b` is not one of them, so nothing is being intercepted
-     * from the game here.
-     */
-    if (e.key === "b") {
-      e.preventDefault();
-      showLog(logEl.hidden);
-      return;
-    }
-    const key =
-      { ArrowUp: "uparrow", ArrowDown: "downarrow", ArrowLeft: "leftarrow", ArrowRight: "rightarrow" }[
-        e.key
-      ] ?? e.key.toLowerCase();
+    const act = keyAction(e);
+    if (!act) return;
     e.preventDefault();
-    sendKey(key);
+    if ("log" in act) showLog(logEl.hidden);
+    else sendKey(act.key, act.special);
   });
 }
 
