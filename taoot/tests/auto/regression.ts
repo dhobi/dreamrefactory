@@ -7627,7 +7627,11 @@ test("every caption file's clips exist in that edition's sound banks", () => {
   const missing: string[] = [];
   let clips = 0;
   for (const name of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
-    const file = JSON.parse(readFileSync(new URL(name, dir), "utf8")) as { edition: string; banks: Record<string, Record<string, unknown>> };
+    const file = JSON.parse(readFileSync(new URL(name, dir), "utf8")) as {
+      edition: string;
+      banks: Record<string, Record<string, unknown>>;
+      films?: Record<string, Record<string, unknown>>;
+    };
     const tree = gamefiles(root, file.edition);
     for (const [bank, wanted] of Object.entries(file.banks)) {
       const path = tree.resolve(bank);
@@ -7635,6 +7639,15 @@ test("every caption file's clips exist in that edition's sound banks", () => {
       for (const clip of Object.keys(wanted)) {
         clips++;
         if (!have.has(clip)) missing.push(`${name}: ${bank} "${clip}"`);
+      }
+    }
+    // a film's clips are in the film's own sound table
+    for (const [film, wanted] of Object.entries(file.films ?? {})) {
+      const path = tree.resolve(film);
+      const have = path ? readMovFile(new Uint8Array(readFileSync(path))).sounds : new Map();
+      for (const clip of Object.keys(wanted)) {
+        clips++;
+        if (!have.has(clip)) missing.push(`${name}: ${film} "${clip}"`);
       }
     }
   }
@@ -7810,14 +7823,21 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
     (await sounded("tour9.mov", "smeth1.116")) === "Smeth: The Line has instructed me to relay the following information.", shown());
   check("penote.mov: Smeth's VO-- note goes",
     (await sounded("penote.mov", "smeth1.096")).startsWith("Smeth: Two thousand two hundred onboard"), shown());
+  check("brncl.mov: Burns's line, whose ident the film's name field cut to 15 characters",
+    (await sounded("brncl.mov", "Burns Correctio")).startsWith("Burns: There they are, the steel tycoon Conklin"), shown());
   check("a film's other sounds are not captioned", (await sounded("rub.mov", "rubopen")) === "", shown());
+  // the opening credits' narration is in the film's own sound table and in no
+  // puppet: its words are the transcript's
+  check("ocredits.mov: Carlson's opening narration, from the transcript",
+    (await sounded("ocredits.mov", "voice.1")) === "Carlson: The past, forever locked in regret. But what if the past could be changed?", shown());
+  check("...and not the credits' music", (await sounded("ocredits.mov", "newtick")) === "", shown());
   check("a film nobody listed has none", film("berg.mov", 0.5) === "");
   session.everyLineSubtitled = false;
   check("and none of it without the setting", film("cash.mov", 0) === "");
 });
 
 // --- 87e. the films' voiced lines all have words, and the editor writes the file back as it is
-test("every film sound in movie-lines.json is a puppet line with words, and the caption file round-trips", async () => {
+test("every film sound in movie-lines.json is a puppet line with words, and the caption files round-trip", async () => {
   const { session } = await newHost();
   const missing: string[] = [];
   let sounds = 0;
@@ -7825,15 +7845,19 @@ test("every film sound in movie-lines.json is a puppet line with words, and the 
     for (const [sound, puppet] of Object.entries(lines)) {
       sounds++;
       const words = await session.puppetCtrl.spokenWords(puppet);
-      if (!words.get(sound)) missing.push(`${movie} ${sound} (${puppet})`);
+      // a 15-character name is an ident the film's name field cut short
+      const text = words.get(sound) ?? (sound.length === 15 ? [...words].find(([i]) => i.startsWith(sound))?.[1] : undefined);
+      if (!text) missing.push(`${movie} ${sound} (${puppet})`);
     }
   }
   check("the index names over a hundred voiced lines", sounds > 100, `sounds=${sounds}`);
   check("and every one has words", missing.length === 0, missing.join(" | "));
 
-  const path = new URL("../../src/captions/en.json", import.meta.url);
-  const text = readFileSync(path, "utf8");
-  check("en.json is exactly what the caption editor would export", formatCaptions(JSON.parse(text)) === text);
+  const dir = new URL("../../src/captions/", import.meta.url);
+  for (const name of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+    const text = readFileSync(new URL(name, dir), "utf8");
+    check(`${name} is exactly what the caption editor would export`, formatCaptions(JSON.parse(text)) === text);
+  }
 });
 
 // --- 88. the puppet knows its own name -------------------------------------

@@ -7,11 +7,13 @@
  *  - the ending's narration, whose words ARE on the disc — NARRATE.PUP, a
  *    puppet no script opens (./narration.ts);
  *  - everything else that speaks without text — the Sasha/Zeitel gossip, the
- *    London landlady, the voices behind cabin doors, the fencing master —
- *    whose words are NOT: ./captions/<edition>.json is a transcript of the
- *    audio, a speech recogniser's draft corrected by ear in the caption
- *    editor (taoot/captions/). Each file says so at the top, and nothing here
- *    pretends otherwise; an edition without a file simply gets no transcript.
+ *    London landlady, the voices behind cabin doors, the fencing master, the
+ *    opening credits' narration that ocredits.mov keeps in its own sound
+ *    table — whose words are NOT: ./captions/<edition>.json is a transcript
+ *    of the audio, a speech recogniser's draft corrected by ear in the
+ *    caption editor (taoot/captions/). Each file says so at the top, and
+ *    nothing here pretends otherwise; an edition without a file simply gets
+ *    no transcript.
  *
  * Both only ever reach the screen with the player's "every line that is heard"
  * setting on (GameSession.everyLineSubtitled).
@@ -46,6 +48,11 @@ export interface CaptionFile {
   made: string;
   /** one-shot clips, by bank file and clip name */
   banks: Record<string, Record<string, Clip>>;
+  /**
+   * Clips kept in a film's own sound table, by film and sound name — the
+   * voice-over that is no puppet's line (ocredits.mov's opening narration)
+   */
+  films?: Record<string, Record<string, Clip>>;
   /** looping tracks that talk (the bedsit radio's news), by bank file */
   tracks?: Record<string, TrackLine[]>;
   /**
@@ -74,10 +81,13 @@ export function formatCaptions(file: CaptionFile): string {
     if (c.listened) parts.push(`"listened": true`);
     return `{ ${parts.join(", ")} }`;
   };
-  const banks = Object.entries(file.banks).map(([bank, clips]) => {
-    const rows = Object.entries(clips).map(([name, c]) => `      ${q(name)}: ${entry(c)}`);
-    return `    ${q(bank)}: {\n${rows.join(",\n")}\n    }`;
-  });
+  const clipGroups = (groups: Record<string, Record<string, Clip>>): string[] =>
+    Object.entries(groups).map(([group, clips]) => {
+      const rows = Object.entries(clips).map(([name, c]) => `      ${q(name)}: ${entry(c)}`);
+      return `    ${q(group)}: {\n${rows.join(",\n")}\n    }`;
+    });
+  const banks = clipGroups(file.banks);
+  const films = clipGroups(file.films ?? {});
   const tracks = Object.entries(file.tracks ?? {}).map(([bank, lines]) => {
     const rows = lines.map((l) => `      ${entry(l)}`);
     return `    ${q(bank)}: [\n${rows.join(",\n")}\n    ]`;
@@ -88,7 +98,8 @@ export function formatCaptions(file: CaptionFile): string {
     `  "edition": ${q(file.edition)},`,
     `  "made": ${q(file.made)},`,
     ...(file.speakers ? [`  "speakers": {\n${Object.entries(file.speakers).map(([k, v]) => `    ${q(k)}: ${q(v)}`).join(",\n")}\n  },`] : []),
-    `  "banks": {\n${banks.join(",\n")}\n  }${tracks.length ? "," : ""}`,
+    `  "banks": {\n${banks.join(",\n")}\n  }${films.length || tracks.length ? "," : ""}`,
+    ...(films.length ? [`  "films": {\n${films.join(",\n")}\n  }${tracks.length ? "," : ""}`] : []),
     ...(tracks.length ? [`  "tracks": {\n${tracks.join(",\n")}\n  }`] : []),
     "}",
     "",
@@ -134,6 +145,10 @@ export function installCaptions(session: GameSession, edition: string): void {
         .map(([name, c]) => [name, { who: c.who, text: c.text }]),
     );
     session.captionSources.set(bank, { words });
+  }
+  for (const [movie, clips] of Object.entries(CAPTION_FILES[edition]?.films ?? {})) {
+    const words = Object.entries(clips).filter(([, c]) => c.text.trim());
+    session.movieSoundWords.set(movie, Object.fromEntries(words.map(([name, c]) => [name, { who: c.who, text: c.text }])));
   }
   for (const [bank, lines] of Object.entries(CAPTION_FILES[edition]?.tracks ?? {})) {
     session.themeCaptionSources.set(
