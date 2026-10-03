@@ -26,6 +26,8 @@ import { t, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
+import { decodeAudioContainer, type DecodedAudio } from "@dreamfactory/engine/df/audio";
+import { wavBlob } from "./wav";
 import {
   CastPose,
   CstFile,
@@ -498,6 +500,7 @@ function refresh(): void {
   buildPoses();
   buildFrames();
   buildScripts();
+  buildSounds();
   buildPalette();
   renderPreview();
 }
@@ -788,6 +791,54 @@ function buildScripts(): void {
     };
     det.appendChild(pre);
     wrap.appendChild(det);
+  }
+}
+
+/**
+ * The sounds a cast keeps among its sprites (#464). Only RedJack's
+ * `bfight.cast` has one: a DreamFactory 5 `SOUN` container, 0.65 s, with no
+ * name and nothing in the cast that names it, so it is listed by where it is.
+ * The section hides for a cast without any.
+ */
+const castSound = new Audio();
+function buildSounds(): void {
+  const wrap = $("sounds");
+  wrap.replaceChildren();
+  castSound.pause();
+  const c = cst!;
+  const isSound = (d: Uint8Array): boolean =>
+    d.length > 24 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === "SOUN";
+  const sounds = c.file.containers.flatMap((x, loc) => (isSound(x.data) ? [loc] : []));
+  $("soundsSection").style.display = sounds.length ? "" : "none";
+  for (const loc of sounds) {
+    const row = document.createElement("div");
+    const label = document.createElement("span");
+    let audio: DecodedAudio;
+    try {
+      audio = decodeAudioContainer(c.file.containers[loc].data, c.file.order);
+    } catch (e) {
+      label.textContent = t("casts.soundBroken", { loc, message: (e as Error).message });
+      row.append(label);
+      wrap.append(row);
+      continue;
+    }
+    const url = URL.createObjectURL(wavBlob(audio));
+    const play = document.createElement("button");
+    play.className = "mini";
+    play.textContent = "▶";
+    play.onclick = () => {
+      castSound.src = url;
+      castSound.currentTime = 0;
+      void castSound.play();
+    };
+    const save = document.createElement("a");
+    save.className = "mini";
+    save.href = url;
+    save.download = `${fileName.replace(/\.[^.]+$/, "")}.sound${loc}.wav`;
+    save.textContent = "⬇ WAV";
+    label.textContent = ` ${t("casts.soundRow", { loc, secs: (audio.samples.length / audio.sampleRate).toFixed(2), rate: audio.sampleRate })} `;
+    row.append(play, label, save);
+    wrap.append(row);
   }
 }
 
