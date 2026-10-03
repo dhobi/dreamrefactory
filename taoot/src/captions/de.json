@@ -2,14 +2,14 @@
   "notice": [
     "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
     "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the de edition's audio, so that a player who cannot hear them can read them (#50).",
-    "The narration over the opening credits (ocredits.mov) and the bedsit radio news (tracks) are written so far: speech recognition (Whisper large-v3-turbo, run locally on the German edition's audio), corrected by hand where it misheard, not yet checked by ear. The German film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
-    "The banks' clips are listed with no text yet: the English lines, waiting for a German ear. A clip with no text is not captioned.",
+    "Every line is a draft from speech recognition (Whisper large-v3-turbo, run locally on the German edition's own audio), corrected by hand where it misheard, not yet checked by ear. The German film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
+    "A clip with no text is not captioned. In the German edition many are SILENCE, not missing words: half the Sasha/Zeitel gossip clips (1.02 s at 11025 Hz) and the landlady's three lines through the door (0.51 s). Its three gossip scenes share one shorter exchange of five recorded lines. The fencing master is the English recording, so his lines are the English file's. Speakers follow what each line says, not who speaks it in English under the same clip name.",
     "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
     "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The German radio news is its own recording, read at its own pace; its timings and its draft words are from speech recognition (Whisper large-v3-turbo) on the German track, not yet checked by ear.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
   "edition": "de",
-  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), German, for the opening credits and the radio news; the rest still to be written by ear in the caption editor",
+  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), German, corrected by hand against the English lines; to be checked by ear in the caption editor",
   "speakers": {
     "narrate.pup": "Carlson",
     "narrate.pup#01": "Boss",
@@ -43,40 +43,40 @@
   },
   "banks": {
     "zgossip1.sfx": {
-      "z3.01": { "text": "", "who": "Sasha" },
+      "z3.01": { "text": "Wir haben ein Problem, Zeitel.", "who": "Sasha", "heard": "Wir haben ein Problem, Zeitl." },
       "z3.02": { "text": "", "who": "Zeitel" },
       "z3.03": { "text": "", "who": "Sasha" },
-      "z3.04": { "text": "", "who": "Zeitel" },
+      "z3.04": { "text": "Die Rubaiyat. Die Handschrift war nicht in Ihrem Geheimbriefkasten.", "who": "Sasha", "heard": "Die Rubaiyat. Die Handschrift war nicht in ihrem Geheimbriefkasten." },
       "z3.05": { "text": "", "who": "Sasha" },
       "z3.06": { "text": "", "who": "Zeitel" },
-      "z3.07": { "text": "", "who": "Sasha" },
+      "z3.07": { "text": "Absolut!", "who": "Sasha" },
       "z3.08": { "text": "", "who": "Zeitel" },
-      "z3.09": { "text": "", "who": "Sasha" },
-      "z3.10": { "text": "", "who": "Sasha" },
+      "z3.09": { "text": "Aber ich habe sie selbst dort versteckt. Was ist passiert?", "who": "Zeitel" },
+      "z3.10": { "text": "Die haben jetzt die Rubaiyat.", "who": "Sasha" },
       "z3.11": { "text": "", "who": "Sasha" }
     },
     "zgossip2.sfx": {
-      "z2.01": { "text": "", "who": "Sasha" },
+      "z2.01": { "text": "Wir haben ein Problem, Zeitel.", "who": "Sasha", "heard": "Wir haben ein Problem, Zeitl." },
       "z2.02": { "text": "", "who": "Zeitel" },
       "z2.03": { "text": "", "who": "Sasha" },
-      "z2.04": { "text": "", "who": "Zeitel" },
+      "z2.04": { "text": "Die Rubaiyat. Die Handschrift war nicht in Ihrem Geheimbriefkasten.", "who": "Sasha", "heard": "Die Rubaiyat. Die Handschrift war nicht in ihrem Geheimbriefkasten." },
       "z2.05": { "text": "", "who": "Sasha" },
-      "z2.06": { "text": "", "who": "Sasha" },
+      "z2.06": { "text": "Absolut!", "who": "Sasha" },
       "z2.07": { "text": "", "who": "Zeitel" },
-      "z2.08": { "text": "", "who": "Sasha" },
+      "z2.08": { "text": "Die haben jetzt die Rubaiyat.", "who": "Sasha" },
       "z2.09": { "text": "", "who": "Zeitel" },
       "z2.10": { "text": "", "who": "Sasha" }
     },
     "zgossip3.sfx": {
-      "z1.01": { "text": "", "who": "Zeitel" },
+      "z1.01": { "text": "Wir haben ein Problem, Zeitel.", "who": "Sasha", "heard": "Wir haben ein Problem, Zeitl." },
       "z1.02": { "text": "", "who": "Sasha" },
       "z1.03": { "text": "", "who": "Zeitel" },
-      "z1.04": { "text": "", "who": "Sasha" },
+      "z1.04": { "text": "Absolut!", "who": "Sasha" },
       "z1.05": { "text": "", "who": "Zeitel" },
       "z1.06": { "text": "", "who": "Sasha" },
-      "z1.07": { "text": "", "who": "Zeitel" },
+      "z1.07": { "text": "Aber ich habe sie selbst dort versteckt. Was ist passiert?", "who": "Zeitel" },
       "z1.09": { "text": "", "who": "Zeitel" },
-      "z1.10": { "text": "", "who": "Zeitel" },
+      "z1.10": { "text": "Die haben jetzt die Rubaiyat.", "who": "Sasha" },
       "z1.11": { "text": "", "who": "Sasha" },
       "z1.12": { "text": "", "who": "Zeitel" },
       "z1.13": { "text": "", "who": "Zeitel" }
@@ -85,28 +85,28 @@
       "door1": { "text": "", "who": "Landlady" },
       "door2": { "text": "", "who": "Landlady" },
       "door3": { "text": "", "who": "Landlady" },
-      "lady2": { "text": "", "who": "Landlady" },
-      "lady3": { "text": "", "who": "Landlady" },
-      "lady4": { "text": "", "who": "Landlady" }
+      "lady2": { "text": "Tja, wird Zeit, dass Sie endlich wach werden. Sie sind zwei Wochen mit der Miete hinten nach.", "who": "Landlady" },
+      "lady3": { "text": "Ob Krieg oder nicht, ein Mieter, der nicht pünktlich zahlt, ist ein Mieter, den ich mir nicht gefallen lasse.", "who": "Landlady" },
+      "lady4": { "text": "Ich weiß, dass Sie mich hören. Wenn Sie bis heute Abend nicht bezahlt haben, sitzen Sie auf der Straße, das verspreche ich Ihnen.", "who": "Landlady" }
     },
     "unilib.trk": {
-      "conk.come": { "text": "", "who": "Conk" },
-      "ga.enter": { "text": "", "who": "Georgia" },
-      "max.cmere": { "text": "", "who": "Max" },
-      "sasha.away": { "text": "", "who": "Sasha" },
-      "shay.jack": { "text": "", "who": "Shailagh" }
+      "conk.come": { "text": "Guten Abend.", "who": "Conk" },
+      "ga.enter": { "text": "Herein.", "who": "Georgia" },
+      "max.cmere": { "text": "Kommen Sie her!", "who": "Max" },
+      "sasha.away": { "text": "Gute Nacht.", "who": "Sasha" },
+      "shay.jack": { "text": "Jack?", "who": "Shailagh", "heard": "Jack", "guess": true }
     },
     "fence.trk": {
-      "en guard": { "text": "", "who": "Fencing master" },
-      "prez": { "text": "", "who": "Fencing master" },
-      "allez": { "text": "", "who": "Fencing master" },
-      "allons y": { "text": "", "who": "Fencing master" },
-      "et la": { "text": "", "who": "Fencing master" },
-      "touche": { "text": "", "who": "Fencing master" },
-      "sehr gut": { "text": "", "who": "Fencing master" },
-      "mist": { "text": "", "who": "Fencing master" },
-      "verdammt": { "text": "", "who": "Fencing master" },
-      "ach": { "text": "", "who": "Fencing master" }
+      "en guard": { "text": "En garde!", "who": "Fencing master" },
+      "prez": { "text": "Prêts?", "who": "Fencing master" },
+      "allez": { "text": "Allez!", "who": "Fencing master" },
+      "allons y": { "text": "Allons-y.", "who": "Fencing master" },
+      "et la": { "text": "Et là!", "who": "Fencing master" },
+      "touche": { "text": "Touché.", "who": "Fencing master" },
+      "sehr gut": { "text": "Sehr gut!", "who": "Fencing master" },
+      "mist": { "text": "Mist!", "who": "Fencing master" },
+      "verdammt": { "text": "Ach, verdammt!", "who": "Fencing master" },
+      "ach": { "text": "Ach!", "who": "Fencing master" }
     }
   },
   "films": {

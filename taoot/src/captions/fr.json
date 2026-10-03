@@ -1,0 +1,134 @@
+{
+  "notice": [
+    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
+    "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the fr edition's audio, so that a player who cannot hear them can read them (#50).",
+    "Every line is a draft from speech recognition (Whisper large-v3-turbo, run locally on the French edition's own audio), corrected by hand where it misheard (mostly names), not yet checked by ear. The French film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
+    "A clip with no text is not captioned. In the French edition some are SILENCE, not missing words: z3.06 and the landlady's three lines through the door (0.51 s). Shailagh's unilib.trk line plays Georgia's \"Entrez.\", the same recording. The fencing master is the English recording, so his lines are the English file's.",
+    "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The French radio news is its own recording, read at its own pace; its timings and words are from speech recognition on the French track.",
+    "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
+  ],
+  "edition": "fr",
+  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), French, corrected by hand against the English lines; to be checked by ear in the caption editor",
+  "speakers": {
+    "narrate.pup": "Carlson",
+    "narrate.pup#01": "Boss",
+    "narrate.pup#02": "Boss",
+    "narrate.pup#03": "Boss",
+    "narrate.pup#04 e": "Boss",
+    "narrate.pup#05 e": "Boss",
+    "narrate.pup#06": "Boss",
+    "narrate.pup#07": "Boss",
+    "narrate.pup#pt.01": "Narrator",
+    "narrate.pup#pt.02": "Narrator",
+    "narrate.pup#pt.03": "Narrator",
+    "narrate.pup#pt.04": "Narrator",
+    "narrate.pup#pt.05": "Narrator",
+    "narrate.pup#pt.06": "Narrator",
+    "narrate.pup#pt.07": "Narrator",
+    "penny1.pup": "Penny",
+    "penny2.pup": "Penny",
+    "smeth1.pup": "Smeth",
+    "cash1.pup": "Cash",
+    "burns1.pup": "Burns",
+    "morrow1.pup": "Morrow",
+    "morrow2.pup": "Morrow",
+    "stok1.pup": "Stoker",
+    "trask1.pup": "Trask",
+    "wilzeit1.pup": "Willie",
+    "shay1.pup": "Shailagh",
+    "csea1.pup": "Seaman",
+    "bsea2.pup": "Seaman",
+    "blkjack2.pup": "Dealer"
+  },
+  "banks": {
+    "zgossip1.sfx": {
+      "z3.01": { "text": "Nous avons un problème, Zeitel.", "who": "Sasha", "heard": "Nous avons un problème, Zaiton." },
+      "z3.02": { "text": "Lequel ?", "who": "Zeitel" },
+      "z3.03": { "text": "Le Rubaiyat, il n'était pas là où vous l'avez laissé.", "who": "Sasha" },
+      "z3.04": { "text": "Vous êtes sûr ?", "who": "Zeitel" },
+      "z3.05": { "text": "Absolument sûr.", "who": "Sasha" },
+      "z3.06": { "text": "", "who": "Zeitel" },
+      "z3.07": { "text": "Il y a un troisième intervenant à bord, un agent qui travaille contre vous et contre nous.", "who": "Sasha" },
+      "z3.08": { "text": "Comment le savez-vous ?", "who": "Zeitel" },
+      "z3.09": { "text": "Mon domestique les a vus à cet endroit.", "who": "Sasha" },
+      "z3.10": { "text": "Maintenant, ils ont le Rubaiyat.", "who": "Sasha", "heard": "Maintenant, ils ont le rubayat." },
+      "z3.11": { "text": "Je pourrais être ruiné, Zeitel, si j'étais découvert.", "who": "Sasha", "heard": "Je pourrais être ruiné, Zaitel, si j'étais découvert." }
+    },
+    "zgossip2.sfx": {
+      "z2.01": { "text": "Tout a marché comme vous vouliez. Je l'ai. Le Rubaiyat est à moi.", "who": "Sasha", "heard": "Tout a marché comme vous vouliez. Je l'ai. Le rubeillat est à moi." },
+      "z2.02": { "text": "J'espère que vous apprécierez.", "who": "Zeitel" },
+      "z2.03": { "text": "Et encore plus les bénéfices que vous pourrez en tirer.", "who": "Sasha" },
+      "z2.04": { "text": "Qu'allez-vous faire avec ça ?", "who": "Zeitel" },
+      "z2.05": { "text": "Je connais un milliardaire américain qui collectionne les manuscrits rares. Il paiera une fortune et ne posera pas de questions.", "who": "Sasha" },
+      "z2.06": { "text": "Mais il reste tout de même un problème, colonel.", "who": "Sasha" },
+      "z2.07": { "text": "Lequel ?", "who": "Zeitel", "heard": "Lequel" },
+      "z2.08": { "text": "Il y a un troisième intervenant à bord, un agent qui travaille contre vous et contre nous.", "who": "Sasha" },
+      "z2.09": { "text": "Comment le savez-vous ?", "who": "Zeitel", "heard": "Comment le savez-vous?" },
+      "z2.10": { "text": "Le domestique qui a récupéré le Rubaiyat les a vus.", "who": "Sasha", "heard": "Le domestique qui a récupéré le rubeillat les a vus." }
+    },
+    "zgossip3.sfx": {
+      "z1.01": { "text": "Nous devons prendre nos précautions.", "who": "Zeitel" },
+      "z1.02": { "text": "Et la toile ? Est-ce que votre associé a été la chercher dans la cale ?", "who": "Sasha" },
+      "z1.03": { "text": "Non, je ne l'ai pas.", "who": "Zeitel" },
+      "z1.04": { "text": "Non ? Mais je l'y ai mise moi-même.", "who": "Sasha", "heard": "Non, mais je l'y ai mise moi-même." },
+      "z1.05": { "text": "Sacha, j'ai découvert un traître. Ne faites pas cette tête, ce n'est pas vous.", "who": "Zeitel" },
+      "z1.06": { "text": "Vous parlez de Haderlitz, votre associé ?", "who": "Sasha", "heard": "Vous parlez d'Aderlitz, votre associé." },
+      "z1.07": { "text": "Ce n'est plus mon associé, j'en ai bien peur. Il a caché la toile à mon insu. Quand je lui en ai parlé, il a été assez choqué.", "who": "Zeitel", "heard": "« Ce n'est plus mon associé, j'en ai bien peur. » Il a caché la toile à mon insu. Quand je lui en ai parlé, il a été assez choqué." },
+      "z1.09": { "text": "Si on peut dire. Willy était un intellectuel. Et les intellectuels ne sont pas assez intelligents pour faire de bons espions.", "who": "Zeitel", "heard": "Si on peut dire. Villy était un intellectuel. Et les intellectuels ne sont pas assez intelligents pour faire de bons espions.", "guess": true },
+      "z1.10": { "text": "Maintenant, je dois retrouver cette toile et les plans. Je crains que cet autre agent n'ait déjà mis la main dessus.", "who": "Zeitel" },
+      "z1.11": { "text": "Et Haderlitz ?", "who": "Sasha", "heard": "Et à Derlitz.", "guess": true },
+      "z1.12": { "text": "Merci de vous inquiéter. Mais il ne pourra plus nous faire aucun mal, je vous l'assure.", "who": "Zeitel" },
+      "z1.13": { "text": "J'ai un plan.", "who": "Zeitel", "guess": true }
+    },
+    "bedsit1.trk": {
+      "door1": { "text": "", "who": "Landlady" },
+      "door2": { "text": "", "who": "Landlady" },
+      "door3": { "text": "", "who": "Landlady" },
+      "lady2": { "text": "Hé hé ! Il serait temps de vous lever ! Vous me devez deux semaines de loyer !", "who": "Landlady" },
+      "lady3": { "text": "Guerre ou pas guerre, je veux pas de locataires qui paient pas leur loyer !", "who": "Landlady" },
+      "lady4": { "text": "Je sais que vous m'entendez ! Si vous n'avez pas payé ce soir, je vous flanque dehors ! Et je plaisante pas !", "who": "Landlady" }
+    },
+    "unilib.trk": {
+      "conk.come": { "text": "Bonjour.", "who": "Conk", "guess": true },
+      "ga.enter": { "text": "Entrez.", "who": "Georgia" },
+      "max.cmere": { "text": "Hé, dites, écoutez ça.", "who": "Max" },
+      "sasha.away": { "text": "Bonne nuit.", "who": "Sasha" },
+      "shay.jack": { "text": "Entrez.", "who": "Georgia" }
+    },
+    "fence.trk": {
+      "en guard": { "text": "En garde!", "who": "Fencing master" },
+      "prez": { "text": "Prêts?", "who": "Fencing master" },
+      "allez": { "text": "Allez!", "who": "Fencing master" },
+      "allons y": { "text": "Allons-y.", "who": "Fencing master" },
+      "et la": { "text": "Et là!", "who": "Fencing master" },
+      "touche": { "text": "Touché.", "who": "Fencing master" },
+      "sehr gut": { "text": "Sehr gut!", "who": "Fencing master" },
+      "mist": { "text": "Mist!", "who": "Fencing master" },
+      "verdammt": { "text": "Ach, verdammt!", "who": "Fencing master" },
+      "ach": { "text": "Ach!", "who": "Fencing master" }
+    }
+  },
+  "films": {
+    "ocredits.mov": {
+      "voice.1": { "text": "Le passé, un paysage gelé, enfermé à jamais dans les regrets. Et si l'on pouvait changer le passé ?", "who": "Carlson", "heard": "Le passé, un paysage gelé, enfermé à jamais dans les regrets, et sinon pouvait changer le passé." },
+      "voice.2": { "text": "Il s'est passé 30 ans depuis que j'ai assisté à la fin d'un monde, le mien, un monde que j'aurais pu sauver. C'était en 1912. La guerre allait éclater.", "who": "Carlson" },
+      "voice.3": { "text": "Le service avait besoin de quelqu'un à bord du Titanic. C'est moi qu'ils ont choisi. Était-ce une chance pour moi ? C'est ce que je pensais à l'époque.", "who": "Carlson", "heard": "Le service avait besoin de quelqu'un à bord du Titanic. C'est moi qui les ont choisis. Était-ce une chance pour moi ? C'est ce que je pensais à l'époque." },
+      "voice.4": { "text": "Je devais attendre un message de mon contact.", "who": "Carlson" },
+      "voice.5": { "text": "La rencontre était prévue sur ce navire immense et extraordinaire.", "who": "Carlson" }
+    }
+  },
+  "tracks": {
+    "bedrad1.trk": [
+      { "from": 1.7, "to": 4.2, "text": "Voici les principales nouvelles de la journée.", "who": "Radio" },
+      { "from": 4.5, "to": 7.5, "text": "Londres a subi un nouveau bombardement allemand cette nuit.", "who": "Radio" },
+      { "from": 8, "to": 10.5, "text": "Les dégâts ont surtout touché l'East End.", "who": "Radio" },
+      { "from": 11.2, "to": 15.8, "text": "La RAF a attaqué les bases aériennes ennemies au Havre et dans les Pays-Bas.", "who": "Radio" },
+      { "from": 16.7, "to": 20.8, "text": "En Russie, les Allemands ont subi de nouvelles pertes près de Leningrad.", "who": "Radio" },
+      { "from": 21, "to": 25, "text": "En Asie, la forteresse américaine de Corregidor tient toujours,", "who": "Radio", "heard": "En Asie, la forteresse américaine de Corjidor tient toujours," },
+      { "from": 25, "to": 28.2, "text": "mais les forces japonaises se rapprochent des champs de pétrole birmans.", "who": "Radio" },
+      { "from": 28.2, "to": 31.3, "text": "C'est la fin de notre bulletin d'information.", "who": "Radio" },
+      { "from": 31.5, "to": 34.7, "text": "Nous reprenons maintenant notre programme musical.", "who": "Radio" }
+    ]
+  }
+}

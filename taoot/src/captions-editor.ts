@@ -30,7 +30,7 @@ import { installVersion } from "@dreamfactory/site/version";
 import { installI18n } from "@dreamfactory/site/locales";
 import { siteUrl } from "@dreamfactory/site/site";
 import { gamefileManifest, editionsIn, chosenEdition, inChosenEdition, installEditionPicker } from "./editions";
-import { CAPTION_FILES, formatCaptions, TRACK_TIMINGS, type CaptionFile, type Clip, type TrackLine } from "./captions";
+import { CAPTION_FILES, formatCaptions, VOICES_OF, type CaptionFile, type Clip, type TrackLine } from "./captions";
 import { AudioLibrary } from "@dreamfactory/engine/runtime/audio";
 
 void installI18n();
@@ -58,17 +58,14 @@ function blankFor(edition: string): CaptionFile {
   }
   const tracks: NonNullable<CaptionFile["tracks"]> = {};
   for (const [bank, lines] of Object.entries(en.tracks ?? {})) {
-    // the edition's own recording's timings where it has one, else English's
-    const own = TRACK_TIMINGS[edition]?.[bank];
-    const times = own?.length === lines.length ? own : lines.map((l): [number, number] => [l.from, l.to]);
-    tracks[bank] = lines.map((l, i) => ({ from: times[i][0], to: times[i][1], text: "", who: l.who }));
+    tracks[bank] = lines.map((l) => ({ from: l.from, to: l.to, text: "", who: l.who }));
   }
   return {
     notice: [
       "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
       `Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the ${edition} edition's audio, written by ear, so that a player who cannot hear them can read them (#50).`,
       "'who' names the speaker. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-      `'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were ${TRACK_TIMINGS[edition] ? `found in the ${edition} edition's track by speech recognition` : "taken from the English edition"} and may need moving.`,
+      "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving.",
       "Corrections are welcome, and should be made by listening to the clip, not by editing the wording.",
     ],
     edition,
@@ -529,7 +526,9 @@ async function boot(): Promise<void> {
   file = loadDraft();
   $("fileNote").textContent = REPO[edition]
     ? `Editing taoot/src/captions/${edition}.json.`
-    : `There is no ${edition}.json yet: these are the English lines, with nothing written. The English line is beside each one.`;
+    : VOICES_OF[edition]
+      ? `The ${edition} edition speaks the ${VOICES_OF[edition]} recordings, so the game captions it from ${VOICES_OF[edition]}.json. A ${edition}.json written here would be used instead.`
+      : `There is no ${edition}.json yet: these are the English lines, with nothing written. The English line is beside each one.`;
   render();
   $("save").addEventListener("click", download);
   $("copy").addEventListener("click", () => void copy());

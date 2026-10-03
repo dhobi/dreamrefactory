@@ -32,7 +32,7 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { readAudioBank } from "@dreamfactory/engine/df/banks";
 import { heardSubtitle, subtitled } from "@dreamfactory/engine/runtime/puppet";
 import { NARRATION_BANK, NARRATION_WORDS } from "../../src/narration";
-import { CAPTION_FILES, TRACK_TIMINGS, formatCaptions, installCaptions } from "../../src/captions";
+import { CAPTION_FILES, VOICES_OF, formatCaptions, installCaptions } from "../../src/captions";
 import { AudioLibrary } from "@dreamfactory/engine/runtime/audio";
 import MOVIE_SOUNDS from "../../src/movie-lines.json";
 import type { CallExpr } from "@dreamfactory/engine/runtime/ast";
@@ -7884,7 +7884,7 @@ test("every film sound in movie-lines.json is a puppet line with words, and the 
 // The bedsit radio's news is read anew in French, German and Russian, at its
 // own pace; de.json first kept the English seconds and the caption editor cut
 // its lines off mid-word. An edition whose track differs from English times it
-// in its file or in TRACK_TIMINGS, and every line ends inside that track.
+// in its own file, and every line ends inside that track.
 test("each edition's radio news is timed by its own recording", () => {
   const en = readFileSync(gamefiles(root, "en").resolve("bedrad1.trk")!);
   const english = (CAPTION_FILES.en.tracks?.["bedrad1.trk"] ?? []).map((l) => `${l.from}-${l.to}`).join(" ");
@@ -7898,13 +7898,31 @@ test("each edition's radio news is timed by its own recording", () => {
     const theme = lib.theme("bedrad1.trk")!;
     const seconds = theme.samples.length / theme.sampleRate;
     const times: [number, number][] =
-      CAPTION_FILES[edition]?.tracks?.["bedrad1.trk"]?.map((l) => [l.from, l.to]) ?? TRACK_TIMINGS[edition]?.["bedrad1.trk"] ?? [];
+      CAPTION_FILES[edition]?.tracks?.["bedrad1.trk"]?.map((l) => [l.from, l.to]) ?? [];
     if (bytes.equals(en)) continue;
     own++;
     check(`${edition}: its own recording has its own timings`, times.length === 9 && times.map(([f, t]) => `${f}-${t}`).join(" ") !== english);
     check(`${edition}: every line ends inside its ${seconds.toFixed(1)} s track, in order`, times.every(([f, t], i) => f < t && t <= seconds && (i === 0 || f >= times[i - 1][1])));
   }
   check("three editions record the news anew", own === 3, `own=${own}`);
+});
+
+// --- 87g. an edition that speaks English is captioned from the English transcript
+// VOICES_OF holds only while the edition's voices really are the other's files:
+// every bank, film and track a transcript captions, byte for byte.
+test("the Dutch and Japanese editions speak the English recordings, so they are captioned from en.json", () => {
+  // files an edition re-encoded with the same words in them, checked by speech recognition
+  const sameWords: Record<string, string[]> = { ja: ["unilib.trk", "ocredits.mov"] };
+  for (const [edition, voices] of Object.entries(VOICES_OF)) {
+    check(`${edition} has no transcript of its own`, !CAPTION_FILES[edition]);
+    const file = CAPTION_FILES[voices];
+    const names = [...Object.keys(file.banks), ...Object.keys(file.films ?? {}), ...Object.keys(file.tracks ?? {})];
+    const differ = names.filter((n) => {
+      const mine = gamefiles(root, edition).resolve(n), theirs = gamefiles(root, voices).resolve(n);
+      return !mine || !theirs || (!sameWords[edition]?.includes(n) && !readFileSync(mine).equals(readFileSync(theirs)));
+    });
+    check(`${edition}: every captioned voice file is ${voices}'s`, differ.length === 0, differ.join(" "));
+  }
 });
 
 // --- 88. the puppet knows its own name -------------------------------------
