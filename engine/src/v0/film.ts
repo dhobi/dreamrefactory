@@ -63,12 +63,24 @@ export function* playOneFilm(
   let worded = false;
   let deeded = false;
   function* hooksAt(frame: number): Co {
-    if (!worded && wordAt >= 0 && frame === wordAt) (worded = true), hooks.word && (yield* hooks.word());
-    if (!deeded && deedAt >= 0 && frame === deedAt) (deeded = true), hooks.deed && (yield* hooks.deed());
+    if (!worded && wordAt >= 0 && frame === wordAt) {
+      worded = true;
+      if (hooks.word) yield* hooks.word();
+    }
+    if (!deeded && deedAt >= 0 && frame === deedAt) {
+      deeded = true;
+      if (hooks.deed) yield* hooks.deed();
+    }
   }
   function* hooksLeft(): Co {
-    if (!worded && wordAt >= 0) (worded = true), hooks.word && (yield* hooks.word());
-    if (!deeded && deedAt >= 0) (deeded = true), hooks.deed && (yield* hooks.deed());
+    if (!worded && wordAt >= 0) {
+      worded = true;
+      if (hooks.word) yield* hooks.word();
+    }
+    if (!deeded && deedAt >= 0) {
+      deeded = true;
+      if (hooks.deed) yield* hooks.deed();
+    }
   }
   m.log(`▶ ${path} — ${film.frames.length} frames`);
   m.screen.setPalette(paletteV0(film.paletteRaw));

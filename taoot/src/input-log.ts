@@ -135,7 +135,7 @@ export function stamp(ms: number): string {
   const h = Math.floor(whole / 3600);
   const m = Math.floor((whole - h * 3600) / 60);
   const s = whole - h * 3600 - m * 60;
-  const mm = `${h ? String(m).padStart(2, "0") : String(m).padStart(2, "0")}:${s.toFixed(1).padStart(4, "0")}`;
+  const mm = `${String(m).padStart(2, "0")}:${s.toFixed(1).padStart(4, "0")}`;
   return `[+${h ? `${h}:` : ""}${mm}]`;
 }
 

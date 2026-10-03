@@ -184,7 +184,7 @@ export function decodePNG(bytes: Uint8Array): DecodedPNG {
   for (let i = 0, n = width * height; i < n; i++) {
     const s = i * channels;
     const grey = channels <= 2;
-    rgba[i * 4] = grey ? out[s] : out[s];
+    rgba[i * 4] = out[s];
     rgba[i * 4 + 1] = grey ? out[s] : out[s + 1];
     rgba[i * 4 + 2] = grey ? out[s] : out[s + 2];
     rgba[i * 4 + 3] = channels === 2 ? out[s + 1] : channels === 4 ? out[s + 3] : 255;
