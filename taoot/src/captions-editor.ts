@@ -64,7 +64,7 @@ function blankFor(edition: string): CaptionFile {
       "Corrections are welcome, and should be made by listening to the clip, not by editing the wording.",
     ],
     edition,
-    made: `written by ear in the caption editor (taoot/captions/), started ${new Date().toISOString().slice(0, 10)}`,
+    made: "written by ear in the caption editor (taoot/captions/)",
     // speaker names are words to translate too; English's to start from
     speakers: { ...(en.speakers ?? {}) },
     banks,
