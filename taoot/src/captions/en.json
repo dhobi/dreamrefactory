@@ -89,7 +89,7 @@
       "door3": { "text": "When do I get my money?! When?!", "who": "Landlady", "listened": true },
       "lady2": { "text": "About time, you're awake. You're two weeks late with the rent.", "who": "Landlady", "heard": "Mom, you're awake. You're two weeks late with the rent.", "listened": true },
       "lady3": { "text": "War or no war, a tenant in arrears is not a tenant I'll put up with.", "who": "Landlady", "heard": "War or no war, a tenant in a raise is not a tenant I'll put up with.", "listened": true },
-      "lady4": { "text": "You don't pay by today, it's the street I promise.", "who": "Landlady", "listened": true }
+      "lady4": { "text": "You don't pay by today, it's the street, I promise!", "who": "Landlady", "listened": true }
     },
     "unilib.trk": {
       "conk.come": { "text": "Come in.", "who": "Conk", "listened": true },
