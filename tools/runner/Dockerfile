@@ -28,10 +28,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     RUNNER_ALLOW_RUNASROOT=0
 
 # `jq` for the entrypoint's token call, `git` for checkout, `curl`/`tar` for the
-# download below, `libicu` because the runner's .NET host needs it.
+# download below, `libicu` because the runner's .NET host needs it, `unzip`
+# because SonarQube Cloud's scan action ships its scanner as a zip (coverage.yml).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates curl tar git jq libicu74 \
+      ca-certificates curl tar git jq libicu74 unzip \
  && rm -rf /var/lib/apt/lists/*
 
 # The suites assume Node 22+. The base image ships a Node; fail the BUILD if it
