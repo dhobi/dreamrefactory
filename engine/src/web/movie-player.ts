@@ -401,11 +401,15 @@ export class MoviePlayer {
       // own picture: the segments after it that bring no bed inherit this one
       // (see the paragraph above, and bedRuntimeMs).
       const bed = soundtrackFor(seg, audio, interval, frames.length, bedRuntimeMs(mov, segIdx));
-      this.session.audio.play(
+      const bedHandle = this.session.audio.play(
         "voice",
         { sampleRate: bed.sampleRate, samples: bed.samples },
         bed.loop ? { loop: true } : undefined,
       );
+      // a bed that speaks puppet lines is captioned chunk by chunk (#50): a
+      // looping bed is its distinct chunks, a run is the authored order
+      const played = bed.loop ? audio.unique : audio.resampled;
+      this.session.captionMovieBed(fileName, played.map((c) => c.length / audio.rate), bed.loop, bedHandle);
     }
     const frameByName = new Map<string, number>();
     seg.frames.forEach(

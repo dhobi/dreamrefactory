@@ -2260,6 +2260,49 @@ export class GameSession {
   prepareMovieCaptions(movie: string): void {
     if (!this.everyLineSubtitled) return;
     for (const puppet of new Set(Object.values(this.movieSoundSources.get(movie.toLowerCase()) ?? {}))) this.wordsOf(puppet);
+    const bed = this.movieBedSources.get(movie.toLowerCase());
+    if (bed) this.wordsOf(bed.puppet);
+  }
+  /**
+   * Film → the puppet lines its SOUNDTRACK speaks, one per distinct chunk in
+   * the order they play (null for a chunk that says nothing). TAOOT's
+   * penote.mov names Smethells' `smeth1.096` and `smeth1.097` on its frames,
+   * but has no clip by either name: the voice is the bed, the two lines and a
+   * rustle of paper, looping while the telegram is up. A game's own index,
+   * set by its page.
+   */
+  readonly movieBedSources = new Map<string, { puppet: string; chunks: readonly (string | null)[] }>();
+  /** the bed now speaking puppet lines, timed from when it started ({@link captionMovieBed}) */
+  private bedNow: { lines: readonly TimedCaption[]; at: number; seconds: number; loop: boolean; handle: { done: boolean } } | null = null;
+  /**
+   * A film's bed has started: if its chunks are puppet lines, caption each
+   * while its chunk plays — by the clock, since the bed runs on whatever the
+   * player clicks. `chunkSecs` are the lengths of the chunks as played.
+   */
+  captionMovieBed(movie: string, chunkSecs: readonly number[], loop: boolean, handle: { done: boolean }): void {
+    this.bedNow = null;
+    if (!this.everyLineSubtitled) return;
+    const source = this.movieBedSources.get(movie.toLowerCase());
+    if (!source) return;
+    const at = this.clock.now;
+    let t = 0;
+    const spans = chunkSecs.map((sec, i) => {
+      const span = { from: t, to: t + sec, line: source.chunks[i] ?? null };
+      t += sec;
+      return span;
+    });
+    const seconds = t;
+    const start = (words: Map<string, string>): void => {
+      if (handle.done) return;
+      const lines = spans.flatMap((sp) => {
+        const text = sp.line ? words.get(sp.line) : undefined;
+        return text ? [{ from: sp.from, to: sp.to, who: this.speakerOf(source.puppet, sp.line!), text }] : [];
+      });
+      this.bedNow = { lines, at, seconds, loop, handle };
+    };
+    const ready = this.wordsOf(source.puppet);
+    if (ready) start(ready);
+    else void (this.puppetWords.get(source.puppet) as Promise<Map<string, string>>).then(start);
   }
   /** a film has played one of its sounds: caption it if it is a puppet line, or has a transcript */
   captionMovieSound(movie: string, sound: string, handle: { done: boolean }): void {
@@ -2321,6 +2364,13 @@ export class GameSession {
     if (t && this.audioLib.bankOf(this.currentThemeName) === t.bank) {
       const sec = ((this.clock.now - t.at) / 1000) % t.seconds;
       const line = t.lines.find((l) => sec >= l.from && sec < l.to);
+      if (line) out.push({ who: line.who, text: line.text });
+    }
+    const bed = this.bedNow;
+    if (bed && !bed.handle.done && bed.seconds > 0) {
+      const sec = (this.clock.now - bed.at) / 1000;
+      const at = bed.loop ? sec % bed.seconds : sec;
+      const line = bed.lines.find((l) => at >= l.from && at < l.to);
       if (line) out.push({ who: line.who, text: line.text });
     }
     for (const c of this.captions) if (!c.handle.done) out.push({ who: c.who, text: c.text });
