@@ -113,7 +113,7 @@
   },
   "tracks": {
     "bedrad1.trk": [
-      { "from": 1.7, "to": 4.3, "text": "Once again today's top stories.", "who": "Radio" },
+      { "from": 1.7, "to": 4.3, "text": "Once again, today's top stories.", "who": "Radio" },
       { "from": 5, "to": 8, "text": "London has endured another night of German bombing.", "who": "Radio" },
       { "from": 8.8, "to": 11.7, "text": "Most damage was concentrated in the East End.", "who": "Radio" },
       { "from": 12.7, "to": 17.6, "text": "The RAF has struck enemy aerodromes in Le Havre and the Low Countries.", "who": "Radio", "heard": "The RAF has struck enemy aerodromes in La Havre and the Low Countries." },
