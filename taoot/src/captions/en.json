@@ -1,12 +1,13 @@
 {
   "notice": [
-    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank and clip names do.",
+    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
     "Titanic: Adventure Out of Time voices these clips and never prints them. This is our best-effort transcript of the audio, made so that a player who cannot hear them can read them (#50).",
     "Each 'text' was produced by speech recognition (Whisper large-v3-turbo, run locally on the English edition's sound banks) and then corrected by hand: names the recogniser cannot know (Zeitel, the Rubaiyat, Willie), and plain mishearings.",
     "'heard' is what the recogniser wrote, kept wherever the text differs from it. 'guess': true marks a line whose wording is uncertain even after correction.",
     "'who' names the speaker, shown before the words because captions can be up together (the radio and the landlady). The names were assigned from the lines' content and the clips' names; correct them by ear too.",
     "'speakers' names who says the lines read from the game's own puppets (the ending, the films' voice-overs), by puppet file, or by puppet#line where one puppet holds several voices. Assigned by us, not the game.",
     "'tracks' are looping tracks that talk, timed in seconds from the start of the loop as the engine assembles it: the bedsit radio's first station reads the news.",
+    "'films' are clips a film keeps in its own sound table and no puppet holds the words of: the narration over the opening credits (ocredits.mov). Transcribed the same way, from the film.",
     "'listened': true marks a line someone has checked by ear. Where it is missing, the line is only as good as the recogniser and the context.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
@@ -109,6 +110,15 @@
       "mist": { "text": "Mist!", "who": "Fencing master", "heard": "Mist.", "listened": true },
       "verdammt": { "text": "Ach, verdammt!", "who": "Fencing master", "heard": "Ah, verdammt!", "listened": true },
       "ach": { "text": "Ach!", "who": "Fencing master", "heard": "Ah!", "listened": true }
+    }
+  },
+  "films": {
+    "ocredits.mov": {
+      "voice.1": { "text": "The past, forever locked in regret. But what if the past could be changed?", "who": "Carlson" },
+      "voice.2": { "text": "Thirty years have come and gone since the night that saw the end of a world, my world. The service needed someone on the Titanic. They chose me.", "who": "Carlson" },
+      "voice.3": { "text": "I was to wait for a signal from my contact, so I remained in my cabin. I left only once Georgia was on board.", "who": "Carlson" },
+      "voice.4": { "text": "And that's when it came. There'd be no second chance. It was Sunday, April 14th. Too late, you see. For the Titanic. For me.", "who": "Carlson" },
+      "voice.5": { "text": "What if I'd met with my contact? Prevented disaster. What if the past could be changed? What then?", "who": "Carlson" }
     }
   },
   "tracks": {

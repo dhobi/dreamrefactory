@@ -1,0 +1,134 @@
+{
+  "notice": [
+    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
+    "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the de edition's audio, so that a player who cannot hear them can read them (#50).",
+    "Only the narration over the opening credits (ocredits.mov) is written so far: speech recognition (Whisper large-v3-turbo, run locally on the German edition's film), corrected by hand where it misheard, not yet checked by ear. The German film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
+    "The banks' clips are listed with no text yet: the English lines, waiting for a German ear. A clip with no text is not captioned.",
+    "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving.",
+    "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
+  ],
+  "edition": "de",
+  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), German, for the opening credits; the rest still to be written by ear in the caption editor",
+  "speakers": {
+    "narrate.pup": "Carlson",
+    "narrate.pup#01": "Boss",
+    "narrate.pup#02": "Boss",
+    "narrate.pup#03": "Boss",
+    "narrate.pup#04 e": "Boss",
+    "narrate.pup#05 e": "Boss",
+    "narrate.pup#06": "Boss",
+    "narrate.pup#07": "Boss",
+    "narrate.pup#pt.01": "Narrator",
+    "narrate.pup#pt.02": "Narrator",
+    "narrate.pup#pt.03": "Narrator",
+    "narrate.pup#pt.04": "Narrator",
+    "narrate.pup#pt.05": "Narrator",
+    "narrate.pup#pt.06": "Narrator",
+    "narrate.pup#pt.07": "Narrator",
+    "penny1.pup": "Penny",
+    "penny2.pup": "Penny",
+    "smeth1.pup": "Smeth",
+    "cash1.pup": "Cash",
+    "burns1.pup": "Burns",
+    "morrow1.pup": "Morrow",
+    "morrow2.pup": "Morrow",
+    "stok1.pup": "Stoker",
+    "trask1.pup": "Trask",
+    "wilzeit1.pup": "Willie",
+    "shay1.pup": "Shailagh",
+    "csea1.pup": "Seaman",
+    "bsea2.pup": "Seaman",
+    "blkjack2.pup": "Dealer"
+  },
+  "banks": {
+    "zgossip1.sfx": {
+      "z3.01": { "text": "", "who": "Sasha" },
+      "z3.02": { "text": "", "who": "Zeitel" },
+      "z3.03": { "text": "", "who": "Sasha" },
+      "z3.04": { "text": "", "who": "Zeitel" },
+      "z3.05": { "text": "", "who": "Sasha" },
+      "z3.06": { "text": "", "who": "Zeitel" },
+      "z3.07": { "text": "", "who": "Sasha" },
+      "z3.08": { "text": "", "who": "Zeitel" },
+      "z3.09": { "text": "", "who": "Sasha" },
+      "z3.10": { "text": "", "who": "Sasha" },
+      "z3.11": { "text": "", "who": "Sasha" }
+    },
+    "zgossip2.sfx": {
+      "z2.01": { "text": "", "who": "Sasha" },
+      "z2.02": { "text": "", "who": "Zeitel" },
+      "z2.03": { "text": "", "who": "Sasha" },
+      "z2.04": { "text": "", "who": "Zeitel" },
+      "z2.05": { "text": "", "who": "Sasha" },
+      "z2.06": { "text": "", "who": "Sasha" },
+      "z2.07": { "text": "", "who": "Zeitel" },
+      "z2.08": { "text": "", "who": "Sasha" },
+      "z2.09": { "text": "", "who": "Zeitel" },
+      "z2.10": { "text": "", "who": "Sasha" }
+    },
+    "zgossip3.sfx": {
+      "z1.01": { "text": "", "who": "Zeitel" },
+      "z1.02": { "text": "", "who": "Sasha" },
+      "z1.03": { "text": "", "who": "Zeitel" },
+      "z1.04": { "text": "", "who": "Sasha" },
+      "z1.05": { "text": "", "who": "Zeitel" },
+      "z1.06": { "text": "", "who": "Sasha" },
+      "z1.07": { "text": "", "who": "Zeitel" },
+      "z1.09": { "text": "", "who": "Zeitel" },
+      "z1.10": { "text": "", "who": "Zeitel" },
+      "z1.11": { "text": "", "who": "Sasha" },
+      "z1.12": { "text": "", "who": "Zeitel" },
+      "z1.13": { "text": "", "who": "Zeitel" }
+    },
+    "bedsit1.trk": {
+      "door1": { "text": "", "who": "Landlady" },
+      "door2": { "text": "", "who": "Landlady" },
+      "door3": { "text": "", "who": "Landlady" },
+      "lady2": { "text": "", "who": "Landlady" },
+      "lady3": { "text": "", "who": "Landlady" },
+      "lady4": { "text": "", "who": "Landlady" }
+    },
+    "unilib.trk": {
+      "conk.come": { "text": "", "who": "Conk" },
+      "ga.enter": { "text": "", "who": "Georgia" },
+      "max.cmere": { "text": "", "who": "Max" },
+      "sasha.away": { "text": "", "who": "Sasha" },
+      "shay.jack": { "text": "", "who": "Shailagh" }
+    },
+    "fence.trk": {
+      "en guard": { "text": "", "who": "Fencing master" },
+      "prez": { "text": "", "who": "Fencing master" },
+      "allez": { "text": "", "who": "Fencing master" },
+      "allons y": { "text": "", "who": "Fencing master" },
+      "et la": { "text": "", "who": "Fencing master" },
+      "touche": { "text": "", "who": "Fencing master" },
+      "sehr gut": { "text": "", "who": "Fencing master" },
+      "mist": { "text": "", "who": "Fencing master" },
+      "verdammt": { "text": "", "who": "Fencing master" },
+      "ach": { "text": "", "who": "Fencing master" }
+    }
+  },
+  "films": {
+    "ocredits.mov": {
+      "voice.1": { "text": "Die Vergangenheit. Eine frosterstarrte Landschaft, auf ewig beklagt und verschlossen. Aber was wäre, wenn man die Vergangenheit ändern könnte?", "who": "Carlson" },
+      "voice.2": { "text": "30 Jahre sind dahingegangen seit jener Nacht, die das Ende einer Welt erlebte. Meiner Welt. Einer Welt, die ich hätte retten können. Es war im Jahre 1912. Krieg war im Kommen.", "who": "Carlson", "heard": "30 Jahre sind dahin gegangen seit jener Nacht, die das Ende einer Welt erlebte. Meiner Welt. Einer Welt, die ich hätte retten können. Es war im Jahre 1912. Krieg war im Kommen." },
+      "voice.3": { "text": "Der Geheimdienst brauchte jemanden auf der Titanic. Man wählte mich dafür. Anfängerglück? So schien es damals.", "who": "Carlson", "heard": "Der Geheimdienst brauchte jemanden auf der Titanic. Man wählte mich dafür. Anfängerglück? So schien es. Damat." },
+      "voice.4": { "text": "Ich sollte auf ein Signal von meinem Verbindungsmann warten, also blieb ich in meiner Kabine. Ich verließ sie nur ein einziges Mal. Georgia war an Bord.", "who": "Carlson" },
+      "voice.5": { "text": "Und ausgerechnet dann kam es. Die Gelegenheit würde sich kein zweites Mal bieten. Es war Sonntag, der 14. April. Zu spät, verstehen Sie? Für die Titanic. Für mich.", "who": "Carlson" }
+    }
+  },
+  "tracks": {
+    "bedrad1.trk": [
+      { "from": 1.7, "to": 4.3, "text": "", "who": "Radio" },
+      { "from": 5, "to": 8, "text": "", "who": "Radio" },
+      { "from": 8.8, "to": 11.7, "text": "", "who": "Radio" },
+      { "from": 12.7, "to": 17.6, "text": "", "who": "Radio" },
+      { "from": 18.6, "to": 23.1, "text": "", "who": "Radio" },
+      { "from": 24, "to": 28.3, "text": "", "who": "Radio" },
+      { "from": 28.3, "to": 32.9, "text": "", "who": "Radio" },
+      { "from": 33.8, "to": 35.5, "text": "", "who": "Radio" },
+      { "from": 36.3, "to": 38.4, "text": "", "who": "Radio" }
+    ]
+  }
+}

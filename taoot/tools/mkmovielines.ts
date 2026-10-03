@@ -13,7 +13,7 @@
  * no text.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { readMovFile } from "@dreamfactory/engine/df/mov";
+import { MOV_NAME_FIELD, readMovFile } from "@dreamfactory/engine/df/mov";
 import { readPupFile } from "@dreamfactory/engine/df/pup";
 import { gamefiles } from "./gamefiles";
 
@@ -23,7 +23,11 @@ const owner = new Map<string, string>();
 for (const f of g.names(/\.pup$/i)) {
   try {
     for (const l of readPupFile(new Uint8Array(readFileSync(g.resolve(f)!))).dialogue.values()) {
-      if (l.audioLocation) owner.set(l.ident.toLowerCase(), f.toLowerCase());
+      if (!l.audioLocation) continue;
+      owner.set(l.ident.toLowerCase(), f.toLowerCase());
+      // a film's name field holds 15 characters: brncl.mov plays BURNS1.PUP's
+      // "Burns Correction.SE" as "Burns Correctio"
+      if (l.ident.length > MOV_NAME_FIELD) owner.set(l.ident.slice(0, MOV_NAME_FIELD).toLowerCase(), f.toLowerCase());
     }
   } catch {
     /* a puppet that will not read owns no lines */

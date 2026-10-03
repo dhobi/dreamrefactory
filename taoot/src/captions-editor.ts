@@ -5,7 +5,7 @@
  * Those files are NOT original data — a speech recogniser's transcript of the
  * game's audio, corrected by hand — and this page is how they get corrected:
  * by listening. It plays each clip out of the chosen edition's own sound bank
- * (fetched through the same manifest the play page uses, so it works wherever
+ * or film (fetched through the same manifest the play page uses, so it works wherever
  * the game does), shows what the recogniser heard, and lets whoever speaks the
  * language write what is really said, mark a line as a guess, and mark it as
  * listened to.
@@ -22,6 +22,7 @@
  */
 import { readContainerFile, type DFContainerFile } from "@dreamfactory/engine/df/container";
 import { readAudioBank } from "@dreamfactory/engine/df/banks";
+import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { decodeAudioContainer, type DecodedAudio } from "@dreamfactory/engine/df/audio";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installPlayMenu } from "@dreamfactory/site/play-menu";
@@ -51,13 +52,17 @@ function blankFor(edition: string): CaptionFile {
   for (const [bank, clips] of Object.entries(en.banks)) {
     banks[bank] = Object.fromEntries(Object.entries(clips).map(([c, e]) => [c, { text: "", who: e.who }]));
   }
+  const films: NonNullable<CaptionFile["films"]> = {};
+  for (const [film, clips] of Object.entries(en.films ?? {})) {
+    films[film] = Object.fromEntries(Object.entries(clips).map(([c, e]) => [c, { text: "", who: e.who }]));
+  }
   const tracks: NonNullable<CaptionFile["tracks"]> = {};
   for (const [bank, lines] of Object.entries(en.tracks ?? {})) {
     tracks[bank] = lines.map((l) => ({ from: l.from, to: l.to, text: "", who: l.who }));
   }
   return {
     notice: [
-      "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank and clip names do.",
+      "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
       `Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the ${edition} edition's audio, written by ear, so that a player who cannot hear them can read them (#50).`,
       "'who' names the speaker. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
       "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving.",
@@ -68,6 +73,7 @@ function blankFor(edition: string): CaptionFile {
     // speaker names are words to translate too; English's to start from
     speakers: { ...(en.speakers ?? {}) },
     banks,
+    films,
     tracks,
   };
 }
@@ -75,6 +81,7 @@ function blankFor(edition: string): CaptionFile {
 /** what a contributor changed, as an issue carries it */
 interface Changes {
   banks?: CaptionFile["banks"];
+  films?: CaptionFile["films"];
   /** track lines by bank, then by their index in the track */
   tracks?: Record<string, Record<string, TrackLine>>;
 }
@@ -91,6 +98,11 @@ export function changedEntries(mine: CaptionFile, repo: CaptionFile): Changes {
       if (!same(c, repo.banks[bank]?.[name])) ((out.banks ??= {})[bank] ??= {})[name] = c;
     }
   }
+  for (const [film, clips] of Object.entries(mine.films ?? {})) {
+    for (const [name, c] of Object.entries(clips)) {
+      if (!same(c, repo.films?.[film]?.[name])) ((out.films ??= {})[film] ??= {})[name] = c;
+    }
+  }
   for (const [bank, lines] of Object.entries(mine.tracks ?? {})) {
     lines.forEach((l, i) => {
       if (!same(l, repo.tracks?.[bank]?.[i])) ((out.tracks ??= {})[bank] ??= {})[String(i)] = l;
@@ -101,6 +113,7 @@ export function changedEntries(mine: CaptionFile, repo: CaptionFile): Changes {
 
 const countChanges = (c: Changes): number =>
   Object.values(c.banks ?? {}).reduce((a, b) => a + Object.keys(b).length, 0) +
+  Object.values(c.films ?? {}).reduce((a, b) => a + Object.keys(b).length, 0) +
   Object.values(c.tracks ?? {}).reduce((a, b) => a + Object.keys(b).length, 0);
 
 // --- the page ----------------------------------------------------------------
@@ -115,7 +128,7 @@ const draftKey = (edition: string): string => `taoot.captions.draft2.${edition}`
 
 let edition = "en";
 let file: CaptionFile;
-/** bank file → its path in the manifest, for the chosen edition */
+/** bank file (or film) → its path in the manifest, for the chosen edition */
 let bankPaths = new Map<string, string>();
 interface Bank {
   file: DFContainerFile;
@@ -154,10 +167,15 @@ function loadDraft(): CaptionFile {
   try {
     const raw = localStorage.getItem(draftKey(edition));
     if (raw) {
-      const draft = JSON.parse(raw) as Pick<CaptionFile, "banks" | "tracks">;
+      const draft = JSON.parse(raw) as Pick<CaptionFile, "banks" | "films" | "tracks">;
       for (const [bank, clips] of Object.entries(draft.banks ?? {})) {
         for (const [name, c] of Object.entries(clips)) {
           if (base.banks[bank]?.[name]) base.banks[bank][name] = c;
+        }
+      }
+      for (const [film, clips] of Object.entries(draft.films ?? {})) {
+        for (const [name, c] of Object.entries(clips)) {
+          if (base.films?.[film]?.[name]) base.films[film][name] = c;
         }
       }
       for (const [bank, lines] of Object.entries(draft.tracks ?? {})) {
@@ -173,7 +191,7 @@ function loadDraft(): CaptionFile {
 
 function saveDraft(): void {
   try {
-    localStorage.setItem(draftKey(edition), JSON.stringify({ banks: file.banks, tracks: file.tracks }));
+    localStorage.setItem(draftKey(edition), JSON.stringify({ banks: file.banks, films: file.films, tracks: file.tracks }));
   } catch {
     /* the edits still hold for this tab; Export is what keeps them */
   }
@@ -181,7 +199,10 @@ function saveDraft(): void {
 }
 
 function updateCount(): void {
-  const all = [...Object.values(file.banks).flatMap((b) => Object.values(b)), ...Object.values(file.tracks ?? {}).flat()];
+  const all = [
+    ...[...Object.values(file.banks), ...Object.values(file.films ?? {})].flatMap((b) => Object.values(b)),
+    ...Object.values(file.tracks ?? {}).flat(),
+  ];
   const listened = all.filter((c) => c.listened).length;
   const n = countChanges(changedEntries(file, REPO[edition] ?? blankFor(edition)));
   countEl.textContent = `${all.length} lines · ${listened} listened to · ${n} changed from the repository's file`;
@@ -196,9 +217,16 @@ async function bank(name: string): Promise<Bank | null> {
       const r = await fetch(siteUrl(path));
       if (!r.ok) return null;
       const bytes = new Uint8Array(await r.arrayBuffer());
-      const f = readContainerFile(bytes);
-      const b = readAudioBank(f);
-      const loaded = { file: f, bytes, singles: new Map([...b.singles].map(([k, c]) => [k, c.containerLoc])) };
+      let loaded: Bank;
+      if (/\.mov$/i.test(name)) {
+        // a film keeps its sounds in its own table, by the names its frames play
+        const mov = readMovFile(bytes);
+        loaded = { file: mov.file, bytes, singles: mov.sounds };
+      } else {
+        const f = readContainerFile(bytes);
+        const b = readAudioBank(f);
+        loaded = { file: f, bytes, singles: new Map([...b.singles].map(([k, c]) => [k, c.containerLoc])) };
+      }
       ready.set(name, loaded);
       return loaded;
     })().catch(() => null);
@@ -261,7 +289,7 @@ function playClip(bankName: string, clip: string): void {
   const key = `${bankName}/${clip}`;
   let url = wavs.get(key);
   if (!url) {
-    url = wavUrl(decodeAudioContainer(b.file.containers[loc].data));
+    url = wavUrl(decodeAudioContainer(b.file.containers[loc].data, b.file.order));
     wavs.set(key, url);
   }
   start(url, `${bankName} ${clip}`);
@@ -378,14 +406,21 @@ function render(): void {
       listEl.append(row(l, `${l.from}–${l.to} s`, () => playTrack(bankName, l), english.tracks?.[bankName]?.[i], null, rows));
     });
   }
-  for (const [bankName, clips] of Object.entries(file.banks)) {
-    heading(bankName);
+  type Group = [name: string, clips: Record<string, Clip>, english: Record<string, Clip> | undefined, title: string];
+  const groups: Group[] = [
+    ...Object.entries(file.banks).map(([b, clips]): Group => [b, clips, english.banks[b], b]),
+    // no English line beside a film's clip: the German ocredits.mov cuts its
+    // narration in other places, so a clip's English namesake says something else
+    ...Object.entries(file.films ?? {}).map(([f, clips]): Group => [f, clips, undefined, `${f} — sounds the film keeps itself`]),
+  ];
+  for (const [bankName, clips, englishClips, title] of groups) {
+    heading(title);
     for (const [name, c] of Object.entries(clips)) {
       // a caption whose clip this edition's bank does not have can only be a
       // wrong name in the file — say so, rather than offer a button that is silent
       const loaded = ready.get(bankName);
       const absent = loaded && !loaded.singles.has(name) ? `${bankName} has no clip called "${name}" in this edition` : null;
-      listEl.append(row(c, name, () => playClip(bankName, name), english.banks[bankName]?.[name], absent, rows));
+      listEl.append(row(c, name, () => playClip(bankName, name), englishClips?.[name], absent, rows));
     }
   }
   updateCount();
@@ -482,7 +517,7 @@ async function boot(): Promise<void> {
   await installEditionPicker($("editionPicker"), { available: editions.length ? editions : ["en"] });
   bankPaths = new Map(
     inChosenEdition(paths, edition)
-      .filter((p) => /\.(sfx|trk|11k)$/i.test(p))
+      .filter((p) => /\.(sfx|trk|11k|mov)$/i.test(p))
       .map((p) => [p.split("/").pop()!.toLowerCase(), p]),
   );
   file = loadDraft();
@@ -502,6 +537,11 @@ async function boot(): Promise<void> {
   say("Loading the clips…");
   await Promise.all([...Object.keys(file.banks), ...Object.keys(file.tracks ?? {})].map((b) => bank(b)));
   render();
+  // the films after: ocredits.mov alone is 22 MB, and the banks should not wait on it
+  if (file.films) {
+    await Promise.all(Object.keys(file.films).map((f) => bank(f)));
+    render();
+  }
   say("Click ▶ or press Enter in a line to hear the next one.");
 }
 

@@ -1,4 +1,5 @@
 import { readContainerFile } from "../df/container";
+import { MOV_NAME_FIELD } from "../df/mov";
 import { RawSaveFile } from "../df/savegame";
 import { Actor, SetFile, StarPathPoint, readSetFile, readStarPath } from "../df/set";
 import { detectVersion, versionOf } from "../df/version";
@@ -2225,6 +2226,13 @@ export class GameSession {
    * and the words are that puppet line's. A game's own index, set by its page.
    */
   readonly movieSoundSources = new Map<string, Readonly<Record<string, string>>>();
+  /**
+   * Film → { its frame sound → words } for the sounds that are NO puppet's
+   * line: clips kept in the film's own sound table with no text anywhere in
+   * the game — TAOOT's `ocredits.mov` voices its opening narration as
+   * `voice.1`…`voice.5`. A game's own transcript, set by its page.
+   */
+  readonly movieSoundWords = new Map<string, Readonly<Record<string, CaptionLine>>>();
   /** who a puppet line is said by, for its caption — the game's own answer, if it has one */
   speakerOf: (puppet: string, line: string) => string | undefined = () => undefined;
   /** each puppet's lines as caption words, read once ({@link import("./puppet").PuppetController.spokenWords}) */
@@ -2253,14 +2261,24 @@ export class GameSession {
     if (!this.everyLineSubtitled) return;
     for (const puppet of new Set(Object.values(this.movieSoundSources.get(movie.toLowerCase()) ?? {}))) this.wordsOf(puppet);
   }
-  /** a film has played one of its sounds: caption it if it is a puppet line */
+  /** a film has played one of its sounds: caption it if it is a puppet line, or has a transcript */
   captionMovieSound(movie: string, sound: string, handle: { done: boolean }): void {
     if (!this.everyLineSubtitled) return;
     const line = sound.toLowerCase();
     const puppet = this.movieSoundSources.get(movie.toLowerCase())?.[line];
-    if (!puppet) return;
+    if (!puppet) {
+      const words = this.movieSoundWords.get(movie.toLowerCase())?.[line];
+      if (!words) return;
+      this.captions = this.captions.filter((c) => !c.handle.done);
+      this.captions.push({ ...words, handle });
+      return;
+    }
     const show = (words: Map<string, string>): void => {
-      const text = words.get(line);
+      // a film's name field holds 15 characters (MOV_NAME_FIELD), so a longer
+      // ident arrives cut short: TAOOT's brncl.mov plays "Burns Correctio"
+      const text =
+        words.get(line) ??
+        (line.length === MOV_NAME_FIELD ? [...words].find(([ident]) => ident.startsWith(line))?.[1] : undefined);
       if (!text || handle.done) return;
       this.captions = this.captions.filter((c) => !c.handle.done);
       this.captions.push({ who: this.speakerOf(puppet, line), text, handle });
