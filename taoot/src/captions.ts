@@ -138,27 +138,21 @@ export const MOVIE_BED_LINES: Record<string, { puppet: string; chunks: (string |
 };
 
 /**
- * Where a talking track's lines fall in an edition that recorded it anew, for
- * an edition with no transcript file yet: the caption editor starts its lines
- * here instead of at the English seconds. The bedsit radio's news is read at
- * its own pace in each language — French 74.4 s and Russian 80.0 s of track
- * against English 78.3 s — so the English timings cut its lines short (Dutch
- * and Japanese ship the English recording). Taken from speech recognition
- * (Whisper large-v3-turbo), each line widened a little where silence allows.
+ * Editions that speak another edition's voices, and are captioned from its
+ * transcript. The Dutch edition ships the English recordings byte for byte and
+ * translates only what the game prints. The Japanese one does too, except two
+ * files it carries in its own copies — unilib.trk's door voices and the opening
+ * credits' narration — whose words are the English ones all the same (speech
+ * recognition on the Japanese files hears "The past, forever locked in
+ * regret…" and "Jack, is that you? I'll be right out").
  */
-export const TRACK_TIMINGS: Record<string, Record<string, [from: number, to: number][]>> = {
-  fr: {
-    "bedrad1.trk": [[1.7, 4.2], [4.5, 7.5], [8, 10.5], [11.2, 15.8], [16.7, 20.8], [21, 25], [25, 28.2], [28.2, 31.3], [31.5, 34.7]],
-  },
-  ru: {
-    "bedrad1.trk": [[1.6, 4.2], [4.2, 9.6], [9.6, 13.7], [13.7, 18.9], [18.9, 24], [24, 28.3], [28.3, 33.8], [33.8, 37.4], [37.4, 40.4]],
-  },
-};
+export const VOICES_OF: Record<string, string> = { nl: "en", ja: "en" };
 
 /** tell the session where an edition's words are — once the edition is known, before any bank opens */
 export function installCaptions(session: GameSession, edition: string): void {
+  const file = CAPTION_FILES[edition] ?? CAPTION_FILES[VOICES_OF[edition] ?? ""];
   // speaker names are words like any other: the edition's own, else English's
-  const speakers = CAPTION_FILES[edition]?.speakers ?? CAPTION_FILES.en?.speakers ?? {};
+  const speakers = file?.speakers ?? CAPTION_FILES.en?.speakers ?? {};
   const speakerOf = (puppet: string, line: string): string | undefined =>
     speakers[`${puppet}#${line}`] ?? speakers[puppet];
   session.speakerOf = speakerOf;
@@ -168,7 +162,7 @@ export function installCaptions(session: GameSession, edition: string): void {
   }
   for (const [movie, sounds] of Object.entries(MOVIE_SOUNDS.films)) session.movieSoundSources.set(movie, sounds);
   for (const [movie, source] of Object.entries(MOVIE_BED_LINES)) session.movieBedSources.set(movie, source);
-  for (const [bank, clips] of Object.entries(CAPTION_FILES[edition]?.banks ?? {})) {
+  for (const [bank, clips] of Object.entries(file?.banks ?? {})) {
     const words = Object.fromEntries(
       Object.entries(clips)
         .filter(([, c]) => c.text.trim())
@@ -176,11 +170,11 @@ export function installCaptions(session: GameSession, edition: string): void {
     );
     session.captionSources.set(bank, { words });
   }
-  for (const [movie, clips] of Object.entries(CAPTION_FILES[edition]?.films ?? {})) {
+  for (const [movie, clips] of Object.entries(file?.films ?? {})) {
     const words = Object.entries(clips).filter(([, c]) => c.text.trim());
     session.movieSoundWords.set(movie, Object.fromEntries(words.map(([name, c]) => [name, { who: c.who, text: c.text }])));
   }
-  for (const [bank, lines] of Object.entries(CAPTION_FILES[edition]?.tracks ?? {})) {
+  for (const [bank, lines] of Object.entries(file?.tracks ?? {})) {
     session.themeCaptionSources.set(
       bank,
       lines.filter((l) => l.text.trim()).map((l) => ({ from: l.from, to: l.to, who: l.who, text: l.text })),

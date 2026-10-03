@@ -1,0 +1,134 @@
+{
+  "notice": [
+    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
+    "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the ru edition's audio, so that a player who cannot hear them can read them (#50).",
+    "Every line is a draft from speech recognition (Whisper large-v3-turbo, run locally on the Russian edition's own audio), corrected by hand where it misheard (mostly names), not yet checked by ear. The Russian dub often says something other than the English, and this file keeps what it says. The Russian film splits its narration differently from the English one.",
+    "Three gossip clips (zgossip3.sfx z1.11 to z1.13) are English in the Russian edition, so their text is the English file's. The fencing master calls the same French and German words as in English.",
+    "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The Russian radio news is its own recording, read at its own pace; its timings and words are from speech recognition on the Russian track.",
+    "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
+  ],
+  "edition": "ru",
+  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), Russian, corrected by hand against the English lines; to be checked by ear in the caption editor",
+  "speakers": {
+    "narrate.pup": "Carlson",
+    "narrate.pup#01": "Boss",
+    "narrate.pup#02": "Boss",
+    "narrate.pup#03": "Boss",
+    "narrate.pup#04 e": "Boss",
+    "narrate.pup#05 e": "Boss",
+    "narrate.pup#06": "Boss",
+    "narrate.pup#07": "Boss",
+    "narrate.pup#pt.01": "Narrator",
+    "narrate.pup#pt.02": "Narrator",
+    "narrate.pup#pt.03": "Narrator",
+    "narrate.pup#pt.04": "Narrator",
+    "narrate.pup#pt.05": "Narrator",
+    "narrate.pup#pt.06": "Narrator",
+    "narrate.pup#pt.07": "Narrator",
+    "penny1.pup": "Penny",
+    "penny2.pup": "Penny",
+    "smeth1.pup": "Smeth",
+    "cash1.pup": "Cash",
+    "burns1.pup": "Burns",
+    "morrow1.pup": "Morrow",
+    "morrow2.pup": "Morrow",
+    "stok1.pup": "Stoker",
+    "trask1.pup": "Trask",
+    "wilzeit1.pup": "Willie",
+    "shay1.pup": "Shailagh",
+    "csea1.pup": "Seaman",
+    "bsea2.pup": "Seaman",
+    "blkjack2.pup": "Dealer"
+  },
+  "banks": {
+    "zgossip1.sfx": {
+      "z3.01": { "text": "У нас проблемы, Цайтель.", "who": "Sasha" },
+      "z3.02": { "text": "А именно…", "who": "Zeitel", "heard": "А именно..." },
+      "z3.03": { "text": "Рубаят не оказался на указанном месте.", "who": "Sasha", "heard": "Рубояд не оказался на указанном месте." },
+      "z3.04": { "text": "Вы уверены?", "who": "Zeitel" },
+      "z3.05": { "text": "Совершенно!", "who": "Sasha" },
+      "z3.06": { "text": "Но я же сам его там оставлял. Что произошло?", "who": "Zeitel" },
+      "z3.07": { "text": "На корабле объявилась третья сила. Агент, работающий против вас, против нас.", "who": "Sasha", "heard": "На корабле объявилась третья сила. Агент работающий против вас, против нас." },
+      "z3.08": { "text": "Откуда вы знаете?", "who": "Zeitel" },
+      "z3.09": { "text": "Мой слуга видел его на указанном месте.", "who": "Sasha" },
+      "z3.10": { "text": "Рубаят теперь у них.", "who": "Sasha" },
+      "z3.11": { "text": "Цайтель, если вы про это узнали, мне конец.", "who": "Sasha", "guess": true }
+    },
+    "zgossip2.sfx": {
+      "z2.01": { "text": "С передачей книги всё получилось. Рубаят теперь у меня.", "who": "Sasha", "heard": "С передачи книги все получилось. Рубаят теперь у меня.", "guess": true },
+      "z2.02": { "text": "Надеюсь, в ваших словах прозвучала благодарность.", "who": "Zeitel" },
+      "z2.03": { "text": "Ещё бы! Получу столько денег за неё!", "who": "Sasha", "heard": "Еще бы! Получу столько денег за нее!" },
+      "z2.04": { "text": "Что вы сделаете с картиной?", "who": "Zeitel" },
+      "z2.05": { "text": "Есть один богатый коллекционер, он заплатит, не задавая лишних вопросов.", "who": "Sasha" },
+      "z2.06": { "text": "Но есть одно препятствие, полковник.", "who": "Sasha" },
+      "z2.07": { "text": "А именно…", "who": "Zeitel", "heard": "А именно..." },
+      "z2.08": { "text": "На корабле объявилась третья сила. Агент, работающий против вас, против нас.", "who": "Sasha" },
+      "z2.09": { "text": "Откуда вы знаете?", "who": "Zeitel" },
+      "z2.10": { "text": "Мой слуга наткнулся на него, когда подбирал Рубаят.", "who": "Sasha", "heard": "Мой слуга наткнулся на него, когда подбирал рубаят." }
+    },
+    "zgossip3.sfx": {
+      "z1.01": { "text": "Мы должны действовать очень осторожно.", "who": "Zeitel" },
+      "z1.02": { "text": "А как картина? Ваш помощник нашёл её среди багажа?", "who": "Sasha", "heard": "А как картина? Ваш помощник нашел ее среди багажа?" },
+      "z1.03": { "text": "Нет, я её не получил.", "who": "Zeitel" },
+      "z1.04": { "text": "Нет? Но я же собственными руками положил её в ящик.", "who": "Sasha", "heard": "Нет, но я же собственными руками положил её в ящик." },
+      "z1.05": { "text": "Саша, я обнаружил предателя в наших рядах. Не волнуйтесь, это не вы.", "who": "Zeitel", "heard": "«Саша, я обнаружил предателя в наших рядах. Не волнуйтесь, это не вы»." },
+      "z1.06": { "text": "Вы думаете на Хадерлица, вашего помощника?", "who": "Sasha", "heard": "Вы думаете на хидр лица вашего помощника?", "guess": true },
+      "z1.07": { "text": "Моего бывшего помощника.", "who": "Zeitel", "heard": "моего бывшего помощника." },
+      "z1.09": { "text": "Вилли был интеллектуалом, а интеллектуалы недостаточно умны для шпионажа.", "who": "Zeitel" },
+      "z1.10": { "text": "А теперь я должен заполучить картину и планы, к ней прилагающиеся. Боюсь, что третья сила их уже захватила.", "who": "Zeitel" },
+      "z1.11": { "text": "And Haderlitz?", "who": "Sasha", "heard": "And hey, let's..." },
+      "z1.12": { "text": "Thank you for asking. Willie will bring no further harm to the Fatherland, I assure you.", "who": "Zeitel" },
+      "z1.13": { "text": "Let us plan.", "who": "Zeitel" }
+    },
+    "bedsit1.trk": {
+      "door1": { "text": "Хочешь выскользнуть незамеченным? Плати за квартиру!", "who": "Landlady" },
+      "door2": { "text": "Говорят, ты когда-то был важным. Ну и что с того? Сейчас ты просто лысый и бедный старик.", "who": "Landlady", "heard": "Говорят, ты когда-то был важным. Ну и что с того? Сейчас ты просто лысый и бедный старикам.", "guess": true },
+      "door3": { "text": "Когда я получу деньги за квартиру? Когда?", "who": "Landlady" },
+      "lady2": { "text": "Эй, вставай, лежебока! У тебя уже за две недели не заплачено!", "who": "Landlady" },
+      "lady3": { "text": "Пусть война! Ну и что? Я с должниками не стану мириться тут!", "who": "Landlady" },
+      "lady4": { "text": "Если сегодня не заплатишь, я тебя выставлю на улицу! В этом не сомневайся!", "who": "Landlady" }
+    },
+    "unilib.trk": {
+      "conk.come": { "text": "Да.", "who": "Conk" },
+      "ga.enter": { "text": "Входите.", "who": "Georgia" },
+      "max.cmere": { "text": "Иди сюда!", "who": "Max" },
+      "sasha.away": { "text": "Спокойной ночи!", "who": "Sasha" },
+      "shay.jack": { "text": "Джек, это ты? Сейчас.", "who": "Shailagh" }
+    },
+    "fence.trk": {
+      "en guard": { "text": "En garde!", "who": "Fencing master" },
+      "prez": { "text": "Prêts?", "who": "Fencing master", "heard": "Поехали.", "guess": true },
+      "allez": { "text": "Allez!", "who": "Fencing master" },
+      "allons y": { "text": "Allons-y.", "who": "Fencing master" },
+      "et la": { "text": "Et là!", "who": "Fencing master" },
+      "touche": { "text": "Touché.", "who": "Fencing master" },
+      "sehr gut": { "text": "Sehr gut!", "who": "Fencing master" },
+      "mist": { "text": "Mist!", "who": "Fencing master" },
+      "verdammt": { "text": "Ach, verdammt!", "who": "Fencing master" },
+      "ach": { "text": "Ach!", "who": "Fencing master" }
+    }
+  },
+  "films": {
+    "ocredits.mov": {
+      "voice.1": { "text": "Прошлое. Горечь поражений и разбитые мечты. Если бы прошлое можно было изменить…", "who": "Carlson", "heard": "Прошлое. Горечь поражений и разбитые мечты. Если бы прошлое можно было изменить." },
+      "voice.2": { "text": "Тридцать лет прошло с той ночи, когда начал рушиться мир. Мой мир. Правительству нужен был человек на борту Титаника. Они выбрали меня.", "who": "Carlson", "heard": "Тридцать лет прошло с той ночи, когда начался рушиться мир. Мой мир. Правительству нужен был человек на борту Титаника. Они выбрали меня." },
+      "voice.3": { "text": "Я должен был ожидать сигнала от своего связного, поэтому я оставался в каюте. Я вышел из неё только раз. Джорджия находилась на борту корабля.", "who": "Carlson", "heard": "Я должен был ожидать сигнала от своего связного, поэтому я оставался в каюте. Я вышел из нее только раз. Джорджи находилась на борту корабля.", "guess": true },
+      "voice.4": { "text": "Тогда я и получил задание. У меня была только одна попытка. Воскресенье, 14 апреля. Как видите, было уже слишком поздно. Для Титаника, для меня.", "who": "Carlson", "heard": "Тогда я и получил задание. У меня была только одна попытка. Воскресенье 14 апреля. Как видите, было уже слишком поздно. Для Титаника, для меня." },
+      "voice.5": { "text": "А что, если бы я, несмотря ни на что, встретился со своим связным, предотвратил катастрофу? Что было бы, если бы прошлое можно было изменить? Что было бы?", "who": "Carlson" }
+    }
+  },
+  "tracks": {
+    "bedrad1.trk": [
+      { "from": 1.6, "to": 4.2, "text": "А теперь о последних событиях.", "who": "Radio" },
+      { "from": 4.2, "to": 9.6, "text": "Сегодня ночью на Лондон был совершён ещё один налёт немецких бомбардировщиков.", "who": "Radio", "heard": "Сегодня ночью на Лондон был совершен еще один налет немецких бомбардировщиков." },
+      { "from": 9.6, "to": 13.7, "text": "Наиболее сильно пострадали здания в восточной части Лондона.", "who": "Radio" },
+      { "from": 13.7, "to": 18.9, "text": "ВВС Великобритании нанесли удар по аэродромам врага в Гавре и в окрестностях.", "who": "Radio", "heard": "ВВС Великобритании нанесли удар по аэродромам врага в Гаврии в окрестностях.", "guess": true },
+      { "from": 18.9, "to": 24, "text": "Из России сообщается о дальнейших потерях германских войск под Ленинградом.", "who": "Radio" },
+      { "from": 24, "to": 28.3, "text": "В Азии США контролируют стратегически важные территории.", "who": "Radio" },
+      { "from": 28.3, "to": 33.8, "text": "Однако японские самолёты были замечены неподалёку от нефтяных месторождений в Бирме.", "who": "Radio", "heard": "Однако японские самолеты были замечены неподалеку от нефтяных месторождений в Бирме." },
+      { "from": 33.8, "to": 37.4, "text": "На этом мы завершаем рассказ о последних событиях.", "who": "Radio" },
+      { "from": 37.4, "to": 40.4, "text": "А теперь вернёмся к нашей музыкальной программе.", "who": "Radio", "heard": "А теперь вернемся к нашей музыкальной программе." }
+    ]
+  }
+}
