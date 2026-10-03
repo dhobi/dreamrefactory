@@ -51,6 +51,28 @@ jobs:
         run: npm run test:portable
 
   # ---------------------------------------------------------------------------
+  # SonarQube Cloud's look at a pull request: the scan alone, on GitHub's
+  # machines, without coverage — the quality gate has no coverage condition,
+  # and coverage is measured once a night by coverage.yml, which also scans
+  # master (docs/reference/ci.md#sonarqube-cloud). Not on a push to master,
+  # where a scan without coverage would blank master's until the next night,
+  # and not for a fork's pull request, which cannot read SONAR_TOKEN.
+  # ---------------------------------------------------------------------------
+  sonar:
+    name: SonarQube Cloud
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # blame for every line, which is how Sonar tells new code from old
+          fetch-depth: 0
+
+      - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ---------------------------------------------------------------------------
   # Runs on the self-hosted runner, which holds the rip. Everything the port's
   # correctness claims actually bottom out in: the full automatic suite, then
   # each game's machine suites, the whole game played in node.
