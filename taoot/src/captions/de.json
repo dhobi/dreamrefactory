@@ -2,14 +2,14 @@
   "notice": [
     "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
     "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the de edition's audio, so that a player who cannot hear them can read them (#50).",
-    "Only the narration over the opening credits (ocredits.mov) is written so far: speech recognition (Whisper large-v3-turbo, run locally on the German edition's film), corrected by hand where it misheard, not yet checked by ear. The German film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
+    "The narration over the opening credits (ocredits.mov) and the bedsit radio news (tracks) are written so far: speech recognition (Whisper large-v3-turbo, run locally on the German edition's audio), corrected by hand where it misheard, not yet checked by ear. The German film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
     "The banks' clips are listed with no text yet: the English lines, waiting for a German ear. A clip with no text is not captioned.",
     "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The German radio news is its own recording, read at its own pace; its timings and its draft words are from speech recognition (Whisper large-v3-turbo) on the German track, not yet checked by ear.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
   "edition": "de",
-  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), German, for the opening credits; the rest still to be written by ear in the caption editor",
+  "made": "2026-10-03, Whisper large-v3-turbo (int8, CPU), German, for the opening credits and the radio news; the rest still to be written by ear in the caption editor",
   "speakers": {
     "narrate.pup": "Carlson",
     "narrate.pup#01": "Boss",
@@ -120,15 +120,15 @@
   },
   "tracks": {
     "bedrad1.trk": [
-      { "from": 1.7, "to": 4.3, "text": "", "who": "Radio" },
-      { "from": 5, "to": 8, "text": "", "who": "Radio" },
-      { "from": 8.8, "to": 11.7, "text": "", "who": "Radio" },
-      { "from": 12.7, "to": 17.6, "text": "", "who": "Radio" },
-      { "from": 18.6, "to": 23.1, "text": "", "who": "Radio" },
-      { "from": 24, "to": 28.3, "text": "", "who": "Radio" },
-      { "from": 28.3, "to": 32.9, "text": "", "who": "Radio" },
-      { "from": 33.8, "to": 35.5, "text": "", "who": "Radio" },
-      { "from": 36.3, "to": 38.4, "text": "", "who": "Radio" }
+      { "from": 1.7, "to": 5.1, "text": "Noch einmal, die wichtigsten Ereignisse von heute.", "who": "Radio" },
+      { "from": 5.2, "to": 8.7, "text": "London war heute Nacht wiederum deutschen Bombenangriffen ausgesetzt.", "who": "Radio" },
+      { "from": 8.7, "to": 11, "text": "Das East End wurde am schwersten getroffen.", "who": "Radio" },
+      { "from": 11.1, "to": 16.1, "text": "Die britische Luftwaffe bombardierte feindliche Flughäfen in Le Havre und in den Niederlanden.", "who": "Radio", "heard": "Die britische Luftwaffe bombardierte feindliche Flughäfen in Loivre und in den Niederlanden." },
+      { "from": 16.1, "to": 19.8, "text": "Aus Russland werden weitere deutsche Verluste bei Leningrad gemeldet.", "who": "Radio" },
+      { "from": 19.8, "to": 23.9, "text": "In Asien leistet die amerikanische Festung bei Corregidor noch Widerstand,", "who": "Radio" },
+      { "from": 23.9, "to": 28, "text": "jedoch sollen sich japanische Streitkräfte den Ölfeldern von Burma nähern.", "who": "Radio" },
+      { "from": 28, "to": 30.4, "text": "Hiermit beenden wir die heutige Nachrichtensendung.", "who": "Radio" },
+      { "from": 30.4, "to": 33.5, "text": "Wir schalten jetzt zu unserem Musikprogramm um.", "who": "Radio" }
     ]
   }
 }

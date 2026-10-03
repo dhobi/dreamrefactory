@@ -30,7 +30,7 @@ import { installVersion } from "@dreamfactory/site/version";
 import { installI18n } from "@dreamfactory/site/locales";
 import { siteUrl } from "@dreamfactory/site/site";
 import { gamefileManifest, editionsIn, chosenEdition, inChosenEdition, installEditionPicker } from "./editions";
-import { CAPTION_FILES, formatCaptions, type CaptionFile, type Clip, type TrackLine } from "./captions";
+import { CAPTION_FILES, formatCaptions, TRACK_TIMINGS, type CaptionFile, type Clip, type TrackLine } from "./captions";
 import { AudioLibrary } from "@dreamfactory/engine/runtime/audio";
 
 void installI18n();
@@ -58,14 +58,17 @@ function blankFor(edition: string): CaptionFile {
   }
   const tracks: NonNullable<CaptionFile["tracks"]> = {};
   for (const [bank, lines] of Object.entries(en.tracks ?? {})) {
-    tracks[bank] = lines.map((l) => ({ from: l.from, to: l.to, text: "", who: l.who }));
+    // the edition's own recording's timings where it has one, else English's
+    const own = TRACK_TIMINGS[edition]?.[bank];
+    const times = own?.length === lines.length ? own : lines.map((l): [number, number] => [l.from, l.to]);
+    tracks[bank] = lines.map((l, i) => ({ from: times[i][0], to: times[i][1], text: "", who: l.who }));
   }
   return {
     notice: [
       "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
       `Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the ${edition} edition's audio, written by ear, so that a player who cannot hear them can read them (#50).`,
       "'who' names the speaker. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-      "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving.",
+      `'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were ${TRACK_TIMINGS[edition] ? `found in the ${edition} edition's track by speech recognition` : "taken from the English edition"} and may need moving.`,
       "Corrections are welcome, and should be made by listening to the clip, not by editing the wording.",
     ],
     edition,
@@ -180,7 +183,10 @@ function loadDraft(): CaptionFile {
       }
       for (const [bank, lines] of Object.entries(draft.tracks ?? {})) {
         const mine = base.tracks?.[bank];
-        if (mine && lines.length === mine.length) base.tracks![bank] = lines;
+        // the words are the draft's, the timings the repository's: the editor
+        // cannot move a line, and a draft kept from before a timing fix would
+        // otherwise go on cutting the line off where the old timing did
+        if (mine && lines.length === mine.length) base.tracks![bank] = lines.map((l, i) => ({ ...l, from: mine[i].from, to: mine[i].to }));
       }
     }
   } catch {
