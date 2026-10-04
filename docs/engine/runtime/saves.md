@@ -57,6 +57,17 @@ writes:
   344 written records are dropped on the way back in
   ([#186](https://github.com/dhobi/dreamrefactory/issues/186)).
 
+- the **open cast files and audio banks** (containers 3 and 6, with each bank's
+  three arrays) — the session's, in the order they were opened, which a load
+  reopens before it places anybody or restarts a loop. These used to be copied
+  from the base, so a save named whatever its *skeleton* had open: a fresh game's
+  London-flat template made a sinking save in the smoking room reload without
+  `extra.cst` (the crowd: `target not loaded`) or `insddest.sfx` (the groaning
+  metal: `sound not found`). Each record leads with the file's manifest handle,
+  which is how TI.EXE's resume finds the file, so a file the base's manifest lacks
+  gets a manifest record of its own — see
+  [the open-file lists](../formats/savegame.md#the-open-file-lists-are-the-sessions-not-the-skeletons).
+
 - the **scheduler**: the live `makeloop` and `makecricket` tables, written over the
   base's own (mid-count, so a loop reloads with the ticks it had left), and the
   **walks** table with them ([#191](https://github.com/dhobi/dreamrefactory/issues/191)).
@@ -460,14 +471,9 @@ does not lean on it. Four kinds of loss:
   the chrome **owners** like any other `propowner`. (`clock` is not here either: it
   is the variable list's head and a patch writes it like any other global —
   measured, "bedsit" written and read back.)
-- **A theme the base save never opened.** The container-0 manifest names the files
-  that were open and a patch does not rewrite it, so a save whose room is scored by a
-  track the base does not carry loses the music — reported, and the room loads
-  silent.
-
-Loops and crickets are not on this list, and the music only in the one case above:
-they come out of the file, mid-count, which is the difference between a faithful
-reload and one that merely re-derives a plausible room.
+Loops, crickets and the music are not on this list: they come out of the file,
+mid-count, which is the difference between a faithful reload and one that merely
+re-derives a plausible room.
 
 ### The actor record
 

@@ -2288,6 +2288,98 @@ test("the sinking's ambience survives a load into lounge1c (#199)", async () => 
 });
 
 /**
+ * The two lists a load reopens are the SESSION's, not the base save's.
+ *
+ * Found while fixing #486: the port writes a save by patching a skeleton, and
+ * the open-cast list (container 3) and the open-bank list (container 6, with its
+ * three arrays per bank) were copied from that skeleton untouched. A game
+ * started fresh patches a London-flat template, so a save taken in the smoking
+ * room during the sinking named `gang.cst` and the flat's banks — no
+ * `extra.cst` for the crowd, no `insddest.sfx` for the groaning metal — and
+ * the reload logged `sendtoactor("paul1b3", extraidle(..)) — target not loaded`
+ * for every extra and `sound not found: ` for the ambience, for good.
+ *
+ * TI.EXE's writer (0x413910) dumps the live tables at 0x489f0c (casts) and
+ * 0x489f24 (banks), and its resume (0x414a70) reopens each record's FILE through
+ * the manifest by the old handle at +0 (0x4152e0 → "ODCC" 0x414b32, "GNOS"
+ * 0x414cf2). So the test reloads in a fresh boot, where nothing the first
+ * session opened can paper over a list that is short.
+ */
+test("a save names the casts and banks the game had open, not the template's", async () => {
+  const first = await newHost();
+  await drain();
+  expect(await first.session.loadGame(
+    new Uint8Array(readFileSync(savePath("ENDGAME2", "02 - April 15th, 1-05 AM - Ship sinking! Must secure items FAST.ti"))),
+  )).toBe(true);
+  await first.session.openSetFile("smoke.set", "scene10", "view44");
+  await first.session.settle();
+  expect(first.session.currentSetFile).toBe("smoke");
+  const casts = [...first.session.actorRuntime.casts.keys()];
+  const banks = first.session.audioLib.bankNames;
+  expect(casts).toContain("extra.cst"); // smoke's openset opened the crowd's cast
+  expect(banks).toContain("insddest.sfx"); // the sinking's ambience bank
+  const crowd = [...first.session.actorRuntime.actors.values()]
+    .filter((a) => a.cast.name === "extra.cst" && a.visible && a.setName.toLowerCase() === "smoke")
+    .map((a) => a.name.toLowerCase());
+  expect(crowd.length).toBeGreaterThan(0);
+
+  // the skeleton a fresh game patches: a London-flat save, whose lists are the
+  // flat's — the shape the #486 report was written against
+  first.session.lastSave = null;
+  const flat = new Uint8Array(readFileSync(savePath("1", "01 - April 14th, 1942.ti")));
+  expect(parseSave(flat).castFiles).not.toContain("extra.cst");
+  expect(parseSave(flat).trackFiles).not.toContain("insddest.sfx");
+  first.session.saveTemplate = () => flat;
+  const bytes = first.session.snapshotSave()!;
+  const save = parseSave(bytes);
+  expect(save.castFiles).toEqual(casts);
+  expect(save.trackFiles).toEqual(banks);
+  // every record leads with a handle the manifest resolves to its own file —
+  // TI.EXE's resume finds the file by that handle, not by the name
+  const raw = readSaveFile(bytes);
+  const c0 = raw.containers[0].data;
+  const v0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
+  const manifest = new Map<number, string>();
+  for (let i = 0; i < v0.getInt32(0x130c, true); i++) {
+    const o = 0x1310 + i * 0x104;
+    const path = new TextDecoder("latin1").decode(c0.subarray(o + 5, o + 5 + c0[o + 4]));
+    manifest.set(v0.getUint32(o, true), path.slice(path.lastIndexOf(":") + 1).toLowerCase());
+  }
+  expect(c0.length).toBe(0x1310 + manifest.size * 0x104);
+  const handles = (ci: number, stride: number) => {
+    const d = raw.containers[ci].data;
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+    return Array.from({ length: d.length / stride }, (_, k) => manifest.get(dv.getUint32(k * stride, true)));
+  };
+  expect(handles(3, 28)).toEqual(casts);
+  expect(handles(6, 40)).toEqual(banks);
+  // ...and so does every crowd record's own cast-file handle (actor +2)
+  const c2 = raw.containers[2].data;
+  const v2 = new DataView(c2.buffer, c2.byteOffset, c2.byteLength);
+  for (let o = 0; o + 160 <= c2.length; o += 160) {
+    expect.soft(manifest.has(v2.getUint32(o + 2, true)), `actor record at ${o}`).toBe(true);
+  }
+
+  // a fresh boot, the way the player reloads it
+  const second = await newHost();
+  await drain();
+  second.logs.length = 0;
+  expect(await second.session.loadGame(bytes)).toBe(true);
+  await second.session.settle();
+  for (const c of casts) expect(second.session.actorRuntime.casts.has(c), c).toBe(true);
+  for (const b of banks) expect(second.session.audioLib.bankNames, b).toContain(b);
+  for (const name of crowd) {
+    check(`crowd member ${name}`, second.session.actorRuntime.get(name)?.visible === true, "not restored");
+  }
+  let clock = 0;
+  for (let i = 0; i < 600; i++) {
+    second.session.tickTime((clock += 50));
+    await drain();
+  }
+  expect(second.logs.filter((l) => /target not loaded|sound not found/.test(l))).toEqual([]);
+}, 120_000);
+
+/**
  * A walk in flight comes back mid-stride.
  *
  * User-reported against the #181 branch, in the room #181 came from: "we are
@@ -3181,7 +3273,7 @@ test("every value a patch cannot store is reported, and the rest is still writte
     "walk(bx): actor or arrival star not representable",
     "walk(charl): a route with no waypoints",
     "walk(w15): the walks table holds 16 slots",
-    "theme(nosuch.trk): the base save has no such track open — the room will load silent",
+    "theme(nosuch.trk): the save has no such bank open — the room will load silent",
   ]);
 
   // what fitted is there: the global, one loop (its period at least 1), the walks
