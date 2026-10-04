@@ -34,6 +34,7 @@ const NEEDS_THE_RIP = [
   "audio-rates",
   "sound-channels",
   "shp-play-order",
+  "prop-views-go-round",
   "cst-play-order",
   "smokestack",
   "devmode",
