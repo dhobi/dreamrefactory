@@ -8,8 +8,9 @@
  *    puppet no script opens (./narration.ts);
  *  - everything else that speaks without text — the Sasha/Zeitel gossip, the
  *    London landlady, the voices behind cabin doors, the fencing master, the
- *    opening credits' narration that ocredits.mov keeps in its own sound
- *    table — whose words are NOT: ./captions/<edition>.json is a transcript
+ *    gramophone's briefing in Carlson's trunk (#471), the opening credits'
+ *    narration that ocredits.mov keeps in its own sound table — whose words
+ *    are NOT: ./captions/<edition>.json is a transcript
  *    of the audio, a speech recogniser's draft corrected by ear in the
  *    caption editor (taoot/captions/). Each file says so at the top, and
  *    nothing here pretends otherwise; an edition without a file simply gets
@@ -17,6 +18,16 @@
  *
  * Both only ever reach the screen with the player's "every line that is heard"
  * setting on (GameSession.everyLineSubtitled).
+ *
+ * What is captioned (#470): what is said, and the sounds that carry something
+ * a deaf or hard-of-hearing player would otherwise miss — as subtitles for the
+ * deaf and hard of hearing do — not every sound in the game. Such a sound is
+ * written in square brackets with no speaker, "[air-raid siren wailing]", and
+ * goes where its sound plays from: the London siren is BEDSIT1.TRK's TRACK
+ * (the bomb() handler's playnewtheme), so it is a track line spanning the
+ * loop, after which the flat's hotspots stop answering. The game's own sound
+ * cues, the starred puppet lines in capitals, arrive bracketed the same way
+ * (heardSubtitle in the engine's puppet.ts).
  */
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NARRATION_BANK, NARRATION_WORDS } from "./narration";
@@ -53,7 +64,11 @@ export interface CaptionFile {
    * voice-over that is no puppet's line (ocredits.mov's opening narration)
    */
   films?: Record<string, Record<string, Clip>>;
-  /** looping tracks that talk (the bedsit radio's news), by bank file */
+  /**
+   * looping tracks that talk, or that sound a cue worth a caption, by bank
+   * file: the bedsit radio's news, the gramophone's briefing (oldboss.trk),
+   * the air-raid siren (bedsit1.trk)
+   */
   tracks?: Record<string, TrackLine[]>;
   /**
    * Who speaks a puppet's lines, for the captions read from puppets (the

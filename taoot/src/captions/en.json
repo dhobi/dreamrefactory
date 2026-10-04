@@ -5,8 +5,9 @@
     "Each 'text' was produced by speech recognition (Whisper large-v3-turbo, run locally on the English edition's sound banks) and then corrected by hand: names the recogniser cannot know (Zeitel, the Rubaiyat, Willie), and plain mishearings.",
     "'heard' is what the recogniser wrote, kept wherever the text differs from it. 'guess': true marks a line whose wording is uncertain even after correction.",
     "'who' names the speaker, shown before the words because captions can be up together (the radio and the landlady). The names were assigned from the lines' content and the clips' names; correct them by ear too.",
-    "'speakers' names who says the lines read from the game's own puppets (the ending, the films' voice-overs), by puppet file, or by puppet#line where one puppet holds several voices. Assigned by us, not the game.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop as the engine assembles it: the bedsit radio's first station reads the news.",
+    "'speakers' names who says the lines read from the game's own puppets (the ending, the films' voice-overs), by puppet file, or by puppet#line where one puppet holds several voices. Assigned by us, not the game. A puppet that seats two people in one close-up (wilzeit1.pup: Zeitel on the left, Willie on the right; shahack1.pup and shahack2.pup: Jack on the left, Shailagh on the right) says in each line's stance whose mouth moves, and the close-up shows it, so a line said there is captioned without a name. A name is only needed where a film plays a puppet's line, and the films' lines from these puppets are voice-overs that move neither face: wilzeit1.pup's are the gymnasium tour (tour3.mov), Willie's, who greets you there with his own mouth (wilfenc1.72) (#479).",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop as the engine assembles it: the bedsit radio's first station reads the news, and the gramophone in Carlson's trunk (oldboss.trk, cabin C-73) plays the service's briefing (#471), transcribed the same way and not yet checked by ear.",
+    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470), after which the room cannot be used. It names no speaker. Captions cover what is said and such sounds, not every sound in the game.",
     "'films' are clips a film keeps in its own sound table and no puppet holds the words of: the narration over the opening credits (ocredits.mov). Transcribed the same way, from the film.",
     "'listened': true marks a line someone has checked by ear. Where it is missing, the line is only as good as the recogniser and the context.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
@@ -132,6 +133,18 @@
       { "from": 28.3, "to": 32.9, "text": "but Japanese forces are reported nearing the Burmese oil fields.", "who": "Radio" },
       { "from": 33.8, "to": 35.5, "text": "And that concludes the news summary.", "who": "Radio" },
       { "from": 36.3, "to": 38.4, "text": "We now return you to our music program.", "who": "Radio" }
+    ],
+    "bedsit1.trk": [
+      { "from": 0, "to": 28.8, "text": "[air-raid siren wailing]" }
+    ],
+    "oldboss.trk": [
+      { "from": 0, "to": 6.2, "text": "His Majesty's government has assigned an agent of the Crown to rendezvous with you on board the Titanic.", "who": "Gramophone" },
+      { "from": 7.2, "to": 11.6, "text": "Remain in your cabin until your contact gives you further instructions.", "who": "Gramophone" },
+      { "from": 12.5, "to": 16, "text": "After completion of all your assignments on board,", "who": "Gramophone" },
+      { "from": 16.8, "to": 22, "text": "book passage to remain on the ship and return to Southampton for your next assignment.", "who": "Gramophone" },
+      { "from": 23.6, "to": 28, "text": "For a more in-depth report of the international situation in the spring of 1912,", "who": "Gramophone" },
+      { "from": 28.8, "to": 32.7, "text": "please review the white paper included as part of this briefing.", "who": "Gramophone" },
+      { "from": 33.3, "to": 34.5, "text": "That is all.", "who": "Gramophone" }
     ]
   }
 }

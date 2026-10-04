@@ -5,7 +5,8 @@
     "Every line is a draft from speech recognition (Whisper large-v3-turbo, run locally on the German edition's own audio), corrected by hand where it misheard, not yet checked by ear. The German film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
     "A clip with no text is not captioned. In the German edition many are SILENCE, not missing words: half the Sasha/Zeitel gossip clips (1.02 s at 11025 Hz) and the landlady's three lines through the door (0.51 s). Its three gossip scenes share one shorter exchange of five recorded lines. The fencing master is the English recording, so his lines are the English file's. Speakers follow what each line says, not who speaks it in English under the same clip name.",
     "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The German radio news is its own recording, read at its own pace; its timings and its draft words are from speech recognition (Whisper large-v3-turbo) on the German track, not yet checked by ear.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The German radio news is its own recording, read at its own pace; its timings and its draft words are from speech recognition (Whisper large-v3-turbo) on the German track, not yet checked by ear. The gramophone in Carlson's trunk (oldboss.trk, #471) is its own recording too, and its briefing is another message than the English one: German agents carrying a military code key and money for a war between the United States and Mexico. Its timings and draft words are from speech recognition on the German track, not yet checked by ear.",
+    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470). It names no speaker.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
   "edition": "de",
@@ -129,6 +130,20 @@
       { "from": 23.9, "to": 28, "text": "jedoch sollen sich japanische Streitkräfte den Ölfeldern von Burma nähern.", "who": "Radio" },
       { "from": 28, "to": 30.4, "text": "Hiermit beenden wir die heutige Nachrichtensendung.", "who": "Radio" },
       { "from": 30.4, "to": 33.5, "text": "Wir schalten jetzt zu unserem Musikprogramm um.", "who": "Radio" }
+    ],
+    "bedsit1.trk": [
+      { "from": 0, "to": 28.8, "text": "[Fliegeralarm heult]" }
+    ],
+    "oldboss.trk": [
+      { "from": 0, "to": 6.8, "text": "Die Regierung Seiner Majestät hegt den begründeten Verdacht, dass sich derzeitig Agenten der Mittelmächte Deutschland und Österreich an Bord der Titanic befinden.", "who": "Grammophon", "heard": "Die Regierung seiner Majestät hegt den begründeten Verdacht, dass sich derzeitig Agenten der Mittelmächte Deutschland und Österreich an Bord der Titanic befinden." },
+      { "from": 7.1, "to": 12.8, "text": "Mit sich führen sie Gegenstände von lebenswichtiger Bedeutung für das nationale Interesse und den Frieden in Europa.", "who": "Grammophon" },
+      { "from": 13.4, "to": 22.1, "text": "Insbesondere den Schlüssel zu einem deutschen Militärcode und eine große Summe Bargeld, das zur Finanzierung eines Konfliktes zwischen den Vereinigten Staaten und Mexiko dienen soll.", "who": "Grammophon" },
+      { "from": 22.5, "to": 27.7, "text": "Ihr Auftrag: in Besitz möglichst aller dieser Gegenstände zu gelangen und sie sicher in New York abzuliefern.", "who": "Grammophon", "heard": "Ihr Auftrag, in Besitz möglichst aller dieser Gegenstände zu gelangen und sie sicher in New York abzuliefern." },
+      { "from": 27.7, "to": 34.6, "text": "Außerdem, möglicherweise wird man Sie beauftragen, eine dritte höchst geheime Mission für einen gewählten Vertreter der Krone auszuführen.", "who": "Grammophon", "heard": "Außerdem, möglicherweise wird man sie beauftragen, eine dritte höchst geheime Mission für einen gewählten Vertreter der Krone auszuführen." },
+      { "from": 34.8, "to": 38.9, "text": "Ihre Kontaktperson an Bord wird Ihnen die besonderen Einzelheiten dazu mitteilen.", "who": "Grammophon" },
+      { "from": 38.9, "to": 41.3, "text": "Warten Sie in Ihrer Kabine auf Instruktionen.", "who": "Grammophon" },
+      { "from": 41.5, "to": 49.5, "text": "Für einen gründlicheren Überblick über die internationale Situation jetzt im Frühjahr 1912 lesen Sie bitte das Weißbuch durch, das diesen Anweisungen beiliegt.", "who": "Grammophon", "heard": "Für einen gründlicheren Überblick über die internationale Situation jetzt im Frühjahr 1912, lesen Sie bitte das Weißbuch durch, das diesen Anweisungen beilegt." },
+      { "from": 49.5, "to": 50.3, "text": "Das ist alles.", "who": "Grammophon" }
     ]
   }
 }

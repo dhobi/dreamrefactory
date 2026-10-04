@@ -5,7 +5,8 @@
     "Every line is a draft from speech recognition (Whisper large-v3-turbo, run locally on the Russian edition's own audio), corrected by hand where it misheard (mostly names), not yet checked by ear. The Russian dub often says something other than the English, and this file keeps what it says. The Russian film splits its narration differently from the English one.",
     "Three gossip clips (zgossip3.sfx z1.11 to z1.13) are English in the Russian edition, so their text is the English file's. The fencing master calls the same French and German words as in English.",
     "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The Russian radio news is its own recording, read at its own pace; its timings and words are from speech recognition on the Russian track.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The Russian radio news is its own recording, read at its own pace; its timings and words are from speech recognition on the Russian track. The gramophone in Carlson's trunk (oldboss.trk, #471) is its own recording too, timed and drafted by speech recognition on the Russian track, not yet checked by ear.",
+    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470). It names no speaker.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
   "edition": "ru",
@@ -129,6 +130,18 @@
       { "from": 28.3, "to": 33.8, "text": "Однако японские самолёты были замечены неподалёку от нефтяных месторождений в Бирме.", "who": "Radio", "heard": "Однако японские самолеты были замечены неподалеку от нефтяных месторождений в Бирме." },
       { "from": 33.8, "to": 37.4, "text": "На этом мы завершаем рассказ о последних событиях.", "who": "Radio" },
       { "from": 37.4, "to": 40.4, "text": "А теперь вернёмся к нашей музыкальной программе.", "who": "Radio", "heard": "А теперь вернемся к нашей музыкальной программе." }
+    ],
+    "bedsit1.trk": [
+      { "from": 0, "to": 28.8, "text": "[воет сирена воздушной тревоги]" }
+    ],
+    "oldboss.trk": [
+      { "from": 0, "to": 5.3, "text": "Правительство Ее Величества назначило агента Короны, вашего связного на борту Титаника.", "who": "Граммофон", "guess": true },
+      { "from": 5.8, "to": 10.5, "text": "Оставайтесь в своей каюте, пока наш человек не даст вам дальнейших указаний.", "who": "Граммофон", "heard": "Оставайтесь в своей каюте, пока наш человек не даст вам до зрейших указаний." },
+      { "from": 10.6, "to": 13.1, "text": "По завершению всех заданий на Титанике,", "who": "Граммофон" },
+      { "from": 13.1, "to": 19.2, "text": "оставайтесь на борту корабля и возвращайтесь в Саут-Хемптон для получения следующего задания.", "who": "Граммофон" },
+      { "from": 19.5, "to": 26.6, "text": "За разъяснением международной обстановки в Европе, сложившейся к весне 1912 года,", "who": "Граммофон" },
+      { "from": 26.6, "to": 32.5, "text": "обратитесь к секретному пакету, являющемуся частью данного брифинга.", "who": "Граммофон" },
+      { "from": 32.7, "to": 34.1, "text": "Конец послания.", "who": "Граммофон" }
     ]
   }
 }

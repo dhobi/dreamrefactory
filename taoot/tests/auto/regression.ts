@@ -27,7 +27,7 @@ import {
 import { readStgFile, readStgRegions } from "@dreamfactory/engine/df/stg";
 import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS, mapUsable } from "../playthrough/nav/mapjumps";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
-import { readPupFile, type PupAnimFrame, type PupDialogue } from "@dreamfactory/engine/df/pup";
+import { readAnimLogic, readPupFile, type PupAnimFrame, type PupDialogue, type PupFile } from "@dreamfactory/engine/df/pup";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { readAudioBank } from "@dreamfactory/engine/df/banks";
 import { heardSubtitle, subtitled } from "@dreamfactory/engine/runtime/puppet";
@@ -4358,15 +4358,15 @@ test("two-character puppet: each line animates its own character's face", async 
   );
 
   // the speak path switches stance too, and does it before the first tick is
-  // drawn: wilzeit1.13 is one of Zeitel's lines (stance 2)
-  const zeitel = p.pup.dialogue.get("wilzeit1.13")!;
+  // drawn: wilzeit1.13 is one of Willie's lines (stance 2, the right-hand face)
+  const willie = p.pup.dialogue.get("wilzeit1.13")!;
   const speaking = session.puppetCtrl.puppetSpeak("wilzeit1.13");
   const spoken = session.puppet!.stanceIdx;
   const spokenDrift = drift(spoken, session.puppetCtrl.puppetFrame());
   check(
     "puppetspeak animates the line against the line's own stance",
-    spoken === zeitel.stance && zeitel.stance !== 0 && spokenDrift <= 16,
-    `stance=${spoken} (line says ${zeitel.stance}), drift ${spokenDrift}px`,
+    spoken === willie.stance && willie.stance !== 0 && spokenDrift <= 16,
+    `stance=${spoken} (line says ${willie.stance}), drift ${spokenDrift}px`,
   );
   session.puppetCtrl.closePuppetFile();
   await speaking;
@@ -7794,6 +7794,30 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
   check("the second station, under the same track name, has no news", shown() === "", shown());
   call("halttheme");
 
+  // the gramophone in Carlson's trunk (#471): the briefing is OLDBOSS.TRK's
+  // TRACK, which trunk.stg opens and plays with playnewtheme when the crank turns
+  check("oldboss.trk opens", await session.openTrackFile("oldboss.trk"));
+  call("playtheme", ["oldboss.trk"]);
+  const g0 = session.clock.now;
+  session.clock.advance(g0 + 1000);
+  check("the gramophone's briefing, named",
+    shown() === "Gramophone: His Majesty's government has assigned an agent of the Crown to rendezvous with you on board the Titanic.", shown());
+  session.clock.advance(g0 + 34_000);
+  check("...to its last words", shown() === "Gramophone: That is all.", shown());
+  call("halttheme");
+  check("the crank stopped, its caption goes", shown() === "", shown());
+  // the air-raid siren (#470): BEDSIT1.TRK's own track, which the flat's bomb()
+  // plays before the room stops answering — a sound, in brackets, no speaker
+  const plain = (): string => session.captionLines().map((c) => (c.who ? `${c.who}: ` : "") + c.text).join(" | ");
+  call("playtheme", ["bedsit1.trk"]);
+  const s0 = session.clock.now;
+  session.clock.advance(s0 + 1000);
+  check("the siren is captioned as a sound, with no speaker", plain() === "[air-raid siren wailing]", plain());
+  session.clock.advance(s0 + 40_000);
+  check("...all the way round its loop", plain() === "[air-raid siren wailing]", plain());
+  call("halttheme");
+  check("the siren over, its caption goes", plain() === "", plain());
+
   // the films: nothing until the puppet is read, then each line in its share
   const film = (movie: string, at: number): string => {
     const c = session.movieCaption(movie, at);
@@ -7915,7 +7939,8 @@ test("each edition's radio news is timed by its own recording", () => {
 // fallback, and says whose recordings these are either way.
 test("the Dutch and Japanese editions speak the English recordings, so en.json is their fallback", () => {
   // files an edition re-encoded with the same words in them, checked by speech recognition
-  const sameWords: Record<string, string[]> = { ja: ["unilib.trk", "ocredits.mov"] };
+  // (ja's oldboss.trk is stored differently and decodes to the English track sample for sample)
+  const sameWords: Record<string, string[]> = { ja: ["unilib.trk", "ocredits.mov", "oldboss.trk"] };
   for (const [edition, voices] of Object.entries(VOICES_OF)) {
     const file = CAPTION_FILES[voices];
     const names = [...Object.keys(file.banks), ...Object.keys(file.films ?? {}), ...Object.keys(file.tracks ?? {})];
@@ -7924,6 +7949,101 @@ test("the Dutch and Japanese editions speak the English recordings, so en.json i
       return !mine || !theirs || (!sameWords[edition]?.includes(n) && !readFileSync(mine).equals(readFileSync(theirs)));
     });
     check(`${edition}: every captioned voice file is ${voices}'s`, differ.length === 0, differ.join(" "));
+  }
+});
+
+// --- 87h. the gramophone's briefing and the siren are timed by each edition's own track
+// #471: the gramophone in Carlson's trunk plays OLDBOSS.TRK, recorded anew in
+// German, French and Russian at its own pace (the German and French briefings
+// even say something else). #470: the London siren is BEDSIT1.TRK's track, the
+// same length in every edition, and its caption is a bracketed sound with no
+// speaker for the whole loop.
+test("each edition's gramophone briefing ends inside its own track, and the siren spans its loop", () => {
+  const themeOf = (edition: string, bank: string): Float32Array | null => {
+    const path = gamefiles(root, edition).resolve(bank);
+    if (!path) return null;
+    const lib = new AudioLibrary();
+    lib.openBank(bank, new Uint8Array(readFileSync(path)));
+    const theme = lib.theme(bank);
+    return theme ? theme.samples : null;
+  };
+  const seconds = (edition: string, bank: string): number => {
+    const path = gamefiles(root, edition).resolve(bank)!;
+    const lib = new AudioLibrary();
+    lib.openBank(bank, new Uint8Array(readFileSync(path)));
+    const theme = lib.theme(bank)!;
+    return theme.samples.length / theme.sampleRate;
+  };
+  const english = themeOf("en", "oldboss.trk")!;
+  const englishTimes = (CAPTION_FILES.en.tracks?.["oldboss.trk"] ?? []).map((l) => `${l.from}-${l.to}`).join(" ");
+  let own = 0;
+  for (const edition of ["en", "de", "fr", "ru", "nl", "ja"]) {
+    const mine = themeOf(edition, "oldboss.trk");
+    if (!mine) continue;
+    const file = CAPTION_FILES[edition] ?? CAPTION_FILES[VOICES_OF[edition]];
+    const lines = file.tracks?.["oldboss.trk"] ?? [];
+    const secs = seconds(edition, "oldboss.trk");
+    check(`${edition}: the gramophone has lines`, lines.length > 0);
+    check(`${edition}: every gramophone line ends inside its ${secs.toFixed(1)} s track, in order`,
+      lines.every((l, i) => l.from < l.to && l.to <= secs && (i === 0 || l.from >= lines[i - 1].to)));
+    const sameAudio = mine.length === english.length && mine.every((v, i) => v === english[i]);
+    if (!sameAudio) {
+      own++;
+      check(`${edition}: its own recording has its own timings`, lines.map((l) => `${l.from}-${l.to}`).join(" ") !== englishTimes);
+    }
+    const siren = file.tracks?.["bedsit1.trk"] ?? [];
+    const loop = seconds(edition, "bedsit1.trk");
+    check(`${edition}: the siren is one bracketed sound with no speaker over its ${loop.toFixed(1)} s loop`,
+      siren.length === 1 && siren[0].from === 0 && siren[0].to >= loop && !siren[0].who && /^\[.+\]$/.test(siren[0].text),
+      JSON.stringify(siren));
+  }
+  check("three editions record the briefing anew", own === 3, `own=${own}`);
+});
+
+// --- 87i. two people in one close-up: who says a line (#479)
+// WILZEIT1.PUP seats Zeitel (left) and Willie (right), SHAHACK1/2.PUP Jack
+// (left) and Shailagh (right). A line's stance says whose mouth moves, and the
+// close-up shows it, so a line said there is captioned without a name. A name
+// is only given where a film plays a puppet's line — and the films' lines from
+// these puppets are voice-overs that move neither face, so the data cannot say
+// whose they are and the speakers file names them: wilzeit1.pup's are the
+// gymnasium tour, Willie's, who greets you there with his own mouth.
+test("a two-person close-up says whose mouth moves; its film lines move none, so the speakers file names them", async () => {
+  const { session } = await newHost();
+  const JAW = 6; // background, body, head, eyes, eyebrows, nose, JAW, ...
+  const pups = new Map<string, PupFile>();
+  const pup = (name: string): PupFile => {
+    if (!pups.has(name)) pups.set(name, readPupFile(new Uint8Array(readFileSync(gamefiles(root, "en").resolve(name)!))));
+    return pups.get(name)!;
+  };
+  /** which face a line animates: its stance's jaw, if the jaw moves at all */
+  const face = (name: string, ident: string): string => {
+    const p = pup(name);
+    const d = p.dialogue.get(ident)!;
+    const jaws = new Set(readAnimLogic(p, d.animLogicLocation).map((t) => t.layers[JAW]?.frame));
+    if (jaws.size < 2) return "none";
+    return p.stances[d.stance].layers[JAW].anchorX < SCREEN_W / 2 ? "left" : "right";
+  };
+  const cases: [string, string, string][] = [
+    ["wilzeit1.pup", "wilzeit1.04c", "left"], // Zeitel: "Inspecting our embassies. Imperial Germany..."
+    ["wilzeit1.pup", "wilzeit1.06", "right"], // Willie: "That reminds me, Colonel Zeitel..."
+    ["wilzeit1.pup", "wilfenc1.72", "right"], // Willie greets you in the gymnasium
+    ["shahack1.pup", "shahack1.03b", "left"], // Jack: "I'm her brother."
+    ["shahack1.pup", "shahack1.03", "right"], // Shailagh: "Hush, Jack!"
+    ["shahack2.pup", "shahack2.04a", "left"], // Jack: "Easy, Shay."
+    ["shahack2.pup", "shahack2.10", "right"], // Shailagh: "No, Jack! No! Not without you!"
+  ];
+  for (const [name, ident, want] of cases) {
+    const got = face(name, ident);
+    check(`${name} ${ident} moves the ${want} face`, got === want, `got ${got}`);
+  }
+  installCaptions(session, "en");
+  const filmLines = Object.values(MOVIE_SOUNDS.films).flatMap((lines) =>
+    Object.entries(lines).filter(([, p]) => ["wilzeit1.pup", "shahack1.pup", "shahack2.pup"].includes(p)));
+  check("a film plays lines from a two-person puppet", filmLines.length > 0);
+  for (const [ident, name] of filmLines) {
+    check(`${ident}: a voice-over, moving no face`, face(name, ident) === "none", face(name, ident));
+    check(`${ident}: named Willie by the speakers file`, session.speakerOf(name, ident) === "Willie", String(session.speakerOf(name, ident)));
   }
 });
 
