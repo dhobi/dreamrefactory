@@ -177,9 +177,10 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       // Play only the variant this prop's deg selects; null for every ordinary
       // state, which then animates across all its frames exactly as before.
       p.frameOrder = st ? playSequence(st, variant) : null;
-      // entering a state plays its frames once (a door opens and holds open); a
-      // single-frame state has nothing to animate. A prop only made visible
-      // (never propview'd) keeps animating=false and holds frame 0.
+      // entering a state plays its frames — once and holding the last in
+      // DreamFactory 1, round and round in 4 if it has a play list (see
+      // PropRuntime.tick, which also starts a never-propview'd prop's first view
+      // going round); a single-frame state has nothing to animate.
       // (a DreamFactory 5 view that plays once says so even with one picture)
       p.animating = !!st && (p.frameCount(st) > 1 || st.playsOnce === true);
     }

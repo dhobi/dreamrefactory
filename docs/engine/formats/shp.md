@@ -35,9 +35,33 @@ flowchart TD
 - **Frames** are the individual images of a state; playing them in sequence is
   the animation.
 
-Prop-state animations **play once and hold** — a door opens and *stays* open.
-Anything that genuinely loops has to be re-triggered by a script
-(`makeloop`); the format itself does not loop.
+A state's **play list** — a step count and that many 1-based steps, each
+naming a *group* of frames — is what plays. In DreamFactory 4 (TI.EXE, and
+Timelapse's TL.EXE, which carries the same routine) a state with more than one
+step **goes round for as long as the prop stands in it**. Every displayed frame
+the engine adds one to every prop's step and wraps it to 0 at the state's step
+count before drawing:
+
+```
+0x418beb: inc  ax                    ; step + 1
+0x418bed: mov  word [ebp + 0x20], ax
+0x418bf1: cmp  word [ebp + 0x22], ax ; the state's step count (its +0x70)
+0x418bf5: jg   0x418bfd
+0x418bf7: mov  word [ebp + 0x20], 0  ; ...wrapped
+```
+
+Nothing holds. A door opens and *stays* open because its script then puts it in
+a one-step state — `for count = 1 to 6 / forceupdate ()` and
+`propview (me, "idleopen")`, or a `makeloop` to an `idle` handler timed to the
+list's length — and a state left standing keeps playing: the gramophone's crank
+in the trunk, which no script ever names (the shop opener starts each prop in
+its first state), and the Turkish bath's running water. One knock-on is visible
+in the original: the deck map's `open` keeps rolling while the map flat is up,
+so `exitmap`'s `transfromflat ()` brings the room back with the map part-rolled,
+and only then does `close ()` roll it up from fully open.
+
+Dust's DF.EXE has not been checked; the port plays its states once and holds the
+last frame, as it always has.
 
 Those three levels are pointers, and pointers are what a block map can show.
 `CUFF.SHP` — the cufflink bag, its three props and their 46 pictures — with the

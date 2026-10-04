@@ -473,8 +473,10 @@ export class ScreenDirector {
     this.lockedAtPass = this.inputLocked;
     this.room?.refreshRoomGamma();
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
-    // the census in SetViewer.advanceRoom for why that is 50 ms and not 90.
-    this.session.endAnim("sendtoprop", this.session.propRuntime.tick(now, ENGINE_STEP_MS));
+    // the census in SetViewer.advanceRoom for why that is 50 ms and not 90. Its
+    // view goes round in DreamFactory 4 (PropRuntime.tick); Dust's is unchecked.
+    const viewsGoRound = !this.session.isV1;
+    this.session.endAnim("sendtoprop", this.session.propRuntime.tick(now, ENGINE_STEP_MS, viewsGoRound));
     this.session.tickFade(now);
     this.session.tickWipe(now);
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service

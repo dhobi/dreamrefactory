@@ -210,6 +210,21 @@ export function playSequence(st: PropState, variant: number[] | null): number[] 
 }
 
 /**
+ * Does a view go round while a prop stands in it? It does when its play list
+ * has more than one step: TI.EXE wraps a prop's step at the view's step count,
+ * the i16 at +0x70 of the view (`0x4191d0`, stored at `0x4192c0` by propview and
+ * at `0x415a10` by the shop opener), so a one-step view draws its one group for
+ * ever and any longer one plays again from the top — see PropRuntime.tick.
+ *
+ * Read off {@link PropState.playOrder}, the list the port plays, so a table the
+ * reader set aside as not the state's own (HOUSE.SHP's `flames`, the tuner lamps
+ * whose second step names a frame that is not there) keeps the port's reading.
+ */
+export function viewGoesRound(st: PropState): boolean {
+  return (st.playOrder?.length ?? 0) > 1;
+}
+
+/**
  * A true-3D prop's picture as a plane in the room — see {@link PropRuntime.cardOf}.
  * `o` is the frame's top-left corner, `r` one frame pixel to the right and `d`
  * one down, all in room units; `n` is the side it faces.
@@ -403,9 +418,10 @@ export class PropInstance {
    */
   degEvent = -1;
   /**
-   * Play this state's frames once (set by propview on a state change). A prop
+   * Play this state's frames (set by propview on a state change). A prop
    * merely made visible in its default state does NOT animate — it holds frame
-   * 0 until a propview state change or a propdeg frame select. Without this the
+   * 0 until a propview state change or a propdeg frame select — unless that
+   * state has a play list and the views go round (PropRuntime.tick). Without this the
    * bomb key (6 discrete frames, opened by clicking) auto-played 0→5 the moment
    * openstage made it visible, so the puzzle started with the case open + empty.
    */
@@ -675,16 +691,45 @@ export class PropRuntime {
   }
 
   /**
-   * Advance animations; frameMs matches the viewer's animation cadence.
-   * State animations play ONCE and hold the last frame (door opens and
-   * stays open) — continuous animation is scripted explicitly via makeloop.
+   * Advance animations, one step a service pass (`frameMs`).
+   *
+   * With `viewsGoRound` — DreamFactory 4, Titanic and Timelapse — a view whose
+   * play list has more than one step ({@link viewGoesRound}) goes round for as
+   * long as the prop stands in it, the way TI.EXE steps it: every displayed
+   * frame, `0x43a8b2` calls the prop pass `0x418bb0` with 1, which adds one to
+   * EVERY prop's step and wraps it to 0 when it reaches the view's step count
+   * (`0x418beb–0x418bf7`) before drawing. Nothing holds: a door stays open
+   * because its script then puts it in a one-step view (`for count = 1 to 6 /
+   * forceupdate () / propview (me, "idleopen")`, or `makeloop` to an `idle`
+   * handler), and a view left standing keeps playing — the gramophone's crank,
+   * the Turkish bath's running water. Without it every view plays once and holds
+   * its last frame, as the port has always done for DreamFactory 1, whose DF.EXE
+   * this has not been checked against.
+   *
+   * Answers the props whose animation reached its last frame this tick (see
+   * GameSession.endAnim).
    */
-  /** answers the props whose animation reached its last frame this tick (see GameSession.endAnim) */
-  tick(now: number, frameMs: number): string[] {
+  tick(now: number, frameMs: number, viewsGoRound = false): string[] {
     const ended: string[] = [];
     for (const p of this.props.values()) {
-      if (!p.visible || p.frameLocked || !p.animating) continue;
+      if (p.frameLocked) continue;
       const st = p.state();
+      const goesRound = viewsGoRound && !!st && st.playsOnce === undefined && viewGoesRound(st);
+      // TI.EXE steps every prop in its table, shown or not (the step is taken
+      // before 0x418d00 asks whether there is anything to draw)
+      if (!p.visible && !goesRound) continue;
+      if (!p.animating) {
+        if (!goesRound) continue;
+        // A view no script has named goes round too. The shop opener puts every
+        // prop in its FIRST view, with that view's step count and the step one
+        // short of it (TI.EXE 0x415a0b–0x415a3b), so the first pass draws step 0
+        // — and the trunk's `crank` is only ever shown, never propview'd: the
+        // gramophone's handle turns because its one view has an 18-step list (#472).
+        p.frameOrder = playSequence(st, degVariantFrames(st, Number(p.deg) || 0));
+        p.frameIdx = 0;
+        p.lastTick = 0;
+        p.animating = true;
+      }
       if (st?.playsOnce !== undefined) {
         // DreamFactory 5 steps a view as it does a pose (RedJack.exe 0x42c89e–
         // 0x42c931, ActorRuntime.advanceAnimation): step 0 on the first pass,
@@ -718,13 +763,17 @@ export class PropRuntime {
       // the variant's length, not the container's: a state holding one animation
       // per degree must stop at the end of the one being played (degVariantFrames)
       const last = st ? p.frameCount(st) - 1 : 0;
-      if (!st || last < 1 || p.frameIdx >= last) {
+      if (!st || last < 1 || (!goesRound && p.frameIdx >= last)) {
         p.animating = false;
         continue;
       }
       if (!p.lastTick) p.lastTick = now;
       if (now - p.lastTick >= frameMs) {
         p.lastTick = now;
+        if (goesRound) {
+          p.frameIdx = p.frameIdx >= last ? 0 : p.frameIdx + 1; // TI.EXE 0x418bf7
+          continue;
+        }
         p.frameIdx++;
         if (p.frameIdx >= last) {
           p.animating = false; // hold last frame
