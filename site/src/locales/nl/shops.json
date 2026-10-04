@@ -40,6 +40,8 @@
   "degPicksOne": "propdeg() kiest ÉÉN van deze beelden op zijn opgeslagen graad; ze spelen nooit",
   "degList": " · graad {degs} · toestandcontainer @{loc}",
   "playThisState": "deze toestand selecteren en afspelen",
+  "soundMeta": " · geluid @{loc} — {secs} s, {rate} Hz",
+  "playSound": "het geluid van deze weergave afspelen — aangewezen door veld 0x0c van de weergave; wanneer het spel het afspeelt is niet bekend",
   "noStateMatches": "geen toestand komt overeen met “{filter}”",
   "framesHeadState": "“{state}” · ",
   "inPlayOrder": " in opgeslagen afspeelvolgorde",

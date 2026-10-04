@@ -22,6 +22,7 @@ here like any other shop, and an export writes back the extension it read.
 | its **states** | every named look, filterable (the ship-wide `door` has 135), each marked **still**, **animation** or **selector** — the distinction the format does not state outright and the runtime depends on: a selector's frames never play, `propdeg()` picks one of them by its stored degree |
 | the **preview** | the 512×384 screen with the room view / UI band split drawn in. A prop draws at **anchor − stored offset**, and the anchor is what `propxy` moves — so the two anchor fields are that command, simulated: type `256,324` and the frame lands in the UI band where the watch does. **▶ Play state** plays the frames in their stored play order at the game's 50 ms, once, holding the last one, exactly as a prop animation does |
 | a **frame** | its stored offset (Y before X, as everywhere), its `propdeg` degree, its packed size and its refScale; export it as a transparent PNG, or replace it |
+| a view's **sound** | DreamFactory 5 only: a state whose view names a sound shows its container, length and rate, and **♪** plays it. RedJack's shops have none; *Villains Revenge*'s do. The link is measured from that game's file, not confirmed in an executable, so nothing says when the game plays it ([DreamFactory 5's shop](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet)) |
 | the **scripts** and **palette** | the shop main script and every prop's, decompiled on demand (read-only), and the file's own 256 colours |
 
 ## Two things the page is built to show

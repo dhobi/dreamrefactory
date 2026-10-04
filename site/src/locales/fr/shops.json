@@ -40,6 +40,8 @@
   "degPicksOne": "propdeg() choisit UNE de ces images d'après son degré stocké ; elles ne se jouent jamais",
   "degList": " · degré {degs} · conteneur d'état @{loc}",
   "playThisState": "sélectionner cet état et le jouer",
+  "soundMeta": " · son @{loc} — {secs} s, {rate} Hz",
+  "playSound": "jouer le son de cette vue — désigné par le champ 0x0c de la vue ; on ne sait pas quand le jeu le joue",
   "noStateMatches": "aucun état ne correspond à « {filter} »",
   "framesHeadState": "« {state} » · ",
   "inPlayOrder": " dans l'ordre de lecture stocké",

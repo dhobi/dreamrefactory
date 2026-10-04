@@ -137,6 +137,16 @@ room.
     `endanim`;
   - the i16 at 0x22e is the step time, in sixtieths of a second.
 
+  One more is **not** from RedJack.exe: the u32 at 0x0c names the view's
+  **sound**, a SOUN container ([Sound](#sound-soun-shed-sthm)). RedJack's shops
+  hold no SOUN and 0 there in every view. It was measured from Disney's
+  *Villains Revenge* (`Title/v105/v105a.shop`, issue #477), whose shop is this
+  format with SOUN containers among the rest, each right after the VIEW that
+  names it — IMA ADPCM at 22050 or 44100 Hz. No executable we have reads the
+  field, so when the game plays the sound is not known: `readShpFile` reads it
+  as `PropState.sound` for the [shop editor](../../editors/shops.md) to play,
+  and the engine never plays it.
+
   A step of the play list names a **group** of frames, not a frame: the value
   there less 1 (0x42d198). A frame record keeps its group in the i16 at +8 and
   its angle in the i32 at +0x26, in 2^24ths of a turn (v4's i16 at +40 is only
@@ -192,6 +202,9 @@ A sound chunk is v4's header at v4's offsets behind the prefix: the codec at
   in blocks listed from 0x2c (a u32 count at 0x28, then count + 1 offsets),
   each opening with a 3-byte header (an i16 predictor and a u8 step index), then
   nibbles, low first.
+
+A shop's SOUN — a view's sound, seen so far only in *Villains Revenge* — is this
+same chunk.
 
 A sound bank's header (SHED) and its one-shot table (SSND) are v4's. Only the
 loop table is new. A bank's STHM and a film's MTHM both keep the loop count at

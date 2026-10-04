@@ -40,6 +40,8 @@
   "degPicksOne": "propdeg() は保存された角度でこれらのフレームから1つを選びます。再生はされません",
   "degList": " · 角度 {degs} · 状態コンテナ @{loc}",
   "playThisState": "この状態を選んで再生",
+  "soundMeta": " · サウンド @{loc} — {secs} 秒、{rate} Hz",
+  "playSound": "このビューのサウンドを再生 — ビューの 0x0c が指すもの。ゲームがいつ再生するかは不明",
   "noStateMatches": "「{filter}」に一致する状態はありません",
   "framesHeadState": "「{state}」· ",
   "inPlayOrder": "（保存された再生順）",

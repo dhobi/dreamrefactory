@@ -50,6 +50,8 @@ import {
   readShpFile,
 } from "@dreamfactory/engine/df/shp";
 import type { GameScreen } from "@dreamfactory/site/games";
+import { DecodedAudio, decodeAudioContainer } from "@dreamfactory/engine/df/audio";
+import { play as playSound, stopPlayback as stopSound } from "./playback";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -86,6 +88,8 @@ let fileName = "props.shp";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** decoded frames by container location (one shop open at a time) */
 const frameCache = new Map<number, ShpFrame>();
+/** decoded view sounds by container location (PropState.sound); null = undecodable */
+const soundCache = new Map<number, DecodedAudio | null>();
 /** human-readable notes of every edit, shown next to the export button */
 const edits: string[] = [];
 let groupIdx = 0;
@@ -120,6 +124,7 @@ let readOnly = false;
 
 function loadShp(bytes: Uint8Array, name: string): void {
   stopPlayback();
+  stopSound();
   let parsed: ShpFile;
   try {
     parsed = readShpFile(bytes);
@@ -134,6 +139,7 @@ function loadShp(bytes: Uint8Array, name: string): void {
   $("exportBtn").textContent = t("shops.export", { ext: /\.[a-z0-9]+$/i.exec(name)?.[0]?.toLowerCase() ?? "" });
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   frameCache.clear();
+  soundCache.clear();
   edits.length = 0;
   // a v5 file reads but cannot be written yet (sources.ts)
   readOnly = isV5File(bytes);
@@ -215,6 +221,21 @@ function frameAt(loc: number): ShpFrame | null {
     frameCache.set(loc, f);
   }
   return f;
+}
+
+/** a view's sound, decoded once — the same chunk reader the track editor uses */
+function soundAt(loc: number): DecodedAudio | null {
+  if (!shp) return null;
+  if (!soundCache.has(loc)) {
+    let a: DecodedAudio | null = null;
+    try {
+      a = decodeAudioContainer(shp.file.containers[loc].data);
+    } catch {
+      /* stays null: listed, not playable */
+    }
+    soundCache.set(loc, a);
+  }
+  return soundCache.get(loc) ?? null;
 }
 
 /** paint a decoded frame into a canvas at 1:1, transparent where masked */
@@ -524,6 +545,27 @@ function buildStates(): void {
         $("playBtn").click();
       };
       row.appendChild(play);
+    }
+
+    // a DreamFactory 5 view may name a sound (Villains Revenge's shops do);
+    // when the game plays it is not known, so here it only plays on request
+    if (st.sound !== undefined) {
+      const audio = soundAt(st.sound);
+      const secs = audio ? audio.samples.length / Math.max(1, audio.sampleRate) : 0;
+      meta.textContent += t("shops.soundMeta", {
+        loc: st.sound,
+        rate: audio?.sampleRate ?? 0,
+        secs: secs.toFixed(2),
+      });
+      const listen = document.createElement("button");
+      listen.className = "mini";
+      listen.textContent = "♪";
+      listen.title = t("shops.playSound");
+      listen.disabled = !audio;
+      listen.onclick = () => {
+        if (audio) playSound(audio, listen);
+      };
+      row.appendChild(listen);
     }
 
     wrap.appendChild(row);
