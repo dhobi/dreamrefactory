@@ -8621,8 +8621,10 @@ test("a prop with no state set reports its first state, not nothing", async () =
     "ok-click",
   );
   for (let i = 0; i < 300; i++) {
+    // the gate is shown only while its up()/down() moves it — and its frame is
+    // no witness, since a view goes round shown or not (PropRuntime.tick)
     const g = session.propRuntime.get("boilgate");
-    if (g && g.frameIdx > 0) gateMoved = true;
+    if (g?.visible) gateMoved = true;
     tick();
     await drain();
   }
