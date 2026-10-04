@@ -7909,12 +7909,14 @@ test("each edition's radio news is timed by its own recording", () => {
 
 // --- 87g. an edition that speaks English is captioned from the English transcript
 // VOICES_OF holds only while the edition's voices really are the other's files:
-// every bank, film and track a transcript captions, byte for byte.
-test("the Dutch and Japanese editions speak the English recordings, so they are captioned from en.json", () => {
+// every bank, film and track a transcript captions, byte for byte. An edition
+// may still have a file of its own — ja.json puts the English words into
+// Japanese (#469) — and installCaptions takes that first; VOICES_OF is the
+// fallback, and says whose recordings these are either way.
+test("the Dutch and Japanese editions speak the English recordings, so en.json is their fallback", () => {
   // files an edition re-encoded with the same words in them, checked by speech recognition
   const sameWords: Record<string, string[]> = { ja: ["unilib.trk", "ocredits.mov"] };
   for (const [edition, voices] of Object.entries(VOICES_OF)) {
-    check(`${edition} has no transcript of its own`, !CAPTION_FILES[edition]);
     const file = CAPTION_FILES[voices];
     const names = [...Object.keys(file.banks), ...Object.keys(file.films ?? {}), ...Object.keys(file.tracks ?? {})];
     const differ = names.filter((n) => {
