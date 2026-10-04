@@ -9903,13 +9903,16 @@ test("blackjack: the deal plays its swing, at the deck's own variant", async () 
 
   check("the deal animates instead of holding its first picture",
     pictures(clean) >= 4, `frames=${JSON.stringify(clean)}`);
-  check("...through the clean deck's own frames, and ending on its last",
-    clean.every((i) => [0, 1, 2, 3, 8].includes(i)) && clean[clean.length - 1] === 8,
+  // a step names its record GROUP (TI.EXE 0x419105–0x419151), and frames 8 and 9
+  // are group 0, stored last: the swing starts on them, and 19 passes of its
+  // 20 steps end on group 4 (#485)
+  check("...through the clean deck's own frames, from group 0 to group 4",
+    clean.every((i) => [0, 1, 2, 3, 8].includes(i)) && clean[0] === 8 && clean[clean.length - 1] === 3,
     `frames=${JSON.stringify(clean)}`);
   check("the card after it animates too (the propdeg before it is not a pin)",
     pictures(dusty) >= 4, `frames=${JSON.stringify(dusty)}`);
   check("...and a dusty deck deals the dusty deck's pictures",
-    dusty.every((i) => [4, 5, 6, 7, 9].includes(i)) && dusty[dusty.length - 1] === 9,
+    dusty.every((i) => [4, 5, 6, 7, 9].includes(i)) && dusty[0] === 9 && dusty[dusty.length - 1] === 7,
     `frames=${JSON.stringify(dusty)}`);
 }
 );

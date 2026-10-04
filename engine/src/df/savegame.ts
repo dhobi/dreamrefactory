@@ -57,6 +57,11 @@ const ALIGN = 64;
  * {@link walkPropGrid} locks onto; the numeric half is at negative offsets.
  */
 const PROP_STRIDE = 158;
+/** `propset` (0x4160b0 reads record+0x5e) and `propstar` (0x416490, +0x6e): the
+ *  set a world prop belongs to and the star it was placed on, 16 and 32 bytes
+ *  after the name — the same two pstr fields the actor record has there */
+const PROP_SET_OFF = 16;
+const PROP_STAR_OFF = 32;
 const PROP_VIEW_OFF = 48;
 const PROP_OWNER_OFF = 64;
 /** the name field's offset inside a prop record (TI.EXE `propvisible` 0x416f30
@@ -67,7 +72,10 @@ const PROP_RECORD_OFF = -0x4e;
  * fetches the record and reads its field at a fixed offset): `propvisible`
  * +0 (0x416f30), `propxy` +0x14/+0x16 (0x4175c0 — +0x14 is the screen Y and
  * +0x16 the X: the interface band's props all read (324, 256), the band anchor),
- * `propdeg` +0x18 (0x4168a0), `propdist` +0x26 (the open pocketwatch's
+ * `propdeg` +0x18 (0x4168a0), `propxyz` +0x1a/+0x1c/+0x1e (0x4173c0's getter
+ * arms, axes 1/2/3 — the world place; SMOKE's card table reads (11262, 3860,
+ * 234) in all 82 saves that have it placed, its `buick` star's x, z and y),
+ * `propdist` +0x26 (the open pocketwatch's
  * lid/hrs/min/sec read −6/−5/−5/−4, exactly the z-order its `open()` assigns),
  * `propscale` +0x28 (0x416a90), `propvalue` +0x46 (0x416240), `propzclip`
  * +0x4a (0x4162d0), `propis3d` +0x12 (0x417760) — 0/1 in every record, and it is
@@ -83,6 +91,9 @@ const PROP_FIELDS = {
   y: PROP_RECORD_OFF + 0x14,
   x: PROP_RECORD_OFF + 0x16,
   deg: PROP_RECORD_OFF + 0x18,
+  worldX: PROP_RECORD_OFF + 0x1a,
+  worldY: PROP_RECORD_OFF + 0x1c,
+  worldZ: PROP_RECORD_OFF + 0x1e,
   dist: PROP_RECORD_OFF + 0x26,
   scale: PROP_RECORD_OFF + 0x28,
   value: PROP_RECORD_OFF + 0x46,
@@ -406,6 +417,10 @@ export interface SavedProp {
   view: string;
   /** propowner at name+64 (e.g. "frank", "none", "vlad", "purser"). */
   owner: string;
+  /** `propset` at name+16 — the set a world prop is drawn in ("" for none). */
+  set: string;
+  /** `propstar` at name+32 — the star it was placed on (or a sentinel). */
+  star: string;
   /** `propvisible` — shown right now. */
   visible: boolean;
   /** `propis3d` — placed in the WORLD (propxyz) rather than on the screen. The
@@ -414,6 +429,10 @@ export interface SavedProp {
   /** screen anchor (propxy) — X at name−0x38, Y at name−0x3a. */
   x: number;
   y: number;
+  /** world place (`propxyz` axes 1..3): the ground pair, then the height. */
+  worldX: number;
+  worldY: number;
+  worldZ: number;
   /** `propdeg` — the deg-selector frame (nav arrow lit, the watch wheels). */
   deg: number;
   /** `propdist` — z-order, more negative = closer (the watch assembly's stack). */
@@ -433,7 +452,7 @@ export interface SavedProp {
  * engine rather than a guess of ours.
  */
 export type SavedPropPatch = Pick<SavedProp, "name" | "owner"> &
-  Partial<Pick<SavedProp, "view" | "visible" | "is3d" | "x" | "y" | "deg" | "dist" | "scale" | "value" | "zclip">>;
+  Partial<Pick<SavedProp, "view" | "set" | "star" | "visible" | "is3d" | "x" | "y" | "worldX" | "worldY" | "worldZ" | "deg" | "dist" | "scale" | "value" | "zclip">>;
 
 /**
  * One live `makeloop` slot from the loops table — the room's scheduled work
@@ -861,10 +880,15 @@ function propRecordAt(d: Uint8Array, o: number): SavedProp | null {
     name: name.toLowerCase(),
     view: view.toLowerCase(),
     owner: owner.toLowerCase(),
+    set: pstrField(d, o + PROP_SET_OFF).toLowerCase(),
+    star: pstrField(d, o + PROP_STAR_OFF).toLowerCase(),
     visible: num(PROP_FIELDS.visible) > 0,
     is3d: num(PROP_FIELDS.is3d) === 1,
     x: num(PROP_FIELDS.x),
     y: num(PROP_FIELDS.y),
+    worldX: num(PROP_FIELDS.worldX),
+    worldY: num(PROP_FIELDS.worldY),
+    worldZ: num(PROP_FIELDS.worldZ),
     deg: num(PROP_FIELDS.deg),
     dist: num(PROP_FIELDS.dist),
     scale: num(PROP_FIELDS.scale),
@@ -1803,6 +1827,8 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       // extras are per-room furniture the arriving room rebuilds anyway.
       if (off === undefined) continue;
       if (sp.view !== undefined) writePstrField(d, off + PROP_VIEW_OFF, sp.view);
+      if (sp.set !== undefined) writePstrField(d, off + PROP_SET_OFF, sp.set);
+      if (sp.star !== undefined) writePstrField(d, off + PROP_STAR_OFF, sp.star);
       writePstrField(d, off + PROP_OWNER_OFF, sp.owner);
       // the numeric half — where and how the prop draws. Bounds-checked like
       // the reader: the fields sit BEFORE the name and the first record's
@@ -1819,6 +1845,9 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       put(PROP_FIELDS.is3d, flag(sp.is3d));
       put(PROP_FIELDS.x, sp.x);
       put(PROP_FIELDS.y, sp.y);
+      put(PROP_FIELDS.worldX, sp.worldX);
+      put(PROP_FIELDS.worldY, sp.worldY);
+      put(PROP_FIELDS.worldZ, sp.worldZ);
       put(PROP_FIELDS.deg, sp.deg);
       put(PROP_FIELDS.dist, sp.dist);
       put(PROP_FIELDS.scale, sp.scale);

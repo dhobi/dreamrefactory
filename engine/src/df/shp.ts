@@ -54,9 +54,12 @@ export interface PropState {
    */
   playOrder: number[] | null;
   /**
-   * DreamFactory 5 only: the group each frame belongs to (the i16 at +8 of its
-   * record), index for index with {@link frames}. A step of the play list
-   * names a group, not a frame; see {@link steps}.
+   * The group each frame belongs to (the i16 at +8 of its record), index for
+   * index with {@link frames}. A step of the play list names a group, not a
+   * frame: DreamFactory 5's, see {@link steps}, and DreamFactory 4's too — TI.EXE
+   * reads `word [view + 0x2e + step * 2] - 1` (0x419105) and draws, of the
+   * records whose +8 equals it, the one whose degree is nearest the prop's
+   * (0x41911f–0x419151). See playSequence in runtime/props.ts.
    */
   groups?: number[];
   /**
@@ -188,6 +191,8 @@ const STATE = {
   maxPlayOrder: (112 - 46) / 2,
   frames: 118,
   frameSize: 44,
+  /** i16: the play-list group the frame belongs to (see PropState.groups) */
+  frameGroup: 8,
   frameDegree: 40,
   frameRefScale: 42,
 } as const;
@@ -226,9 +231,8 @@ const STATE_V5 = {
   frameCount: 0x232,
   frames: 0x236,
   frameSource: 0x10,
-  /** in each 44-byte frame record: the i16 group the frame belongs to, and its
-   *  angle, an i32 in 2^24ths of a turn (RedJack.exe 0x42d202, 0x42d211) */
-  frameGroup: 8,
+  /** in each 44-byte frame record: the angle, an i32 in 2^24ths of a turn
+   *  (RedJack.exe 0x42d211); the group is v4's {@link STATE.frameGroup} (0x42d202) */
   frameAngle: 0x26,
 } as const;
 
@@ -319,8 +323,8 @@ function readGroup(
       // which is 0 for the small numbers most views count their frames by
       if (at === STATE_V5) {
         degrees.push(fv.getInt32(rec + STATE_V5.frameAngle, true) & 0xffffff);
-        groups.push(fv.getInt16(rec + STATE_V5.frameGroup, true));
       } else degrees.push(fv.getInt16(rec + STATE.frameDegree, true));
+      groups.push(fv.getInt16(rec + STATE.frameGroup, true));
       refScales.push(fv.getInt16(rec + STATE.frameRefScale, true) || 96);
     }
     // The play script (see PropState.playOrder): a step count at +112 and that
@@ -381,7 +385,8 @@ function readGroup(
       // v5: the view's flags word, bit 0 "plays once" (see PropState.playsOnce)
       ...(at === STATE_V5 && ed.length >= 0x18 ? { playsOnce: (ev.getUint32(0x14, true) & 1) === 1 } : {}),
       ...(at === STATE_V5 && ed.length >= 0x230 ? { frameTicks: ev.getInt16(0x22e, true), playCount: orderCount } : {}),
-      ...(at === STATE_V5 ? { groups, steps: order.length ? order : [0] } : {}),
+      groups,
+      ...(at === STATE_V5 ? { steps: order.length ? order : [0] } : {}),
     });
   }
   orientToSettledPose(states, containers);

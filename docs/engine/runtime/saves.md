@@ -34,8 +34,8 @@ writes:
   them changing. It matters at both ends: the original engine asks for that CD
   by name, and a load in this port mounts it (step 3 below),
 - the **props**: **every prop the engine has loaded**, in the engine's own list
-  order, and the whole record — `propowner` and `propview`, plus the numeric half
-  (`propvisible`, the screen anchor, `deg`, `dist`, `scale`, `value`, `zclip`) —
+  order, and the whole record — `propowner`, `propview`, `propset` and `propstar`, plus the numeric half
+  (`propvisible`, the screen anchor or world place, `deg`, `dist`, `scale`, `value`, `zclip`) —
   see [Which props get written](#which-props-get-written),
 - the **cast**: `actorowner` and `actorvalue` (what each character remembers of
   you) plus the whole placement half of [the actor record](#the-actor-record) —
@@ -306,11 +306,14 @@ original's own choreography (see [A load is not an arrival](#a-load-is-not-an-ar
    `actorvisible` verbatim is what makes wholesale restore safe at all:
    `putdownactor` hides a character without touching `actorset`, so "place everyone
    whose set matches" would resurrect everybody who ever walked through the room.
-10. **Put every prop back, both halves** — owner, view, and the numeric fields that
-   say where and how it draws. This one step stands in for everything the room's
-   scripts would otherwise do to props: `initprops`' mission defaults, the
+10. **Put every prop back, both halves** — owner, view, set, star, and the numeric
+   fields that say where and how it draws. This one step stands in for everything
+   the room's scripts would otherwise do to props: `initprops`' mission defaults, the
    `house.shp` `openshop`/`initprops`/`showinterface` sequence, the open
-   pocketwatch's assembly, the nav arrow's lighting. (`handitem` is not cleared by
+   pocketwatch's assembly, the nav arrow's lighting, and the furniture a room's
+   `openset` places — SMOKE's card table, whose `propset`/`propstar` and world
+   place come back from the record, so a load from another room finds Riviera at
+   his table ([#486](https://github.com/dhobi/dreamrefactory/issues/486)). (`handitem` is not cleared by
    hand — it restores from its variable record like every global, and every
    shipped save carries `""` there: a save is taken from the CTL panel, which you
    cannot reach mid-drag.)

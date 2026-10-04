@@ -303,10 +303,15 @@ function inventorySnapshot(session: GameSession): SavedPropPatch[] {
       // tell whether the x/y below mean anything (TAOOT's watch/bag are world
       // props on the cabin furniture until picked up, band props after)
       is3d: p.worldSpace,
-      // a world-space prop's place is its world xyz, which the room's own shop
-      // re-creates; the record's x/y are the screen anchor and only meaningful
-      // for the screen-space props (all 72 in the boot shops are)
-      ...(p.worldSpace ? {} : { x: p.anchorX, y: p.anchorY }),
+      // the record's x/y are the screen anchor, meaningful only for a screen
+      // prop; a world prop's place is its world xyz, which the record has too
+      ...(p.worldSpace
+        ? { worldX: p.worldX, worldY: p.worldY, worldZ: p.worldZ }
+        : { x: p.anchorX, y: p.anchorY }),
+      // the set it draws in and the star it stands on (`propset`/`propstar`),
+      // which only the room's `openset` would otherwise say (#486)
+      set: String(p.setName ?? "").toLowerCase(),
+      star: String(p.starName ?? "").toLowerCase(),
       deg: Number(p.deg) || 0,
       dist: p.dist,
       scale: p.scale,
@@ -822,8 +827,9 @@ function instanceSource(session: GameSession, name: string): string | null {
 }
 
 /**
- * Apply every prop record from the file: owner, view, and the numeric half —
- * visibility, screen anchor, deg, z-order, scale, value, zclip.
+ * Apply every prop record from the file: owner, view, set and star, and the
+ * numeric half — visibility, screen anchor or world place, deg, z-order, scale,
+ * value, zclip.
  *
  * This is the read-back of the two fields the port used to parse and discard
  * (`propvisible` and the view) plus the ones it never read at all, and it is
@@ -845,14 +851,27 @@ export function restoreProps(session: GameSession, inventory: SavedProp[]): void
     // place TAOOT's watch/bag in the world (`setuprop`'s propxyz), and a load
     // taken after they moved to the band must put them back ON it — a stale
     // worldSpace left the band's watch and bag restored but never drawn.
-    // A world prop's place is not in the record (no xyz); its room re-derives
-    // it, exactly as the original does — the 4 pre-boarding shipped saves are
-    // the measured case (watch/bag is3d=1, view=small).
     p.worldSpace = sp.is3d;
     if (!sp.is3d) {
       p.anchorX = sp.x;
       p.anchorY = sp.y;
+    } else {
+      // ...and a world prop's PLACE is in the record too: `propxyz`'s getter
+      // (0x4173c0) reads it at +0x1a/+0x1c/+0x1e. The load runs no `openset`,
+      // so nothing else would put SMOKE's card table back on its star (#486).
+      p.worldX = sp.worldX;
+      p.worldY = sp.worldY;
+      p.worldZ = sp.worldZ;
     }
+    // The set it draws in, and the star it was put on, verbatim. A world prop
+    // only draws in its own set, and that is `openset`'s to say too: SMOKE.SET's
+    // `sendtoprop ("blkjacktable", setupprop ("smoke"))` is the only thing that
+    // ever names a set for the card table, so a load from any other room left it
+    // belonging nowhere — Riviera and the table missing until you walked out and
+    // back in (#486). The position above is the answer, so no star is pending.
+    p.setName = sp.set;
+    p.starName = sp.star;
+    p.starPending = false;
     p.deg = sp.deg;
     p.dist = sp.dist;
     if (sp.scale) p.scale = sp.scale;
