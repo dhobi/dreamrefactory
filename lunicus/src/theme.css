@@ -75,33 +75,29 @@
   --night-600: #020837;
   --night-500: #040a48;
   --night-400: #060a56;
-}
 
-/* ---- steel: the chrome in shadow, which is what a border is here -------- */
+  /* ---- steel: the chrome in shadow, which is what a border is here -------- */
 
-/*
- * The chrome's dark side: #2c2c2c and #3a3a44 in the grey-dark cells, then the
- * sky's reflection going dark, #576a86 and #6a7686. A cold grey on a navy page
- * reads as a plate's edge, not as a line drawn on it.
- */
-:root {
+  /*
+   * The chrome's dark side: #2c2c2c and #3a3a44 in the grey-dark cells, then the
+   * sky's reflection going dark, #576a86 and #6a7686. A cold grey on a navy page
+   * reads as a plate's edge, not as a line drawn on it.
+   */
   --steel-600: #1d2238;
   --steel-500: #2c2f44;
   --steel-400: #3a3a44;
   --steel-300: #576a86;
   --steel-200: #6a7686;
-}
 
-/* ---- chrome: every word on the page ------------------------------------- */
+  /* ---- chrome: every word on the page ------------------------------------- */
 
-/*
- * A scanline across the L's stem: #a6a4a2 to #b8b8b1 across the face, #e9e3da
- * where it catches the light, then the grey family's mean #c2c2c0 and the
- * mid-grey #7c7f80 where the face turns away. The lit chrome is warm, from the
- * fire. The sky the letters reflect, #a7bbe0 and #d7e8f6, is the coldest light
- * on the card, and it is the brightest word.
- */
-:root {
+  /*
+   * A scanline across the L's stem: #a6a4a2 to #b8b8b1 across the face, #e9e3da
+   * where it catches the light, then the grey family's mean #c2c2c0 and the
+   * mid-grey #7c7f80 where the face turns away. The lit chrome is warm, from the
+   * fire. The sky the letters reflect, #a7bbe0 and #d7e8f6, is the coldest light
+   * on the card, and it is the brightest word.
+   */
   --chrome-100: #fdfdf7;
   --chrome-200: #e9e3da;
   --chrome-300: #c2c2c0;
@@ -110,22 +106,20 @@
   --chrome-600: #7c7f80;
   --sky-100: #d7e8f6;
   --sky-200: #a7bbe0;
-}
 
-/* ---- gold: the bevel ---------------------------------------------------- */
+  /* ---- gold: the bevel ---------------------------------------------------- */
 
-/*
- * A scanline down the I's top serif, from the rule outside into the chrome:
- *
- *   #0e0600   the dark rule
- *   #f8f574   the bevel's lit lip, the brightest gold on the card
- *   #efc034   #e3b83e   its face
- *   #d57801   #c77401   turning
- *   #b16b05   #864705   falling away
- *   #733500   #572700   into the shadow side
- *   #3e1c01   the foot
- */
-:root {
+  /*
+   * A scanline down the I's top serif, from the rule outside into the chrome:
+   *
+   *   #0e0600   the dark rule
+   *   #f8f574   the bevel's lit lip, the brightest gold on the card
+   *   #efc034   #e3b83e   its face
+   *   #d57801   #c77401   turning
+   *   #b16b05   #864705   falling away
+   *   #733500   #572700   into the shadow side
+   *   #3e1c01   the foot
+   */
   --gold-100: #f8f574;
   --gold-200: #efc034;
   --gold-300: #e3b83e;
@@ -135,25 +129,23 @@
   --gold-700: #572700;
   --gold-800: #3e1c01;
   --rule: #0e0600;
-}
 
-/* ---- fire: the explosion ------------------------------------------------ */
+  /* ---- fire: the explosion ------------------------------------------------ */
 
-/*
- * The explosion from its heart outwards: the light-yellow family's #fdfca8, the
- * yellow-mid face #fcd706 and #fbb805, orange-mid #fb9704, #fb7803 and #f95803,
- * then the flames' red-mid #c92c13 and the smoke at their edge, #79140a and
- * #560b07.
- *
- * Only for what is LIVE:
- *
- *   1  the boot gauge's burn
- *   2  the network spinner in the corner of the picture
- *   3  `--ok`
- *
- * Not for text, not for a border, not for the ground.
- */
-:root {
+  /*
+   * The explosion from its heart outwards: the light-yellow family's #fdfca8, the
+   * yellow-mid face #fcd706 and #fbb805, orange-mid #fb9704, #fb7803 and #f95803,
+   * then the flames' red-mid #c92c13 and the smoke at their edge, #79140a and
+   * #560b07.
+   *
+   * Only for what is LIVE:
+   *
+   *   1  the boot gauge's burn
+   *   2  the network spinner in the corner of the picture
+   *   3  `--ok`
+   *
+   * Not for text, not for a border, not for the ground.
+   */
   --fire-100: #fdfca8;
   --fire-200: #fcd706;
   --fire-300: #fbb805;
@@ -163,21 +155,17 @@
   --fire-700: #c92c13;
   --fire-800: #79140a;
   --fire-900: #560b07;
-}
 
-/* ---- the two extras the pages use ------------------------------------- */
+  /* ---- the two extras the pages use ------------------------------------- */
 
-:root {
   /* A warning has to be told from the fire, so it is not orange: it is the
      red-light cell #fb663a pushed towards pink, where the flames' reflection
      lies on a face (red light, 0.1%). 7.3:1 on the ground. */
   --alarm: #ff6f5e;
   --ok: var(--fire-200);
-}
 
-/* ---- typography and metrics ------------------------------------------- */
+  /* ---- typography and metrics ------------------------------------------- */
 
-:root {
   /* the letters are a slab serif cut in metal; the page carries no webfont for
      them, so the display face is the nearest slab each system has, then its
      serif */
@@ -196,11 +184,9 @@
   /* what the title card sits in: the fire's own light */
   --glow:
     0 0 0 1px rgba(239, 192, 52, 0.24), 0 0 36px -6px rgba(251, 120, 3, 0.32);
-}
 
-/* ---- the roles the chrome asks for ------------------------------------ */
+  /* ---- the roles the chrome asks for ------------------------------------ */
 
-:root {
   --bg: var(--night-1000);
   --panel: var(--night-800);
   --raised: var(--night-700);

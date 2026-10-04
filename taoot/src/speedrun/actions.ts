@@ -206,7 +206,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       c.say(`maze ${maze}, in at ${chosen.entry.scene}, ${chosen.plan.length} moves`);
 
       const sceneNow = `String(window.dbg.viewer.scene.sceneName || "").toLowerCase()`;
-      const setNow = `String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\\.set$/, "")`;
+      const setNow = String.raw`String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, "")`;
 
       // in at the entry smstack1 offers
       await ACTIONS.face.run({ ...c, step: { ...c.step, args: [chosen.entry.stand], opts: {} } });
@@ -269,7 +269,7 @@ export const TITANIC_ACTIONS: ActionTable = {
     help: "drag the hand item onto something — use light on watch",
     run: async (c) => {
       const [item, ...rest] = c.step.args;
-      const target = rest.filter((w) => w.toLowerCase() !== "on")[0];
+      const target = rest.find((w) => w.toLowerCase() !== "on");
       if (!target) throw new Error(`use needs something to use it ON`);
       const held = await c.d.evaluate<string>(`String(window.dbg.session.interp.globals.get("handitem") ?? "")`);
       if (held.toLowerCase() !== item.toLowerCase()) {
@@ -313,7 +313,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       // which way round a dial reads, and a speedrun that got any of it wrong
       // would take an extra lap of the dial and call it a route problem.
       const adapter = {
-        propDeg: (p: string) => degCache[p.toLowerCase()] ?? NaN,
+        propDeg: (p: string) => degCache[p.toLowerCase()] ?? Number.NaN,
         flow: () => flowCache,
         dragProp: async (p: string, next: (start: { x: number; y: number }) => { x: number; y: number } | null) => {
           const at = await c.d.aim("thing", p);
@@ -332,7 +332,14 @@ export const TITANIC_ACTIONS: ActionTable = {
           // and it steers a dial by a photograph: the number never changes, so
           // the swing never turns round and never stops. valve3 asked for 7 wound
           // 2->19, 19->0, 0->19 across its three grabs and was called stuck.
-          await c.d.dragProp(at, async () => (await refresh(), next(at)), c.budget);
+          await c.d.dragProp(
+            at,
+            async () => {
+              await refresh();
+              return next(at);
+            },
+            c.budget,
+          );
           await refresh();
           return true;
         },
@@ -426,9 +433,10 @@ export const TITANIC_ACTIONS: ActionTable = {
         `(() => { const s = window.dbg.session; return !s.viewShowing && s.currentFlat ? String(s.currentFlat) : null; })()`,
       );
       if (at !== WIRELESS_MAIN) {
+        const place = at ? `in "${at}"` : "in the room";
         throw new Error(
           `the wireless set is worked from the "${WIRELESS_MAIN}" flat and we are ` +
-            `${at ? `in "${at}"` : "in the room"} — click(wireless) opens it`,
+            `${place} — click(wireless) opens it`,
         );
       }
       let props: Record<string, { owner: string; value: number }> = {};
@@ -452,7 +460,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       const adapter = {
         inFlat: () => flat,
         propOwner: (n: string) => props[n.toLowerCase()]?.owner ?? "",
-        propValue: (n: string) => props[n.toLowerCase()]?.value ?? NaN,
+        propValue: (n: string) => props[n.toLowerCase()]?.value ?? Number.NaN,
         clickThing: async (n: string) => {
           const spot = await c.d.aim("thing", n);
           if (!spot) return false;
@@ -465,7 +473,14 @@ export const TITANIC_ACTIONS: ActionTable = {
         dragProp: async (n: string, next: (from: { x: number; y: number }) => { x: number; y: number } | null) => {
           const spot = await c.d.aim("thing", n);
           if (!spot) return false;
-          await c.d.dragProp(spot, async () => (await refresh(), next(spot)), c.budget);
+          await c.d.dragProp(
+            spot,
+            async () => {
+              await refresh();
+              return next(spot);
+            },
+            c.budget,
+          );
           await refresh();
           return true;
         },
@@ -497,49 +512,45 @@ export const TITANIC_ACTIONS: ActionTable = {
        * is no way to try the tuner twice, or to power the set and stop, or to
        * throw the breaker to rx and read the message stack. These are that.
        */
-      const control =
-        what === "breaker"
-          ? {
-              region: "breaker" as const,
-              run: () => {
-                if (!["tx", "rx", "off"].includes(value)) {
-                  throw new Error(`the breaker settles on tx, rx or off — not "${value}"`);
-                }
-                return setBreaker(adapter, value as "tx" | "rx" | "off");
-              },
+      const controls = {
+        breaker: {
+          region: "breaker" as const,
+          run: () => {
+            if (!["tx", "rx", "off"].includes(value)) {
+              throw new Error(`the breaker settles on tx, rx or off — not "${value}"`);
             }
-          : what === "sender"
-            ? {
-                region: "sender" as const,
-                run: () => {
-                  if (!["on", "off"].includes(value)) throw new Error(`the sender is on or off — not "${value}"`);
-                  return setSender(adapter, value as "on" | "off");
-                },
-              }
-            : what === "tuner"
-              ? {
-                  region: "tuner" as const,
-                  run: () => {
-                    // The transmit band, or one of the three receive bands. Which
-                    // receive band is tuned decides which message `rx()` spells
-                    // out, so they are numbered rather than lumped together.
-                    const band =
-                      value === "tx"
-                        ? TX_BAND
-                        : /^rx[123]$/.test(value)
-                          ? RX_BANDS[Number(value[2]) - 1]
-                          : null;
-                    if (!band) {
-                      throw new Error(
-                        `the tuner takes a band: tx (${TX_BAND.lo}..${TX_BAND.hi}) or ` +
-                          RX_BANDS.map((b, i) => `rx${i + 1} (${b.lo}..${b.hi})`).join(", ") +
-                          ` — not "${value}"`,
-                      );
-                    }
-                    return tuneTo(adapter, band);
-                  },
-                }
-              : null;
+            return setBreaker(adapter, value as "tx" | "rx" | "off");
+          },
+        },
+        sender: {
+          region: "sender" as const,
+          run: () => {
+            if (!["on", "off"].includes(value)) throw new Error(`the sender is on or off — not "${value}"`);
+            return setSender(adapter, value as "on" | "off");
+          },
+        },
+        tuner: {
+          region: "tuner" as const,
+          run: () => {
+            // The transmit band, or one of the three receive bands. Which
+            // receive band is tuned decides which message `rx()` spells
+            // out, so they are numbered rather than lumped together.
+            let band: typeof TX_BAND | (typeof RX_BANDS)[number] | null = null;
+            if (value === "tx") band = TX_BAND;
+            else if (/^rx[123]$/.test(value)) band = RX_BANDS[Number(value[2]) - 1];
+            if (!band) {
+              throw new Error(
+                `the tuner takes a band: tx (${TX_BAND.lo}..${TX_BAND.hi}) or ` +
+                  RX_BANDS.map((b, i) => `rx${i + 1} (${b.lo}..${b.hi})`).join(", ") +
+                  ` — not "${value}"`,
+              );
+            }
+            return tuneTo(adapter, band);
+          },
+        },
+      };
+      const control =
+        what === "breaker" || what === "sender" || what === "tuner" ? controls[what] : null;
       if (!control) {
         throw new Error(
           `wireless does tx (the lot), or one of breaker, sender, tuner — not "${what}". ` +
@@ -556,7 +567,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       c.say(
         what === "tuner"
           ? `needle ${adapter.propValue("tunerneedle")}, knob ${adapter.propOwner("tunerknob")}`
-          : `${what} ${adapter.propOwner(`${what}handle`)}`,
+          : `${what} ${adapter.propOwner(what + "handle")}`,
       );
       await c.d.settle(c.wait, `the ${control.region}`, c.budget);
     },
@@ -595,7 +606,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       }
       const page = () =>
         c.d.evaluate<number | null>(
-          `(() => { const m = /^map (\\d+)$/i.exec(String(window.dbg.session.currentFlat || "")); return m ? Number(m[1]) : null; })()`,
+          String.raw`(() => { const m = /^map (\d+)$/i.exec(String(window.dbg.session.currentFlat || "")); return m ? Number(m[1]) : null; })()`,
         );
       // TWO clicks, doing DIFFERENT things — so they must not be waited on the
       // same way. house.shp c609's mousedown switches on the map's own view:
@@ -642,8 +653,9 @@ export const TITANIC_ACTIONS: ActionTable = {
         // would shut it again.
         const wasLight = await c.d.evaluate<boolean>(lit);
         await clickThing(c, "map", "taken");
+        const orLit = wasLight ? "" : " || (" + lit + ")";
         const answered = await c.d.tryHold(
-          `/^map \\d+$/i.test(String(window.dbg.session.currentFlat || ""))${wasLight ? "" : ` || (${lit})`}`,
+          String.raw`/^map \d+$/i.test(String(window.dbg.session.currentFlat || ""))${orLit}`,
           4000,
         );
         // A click that did nothing costs the whole backstop, and until now it did
@@ -677,7 +689,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       // later move in the same room cost 0.2 s. Waiting for the room to settle
       // here pays the fade once instead of guessing at it twice.
       await c.d.hold(
-        `(${predicate(`set == ${goal}`)}) && (${predicate("noflat")}) && (${predicate("quiet")})`,
+        `(${predicate("set == " + goal)}) && (${predicate("noflat")}) && (${predicate("quiet")})`,
         `the jump to ${goal}`,
         c.budget,
       );
@@ -764,7 +776,7 @@ export const TITANIC_ACTIONS: ActionTable = {
         const v = window.dbg.viewer, s = window.dbg.session;
         if (!v || !v.set) return null;
         return {
-          set: String(s.currentSetFile || "").toLowerCase().replace(/\.set$/, ""),
+          set: String(s.currentSetFile || "").toLowerCase().replace(/[.]set$/, ""),
           here: String(v.scene.sceneName || "").toLowerCase(),
           scenes: v.set.scenes.map((sc) => ({
             name: String(sc.sceneName || "").toLowerCase(),
@@ -799,7 +811,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       }
       // No set in memory means no room to plan in — the planner's problem, if
       // this host has one.
-      if (!room || !room.scenes.some((s) => s.views.some((w) => w.name === want))) {
+      if (!room?.scenes.some((s) => s.views.some((w) => w.name === want))) {
         return planner(c, "stand", want);
       }
 
@@ -854,7 +866,8 @@ export const TITANIC_ACTIONS: ActionTable = {
             `${[...steps.map((s2) => s2.face), want].join(" -> ")}`,
         );
       }
-      c.say(`${where}${steps.length ? `, ${steps.length} road(s): ` : ": "}${[...steps.map((s2) => s2.face), want].join(" -> ")}`);
+      const roads = steps.length ? `, ${steps.length} road(s): ` : ": ";
+      c.say(where + roads + [...steps.map((s2) => s2.face), want].join(" -> "));
       await c.d.settle(c.wait, `the walk to ${want}`, c.budget);
     },
   },
@@ -894,7 +907,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       const n = Number(c.step.args[0]);
       const phase = Number(c.step.opts.phase ?? 0);
       if (!Number.isFinite(n) || !Number.isFinite(phase)) {
-        throw new Error(`mission takes numbers — mission(1, phase: 2)`);
+        throw new TypeError(`mission takes numbers — mission(1, phase: 2)`);
       }
       await loadPoint(c, `m${n}p${phase}`);
     },

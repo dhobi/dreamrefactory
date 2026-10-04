@@ -521,7 +521,7 @@ const ACTIONS_0: PlayerActions = {
    * One frame more than the tags, so the knockdown the last one installs goes
    * on before the page would end this.
    */
-  struck: { cels: Array(16).fill(3325), dx: Array(16).fill(0), hold: 1, from: "0x470c40 tags 18..22" },
+  struck: { cels: new Array(16).fill(3325), dx: new Array(16).fill(0), hold: 1, from: "0x470c40 tags 18..22" },
   /**
    * The hard landing — `0x471c68` tag 5, FOUR frames a cel, after
    * `0x402ac0(0xa)` takes ten health and sound 5 plays (`0x429374`). Character
@@ -730,12 +730,12 @@ const ACTIONS_1: PlayerActions = {
   /** `0x476758` tag 3 — the lightning's death for the second (`0x449856`) */
   dyingStruck: {
     cels: [9700, 9701, 9702, 9701, 9700, 9701, 5910, 5911, 5912, 5913, 5914, 5915],
-    dx: Array(12).fill(0),
+    dx: new Array(12).fill(0),
     hold: 2,
     from: "0x476758 tag 3, from 0x449856",
   },
   /** `0x4752f0` tags 18..22 — the second's scepter under the strike (`0x449836`) */
-  struck: { cels: Array(16).fill(8324), dx: Array(16).fill(0), hold: 1, from: "0x4752f0 tags 18..22" },
+  struck: { cels: new Array(16).fill(8324), dx: new Array(16).fill(0), hold: 1, from: "0x4752f0 tags 18..22" },
   /** `0x476220` tag 5, four ticks a cel — `0x443d88`, after ten health and sound 5 */
   landRoll: { cels: [5208, 5207, 5206], dx: [0, 0, 0], hold: 4, from: "0x476220 tag 5, from 0x443d88" },
   /** `0x476300` tag 4 — `5681(dx 190, dy -370)`, a higher leap than character 0's */

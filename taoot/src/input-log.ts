@@ -136,7 +136,8 @@ export function stamp(ms: number): string {
   const m = Math.floor((whole - h * 3600) / 60);
   const s = whole - h * 3600 - m * 60;
   const mm = `${String(m).padStart(2, "0")}:${s.toFixed(1).padStart(4, "0")}`;
-  return `[+${h ? `${h}:` : ""}${mm}]`;
+  const hh = h ? h + ":" : "";
+  return `[+${hh}${mm}]`;
 }
 
 /** the engine's hit-test word, in the log's own vocabulary */
@@ -165,7 +166,7 @@ const HIT_WORD: Record<string, string> = {
  * that already says `bedsit1` is a line saying one thing twice.
  */
 export function hitPhrase(hit: Hit | null | undefined): string {
-  if (!hit || !hit.name || !hit.type) return "";
+  if (!hit?.name || !hit.type) return "";
   if (hit.type === "scene") return "";
   return `${HIT_WORD[hit.type] ?? hit.type} "${hit.name}"`;
 }
@@ -193,18 +194,19 @@ export function inputLine(c: Cause, to: string | null): string {
   const bits = [hitPhrase(c.hit), GATE_NOTE[c.gate]].filter(Boolean);
   const head = `${stamp(c.at)} ${c.what.padEnd(LABEL_WIDTH)}`;
   const said = bits.join(", ");
+  const saidSp = said ? said + " " : "";
   if (to === null) {
     // still working: the cause, in its right place, and where it started from
-    return `${head}${said ? `${said} ` : ""}· ${c.where}…`;
+    return `${head}${saidSp}· ${c.where}…`;
   }
-  if (to !== c.where) return `${head}${said ? `${said} ` : ""}→ ${to}`;
+  if (to !== c.where) return `${head}${saidSp}→ ${to}`;
   if (said) return `${head}${said} → ${to}`;
   return `${head}— nothing changed`;
 }
 
 /** the second line of a slow gesture: what it turned out to do */
 export const effectLine = (at: number, from: string, to: string): string =>
-  `${stamp(at)} ${" ".repeat(LABEL_WIDTH)}${to === from ? "— nothing changed" : `→ ${to}`}`;
+  `${stamp(at)} ${" ".repeat(LABEL_WIDTH)}` + (to === from ? "— nothing changed" : `→ ${to}`);
 
 /** the four questions this asks of the page, and the one thing it tells it */
 export interface InputLogPorts {
@@ -246,7 +248,7 @@ export class InputLog {
    * a thing that changes what the game does, which is the one property a
    * debugging aid must not have.
    */
-  note(what: string, dispatch: () => Promise<unknown> | unknown, hit?: () => Hit | null): void {
+  note(what: string, dispatch: () => unknown, hit?: () => Hit | null): void {
     if (!this.on) {
       void dispatch();
       return;

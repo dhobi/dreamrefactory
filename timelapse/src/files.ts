@@ -1,9 +1,9 @@
-import type { HostFiles } from "@dreamfactory/engine/web/host";
+import { RipFiles } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /**
- * The four Timelapse CDs as one {@link HostFiles} — what lets the real engine
+ * The four Timelapse CDs as one `HostFiles` (a {@link RipFiles}) — what lets the real engine
  * try to boot off them.
  *
  * Indexed by lowercase BASENAME across the whole rip, for the reason Dust's
@@ -89,41 +89,7 @@ const INSTALLED = [
 /** this page's own URL for a served path, so it runs from any directory */
 const url = (path: string): string => pageUrl(path);
 
-export class TimelapseFiles implements HostFiles {
-  private urls = new Map<string, string>();
-  private cache = new Map<string, Uint8Array>();
-  /** one fetch per name however many callers ask at once */
-  private inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
-  onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
-  /** basename → size in bytes, from the manifest */
-  private sizes = new Map<string, number>();
-  /** every name the engine asked for and did not have, in order — a failed boot
-   *  is only diagnosable if it says what it wanted */
-  readonly misses: string[] = [];
-  /** every name that arrived, in the order it did */
-  readonly loads: string[] = [];
-  onFileLoaded: ((name: string, bytes: number) => void) | null = null;
-  /**
-   * Every CHUNK of every fetch, not every completed file.
-   *
-   * The difference is the whole loading page on this game. Its boot moves 69.9 MB
-   * before the first frame and 27 of that is one file, `open.mov` — so a meter
-   * sampled per arrival reports nothing at all for the minute that film is coming
-   * down and then one enormous figure at the moment it lands, and a bar that only
-   * moves on completion sits still for exactly as long.
-   *
-   * A hook on the STORE rather than a callback per call, because the fetches worth
-   * metering are not all started by the page: the engine misses a file, `provide`
-   * starts one, and no caller is there to pass anything.
-   */
-  onChunk: ((name: string, bytes: number) => void) | null = null;
-  /** fires as the number of fetches in flight changes — what the canvas-corner
-   *  spinner is driven by, exactly as on the other two pages */
-  onBusyChange: ((inFlight: number) => void) | null = null;
-  /** how far each in-flight fetch has got, so {@link bytesLeft} can count the
-   *  remainder of one that is half here rather than all of it */
-  private partial = new Map<string, number>();
-
+export class TimelapseFiles extends RipFiles {
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<TimelapseFiles> {
     const store = new TimelapseFiles();
@@ -143,137 +109,18 @@ export class TimelapseFiles implements HostFiles {
     return store;
   }
 
-  /** how many names the rip offers — a boot that indexed nothing says so */
-  get size(): number {
-    return this.urls.size;
-  }
-
-  /** what the manifest says this file weighs; 0 for one it does not list */
-  sizeOf(name: string): number {
-    return this.sizes.get(name.toLowerCase()) ?? 0;
-  }
-
-  /**
-   * How many bytes of these names are still to come: nothing for one already in
-   * hand, and only the unfetched remainder of one in flight.
-   *
-   * The loading page's estimate of how long is left needs a "how much", and this
-   * is the honest form of it — the manifest's own sizes minus what has actually
-   * landed, rather than a count of files scaled by an average. A name the manifest
-   * does not size contributes nothing, which makes the estimate optimistic rather
-   * than invented; on a manifest that lists the installed tree — the normal case,
-   * see the note above — there is no such name.
-   */
-  bytesLeft(names: Iterable<string>): number {
-    let left = 0;
-    for (const name of names) {
-      const key = name.toLowerCase();
-      if (this.cache.has(key)) continue;
-      left += Math.max(0, (this.sizes.get(key) ?? 0) - (this.partial.get(key) ?? 0));
-    }
-    return left;
-  }
-
-  /**
-   * The engine's synchronous provider: what is in hand, or null.
-   *
-   * Null is not a failure. The engine asks synchronously, misses, and the host's
-   * `ensureFile` fetches and asks again — so a miss is recorded and a fetch
-   * started, exactly as Dust's store does it.
-   */
-  provide = (name: string): Uint8Array | null => {
-    const key = name.toLowerCase();
-    const have = this.cache.get(key);
-    if (have) return have;
-    this.misses.push(key);
-    if (this.urls.has(key)) void this.load(key);
-    return null;
-  };
-
-  async load(name: string, onBytes?: (n: number) => void): Promise<Uint8Array | null> {
-    const key = name.toLowerCase();
-    const have = this.cache.get(key);
-    if (have) {
-      onBytes?.(have.byteLength);
-      return have;
-    }
-    const url = this.urls.get(key);
-    if (!url) return null;
-    const started = !this.inFlight.has(key);
-    const flight =
-      this.inFlight.get(key) ??
-      (async () => {
-        const res = await fetch(url);
-        if (!res.ok) return { bytes: null, streamed: false };
-        // Read as it ARRIVES where the browser gives a body to read, which is
-        // what `HostFiles.load` has always promised and what the other two stores
-        // do. This one buffered the whole body and reported it once, so a page
-        // built on it could only ever draw a bar that moved thirteen times — and
-        // two of those thirteen files are three quarters of the download.
-        const bytes = res.body
-          ? await this.readStream(key, res.body, onBytes)
-          : new Uint8Array(await res.arrayBuffer());
-        this.cache.set(key, bytes);
-        this.loads.push(key);
-        this.onFileLoaded?.(key, bytes.byteLength);
-        this.onBackgroundLoad?.(key, bytes);
-        return { bytes, streamed: res.body !== null };
-      })();
-    this.inFlight.set(key, flight);
-    if (started) this.onBusyChange?.(this.inFlight.size);
-    try {
-      const { bytes, streamed } = await flight;
-      // the owner of a streamed fetch has been told chunk by chunk already;
-      // everyone else — a joiner, or a response with no body — gets the one total
-      if (bytes && (!streamed || !started)) onBytes?.(bytes.byteLength);
-      return bytes;
-    } finally {
-      this.partial.delete(key);
-      if (this.inFlight.delete(key)) this.onBusyChange?.(this.inFlight.size);
-    }
-  }
-
-  /** drain a response body, reporting each chunk, then join it into one array */
-  private async readStream(
-    key: string,
-    body: ReadableStream<Uint8Array>,
-    onBytes?: (n: number) => void,
-  ): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.byteLength;
-      this.partial.set(key, total);
-      this.onChunk?.(key, value.byteLength);
-      onBytes?.(value.byteLength);
-    }
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const c of chunks) {
-      out.set(c, at);
-      at += c.byteLength;
-    }
-    return out;
-  }
-
   /**
    * Nothing to swap. `setDisc` is how a two-CD DreamFactory game follows its
    * BOOTFILE's `setpath(disk)`; Timelapse has four discs and switches between
    * them with `path(n, …)` inside its own `enterworld`, which this store cannot
    * see and does not need to — every disc is indexed at once.
    */
-  setDisc(): void {}
+  setDisc(): void {
+    // every disc is indexed already
+  }
 
   activeEdition(): string {
     return "timelapse";
-  }
-
-  has(name: string): boolean {
-    return this.cache.has(name.toLowerCase());
   }
 
   /**
@@ -290,14 +137,5 @@ export class TimelapseFiles implements HostFiles {
    */
   serverSetNames(): string[] {
     return [];
-  }
-
-  serverUrl(name: string): string | null {
-    return this.urls.get(name.toLowerCase()) ?? null;
-  }
-
-  /** nothing is evicted: this is an experiment, and what it asked for is data */
-  evict(): number {
-    return 0;
   }
 }

@@ -249,7 +249,8 @@ export function buildSetFile(opts: SetBuildOptions): SetBuildResult {
         throw new Error(`set: a picture is ${art.pixels.length} bytes, needs ${w * h}`);
       }
       const z = art.depth ? encodeZLayer(art.depth, w, h) : undefined;
-      artLocs.set(art, (loc = b.add(encodeFrame(art.pixels, w, h, z))));
+      loc = b.add(encodeFrame(art.pixels, w, h, z));
+      artLocs.set(art, loc);
     }
     return loc;
   };

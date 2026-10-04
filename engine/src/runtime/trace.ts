@@ -47,7 +47,11 @@ export interface StateTrace {
 /** key-sorted so two traces serialize identically */
 function sorted(entries: [string, Value][]): Record<string, Value> {
   const out: Record<string, Value> = {};
-  for (const [k, v] of entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) out[k] = v;
+  entries.sort(([a], [b]) => {
+    if (a < b) return -1;
+    return a > b ? 1 : 0;
+  });
+  for (const [k, v] of entries) out[k] = v;
   return out;
 }
 

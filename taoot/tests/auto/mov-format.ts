@@ -40,7 +40,7 @@ const enMov = (name: string) => {
 test.skipIf(noDemo)("a movie is a chain of segments, and a segment can carry cues", () => {
   const tour = mov(demoMovies, "tour.mov");
   // one segment per narrated slide, plus the ship's-logo intro and outro
-  expect(tour.segments.length).toBe(20);
+  expect(tour.segments).toHaveLength(20);
   // MovFile IS its first segment, so single-segment reads are unchanged
   expect(tour.segments[0]).toBe(tour);
 
@@ -55,9 +55,9 @@ test.skipIf(noDemo)("a movie is a chain of segments, and a segment can carry cue
   // own bias — the frame art must decode, i.e. point at real containers
   const slide = tour.segments[1];
   expect(slide.bias).toBe(46);
-  expect(slide.frames.length).toBe(3);
-  expect(slide.audioChunks.length).toBe(0);
-  expect(slide.cues.length).toBe(0);
+  expect(slide.frames).toHaveLength(3);
+  expect(slide.audioChunks).toHaveLength(0);
+  expect(slide.cues).toHaveLength(0);
   for (const f of slide.frames) {
     expect(f.locationFrame).toBeGreaterThan(slide.bias);
     expect(tour.file.containers[f.locationFrame].data.length).toBeGreaterThan(0);
@@ -65,9 +65,9 @@ test.skipIf(noDemo)("a movie is a chain of segments, and a segment can carry cue
 
   // trailer.mov: 13 segments, 698 frames — not 139 against 92 s of narration
   const trailer = mov(demoMovies, "trailer.mov");
-  expect(trailer.segments.length).toBe(13);
+  expect(trailer.segments).toHaveLength(13);
   expect(trailer.segments.reduce((a, s) => a + s.frames.length, 0)).toBe(698);
-  expect(trailer.cues.length).toBe(0);
+  expect(trailer.cues).toHaveLength(0);
 });
 
 test.skipIf(noDemo)("the letterboxed films name their own screen origin", () => {
@@ -119,7 +119,7 @@ test("a sound can name the frame that follows it", () => {
 test("leave.mov is the whole sinking montage", () => {
   const leave = enMov("leave.mov");
   if (!leave) return; // no full-game tree installed
-  expect(leave.segments.length).toBe(10);
+  expect(leave.segments).toHaveLength(10);
   expect(leave.segments.reduce((a, s) => a + s.frames.length, 0)).toBe(1628);
   // every segment ends in an authored exit — the chain, not a truncation
   for (const s of leave.segments) expect(s.frames[s.frames.length - 1].type).toBe(1);
@@ -138,11 +138,11 @@ test("leave.mov is the whole sinking montage", () => {
 test("camelsee.mov loops on a backward goto that bit 2 is what reaches", () => {
   const camel = enMov("camelsee.mov");
   if (!camel) return; // no full-game tree installed
-  expect(camel.segments.length).toBe(1);
-  expect(camel.frames.length).toBe(90);
+  expect(camel.segments).toHaveLength(1);
+  expect(camel.frames).toHaveLength(90);
 
   // frame 0 is the still the movie opens on: regions, and NO bit 2, so it waits
-  expect(camel.frames[0].regions.length).toBe(2);
+  expect(camel.frames[0].regions).toHaveLength(2);
   expect(camel.frames[0].playsThroughRegions).toBe(false);
 
   // frames 1..43 are the gallop: one region each, every one of them bit 2
@@ -163,7 +163,7 @@ test("camelsee.mov loops on a backward goto that bit 2 is what reaches", () => {
   for (let i = 1; i <= 40; i++) expect(camel.frames[i].type, `frame ${i} advances`).toBe(6);
 
   // the stop tail is regionless, so it plays itself out to the exit
-  for (let i = 45; i < 90; i++) expect(camel.frames[i].regions.length).toBe(0);
+  for (let i = 45; i < 90; i++) expect(camel.frames[i].regions).toHaveLength(0);
 
   // each gallop frame's region targets the PHASE-MATCHED stop frame (N -> N+44),
   // which is the file's own proof that the animation runs while they are live:

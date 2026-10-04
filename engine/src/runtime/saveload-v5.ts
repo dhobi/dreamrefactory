@@ -237,9 +237,10 @@ export async function loadGameV5(session: GameSession, bytes: Uint8Array, versio
   }
   const fileOf = new Map(save.files.map((f) => [f.handle, baseName(f.path).toLowerCase()]));
   const file = (h: number): string => fileOf.get(h) ?? "";
+  const stage = save.runt.stageOpen ? `, stage ${save.runt.stageName}` : "";
   session.onLog(
     `opengame: ${save.runt.setName || "no room"} at ${save.runt.scene || "?"}` +
-      `${save.runt.stageOpen ? `, stage ${save.runt.stageName}` : ""}; ${save.actors.length} actors, ${save.props.length} props`,
+      `${stage}; ${save.actors.length} actors, ${save.props.length} props`,
   );
 
   // Past the point of no return: the scripts of the game being left stop at
@@ -247,12 +248,14 @@ export async function loadGameV5(session: GameSession, bytes: Uint8Array, versio
   session.interp.abandonRunning();
 
   // ---- close the game being left, with its scripts (0x439df0) ----------------
-  for (const cast of [...session.actorRuntime.casts.keys()]) await session.closeCastFile(cast);
-  for (const shop of [...session.propRuntime.shops.keys()]) await session.closeShop(shop);
+  const casts = Array.from(session.actorRuntime.casts.keys());
+  for (const cast of casts) await session.closeCastFile(cast);
+  const shops = Array.from(session.propRuntime.shops.keys());
+  for (const shop of shops) await session.closeShop(shop);
   if (session.maze) await session.maze.closeSet();
   if (session.stageCtrl.stageFile) await session.stageCtrl.closeStageFile();
   session.puppetCtrl.closePuppetFile();
-  for (const bank of [...session.audioLib.bankNames]) session.audioLib.closeBank(bank);
+  for (const bank of session.audioLib.bankNames) session.audioLib.closeBank(bank);
   session.scheduler.reset();
   session.audio.halt("voice");
   session.audio.halt("theme");
@@ -261,7 +264,7 @@ export async function loadGameV5(session: GameSession, bytes: Uint8Array, versio
 
   // ---- the state that is not a room ------------------------------------------
   // the globals the file names, and only those; permanents are the BOOTFILE's
-  for (const key of [...session.interp.globals.keys()]) {
+  for (const key of session.interp.globals.keys()) {
     const { name } = splitElement(key);
     if (name.startsWith("__") || session.interp.permanents.has(name.toLowerCase())) continue;
     session.interp.globals.delete(key);

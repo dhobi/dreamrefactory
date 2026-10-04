@@ -186,7 +186,7 @@ export class MoviePlayer {
    */
   get waitingRegions(): readonly MovClickRegion[] {
     const m = this.active;
-    if (!m || !m.hasRegions) return [];
+    if (!m?.hasRegions) return [];
     return m.meta[Math.min(m.pos, m.meta.length - 1)]?.regions ?? [];
   }
 
@@ -207,7 +207,7 @@ export class MoviePlayer {
   /** how far through the active clip playback is, 0..1, or -1 when none is playing */
   get progress(): number {
     const m = this.active;
-    return m && m.frames.length ? Math.min(m.pos, m.frames.length - 1) / m.frames.length : -1;
+    return m?.frames.length ? Math.min(m.pos, m.frames.length - 1) / m.frames.length : -1;
   }
 
   /** the frame to paint right now (with the movie's own palette and where on
@@ -247,7 +247,7 @@ export class MoviePlayer {
    * than minting a new one — the original top-level call owns completion.
    */
   /** every movie this chain has loaded, for release when the chain ends */
-  private played = new Set<string>();
+  private readonly played = new Set<string>();
 
   async play(fileName: string, startFrame = 0): Promise<void> {
     // the puppets whose lines the film voices, read before its first frame (#50)
@@ -286,9 +286,9 @@ export class MoviePlayer {
     if (!this.load(fileName, startFrame)) {
       // nothing to play — end the sequence (resolves any pending chain promise)
       this.finish();
-      return Promise.resolve();
+      return;
     }
-    if (chained) return Promise.resolve();
+    if (chained) return;
     return new Promise<void>((resolve) => {
       this.resolveWhenDone = resolve;
     });
@@ -308,12 +308,9 @@ export class MoviePlayer {
       // fields moved (engine/src/df/mov-v1.ts). Routed here rather than inside
       // readMovFile because the two produce the same MovFile and nothing below
       // this line has to care which engine wrote the film.
-      mov =
-        detectVersion(data) === 1
-          ? movFileFromV1(readMovFileV1(data))
-          : isMovV5(data)
-            ? readMovFileV5(data)
-            : readMovFile(data);
+      if (detectVersion(data) === 1) mov = movFileFromV1(readMovFileV1(data));
+      else if (isMovV5(data)) mov = readMovFileV5(data);
+      else mov = readMovFile(data);
     } catch (e) {
       this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
       return false;
@@ -353,13 +350,13 @@ export class MoviePlayer {
         // nobody draws it (session.drawsPictures): one blank of the frame's size,
         // shared, stands in for the picture, and the film paces as it would
         const { width, height } = frameSizeV5(data);
-        if (!blank || blank.length !== width * height) blank = new Uint8Array(width * height);
+        if (blank?.length !== width * height) blank = new Uint8Array(width * height);
         frames.push({ pixels: blank, width, height, palette: paletteV5(data) });
         continue;
       }
       if (!this.session.drawsPictures && !seg.dfV5) {
         // and a v1 or v4 film the same way: the frame record says its size
-        if (!blank || blank.length !== f.width * f.height) blank = new Uint8Array(f.width * f.height);
+        if (blank?.length !== f.width * f.height) blank = new Uint8Array(f.width * f.height);
         frames.push({ pixels: blank, width: f.width, height: f.height });
         continue;
       }
@@ -458,9 +455,11 @@ export class MoviePlayer {
       cuesFired: new Set(),
     };
     this.recordAction(this.active.pos);
-    this.onLog(
-      `movie: ${fileName}${segIdx ? ` segment ${segIdx + 1}/${mov.segments.length}` : mov.segments.length > 1 ? ` (1/${mov.segments.length} segments)` : ""} (${frames.length} frames${audioSec ? `, ${audioSec.toFixed(1)}s audio` : ""}${hasRegions ? ", interactive" : ""})`,
-    );
+    let segment = "";
+    if (segIdx) segment = ` segment ${segIdx + 1}/${mov.segments.length}`;
+    else if (mov.segments.length > 1) segment = ` (1/${mov.segments.length} segments)`;
+    const heard = audioSec ? `, ${audioSec.toFixed(1)}s audio` : "";
+    this.onLog(`movie: ${fileName}${segment} (${frames.length} frames${heard}${hasRegions ? ", interactive" : ""})`);
     // The frame a segment OPENS on is a frame entered, so its entry sound fires
     // like any other — {@link enter} does both halves for every later frame and
     // this used to do only the actionframe one, so the first frame's sound was
@@ -526,7 +525,7 @@ export class MoviePlayer {
    */
   private regionAt(x: number, y: number): MovClickRegion | null {
     const m = this.active;
-    if (!m || !m.hasRegions) return null;
+    if (!m?.hasRegions) return null;
     const regions = m.meta[m.pos].regions;
     if (!regions.length) return null; // animation in flight
     // regions are picture-relative; the mouse is screen-relative, and the
@@ -575,9 +574,8 @@ export class MoviePlayer {
     const regions = m.meta[m.pos].regions;
     if (!regions.length) return; // animation in flight
     const region = this.regionAt(x, y);
-    this.onLog(
-      `movie click (${x},${y}) frame ${m.pos}${region ? ` -> type ${region.type} "${region.target || region.event}"` : " (no region hit)"}`,
-    );
+    const hit = region ? ` -> type ${region.type} "${region.target || region.event}"` : " (no region hit)";
+    this.onLog(`movie click (${x},${y}) frame ${m.pos}${hit}`);
     if (!region) return;
     if (region.sound) this.playSound(region.sound);
     m.lastTick = 0;
@@ -790,7 +788,7 @@ export class MoviePlayer {
     // The original asks whether the sound channel still carries the armed sound's
     // NAME, which is why a line the player cut short jumps too — a stopped handle
     // reads done here exactly as a finished one does.
-    if (m.soundJump && m.soundJump.sound.done) {
+    if (m.soundJump?.sound.done) {
       const { frame } = m.soundJump;
       m.soundJump = null;
       m.lastTick = now;

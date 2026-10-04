@@ -73,7 +73,7 @@ test("both are clipped to the rect they are given, and to the window", () => {
   expect(rows(t, 0, 0, 1, 2)).toEqual([[5, 6]]);
   expect(t.pixels[(SCREEN_H - 1) * SCREEN_W + SCREEN_W - 1]).toBe(2);
   // two of the first, one of the second
-  expect(t.pixels.filter((p) => p).length).toBe(3);
+  expect(t.pixels.filter((p) => p)).toHaveLength(3);
 });
 
 test("stretched onto a rect, each pixel samples its nearest, and a clear one stays clear", () => {
@@ -124,5 +124,5 @@ test("as RGBA, each pixel is its palette entry, opaque", () => {
   s.pixels[1] = 5;
   const out = s.rgba();
   expect([...out.subarray(0, 8)]).toEqual([0, 0, 0, 255, 10, 20, 30, 255]);
-  expect(out.length).toBe(SCREEN_W * SCREEN_H * 4);
+  expect(out).toHaveLength(SCREEN_W * SCREEN_H * 4);
 });

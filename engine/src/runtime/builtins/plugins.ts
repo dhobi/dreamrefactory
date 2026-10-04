@@ -26,24 +26,24 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
    * than guessed at, because a reveal armed from arguments this did not
    * understand would draw a hole somewhere the author never put one.
    */
-  const xray = (args: Value[]): Value => {
+  const xray = (args: Value[]): void => {
     const bus = session.plugins;
     if (args.length === 0) {
       // teardown. Not conditional on there being a reveal: the scripts guard it
       // with `if mirrorflat != 0` themselves and a second disarm is harmless,
       // but `leaveframe` also fires on stages the player never used the light on.
       bus.xray = null;
-      return 0;
+      return;
     }
     if (typeof args[0] === "string") {
       const [hidden, base, mask, light] = args.map((a) => toStr(a));
       if (!hidden || !mask) {
         log(`plugin("xray"): armed with no ${!hidden ? "hidden flat" : "mask prop"}`);
-        return 0;
+        return;
       }
       bus.xray = { hidden, base, mask, light, x: 0, y: 0, aimed: false };
       log(`xray: ${hidden} through ${mask} over ${base || "(current flat)"}`);
-      return 0;
+      return;
     }
     const pt = toNum(args[0]);
     if (!bus.xray) {
@@ -51,12 +51,11 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
       // directly, and `drawme` only arms when the frame is one of the fourteen
       // the specs work on — so on any other frame this is the script's normal
       // path and not a fault. Silent for that reason.
-      return 0;
+      return;
     }
     bus.xray.x = pointX(pt);
     bus.xray.y = pointY(pt);
     bus.xray.aimed = true;
-    return 0;
   };
 
   /**
@@ -148,7 +147,8 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
       const rest = args.slice(1);
       switch (name) {
         case "xray":
-          return xray(rest);
+          xray(rest);
+          return 0;
         case "camera":
           return camera(rest);
         /**

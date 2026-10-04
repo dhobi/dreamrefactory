@@ -73,7 +73,7 @@ export function wrapText(
   if (word) pieces.push(word);
 
   for (const piece of pieces) {
-    const cur = lines[lines.length - 1];
+    const cur = lines.at(-1);
     // a space at a line break is consumed by the break rather than indenting
     if (piece === " " && !cur) continue;
     const grown = cur + piece;
@@ -84,5 +84,9 @@ export function wrapText(
     }
   }
   // the space a line was measured with but broke after is not part of it
-  return lines.map((l) => (l.endsWith(" ") ? l.replace(/ +$/, "") : l));
+  return lines.map((l) => {
+    let end = l.length;
+    while (l[end - 1] === " ") end--;
+    return l.slice(0, end);
+  });
 }

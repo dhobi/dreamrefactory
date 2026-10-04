@@ -160,8 +160,9 @@
         opacity: 0;
       }
 
-      /* The card. `onerror` in the markup hides it and sets body.nobrand, so a
-         missing file closes the band up instead of leaving a broken frame. */
+      /* The card. src/main.ts hides it and sets body.nobrand when it fails to
+         load, so a missing file closes the band up instead of leaving a broken
+         frame. */
       #brand {
         position: relative;
         display: block;
@@ -230,6 +231,15 @@
            #charge  the width JS drives, the fire's trail; its ::after is the
                     white-hot head
          ------------------------------------------------------------------ */
+      /* the gauge's value, for a screen reader: #bar is only its picture */
+      #barvalue {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
       #bar {
         position: relative;
         height: 12px;
@@ -661,28 +671,19 @@
 
     <div id="stage">
       <!-- The title card and the gauge under it: the whole page until the game
-           is running, a band at the top after. `onerror` removes the image
-           rather than leaving a broken frame: the logo is decoration. -->
+           is running, a band at the top after. A logo that fails to load is
+           removed rather than left as a broken frame (src/main.ts, `dropBrand`):
+           the logo is decoration. -->
       <div id="curtain">
         <img
           id="brand"
           src="./lunicus-logo.png"
           alt="Lunicus"
-          onerror="
-            this.hidden = true;
-            document.body.classList.add('nobrand');
-          "
         />
         <div id="boot">
           <div id="gauge">
-            <div
-              id="bar"
-              role="progressbar"
-              aria-label="reading the disc"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-            >
+            <progress id="barvalue" aria-label="reading the disc" max="100" value="0"></progress>
+            <div id="bar" aria-hidden="true">
               <div id="charge" style="width: 0%"></div>
             </div>
             <div id="bootline">

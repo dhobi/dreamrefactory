@@ -91,16 +91,14 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
         // would have changed which object answered.
         // ...and in a DreamFactory 5 room, `sendtoset` its set: RedJack's boot
         // sends a click near an edge on with `sendtoset (mousedown (thepoint))`
-        targetName = cmd.startsWith("sendtoboot")
-          ? "boot"
-          : cmd === "sendtoset" && session.maze?.main
-            ? session.maze.main.name
-            : (session.stageScript?.name ?? "main.stg");
+        if (cmd.startsWith("sendtoboot")) targetName = "boot";
+        else if (cmd === "sendtoset" && session.maze?.main) targetName = session.maze.main.name;
+        else targetName = session.stageScript?.name ?? "main.stg";
         deferred = argExprs[0];
       } else {
         targetName = toStr(await ip.evalExpr(argExprs[0], frame));
       }
-      if (!deferred || deferred.t !== "call") {
+      if (deferred?.t !== "call") {
         log(`${cmd}: no deferred call argument`);
         return 0;
       }
@@ -123,7 +121,7 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
       const view = toStr(await ip.evalExpr(argExprs[1], frame));
       const paint = toStr(await ip.evalExpr(argExprs[2], frame));
       const deferred = argExprs[3];
-      if (!deferred || deferred.t !== "call") {
+      if (deferred?.t !== "call") {
         log(`${cmd}: no deferred call argument`);
         return 0;
       }
@@ -141,7 +139,7 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
       const flat = toStr(await ip.evalExpr(argExprs[0], frame));
       const name = toStr(await ip.evalExpr(argExprs[1], frame));
       const deferred = argExprs[2];
-      if (!deferred || deferred.t !== "call") {
+      if (deferred?.t !== "call") {
         log(`${cmd}: no deferred call argument`);
         return 0;
       }

@@ -82,7 +82,7 @@
 export const isHarnessPaced = (name: string): boolean =>
   name === "sec" || name === "secframe" || name === "clockcount" ||
   name === "attentionspan" || name === "lastsail" || name === "bjtime" ||
-  /frame$/.test(name);
+  name.endsWith("frame");
 
 /**
  * The one thing in the story decided by a COIN FLIP — masked by the BROWSER

@@ -94,10 +94,10 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
         // no prop can be left holding a flag from a transition that is over
         if (on ? p.visible : true) p.hidden = on;
       }
-      return 0;
+    } else {
+      const p = prop(n);
+      if (p) p.hidden = on;
     }
-    const p = prop(n);
-    if (p) p.hidden = on;
     return 0;
   });
   acc("propvisible", 0, (p) => (p.visible ? 1 : 0), (p, v) => {
@@ -196,7 +196,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // none of them ever turned at a corner, and the maze's patrols froze.
     if (y === undefined) {
       const axis = toNum(x);
-      return axis === 3 ? packPoint(p.anchorX, p.anchorY) : axis === 2 ? p.anchorY : p.anchorX;
+      if (axis === 3) return packPoint(p.anchorX, p.anchorY);
+      return axis === 2 ? p.anchorY : p.anchorX;
     }
     p.anchorX = Number(x) || 0;
     p.anchorY = Number(y) || 0;
@@ -366,7 +367,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
       p.frameOrder = playSequence(st!, variant);
       return;
     }
-    if (st && st.frames.length) {
+    if (st?.frames.length) {
       // a raw index again, so drop any variant map the current state installed
       p.frameOrder = null;
       p.frameIdx = frameIndexForDegree(st, Number(v) || 0);

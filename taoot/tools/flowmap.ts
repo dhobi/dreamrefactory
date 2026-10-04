@@ -279,7 +279,7 @@ function harvest(stmts: Stmt[]): void {
         const vs: string[] = [];
         collectVars(s.cond, vs);
         for (const v of vs) condReads.set(v, (condReads.get(v) ?? 0) + 1);
-        harvest(s.then);
+        harvest(s.body);
         if (s.else_) harvest(s.else_);
         break;
       }
@@ -419,7 +419,7 @@ function emitFromStmts(
         // gate events: progress() tests inside the condition
         collectGates(s.cond, guards, loc);
         const g = exprToStr(s.cond);
-        emitFromStmts(s.then, [...guards, g], loc);
+        emitFromStmts(s.body, [...guards, g], loc);
         if (s.else_) emitFromStmts(s.else_, [...guards, `not (${g})`], loc);
         break;
       }

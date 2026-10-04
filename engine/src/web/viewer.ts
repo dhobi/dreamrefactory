@@ -110,12 +110,12 @@ export class SetViewer implements RoomLayer {
   // Pristine baselines for the CLUT-mixing opcodes (clut/mixclut). `palette`
   // and `propPalette` above are the EFFECTIVE (possibly dimmed) versions the
   // renderer uses; these are the untouched originals to dim from / restore to.
-  private basePalette: Uint8ClampedArray;
-  private basePropPalette: Uint8ClampedArray;
+  private readonly basePalette: Uint8ClampedArray;
+  private readonly basePropPalette: Uint8ClampedArray;
   /** active dim of the set CLUT (mixclut "set"/"current"); null = normal */
   private setDim: ClutDim | null = null;
   /** active dim of the stage-flat CLUT (mixclut "stage"/"current"); null = normal */
-  private stageDim: ClutDim | null = null;
+  private readonly stageDim: ClutDim | null = null;
   /** the set's decoded scenery frames, a ring at a time (see ring-cache.ts) */
   private readonly rings: RingCache;
   /** every ring reachable from this standpoint is decoded — stop rescanning */
@@ -150,7 +150,7 @@ export class SetViewer implements RoomLayer {
    * calls made later from animation-arrival scripts must stay inert (the
    * original engine's default keydown owns movement).
    */
-  private navigate = (dir: string): void => {
+  private readonly navigate = (dir: string): void => {
     this.session.navHappened = true;
     // A move asked for while one is still running WAITS for it; it does not
     // vanish. `walk()` and `turn()` both open with `if (this.busy) return`,
@@ -283,11 +283,11 @@ export class SetViewer implements RoomLayer {
   /** buffered currentscene("sceneNNN") teleport target, consumed by the paired
    *  currentview("viewNNN"). Reset at the start of every input gesture. */
   private pendingJumpScene: string | null = null;
-  private sceneJump = (scene: string): void => {
+  private readonly sceneJump = (scene: string): void => {
     this.session.navHappened = true;
     this.pendingJumpScene = scene;
   };
-  private viewJump = (view: string): void => {
+  private readonly viewJump = (view: string): void => {
     this.session.navHappened = true;
     const scene = this.pendingJumpScene;
     this.pendingJumpScene = null;
@@ -676,7 +676,7 @@ export class SetViewer implements RoomLayer {
       if (rot !== undefined && rot !== null) v = this.nearestView(scene, rot);
     }
     this.sceneIdx = s;
-    this.viewIdx = v >= 0 ? v : 0;
+    this.viewIdx = Math.max(0, v);
     this.showView();
     return true;
   }
@@ -883,7 +883,7 @@ export class SetViewer implements RoomLayer {
   bandPropPalette(stageBase: Uint8ClampedArray): Uint8ClampedArray {
     const gen = screenGammaGeneration();
     const hit = this.worldPal;
-    if (hit && hit.stage === stageBase && hit.dim === this.setDim && hit.gen === gen) return hit.out;
+    if (hit?.stage === stageBase && hit.dim === this.setDim && hit.gen === gen) return hit.out;
     const composed = this.basePropPalette.slice();
     composed.set(stageBase.subarray(this.set.colorCount * 4), this.set.colorCount * 4);
     const out = displayPalette(this.setDim ? dimPalette(composed, this.setDim) : composed);
@@ -977,10 +977,10 @@ export class SetViewer implements RoomLayer {
 
   private jumpToDefault(): void {
     const s = this.set.scenes.findIndex((sc) => sc.sceneName === this.set.defaultSceneName);
-    this.sceneIdx = s >= 0 ? s : 0;
+    this.sceneIdx = Math.max(0, s);
     const scene = this.scene;
     const v = scene.views.findIndex((vw) => vw.viewName === this.set.defaultViewName);
-    this.viewIdx = v >= 0 ? v : 0;
+    this.viewIdx = Math.max(0, v);
     this.showView();
   }
 
@@ -1033,7 +1033,7 @@ export class SetViewer implements RoomLayer {
       sceneIdx = this.set.scenes.findIndex((s) => s.views.some((vw) => vw.viewID === arriveViewID));
     }
     if (sceneIdx < 0) return null;
-    const travelDir = reg.frames[reg.frames.length - 1].axisX;
+    const travelDir = reg.frames.at(-1)!.axisX;
     return { sceneIdx, viewIdx: this.nearestView(this.set.scenes[sceneIdx], travelDir) };
   }
 
@@ -1252,10 +1252,10 @@ export class SetViewer implements RoomLayer {
    */
   roomOcclusion(): import("@dreamfactory/engine/runtime/actors").Occlusion | null {
     const f = this.current;
-    if (!f || !f.z) return null;
+    if (!f?.z) return null;
     const levels = this.set.zLevelCount || 24;
     const scale = this.set.zFarMax / levels;
-    if (!(scale > 0)) return null;
+    if (Number.isNaN(scale) || scale <= 0) return null;
     return {
       z: f.z, w: f.width, h: f.height, scale, levels,
       // v1 z-tests sprites 128 units deep of where they stand (DF.EXE's +0x80,
@@ -1478,7 +1478,7 @@ export class SetViewer implements RoomLayer {
       const arrive = arrival
         ? this.standFrameInfoOf(this.set.scenes[arrival.sceneIdx], arrival.viewIdx)
         : null;
-      frames[frames.length - 1] = pinHeight(frames[frames.length - 1], arrive);
+      frames[frames.length - 1] = pinHeight(frames.at(-1)!, arrive);
     }
     if (arrival && this.session.pictureMode === "transition") {
       // A road ends on an IN-MOTION frame — measured, all 722 registers in
@@ -1677,7 +1677,7 @@ export class SetViewer implements RoomLayer {
    * scene hittest just named — and the event forwards along scene → set main →
    * stage the way every other scene event does.
    *
-   * This used to fall through to {@link clickFlatSurface}, which is the STAGE's
+   * This used to fall through to the director's `clickFlatSurface`, which is the STAGE's
    * answer and belongs to a click in the band. In a room that meant the current
    * flat's mousedown ran for a click on the floor — in TAOOT the current flat is
    * main.stg's `main 1`, whose mousedown is `sendtoshop("house.shp",
@@ -1693,24 +1693,6 @@ export class SetViewer implements RoomLayer {
     );
   }
 
-  /** nothing specific was hit: flat script -> stage script */
-  private async clickFlatSurface(): Promise<void> {
-    const flat = this.session.flatScripts.get(this.session.currentFlat.toLowerCase());
-    const interp = this.session.interp;
-    interp.eventConsumed = false;
-    for (const inst of [flat, this.session.stageScript]) {
-      if (!inst || !inst.script.codes.has("mousedown")) continue;
-      try {
-        const res = await interp.runHandler(inst, "mousedown", [""], { me: inst.name, target: "" });
-        if (interp.eventConsumed || (res.handled && !res.passed)) return;
-      } catch (e) {
-        this.onLog(`script error in ${inst.name}.mousedown: ${(e as Error).message}`);
-      }
-    }
-  }
-
-  /** the front-most prop sprite under a screen position — world-projected
-   *  while the set is visible, screen-space over an overlay flat */
   /** the front-most prop sprite under a screen position — the director's, and
    *  its own, because a prop is screen-space unless a room is showing */
   propUnder(x: number, y: number): ReturnType<GameSession["propRuntime"]["propAt"]> {

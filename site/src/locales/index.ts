@@ -84,11 +84,10 @@ export function uiLanguage(): string {
   // the URL first, and outside the try: a browser that refuses storage must not
   // cost us the parameters that need no storage to read
   const query = new URLSearchParams(window.location.search);
-  wanted.push(query.get("lang"));
-  // `?uilang=` is what this parameter was called while `?lang=` still meant the
+  // `?uilang=` is what `?lang=` was called while `?lang=` still meant the
   // game's data, which was a matter of weeks — kept because links carrying it are
-  // in the wild and it costs one line to keep honouring them
-  wanted.push(query.get("uilang"));
+  // in the wild and it costs one argument to keep honouring them
+  wanted.push(query.get("lang"), query.get("uilang"));
   try {
     wanted.push(window.localStorage.getItem(UI_LANG_STORAGE_KEY));
   } catch {
@@ -228,7 +227,8 @@ export function installI18n(): Promise<void> {
   // Russian or Japanese one the Play dropdown was built out of untranslated
   // markup and its summary read "Play" in a bar that said Играть everywhere
   // else.
-  return (installing ??= install());
+  installing ??= install();
+  return installing;
 }
 
 let installing: Promise<void> | null = null;

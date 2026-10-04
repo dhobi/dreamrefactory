@@ -48,6 +48,16 @@ import { installI18n, t } from "./locales";
 const WAY = "playway";
 
 /**
+ * The last folder of an href that ends in one — `../play/` is `play` — and the
+ * href itself when it does not.
+ */
+function lastSegment(href: string): string {
+  if (!href.endsWith("/")) return href;
+  const body = href.slice(0, -1);
+  return body.slice(body.lastIndexOf("/") + 1) || href;
+}
+
+/**
  * Fold the nav's play links into a dropdown, and say how many it took.
  *
  * Does nothing where there is no top bar and nothing where the bar carries fewer
@@ -92,7 +102,7 @@ export async function installPlayMenu(): Promise<number> {
    */
   const here = window.location.pathname.replace(/\/[^/]*$/, "/");
   for (const a of links) {
-    const target = a.getAttribute("href")?.replace(/^.*?([^/]+)\/$/, "$1") ?? "";
+    const target = lastSegment(a.getAttribute("href") ?? "");
     const mine = !!target && here.endsWith(`/${target}/`);
     a.classList.toggle("here", mine);
     // ...and the summary says "you are inside this menu", which is what a folded

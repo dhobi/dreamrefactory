@@ -78,11 +78,10 @@ async function inTheSaloon(logs: string[] = []): Promise<GameSession> {
   return session;
 }
 
-test("a patrol armed from another room still follows the streets", async () => {
-  if (!existsSync(`${CD}/DATA/NITE.SET`)) {
-    console.warn(`no ${CD} — skipping (needs the Dust rip)`);
-    return;
-  }
+const noRip = !existsSync(`${CD}/DATA/NITE.SET`);
+if (noRip) console.warn(`no ${CD} — skipping (needs the Dust rip)`);
+
+test.skipIf(noRip)("a patrol armed from another room still follows the streets", async () => {
   const session = await inTheSaloon();
   expect(
     session.starPathRegistry.has("town.mwife1|town.mwife2"),
@@ -122,8 +121,7 @@ test("a patrol armed from another room still follows the streets", async () => {
   expect(walk.dist, "the way round by the street is longer").toBe(2003);
 });
 
-test("a pair with no authored route still walks the straight line", async () => {
-  if (!existsSync(`${CD}/DATA/NITE.SET`)) return;
+test.skipIf(noRip)("a pair with no authored route still walks the straight line", async () => {
   const session = await inTheSaloon();
   const mwife = session.actorRuntime.get("mwife")!;
   const call = (name: string, args: (string | number)[]) =>
@@ -141,11 +139,10 @@ test("a pair with no authored route still walks the straight line", async () => 
   expect(session.scheduler.walks.get("mwife")?.path, "and no polyline").toBeFalsy();
 });
 
-test("the disc's own saves say DF.EXE walked this patrol on its route", () => {
-  if (!existsSync(`${SAVES}/D1E_005.RTD`)) {
-    console.warn(`no ${SAVES} — skipping (needs the shipped saves)`);
-    return;
-  }
+const noSaves = !existsSync(`${SAVES}/D1E_005.RTD`);
+if (noSaves) console.warn(`no ${SAVES} — skipping (needs the shipped saves)`);
+
+test.skipIf(noSaves)("the disc's own saves say DF.EXE walked this patrol on its route", () => {
   /*
    * Written by the original engine, during this very patrol on the evening of
    * day 1 — the same stretch of game the report is from. `hasPath` is the walk

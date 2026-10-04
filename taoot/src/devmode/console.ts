@@ -115,7 +115,7 @@ export class History {
   add(line: string): void {
     const s = line.trim();
     this.back = 0;
-    if (!s || this.lines[this.lines.length - 1] === s) return;
+    if (!s || this.lines.at(-1) === s) return;
     this.lines.push(s);
   }
 

@@ -92,12 +92,14 @@ export function formatCaptions(file: CaptionFile): string {
     const rows = lines.map((l) => `      ${entry(l)}`);
     return `    ${q(bank)}: [\n${rows.join(",\n")}\n    ]`;
   });
+  const notice = file.notice.map((n) => "    " + q(n));
+  const speakers = Object.entries(file.speakers ?? {}).map(([k, v]) => `    ${q(k)}: ${q(v)}`);
   return [
     "{",
-    `  "notice": [\n${file.notice.map((n) => `    ${q(n)}`).join(",\n")}\n  ],`,
+    `  "notice": [\n${notice.join(",\n")}\n  ],`,
     `  "edition": ${q(file.edition)},`,
     `  "made": ${q(file.made)},`,
-    ...(file.speakers ? [`  "speakers": {\n${Object.entries(file.speakers).map(([k, v]) => `    ${q(k)}: ${q(v)}`).join(",\n")}\n  },`] : []),
+    ...(file.speakers ? [`  "speakers": {\n${speakers.join(",\n")}\n  },`] : []),
     `  "banks": {\n${banks.join(",\n")}\n  }${films.length || tracks.length ? "," : ""}`,
     ...(films.length ? [`  "films": {\n${films.join(",\n")}\n  }${tracks.length ? "," : ""}`] : []),
     ...(tracks.length ? [`  "tracks": {\n${tracks.join(",\n")}\n  }`] : []),

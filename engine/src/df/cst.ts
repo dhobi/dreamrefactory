@@ -252,7 +252,8 @@ export function readCstFile(data: Uint8Array): CstFile {
         const angle = rs.i16();
         const refScale = rs.i16();
         if (step < 0) continue;
-        (steps[step] ??= []).push({ location, direction, angle, refScale, record: base });
+        steps[step] ??= [];
+        steps[step].push({ location, direction, angle, refScale, record: base });
       }
       for (let si = 0; si < steps.length; si++) steps[si] ??= [];
       // the play script, read after the steps so it can be checked against them:

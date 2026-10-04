@@ -58,7 +58,7 @@ export function stillAt(set: SetFileV1, frames: Map<number, Uint8Array>, s: V1St
   }
   for (const t of set.transitions) {
     if (standKey(t.to) !== standKey(s) || !t.frames.length) continue;
-    const px = frames.get(t.frames[t.frames.length - 1]);
+    const px = frames.get(t.frames.at(-1)!);
     if (px) return px;
   }
   return null;

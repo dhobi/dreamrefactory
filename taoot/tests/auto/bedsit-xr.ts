@@ -705,7 +705,7 @@ describe("the bedsit in a headset", () => {
     for (let i = 0; i < 12; i++) fake.frame(pose, (t += 16));
     const settled = rings.length;
     for (let i = 0; i < 5; i++) fake.frame(pose, (t += 16));
-    expect(rings.length).toBe(settled);
+    expect(rings).toHaveLength(settled);
   });
 
   /**
@@ -828,7 +828,7 @@ describe("the bedsit in a headset", () => {
     expect(bound.at(-1)).toBe(FRAMEBUFFER);
     fake.end();
     // and puts the canvas back when the headset is handed over
-    expect(bound.at(-1)).toBe(null);
+    expect(bound.at(-1)).toBeNull();
     expect(left.n).toBe(1);
   });
 

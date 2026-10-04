@@ -14,15 +14,25 @@
  * writeContainerFile, so an untouched load exports the file it read (see
  * taoot/tests/auto/shp-editor.ts).
  */
-import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import { paletteToRGBA } from "@dreamfactory/engine/df/image";
+import { byExtension, chosenSource, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import {
+  appendScripts,
+  artSizes,
+  drawScreenBands,
+  exportContainerFile,
+  fillSwatches,
+  installEditorPage,
+  paintFrame,
+  readImage,
+  savePng,
+  serverNote,
+  serverRow,
+  spriteFromImage,
+  wireFileOpen,
+  wirePngImport,
+} from "./editor-kit";
 import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
-import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
-import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import {
   GROUP_NAME_FIELD,
   PropState,
@@ -150,28 +160,7 @@ function loadShp(bytes: Uint8Array, name: string): void {
   refresh();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadShp(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadShp(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /** dev-server mode: offer every .shp in the gamefiles manifest */
 async function initServerShops(): Promise<void> {
@@ -190,31 +179,17 @@ async function initServerShops(): Promise<void> {
   const shops = filesIn(source, byExtension(".shp", ".prp", ".shop"));
   if (!shops.length) return;
   const wrap = $("serverShops");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent = t("common.pickFromGamefiles");
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row shops";
-  for (const f of shops) {
-    const b = document.createElement("button");
-    b.className = "shop";
-    b.textContent = f.base;
-    b.title = `${source.game.short} · ${f.path}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadShp(new Uint8Array(await r.arrayBuffer()), f.base);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverNote(wrap, t("common.pickFromGamefiles"));
+  serverRow(wrap, {
+    source,
+    files: shops,
+    rowClass: "shops",
+    buttonClass: "shop",
+    log,
+    open: (bytes, f) => loadShp(bytes, f.base),
+  });
 }
-void initServerShops();
+const serverListed = initServerShops();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -243,20 +218,7 @@ function frameAt(loc: number): ShpFrame | null {
 }
 
 /** paint a decoded frame into a canvas at 1:1, transparent where masked */
-function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
-  canvas.width = Math.max(1, f.width);
-  canvas.height = Math.max(1, f.height);
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (!f.width || !f.height) return;
-  const img = ctx.createImageData(f.width, f.height);
-  // a v5 sprite brings its own palette; a v4 one is drawn through the file's
-  indexedToRGBA(f.indexed, f.width, f.height, f.palette ?? palette, img.data);
-  for (let i = 0; i < f.width * f.height; i++) {
-    if (!f.opaque[i]) img.data[i * 4 + 3] = 0;
-  }
-  ctx.putImageData(img, 0, 0);
-}
+const frameToCanvas = (f: ShpFrame, canvas: HTMLCanvasElement): void => paintFrame(f, canvas, palette);
 
 // --- preview ----------------------------------------------------------------
 
@@ -276,20 +238,9 @@ function drawScreen(f: ShpFrame | null): void {
   canvas.width = screen.width;
   canvas.height = screen.height;
   const ctx = canvas.getContext("2d")!;
-  const band = screen.band ?? screen.height;
-  ctx.fillStyle = "#00060f";
-  ctx.fillRect(0, 0, screen.width, band);
-  if (band < screen.height) {
-    ctx.fillStyle = "#000d1f";
-    ctx.fillRect(0, band, screen.width, screen.height - band);
-    ctx.strokeStyle = "#0a2d52";
-    ctx.beginPath();
-    ctx.moveTo(0, band + 0.5);
-    ctx.lineTo(screen.width, band + 0.5);
-    ctx.stroke();
-  }
+  drawScreenBands(ctx, screen);
 
-  if (f && f.width && f.height) {
+  if (f?.width && f.height) {
     const dx = anchor.x - f.posXraw;
     const dy = anchor.y - f.posYraw;
     const off = document.createElement("canvas");
@@ -316,30 +267,36 @@ function renderPreview(): void {
   const f = loc === undefined ? null : frameAt(loc);
   drawScreen(f);
   const packed = loc === undefined ? 0 : (shp.file.containers[loc]?.data.length ?? 0);
-  $("previewInfo").innerHTML = st
-    ? t("shops.previewHead", {
-        name: group().name || t("shops.unnamedProp"),
-        state: st.identifier,
-        i: frameIdx + 1,
-        n: st.frames.length,
+  if (!st) {
+    $("previewInfo").innerHTML = t("shops.noStates");
+    return;
+  }
+  let info =
+    t("shops.previewHead", {
+      name: group().name || t("shops.unnamedProp"),
+      state: st.identifier,
+      i: frameIdx + 1,
+      n: st.frames.length,
+    }) + (loc === undefined ? "" : t("shops.previewContainer", { loc }));
+  if (f) {
+    info +=
+      t("shops.previewSize", {
+        w: f.width,
+        h: f.height,
+        y: f.posYraw,
+        x: f.posXraw,
+        dx: anchor.x - f.posXraw,
+        dy: anchor.y - f.posYraw,
       }) +
-      (loc === undefined ? "" : t("shops.previewContainer", { loc })) +
-      (f
-        ? t("shops.previewSize", {
-            w: f.width,
-            h: f.height,
-            y: f.posYraw,
-            x: f.posXraw,
-            dx: anchor.x - f.posXraw,
-            dy: anchor.y - f.posYraw,
-          }) +
-          t("shops.previewPacked", {
-            bytes: formatNumber(packed),
-            deg: st.degrees[frameIdx] ?? 0,
-            ref: st.refScales[frameIdx] ?? 0,
-          })
-        : t("shops.previewNotFrame"))
-    : t("shops.noStates");
+      t("shops.previewPacked", {
+        bytes: formatNumber(packed),
+        deg: st.degrees[frameIdx] ?? 0,
+        ref: st.refScales[frameIdx] ?? 0,
+      });
+  } else {
+    info += t("shops.previewNotFrame");
+  }
+  $("previewInfo").innerHTML = info;
 }
 
 for (const [id, key] of [
@@ -538,12 +495,16 @@ function buildStates(): void {
     const still = st.frames.length < 2;
     const kind = document.createElement("span");
     kind.className = "badge " + (st.animated ? "anim" : "sel");
-    kind.textContent = still ? "still" : st.animated ? "animation" : "selector";
-    kind.title = still
-      ? t("shops.onePose")
-      : st.animated
-        ? t("shops.playsInOrder")
-        : t("shops.degPicksOne");
+    if (still) {
+      kind.textContent = "still";
+      kind.title = t("shops.onePose");
+    } else if (st.animated) {
+      kind.textContent = "animation";
+      kind.title = t("shops.playsInOrder");
+    } else {
+      kind.textContent = "selector";
+      kind.title = t("shops.degPicksOne");
+    }
     row.appendChild(kind);
 
     const meta = document.createElement("span");
@@ -581,19 +542,21 @@ function buildFrames(): void {
   const wrap = $("frames");
   wrap.replaceChildren();
   const st = state();
-  $("framesInfo").textContent = st
-    ? t("shops.framesHeadState", { state: st.identifier }) +
-      t("counts.frames", { n: st.frames.length }) +
-      (st.animated ? t("shops.inPlayOrder") : t("shops.degVariants"))
-    : "";
-  if (!st) return;
+  if (!st) {
+    $("framesInfo").textContent = "";
+    return;
+  }
+  $("framesInfo").textContent =
+    t("shops.framesHeadState", { state: st.identifier }) +
+    t("counts.frames", { n: st.frames.length }) +
+    (st.animated ? t("shops.inPlayOrder") : t("shops.degVariants"));
   st.frames.forEach((loc, i) => {
     const f = frameAt(loc);
     const cell = document.createElement("div");
     cell.className = "framecell" + (i === frameIdx ? " selected" : "");
     const c = document.createElement("canvas");
     c.className = "thumb";
-    if (f && f.width && f.height) {
+    if (f?.width && f.height) {
       frameToCanvas(f, c);
       const scale = Math.min(72 / f.width, 72 / f.height, 3);
       c.style.width = `${Math.max(1, Math.round(f.width * scale))}px`;
@@ -675,37 +638,13 @@ function buildScripts(): void {
       entries.push({ label: `prop “${g.name}”`, loc: g.scriptContainerLocation });
     }
   }
-  for (const e of entries) {
-    const det = document.createElement("details");
-    det.className = "script";
-    const sum = document.createElement("summary");
-    sum.textContent = `${e.label} (container @${e.loc})`;
-    det.appendChild(sum);
-    const pre = document.createElement("pre");
-    // decompiling is only worth it when opened — a shop carries dozens
-    let filled = false;
-    det.ontoggle = () => {
-      if (filled || !det.open) return;
-      filled = true;
-      const tokens = sniffScript(s.file.containers[e.loc]?.data ?? new Uint8Array(0));
-      pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
-    };
-    det.appendChild(pre);
-    wrap.appendChild(det);
-  }
+  appendScripts(wrap, entries, s.file.containers);
 }
 
 function buildPalette(): void {
-  const wrap = $("palette");
-  wrap.replaceChildren();
+  fillSwatches($("palette"), palette);
   $("paletteInfo").textContent =
     t("shops.paletteInfo");
-  for (let i = 0; i < 256; i++) {
-    const d = document.createElement("div");
-    d.style.background = `rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    d.title = `${i}: rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    wrap.appendChild(d);
-  }
 }
 
 // --- PNG round trip ---------------------------------------------------------
@@ -718,19 +657,12 @@ $("pngExportBtn").addEventListener("click", () => {
   if (!f) return;
   const c = document.createElement("canvas");
   frameToCanvas(f, c);
-  c.toBlob((blob) => {
-    if (!blob) return;
-    download(blob, `${baseName()}.${group().name || groupIdx}.${state()!.identifier}.f${frameIdx}.png`);
-  }, "image/png");
+  savePng(c, `${baseName()}.${group().name || groupIdx}.${state()!.identifier}.f${frameIdx}.png`);
 });
 
-const pngInput = $<HTMLInputElement>("pngInput");
-$("pngImportBtn").addEventListener("click", () => pngInput.click());
-pngInput.addEventListener("change", () => {
-  const file = pngInput.files?.[0];
-  pngInput.value = "";
+wirePngImport((file) => {
   const loc = frameLoc();
-  if (file && loc !== undefined) void importPng(file, loc);
+  if (loc !== undefined) void importPng(file, loc);
 });
 
 /**
@@ -742,35 +674,9 @@ pngInput.addEventListener("change", () => {
 async function importPng(file: File, loc: number): Promise<void> {
   if (!shp) return;
   const old = frameAt(loc);
-  let bmp: ImageBitmap;
-  try {
-    bmp = await createImageBitmap(file);
-  } catch {
-    log(t("common.notAnImage", { file: file.name }));
-    return;
-  }
-  const c = document.createElement("canvas");
-  c.width = bmp.width;
-  c.height = bmp.height;
-  const ctx = c.getContext("2d")!;
-  ctx.drawImage(bmp, 0, 0);
-  const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
-
-  const indexed = new Uint8Array(bmp.width * bmp.height);
-  const opaque = new Uint8Array(bmp.width * bmp.height);
-  for (let i = 0; i < indexed.length; i++) {
-    if (img.data[i * 4 + 3] < 128) continue;
-    opaque[i] = 1;
-    indexed[i] = nearestPaletteIndex(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
-  }
-  const frame: ShpFrame = {
-    width: bmp.width,
-    height: bmp.height,
-    posYraw: old?.posYraw ?? 0,
-    posXraw: old?.posXraw ?? 0,
-    indexed,
-    opaque,
-  };
+  const img = await readImage(file, log);
+  if (!img) return;
+  const frame = spriteFromImage(img, palette, old);
   const container = shp.file.containers[loc];
   const data = encodeShpFrame(frame);
   shp.file.containers[loc] = { id: container.id, data };
@@ -779,13 +685,9 @@ async function importPng(file: File, loc: number): Promise<void> {
   log(
     t("shops.artReplaced", {
       loc,
-      file: file.name,
-      w: bmp.width,
-      h: bmp.height,
-      kb: (data.length / 1024).toFixed(1),
-      was: (container.data.length / 1024).toFixed(1),
+      ...artSizes(file, img, data, container.data),
     }) +
-      (old && (old.width !== bmp.width || old.height !== bmp.height)
+      (old && (old.width !== img.width || old.height !== img.height)
         ? t("shops.artSizeWarn", { w: old.width, h: old.height })
         : ""),
   );
@@ -793,31 +695,7 @@ async function importPng(file: File, loc: number): Promise<void> {
   renderPreview();
 }
 
-function nearestPaletteIndex(r: number, g: number, b: number): number {
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < 256; i++) {
-    const dr = palette[i * 4] - r;
-    const dg = palette[i * 4 + 1] - g;
-    const db = palette[i * 4 + 2] - b;
-    const d = dr * dr + dg * dg + db * db;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
-}
-
 // --- export -----------------------------------------------------------------
-
-function download(blob: Blob, name: string): void {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
 
 $("exportBtn").addEventListener("click", () => {
   if (!shp) return;
@@ -825,28 +703,9 @@ $("exportBtn").addEventListener("click", () => {
     log(V5_READ_ONLY);
     return;
   }
-  const bytes = writeContainerFile(shp.file);
-  try {
-    readShpFile(bytes); // sanity: the export must read back as a shop
-  } catch (e) {
-    log(t("common.exportFailed", { message: (e as Error).message }));
-    return;
-  }
-  download(new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }), fileName);
-  log(
-    t("common.exported", { file: fileName, bytes: formatNumber(bytes.length) }) +
-      (edits.length
-        ? t("common.exportedWithEdits", { n: edits.length, edits: edits.join(", ") })
-        : t("common.exportedUnmodified")),
-  );
+  // sanity: the export must read back as a shop
+  exportContainerFile(shp.file, readShpFile, fileName, edits, log);
 });
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-// Which edition's files the landing screen lists, and which copy of a basename an
-// edit is written back into: the same row the play page and the collection carry
-// (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
-// stands between that and unexported edits.
-void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+void installEditorPage();
+await serverListed;

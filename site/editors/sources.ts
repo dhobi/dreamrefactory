@@ -89,7 +89,7 @@ let cached: Promise<Source[]> | null = null;
  * name, because "Dust · English" would imply there is another.
  */
 export function listSources(): Promise<Source[]> {
-  return (cached ??= (async () => {
+  cached ??= (async () => {
     const out: Source[] = [];
     for (const game of GAMES) {
       const paths = Object.keys(await manifestOf(game));
@@ -118,7 +118,8 @@ export function listSources(): Promise<Source[]> {
       }
     }
     return out;
-  })());
+  })();
+  return cached;
 }
 
 /**

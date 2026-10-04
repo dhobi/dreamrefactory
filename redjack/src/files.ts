@@ -36,18 +36,18 @@ const ALIASES: Record<string, string> = { bootfile: "bootfile.boot" };
 const url = (path: string): string => pageUrl(path);
 
 export class RedJackFiles implements HostFiles {
-  private urls = new Map<string, string>();
-  private cache = new Map<string, Uint8Array>();
+  private readonly urls = new Map<string, string>();
+  private readonly cache = new Map<string, Uint8Array>();
   /** one fetch per name however many callers ask at once */
   /** each download under way, by name, with the address it is reading — after a
    *  disc change a name can be wanted from one disc while a copy from the other
    *  is still arriving, and the two are not the same download */
-  private inFlight = new Map<string, { src: string; flight: Promise<{ bytes: Uint8Array | null; streamed: boolean }> }>();
+  private readonly inFlight = new Map<string, { src: string; flight: Promise<{ bytes: Uint8Array | null; streamed: boolean }> }>();
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
   /** basename → size in bytes, from the manifest */
-  private sizes = new Map<string, number>();
+  private readonly sizes = new Map<string, number>();
   /** a name more than one disc carries → each disc's copy (1-based) */
-  private copies = new Map<string, Map<number, { url: string; size: number }>>();
+  private readonly copies = new Map<string, Map<number, { url: string; size: number }>>();
   private disc = 1;
   /** every name the engine asked for and did not have, in order */
   readonly misses: string[] = [];
@@ -58,7 +58,7 @@ export class RedJackFiles implements HostFiles {
   /** fires as the number of fetches in flight changes (the canvas-corner spinner) */
   onBusyChange: ((inFlight: number) => void) | null = null;
   /** how far each in-flight fetch has got */
-  private partial = new Map<string, number>();
+  private readonly partial = new Map<string, number>();
 
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<RedJackFiles> {
@@ -205,7 +205,7 @@ export class RedJackFiles implements HostFiles {
   }
 
   /** which disc each name was first found on, while the index is built */
-  private discOf = new Map<string, number>();
+  private readonly discOf = new Map<string, number>();
 
   /**
    * The game is on another disc: every name more than one disc carries is now

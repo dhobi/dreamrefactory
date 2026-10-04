@@ -263,12 +263,14 @@ export function mixFilmSound(tl: FilmTimeline, rate: number): Float32Array {
     if (!pcm.length) continue;
     const from = Math.round((s.atMs / 1000) * rate);
     const to = Math.min(out.length, Math.round((s.untilMs / 1000) * rate));
-    for (let o = from, k = 0; o < to; o++, k++) {
+    let k = 0;
+    for (let o = from; o < to; o++) {
       if (k >= pcm.length) {
         if (!s.loop) break;
         k = 0;
       }
       out[o] += pcm[k];
+      k++;
     }
   }
   for (let o = 0; o < out.length; o++) out[o] = Math.max(-1, Math.min(1, out[o]));

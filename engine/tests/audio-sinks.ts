@@ -165,8 +165,8 @@ test("a placed play gets its own gain and panner, clamped, and moves with place(
 
   // an unplaced play builds neither
   sink.play("voice", tone(10));
-  expect(f.gains.length).toBe(channelGains + 1);
-  expect(f.panners.length).toBe(1);
+  expect(f.gains).toHaveLength(channelGains + 1);
+  expect(f.panners).toHaveLength(1);
 });
 
 test("a stopped handle is done, and a stop on a source already stopped is swallowed", () => {
@@ -236,7 +236,7 @@ test("a hidden page suspends the sound, and coming back resumes it unless the ga
   // the listeners went with it
   const before = f.log.length;
   win.dispatchEvent(new Event("pagehide"));
-  expect(f.log.length).toBe(before);
+  expect(f.log).toHaveLength(before);
 });
 
 // ---- AudioLibrary ----
@@ -271,7 +271,7 @@ test("a bank is found by file name or by the track name it calls itself", () => 
   // the theme is both chunks brought up to the faster rate
   const theme = lib.theme("narend.trk")!;
   expect(theme.sampleRate).toBe(22050);
-  expect(theme.samples.length).toBe(80 + 20);
+  expect(theme.samples).toHaveLength(80 + 20);
   expect(lib.theme()).toBe(theme);
   expect(lib.loopTable("narend.trk")?.order).toEqual([1, 2]);
   expect(lib.loopTable("nothing")).toBeNull();
@@ -280,7 +280,7 @@ test("a bank is found by file name or by the track name it calls itself", () => 
   expect(lib.setThemeOrder("nothing", [1])).toBe(false);
   expect(lib.setThemeOrder("narend.trk", [7])).toBe(false);
   expect(lib.setThemeOrder("narend.trk", [2])).toBe(true);
-  expect(lib.theme("narend.trk")!.samples.length).toBe(20);
+  expect(lib.theme("narend.trk")!.samples).toHaveLength(20);
 
   // closing by the track name drops the file, and what was decoded from it
   const closed: string[][] = [];

@@ -141,7 +141,16 @@ function holds(c: DoorCond, globals: { get(name: string): unknown }): boolean {
       const a = typeof live === "number" ? live : Number(live);
       const b = typeof want === "number" ? want : Number(want);
       if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
-      return c.op === "<" ? a < b : c.op === "<=" ? a <= b : c.op === ">" ? a > b : a >= b;
+      switch (c.op) {
+        case "<":
+          return a < b;
+        case "<=":
+          return a <= b;
+        case ">":
+          return a > b;
+        default:
+          return a >= b;
+      }
     }
   }
 }

@@ -893,8 +893,10 @@ describe("input", () => {
 
   it("runs the frame loop on the director", async () => {
     const p = await openPage();
-    p.frame();
-    p.frame();
+    expect(() => {
+      p.frame();
+      p.frame();
+    }).not.toThrow();
   });
 
   it("shows the network mark only for a wait long enough to be one", async () => {

@@ -42,7 +42,7 @@ test("indices come back as containers are allocated, and survive a round trip", 
   i32(c0, 4, first);
 
   const back = readContainerFile(b.bytes());
-  expect(back.containers.length).toBe(4);
+  expect(back.containers).toHaveLength(4);
   expect(back.containers[gap].gap).toBe(true);
   expect(back.containers[last].data).toEqual(new Uint8Array([9]));
   // the header's pointers still address what they were given
@@ -80,7 +80,7 @@ test("the palette block puts the channel value in the high byte", () => {
   rgb.set([10, 20, 30], 1 * 3);
   rgb.set([200, 100, 50], 7 * 3);
   const block = paletteBlock(rgb);
-  expect(block.length).toBe(256 * 8);
+  expect(block).toHaveLength(256 * 8);
   const rgba = paletteToRGBA(block, 256);
   expect([...rgba.slice(1 * 4, 1 * 4 + 3)]).toEqual([10, 20, 30]);
   expect([...rgba.slice(7 * 4, 7 * 4 + 3)]).toEqual([200, 100, 50]);

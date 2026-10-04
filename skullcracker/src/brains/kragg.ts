@@ -617,7 +617,8 @@ const think: Brain = (e, foe, run, k) => {
   // `0x440b28` / `0x440b6d` — the shove weight, 100 grounded and 40 flying,
   // and the maul (`0x440fc3`), the dive (`0x441255`) and the death (`0x441a1e`)
   // clear it for as long as they run
-  e.shove = state === 5 || state === 8 || state === 16 ? 0 : state >= GROUND ? 100 : 40;
+  if (state === 5 || state === 8 || state === 16) e.shove = 0;
+  else e.shove = state >= GROUND ? 100 : 40;
   switch (state) {
     /**
      * ---- 1, `0x440cc4`: the hover, and the only air state that thinks.
@@ -843,6 +844,8 @@ const think: Brain = (e, foe, run, k) => {
      * 11 is a kragg that has just stood back up, and this is where it goes.
      */
     case 11:
+    /** ---- 15, `0x4419d9`: both swings hand straight back to the ground idle */
+    case 15:
       if (!done) return false;
       return install(e, KRAGG.stand);
     /**
@@ -914,10 +917,6 @@ const think: Brain = (e, foe, run, k) => {
       // `0x4419c4` — and the volley always ends in kind 15 tag 1
       return install(e, KRAGG.swing, true);
     }
-    /** ---- 15, `0x4419d9`: both swings hand straight back to the ground idle */
-    case 15:
-      if (!done) return false;
-      return install(e, KRAGG.stand);
     /**
      * ---- 10, `0x441615`: shot out of the sky, and where it comes down.
      *
@@ -1015,7 +1014,8 @@ export const kraggReacts: Reaction = (e, foe, _run, k) => {
    * −15 grounded (`0x440b78` / `0x440b55`), and the death that sticks writes
    * −25 over it every frame (`0x441a13`).
    */
-  e.floor = e.state === "dead" ? -25 : e.rallied ? -15 : 0;
+  if (e.state === "dead") e.floor = -25;
+  else e.floor = e.rallied ? -15 : 0;
   /**
    * ---- 16, `0x441a42`: tag 0's eight cels end and tag 2 goes on, and with
    * it 0x1b through `0x40f090` and `0x4423a0(point, 0xf)` — fifteen roaches.

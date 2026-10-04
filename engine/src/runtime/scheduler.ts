@@ -52,12 +52,24 @@ export interface Cricket {
  * cross-cutting session state (clock, audio, actors, dispatch) is reached back
  * through the session reference.
  */
+/** a cricket slot as a save records it — what {@link Scheduler.restoreCricket} puts back */
+export interface CricketSlot {
+  name: string;
+  set: string;
+  x: number;
+  y: number;
+  radius: number;
+  base: number;
+  jitter: number;
+  next: number;
+}
+
 export class Scheduler {
   constructor(private readonly session: GameSession) {}
 
   readonly loops: GameLoop[] = [];
   readonly crickets: Cricket[] = [];
-  private soundLoops = new Map<string, PlayHandle>();
+  private readonly soundLoops = new Map<string, PlayHandle>();
   private timeLastTick = 0;
   // Wall-clock anchor + re-entry guard for the game clock (serviceGameClock).
   private clockLastMs = 0;
@@ -67,8 +79,8 @@ export class Scheduler {
   // before the matching singlesound()/etc. — scripts configure a sound then
   // play it (e.g. windgust: `soundpan(n,..); soundvol(n,..); singlesound(n)`).
   // Applied to the play's gain/pan below; unset names play at full/centre.
-  private soundVol = new Map<string, number>();
-  private soundPan = new Map<string, number>();
+  private readonly soundVol = new Map<string, number>();
+  private readonly soundPan = new Map<string, number>();
   setSoundVol(name: string, v: number): void {
     this.soundVol.set(name.toLowerCase(), v);
   }
@@ -152,8 +164,11 @@ export class Scheduler {
    * silently dropping arguments somebody meant would be worse than not resolving.
    */
   private static loopHandlerName(handler: string): string {
-    const m = /^(.*?)\s*\(\s*\)$/.exec(handler.trim());
-    return m ? m[1] : handler;
+    const trimmed = handler.trim();
+    const call = /\(\s*\)$/.exec(trimmed);
+    if (!call) return handler;
+    const name = trimmed.slice(0, call.index).trimEnd();
+    return /[\n\r\u2028\u2029]/.test(name) ? handler : name;
   }
 
   /** makeloop: (kind, name) identity — replaces an existing loop */
@@ -268,7 +283,7 @@ export class Scheduler {
    * to be leaving), the saved countdown (no `rand(jitter)` re-roll — see
    * {@link restoreLoop} for why a restore must not draw), no sounding handle.
    */
-  restoreCricket(name: string, set: string, x: number, y: number, radius: number, base: number, jitter: number, next: number): void {
+  restoreCricket({ name, set, x, y, radius, base, jitter, next }: CricketSlot): void {
     if (this.crickets.length >= MAX_CRICKETS) {
       this.session.onLog(`loadgame: cricket table full (${MAX_CRICKETS}), dropping ${name}`);
       return;
@@ -706,7 +721,7 @@ export class Scheduler {
   stopWalk(name: string): void {
     const key = name.toLowerCase();
     const a = this.session.actorRuntime.get(key);
-    if (this.walks.delete(key) && a && a.poseName === "walk") {
+    if (this.walks.delete(key) && a?.poseName === "walk") {
       a.poseName = "stand";
       a.restartPose();
     }
@@ -832,7 +847,7 @@ export class Scheduler {
         // The facing is re-aimed per leg rather than only at the start: an
         // authored route turns corners, and holding the opening bearing would
         // walk the whole of Georgia's curve sideways.
-        const at = t * w.path[w.path.length - 1].cum;
+        const at = t * w.path.at(-1)!.cum;
         let i = 1;
         while (i < w.path.length - 1 && w.path[i].cum < at) i++;
         const from = w.path[i - 1];
@@ -1027,6 +1042,20 @@ export class Scheduler {
     this.fireDueLoops((l) => l.period <= 1);
   }
 
+  /** the script a prop, flat or actor loop runs in */
+  private loopScript(l: GameLoop) {
+    switch (l.kind) {
+      case "prop":
+        return this.session.propScripts.get(l.name);
+      case "flat":
+        return this.session.flatScripts.get(l.name);
+      case "actor":
+        return this.session.castScripts.get(l.name);
+      default:
+        return undefined;
+    }
+  }
+
   /**
    * Fire period-1 loops from within a forceupdate() cooperative yield, so a
    * long-running drag/animation loop (the bridge wheel's stilldown loop) still
@@ -1054,11 +1083,7 @@ export class Scheduler {
      */
     const reenters = (l: GameLoop): boolean => {
       if (l.name !== ex) return false;
-      const inst =
-        l.kind === "prop" ? this.session.propScripts.get(l.name)
-        : l.kind === "flat" ? this.session.flatScripts.get(l.name)
-        : l.kind === "actor" ? this.session.castScripts.get(l.name)
-        : undefined;
+      const inst = this.loopScript(l);
       return !inst || this.session.interp.isRunning(inst, l.handler);
     };
     // NOT gated on scriptBusy: the caller IS the busy script, yielding a frame

@@ -257,14 +257,19 @@ export function readBankTables(file: DFContainerFile): BankTables {
   // a bank whose field points at audio (or past the end) has no loop bed
   const loopLoc = loopInfoLoc > 0 && loopInfoLoc < file.containers.length ? loopInfoLoc : 0;
   const hasLoops = loopLoc > 0 && file.containers[loopLoc].data.length >= LOOP_TABLE_MIN;
-  const { order, records } = hasLoops
-    ? v5
-      ? readLoopTableV5(file.containers[loopLoc].data, "bank", byteOrder)
-      : readLoopTable(file.containers[loopLoc].data, byteOrder)
-    : { order: [], records: [] };
+  const readLoops = (data: Uint8Array) =>
+    v5 ? readLoopTableV5(data, "bank", byteOrder) : readLoopTable(data, byteOrder);
+  const { order, records } = hasLoops ? readLoops(file.containers[loopLoc].data) : { order: [], records: [] };
 
   const oneShotTable =
     chunkInfo2Loc > 0 && chunkInfo2Loc < file.containers.length ? chunkInfo2Loc : 0;
+  const readSingles = (data: Uint8Array) =>
+    v5
+      ? readOneShotChunks(data.subarray(V5_PREFIX), CHUNK_ID_FIELD, 0, byteOrder).map((c) => ({
+          ...c,
+          idOffset: c.idOffset + V5_PREFIX,
+        }))
+      : readOneShotChunks(data, CHUNK_ID_FIELD, 0, byteOrder);
 
   return {
     trackName,
@@ -273,13 +278,7 @@ export function readBankTables(file: DFContainerFile): BankTables {
     oneShotTable,
     loopOrder: order,
     loopRecords: records,
-    singles: oneShotTable
-      ? v5
-        ? readOneShotChunks(file.containers[oneShotTable].data.subarray(V5_PREFIX), CHUNK_ID_FIELD, 0, byteOrder).map(
-            (c) => ({ ...c, idOffset: c.idOffset + V5_PREFIX }),
-          )
-        : readOneShotChunks(file.containers[oneShotTable].data, CHUNK_ID_FIELD, 0, byteOrder)
-      : [],
+    singles: oneShotTable ? readSingles(file.containers[oneShotTable].data) : [],
   };
 }
 

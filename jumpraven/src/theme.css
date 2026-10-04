@@ -74,31 +74,27 @@
   --night-700: #091428;
   --night-600: #091735;
   --night-500: #161a38;
-}
 
-/* ---- dusk: the wing plates' lit edges, which is what a border is -------- */
+  /* ---- dusk: the wing plates' lit edges, which is what a border is -------- */
 
-/*
- * A violet the wings catch from the sky: the violet-dark cells #261839,
- * #362a58 and #46385a, and violet-mid #584467. On the blue-black ground it
- * reads as a plate's edge, not a line drawn on it.
- */
-:root {
+  /*
+   * A violet the wings catch from the sky: the violet-dark cells #261839,
+   * #362a58 and #46385a, and violet-mid #584467. On the blue-black ground it
+   * reads as a plate's edge, not a line drawn on it.
+   */
   --dusk-600: #261839;
   --dusk-500: #362a58;
   --dusk-400: #46385a;
   --dusk-300: #584467;
-}
 
-/* ---- chrome: every word on the page ------------------------------------- */
+  /* ---- chrome: every word on the page ------------------------------------- */
 
-/*
- * A scanline down the raven's head: #fafbfc where it catches the light,
- * #eff0f7 and #e8e8ee across its face, then #d8d9eb, #bbbcd9, #a9aacc and
- * #9498bc as it turns away, and #696e99 at its shadow edge. Cold, and a little
- * lavender: it reflects the violet sky, not the fire.
- */
-:root {
+  /*
+   * A scanline down the raven's head: #fafbfc where it catches the light,
+   * #eff0f7 and #e8e8ee across its face, then #d8d9eb, #bbbcd9, #a9aacc and
+   * #9498bc as it turns away, and #696e99 at its shadow edge. Cold, and a little
+   * lavender: it reflects the violet sky, not the fire.
+   */
   --chrome-100: #fafbfc;
   --chrome-200: #eff0f7;
   --chrome-300: #d8d9eb;
@@ -106,24 +102,22 @@
   --chrome-500: #a9aacc;
   --chrome-600: #9498bc;
   --chrome-700: #696e99;
-}
 
-/* ---- bronze: the rim ---------------------------------------------------- */
+  /* ---- bronze: the rim ---------------------------------------------------- */
 
-/*
- * A scanline down the band's top rim, from the rule outside into the band:
- *
- *   #fce9ad   the lit lip, where a letter's top catches it too
- *   #d8a364   the face
- *   #b86d20   #b46218   turning
- *   #572706   #482507   falling away
- *   #371805   the foot
- *   #140a06   the dark rule, the warmest cell of the black
- *
- * The stop between #b46218 and #572706 is the same hue at the value a bevel's
- * middle needs, which a 2-pixel rim does not hold on its own.
- */
-:root {
+  /*
+   * A scanline down the band's top rim, from the rule outside into the band:
+   *
+   *   #fce9ad   the lit lip, where a letter's top catches it too
+   *   #d8a364   the face
+   *   #b86d20   #b46218   turning
+   *   #572706   #482507   falling away
+   *   #371805   the foot
+   *   #140a06   the dark rule, the warmest cell of the black
+   *
+   * The stop between #b46218 and #572706 is the same hue at the value a bevel's
+   * middle needs, which a 2-pixel rim does not hold on its own.
+   */
   --bronze-100: #fce9ad;
   --bronze-200: #d8a364;
   --bronze-300: #b86d20;
@@ -133,40 +127,36 @@
   --bronze-700: #482507;
   --bronze-800: #371805;
   --rule: #140a06;
-}
 
-/* ---- red: the letters --------------------------------------------------- */
+  /* ---- red: the letters --------------------------------------------------- */
 
-/*
- * A scanline through the J's stem: the rule, #f77562 where the face turns up
- * to the light, #f70313 and #e90206 across it, #d90305 and #b80204 into its
- * shade, and the red-dark #38130a it is cut from.
- */
-:root {
+  /*
+   * A scanline through the J's stem: the rule, #f77562 where the face turns up
+   * to the light, #f70313 and #e90206 across it, #d90305 and #b80204 into its
+   * shade, and the red-dark #38130a it is cut from.
+   */
   --red-100: #f77562;
   --red-200: #f70313;
   --red-300: #e90206;
   --red-400: #d90305;
   --red-500: #b80204;
   --red-900: #38130a;
-}
 
-/* ---- sunset: the sky ---------------------------------------------------- */
+  /* ---- sunset: the sky ---------------------------------------------------- */
 
-/*
- * The sky from the horizon up: the craft's lamps #fbeb05, the yellow-light
- * cells #fee44a and #fdc83a, orange #fda73a, #f99735 and #f68a36, and then the
- * violet it goes to overhead, #874967 and #694766.
- *
- * Only for what is LIVE:
- *
- *   1  the boot gauge
- *   2  the network spinner in the corner of the picture
- *   3  `--ok`
- *
- * Not for text, not for a border, not for the ground.
- */
-:root {
+  /*
+   * The sky from the horizon up: the craft's lamps #fbeb05, the yellow-light
+   * cells #fee44a and #fdc83a, orange #fda73a, #f99735 and #f68a36, and then the
+   * violet it goes to overhead, #874967 and #694766.
+   *
+   * Only for what is LIVE:
+   *
+   *   1  the boot gauge
+   *   2  the network spinner in the corner of the picture
+   *   3  `--ok`
+   *
+   * Not for text, not for a border, not for the ground.
+   */
   --sunset-100: #fbeb05;
   --sunset-200: #fee44a;
   --sunset-300: #fdc83a;
@@ -175,31 +165,25 @@
   --sunset-600: #f68a36;
   --sunset-800: #874967;
   --sunset-900: #694766;
-}
 
-/* ---- indigo: the hovercraft --------------------------------------------- */
+  /* ---- indigo: the hovercraft --------------------------------------------- */
 
-/* the hull's blue-mid cells, darkest first */
-:root {
+  /* the hull's blue-mid cells, darkest first */
   --indigo-800: #151878;
   --indigo-700: #1a1b87;
   --indigo-500: #2629a6;
   --indigo-300: #3437b9;
-}
 
-/* ---- the two extras the pages use ------------------------------------- */
+  /* ---- the two extras the pages use ------------------------------------- */
 
-:root {
   /* A warning has to be told from the letters' red, which is the name: it is
      the red-light cell #f77655 lifted towards pink, where the sunset lies on
      the letters' tops. 7.9:1 on the ground. */
   --alarm: #ff7a6a;
   --ok: var(--sunset-300);
-}
 
-/* ---- typography and metrics ------------------------------------------- */
+  /* ---- typography and metrics ------------------------------------------- */
 
-:root {
   /* the letters are a heavy sans leant forward; the page carries no webfont
      for them, so the display face is the heaviest sans each system has — the
      Enter button leans it (index.html) */
@@ -218,11 +202,9 @@
   /* what the title card sits in: the sunset's light */
   --glow:
     0 0 0 1px rgba(216, 163, 100, 0.24), 0 0 36px -6px rgba(253, 167, 58, 0.3);
-}
 
-/* ---- the roles the chrome asks for ------------------------------------ */
+  /* ---- the roles the chrome asks for ------------------------------------ */
 
-:root {
   --bg: var(--night-1000);
   --panel: var(--night-800);
   --raised: var(--night-700);

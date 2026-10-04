@@ -35,9 +35,10 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { TankApi } from "./api";
-import { comeIn, drawShot, drawVehicle, moveBullet, newShots, objOf, withinReach, type VehicleShot } from "./jeep";
-import { aimAt, callShell, downTheLine, lookAlong, meets, tooFar, turnToward } from "./lib";
-import { KIND, abs, copyObj, cosMul, inside, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
+import { cellToCell, countUp, findAt, nthUp, objOf, occupiedBy, pickNearest, shiftFleet, shiftTo } from "./fleet";
+import { comeInAt, drawShot, moveBullet, newShots, rollOne, setOut, withinReach, type VehicleShot } from "./jeep";
+import { aimAt, callShell, meets } from "./lib";
+import { KIND, copyObj, cosMul, newObj, readPictures, sinMul, type Obj, type Pt, type World } from "./world";
 
 /** a tank, the EXE's 0x84 bytes at 0x43a674 (its object the first 0x18) */
 interface TankRec extends Obj {
@@ -134,25 +135,10 @@ export class Tank implements TankApi {
   /** 0x42498e */
   private comeIn(r: TankRec): void {
     const w = this.w;
-    r.self = r.slot;
-    const c = comeIn(w, (x, y) => this.blocked(x, y, r.self));
-    r.angle = c.angle;
-    r.cellX = c.cellX;
-    r.cellY = c.cellY;
-    r.x = (r.cellX << 8) + 0x80;
-    r.y = (r.cellY << 8) + 0x80;
-    r.z = 1;
-    r.toX = c.cellX;
-    r.toY = c.cellY;
+    comeInAt(w, r, (x, y, self) => this.blocked(x, y, self));
     r.speed = w.params.x43cf8a;
     r.turn = w.params.x43cf96;
-    r.state = 0;
-    r.shown = 0;
-    r.reload = 0;
-    r.strength = w.params.x43cfb6;
-    setObj(r.last, r);
-    r.pod = 0;
-    if (w.pyro.wreckage() < 2 && w.roll(8) === 1 && w.state < 2) r.pod = 1;
+    setOut(w, r, w.params.x43cfb6);
   }
 
   /** 0x424d46: every tank, then the shots (0x425771) */
@@ -163,129 +149,13 @@ export class Tank implements TankApi {
 
   /** 0x424d78 */
   private one(r: TankRec): void {
-    const w = this.w;
-    r.shown = 0;
-    if (r.self < 0) {
-      if (--r.wait <= 0) this.comeIn(r);
-      return;
-    }
-    if (tooFar(w, r)) return this.gone(r);
-    setObj(r.last, r);
-    this.think(r);
-    const d = drawVehicle(w, r, this.pics);
-    if (!d) return;
-    r.rect = d.rect;
-    r.depth = d.depth;
-    r.shown = 1;
+    rollOne(this.w, r, this.pics, (r) => this.comeIn(r), (r) => this.gone(r), (r) => this.think(r));
   }
 
   /** 0x424ed5 */
   private think(r: TankRec): void {
     const w = this.w;
     switch (r.state) {
-      case 0: {
-        let ax = r.cellX;
-        let ay = r.cellY;
-        const dx = ax - w.cam.cellX;
-        const dy = ay - w.cam.cellY;
-        const seen = lookAlong(w, r);
-        if (seen !== null) r.goal = seen;
-        if (seen !== null && abs(dx) <= 1 && abs(dy) <= 1) return void (r.state = 4);
-        let bx = ax;
-        let by = ay;
-        let a: number;
-        let b: number;
-        if (abs(dx) > abs(dy)) {
-          if (dx > 0) (a = 0x80), ax--;
-          else (a = 0), ax++;
-          if (dy > 0) (b = 0xc0), by--;
-          else (b = 0x40), by++;
-        } else {
-          if (dy > 0) (a = 0xc0), ay--;
-          else (a = 0x40), ay++;
-          if (dx > 0) (b = 0x80), bx--;
-          else (b = 0), bx++;
-        }
-        if (abs(dx) === abs(dy) && w.roll(2) === 1) {
-          [ax, bx] = [bx, ax];
-          [ay, by] = [by, ay];
-          [a, b] = [b, a];
-        }
-        if (!this.blocked(ax, ay, r.self)) {
-          r.toX = ax;
-          r.toY = ay;
-          r.goal = a;
-          r.state = 1;
-        } else if (!this.blocked(bx, by, r.self)) {
-          r.toX = bx;
-          r.toY = by;
-          r.goal = b;
-          r.state = 1;
-        }
-        return;
-      }
-      case 1:
-        if (r.angle !== r.goal) return void (r.angle = turnToward(r.angle, r.goal, r.turn, 0x100));
-        r.goalX = (r.cellX << 8) + 0x80;
-        r.goalY = (r.cellY << 8) + 0x80;
-        // 0x432638
-        switch (r.angle) {
-          case 0:
-            r.goalX += 0x100;
-            r.state = 2;
-            r.way = 1;
-            break;
-          case 0x40:
-            r.goalY += 0x100;
-            r.state = 3;
-            r.way = 1;
-            break;
-          case 0x80:
-            r.goalX -= 0x100;
-            r.state = 2;
-            r.way = 0;
-            break;
-          case 0xc0:
-            r.goalY -= 0x100;
-            r.state = 3;
-            r.way = 0;
-            break;
-        }
-        return;
-      case 2:
-      case 3: {
-        const alongX = r.state === 2;
-        const t = alongX ? r.goalY : r.goalX;
-        let across = (alongX ? r.y : r.x) + w.roll(5) - 3;
-        if (t - 0x2a > across) across = t - 0x2a;
-        if (t + 0x2a < across) across = t + 0x2a;
-        if (alongX) r.y = across;
-        else r.x = across;
-        const goal = alongX ? r.goalX : r.goalY;
-        let v = alongX ? r.x : r.y;
-        if (r.way) {
-          v += r.speed;
-          if (v >= goal) (v = goal), (r.state = 0);
-        } else {
-          v -= r.speed;
-          if (v <= goal) (v = goal), (r.state = 0);
-        }
-        if (alongX) (r.x = v), (r.cellX = v >> 8);
-        else (r.y = v), (r.cellY = v >> 8);
-        if (downTheLine(w, r)) this.fire(r);
-        return;
-      }
-      case 4:
-        if (r.angle === r.goal) r.state = 5;
-        else r.angle = turnToward(r.angle, r.goal, r.turn, 0x100);
-        return;
-      case 5: {
-        const dx = r.cellX - w.cam.cellX;
-        const dy = r.cellY - w.cam.cellY;
-        if (downTheLine(w, r) && abs(dx) <= 2 && abs(dy) <= 2) this.fire(r);
-        else r.state = 0;
-        return;
-      }
       case 6: {
         if (--r.way > 0) return;
         // 0x425375: the blast 0x18 ahead of it, 6 up
@@ -298,6 +168,9 @@ export class Tank implements TankApi {
         this.gone(r);
         return;
       }
+      default:
+        // 0 … 5: cell centre to cell centre, as the copter's (src/game/combat/fleet.ts)
+        return cellToCell(w, r, (x, y, self) => this.blocked(x, y, self), (r) => this.fire(r));
     }
   }
 
@@ -309,11 +182,7 @@ export class Tank implements TankApi {
 
   /** 0x4260bc */
   occupied(x: number, y: number, self: number): boolean {
-    for (const r of this.recs) {
-      if (r.self < 0 || r.self === self) continue;
-      if ((r.toX === x && r.toY === y) || (r.cellX === x && r.cellY === y)) return true;
-    }
-    return false;
+    return occupiedBy(this.recs, x, y, self);
   }
 
   /** 0x425430: a shot, if one is due and a slot is free */
@@ -400,7 +269,10 @@ export class Tank implements TankApi {
 
   /** 0x425b49: a shell's picture — bursting (pyro's 0xc0 …, then 0xd0 …), homing (0x12c …), or not (0x13c …) */
   private drawShell(s: VehicleShot): void {
-    drawShot(this.w, s, s.met === 1 ? 0xc0 : s.met === 2 ? 0xd0 : s.kind === 2 ? 0x12c : 0x13c);
+    let base = s.kind === 2 ? 0x12c : 0x13c;
+    if (s.met === 1) base = 0xc0;
+    else if (s.met === 2) base = 0xd0;
+    drawShot(this.w, s, base);
   }
 
   /** 0x425c89: the first tank the shot meets (0x425cd9) */
@@ -430,59 +302,26 @@ export class Tank implements TankApi {
 
   /** 0x425e2c */
   shift(dx: number, dy: number): void {
-    const cx = dx >> 8;
-    const cy = dy >> 8;
-    for (const r of this.recs) {
-      if (r.self < 0) continue;
-      r.x += dx;
-      r.y += dy;
-      r.cellX += cx;
-      r.cellY += cy;
-      r.goalX += dx;
-      r.goalY += dy;
-      r.toX += cx;
-      r.toY += cy;
-    }
-    for (const s of this.shots) {
-      if (!s.on) continue;
-      s.o.x += dx;
-      s.o.y += dy;
-      s.o.cellX += cx;
-      s.o.cellY += cy;
-    }
+    shiftFleet(this.recs, this.shots, dx, dy, shiftTo);
   }
 
   /** 0x425ec8 */
   count(): number {
-    return this.recs.filter((r) => r.self >= 0).length;
+    return countUp(this.recs);
   }
 
   /** 0x425ef4: a burning one is dying */
   nth(k: number): { obj: Obj; kind: number; flag: number; dying: number } {
-    for (const r of this.recs) {
-      if (r.self >= 0) k--;
-      if (k < 0) return { obj: objOf(r), kind: KIND.tank, flag: r.pod, dying: r.state === 6 ? 1 : 0 };
-    }
-    throw new Error("0x425ef4: no such tank (0x41e28a 0x6b, 0xa5)");
+    return nthUp(this.recs, k, KIND.tank, (r) => r.state === 6, "0x425ef4: no such tank (0x41e28a 0x6b, 0xa5)");
   }
 
   /** 0x425f76 */
   pick(pt: Pt): Obj | null {
-    let best: TankRec | null = null;
-    let near = 0x7fff;
-    for (const r of this.recs) {
-      if (r.shown && r.depth < near && inside(pt.y, pt.x, r.rect)) {
-        best = r;
-        near = r.depth;
-      }
-    }
-    return best;
+    return pickNearest(this.recs, pt);
   }
 
   /** 0x425fef */
   find(o: Obj): Obj {
-    const r = this.recs.find((r) => r.x === o.x && r.y === o.y && r.z === o.z);
-    if (!r) throw new Error("0x425fef: no tank there (0x41e28a 0x6b, 0xa6)");
-    return r;
+    return findAt(this.recs, o, "0x425fef: no tank there (0x41e28a 0x6b, 0xa6)");
   }
 }

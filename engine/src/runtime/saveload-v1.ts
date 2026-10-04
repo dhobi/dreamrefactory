@@ -343,7 +343,7 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
    * into lost state. #357 closed it, and `dust/tests/saves.ts`'s round trip is
    * what keeps it closed.
    */
-  for (const name of [...session.interp.globals.keys()]) {
+  for (const name of session.interp.globals.keys()) {
     if (name.startsWith("__")) continue;
     if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
     session.interp.globals.delete(name);
@@ -471,11 +471,11 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
           arriveStar: w.star || undefined,
         });
       if (resumed) {
+        const route = w.hasPath ? " on an authored route, resumed as a straight line" : "";
         session.onLog(
           w.turnOnly
             ? `opengame: ${w.actor} was saved mid-turn — resuming it`
-            : `opengame: ${w.actor} was saved walking to "${w.star}" ` +
-              `(${w.progress} of ${w.dist})${w.hasPath ? " on an authored route, resumed as a straight line" : ""}`,
+            : `opengame: ${w.actor} was saved walking to "${w.star}" (${w.progress} of ${w.dist})${route}`,
         );
         continue;
       }
@@ -753,7 +753,7 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
  * whether anything is moving it.
  */
 function standUp(a: { poseName: string; step: number; member: { poses: { name: string }[] } } | undefined): void {
-  if (!a || !a.poseName.startsWith("walk")) return;
+  if (!a?.poseName.startsWith("walk")) return;
   const suffixed = `stand${a.poseName.slice(4)}`;
   a.poseName = a.member.poses.some((p) => p.name === suffixed) ? suffixed : "stand";
   a.step = 0;

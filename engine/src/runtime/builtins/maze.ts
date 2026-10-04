@@ -63,11 +63,12 @@ export function registerMazeBuiltins(ctx: BuiltinCtx): void {
   // is honoured — see MazeRuntime.detail
   r("nodequality", (_i, [, detail]) => {
     const m = maze();
-    if (!m || detail === undefined) return 0;
-    const d = toNum(detail);
-    if (d !== m.detail) {
-      m.detail = d;
-      m.onChange();
+    if (m && detail !== undefined) {
+      const d = toNum(detail);
+      if (d !== m.detail) {
+        m.detail = d;
+        m.onChange();
+      }
     }
     return 0;
   });
@@ -80,7 +81,11 @@ export function registerMazeBuiltins(ctx: BuiltinCtx): void {
   // two: 7, the button of the press being handled, and 10, the screen depth.
   // The canvas is true-colour, so the depth is whatever the control panel last
   // asked for (`doublebuffer`, builtins/df5.ts) — 32 until it asks.
-  const sysparam = (n: number): number => (n === 7 ? session.pointerButton : n === 10 ? session.screenDepth : 0);
+  const sysparam = (n: number): number => {
+    if (n === 7) return session.pointerButton;
+    if (n === 10) return session.screenDepth;
+    return 0;
+  };
   r("sysparam", (_i, [n]) => sysparam(toNum(n ?? 0)));
   // roadahead (scene, view): v4 asks the set's transitions (scene.ts); a v5
   // room answers the film ahead of a scene's view
@@ -94,8 +99,15 @@ export function registerMazeBuiltins(ctx: BuiltinCtx): void {
   // are points in its own units (engine/src/df/sett.ts), which the scripts put
   // props on and turn them to — `propxyz (me, scenexyz ("scene10", 1), …)`,
   // `calcdeg (propxyz (me, 1), propxyz (me, 2), cameraxyz (1), cameraxyz (2))`
-  const axisOf = (pt: { x: number; y: number; z: number }, axis: number): number =>
-    axis === 1 ? pt.x : axis === 2 ? pt.y : axis === 3 ? pt.z : axis === 4 ? packPoint(pt.x, pt.y) : 0;
+  const axisOf = (pt: { x: number; y: number; z: number }, axis: number): number => {
+    switch (axis) {
+      case 1: return pt.x;
+      case 2: return pt.y;
+      case 3: return pt.z;
+      case 4: return packPoint(pt.x, pt.y);
+      default: return 0;
+    }
+  };
   for (const name of ["cameraxyz", "playerxyz"]) {
     const v4 = ctx.interp.builtins.get(name)!;
     ctx.interp.builtins.set(name, (i, args, call, frame) => {

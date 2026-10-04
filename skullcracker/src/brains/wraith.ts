@@ -638,9 +638,9 @@ export function wraithGate(
   return { ...blow, still: true, quiet: true, spare: true };
 }
 
-/** `0x424c44` — every band falls through here: restart the hover, or wait */
-function tail(e: Enemy, done: boolean): boolean {
-  return done ? install(e, WRAITH.hover) : false;
+/** `0x424c44` — every band falls through here, and restarts the hover once it has finished */
+function tail(e: Enemy): boolean {
+  return install(e, WRAITH.hover);
 }
 
 /**
@@ -671,7 +671,7 @@ function fight(
    */
   if (k.player.down) {
     e.facing = k.player.x > k.anchorX(e) ? -1 : 1;
-    return tail(e, done);
+    return done && tail(e);
   }
   switch (t.band) {
     /**
@@ -704,7 +704,7 @@ function fight(
       }
       e.vx += through(e.facing * 10) * TICKS;
       e.vy += through(lift) * TICKS;
-      return tail(e, done);
+      return done && tail(e);
     }
     /**
      * 130..230 — `0x424963`, and the first thing it does is line itself up.
@@ -733,10 +733,10 @@ function fight(
        */
       const beat = e.beat ?? 5;
       e.beat = beat - 1;
-      if (beat >= 0) return tail(e, done);
+      if (beat >= 0) return done && tail(e);
       e.beat = 5;
       if (k.roll(0x2f) < 7) return install(e, WRAITH.shudder, true);
-      return tail(e, done);
+      return done && tail(e);
     }
     /**
      * 60..130 — `0x424abf`, the same alignment at twenty-five a frame, and the
@@ -754,7 +754,7 @@ function fight(
        */
       if (k.player.swinging) {
         if (k.roll(10) < 5) return install(e, WRAITH.shudder, true);
-        if ((e.decisions ?? 1) === 0) return tail(e, done);
+        if ((e.decisions ?? 1) === 0) return done && tail(e);
         k.say(e, WRAITH.splits);
         return install(e, WRAITH.split, true);
       }
@@ -763,9 +763,9 @@ function fight(
        * `0x424ba1` — and with him doing nothing in particular, the cast:
        * `AI+4` set and `0x434540(0x2f)` under 6, six chances in forty-seven.
        */
-      if ((e.decisions ?? 1) === 0) return tail(e, done);
+      if ((e.decisions ?? 1) === 0) return done && tail(e);
       if (k.roll(0x2f) < 6) return install(e, WRAITH.cast, true);
-      return tail(e, done);
+      return done && tail(e);
     }
     /**
      * Inside 60 — `0x424bd1`, and it is three tests and one animation.
@@ -777,14 +777,14 @@ function fight(
      * is the dead write.
      */
     case 4: {
-      if ((e.decisions ?? 1) === 0) return tail(e, done);
-      if (Math.abs(e.y - k.player.y) >= 0x32) return tail(e, done);
+      if ((e.decisions ?? 1) === 0) return done && tail(e);
+      if (Math.abs(e.y - k.player.y) >= 0x32) return done && tail(e);
       k.say(e, WRAITH.claws);
       return install(e, WRAITH.claw, true);
     }
     // behind it — `0x4248dc`'s `cmp eax, 4; ja` is unsigned and -1 falls through
     default:
-      return tail(e, done);
+      return done && tail(e);
   }
 }
 

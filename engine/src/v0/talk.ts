@@ -286,7 +286,10 @@ export class FaceDrawer {
 
   track(container: number): TrackKeyV0[] {
     let k = this.tracks.get(container);
-    if (!k) this.tracks.set(container, (k = this.t.containers[container] ? readPuppetTrackV0(this.t.containers[container]) : []));
+    if (!k) {
+      k = this.t.containers[container] ? readPuppetTrackV0(this.t.containers[container]) : [];
+      this.tracks.set(container, k);
+    }
     return k;
   }
 

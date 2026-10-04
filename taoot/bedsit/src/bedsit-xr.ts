@@ -405,7 +405,7 @@ function bestRate(rates: ArrayLike<number> | undefined): number | null {
   const all = Array.from(rates ?? []).filter((r) => r > 0).sort((a, b) => a - b);
   if (all.length === 0) return null;
   const under = all.filter((r) => r <= RATE);
-  return under.length > 0 ? under[under.length - 1] : all[0];
+  return under.at(-1) ?? all[0];
 }
 
 /**

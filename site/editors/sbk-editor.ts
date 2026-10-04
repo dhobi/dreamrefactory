@@ -60,11 +60,9 @@ import {
   readRooms,
   readSbkFile,
 } from "@dreamfactory/engine/df/sbk";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { installI18n, t } from "@dreamfactory/site/locales";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { t } from "@dreamfactory/site/locales";
+import { byExtension, chosenSource, filesIn, listSources } from "./sources";
+import { installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -101,10 +99,10 @@ const PICKUP = "#ff9020";
 const OTHER = "#a0a0a0";
 
 function colorOf(name: string): string {
-  return (
-    KIND_COLORS[name] ??
-    (name.startsWith("init") ? SPAWN : name.startsWith("stat") ? PICKUP : OTHER)
-  );
+  const known = KIND_COLORS[name];
+  if (known !== undefined) return known;
+  if (name.startsWith("init")) return SPAWN;
+  return name.startsWith("stat") ? PICKUP : OTHER;
 }
 
 /** the legend's rows, in the order it lists them */
@@ -190,13 +188,9 @@ function loadBook(bytes: Uint8Array, name: string): void {
     `${sbk.file.containers.length} containers · ${sbk.cels.length} cels · ` +
     `${sbk.entities.length} entities · ${sbk.placements.length} placements · ${sbk.file.order}`;
   const unresolved = sbk.placements.length - drawList.length;
-  log(
-    unresolved
-      ? `${unresolved} placement(s) name a cel the directory does not — those are not drawn`
-      : sbk.placements.length
-        ? `every placement resolves to a cel`
-        : `no level in this book — the player's own book has cels and no place to put them`,
-  );
+  if (unresolved) log(`${unresolved} placement(s) name a cel the directory does not — those are not drawn`);
+  else if (sbk.placements.length) log(`every placement resolves to a cel`);
+  else log(`no level in this book — the player's own book has cels and no place to put them`);
 
   buildLayers();
   buildLegend();
@@ -205,27 +199,7 @@ function loadBook(bytes: Uint8Array, name: string): void {
   cameraHome();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadBook(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadBook(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /**
  * Dev-server mode: offer every `.sbk` there is.
@@ -249,38 +223,33 @@ async function initServerBooks(): Promise<void> {
     books = filesIn(elsewhere, byExtension(".sbk"));
   }
   const wrap = $("serverBooks");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent =
+  serverNote(
+    wrap,
     source === chose
       ? t("common.pickFromGamefiles")
-      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with sprite books in it`;
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row books";
+      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with sprite books in it`,
+  );
   // in the order the game plays them, not the order the directory sorts them —
   // see LEVEL_ORDER, which is recovered from SC.EXE and not from the discs
   books.sort((a, b) => (levelNumber(a.base) || 99) - (levelNumber(b.base) || 99));
-  for (const f of books) {
-    const n = levelNumber(f.base);
-    const b = document.createElement("button");
-    b.className = "book";
-    b.textContent = n ? `${n}. ${f.base}` : f.base;
-    b.title = `${source.game.short} · ${f.path}${n ? ` · level ${n} of 16` : " · the player, not a level"}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadBook(new Uint8Array(await r.arrayBuffer()), f.base);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverRow(wrap, {
+    source,
+    files: books,
+    rowClass: "books",
+    buttonClass: "book",
+    label: (f) => {
+      const n = levelNumber(f.base);
+      return n ? `${n}. ${f.base}` : f.base;
+    },
+    more: (f) => {
+      const n = levelNumber(f.base);
+      return n ? ` · level ${n} of 16` : " · the player, not a level";
+    },
+    log,
+    open: (bytes, f) => loadBook(bytes, f.base),
+  });
 }
-void initServerBooks();
+const serverListed = initServerBooks();
 
 $("closeBtn").addEventListener("click", () => {
   book = null;
@@ -479,10 +448,15 @@ function buildPlan(): void {
   const nEnt = book.entities.filter((e) => e.isEntity).length;
   const ground = [...book.regions.values()].reduce((n, r) => n + r.ground.length, 0);
   const doors = rooms.reduce((n, r) => n + r.exits.length, 0);
-  $("planStats").textContent = book.entities.length
-    ? `${nEnt} objects · ${rooms.length} rooms, ${rooms.filter((r) => r.ground).length} with a floor ` +
-      `(${ground} points)${doors ? ` · ${doors} door${doors > 1 ? "s" : ""} between them` : ""}`
-    : "nothing placed";
+  let stats = "nothing placed";
+  if (book.entities.length) {
+    const doorWord = doors > 1 ? "doors" : "door";
+    const between = doors ? ` · ${doors} ${doorWord} between them` : "";
+    stats =
+      `${nEnt} objects · ${rooms.length} rooms, ${rooms.filter((r) => r.ground).length} with a floor ` +
+      `(${ground} points)${between}`;
+  }
+  $("planStats").textContent = stats;
   // grouped by kind, commonest first, and every one is a link into the view
   const order = [...kinds].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   for (const [kind] of order) {
@@ -754,7 +728,9 @@ function draw(): void {
         ctx.fillRect(Math.round(ox + e.pointX * scale) - 1, Math.round(oy + e.pointY * scale) - 1, 3, 3);
         if (ew > 20) {
           ctx.font = "10px ui-monospace, monospace";
-          const arrow = e.side < 0 ? "←" : e.side > 0 ? "→" : "·";
+          let arrow = "·";
+          if (e.side < 0) arrow = "←";
+          else if (e.side > 0) arrow = "→";
           ctx.fillText(`${arrow} p${e.to}`, ex + 2, ey + eh - 3);
         }
       }
@@ -786,8 +762,5 @@ function draw(): void {
     `camera ${Math.round(camX)},${Math.round(camY)} · ${drawn} of ${drawList.length} placements in view`;
 }
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-void installSourcePicker($("editionPicker"));
+void installEditorPage();
+await serverListed;

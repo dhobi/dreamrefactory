@@ -97,7 +97,7 @@ const main = async (): Promise<void> => {
     available[1];
   const region = await page.evaluate(
     (code: string) =>
-      (window as any).dbg.session
+      (window as any).dbg.session.stageCtrl
         .currentFlatRegions()
         .find((r: { name: string }) => r.name.toLowerCase() === code) ?? null,
     target,

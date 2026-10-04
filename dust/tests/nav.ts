@@ -21,8 +21,7 @@ const DATA = fileURLToPath(new URL("../gamefiles/dustcd/DATA", import.meta.url))
 const load = (name: string) => readSetFileV1(new Uint8Array(readFileSync(`${DATA}/${name}.SET`)));
 const have = existsSync(DATA);
 
-test("the compass is read off the set's own moves", () => {
-  if (!have) return;
+test.skipIf(!have)("the compass is read off the set's own moves", () => {
   const dirs = compass(load("NITE"));
   // whichever facing walks to z-1 is north; the set numbers them 1..4 and the
   // planner never assumes which is which
@@ -35,8 +34,7 @@ test("the compass is read off the set's own moves", () => {
   expect.soft([...rightRing(load("NITE"))].sort(), "clockwise").toEqual([[1, 3], [2, 4], [3, 2], [4, 1]]);
 });
 
-test("every set's facings agree with themselves", () => {
-  if (!have) return;
+test.skipIf(!have)("every set's facings agree with themselves", () => {
   // `compass` throws when one facing walks two different ways, which would mean
   // the grid model is wrong for that set — so reading every set in DATA/ IS the
   // assertion, and the list is the directory rather than a list kept by hand
@@ -47,8 +45,7 @@ test("every set's facings agree with themselves", () => {
   }
 });
 
-test("the facing numbers are the engine's, not each set's", () => {
-  if (!have) return;
+test.skipIf(!have)("the facing numbers are the engine's, not each set's", () => {
   /*
    * A small interior defines almost nothing — MAYHALL is four cells with one
    * authored walk, so on its own it can say which way is north and nothing else.
@@ -71,8 +68,7 @@ test("the facing numbers are the engine's, not each set's", () => {
   expect.soft(facingFor(mergeCompass(sets), "west"), "the merge can").toBe(4);
 });
 
-test("a route across the night town is walkable and lands where it says", () => {
-  if (!have) return;
+test.skipIf(!have)("a route across the night town is walkable and lands where it says", () => {
   const set = load("NITE");
   // the first night's own geography: the street outside the hotel to the cell
   // the Mayor's gate is on (Scene J9), which is where the walkthrough's day 1
@@ -94,8 +90,7 @@ test("a route across the night town is walkable and lands where it says", () => 
   expect.soft([at.x, at.z], "arrives at the goal").toEqual([9, 8]);
 });
 
-test("the hall-to-study leg is two presses", () => {
-  if (!have) return;
+test.skipIf(!have)("the hall-to-study leg is two presses", () => {
   const hall = load("MAYHALL");
   // MAYHALL opens at its own standpoint and the study door is west of Scene C3:
   // `if currentview () = "west" & arg = "uparrow" & propowner ("door") = "study"`
@@ -108,8 +103,7 @@ test("the hall-to-study leg is two presses", () => {
   expect.soft(route!.keys, "up, then turn to face the door").toEqual(["uparrow", "leftarrow"]);
 });
 
-test("a goal with no authored route says so rather than hanging", () => {
-  if (!have) return;
+test.skipIf(!have)("a goal with no authored route says so rather than hanging", () => {
   const study = load("MAYSTUDY");
   // a cell off the grid cannot be reached and the search has to end
   expect(planRoute(study, { x: 1, z: 1, facing: 4 }, { x: 99, z: 99 })).toBeNull();

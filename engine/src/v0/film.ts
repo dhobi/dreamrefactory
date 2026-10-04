@@ -152,10 +152,22 @@ export function* playOneFilm(
         if (click) filmSound(m, click.data);
       }
       const type = hit ? Math.abs(hit.type) : 0;
-      if (type === 1 || (type === 3 && !hit!.film)) return yield* hooksLeft(), over;
-      if (type === 3) return yield* hooksLeft(), { end: "chain", to: hit!.film, back: 0 };
-      if (type === 4) return yield* hooksLeft(), { end: "call", to: hit!.film, back: hit!.target };
-      if (type === 5) return yield* hooksLeft(), { end: "return", to: "", back: 0 };
+      if (type === 1 || (type === 3 && !hit!.film)) {
+        yield* hooksLeft();
+        return over;
+      }
+      if (type === 3) {
+        yield* hooksLeft();
+        return { end: "chain", to: hit!.film, back: 0 };
+      }
+      if (type === 4) {
+        yield* hooksLeft();
+        return { end: "call", to: hit!.film, back: hit!.target };
+      }
+      if (type === 5) {
+        yield* hooksLeft();
+        return { end: "return", to: "", back: 0 };
+      }
       if (type === 2 && hit) {
         yield* soundDone();
         index = hit.target;
@@ -200,7 +212,10 @@ export function* trackPress(m: Machine, rect: readonly [number, number, number, 
   const on = (): boolean => m.pointer.y >= rect[0] && m.pointer.y < rect[2] && m.pointer.x >= rect[1] && m.pointer.x < rect[3];
   const pressed = m.ticks;
   let lit = true;
-  const flip = (): void => ((lit = !lit), m.screen.invertFrame(rect, PRESS_PEN));
+  const flip = (): void => {
+    lit = !lit;
+    m.screen.invertFrame(rect, PRESS_PEN);
+  };
   m.screen.invertFrame(rect, PRESS_PEN);
   for (;;) {
     const i = m.events.findIndex((e) => e.kind === "up");
@@ -247,7 +262,8 @@ export function* playFilm(m: Machine, name: string, day: number, hooks: FilmHook
         const up = calls.pop();
         if (!up) return;
         m.log(`  back to ${up.name}`);
-        (at = up.name), (from = up.frame);
+        at = up.name;
+        from = up.frame;
         continue;
       }
       if (end === "call") {
@@ -255,7 +271,8 @@ export function* playFilm(m: Machine, name: string, day: number, hooks: FilmHook
         calls.push({ name: at, frame: back });
         m.log(`  calls ${to}`);
       } else m.log(`  chains to ${to}`);
-      (at = to), (from = 0);
+      at = to;
+      from = 0;
     }
   } finally {
     m.film = null;

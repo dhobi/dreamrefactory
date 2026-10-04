@@ -601,10 +601,12 @@ export function writeSaveV5(s: SaveGameV5): Uint8Array {
       out.push(table(TAG.SOU, recs, STRIDE.sound));
     }
   }
-  out.push(writeVars(s.globals));
-  out.push(fixed(TAG.LOO, s.loops, TABLE.loops.slots, TABLE.loops.stride));
-  out.push(fixed(TAG.BAL, s.crickets, TABLE.crickets.slots, TABLE.crickets.stride));
-  out.push(fixed(TAG.WAL, s.walks, TABLE.walks.slots, TABLE.walks.stride));
+  out.push(
+    writeVars(s.globals),
+    fixed(TAG.LOO, s.loops, TABLE.loops.slots, TABLE.loops.stride),
+    fixed(TAG.BAL, s.crickets, TABLE.crickets.slots, TABLE.crickets.stride),
+    fixed(TAG.WAL, s.walks, TABLE.walks.slots, TABLE.walks.stride),
+  );
   for (const r of s.routes) out.push(r);
   out.push(fixed(TAG.COL, s.copies, TABLE.copies.slots, TABLE.copies.stride));
   return writeDFile(out);

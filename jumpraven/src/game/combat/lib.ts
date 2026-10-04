@@ -224,8 +224,7 @@ export function callShell(w: World, o: Obj): void {
  * 0x40ce63's cases (0x431558; the fuel station's 0x43133c, the weapons ship's
  * 0x432b20): facing `angle`, `dx`, `dy` from the cell it is heading for, the
  * three ways a street-bound thing may take without turning back, the first
- * toward it by the longer way; a tie across is settled by a roll of 2 (the
- * jeep keeps its own copy, src/game/combat/jeep.ts)
+ * toward it by the longer way; a tie across is settled by a roll of 2
  */
 export function waysToward(w: World, angle: number, dx: number, dy: number): [number, number, number] {
   const ax = abs(dx);
@@ -280,8 +279,9 @@ export function chatterOf(w: World): Chatter {
     beacon: () => beacon().n,
     squared: () => (w.cam.angle & 0x3f) === 0,
     ahead: (kind) => {
-      const o = kind === 0 ? w.fuel.nth(0).obj : kind === 1 ? w.weap.nth(0).obj : beacon().at;
-      return downFromCraft(w, w.cam.angle, o);
+      if (kind === 0) return downFromCraft(w, w.cam.angle, w.fuel.nth(0).obj);
+      if (kind === 1) return downFromCraft(w, w.cam.angle, w.weap.nth(0).obj);
+      return downFromCraft(w, w.cam.angle, beacon().at);
     },
     homing: () => {
       const missiles = w.copter.missiles();

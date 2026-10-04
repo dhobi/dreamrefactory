@@ -143,7 +143,7 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   r("pointinprop", (_i, [n, point]) => {
     const p = session.propRuntime.get(toStr(n));
     const st = p?.state();
-    if (!p || !st || !st.frames.length) return 0;
+    if (!p || !st?.frames.length) return 0;
     // the frame drawn: a v5 view's is picked by step and degree (v5FrameIndex)
     if (session.isV5) {
       const f = p.shop.frame(st.steps ? p.currentFrame(st) : st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);

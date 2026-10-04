@@ -106,7 +106,7 @@ const debugging = (s: Dbg["session"]): boolean => {
   return typeof v === "number" ? v !== 0 : !!v && v !== "0";
 };
 
-void (async () => {
+const developerMode = async (): Promise<void> => {
   const dbg = await booted();
   if (!dbg?.session) throw new Error("devmode: the game never came up");
   const session = dbg.session;
@@ -445,4 +445,5 @@ void (async () => {
   // does not carry one.
   (document.getElementById("devpromptslot") ?? slot).append(consoleRow);
   sayState();
-})();
+};
+await developerMode();

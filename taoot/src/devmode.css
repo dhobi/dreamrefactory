@@ -365,7 +365,8 @@ body.spoken #booting {
   line-height: 1.5;
   color: var(--text-mute);
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 #dbgState {
@@ -566,6 +567,7 @@ body.spoken #booting {
      at, and a box you cannot see through points at nothing */
   background: color-mix(in srgb, currentcolor 12%, transparent);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  color: var(--area);
 }
 
 /* The kind's colour is a custom property, not just `color`, because the label
@@ -589,10 +591,6 @@ body.spoken #booting {
 .devarea.dead {
   --area: #ff5050;
   border-style: dashed;
-}
-
-.devarea {
-  color: var(--area);
 }
 
 .devarea span {

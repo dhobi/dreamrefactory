@@ -377,7 +377,7 @@ export const PENDANT = { x: 7300, y: 7600 } as const;
 
 function lerpTable(table: readonly (readonly [number, number])[], x: number): number {
   if (x <= table[0][0]) return table[0][1];
-  const last = table[table.length - 1];
+  const last = table.at(-1)!;
   if (x >= last[0]) return last[1];
   for (let i = 1; i < table.length; i++) {
     const [xa, za] = table[i - 1], [xb, zb] = table[i];
@@ -386,7 +386,11 @@ function lerpTable(table: readonly (readonly [number, number])[], x: number): nu
   return last[1];
 }
 
-const smoothstep = (t: number): number => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const smoothstep = (t: number): number => {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+};
 
 
 
@@ -495,7 +499,10 @@ export function ceilingRails(x: number): number[] {
   for (const w of WINDOWS) {
     const c = (w.y0 + w.y1) / 2, half = (w.y1 - w.y0) / 2;
     // the head is a circle, so the band is a chord of it
-    const band = rise <= 0 ? half : rise >= half ? 0 : Math.sqrt(half * half - rise * rise);
+    let band: number;
+    if (rise <= 0) band = half;
+    else if (rise >= half) band = 0;
+    else band = Math.sqrt(half * half - rise * rise);
     out.push(c - band, c + band);
   }
   out.push(ROOM.y1);
@@ -563,6 +570,8 @@ export type SurfaceId =
   | "portrait" | "sketch" | "print" | "hidden" | "futility" | "rug";
 
 export type V3 = [number, number, number];
+/** one of the three world axes, by index */
+type Axis = 0 | 1 | 2;
 
 /**
  * A surface's own coordinate system, in world units, and the two directions the
@@ -945,7 +954,9 @@ export class Builder {
       if (pinned) return [pinned[i][0], pinned[i][1]];
       if (!this.mat) return [0, 0];
       const s = this.mat.scale, ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
-      return ax >= ay && ax >= az ? [v[1] / s, v[2] / s] : ay >= az ? [v[0] / s, v[2] / s] : [v[0] / s, v[1] / s];
+      if (ax >= ay && ax >= az) return [v[1] / s, v[2] / s];
+      if (ay >= az) return [v[0] / s, v[2] / s];
+      return [v[0] / s, v[1] / s];
     });
     if (this.turn) {
       a = this.turned(a); b = this.turned(b); c = this.turned(c); d = this.turned(d);
@@ -954,7 +965,10 @@ export class Builder {
     }
     const key = this.chart?.id ?? this.mat?.id ?? null;
     let bucket = this.parts.get(key);
-    if (!bucket) this.parts.set(key, (bucket = { p: [], n: [], c: [], t: [], u: [] }));
+    if (!bucket) {
+      bucket = { p: [], n: [], c: [], t: [], u: [] };
+      this.parts.set(key, bucket);
+    }
     [a, b, c, a, c, d].forEach((v, i) => {
       bucket!.p.push(...glOf(v[0], v[1], v[2]));
       bucket!.n.push(...glOf(nx, ny, nz));
@@ -1004,7 +1018,10 @@ export class Builder {
     }
     const key = this.chart?.id ?? this.mat?.id ?? null;
     let bucket = this.parts.get(key);
-    if (!bucket) this.parts.set(key, (bucket = { p: [], n: [], c: [], t: [], u: [] }));
+    if (!bucket) {
+      bucket = { p: [], n: [], c: [], t: [], u: [] };
+      this.parts.set(key, bucket);
+    }
     const s = this.mat?.scale ?? 1;
     for (let i = 0; i < index.length; i += 3) {
       const tri = [index[i] * 3, index[i + 1] * 3, index[i + 2] * 3];
@@ -1019,7 +1036,9 @@ export class Builder {
       const fx = Math.abs(e1[1] * e2[2] - e1[2] * e2[1]);
       const fy = Math.abs(e1[2] * e2[0] - e1[0] * e2[2]);
       const fz = Math.abs(e1[0] * e2[1] - e1[1] * e2[0]);
-      const axis = fx >= fy && fx >= fz ? 0 : fy >= fz ? 1 : 2;
+      let axis: Axis = 2;
+      if (fx >= fy && fx >= fz) axis = 0;
+      else if (fy >= fz) axis = 1;
       // the face's own normal, unsigned above for the axis pick and signed here
       const gx = e1[1] * e2[2] - e1[2] * e2[1];
       const gy = e1[2] * e2[0] - e1[0] * e2[2];
@@ -1116,7 +1135,7 @@ export class Builder {
   bend(path: readonly V3[], r: number, segments: number, paint: readonly number[], unlit = 0): void {
     const pts: V3[] = [];
     for (const q of path) {
-      const last = pts[pts.length - 1];
+      const last = pts.at(-1);
       if (!last || Math.hypot(q[0] - last[0], q[1] - last[1], q[2] - last[2]) > 1e-6) pts.push([q[0], q[1], q[2]]);
     }
     if (pts.length < 2) return;
@@ -1128,7 +1147,7 @@ export class Builder {
     // two chords meeting there, so a station is a mitre and not a butt joint
     const tan: V3[] = pts.map((_, i) => {
       if (i === 0) return seg[0];
-      if (i === pts.length - 1) return seg[seg.length - 1];
+      if (i === pts.length - 1) return seg.at(-1)!;
       return unit([seg[i - 1][0] + seg[i][0], seg[i - 1][1] + seg[i][1], seg[i - 1][2] + seg[i][2]]);
     });
     let u = unit(cross(tan[0], Math.abs(tan[0][2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]));
@@ -1224,8 +1243,8 @@ export class Builder {
   }
 
   /** a flat disc in a plane normal to one axis (`axis` 0, 1 or 2), facing `dir` */
-  disc(c: V3, axis: 0 | 1 | 2, dir: 1 | -1, r: number, segments: number, paint: readonly number[], unlit = 0): void {
-    const a1 = ((axis + 1) % 3) as 0 | 1 | 2, a2 = ((axis + 2) % 3) as 0 | 1 | 2;
+  disc(c: V3, axis: Axis, dir: 1 | -1, r: number, segments: number, paint: readonly number[], unlit = 0): void {
+    const a1 = ((axis + 1) % 3) as Axis, a2 = ((axis + 2) % 3) as Axis;
     const at = (k: number): V3 => {
       const th = (2 * Math.PI * k) / segments, p: V3 = [c[0], c[1], c[2]];
       p[a1] += r * Math.cos(th); p[a2] += r * Math.sin(th);
@@ -1267,13 +1286,10 @@ export class Builder {
     for (let i = 0; i + 1 < rings.length; i++) {
       const colour = typeof paint === "function" ? paint(i) : paint;
       for (let k = 0; k < segments; k++) {
-        b: {
-          const a = at(i, k), bq = at(i, k + 1), c = at(i + 1, k + 1), d = at(i + 1, k);
-          // the outward normal: away from the axis, which `towards` settles
-          const mx = (a[0] + c[0]) / 2 - cx, my = (a[1] + c[1]) / 2 - cy;
-          this.quad(a, bq, c, d, colour, [mx, my, 0], unlit);
-          break b;
-        }
+        const a = at(i, k), bq = at(i, k + 1), c = at(i + 1, k + 1), d = at(i + 1, k);
+        // the outward normal: away from the axis, which `towards` settles
+        const mx = (a[0] + c[0]) / 2 - cx, my = (a[1] + c[1]) / 2 - cy;
+        this.quad(a, bq, c, d, colour, [mx, my, 0], unlit);
       }
     }
   }
@@ -1505,7 +1521,9 @@ export function buildRoom(): Part[] {
       const xa = xs[i], xb = xs[i + 1];
       const doorway = y === y1 && xa >= DOOR.x0 && xb <= DOOR.x1;
       const flue = y === y0 && xa >= CHIMNEY.x0 && xb <= CHIMNEY.x1;
-      const base = doorway ? DOOR.head : flue ? CHIMNEY.head : floor;
+      let base: number = floor;
+      if (doorway) base = DOOR.head;
+      else if (flue) base = CHIMNEY.head;
       b.quad([xa, y, base], [xb, y, base], [xb, y, ceilingAt(xb, y)], [xa, y, ceilingAt(xa, y)],
         PAINT.plaster, towards as unknown as V3);
     }

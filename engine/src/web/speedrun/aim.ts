@@ -91,11 +91,11 @@ export function aimAtThing(a: Aim, name: string): { x: number; y: number } | nul
     const spot = aimAtHotspot(a, want);
     if (spot) return spot;
   }
-  const kinds = ["actor", "prop", "button", "painting"];
+  const kinds = new Set(["actor", "prop", "button", "painting"]);
   for (let y = 2; y < a.height; y += AIM_STEP) {
     for (let x = 2; x < a.width; x += AIM_STEP) {
       const hit = a.hitTest(x, y);
-      if (hit.name?.toLowerCase() === want && kinds.includes(hit.type)) return { x, y };
+      if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
       if (!a.inFlat && a.propUnder(x, y)?.toLowerCase() === want) return { x, y };
     }
   }

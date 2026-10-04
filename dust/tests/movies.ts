@@ -86,14 +86,10 @@ const movies = (): string[] =>
 const read = (name: string) =>
   readMovFileV1(new Uint8Array(readFileSync(join(MOVIE_DIR, name))));
 
-const skip = (): boolean => {
-  if (movies().length) return false;
-  console.warn(`no ${MOVIE_DIR} — skipping (needs the Dust rip)`);
-  return true;
-};
+const noRip = movies().length === 0;
+if (noRip) console.warn(`no ${MOVIE_DIR} — skipping (needs the Dust rip)`);
 
-test("every sound a frame or a click references is an audio container", () => {
-  if (skip()) return;
+test.skipIf(noRip)("every sound a frame or a click references is an audio container", () => {
   let frameRefs = 0;
   let clickRefs = 0;
   for (const name of movies()) {
@@ -141,8 +137,7 @@ test("every sound a frame or a click references is an audio container", () => {
   expect(clickRefs).toBe(224);
 });
 
-test("the frame table is the engine's: gotos advance, and nothing is unaccounted", () => {
-  if (skip()) return;
+test.skipIf(noRip)("the frame table is the engine's: gotos advance, and nothing is unaccounted", () => {
   for (const name of movies()) {
     const m = read(name);
     expect.soft(m.unaccounted, `${name}: unaccounted pictures`).toBe(0);
@@ -164,11 +159,10 @@ test("the frame table is the engine's: gotos advance, and nothing is unaccounted
   }
 });
 
-test("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
-  if (skip()) return;
+test.skipIf(noRip)("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
   const v1 = read("ARMOPEN.MOV");
   const sg = v1.segments[0];
-  expect(sg.frames.length).toBe(37);
+  expect(sg.frames).toHaveLength(37);
   // Three click-waits, and which frames they are is the whole of #324: a frame
   // waits because it OWNS hotspots (+0x00) and does not carry the play-through
   // bit, not because it is frame 0. Frame 1 is a lead-in that owns none and
@@ -203,7 +197,7 @@ test("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
   // "steerable mid-swing" the format doc describes (goto 0-based 20 = frame 21).
   // On the old reading nothing stopped there and those three boxes were dead.
   const away = sg.frames[15].regions.filter((r) => r.target === 20);
-  expect(away.length).toBe(3);
+  expect(away).toHaveLength(3);
 
   const mov = movFileFromV1(v1);
   // v4's own type 3 — exit + chain, NO call stack: Diary.mov ends and the
@@ -217,16 +211,15 @@ test("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no return", () => {
   // a frame that owns hotspots stops for them; one that owns none carries no
   // regions to stop for in the first place (frameWaits tests both)
   expect(mov.frames[1].playsThroughRegions).toBe(false);
-  expect(mov.frames[1].regions.length).toBe(2);
-  expect(mov.frames[3].regions.length).toBe(0);
+  expect(mov.frames[1].regions).toHaveLength(2);
+  expect(mov.frames[3].regions).toHaveLength(0);
   // the fired sounds resolve through the segment's own sound map
   expect(mov.frames[2].sound).toBe("1");
   expect(mov.sounds.get("1")).toBe(1);
   expect(mov.audioChunks).toEqual([]);
 });
 
-test("BELL.MOV: three bells, three dings, a backward idle loop", () => {
-  if (skip()) return;
+test.skipIf(noRip)("BELL.MOV: three bells, three dings, a backward idle loop", () => {
   const v1 = read("BELL.MOV");
   const sg = v1.segments[0];
   // no frame fires a sound; each bell's box carries its own ding and its own
@@ -258,8 +251,7 @@ test("BELL.MOV: three bells, three dings, a backward idle loop", () => {
   ]);
 });
 
-test("action frames are 0-based indices in the header", () => {
-  if (skip()) return;
+test.skipIf(noRip)("action frames are 0-based indices in the header", () => {
   /*
    * The header names the frame `actionframe (n)` reports on, and the BASE of
    * that number was read wrong here for a while — inferred from DIARY.MOV, on
@@ -295,8 +287,7 @@ test("action frames are 0-based indices in the header", () => {
   expect(movFileFromV1(read("DIARY.MOV")).actionFrame1).toBe("2");
 });
 
-test("a frame waits because it OWNS hotspots, not because it is frame 0 (#324)", () => {
-  if (skip()) return;
+test.skipIf(noRip)("a frame waits because it OWNS hotspots, not because it is frame 0 (#324)", () => {
   /*
    * Reported twice from play, on two different films: click the envelopes in
    * the Mayor's study and "the letter appears for a frame, then runs through
@@ -351,8 +342,7 @@ test("a frame waits because it OWNS hotspots, not because it is frame 0 (#324)",
   expect(lett.frames[1].hotspotOffset + 3 * 0x10).toBe(lett.frames[2].hotspotOffset);
 });
 
-test("a movie chains by name on its way out", () => {
-  if (skip()) return;
+test.skipIf(noRip)("a movie chains by name on its way out", () => {
   // the linear chains: intro2 -> intro3, towerup -> towertop -> towerdn,
   // and all four endings -> finalend; plus the armoire's diary
   const chains = new Map<string, string>();
@@ -369,8 +359,7 @@ test("a movie chains by name on its way out", () => {
   expect(chains.size).toBe(8);
 });
 
-test("FINALEND.MOV: unreferenced chunks are the bed — the credits music plays", () => {
-  if (skip()) return;
+test.skipIf(noRip)("FINALEND.MOV: unreferenced chunks are the bed — the credits music plays", () => {
   const v1 = read("FINALEND.MOV");
   const sg = v1.segments[0];
   expect(sg.frames.every((f) => f.sound === 0)).toBe(true);
@@ -378,8 +367,7 @@ test("FINALEND.MOV: unreferenced chunks are the bed — the credits music plays"
   expect(movFileFromV1(v1).audioChunks).toEqual([1, 2, 3, 4]);
 });
 
-test("index 255 is transparent: a wait frame HOLDS the picture before it", () => {
-  if (skip()) return;
+test.skipIf(noRip)("index 255 is transparent: a wait frame HOLDS the picture before it", () => {
   // ARMOPEN frames 17 and 20 decode as SOLID index 255 — the frames that
   // showed "completely white", then (one wrong fix later) completely black.
   // DF.EXE's blit keys palette-index-0 pixels out through a monochrome mask and
@@ -420,8 +408,7 @@ test("index 255 is transparent: a wait frame HOLDS the picture before it", () =>
   ]);
 });
 
-test("segment audio banks decode and the up-front count matches the header", () => {
-  if (skip()) return;
+test.skipIf(noRip)("segment audio banks decode and the up-front count matches the header", () => {
   // header +0x1a counts the chunks that sit right after the header; every one
   // must decode as audio (the range positive sound refs point into)
   for (const name of movies()) {
@@ -461,8 +448,7 @@ test("segment audio banks decode and the up-front count matches the header", () 
  * no error. The decoder was never at fault; 16 consecutive intro frames decode to
  * 16 distinct pictures, which is asserted elsewhere in this file.
  */
-test("every Dust film self-paces: a v1 straight run is a forward goto", () => {
-  if (skip()) return;
+test.skipIf(noRip)("every Dust film self-paces: a v1 straight run is a forward goto", () => {
   const names = movies();
   expect(names.length).toBeGreaterThan(100);
 
@@ -493,18 +479,16 @@ test("every Dust film self-paces: a v1 straight run is a forward goto", () => {
   ).toEqual([]);
 });
 
-test("the intro runs at its own authored rate, not one we invented", () => {
-  if (skip()) return;
+test.skipIf(noRip)("the intro runs at its own authored rate, not one we invented", () => {
   const mov = movFileFromV1(read("INTRO.MOV"));
   const seg = mov.segments[0];
 
   expect(stepsForward(seg)).toBe(true);
   // named "1".."136", each handing on to its successor: 135 forward, none back
-  expect(seg.frames.length).toBe(136);
+  expect(seg.frames).toHaveLength(136);
   expect(
-    seg.frames.filter((f, i) => f.type === 2 && Number(f.target) - 1 > i)
-      .length,
-  ).toBe(135);
+    seg.frames.filter((f, i) => f.type === 2 && Number(f.target) - 1 > i),
+  ).toHaveLength(135);
 
   // And the hold is the FILM's own, not a rate derived from its audio:
   // max(this frame's holdTicks, the movie's floor) x one tick. Frame 0 of the
@@ -600,16 +584,15 @@ const runtimeMs = (mov: ReturnType<typeof movFileFromV1>, segIdx = 0): number =>
   return now;
 };
 
-test("DOG1.MOV: the dog growls twice, because the film waits for each growl", () => {
-  if (skip()) return;
+test.skipIf(noRip)("DOG1.MOV: the dog growls twice, because the film waits for each growl", () => {
   const v1 = read("DOG1.MOV");
   const mov = movFileFromV1(v1);
   const seg = mov.segments[0];
   const raw = v1.segments[0];
 
   // six frames, one growl chunk, and the growl fired TWICE — once per snarl
-  expect(seg.frames.length).toBe(6);
-  expect(raw.audioChunks.length).toBe(1);
+  expect(seg.frames).toHaveLength(6);
+  expect(raw.audioChunks).toHaveLength(1);
   expect(seg.frames.map((f) => f.sound)).toEqual(["", "1", "", "1", "", ""]);
   const growl = decodeAudioContainer(mov.file.containers[1].data);
   const growlMs = (growl.samples.length / growl.sampleRate) * 1000;
@@ -642,8 +625,7 @@ test("DOG1.MOV: the dog growls twice, because the film waits for each growl", ()
   expect(runtimeMs(mov)).toBeGreaterThan(2_300);
 });
 
-test("+0x1a bit 0 is what times 50 of the disc's films, the four endings among them", () => {
-  if (skip()) return;
+test.skipIf(noRip)("+0x1a bit 0 is what times 50 of the disc's films, the four endings among them", () => {
 
   // The flag is real and it is rare: 152 frames of 6717, and never bit 4 —
   // the step-advance the earlier reading named is not on this disc at all.
@@ -702,8 +684,7 @@ test("+0x1a bit 0 is what times 50 of the disc's films, the four endings among t
   expect(runtimeMs(mayor)).toBeGreaterThan(55_000);
 });
 
-test("a v1 keyframe's 0xff renders white, not black", () => {
-  if (skip()) return;
+test.skipIf(noRip)("a v1 keyframe's 0xff renders white, not black", () => {
 
   for (const [name, atLeast] of [
     ["INTRO3.MOV", 0.05],
@@ -760,14 +741,13 @@ test("a v1 keyframe's 0xff renders white, not black", () => {
  * Checked here rather than in the editor that now plays these films, because this
  * is where the rip is and because a rule is worth pinning once.
  */
-test("a v1 bed plays once, and is not cut to the picture", () => {
-  if (skip()) return;
+test.skipIf(noRip)("a v1 bed plays once, and is not cut to the picture", () => {
   const mov = movFileFromV1(read("D1ND2M.MOV"));
   const seg = mov.segments[0];
   const audio = segmentAudio(seg);
   expect(audio, "D1ND2M.MOV's first segment has a bed").toBeTruthy();
   expect(seg.audioLoops).toBe(false);
-  expect(audio!.unique.length).toBe(2);
+  expect(audio!.unique).toHaveLength(2);
   expect(audio!.audioSec).toBeCloseTo(12.31, 1);
 
   const interval = segmentInterval(seg, seg.frames.length, audio!.audioSec, 0);

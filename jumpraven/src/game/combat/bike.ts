@@ -51,8 +51,9 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { BikeApi } from "./api";
-import { aimAt, downTheLine, inBlock, meets, tooFar, turnToward, type EnemyShot } from "./lib";
-import { KIND, abs, copyObj, cosMul, dist, inside, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
+import { countUp, drawPyro, findAt, nthUp, pickNearest, shiftFleet, tumble, widen } from "./fleet";
+import { aimAt, downTheLine, meets, tooFar, turnToward, type EnemyShot } from "./lib";
+import { KIND, abs, copyObj, cosMul, dist, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
 
 /** `pyro`'s pictures the bikes draw (0x4379d0 + 4·index; src/game/combat/pyro.ts PIC) */
 const SHELL = 0x08;
@@ -122,9 +123,6 @@ interface BikeShot extends EnemyShot {
   o: Obj;
 }
 
-/** 0x402d39's copy of a record's object */
-const objOf = (r: Obj): Obj => ({ angle: r.angle, x: r.x, y: r.y, z: r.z, cellX: r.cellX, cellY: r.cellY });
-
 export class Bike implements BikeApi {
   /** 0x433b7c: BIKE's pictures (0x401684) */
   private readonly pics: (FrameV0 | undefined)[];
@@ -143,11 +141,6 @@ export class Bike implements BikeApi {
   /** `[0x43cf82]` */
   private get n(): number {
     return this.w.params.x43cf82;
-  }
-
-  /** `[0x433b78]`: `pyro`'s pictures (0x41928d) */
-  private pyro(i: number): FrameV0 | undefined {
-    return this.w.pyro.pics[i];
   }
 
   /** 0x4016c5: every bike to come in 200 … 400 frames, the first wait after 100; the shots off (0x4027a2) */
@@ -191,7 +184,6 @@ export class Bike implements BikeApi {
           angle = 0x80;
           x = w.poseX + 1;
         } else {
-          angle = 0;
           x = w.poseX - 1;
         }
         while (w.solid(x, y)) y += dy;
@@ -298,12 +290,7 @@ export class Bike implements BikeApi {
 
   /** 0x401c50: the blast where it rammed the craft */
   private blast(o: Obj): void {
-    const w = this.w;
-    const p = w.project(o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    w.sprite(this.pyro(BLAST + i), p.y, p.x, p.depth - 1);
+    drawPyro(this.w, o, BLAST, 1);
   }
 
   /** 0x401ca4: a bike's move by its state (0x431058) */
@@ -356,20 +343,52 @@ export class Bike implements BikeApi {
         // 0x4310b0: turn about the corner on the side it turns to
         switch (r.angle) {
           case 0:
-            if (r.goal === 0xc0) (r.state = 3), (r.goalX -= 0x80), (r.goalY -= 0x80);
-            if (r.goal === 0x40) (r.state = 4), (r.goalX -= 0x80), (r.goalY += 0x80);
+            if (r.goal === 0xc0) {
+              r.state = 3;
+              r.goalX -= 0x80;
+              r.goalY -= 0x80;
+            }
+            if (r.goal === 0x40) {
+              r.state = 4;
+              r.goalX -= 0x80;
+              r.goalY += 0x80;
+            }
             break;
           case 0x40:
-            if (r.goal === 0) (r.state = 3), (r.goalX += 0x80), (r.goalY -= 0x80);
-            if (r.goal === 0x80) (r.state = 4), (r.goalX -= 0x80), (r.goalY -= 0x80);
+            if (r.goal === 0) {
+              r.state = 3;
+              r.goalX += 0x80;
+              r.goalY -= 0x80;
+            }
+            if (r.goal === 0x80) {
+              r.state = 4;
+              r.goalX -= 0x80;
+              r.goalY -= 0x80;
+            }
             break;
           case 0x80:
-            if (r.goal === 0xc0) (r.state = 4), (r.goalX += 0x80), (r.goalY -= 0x80);
-            if (r.goal === 0x40) (r.state = 3), (r.goalX += 0x80), (r.goalY += 0x80);
+            if (r.goal === 0xc0) {
+              r.state = 4;
+              r.goalX += 0x80;
+              r.goalY -= 0x80;
+            }
+            if (r.goal === 0x40) {
+              r.state = 3;
+              r.goalX += 0x80;
+              r.goalY += 0x80;
+            }
             break;
           case 0xc0:
-            if (r.goal === 0x80) (r.state = 3), (r.goalX -= 0x80), (r.goalY += 0x80);
-            if (r.goal === 0) (r.state = 4), (r.goalX += 0x80), (r.goalY += 0x80);
+            if (r.goal === 0x80) {
+              r.state = 3;
+              r.goalX -= 0x80;
+              r.goalY += 0x80;
+            }
+            if (r.goal === 0) {
+              r.state = 4;
+              r.goalX += 0x80;
+              r.goalY += 0x80;
+            }
             break;
         }
         r.radius = dist(r.goalX - r.x, r.goalY - r.y, 0);
@@ -422,32 +441,7 @@ export class Bike implements BikeApi {
         r.angle = (r.angle - 0x20) & 0xff;
         const was = copyObj(r);
         r.vz--;
-        r.x += r.vx;
-        r.y += r.vy;
-        r.z += r.vz;
-        r.cellX = r.x >> 8;
-        r.cellY = r.y >> 8;
-        let met = false;
-        if (r.z <= 0) {
-          r.z = 0;
-          r.vz = -Math.trunc(r.vz / 4);
-          met = true;
-        }
-        if (inBlock(w, r)) {
-          if (r.cellX !== was.cellX) {
-            r.x = ((r.cellX + was.cellX) << 7) + 0x80;
-            r.cellX = r.x >> 8;
-            r.vx = -Math.trunc(r.vx / 2);
-            met = true;
-          }
-          if (r.cellY !== was.cellY) {
-            r.y = ((r.cellY + was.cellY) << 7) + 0x80;
-            r.cellY = r.y >> 8;
-            r.vy = -Math.trunc(r.vy / 2);
-            met = true;
-          }
-        }
-        if (met) {
+        if (tumble(w, r, was)) {
           w.pyro.burst(r, r.vx, r.vy, r.vz);
           if (r.pod) w.pyro.drop(r, r.vx, r.vy, r.vz);
           this.gone(r);
@@ -595,23 +589,15 @@ export class Bike implements BikeApi {
 
   /** 0x40299f: a shot's picture — a shell, a chip off a wall, a hit */
   private drawShot(s: BikeShot): void {
-    const w = this.w;
-    const p = w.project(s.o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    const base = s.met === 2 ? HIT : s.met ? CHIP : SHELL;
-    w.sprite(this.pyro(base + i), p.y, p.x, p.depth);
+    let base = SHELL;
+    if (s.met === 2) base = HIT;
+    else if (s.met) base = CHIP;
+    drawPyro(this.w, s.o, base);
   }
 
   /** 0x402a55: the flash where a shot leaves */
   private muzzle(s: BikeShot): void {
-    const w = this.w;
-    const p = w.project(s.o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    w.sprite(this.pyro(CHIP + i), p.y, p.x, p.depth);
+    drawPyro(this.w, s.o, CHIP);
   }
 
   /** 0x402aaa: a shot from `a` to `b` hits the first bike it meets */
@@ -655,73 +641,26 @@ export class Bike implements BikeApi {
 
   /** 0x402c7e: the world moved (dx, dy) — every bike up and every shot */
   shift(dx: number, dy: number): void {
-    const cx = dx >> 8;
-    const cy = dy >> 8;
-    for (const r of this.recs) {
-      if (r.self < 0) continue;
-      r.x += dx;
-      r.y += dy;
-      r.cellX += cx;
-      r.cellY += cy;
-      r.goalX += dx;
-      r.goalY += dy;
-    }
-    for (const s of this.shots) {
-      if (!s.on) continue;
-      s.o.x += dx;
-      s.o.y += dy;
-      s.o.cellX += cx;
-      s.o.cellY += cy;
-    }
+    shiftFleet(this.recs, this.shots, dx, dy);
   }
 
   /** 0x402d0d */
   count(): number {
-    return this.recs.filter((r) => r.self >= 0).length;
+    return countUp(this.recs);
   }
 
   /** 0x402d39: the k-th bike up, KIND.bike (0: it answers the eax it zeroed) */
   nth(k: number): { obj: Obj; kind: number; flag: number; dying: number } {
-    for (const r of this.recs) {
-      if (r.self >= 0) k--;
-      if (k < 0) return { obj: objOf(r), kind: KIND.bike, flag: r.pod, dying: r.state === DYING ? 1 : 0 };
-    }
-    throw new Error("0x402d39: no such bike (0x41e28a 0x6b, 4)");
+    return nthUp(this.recs, k, KIND.bike, (r) => r.state === DYING, "0x402d39: no such bike (0x41e28a 0x6b, 4)");
   }
 
   /** 0x402db6: the nearest bike drawn last frame (0x140 away or more) whose rect holds the point */
   pick(pt: Pt): Obj | null {
-    let best: BikeRec | null = null;
-    let near = 0x7fff;
-    for (const r of this.recs) {
-      if (r.shown && r.depth < near && inside(pt.y, pt.x, r.rect)) {
-        best = r;
-        near = r.depth;
-      }
-    }
-    return best;
+    return pickNearest(this.recs, pt);
   }
 
   /** 0x402e2f: the bike at exactly `o`'s point, up or not */
   find(o: Obj): Obj {
-    const r = this.recs.find((r) => r.x === o.x && r.y === o.y && r.z === o.z);
-    if (!r) throw new Error("0x402e2f: no bike there (0x41e28a 0x6b, 5)");
-    return r;
+    return findAt(this.recs, o, "0x402e2f: no bike there (0x41e28a 0x6b, 5)");
   }
-}
-
-/** 0x401be4 / 0x4075b8: a rect narrower or shorter than 0x14 widened to 0x14 about its middle (the aim's) */
-export function widen(r: Rect): Rect {
-  let [top, left, bottom, right] = r;
-  const wd = right - left;
-  if (wd < 0x14) {
-    left += (wd >> 1) - 0xa;
-    right = left + 0x14;
-  }
-  const ht = bottom - top;
-  if (ht < 0x14) {
-    top += (ht >> 1) - 0xa;
-    bottom = top + 0x14;
-  }
-  return [top, left, bottom, right];
 }

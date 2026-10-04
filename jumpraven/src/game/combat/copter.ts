@@ -59,9 +59,9 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { CopterApi } from "./api";
-import { widen } from "./bike";
-import { aimAt, callShell, downTheLine, inBlock, lookAlong, meets, tooFar, turnToward, type EnemyShot } from "./lib";
-import { KIND, abs, copyObj, cosMul, inside, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
+import { cellToCell, countUp, drawPyro, findAt, nthUp, occupiedBy, pickNearest, shiftFleet, shiftTo, tumble, widen } from "./fleet";
+import { aimAt, callShell, meets, tooFar, type EnemyShot } from "./lib";
+import { KIND, copyObj, cosMul, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
 
 /** `pyro`'s pictures the copters draw (0x4379d0 + 4·index; src/game/combat/pyro.ts PIC) */
 const SHELL = 0x08;
@@ -146,9 +146,6 @@ interface CopterShot extends EnemyShot {
   o: Obj;
 }
 
-/** 0x408841's copy of a record's object */
-const objOf = (r: Obj): Obj => ({ angle: r.angle, x: r.x, y: r.y, z: r.z, cellX: r.cellX, cellY: r.cellY });
-
 export class Copter implements CopterApi {
   /** 0x434f0c: COPT's pictures (0x406fc4) */
   private readonly pics: (FrameV0 | undefined)[];
@@ -169,11 +166,6 @@ export class Copter implements CopterApi {
   /** `[0x43cfa6]` */
   private get n(): number {
     return this.w.params.x43cfa6;
-  }
-
-  /** `[0x434f08]`: `pyro`'s pictures (0x41928d) */
-  private pyro(i: number): FrameV0 | undefined {
-    return this.w.pyro.pics[i];
   }
 
   /** 0x407005: every copter to come in 600 … 1200 frames, the first wait after 300; the shots off (0x407c97) */
@@ -224,7 +216,6 @@ export class Copter implements CopterApi {
           angle = 0x80;
           for (x = w.poseX + 1; this.blocked(x, y, r.self); x++);
         } else {
-          angle = 0;
           for (x = w.poseX - 1; this.blocked(x, y, r.self); x--);
         }
         break;
@@ -305,166 +296,18 @@ export class Copter implements CopterApi {
 
   /** 0x407624: the blast where it rammed the craft */
   private blast(o: Obj): void {
-    const w = this.w;
-    const p = w.project(o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    w.sprite(this.pyro(BLAST + i), p.y, p.x, p.depth - 1);
+    drawPyro(this.w, o, BLAST, 1);
   }
 
   /** 0x407678: a copter's move by its state (0x43125c) */
   private move(r: CopterRec): void {
     const w = this.w;
     switch (r.state) {
-      case 0: {
-        const dx = r.cellX - w.cam.cellX;
-        const dy = r.cellY - w.cam.cellY;
-        const face = lookAlong(w, r);
-        if (face !== null) r.goal = face;
-        if (face !== null && abs(dx) <= 1 && abs(dy) <= 1) {
-          r.state = 4;
-          return;
-        }
-        // the first way and the second, each a cell and a heading
-        let x1 = r.cellX;
-        let y1 = r.cellY;
-        let x2 = r.cellX;
-        let y2 = r.cellY;
-        let h1: number;
-        let h2: number;
-        if (abs(dx) > abs(dy)) {
-          if (dx > 0) (h1 = 0x80), x1--;
-          else (h1 = 0), x1++;
-          if (dy > 0) (h2 = 0xc0), y2--;
-          else (h2 = 0x40), y2++;
-        } else {
-          if (dy > 0) (h1 = 0xc0), y1--;
-          else (h1 = 0x40), y1++;
-          if (dx > 0) (h2 = 0x80), x2--;
-          else (h2 = 0), x2++;
-        }
-        if (abs(dx) === abs(dy) && w.roll(2) === 1) {
-          [x1, x2] = [x2, x1];
-          [y1, y2] = [y2, y1];
-          [h1, h2] = [h2, h1];
-        }
-        if (!this.blocked(x1, y1, r.self)) {
-          r.toX = x1;
-          r.toY = y1;
-          r.goal = h1;
-          r.state = 1;
-        } else if (!this.blocked(x2, y2, r.self)) {
-          r.toX = x2;
-          r.toY = y2;
-          r.goal = h2;
-          r.state = 1;
-        }
-        return;
-      }
-      case 1:
-        if (r.angle !== r.goal) {
-          r.angle = turnToward(r.angle, r.goal, r.turn, 0x100);
-          return;
-        }
-        r.goalX = (r.cellX << 8) + 0x80;
-        r.goalY = (r.cellY << 8) + 0x80;
-        // 0x431278: on to the next cell's centre
-        switch (r.angle) {
-          case 0:
-            r.goalX += 0x100;
-            r.state = 2;
-            r.way = 1;
-            break;
-          case 0x40:
-            r.goalY += 0x100;
-            r.state = 3;
-            r.way = 1;
-            break;
-          case 0x80:
-            r.goalX -= 0x100;
-            r.state = 2;
-            r.way = 0;
-            break;
-          case 0xc0:
-            r.goalY -= 0x100;
-            r.state = 3;
-            r.way = 0;
-            break;
-        }
-        return;
-      case 2: {
-        const ty = r.goalY;
-        r.y += w.roll(5) - 3;
-        if (r.y < ty - 0x2a) r.y = ty - 0x2a;
-        if (r.y > ty + 0x2a) r.y = ty + 0x2a;
-        if (r.way) {
-          r.x += r.speed;
-          if (r.x >= r.goalX) (r.x = r.goalX), (r.state = 0);
-        } else {
-          r.x -= r.speed;
-          if (r.x <= r.goalX) (r.x = r.goalX), (r.state = 0);
-        }
-        r.cellX = r.x >> 8;
-        if (downTheLine(w, r)) this.fire(r);
-        return;
-      }
-      case 3: {
-        const tx = r.goalX;
-        r.x += w.roll(5) - 3;
-        if (r.x < tx - 0x2a) r.x = tx - 0x2a;
-        if (r.x > tx + 0x2a) r.x = tx + 0x2a;
-        if (r.way) {
-          r.y += r.speed;
-          if (r.y >= r.goalY) (r.y = r.goalY), (r.state = 0);
-        } else {
-          r.y -= r.speed;
-          if (r.y <= r.goalY) (r.y = r.goalY), (r.state = 0);
-        }
-        r.cellY = r.y >> 8;
-        if (downTheLine(w, r)) this.fire(r);
-        return;
-      }
-      case 4:
-        if (r.angle === r.goal) r.state = 5;
-        else r.angle = turnToward(r.angle, r.goal, r.turn, 0x100);
-        return;
-      case 5: {
-        const dx = r.cellX - w.cam.cellX;
-        const dy = r.cellY - w.cam.cellY;
-        if (downTheLine(w, r) && abs(dx) <= 2 && abs(dy) <= 2) this.fire(r);
-        else r.state = 0;
-        return;
-      }
       case DYING: {
         r.angle = (r.angle - (r.spins ? 0x10 : 4)) & 0xff;
         const was = copyObj(r);
         if (r.falls) r.vz--;
-        r.x += r.vx;
-        r.y += r.vy;
-        r.z += r.vz;
-        r.cellX = r.x >> 8;
-        r.cellY = r.y >> 8;
-        let met = false;
-        if (r.z <= 0) {
-          r.z = 0;
-          r.vz = -Math.trunc(r.vz / 4);
-          met = true;
-        }
-        if (inBlock(w, r)) {
-          if (r.cellX !== was.cellX) {
-            r.x = ((r.cellX + was.cellX) << 7) + 0x80;
-            r.cellX = r.x >> 8;
-            r.vx = -Math.trunc(r.vx / 2);
-            met = true;
-          }
-          if (r.cellY !== was.cellY) {
-            r.y = ((r.cellY + was.cellY) << 7) + 0x80;
-            r.cellY = r.y >> 8;
-            r.vy = -Math.trunc(r.vy / 2);
-            met = true;
-          }
-        }
+        let met = tumble(w, r, was);
         if (--r.way < 0) met = true;
         if (met) {
           w.pyro.burst(r, r.vx, r.vy, r.vz);
@@ -473,6 +316,9 @@ export class Copter implements CopterApi {
         }
         return;
       }
+      default:
+        // 0 … 5: cell centre to cell centre, as the tank's (src/game/combat/fleet.ts)
+        return cellToCell(w, r, (x, y, self) => this.blocked(x, y, self), (r) => this.fire(r));
     }
   }
 
@@ -488,7 +334,8 @@ export class Copter implements CopterApi {
     const s = this.shots.find((s) => !s.on);
     if (!s) return;
     const missile = w.roll(4) === 1;
-    const kind = !missile ? BULLET : w.roll(4) === 1 ? HOMER : ROCKET;
+    let kind = BULLET;
+    if (missile) kind = w.roll(4) === 1 ? HOMER : ROCKET;
     s.on = 1;
     s.kind = kind;
     s.met = 0;
@@ -609,34 +456,23 @@ export class Copter implements CopterApi {
 
   /** 0x408333: a bullet's picture — a shell, a chip off a wall, a hit */
   private drawBullet(s: CopterShot): void {
-    const w = this.w;
-    const p = w.project(s.o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    const base = s.met === 2 ? HIT : s.met ? CHIP : SHELL;
-    w.sprite(this.pyro(base + i), p.y, p.x, p.depth);
+    let base = SHELL;
+    if (s.met === 2) base = HIT;
+    else if (s.met) base = CHIP;
+    drawPyro(this.w, s.o, base);
   }
 
   /** 0x4083e9: a missile's picture, or its burst's two frames */
   private drawMissile(s: CopterShot): void {
-    const w = this.w;
-    const p = w.project(s.o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    const base = s.met === 1 ? BLAST : s.met === 2 ? BLAST2 : s.kind === HOMER ? HOMING : MISSILE;
-    w.sprite(this.pyro(base + i), p.y, p.x, p.depth);
+    let base = s.kind === HOMER ? HOMING : MISSILE;
+    if (s.met === 1) base = BLAST;
+    else if (s.met === 2) base = BLAST2;
+    drawPyro(this.w, s.o, base);
   }
 
   /** 0x4084d4: the flash where a shot leaves */
   private muzzle(s: CopterShot): void {
-    const w = this.w;
-    const p = w.project(s.o);
-    if (p.depth < 0x40) return;
-    let i = (p.depth - 0x40) >> 7;
-    if (i >= 0x10) i = 0xf;
-    w.sprite(this.pyro(CHIP + i), p.y, p.x, p.depth);
+    drawPyro(this.w, s.o, CHIP);
   }
 
   /** 0x408529: a shot from `a` to `b` hits the first copter it meets */
@@ -687,60 +523,27 @@ export class Copter implements CopterApi {
 
   /** 0x408779: the world moved (dx, dy) — every copter up and every shot */
   shift(dx: number, dy: number): void {
-    const cx = dx >> 8;
-    const cy = dy >> 8;
-    for (const r of this.recs) {
-      if (r.self < 0) continue;
-      r.x += dx;
-      r.y += dy;
-      r.cellX += cx;
-      r.cellY += cy;
-      r.goalX += dx;
-      r.goalY += dy;
-      r.toX += cx;
-      r.toY += cy;
-    }
-    for (const s of this.shots) {
-      if (!s.on) continue;
-      s.o.x += dx;
-      s.o.y += dy;
-      s.o.cellX += cx;
-      s.o.cellY += cy;
-    }
+    shiftFleet(this.recs, this.shots, dx, dy, shiftTo);
   }
 
   /** 0x408815 */
   count(): number {
-    return this.recs.filter((r) => r.self >= 0).length;
+    return countUp(this.recs);
   }
 
   /** 0x408841: the k-th copter up, KIND.copter */
   nth(k: number): { obj: Obj; kind: number; flag: number; dying: number } {
-    for (const r of this.recs) {
-      if (r.self >= 0) k--;
-      if (k < 0) return { obj: objOf(r), kind: KIND.copter, flag: r.pod, dying: r.state === DYING ? 1 : 0 };
-    }
-    throw new Error("0x408841: no such copter (0x41e28a 0x6b, 0x1d)");
+    return nthUp(this.recs, k, KIND.copter, (r) => r.state === DYING, "0x408841: no such copter (0x41e28a 0x6b, 0x1d)");
   }
 
   /** 0x4088c0: the nearest copter drawn last frame (0x140 away or more) whose rect holds the point */
   pick(pt: Pt): Obj | null {
-    let best: CopterRec | null = null;
-    let near = 0x7fff;
-    for (const r of this.recs) {
-      if (r.shown && r.depth < near && inside(pt.y, pt.x, r.rect)) {
-        best = r;
-        near = r.depth;
-      }
-    }
-    return best;
+    return pickNearest(this.recs, pt);
   }
 
   /** 0x408939: the copter up at exactly `o`'s point */
   find(o: Obj): Obj {
-    const r = this.recs.find((r) => r.self >= 0 && r.x === o.x && r.y === o.y && r.z === o.z);
-    if (!r) throw new Error("0x408939: no copter there (0x41e28a 0x6b, 0x1e)");
-    return r;
+    return findAt(this.recs, o, "0x408939: no copter there (0x41e28a 0x6b, 0x1e)", true);
   }
 
   /** 0x407cb5: the homing missiles up (`[0x434f04]`; below 0 is a logic error, 0x41e28a 0x6b, 0x1c) */
@@ -751,10 +554,6 @@ export class Copter implements CopterApi {
 
   /** 0x408a03: another copter than `self` (−1 for any) is in cell (x, y), or going to it */
   occupied(x: number, y: number, self: number): boolean {
-    for (const r of this.recs) {
-      if (r.self < 0 || r.self === self) continue;
-      if ((r.toX === x && r.toY === y) || (r.cellX === x && r.cellY === y)) return true;
-    }
-    return false;
+    return occupiedBy(this.recs, x, y, self);
   }
 }

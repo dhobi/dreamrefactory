@@ -6016,7 +6016,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     beneath it. The doll prop overlaps the doll1/dial hotspots that revealed
 //     it; before the fix every "open a layer" click on the doll's left half was
 //     swallowed by those regions and the doll only ever closed. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("a foreground prop's own mousedown wins over the flat regions beneath it (PATTY.STG doll)", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8); g.set("debugging", 1);
@@ -6084,7 +6084,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     A14 door "kickout": Sasha's sasha1.pup conversation runs, neckphase 8->9,
 //     and a changeset drops you into the HALLA corridor with the real necklace
 //     and NO player death (the "swap" outcome, vs "steal" which kills you). ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("swapping the necklace: leaving Sasha's cabin kicks you out to HALLA alive", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8);
@@ -6119,7 +6119,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     turning on the red safelight, opening its case, and dragging it into the
 //     "start" bath (good) vs "stop" (spoiled). Exercises the entry-handler alias
 //     and the region-vs-foreground-prop click routing. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("darkroom (REDPHOTO.STG): a negative develops in the start bath and spoils in the stop bath", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0);
@@ -6172,7 +6172,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 // --- volume settings plumbing (CTL.STG dial + slider): wavevolume() drives the
 //     sound+voice channel gains, themevol() the theme channel, and a theme that
 //     starts (playtheme) picks up the current global themevolume. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("wavevolume drives sound+voice, themevol the theme, and playtheme picks up themevolume", async () => {
   const { session, sink } = await newSession();
   // builtins are (interp, args, call, ctx) but ignore the last two here
   type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
@@ -6225,7 +6225,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     ctl.stg): the full-screen panel opens over the game, its HOUSE.SHP props
 //     (the wave-volume dial, the theme lever) are shown, and dragging the
 //     "themetoggle" flat region writes the global themevolume live. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("CTL.STG settings panel opens over the game and the theme lever writes themevolume live", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 1); g.set("tour", 0);
@@ -6338,7 +6338,7 @@ test("in the smokestack the readout names the maze and the level", async () => {
 // --- subtitles toggle + quiet-music default: subtitles are gated on
 //     puppetparam slot 7 (the CTL.STG subtoggle lever), and music starts very
 //     quiet with the theme lever synced to that low rest position. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("subtitles follow puppetparam slot 7; music starts quiet with the theme lever synced", async () => {
   const { session } = await newSession();
   const g = session.interp.globals;
   type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
@@ -6366,7 +6366,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     mission=2 & cufflink unowned & the purs actor is on "findcuff" & chair 1.
 //     You examine it (small->med->big) then take it into your bag. ZERO new
 //     engine code — pure overlay-stage + prop + inventory reuse. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("cufflink clue pickup (CUFF.STG): examine it small->med->big and take it into the bag", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   g.set("mission", 2); g.set("tour", 0); g.set("cuffchair", "cufflink1");
@@ -6441,7 +6441,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     it, and once it passes ±64 the ship swings off course (driftpos != 256 ->
 //     drifthappen=1) and the sky scrolls. Needs 2 new builtins: propinstance +
 //     calcmod. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("ship's-wheel steering sim (BRIDGE.STG): drift past ±64 swings the ship off course", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
   await session.openSetFile("bridge.set");
@@ -6496,7 +6496,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 //     ending movie; "proz" is the only mission="good" outcome). Pure logic, so
 //     we drive the handlers directly (like the blackjack winner() test). ZERO
 //     new engine code — a scripted slideshow over existing machinery. ---
-test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async () => {
+test("endgame slideshow logic (NAREND.STG): the artifacts' owners choose the ending", async () => {
   const { session } = await newSession();
   await session.openSetFile("c78.set"); // loads inven.shp so the artifact props exist
   const file = readContainerFile(provider("narend.stg")!);
@@ -7802,8 +7802,8 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
   film("cash.mov", 0);
   await drain();
   await drain();
-  check("cash.mov, whose voice is its soundtrack, opens on the first line", film("cash.mov", 0) === "Cash: You know his wife, Beatrix, the designer? Such an eye!", film("cash.mov", 0));
-  check("...and ends on the last", film("cash.mov", 0.99) === "Cash: White Star's best officer-or 'was'...", film("cash.mov", 0.99));
+  check("cash.mov, whose voice is its soundtrack, opens on the first line", film("cash.mov", 0) === "Cashmore: You know his wife, Beatrix, the designer? Such an eye!", film("cash.mov", 0));
+  check("...and ends on the last", film("cash.mov", 0.99) === "Cashmore: White Star's best officer-or 'was'...", film("cash.mov", 0.99));
 
   // the films that voice puppet lines as frame sounds: each line as it plays,
   // with its puppet's words and speaker — Penny over the Zeitel photograph in

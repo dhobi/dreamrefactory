@@ -133,7 +133,7 @@ export function rateMeter(windowMs = 3000): (at: number, bytes: number) => numbe
     marks.push({ at, bytes });
     while (marks.length > 2 && at - marks[0].at > windowMs) marks.shift();
     const first = marks[0];
-    const last = marks[marks.length - 1];
+    const last = marks.at(-1)!;
     const dt = last.at - first.at;
     return dt > 0 ? ((last.bytes - first.bytes) * 1000) / dt : 0;
   };
@@ -162,7 +162,7 @@ export function formatBytes(n: number): string {
  * inviting somebody to notice it was wrong.
  */
 export function formatEta(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return "";
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
   if (seconds < 90) return `~${Math.max(1, Math.round(seconds))}s left`;
   if (seconds < 3600) return `~${Math.round(seconds / 60)} min left`;
   return `~${(seconds / 3600).toFixed(1)} h left`;

@@ -90,8 +90,8 @@ export interface AudioSink {
  */
 export class DeferredAudioSink implements AudioSink {
   private real: AudioSink | null = null;
-  private volumes = new Map<AudioChannel, number>();
-  private held = new Map<
+  private readonly volumes = new Map<AudioChannel, number>();
+  private readonly held = new Map<
     AudioChannel,
     { audio: DecodedAudio; opts?: PlayOpts; real: PlayHandle | null; stopped: boolean }
   >();
@@ -273,8 +273,8 @@ export class NullAudioSink implements AudioSink {
 
 /** browser sink; construct after a user gesture (AudioContext autoplay policy) */
 export class WebAudioSink implements AudioSink {
-  private ctx: AudioContext;
-  private gains: Record<AudioChannel, GainNode>;
+  private readonly ctx: AudioContext;
+  private readonly gains: Record<AudioChannel, GainNode>;
   private playing: Partial<Record<AudioChannel, { src: AudioBufferSourceNode; done: boolean }>> = {};
 
   /** true while the page is hidden or frozen; see {@link followPageLifecycle} */
@@ -452,8 +452,8 @@ export class WebAudioSink implements AudioSink {
 
 /** open audio banks + decoded-sound cache; resolves names across all banks */
 export class AudioLibrary {
-  private banks = new Map<string, { file: DFContainerFile; bank: AudioBank }>();
-  private cache = new Map<string, DecodedAudio>();
+  private readonly banks = new Map<string, { file: DFContainerFile; bank: AudioBank }>();
+  private readonly cache = new Map<string, DecodedAudio>();
   /** a bank has just been opened, with its one-shot sounds' names — the session's captions hook in here */
   onBankOpened?: (name: string, sounds: string[]) => void;
 
@@ -525,7 +525,7 @@ export class AudioLibrary {
       this.forget(want, entry.bank.trackName);
       this.onSoundsClosed?.([...entry.bank.singles.keys()]);
     } else {
-      for (const [key, e] of [...this.banks]) {
+      for (const [key, e] of this.banks) {
         if (e.bank.trackName.toLowerCase() !== want) continue;
         this.banks.delete(key);
         dropped.push(key);
@@ -538,7 +538,7 @@ export class AudioLibrary {
 
   /** drop a closed bank's decodes — an unloaded bank must go quiet, see sound() */
   private forget(bankKey: string, trackName: string): void {
-    for (const k of [...this.cache.keys()]) {
+    for (const k of this.cache.keys()) {
       if (k.startsWith(`${bankKey}|`)) this.cache.delete(k);
     }
     this.cache.delete(`theme:${trackName}`);
@@ -625,7 +625,7 @@ export class AudioLibrary {
       ? [this.find(bankName)?.entry].filter((x) => !!x)
       : [...this.banks.values()];
     for (const b of candidates) {
-      if (!b || !b.bank.loopChunks.length) continue;
+      if (!b?.bank.loopChunks.length) continue;
       const cacheKey = `theme:${b.bank.trackName}`;
       const hit = this.cache.get(cacheKey);
       if (hit) return hit;

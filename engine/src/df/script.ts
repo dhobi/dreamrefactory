@@ -124,8 +124,11 @@ export function encodeScript(tokens: Token[]): Uint8Array {
   // the pool first, so every segment knows where its text will land
   const poolAt = new Map<string, number>();
   let poolLen = 0;
-  const textOf = (t: Token): string | null =>
-    t.kind === "str" ? t.value : t.kind === "var" ? t.name : null;
+  const textOf = (t: Token): string | null => {
+    if (t.kind === "str") return t.value;
+    if (t.kind === "var") return t.name;
+    return null;
+  };
   for (const t of tokens) {
     const text = textOf(t);
     if (text === null || poolAt.has(text)) continue;

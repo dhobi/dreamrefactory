@@ -147,6 +147,12 @@ const OPENERS: Readonly<Record<number, string>> = {
   13: "cycle.mov",
 };
 
+/** a stage's films in the order they play */
+function chapterFilms(number: number, boggs: string, film: string, opener: string | undefined): string[] {
+  if (opener === undefined) return [boggs, film];
+  return number === 1 ? [opener, boggs, film] : [boggs, opener, film];
+}
+
 export const MISSIONS: readonly Mission[] = LEVEL_ORDER.map((book, i) => {
   const nn = String(i + 1).padStart(2, "0");
   const number = i + 1;
@@ -161,7 +167,7 @@ export const MISSIONS: readonly Mission[] = LEVEL_ORDER.map((book, i) => {
     opener,
     // chapter one leads with its opener and the other three do not — the four
     // cases are quoted in `Mission.opener`
-    films: opener === undefined ? [boggs, film] : number === 1 ? [opener, boggs, film] : [boggs, opener, film],
+    films: chapterFilms(number, boggs, film, opener),
     kill: SHARES[i][0],
     from: SHARES[i][1],
   };

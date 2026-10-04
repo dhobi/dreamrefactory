@@ -55,7 +55,8 @@ export type { WireEvent };
 export function discOfUrl(url: string, volumes: readonly string[] = []): Disc | null {
   for (let i = 0; i < volumes.length && i < 2; i++) {
     // a path SEGMENT, so a volume called "data" cannot match a folder of that name
-    if (new RegExp(`(?:^|/)${volumes[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/`, "i").test(url)) {
+    const escaped = volumes[i].replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    if (new RegExp(`(?:^|/)${escaped}/`, "i").test(url)) {
       return (i + 1) as Disc;
     }
   }
@@ -120,9 +121,9 @@ const MOVIE_BUDGET_BYTES = 64 * 1024 * 1024;
 const isMovie = (key: string): boolean => key.endsWith(".mov");
 
 export class FileStore {
-  private files = new Map<string, Uint8Array>();
+  private readonly files = new Map<string, Uint8Array>();
   /** LRU stamps for cached movies, and their total size — see MOVIE_BUDGET_BYTES */
-  private movieUse = new Map<string, number>();
+  private readonly movieUse = new Map<string, number>();
   private movieClock = 0;
   private movieBytes = 0;
   /**
@@ -133,14 +134,14 @@ export class FileStore {
    * had an edition level they collided on the basename and one arbitrary tree
    * (whichever won `preferredUrl`) served the whole game.
    */
-  private urls = new Map<string, Map<string, { 1?: string; 2?: string }>>();
+  private readonly urls = new Map<string, Map<string, { 1?: string; 2?: string }>>();
   /** every registration as it came in, so {@link setVolumes} can re-index */
-  private registered: [key: string, url: string][] = [];
+  private readonly registered: [key: string, url: string][] = [];
   /** the game's volume directories in disc order; empty until the plan is read */
   private volumes: string[] = [];
   /** the edition whose copies win; {@link NEUTRAL} entries always resolve */
   private edition: string = NEUTRAL;
-  private pendingFetches = new Set<string>();
+  private readonly pendingFetches = new Set<string>();
   /** fired when a background fetch started by {@link provide} arrives */
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
 
@@ -164,7 +165,7 @@ export class FileStore {
    */
   private inFlight = 0;
   private nextFetchId = 1;
-  private wireWatchers = new Set<(e: WireEvent) => void>();
+  private readonly wireWatchers = new Set<(e: WireEvent) => void>();
 
   /**
    * Watch the wire, one fetch at a time.
@@ -262,7 +263,7 @@ export class FileStore {
     if (edition === this.edition) return;
     this.edition = edition;
     const neutral = this.urls.get(NEUTRAL);
-    for (const key of [...this.files.keys()]) {
+    for (const key of this.files.keys()) {
       if (!neutral?.has(key)) this.dropCached(key);
     }
   }
@@ -359,7 +360,10 @@ export class FileStore {
     const disc = discOfUrl(url, this.volumes) ?? 1;
     const edition = editionOfUrl(url);
     let byName = this.urls.get(edition);
-    if (!byName) this.urls.set(edition, (byName = new Map()));
+    if (!byName) {
+      byName = new Map();
+      this.urls.set(edition, byName);
+    }
     const slots = byName.get(lower) ?? {};
     slots[disc] = slots[disc] ? preferredUrl(slots[disc]!, url) : url;
     byName.set(lower, slots);

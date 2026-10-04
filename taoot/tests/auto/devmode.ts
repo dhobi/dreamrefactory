@@ -543,6 +543,6 @@ describe("the console's history", () => {
     h.add("");
     h.add("   ");
     expect(h.all).toEqual([]);
-    expect(h.older()).toBe(null);
+    expect(h.older()).toBeNull();
   });
 });

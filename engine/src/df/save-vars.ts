@@ -313,7 +313,7 @@ export function newVarRecord(container: { data: Uint8Array }, name: string): num
   if (!slots.length) return -1;
   // the dangling DFValue sits one stride past the last name's value slot; the new
   // name goes one stride past THAT
-  const valueSlot = slots[slots.length - 1].valueSlot + NODE_STRIDE;
+  const valueSlot = slots.at(-1)!.valueSlot + NODE_STRIDE;
   const nameSlot = valueSlot + NODE_STRIDE;
   // the whole node must fit as it stands — no growing, for the reason above. A
   // full stride rather than just the name+vtable, so the NEXT one can pair
@@ -506,7 +506,7 @@ export function ensureVarRoom(
 export function freeVarSlots(d: Uint8Array): number {
   const slots = decodeVarSlots(d);
   if (!slots.length) return 0;
-  const frontier = slots[slots.length - 1].valueSlot + 3 * NODE_STRIDE;
+  const frontier = slots.at(-1)!.valueSlot + 3 * NODE_STRIDE;
   return frontier > d.length ? 0 : Math.floor((d.length - frontier) / NODE_STRIDE) + 1;
 }
 

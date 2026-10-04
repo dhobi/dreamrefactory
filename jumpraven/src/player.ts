@@ -150,15 +150,27 @@ export class Player {
 
   private screen(): void {
     const g = this.game;
-    const screen = g.screen === "mart" ? g.martScreen : g.screen === "rbay" ? g.bay : g.screen;
+    let screen: unknown = g.screen;
+    if (g.screen === "mart") screen = g.martScreen;
+    else if (g.screen === "rbay") screen = g.bay;
     if (screen !== this.planned) {
       this.planned = screen;
-      this.presses = g.screen === "mart" ? this.shop() : g.screen === "rbay" ? this.mend() : g.screen === "pilots" ? this.choose() : [CONTINUE];
+      this.presses = this.plan(g.screen);
     }
     const next = this.presses.shift();
     if (next) this.click(next);
     // a screen still up after its presses: CONTINUE again, in case one went unheard
-    else this.presses = g.screen === "mart" ? [mid(g.martScreen!.targets().cont)] : g.screen === "rbay" ? [mid(g.bay!.targets().cont)] : [CONTINUE];
+    else if (g.screen === "mart") this.presses = [mid(g.martScreen!.targets().cont)];
+    else if (g.screen === "rbay") this.presses = [mid(g.bay!.targets().cont)];
+    else this.presses = [CONTINUE];
+  }
+
+  /** the presses a screen just up is planned with */
+  private plan(screen: JumpRaven["screen"]): { x: number; y: number }[] {
+    if (screen === "mart") return this.shop();
+    if (screen === "rbay") return this.mend();
+    if (screen === "pilots") return this.choose();
+    return [CONTINUE];
   }
 
   /**

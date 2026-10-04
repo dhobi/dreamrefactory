@@ -27,8 +27,8 @@
  */
 import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { GestureAudio, PageLog, screenPlate, showVersion, titleRise } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
@@ -56,86 +56,36 @@ import { NetMeter, fmtSize } from "./meter";
 const SCREEN = { width: 640, height: 480 };
 
 const canvas = document.getElementById("screen") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d", { alpha: false })!;
 /**
- * The picture is composed at 640x480 and blitted up, rather than the canvas
- * being 640 wide and stretched by CSS.
- *
- * 640 CSS pixels in a 1920px window is a postage stamp, and the alternative to
- * this is asking the browser to draw a 640-wide canvas at, say, 1100 — a
- * non-integer nearest-neighbour UPSCALE, where some source pixels come out two
- * device pixels wide and their neighbours one. On 1996 art that reads as a limp.
- *
- * So the engine draws its own 640x480 here, one `drawImage` doubles it into a
- * 1280x960 canvas (a nearest-neighbour blit in the compositor, with smoothing
- * off), and the PAGE only ever shrinks that — a downscale of an already-doubled
- * picture, which is soft at worst. Dust's page does the same thing for the same
- * reason at 512x384.
+ * The picture is composed at 640x480 and blitted up into a 1280x960 canvas, so
+ * the page only ever SHRINKS it (engine/src/web/page-shell.ts). Dust's page does
+ * the same thing for the same reason at 512x384.
  */
-const plate = document.createElement("canvas");
-plate.width = SCREEN.width;
-plate.height = SCREEN.height;
-const plateCtx = plate.getContext("2d", { alpha: false })!;
-ctx.imageSmoothingEnabled = false;
+const { ctx, plate, plateCtx } = screenPlate(canvas, SCREEN);
 
 const logEl = document.getElementById("log") as HTMLPreElement;
 const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
 const stageEl = document.getElementById("stage") as HTMLElement;
-const verEl = document.getElementById("ver");
-if (verEl) verEl.textContent = `v${VERSION}`;
-
-const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
+showVersion(VERSION);
 
 /**
- * One line of the log, which on this game is still the deliverable.
- *
- * Two voices, and they are the two the page's stylesheet knows: `step` is
- * something the boot did, `warn` is something it had to complain about. The plain
- * lines are kept as strings as well, because a bug report carries the tail of
- * them (see installBugReport below) and because the newest one is the caption
- * under the loading gauge.
+ * One line of the log, which on this game is still the deliverable — see
+ * `PageLog` for its two voices. The plain lines are kept as strings as well,
+ * because a bug report carries the tail of them (see installBugReport below)
+ * and because the newest one is the caption under the loading gauge.
  */
-const LOG_MAX = 600;
-const logLines: string[] = [];
-function say(line: string, kind: "" | "step" | "warn" = ""): void {
-  logLines.push(line);
-  if (logLines.length > LOG_MAX) logLines.splice(0, logLines.length - LOG_MAX);
-  const tag = kind === "step" ? "b" : kind === "warn" ? "i" : "";
-  logEl.insertAdjacentHTML("beforeend", tag ? `<${tag}>${esc(line)}</${tag}>\n` : `${esc(line)}\n`);
-  // scrollTop forces layout, so only when there is something to scroll
-  if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
-}
-
-/** the log is a panel over the picture now, and this is the only way in or out */
-function showLog(open: boolean): void {
-  logEl.hidden = !open;
-  if (open) logEl.scrollTop = logEl.scrollHeight;
-}
-document.getElementById("logBtn")?.addEventListener("click", () => showLog(logEl.hidden));
+const log = new PageLog(logEl, document.getElementById("logBtn"));
+const { say, show: showLog, lines: logLines } = log;
 
 /**
  * Audio waits for a gesture, as every browser insists — and on this game the
  * gesture is the Enter button, because the first thing the boot does is play a
- * 51-second film with a score on it.
- *
- * Deferred rather than absent so the boot's `LoopSound`/`gototheme` calls are
- * HELD and started when the sink arrives, instead of being lost: a silent boot
- * would look like an audio bug when it is only an autoplay policy. Idempotent,
- * because the error paths reach it too.
+ * 51-second film with a score on it. Held until then, so the boot's
+ * `LoopSound`/`gototheme` calls are started when the sink arrives rather than
+ * lost (`GestureAudio`).
  */
-const audio = new DeferredAudioSink();
-let audioReady = false;
-function ensureAudio(): void {
-  if (audioReady) return;
-  audioReady = true;
-  try {
-    audio.attach(new WebAudioSink());
-    say("audio attached", "step");
-  } catch {
-    /* no audio in this browser: not what this page is measuring */
-  }
-}
+const { sink: audio, ensure: ensureAudio } = new GestureAudio(say);
 
 /**
  * The two levers this port adds, both of them the play page's: a fullscreen
@@ -299,58 +249,8 @@ async function waitForStart(): Promise<void> {
   await new Promise<void>((resolve) => startEl.addEventListener("click", () => resolve(), { once: true }));
 }
 
-/**
- * The title card rises, by FLIP.
- *
- * Measure where it is, switch the state, measure where it landed, then play the
- * difference back as a transform. Which is not ceremony: the two states size the
- * image by DIFFERENT properties — centred by `max-height: 46vh`, risen by
- * `height: 100%` of a `clamp()`ed band — and a transition between two sizing
- * modes has nothing to interpolate. A transform does, and it is the one property
- * that animates without touching layout, which matters here because the game's
- * first film starts in the same frame this does.
- *
- * The gauge is PINNED before the switch and faded after it: it is a flex child of
- * the band the card is rising into, so the class change removes it from the
- * layout it is standing in, and freezing it at the rect it already occupies lets
- * it fade out where the player last saw it instead of jumping to the top with the
- * logo.
- */
-let risen = false;
-function raiseTitle(): void {
-  if (risen) return; // the failure paths reach here too; the move happens once
-  risen = true;
-  const bar = bootEl.getBoundingClientRect();
-  if (bar.width) {
-    bootEl.style.position = "fixed";
-    bootEl.style.left = `${bar.left}px`;
-    bootEl.style.top = `${bar.top}px`;
-    bootEl.style.width = `${bar.width}px`;
-  }
-  const first = brandEl?.getBoundingClientRect();
-  document.body.classList.remove("booting");
-  document.body.classList.add("playing");
-  const last = brandEl?.getBoundingClientRect();
-  if (brandEl && first?.width && last?.width) {
-    const k = first.width / last.width;
-    const dx = first.left + first.width / 2 - (last.left + last.width / 2);
-    const dy = first.top + first.height / 2 - (last.top + last.height / 2);
-    brandEl.style.transition = "none";
-    brandEl.style.transform = `translate(${dx}px, ${dy}px) scale(${k})`;
-    // two frames: one for the browser to accept the start pose, one to leave it
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        brandEl.style.transition = "transform 980ms cubic-bezier(.28,.74,.22,1)";
-        brandEl.style.transform = "";
-      }),
-    );
-  }
-  // the gauge goes out: down, dim and blurred, under the rising card
-  bootEl.style.opacity = "0";
-  bootEl.style.translate = "0 18px";
-  bootEl.style.filter = "blur(3px)";
-  bootEl.addEventListener("transitionend", () => bootEl.remove(), { once: true });
-}
+/** the title card rises, by FLIP (engine/src/web/page-shell.ts); the failure paths reach here too */
+const raiseTitle = titleRise(bootEl, brandEl);
 
 /** the spinner in the corner of the picture, once a wait is long enough to be one */
 const BUSY_AFTER_MS = 400;
@@ -596,30 +496,8 @@ async function main(): Promise<void> {
   ensureAudio();
   raiseTitle();
 
-  say("coldBoot()…", "step");
-  const started = performance.now();
-  try {
-    await host.coldBoot();
-    say(`boot returned after ${Math.round(performance.now() - started)} ms`, "step");
-  } catch (e) {
-    say(`!! coldBoot threw: ${(e as Error).message}`, "warn");
-    errEl.textContent = `boot failed: ${(e as Error).message} — press b for the log`;
-  }
-
-  say(
-    `stage ${s.stageName} · flat ${s.currentFlat} · ` +
-      `${s.propRuntime.shops.size} shop(s) · ${s.actorRuntime.actors.size} actor(s) · ` +
-      `screen owned by "${host.director.screenOwner()}"`,
-    "step",
-  );
-  say(`fetched ${files.loads.length} file(s): ${files.loads.join(", ") || "(none)"}`);
-  const absent = [...new Set(files.misses)].filter((m) => !files.serverUrl(m));
-  say(
-    absent.length
-      ? `asked for ${absent.length} name(s) the rip does not have: ${absent.join(", ")}`
-      : "every name the boot asked for is on the discs",
-    absent.length ? "warn" : "step",
-  );
+  await log.coldBoot(host, errEl);
+  log.bootSummary(host, files);
 }
 
 let lastLoc = "";
@@ -845,10 +723,8 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
 }
 
 void main().catch((e) => {
-  say(`!! ${(e as Error).stack ?? e}`, "warn");
-  errEl.textContent = `${(e as Error).message ?? e} — press b for the log`;
+  log.fail(e, errEl);
   // whatever went wrong, the page must not be left as a title card over a bar
   // that never finished: the log IS the result on this game
-  showLog(true);
   raiseTitle();
 });

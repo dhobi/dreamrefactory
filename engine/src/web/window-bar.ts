@@ -259,8 +259,10 @@ export function attachWindowBar(frame: HTMLElement, menus: readonly WindowMenu[]
   function step(d: number): void {
     const list = itemsOf(open);
     if (!list.length) return;
+    let from = focusItem;
+    if (from < 0) from = d > 0 ? -1 : 0;
     for (let n = 1; n <= list.length; n++) {
-      const i = (((focusItem < 0 ? (d > 0 ? -1 : 0) : focusItem) + d * n) % list.length + list.length) % list.length;
+      const i = (((from + d * n) % list.length) + list.length) % list.length;
       if (!list[i].classList.contains("disabled")) {
         focusItem = i;
         break;

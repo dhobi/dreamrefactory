@@ -87,7 +87,7 @@ const SLOP = 2;
 /** content-box px, which is the box `flex-basis`, `min-width` and `max-width` are all in */
 type Widths = Record<string, number>;
 
-const num = (v: string): number => parseFloat(v);
+const num = (v: string): number => Number.parseFloat(v);
 
 /** what the stylesheet allows this column to be, asked of it rather than repeated */
 function bounds(section: HTMLElement): { min: number; max: number } {
@@ -294,7 +294,7 @@ export function installColumnWidths(keys: PanelKeys): void {
 const SCALE_KEY = (keys: PanelKeys): string => keys.key("picture");
 
 /** every scale the canvas may be drawn at, and the one it opens at */
-const SCALES = ["1", "2", "3"];
+const SCALES = new Set(["1", "2", "3"]);
 const DEFAULT_SCALE = "2";
 
 /**
@@ -329,7 +329,7 @@ export function installPictureScale(keys: PanelKeys): void {
   let start = DEFAULT_SCALE;
   try {
     const raw = localStorage.getItem(SCALE_KEY(keys));
-    if (raw && SCALES.includes(raw)) start = raw;
+    if (raw && SCALES.has(raw)) start = raw;
   } catch {
     /* unreadable is the same as unset — the page opens at 2x, as it always did */
   }

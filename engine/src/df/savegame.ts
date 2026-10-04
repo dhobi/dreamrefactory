@@ -1202,6 +1202,9 @@ function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
     // container — both leave whatever the slot held last, which is how `hack`'s
     // route comes to claim a distance of -1422655421 (see {@link SavedWalk})
     const moves = type === 1;
+    let dist = 0;
+    if (path) dist = path.at(-1)!.cum;
+    else if (moves) dist = dv.getInt32(s + WALK_SLOT.dist, true);
     out.push({
       actor: actor.toLowerCase(),
       type,
@@ -1216,7 +1219,7 @@ function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
       // a route's progress IS written (it is the one movement word the path
       // mover keeps in the record); its length comes from the payload header
       progress: moves || path ? dv.getInt32(s + WALK_SLOT.progress, true) : 0,
-      dist: path ? path[path.length - 1].cum : moves ? dv.getInt32(s + WALK_SLOT.dist, true) : 0,
+      dist,
       star: pstrField(d, s + WALK_SLOT.star) ?? "",
       path,
     });
@@ -1811,8 +1814,9 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         if (wide) dv.setInt32(p, value | 0, true);
         else dv.setInt16(p, clampI16(value), true);
       };
-      put(PROP_FIELDS.visible, sp.visible === undefined ? undefined : sp.visible ? 1 : 0);
-      put(PROP_FIELDS.is3d, sp.is3d === undefined ? undefined : sp.is3d ? 1 : 0);
+      const flag = (b: boolean | undefined): number | undefined => (b === undefined ? undefined : Number(b));
+      put(PROP_FIELDS.visible, flag(sp.visible));
+      put(PROP_FIELDS.is3d, flag(sp.is3d));
       put(PROP_FIELDS.x, sp.x);
       put(PROP_FIELDS.y, sp.y);
       put(PROP_FIELDS.deg, sp.deg);
@@ -1860,7 +1864,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       // records are back to back from 0, so that must be the length — refuse
       // a container whose grid doesn't end there (unknown trailing bytes are
       // not ours to bury)
-      const end = grid.length ? grid[grid.length - 1].off - ACTOR_RECORD_OFF : 0;
+      const end = grid.length ? grid.at(-1)!.off - ACTOR_RECORD_OFF : 0;
       if (end !== d.length) return -1;
       const grown = new Uint8Array(d.length + ACTOR_STRIDE);
       grown.set(d, 0);

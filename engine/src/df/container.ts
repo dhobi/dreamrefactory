@@ -118,10 +118,7 @@ export function readContainerFile(
 
   const containers: Container[] = [];
   for (let i = 0; i < containerCount; i++) {
-    const isGap =
-      type === 1 ? i === gapWhere :
-      type === 2 ? i === gapWhere - 1 || i === gapWhere :
-      positions[i] <= HEADER_SIZE;
+    const isGap = typedGap(type, gapWhere, i) ?? positions[i] <= HEADER_SIZE;
     if (isGap) {
       containers.push({ id: i, data: EMPTY, gap: true });
       continue;
@@ -129,6 +126,13 @@ export function readContainerFile(
     containers.push(readContainerAt(data, positions[i], order));
   }
   return { header, containers, headerRaw: data.slice(0, HEADER_SIZE), order };
+}
+
+/** whether header type 1 or 2 makes container `i` a gap; null for type 0, which marks none */
+function typedGap(type: number, gapWhere: number, i: number): boolean | null {
+  if (type === 1) return i === gapWhere;
+  if (type === 2) return i === gapWhere - 1 || i === gapWhere;
+  return null;
 }
 
 /**
@@ -145,10 +149,7 @@ export function writeContainerFile(file: DFContainerFile): Uint8Array {
   // whichever way round the file was read, it is written back the same way, so
   // an edit-and-export round trip is byte-identical on a Mac rip too
   const le = little(file.order ?? PC);
-  const isGap = (i: number): boolean =>
-    header.type === 1 ? i === header.gapWhere :
-    header.type === 2 ? i === header.gapWhere - 1 || i === header.gapWhere :
-    containers[i].gap === true;
+  const isGap = (i: number): boolean => typedGap(header.type, header.gapWhere, i) ?? containers[i].gap === true;
 
   const tableSize = containers.length * 4;
   let total = HEADER_SIZE + tableSize;

@@ -109,7 +109,7 @@ const BOOT_SEQUENCE: readonly string[] = ["cyber.Mov", "imain.Mov", "Menu.Mov"];
  * sitting in that same `Install Folder` is the reason to prefer it: the shipped
  * game ran from there.
  */
-const BOOT_MOVIE = BOOT_SEQUENCE[BOOT_SEQUENCE.length - 1];
+const BOOT_MOVIE = BOOT_SEQUENCE.at(-1)!;
 
 /**
  * What the menu's six buttons MEAN — and this is the executable's table, not a
@@ -444,7 +444,7 @@ function drawDossier(pal: Uint8ClampedArray): void {
  */
 function drawBoard(pal: Uint8ClampedArray): void {
   const at = film?.frameIndex ?? -1;
-  if (!film || film.name.toLowerCase() !== BOOT_MOVIE.toLowerCase()) return;
+  if (film?.name.toLowerCase() !== BOOT_MOVIE.toLowerCase()) return;
   if (at < 0 || at > BOARD.attractUntilFrame) return;
   const rows = boards[boardKey(prefs.difficulty)];
   ctx.font = `${11 * PLATE}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
@@ -546,7 +546,9 @@ function drawPrefs(): void {
     }
     if (role.kind !== "volume") continue;
     for (let seg = 0; seg < VOLUME.steps; seg++) {
-      const ink = seg > prefs.volume ? PREFS_INK.unselected : seg <= VOLUME.loudFrom - 1 ? PREFS_INK.low : PREFS_INK.lit;
+      let ink: number = PREFS_INK.lit;
+      if (seg > prefs.volume) ink = PREFS_INK.unselected;
+      else if (seg <= VOLUME.loudFrom - 1) ink = PREFS_INK.low;
       const left = control.left + seg * VOLUME.stride;
       fillRect(pal, ink, {
         top: control.top + VOLUME.inset,
@@ -865,10 +867,19 @@ function screenPoint(e: { clientX: number; clientY: number }): { x: number; y: n
   };
 }
 
+/** the prefs panel, for the status line */
+function prefsSay(): string {
+  const music = prefs.music ? "on" : "off";
+  return (
+    `prefs panel · difficulty ${prefs.difficulty} · volume ${prefs.volume} · music ${music} · ` +
+    PREFS_ACTIONS.map((a) => `${a.say} ${keyName(prefs.keys[a.action - 1]) || "--"}`).join(" ")
+  );
+}
+
 /** what the board is showing, for the status line and for a probe */
 function boardSay(): string {
   const at = film?.frameIndex ?? -1;
-  if (!film || film.name.toLowerCase() !== BOOT_MOVIE.toLowerCase()) return "";
+  if (film?.name.toLowerCase() !== BOOT_MOVIE.toLowerCase()) return "";
   if (at < 0 || at > BOARD.attractUntilFrame) return "";
   const key = boardKey(prefs.difficulty);
   const rows = boards[key];
@@ -897,12 +908,9 @@ function frameLoop(now: number): void {
   if (film && lastPalette && (film.name !== composedName || film.frameIndex !== composedAt)) {
     compose(lastPalette);
   }
-  nowEl.textContent = film
-    ? film.where + boardSay()
-    : prefsOpen
-      ? `prefs panel · difficulty ${prefs.difficulty} · volume ${prefs.volume} · music ${prefs.music ? "on" : "off"} · ` +
-        PREFS_ACTIONS.map((a) => `${a.say} ${keyName(prefs.keys[a.action - 1]) || "--"}`).join(" ")
-      : "";
+  if (film) nowEl.textContent = film.where + boardSay();
+  else if (prefsOpen) nowEl.textContent = prefsSay();
+  else nowEl.textContent = "";
   requestAnimationFrame(frameLoop);
 }
 
@@ -1120,7 +1128,7 @@ function prefsKey(e: KeyboardEvent): boolean {
     if (e.key === "t" || e.key === "T") {
       prefs.music = !prefs.music;
       log(`prefs: music ${prefs.music ? "on" : "off"} (0x45d6a0)`);
-    } else if (/^[0-9]$/.test(e.key)) {
+    } else if (/^\d$/.test(e.key)) {
       prefs.volume = clampVolume(Number(e.key));
       log(`prefs: volume ${prefs.volume} (0x45d6b8)`);
     } else return false;
@@ -1234,4 +1242,8 @@ window.addEventListener("keydown", (e) => {
 });
 
 requestAnimationFrame(frameLoop);
-void boot().catch(fail);
+try {
+  await boot();
+} catch (e) {
+  fail(e);
+}

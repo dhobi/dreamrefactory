@@ -63,7 +63,7 @@ const MAX_FRAME_CATCHUP = 64;
  * prop visible and correctly placed, none of them drawn, because the shop they
  * live in had been opened by the game rather than on its behalf.
  */
-const BOOT_UI_SHOPS = ["inven.shp", "house.shp", "inven.prp", "house.prp"];
+const BOOT_UI_SHOPS = new Set(["inven.shp", "house.shp", "inven.prp", "house.prp"]);
 
 /** the sendto* commands that address a CAST member, whoever else answers to the
  *  name — see {@link GameSession.resolveEventTarget} */
@@ -428,7 +428,7 @@ export class GameSession {
    * On the session rather than in the builtin because a DreamFactory 5 save
    * carries them (savegame-v5.md, the manifest's `+0x218`).
    */
-  readonly pathSlots: string[] = Array(9).fill("");
+  readonly pathSlots: string[] = new Array(9).fill("");
 
   /**
    * Host hook: a movie sequence has fully ended and these are the files it
@@ -918,7 +918,7 @@ export class GameSession {
   activeCamera: () => WorldCamera | null = () => null;
 
   /** scripts currently executing/suspended (delay) — input waits on these */
-  private inflight = new Set<Promise<unknown>>();
+  private readonly inflight = new Set<Promise<unknown>>();
   /**
    * The idle heartbeat's own dispatches — awaited by {@link settle} but NOT by
    * {@link scriptBusy}, because they are not scripts the player started.
@@ -935,7 +935,7 @@ export class GameSession {
    * (see tickTime). Separating the two sets is what lets the clock tick without
    * the player's input paying for it.
    */
-  private idleInflight = new Set<Promise<unknown>>();
+  private readonly idleInflight = new Set<Promise<unknown>>();
 
   /**
    * What each in-flight dispatch IS, for the one question a stall asks: the
@@ -943,7 +943,7 @@ export class GameSession {
    * cannot say which one is not coming back. A hung run could report "the engine
    * would not take an arrow" and nothing more; now it can name the dispatch.
    */
-  private labels = new WeakMap<Promise<unknown>, string>();
+  private readonly labels = new WeakMap<Promise<unknown>, string>();
 
   /** run a script dispatch in the background, tracked for busy/settle */
   track<T>(p: Promise<T>, label = ""): Promise<T> {
@@ -1192,7 +1192,7 @@ export class GameSession {
       );
       return 0;
     }
-    // EXPERIMENT (see TODO 11b): `target` is the ADDRESSEE where the addressee is
+    // EXPERIMENT: `target` is the ADDRESSEE where the addressee is
     // a THING — a prop, an actor, a scene, a flat. Where it is a FILE (a shop, a
     // cast, the stage, a puppet, the boot) there is no thing being addressed and
     // `target` stays the caller's context.
@@ -1292,7 +1292,7 @@ export class GameSession {
     // it leads OUT of (see runHandlerChain)
     if (room && this.maze !== room && inst && room.owns(inst)) return value;
     if ((!ran || passed) && inst) {
-      return this.resolveViaContainment(cmd, inst, handler, args, evTarget, value, visited, parent);
+      return this.resolveViaContainment({ cmd, inst, handler, args, evTarget }, value, visited, parent);
     }
     return value;
   }
@@ -1628,7 +1628,7 @@ export class GameSession {
     const visited: ScriptInstance[] = [];
     const room = this.maze;
     for (const link of chain) {
-      if (!link || !link.script.codes.has(handler)) continue;
+      if (!link?.script.codes.has(handler)) continue;
       /**
        * A DreamFactory 5 room's scripts stop answering once the room is gone.
        * RedJack's doors are a `mousedown` that does `gotonode` into the next room
@@ -1663,11 +1663,13 @@ export class GameSession {
    * recursion above is unaffected.
    */
   private async resolveViaContainment(
-    cmd: string,
-    inst: ScriptInstance,
-    handler: string,
-    args: Value[],
-    evTarget: string,
+    { cmd, inst, handler, args, evTarget }: {
+      cmd: string;
+      inst: ScriptInstance;
+      handler: string;
+      args: Value[];
+      evTarget: string;
+    },
     fallback: Value = 0,
     visited: ScriptInstance[] = [],
     /** the frame the `sendto*` was written in — see {@link sendEvent} */
@@ -1805,7 +1807,8 @@ export class GameSession {
   private bootPlan(): BootPlan {
     if (this.plan) return this.plan;
     const bytes = this.files("bootfile");
-    return (this.plan = bytes ? readBootPlan(bytes) : EMPTY_BOOT_PLAN);
+    this.plan = bytes ? readBootPlan(bytes) : EMPTY_BOOT_PLAN;
+    return this.plan;
   }
 
   /**
@@ -2217,7 +2220,7 @@ export class GameSession {
       if (at < line.length) return { who: source.who, text: line };
       at -= line.length;
     }
-    return { who: source.who, text: lines[lines.length - 1] };
+    return { who: source.who, text: lines.at(-1)! };
   }
   /**
    * Film → { its frame sound → the puppet whose line that sound is } (#50).
@@ -2361,7 +2364,7 @@ export class GameSession {
     if (!this.everyLineSubtitled || !this.subtitlesOn()) return [];
     const out: CaptionLine[] = [];
     const t = this.themeNow;
-    if (t && this.audioLib.bankOf(this.currentThemeName) === t.bank) {
+    if (t?.bank === this.audioLib.bankOf(this.currentThemeName)) {
       const sec = ((this.clock.now - t.at) / 1000) % t.seconds;
       const line = t.lines.find((l) => sec >= l.from && sec < l.to);
       if (line) out.push({ who: line.who, text: line.text });
@@ -3134,11 +3137,11 @@ export class GameSession {
 
   /** prop-group script instances of loaded shops, by lowercase prop name */
   readonly propScripts = new Map<string, ScriptInstance>();
-  private shopMains = new Map<string, ScriptInstance | null>();
+  private readonly shopMains = new Map<string, ScriptInstance | null>();
 
   /** per-character script instances of loaded casts, by actor name */
   readonly castScripts = new Map<string, ScriptInstance>();
-  private castMains = new Map<string, ScriptInstance | null>();
+  private readonly castMains = new Map<string, ScriptInstance | null>();
 
   /**
    * Give an `actorinstance(src, dst)` copy its own script, so events can reach
@@ -3183,7 +3186,7 @@ export class GameSession {
   }
 
   /** which castScripts entries came from actorinstance() rather than a cast */
-  private instancedActors = new Set<string>();
+  private readonly instancedActors = new Set<string>();
 
   // ---- puppet mode (PUP conversation close-ups) ---------------------------
   // Conversation state + playback live in PuppetController, addressed directly
@@ -3336,7 +3339,7 @@ export class GameSession {
       this.shopMains.get(lower) ??
       this.castMains.get(lower) ??
       this.flatScripts.get(lower) ??
-      (this.stageScript && this.stageScript.name.toLowerCase() === lower ? this.stageScript : null) ??
+      (this.stageScript?.name.toLowerCase() === lower ? this.stageScript : null) ??
       (lower === "boot" ? this.boot : null);
     if (exact) return exact;
     /**
@@ -3425,7 +3428,7 @@ export class GameSession {
     // a boot-UI shop's screen props draw over the room view, however it was
     // opened — by the port's stand-in boot or by the game's own openshopfile
     const loaded = this.propRuntime.shops.get(key);
-    if (loaded && BOOT_UI_SHOPS.includes(key)) loaded.persistent = true;
+    if (loaded && BOOT_UI_SHOPS.has(key)) loaded.persistent = true;
     const main = this.instanceFrom(shp.file.containers[shp.mainScriptLocation]?.data, key);
     this.shopMains.set(key, main);
     for (const g of shp.groups) {

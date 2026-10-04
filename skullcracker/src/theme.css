@@ -106,29 +106,27 @@
   --void-700: #210402;
   --void-600: #2b0503;
   --void-500: #3b0302;
-}
 
-/* ---- gore: the letters ------------------------------------------------- */
+  /* ---- gore: the letters ------------------------------------------------- */
 
-/*
- * Half the artwork, and the ramp is its own moulding read across a letter. This
- * is a scanline at y=340 of 819, going out of the face of the K in SKULL:
- *
- *   x=560   #f11d0a   the face
- *   x=566   #b90f06   the face darkening into its edge
- *   x=571   #f7c5a8   the bevel's lit lip, and the brightest thing on the letter
- *   x=580   #da6b5f   the bevel falling away
- *   x=588   #594844   its shaded flank
- *   x=592   #040304   a hard dark rule, one pixel of it
- *   x=593+  #000000   the black
- *
- * The 400/300/200 stops below are the face; 500 and 600 are what happens to it
- * at an edge; 700 is the shadow the letters cast into their own cracks. The lip
- * is not in this ramp — it is bone-200, because on the card it is the same cream
- * as the subtitle, and calling it that is what lets a border and a word share a
- * colour honestly.
- */
-:root {
+  /*
+   * Half the artwork, and the ramp is its own moulding read across a letter. This
+   * is a scanline at y=340 of 819, going out of the face of the K in SKULL:
+   *
+   *   x=560   #f11d0a   the face
+   *   x=566   #b90f06   the face darkening into its edge
+   *   x=571   #f7c5a8   the bevel's lit lip, and the brightest thing on the letter
+   *   x=580   #da6b5f   the bevel falling away
+   *   x=588   #594844   its shaded flank
+   *   x=592   #040304   a hard dark rule, one pixel of it
+   *   x=593+  #000000   the black
+   *
+   * The 400/300/200 stops below are the face; 500 and 600 are what happens to it
+   * at an edge; 700 is the shadow the letters cast into their own cracks. The lip
+   * is not in this ramp — it is bone-200, because on the card it is the same cream
+   * as the subtitle, and calling it that is what lets a border and a word share a
+   * colour honestly.
+   */
   --gore-700: #2a0705;
   --gore-600: #4e0c07;
   --gore-500: #6e0e07;
@@ -136,21 +134,19 @@
   --gore-300: #ed170d;
   --gore-200: #f42915;
   --gore-100: #ff5a42;
-}
 
-/* ---- bone: every word on the page -------------------------------------- */
+  /* ---- bone: every word on the page -------------------------------------- */
 
-/*
- * The skull, the bevel's lit lip, and the subtitle band's lettering, which are
- * three uses of one cream. #f9f7f0 is 2.0% of the non-black picture on its own —
- * the highlight along the top of every letter, where the light is — and #faebb1
- * is the subtitle's, a half-step warmer because it is printed on red.
- *
- * The bottom of the ramp is where this palette differs from a grey one: bone-600
- * is #6a5649, the brown the flesh goes in shadow, not a grey. Dim text on this
- * page is under-lit rather than desaturated.
- */
-:root {
+  /*
+   * The skull, the bevel's lit lip, and the subtitle band's lettering, which are
+   * three uses of one cream. #f9f7f0 is 2.0% of the non-black picture on its own —
+   * the highlight along the top of every letter, where the light is — and #faebb1
+   * is the subtitle's, a half-step warmer because it is printed on red.
+   *
+   * The bottom of the ramp is where this palette differs from a grey one: bone-600
+   * is #6a5649, the brown the flesh goes in shadow, not a grey. Dim text on this
+   * page is under-lit rather than desaturated.
+   */
   --bone-100: #f9f7f0;
   --bone-200: #f7edd6;
   --bone-300: #faebb1;
@@ -158,99 +154,89 @@
   --bone-500: #d1c7b7;
   --bone-600: #a69891;
   --bone-700: #6a5649;
-}
 
-/* ---- iron: the edges --------------------------------------------------- */
+  /* ---- iron: the edges --------------------------------------------------- */
 
-/*
- * The two maces, the scythe, the horns and the studded collars. It is the only
- * COLD family in the artwork and the census says so twice — 8.0% blue and 4.3%
- * grey-dark, and the blue is the shadow side of the same metal (#2c344c inside a
- * mace against #8f8d8f along its lit edge). Which makes iron the natural border:
- * a rule in it is the one thing on the page that is not red, cream or black, so
- * it separates without competing.
- */
-:root {
+  /*
+   * The two maces, the scythe, the horns and the studded collars. It is the only
+   * COLD family in the artwork and the census says so twice — 8.0% blue and 4.3%
+   * grey-dark, and the blue is the shadow side of the same metal (#2c344c inside a
+   * mace against #8f8d8f along its lit edge). Which makes iron the natural border:
+   * a rule in it is the one thing on the page that is not red, cream or black, so
+   * it separates without competing.
+   */
   --iron-100: #b1aeae;
   --iron-200: #8f8d8f;
   --iron-300: #767786;
   --iron-400: #4b526f;
   --iron-500: #2c344c;
   --iron-600: #252936;
-}
 
-/* ---- toxic: the eyes --------------------------------------------------- */
+  /* ---- toxic: the eyes --------------------------------------------------- */
 
-/*
- * Half a percent of the artwork, and the whole of its light. Measured inside the
- * sockets, where 1,667 pixels are green: the mean is #506e03 and the core blows
- * out to #d6ed15 before going white at the very centre.
- *
- * It is used here the way it is used there, and the discipline is a COUNT. Green
- * appears in exactly four places on this page:
- *
- *   1  the fracture in the boot gauge, and its advancing tip
- *   2  the light the title card sits in
- *   3  the eyes of the mark in the top bar — and this one needed NO page rule:
- *      the shared chrome already lights `.brand-mark` with `--mark-glow`, so
- *      setting that role green is the whole of it. Writing the glow again on the
- *      page collided with the chrome's own rule at equal specificity, which
- *      `site/tests/cascade.ts` refused, and it was right to: the role existed
- *   4  `--ok`, when the page says it is ready
- *
- * Not for text, not for a border, not for a panel, not for the ground. A green
- * page was considered and is the wrong answer twice over: it inverts the
- * artwork's own hierarchy, putting 0.5% of the picture on its largest surfaces,
- * and it would put the red logo on a green field — the one pairing at this
- * saturation that vibrates instead of sitting. Green cannot mean "live" if
- * everything is green.
- *
- * (It also happens to be the game's own: Skull Cracker's menu is green phosphor
- * on black — see the lit buttons in its `menu.mov` — so the artwork and the
- * interface agreed about this long before this page did.)
- */
-:root {
+  /*
+   * Half a percent of the artwork, and the whole of its light. Measured inside the
+   * sockets, where 1,667 pixels are green: the mean is #506e03 and the core blows
+   * out to #d6ed15 before going white at the very centre.
+   *
+   * It is used here the way it is used there, and the discipline is a COUNT. Green
+   * appears in exactly four places on this page:
+   *
+   *   1  the fracture in the boot gauge, and its advancing tip
+   *   2  the light the title card sits in
+   *   3  the eyes of the mark in the top bar — and this one needed NO page rule:
+   *      the shared chrome already lights `.brand-mark` with `--mark-glow`, so
+   *      setting that role green is the whole of it. Writing the glow again on the
+   *      page collided with the chrome's own rule at equal specificity, which
+   *      `site/tests/cascade.ts` refused, and it was right to: the role existed
+   *   4  `--ok`, when the page says it is ready
+   *
+   * Not for text, not for a border, not for a panel, not for the ground. A green
+   * page was considered and is the wrong answer twice over: it inverts the
+   * artwork's own hierarchy, putting 0.5% of the picture on its largest surfaces,
+   * and it would put the red logo on a green field — the one pairing at this
+   * saturation that vibrates instead of sitting. Green cannot mean "live" if
+   * everything is green.
+   *
+   * (It also happens to be the game's own: Skull Cracker's menu is green phosphor
+   * on black — see the lit buttons in its `menu.mov` — so the artwork and the
+   * interface agreed about this long before this page did.)
+   */
   --toxic-600: #2c3a02;
   --toxic-500: #4e6d03;
   --toxic-400: #6d8f03;
   --toxic-300: #8fb703;
   --toxic-200: #a8cf0d;
   --toxic-100: #d6ed15;
-}
 
-/* ---- flesh: the one control that commits ------------------------------- */
+  /* ---- flesh: the one control that commits ------------------------------- */
 
-/*
- * The hands. 24.2% of the picture is this family, but most of that is the
- * letters' cream bevel — the SATURATED end of it is the flesh gripping them,
- * #f46f2d at 1.0%, falling to #6a5649 in shadow.
- *
- * Orange is the right colour for a commit here for a reason that is about the
- * red rather than about orange: the brand is crimson, so a crimson button is
- * invisible against its own identity. Orange is adjacent enough to belong to the
- * artwork and far enough to be seen inside it.
- */
-:root {
+  /*
+   * The hands. 24.2% of the picture is this family, but most of that is the
+   * letters' cream bevel — the SATURATED end of it is the flesh gripping them,
+   * #f46f2d at 1.0%, falling to #6a5649 in shadow.
+   *
+   * Orange is the right colour for a commit here for a reason that is about the
+   * red rather than about orange: the brand is crimson, so a crimson button is
+   * invisible against its own identity. Orange is adjacent enough to belong to the
+   * artwork and far enough to be seen inside it.
+   */
   --flesh-600: #7a3510;
   --flesh-500: #c4551f;
   --flesh-400: #f46f2d;
   --flesh-300: #f2ae71;
   --flesh-200: #f7c5a8;
-}
 
-/* ---- the two extras the pages use ------------------------------------- */
+  /* ---- the two extras the pages use ------------------------------------- */
 
-:root {
   /* a warning is not the brand: it has to be distinguishable FROM gore, so it
      is the bevel's mid-tone, a dusty rose that reads as a caution rather than
      as the logo */
   --alarm: #da6b5f;
   --ok: var(--toxic-300);
-}
 
-/* ---- typography and metrics ------------------------------------------- */
+  /* ---- typography and metrics ------------------------------------------- */
 
-:root {
   --font-display:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-ui:
@@ -268,11 +254,9 @@
      a red glow around red letters is a smudge, and a green one is the picture's
      own light source falling on the thing it comes out of */
   --glow: 0 0 0 1px rgba(109, 143, 3, 0.22), 0 0 38px -6px rgba(109, 143, 3, 0.3);
-}
 
-/* ---- the 39 roles the chrome asks for --------------------------------- */
+  /* ---- the 39 roles the chrome asks for --------------------------------- */
 
-:root {
   --bg: var(--void-1000);
   --panel: var(--void-800);
   --raised: var(--void-700);

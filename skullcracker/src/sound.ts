@@ -629,12 +629,12 @@ function route(
 export class Sounds {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  private banks = new Map<string, Bank | null>();
+  private readonly banks = new Map<string, Bank | null>();
   /** the level's two banks, once its own names are known */
   private themeName = "";
   private sfxName = "";
   /** where the camera is, in world coordinates — the middle of the view */
-  private eye = { x: 0, y: 0 };
+  private readonly eye = { x: 0, y: 0 };
   /** the theme's place in its own play order, and the clock it is queued to */
   private step = 0;
   private queuedTo = 0;
@@ -675,7 +675,7 @@ export class Sounds {
    */
   resume(): void {
     const ctx = this.context();
-    if (ctx && ctx.state === "suspended") void ctx.resume();
+    if (ctx?.state === "suspended") void ctx.resume();
   }
 
   private context(): AudioContext | null {

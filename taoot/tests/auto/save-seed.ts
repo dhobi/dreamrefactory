@@ -91,7 +91,7 @@ test("a seeded store is not seeded again for the same language", async () => {
   await seedSaves(MANIFEST, "en");
   const before = fetched.length;
   await seedSaves(MANIFEST, "en");
-  expect(fetched.length).toBe(before);
+  expect(fetched).toHaveLength(before);
 });
 
 test("nothing stored means no marker, so a later launch can still seed", async () => {

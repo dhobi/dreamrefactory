@@ -324,27 +324,35 @@ export class Copilot implements CopilotApi {
     let h1: number;
     let h2: number;
     if (abs(dx) > abs(dy)) {
-      if (dx > 0) (h1 = 0x80), x1--;
-      else {
+      if (dx > 0) {
+        h1 = 0x80;
+        x1--;
+      } else {
         if (dx === 0) ok1 = 0;
         h1 = 0;
         x1++;
       }
-      if (dy > 0) (h2 = 0xc0), y2--;
-      else {
+      if (dy > 0) {
+        h2 = 0xc0;
+        y2--;
+      } else {
         if (dy === 0) ok2 = 0;
         h2 = 0x40;
         y2++;
       }
     } else {
-      if (dy > 0) (h1 = 0xc0), y1--;
-      else {
+      if (dy > 0) {
+        h1 = 0xc0;
+        y1--;
+      } else {
         if (dy === 0) ok1 = 0;
         h1 = 0x40;
         y1++;
       }
-      if (dx > 0) (h2 = 0x80), x2--;
-      else {
+      if (dx > 0) {
+        h2 = 0x80;
+        x2--;
+      } else {
         if (dx === 0) ok2 = 0;
         h2 = 0;
         x2++;
@@ -657,7 +665,8 @@ export class Copilot implements CopilotApi {
         return;
       case ROCKETS:
       case MISSILES:
-        s.flag = tier === 0 && w.roll(weapon === ROCKETS ? 4 : 6) === 1 ? 1 : 0;
+        const odds = weapon === ROCKETS ? 4 : 6;
+        s.flag = tier === 0 && w.roll(odds) === 1 ? 1 : 0;
         s.life = 0x40;
         this.muzzle(s, 6, 0xa, 0x14);
         this.aimShot(s, t, 0x20);

@@ -29,7 +29,7 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { WeapApi } from "./api";
 import { approach, callDepot, craftOver, depotWhere, driveDepot, driveOff, drawDepot, newDepot, shiftDepot } from "./fuel";
-import { objOf } from "./jeep";
+import { objOf } from "./fleet";
 import { tooFar } from "./lib";
 import { KIND, cosMul, readPictures, setObj, sinMul, type Obj, type World } from "./world";
 
@@ -62,7 +62,7 @@ export class Weap implements WeapApi {
   }
 
   /** 0x42aa3d: a block or a copter's cell */
-  private blocked = (x: number, y: number): boolean => this.w.solid(x, y) || this.w.copter.occupied(x, y, -1);
+  private readonly blocked = (x: number, y: number): boolean => this.w.solid(x, y) || this.w.copter.occupied(x, y, -1);
 
   /** 0x429360 */
   callIn(): void {
@@ -75,7 +75,10 @@ export class Weap implements WeapApi {
     const w = this.w;
     const r = this.r;
     if (r.self < 0) return;
-    if (tooFar(w, r) && !r.called) return void (r.self = -1);
+    if (tooFar(w, r) && !r.called) {
+      r.self = -1;
+      return;
+    }
     setObj(r.last, r);
     this.think();
     if (w.pyro.hitsCraft(r.last, r, 0x10e0, 0x19)) {

@@ -123,7 +123,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   r("playtheme", (_i, [n]) => {
     const theme = session.audioLib.theme(n === undefined ? undefined : toStr(n));
     if (!theme) {
-      log(`playtheme: no theme available${n !== undefined ? ` (${toStr(n)})` : ""}`);
+      const asked = n === undefined ? "" : ` (${toStr(n)})`;
+      log(`playtheme: no theme available${asked}`);
       return;
     }
     session.audio.play("theme", theme, { loop: true });

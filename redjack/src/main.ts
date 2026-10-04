@@ -22,10 +22,10 @@
  * `billsdoublebuffer` asks the machine for nothing else.
  */
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { GestureAudio, PageLog, screenPlate, showVersion } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
@@ -44,46 +44,35 @@ import { SWIPE_ARROWS, arrowUp, defaultSaveName, keyAction, screenPoint, whereLi
 const SCREEN = REDJACK.screen;
 
 const canvas = document.getElementById("screen") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d", { alpha: false })!;
 /**
  * The picture is composed at 640x480 and blitted up into a 1280x960 canvas, so
- * the page only ever SHRINKS it — see the same plate in timelapse/src/main.ts.
+ * the page only ever SHRINKS it — see `screenPlate` (engine/src/web/page-shell.ts).
  */
-const plate = document.createElement("canvas");
-plate.width = SCREEN.width;
-plate.height = SCREEN.height;
-const plateCtx = plate.getContext("2d", { alpha: false })!;
-ctx.imageSmoothingEnabled = false;
+const { ctx, plate, plateCtx } = screenPlate(canvas, SCREEN);
 
 const logEl = document.getElementById("log") as HTMLPreElement;
 const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
 const stageEl = document.getElementById("stage") as HTMLElement;
-const verEl = document.getElementById("ver");
-if (verEl) verEl.textContent = `v${VERSION}`;
+showVersion(VERSION);
 
-const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
+/** the title card, which closes the band up when it fails to load — see #brand in index.html */
+const brandEl = document.getElementById("brand") as HTMLImageElement;
+function dropBrand(): void {
+  brandEl.hidden = true;
+  document.body.classList.add("nobrand");
+}
+// a module runs after parsing, so the image may already have failed by now
+if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
+else brandEl.addEventListener("error", dropBrand);
 
 /* ------------------------------------------------------------------------- *
  * The log
  * ------------------------------------------------------------------------- */
 
-const LOG_MAX = 600;
-const logLines: string[] = [];
 /** one line of the log: `step` is something the boot did, `warn` a complaint */
-function say(line: string, kind: "" | "step" | "warn" = ""): void {
-  logLines.push(line);
-  if (logLines.length > LOG_MAX) logLines.splice(0, logLines.length - LOG_MAX);
-  const tag = kind === "step" ? "b" : kind === "warn" ? "i" : "";
-  logEl.insertAdjacentHTML("beforeend", tag ? `<${tag}>${esc(line)}</${tag}>\n` : `${esc(line)}\n`);
-  if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
-}
-
-function showLog(open: boolean): void {
-  logEl.hidden = !open;
-  if (open) logEl.scrollTop = logEl.scrollHeight;
-}
-document.getElementById("logBtn")?.addEventListener("click", () => showLog(logEl.hidden));
+const log = new PageLog(logEl, document.getElementById("logBtn"));
+const { say, show: showLog, lines: logLines } = log;
 
 /* ------------------------------------------------------------------------- *
  * The shared controls
@@ -93,18 +82,7 @@ document.getElementById("logBtn")?.addEventListener("click", () => showLog(logEl
  * Audio waits for a gesture — the Enter button. Deferred rather than absent, so
  * whatever the boot starts before then is held and started when the sink comes.
  */
-const audio = new DeferredAudioSink();
-let audioReady = false;
-function ensureAudio(): void {
-  if (audioReady) return;
-  audioReady = true;
-  try {
-    audio.attach(new WebAudioSink());
-    say("audio attached", "step");
-  } catch {
-    /* no audio in this browser */
-  }
-}
+const { sink: audio, ensure: ensureAudio } = new GestureAudio(say);
 
 // the STAGE, not the canvas: see #stage.fs in src/theme.css
 installFullscreen(document.getElementById("fsBtn") as HTMLButtonElement | null, stageEl, { report: say, landscape: true });
@@ -142,7 +120,7 @@ if (bugBtn) {
 
 const bootEl = document.getElementById("boot") as HTMLElement;
 const startEl = document.getElementById("start") as HTMLButtonElement;
-const barEl = document.getElementById("bar") as HTMLElement;
+const barEl = document.getElementById("barvalue") as HTMLProgressElement;
 const chargeEl = document.getElementById("charge") as HTMLElement;
 const bootSayEl = document.getElementById("bootsay") as HTMLElement;
 const bootPctEl = document.getElementById("bootpct") as HTMLElement;
@@ -160,7 +138,7 @@ function progress(f: number, label?: string): void {
   const pct = Math.round(charged * 100);
   chargeEl.style.width = `${pct}%`;
   bootPctEl.textContent = `${pct}%`;
-  barEl.setAttribute("aria-valuenow", String(pct));
+  barEl.value = pct;
   if (label) bootSayEl.textContent = label;
 }
 
@@ -316,7 +294,8 @@ async function main(): Promise<void> {
     showLocation(host);
     // a conversation keeps the arrow however a script inside it changes the
     // cursor: RedJack.exe's puppet code sets `CURS.ARROW` as it runs (#446)
-    showCursor(host.session.cursorHidden ? "none" : host.session.puppet?.visible ? "arrow" : host.session.cursorName);
+    if (host.session.cursorHidden) showCursor("none");
+    else showCursor(host.session.puppet?.visible ? "arrow" : host.session.cursorName);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
@@ -346,31 +325,8 @@ async function main(): Promise<void> {
   ensureAudio();
   beginPlaying();
 
-  say("coldBoot()…", "step");
-  const started = performance.now();
-  try {
-    await host.coldBoot();
-    say(`boot returned after ${Math.round(performance.now() - started)} ms`, "step");
-  } catch (e) {
-    say(`!! coldBoot threw: ${(e as Error).message}`, "warn");
-    errEl.textContent = `boot failed: ${(e as Error).message} — press b for the log`;
-    showLog(true);
-  }
-
-  say(
-    `set ${s.currentSetName || "none"} · stage ${s.stageName} · flat ${s.currentFlat} · ` +
-      `${s.propRuntime.shops.size} shop(s) · ${s.actorRuntime.actors.size} actor(s) · ` +
-      `screen owned by "${host.director.screenOwner()}"`,
-    "step",
-  );
-  say(`fetched ${files.loads.length} file(s): ${files.loads.join(", ") || "(none)"}`);
-  const absent = [...new Set(files.misses)].filter((m) => !files.serverUrl(m));
-  say(
-    absent.length
-      ? `asked for ${absent.length} name(s) the rip does not have: ${absent.join(", ")}`
-      : "every name the boot asked for is on the discs",
-    absent.length ? "warn" : "step",
-  );
+  if (!(await log.coldBoot(host, errEl))) showLog(true);
+  log.bootSummary(host, files, `set ${s.currentSetName || "none"} · `);
 }
 
 /** the readout under the picture, refreshed only when it changes */
@@ -505,8 +461,6 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
 }
 
 void main().catch((e) => {
-  say(`!! ${(e as Error).stack ?? e}`, "warn");
-  errEl.textContent = `${(e as Error).message ?? e} — press b for the log`;
-  showLog(true);
+  log.fail(e, errEl);
   beginPlaying();
 });

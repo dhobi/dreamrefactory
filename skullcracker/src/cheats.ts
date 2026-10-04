@@ -85,7 +85,7 @@ export class CheatTyper {
     this.buffer += ch;
     if (this.buffer.length >= CHEAT_RING) this.buffer = "";
     const candidate = BY_LENGTH.get(this.buffer.length);
-    if (!candidate || candidate.word !== this.buffer) return null;
+    if (candidate?.word !== this.buffer) return null;
     // `0x403faa` and its seven siblings zero the index on a match, which is what
     // stops `zip` from firing again on every letter after it
     this.buffer = "";

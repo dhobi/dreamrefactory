@@ -387,7 +387,8 @@ export class Hud implements HudApi {
     }
     if (!s.videoOut) {
       // 0x413c6d(1): the comms box's tick in flight, the pilot's chatter with it
-      this.comms?.flightTick((this.chatter ??= chatterOf(this.w)));
+      this.chatter ??= chatterOf(this.w);
+      this.comms?.flightTick(this.chatter);
       this.clip = WHOLE;
     }
     if (s.nav !== sh.nav) {
@@ -681,9 +682,16 @@ export class Hud implements HudApi {
       return dy < 0 ? 0 : 8;
     }
     if (dy === 0) return dx < 0 ? 0xc : 4;
-    if (abs(dx) === abs(dy)) return dx > 0 ? (dy > 0 ? 6 : 2) : dy > 0 ? 0xa : 0xe;
-    if (abs(dx) > abs(dy)) return dx > 0 ? (dy > 0 ? 5 : 3) : dy > 0 ? 0xb : 0xd;
-    return dy > 0 ? (dx > 0 ? 7 : 9) : dx > 0 ? 1 : 0xf;
+    if (abs(dx) === abs(dy)) {
+      if (dx > 0) return dy > 0 ? 6 : 2;
+      return dy > 0 ? 0xa : 0xe;
+    }
+    if (abs(dx) > abs(dy)) {
+      if (dx > 0) return dy > 0 ? 5 : 3;
+      return dy > 0 ? 0xb : 0xd;
+    }
+    if (dy > 0) return dx > 0 ? 7 : 9;
+    return dx > 0 ? 1 : 0xf;
   }
 
   /** 0x41771f: the radar — every target's mark round the craft, ahead up, 0x24 to a pixel */

@@ -102,7 +102,7 @@ export function assembleScript(source: string): Token[] {
         continue;
       }
 
-      const ident = /^[A-Za-z_][A-Za-z0-9_]*/.exec(raw.slice(pos));
+      const ident = /^[A-Za-z_]\w*/.exec(raw.slice(pos));
       if (ident) {
         const name = ident[0];
         const forced = nameNext || headerDepth > 0;

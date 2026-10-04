@@ -140,7 +140,7 @@ describe("fetching a file", () => {
     expect(files.provide("q001.stg")).toBeNull();
     expect(files.misses).toEqual(["q001.stg"]);
     expect(await files.load("q001.stg")).toBeNull();
-    expect(fetches.length).toBe(before);
+    expect(fetches).toHaveLength(before);
   });
 
   it("fetches a name once however many ask, and reports each chunk to its owner", async () => {

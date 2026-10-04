@@ -87,10 +87,11 @@ const FACES: readonly Face[] = ["front", "back", "left", "right", "top", "bottom
     other three reuse one side.jpg for both), and only JA's front/back are PNG */
 function coverSrc(code: Edition, face: Face): string {
   const ext = code === "ja" && (face === "front" || face === "back") ? "png" : "jpg";
-  const name =
-    face === "left" || face === "right"
-      ? code === "en" ? (face === "left" ? "sideleft" : "sideright") : "side"
-      : face;
+  let name: string = face;
+  if (face === "left" || face === "right") {
+    if (code !== "en") name = "side";
+    else name = face === "left" ? "sideleft" : "sideright";
+  }
   return siteUrl(`collection/cover/${code}/${name}.${ext}`);
 }
 
@@ -112,7 +113,7 @@ const FACE_ROTATION: Record<Face, { rx: number; ry: number }> = {
 // ---- the DOM this page already has (collection/index.html) ----
 
 const box = document.getElementById("box") as HTMLDivElement;
-const editionPicker = document.getElementById("editionPicker") as HTMLDivElement;
+const editionPicker = document.getElementById("editionPicker") as HTMLElement;
 const discsEl = document.getElementById("discs") as HTMLDivElement;
 const captionEl = document.getElementById("caption") as HTMLParagraphElement;
 

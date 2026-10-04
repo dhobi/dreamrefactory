@@ -82,7 +82,7 @@ describe.skipIf(!have)("the rules, on the disc", () => {
     const frames = decodeSetFrames(bytes);
     const start = set.transitions[0].from;
     expect(frames.size).toBeGreaterThan(100);
-    for (const px of frames.values()) expect(px.length).toBe(VIEW_W * VIEW_H);
+    for (const px of frames.values()) expect(px).toHaveLength(VIEW_W * VIEW_H);
     // two turns from every standpoint, which come back round in four
     let s = start;
     for (let i = 0; i < 4; i++) s = turnsFrom(set, s)[0].to;

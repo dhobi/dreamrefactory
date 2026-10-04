@@ -59,7 +59,9 @@ const TURN_MS = 460;
 
 /** page 1 and page 32 are the covers, and were scanned under those names */
 function pageSrc(edition: string, n: number): string {
-  const name = n === 1 ? "front" : n === PAGE_COUNT ? "back" : String(n);
+  let name = String(n);
+  if (n === 1) name = "front";
+  else if (n === PAGE_COUNT) name = "back";
   return siteUrl(`collection/manual/${edition}/${name}.jpg`);
 }
 
@@ -77,7 +79,8 @@ const reduceMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: 
 function readout(view: number): string {
   const l = leftPage(view);
   const r = rightPage(view);
-  return `${l !== null && r !== null ? `${l}–${r}` : (l ?? r)} / ${PAGE_COUNT}`;
+  const pages = l !== null && r !== null ? `${l}–${r}` : (l ?? r);
+  return `${pages} / ${PAGE_COUNT}`;
 }
 
 // ---- the DOM this page already has (collection/index.html) ----

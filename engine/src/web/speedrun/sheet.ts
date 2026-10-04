@@ -185,7 +185,10 @@ const REPEAT = /^x(\d+)$/i;
  * With a colon the two grammars cannot be confused at all, so an unknown name
  * here is a typo and can be reported as one.
  */
-const OPTION = /^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*([\s\S]*)$/;
+function namedOption(token: string): { key: string; value: string } | null {
+  const head = /^([A-Za-z][\w-]*)\s*:/.exec(token);
+  return head ? { key: head[1], value: token.slice(head[0].length).trimStart() } : null;
+}
 
 /**
  * Strip a trailing `#` comment, respecting double quotes.
@@ -286,7 +289,7 @@ export function parseSheet(text: string, { verbs }: ParseOptions): Step[] {
 }
 
 /** `verb ( ... )` — the whole shape of a statement */
-const CALL = /^([A-Za-z][A-Za-z0-9_]*)\s*\(([\s\S]*)\)$/;
+const CALL = /^([A-Za-z]\w*)\s*\(([\s\S]*)\)$/;
 
 function parseStatement(
   statement: string,
@@ -300,7 +303,7 @@ function parseStatement(
     // Almost always the old grammar rather than a typo, so say which it is. A
     // sheet is a file people keep, and "unknown action" would send someone
     // looking for a missing verb that is sitting right there.
-    const bare = /^([A-Za-z][A-Za-z0-9_]*)\b/.exec(source);
+    const bare = /^([A-Za-z]\w*)\b/.exec(source);
     const hint =
       bare && verbs[bare[1].toLowerCase()]
         ? ` — actions are calls now, so write \`${bare[1]}(...)\``
@@ -315,9 +318,10 @@ function parseStatement(
     const near = Object.keys(verbs)
       .filter((v) => v.startsWith(verb.slice(0, 2)) || v.includes(verb))
       .slice(0, 3);
+    const hint = near.length ? ` — did you mean ${near.join(", ")}?` : "";
     throw new SheetError(
       line,
-      `unknown action "${call[1]}"${near.length ? ` — did you mean ${near.join(", ")}?` : ""}`,
+      `unknown action "${call[1]}"${hint}`,
       source,
     );
   }
@@ -369,14 +373,14 @@ function parseStatement(
       continue;
     }
 
-    const asNamed = OPTION.exec(token);
+    const asNamed = namedOption(token);
     if (asNamed) {
-      const key = asNamed[1].toLowerCase();
+      const key = asNamed.key.toLowerCase();
       const known = [...UNIVERSAL_OPTS, ...(spec.opts ?? [])];
       if (!known.includes(key)) {
         throw new SheetError(line, `${verb} has no argument "${key}" (it takes ${known.join(", ")})`, source);
       }
-      opts[key] = unquote(asNamed[2]);
+      opts[key] = unquote(asNamed.value);
       continue;
     }
     // The one mistake worth catching by hand, because it was the whole grammar
@@ -397,7 +401,9 @@ function parseStatement(
 
   const [min, max] = spec.args;
   if (args.length < min || args.length > max) {
-    const want = min === max ? `${min}` : max === Infinity ? `${min} or more` : `${min}-${max}`;
+    let want = `${min}-${max}`;
+    if (min === max) want = `${min}`;
+    else if (max === Infinity) want = `${min} or more`;
     throw new SheetError(
       line,
       `${verb} takes ${want} argument${max === 1 ? "" : "s"}, got ${args.length}`,

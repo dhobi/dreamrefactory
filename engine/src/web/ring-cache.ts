@@ -57,7 +57,7 @@ const RING_BUDGET_BYTES = 24 * 1024 * 1024;
  * animation are held by reference, so eviction can never blank them.
  */
 export class RingCache {
-  private rings: {
+  private readonly rings: {
     frames: FrameInfo[];
     /** decoded images by container location; null = not decoded / evicted */
     frames_: Map<number, CachedFrame> | null;
@@ -65,7 +65,7 @@ export class RingCache {
     /** LRU stamp */
     used: number;
   }[] = [];
-  private index = new Map<FrameInfo[], number>();
+  private readonly index = new Map<FrameInfo[], number>();
   private clock = 0;
   private decodedBytes = 0;
 

@@ -90,7 +90,7 @@ test("a script shorter than its art is vestigial and ignored (house flames)", ()
   // naming only the first three — authored against art that was later redrawn.
   // Believing it would play three pictures of a fire that has twenty-one.
   const s = state(HOUSE, "flames", "untitled");
-  expect(s.frames.length).toBe(21);
+  expect(s.frames).toHaveLength(21);
   expect(s.playOrder, "the short table is dropped").toBeNull();
 });
 

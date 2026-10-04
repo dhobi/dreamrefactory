@@ -138,7 +138,10 @@ function continueStreet(rgba: Uint8Array, seen: Uint8Array, w: number, h: number
   let c0 = w, c1 = -1, r0 = h, r1 = -1;
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     if (!seen[j * w + i]) continue;
-    if (i < c0) c0 = i; if (i > c1) c1 = i; if (j < r0) r0 = j; if (j > r1) r1 = j;
+    if (i < c0) c0 = i;
+    if (i > c1) c1 = i;
+    if (j < r0) r0 = j;
+    if (j > r1) r1 = j;
   }
   if (c1 < 0) return;
   // the box: grown on its own, so nothing outside it takes part

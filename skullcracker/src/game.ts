@@ -296,7 +296,8 @@ function startJump(run: boolean, moving: boolean): void {
   sound?.own(OWN.jump, p.x, p.y);
   p.leap = run;
   p.windup = run ? 1 : ANIM.launch.length;
-  p.launchDx = run ? MEASURED.runJumpDx : moving ? MEASURED.launchDx : 0;
+  if (run) p.launchDx = MEASURED.runJumpDx;
+  else p.launchDx = moving ? MEASURED.launchDx : 0;
 }
 
 export function engineFrame(): void {
@@ -696,13 +697,10 @@ export function poseFeet(): void {
   // the tuck's cels are 200 and 220: a run's leap from its first frame, a
   // standing jump's from the frame after 253's launch
   const tucked = !p.onGround && (p.leap || p.airFrames >= 1);
-  const want = p.climbing
-    ? p.feet
-    : rec && !hung
-      ? rec.height - rec.posY
-      : tucked
-        ? TUCK_FEET
-        : STAND_FEET;
+  let want: number;
+  if (p.climbing) want = p.feet;
+  else if (rec && !hung) want = rec.height - rec.posY;
+  else want = tucked ? TUCK_FEET : STAND_FEET;
   if (want === p.feet) return;
   p.y += want - p.feet;
   p.feet = want;
@@ -855,11 +853,8 @@ export function placeView(x: number, y: number): void {
  * so the rig is a function of the state and nothing else.
  */
 export function cameraRig(): (typeof CAMERA.rig)[keyof typeof CAMERA.rig] {
-  return p.climbing
-    ? CAMERA.rig.ladder
-    : p.bar
-      ? CAMERA.rig.bar
-      : CAMERA.rig.foot;
+  if (p.climbing) return CAMERA.rig.ladder;
+  return p.bar ? CAMERA.rig.bar : CAMERA.rig.foot;
 }
 
 /** where the target is — the player's own point, led by the facing */
@@ -1042,12 +1037,9 @@ export function lookTarget(): { x: number; y: number } | null {
     !p.bar &&
     p.windup === 0 &&
     p.landLeft === 0;
-  const way =
-    idle && !p.crouching && held.up
-      ? "up"
-      : idle && p.crouching && held.down
-        ? "down"
-        : null;
+  let way: typeof lookWay = null;
+  if (idle && !p.crouching && held.up) way = "up";
+  else if (idle && p.crouching && held.down) way = "down";
   if (way !== lookWay) lookFrames = 0;
   lookWay = way;
   if (!way) return null;
@@ -2367,7 +2359,7 @@ export function fellOut(): boolean {
  * restart anything — `0x402760` moves the player and leaves the level exactly as
  * it was: see {@link respawn}.
  */
-export async function died(): Promise<void> {
+export function died(): void {
   if (advancing) return;
   advancing = true;
   stats.lives -= 1;
@@ -3301,12 +3293,15 @@ export function sideWalls(nx: number): number | null {
   const g = r.ground;
   const lo = g ? g.x0 : r.left + 50;
   const hi = g ? g.x0 + g.ys.length : r.right - 50;
-  const past = nx <= lo ? -1 : nx >= hi ? 1 : 0;
+  let past = 0;
+  if (nx <= lo) past = -1;
+  else if (nx >= hi) past = 1;
   if (past === 0) return null;
   const edge = past < 0 ? lo + 1 : hi - 1;
   const ay = p.y - p.feet;
+  const flag = past < 0 ? 2 : 8;
   const next =
-    r.flags & (past < 0 ? 2 : 8)
+    r.flags & flag
       ? undefined
       : level.rooms.find(
           (q) => nx >= q.left && nx < q.right && ay >= q.top && ay < q.bottom,
@@ -3399,7 +3394,7 @@ export function groundAt(x: number): number | null {
       ? room.top + room.floorDrop
       : null;
   }
-  if (!g || !g.ys.length) return null;
+  if (!g?.ys.length) return null;
   // ...and past either end of a region's floor, the end sample: `0x40bc34` and
   // `0x40bc4c` hold the floor flat beyond its ends rather than answering none
   const i = Math.round(x) - g.x0;
@@ -3859,7 +3854,8 @@ export function padLift(id: number): void {
 
 /** every key at once — a film starting, or the page losing the fingers */
 export function padLiftAll(): void {
-  for (const id of [...padFingers.keys()]) padLift(id);
+  const fingers = Array.from(padFingers.keys());
+  for (const id of fingers) padLift(id);
 }
 
 /**
@@ -4123,7 +4119,10 @@ export function celRec(
 ): SbkCel | undefined {
   if (!book) return undefined;
   let m = celMemo.get(book);
-  if (!m) celMemo.set(book, (m = new Map()));
+  if (!m) {
+    m = new Map();
+    celMemo.set(book, m);
+  }
   if (!m.has(id))
     m.set(
       id,
@@ -4362,7 +4361,8 @@ export function landHits(): void {
     kickHead(h, mine.blow);
   }
   const pool = level.spawned[i];
-  for (const e of [...pool]) {
+  const struckAt = pool.slice();
+  for (const e of struckAt) {
     // and once it has toppled it is out of the fight, the way `0x44fe80` opens
     // with `if (obj+0x18 != 2)`; the water is not a thing at all — its cels carry
     // no collision box, which is how the format says so
@@ -4381,7 +4381,6 @@ export function landHits(): void {
      */
     if (!celRec(level.sbk, celOf(e))?.body) continue;
     if (e.state === "flinch" && e.anim.terminal) continue;
-    const foe = FOES[e.kind];
     const c = celRec(level.sbk, celOf(e));
     if (!c) continue;
     const box = hurtBox(e, c, level);
@@ -4568,6 +4567,30 @@ export function rallyFall(
   e.clock = 0;
 }
 
+/** a blow's hitter as {@link strikeFoe}'s exchange reads it */
+interface FoeHitter {
+  mass: number;
+  vx: number;
+  vy: number;
+  recoil?: (vx: number, vy: number) => void;
+  /** who it was, for the handlers that ask — see {@link Hitter} */
+  by?: Hitter;
+}
+
+/** the player's fist, the hitter {@link strikeFoe} assumes when it is handed none */
+function fistHitter(): FoeHitter {
+  return {
+    mass: DIVISOR,
+    vx: p.vx,
+    vy: p.vyRaw,
+    recoil: (vx, vy) => {
+      p.vx = vx;
+      if (!p.onGround) p.vyRaw = vy;
+    },
+    by: { player: true },
+  };
+}
+
 /**
  * What a landed blow DOES to one creature — the class handler's own sequence,
  * lifted out of {@link landHits} so that something other than a fist can land
@@ -4611,23 +4634,7 @@ export function strikeFoe(
    * in pixels a frame, and where its share of the exchange goes. The player's
    * fist by default.
    */
-  hitter: {
-    mass: number;
-    vx: number;
-    vy: number;
-    recoil?: (vx: number, vy: number) => void;
-    /** who it was, for the handlers that ask — see {@link Hitter} */
-    by?: Hitter;
-  } = {
-    mass: DIVISOR,
-    vx: p.vx,
-    vy: p.vyRaw,
-    recoil: (vx, vy) => {
-      p.vx = vx;
-      if (!p.onGround) p.vyRaw = vy;
-    },
-    by: { player: true },
-  },
+  hitter: FoeHitter = fistHitter(),
 ): void {
   if (!level) return;
   const foe = FOES[e.kind];
@@ -4813,7 +4820,9 @@ export function strikeFoe(
   // a progressive kind advances one stage per blow instead of picking; a
   // hydrant's handler switches on the state it is already showing, not on how
   // hard it was hit
-  const which = foe.progressive ? e.dents - 1 : foe.pick ? foe.pick(blow, e) : 0;
+  let which = 0;
+  if (foe.progressive) which = e.dents - 1;
+  else if (foe.pick) which = foe.pick(blow, e);
   if (foe.progressive && which >= foe.flinch.length) return; // beaten in already
   // ...and a pick of −1 is a handler that takes the blow and shows nothing:
   // the eyeball's on any cel but its three hover poses (`0x43e9d4`)
@@ -4988,7 +4997,6 @@ export function stepGobs(): void {
     // the allocator's gravity, ten a frame² (`0x42f5ca`) — the effect class's
     // init `0x40c3c0` sets its divisor and nothing else — added after the move
     // and never capped (`0x430322`)
-    const was = g.y;
     g.x += g.vx;
     g.y += g.vy;
     g.vy += 10 * TICK_SCALE * TICK_SCALE;
@@ -5490,7 +5498,10 @@ export function foesStrikeFoes(): void {
     const box = strikeOf(cel, x, y, facing);
     if (!box) return false;
     let mem = struckBy.get(who);
-    if (!mem || mem.anim !== anim) struckBy.set(who, (mem = { anim, hit: new Set() }));
+    if (!mem || mem.anim !== anim) {
+      mem = { anim, hit: new Set() };
+      struckBy.set(who, mem);
+    }
     let landed = false;
     for (const v of bodies) {
       if (v === who || mem.hit.has(v)) continue;
@@ -5526,7 +5537,7 @@ export function foesStrikeFoes(): void {
         facing,
         (box.top + box.bottom) / 2,
         hb,
-        code < 0 ? code : 0,
+        Math.min(code, 0),
         {
           x: (Math.max(box.left, hb.left) + Math.min(box.right, hb.right)) / 2,
           y: (Math.max(box.top, hb.top) + Math.min(box.bottom, hb.bottom)) / 2,
@@ -5670,13 +5681,8 @@ export function takeHits(): void {
     // `0x44915c` / `0x44919e`: which side it came from decides the take
     const front = x > p.x === p.facing > 0;
     const knocked = damage > HURT.knockdown;
-    p.act = knocked
-      ? front
-        ? "downFront"
-        : "downBack"
-      : front
-        ? "hurtFront"
-        : "hurtBack";
+    if (knocked) p.act = front ? "downFront" : "downBack";
+    else p.act = front ? "hurtFront" : "hurtBack";
     p.actClock = 0;
     const hurt = OWN.hurt[Math.floor(random() * OWN.hurt.length)];
     sound?.own(hurt, p.x, p.y);
@@ -6843,12 +6849,9 @@ export function pickupsIn(sbk: SbkFile, room: SbkRoom): Pickup[] {
     if (!e.isEntity) continue;
     // `0x451420`: one name, three codes, picked by the record's own param — 0, 1
     // and 2 are −6, −5 and −4, and any other param makes nothing (`0x45142e`)
-    const code =
-      e.name === "statscoreup"
-        ? e.param >= 0 && e.param <= 2
-          ? String(-6 + e.param)
-          : undefined
-        : PICKUP_CODES[e.name];
+    let code: string | undefined;
+    if (e.name !== "statscoreup") code = PICKUP_CODES[e.name];
+    else if (e.param >= 0 && e.param <= 2) code = String(-6 + e.param);
     if (!code || !PICKUP.kinds[code]) continue;
     if (
       e.pointY < room.top ||
@@ -6931,15 +6934,11 @@ export function playerSprite(): {
   if (!f) return null;
   // the same placement the draw uses: the anchor on `p.x`, standing on `p.y`
   const rec = celRec(player, lastCel);
+  let left = p.x - f.width / 2;
+  if (rec) left = p.facing < 0 ? p.x - (f.width - rec.posX) : p.x - rec.posX;
   return {
     f,
-    left: Math.round(
-      rec
-        ? p.facing < 0
-          ? p.x - (f.width - rec.posX)
-          : p.x - rec.posX
-        : p.x - f.width / 2,
-    ),
+    left: Math.round(left),
     top: Math.round(p.y - f.height),
     mirror: p.facing < 0,
   };
@@ -7086,7 +7085,7 @@ export function stepHoles(): void {
       // `0x421239` — `0x402fa0` opens with `0x402df0`: every key dropped
       dropKeys();
       sound?.effect(FOE_SFX.graveTake, h.x, h.y);
-      void died();
+      died();
     }
     h.clock += 1;
     if (h.clock < HOLE.opening.cels.length * HOLE.opening.hold) continue;
@@ -7453,7 +7452,7 @@ export function stepFloors(): void {
     ) {
       // `0x42713e` — `0x402fa0(1)`, and `0x402df0` before it drops every key
       dropKeys();
-      void died();
+      died();
     }
   }
 }
@@ -7462,7 +7461,7 @@ export function stepFloors(): void {
 export function floorCel(f: Floor): number {
   if (f.state === "whole" || f.state === "settling") return FLOOR.whole;
   if (f.state === "gone")
-    return FLOOR.caving.cels[FLOOR.caving.cels.length - 1];
+    return FLOOR.caving.cels.at(-1)!;
   const a = f.state === "creaking" ? FLOOR.creaking : FLOOR.caving;
   return a.cels[Math.min(a.cels.length - 1, Math.floor(f.clock / a.hold))];
 }
@@ -7647,7 +7646,7 @@ function boltStrikes(all: readonly LightFx[]): void {
   p.dyingTag = 3;
   // ...and the life goes with it, once: `died` answers a second call with
   // nothing, as the disc spends it only as the death script ends
-  void died();
+  died();
 }
 
 /**
@@ -7778,12 +7777,7 @@ export function stepBigGuns(): void {
           g.clock = 0;
           break;
         }
-        const run =
-          g.shot === 0
-            ? BIGGUN.fire.one
-            : g.shot === 1
-              ? BIGGUN.fire.two
-              : BIGGUN.fire.done;
+        const run = shotRun(g);
         if (g.clock < run.cels.length * run.hold) break;
         if (g.shot < 2) {
           // `0x41373c` / `0x413770` — the sound, then `0x412a70(gun, 0)`, which
@@ -7827,17 +7821,30 @@ export function stepBigGuns(): void {
   }
 }
 
+/** the script a big gun's shot plays — one, two, or done */
+function shotRun(g: BigGun) {
+  if (g.shot === 0) return BIGGUN.fire.one;
+  return g.shot === 1 ? BIGGUN.fire.two : BIGGUN.fire.done;
+}
+
+/** the script the hatch's tag plays, and none for tag 0 */
+function hatchRun(g: BigGun) {
+  switch (g.hatch) {
+    case 1:
+      return BIGGUN.hatch.open;
+    case 2:
+      return BIGGUN.hatch.held;
+    case 3:
+      return BIGGUN.hatch.close;
+    default:
+      return null;
+  }
+}
+
 /** `0x41387c` — the hatch, which has its own four tags and its own clock */
 export function stepHatch(g: BigGun, inside: boolean): void {
   g.hatchClock += 1;
-  const run =
-    g.hatch === 1
-      ? BIGGUN.hatch.open
-      : g.hatch === 2
-        ? BIGGUN.hatch.held
-        : g.hatch === 3
-          ? BIGGUN.hatch.close
-          : null;
+  const run = hatchRun(g);
   if (!run) {
     if (inside) {
       g.hatch = 1;
@@ -7847,19 +7854,16 @@ export function stepHatch(g: BigGun, inside: boolean): void {
   }
   if (g.hatchClock < run.cels.length * run.hold) return;
   // tag 1 always goes to 2; tag 2 asks the rect again; tag 3 goes home
-  g.hatch = g.hatch === 1 ? 2 : g.hatch === 2 ? (inside ? 2 : 3) : 0;
+  if (g.hatch === 1) g.hatch = 2;
+  else if (g.hatch === 2) g.hatch = inside ? 2 : 3;
+  else g.hatch = 0;
   g.hatchClock = 0;
 }
 
 /** which cel the hatch is showing — `0x46c238`'s four tags */
 export function hatchCel(g: BigGun): number {
   if (g.hatch === 0) return BIGGUN.hatch.shut;
-  const run =
-    g.hatch === 1
-      ? BIGGUN.hatch.open
-      : g.hatch === 2
-        ? BIGGUN.hatch.held
-        : BIGGUN.hatch.close;
+  const run = hatchRun(g) ?? BIGGUN.hatch.close;
   const i = Math.min(run.cels.length - 1, Math.floor(g.hatchClock / run.hold));
   return run.cels[i];
 }
@@ -7879,14 +7883,7 @@ export function gunCel(g: BigGun): number {
     case "unfold":
       return step(BIGGUN.unfold, g.clock);
     case "fire":
-      return step(
-        g.shot === 0
-          ? BIGGUN.fire.one
-          : g.shot === 1
-            ? BIGGUN.fire.two
-            : BIGGUN.fire.done,
-        g.clock,
-      );
+      return step(shotRun(g), g.clock);
     case "blink":
       return BIGGUN.blink.cels[
         Math.floor(g.clock / BIGGUN.blink.hold) % BIGGUN.blink.cels.length
@@ -7894,7 +7891,7 @@ export function gunCel(g: BigGun): number {
     case "fold":
       return step(BIGGUN.fold, g.clock);
     case "rise":
-      return BIGGUN.fold.cels[BIGGUN.fold.cels.length - 1];
+      return BIGGUN.fold.cels.at(-1)!;
   }
 }
 
@@ -8026,7 +8023,7 @@ export function fanKills(f: Fan): void {
   sound?.effect(FAN.kill, f.x, f.y);
   f.red = true;
   f.clock = 0;
-  void died();
+  died();
 }
 
 /** which cel a fan is showing — each tag loops, as the think reinstalls it */
@@ -8078,7 +8075,9 @@ export function stepBelts(): void {
 export function beltCel(b: Belt): number {
   // `0x411532`: a param under 5 is `0x46c188` (three frames a cel), under 10
   // `0x46c130` (two), and otherwise `0x46c0d8` (one)
-  const hold = b.param < 5 ? BELT.slowHold : b.param < 10 ? 2 : BELT.roll.hold;
+  let hold: number = BELT.roll.hold;
+  if (b.param < 5) hold = BELT.slowHold;
+  else if (b.param < 10) hold = 2;
   const i = Math.floor(b.clock / hold) % BELT.roll.cels.length;
   return b.dir < 0
     ? BELT.roll.cels[BELT.roll.cels.length - 1 - i]
@@ -8138,12 +8137,7 @@ export function stepClaws(): void {
     const gap = Math.abs(p.x - c.x);
     // the DIVE, and it owns the claw until it is back up — `0x4173bf`'s four tags
     if (c.state === "dive" || c.state === "clamp" || c.state === "lift") {
-      const a =
-        c.state === "dive"
-          ? CLAW.dive
-          : c.state === "clamp"
-            ? CLAW.jaws
-            : CLAW.lift;
+      const a = clawScript(c);
       if (c.clock < a.cels.length * a.hold) continue;
       c.clock = 0;
       if (c.state === "dive") {
@@ -8160,16 +8154,12 @@ export function stepClaws(): void {
       continue;
     }
     if (c.state === "down" || c.state === "shut" || c.state === "up") {
-      const a =
-        c.state === "down"
-          ? CLAW.down
-          : c.state === "shut"
-            ? CLAW.shut
-            : CLAW.up;
+      const a = clawScript(c);
       if (c.clock < a.cels.length * a.hold) continue;
       c.clock = 0;
-      c.state =
-        c.state === "down" ? "shut" : c.state === "shut" ? "up" : "running";
+      if (c.state === "down") c.state = "shut";
+      else if (c.state === "shut") c.state = "up";
+      else c.state = "running";
       if (c.state === "shut") sound?.effect(CLAW.clamp, c.x, c.y);
       continue;
     }
@@ -8211,24 +8201,31 @@ export function stepClaws(): void {
   }
 }
 
+/** the script a claw's state plays */
+function clawScript(c: Claw) {
+  switch (c.state) {
+    case "idle":
+      return CLAW.idle;
+    case "running":
+      return CLAW.running;
+    case "down":
+      return CLAW.down;
+    case "shut":
+      return CLAW.shut;
+    case "dive":
+      return CLAW.dive;
+    case "clamp":
+      return CLAW.jaws;
+    case "lift":
+      return CLAW.lift;
+    default:
+      return CLAW.up;
+  }
+}
+
 /** which cel a claw is showing */
 export function clawCel(c: Claw): number {
-  const a =
-    c.state === "idle"
-      ? CLAW.idle
-      : c.state === "running"
-        ? CLAW.running
-        : c.state === "down"
-          ? CLAW.down
-          : c.state === "shut"
-            ? CLAW.shut
-            : c.state === "dive"
-              ? CLAW.dive
-              : c.state === "clamp"
-                ? CLAW.jaws
-                : c.state === "lift"
-                  ? CLAW.lift
-                  : CLAW.up;
+  const a = clawScript(c);
   const i =
     c.state === "idle" || c.state === "running"
       ? Math.floor(c.clock / a.hold) % a.cels.length
@@ -8266,8 +8263,10 @@ export function boggsStruck(b: Boggs, bolted: boolean): void {
 /** what a fitting is playing — see {@link FITTING} */
 function fittingAnim(f: Fitting): { cels: readonly number[]; hold: number } {
   if (f.kind === "teeth") return { cels: [FITTING.teeth.cel], hold: 1 };
-  if (f.kind === "ball")
-    return f.phase === "out" ? FITTING.ball.out : f.phase === "back" ? FITTING.ball.back : FITTING.ball.idle;
+  if (f.kind === "ball") {
+    if (f.phase === "out") return FITTING.ball.out;
+    return f.phase === "back" ? FITTING.ball.back : FITTING.ball.idle;
+  }
   return f.phase === "spray" ? FITTING.shower.spray[f.tag] : FITTING.shower.idle[f.tag];
 }
 
@@ -8666,8 +8665,7 @@ export function stepBoggsWorms(b: Boggs): void {
       m.clock = 0;
       continue;
     }
-    const run =
-      m.kind === 1 ? w.rise : m.kind === 2 ? w.strike : w.sink;
+    const run = wormRun(m);
     if (m.clock < run.cels.length * run.hold) continue;
     if (m.kind === 1) {
       // `0x41ae5f` — the warning is played ONCE a level, and only for one that
@@ -8696,11 +8694,24 @@ export function wormsHere(): BoggsWorm[] {
   return out;
 }
 
+/** the script a worm's kind plays */
+function wormRun(m: BoggsWorm) {
+  const w = BOGGS.worms;
+  switch (m.kind) {
+    case 0:
+      return w.sleep;
+    case 1:
+      return w.rise;
+    case 2:
+      return w.strike;
+    default:
+      return w.sink;
+  }
+}
+
 /** the cel a worm is showing, off its own kind and its own clock */
 export function boggsWormCel(m: BoggsWorm): number {
-  const w = BOGGS.worms;
-  const run =
-    m.kind === 0 ? w.sleep : m.kind === 1 ? w.rise : m.kind === 2 ? w.strike : w.sink;
+  const run = wormRun(m);
   const i = Math.floor(m.clock / run.hold);
   return run.cels[Math.min(run.cels.length - 1, i)];
 }
@@ -8716,8 +8727,12 @@ export function boggsWormCel(m: BoggsWorm): number {
 export function boggsAim(b: Boggs): number {
   const si = b.x - p.x; // positive when you are to its left
   const di = p.y - b.y; // positive when you are below it
-  const col = si > BOGGS.head.far ? 0 : si > 0 ? 1 : 2;
-  const row = di > BOGGS.head.below ? 6 : di > BOGGS.head.above ? 0 : 3;
+  let col = 2;
+  if (si > BOGGS.head.far) col = 0;
+  else if (si > 0) col = 1;
+  let row = 3;
+  if (di > BOGGS.head.below) row = 6;
+  else if (di > BOGGS.head.above) row = 0;
   return row + col;
 }
 
@@ -8938,7 +8953,7 @@ export function gunsIn(sbk: SbkFile, room: SbkRoom): Gun[] {
     const code = Number(
       Object.keys(GUN_CODES).find(
         (c) => GUN_CODES[Number(c)].name === e.name,
-      ) ?? NaN,
+      ) ?? Number.NaN,
     );
     if (!Number.isFinite(code)) continue;
     if (
@@ -9653,7 +9668,7 @@ export function bushCel(q: Bush): number {
     // the object without installing anything, so it keeps showing its last
     // frame, grip and all, the whole way back down
     case "sink":
-      return BUSH.rise.cels[BUSH.rise.cels.length - 1];
+      return BUSH.rise.cels.at(-1)!;
     case "peekUp":
       return at(BUSH.peek.up);
     case "peekDown":
@@ -9671,8 +9686,9 @@ export function bushCel(q: Bush): number {
 /** which cel a stream is showing */
 export function streamCel(q: Stream): number {
   const kit = STREAMS[q.weapon]!;
-  const a =
-    q.state === "start" ? kit.start : q.state === "loop" ? kit.loop : kit.stop;
+  let a = kit.stop;
+  if (q.state === "start") a = kit.start;
+  else if (q.state === "loop") a = kit.loop;
   const k = Math.floor(q.clock / a.hold);
   return q.state === "loop"
     ? a.cels[k % a.cels.length]
@@ -10020,7 +10036,7 @@ export function stepFlares(): void {
       f.grounded = true;
       // `0x43acae`: the ground ends the flight, and next frame's think
       // installs the burn-out
-      if (f.burn === null) f.burn = -1;
+      f.burn ??= -1;
     }
     if (f.grounded) f.vx = dragged(f.vx);
     // `0x42f850(obj, 0.5)` stores `trunc(0.5 * 10)` — half the player's own
@@ -10524,7 +10540,8 @@ export function stepScenery(): void {
 
 /** the script a barrel is on, as {@link BARREL} names them */
 export function barrelScript(b: Barrel): (typeof BARREL)["bob" | "wobble" | "sink"] {
-  return b.tag === "wobble" ? BARREL.wobble : b.tag === "sink" ? BARREL.sink : BARREL.bob;
+  if (b.tag === "wobble") return BARREL.wobble;
+  return b.tag === "sink" ? BARREL.sink : BARREL.bob;
 }
 
 /** which cel a barrel is showing — its class's own 3180 while its delay runs */
@@ -11660,12 +11677,14 @@ export function lightFlame(
   flames.push(f);
   // placed now as well as every frame, so a flame lit after the flame pass
   // (the CHOPPER's wreck, lit from its own think) is not drawn once elsewhere
-  placeFlame(
-    f,
-    lvl,
-    on === p ? "player" : crowsHere().includes(on as Crow) ? "crow" : casts.includes(on as Cast) ? "cast" : "foe",
-  );
+  let kind: FlameOn = "foe";
+  if (on === p) kind = "player";
+  else if (crowsHere().includes(on as Crow)) kind = "crow";
+  else if (casts.includes(on as Cast)) kind = "cast";
+  placeFlame(f, lvl, kind);
 }
+
+type FlameOn = "crow" | "cast" | "foe" | "player";
 
 /**
  * Where a flame stands — `0x453eb7`, against its victim's `obj+8` and `obj+6`.
@@ -11676,7 +11695,7 @@ export function lightFlame(
  * 197 of its 222 pixels right of the anchor, measuring from `e.x` put the flame
  * on its wreck 86 pixels off it.
  */
-function placeFlame(f: Flame, lvl: Level, kind: "crow" | "cast" | "foe" | "player"): void {
+function placeFlame(f: Flame, lvl: Level, kind: FlameOn): void {
   if (kind === "player") {
     // `0x41a019`..`0x41a055` — chapter four's flame, the same arithmetic
     // against the player's own point
@@ -11728,14 +11747,14 @@ export function stepFlames(): void {
   alive.add(p);
   for (const f of flames) {
     if (!alive.has(f.on)) continue;
-    placeFlame(f, lvl, f.on === p ? "player" : birds.has(f.on) ? "crow" : lit.has(f.on) ? "cast" : "foe");
+    let kind: FlameOn = "foe";
+    if (f.on === p) kind = "player";
+    else if (birds.has(f.on)) kind = "crow";
+    else if (lit.has(f.on)) kind = "cast";
+    placeFlame(f, lvl, kind);
     f.clock += 1;
-    const run =
-      f.stage === 0
-        ? FLAME.grow.cels.length * FLAME.grow.hold
-        : f.stage === 1
-          ? FLAME.burn.cels.length * FLAME.burn.hold
-          : FLAME.fade.cels.length * FLAME.fade.hold;
+    const stage = flameStage(f);
+    const run = stage.cels.length * stage.hold;
     if (f.clock < run) continue;
     if (f.stage === 0) {
       f.stage = 1;
@@ -11762,10 +11781,15 @@ export function stepFlames(): void {
   );
 }
 
+/** the script a flame's stage plays — {@link FLAME}'s three stages in order */
+function flameStage(f: Flame) {
+  if (f.stage === 0) return FLAME.grow;
+  return f.stage === 1 ? FLAME.burn : FLAME.fade;
+}
+
 /** the cel a flame is showing — {@link FLAME}'s three stages in order */
 export function flameCel(f: Flame): number {
-  const a =
-    f.stage === 0 ? FLAME.grow : f.stage === 1 ? FLAME.burn : FLAME.fade;
+  const a = flameStage(f);
   return a.cels[Math.min(a.cels.length - 1, Math.floor(f.clock / a.hold))];
 }
 
@@ -11821,12 +11845,9 @@ export function stepCans(): void {
       drag: Math.trunc(c.drag * 8192),
       weight: CAN.pull,
     });
-    const len =
-      c.tag === 0
-        ? CAN.tumble.cels.length * CAN.tumble.hold
-        : c.tag === 1
-          ? CAN.settle.cels.length * CAN.settle.hold
-          : 1;
+    let len = 1;
+    if (c.tag === 0) len = CAN.tumble.cels.length * CAN.tumble.hold;
+    else if (c.tag === 1) len = CAN.settle.cels.length * CAN.settle.hold;
     if (c.tag <= 1) {
       if (c.clock < len) continue;
       // `0x43af32` hands tag 0 to tag 1; `0x43af4e` rolls 1..3 out of tag 1
@@ -12141,7 +12162,7 @@ export function rollerCel(r: RollerBody): number {
   if (r.wait >= 0) return ROLLER.waits;
   const c = ROLLER.rolls;
   const i = Math.floor(r.clock / c.hold);
-  if (r.still && i >= c.cels.length) return c.cels[c.cels.length - 1];
+  if (r.still && i >= c.cels.length) return c.cels.at(-1)!;
   return c.cels[i % c.cels.length];
 }
 
@@ -12250,7 +12271,7 @@ function flightCel(kit: CastKit, clock: number): number {
   // the launch has run out: either the flight takes over and loops, or the last
   // cel holds, which is what a finished script does with nobody to reinstall it
   const then = kit.next;
-  if (!then) return kit.cels[kit.cels.length - 1];
+  if (!then) return kit.cels.at(-1)!;
   const since = clock - kit.cels.length * hold;
   const j = Math.floor(since / Math.max(1, then.hold));
   const loop = kit.thenLoop;
@@ -13024,11 +13045,14 @@ export function track(e: Enemy, bands: readonly number[]): Track {
   // the player's is `p.y - p.feet`, the foe's is its gait cel's point above its
   // feet ({@link foeAnchor})
   const anchor = level ? foeAnchor(e, level) : null;
+  let side: 0 | 1 | 2 = 0;
+  if (still) side = 2;
+  else if (infront) side = 1;
   return {
     forward,
     dy: p.y - p.feet - (anchor ? anchor.y : e.y),
     band,
-    side: still ? 2 : infront ? 1 : 0,
+    side,
   };
 }
 
@@ -13413,7 +13437,8 @@ export function stepEnemies(): void {
   const lvl = level;
   const pool = spawnedHere();
   playerSwinging = strikeBox() !== null;
-  for (const e of [...pool]) {
+  const stepping = pool.slice();
+  for (const e of stepping) {
     const foe = FOES[e.kind];
     // ...and a thing that is no longer running a state of its own has weight
     // again, which only a brain that sets {@link Enemy.weightless} notices
@@ -13989,11 +14014,10 @@ export function stepEnemies(): void {
      * probe's `0x410486` clamps `obj+0xc` to ±27 by hand), which this page has
      * never modelled through the stride. So they keep the stride they had.
      */
-    const step = foe.floats
-      ? foe.accrues
-        ? 0
-        : ((e.anim.dx?.[i] ?? 0) / (e.divisor ?? foe.divisor)) * TICK_SCALE
-      : (e.speed ?? 0) * TICK_SCALE;
+    let step: number;
+    if (!foe.floats) step = (e.speed ?? 0) * TICK_SCALE;
+    else if (foe.accrues) step = 0;
+    else step = ((e.anim.dx?.[i] ?? 0) / (e.divisor ?? foe.divisor)) * TICK_SCALE;
     // ...except a floater whose own think holds the velocity down, which gets
     // the engine's reading: `0x45d1a3` adds the frame's `dx / divisor`, rounded
     // away from zero, into `obj+0xc` on every frame it shows, with no drag in
@@ -14131,19 +14155,12 @@ export function stepEnemies(): void {
           break;
         } else if (!blocked) {
           const span = p.room ? roomSpan(p.room) : null;
-          e.x =
-            // ...nor is a brain class held to its rect ±200: `0x42fd80` clamps
-            // at no rect, and the rat's run `0x44e226` goes where it goes
-            foe.drives || e.fighting || brain
-              ? span
-                ? Math.max(span.lo, Math.min(span.hi, nx))
-                : nx
-              : // ...and never through where it already stands, so a foe walking
-                // home from a fight it followed you out of is not teleported
-                Math.max(
-                  Math.min(e.left - 200, e.x),
-                  Math.min(Math.max(e.right + 200, e.x), nx),
-                );
+          // ...nor is a brain class held to its rect ±200: `0x42fd80` clamps
+          // at no rect, and the rat's run `0x44e226` goes where it goes
+          if (foe.drives || e.fighting || brain) e.x = span ? Math.max(span.lo, Math.min(span.hi, nx)) : nx;
+          // ...and never through where it already stands, so a foe walking
+          // home from a fight it followed you out of is not teleported
+          else e.x = Math.max(Math.min(e.left - 200, e.x), Math.min(Math.max(e.right + 200, e.x), nx));
         } else break; // it walked into a step it cannot climb: the rest is thrown away
         // ...and it is pinned HERE, not at the end of the whole stride, so it
         // meets a ledge where the ledge is and steps off it rather than over it
@@ -14247,7 +14264,7 @@ function stepOff(e: Enemy, foe: Foe): void {
  * VAT (`0x419b20`) draws no creature class.
  */
 export type EnemyPass = string | readonly [string, 0 | 1];
-export const ENEMY_PASSES: Readonly<Record<string, readonly (EnemyPass | "player")[]>> = {
+export const ENEMY_PASSES: Readonly<Record<string, readonly EnemyPass[]>> = {
   STREETS: [["initrat", 0], "initmailbox", "initwerea", "initwereb", "player", ["initrat", 1], "inithydrant"],
   CITY: ["initwerea", "initwereb", "initwerec", "player"],
   WOODS: [["initdog", 0], "initwered", "initwerea", "initwereb", "initwerec", "player", ["initdog", 1]],
@@ -14370,29 +14387,19 @@ export function choosePlayerCel(): void {
    */
   const kit =
     inv.drawn ? (WEAPONS[inv.weapon]?.moveset ?? null) : null;
-  const seq = acting
-    ? acting.cels
-    : p.bar
-      ? (ANIM.bar[p.barTag] ?? ANIM.bar[0] ?? ANIM.hang)
-      : p.climbing
-        ? (ANIM.climb[p.climbTag] ?? ANIM.hang)
-        : p.flail
-          // `0x472350` whatever is in the player's hands: the preamble that
-          // installs it runs ahead of every armed state's handler too
-          ? ANIM.flail
-          : p.landLeft > 0
-          ? p.hardLand
-            ? (kit?.fall ?? ANIM.air)
-            : (kit?.land ?? ANIM.land)
-          : !p.onGround || p.windup > 0
-            ? (kit?.jump ?? ANIM.air)
-            : p.crouching
-              ? (kit?.duck ?? ANIM.crouch)
-              : p.running
-                ? (kit?.run ?? ANIM.run)
-                : p.moving
-                  ? (kit?.walk ?? ANIM.walk)
-                  : (kit?.idle ?? ANIM.idle);
+  let seq: readonly number[];
+  if (acting) seq = acting.cels;
+  else if (p.bar) seq = ANIM.bar[p.barTag] ?? ANIM.bar[0] ?? ANIM.hang;
+  else if (p.climbing) seq = ANIM.climb[p.climbTag] ?? ANIM.hang;
+  // `0x472350` whatever is in the player's hands: the preamble that
+  // installs it runs ahead of every armed state's handler too
+  else if (p.flail) seq = ANIM.flail;
+  else if (p.landLeft > 0) seq = p.hardLand ? (kit?.fall ?? ANIM.air) : (kit?.land ?? ANIM.land);
+  else if (!p.onGround || p.windup > 0) seq = kit?.jump ?? ANIM.air;
+  else if (p.crouching) seq = kit?.duck ?? ANIM.crouch;
+  else if (p.running) seq = kit?.run ?? ANIM.run;
+  else if (p.moving) seq = kit?.walk ?? ANIM.walk;
+  else seq = kit?.idle ?? ANIM.idle;
   // Three clocks, because the engine has three. An action and the idle run on
   // engine frames at their script's own ticksPerFrame; anything that covers
   // ground is clocked by the GROUND it covers, one cel per stride, so the feet
@@ -14421,24 +14428,20 @@ export function choosePlayerCel(): void {
             Math.min(p.fidget.length - 1, Math.floor(p.fidgetClock / IDLE_HOLD))
           ]
         : seq[Math.floor(p.idleClock / IDLE_HOLD) % seq.length];
-  else if (kit && seq === kit.duck) id = seq[0];
-  else if (kit && (seq === kit.land || seq === kit.fall))
+  else if (seq === kit?.duck) id = seq[0];
+  else if (seq === kit?.land || seq === kit?.fall)
     id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
   else if (kit && seq === kit.jump)
     // two records, the second carrying the dy: the wind-up cel, then the tuck
     id = seq[p.windup > 0 || p.airFrames === 0 ? 0 : seq.length - 1];
-  else if (seq === ANIM.crouch)
+  else if (seq === ANIM.crouch) {
     // moving while ducked is the crawl, clocked by ground covered like every
     // gait; still is the held duck, with its rare settle fidget over it
-    id = p.moving
-      ? ANIM.crawl[
-          Math.floor(p.travelled / crawlStridePx()) % ANIM.crawl.length
-        ]
-      : p.fidget === ANIM.crouchFidget
-        ? ANIM.crouchFidget[
-            Math.min(ANIM.crouchFidget.length - 1, Math.floor(p.fidgetClock))
-          ]
-        : ANIM.crouch[0];
+    if (p.moving) id = ANIM.crawl[Math.floor(p.travelled / crawlStridePx()) % ANIM.crawl.length];
+    else if (p.fidget === ANIM.crouchFidget)
+      id = ANIM.crouchFidget[Math.min(ANIM.crouchFidget.length - 1, Math.floor(p.fidgetClock))];
+    else id = ANIM.crouch[0];
+  }
   else if (seq === ANIM.land)
     id =
       ANIM.land[Math.min(ANIM.land.length - 1, ANIM.land.length - p.landLeft)];
@@ -14454,7 +14457,7 @@ export function choosePlayerCel(): void {
     else if (p.leap)
       id =
         ANIM.tuck[Math.min(ANIM.tuck.length - 1, Math.max(0, p.airFrames - 1))];
-    else if (p.airFrames === 0) id = ANIM.launch[ANIM.launch.length - 1];
+    else if (p.airFrames === 0) id = ANIM.launch.at(-1)!;
     else id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, p.airFrames - 1)];
   } else {
     const f = Math.floor(p.travelled / stride) % seq.length;
@@ -14628,10 +14631,10 @@ export function tick(): void {
     // none of them has a kick at all.
     else if (inv.drawn && punchPressed && !held.down) p.act = "fire";
     else if (both) p.act = held.down ? "duckCombo" : "headbutt";
-    else if (punchPressed)
-      p.act = held.down
-        ? "duckPunch"
-        : `punch${big}${random() < 0.5 ? "" : "2"}`;
+    else if (punchPressed) {
+      if (held.down) p.act = "duckPunch";
+      else p.act = `punch${big}${random() < 0.5 ? "" : "2"}`;
+    }
     else if (kickPressed && p.running) {
       // the RUN handler's own kick (`0x429db9`) is the FLYING KICK — tag 4 of
       // `0x471d68`, whose first record carries its own leap: dx 190, dy -310
@@ -14889,10 +14892,8 @@ export function tick(): void {
     bar = barAt();
   // ...and INV stands you still: state 15 reads no direction at all, and the
   // idle it hands you to goes straight back to it while the button is down
-  const dir =
-    ladder || bar || p.act || p.invLoop
-      ? 0
-      : (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  let dir = 0;
+  if (!(ladder || bar || p.act || p.invLoop)) dir = (held.right ? 1 : 0) - (held.left ? 1 : 0);
   p.moving = dir !== 0;
   /**
    * The run — `[0x4ac3fe]`, which is W held, and see {@link KEYS} for why that
@@ -15005,11 +15006,9 @@ export function tick(): void {
       } else if (dir && p.onGround) {
         // the gait's own dx: the walk's 95, the run's 180, and ducked it is the
         // CRAWL — 0x4717c8 tag 4's 47, which cannot run
-        const dx = held.down
-          ? MEASURED.crawl
-          : p.running
-            ? MEASURED.run
-            : MEASURED.walk;
+        let dx: number = MEASURED.walk;
+        if (held.down) dx = MEASURED.crawl;
+        else if (p.running) dx = MEASURED.run;
         p.vx += p.facing * roundAway(dx / DIVISOR);
       }
     }
@@ -15313,10 +15312,8 @@ export function tick(): void {
            * hold below. Take the facing alone and a westward swing snaps
            * fifteen pixels back east every time it completes.
            */
-          const n =
-            p.x > bar.left
-              ? Math.trunc((p.x - bar.left) / spacing) + (way === 1 ? 1 : 0)
-              : 0;
+          let n = 0;
+          if (p.x > bar.left) n = Math.trunc((p.x - bar.left) / spacing) + (way === 1 ? 1 : 0);
           p.x = Math.max(
             bar.left,
             Math.min(bar.right, bar.left + n * spacing),
@@ -15325,7 +15322,7 @@ export function tick(): void {
           // to the chin-up, and anything else drops back to the hang. The
           // opposite direction is not tested, so a reversal costs a tag.
           const keep = p.barTag === 1 ? toward : away;
-          p.barTag = keep ? p.barTag : held.up ? 3 : 0;
+          if (!keep) p.barTag = held.up ? 3 : 0;
           p.barClock = 0;
         } else if (p.barTag === 3) {
           // `0x42b7ff` — W still down and the last cel simply HOLDS
@@ -15586,8 +15583,8 @@ export function tick(): void {
   // ...and not `damageOn &&`: the switch decides whether anything may SPEND
   // health, not what an empty bar means. `harakari` empties it with the switch
   // off and the original has no switch at all
-  if (stats.health <= 0 && p.act === null && !film) void died();
-  if (fellOut() && !film) void died();
+  if (stats.health <= 0 && p.act === null && !film) died();
+  if (fellOut() && !film) died();
   upPressed = false;
   // J is read by the frame's think, not by the tick, so it waits for one
   if (frame) jumpPressed = false;

@@ -257,7 +257,7 @@ export function readStgFile(data: Uint8Array): StgFile {
    * reader should add a case, not take one away.
    */
   const tag = versionOf(c0);
-  const version: StgVersion = tag === 1 ? 1 : tag === 5 ? 5 : 4;
+  const version: StgVersion = tag === 1 || tag === 5 ? tag : 4;
   const C0 = C0_BY_VERSION[version];
   const FLAT = FLAT_BY_VERSION[version];
   // a v1 flat stores no size of its own, so it is the whole screen — which is

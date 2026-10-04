@@ -70,7 +70,7 @@ export class BinaryReader {
 
 export function latin1(bytes: Uint8Array): string {
   let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  for (const b of bytes) s += String.fromCharCode(b);
   return s;
 }
 

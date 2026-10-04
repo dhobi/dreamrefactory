@@ -66,18 +66,10 @@ export function chooseFrameInterval(
   const hasStep =
     mov.frames.some((f) => f.type === 6 || f.type === 7) || stepsForward(mov);
   const hasAudio = mov.audioChunks.length > 0 || mov.sounds.size > 0;
-  return audioSec > 0
-    ? Math.max(NATIVE_FRAME_MS, (audioSec * 1000) / frameCount)
-    : hasRegions
-      ? hasAudio
-        ? FAUCET_FRAME_MS
-        : NATIVE_FRAME_MS
-      : hasStep
-        ? Math.max(
-            NATIVE_FRAME_MS,
-            Math.min(1200, CUTSCENE_TOTAL_MS / frameCount),
-          )
-        : 0;
+  if (audioSec > 0) return Math.max(NATIVE_FRAME_MS, (audioSec * 1000) / frameCount);
+  if (hasRegions) return hasAudio ? FAUCET_FRAME_MS : NATIVE_FRAME_MS;
+  if (hasStep) return Math.max(NATIVE_FRAME_MS, Math.min(1200, CUTSCENE_TOTAL_MS / frameCount));
+  return 0;
 }
 
 /**

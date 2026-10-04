@@ -130,10 +130,10 @@ body.dragover #landing {
   min-width: 0;
   max-width: 100%;
 }
-/* `display: inline-flex` above outranks the UA sheet's `[hidden] { display:
-   none }`, so a head control that hides itself (the movie editor's segment
-   picker, on a film with only one segment) needs saying again — same trap as
-   .editionPicker[hidden] in site/src/theme.css */
+/* `display: inline-flex` above outranks the UA sheet's hiding of `[hidden]`,
+   so a head control that hides itself (the movie editor's segment picker, on
+   a film with only one segment) needs saying again — the same trap as the
+   edition picker's, in site/src/chrome.css */
 .head label[hidden] {
   display: none;
 }

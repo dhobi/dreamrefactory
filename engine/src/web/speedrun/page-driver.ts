@@ -40,7 +40,6 @@ import {
   HELD_YIELDS,
   KEY_SAFE,
   Paused,
-  SHOWING,
   clientPointFor,
   waitExpr,
   type Clock,
@@ -205,7 +204,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
     }
   };
 
-  const evaluate = async <T>(expr: string): Promise<T> => run<T>(expr);
+  const evaluate = <T>(expr: string): Promise<T> => new Promise<T>((resolve) => resolve(run<T>(expr)));
 
   const frame = (): Promise<void> => new Promise((r) => win.requestAnimationFrame(() => r()));
 
@@ -377,12 +376,13 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
      * one from the other, only a difference of one from a difference of the
      * other, and both count real milliseconds at the same rate.
      */
-    clock: async (): Promise<Clock> => {
-      const [frames, loading] = run<[number, number]>(
-        "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
-      );
-      return { ms: performance.now(), frames, loading };
-    },
+    clock: (): Promise<Clock> =>
+      new Promise((resolve) => {
+        const [frames, loading] = run<[number, number]>(
+          "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
+        );
+        resolve({ ms: performance.now(), frames, loading });
+      }),
     evaluate,
     hold,
     tryHold,
@@ -560,19 +560,25 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
     // localStorage, because the page has no disk. A `.ti` is a few kilobytes and
     // base64 costs a third on top, which is nothing against the 5 MB a browser
     // gives an origin — and it survives the reload that rebooting the game takes.
-    putSave: async (name: string, bytes: Uint8Array) => {
-      let bin = "";
-      for (const b of bytes) bin += String.fromCharCode(b);
-      localStorage.setItem(opts.keys.key(opts.sheet(), name), btoa(bin));
-    },
-    getSave: async (name: string) => {
-      const raw = localStorage.getItem(opts.keys.key(opts.sheet(), name));
-      if (!raw) return null;
-      const bin = atob(raw);
-      const out = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-      return out;
-    },
+    putSave: (name: string, bytes: Uint8Array) =>
+      new Promise<void>((resolve) => {
+        let bin = "";
+        for (const b of bytes) bin += String.fromCharCode(b);
+        localStorage.setItem(opts.keys.key(opts.sheet(), name), btoa(bin));
+        resolve();
+      }),
+    getSave: (name: string) =>
+      new Promise<Uint8Array | null>((resolve) => {
+        const raw = localStorage.getItem(opts.keys.key(opts.sheet(), name));
+        if (!raw) {
+          resolve(null);
+          return;
+        }
+        const bin = atob(raw);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        resolve(out);
+      }),
 
     /**
      * Reload the document, and never come back.
@@ -599,4 +605,4 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
   };
 }
 
-export { SHOWING };
+export { SHOWING } from "./driver";

@@ -16,9 +16,9 @@ export type FileProvider = (name: string) => Uint8Array | null;
  */
 export class SetScripts {
   readonly main: ScriptInstance | null;
-  private sceneScripts: (ScriptInstance | null)[] = [];
+  private readonly sceneScripts: (ScriptInstance | null)[] = [];
   /** key: `${sceneIdx}:${viewIdx}:${objIdx}` */
-  private objectScripts = new Map<string, ScriptInstance>();
+  private readonly objectScripts = new Map<string, ScriptInstance>();
 
   onLog: (line: string) => void = () => {};
 
@@ -453,14 +453,14 @@ export class SetScripts {
     const lower = name.toLowerCase();
     const prop = this.session.propScripts.get(lower);
     if (prop) return prop;
-    if (this.main && this.main.name.toLowerCase() === lower) return this.main;
+    if (this.main?.name.toLowerCase() === lower) return this.main;
     for (let s = 0; s < this.set.scenes.length; s++) {
       if (this.set.scenes[s].sceneName.toLowerCase() === lower) return this.sceneScripts[s];
     }
     for (const inst of this.objectScripts.values()) {
       if (inst.name.toLowerCase() === lower) return inst;
     }
-    if (this.session.stageScript && lower === this.session.stageScript.name.toLowerCase()) {
+    if (lower === this.session.stageScript?.name.toLowerCase()) {
       return this.session.stageScript;
     }
     const shop = this.session.shopMain(lower);

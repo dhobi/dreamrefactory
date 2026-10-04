@@ -272,11 +272,8 @@ slide("rise", (c, v) => { c.h = Math.round(c.w * v); }, (v) => v.toFixed(2));
   publish();
 });
 
-// Not a top-level await: the build targets browsers that have none, and this
-// page is built like every other — a tool that only exists on a dev server is
-// a tool nobody uses.
-void photo.decode().then(() => {
-  fit();
-  publish();
-  draw();
-});
+// Last, so every listener above is already up while the photograph decodes.
+await photo.decode();
+fit();
+publish();
+draw();

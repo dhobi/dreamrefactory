@@ -104,7 +104,7 @@ test("`all` is the whole table, plus who owns what", () => {
   const all = stateView(trace, { spine: SPINE, all: true });
   const globals = Object.keys(trace.globals).length - SPINE.filter((v) => v.name in trace.globals).length;
   const owned = Object.keys(trace.props).length + Object.keys(trace.actors).length;
-  expect(all.rest.length).toBe(globals + owned);
+  expect(all.rest).toHaveLength(globals + owned);
   expect(all.hidden, "nothing is being held back").toBe(0);
   // props and actors are named as such: `prop` and a global could share a name
   expect(all.rest.some((r) => r.name.startsWith("prop "))).toBe(true);
@@ -218,11 +218,11 @@ test("the filter searches a row's TYPE as well as its name (#178)", () => {
   // as names and are still here — what changed is that the props themselves are
   // here too, and they are the majority.
   expect(props.some((r) => r.name.startsWith("prop ")), "the props themselves").toBe(true);
-  expect(props.filter((r) => r.name.startsWith("prop ")).length).toBe(
+  expect(props.filter((r) => r.name.startsWith("prop "))).toHaveLength(
     Object.keys(trace.props).length,
   );
   const actors = stateView(trace, { spine: SPINE, filter: "actor" }).rest;
-  expect(actors.filter((r) => r.name.startsWith("actor ")).length).toBe(
+  expect(actors.filter((r) => r.name.startsWith("actor "))).toHaveLength(
     Object.keys(trace.actors).length,
   );
 });
@@ -244,7 +244,7 @@ test("the spine is not filtered — it is the thing that is always true (#178)",
   const trace = endOfGame();
   // pinned out of the scroll in the page (see #dbgState), and unfiltered here:
   // a filter narrows the LIST, and the six the game names are not in it
-  expect(stateView(trace, { spine: SPINE, filter: "prop" }).spine.length).toBe(
+  expect(stateView(trace, { spine: SPINE, filter: "prop" }).spine).toHaveLength(
     stateView(trace, { spine: SPINE }).spine.length,
   );
   expect(stateView(trace, { spine: SPINE, filter: "nothing matches this" }).spine.length).toBeGreaterThan(0);
@@ -317,7 +317,7 @@ test("a quiet game costs no writes at all", () => {
   const { host, view } = list();
   const rows = [row("mission", "1"), row("bombphase", "0"), row("coalchute", "3")];
   expect(view.apply(rows)).toEqual({ added: 3, removed: 0, updated: 6, moved: 3 });
-  expect(host.children.length).toBe(3);
+  expect(host.children).toHaveLength(3);
 
   // the same values again, and again: nothing is touched
   expect(view.apply(rows), "second pass").toEqual({ added: 0, removed: 0, updated: 0, moved: 0 });
@@ -363,7 +363,7 @@ test("rows that go, go — and a reorder moves rather than rebuilds", () => {
     updated: 0,
     moved: 0,
   });
-  expect(host.children.length).toBe(2);
+  expect(host.children).toHaveLength(2);
   expect(host.children[1], "c is the element it always was").toBe(kept);
 
   // what a filter does: the same rows, different order
@@ -395,7 +395,7 @@ test("the whole real table, twice, writes nothing the second time", () => {
   const rows = stateView(trace, { spine: SPINE, all: true }).rest;
   expect(rows.length, "the real thing, not a sample").toBeGreaterThan(120);
   view.apply(rows);
-  expect(host.children.length).toBe(rows.length);
+  expect(host.children).toHaveLength(rows.length);
   expect(view.apply(stateView(trace, { spine: SPINE, all: true }).rest)).toEqual({
     added: 0,
     removed: 0,

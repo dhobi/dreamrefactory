@@ -63,27 +63,22 @@ const books: string[] = DATA
       .map((n) => `${DATA}/${n}`)
   : [];
 
-const skip = (): boolean => {
-  if (books.length) return false;
-  console.warn(`no Skull Cracker books under any of ${DIRS.join(", ")} — skipping`);
-  return true;
-};
+const missing = books.length === 0;
+if (missing) console.warn(`no Skull Cracker books under any of ${DIRS.join(", ")} — skipping`);
 
 const read = (path: string) => readSbkFile(new Uint8Array(readFileSync(path)));
 const name = (path: string): string => path.split("/").pop()!.replace(/\.sbk$/i, "").toUpperCase();
 /** the one book that is a character and not a place */
 const isPlayer = (path: string): boolean => name(path) === "PLAYER";
 
-test("the disc holds seventeen books: sixteen levels and the player", () => {
-  if (skip()) return;
-  expect(books.length).toBe(17);
-  expect(books.filter(isPlayer).length).toBe(1);
+test.skipIf(missing)("the disc holds seventeen books: sixteen levels and the player", () => {
+  expect(books).toHaveLength(17);
+  expect(books.filter(isPlayer)).toHaveLength(1);
   // and the sixteen match the shell's own "Enter level (1-16):"
-  expect(books.filter((b) => !isPlayer(b)).length).toBe(16);
+  expect(books.filter((b) => !isPlayer(b))).toHaveLength(16);
 });
 
-test("the directory names every cel, and says the same as the cel does", () => {
-  if (skip()) return;
+test.skipIf(missing)("the directory names every cel, and says the same as the cel does", () => {
   let entries = 0;
   const disagreed: string[] = [];
   for (const path of books) {
@@ -126,8 +121,7 @@ test("the directory names every cel, and says the same as the cel does", () => {
  * its speed and nothing else. A misread offset would not produce a one-way
  * implication like that; it would scatter both ways.
  */
-test("a blow never comes without a strike box, and both boxes fit the cel", () => {
-  if (skip()) return;
+test.skipIf(missing)("a blow never comes without a strike box, and both boxes fit the cel", () => {
   let withBlow = 0;
   let boxOnly = 0;
   let bodies = 0;
@@ -175,8 +169,7 @@ test("a blow never comes without a strike box, and both boxes fit the cel", () =
   expect(sameAsTheCel).toBe(383);
 });
 
-test("the player's punch and kick carry the blows the hit handlers compare against", () => {
-  if (skip()) return;
+test.skipIf(missing)("the player's punch and kick carry the blows the hit handlers compare against", () => {
   const player = books.find(isPlayer);
   if (!player) return;
   const sbk = read(player);
@@ -195,8 +188,7 @@ test("the player's punch and kick carry the blows the hit handlers compare again
   expect(blowOf(663)).toBeGreaterThan(50);
 });
 
-test("every backdrop placement resolves to a cel the directory names", () => {
-  if (skip()) return;
+test.skipIf(missing)("every backdrop placement resolves to a cel the directory names", () => {
   let placements = 0;
   const unresolved: string[] = [];
   for (const path of books) {
@@ -210,8 +202,7 @@ test("every backdrop placement resolves to a cel the directory names", () => {
   expect(placements).toBe(5048);
 });
 
-test("the sixteen levels have a level in them and the player does not", () => {
-  if (skip()) return;
+test.skipIf(missing)("the sixteen levels have a level in them and the player does not", () => {
   for (const path of books) {
     const sbk = read(path);
     // both releases point at their tables through the same 38-byte root
@@ -219,9 +210,9 @@ test("the sixteen levels have a level in them and the player does not", () => {
     expect(sbk.backdropLocation).toBeGreaterThan(0);
     if (isPlayer(path)) {
       // the degenerate case that separates the halves: cels, and nothing placed
-      expect(sbk.entities.length).toBe(0);
-      expect(sbk.placements.length).toBe(0);
-      expect(sbk.cels.length).toBe(1229);
+      expect(sbk.entities).toHaveLength(0);
+      expect(sbk.placements).toHaveLength(0);
+      expect(sbk.cels).toHaveLength(1229);
     } else {
       expect(sbk.entities.length).toBeGreaterThan(0);
       expect(sbk.placements.length).toBeGreaterThan(0);
@@ -229,8 +220,7 @@ test("the sixteen levels have a level in them and the player does not", () => {
   }
 });
 
-test("the level plan is named, and the vocabulary is the game", () => {
-  if (skip()) return;
+test.skipIf(missing)("the level plan is named, and the vocabulary is the game", () => {
   const kinds = new Map<string, number>();
   let records = 0;
   let named = 0;
@@ -253,8 +243,7 @@ test("the level plan is named, and the vocabulary is the game", () => {
   expect([...kinds].sort((a, b) => b[1] - a[1])[0][0]).toBe("platform");
 });
 
-test("the second point is a midpoint for the static kinds and not for the doors", () => {
-  if (skip()) return;
+test.skipIf(missing)("the second point is a midpoint for the static kinds and not for the doors", () => {
   const tally = new Map<string, { n: number; mid: number }>();
   for (const path of books) {
     for (const e of read(path).entities) {
@@ -279,8 +268,7 @@ test("the second point is a midpoint for the static kinds and not for the doors"
   expect(door.mid).toBe(0);
 });
 
-test("a level's parallax layers are per-level, so 1.0 is not a landmark", () => {
-  if (skip()) return;
+test.skipIf(missing)("a level's parallax layers are per-level, so 1.0 is not a landmark", () => {
   const near: number[] = [];
   for (const path of books) {
     const sbk = read(path);
@@ -292,18 +280,17 @@ test("a level's parallax layers are per-level, so 1.0 is not a landmark", () => 
     expect(factor).toBeLessThan(8);
     near.push(factor);
   }
-  expect(near.length).toBe(16);
+  expect(near).toHaveLength(16);
   // and they are NOT all 1.0 — which is why nearestLayer takes the mode rather
   // than comparing against a constant
   expect(new Set(near).size).toBeGreaterThan(1);
 });
 
-test("every book carries a palette, and it spans a real range", () => {
-  if (skip()) return;
+test.skipIf(missing)("every book carries a palette, and it spans a real range", () => {
   for (const path of books) {
     const sbk = read(path);
     expect(sbk.paletteRaw, `${name(path)} has no palette`).not.toBeNull();
-    expect(sbk.paletteRaw!.length).toBe(2048);
+    expect(sbk.paletteRaw!).toHaveLength(2048);
   }
 });
 
@@ -316,8 +303,7 @@ test("every book carries a palette, and it spans a real range", () => {
  * every name on the region side is a label a designer typed that the binary has
  * never heard of. That is two independent statements of one fact.
  */
-test("the entity flag separates engine classes from designer labels", () => {
-  if (skip()) return;
+test.skipIf(missing)("the entity flag separates engine classes from designer labels", () => {
   const entities = new Set<string>();
   const regions = new Set<string>();
   for (const path of books) {
@@ -335,8 +321,7 @@ test("the entity flag separates engine classes from designer labels", () => {
   }
 });
 
-test("every region names a container, and it holds a floor", () => {
-  if (skip()) return;
+test.skipIf(missing)("every region names a container, and it holds a floor", () => {
   let regions = 0;
   let withGround = 0;
   let points = 0;
@@ -368,8 +353,7 @@ test("every region names a container, and it holds a floor", () => {
   expect(points).toBe(567);
 });
 
-test("the per-instance parameter varies within a kind, so it is not the kind", () => {
-  if (skip()) return;
+test.skipIf(missing)("the per-instance parameter varies within a kind, so it is not the kind", () => {
   const byKind = new Map<string, Set<number>>();
   for (const path of books) {
     for (const e of read(path).entities) {
@@ -405,9 +389,8 @@ test("the per-instance parameter varies within a kind, so it is not the kind", (
  * would otherwise show up as one level silently missing its number in the
  * viewer's list.
  */
-test("the recovered level order names the sixteen books and nothing else", () => {
-  if (skip()) return;
-  expect(LEVEL_ORDER.length).toBe(16);
+test.skipIf(missing)("the recovered level order names the sixteen books and nothing else", () => {
+  expect(LEVEL_ORDER).toHaveLength(16);
   const stems = books.map((b) => name(b).toLowerCase()).filter((n) => n !== "player");
   expect([...LEVEL_ORDER].sort()).toEqual(stems.sort());
   // 1-based, and the player's book is not a level
@@ -426,8 +409,7 @@ test("the recovered level order names the sixteen books and nothing else", () =>
  * would give the same answer everywhere. That is exactly why it is worth a test:
  * a change that no data can distinguish is a change nothing else would catch.
  */
-test("+10 is a 32-bit field whose upper half is zero on disc", () => {
-  if (skip()) return;
+test.skipIf(missing)("+10 is a 32-bit field whose upper half is zero on disc", () => {
   let records = 0;
   for (const path of books) {
     const sbk = read(path);
@@ -455,8 +437,7 @@ test("+10 is a 32-bit field whose upper half is zero on disc", () => {
  * corpus fact that falsifies the old whole-i32 reading: under it, one layer
  * appeared as several factors a few 1/65536ths apart.
  */
-test("every placement's plane byte is 0..4, and depths no longer split by type", () => {
-  if (skip()) return;
+test.skipIf(missing)("every placement's plane byte is 0..4, and depths no longer split by type", () => {
   const planes = new Set<number>();
   for (const path of books) {
     const sbk = read(path);
@@ -481,8 +462,7 @@ test("every placement's plane byte is 0..4, and depths no longer split by type",
  * the seven values the code can produce — a wrong bit order or plane mapping
  * would put some placement outside the set.
  */
-test("every placement's engine rate is one of the seven the code can produce", () => {
-  if (skip()) return;
+test.skipIf(missing)("every placement's engine rate is one of the seven the code can produce", () => {
   const LEGAL = new Set([1, 5000 / 6000, 5300 / 6000, 5600 / 6000, 7500 / 6000, 6700 / 6000, 6400 / 6000]);
   const seen = new Set<number>();
   for (const path of books) {
@@ -505,8 +485,7 @@ test("every placement's engine rate is one of the seven the code can produce", (
  * brightest frame, not their first (CAVERN's 5534). The test asserts what is
  * true — every frame resolves to a cel — not the tidier thing that is false.
  */
-test("an animated placement lists its frame cels, all resolvable", () => {
-  if (skip()) return;
+test.skipIf(missing)("an animated placement lists its frame cels, all resolvable", () => {
   let animated = 0;
   let startsElsewhere = 0;
   for (const path of books) {
@@ -514,7 +493,7 @@ test("an animated placement lists its frame cels, all resolvable", () => {
     for (const p of sbk.placements) {
       if (p.frames > 1) {
         animated++;
-        expect(p.frameIds.length).toBe(Math.min(p.frames, Math.floor((342 - 22) / 8)));
+        expect(p.frameIds).toHaveLength(Math.min(p.frames, Math.floor((342 - 22) / 8)));
         if (p.frameIds[0] !== p.id) startsElsewhere++;
         for (const id of p.frameIds) expect(sbk.byId.has(id), `${name(path)}: frame cel ${id}`).toBe(true);
       } else {
@@ -538,8 +517,7 @@ test("an animated placement lists its frame cels, all resolvable", () => {
  * format's null. Those four are named here because a change in that number means
  * either the disc or the reader moved.
  */
-test("each room owns one region, and four rooms own none", () => {
-  if (skip()) return;
+test.skipIf(missing)("each room owns one region, and four rooms own none", () => {
   let rooms = 0;
   const floorless: string[] = [];
   for (const path of books.filter((b) => !isPlayer(b))) {
@@ -566,8 +544,7 @@ test("each room owns one region, and four rooms own none", () => {
  * and CAVERN and MAZE are reciprocal pairs; LAB is a three-room chain, which is
  * why "back" means "to a room you can reach from there" and not "to me".
  */
-test("every exitroom names a room that exists, and none is a dead end", () => {
-  if (skip()) return;
+test.skipIf(missing)("every exitroom names a room that exists, and none is a dead end", () => {
   let doors = 0;
   for (const path of books.filter((b) => !isPlayer(b))) {
     const sbk = read(path);
@@ -601,8 +578,7 @@ test("every exitroom names a room that exists, and none is a dead end", () => {
  * carries, and SEWER's five `door` records carry -1, 2, 7, 8 and -4 while all
  * twelve of its rooms are param 0.
  */
-test("goal and door params are not room links", () => {
-  if (skip()) return;
+test.skipIf(missing)("goal and door params are not room links", () => {
   let goalsThatMissEveryRoom = 0;
   let doorParams: number[] = [];
   for (const path of books.filter((b) => !isPlayer(b))) {
@@ -627,8 +603,7 @@ test("goal and door params are not room links", () => {
  * The property that has to hold anyway is that no column is left unwritten, and
  * that the floor never leaves the range the polyline itself states.
  */
-test("every region rasterises to a floor with no gap in it", () => {
-  if (skip()) return;
+test.skipIf(missing)("every region rasterises to a floor with no gap in it", () => {
   let regions = 0;
   let steps = 0;
   for (const path of books.filter((b) => !isPlayer(b))) {
@@ -655,8 +630,7 @@ test("every region rasterises to a floor with no gap in it", () => {
  * first; and it paints the placements in the order SC.EXE's compositor does,
  * p3, p0, the actors, p4, p1, p2.
  */
-test("a book is told from a SoundFont by its fourCC, and is painted plane 3 first, plane 2 last", () => {
-  if (skip()) return;
+test.skipIf(missing)("a book is told from a SoundFont by its fourCC, and is painted plane 3 first, plane 2 last", () => {
   for (const path of books) expect(isSbkFile(new Uint8Array(readFileSync(path))), name(path)).toBe(true);
   expect(isSbkFile(new TextEncoder().encode("RIFF\0\0\0\0sfbk"))).toBe(false);
   expect(isSbkFile(new Uint8Array(3))).toBe(false);

@@ -199,7 +199,7 @@ export class Interpreter {
    * stuck loop still trips the 100k guard instead of hanging the test run.
    */
   realYieldSeq: () => number = () => 0;
-  private unknownLogged = new Set<string>();
+  private readonly unknownLogged = new Set<string>();
   /**
    * The (script, handler) pairs currently on the dispatch stack.
    *
@@ -413,7 +413,7 @@ export class Interpreter {
         await this.evalCall(st.call, frame);
         return NORMAL;
       case "if":
-        if (truthy(await this.evalExpr(st.cond, frame))) return this.execBlock(st.then, frame);
+        if (truthy(await this.evalExpr(st.cond, frame))) return this.execBlock(st.body, frame);
         if (st.else_) return this.execBlock(st.else_, frame);
         return NORMAL;
       case "switch": {
@@ -496,7 +496,8 @@ export class Interpreter {
         return (await this.evalCall(e, frame)) ?? 0;
       case "un": {
         const v = await this.evalExpr(e.e, frame);
-        return e.op === "not" ? (truthy(v) ? 0 : 1) : -toNum(v);
+        if (e.op === "not") return truthy(v) ? 0 : 1;
+        return -toNum(v);
       }
       case "bin": {
         const l = await this.evalExpr(e.l, frame);
@@ -625,7 +626,7 @@ export function truthy(v: Value): boolean {
 }
 export function toNum(v: Value): number {
   if (typeof v === "number") return v;
-  const n = parseInt(v, 10);
+  const n = Number.parseInt(v, 10);
   return Number.isNaN(n) ? 0 : n;
 }
 export function toStr(v: Value): string {

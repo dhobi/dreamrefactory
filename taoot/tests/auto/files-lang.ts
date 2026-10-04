@@ -142,7 +142,7 @@ test("shipped saves are picked from one language tree", () => {
   expect(shippedSaves(MANIFEST, "de").map((s) => s.rel)).toEqual(["1/01 - Das Zimmer.ti"]);
   expect(shippedSaves(MANIFEST, "en").map((s) => s.rel)).toEqual(["1/01 - The Bedsit.ti"]);
   // unfiltered (a single-language dump) takes what it finds
-  expect(shippedSaves(MANIFEST).length).toBe(2);
+  expect(shippedSaves(MANIFEST)).toHaveLength(2);
   // and the URL is the manifest path, encoded, hung off wherever the site is
   // served from (site/src/site.ts) — which under a test runner, with no document to
   // read a site root from, is the host root this has always asserted

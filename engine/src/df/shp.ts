@@ -445,7 +445,7 @@ function orientToSettledPose(states: PropState[], containers: Container[]): void
     if (!pose) continue;
     const seq = s.playOrder ?? s.frames.map((_, i) => i);
     const first = frameSignature(containers[s.frames[seq[0]]].data);
-    const last = frameSignature(containers[s.frames[seq[seq.length - 1]]].data);
+    const last = frameSignature(containers[s.frames[seq.at(-1)!]].data);
     if (first === last) continue;
     // "open" settles INTO the pose, "close" departs FROM it — finding the pose
     // at the other end means these frames are running the wrong way.
@@ -535,19 +535,17 @@ export function decodeShpFrame(data: Uint8Array): ShpFrame {
           // transparent run
           outPos += count;
         }
+      } else if (flag & 2) {
+        // repeat one palette pixel `count` times
+        indexed.fill(data[inPos], outPos, outPos + count);
+        opaque.fill(1, outPos, outPos + count);
+        outPos += count;
+        inPos++;
       } else {
-        if (flag & 2) {
-          // repeat one palette pixel `count` times
-          indexed.fill(data[inPos], outPos, outPos + count);
-          opaque.fill(1, outPos, outPos + count);
-          outPos += count;
-          inPos++;
-        } else {
-          // copy from previous row
-          indexed.copyWithin(outPos, outPos - width, outPos - width + count);
-          opaque.copyWithin(outPos, outPos - width, outPos - width + count);
-          outPos += count;
-        }
+        // copy from previous row
+        indexed.copyWithin(outPos, outPos - width, outPos - width + count);
+        opaque.copyWithin(outPos, outPos - width, outPos - width + count);
+        outPos += count;
       }
     }
   }

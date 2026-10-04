@@ -168,7 +168,10 @@ const brightened = new WeakMap<Uint8ClampedArray, Map<string, Uint8ClampedArray>
 export function brightPalette(pal: Uint8ClampedArray, [r, g, b]: readonly [number, number, number]): Uint8ClampedArray {
   if (!r && !g && !b) return pal;
   let byKey = brightened.get(pal);
-  if (!byKey) brightened.set(pal, (byKey = new Map()));
+  if (!byKey) {
+    byKey = new Map();
+    brightened.set(pal, byKey);
+  }
   const key = `${r},${g},${b}`;
   let out = byKey.get(key);
   if (!out) {

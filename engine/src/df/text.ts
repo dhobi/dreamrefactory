@@ -48,7 +48,10 @@ export const DEFAULT_ENCODING: DfEncoding = "macintosh";
 const decoders = new Map<DfEncoding, TextDecoder>();
 const decoderFor = (enc: DfEncoding): TextDecoder => {
   let d = decoders.get(enc);
-  if (!d) decoders.set(enc, (d = new TextDecoder(enc)));
+  if (!d) {
+    d = new TextDecoder(enc);
+    decoders.set(enc, d);
+  }
   return d;
 };
 

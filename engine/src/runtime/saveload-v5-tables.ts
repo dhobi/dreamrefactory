@@ -63,7 +63,7 @@ export function decodeLoops(session: GameSession, bytes: Uint8Array): void {
     const name = pstrAt(bytes, at + 0x0e);
     // as the statement the engine stores; restoreLoop takes the name out of it
     session.scheduler.restoreLoop(kind, name, pstrAt(bytes, at + 0x1e), passes);
-    const l = session.scheduler.loops[session.scheduler.loops.length - 1];
+    const l = session.scheduler.loops.at(-1);
     if (l && v.getInt16(at + 0x02, true)) l.paused = true;
   }
 }
@@ -98,17 +98,17 @@ export function decodeCrickets(session: GameSession, bytes: Uint8Array): void {
   for (let i = 0; i < slots && (i + 1) * stride <= bytes.length; i++) {
     const at = i * stride;
     if (!v.getInt16(at, true)) continue;
-    session.scheduler.restoreCricket(
-      pstrAt(bytes, at + 0x44),
-      pstrAt(bytes, at + 0x34),
-      v.getInt32(at + 0x04, true),
-      v.getInt32(at + 0x08, true),
-      v.getInt32(at + 0x0c, true),
-      v.getInt32(at + 0x10, true),
-      v.getInt32(at + 0x14, true),
-      v.getInt32(at + 0x18, true),
-    );
-    const c = session.scheduler.crickets[session.scheduler.crickets.length - 1];
+    session.scheduler.restoreCricket({
+      name: pstrAt(bytes, at + 0x44),
+      set: pstrAt(bytes, at + 0x34),
+      x: v.getInt32(at + 0x04, true),
+      y: v.getInt32(at + 0x08, true),
+      radius: v.getInt32(at + 0x0c, true),
+      base: v.getInt32(at + 0x10, true),
+      jitter: v.getInt32(at + 0x14, true),
+      next: v.getInt32(at + 0x18, true),
+    });
+    const c = session.scheduler.crickets.at(-1);
     if (c && v.getInt16(at + 0x02, true)) c.paused = true;
   }
 }
@@ -124,7 +124,7 @@ function driv(points: { x: number; y: number; z: number; cum: number }[]): Uint8
   const v = new DataView(d.buffer);
   v.setUint32(0, 0x00050000, true);
   v.setUint32(4, 0x44524956, true); // 'DRIV'
-  v.setInt32(0x18, Math.round(points[points.length - 1]?.cum ?? 0), true);
+  v.setInt32(0x18, Math.round(points.at(-1)?.cum ?? 0), true);
   v.setInt32(0x20, points.length, true);
   points.forEach((p, i) => {
     const at = 0x34 + i * 16;
@@ -162,7 +162,10 @@ export function encodeWalks(
     const a = session.actorRuntime.get(key);
     if (!a) continue;
     const at = slot++ * stride;
-    const mode = w.turnOnly ? MODE.turn : w.path ? MODE.path : w.arriveStar === "custom" ? MODE.xyz : MODE.star;
+    let mode: number = MODE.star;
+    if (w.turnOnly) mode = MODE.turn;
+    else if (w.path) mode = MODE.path;
+    else if (w.arriveStar === "custom") mode = MODE.xyz;
     v.setInt16(at + 0x00, 1, true);
     v.setInt16(at + 0x02, w.paused ? 1 : 0, true);
     v.setInt16(at + 0x04, mode, true);

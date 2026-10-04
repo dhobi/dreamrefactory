@@ -1,8 +1,9 @@
-import type { HostFiles, WireEvent } from "@dreamfactory/engine/web/host";
+import type { WireEvent } from "@dreamfactory/engine/web/host";
+import { RipFiles } from "@dreamfactory/engine/web/rip-files";
 import { siteUrl } from "@dreamfactory/site/site";
 
 /**
- * The Dust CD as a {@link HostFiles} — what lets the real engine boot off it.
+ * The Dust CD as a `HostFiles` (a {@link RipFiles}) — what lets the real engine boot off it.
  *
  * `GameHost` reaches its data through this interface and nothing else, so a game
  * on a different disc, laid out differently, needs a different implementation of
@@ -54,66 +55,12 @@ const rank = (url: string): number => {
   return at < 0 ? PREFERRED.length : at;
 };
 
-export class DustFiles implements HostFiles {
-  private urls = new Map<string, string>();
-  private cache = new Map<string, Uint8Array>();
-  /**
-   * The fetch in progress per name, and whether it is REPORTING ITS CHUNKS to
-   * the caller that started it. A second caller for the same file joins the
-   * flight but is not the one the stream reports to, so it still owes itself the
-   * single total report the old buffering path always made.
-   */
-  private inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
-  onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
-  /** every name the engine asked for and did not have, in order — the boot's own
-   *  account of what it wanted, which is what makes a failed boot diagnosable */
-  readonly misses: string[] = [];
-  /**
-   * Every name that actually ARRIVED, in the order it did, and a hook that fires
-   * as each one does.
-   *
-   * The counterpart to {@link misses}, and the page's progress bar is what it is
-   * for. A boot's real unit of work is a fetch — Dust's is 14 of them, of which
-   * eight are named up front by its own BOOTFILE (unilib.snd, gang.cst,
-   * extra.cst, house.prp, inven.prp, intro.mov, intro2.mov, new.flt) — so
-   * counting them is the one progress reading on this page that is a count of
-   * something rather than a guess at how long something takes.
-   *
-   * Recorded here rather than by wrapping `load`, because `onBackgroundLoad`
-   * already belongs to `GameHost` (it feeds resources to the running session)
-   * and a second owner of that one hook would be a race between two features.
-   */
-  readonly loads: string[] = [];
-  onFileLoaded: ((name: string, bytes: number) => void) | null = null;
-  /**
-   * Every CHUNK of every fetch, as it lands — what a transfer rate has to be
-   * measured from.
-   *
-   * {@link onFileLoaded} fires once, when a file is done, which is the wrong
-   * event for both things the loading page wants to say. A rate computed from it
-   * divides a whole file by however long the page has been watching, so the
-   * intro films (13 MB of the boot's 14 fetches) report one enormous figure at
-   * the moment they land and nothing at all for the minute before; and a bar
-   * that only moves on completion sits still for that same minute. Per chunk,
-   * both are honest.
-   *
-   * A hook on the STORE rather than a callback per call, because the fetches
-   * worth metering are not all started by the page: the engine misses a file,
-   * `provide` starts a fetch, and no caller is there to pass one.
-   */
-  onChunk: ((name: string, bytes: number) => void) | null = null;
-  /** basename → size in bytes, from the manifest — see {@link sizeOf} */
-  private sizes = new Map<string, number>();
-  /** how far each in-flight fetch has got, for {@link partialProgress} */
-  private partial = new Map<string, number>();
-  /** fires as the number of in-flight fetches changes — the play page's
-   *  `FileStore` has the same hook, and the same canvas-corner spinner on it */
-  onBusyChange: ((inFlight: number) => void) | null = null;
+export class DustFiles extends RipFiles {
   /**
    * The wire, one fetch at a time — what the load remover subtracts
    * (`engine/src/web/load-clock.ts`, #251).
    *
-   * {@link onBusyChange} above cannot answer it: the clock needs each fetch by
+   * {@link onBusyChange} cannot answer it: the clock needs each fetch by
    * NAME, because since #369 it stops only for the ones that went to the
    * network and a cache hit is a read the original did off its CD as well. So
    * this reports the URL and an id to pair the two ends by, which is the same
@@ -186,7 +133,7 @@ export class DustFiles implements HostFiles {
   /**
    * Watch the wire, one fetch at a time; returns the way to stop watching.
    *
-   * {@link HostFiles.onWire}'s implementation for this disc. A watcher that
+   * `HostFiles.onWire`'s implementation for this disc. A watcher that
    * throws is not allowed to take the fetch down with it — what is being
    * reported is somebody else's readout.
    */
@@ -220,16 +167,6 @@ export class DustFiles implements HostFiles {
     }
   }
 
-  /** how many names the disc offers — a boot that indexed nothing says so */
-  get size(): number {
-    return this.urls.size;
-  }
-
-  /** what the manifest says this file weighs, or 0 for one it does not list */
-  sizeOf(name: string): number {
-    return this.sizes.get(name.toLowerCase()) ?? 0;
-  }
-
   /**
    * How far the fetches in flight have got, in whole-file units — 0.4 while a
    * single film is two fifths of the way down the wire.
@@ -240,26 +177,6 @@ export class DustFiles implements HostFiles {
    * between two arrivals. A file the manifest does not size contributes nothing
    * rather than a guess.
    */
-  /**
-   * How many bytes of these names are still to come: nothing for one already in
-   * hand, and only the unfetched remainder of one in flight.
-   *
-   * The loading page's estimate of how long is left needs a "how much", and this
-   * is the honest form of it — the manifest's sizes minus what has actually
-   * landed, rather than a count of files scaled by an average. A name the
-   * manifest does not size contributes nothing, which makes the estimate
-   * optimistic rather than invented; on this disc it sizes everything.
-   */
-  bytesLeft(names: Iterable<string>): number {
-    let left = 0;
-    for (const name of names) {
-      const key = name.toLowerCase();
-      if (this.cache.has(key)) continue;
-      left += Math.max(0, (this.sizes.get(key) ?? 0) - (this.partial.get(key) ?? 0));
-    }
-    return left;
-  }
-
   partialProgress(): number {
     let sum = 0;
     for (const [key, got] of this.partial) {
@@ -270,114 +187,29 @@ export class DustFiles implements HostFiles {
   }
 
   /**
-   * The engine's synchronous provider: what is in hand, or null.
-   *
-   * Null is not a failure here. The engine asks synchronously, misses, and the
-   * host's `ensureFile` fetches and asks again — so a miss is recorded and
-   * a fetch started, exactly as `FileStore.provide` does it.
+   * Nobody awaits this one: the engine asked, was told "not yet" and carried
+   * on, so a speedrun's clock must keep counting through it (#369). Marked
+   * BEFORE the fetch, because the flight reads it as it is created — see
+   * {@link background}.
    */
-  provide = (name: string): Uint8Array | null => {
-    const key = name.toLowerCase();
-    const have = this.cache.get(key);
-    if (have) return have;
-    this.misses.push(key);
-    if (this.urls.has(key)) {
-      // Nobody awaits this one: the engine asked, was told "not yet" and
-      // carried on, so a speedrun's clock must keep counting through it
-      // (#369). Marked BEFORE the fetch, because `load` reads it as the flight
-      // is created — see {@link background}.
-      this.background.add(key);
-      void this.load(key);
-    }
-    return null;
-  };
-
-  async load(name: string, onBytes?: (n: number) => void): Promise<Uint8Array | null> {
-    const key = name.toLowerCase();
-    const have = this.cache.get(key);
-    if (have) {
-      onBytes?.(have.byteLength);
-      return have;
-    }
-    const url = this.urls.get(key);
-    if (!url) return null;
-    // one fetch per name however many callers ask at once, which the boot does:
-    // `preload` fetches the plan while the scripts are already asking
-    const started = !this.inFlight.has(key);
-    // whether anyone is waiting is decided once, for the whole flight, and by
-    // whoever started it — see {@link background}
-    const waited = !this.background.has(key);
-    const flight = this.inFlight.get(key) ?? (async () => {
-      // announced from inside the flight, and synchronously: this runs before
-      // the first `await` below, so the wire says "busy" in the same turn the
-      // fetch was issued in rather than a microtask later
-      const id = this.fetchBegan(url, waited);
-      try {
-        const res = await fetch(url);
-        if (!res.ok) return { bytes: null, streamed: false };
-        // STREAMED, which is what `HostFiles.load` has always promised ("where the
-        // source streams, reports each chunk") and what taoot/src/files.ts does.
-        // This store used to buffer the whole body and report it once, so its page
-        // could only ever draw a bar that moved fourteen times.
-        const bytes = res.body
-          ? await this.readStream(key, res.body, onBytes)
-          : new Uint8Array(await res.arrayBuffer());
-        this.partial.delete(key);
-        this.cache.set(key, bytes);
-        this.loads.push(key);
-        this.onFileLoaded?.(key, bytes.byteLength);
-        this.onBackgroundLoad?.(key, bytes);
-        return { bytes, streamed: res.body !== null };
-      } finally {
-        // in a `finally`, so a fetch that THREW still closes its span — a clock
-        // left holding an open period would stop counting for the rest of the
-        // page's life
-        this.fetchEnded(id, url, waited);
-      }
-    })();
-    this.inFlight.set(key, flight);
-    if (started) this.onBusyChange?.(this.inFlight.size);
-    try {
-      const { bytes, streamed } = await flight;
-      // The owner of a streamed fetch has been told chunk by chunk already.
-      // Everyone else — a joiner, or the fallback path where the response had no
-      // body to read — still gets the one total, as they always did.
-      if (bytes && (!streamed || !started)) onBytes?.(bytes.byteLength);
-      return bytes;
-    } finally {
-      this.partial.delete(key);
-      if (this.inFlight.delete(key)) {
-        this.background.delete(key);
-        this.onBusyChange?.(this.inFlight.size);
-      }
-    }
+  protected override fetchUnasked(key: string): void {
+    this.background.add(key);
+    super.fetchUnasked(key);
   }
 
-  /** drain a response body, reporting each chunk, then join it into one array */
-  private async readStream(
-    key: string,
-    body: ReadableStream<Uint8Array>,
-    onBytes?: (n: number) => void,
-  ): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.byteLength;
-      this.partial.set(key, total);
-      this.onChunk?.(key, value.byteLength);
-      onBytes?.(value.byteLength);
-    }
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const c of chunks) {
-      out.set(c, at);
-      at += c.byteLength;
-    }
-    return out;
+  /**
+   * The flight's two ends, said on the wire. Whether anyone is waiting is
+   * decided once, for the whole flight, and by whoever started it — see
+   * {@link background}.
+   */
+  protected override flightBegins(key: string, url: string): () => void {
+    const waited = !this.background.has(key);
+    const id = this.fetchBegan(url, waited);
+    return () => this.fetchEnded(id, url, waited);
+  }
+
+  protected override flightOver(key: string): void {
+    this.background.delete(key);
   }
 
   setDisc(): void {
@@ -386,10 +218,6 @@ export class DustFiles implements HostFiles {
 
   activeEdition(): string {
     return "dust";
-  }
-
-  has(name: string): boolean {
-    return this.cache.has(name.toLowerCase());
   }
 
   /**
@@ -403,16 +231,5 @@ export class DustFiles implements HostFiles {
    */
   serverSetNames(): string[] {
     return this.has("town.set") || this.urls.has("town.set") ? ["town.set"] : [];
-  }
-
-  serverUrl(name: string): string | null {
-    return this.urls.get(name.toLowerCase()) ?? null;
-  }
-
-  evict(): number {
-    // Nothing is evicted. The disc is 644 MB but a boot touches a few of it, and
-    // an experiment that drops bytes it might want again trades a real
-    // diagnostic ("what did it ask for?") for memory it is not short of.
-    return 0;
   }
 }

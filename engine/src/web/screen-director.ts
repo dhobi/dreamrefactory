@@ -907,7 +907,7 @@ export class ScreenDirector {
      * one — a transition composites over whatever the world last painted.
      */
     const shot = this.session.photoOverlay;
-    if (shot && shot.photo.width && shot.photo.height) {
+    if (shot?.photo.width && shot.photo.height) {
       this.screen.blitAt(shot.photo.rgba, shot.photo.width, shot.photo.height, shot.x, shot.y);
     }
     this.screen.frameValid = true;
@@ -1157,7 +1157,7 @@ export class ScreenDirector {
    */
   private compositeXRay(flatPal: Uint8ClampedArray): void {
     const xr = this.session.plugins.xray;
-    if (!xr || !xr.aimed) return;
+    if (!xr?.aimed) return;
     const hidden = this.session.stageCtrl.flatImage(xr.hidden);
     const mask = this.session.propRuntime.get(xr.mask);
     const st = mask?.state();
@@ -1346,7 +1346,7 @@ export class ScreenDirector {
       ar.compositeScreen(data, width, height, palette);
       // cam = null skips the world half, which the merge above has already drawn
       pr.composite(
-        data, width, height, palette, -Infinity, null,
+        data, width, height, palette, null,
         animating || this.session.viewShowing, occ,
       );
       return;
@@ -1360,7 +1360,7 @@ export class ScreenDirector {
     // room, and its scripts put away what should not show — RedJack's credits
     // (credits.shop) roll over liznite's first node.
     this.session.propRuntime.composite(
-      data, width, height, palette, -Infinity, cam,
+      data, width, height, palette, cam,
       (animating || this.session.viewShowing) && !this.session.isV5,
       occ,
     );
@@ -1829,7 +1829,7 @@ export class ScreenDirector {
     const interp = this.session.interp;
     interp.eventConsumed = false;
     for (const inst of [flat, this.session.stageScript]) {
-      if (!inst || !inst.script.codes.has("mousedown")) continue;
+      if (!inst?.script.codes.has("mousedown")) continue;
       try {
         const res = await interp.runHandler(inst, "mousedown", [""], { me: inst.name, target: "" });
         if (interp.eventConsumed || (res.handled && !res.passed)) return;
@@ -2124,11 +2124,9 @@ export class ScreenDirector {
     // exit runs `clut("set")` between a stage's screentoblack and its
     // blacktoscreen, and lifting the black there would flash the room in
     // early (same reasoning as visualeffect's reveal, one function up).
-    const showing = this.session.viewShowing
-      ? "set"
-      : this.session.currentFlat !== "none"
-        ? "stage"
-        : "";
+    let showing = "";
+    if (this.session.viewShowing) showing = "set";
+    else if (this.session.currentFlat !== "none") showing = "stage";
     if (t === showing && !this.session.puppet?.visible) {
       this.session.fade.queue.length = 0;
       this.session.fade.snapshot = null;
@@ -2155,7 +2153,7 @@ export class ScreenDirector {
   private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
     const gen = screenGammaGeneration();
     const hit = this.flatPal;
-    if (hit && hit.base === base && hit.dim === this.stageDim && hit.gen === gen) return hit.out;
+    if (hit?.base === base && hit.dim === this.stageDim && hit.gen === gen) return hit.out;
     const out = displayPalette(this.stageDim ? dimPalette(base, this.stageDim) : base);
     this.flatPal = { base, dim: this.stageDim, gen, out };
     return out;

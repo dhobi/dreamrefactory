@@ -10,14 +10,23 @@
  * writing is writeContainerFile/encodeShpFrame from engine/src/df, so an untouched
  * load exports the same structure it read (see taoot/tests/auto/pup-editor.ts).
  */
-import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, encodingOf, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import { paletteToRGBA } from "@dreamfactory/engine/df/image";
+import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import {
+  download,
+  exportContainerFile,
+  fillSwatches,
+  installEditorPage,
+  paintFrame,
+  readImage,
+  serverNote,
+  serverRow,
+  spriteFromImage,
+  wireFileOpen,
+  wirePngImport,
+} from "./editor-kit";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
@@ -25,7 +34,6 @@ import { paletteV0 } from "@dreamfactory/engine/df/mov-v0";
 import { pupFileFromV0 } from "@dreamfactory/engine/df/talk-v0";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { decodeShpFrame, encodeShpFrame, patchFrameAnchor, ShpFrame } from "@dreamfactory/engine/df/shp";
-import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import {
   PUP_LAYERS,
   PupAnimFrame,
@@ -85,11 +93,12 @@ window.addEventListener("beforeunload", (e) => {
 let screen: GameScreen = screenOf(null);
 
 let encoding: DfEncoding = DEFAULT_ENCODING;
-void (async () => {
+async function chooseSource(): Promise<void> {
   const source = chosenSource(await listSources());
   if (source) screen = screenOf(source);
   if (source) encoding = encodingOf(source);
-})();
+}
+const sourceChosen = chooseSource();
 
 /** a DreamFactory 5 file or a DreamFactory 0 talk file, open read-only */
 let readOnly = false;
@@ -134,7 +143,10 @@ function loadPup(bytes: Uint8Array, name: string, v0 = false): void {
   edits.length = 0;
   // a v5 file reads but cannot be written yet (sources.ts), and a v0 one never
   readOnly = v0 || isV5File(bytes);
-  dirtyEl.textContent = v0 ? V0_READ_ONLY : readOnly ? V5_READ_ONLY : "";
+  let status = "";
+  if (v0) status = V0_READ_ONLY;
+  else if (readOnly) status = V5_READ_ONLY;
+  dirtyEl.textContent = status;
   // a button that refuses when pressed is worse than one that says so first
   ($("exportBtn") as HTMLButtonElement).disabled = readOnly;
   stanceIdx = 0;
@@ -166,28 +178,7 @@ function loadPup(bytes: Uint8Array, name: string, v0 = false): void {
   renderPreview();
 }
 
-async function loadFromFile(file: File): Promise<void> {
-  loadPup(new Uint8Array(await file.arrayBuffer()), file.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadPup(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /** dev-server mode: offer every .pup in the gamefiles manifest */
 async function initServerPups(): Promise<void> {
@@ -206,31 +197,17 @@ async function initServerPups(): Promise<void> {
   );
   if (!pups.length) return;
   const wrap = $("serverPups");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent = t("common.pickFromGamefiles");
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row pups";
-  for (const f of pups) {
-    const b = document.createElement("button");
-    b.className = "pup";
-    b.textContent = f.base;
-    b.title = `${source.game.short} · ${f.path}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadPup(new Uint8Array(await r.arrayBuffer()), f.base, source.game.dreamFactory0 === true);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverNote(wrap, t("common.pickFromGamefiles"));
+  serverRow(wrap, {
+    source,
+    files: pups,
+    rowClass: "pups",
+    buttonClass: "pup",
+    log,
+    open: (bytes, f) => loadPup(bytes, f.base, source.game.dreamFactory0 === true),
+  });
 }
-void initServerPups();
+const serverListed = initServerPups();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -270,20 +247,7 @@ function frameAt(loc: number): ShpFrame | null {
 }
 
 /** paint a decoded frame into a canvas at 1:1, transparent where masked */
-function frameToCanvas(f: ShpFrame, canvas: HTMLCanvasElement): void {
-  canvas.width = Math.max(1, f.width);
-  canvas.height = Math.max(1, f.height);
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (!f.width || !f.height) return;
-  const img = ctx.createImageData(f.width, f.height);
-  // a v5 sprite brings its own palette; a v4 one is drawn through the file's
-  indexedToRGBA(f.indexed, f.width, f.height, f.palette ?? palette, img.data);
-  for (let i = 0; i < f.width * f.height; i++) {
-    if (!f.opaque[i]) img.data[i * 4 + 3] = 0;
-  }
-  ctx.putImageData(img, 0, 0);
-}
+const frameToCanvas = (f: ShpFrame, canvas: HTMLCanvasElement): void => paintFrame(f, canvas, palette);
 
 // --- preview compositor -------------------------------------------------------
 
@@ -517,7 +481,7 @@ function buildLayers(): void {
       const c = document.createElement("canvas");
       c.className = "thumb";
       c.title = `frame ${idx} @${loc}` + (f ? ` — ${f.width}×${f.height}` : " — undecodable");
-      if (f && f.width && f.height) {
+      if (f?.width && f.height) {
         frameToCanvas(f, c);
         const scale = Math.min(48 / f.height, 96 / f.width, 3);
         c.style.width = `${Math.max(1, Math.round(f.width * scale))}px`;
@@ -526,7 +490,7 @@ function buildLayers(): void {
         c.width = c.height = 16;
         c.style.width = c.style.height = "16px";
       }
-      if (selected && selected.layer === l && selected.idx === idx) c.classList.add("selected");
+      if (selected?.layer === l && selected.idx === idx) c.classList.add("selected");
       c.addEventListener("click", () => {
         selected = { layer: l, idx, loc };
         buildLayers();
@@ -606,12 +570,8 @@ $("pngExportBtn").addEventListener("click", () => {
   }, "image/png");
 });
 
-const pngInput = $<HTMLInputElement>("pngInput");
-$("pngImportBtn").addEventListener("click", () => pngInput.click());
-pngInput.addEventListener("change", () => {
-  const file = pngInput.files?.[0];
-  pngInput.value = "";
-  if (file && selected) void importPng(file, selected.loc);
+wirePngImport((file) => {
+  if (selected) void importPng(file, selected.loc);
 });
 
 /**
@@ -623,58 +583,16 @@ pngInput.addEventListener("change", () => {
 async function importPng(file: File, loc: number): Promise<void> {
   if (!pup) return;
   const old = frameAt(loc);
-  let bmp: ImageBitmap;
-  try {
-    bmp = await createImageBitmap(file);
-  } catch {
-    log(t("common.notAnImage", { file: file.name }));
-    return;
-  }
-  const c = document.createElement("canvas");
-  c.width = bmp.width;
-  c.height = bmp.height;
-  const ctx = c.getContext("2d")!;
-  ctx.drawImage(bmp, 0, 0);
-  const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
-
-  const indexed = new Uint8Array(bmp.width * bmp.height);
-  const opaque = new Uint8Array(bmp.width * bmp.height);
-  for (let i = 0; i < indexed.length; i++) {
-    if (img.data[i * 4 + 3] < 128) continue;
-    opaque[i] = 1;
-    indexed[i] = nearestPaletteIndex(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
-  }
-  const frame: ShpFrame = {
-    width: bmp.width,
-    height: bmp.height,
-    posYraw: old?.posYraw ?? 0,
-    posXraw: old?.posXraw ?? 0,
-    indexed,
-    opaque,
-  };
+  const img = await readImage(file, log);
+  if (!img) return;
+  const frame = spriteFromImage(img, palette, old);
   const oldC = pup.file.containers[loc];
   pup.file.containers[loc] = { id: oldC.id, data: encodeShpFrame(frame) };
   frameCache.delete(loc);
   markEdit(t("puppets.artEdit", { loc, file: file.name }));
-  log(t("puppets.artReplaced", { loc, file: file.name, w: bmp.width, h: bmp.height }));
+  log(t("puppets.artReplaced", { loc, file: file.name, w: img.width, h: img.height }));
   buildLayers();
   renderPreview();
-}
-
-function nearestPaletteIndex(r: number, g: number, b: number): number {
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < 256; i++) {
-    const dr = palette[i * 4] - r;
-    const dg = palette[i * 4 + 1] - g;
-    const db = palette[i * 4 + 2] - b;
-    const d = dr * dr + dg * dg + db * db;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
 }
 
 // --- dialogue ------------------------------------------------------------------
@@ -738,25 +656,10 @@ function buildScripts(): void {
 // --- palette --------------------------------------------------------------------
 
 function buildPalette(): void {
-  const wrap = $("palette");
-  wrap.innerHTML = "";
-  for (let i = 0; i < 256; i++) {
-    const d = document.createElement("div");
-    d.style.background = `rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    d.title = `${i}: rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    wrap.appendChild(d);
-  }
+  fillSwatches($("palette"), palette);
 }
 
 // --- export ---------------------------------------------------------------------
-
-function download(blob: Blob, name: string): void {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
 
 $("exportBtn").addEventListener("click", () => {
   if (!pup) return;
@@ -764,28 +667,9 @@ $("exportBtn").addEventListener("click", () => {
     log(V5_READ_ONLY);
     return;
   }
-  const bytes = writeContainerFile(pup.file);
-  try {
-    readPupFile(bytes, encoding); // sanity: the export must read back as a puppet
-  } catch (e) {
-    log(t("common.exportFailed", { message: (e as Error).message }));
-    return;
-  }
-  download(new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }), fileName);
-  log(
-    t("common.exported", { file: fileName, bytes: formatNumber(bytes.length) }) +
-      (edits.length
-        ? t("common.exportedWithEdits", { n: edits.length, edits: edits.join(", ") })
-        : t("common.exportedUnmodified")),
-  );
+  // sanity: the export must read back as a puppet
+  exportContainerFile(pup.file, (bytes) => readPupFile(bytes, encoding), fileName, edits, log);
 });
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-// Which edition's files the landing screen lists, and which copy of a basename an
-// edit is written back into: the same row the play page and the collection carry
-// (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
-// stands between that and unexported edits.
-void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+void installEditorPage();
+await Promise.all([sourceChosen, serverListed]);

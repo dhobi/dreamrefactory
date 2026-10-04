@@ -87,8 +87,8 @@ test("the room the reporter saved in", () => {
   expect([save.set, save.scene, save.view]).toEqual(["lounge1c", "scene14", "view37"]);
   // the rest of the file always parsed — this is what made the bug look like a
   // room problem rather than a globals one: the right set opened every time
-  expect(save.inventory.length).toBe(72);
-  expect(save.actors.length).toBe(39);
+  expect(save.inventory).toHaveLength(72);
+  expect(save.actors).toHaveLength(39);
   expect(save.theme?.track).toBe("sink0.trk");
 });
 
@@ -148,7 +148,7 @@ test("loading it over a mission-2 game replaces the mission-2 state (#179)", asy
 test("it round-trips everything the loader reads", () => {
   const raw = readSaveFile(SAVE);
   const again = readSaveFile(writeSaveFile(raw));
-  expect(again.containers.length).toBe(raw.containers.length);
+  expect(again.containers).toHaveLength(raw.containers.length);
   for (let i = 0; i < raw.containers.length; i++) {
     expect(again.containers[i].id).toBe(raw.containers[i].id);
     expect(Buffer.from(again.containers[i].data)).toEqual(Buffer.from(raw.containers[i].data));

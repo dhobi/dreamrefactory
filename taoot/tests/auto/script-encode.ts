@@ -58,7 +58,7 @@ test("the segment stream is 8 bytes a token, zero-terminated, pool behind it", (
   ];
   const bytes = encodeScript(tokens);
   // 3 segments + terminator, then one pascal string of 4 characters
-  expect(bytes.length).toBe(4 * 8 + 5);
+  expect(bytes).toHaveLength(4 * 8 + 5);
   const view = new DataView(bytes.buffer);
   expect(view.getUint16(3 * 8, true)).toBe(0); // the terminator
   // all three point at the same pooled string (info is relative to the segment)

@@ -326,6 +326,15 @@ kbd,
 
    Layout-neutral on purpose — where the control sits is the page's business, and
    both of them put it somewhere different. */
+/* The pickers and the segmented rows are fieldsets, for the group they are,
+   and owe the UA sheet's frame nothing: zero specificity, so any class that
+   draws a border or a margin of its own still wins. */
+:where(fieldset) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: auto;
+}
 .editionPicker {
   display: flex;
   flex-wrap: wrap;

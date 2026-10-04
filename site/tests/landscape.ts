@@ -9,7 +9,9 @@
  * came later did not: Lunicus's page wired the button without it and kept the
  * postage-stamp picture on a phone turned sideways. This reads each game's
  * `src/main.ts` for the call, the way site/tests/deploy-lanes.ts reads the
- * workflow: what is checked is that the words are there.
+ * workflow: what is checked is that the words are there. Lunicus and Jump
+ * Raven build their page from engine/src/web/v0-page.ts, so for them the call
+ * is read there.
  */
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -19,7 +21,8 @@ import { GAMES } from "@dreamfactory/site/games";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 test.each(GAMES.map((g) => g.dir))("%s: a phone on its side goes fullscreen", (dir) => {
-  const main = readFileSync(`${ROOT}/${dir}/src/main.ts`, "utf8");
+  let main = readFileSync(`${ROOT}/${dir}/src/main.ts`, "utf8");
+  if (/new V0Page\(/.test(main)) main = readFileSync(`${ROOT}/engine/src/web/v0-page.ts`, "utf8");
   const call = /installFullscreen\(([\s\S]*?)\);/.exec(main)?.[1];
   expect(call, `${dir}/src/main.ts wires no Fullscreen button`).toBeDefined();
   expect(call, `${dir}/src/main.ts calls installFullscreen without landscape: true`).toMatch(/landscape:\s*true/);

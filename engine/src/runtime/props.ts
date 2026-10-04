@@ -72,7 +72,7 @@ export function becomeWorldProp(p: PropInstance, v1 = false): void {
  */
 export function frameIndexForDegree(st: PropState, deg: number): number {
   const d = st.degrees;
-  if (!d || !d.length) return 0;
+  if (!d?.length) return 0;
   const target = ((Math.round(deg) % 256) + 256) % 256;
   let best = 0;
   let bestDist = Infinity;
@@ -111,7 +111,7 @@ export function v5FrameIndex(st: PropState, step: number, deg: number): number {
       if (dist === 0) break;
     }
   }
-  return best < 0 ? 0 : best;
+  return Math.max(0, best);
 }
 
 /**
@@ -161,7 +161,7 @@ const MAX_VARIANT_DEGREE = 8;
  */
 export function degVariantFrames(st: PropState, deg: number): number[] | null {
   const d = st.degrees;
-  if (!d || d.length !== st.frames.length || st.frames.length < 3) return null;
+  if (d?.length !== st.frames.length || st.frames.length < 3) return null;
   const groups = new Map<number, number[]>();
   for (let i = 0; i < d.length; i++) {
     if (d[i] >= MAX_VARIANT_DEGREE) return null; // an angle, not a variant index
@@ -463,7 +463,7 @@ export class PropInstance {
    */
   screenRect(origin = NO_ORIGIN): { x: number; y: number; w: number; h: number } | null {
     const st = this.state();
-    if (!st || !st.frames.length) return null;
+    if (!st?.frames.length) return null;
     const f = this.shop.frame(this.currentFrame(st));
     return { ...this.screenCorner(f, origin), w: f.width, h: f.height };
   }
@@ -484,7 +484,7 @@ export class PropInstance {
 }
 
 export class LoadedShop {
-  private frameCache = new Map<number, ShpFrame>();
+  private readonly frameCache = new Map<number, ShpFrame>();
   /**
    * Persistent = a boot-level UI shop (TAOOT: house.shp / inven.shp) whose screen
    * props (the interface band, inventory) belong on top of the set view.
@@ -675,7 +675,7 @@ export class PropRuntime {
     for (const p of this.props.values()) {
       if (!p.visible || p.frameLocked || !p.animating) continue;
       const st = p.state();
-      if (st && st.playsOnce !== undefined) {
+      if (st?.playsOnce !== undefined) {
         // DreamFactory 5 steps a view as it does a pose (RedJack.exe 0x42c89e–
         // 0x42c931, ActorRuntime.advanceAnimation): step 0 on the first pass,
         // then by the view's step time on the clock or one a pass; a view that
@@ -983,7 +983,7 @@ export class PropRuntime {
     const corners = [[0, 0], [f.width, 0], [0, f.height], [f.width, f.height]].map(([u, v]) =>
       v5.project(o[0] + r[0] * u + d[0] * v, o[1] + r[1] * u + d[1] * v, o[2] + r[2] * u + d[2] * v),
     );
-    if (corners.every((c) => c)) {
+    if (corners.every(Boolean)) {
       const xs = corners.map((c) => c!.x);
       const ys = corners.map((c) => c!.y);
       box = {
@@ -1071,7 +1071,6 @@ export class PropRuntime {
     width: number,
     height: number,
     paletteRGBA: Uint8ClampedArray,
-    minAnchorY = -Infinity,
     cam: WorldCamera | null = null,
     persistentScreenOnly = false,
     occ: Occlusion | null = null,
@@ -1083,7 +1082,6 @@ export class PropRuntime {
       }
     }
     for (const p of this.drawList(persistentScreenOnly)) {
-      if (p.anchorY < minAnchorY) continue;
       const st = p.state()!;
       const f = p.shop.frame(p.currentFrame(st));
       const { x: dx, y: dy } = p.screenCorner(f, this.origin);

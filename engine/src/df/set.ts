@@ -242,11 +242,9 @@ export function turnRing(scene: Scene, viewIdx: number, dir: number): { target: 
   const from = ring.findIndex((f) => f.viewID === viewIdx && f.motionInfo > 0);
   if (from < 0) return null;
   const frames: FrameInfo[] = [];
-  let i = from;
   let target = viewIdx;
-  for (let step = 0; step < ring.length; step++) {
-    i = (i + 1) % ring.length;
-    const fi = ring[i];
+  for (let step = 1; step <= ring.length; step++) {
+    const fi = ring[(from + step) % ring.length];
     frames.push(fi);
     if (fi.viewID >= 0 && fi.motionInfo > 0) {
       target = fi.viewID;
