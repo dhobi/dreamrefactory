@@ -109,6 +109,10 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
       })),
       walks: walkSnapshot(session),
     },
+    // the files open NOW, which a load reopens before it places anybody or
+    // starts a loop — not the base save's lists (see SavePatch.casts/banks)
+    casts: [...session.actorRuntime.casts.keys()],
+    banks: session.audioLib.bankNames,
     theme: themeSnapshot(session),
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
   });
@@ -261,6 +265,7 @@ function actorSnapshot(session: GameSession): SavedActorPatch[] {
       name: name.toLowerCase(),
       owner: (String(a.owner) || "none").toLowerCase(),
       value,
+      cast: a.cast.name,
       placement: {
         visible: !!a.visible,
         set: a.setName.toLowerCase(),

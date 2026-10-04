@@ -88,10 +88,10 @@ diffing the same record across many saves.
 | **0** | manifest, built on the stack: `"Titanic 1.0"` version (Pascal string @0), disk family `"Titanic1"`/`"Titanic2"` (@+0x104), nine 256-byte path slots (@+0x1fc — the *Save As* / tour directories), the **live CLUT** (@+0xb0c, 256 × {i16 index, i16 rgb[3]} — the loader copies it into the palette global and applies it, `0x414aa8..0x414b07`; the lower 128 entries are the open set's own palette table and a cross-room patch must replace them or the room comes back in the old room's colours), the open-file count (@+0x130c), then one **260-byte record per open file** at +0x1310: the file's **old heap handle** (u32) followed by its path as a Pascal string (`titanic2:data:cargo.set`). The handle is not junk — it is the key every other container's file references resolve through, see [how the loader re-opens the room](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name) |
 | **1** | current location, a fixed 786 bytes from `0x489d40`: the **frame counter** (@442 — see [below](#the-frame-counter-c1-442)), stage file (@520, `"main.stg"`), the open **set file's old handle** (@544 — resolved through the manifest, above), set base (@596), scene (@612), view (@628), the set's **actor / main-scene register container refs** (@644 / @652) and the scene register's **record count** (@656 — the loader's scene lookup walks exactly this many records; equal to the set's scene count in all 109 shipped saves) |
 | **2** | the cast: n × 160-byte actor records — see [The actor container](#the-actor-container-fixed-160-byte-actor-records) |
-| **3** | open casts: n × 28 (two pointers, a u32, the `.cst` filename as a Pascal string at +12). **A load has to reopen these** — the room's crowd is instanced from them and no `openset` runs to open them itself; see [The crowd comes from this container](#the-crowd-comes-from-this-container) |
+| **3** | open casts: n × 28 — the cast file's **old handle** (+0, resolved through the manifest like the set's), a pointer, a u32 that is 1 in every shipped record, the `.cst` filename as a Pascal string at +12. **A load has to reopen these** — the room's crowd is instanced from them and no `openset` runs to open them itself; see [The crowd comes from this container](#the-crowd-comes-from-this-container) |
 | **4** | inventory — every loaded prop: **72 × 158** in every shipped save, inventory items first — see [The inventory container](#the-inventory-container-fixed-158-byte-prop-records) |
 | **5** | open shops (`.shp`): n × 28, the same shape as the casts |
-| **6** | open tracks: n × 40-byte descriptors. **A load has to reopen all of them**, not just the one that was playing — see [The track containers](#the-track-containers-what-was-playing) |
+| **6** | open tracks: n × 40-byte descriptors, each leading with the bank file's old handle. **A load has to reopen all of them**, not just the one that was playing — see [The track containers](#the-track-containers-what-was-playing) |
 | 7 … 6+3n | **three containers per open track**, in descriptor order: the track's registered, playing and looping sound lists, 104 bytes per record. Counts come from the descriptor's `+4`/`+6`/`+8` |
 | **globals** | the script global variables — the core story progress (`clock`, `phase`, `mission`, `playerdeath`, every `…phase`/`…count`, the boiler pressures, the minigame state…) |
 | **globals + 1** | the globals' **string pool**: every string-valued variable's text, as `[len][chars]` entries. The loader reads the pair together (TI.EXE stores the pool handle at globals-blob `+0x10`) |
@@ -885,7 +885,7 @@ is followed by three containers of its own further down the file:
 
 | Offset | Type | Field |
 |-------:|------|-------|
-| +0 | u32 | heap pointer |
+| +0 | u32 | the bank file's **old handle** — resolved through the manifest on load |
 | +4 / +6 / +8 | u16 | the **three array counts**: registered / playing / looping |
 | +0xa / +0xe / +0x12 | u32 | the three arrays' heap pointers |
 | +0x16 | pstr16 | track name — `inven.trk`, `unilib.trk`, `cricket.sfx`, `deckbd.trk` |
@@ -968,13 +968,59 @@ the loop records (container location + identifier) and the play order, supplied
 at save time by the open bank (`AudioLibrary.loopTable`), and the descriptor
 counts move with the container lengths as always.
 
-Writing it back has one real limit. `applyPatch` can empty every track's
-playing/looping arrays and write one base track's lists (descriptor counts and
-container lengths move together, so the file keeps the shape the original writes),
-but it **cannot open a track the base save never had**: the container-0 manifest
-names the open files and the patcher does not rewrite the manifest. A theme whose
-track is not in the base is dropped, reported through `SavePatch.onDrop`, and the
-room loads silent.
+`applyPatch` empties every track's playing/looping arrays and writes the theme
+track's lists (descriptor counts and container lengths move together, so the file
+keeps the shape the original writes). The theme's bank is on the list because the
+list itself is written from the session, below; a theme whose bank is not open is
+dropped, reported through `SavePatch.onDrop`, and the room loads silent.
+
+## The open-file lists are the session's, not the skeleton's
+
+Containers 3 and 6 are the engine's live tables, dumped as they are. The writer
+(`0x413910`) serializes the handle at `0x489f0c` (casts, count `0x489f10`) and the
+one at `0x489f24` (tracks, count `0x489f28`, followed by each track's three arrays,
+`0x413cba..0x413e0e`); the restore (`0x414080`) reads them straight back into those
+globals (`0x414431`, `0x41454e`); and the resume (`0x414a70`) walks them:
+
+- each **cast** record's handle at +0 goes through `0x4152e0` with the tag `ODCC`
+  (`0x414b32`) — the manifest record with that handle is found (`0x4153f0`, a miss
+  is fatal 0x1127), its path cut to the basename (`0x42bc20`) and opened
+  (`0x429e30`) — and the new handle replaces the old one; the cast's directory is
+  then re-read into +4 (`0x414b4d`);
+- each **track** descriptor's handle goes through the same resolver with `GNOS`
+  (`0x414cf2`), and the three arrays are rebuilt from the bank (`0x414d6a` on);
+- each **actor** record's +2 is its cast file's handle, resolved by `0x415370`
+  (`0x414b9c`) — the file has to be open already, which is why the casts come
+  first.
+
+So a record is its handle and its name; every other field is a pointer the loader
+overwrites. Measured over the shipped corpus, every cast and track record's handle
+names a manifest record whose basename is the record's own name, and every actor
+record's +2 names `gang.cst` or `extra.cst`.
+
+The port's writer patches a skeleton, and it used to copy these two lists from it.
+A save therefore named whatever the **skeleton** had open: a game started fresh
+patches a London-flat template, so a save in the smoking room during the sinking
+listed `gang.cst` and the flat's banks, and the reload had no `extra.cst` to
+instance the crowd from (`sendtoactor("paul1b3", extraidle(..)) — target not
+loaded`) and no `insddest.sfx` for the sinking's ambience (`sound not found: `).
+`SavePatch.casts` and `SavePatch.banks` now carry the session's open casts and
+banks, in the order they were opened:
+
+- a file the skeleton also had keeps its record (a bank keeps its three arrays,
+  whose live halves the theme then rewrites);
+- a new file gets a record shaped like the corpus's — its handle, +8 = 1 for a
+  cast, counts 0 for a bank;
+- a file the manifest does not name gets a manifest record, with a handle no other
+  record has and the directory of a record with the same extension (only the
+  basename is read); container 0 grows by one 260-byte record, as the writer's own
+  does;
+- every actor record's +2 is written as its cast file's handle, so a crowd record
+  the skeleton lacked resolves too.
+
+Reading takes the file by the same route as the original — handle through the
+manifest, the record's own name as the fallback — which on the shipped corpus is
+the same answer either way.
 
 ## How the web port loads a save
 
@@ -992,7 +1038,8 @@ What a load takes out of the file:
 
 - the **globals**, numbers and strings, plus the `hallside`/`savedeck` fallbacks;
 - the **open cast files** (container 3), reopened before any record is applied —
-  see [the crowd](#the-crowd-comes-from-this-container);
+  see [the crowd](#the-crowd-comes-from-this-container) — each by its manifest
+  handle, as `0x414b32` does;
 - the **cast**, wholesale — the live actor list is wiped and every record applied,
   including the crowd extras, which are re-instanced from their cast member by name
   (`brown1a1` ← `brown1`, `stok4` ← `stok1`), and including `actorscale` from
@@ -1025,7 +1072,9 @@ host-supplied per-disk template) with the current globals, the set/scene/view **
 the set file's manifest path + register refs** (see
 [the loader re-opens the room from the manifest](#the-loader-re-opens-the-room-from-the-manifest-not-from-the-set-name)),
 every loaded prop's full record, every actor's full record — **appending** one for a
-crowd extra the base save lacks — the scheduler's loop, cricket and walk tables (a
+crowd extra the base save lacks, and pointing each at its cast file's handle — the
+**open casts and banks** ([the session's, not the skeleton's](#the-open-file-lists-are-the-sessions-not-the-skeletons)),
+the scheduler's loop, cricket and walk tables (a
 `walkonpath` appending its waypoint container), and the playing theme
 ([one record per loop chunk of the bank](#the-playing-looping-lists-mirror-the-bank-record-for-record)).
 Everything the loader ignores stays byte-for-byte as the base had it.

@@ -148,6 +148,10 @@ const PROP_FIELDS = {
 const ACTOR_STRIDE = 160;
 /** the name field's offset inside a record — the grid is located by it */
 const ACTOR_RECORD_OFF = -80;
+/** record +2: the old handle of the cast FILE the member comes from, resolved
+ *  through the manifest on load (0x414b9c → 0x415370) — gang.cst's or
+ *  extra.cst's in every one of the shipped corpus's records */
+const ACTOR_CAST_OFF = 2;
 const ACTOR_OWNER_OFF = 64;
 /**
  * `actorvalue` — how many conversations you have had with this character, and
@@ -656,6 +660,14 @@ export interface SavedActor {
  */
 export type SavedActorPatch = Pick<SavedActor, "name" | "owner" | "value"> & {
   placement?: SavedActor["placement"];
+  /**
+   * The cast FILE the character came from (`extra.cst` for the crowd). Written
+   * as that file's manifest handle at record +2, which TI.EXE's resume
+   * (0x414b9c) resolves through the manifest to the open cast it re-reads the
+   * member from. Every record in the shipped corpus carries one; omitted, the
+   * base's is kept (and an appended record's stays 0).
+   */
+  cast?: string;
 };
 
 export interface SaveGame {
@@ -1020,12 +1032,30 @@ const CAST_STRIDE = 28;
 const CAST_NAME = 12;
 
 
+/**
+ * The file a list record opens, the way TI.EXE's resume finds it: by the old
+ * handle at +0, through the container-0 manifest (0x4152e0), falling back to the
+ * record's own name. The two agree in every record of the shipped corpus (156
+ * casts, 373 banks); a record whose handle the manifest lacks is fatal 0x1127 in
+ * the original, and the name is what the port can still use.
+ */
+function recordFile(d: Uint8Array, o: number, nameOff: number, files: Map<number, string>): string {
+  const own = (pstrAtChecked(d, o + nameOff, 1, 40) ?? "").toLowerCase();
+  return files.get(new DataView(d.buffer, d.byteOffset, d.byteLength).getUint32(o, true)) ?? own;
+}
+
+/** the manifest's handle → basename map, for {@link recordFile} */
+const manifestByHandle = (raw: RawSaveFile): Map<number, string> =>
+  new Map(manifestFiles(raw.containers[0].data).map((f) => [f.handle, f.file]));
+
 /** Decode the open-cast-file list (see {@link CAST_STRIDE}), lowercased. */
-function decodeCastFiles(d: Uint8Array): string[] {
+function decodeCastFiles(raw: RawSaveFile, castsIndex: number): string[] {
+  const d = raw.containers[castsIndex].data;
+  const files = manifestByHandle(raw);
   const out: string[] = [];
   for (let o = 0; o + CAST_STRIDE <= d.length; o += CAST_STRIDE) {
-    const name = pstrAtChecked(d, o + CAST_NAME, 1, 12);
-    if (name) out.push(name.toLowerCase());
+    const name = recordFile(d, o, CAST_NAME, files);
+    if (name) out.push(name);
   }
   return out;
 }
@@ -1273,9 +1303,10 @@ const SOUND_STRIDE = 104;
 function decodeTrackFiles(raw: RawSaveFile, tracksIndex: number): string[] {
   if (tracksIndex < 0) return [];
   const d = raw.containers[tracksIndex].data;
+  const files = manifestByHandle(raw);
   const out: string[] = [];
   for (let k = 0; k < d.length / TRACK_STRIDE; k++) {
-    const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+    const name = recordFile(d, k * TRACK_STRIDE, TRACK_NAME_OFF, files);
     if (name) out.push(name);
   }
   return out;
@@ -1367,7 +1398,7 @@ export function parseSave(bytes: Uint8Array): SaveGame {
 
   // which cast files were open — the crowd is instanced from them, and a load
   // runs no openset to reopen them (#186).
-  const castFiles = decodeCastFiles(raw.containers[index.casts].data);
+  const castFiles = decodeCastFiles(raw, index.casts);
 
   // the scheduler tables (loops/crickets/walks) and the open-track sound state —
   // what a load restores instead of re-running the room's openset (#143).
@@ -1539,9 +1570,9 @@ export interface SavePatch {
    * silent. Written by emptying every track's playing/looping arrays (their
    * descriptor counts and container lengths together, so they stay consistent)
    * and then writing the named track's lists the way TI.EXE's own writer does —
-   * IF the base has that track open; a theme track the base never opened is
-   * reported through {@link onDrop} (the container 0 manifest names the open
-   * files, and this writer does not rewrite the manifest).
+   * IF that track is on the open-bank list ({@link banks}, or the base's when
+   * that is omitted); a theme whose bank is not open is reported through
+   * {@link onDrop}.
    *
    * The lists are NOT free-form, and an invented record is a crash in the
    * original engine, not a quieter room. TI.EXE's post-load resume (0x414a70,
@@ -1560,6 +1591,30 @@ export interface SavePatch {
    * pan = 128, name = the chunk identifier verbatim.
    */
   theme?: ThemePatch | null;
+  /**
+   * The cast files open now, in the order they were opened — written as the
+   * open-cast list (container 3). Omitted, the base's list stands.
+   *
+   * The list is the live engine table at 0x489f0c, dumped as it is by the
+   * writer (0x413910), and a load reopens what it names (0x414b32): the crowd
+   * is instanced from `extra.cst`, which three rooms open from their `openset`
+   * and which a load, running no `openset`, gets only from here. Copying the
+   * base's list meant a save named whatever its SKELETON had open (#486: a
+   * London-flat template, so a smoking-room save during the sinking reloaded
+   * without its crowd). See {@link openFilesPatch}.
+   */
+  casts?: string[];
+  /**
+   * The audio banks open now — written as the open-tracks list (container 6)
+   * and its three arrays per bank. Omitted, the base's list stands.
+   *
+   * The live table at 0x489f24, reopened by a load (0x414cf2) whether a bank is
+   * sounding or not: the sinking's `insddest.sfx` is a silent bank a restored
+   * loop plays out of (#199). A bank the base also had keeps its record and
+   * arrays; a new one gets an empty record. {@link theme} is then written into
+   * this list, so a theme the base never had open is no longer dropped.
+   */
+  banks?: string[];
   /**
    * Told about any global that could not be written, and why.
    *
@@ -1635,6 +1690,152 @@ const NEW_RECORD_PRIORITY = ["savedeck", "hallside", "handitem", "pennybrush", "
 
 
 /**
+ * The container-0 manifest, as the loader reads it: the records' old handles and
+ * the BASENAME each path ends in — `0x4152e0` finds a record by handle
+ * (`0x4153f0`), strips its path to the last ":" (`0x42bc20`) and opens that.
+ */
+function manifestFiles(c0: Uint8Array): { handle: number; file: string; path: string }[] {
+  const dv = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
+  const out: { handle: number; file: string; path: string }[] = [];
+  const n = c0.length >= C0_FILE_RECORDS ? dv.getInt32(C0_FILE_COUNT, true) : 0;
+  for (let i = 0; i < n; i++) {
+    const o = C0_FILE_RECORDS + i * C0_FILE_STRIDE;
+    if (o + C0_FILE_STRIDE > c0.length) break;
+    const path = pstrAtChecked(c0, o + 4, 0, 255) ?? "";
+    out.push({ handle: dv.getUint32(o, true), file: path.slice(path.lastIndexOf(":") + 1).toLowerCase(), path });
+  }
+  return out;
+}
+
+/**
+ * The manifest handle that opens `file`, adding a record for it when the base
+ * has none.
+ *
+ * Every record of the open-cast and open-bank lists, and every actor record's
+ * cast reference, leads with an OLD HANDLE that the loader resolves through the
+ * manifest — a handle the manifest does not hold is TI.EXE's fatal 0x1127. The
+ * manifest is the open-file list (`0x413910` walks it from the file chain), so a
+ * file open now and not in the base belongs in it. The new record's handle only
+ * has to be one no other record has, since it is matched by equality; its path
+ * borrows the directory of a record with the same extension (only the basename
+ * is read, see SavePatch.setFile). Container 0 is `0x1310 + n × 0x104` bytes in
+ * every shipped save, so the record goes on the end and the count moves with it.
+ */
+function manifestHandle(containers: Container[], file: string): number {
+  const want = file.toLowerCase();
+  const files = manifestFiles(containers[0].data);
+  const have = files.find((f) => f.file === want);
+  if (have) return have.handle;
+  const ext = want.slice(want.lastIndexOf("."));
+  const like = files.find((f) => f.file.endsWith(ext) && f.path.includes(":"))
+    ?? files.find((f) => f.path.includes(":"));
+  const path = (like ? like.path.slice(0, like.path.lastIndexOf(":") + 1) : "") + want;
+  const handle = (files.reduce((m, f) => Math.max(m, f.handle), 0) + 0x10) >>> 0;
+  const c0 = containers[0].data;
+  const at = C0_FILE_RECORDS + files.length * C0_FILE_STRIDE;
+  const grown = new Uint8Array(at + C0_FILE_STRIDE);
+  grown.set(c0.subarray(0, Math.min(c0.length, at)), 0);
+  const dv = new DataView(grown.buffer);
+  dv.setUint32(at, handle, true);
+  writePstrField(grown, at + 4, path, 255);
+  dv.setInt32(C0_FILE_COUNT, files.length + 1, true);
+  containers[0].data = grown;
+  return handle;
+}
+
+/** the open-cast record's u32 at +8 — 1 in all 156 records of the shipped corpus */
+const CAST_FLAG = 8;
+/** the longest name an open-cast record's field holds (28 − 12, less the length byte) */
+const CAST_NAME_MAX = CAST_STRIDE - CAST_NAME - 1;
+/** the longest name an open-bank descriptor's field holds (40 − 0x16, less the length byte) */
+const TRACK_NAME_MAX = TRACK_STRIDE - TRACK_NAME_OFF - 1;
+
+/**
+ * Write the open-cast list (container 3) and the open-bank list (container 6 and
+ * the three arrays per bank after it) from the session's, before anything else in
+ * {@link applyPatch} reads the map — the bank count places every container after
+ * them, so this is the one step that moves the index.
+ *
+ * TI.EXE's writer (0x413910) dumps both tables verbatim (handles 0x489f0c and
+ * 0x489f24), and its resume (0x414a70) walks them record by record: each cast
+ * record's handle at +0 is reopened through the manifest ("ODCC", 0x414b32) and
+ * its directory re-read into +4; each bank descriptor's handle at +0 likewise
+ * ("GNOS", 0x414cf2), and then its three arrays are re-read from the containers
+ * that follow. So a record is its handle, its name, and — for a bank — its
+ * counts: everything else in it is pointers the loader overwrites.
+ *
+ * A file the base also had keeps the base's record (and a bank its three arrays,
+ * whose playing/looping halves the theme step rewrites anyway). A new file gets a
+ * fresh record shaped like the corpus's — handle, +8 = 1 for a cast, counts 0 for
+ * a bank — and a manifest record if the base had none for it.
+ */
+function openFilesPatch(containers: Container[], index: SaveIndex, patch: SavePatch): void {
+  if (patch.casts) {
+    const d = containers[index.casts].data;
+    const base = new Map<string, Uint8Array>();
+    for (let o = 0; o + CAST_STRIDE <= d.length; o += CAST_STRIDE) {
+      const name = pstrField(d, o + CAST_NAME).toLowerCase();
+      if (name && !base.has(name)) base.set(name, d.slice(o, o + CAST_STRIDE));
+    }
+    const recs: Uint8Array[] = [];
+    for (const cast of patch.casts) {
+      const name = cast.toLowerCase();
+      if (name.length > CAST_NAME_MAX) {
+        patch.onDrop?.(`cast(${name})`, `the name is longer than the record's ${CAST_NAME_MAX} characters`);
+        continue;
+      }
+      const rec = base.get(name) ?? new Uint8Array(CAST_STRIDE);
+      const dv = new DataView(rec.buffer, rec.byteOffset, rec.byteLength);
+      dv.setUint32(0, manifestHandle(containers, name), true);
+      if (!base.has(name)) {
+        dv.setUint32(CAST_FLAG, 1, true);
+        writePstrField(rec, CAST_NAME, name, CAST_NAME_MAX);
+      }
+      recs.push(rec);
+    }
+    const out = new Uint8Array(recs.length * CAST_STRIDE);
+    recs.forEach((r, k) => out.set(r, k * CAST_STRIDE));
+    containers[index.casts].data = out;
+  }
+
+  if (patch.banks) {
+    const ti = index.tracks;
+    const d = containers[ti].data;
+    const base = new Map<string, { rec: Uint8Array; arrays: Uint8Array[] }>();
+    for (let k = 0; k < index.trackCount; k++) {
+      const name = pstrField(d, k * TRACK_STRIDE + TRACK_NAME_OFF).toLowerCase();
+      if (!name || base.has(name)) continue;
+      base.set(name, {
+        rec: d.slice(k * TRACK_STRIDE, (k + 1) * TRACK_STRIDE),
+        arrays: [0, 1, 2].map((j) => containers[ti + 1 + 3 * k + j].data),
+      });
+    }
+    const recs: Uint8Array[] = [];
+    const arrays: Uint8Array[] = [];
+    for (const bank of patch.banks) {
+      const name = bank.toLowerCase();
+      if (name.length > TRACK_NAME_MAX) {
+        patch.onDrop?.(`bank(${name})`, `the name is longer than the record's ${TRACK_NAME_MAX} characters`);
+        continue;
+      }
+      const had = base.get(name);
+      const rec = had?.rec ?? new Uint8Array(TRACK_STRIDE);
+      if (!had) writePstrField(rec, TRACK_NAME_OFF, name, TRACK_NAME_MAX);
+      new DataView(rec.buffer, rec.byteOffset, rec.byteLength).setUint32(0, manifestHandle(containers, name), true);
+      recs.push(rec);
+      // counts and arrays travel together, which is what saveIndex validates
+      arrays.push(...(had?.arrays ?? [0, 1, 2].map(() => new Uint8Array(0))));
+    }
+    const list = new Uint8Array(recs.length * TRACK_STRIDE);
+    recs.forEach((r, k) => list.set(r, k * TRACK_STRIDE));
+    containers[ti].data = list;
+    containers.splice(ti + 1, 3 * index.trackCount, ...arrays.map((data) => ({ id: 0, data })));
+    // a container's id is its place in the file (the walks step appends the same way)
+    containers.forEach((c, i) => (c.id = i));
+  }
+}
+
+/**
  * Produce the bytes of a save that carries `patch`'s progress, using `base` as
  * the structural template. The base's containers are copied; the globals-
  * container values and container 1's set/scene/view are overwritten in place.
@@ -1644,13 +1845,15 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   const containers: Container[] = base.containers.map((c) => ({ id: c.id, data: c.data.slice() }));
   const raw: RawSaveFile = { header: base.header.slice(), table: base.table.slice(), containers };
   /**
-   * Read once, up front, and valid for the whole patch — which is a property of
-   * the map rather than luck. Nothing below changes container 6 or the count of
-   * containers before the walks table; the scheduler block truncates the tail to
+   * Read once the open-file lists are written ({@link openFilesPatch}, the one
+   * step that moves the map), and valid for the rest of the patch — which is a
+   * property of the map rather than luck. Nothing after it changes container 6
+   * or the count of containers before the walks table; the scheduler block truncates the tail to
    * re-emit the waypoint payloads, and every index it and the theme block use
    * sits at or before that cut. (Six searches used to run here instead, on the
    * copy, and a mis-lock would have WRITTEN to the wrong container — #325.)
    */
+  openFilesPatch(containers, saveIndex(raw), patch);
   const index = saveIndex(raw);
 
   // globals: overwrite each variable's DFValue (type at slot+24, value at
@@ -1919,6 +2122,8 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         offs.set(sa.name.toLowerCase(), at);
         off = at;
       }
+      // the cast file the member comes from, as its manifest handle (record +2)
+      if (sa.cast) put(off + ACTOR_RECORD_OFF + ACTOR_CAST_OFF, manifestHandle(containers, sa.cast), true);
       const d = containers[ai].data;
       // the field is a length byte + 15 characters, and the longest owner any
       // script assigns is "readhackerclue" at 14 — but a truncated owner would
@@ -2117,7 +2322,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       }
     }
     if (want && playing.length && !written) {
-      patch.onDrop?.(`theme(${want})`, "the base save has no such track open — the room will load silent");
+      patch.onDrop?.(`theme(${want})`, "the save has no such bank open — the room will load silent");
     } else if (want && !playing.length) {
       patch.onDrop?.(`theme(${want})`, "the bank's loop table was not readable — the room will load silent");
     }
