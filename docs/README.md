@@ -119,11 +119,13 @@ logic is all in its executable, played through by machine and in a browser —
 and **[Jump Raven](jumpraven/)** — the same engine again, and a player that
 wins it.
 
-Two pages are outside the order, for reading out of order:
+Three pages are outside the order, for reading out of order:
 **[the glossary](glossary.md)** (one line per term, when a word you don't know
-turns up in the middle of a page) and
+turns up in the middle of a page),
 **[how we know it's right](taoot/verification.md)** (what actually verifies these
-claims — worth reading whenever you want to know how load-bearing one is).
+claims — worth reading whenever you want to know how load-bearing one is) and
+**[collaboration](collaboration.md)** (how a person and a machine make this
+project together).
 
 ### Concepts — the engine, and what it makes
 
