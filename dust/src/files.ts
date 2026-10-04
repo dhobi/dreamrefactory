@@ -67,7 +67,7 @@ export class DustFiles extends RipFiles {
    * sentence Titanic's store says (taoot/src/files.ts) and therefore the same
    * arithmetic on top of it.
    */
-  private wireWatchers = new Set<(e: WireEvent) => void>();
+  private readonly wireWatchers = new Set<(e: WireEvent) => void>();
   private wireInFlight = 0;
   private nextFetchId = 1;
   /**

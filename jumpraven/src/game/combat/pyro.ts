@@ -501,7 +501,7 @@ export class Pyro implements PyroApi {
         this.x41c765(0, SHELLS, tier);
         return;
       case ROCKETS:
-      case MISSILES:
+      case MISSILES: {
         if (!this.press) {
           s.on = 0;
           return;
@@ -517,6 +517,7 @@ export class Pyro implements PyroApi {
         hud.setAmmo(kind, kind === ROCKETS ? -0xf0 : -0x168);
         this.x41c765(0, kind, tier);
         return;
+      }
       case BOMBS: {
         if (!this.press) {
           s.on = 0;

@@ -204,7 +204,13 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
     }
   };
 
-  const evaluate = <T>(expr: string): Promise<T> => new Promise<T>((resolve) => resolve(run<T>(expr)));
+  const evaluate = <T>(expr: string): Promise<T> => {
+    try {
+      return Promise.resolve(run<T>(expr));
+    } catch (e) {
+      return Promise.reject(e as Error);
+    }
+  };
 
   const frame = (): Promise<void> => new Promise((r) => win.requestAnimationFrame(() => r()));
 

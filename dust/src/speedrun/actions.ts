@@ -820,7 +820,7 @@ async function pickFromAvatar(c: ActionContext, item: string): Promise<boolean> 
 }
 
 /** everything the player is carrying, by name — for an error worth reading */
-async function carried(c: ActionContext): Promise<string[]> {
+function carried(c: ActionContext): Promise<string[]> {
   return c.d.evaluate<string[]>(`(() => {
     const out = [];
     for (const [n, p] of window.dbg.session.propRuntime.props) {
@@ -917,7 +917,7 @@ const TAKE_IN_HAND: Action = {
      * interpreter and never asks where it is drawn. A verb may not do that: it
      * has to click. So it clicks the point the engine itself drew the thing at.
      */
-    const drawnAt = async (): Promise<{ x: number; y: number; visible: boolean } | null> =>
+    const drawnAt = (): Promise<{ x: number; y: number; visible: boolean } | null> =>
       c.d.evaluate<{ x: number; y: number; visible: boolean } | null>(`(() => {
         const s = window.dbg.session, i = s.interp;
         const f = i.builtins.get("propxy");

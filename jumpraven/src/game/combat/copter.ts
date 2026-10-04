@@ -302,24 +302,21 @@ export class Copter implements CopterApi {
   /** 0x407678: a copter's move by its state (0x43125c) */
   private move(r: CopterRec): void {
     const w = this.w;
-    switch (r.state) {
-      case DYING: {
-        r.angle = (r.angle - (r.spins ? 0x10 : 4)) & 0xff;
-        const was = copyObj(r);
-        if (r.falls) r.vz--;
-        let met = tumble(w, r, was);
-        if (--r.way < 0) met = true;
-        if (met) {
-          w.pyro.burst(r, r.vx, r.vy, r.vz);
-          if (r.pod) w.pyro.drop(r, r.vx, r.vy, r.vz);
-          this.gone(r);
-        }
-        return;
+    if (r.state === DYING) {
+      r.angle = (r.angle - (r.spins ? 0x10 : 4)) & 0xff;
+      const was = copyObj(r);
+      if (r.falls) r.vz--;
+      let met = tumble(w, r, was);
+      if (--r.way < 0) met = true;
+      if (met) {
+        w.pyro.burst(r, r.vx, r.vy, r.vz);
+        if (r.pod) w.pyro.drop(r, r.vx, r.vy, r.vz);
+        this.gone(r);
       }
-      default:
-        // 0 … 5: cell centre to cell centre, as the tank's (src/game/combat/fleet.ts)
-        return cellToCell(w, r, (x, y, self) => this.blocked(x, y, self), (r) => this.fire(r));
+      return;
     }
+    // 0 … 5: cell centre to cell centre, as the tank's (src/game/combat/fleet.ts)
+    return cellToCell(w, r, (x, y, self) => this.blocked(x, y, self), (r) => this.fire(r));
   }
 
   /**

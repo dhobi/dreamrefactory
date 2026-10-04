@@ -11236,10 +11236,8 @@ export function stepCrows(): void {
     c.y += c.vy;
     // the floor it crossed, or — already standing — one within the eight the
     // mover snaps to
-    const floor =
-      c.vy >= 0
-        ? regionFloorUnder(c.x, wasFoot - (c.grounded ? 8 : 0), c.y + ext + (c.grounded ? 8 : 0))
-        : null;
+    const snap = c.grounded ? 8 : 0;
+    const floor = c.vy >= 0 ? regionFloorUnder(c.x, wasFoot - snap, c.y + ext + snap) : null;
     if (floor !== null) {
       c.y = floor - ext;
       c.vy = 0;
@@ -14431,7 +14429,7 @@ export function choosePlayerCel(): void {
   else if (seq === kit?.duck) id = seq[0];
   else if (seq === kit?.land || seq === kit?.fall)
     id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
-  else if (kit && seq === kit.jump)
+  else if (seq === kit?.jump)
     // two records, the second carrying the dy: the wind-up cel, then the tuck
     id = seq[p.windup > 0 || p.airFrames === 0 ? 0 : seq.length - 1];
   else if (seq === ANIM.crouch) {

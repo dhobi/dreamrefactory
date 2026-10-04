@@ -155,23 +155,20 @@ export class Tank implements TankApi {
   /** 0x424ed5 */
   private think(r: TankRec): void {
     const w = this.w;
-    switch (r.state) {
-      case 6: {
-        if (--r.way > 0) return;
-        // 0x425375: the blast 0x18 ahead of it, 6 up
-        const at = objOf(r);
-        at.x += cosMul(at.angle, 0x18);
-        at.y += sinMul(at.angle, 0x18);
-        at.z += 6;
-        w.pyro.burst(at, 0, 0, 0);
-        if (r.pod) w.pyro.drop(r, 0, 0, 0);
-        this.gone(r);
-        return;
-      }
-      default:
-        // 0 … 5: cell centre to cell centre, as the copter's (src/game/combat/fleet.ts)
-        return cellToCell(w, r, (x, y, self) => this.blocked(x, y, self), (r) => this.fire(r));
+    if (r.state === 6) {
+      if (--r.way > 0) return;
+      // 0x425375: the blast 0x18 ahead of it, 6 up
+      const at = objOf(r);
+      at.x += cosMul(at.angle, 0x18);
+      at.y += sinMul(at.angle, 0x18);
+      at.z += 6;
+      w.pyro.burst(at, 0, 0, 0);
+      if (r.pod) w.pyro.drop(r, 0, 0, 0);
+      this.gone(r);
+      return;
     }
+    // 0 … 5: cell centre to cell centre, as the copter's (src/game/combat/fleet.ts)
+    return cellToCell(w, r, (x, y, self) => this.blocked(x, y, self), (r) => this.fire(r));
   }
 
   /** 0x426065: a block, another tank's cell, a jeep's or the fuel station's */

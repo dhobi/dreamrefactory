@@ -163,7 +163,7 @@ function loadMaze(bytes: Uint8Array, name: string): void {
   landing.style.display = "none";
   editor.style.display = "flex";
   $("fileName").textContent = name;
-  const cells = [...new Array(parsed.width * parsed.height)].filter((_, i) => cellV0(parsed, i % parsed.width, Math.floor(i / parsed.width))).length;
+  const cells = Array.from({ length: parsed.width * parsed.height }, (_, i) => i).filter((i) => cellV0(parsed, i % parsed.width, Math.floor(i / parsed.width))).length;
   const poses = new Set(parsed.transitions.map((t) => say(t.from))).size;
   const films = parsed.transitions.filter(ownsFilmV0).length;
   $("fileStats").textContent =

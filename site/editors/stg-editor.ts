@@ -257,13 +257,16 @@ function renderPreview(): void {
     drawOverlay();
     return;
   }
-  const art = img
-    ? t("stages.previewImage", {
+  let art = t("stages.previewNoImage");
+  if (img) {
+    const z = img.zOffset >= 0 ? t("stages.previewZLayer") : "";
+    art =
+      t("stages.previewImage", {
         w: img.width,
         h: img.height,
         bytes: formatNumber(stg.file.containers[f.locationFrame]?.data.length ?? 0),
-      }) + (img.zOffset >= 0 ? t("stages.previewZLayer") : "")
-    : t("stages.previewNoImage");
+      }) + z;
+  }
   $("previewInfo").innerHTML =
     t("stages.previewFlat", { name: f.name, loc: f.locationFrame }) +
     art +

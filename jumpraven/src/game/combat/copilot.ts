@@ -664,7 +664,7 @@ export class Copilot implements CopilotApi {
         w.pyro.x41c765(1, SHELLS, tier);
         return;
       case ROCKETS:
-      case MISSILES:
+      case MISSILES: {
         const odds = weapon === ROCKETS ? 4 : 6;
         s.flag = tier === 0 && w.roll(odds) === 1 ? 1 : 0;
         s.life = 0x40;
@@ -675,6 +675,7 @@ export class Copilot implements CopilotApi {
         hud.setAmmo(weapon, weapon === ROCKETS ? -0xf0 : -0x168);
         w.pyro.x41c765(1, weapon, tier);
         return;
+      }
       case BOMBS: {
         const c = w.cam;
         s.life = 0x1f4;
