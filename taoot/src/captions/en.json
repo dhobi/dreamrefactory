@@ -32,7 +32,7 @@
     "penny1.pup": "Penny",
     "penny2.pup": "Penny",
     "smeth1.pup": "Smeth",
-    "cash1.pup": "Cash",
+    "cash1.pup": "Cashmore",
     "burns1.pup": "Burns",
     "morrow1.pup": "Morrow",
     "morrow2.pup": "Morrow",
@@ -93,23 +93,23 @@
       "lady4": { "text": "You don't pay by today, it's the street, I promise!", "who": "Landlady", "listened": true }
     },
     "unilib.trk": {
-      "conk.come": { "text": "Come in.", "who": "Conk", "listened": true },
+      "conk.come": { "text": "Come in.", "who": "Conkling", "listened": true },
       "ga.enter": { "text": "Enter.", "who": "Georgia", "listened": true },
       "max.cmere": { "text": "Come here.", "who": "Max", "listened": true },
       "sasha.away": { "text": "Good night.", "who": "Sasha", "listened": true },
       "shay.jack": { "text": "Jack, is that you? I'll be right out.", "who": "Shailagh", "listened": true }
     },
     "fence.trk": {
-      "en guard": { "text": "En garde!", "who": "Fencing master", "heard": "On garde.", "listened": true },
-      "prez": { "text": "Prêts?", "who": "Fencing master", "heard": "Right.", "listened": true },
-      "allez": { "text": "Allez!", "who": "Fencing master", "heard": "Allé!", "listened": true },
-      "allons y": { "text": "Allons-y.", "who": "Fencing master", "listened": true },
-      "et la": { "text": "Et là!", "who": "Fencing master", "heard": "Ella.", "guess": true, "listened": true },
-      "touche": { "text": "Touché.", "who": "Fencing master", "listened": true },
-      "sehr gut": { "text": "Sehr gut!", "who": "Fencing master", "heard": "Very good!", "listened": true },
-      "mist": { "text": "Mist!", "who": "Fencing master", "heard": "Mist.", "listened": true },
-      "verdammt": { "text": "Ach, verdammt!", "who": "Fencing master", "heard": "Ah, verdammt!", "listened": true },
-      "ach": { "text": "Ach!", "who": "Fencing master", "heard": "Ah!", "listened": true }
+      "en guard": { "text": "En garde!", "who": "Willie", "heard": "On garde.", "listened": true },
+      "prez": { "text": "Prêts?", "who": "Willie", "heard": "Right.", "listened": true },
+      "allez": { "text": "Allez!", "who": "Willie", "heard": "Allé!", "listened": true },
+      "allons y": { "text": "Allons-y.", "who": "Willie", "listened": true },
+      "et la": { "text": "Et là!", "who": "Willie", "heard": "Ella.", "guess": true, "listened": true },
+      "touche": { "text": "Touché.", "who": "Willie", "listened": true },
+      "sehr gut": { "text": "Sehr gut!", "who": "Willie", "heard": "Very good!", "listened": true },
+      "mist": { "text": "Mist!", "who": "Willie", "heard": "Mist.", "listened": true },
+      "verdammt": { "text": "Ach, verdammt!", "who": "Willie", "heard": "Ah, verdammt!", "listened": true },
+      "ach": { "text": "Ach!", "who": "Willie", "heard": "Ah!", "listened": true }
     }
   },
   "films": {
