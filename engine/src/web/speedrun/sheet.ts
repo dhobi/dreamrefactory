@@ -64,6 +64,13 @@ export interface Step {
   opts: Record<string, string>;
   /** the bevel list from `who[1,3,5]`, if the action carried one */
   bevels?: number[];
+  /**
+   * How a bevel list ends when an action, not the sheet, decides it: set by an
+   * action that hands its bevels on to `say`, and read before `then:`
+   * ({@link thenOf}). A field of its own rather than a `then` written into
+   * `opts`, which would make the options object a thenable.
+   */
+  ending?: "leave" | "stop";
   /** how many times to do it — `x3`, default 1 */
   repeat: number;
   /** 1-based line in the sheet, for errors and for the report */
