@@ -123,7 +123,9 @@ export abstract class RipFiles implements HostFiles {
   }
 
   /** called once a flight is out of {@link inFlight}, before the busy count is said */
-  protected flightOver(_key: string): void {}
+  protected flightOver(_key: string): void {
+    // nothing to clear unless a subclass reports flights
+  }
 
   async load(name: string, onBytes?: (n: number) => void): Promise<Uint8Array | null> {
     const key = name.toLowerCase();
