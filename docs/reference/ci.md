@@ -130,6 +130,15 @@ coverage run per change. The job leaves every file out of coverage
 to judge; without that, Sonar counts a file with no report as 0% covered. A fork's pull
 request is not scanned, since it cannot read the token.
 
+The rules the code breaks on purpose are switched off in that same file
+(`sonar.issue.ignore.multicriteria`), each with its reason beside it: Unicode
+string methods on strings that are bytes, awaits that must run in order, `void`
+on a promise left unawaited on purpose, `| 0` as the original's integer
+conversion, the complexity of a function that ports one routine of an original
+executable, and Skull Cracker's exported game state. Nothing is marked in the
+code (`NOSONAR`) or accepted in Sonar's UI: a finding is fixed, or its rule is
+switched off there, where a pull request can see the decision.
+
 Every workflow installs with `npm ci --ignore-scripts`, so no dependency's
 install script runs on a runner. Nothing here needs one: our packages declare
 none, and the two dependencies that do (esbuild and fsevents) work without
