@@ -139,7 +139,10 @@ export function buildShpFile(opts: ShpBuildOptions): ShpBuildResult {
   const frameLocs = new Map<ShpFrame, ContainerRef>();
   const artLoc = (art: ShpFrame): ContainerRef => {
     let loc = frameLocs.get(art);
-    if (loc === undefined) frameLocs.set(art, (loc = b.add(encodeShpFrame(art))));
+    if (loc === undefined) {
+      loc = b.add(encodeShpFrame(art));
+      frameLocs.set(art, loc);
+    }
     return loc;
   };
 

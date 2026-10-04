@@ -668,7 +668,7 @@ Object.defineProperty(window, "dbg", {
 
 function refreshMap(): void {
   const viewer = host.viewer;
-  if (viewer && viewer.showMap) {
+  if (viewer?.showMap) {
     viewer.renderMap(mapCtx);
     minimap.style.display = "block";
   } else {
@@ -1302,7 +1302,7 @@ const hitAt = (x: number, y: number): (() => Hit | null) => () => session.hitTes
  */
 function noteGame(
   what: string,
-  dispatch: () => Promise<unknown> | unknown,
+  dispatch: () => unknown,
   hit?: () => Hit | null,
 ): void {
   if (liveIntro) {

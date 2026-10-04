@@ -170,7 +170,8 @@ export function saveBoards(boards: ScoreBoards): void {
 
 /** which of the three a difficulty reads, as a key */
 export function boardKey(difficulty: number): "1" | "0" | "-1" {
-  return difficulty > 0 ? "1" : difficulty < 0 ? "-1" : "0";
+  if (difficulty > 0) return "1";
+  return difficulty < 0 ? "-1" : "0";
 }
 
 /**

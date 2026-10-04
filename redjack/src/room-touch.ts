@@ -155,7 +155,7 @@ export function bindRoomTouch({ host, touch, coords, screen, now = () => perform
         return true;
       }
       const m = s.maze;
-      if (!look || e.pointerId !== look.id || !m) return false;
+      if (look?.id !== e.pointerId || !m) return false;
       if (!look.panning && Math.hypot(e.clientX - look.clientX, e.clientY - look.clientY) >= SWIPE_MIN_PX) {
         look.panning = true;
         // the scroll's own lower detail (tracknodescroll's `nodequality (24, 8, 0)`)
@@ -182,7 +182,7 @@ export function bindRoomTouch({ host, touch, coords, screen, now = () => perform
         }
         return true;
       }
-      if (!look || e.pointerId !== look.id) return false;
+      if (look?.id !== e.pointerId) return false;
       const flick = look.panning && now() - look.at < FLICK_MS;
       if (look.panning && !flick) {
         endLook(false);

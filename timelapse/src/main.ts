@@ -101,7 +101,9 @@ const logLines: string[] = [];
 function say(line: string, kind: "" | "step" | "warn" = ""): void {
   logLines.push(line);
   if (logLines.length > LOG_MAX) logLines.splice(0, logLines.length - LOG_MAX);
-  const tag = kind === "step" ? "b" : kind === "warn" ? "i" : "";
+  let tag = "";
+  if (kind === "step") tag = "b";
+  else if (kind === "warn") tag = "i";
   logEl.insertAdjacentHTML("beforeend", tag ? `<${tag}>${esc(line)}</${tag}>\n` : `${esc(line)}\n`);
   // scrollTop forces layout, so only when there is something to scroll
   if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;

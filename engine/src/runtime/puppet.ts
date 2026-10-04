@@ -95,14 +95,60 @@ export function subtitled(line: PupDialogue): boolean {
   return !/^ *$/.test(line.raw);
 }
 
+const NOTE_STAR = /^\*\s*/;
+const NOTE_MOV = /(?:MOV|mov)(?![A-Za-z])/g;
+/** a name, then a dot or a gap — what may stand before the MOV */
+const NOTE_NAME = /^[A-Za-z0-9 _]*(?:\.\s*|[^\S ]\s*)?$/;
+const NOTE_MOV_END = /\.?\s*(?::\s*)?/y;
+const NOTE_VO = /\(VO\)|VOICE OVER|VO(?![A-Za-z])|vo(?![A-Za-z])/y;
+const NOTE_END = /[-:\s]*/y;
+
 /**
  * The note a starred line's text opens with: `*SASHA.MOV:`, `*TOUR1.MOV VO`,
  * `*TOUR10.MOV: (VO)`, `*VO--`, `*VOICE OVER`, and the German edition's
  * misspellings of them (`*TOUR10MOV.VO`, `*TOUR 10.MOV VO`, `*TOUR4. MOV VO`,
  * `*TOUR10.MOV : (VO)`), and `*tour2.mov vo`. `VO` must stand alone, so a
- * sentence that starts with "Vor…" is not a note.
+ * sentence that starts with "Vor…" is not a note. Answers how long the note is,
+ * and whether it named a film or a voice-over.
  */
-const STUDIO_NOTE = /^\*\s*(?:([A-Za-z0-9 _]*\.?\s*(?:MOV|mov)(?![A-Za-z])\.?\s*:?)\s*)?(\(VO\)|VOICE OVER|VO(?![A-Za-z])|vo(?![A-Za-z]))?[-:\s]*/;
+function studioNote(text: string): { length: number; noted: boolean } {
+  let at = NOTE_STAR.exec(text)![0].length;
+  // the file: the LAST `MOV` that nothing but a name stands in front of
+  let file = -1;
+  const after = text.slice(at);
+  for (const m of after.matchAll(NOTE_MOV)) {
+    if (NOTE_NAME.test(after.slice(0, m.index))) file = at + m.index + 3;
+  }
+  if (file >= 0) at = stickyEnd(NOTE_MOV_END, text, file);
+  const vo = stickyEnd(NOTE_VO, text, at);
+  return { length: stickyEnd(NOTE_END, text, vo), noted: file >= 0 || vo > at };
+}
+
+/** where the sticky `re` matches `s` from `at` to, or `at` when it does not match there */
+function stickyEnd(re: RegExp, s: string, at: number): number {
+  re.lastIndex = at;
+  return re.exec(s) ? re.lastIndex : at;
+}
+
+/**
+ * The caption a translator wrote after an English note in capitals, or null:
+ * `rest` is what follows the note, and the caption is its first character
+ * outside ASCII after a gap, to the end of the line.
+ */
+function writtenAfter(rest: string): string | null {
+  const gap = /^[\s　]*/.exec(rest)![0].length;
+  for (let p = gap; p >= 1; p--) {
+    if (rest.charCodeAt(p) > 0x7f) return /[\n\r\u2028\u2029]/.test(rest.slice(p + 1)) ? null : rest.slice(p);
+  }
+  return null;
+}
+
+/** `s` without the run of characters matching `ch` it ends in */
+function trimEndMatching(s: string, ch: RegExp): string {
+  let end = s.length;
+  while (end > 0 && ch.test(s[end - 1])) end--;
+  return s.slice(0, end);
+}
 
 /**
  * What a line {@link subtitled} keeps off the screen says, when the player has
@@ -113,7 +159,7 @@ const STUDIO_NOTE = /^\*\s*(?:([A-Za-z0-9 _]*\.?\s*(?:MOV|mov)(?![A-Za-z])\.?\s*
  * after her cut-aways (PENNY1's Sasha, Ruby and Ochrana lines) in four of the six
  * editions. Two kinds of starred line are worth printing:
  *
- *  - a spoken line under a studio note ({@link STUDIO_NOTE}) — the note goes and
+ *  - a spoken line under a studio note ({@link studioNote}) — the note goes and
  *    the words stay, which is what the Japanese and Dutch translators did by hand;
  *  - a sound written in capitals (`*SOUND OF CRASHING GLASS, CRIES STARTLE
  *    EVERYONE`, `*TRADEMARK LAUGH`, `*HE DRINKS.`, `*(VO) WHISTLING ROW YOUR
@@ -127,19 +173,20 @@ const STUDIO_NOTE = /^\*\s*(?:([A-Za-z0-9 _]*\.?\s*(?:MOV|mov)(?![A-Za-z])\.?\s*
 export function heardSubtitle(line: PupDialogue): string {
   if (subtitled(line)) return line.text;
   if (!line.text.startsWith("*") || /^idle [1-4]$/i.test(line.ident)) return "";
-  const note = STUDIO_NOTE.exec(line.text)!;
-  const words = line.text.slice(note[0].length).trim();
+  const note = studioNote(line.text);
+  const words = line.text.slice(note.length).trim();
   if (!words) return "";
   // a translator who wrote the sound out after the English note
   // (`*TRADEMARK LAUGH　ホッホッホッ`) has already captioned it
-  const written = /^[A-Z][A-Z .,]*[\s　]+([^\x00-\x7f].*)$/.exec(words);
-  if (written) return written[1];
+  const caps = /^[A-Z][A-Z.,]*(?: +[A-Z.,]+)*/.exec(words);
+  const written = caps && writtenAfter(words.slice(caps[0].length));
+  if (written) return written;
   // capitals and no small letters: a sound, not a sentence
   if (/[A-Z]/.test(words) && !/[a-z]/.test(words)) {
-    const sound = words.replace(/[.\s]+$/, "").toLowerCase();
+    const sound = trimEndMatching(words, /[.\s]/).toLowerCase();
     return `[${sound[0].toUpperCase()}${sound.slice(1)}]`;
   }
-  return note[1] || note[2] ? words : "";
+  return note.noted ? words : "";
 }
 
 /**
@@ -163,10 +210,10 @@ export function spokenText(text: string): string {
     .replace(/^\*\s*/, "")
     .replace(/^[A-Za-z0-9_ ]*\.\s*MOV\s*:?/, "")
     .replace(/^\s*\(VO\)/, "")
-    .replace(new RegExp(`^\\s*(?:${CAPS}\\s*)+`), "")
+    .replace(new RegExp(String.raw`^\s*(?:${CAPS}\s*)+`), "")
     .replace(/^[-:\s]+/, "")
-    .replace(new RegExp(`(?:${CAPS}\\s+){1,}${CAPS}\\s*`, "g"), "")
-    .replace(/\s+([,.!?])/g, "$1")
+    .replace(new RegExp(String.raw`(?:${CAPS}\s+){1,}${CAPS}\s*`, "g"), "")
+    .replace(/\s+/g, (gap, at: number, s: string) => (/[,.!?]/.test(s.charAt(at + gap.length)) ? "" : gap))
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -400,7 +447,8 @@ export class PuppetController {
     // The line is always HEARD; whether its text is printed is a separate
     // question, and one the record answers — see {@link subtitled} — unless
     // the player has asked to read every line that is heard (#50)
-    p.subtitle = this.session.everyLineSubtitled ? heardSubtitle(line) : subtitled(line) ? line.text : "";
+    if (this.session.everyLineSubtitled) p.subtitle = heardSubtitle(line);
+    else p.subtitle = subtitled(line) ? line.text : "";
     // the line's stance first, before a single frame of it is drawn: the layer
     // tables the animLogic records index are the ones it was animated against
     // (0x4406c7, before the playback loop). In a two-character puppet this is
@@ -440,7 +488,7 @@ export class PuppetController {
     if (this.puppet === p) {
       p.subtitle = "";
       if (p.anim) {
-        p.pose = p.anim.frames[p.anim.frames.length - 1];
+        p.pose = p.anim.frames.at(-1)!;
         p.anim = null;
       }
     }
@@ -601,7 +649,7 @@ export class PuppetController {
    */
   key(name: string, special: boolean): boolean {
     const p = this.puppet;
-    if (!p || !p.visible) return false;
+    if (!p?.visible) return false;
     if (!p.speakSkip && !p.eventWaiter) return false;
     // the volume digits first, because they are the arms that do NOT interrupt:
     // the filter answers 0 for them and the line plays on (see volumeKey)
@@ -792,7 +840,8 @@ export class PuppetController {
       if (line) await this.playLine(p, line);
       // 0x441a35: the first queued reply always plays; the flag is only read
       // after one has finished, so ESC stops the NEXT one rather than this one
-      for (const queued of [...p.voiceQueue]) {
+      const queue = p.voiceQueue.slice();
+      for (const queued of queue) {
         if (this.puppet !== p) return;
         await this.playLine(p, queued);
         if (p.interrupted) break;
@@ -842,7 +891,7 @@ export class PuppetController {
     const p = this.puppet;
     if (!p) return;
     const press = p.press;
-    if (!press || press.index !== i) {
+    if (press?.index !== i) {
       p.press = null; // released off the row: box goes, nothing answered
       return;
     }

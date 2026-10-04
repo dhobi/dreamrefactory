@@ -73,13 +73,13 @@ const INSTALLED_DIR = "/install folder/";
 
 export class SkullFiles {
   /** lowercase basename -> URL */
-  private urls = new Map<string, string>();
+  private readonly urls = new Map<string, string>();
   /** lowercase basename -> bytes, once fetched */
-  private cache = new Map<string, Uint8Array>();
+  private readonly cache = new Map<string, Uint8Array>();
   /** one fetch per name however many callers ask at once */
-  private inFlight = new Map<string, Promise<Uint8Array | null>>();
+  private readonly inFlight = new Map<string, Promise<Uint8Array | null>>();
   /** basename -> size in bytes, from the manifest */
-  private sizes = new Map<string, number>();
+  private readonly sizes = new Map<string, number>();
   /** every name asked for and not had, in order — a failed boot is only
    *  diagnosable if it says what it wanted */
   readonly misses: string[] = [];

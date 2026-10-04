@@ -1467,8 +1467,9 @@ export function describeSaveV1(save: SaveGameV1): string {
   const s = save.standpoint;
   const day = save.numGlobals.get("day");
   const cash = save.numGlobals.get("playercash");
+  const setFile = s.setFile || s.set + ".set";
   return (
-    `${save.title} · ${s.setFile || `${s.set}.set`} (${s.cellX},${s.cellZ}) facing ${s.view || s.facing}` +
+    `${save.title} · ${setFile} (${s.cellX},${s.cellZ}) facing ${s.view || s.facing}` +
     ` · frame ${save.frame} · day ${day ?? "?"} · $${cash ?? "?"}` +
     ` · ${save.actors.length} cast, ${save.props.length} props, ${save.loops.length} loops` +
     (save.puppet ? ` · ${save.puppet} open` : "")

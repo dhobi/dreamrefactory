@@ -19,8 +19,7 @@ import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
-import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import {
@@ -214,7 +213,7 @@ async function initServerShops(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerShops();
+const serverListed = initServerShops();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -289,7 +288,7 @@ function drawScreen(f: ShpFrame | null): void {
     ctx.stroke();
   }
 
-  if (f && f.width && f.height) {
+  if (f?.width && f.height) {
     const dx = anchor.x - f.posXraw;
     const dy = anchor.y - f.posYraw;
     const off = document.createElement("canvas");
@@ -316,30 +315,36 @@ function renderPreview(): void {
   const f = loc === undefined ? null : frameAt(loc);
   drawScreen(f);
   const packed = loc === undefined ? 0 : (shp.file.containers[loc]?.data.length ?? 0);
-  $("previewInfo").innerHTML = st
-    ? t("shops.previewHead", {
-        name: group().name || t("shops.unnamedProp"),
-        state: st.identifier,
-        i: frameIdx + 1,
-        n: st.frames.length,
+  if (!st) {
+    $("previewInfo").innerHTML = t("shops.noStates");
+    return;
+  }
+  let info =
+    t("shops.previewHead", {
+      name: group().name || t("shops.unnamedProp"),
+      state: st.identifier,
+      i: frameIdx + 1,
+      n: st.frames.length,
+    }) + (loc === undefined ? "" : t("shops.previewContainer", { loc }));
+  if (f) {
+    info +=
+      t("shops.previewSize", {
+        w: f.width,
+        h: f.height,
+        y: f.posYraw,
+        x: f.posXraw,
+        dx: anchor.x - f.posXraw,
+        dy: anchor.y - f.posYraw,
       }) +
-      (loc === undefined ? "" : t("shops.previewContainer", { loc })) +
-      (f
-        ? t("shops.previewSize", {
-            w: f.width,
-            h: f.height,
-            y: f.posYraw,
-            x: f.posXraw,
-            dx: anchor.x - f.posXraw,
-            dy: anchor.y - f.posYraw,
-          }) +
-          t("shops.previewPacked", {
-            bytes: formatNumber(packed),
-            deg: st.degrees[frameIdx] ?? 0,
-            ref: st.refScales[frameIdx] ?? 0,
-          })
-        : t("shops.previewNotFrame"))
-    : t("shops.noStates");
+      t("shops.previewPacked", {
+        bytes: formatNumber(packed),
+        deg: st.degrees[frameIdx] ?? 0,
+        ref: st.refScales[frameIdx] ?? 0,
+      });
+  } else {
+    info += t("shops.previewNotFrame");
+  }
+  $("previewInfo").innerHTML = info;
 }
 
 for (const [id, key] of [
@@ -538,12 +543,16 @@ function buildStates(): void {
     const still = st.frames.length < 2;
     const kind = document.createElement("span");
     kind.className = "badge " + (st.animated ? "anim" : "sel");
-    kind.textContent = still ? "still" : st.animated ? "animation" : "selector";
-    kind.title = still
-      ? t("shops.onePose")
-      : st.animated
-        ? t("shops.playsInOrder")
-        : t("shops.degPicksOne");
+    if (still) {
+      kind.textContent = "still";
+      kind.title = t("shops.onePose");
+    } else if (st.animated) {
+      kind.textContent = "animation";
+      kind.title = t("shops.playsInOrder");
+    } else {
+      kind.textContent = "selector";
+      kind.title = t("shops.degPicksOne");
+    }
     row.appendChild(kind);
 
     const meta = document.createElement("span");
@@ -581,19 +590,21 @@ function buildFrames(): void {
   const wrap = $("frames");
   wrap.replaceChildren();
   const st = state();
-  $("framesInfo").textContent = st
-    ? t("shops.framesHeadState", { state: st.identifier }) +
-      t("counts.frames", { n: st.frames.length }) +
-      (st.animated ? t("shops.inPlayOrder") : t("shops.degVariants"))
-    : "";
-  if (!st) return;
+  if (!st) {
+    $("framesInfo").textContent = "";
+    return;
+  }
+  $("framesInfo").textContent =
+    t("shops.framesHeadState", { state: st.identifier }) +
+    t("counts.frames", { n: st.frames.length }) +
+    (st.animated ? t("shops.inPlayOrder") : t("shops.degVariants"));
   st.frames.forEach((loc, i) => {
     const f = frameAt(loc);
     const cell = document.createElement("div");
     cell.className = "framecell" + (i === frameIdx ? " selected" : "");
     const c = document.createElement("canvas");
     c.className = "thumb";
-    if (f && f.width && f.height) {
+    if (f?.width && f.height) {
       frameToCanvas(f, c);
       const scale = Math.min(72 / f.width, 72 / f.height, 3);
       c.style.width = `${Math.max(1, Math.round(f.width * scale))}px`;
@@ -850,3 +861,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await serverListed;

@@ -683,7 +683,7 @@ export function compositeFrameV1(
   pixels: Uint8Array,
   prev: Uint8Array | null,
 ): void {
-  if (!prev || prev.length !== pixels.length) return;
+  if (prev?.length !== pixels.length) return;
   for (let i = 0; i < pixels.length; i++) {
     const p = pixels[i];
     if (p === 0 || p === 255) pixels[i] = prev[i];
@@ -798,12 +798,7 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
           regions: f.regions.map((r) => ({
             // the same codes again; a type-2 hotspot is v4's "goto the frame
             // named target", sound and all
-            type:
-              r.type === 2
-                ? 2
-                : r.type >= 1 && r.type <= 5
-                  ? r.type
-                  : ACTION_FALLBACK,
+            type: r.type >= 1 && r.type <= 5 ? r.type : ACTION_FALLBACK,
             target: r.type === 2 ? frameName(r.target) : "",
             // stored top/left/bottom/right, Y first — mov.ts keeps the same order
             y0: r.top,

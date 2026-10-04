@@ -301,7 +301,7 @@ export function readSettFile(data: Uint8Array): SettFile {
         films: [20, 24].map((at) => readFilm(file, pv.getInt32(r + at, true))).filter((f): f is MazeFilm => !!f),
         views,
       });
-      first ||= scenes[scenes.length - 1].name;
+      first ||= scenes.at(-1)!.name;
     } else if (kind === 2) {
       const node = pv.getInt32(r + 16, true);
       const nd = c(node);
@@ -316,7 +316,7 @@ export function readSettFile(data: Uint8Array): SettFile {
         y: pv.getInt32(r + 8, true),
         z: pv.getInt32(r + 12, true),
       });
-      first ||= nodes[nodes.length - 1].name;
+      first ||= nodes.at(-1)!.name;
     } else if (kind === 0) {
       const road = pv.getInt32(r + 16, true);
       if (tagOf(c(road) ?? new Uint8Array()) !== "ROAD") continue;

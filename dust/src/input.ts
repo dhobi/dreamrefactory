@@ -8,6 +8,12 @@ const ARROWS: Record<string, string> = {
   ArrowRight: "rightarrow",
 };
 
+/** the two other keys that go to the game under a name of their own */
+const SPECIAL_KEYS: Record<string, string> = {
+  " ": " ",
+  Escape: ".",
+};
+
 interface KeyEventLike {
   key: string;
   ctrlKey: boolean;
@@ -38,7 +44,7 @@ export function keyAction(e: KeyEventLike): KeyAction | null {
   if (focusOwnsKey(e.target, e.key)) return null;
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
   if (e.key === "b" || e.key === "B") return { log: true };
-  const name = ARROWS[e.key] ?? (e.key === " " ? " " : e.key === "Escape" ? "." : null);
+  const name = ARROWS[e.key] ?? SPECIAL_KEYS[e.key] ?? null;
   const ch = name ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
   if (!ch) return null;
   return { key: ch, escape: e.key === "Escape", repeat: e.repeat };

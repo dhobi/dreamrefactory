@@ -76,6 +76,13 @@ const TURN_RIGHT = [2, 3, 1, 0];
 const FORWARD_DX = [0, 0, 1, -1];
 const FORWARD_DY = [-1, 1, 0, 0];
 
+/** a cell index one step past either edge of `n`, brought round to the other side */
+function wrapAround(v: number, n: number): number {
+  if (v >= n) return v - n;
+  if (v < 0) return v + n;
+  return v;
+}
+
 /** HOVER's slide: across the street and up (0x419511) */
 const SLIDE_MIN = -0x46;
 const SLIDE_MAX = 0x46;
@@ -214,7 +221,7 @@ export class Flight {
       this.view.set(this.fb.pixels.subarray(0, this.view.length));
       w.drawItems(this.view, this.haveZ ? this.fb.zPixels : null);
       // 0x40c3e5: shaken, the view drawn 8 or 16 lower and the rows above it black
-      const drop = w.jolt === 1 ? 8 : w.jolt === 2 ? 16 : 0;
+      const drop = [0, 8, 16][w.jolt] ?? 0;
       if (drop) m.screen.fill([VIEW_TOP, VIEW_LEFT, VIEW_TOP + drop, VIEW_LEFT + VIEW_W], 0xff);
       m.screen.put(this.view.subarray(0, (VIEW_H - drop) * VIEW_W), VIEW_W, VIEW_H - drop, VIEW_TOP + drop, VIEW_LEFT);
     }
@@ -338,8 +345,8 @@ export class Flight {
    */
   private wrapped(p: PoseV0): PoseV0 {
     const { width: wd, height: h } = this.maze;
-    const x = p.x >= wd ? p.x - wd : p.x < 0 ? p.x + wd : p.x;
-    const y = p.y >= h ? p.y - h : p.y < 0 ? p.y + h : p.y;
+    const x = wrapAround(p.x, wd);
+    const y = wrapAround(p.y, h);
     if (x !== p.x || y !== p.y) this.w.shift((x - p.x) * 256, (y - p.y) * 256);
     return { x, y, dir: p.dir };
   }

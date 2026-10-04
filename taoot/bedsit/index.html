@@ -303,6 +303,15 @@
         height: auto;
         mix-blend-mode: screen;
       }
+      /* the title's words, for whatever reads the page rather than looks at it */
+      #splash h1 .unseen {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
       /*
        * The preloader and the button are ONE cell, and the button is always in
        * it: a 2px rule and a 47px button swapped by `display` would move the
@@ -376,12 +385,11 @@
         max-width: 15em;
         opacity: 0;
       }
-      #splash p#line.on { opacity: 1; }
       /* IN is instant and OUT takes the fade: the words do their own arriving
          below, and a container fading up underneath them blunts it. Removing
          `.on` stops matching this rule, so the shared 0.55s comes back for the
          way out */
-      #splash p#line.on { transition: none; }
+      #splash p#line.on { opacity: 1; transition: none; }
       /*
        * The line is WRITTEN, not faded up.
        *
@@ -503,7 +511,7 @@
     <button id="vr" type="button" hidden>VR</button>
     <div id="splash">
       <div id="card">
-        <h1><img src="the-day-before.jpg" width="685" height="238" alt="The Day Before" /></h1>
+        <h1><img src="the-day-before.jpg" width="685" height="238" alt="" /><span class="unseen">The Day Before</span></h1>
         <div id="way">
           <div id="bar"><i></i></div>
           <button id="load" type="button">Start</button>

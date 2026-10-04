@@ -224,7 +224,6 @@ export class Copter implements CopterApi {
           angle = 0x80;
           for (x = w.poseX + 1; this.blocked(x, y, r.self); x++);
         } else {
-          angle = 0;
           for (x = w.poseX - 1; this.blocked(x, y, r.self); x--);
         }
         break;
@@ -334,15 +333,35 @@ export class Copter implements CopterApi {
         let h1: number;
         let h2: number;
         if (abs(dx) > abs(dy)) {
-          if (dx > 0) (h1 = 0x80), x1--;
-          else (h1 = 0), x1++;
-          if (dy > 0) (h2 = 0xc0), y2--;
-          else (h2 = 0x40), y2++;
+          if (dx > 0) {
+            h1 = 0x80;
+            x1--;
+          } else {
+            h1 = 0;
+            x1++;
+          }
+          if (dy > 0) {
+            h2 = 0xc0;
+            y2--;
+          } else {
+            h2 = 0x40;
+            y2++;
+          }
         } else {
-          if (dy > 0) (h1 = 0xc0), y1--;
-          else (h1 = 0x40), y1++;
-          if (dx > 0) (h2 = 0x80), x2--;
-          else (h2 = 0), x2++;
+          if (dy > 0) {
+            h1 = 0xc0;
+            y1--;
+          } else {
+            h1 = 0x40;
+            y1++;
+          }
+          if (dx > 0) {
+            h2 = 0x80;
+            x2--;
+          } else {
+            h2 = 0;
+            x2++;
+          }
         }
         if (abs(dx) === abs(dy) && w.roll(2) === 1) {
           [x1, x2] = [x2, x1];
@@ -400,10 +419,16 @@ export class Copter implements CopterApi {
         if (r.y > ty + 0x2a) r.y = ty + 0x2a;
         if (r.way) {
           r.x += r.speed;
-          if (r.x >= r.goalX) (r.x = r.goalX), (r.state = 0);
+          if (r.x >= r.goalX) {
+            r.x = r.goalX;
+            r.state = 0;
+          }
         } else {
           r.x -= r.speed;
-          if (r.x <= r.goalX) (r.x = r.goalX), (r.state = 0);
+          if (r.x <= r.goalX) {
+            r.x = r.goalX;
+            r.state = 0;
+          }
         }
         r.cellX = r.x >> 8;
         if (downTheLine(w, r)) this.fire(r);
@@ -416,10 +441,16 @@ export class Copter implements CopterApi {
         if (r.x > tx + 0x2a) r.x = tx + 0x2a;
         if (r.way) {
           r.y += r.speed;
-          if (r.y >= r.goalY) (r.y = r.goalY), (r.state = 0);
+          if (r.y >= r.goalY) {
+            r.y = r.goalY;
+            r.state = 0;
+          }
         } else {
           r.y -= r.speed;
-          if (r.y <= r.goalY) (r.y = r.goalY), (r.state = 0);
+          if (r.y <= r.goalY) {
+            r.y = r.goalY;
+            r.state = 0;
+          }
         }
         r.cellY = r.y >> 8;
         if (downTheLine(w, r)) this.fire(r);
@@ -488,7 +519,8 @@ export class Copter implements CopterApi {
     const s = this.shots.find((s) => !s.on);
     if (!s) return;
     const missile = w.roll(4) === 1;
-    const kind = !missile ? BULLET : w.roll(4) === 1 ? HOMER : ROCKET;
+    let kind = BULLET;
+    if (missile) kind = w.roll(4) === 1 ? HOMER : ROCKET;
     s.on = 1;
     s.kind = kind;
     s.met = 0;
@@ -614,7 +646,9 @@ export class Copter implements CopterApi {
     if (p.depth < 0x40) return;
     let i = (p.depth - 0x40) >> 7;
     if (i >= 0x10) i = 0xf;
-    const base = s.met === 2 ? HIT : s.met ? CHIP : SHELL;
+    let base = SHELL;
+    if (s.met === 2) base = HIT;
+    else if (s.met) base = CHIP;
     w.sprite(this.pyro(base + i), p.y, p.x, p.depth);
   }
 
@@ -625,7 +659,9 @@ export class Copter implements CopterApi {
     if (p.depth < 0x40) return;
     let i = (p.depth - 0x40) >> 7;
     if (i >= 0x10) i = 0xf;
-    const base = s.met === 1 ? BLAST : s.met === 2 ? BLAST2 : s.kind === HOMER ? HOMING : MISSILE;
+    let base = s.kind === HOMER ? HOMING : MISSILE;
+    if (s.met === 1) base = BLAST;
+    else if (s.met === 2) base = BLAST2;
     w.sprite(this.pyro(base + i), p.y, p.x, p.depth);
   }
 

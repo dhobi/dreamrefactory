@@ -66,14 +66,15 @@ export { NEUTRAL } from "./games";
 let manifest: Promise<Record<string, number>> | null = null;
 
 function gamefileTable(): Promise<Record<string, number>> {
-  return (manifest ??= (async () => {
+  manifest ??= (async () => {
     try {
       const r = await fetch(siteUrl("gamefiles.json"));
       return r.ok ? ((await r.json()) as Record<string, number>) : {};
     } catch {
       return {};
     }
-  })());
+  })();
+  return manifest;
 }
 
 /** the paths the manifest carries, as served (no leading slash) */
@@ -93,6 +94,13 @@ export interface EditionPickerOptions {
   current?: string;
   /** what a click does; remember-and-reload when left out */
   onPick?: (code: string) => void;
+}
+
+/** mark the button of `code` as the one being shown */
+function markEdition(mount: HTMLElement, code: string): void {
+  for (const btn of mount.querySelectorAll<HTMLButtonElement>("button[data-edition]")) {
+    btn.classList.toggle("here", btn.dataset.edition === code);
+  }
 }
 
 /** everything the edition axis does, for one game */
@@ -207,13 +215,6 @@ export function editionAxis(game: GameEditions): EditionAxis {
   function switchEdition(code: string): void {
     rememberEdition(code);
     window.location.reload();
-  }
-
-  /** mark the button of `code` as the one being shown */
-  function markEdition(mount: HTMLElement, code: string): void {
-    for (const btn of mount.querySelectorAll<HTMLButtonElement>("button[data-edition]")) {
-      btn.classList.toggle("here", btn.dataset.edition === code);
-    }
   }
 
   /**

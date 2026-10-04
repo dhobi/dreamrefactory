@@ -86,13 +86,11 @@ void bootMinigame({
      * string in the catalogue is actually reachable, and a key it cannot see is
      * a key it reports as dead.
      */
-    window.alert(
-      drawn
-        ? t("minigames.fightDrawn")
-        : won
-          ? t("minigames.fightWon")
-          : t("minigames.fightLost"),
-    );
+    let verdict: string;
+    if (drawn) verdict = t("minigames.fightDrawn");
+    else if (won) verdict = t("minigames.fightWon");
+    else verdict = t("minigames.fightLost");
+    window.alert(verdict);
     return "done";
   },
 });

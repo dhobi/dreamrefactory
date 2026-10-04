@@ -71,7 +71,7 @@ function blankFor(edition: string): CaptionFile {
     edition,
     made: "written by ear in the caption editor (taoot/captions/)",
     // speaker names are words to translate too; English's to start from
-    speakers: { ...(en.speakers ?? {}) },
+    speakers: { ...en.speakers },
     banks,
     films,
     tracks,
@@ -81,9 +81,15 @@ function blankFor(edition: string): CaptionFile {
 /** what a contributor changed, as an issue carries it */
 interface Changes {
   banks?: CaptionFile["banks"];
-  films?: CaptionFile["films"];
+  films?: NonNullable<CaptionFile["films"]>;
   /** track lines by bank, then by their index in the track */
   tracks?: Record<string, Record<string, TrackLine>>;
+}
+
+/** the inner record under `key`, made on first use */
+function slot<T>(rec: Record<string, Record<string, T>>, key: string): Record<string, T> {
+  rec[key] ??= {};
+  return rec[key];
 }
 
 /**
@@ -95,17 +101,26 @@ export function changedEntries(mine: CaptionFile, repo: CaptionFile): Changes {
   const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
   for (const [bank, clips] of Object.entries(mine.banks)) {
     for (const [name, c] of Object.entries(clips)) {
-      if (!same(c, repo.banks[bank]?.[name])) ((out.banks ??= {})[bank] ??= {})[name] = c;
+      if (!same(c, repo.banks[bank]?.[name])) {
+        out.banks ??= {};
+        slot(out.banks, bank)[name] = c;
+      }
     }
   }
   for (const [film, clips] of Object.entries(mine.films ?? {})) {
     for (const [name, c] of Object.entries(clips)) {
-      if (!same(c, repo.films?.[film]?.[name])) ((out.films ??= {})[film] ??= {})[name] = c;
+      if (!same(c, repo.films?.[film]?.[name])) {
+        out.films ??= {};
+        slot(out.films, film)[name] = c;
+      }
     }
   }
   for (const [bank, lines] of Object.entries(mine.tracks ?? {})) {
     lines.forEach((l, i) => {
-      if (!same(l, repo.tracks?.[bank]?.[i])) ((out.tracks ??= {})[bank] ??= {})[String(i)] = l;
+      if (!same(l, repo.tracks?.[bank]?.[i])) {
+        out.tracks ??= {};
+        slot(out.tracks, bank)[String(i)] = l;
+      }
     });
   }
   return out;
@@ -183,7 +198,7 @@ function loadDraft(): CaptionFile {
         // the words are the draft's, the timings the repository's: the editor
         // cannot move a line, and a draft kept from before a timing fix would
         // otherwise go on cutting the line off where the old timing did
-        if (mine && lines.length === mine.length) base.tracks![bank] = lines.map((l, i) => ({ ...l, from: mine[i].from, to: mine[i].to }));
+        if (mine?.length === lines.length) base.tracks![bank] = lines.map((l, i) => ({ ...l, from: mine[i].from, to: mine[i].to }));
       }
     }
   } catch {
@@ -273,7 +288,8 @@ function start(url: string, what: string, from = 0, to: number | null = null): v
 
 function notLoaded(bankName: string): boolean {
   if (ready.has(bankName)) return false;
-  say(bankPaths.has(bankName) ? `${bankName} is still loading — try again in a moment.` : `${bankName}: not in this edition's files${bankPaths.size ? "" : " (no game files are served here)"}`);
+  if (bankPaths.has(bankName)) say(`${bankName} is still loading — try again in a moment.`);
+  else say(`${bankName}: not in this edition's files` + (bankPaths.size ? "" : " (no game files are served here)"));
   return true;
 }
 
@@ -524,11 +540,12 @@ async function boot(): Promise<void> {
       .map((p) => [p.split("/").pop()!.toLowerCase(), p]),
   );
   file = loadDraft();
-  $("fileNote").textContent = REPO[edition]
-    ? `Editing taoot/src/captions/${edition}.json.`
-    : VOICES_OF[edition]
-      ? `The ${edition} edition speaks the ${VOICES_OF[edition]} recordings, so the game captions it from ${VOICES_OF[edition]}.json. A ${edition}.json written here would be used instead.`
-      : `There is no ${edition}.json yet: these are the English lines, with nothing written. The English line is beside each one.`;
+  let note: string;
+  if (REPO[edition]) note = `Editing taoot/src/captions/${edition}.json.`;
+  else if (VOICES_OF[edition])
+    note = `The ${edition} edition speaks the ${VOICES_OF[edition]} recordings, so the game captions it from ${VOICES_OF[edition]}.json. A ${edition}.json written here would be used instead.`;
+  else note = `There is no ${edition}.json yet: these are the English lines, with nothing written. The English line is beside each one.`;
+  $("fileNote").textContent = note;
   render();
   $("save").addEventListener("click", download);
   $("copy").addEventListener("click", () => void copy());
@@ -550,4 +567,4 @@ async function boot(): Promise<void> {
   say("Click ▶ or press Enter in a line to hear the next one.");
 }
 
-void boot();
+await boot();

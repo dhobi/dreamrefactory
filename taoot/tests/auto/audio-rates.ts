@@ -33,7 +33,7 @@ function tone(seconds: number, freq: number, rate: number): Float32Array {
 test("resampleTo changes the sample count, not the duration", () => {
   const half = tone(0.5, 440, LO);
   const up = resampleTo(half, LO, HI);
-  expect(up.length).toBe(half.length * 2);
+  expect(up).toHaveLength(half.length * 2);
   expect(up.length / HI).toBeCloseTo(half.length / LO, 5);
 });
 
@@ -88,7 +88,7 @@ test("an all-one-rate bank is joined without touching its samples", () => {
   lib.openBank("plain.trk", writeContainerFile(file));
   const theme = lib.theme("plain.trk")!;
   expect(theme.sampleRate).toBe(HI);
-  expect(theme.samples.length).toBe(Math.round(0.5 * HI) * 2);
+  expect(theme.samples).toHaveLength(Math.round(0.5 * HI) * 2);
 });
 
 // --- the file that reported it ----------------------------------------------

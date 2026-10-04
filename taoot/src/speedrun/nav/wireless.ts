@@ -157,6 +157,9 @@ export async function closePanel(d: WirelessDriver): Promise<WirelessResult> {
   return { ok: true };
 }
 
+/** the cursor X the middle of each settling band is at (see setBreaker) */
+const BREAKER_X = { tx: 40, off: 125, rx: 240 } as const;
+
 /**
  * Throw the breaker to transmit, receive or off.
  *
@@ -166,7 +169,7 @@ export async function closePanel(d: WirelessDriver): Promise<WirelessResult> {
  * where the handle was grabbed because the loop never looks at it.
  */
 export async function setBreaker(d: WirelessDriver, want: "tx" | "off" | "rx"): Promise<WirelessResult> {
-  const x = want === "tx" ? 40 : want === "off" ? 125 : 240;
+  const x = BREAKER_X[want];
   let moved = false;
   const held = await d.dragProp("breakerhandle", (from) => (moved ? null : ((moved = true), { x, y: from.y })));
   if (!held) return bad("no breakerhandle to take hold of");

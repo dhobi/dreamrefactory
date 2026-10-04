@@ -314,7 +314,7 @@ export async function turnDial(d: DialDriver, dial: DragDial, want: number): Pro
 
 /** what the plant is actually running this control at */
 function driven(d: DialDriver, c: DrivenControl): number | "nothing" {
-  return c.global ? Number(d.flow()[c.global] ?? NaN) : "nothing";
+  return c.global ? Number(d.flow()[c.global] ?? Number.NaN) : "nothing";
 }
 
 /**

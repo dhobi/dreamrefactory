@@ -78,7 +78,7 @@ export class Film {
   private events: PlayHandle[] = [];
   /** the sound a click just fired, so entering its frame does not fire it twice */
   private clickSound = "";
-  private byName = new Map<string, number>();
+  private readonly byName = new Map<string, number>();
 
   constructor(
     readonly name: string,
@@ -111,7 +111,8 @@ export class Film {
 
   get where(): string {
     const f = this.seg.frames[this.pos];
-    return `${this.name} · segment ${this.segIdx + 1}/${this.mov.segments.length} · frame ${this.pos + 1}/${this.seg.frames.length}${f ? ` "${f.name}"` : ""}`;
+    const named = f ? ` "${f.name}"` : "";
+    return `${this.name} · segment ${this.segIdx + 1}/${this.mov.segments.length} · frame ${this.pos + 1}/${this.seg.frames.length}${named}`;
   }
 
   private enterSegment(idx: number, now: number): void {

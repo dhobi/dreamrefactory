@@ -288,6 +288,20 @@ export interface Panel {
   draw(proj: Float32Array, view: Float32Array, eye: readonly [number, number, number]): void;
 }
 
+function rowTop(i: number): number { return TITLE_H + i * ROW_H; }
+
+/** the quad's six corners from a centre and two half-axes, as two triangles */
+function quad(
+  at: readonly number[], x: readonly number[], y: readonly number[],
+): number[] {
+  const corner = (sx: number, sy: number): number[] =>
+    [0, 1, 2].map((k) => at[k] + x[k] * sx + y[k] * sy);
+  return [
+    ...corner(-1, -1), ...corner(1, -1), ...corner(-1, 1),
+    ...corner(1, -1), ...corner(1, 1), ...corner(-1, 1),
+  ];
+}
+
 export function makePanel(host: PanelHost): Panel {
   const { gl } = host;
   const list = rows(host.pieces);
@@ -382,18 +396,6 @@ export function makePanel(host: PanelHost): Panel {
    *  go, even if the ray wanders off the row on the way */
   let held: number | null = null;
 
-  /** the quad's six corners from a centre and two half-axes, as two triangles */
-  function quad(
-    at: readonly number[], x: readonly number[], y: readonly number[],
-  ): number[] {
-    const corner = (sx: number, sy: number): number[] =>
-      [0, 1, 2].map((k) => at[k] + x[k] * sx + y[k] * sy);
-    return [
-      ...corner(-1, -1), ...corner(1, -1), ...corner(-1, 1),
-      ...corner(1, -1), ...corner(1, 1), ...corner(-1, 1),
-    ];
-  }
-
   function place(eye: readonly [number, number, number], yaw: number): void {
     const f: [number, number, number] = [Math.cos(yaw), 0, Math.sin(yaw)];
     at = [eye[0] + f[0] * AHEAD, eye[1], eye[2] + f[2] * AHEAD];
@@ -460,8 +462,6 @@ export function makePanel(host: PanelHost): Panel {
   }
 
   // --- painting it ----------------------------------------------------------
-
-  function rowTop(i: number): number { return TITLE_H + i * ROW_H; }
 
   /** the track a slider's knob runs along, in the canvas's own pixels */
   const TRACK = { x0: 190, x1: W - 86 };
@@ -661,8 +661,8 @@ export function makePanel(host: PanelHost): Panel {
       // a press on the row but off the cells still means "the next one", which
       // is what a controller pointed roughly at a line of text usually wants
       row.set(hit.u * W < TRACK.x0 ? (row.get() + 1) % n : k);
-    } else {
-      if (hit.u * W >= TRACK.x0) row.press(k);
+    } else if (hit.u * W >= TRACK.x0) {
+      row.press(k);
     }
   }
 

@@ -90,13 +90,13 @@ const INSTALLED = [
 const url = (path: string): string => pageUrl(path);
 
 export class TimelapseFiles implements HostFiles {
-  private urls = new Map<string, string>();
-  private cache = new Map<string, Uint8Array>();
+  private readonly urls = new Map<string, string>();
+  private readonly cache = new Map<string, Uint8Array>();
   /** one fetch per name however many callers ask at once */
-  private inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
+  private readonly inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
   /** basename → size in bytes, from the manifest */
-  private sizes = new Map<string, number>();
+  private readonly sizes = new Map<string, number>();
   /** every name the engine asked for and did not have, in order — a failed boot
    *  is only diagnosable if it says what it wanted */
   readonly misses: string[] = [];
@@ -122,7 +122,7 @@ export class TimelapseFiles implements HostFiles {
   onBusyChange: ((inFlight: number) => void) | null = null;
   /** how far each in-flight fetch has got, so {@link bytesLeft} can count the
    *  remainder of one that is half here rather than all of it */
-  private partial = new Map<string, number>();
+  private readonly partial = new Map<string, number>();
 
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<TimelapseFiles> {
@@ -266,7 +266,9 @@ export class TimelapseFiles implements HostFiles {
    * them with `path(n, …)` inside its own `enterworld`, which this store cannot
    * see and does not need to — every disc is indexed at once.
    */
-  setDisc(): void {}
+  setDisc(): void {
+    // every disc is indexed already
+  }
 
   activeEdition(): string {
     return "timelapse";

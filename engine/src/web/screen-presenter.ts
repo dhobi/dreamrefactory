@@ -176,7 +176,7 @@ export class ScreenPresenter {
     if (r || g || b || cr || cg || cb) {
       // on the way out, so the framebuffer itself stays the picture and nothing
       // composited over it later is lit twice
-      if (!this.lit || this.lit.width !== this.width) this.lit = ctx.createImageData(this.width, this.height);
+      if (this.lit?.width !== this.width) this.lit = ctx.createImageData(this.width, this.height);
       const [lr, lg, lb] = [this.curve(cr, r), this.curve(cg, g), this.curve(cb, b)];
       const out = this.lit.data;
       const src = this.frame;
@@ -198,7 +198,7 @@ export class ScreenPresenter {
   /** ...and its `screencontrast`, a gamma per channel (see builtins/df5.ts) */
   contrast: readonly [number, number, number] = [0, 0, 0];
   private lit: ImageData | null = null;
-  private curves = new Map<string, Uint8ClampedArray>();
+  private readonly curves = new Map<string, Uint8ClampedArray>();
 
   /** one channel's 256 levels through a contrast's gamma, then a brightness added */
   private curve(contrast: number, add: number): Uint8ClampedArray {

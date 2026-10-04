@@ -59,7 +59,8 @@ function handlerIn(path: string, want: string): ScriptInstance | null {
   return null;
 }
 
-const have = (): boolean => existsSync(CHECKERS);
+const have = existsSync(CHECKERS);
+if (!have) console.warn(`no ${CHECKERS} — skipping (needs the Dust rip)`);
 
 /**
  * A handler, with a deadline.
@@ -82,11 +83,7 @@ async function within(ms: number, work: Promise<unknown>, what: string): Promise
   }
 }
 
-test("win(\"him\") returns — losing does not hang on the voice wait", async () => {
-  if (!have()) {
-    console.warn(`no ${CHECKERS} — skipping (needs the Dust rip)`);
-    return;
-  }
+test.skipIf(!have)("win(\"him\") returns — losing does not hang on the voice wait", async () => {
   const inst = handlerIn(CHECKERS, "win");
   expect(inst, "CHECKERS.PRP carries a `win` block").not.toBeNull();
 
@@ -105,8 +102,7 @@ test("win(\"him\") returns — losing does not hang on the voice wait", async ()
   expect(String(session.interp.globals.get("score")), "the loss is recorded").toBe("lose");
 });
 
-test('win("me") returns too — the arm that never had the wait', async () => {
-  if (!have()) return;
+test.skipIf(!have)('win("me") returns too — the arm that never had the wait', async () => {
   const inst = handlerIn(CHECKERS, "win");
   const session = new GameSession(() => null, new NullAudioSink());
   session.onLog = () => {};

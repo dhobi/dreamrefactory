@@ -361,10 +361,18 @@ function say(line: string): void {
 }
 /** the title card, which rises rather than leaving — see #brand in dust/index.html */
 const brandEl = document.getElementById("brand") as HTMLImageElement | null;
+function dropBrand(): void {
+  if (!brandEl) return;
+  brandEl.hidden = true;
+  document.body.classList.add("nobrand");
+}
+// a module runs after parsing, so the image may already have failed by now
+if (brandEl?.complete && brandEl.naturalWidth === 0) dropBrand();
+else brandEl?.addEventListener("error", dropBrand);
 /** the fuse: the bar, the burnt length, the boot's newest word, the percentage */
 const bootEl = document.getElementById("boot") as HTMLElement;
 const startEl = document.getElementById("start") as HTMLButtonElement;
-const fuseEl = document.getElementById("fuse") as HTMLElement;
+const fuseValueEl = document.getElementById("fusevalue") as HTMLProgressElement;
 const burnEl = document.getElementById("burn") as HTMLElement;
 const bootSayEl = document.getElementById("bootsay") as HTMLElement;
 const bootPctEl = document.getElementById("bootpct") as HTMLElement;
@@ -511,7 +519,7 @@ function progress(f: number, label?: string): void {
     shownPct = pct;
     burnEl.style.width = `${pct}%`;
     bootPctEl.textContent = `${pct}%`;
-    fuseEl.setAttribute("aria-valuenow", String(pct));
+    fuseValueEl.value = pct;
   }
   // the caption is one line and the newest one wins: what a player watches for
   // two seconds is the engine naming what it just opened

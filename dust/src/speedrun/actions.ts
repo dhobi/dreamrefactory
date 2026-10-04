@@ -120,7 +120,7 @@ const GIVE: Action = {
     // takes them (taoot/src/speedrun/actions.ts) — one grammar for the two verbs
     // that drag something onto something else.
     const [item, ...rest] = c.step.args;
-    const target = rest.filter((w) => !["to", "on", "at"].includes(w.toLowerCase()))[0];
+    const target = rest.find((w) => !["to", "on", "at"].includes(w.toLowerCase()));
     if (!target) throw new Error(`give needs somebody to give it to — give(${item}, to, dog)`);
 
     const held = await c.d.evaluate<string>(
@@ -283,7 +283,7 @@ const GOTO: Action = {
     const x = Number(xs);
     const z = Number(zs);
     if (!Number.isInteger(x) || !Number.isInteger(z)) {
-      throw new Error(
+      throw new TypeError(
         `goto takes a cell of this room — goto(10, 10), or goto(10, 10, north). ` +
           `"${xs}, ${zs}" is not one`,
       );
@@ -372,13 +372,14 @@ const GOTO: Action = {
         const offered = await c.d.evaluate<{ id: number; text: string }[]>(
           `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ({ id: ch.id, text: String(ch.text || "") }))`,
         );
+        const plaque = offered.length
+          ? `Its plaque offers ${offered.map((o) => o.id + ":" + o.text).join(" | ")}`
+          : `Nothing is on its plaque — it is still speaking, which is what the ` +
+            `HELP overlay does and no reply closes`;
         throw new Error(
           `a conversation interrupted the walk and would not close — answer it in the ` +
             `sheet (talk(...) or say([...])), or pass replies: to this line. ` +
-            (offered.length
-              ? `Its plaque offers ${offered.map((o) => `${o.id}:${o.text}`).join(" | ")}`
-              : `Nothing is on its plaque — it is still speaking, which is what the ` +
-                `HELP overlay does and no reply closes`),
+            plaque,
         );
       }
       c.say("answered something on the way");
@@ -395,7 +396,7 @@ const GOTO: Action = {
       const v = window.dbg.viewer, s = window.dbg.session;
       if (!v || !v.set) return null;
       return {
-        set: String(s.currentSetFile || "").toLowerCase().replace(/\.set$/, ""),
+        set: String(s.currentSetFile || "").toLowerCase().replace(/[.]set$/, ""),
         here: String(v.scene.sceneName || "").toLowerCase(),
         cells: v.set.scenes.map((sc) => ({
           name: String(sc.sceneName || "").toLowerCase(),
@@ -420,10 +421,9 @@ const GOTO: Action = {
       if (want) {
         await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
       }
-      c.say(
-        `${set} ${goal.name} (${x},${z})` +
-          (spent ? `, ${spent} road(s)${plans > 1 ? ` over ${plans} plans` : ""}` : ", already there"),
-      );
+      let how = ", already there";
+      if (spent) how = `, ${spent} road(s)` + (plans > 1 ? ` over ${plans} plans` : "");
+      c.say(`${set} ${goal.name} (${x},${z})` + how);
       await c.d.settle(c.wait, `the walk to ${x},${z}`, c.budget);
     };
     for (let attempt = 1; attempt <= tries; attempt++) {
@@ -481,10 +481,11 @@ const GOTO: Action = {
          * where the room is already correct, because this branch is only reached
          * when it is not.
          */
-        const ROOM = `String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, "")`;
+        const ROOM = `String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/[.]set$/, "")`;
+        const twin = mustBe === "nite" ? "town" : "nite";
         const arrived = await c.d.tryHold(
           `${ROOM} === ${JSON.stringify(mustBe)}` +
-            (sameRoom("nite", mustBe) ? ` || ${ROOM} === ${JSON.stringify(mustBe === "nite" ? "town" : "nite")}` : ""),
+            (sameRoom("nite", mustBe) ? ` || ${ROOM} === ${JSON.stringify(twin)}` : ""),
           Math.min(Math.max(c.budget, 20_000), 30_000),
         );
         if (!arrived) {
@@ -500,15 +501,16 @@ const GOTO: Action = {
       }
 
       const goal = room.cells.find((s2) => s2.x === x && s2.z === z);
-      if (!goal || !goal.views.length) {
+      if (!goal) {
+        throw new Error(`${room.set} has no cell at ${x},${z} — its grid does not reach that far`);
+      }
+      if (!goal.views.length) {
         const walkable = room.cells.filter((s2) => s2.views.length);
         throw new Error(
-          !goal
-            ? `${room.set} has no cell at ${x},${z} — its grid does not reach that far`
-            : `${room.set}'s cell ${x},${z} (${goal.name}) cannot be stood on` +
-              (goal.build ? " — it is built on" : " — it has no views") +
-              `. The ${walkable.length} that can: ` +
-              walkable.map((s2) => `${s2.x},${s2.z}`).join(" "),
+          `${room.set}'s cell ${x},${z} (${goal.name}) cannot be stood on` +
+            (goal.build ? " — it is built on" : " — it has no views") +
+            `. The ${walkable.length} that can: ` +
+            walkable.map((s2) => `${s2.x},${s2.z}`).join(" "),
         );
       }
 
@@ -970,21 +972,19 @@ const TAKE_IN_HAND: Action = {
        * lazy list means the common case never performs it.
        */
       for (const find of [
-        async () =>
+        () =>
           at && at.visible && at.x > 0 && at.y > 0 && at.x < 512 && at.y < 384 ? { x: at.x, y: at.y } : null,
         () => c.d.aim("thing", item),
       ]) {
         const spot = await find();
         if (!spot) continue;
         // the sweep landing on the point `propxy` just named is the same click
-        if (tried.some((t) => t === `${spot.x},${spot.y}`)) continue;
+        if (tried.includes(`${spot.x},${spot.y}`)) continue;
         tried.push(`${spot.x},${spot.y}`);
         await c.d.clickAt(spot.x, spot.y, "taken", c.budget);
         if (await c.d.tryHold(inHand, TOOK)) {
-          c.say(
-            `${item} picked up where it lay, at ${spot.x},${spot.y}` +
-              (turn ? ` after ${turn} turn${turn > 1 ? "s" : ""}` : ""),
-          );
+          const turns = turn > 1 ? "turns" : "turn";
+          c.say(`${item} picked up where it lay, at ${spot.x},${spot.y}` + (turn ? ` after ${turn} ${turns}` : ""));
           await c.d.settle(c.wait, `the world after taking ${item}`, c.budget);
           return;
         }
@@ -1005,6 +1005,8 @@ const TAKE_IN_HAND: Action = {
     if (!got) {
       const now = await c.d.evaluate<string>(HAND);
       const mine = await carried(c);
+      let where = "";
+      if (drawn) where = `. The engine draws it at ${drawn.x},${drawn.y}${drawn.visible ? "" : ", invisible"}`;
       throw new Error(
         `${item} would not go in hand. ` +
           // which halves actually ran, because "the panel refused a thing you
@@ -1015,7 +1017,7 @@ const TAKE_IN_HAND: Action = {
             : `Round the four views of this cell it was at [${looked.trim()}], and the panel `) +
           `would not take it${owned ? "" : " either"}; the hand holds "${now || "nothing"}" ` +
           `and the player is carrying ${mine.join(", ") || "nothing"}` +
-          (drawn ? `. The engine draws it at ${drawn.x},${drawn.y}${drawn.visible ? "" : ", invisible"}` : ""),
+          where,
       );
     }
     c.say(`${item} in hand${wasOpen ? " (the panel was already open)" : ""}`);
@@ -1111,7 +1113,7 @@ const OFFER: Action = {
         const owner = await c.d.evaluate<string>(
           `String(window.dbg.session.propRuntime.get(${JSON.stringify(want)})?.owner ?? "")`,
         );
-        c.say(`offered ${item}${owner ? `, and it belongs to "${owner}" now` : ""}`);
+        c.say(`offered ${item}` + (owner ? `, and it belongs to "${owner}" now` : ""));
         return;
       }
       if (!(await pickFromAvatar(c, item))) {
@@ -1248,7 +1250,8 @@ const DOOR_AT: Action = {
     }
     // and through it, which is the half a click does not do
     await CORE_ACTIONS.up.run({ ...c, step: { ...c.step, args: [] }, wait: "none" });
-    c.say(`through${blocked ? ` (waited out ${blocked} blocked look${blocked > 1 ? "s" : ""})` : ""}`);
+    const looks = blocked > 1 ? "looks" : "look";
+    c.say("through" + (blocked ? ` (waited out ${blocked} blocked ${looks})` : ""));
     await c.d.settle(c.wait, `the room beyond the door`, c.budget);
   },
 };
@@ -1309,7 +1312,8 @@ const LOAD_SAVE: Action = {
     const got = await c.d.evaluate<{ ok: boolean; error: string | null }>(`window.__srLoad`);
     if (!got.ok) {
       throw new Error(
-        `loadSave(${name}) would not load${got.error ? `: ${got.error}` : ""}` +
+        `loadSave(${name}) would not load` +
+          (got.error ? `: ${got.error}` : "") +
           ` — the names are the disc's own, D1E_001 through ENDING`,
       );
     }
@@ -1384,7 +1388,8 @@ const MEET: Action = {
     let went = "";
     for (let round = 0; round < rounds; round++) {
       if (await talking()) {
-        c.say(round ? `${who} after ${round} round${round > 1 ? "s" : ""}` : `already talking`);
+        const noun = round > 1 ? "rounds" : "round";
+        c.say(round ? `${who} after ${round} ${noun}` : `already talking`);
         return;
       }
       // 1. let them stand still — a cell read mid-stride is already stale

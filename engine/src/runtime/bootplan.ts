@@ -161,7 +161,7 @@ export const EMPTY_BOOT_PLAN: BootPlan = {
 /** the call's first argument if it is a non-empty string literal */
 function literalArg(call: CallExpr): string | null {
   const first = call.args[0];
-  return first && first.t === "str" && first.v ? first.v : null;
+  return first?.t === "str" && first.v ? first.v : null;
 }
 
 /** a room reference as a filename: `initall("bedsit1")` -> `"bedsit1.set"` */

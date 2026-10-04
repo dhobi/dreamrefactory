@@ -87,8 +87,25 @@ const BIN_PREC: Record<number, { op: string; prec: number }> = {
 
 export class ParseError extends Error {}
 
+/** which declaration a declaring opcode makes — `dumppermanent` drops like `dumpglobal` */
+function declKind(id: number): Extract<Stmt, { t: "decl" }>["kind"] {
+  switch (id) {
+    case OP.GLOBAL:
+      return "global";
+    case OP.PERMANENT:
+      return "permanent";
+    case OP.LOCAL:
+      return "local";
+    case OP.DUMPGLOBAL:
+    case OP.DUMPPERMANENT:
+      return "dumpglobal";
+    default:
+      return "dumplocal";
+  }
+}
+
 class Parser {
-  private toks: Token[];
+  private readonly toks: Token[];
   private pos = 0;
 
   constructor(tokens: Token[]) {
@@ -334,12 +351,7 @@ class Parser {
           // script, and kept apart only so a save can leave it out: RedJack.exe
           // keeps permanents in the BOOTFILE, not in a `.save` (savegame-v5.md).
           // What makes it OUTLIVE a session is not modelled yet.
-          const kind =
-            t.id === OP.GLOBAL ? "global"
-            : t.id === OP.PERMANENT ? "permanent"
-            : t.id === OP.LOCAL ? "local"
-            : t.id === OP.DUMPGLOBAL || t.id === OP.DUMPPERMANENT ? "dumpglobal"
-            : "dumplocal";
+          const kind = declKind(t.id);
           const names: string[] = [];
           // v5 writes `dumpglobal (oldtheme)` as well as the bare form
           const wrapped = this.atOp(OP.LPAREN);

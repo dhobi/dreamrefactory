@@ -83,7 +83,7 @@ describe("warming the cache", () => {
   test("it reads every file, and counts the bytes it actually read", async () => {
     const { net, fetch } = fakeNet();
     const end = await warmCache(spread(10), { fetch, now: handClock().now });
-    expect(net.asked.length).toBe(10);
+    expect(net.asked).toHaveLength(10);
     expect(end.done).toBe(10);
     expect(end.failed).toBe(0);
     expect(end.bytes).toBe(4000);
@@ -129,7 +129,7 @@ describe("warming the cache", () => {
   test("a 404 costs one file and nothing else", async () => {
     const { net, fetch } = fakeNet({ fails: (u) => u === "f3#400" || u === "f7#400" });
     const end = await warmCache(spread(10), { fetch, now: handClock().now });
-    expect(net.asked.length).toBe(10);
+    expect(net.asked).toHaveLength(10);
     expect(end.done).toBe(10);
     expect(end.failed).toBe(2);
     expect(end.bytes).toBe(3200);

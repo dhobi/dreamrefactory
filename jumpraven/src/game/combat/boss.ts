@@ -341,7 +341,9 @@ export class Boss implements BossApi {
 
   /** 0x403c96 / 0x403d81: a shell — bursting (pyro's 0xc0 …, then 0xd0 …), else by kind 0x13c …, 0x12c …, 0x14c … */
   private drawShell(s: VehicleShot): void {
-    const base = s.met === 1 ? 0xc0 : s.met === 2 ? 0xd0 : [0, 0x13c, 0x12c, 0x14c][s.kind];
+    let base = [0, 0x13c, 0x12c, 0x14c][s.kind];
+    if (s.met === 1) base = 0xc0;
+    else if (s.met === 2) base = 0xd0;
     drawShot(this.w, s, base);
   }
 

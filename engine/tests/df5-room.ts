@@ -233,14 +233,10 @@ const walk = (dir: string): void => {
 if (existsSync(ROOT)) walk(ROOT);
 rooms.sort();
 
-const skip = (): boolean => {
-  if (rooms.length) return false;
-  console.warn(`no RedJack rooms under ${ROOT} — skipping`);
-  return true;
-};
+const missing = rooms.length === 0;
+if (missing) console.warn(`no RedJack rooms under ${ROOT} — skipping`);
 
-test("every room reads: its nodes' spheres and its roads' films are what MAPR says", () => {
-  if (skip()) return;
+test.skipIf(missing)("every room reads: its nodes' spheres and its roads' films are what MAPR says", () => {
   const tag = (s: SettFile, i: number): string => {
     const d = s.file.containers[i]?.data;
     return d && d.length >= 8 ? String.fromCharCode(d[7], d[6], d[5], d[4]) : "";
@@ -267,8 +263,7 @@ test("every room reads: its nodes' spheres and its roads' films are what MAPR sa
   }
 });
 
-test("a sphere drawn at a road film's first camera is that film's first picture", () => {
-  if (skip()) return;
+test.skipIf(missing)("a sphere drawn at a road film's first camera is that film's first picture", () => {
   const shed = rooms.find((p) => /\/shed\.sett$/i.test(p));
   if (!shed) return;
   const s = readSettFile(new Uint8Array(readFileSync(shed)));
@@ -301,8 +296,7 @@ test("a sphere drawn at a road film's first camera is that film's first picture"
   expect(films).toBeGreaterThan(0);
 });
 
-test("a scene turns between its views on film, and its road walks into the next scene", async () => {
-  if (skip()) return;
+test.skipIf(missing)("a scene turns between its views on film, and its road walks into the next scene", async () => {
   const path = rooms.find((p) => /\/shark\.sett$/i.test(p));
   if (!path) return;
   const s = readSettFile(new Uint8Array(readFileSync(path)));
@@ -359,16 +353,14 @@ test("a scene turns between its views on film, and its road walks into the next 
   expect(m.camera()).not.toBeNull();
 });
 
-test("a room opened without a scene starts at MAPR's first, a scene when it has no nodes", () => {
-  if (skip()) return;
+test.skipIf(missing)("a room opened without a scene starts at MAPR's first, a scene when it has no nodes", () => {
   const path = rooms.find((p) => /\/darts\.sett$/i.test(p));
   if (!path) return;
   // bar.sett's `opensetfile ("darts.sett")`
   expect(readSettFile(new Uint8Array(readFileSync(path))).first).toBe("Scene12");
 });
 
-test("a prop put on a star stands on the scenery the sphere's depth map puts there", () => {
-  if (skip()) return;
+test.skipIf(missing)("a prop put on a star stands on the scenery the sphere's depth map puts there", () => {
   const path = rooms.find((p) => /\/liznite\.sett$/i.test(p));
   if (!path) return;
   const sett = readSettFile(new Uint8Array(readFileSync(path)));
@@ -388,13 +380,11 @@ test("a prop put on a star stands on the scenery the sphere's depth map puts the
   expect(Math.abs(depth[at.y * 640 + at.x] - at.depth) / at.depth).toBeLessThan(0.03);
 });
 
-test("every room has a far limit, and sprites past it less their zclip are not drawn", () => {
-  if (skip()) return;
+test.skipIf(missing)("every room has a far limit, and sprites past it less their zclip are not drawn", () => {
   for (const path of rooms) expect(readSettFile(new Uint8Array(readFileSync(path))).far, path).toBeGreaterThan(0);
 });
 
-test("a film's picture carries the depths a sphere has, so sprites hide on film too", () => {
-  if (skip()) return;
+test.skipIf(missing)("a film's picture carries the depths a sphere has, so sprites hide on film too", () => {
   const shed = rooms.find((p) => /\/shed\.sett$/i.test(p));
   if (!shed) return;
   const s = readSettFile(new Uint8Array(readFileSync(shed)));
@@ -423,8 +413,7 @@ test("a film's picture carries the depths a sphere has, so sprites hide on film 
   expect(films).toBeGreaterThan(0);
 });
 
-test("the sett editor's patches write each edit where it was read, and no other byte", () => {
-  if (skip()) return;
+test.skipIf(missing)("the sett editor's patches write each edit where it was read, and no other byte", () => {
   let quads = 0;
   let stars = 0;
   for (const path of rooms) {
@@ -457,7 +446,7 @@ test("the sett editor's patches write each edit where it was read, and no other 
     let changed = 0;
     for (let i = 0; i < before.length; i++) if (before[i] !== bytes[i]) changed++;
     expect(changed).toBeLessThanOrEqual((q >= 0 ? 7 + 44 : 0) + (st >= 0 ? 6 + 12 : 0));
-    expect(bytes.length).toBe(before.length);
+    expect(bytes).toHaveLength(before.length);
   }
   expect(quads).toBeGreaterThan(0);
   expect(stars).toBeGreaterThan(0);

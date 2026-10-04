@@ -207,7 +207,9 @@ function walkSnapshot(session: GameSession): SavedWalk[] {
   for (const [name, w] of session.scheduler.walks) {
     const a = session.actorRuntime.get(name);
     const path = w.path?.map((p) => ({ ...p }));
-    const type = w.turnOnly ? 0 : path && path.length > 1 ? 3 : 1;
+    let type = 1;
+    if (w.turnOnly) type = 0;
+    else if (path && path.length > 1) type = 3;
     out.push({
       actor: name,
       type,
@@ -470,7 +472,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
    * skips the same prefix when writing, for the same reason. Everything else a
    * booted session holds is carried by all 109 saves.
    */
-  for (const name of [...session.interp.globals.keys()]) {
+  for (const name of session.interp.globals.keys()) {
     if (name.startsWith("__")) continue;
     if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
     session.interp.globals.delete(name);
@@ -636,8 +638,9 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // a set's own `.shp` is opened when the viewer wires it (SetViewer.addResource).
     // The two boot shops are persistent, so their 72 props are still here to
     // receive the records the file does carry.
-    for (const shop of [...session.propRuntime.shops.entries()]) {
-      if (!shop[1].persistent) await session.closeShop(shop[0]);
+    const shops = Array.from(session.propRuntime.shops.entries());
+    for (const [name, shop] of shops) {
+      if (!shop.persistent) await session.closeShop(name);
     }
 
     // Every prop, both halves, from the file. This replaces the whole family of
@@ -651,9 +654,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // room's openset: the idles that make characters act, the scene timers, the
     // room's positional ambience.
     for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
-    for (const c of save.crickets) {
-      session.scheduler.restoreCricket(c.name, c.set, c.x, c.y, c.radius, c.base, c.jitter, c.next);
-    }
+    for (const c of save.crickets) session.scheduler.restoreCricket(c);
     // A walk in flight comes back mid-stride, because the original's does: load
     // save 17 in TI.EXE and Daisy finishes crossing the Grand Staircase to the
     // middle of the room. (User-reported, against a build that stood her still.)
@@ -726,7 +727,8 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
  * a record-less actor was never placed or spoken to in that game.
  */
 export function resetCast(session: GameSession): void {
-  for (const [key, a] of [...session.actorRuntime.actors]) {
+  const actors = Array.from(session.actorRuntime.actors);
+  for (const [key, a] of actors) {
     if (a.member.name.toLowerCase() !== key.toLowerCase()) {
       session.actorRuntime.remove(key);
       session.dropInstancedScript(key);

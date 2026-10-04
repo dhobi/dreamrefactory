@@ -31,5 +31,5 @@ export function installVersion(): void {
   tag.textContent = `v${VERSION}`;
   // hard-coded English, like every string this repo builds in TypeScript
   tag.title = `This port, version ${VERSION} — the game itself is CyberFlix's 1996 release`;
-  brand.insertAdjacentElement("afterend", tag);
+  brand.after(tag);
 }

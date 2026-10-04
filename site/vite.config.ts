@@ -115,6 +115,7 @@ export default defineConfig({
     watch: { ignored: ["**/gamefiles/**"] },
   },
   build: {
+    target: "es2022",
     outDir: resolve(HERE, "../dist/site"),
     emptyOutDir: true,
     rollupOptions: {

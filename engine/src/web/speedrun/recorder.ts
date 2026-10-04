@@ -150,7 +150,7 @@ function nameAt(win: Window, x: number, y: number): string | null {
       dbg?: { session?: { hitTestAt?(x: number, y: number): { name: string; type: string } | null } };
     }).dbg;
     const hit = dbg?.session?.hitTestAt?.(x, y) ?? null;
-    if (!hit || !hit.name || !CLICKABLE.has(hit.type)) return null;
+    if (!hit?.name || !CLICKABLE.has(hit.type)) return null;
     return String(hit.name);
   } catch {
     return null;

@@ -197,11 +197,21 @@ export class Lunicus {
     const item = id - (menu === 1 ? 600 : menu * 100);
     const m = this.m;
     if (menu === 5) {
-      if (item >= 1 && item <= 8) m.setVolume(item - 1), m.log(`Sound ▸ ${item === 1 ? "Sound Off" : `Sound Level ${item - 1}`}`);
-      if (item === 10) m.setTheme(!m.theme), m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
+      if (item >= 1 && item <= 8) {
+        m.setVolume(item - 1);
+        const level = item === 1 ? "Sound Off" : "Sound Level " + (item - 1);
+        m.log(`Sound ▸ ${level}`);
+      }
+      if (item === 10) {
+        m.setTheme(!m.theme);
+        m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
+      }
       return true;
     }
-    if (menu === 4 && item === 7) return (m.cacheMazes = !m.cacheMazes), true;
+    if (menu === 4 && item === 7) {
+      m.cacheMazes = !m.cacheMazes;
+      return true;
+    }
     if (menu === 4 && item === 6) {
       if (this.phase === "title") this.titleKeys = true;
       else if (this.base || this.city) m.commands.push({ menu, item });
@@ -315,7 +325,10 @@ export class Lunicus {
     const ask = this.opts.keysDialog;
     if (!ask) return m.log("Settings ▸ Keys: no dialog to show");
     const game = this.phase !== "title";
-    if (game) m.stopSound(), m.stopAmbience();
+    if (game) {
+      m.stopSound();
+      m.stopAmbience();
+    }
     const fields = ACTIONS.map((_, i) => keyFor(m.sco.keys, i + 1));
     const defaults = ACTIONS.map((_, i) => keyFor(defaultTable(), i + 1));
     let answer: string[] | null | undefined;
@@ -325,7 +338,8 @@ export class Lunicus {
     this.asking = false;
     if (answer) {
       m.sco.keys = bindKeys(answer);
-      m.log(`Settings ▸ Keys: ${ACTIONS.map((a, i) => `${a} ${keyFor(m.sco.keys, i + 1) || "-"}`).join(", ")}`);
+      const keys = ACTIONS.map((a, i) => `${a} ${keyFor(m.sco.keys, i + 1) || "-"}`).join(", ");
+      m.log(`Settings ▸ Keys: ${keys}`);
       this.keepSco();
     }
     if (game) m.playAmbience();
@@ -344,7 +358,7 @@ export class Lunicus {
 
   /** one tick; false once the machine has stopped */
   tick(): boolean {
-    if (!this.run) this.run = this.main();
+    this.run ??= this.main();
     if (this.phase === "over" || this.phase === "not-ported") return false;
     this.m.ticks++;
     const r = this.run.next();
@@ -404,8 +418,13 @@ export class Lunicus {
       if (level === 0) {
         // level 0 is the title (0x416ec8): the intro again, and File ▸ New
         if (m.quitAsked) m.quitAsked = false;
-        else if (this.won && !this.wonTold) (this.wonTold = true), m.log("the queen is dead, the game is won: back to the title");
-        else this.deaths++, m.log("the player died: back to the title");
+        else if (this.won && !this.wonTold) {
+          this.wonTold = true;
+          m.log("the queen is dead, the game is won: back to the title");
+        } else {
+          this.deaths++;
+          m.log("the player died: back to the title");
+        }
         this.city = null;
         this.base = null;
         prev = 0;

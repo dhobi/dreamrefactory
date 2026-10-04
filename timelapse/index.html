@@ -1344,11 +1344,10 @@
            list and read from the left edge like one; this is a single object
            with the whole width to itself. */
         justify-content: center;
-      }
-      /* The rule belongs BETWEEN the controls and the ask, so it goes away with
-         them: a hairline under the picture with nothing above it is worse than
-         no rule at all. The selector is #under's own hiding condition. */
-      #foot {
+        /* The rule belongs BETWEEN the controls and the ask, so it goes away
+           with them: a hairline under the picture with nothing above it is
+           worse than no rule at all. The selector below is #under's own hiding
+           condition. */
         border-top: 1px solid var(--border);
       }
       body:not(.playing) #under:not(:has(#err:not(:empty))) + #foot {

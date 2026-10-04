@@ -51,7 +51,9 @@ export function moveShots(p: Pyro): void {
           if (s.kind === LASERS) w.sound(0xe);
           else w.sound(w.roll(4) === 1 ? 0xf : 0xd);
         }
-        const dmg = s.kind === LASERS ? (s.tier === 0 || s.tier === 2 ? 0xc8 : 0xf0) : s.tier === 0 ? 0x78 : s.tier === 3 ? 0xdc : 0xb4;
+        let dmg: number;
+        if (s.kind === LASERS) dmg = s.tier === 0 || s.tier === 2 ? 0xc8 : 0xf0;
+        else dmg = [0x78, 0xb4, 0xb4, 0xdc][s.tier] ?? 0xb4;
         if (w.hitEnemies(old, s.o, dmg, 0)) {
           s.met = 2;
           w.sound(s.kind === LASERS ? 0x12 : 0x11);
@@ -93,10 +95,9 @@ export function moveShots(p: Pyro): void {
             p.misses = 0;
           }
         }
-        const dmg =
-          s.kind === ROCKETS
-            ? s.tier === 0 ? 0x834 : s.tier === 3 ? 0xfa0 : 0xbb8
-            : [0xc1c, 0xfa0, 0x1388, 0x1770][s.tier] ?? 0xc1c;
+        let dmg: number;
+        if (s.kind === ROCKETS) dmg = [0x834, 0xbb8, 0xbb8, 0xfa0][s.tier] ?? 0xbb8;
+        else dmg = [0xc1c, 0xfa0, 0x1388, 0x1770][s.tier] ?? 0xc1c;
         if (w.hitEnemies(old, s.o, dmg, 0)) {
           s.met = 1;
           s.life = 0x1f4;
@@ -318,7 +319,8 @@ function drawBomb(p: Pyro, s: Shot): void {
   if (a.depth < 0x40) return;
   const i = Math.min(far(a.depth), 0xf);
   let pic: number = PIC.bomb;
-  if (s.met) pic = s.tier === 1 || s.tier === 3 ? PIC.chip : s.met === 2 || s.met === 3 ? PIC.blast2 : PIC.blast;
+  if (s.met && (s.tier === 1 || s.tier === 3)) pic = PIC.chip;
+  else if (s.met) pic = s.met === 2 || s.met === 3 ? PIC.blast2 : PIC.blast;
   w.sprite(p.pic(pic + i), a.y, a.x, a.depth);
 }
 

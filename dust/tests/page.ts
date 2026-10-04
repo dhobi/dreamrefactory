@@ -432,7 +432,7 @@ describe("the game, once it runs", () => {
     expect(bugOpts!.where()).toBe("TOWN.SET G15 · north · 1 here, 1 in view");
     const lines = p.log().split("\n").length;
     p.frame(20_000);
-    expect(p.log().split("\n").length).toBe(lines);
+    expect(p.log().split("\n")).toHaveLength(lines);
   });
 
   it("hands the bug report the page's edition, log tail and note", async () => {

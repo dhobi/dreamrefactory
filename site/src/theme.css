@@ -70,11 +70,8 @@
   --wire-400: #2b522b;
   --wire-300: #3d723d;
   --wire-200: #58a058;
-}
 
-/* ---- the green --------------------------------------------------------- */
-
-:root {
+  /* ---- the green --------------------------------------------------------- */
   /* The globe's wireframe at the bottom of the scale, the swoosh's core at the
      top. This is the "RE" — the one word in the logo that is lit rather than
      reflective. */
@@ -85,11 +82,8 @@
   --signal-300: #5bff5b;
   --signal-200: #9dff9d;
   --signal-100: #d8ffd8;
-}
 
-/* ---- the chrome ------------------------------------------------------- */
-
-:root {
+  /* ---- the chrome ------------------------------------------------------- */
   /* Brushed metal, cool rather than warm: the dark underside of a bevel through
      to the highlight running along its top edge. */
   --chrome-600: #3f4a55;
@@ -101,11 +95,8 @@
 
   --alarm: #ff4d3d;
   --ok: var(--signal-400);
-}
 
-/* ---- typography and metrics ------------------------------------------- */
-
-:root {
+  /* ---- typography and metrics ------------------------------------------- */
   /*
    * The logo's own face is a wide, squared, italic-cut techno display type of the
    * sort a 1996 CD-ROM box carried, and nothing on a system font stack is it. So
@@ -127,11 +118,8 @@
   /* The focus treatment is the swoosh's bloom rather than a drop shadow: a tight
      ring and a wide soft halo, which is how the logo lights what it lights. */
   --glow: 0 0 0 1px rgba(46, 230, 46, 0.35), 0 0 34px -4px rgba(46, 230, 46, 0.45);
-}
 
-/* ---- the 39 roles the chrome asks for ---------------------------------- */
-
-:root {
+  /* ---- the 39 roles the chrome asks for ---------------------------------- */
   /* surfaces */
   --bg: var(--void-1000);
   --panel: var(--void-800);

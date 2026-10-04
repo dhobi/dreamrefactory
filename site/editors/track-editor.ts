@@ -22,8 +22,7 @@ import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { wavBlob } from "./wav";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
-import { t as tr, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t as tr, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import {
   DecodedAudio,
   V0_SAMPLE_RATE,
@@ -142,6 +141,12 @@ let bankV0 = false;
  */
 let sndSource: SndFile | null = null;
 
+/** a bank's tables, read the way its version keeps them */
+function tablesOf(file: DFContainerFile, v0: boolean, snd: SndFile | null): BankTables {
+  if (v0) return bankTablesFromV0(file);
+  return snd ? bankTablesFromSnd(snd) : readBankTables(file);
+}
+
 // Hard-coded English, like every string this repo builds in TypeScript rather
 // than in markup (site/src/locales/en.ts says why).
 const V1_READ_ONLY =
@@ -202,9 +207,11 @@ function loadBank(bytes: Uint8Array, name: string, v0 = false): void {
     parsed = readContainerFile(bytes);
     bankV0 = v0;
     const v1 = !v0 && detectVersion(bytes) === 1;
-    reshaped = v0 ? V0_READ_ONLY : v1 ? V1_READ_ONLY : null;
+    reshaped = null;
+    if (v0) reshaped = V0_READ_ONLY;
+    else if (v1) reshaped = V1_READ_ONLY;
     sndSource = v1 ? readSndFile(bytes) : null;
-    parsedTables = v0 ? bankTablesFromV0(parsed) : sndSource ? bankTablesFromSnd(sndSource) : readBankTables(parsed);
+    parsedTables = tablesOf(parsed, v0, sndSource);
   } catch (e) {
     log(tr("tracks.notReadableBank", { message: (e as Error).message }));
     return;
@@ -298,7 +305,7 @@ async function initServerBanks(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerBanks();
+const serverListed = initServerBanks();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(tr("counts.discardEdits", { n: edits.length }))) return;
@@ -627,7 +634,7 @@ function refresh(): void {
   // the rows are rebuilt, and with them the button a playback is showing on
   stopPlayback();
   resetObserver();
-  tables = bankV0 ? bankTablesFromV0(file) : sndSource ? bankTablesFromSnd(sndSource) : readBankTables(file);
+  tables = tablesOf(file, bankV0, sndSource);
   buildFileBar();
   buildBank();
   buildMusic();
@@ -709,7 +716,8 @@ function buildMusic(): void {
     chip.className = "chip";
     const rec = t.loopRecords[o - 1];
     const label = document.createElement("span");
-    label.textContent = `${pos + 1}. ${rec ? rec.identifier || `#${o}` : `#${o}?`}`;
+    const name = rec ? rec.identifier || "#" + o : "#" + o + "?";
+    label.textContent = `${pos + 1}. ${name}`;
     chip.appendChild(label);
     const move = (to: number): void => {
       const next = [...t.loopOrder];
@@ -915,3 +923,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await serverListed;

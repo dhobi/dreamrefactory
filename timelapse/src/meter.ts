@@ -50,7 +50,8 @@ export class NetMeter {
     if (!rate) return null;
     const scale = left ? `${fmtSize(this.total)} of ${fmtSize(this.total + left)}` : `${fmtSize(this.total)} so far`;
     const eta = left ? fmtLeft(left / rate) : "";
-    return `${fmtRate(rate)} · ${scale}${eta ? ` · ${eta}` : ""}`;
+    const then = eta ? ` · ${eta}` : "";
+    return `${fmtRate(rate)} · ${scale}${then}`;
   }
 }
 

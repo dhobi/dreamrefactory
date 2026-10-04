@@ -45,7 +45,10 @@ import { inRect, type Rect } from "@dreamfactory/engine/v0/screen";
 import { talk, type TalkState } from "@dreamfactory/engine/v0/talk";
 
 /** a talk file's number for the day's progress `[0x42d1c8]` (table 0x427168): `raife.1` before the day's briefing, `.2` at 2, `.3` at 3–4 */
-export const talkNumber = (progress: number): number => (progress <= 1 ? 1 : progress === 2 ? 2 : 3);
+export const talkNumber = (progress: number): number => {
+  if (progress <= 1) return 1;
+  return progress === 2 ? 2 : 3;
+};
 
 /** everything a saved game would hold, and what a machine test reads */
 export interface Progress {
@@ -139,7 +142,8 @@ export class Base {
     };
     // 0x40de55: the base's radar shows the crew on the floor
     this.panelUi.radar = () => ({ cam: this.cam, blips: this.crew.map((f) => ({ x: f.at.x, y: f.at.y, dot: false })), nodeOut: false });
-    m.log(`${name} (level ${p.level}, day ${this.day}): at ${this.pose.x},${this.pose.y} facing ${this.pose.dir}; crew ${this.crew.map((c) => `${c.name} (${c.home.cellX},${c.home.cellY})`).join(", ")}`);
+    const crew = this.crew.map((c) => `${c.name} (${c.home.cellX},${c.home.cellY})`).join(", ");
+    m.log(`${name} (level ${p.level}, day ${this.day}): at ${this.pose.x},${this.pose.y} facing ${this.pose.dir}; crew ${crew}`);
     m.screen.setPalette(this.clut);
     this.showRest();
     this.drawPanel();
@@ -371,7 +375,8 @@ export class Base {
     // 0x40cd1b: the key table's first three actions are the steps; the modes are the city's
     const kind = [0, FORWARD, LEFT, RIGHT][this.m.action(key)] ?? 0;
     if (!kind) return;
-    while ((yield* this.move(kind)) && this.m.keysHeld.has(key)) {}
+    let moved = yield* this.move(kind);
+    while (moved && this.m.keysHeld.has(key)) moved = yield* this.move(kind);
   }
 
   /* ----------------------------------------------------------------------- *

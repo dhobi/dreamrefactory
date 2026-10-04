@@ -97,7 +97,7 @@ function fbm(x: number, y: number, seed: number, octaves: number): number {
   return sum / total;
 }
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 const scale = (c: RGB, k: number): RGB => [c[0] * k, c[1] * k, c[2] * k];
 
 // ---------------------------------------------------------------------------
@@ -317,7 +317,9 @@ function panelling(u: number, v: number, seed: number): RGB {
   const own = 0.88 + 0.24 * hash(board, 0, seed);
   const across = u - board * DADO.board;
   // the joints barely show on boards this dark: a hint of a line, no more
-  const groove = across < 10 ? 0.78 : across < 18 ? 1.05 : 1;
+  let groove = 1;
+  if (across < 10) groove = 0.78;
+  else if (across < 18) groove = 1.05;
   const grain = fbm(u / 9, v / 260, seed + 300, 2);
   return scale(STAIN, own * groove * (1 + 0.12 * grain));
 }
@@ -594,7 +596,9 @@ function boards(u: number, v: number, seed: number): RGB {
   const grain = fbm(u / 7, v / 420, seed + 5, 2);
   const figure = fbm(u / 40, v / 90, seed + 6, 1);
   const dirt = 1 + 0.12 * fbm(u / 900, v / 900, seed + 7, 2);
-  const edge = across < BOARD.gap + 10 ? 1.12 : across > BOARD.width - 10 ? 0.84 : 1;
+  let edge = 1;
+  if (across < BOARD.gap + 10) edge = 1.12;
+  else if (across > BOARD.width - 10) edge = 0.84;
   return scale(base, own * dirt * edge * (1 + 0.18 * grain + 0.08 * figure));
 }
 
@@ -618,7 +622,11 @@ const RUG_BORDER = 110;
 function rug(u: number, v: number, seed: number): RGB {
   const edge = Math.min(u - RUG.x0, RUG.x1 - u, v - RUG.y0, RUG.y1 - v);
   const tuft = hash(Math.floor(u / 26), Math.floor(v / 26), seed + 901);
-  let c: RGB = tuft < 0.22 ? [0.27, 0.30, 0.37] : tuft < 0.36 ? [0.44, 0.37, 0.29] : tuft < 0.55 ? [0.56, 0.56, 0.53] : [0.74, 0.72, 0.66];
+  let c: RGB;
+  if (tuft < 0.22) c = [0.27, 0.30, 0.37];
+  else if (tuft < 0.36) c = [0.44, 0.37, 0.29];
+  else if (tuft < 0.55) c = [0.56, 0.56, 0.53];
+  else c = [0.74, 0.72, 0.66];
   c = scale(c, 0.85 + 0.3 * noise(u / 60, v / 60, seed + 902));
   if (edge < RUG_BORDER) {
     const k = 0.55 + 0.45 * (edge / RUG_BORDER) ** 2;
@@ -784,7 +792,10 @@ function london(u: number, v: number, seed: number): RGB {
   }
   if (vf >= seg.top) {
     // a low slate roof behind the parapet, then the far skyline, then sky
-    const slate = seg.kind === "block" ? 300 : seg.recede ? 450 : 700 - 500 * Math.abs((u - mid) / (width / 2));
+    let slate: number;
+    if (seg.kind === "block") slate = 300;
+    else if (seg.recede) slate = 450;
+    else slate = 700 - 500 * Math.abs((u - mid) / (width / 2));
     if (vf < seg.top + slate) {
       const course = Math.floor((vf - seg.top) / 90) & 1;
       return scale([0.30, 0.33, 0.38], 0.85 + 0.12 * course + 0.1 * noise(u / 40, v / 20, seed + 1300));
@@ -801,7 +812,9 @@ function london(u: number, v: number, seed: number): RGB {
   const endShade = 1 - 0.18 * Math.max(0, 1 - Math.min(inSeg, width - inSeg) / 250);
   // cornice and coping
   if (vf > seg.top - 400) {
-    const step = vf > seg.top - 110 ? 1.0 : vf > seg.top - 220 ? 0.8 : 0.95;
+    let step = 0.95;
+    if (vf > seg.top - 110) step = 1.0;
+    else if (vf > seg.top - 220) step = 0.8;
     return scale(seg.kind === "block" ? [0.80, 0.78, 0.72] : [0.88, 0.86, 0.80], step * endShade);
   }
   const flags = bunting(seg, u, v);
@@ -814,7 +827,7 @@ function london(u: number, v: number, seed: number): RGB {
       const bu = seg.u0 + 1600, dx = u - bu;
       if (Math.abs(dx) < 620 && v > 400 && v < 1900) {
         if (Math.abs(dx) > 560 || v < 520 || v > 1780) return scale([0.88, 0.86, 0.80], endShade);
-        const light = Math.abs(dx) < 180 ? 0 : dx < 0 ? -1 : 1;
+        const light = Math.abs(dx) < 180 ? 0 : Math.sign(dx);
         const s2 = sash(dx - light * 380, v - 620, 260, 1000, seed, u, v);
         if (s2) return s2;
         return scale([0.86, 0.84, 0.78], endShade);

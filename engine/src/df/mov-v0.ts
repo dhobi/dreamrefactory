@@ -142,7 +142,9 @@ export function readMovFileV0(data: Uint8Array): MovFileV0 {
       const size = HOTSPOT_BYTES[Math.abs(type)];
       if (!size || p + size > c0.length) break;
       const kind = Math.abs(type);
-      const named = kind === 3 ? p + 0xe : kind === 4 ? p + 0x10 : -1;
+      let named = -1;
+      if (kind === 3) named = p + 0xe;
+      else if (kind === 4) named = p + 0x10;
       hotspots.push({
         type,
         top: v.getInt16(p + 2, true),
@@ -232,9 +234,13 @@ export function movFileFromV0(v0: MovFileV0): MovFile {
     let event = "";
     if (f.flags & FLAG_STEP) type = 6;
     else if (f.action === 1) type = last ? 1 : 3;
-    else if (f.action === 2) (type = 2), (target = frameName(f.target));
-    else if (f.action === 3) (type = 3), (event = f.chainTo);
-    else type = 6;
+    else if (f.action === 2) {
+      type = 2;
+      target = frameName(f.target);
+    } else if (f.action === 3) {
+      type = 3;
+      event = f.chainTo;
+    } else type = 6;
     const regions = f.hotspots.map(
       (h): MovClickRegion => ({
         type: Math.abs(h.type) >= 1 && Math.abs(h.type) <= 5 ? Math.abs(h.type) : 6,

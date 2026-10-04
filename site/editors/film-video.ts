@@ -22,7 +22,7 @@ import {
   CanvasSource,
   Mp4OutputFormat,
   Output,
-  QUALITY_HIGH,
+  Quality,
   WebMOutputFormat,
   getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
@@ -30,6 +30,8 @@ import {
 import type { MovFile } from "@dreamfactory/engine/df/mov";
 import { FilmPictures, FilmTimeline, filmTimeline, mixFilmSound } from "@dreamfactory/engine/df/mov-film";
 
+/** what every encoder here is asked for */
+const QUALITY = new Quality("high");
 /** the sample rate both audio encoders take */
 const RATE = 48000;
 /** scale the picture up until it is at least this tall, by a whole number */
@@ -68,19 +70,20 @@ export async function encodeFilmVideo(
   const height = (srcH * scale + 1) & ~1;
 
   let format: Mp4OutputFormat | WebMOutputFormat = new Mp4OutputFormat({ fastStart: "in-memory" });
-  let video = await getFirstEncodableVideoCodec(["avc"], { width, height, quality: QUALITY_HIGH });
+  let video = await getFirstEncodableVideoCodec(["avc"], { width, height, quality: QUALITY });
   if (!video) {
     format = new WebMOutputFormat();
-    video = await getFirstEncodableVideoCodec(["vp9", "vp8"], { width, height, quality: QUALITY_HIGH });
+    video = await getFirstEncodableVideoCodec(["vp9", "vp8"], { width, height, quality: QUALITY });
   }
   if (!video) return null;
   const pcm = mixFilmSound(timeline, RATE);
   const audible = pcm.some((s) => s !== 0);
+  const codecs: ("aac" | "opus")[] = format instanceof Mp4OutputFormat ? ["aac", "opus"] : ["opus"];
   const audio = audible
-    ? await getFirstEncodableAudioCodec(format instanceof Mp4OutputFormat ? ["aac", "opus"] : ["opus"], {
+    ? await getFirstEncodableAudioCodec(codecs, {
         numberOfChannels: 1,
         sampleRate: RATE,
-        quality: QUALITY_HIGH,
+        quality: QUALITY,
       })
     : null;
 
@@ -91,9 +94,9 @@ export async function encodeFilmVideo(
   const smallCtx = small.getContext("2d")!;
 
   const output = new Output({ format, target: new BufferTarget() });
-  const videoSource = new CanvasSource(canvas, { codec: video, quality: QUALITY_HIGH });
+  const videoSource = new CanvasSource(canvas, { codec: video, quality: QUALITY });
   output.addVideoTrack(videoSource);
-  const audioSource = audio ? new AudioSampleSource({ codec: audio, quality: QUALITY_HIGH }) : null;
+  const audioSource = audio ? new AudioSampleSource({ codec: audio, quality: QUALITY }) : null;
   if (audioSource) output.addAudioTrack(audioSource);
   await output.start();
 

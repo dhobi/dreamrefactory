@@ -1396,7 +1396,7 @@ const furniturePanel = document.getElementById("furniture") as HTMLElement;
 const boxes = new Map<string, HTMLInputElement>();
 /** every piece the room actually built, first-appearance order — so a piece
  *  added anywhere gets a box without a list here having to be kept in step */
-for (const name of [...new Set(parts.map((p) => p.piece).filter((n): n is string => n !== null))]) {
+for (const name of new Set(parts.map((p) => p.piece).filter((n): n is string => n !== null))) {
   const row = document.createElement("label");
   const box = document.createElement("input");
   box.type = "checkbox";
@@ -1522,7 +1522,8 @@ onSettings((changed) => {
   if (changed.has("lamp") || changed.has("fill")) {
     for (const input of lightsPanel.querySelectorAll<HTMLInputElement>("input[data-light]")) {
       const which = input.dataset.light!;
-      const g = which === "fill" ? settings.fill : settings.lamp[which === "sky" ? 3 : +which];
+      const lamp = which === "sky" ? 3 : +which;
+      const g = which === "fill" ? settings.fill : settings.lamp[lamp];
       input.value = String(g);
       (input.nextElementSibling as HTMLElement).textContent = g.toFixed(2);
     }
@@ -1557,7 +1558,11 @@ onSettings((changed) => {
  */
 const vrButton = document.getElementById("vr") as HTMLButtonElement;
 let headsetThere = false;
-void xrSupported().then((yes) => { headsetThere = yes; offerVR(); });
+async function askForHeadset(): Promise<void> {
+  headsetThere = await xrSupported();
+  offerVR();
+}
+const headsetAsked = askForHeadset();
 
 /**
  * The button appears when both halves are true, whichever lands last — and it
@@ -2564,7 +2569,7 @@ async function toothPhoto(): Promise<void> {
     sum += k[i];
   }
   const mean = sum / k.length;
-  if (!(mean > 0)) return;
+  if (Number.isNaN(mean) || mean <= 0) return;
   for (let i = 0; i < k.length; i++) k[i] /= mean;
   useToothPhoto(n, k);
 }
@@ -2733,11 +2738,13 @@ async function fetchMusic(): Promise<void> {
  * button says Start and not Load. By the time it can be pressed there is
  * nothing left to wait for.
  */
-void Promise.all([skin(), fetchMusic()]).then(() => {
+async function loadThePage(): Promise<void> {
+  await Promise.all([skin(), fetchMusic()]);
   note.textContent = "";
   splash.dataset.state = "ready";
   loadButton.focus();
-});
+}
+const pageLoaded = loadThePage();
 
 /**
  * The intro, cut to the track's own bars.
@@ -2922,3 +2929,5 @@ loadButton.addEventListener("click", () => {
   void music.play().catch(() => { /* the browser said no; the wall clock takes over */ });
   runIntro();
 });
+
+await Promise.all([headsetAsked, pageLoaded]);

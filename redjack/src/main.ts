@@ -62,6 +62,16 @@ const stageEl = document.getElementById("stage") as HTMLElement;
 const verEl = document.getElementById("ver");
 if (verEl) verEl.textContent = `v${VERSION}`;
 
+/** the title card, which closes the band up when it fails to load — see #brand in index.html */
+const brandEl = document.getElementById("brand") as HTMLImageElement;
+function dropBrand(): void {
+  brandEl.hidden = true;
+  document.body.classList.add("nobrand");
+}
+// a module runs after parsing, so the image may already have failed by now
+if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
+else brandEl.addEventListener("error", dropBrand);
+
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
 
 /* ------------------------------------------------------------------------- *
@@ -74,7 +84,9 @@ const logLines: string[] = [];
 function say(line: string, kind: "" | "step" | "warn" = ""): void {
   logLines.push(line);
   if (logLines.length > LOG_MAX) logLines.splice(0, logLines.length - LOG_MAX);
-  const tag = kind === "step" ? "b" : kind === "warn" ? "i" : "";
+  let tag = "";
+  if (kind === "step") tag = "b";
+  else if (kind === "warn") tag = "i";
   logEl.insertAdjacentHTML("beforeend", tag ? `<${tag}>${esc(line)}</${tag}>\n` : `${esc(line)}\n`);
   if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
 }
@@ -142,7 +154,7 @@ if (bugBtn) {
 
 const bootEl = document.getElementById("boot") as HTMLElement;
 const startEl = document.getElementById("start") as HTMLButtonElement;
-const barEl = document.getElementById("bar") as HTMLElement;
+const barEl = document.getElementById("barvalue") as HTMLProgressElement;
 const chargeEl = document.getElementById("charge") as HTMLElement;
 const bootSayEl = document.getElementById("bootsay") as HTMLElement;
 const bootPctEl = document.getElementById("bootpct") as HTMLElement;
@@ -160,7 +172,7 @@ function progress(f: number, label?: string): void {
   const pct = Math.round(charged * 100);
   chargeEl.style.width = `${pct}%`;
   bootPctEl.textContent = `${pct}%`;
-  barEl.setAttribute("aria-valuenow", String(pct));
+  barEl.value = pct;
   if (label) bootSayEl.textContent = label;
 }
 
@@ -316,7 +328,8 @@ async function main(): Promise<void> {
     showLocation(host);
     // a conversation keeps the arrow however a script inside it changes the
     // cursor: RedJack.exe's puppet code sets `CURS.ARROW` as it runs (#446)
-    showCursor(host.session.cursorHidden ? "none" : host.session.puppet?.visible ? "arrow" : host.session.cursorName);
+    if (host.session.cursorHidden) showCursor("none");
+    else showCursor(host.session.puppet?.visible ? "arrow" : host.session.cursorName);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

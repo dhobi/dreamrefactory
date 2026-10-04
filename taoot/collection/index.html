@@ -515,12 +515,11 @@
 
         <!-- taoot/src/collection.ts appends the five endonym buttons here, off the
              same taoot/src/languages.ts list the top bar's own language menu reads -->
-        <!-- a role="group" with no accessible name is an unnamed group, so the
+        <!-- a fieldset with no accessible name is an unnamed group, so the
              label the sighted reader sees is the one it points at -->
-        <div
+        <fieldset
           class="editionPicker"
           id="editionPicker"
-          role="group"
           aria-labelledby="editionLabel"
         >
           <span
@@ -529,7 +528,7 @@
             data-i18n="site.editionLabel"
             >Edition</span
           >
-        </div>
+        </fieldset>
 
         <div class="viewer">
           <div class="boxColumn">

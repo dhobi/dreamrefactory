@@ -320,8 +320,8 @@ test("set structure: the synthesized file reads back as a set", () => {
   expect(spots[1].startRegionX).toBe(200);
 
   // the turn ring: a turn leaves a standpoint and lands on the next one
-  expect(set.scenes[0].turns[RIGHTTURNS].frames.length).toBe(4);
-  expect(set.scenes[0].turns[LEFTTURNS].frames.length).toBe(4);
+  expect(set.scenes[0].turns[RIGHTTURNS].frames).toHaveLength(4);
+  expect(set.scenes[0].turns[LEFTTURNS].frames).toHaveLength(4);
   const turn = turnRing(set.scenes[0], 0, RIGHTTURNS)!;
   expect(turn.target).toBe(1);
   expect(turn.frames.map((f) => f.frameContainerLoc)).toEqual([
@@ -331,14 +331,14 @@ test("set structure: the synthesized file reads back as a set", () => {
   expect(turnRing(set.scenes[0], 0, RIGHTTURNS)!.frames[1].motionInfo).toBe(2);
 
   // the road, by global view id from either end
-  expect(set.transitions.length).toBe(1);
+  expect(set.transitions).toHaveLength(1);
   const road = set.transitions[0];
   expect(road.transitionName).toBe("to the corner");
   expect([road.viewIDstart, road.viewIDend]).toEqual([1, 2]);
   expect(road.waypoints).toEqual([[1200, 2000, 300]]);
   expect(roadsAt(set, 1)).toEqual([{ road, register: 0, arriveViewID: 2 }]);
   expect(roadsAt(set, 2)).toEqual([{ road, register: 1, arriveViewID: 1 }]);
-  expect(road.frameRegisters[0].frames.length).toBe(2);
+  expect(road.frameRegisters[0].frames).toHaveLength(2);
 
   // both stars of the one actor record, the nested secondary included
   expect(set.actors.map((a) => a.identifier)).toEqual(["sasha.1", "sasha.2"]);
@@ -530,5 +530,5 @@ test("frame replacement: new art in one frame, the rest of the set as it was", (
   };
   const noZ = decodeAlone(readSetFile(writeContainerFile(set.file)).file.containers[loc].data);
   expect([noZ.width, noZ.height]).toEqual([20, 12]);
-  expect(noZ.z).toBe(null);
+  expect(noZ.z).toBeNull();
 });

@@ -354,7 +354,7 @@ test("loadGame closes a conversation that was open when it was pressed", async (
   await session.settle();
 
   expect(session.currentSetFile).toBe("boil"); // the load itself still happened
-  expect(session.puppet).toBe(null); // and took the close-up with it
+  expect(session.puppet).toBeNull(); // and took the close-up with it
 });
 
 test("loadGame gives up a film that was playing", async () => {
@@ -463,7 +463,7 @@ test("the load dialog holds a black screen, and the panel comes back on cancel (
   expect(frozen).toBe(true); // the world stops while the dialog owns the screen
   expect(session.frozen).toBe(false);
   expect(session.fade.level).toBe(0);
-  expect(session.fade.queue.length).toBe(0);
+  expect(session.fade.queue).toHaveLength(0);
   expect(session.stageName).toBe("ctl.stg"); // the lever's own cancel check
 
   // a file we cannot read is a cancel too: the panel is still standing.
@@ -485,7 +485,7 @@ test("the load dialog holds a black screen, and the panel comes back on cancel (
   expect(session.stageName).toBe("main.stg");
   expect(session.setVisible).toBe(true);
   expect(session.fade.level).toBe(0);
-  expect(session.fade.queue.length).toBe(0);
+  expect(session.fade.queue).toHaveLength(0);
 });
 
 /**
@@ -867,7 +867,7 @@ test("propis3d is 1 exactly while the watch/bag still lie in the world", () => {
 
 test("17 shipped saves record the watch left open, and agree on the assembly", () => {
   const open = openWatchSaves();
-  expect(open.length).toBe(17);
+  expect(open).toHaveLength(17);
   for (const p of open) {
     const inv = parseSave(new Uint8Array(readFileSync(p))).inventory;
     const view = (n: string) => inv.find((q) => q.name === n)?.view;
@@ -1029,7 +1029,7 @@ test("applyPatch writes actor owners that parse back", () => {
   expect(re.actors.find((a) => a.name === "purs")?.value).toBe(4);
   expect(re.actors.find((a) => a.name === "morrow")?.value).toBe(0);
   // and the rest of the cast is left as the base had it
-  expect(re.actors.length).toBe(save.actors.length);
+  expect(re.actors).toHaveLength(save.actors.length);
   expect(re.actors.find((a) => a.name === "penny")?.owner).toBe(
     save.actors.find((a) => a.name === "penny")?.owner,
   );
@@ -1923,7 +1923,7 @@ test("parseSave decodes the loop/cricket tables, the active walk and the theme",
   expect(motor, "the deck's motor ambience is armed").toBeTruthy();
   expect(motor!.set).toBe("deckbd");
   expect(motor!.radius).toBe(3000);
-  expect(save.walks.length).toBe(1);
+  expect(save.walks).toHaveLength(1);
   expect(save.walks[0]).toMatchObject({ actor: "ga", type: 3, hasPayload: true, star: "ga.2" });
   expect(save.theme).toMatchObject({ track: "deckbd.trk" });
 });
@@ -2277,7 +2277,7 @@ test("a walk saved in flight resumes and finishes, and its walker arrives", asyn
   // the premise, and the offsets: the record's own arithmetic has to reproduce
   // the position the actor record was saved at
   const w = save.walks[0];
-  expect(save.walks.length).toBe(1);
+  expect(save.walks).toHaveLength(1);
   expect(w).toMatchObject({ actor: "cash", type: 1, hasPayload: false, star: "cash1", turnTo: -1 });
   expect([w.startX, w.startY, w.startZ]).toEqual([6561, 5095, 4985]);
   expect([w.destX, w.destY, w.destZ]).toEqual([5795, 7161, 4985]);
@@ -2525,7 +2525,7 @@ test("applyPatch appends one waypoint container per route, in slot order (#191)"
     scheduler: { loops: save.loops, crickets: save.crickets, walks: two },
   }));
   // the base's own payload is GONE — one appended per route, not three
-  expect(raw.containers.length).toBe(base + 1);
+  expect(raw.containers).toHaveLength(base + 1);
   // exact sizes: 20 bytes of header, then 8 per waypoint
   expect(raw.containers.slice(-2).map((c) => c.data.length)).toEqual([20 + 2 * 8, 20 + 3 * 8]);
   // the header past the count is the authored path structure's: +4 zero, and
@@ -2556,7 +2556,7 @@ test("applyPatch appends one waypoint container per route, in slot order (#191)"
     scheduler: { loops: save.loops, crickets: save.crickets },
   }));
   expect(parseSave(writeSaveFile(quietRaw)).walks).toEqual([]);
-  expect(quietRaw.containers.length).toBe(base - 1); // ga's stale payload is gone
+  expect(quietRaw.containers).toHaveLength(base - 1); // ga's stale payload is gone
 
   // a lost walk is SAID, whatever loses it: the 17th of a 16-slot table, and a
   // route claiming the path mover with no waypoints behind it (a shape no
@@ -2576,7 +2576,7 @@ test("applyPatch appends one waypoint container per route, in slot order (#191)"
     },
     onDrop: (n, why) => dropped.push(`${n}: ${why}`),
   }));
-  expect(over.walks.length).toBe(16);
+  expect(over.walks).toHaveLength(16);
   expect(dropped).toContain("walk(t16): the walks table holds 16 slots");
   expect(dropped).toContain("walk(t99): the walks table holds 16 slots");
   const malformed = parseSave(applyPatch(save.raw, {
@@ -3087,7 +3087,7 @@ test("a file that is not a save, or a save missing a part, is refused with the p
 
   // a container whose position points into the header is an empty one, not a read
   const raw = readSaveFile(bad((b) => new DataView(b.buffer).setUint32(1024 + 4 * 5, 0, true)));
-  expect(raw.containers[5].data.length).toBe(0);
+  expect(raw.containers[5].data).toHaveLength(0);
 });
 
 test("every value a patch cannot store is reported, and the rest is still written", () => {

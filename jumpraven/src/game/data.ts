@@ -30,7 +30,12 @@ export const HIGH_SCORES = 1;
 export const isFlying = (level: number): boolean => level === 3 || level === 5 || level === 7;
 
 /** the day's folder a level reads its files from (0x40e8df): `Day1\` … `Day4\` */
-export const dayOf = (level: number): number => (level <= 3 ? 1 : level <= 5 ? 2 : level <= 7 ? 3 : 4);
+export function dayOf(level: number): number {
+  if (level <= 3) return 1;
+  if (level <= 5) return 2;
+  if (level <= 7) return 3;
+  return 4;
+}
 
 /**
  * The difficulty, `[0x439fb0]`: Settings ▸ Training, Intermediate, Advanced,

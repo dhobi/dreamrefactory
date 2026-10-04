@@ -19,8 +19,7 @@ import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
-import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import {
@@ -183,7 +182,7 @@ async function initServerStages(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerStages();
+const serverListed = initServerStages();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -250,7 +249,7 @@ function previousImage(loc: number, data: Uint8Array, v5: boolean): FlatImage | 
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const size = v5 ? frameSizeV5(data) : { width: view.getInt16(2, true), height: view.getInt16(0, true) };
   const under = imageAt(flats[i - 1].locationFrame);
-  return under && under.width === size.width && under.height === size.height ? under : null;
+  return under?.width === size.width && under.height === size.height ? under : null;
 }
 
 function imageToCanvas(img: FlatImage, canvas: HTMLCanvasElement): void {
@@ -278,25 +277,29 @@ function renderPreview(): void {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
-  $("previewInfo").innerHTML = f
-    ? t("stages.previewFlat", { name: f.name, loc: f.locationFrame }) +
-      (img
-        ? t("stages.previewImage", {
-            w: img.width,
-            h: img.height,
-            bytes: formatNumber(stg.file.containers[f.locationFrame]?.data.length ?? 0),
-          }) +
-          (img.zOffset >= 0 ? t("stages.previewZLayer") : "")
-        : t("stages.previewNoImage")) +
-      t("stages.previewScript", {
-        script: f.locationScript,
-        logic: f.locationClickLogic,
-        cond: f.condition,
-        w: f.width,
-        h: f.height,
-      }) +
-      `<br>${t("counts.clickableRegions", { n: regions.length })}`
-    : t("stages.noFlats");
+  if (!f) {
+    $("previewInfo").innerHTML = t("stages.noFlats");
+    drawOverlay();
+    return;
+  }
+  const art = img
+    ? t("stages.previewImage", {
+        w: img.width,
+        h: img.height,
+        bytes: formatNumber(stg.file.containers[f.locationFrame]?.data.length ?? 0),
+      }) + (img.zOffset >= 0 ? t("stages.previewZLayer") : "")
+    : t("stages.previewNoImage");
+  $("previewInfo").innerHTML =
+    t("stages.previewFlat", { name: f.name, loc: f.locationFrame }) +
+    art +
+    t("stages.previewScript", {
+      script: f.locationScript,
+      logic: f.locationClickLogic,
+      cond: f.condition,
+      w: f.width,
+      h: f.height,
+    }) +
+    `<br>${t("counts.clickableRegions", { n: regions.length })}`;
   drawOverlay();
 }
 
@@ -406,11 +409,14 @@ function buildRegions(): void {
   const wrap = $("regions");
   wrap.replaceChildren();
   const f = flat();
-  $("regionsInfo").textContent = f
-    ? t("stages.regionsIn", { n: regions.length, name: f.name }) +
+  let info = "";
+  if (f) {
+    info =
+      t("stages.regionsIn", { n: regions.length, name: f.name }) +
       (f.locationClickLogic ? t("stages.regionsLogic", { loc: f.locationClickLogic }) : "") +
-      t("stages.regionsRects")
-    : "";
+      t("stages.regionsRects");
+  }
+  $("regionsInfo").textContent = info;
   if (!regions.length) {
     const empty = document.createElement("span");
     empty.className = "dim";
@@ -606,7 +612,7 @@ async function importPng(file: File): Promise<void> {
   }
 
   const container = stg.file.containers[f.locationFrame];
-  const sameSize = old && old.width === bmp.width && old.height === bmp.height;
+  const sameSize = old?.width === bmp.width && old.height === bmp.height;
   const zBlock = sameSize && old.zOffset >= 0 ? container.data.subarray(old.zOffset) : undefined;
   const data = encodeFrame(pixels, bmp.width, bmp.height, zBlock);
   stg.file.containers[f.locationFrame] = { id: container.id, data };
@@ -691,3 +697,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await serverListed;

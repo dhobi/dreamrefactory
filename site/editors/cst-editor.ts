@@ -21,8 +21,7 @@ import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { decodeAudioContainer, type DecodedAudio } from "@dreamfactory/engine/df/audio";
@@ -249,7 +248,7 @@ async function initServerCasts(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerCasts();
+const serverListed = initServerCasts();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -375,7 +374,7 @@ function drawScreen(f: ShpFrame | null): void {
     ctx.stroke();
   }
 
-  if (f && f.width && f.height) {
+  if (f?.width && f.height) {
     const r = spriteRect(f);
     const off = document.createElement("canvas");
     frameToCanvas(f, off);
@@ -408,30 +407,38 @@ function renderPreview(): void {
   const f = cf?.location ? frameAt(cf.location) : null;
   drawScreen(f);
   const packed = cf?.location ? (cst.file.containers[cf.location]?.data.length ?? 0) : 0;
-  $("previewInfo").innerHTML = p
-    ? t("casts.previewHead", {
-        name: member().name,
-        pose: p.name,
-        step: stepIdx + 1,
-        steps: p.steps.length,
-        dir: dirIdx,
-        compass: compassOf(cf?.angle ?? dirIdx * 32),
-      }) +
-      (cf?.location
-        ? t("casts.previewContainer", { loc: cf.location }) +
-          (f
-            ? t("casts.previewSize", { w: f.width, h: f.height, y: f.posYraw, x: f.posXraw }) +
-              t("casts.previewPacked", { bytes: formatNumber(packed), angle: cf.angle, ref: cf.refScale }) +
-              t("casts.previewDrawn", {
-                k: scaleK,
-                w: Math.round(f.width * scaleK),
-                h: Math.round(f.height * scaleK),
-                x: groundX() - Math.round(f.posXraw * scaleK),
-                y: groundY() - Math.round(f.posYraw * scaleK),
-              })
-            : t("casts.previewNotSprite"))
-        : t("casts.previewNoSprite"))
-    : t("casts.noPoses");
+  if (!p) {
+    $("previewInfo").innerHTML = t("casts.noPoses");
+    return;
+  }
+  let info = t("casts.previewHead", {
+    name: member().name,
+    pose: p.name,
+    step: stepIdx + 1,
+    steps: p.steps.length,
+    dir: dirIdx,
+    compass: compassOf(cf?.angle ?? dirIdx * 32),
+  });
+  if (!cf?.location) {
+    info += t("casts.previewNoSprite");
+  } else {
+    info += t("casts.previewContainer", { loc: cf.location });
+    if (f) {
+      info +=
+        t("casts.previewSize", { w: f.width, h: f.height, y: f.posYraw, x: f.posXraw }) +
+        t("casts.previewPacked", { bytes: formatNumber(packed), angle: cf.angle, ref: cf.refScale }) +
+        t("casts.previewDrawn", {
+          k: scaleK,
+          w: Math.round(f.width * scaleK),
+          h: Math.round(f.height * scaleK),
+          x: groundX() - Math.round(f.posXraw * scaleK),
+          y: groundY() - Math.round(f.posYraw * scaleK),
+        });
+    } else {
+      info += t("casts.previewNotSprite");
+    }
+  }
+  $("previewInfo").innerHTML = info;
 }
 
 $<HTMLInputElement>("scaleK").addEventListener("change", () => {
@@ -712,7 +719,7 @@ function buildFrames(): void {
       const f = frameAt(cf.location);
       const c = document.createElement("canvas");
       c.className = "thumb";
-      if (f && f.width && f.height) {
+      if (f?.width && f.height) {
         frameToCanvas(f, c);
         const scale = Math.min(56 / f.width, 56 / f.height, 2);
         c.style.width = `${Math.max(1, Math.round(f.width * scale))}px`;
@@ -996,3 +1003,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await serverListed;

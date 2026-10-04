@@ -326,7 +326,7 @@ describe("the game, once it runs", () => {
     const asked = calls.filter((c) => c.includes("getframeaction")).length;
     p.frame();
     await Promise.resolve();
-    expect(calls.filter((c) => c.includes("getframeaction")).length).toBe(asked);
+    expect(calls.filter((c) => c.includes("getframeaction"))).toHaveLength(asked);
   });
 
   it("hands the bug report the page's edition, log tail and note", async () => {

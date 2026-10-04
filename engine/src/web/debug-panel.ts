@@ -217,7 +217,7 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
  */
 export class ChangeWatch {
   private last: Record<string, unknown> = {};
-  private at = new Map<string, number>();
+  private readonly at = new Map<string, number>();
 
   /** @param lifeMs how long a change stays lit */
   constructor(readonly lifeMs = 2500) {}
@@ -282,7 +282,7 @@ export interface RowPatch {
  * value asks for, and nothing else.
  */
 export class RowView {
-  private rows = new Map<string, { row: HTMLElement; name: HTMLElement; value: HTMLElement }>();
+  private readonly rows = new Map<string, { row: HTMLElement; name: HTMLElement; value: HTMLElement }>();
 
   /**
    * @param host the element the rows live in — it owns nothing else

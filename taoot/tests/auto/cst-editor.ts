@@ -108,9 +108,9 @@ test("cst structure: the synthesized cast reads back as a cast", () => {
   // a stand is one step of 8 directions; a walk cycle is several
   const stand = morrow.poses[0];
   const walk = morrow.poses[1];
-  expect(stand.steps.length).toBe(1);
-  expect(stand.steps[0].length).toBe(8);
-  expect(walk.steps.length).toBe(2);
+  expect(stand.steps).toHaveLength(1);
+  expect(stand.steps[0]).toHaveLength(8);
+  expect(walk.steps).toHaveLength(2);
   expect(walk.frameCount).toBe(16);
   // each slot knows its own direction, depicted angle and edit target
   expect(stand.steps[0][3]).toMatchObject({ direction: 3, angle: 96, refScale: 96 });
@@ -155,7 +155,7 @@ test("name edits: member and pose patch one field each, in one container", () =>
   expect(back.members.map((m) => m.name)).toEqual(["morrowjr", "sasha"]);
   expect(back.members[0].poses.map((p) => p.name)).toEqual(["stand", "stroll"]);
   // the pose still points at the same set container, with its frames intact
-  expect(back.members[0].poses[1].steps.length).toBe(2);
+  expect(back.members[0].poses[1].steps).toHaveLength(2);
 
   // both names live in the ONE logic container, so nothing else moved
   const logic = cst.members[0].logicLocation;

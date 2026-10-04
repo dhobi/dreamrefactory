@@ -37,6 +37,22 @@ interface Shell {
 
 const EDGE = 0xd2;
 
+/** the coordinate `d` ahead along its quarter heading */
+function ahead(o: Obj, d: number): number {
+  if (o.angle === 0) return o.x + d;
+  if (o.angle === 0x40) return o.y + d;
+  if (o.angle === 0x80) return o.x - d;
+  return o.y - d;
+}
+
+/** the cell beside `x`, `y` the way the quarter `a` goes */
+function beside(a: number, x: number, y: number): [number, number] {
+  if (a === 0) return [x + 1, y];
+  if (a === 0x40) return [x, y + 1];
+  if (a === 0x80) return [x - 1, y];
+  return [x, y - 1];
+}
+
 export class Wasp implements Target {
   o: Obj = { angle: 0, x: 0, y: 0, z: 0, cellX: 0, cellY: 0 };
   /** `[0x42cfe0]` a wasp, not the node */
@@ -145,7 +161,10 @@ export class Wasp implements Target {
     if (this.wasp) {
       let a = ((w.cam.angle - this.o.angle + 8) & 0xff) >> 4;
       let mirror = false;
-      if (a >= 9) (a = 16 - a), (mirror = true);
+      if (a >= 9) {
+        a = 16 - a;
+        mirror = true;
+      }
       w.addFixed(within, pt.depth, 0x84, pt.x, this.frames[a * 28 + dist], mirror);
     } else {
       const f = (this.spin >> 1) * 28 + dist;
@@ -157,7 +176,7 @@ export class Wasp implements Target {
   /** 0x41f1fa: the cell beyond its own the way `a` goes is shut */
   private shut(a: number): boolean {
     const { cellX: x, cellY: y } = this.o;
-    return this.w.blocked(...((a === 0 ? [x + 1, y] : a === 0x40 ? [x, y + 1] : a === 0x80 ? [x - 1, y] : [x, y - 1]) as [number, number]));
+    return this.w.blocked(...beside(a, x, y));
   }
 
   /** 0x41f155: into the next cell, at its edge, choosing again */
@@ -228,31 +247,33 @@ export class Wasp implements Target {
         else if (!this.shut(third)) this.goal = third;
         else {
           this.state = 4;
-          const a = o.angle;
-          this.goal = a === 0 ? o.x + EDGE : a === 0x40 ? o.y + EDGE : a === 0x80 ? o.x - EDGE : o.y - EDGE;
+          this.goal = ahead(o, EDGE);
           return this.fly();
         }
         if (this.goal === o.angle) {
           this.state = 1;
-          const a = o.angle;
-          this.goal = a === 0 ? o.x + CELL : a === 0x40 ? o.y + CELL : a === 0x80 ? o.x - CELL : o.y - CELL;
+          this.goal = ahead(o, CELL);
           return this.fly();
         }
         this.arc = [o.x, o.y];
         const a = o.angle;
         const g = this.goal;
+        const corner = (state: number, axis: 0 | 1, by: number): void => {
+          this.state = state;
+          this.arc[axis] += by;
+        };
         if (a === 0) {
-          if (g === 0xc0) (this.state = 2), (this.arc[1] -= EDGE);
-          if (g === 0x40) (this.state = 3), (this.arc[1] += EDGE);
+          if (g === 0xc0) corner(2, 1, -EDGE);
+          if (g === 0x40) corner(3, 1, EDGE);
         } else if (a === 0x40) {
-          if (g === 0) (this.state = 2), (this.arc[0] += EDGE);
-          if (g === 0x80) (this.state = 3), (this.arc[0] -= EDGE);
+          if (g === 0) corner(2, 0, EDGE);
+          if (g === 0x80) corner(3, 0, -EDGE);
         } else if (a === 0x80) {
-          if (g === 0xc0) (this.state = 3), (this.arc[1] -= EDGE);
-          if (g === 0x40) (this.state = 2), (this.arc[1] += EDGE);
+          if (g === 0xc0) corner(3, 1, -EDGE);
+          if (g === 0x40) corner(2, 1, EDGE);
         } else {
-          if (g === 0) (this.state = 3), (this.arc[0] += EDGE);
-          if (g === 0x80) (this.state = 2), (this.arc[0] -= EDGE);
+          if (g === 0) corner(3, 0, EDGE);
+          if (g === 0x80) corner(2, 0, -EDGE);
         }
         this.arcTurn = Math.trunc(0x1900 / Math.trunc(0x8084 / speed));
         return this.fly();
@@ -260,15 +281,13 @@ export class Wasp implements Target {
       case 1: {
         if (this.lineOfFire()) {
           this.w.warnFrom(o);
-          if (this.wasp) (this.fire(0), this.fire(1));
-          else this.fireNode();
+          if (this.wasp) {
+            this.fire(0);
+            this.fire(1);
+          } else this.fireNode();
           this.fired++;
         }
-        const a = o.angle;
-        if (a === 0) (o.x += speed), o.x >= this.goal && this.nextCell();
-        else if (a === 0x40) (o.y += speed), o.y >= this.goal && this.nextCell();
-        else if (a === 0x80) (o.x -= speed), o.x <= this.goal && this.nextCell();
-        else (o.y -= speed), o.y <= this.goal && this.nextCell();
+        if (this.advance(speed)) this.nextCell();
         return;
       }
       case 2:
@@ -281,34 +300,45 @@ export class Wasp implements Target {
         return;
       }
       case 4: {
-        const a = o.angle;
-        const done = (): void => {
-          this.state = 5;
-          this.goal = (o.angle + 0x80) & 0xff;
-        };
-        if (a === 0) (o.x += speed), o.x >= this.goal && ((o.x = this.goal), done());
-        else if (a === 0x40) (o.y += speed), o.y >= this.goal && ((o.y = this.goal), done());
-        else if (a === 0x80) (o.x -= speed), o.x <= this.goal && ((o.x = this.goal), done());
-        else (o.y -= speed), o.y <= this.goal && ((o.y = this.goal), done());
+        if (!this.advance(speed)) return;
+        if (o.angle === 0 || o.angle === 0x80) o.x = this.goal;
+        else o.y = this.goal;
+        this.state = 5;
+        this.goal = (o.angle + 0x80) & 0xff;
         return;
       }
       case 5: {
         o.angle = turnToward(o.angle, this.goal, w.params.waspTurn);
         if (o.angle !== this.goal) return;
         this.state = 6;
-        const a = o.angle;
-        this.goal = a === 0 ? o.x + EDGE : a === 0x40 ? o.y + EDGE : a === 0x80 ? o.x - EDGE : o.y - EDGE;
+        this.goal = ahead(o, EDGE);
         return;
       }
       case 6: {
-        const a = o.angle;
-        if (a === 0) (o.x += speed), o.x >= this.goal && this.nextCell();
-        else if (a === 0x40) (o.y += speed), o.y >= this.goal && this.nextCell();
-        else if (a === 0x80) (o.x -= speed), o.x <= this.goal && this.nextCell();
-        else (o.y -= speed), o.y <= this.goal && this.nextCell();
+        if (this.advance(speed)) this.nextCell();
         return;
       }
     }
+  }
+
+  /** on along its quarter heading by `speed`; at or past the goal */
+  private advance(speed: number): boolean {
+    const o = this.o;
+    const a = o.angle;
+    if (a === 0) {
+      o.x += speed;
+      return o.x >= this.goal;
+    }
+    if (a === 0x40) {
+      o.y += speed;
+      return o.y >= this.goal;
+    }
+    if (a === 0x80) {
+      o.x -= speed;
+      return o.x <= this.goal;
+    }
+    o.y -= speed;
+    return o.y <= this.goal;
   }
 
   /** 0x41d500 */
@@ -328,8 +358,15 @@ export class Wasp implements Target {
     const [fx, fy] = along(this.o.angle, fw);
     s.o = { angle: 0, x: this.o.x + gx + fx, y: this.o.y + gy + fy, z: this.o.z + dz, cellX: 0, cellY: 0 };
     aim(s, w.camObj(), 0x3c);
-    if (this.fired & 1) (s.o.x += s.v[0]), (s.o.y += s.v[1]), (s.o.z += s.v[2]), World.cellOf(s.o);
-    else World.cellOf(s.o), w.shotPicture(s.o, 1);
+    if (this.fired & 1) {
+      s.o.x += s.v[0];
+      s.o.y += s.v[1];
+      s.o.z += s.v[2];
+      World.cellOf(s.o);
+    } else {
+      World.cellOf(s.o);
+      w.shotPicture(s.o, 1);
+    }
     w.sound(0);
   }
 
@@ -342,8 +379,11 @@ export class Wasp implements Target {
     const [fx, fy] = along(this.o.angle, 0x3c);
     s.o = { angle: 0, x: this.o.x + fx, y: this.o.y + fy, z: this.o.z - 0x46, cellX: 0, cellY: 0 };
     aim(s, w.camObj(), 0x3c);
-    if (this.fired & 1) (s.o.x += s.v[0]), (s.o.y += s.v[1]), (s.o.z += s.v[2]);
-    else w.shotPicture(s.o, 1, true);
+    if (this.fired & 1) {
+      s.o.x += s.v[0];
+      s.o.y += s.v[1];
+      s.o.z += s.v[2];
+    } else w.shotPicture(s.o, 1, true);
     World.cellOf(s.o);
     w.sound(2);
   }

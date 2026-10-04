@@ -66,7 +66,7 @@ test("a v0 sound is a block count and a v40 stream, at the device's 22050", () =
   const bytes = new Uint8Array([...u16(1), 0x40, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc0 | 48]);
   const a = decodeAudioV0(bytes);
   expect(a.sampleRate).toBe(V0_SAMPLE_RATE);
-  expect(a.samples.length).toBe(V0_BLOCK_SAMPLES);
+  expect(a.samples).toHaveLength(V0_BLOCK_SAMPLES);
   expect(a.samples.every((s) => s === 0)).toBe(true);
 });
 
@@ -125,11 +125,8 @@ const walk = (d: string): string[] =>
     return statSync(p).isDirectory() ? walk(p) : [p];
   });
 const files: string[] = existsSync(ROOT) ? walk(ROOT).filter((f) => /\/(day\d|shared)\//.test(f)).sort() : [];
-const skip = (): boolean => {
-  if (files.length) return false;
-  console.warn(`no Lunicus rip at ${ROOT} — skipping`);
-  return true;
-};
+const missing = files.length === 0;
+if (missing) console.warn(`no Lunicus rip at ${ROOT} — skipping`);
 const open = (f: string) => readContainerFile(new Uint8Array(readFileSync(f)));
 const base = (f: string) => f.split("/").pop()!;
 const TALK = /^(raife|sasha|heisenst|mccallum|molotov|guard|queen)\.\d$/;
@@ -155,8 +152,7 @@ function isSound(d: Uint8Array): boolean {
   return p === d.length && n === (d[0] | (d[1] << 8)) * V0_BLOCK_SAMPLES;
 }
 
-test("every sprite, and every figure, decodes exactly", () => {
-  if (skip()) return;
+test.skipIf(missing)("every sprite, and every figure, decodes exactly", () => {
   let sprites = 0;
   let figures = 0;
   for (const f of files) {
@@ -167,8 +163,7 @@ test("every sprite, and every figure, decodes exactly", () => {
   expect(figures).toBeGreaterThan(0);
 });
 
-test("a talk file: a 512x264 backdrop anchored at its centre, a run of head frames, then lines", () => {
-  if (skip()) return;
+test.skipIf(missing)("a talk file: a 512x264 backdrop anchored at its centre, a run of head frames, then lines", () => {
   const talks = files.filter((f) => TALK.test(base(f)));
   expect(talks.length).toBeGreaterThan(0);
   let pairs = 0;
@@ -204,21 +199,19 @@ test("a talk file: a 512x264 backdrop anchored at its centre, a run of head fram
   expect(silent).toBeLessThan(pairs / 10);
 });
 
-test("a sound bank is a table and then sounds that end on their last byte", () => {
-  if (skip()) return;
+test.skipIf(missing)("a sound bank is a table and then sounds that end on their last byte", () => {
   const banks = files.filter((f) => BANKS.test(base(f)));
   expect(banks.length).toBeGreaterThan(0);
   for (const f of banks) {
     const cs = open(f).containers;
     for (const c of cs.slice(1)) {
       expect(isSound(c.data), f).toBe(true);
-      expect(decodeAudioV0(c.data).samples.length).toBe((c.data[0] | (c.data[1] << 8)) * V0_BLOCK_SAMPLES);
+      expect(decodeAudioV0(c.data).samples).toHaveLength((c.data[0] | (c.data[1] << 8)) * V0_BLOCK_SAMPLES);
     }
   }
 });
 
-test("a maze's films tile its frames, every borrowed film exists, and every frame is 384x264", () => {
-  if (skip()) return;
+test.skipIf(missing)("a maze's films tile its frames, every borrowed film exists, and every frame is 384x264", () => {
   const mazes = files.filter((f) => MAZES.test(base(f)));
   expect(mazes.length).toBeGreaterThan(0);
   for (const f of mazes) {
@@ -248,8 +241,7 @@ test("a maze's films tile its frames, every borrowed film exists, and every fram
   }
 });
 
-test("a maze's facing byte is 0 exactly where a step forward leaves the cell", () => {
-  if (skip()) return;
+test.skipIf(missing)("a maze's facing byte is 0 exactly where a step forward leaves the cell", () => {
   const DX = [0, 0, 1, -1];
   const DY = [-1, 1, 0, 0];
   for (const f of files.filter((f) => MAZES.test(base(f)))) {
@@ -267,8 +259,7 @@ test("a maze's facing byte is 0 exactly where a step forward leaves the cell", (
   }
 });
 
-test("a film: every frame decodes at the header's size, its hotspots read in full, every sound is a v0 sound, the palette is the Mac way round", () => {
-  if (skip()) return;
+test.skipIf(missing)("a film: every frame decodes at the header's size, its hotspots read in full, every sound is a v0 sound, the palette is the Mac way round", () => {
   // previews/ holds other games' demos, whose sounds are not Lunicus's
   const films = files.filter((f) => /\.mov$/.test(f));
   expect(films.length).toBeGreaterThan(0);
@@ -292,8 +283,7 @@ test("a film: every frame decodes at the header's size, its hotspots read in ful
   expect(intro.frames.at(-1)!.chainTo).toBe("flip.move");
 });
 
-test("the movie editor's picture of a film: a frame for each, its picture, and a goto to a frame that exists", () => {
-  if (skip()) return;
+test.skipIf(missing)("the movie editor's picture of a film: a frame for each, its picture, and a goto to a frame that exists", () => {
   for (const f of files.filter((f) => /\.mov$/.test(f))) {
     const v0 = readMovFileV0(new Uint8Array(readFileSync(f)));
     const film = movFileFromV0(v0);
@@ -313,8 +303,7 @@ test("the movie editor's picture of a film: a frame for each, its picture, and a
   }
 });
 
-test("the puppet editor's picture of a talk file: every line and question by name, and each line's track", () => {
-  if (skip()) return;
+test.skipIf(missing)("the puppet editor's picture of a talk file: every line and question by name, and each line's track", () => {
   let tracks = 0;
   for (const f of files.filter((f) => TALK.test(base(f)))) {
     const bytes = new Uint8Array(readFileSync(f));
@@ -323,7 +312,7 @@ test("the puppet editor's picture of a talk file: every line and question by nam
     expect(pup.dfV0).toBe(true);
     expect(pup.stances).toHaveLength(1);
     expect(pup.stances[0].layers.length, f).toBe(t.layers.length);
-    expect(pup.idleTimers.length).toBe(t.idleMin.length);
+    expect(pup.idleTimers).toHaveLength(t.idleMin.length);
     for (const l of t.lines) {
       const d = pup.dialogue.get(l.name.toLowerCase())!;
       expect(d.text, `${f} ${l.name}`).toBe(l.subtitle);
@@ -348,7 +337,7 @@ test("the puppet editor's picture of a talk file: every line and question by nam
 test("a saved game (.LUN): 26 little-endian bytes in LUNICUS.EXE's order, the score the one dword, read back as written", () => {
   const game = { difficulty: 3, level: 15, came: 5, elevator: 1, progress: 2, score: 0x12345, enemies: 7000, energy: 8123, shields: 9000, bullets: 10000, grenades: 160, rockets: 640 };
   const b = writeSaveV0(game);
-  expect(b.length).toBe(SAVE_V0_SIZE);
+  expect(b).toHaveLength(SAVE_V0_SIZE);
   // 0x417944's record: the words, and the score at 0x0a, off the word grid
   expect([...b.subarray(0, 0x0e)]).toEqual([3, 0, 15, 0, 5, 0, 1, 0, 2, 0, 0x45, 0x23, 0x01, 0x00]);
   expect(b[0x18] | (b[0x19] << 8)).toBe(640);

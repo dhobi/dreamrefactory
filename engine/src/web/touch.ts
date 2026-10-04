@@ -203,7 +203,7 @@ export class TouchGestures {
    */
   move(e: PointerEventLike): void {
     const g = this.g;
-    if (!g || e.pointerId !== g.id) return;
+    if (g?.id !== e.pointerId) return;
     if (g.pressed || g.swiped) return; // already committed either way
     if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < SWIPE_MIN_PX) return;
     g.swiped = true;
@@ -218,7 +218,7 @@ export class TouchGestures {
    */
   up(e: PointerEventLike): boolean {
     const g = this.g;
-    if (!g || e.pointerId !== g.id) return false;
+    if (g?.id !== e.pointerId) return false;
     if (g.holdTimer) clearTimeout(g.holdTimer);
     this.g = null;
 
@@ -268,7 +268,7 @@ export class TouchGestures {
    */
   cancel(e: PointerEventLike): void {
     const g = this.g;
-    if (!g || e.pointerId !== g.id) return;
+    if (g?.id !== e.pointerId) return;
     if (g.holdTimer) clearTimeout(g.holdTimer);
     this.g = null;
     if (g.pressed) this.hooks.release(g.x, g.y);

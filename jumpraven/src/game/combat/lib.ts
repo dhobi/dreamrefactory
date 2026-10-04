@@ -280,8 +280,9 @@ export function chatterOf(w: World): Chatter {
     beacon: () => beacon().n,
     squared: () => (w.cam.angle & 0x3f) === 0,
     ahead: (kind) => {
-      const o = kind === 0 ? w.fuel.nth(0).obj : kind === 1 ? w.weap.nth(0).obj : beacon().at;
-      return downFromCraft(w, w.cam.angle, o);
+      if (kind === 0) return downFromCraft(w, w.cam.angle, w.fuel.nth(0).obj);
+      if (kind === 1) return downFromCraft(w, w.cam.angle, w.weap.nth(0).obj);
+      return downFromCraft(w, w.cam.angle, beacon().at);
     },
     homing: () => {
       const missiles = w.copter.missiles();

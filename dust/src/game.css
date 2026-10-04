@@ -728,6 +728,15 @@ body.playing #brand {
   transform: translateY(-70%);
   pointer-events: none;
 }
+/* what a screen reader is told; the cord below is what is seen */
+#fusevalue {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 #fuse {
   position: relative;
   height: 7px;
@@ -1086,12 +1095,10 @@ body:not(.playing) #swipeOpts {
      with the whole width to itself, and left-aligned it read as a fourth
      control that had lost its row. */
   justify-content: center;
-}
-/* The rule belongs BETWEEN the controls and the ask, so it goes away with
-   them — the same "a hairline with nothing above it" problem that put
-   #under's border on the container rather than on its rows. The selector
-   is #under's own hiding condition, repeated. */
-#foot {
+  /* The rule belongs BETWEEN the controls and the ask, so it goes away with
+     them — the same "a hairline with nothing above it" problem that put
+     #under's border on the container rather than on its rows. The selector
+     is #under's own hiding condition, repeated. */
   border-top: 1px solid var(--edge);
 }
 body:not(.playing) #under:not(:has(#err:not(:empty))) + #foot {

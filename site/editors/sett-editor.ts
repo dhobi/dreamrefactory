@@ -166,8 +166,9 @@ function loadRoom(data: Uint8Array, name: string): void {
   landing.style.display = "none";
   editor.style.display = "flex";
   $("fileName").textContent = name;
+  const titled = parsed.name ? parsed.name + " · " : "";
   $("fileStats").textContent =
-    `${parsed.name ? `${parsed.name} · ` : ""}${parsed.nodes.length} nodes · ${parsed.scenes.length} scenes · ${parsed.roads.length} roads · ` +
+    `${titled}${parsed.nodes.length} nodes · ${parsed.scenes.length} scenes · ${parsed.roads.length} roads · ` +
     `${parsed.quads.length} quads · ${parsed.stars.length} stars · ${parsed.routes.length} routes · ${parsed.file.containers.length} containers`;
   log("");
   markDirty();
@@ -262,7 +263,7 @@ async function initServerRooms(): Promise<void> {
     wrap.appendChild(row);
   }
 }
-void initServerRooms();
+const serverListed = initServerRooms();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits && !confirm("Close without exporting your edits?")) return;
@@ -287,7 +288,8 @@ $("exportBtn").addEventListener("click", () => {
 });
 
 function markDirty(): void {
-  $("dirty").textContent = edits ? `${edits} edit${edits === 1 ? "" : "s"}` : "";
+  const noun = edits === 1 ? "edit" : "edits";
+  $("dirty").textContent = edits ? `${edits} ${noun}` : "";
 }
 
 // ---- moving -----------------------------------------------------------------
@@ -362,7 +364,7 @@ async function play(f: MazeFilm, from: number, turn: boolean): Promise<void> {
 
 /** the far end of a film: a node looking the way it ended, or a scene's nearest view */
 function arrive(f: MazeFilm): void {
-  const last = f.frames[f.frames.length - 1];
+  const last = f.frames.at(-1)!;
   heading = last.heading;
   pitch = last.pitch;
   fov = last.fov || 90 * DEG;
@@ -535,12 +537,12 @@ function showInfo(): void {
   else if (scene) {
     const v = scene.views[sceneView];
     lines.push(`scene ${scene.name} · SCEN @${scene.scen}`);
-    if (v) lines.push(`view ${v.name} (id ${v.id}), ${sceneView + 1} of ${scene.views.length}${v.road ? ` · road ahead @${v.road.container}` : ""}`);
+    const ahead = v?.road ? ` · road ahead @${v.road.container}` : "";
+    if (v) lines.push(`view ${v.name} (id ${v.id}), ${sceneView + 1} of ${scene.views.length}${ahead}`);
   }
   if (blank) lines.push("this film frame has no picture in the room: it is drawn black");
   if (cam) {
-    lines.push(`heading ${deg(cam.heading)} · pitch ${deg(cam.pitch)} · fov ${deg(cam.fov)}`);
-    lines.push(`at ${cam.x}, ${cam.y}, ${cam.z}`);
+    lines.push(`heading ${deg(cam.heading)} · pitch ${deg(cam.pitch)} · fov ${deg(cam.fov)}`, `at ${cam.x}, ${cam.y}, ${cam.z}`);
   }
   $("previewInfo").textContent = lines.join("\n");
   $("previewInfo").style.whiteSpace = "pre-line";
@@ -614,11 +616,9 @@ function buildExits(): void {
   const exits = exitsOf(sett!, node);
   const head = document.createElement("div");
   head.className = "muted";
-  head.textContent = exits.length
-    ? "exits, as the scripts number them:"
-    : sett!.roads.some(isFreeRoad)
-      ? "no exits: this room's roads join no place (below)"
-      : "no exits";
+  if (exits.length) head.textContent = "exits, as the scripts number them:";
+  else if (sett!.roads.some(isFreeRoad)) head.textContent = "no exits: this room's roads join no place (below)";
+  else head.textContent = "no exits";
   wrap.appendChild(head);
   exits.forEach((f, i) => {
     const b = document.createElement("button");
@@ -837,7 +837,9 @@ function mapHit(e: MouseEvent): { kind: "place" | "quad" | "star"; i: number; na
 
 map.addEventListener("mousemove", (e) => {
   const h = mapHit(e);
-  $("mapSay").textContent = h ? `${h.kind === "place" ? "" : `${h.kind} `}${h.say}` : "";
+  let say = "";
+  if (h) say = h.kind === "place" ? h.say : `${h.kind} ${h.say}`;
+  $("mapSay").textContent = say;
 });
 map.addEventListener("click", (e) => {
   const h = mapHit(e);
@@ -984,7 +986,7 @@ function pickQuad(i: number, scroll: boolean): void {
   pickedQuad = i;
   pick("quads", i, scroll);
   const q = sett!.quads[i];
-  log(`quad ${q.name}${q.script ? `, its script @${q.script}` : ""}`);
+  log(`quad ${q.name}` + (q.script ? `, its script @${q.script}` : ""));
   drawOverlay();
   drawMap();
 }
@@ -1042,3 +1044,4 @@ installGamesMenu();
 void installLanguageMenu();
 installVersion();
 void installSourcePicker($("editionPicker"));
+await serverListed;

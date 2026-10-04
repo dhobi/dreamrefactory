@@ -204,7 +204,7 @@ export class SphereImage {
  * before, as a v5 `.move`'s are, so they decode in order into one buffer.
  */
 export class FilmFrames {
-  private fb = new FrameBuffer();
+  private readonly fb = new FrameBuffer();
   private shown = -1;
 
   constructor(

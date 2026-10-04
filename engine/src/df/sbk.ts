@@ -528,25 +528,20 @@ export function placementZ(p: SbkPlacement): number {
  * why rendering by it misaligns a level: most of the art is rate-1 and lines
  * up exactly as stored. Horizontal only — the engine scales x and leaves y.
  */
+/** plane 2's and plane 3's divisors for flag bits 1, 2 and 4, first bit set wins; 6000 otherwise */
+const PLANE_RATES: Record<number, readonly [number, number, number]> = {
+  2: [5000, 5300, 5600],
+  3: [7500, 6700, 6400],
+};
+
 export function placementRate(p: SbkPlacement): number {
-  const k =
-    p.plane === 2
-      ? p.flags & 1
-        ? 5000
-        : p.flags & 2
-          ? 5300
-          : p.flags & 4
-            ? 5600
-            : 6000
-      : p.plane === 3
-        ? p.flags & 1
-          ? 7500
-          : p.flags & 2
-            ? 6700
-            : p.flags & 4
-              ? 6400
-              : 6000
-        : 6000;
+  const ks = PLANE_RATES[p.plane];
+  let k = 6000;
+  if (ks) {
+    if (p.flags & 1) k = ks[0];
+    else if (p.flags & 2) k = ks[1];
+    else if (p.flags & 4) k = ks[2];
+  }
   return k / 6000;
 }
 
@@ -623,7 +618,7 @@ export function rasteriseGround(r: SbkRegion): SbkGround | null {
   const pts = r.ground;
   if (pts.length < 2) return null;
   const x0 = pts[0].x;
-  const span = pts[pts.length - 1].x - x0;
+  const span = pts.at(-1)!.x - x0;
   if (span <= 0) return null;
   const ys = new Int16Array(span + 1).fill(pts[0].y);
   for (let s = 0; s + 1 < pts.length; s++) {
@@ -796,6 +791,9 @@ export function readRooms(sbk: SbkFile): SbkRoom[] {
     const cx = (e.left + e.right) >> 1;
     const host = rooms.find((r) => within(r, cy, cx));
     if (!host) continue;
+    let side: -1 | 0 | 1 = 0;
+    if (e.pointX < e.left) side = -1;
+    else if (e.pointX > e.right) side = 1;
     (host.exits as SbkExit[]).push({
       to: e.param,
       top: e.top,
@@ -804,7 +802,7 @@ export function readRooms(sbk: SbkFile): SbkRoom[] {
       right: e.right,
       pointY: e.pointY,
       pointX: e.pointX,
-      side: e.pointX < e.left ? -1 : e.pointX > e.right ? 1 : 0,
+      side,
     });
   }
   return rooms;

@@ -125,7 +125,7 @@ test("container writer: read(write(file)) preserves ids, data, and gaps", () => 
   expect(back.header.containerCount).toBe(file.containers.length);
   expect(back.header.fileSize).toBe(bytes.length);
   expect(back.header.type).toBe(0);
-  expect(back.containers.length).toBe(file.containers.length);
+  expect(back.containers).toHaveLength(file.containers.length);
   for (let i = 0; i < file.containers.length; i++) {
     expect(back.containers[i].gap ?? false).toBe(file.containers[i].gap ?? false);
     if (!file.containers[i].gap) {
@@ -149,7 +149,7 @@ test("pup structure: the synthesized file reads back as a puppet", () => {
   expect(pup.dialogue.get("test1.001")!.text).toBe("Good evening.");
   expect(pup.scripts).toEqual([{ name: "boot script", location: 1 }]);
 
-  expect(pup.stances.length).toBe(1);
+  expect(pup.stances).toHaveLength(1);
   const layers = pup.stances[0].layers;
   expect(layers[0].frames).toEqual([frameLocs[0]]);
   expect(layers[2].frames).toEqual([frameLocs[1]]);
@@ -157,7 +157,7 @@ test("pup structure: the synthesized file reads back as a puppet", () => {
   expect(layers[1].frames).toEqual([]);
 
   const anim = readAnimLogic(pup, pup.dialogue.get("test1.001")!.animLogicLocation);
-  expect(anim.length).toBe(2);
+  expect(anim).toHaveLength(2);
   expect(anim[0].layers[6]).toEqual({ frame: 0, y: 132, x: 256 });
   expect(anim[1].layers[6].frame).toBe(1);
   expect(anim[0].layers[3].frame).toBe(-1);

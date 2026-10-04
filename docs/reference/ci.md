@@ -135,7 +135,10 @@ The rules the code breaks on purpose are switched off in that same file
 string methods on strings that are bytes, awaits that must run in order, `void`
 on a promise left unawaited on purpose, `| 0` as the original's integer
 conversion, the complexity of a function that ports one routine of an original
-executable, and Skull Cracker's exported game state. Nothing is marked in the
+executable, Skull Cracker's exported game state, `Math.hypot` (which rounds
+differently from the original's square root), type aliases that name a
+meaning, and, in single files, a parameter list copied from the original and
+`.dataset` where the suites' DOM misreads it. Nothing is marked in the
 code (`NOSONAR`) or accepted in Sonar's UI: a finding is fixed, or its rule is
 switched off there, where a pull request can see the decision.
 

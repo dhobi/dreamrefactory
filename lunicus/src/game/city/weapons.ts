@@ -94,7 +94,7 @@ export class Weapons {
       s.o.z += s.v[2];
     };
     if (kind === 3) {
-      w.ammoBy(w.day >= 4 ? (w.day === 6 ? -10 : -20) : w.day === 3 ? -6 : -12);
+      w.ammoBy(rocketCost(w.day));
       s.life = 0x10;
       s.o = { angle: 0, x: w.cam.x, y: w.cam.y, z: w.cam.z + 10, cellX: 0, cellY: 0 };
       const [vx, vy] = along(heading, 0x3c);
@@ -176,8 +176,15 @@ export class Weapons {
   private bullet(s: Shot): void {
     const w = this.w;
     const dmg = w.day === 3 ? w.params.bullet >> 1 : w.params.bullet;
-    if (s.done) return void (w.shotPicture(s.o, s.done), (s.on = false));
-    if (--s.life < 0) return void (s.on = false);
+    if (s.done) {
+      w.shotPicture(s.o, s.done);
+      s.on = false;
+      return;
+    }
+    if (--s.life < 0) {
+      s.on = false;
+      return;
+    }
     for (let k = 0; k < 2; k++) {
       this.step(s);
       if (shotWall(w, s.o)) {
@@ -200,8 +207,15 @@ export class Weapons {
   private pulse(s: Shot): void {
     const w = this.w;
     const dmg = w.day === 6 ? w.params.pulse >> 1 : w.params.pulse;
-    if (s.done) return void (w.shotPicture(s.o, s.done, true), (s.on = false));
-    if (--s.life < 0) return void (s.on = false);
+    if (s.done) {
+      w.shotPicture(s.o, s.done, true);
+      s.on = false;
+      return;
+    }
+    if (--s.life < 0) {
+      s.on = false;
+      return;
+    }
     for (let k = 0; k < 2; k++) {
       this.step(s);
       const wall = shotWall(w, s.o);
@@ -309,7 +323,7 @@ export class Weapons {
 
   /** 0x413bb4: the first thing a rocket could fly at, up to eight open cells along a heading */
   private lookDown(angle: number, x: number, y: number): Obj | null {
-    const [dx, dy] = angle === 0 ? [1, 0] : angle === 0x40 ? [0, 1] : angle === 0x80 ? [-1, 0] : angle === 0xc0 ? [0, -1] : [0, 0];
+    const [dx, dy] = LOOK.get(angle) ?? [0, 0];
     if (!dx && !dy) throw new Error(`a rocket looking along ${angle}`);
     for (let k = 1; k <= 8; k++) {
       const cx = x + dx * k;
@@ -317,7 +331,7 @@ export class Weapons {
       if (this.w.blocked(cx, cy)) return null;
       for (const t of this.targets) {
         const o = t.at();
-        if (o && o.cellX === cx && o.cellY === cy) return { ...o };
+        if (o?.cellX === cx && o.cellY === cy) return { ...o };
       }
     }
     return null;
@@ -438,8 +452,8 @@ export class Weapons {
           if (c.frame === 2) y = 0x85;
           if (c.frame === 4 || c.frame === 6) y++;
         }
-      } else if (c.move === 1) this.pose = c.frame === 1 || c.frame === 5 ? 5 : c.frame === 6 ? 4 : 6;
-      else if (c.move === 2) this.pose = c.frame === 1 || c.frame === 5 ? 3 : c.frame === 6 ? 4 : 2;
+      } else if (c.move === 1) this.pose = stridePose(c.frame, 5, 6);
+      else if (c.move === 2) this.pose = stridePose(c.frame, 3, 2);
     }
     const kick = KICK[this.pose];
     const muzzle = (w.building ? MUZZLE_IN : MUZZLE_OUT)[this.pose];
@@ -451,14 +465,46 @@ export class Weapons {
       w.addFixed(view, 0, muzzle[0], muzzle[1], this.pyro[(w.day >= 4 ? 116 : 106) + this.recoilStep], false);
     } else if (this.recoil === 2 || this.recoil === 3) {
       const [ky, kx] = this.recoil === 3 ? [kick[0] * 2, kick[1] * 2] : kick;
-      if (this.recoilStep < 1) (x = kx + 0xc0), (y += ky);
-      if (this.recoilStep < 2) (x += kx), (y += ky);
+      if (this.recoilStep < 1) {
+        x = kx + 0xc0;
+        y += ky;
+      }
+      if (this.recoilStep < 2) {
+        x += kx;
+        y += ky;
+      }
       w.addFixed(view, 0, muzzle[0], muzzle[1], this.pyro[109 + this.recoilStep], false);
-      if (++this.recoilStep >= 4) (this.recoil = 0), (this.recoilStep = 0);
+      if (++this.recoilStep >= 4) {
+        this.recoil = 0;
+        this.recoilStep = 0;
+      }
     }
     w.addFixed(view, 0, y, x, this.hand[this.pose], false);
   }
 }
+
+/** what a rocket costs of the ammunition, by day */
+function rocketCost(day: number): number {
+  if (day === 6) return -10;
+  if (day >= 4) return -20;
+  if (day === 3) return -6;
+  return -12;
+}
+
+/** the hand's pose on a walking frame: `step` at frames 1 and 5, 4 at 6, `rest` else */
+function stridePose(frame: number, step: number, rest: number): number {
+  if (frame === 1 || frame === 5) return step;
+  if (frame === 6) return 4;
+  return rest;
+}
+
+/** a cell's step along each quarter heading */
+const LOOK = new Map<number, [number, number]>([
+  [0, [1, 0]],
+  [0x40, [0, 1]],
+  [0x80, [-1, 0]],
+  [0xc0, [0, -1]],
+]);
 
 /** 0x428320: how far a shot kicks the hand, {down, across}, per pose */
 const KICK: [number, number][] = [

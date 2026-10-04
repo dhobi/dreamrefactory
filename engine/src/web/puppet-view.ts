@@ -168,6 +168,8 @@ function rawFromRGBA(rgba: Uint8ClampedArray): Uint8Array {
   return out;
 }
 
+const FULL_SCREEN = { width: SCREEN_W, height: SCREEN_H };
+
 export class PuppetView {
   /**
    * The palette the puppet's TEXT is inked from. A v1/v4 puppet has one in its
@@ -191,7 +193,7 @@ export class PuppetView {
     this.inks.set(pup, ink);
     return ink;
   }
-  private inks = new WeakMap<object, Uint8Array>();
+  private readonly inks = new WeakMap<object, Uint8Array>();
 
   /**
    * Cached layer composite of the active puppet stance — and of the ROOM behind
@@ -211,7 +213,7 @@ export class PuppetView {
    * at the same container index, so keying by loc alone made a second
    * character reuse the first's decoded sprites (garbled overlap).
    */
-  private frames = new Map<string, ShpFrame>();
+  private readonly frames = new Map<string, ShpFrame>();
   /** the active puppet's answer-band plate, decoded once */
   private band: { key: string; frame: ShpFrame } | null = null;
 
@@ -232,7 +234,7 @@ export class PuppetView {
 
   constructor(
     private readonly session: GameSession,
-    size: { width: number; height: number } = { width: SCREEN_W, height: SCREEN_H },
+    size: { width: number; height: number } = FULL_SCREEN,
   ) {
     this.W = size.width;
     this.H = size.height;
@@ -368,8 +370,7 @@ export class PuppetView {
     const backdropPixels = backdrop?.pixels ?? null;
     const backdropPalette = backdrop?.palette ?? null;
     if (
-      !this.image ||
-      this.image.key !== key ||
+      this.image?.key !== key ||
       this.image.pixels !== backdropPixels ||
       this.image.palette !== backdropPalette
     ) {

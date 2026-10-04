@@ -699,7 +699,9 @@ export const vpriestReacts: Reaction = (e, foe, run, k) => {
 /** `0x42600b`-style bleed — `0x4260f7`/`0x4260ff`: two a frame, towards zero */
 function bleed(v: number): number {
   const n = Math.round(v / TICKS);
-  return (n > 0 ? n - 2 : n < 0 ? n + 2 : 0) * TICKS;
+  if (n > 0) return (n - 2) * TICKS;
+  if (n < 0) return (n + 2) * TICKS;
+  return 0;
 }
 
 /** `0x4260ca` — `-100` up, through the divisor */

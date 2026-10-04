@@ -51,18 +51,14 @@ const banks: string[] = DATA
       .map((n) => `${DATA}/${n}`)
   : [];
 
-const skip = (): boolean => {
-  if (banks.length) return false;
-  console.warn(`no Skull Cracker sound banks under any of ${DIRS.join(", ")} — skipping`);
-  return true;
-};
+const missing = banks.length === 0;
+if (missing) console.warn(`no Skull Cracker sound banks under any of ${DIRS.join(", ")} — skipping`);
 
 const open = (path: string) => readContainerFile(new Uint8Array(readFileSync(path)));
 const named = (stem: string): string | undefined => banks.find((b) => b.toUpperCase().endsWith(`/${stem}.SND`));
 
-test("the disc holds 24 sound banks and every one of them is a version 4 bank", () => {
-  if (skip()) return;
-  expect(banks.length).toBe(24);
+test.skipIf(missing)("the disc holds 24 sound banks and every one of them is a version 4 bank", () => {
+  expect(banks).toHaveLength(24);
   for (const b of banks) {
     const f = open(b);
     expect(versionOf(f.containers[0].data, f.order), b).toBe(4);
@@ -71,8 +67,7 @@ test("the disc holds 24 sound banks and every one of them is a version 4 bank", 
   }
 });
 
-test("each bank's header names its own tables, and fifteen of them are not container 1", () => {
-  if (skip()) return;
+test.skipIf(missing)("each bank's header names its own tables, and fifteen of them are not container 1", () => {
   let elsewhere = 0;
   for (const b of banks) {
     const f = open(b);
@@ -93,8 +88,7 @@ test("each bank's header names its own tables, and fifteen of them are not conta
   expect(elsewhere).toBe(15);
 });
 
-test("a theme is a bed of bars with a play order, and a level bank is named sounds", () => {
-  if (skip()) return;
+test.skipIf(missing)("a theme is a bed of bars with a play order, and a level bank is named sounds", () => {
   const theme = named("THEME01");
   const woods = named("WOODS");
   expect(theme && woods).toBeTruthy();
@@ -102,21 +96,20 @@ test("a theme is a bed of bars with a play order, and a level bank is named soun
   const t = readBankTables(open(theme!));
   expect(t.trackName).toBe("Theme 3.1");
   expect(t.loopTable).toBe(12);
-  expect(t.loopRecords.length).toBe(11);
-  expect(t.singles.length).toBe(0);
+  expect(t.loopRecords).toHaveLength(11);
+  expect(t.singles).toHaveLength(0);
   // the arrangement: 62 steps over 11 bars, each step a 1-based bar
-  expect(t.loopOrder.length).toBe(62);
+  expect(t.loopOrder).toHaveLength(62);
   expect(Math.min(...t.loopOrder)).toBe(1);
   expect(Math.max(...t.loopOrder)).toBe(11);
   expect(t.loopOrder.slice(0, 6)).toEqual([1, 1, 5, 5, 5, 3]);
 
   const w = readBankTables(open(woods!));
-  expect(w.loopRecords.length).toBe(0);
-  expect(w.singles.length).toBe(53);
+  expect(w.loopRecords).toHaveLength(0);
+  expect(w.singles).toHaveLength(53);
 });
 
-test("the indices SC.EXE plays by land on names that say what they are", () => {
-  if (skip()) return;
+test.skipIf(missing)("the indices SC.EXE plays by land on names that say what they are", () => {
   const woods = readBankTables(open(named("WOODS")!)).singles;
   const skulz = readBankTables(open(named("SKULZ")!)).singles;
   // one index per hit handler — see this file's own header for where each is read
@@ -129,8 +122,7 @@ test("the indices SC.EXE plays by land on names that say what they are", () => {
   expect(skulz[3].identifier).toMatch(/ladder/i);
 });
 
-test("every chunk a bank points at decodes as audio at one of the disc's two rates", () => {
-  if (skip()) return;
+test.skipIf(missing)("every chunk a bank points at decodes as audio at one of the disc's two rates", () => {
   let total = 0;
   let silent = 0;
   for (const b of banks) {

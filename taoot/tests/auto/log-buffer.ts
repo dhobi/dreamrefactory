@@ -19,7 +19,7 @@ test("the log stays bounded, and drops the oldest lines", () => {
   // one past the cap: a batch of the oldest goes, and the newest is still there
   const write = buf.push("line 100");
   expect(write.repaint, "the pane has to be redrawn when lines go").toBe(true);
-  expect(buf.lines.length).toBe(91);
+  expect(buf.lines).toHaveLength(91);
   expect(buf.lines[0], "the first ten are gone").toBe("line 10");
   expect(buf.lines[buf.lines.length - 1]).toBe("line 100");
 

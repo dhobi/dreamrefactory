@@ -14,10 +14,11 @@
  * clicking — nine of the 24 did nothing in the shipping build either, and a bar
  * where a third of the items are silent reads as broken unless it says so.
  */
-import { DEV_MENU, type DevMenu, type DevMenuEntry } from "./menu.gen";
+import { DEV_MENU, type DevMenu } from "./menu.gen";
 
 export { DEV_MENU };
-export type { DevMenu, DevMenuEntry };
+export type { DevMenu };
+export type { DevMenuEntry } from "./menu.gen";
 
 /** a label split into the three things it carries */
 export interface Label {
@@ -34,7 +35,7 @@ export function parseLabel(label: string): Label {
   const [left, hint = ""] = label.split("\t");
   const amp = left.indexOf("&");
   return {
-    text: left.replace(/&/g, ""),
+    text: left.replaceAll("&", ""),
     accessKey: amp >= 0 && amp + 1 < left.length ? left[amp + 1].toLowerCase() : "",
     hint,
   };

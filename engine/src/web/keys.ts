@@ -124,10 +124,12 @@ export const SWIPE_AXIS_RATIO = 1.3;
 
 export type ArrowKey = "uparrow" | "downarrow" | "leftarrow" | "rightarrow";
 
+const NO_INVERT = { turn: false, walk: false };
+
 export function swipeKey(
   dx: number,
   dy: number,
-  invert: { turn: boolean; walk: boolean } = { turn: false, walk: false },
+  invert: { turn: boolean; walk: boolean } = NO_INVERT,
 ): ArrowKey | null {
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);

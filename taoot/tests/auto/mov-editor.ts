@@ -177,7 +177,7 @@ test("mov structure: the synthesized movie reads back as a state machine", () =>
 
   // the waiting frame: two regions, Y-first coordinates read back by edge
   const choose = mov.frames[2];
-  expect(choose.regions.length).toBe(2);
+  expect(choose.regions).toHaveLength(2);
   expect(choose.regions[0]).toMatchObject({
     type: 2,
     y0: 10,
@@ -332,7 +332,7 @@ test("chain: each segment reads its own header, frames and slots", () => {
   const { bytes, segmentLocs } = buildChainMovie();
   const mov = readMovFile(bytes);
 
-  expect(mov.segments.length).toBe(2);
+  expect(mov.segments).toHaveLength(2);
   expect(mov.segments.map((s) => s.bias)).toEqual(segmentLocs);
   // a MovFile IS its first segment
   expect(mov.segments[0]).toBe(mov);

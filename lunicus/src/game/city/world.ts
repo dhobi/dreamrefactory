@@ -169,33 +169,32 @@ export class World {
     const pt = this.project(o);
     if (pt.depth < 0xfc) return;
     const d = Math.min(13, Math.trunc((pt.depth - 0xfc) / 0xd2));
-    const row = kind === 0 ? (jeep ? 147 : 14) : kind === 1 ? 42 : kind === 2 ? 119 : kind === 3 ? 56 : kind === 4 ? 133 : -1;
+    const row = kind === 0 && jeep ? 147 : (SHOT_ROWS[kind] ?? -1);
     if (row < 0) return;
     this.addFixed(within, pt.depth, pt.y, pt.x, this.pyro[row + d], false);
   }
 
   /** 0x41d500: the player straight down its heading, nothing between */
   downTheLine(o: Obj): boolean {
-    const w = this;
     const { cellX: x, cellY: y } = o;
-    const cx = w.cam.cellX;
-    const cy = w.cam.cellY;
+    const cx = this.cam.cellX;
+    const cy = this.cam.cellY;
     switch (o.angle) {
       case 0:
         if (y !== cy || x >= cx) return false;
-        for (let k = x + 1; k <= cx; k++) if (w.blocked(k, y)) return false;
+        for (let k = x + 1; k <= cx; k++) if (this.blocked(k, y)) return false;
         return true;
       case 0x40:
         if (x !== cx || y >= cy) return false;
-        for (let k = y + 1; k <= cy; k++) if (w.blocked(x, k)) return false;
+        for (let k = y + 1; k <= cy; k++) if (this.blocked(x, k)) return false;
         return true;
       case 0x80:
         if (y !== cy || x <= cx) return false;
-        for (let k = x - 1; k >= cx; k--) if (w.blocked(k, y)) return false;
+        for (let k = x - 1; k >= cx; k--) if (this.blocked(k, y)) return false;
         return true;
       case 0xc0:
         if (x !== cx || y <= cy) return false;
-        for (let k = y - 1; k >= cy; k--) if (w.blocked(x, k)) return false;
+        for (let k = y - 1; k >= cy; k--) if (this.blocked(x, k)) return false;
         return true;
     }
     throw new Error(`a heading of ${o.angle} is no quarter`);
@@ -203,38 +202,36 @@ export class World {
 
   /** 0x4112a9: DANGER — ENEMY AHEAD, ON THE LEFT, ON THE RIGHT, BEHIND */
   warnFrom(o: Obj): void {
-    const w = this;
-    const q = (w.cam.angle + 0x20) & 0xc0;
+    const q = (this.cam.angle + 0x20) & 0xc0;
     const facing = (a: number): boolean => this.facingPlayer(o, a & 0xff);
-    if (facing(q + 0x80)) w.say(4);
-    else if (facing(q - 0x40)) w.say(2);
-    else if (facing(q + 0x40)) w.say(3);
-    else if (facing(q)) w.say(1);
+    if (facing(q + 0x80)) this.say(4);
+    else if (facing(q - 0x40)) this.say(2);
+    else if (facing(q + 0x40)) this.say(3);
+    else if (facing(q)) this.say(1);
   }
 
   /** 0x41134b: the player, looking along `a`, has this vehicle down that way in the open */
   private facingPlayer(o: Obj, a: number): boolean {
-    const w = this;
-    const cx = w.cam.cellX;
-    const cy = w.cam.cellY;
+    const cx = this.cam.cellX;
+    const cy = this.cam.cellY;
     const { cellX: x, cellY: y } = o;
     if (a === 0) {
       if (y !== cy || x <= cx) return false;
-      for (let k = cx + 1; k <= x; k++) if (w.blocked(k, cy)) return false;
+      for (let k = cx + 1; k <= x; k++) if (this.blocked(k, cy)) return false;
       return true;
     }
     if (a === 0x40) {
       if (x !== cx || y <= cy) return false;
-      for (let k = cy + 1; k <= y; k++) if (w.blocked(cx, k)) return false;
+      for (let k = cy + 1; k <= y; k++) if (this.blocked(cx, k)) return false;
       return true;
     }
     if (a === 0x80) {
       if (y !== cy || x >= cx) return false;
-      for (let k = cx - 1; k >= x; k--) if (w.blocked(k, cy)) return false;
+      for (let k = cx - 1; k >= x; k--) if (this.blocked(k, cy)) return false;
       return true;
     }
     if (x !== cx || y >= cy) return false;
-    for (let k = cy - 1; k >= y; k--) if (w.blocked(cx, k)) return false;
+    for (let k = cy - 1; k >= y; k--) if (this.blocked(cx, k)) return false;
     return true;
   }
 
@@ -272,12 +269,21 @@ export class World {
 
   /** 0x410aa4 */
   ammo(): number {
-    return this.g.mode === 3 ? this.g.bullets : this.g.mode === 5 ? this.g.rockets : this.g.mode === 4 ? this.g.grenades : 0;
+    const key = this.ammoKey();
+    return key ? this.g[key] : 0;
+  }
+
+  /** the pressed weapon's ammo */
+  private ammoKey(): "bullets" | "rockets" | "grenades" | null {
+    if (this.g.mode === 3) return "bullets";
+    if (this.g.mode === 5) return "rockets";
+    if (this.g.mode === 4) return "grenades";
+    return null;
   }
 
   /** 0x410adb: the pressed weapon's ammo moved */
   ammoBy(d: number): void {
-    const key = this.g.mode === 3 ? "bullets" : this.g.mode === 5 ? "rockets" : this.g.mode === 4 ? "grenades" : null;
+    const key = this.ammoKey();
     if (!key) return;
     const before = this.g[key];
     this.g[key] = Math.max(0, Math.min(10000, this.g[key] + d));
@@ -286,6 +292,9 @@ export class World {
     else if (this.g[key] <= 2500 && before > 2500) this.say(7);
   }
 }
+
+/** the pyro row of each shot kind's picture, 0 … 4 (a jeep's kind 0 is 147) */
+const SHOT_ROWS = [14, 42, 119, 56, 133];
 
 /** 0x41d79f: nine cells or more from the camera — an actor that far goes and comes back */
 export function tooFar(w: World, o: Obj): boolean {

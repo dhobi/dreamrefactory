@@ -46,7 +46,7 @@ describe("Timelapse cursors", () => {
     for (const name of Object.keys(CALLED)) expect(sheet.has(name), name).toBe(true);
     // and nothing else is claimed: the two dropped duplicates were `CURS131`
     // and `CURS2002`, which nothing names
-    expect(Object.keys(TL_CURSORS).length).toBe(15);
+    expect(Object.keys(TL_CURSORS)).toHaveLength(15);
     expect(sheet.has("goforward")).toBe(false);
   });
 
@@ -129,8 +129,8 @@ describe("Timelapse cursors", () => {
     // 2x here is exact nearest neighbour, which is what keeps a 1996 pixel a pixel
     const one = picture("touch");
     const two = picture("touch", 2);
-    expect(two.length).toBe(2 * CURSOR_H);
-    expect(two[0].length).toBe(2 * CURSOR_W);
+    expect(two).toHaveLength(2 * CURSOR_H);
+    expect(two[0]).toHaveLength(2 * CURSOR_W);
     for (let y = 0; y < CURSOR_H; y++) {
       for (let x = 0; x < CURSOR_W; x++) {
         const c = one[y][x];

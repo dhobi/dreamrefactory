@@ -70,8 +70,8 @@ test("a still pose has a one-step script, so nothing cycles", () => {
   }
   // ...and these two are ONE picture each, not the two and three that reading
   // eight records at a time made of them: they store nine and seventeen views
-  expect(pose("gang.cst", "stok1", "stand").steps.length).toBe(1);
-  expect(pose("extra.cst", "life1", "stand").steps.length).toBe(1);
+  expect(pose("gang.cst", "stok1", "stand").steps).toHaveLength(1);
+  expect(pose("extra.cst", "life1", "stand").steps).toHaveLength(1);
 });
 
 test("the stoker's shovel is the other authored script", () => {
@@ -95,7 +95,7 @@ test("a pose need not store eight views, and two do not", () => {
   ]);
   // and one that stores a single view, facing 192
   const dead = pose("gang.cst", "willie", "dead");
-  expect(dead.steps.length).toBe(1);
+  expect(dead.steps).toHaveLength(1);
   expect(dead.steps[0].map((f) => f.angle)).toEqual([192]);
 });
 

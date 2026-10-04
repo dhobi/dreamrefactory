@@ -55,15 +55,15 @@ const rank = (url: string): number => {
 };
 
 export class DustFiles implements HostFiles {
-  private urls = new Map<string, string>();
-  private cache = new Map<string, Uint8Array>();
+  private readonly urls = new Map<string, string>();
+  private readonly cache = new Map<string, Uint8Array>();
   /**
    * The fetch in progress per name, and whether it is REPORTING ITS CHUNKS to
    * the caller that started it. A second caller for the same file joins the
    * flight but is not the one the stream reports to, so it still owes itself the
    * single total report the old buffering path always made.
    */
-  private inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
+  private readonly inFlight = new Map<string, Promise<{ bytes: Uint8Array | null; streamed: boolean }>>();
   onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
   /** every name the engine asked for and did not have, in order — the boot's own
    *  account of what it wanted, which is what makes a failed boot diagnosable */

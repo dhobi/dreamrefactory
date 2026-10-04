@@ -144,7 +144,7 @@ export class ActorInstance {
 }
 
 export class LoadedCast {
-  private frameCache = new Map<number, ShpFrame>();
+  private readonly frameCache = new Map<number, ShpFrame>();
 
   constructor(
     readonly name: string,
@@ -346,7 +346,7 @@ export class ActorRuntime {
       // once: gang.cast's Lyle has a `sit down` of 568 bytes, the header and no
       // frame record, between his `butt pick` and the `crouch` its `endanim`
       // puts him in. `actorpose` resets the step, so a step of 1 is "told".
-      if (pose && pose.steps.length === 0 && a.step === 0) {
+      if (pose?.steps.length === 0 && a.step === 0) {
         a.step = 1;
         ended.push(a.name);
       }
@@ -361,7 +361,7 @@ export class ActorRuntime {
    */
   private frameFor(a: ActorInstance, cam: WorldCamera | null): ShpFrame | null {
     const pose = a.pose();
-    if (!pose || !pose.play.length) return null;
+    if (!pose?.play.length) return null;
     // through the play script, which is what says how long a picture is HELD —
     // TI.EXE 0x411588, `poseContainer[0x2e + step*2] - 1` matched against the
     // frame record's own step number. See {@link CastPose.play} for #181.
@@ -376,9 +376,10 @@ export class ActorRuntime {
     // so its own facing IS the angle to match, and an actor no script ever turns
     // (Dust's booth targets, all of them) takes the frame nearest angle 0, the
     // one drawn front-on.
-    const rel = cam?.v5
-      ? cam.v5.facing(a.worldX, a.worldY, Number(a.deg) || 0)
-      : cam ? (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff : Number(a.deg) & 0xff;
+    let rel: number;
+    if (cam?.v5) rel = cam.v5.facing(a.worldX, a.worldY, Number(a.deg) || 0);
+    else if (cam) rel = (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff;
+    else rel = Number(a.deg) & 0xff;
     let cf = step[0];
     let best = angleApart(cf.angle, rel);
     for (const f of step) {

@@ -165,16 +165,22 @@ export interface Plank {
   floor: { top: number; bottom: number } | null;
 }
 
+/** the script a plank's state runs */
+function plankScript(k: Plank) {
+  if (k.state === "intact") return PLANK.intact;
+  return k.state === "wobble" ? PLANK.wobble : PLANK.fall;
+}
+
 /** which cel a plank is showing */
 export function plankCel(k: Plank): number {
-  const a = k.state === "intact" ? PLANK.intact : k.state === "wobble" ? PLANK.wobble : PLANK.fall;
+  const a = plankScript(k);
   const i = Math.min(a.cels.length - 1, Math.floor(k.clock / a.hold));
   return a.cels[i];
 }
 
 /** how many engine frames the current script runs for */
 export function plankFrames(k: Plank): number {
-  const a = k.state === "intact" ? PLANK.intact : k.state === "wobble" ? PLANK.wobble : PLANK.fall;
+  const a = plankScript(k);
   return a.cels.length * a.hold;
 }
 

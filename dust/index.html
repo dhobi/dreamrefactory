@@ -85,29 +85,20 @@
 
     <div id="stage">
       <!-- The title card and the fuse under it: the whole page until the game is
-           running, a band at the top after. `onerror` removes the image rather
-           than leaving a broken frame, and tells the page so the band closes up:
-           the logo is decoration and the experiment is the picture below it. -->
+           running, a band at the top after. A logo that fails to load is removed
+           rather than left as a broken frame (dust/src/main.ts, `dropBrand`), and
+           the page is told so the band closes up: the logo is decoration and the
+           experiment is the picture below it. -->
       <div id="curtain">
         <img
           id="brand"
           src="./dust-logo.png"
           alt="Dust: A Tale of the Wired West RE"
-          onerror="
-            this.hidden = true;
-            document.body.classList.add('nobrand');
-          "
         />
         <div id="boot">
           <div id="gauge">
-            <div
-              id="fuse"
-              role="progressbar"
-              aria-label="booting"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-            >
+            <progress id="fusevalue" aria-label="booting" max="100" value="0"></progress>
+            <div id="fuse" aria-hidden="true">
               <div id="burn" style="width: 0%"><i id="spark"></i></div>
             </div>
             <div id="bootline">

@@ -139,24 +139,20 @@ const MENU_PATHS = [
 
 const MENU = MENU_PATHS.find((p) => existsSync(p));
 
-const skip = (): boolean => {
-  if (MENU) return false;
-  console.warn(`no Skull Cracker disc at any of ${MENU_PATHS.join(", ")} — skipping`);
-  return true;
-};
+const missing = !MENU;
+if (missing) console.warn(`no Skull Cracker disc at any of ${MENU_PATHS.join(", ")} — skipping`);
 
 const menu = (): Uint8Array => new Uint8Array(readFileSync(MENU!));
 
 /** the index this disc draws its black ground in — see the header */
 const groundIndex = (order: string): number => (order === "be" ? 255 : 0);
 
-test("Skull Cracker's menu is a DreamFactory 4 container file, either way round", () => {
-  if (skip()) return;
+test.skipIf(missing)("Skull Cracker's menu is a DreamFactory 4 container file, either way round", () => {
   const file = readContainerFile(menu());
   // whichever disc this is, the ANSWER has to be one of the two and the file has
   // to be the same film underneath it
   expect([PC, MAC]).toContain(file.order);
-  expect(file.containers.length).toBe(356);
+  expect(file.containers).toHaveLength(356);
   // the version tag is the one field that MOVES between the two orders, so it is
   // asked for through versionOf rather than read at a fixed offset. This is the
   // assertion that would fail if that anomaly were a misreading: on the Mac disc
@@ -164,15 +160,14 @@ test("Skull Cracker's menu is a DreamFactory 4 container file, either way round"
   expect(versionOf(file.containers[0].data, file.order)).toBe(4);
 });
 
-test("its frames, names and click regions read out", () => {
-  if (skip()) return;
+test.skipIf(missing)("its frames, names and click regions read out", () => {
   const mov = readMovFile(menu());
-  expect(mov.frames.length).toBe(175);
+  expect(mov.frames).toHaveLength(175);
   expect(mov.frames[0].name).toBe("frame 1");
   // the six buttons down the menu, plus the demo panel — all type 2 (go to the
   // named frame), and every one of those names is a frame that exists
   const regions = mov.frames[0].regions;
-  expect(regions.length).toBe(7);
+  expect(regions).toHaveLength(7);
   const names = new Set(mov.frames.map((f) => f.name.toLowerCase()));
   for (const r of regions) {
     expect(r.type).toBe(2);
@@ -186,17 +181,15 @@ test("its frames, names and click regions read out", () => {
   expect(stub("frame 5").event).toBe("prefs.mov");
 });
 
-test("its bed and its click sound are found, which needs the 32-bit counts", () => {
-  if (skip()) return;
+test.skipIf(missing)("its bed and its click sound are found, which needs the 32-bit counts", () => {
   const mov = readMovFile(menu());
   // read as i16 these are the empty half of a big-endian field and both come out
   // zero — a menu that plays in silence and clicks without a click
-  expect(mov.audioChunks.length).toBe(11);
+  expect(mov.audioChunks).toHaveLength(11);
   expect([...mov.sounds.keys()]).toEqual(["sound 1"]);
 });
 
-test("its palette spans a real range and reserves this disc's own two ends", () => {
-  if (skip()) return;
+test.skipIf(missing)("its palette spans a real range and reserves this disc's own two ends", () => {
   const mov = readMovFile(menu());
   const pal = paletteToRGBA(mov.paletteRaw, 256, mov.file.order);
   // read at the wrong byte the whole table is near-black; read right it is a
@@ -220,8 +213,7 @@ test("its palette spans a real range and reserves this disc's own two ends", () 
   }
 });
 
-test("its first frame decodes to the whole screen, and is 17.9% ground", () => {
-  if (skip()) return;
+test.skipIf(missing)("its first frame decodes to the whole screen, and is 17.9% ground", () => {
   const mov = readMovFile(menu());
   const fb = new FrameBuffer();
   const d = decodeFrame(mov.file.containers[mov.frames[0].locationFrame].data, fb, mov.file.order);

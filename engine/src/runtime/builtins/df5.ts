@@ -165,7 +165,7 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   // into its bank's loop records — the big fight gets louder by phases this way
   r5("themeorder", (_i, [n, order]) => {
     const name = toStr(n ?? "");
-    const list = toStr(order ?? "").split(",").map((s) => parseInt(s, 10)).filter((v) => v > 0);
+    const list = toStr(order ?? "").split(",").map((s) => Number.parseInt(s, 10)).filter((v) => v > 0);
     if (!session.audioLib.setThemeOrder(name, list)) return;
     // playing already: the new order takes over from its start
     if (session.currentThemeName.toLowerCase() !== name.toLowerCase()) return;

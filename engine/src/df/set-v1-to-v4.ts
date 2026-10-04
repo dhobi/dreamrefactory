@@ -256,7 +256,7 @@ export function setFileFromV1(v1: SetFileV1): SetFile {
   /** the hi-res still, carried by one of the transitions leaving it */
   const hiRes = new Map<string, number>();
   for (const t of v1.transitions) {
-    if (t.frames.length) lowRes.set(key(t.to), t.frames[t.frames.length - 1]);
+    if (t.frames.length) lowRes.set(key(t.to), t.frames.at(-1)!);
     if (t.departureStill >= 0) hiRes.set(key(t.from), t.departureStill);
   }
 

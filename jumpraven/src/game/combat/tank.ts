@@ -190,21 +190,44 @@ export class Tank implements TankApi {
         const dy = ay - w.cam.cellY;
         const seen = lookAlong(w, r);
         if (seen !== null) r.goal = seen;
-        if (seen !== null && abs(dx) <= 1 && abs(dy) <= 1) return void (r.state = 4);
+        if (seen !== null && abs(dx) <= 1 && abs(dy) <= 1) {
+          r.state = 4;
+          return;
+        }
         let bx = ax;
         let by = ay;
         let a: number;
         let b: number;
         if (abs(dx) > abs(dy)) {
-          if (dx > 0) (a = 0x80), ax--;
-          else (a = 0), ax++;
-          if (dy > 0) (b = 0xc0), by--;
-          else (b = 0x40), by++;
+          if (dx > 0) {
+            a = 0x80;
+            ax--;
+          } else {
+            a = 0;
+            ax++;
+          }
+          if (dy > 0) {
+            b = 0xc0;
+            by--;
+          } else {
+            b = 0x40;
+            by++;
+          }
         } else {
-          if (dy > 0) (a = 0xc0), ay--;
-          else (a = 0x40), ay++;
-          if (dx > 0) (b = 0x80), bx--;
-          else (b = 0), bx++;
+          if (dy > 0) {
+            a = 0xc0;
+            ay--;
+          } else {
+            a = 0x40;
+            ay++;
+          }
+          if (dx > 0) {
+            b = 0x80;
+            bx--;
+          } else {
+            b = 0;
+            bx++;
+          }
         }
         if (abs(dx) === abs(dy) && w.roll(2) === 1) {
           [ax, bx] = [bx, ax];
@@ -225,7 +248,10 @@ export class Tank implements TankApi {
         return;
       }
       case 1:
-        if (r.angle !== r.goal) return void (r.angle = turnToward(r.angle, r.goal, r.turn, 0x100));
+        if (r.angle !== r.goal) {
+          r.angle = turnToward(r.angle, r.goal, r.turn, 0x100);
+          return;
+        }
         r.goalX = (r.cellX << 8) + 0x80;
         r.goalY = (r.cellY << 8) + 0x80;
         // 0x432638
@@ -265,13 +291,24 @@ export class Tank implements TankApi {
         let v = alongX ? r.x : r.y;
         if (r.way) {
           v += r.speed;
-          if (v >= goal) (v = goal), (r.state = 0);
+          if (v >= goal) {
+            v = goal;
+            r.state = 0;
+          }
         } else {
           v -= r.speed;
-          if (v <= goal) (v = goal), (r.state = 0);
+          if (v <= goal) {
+            v = goal;
+            r.state = 0;
+          }
         }
-        if (alongX) (r.x = v), (r.cellX = v >> 8);
-        else (r.y = v), (r.cellY = v >> 8);
+        if (alongX) {
+          r.x = v;
+          r.cellX = v >> 8;
+        } else {
+          r.y = v;
+          r.cellY = v >> 8;
+        }
         if (downTheLine(w, r)) this.fire(r);
         return;
       }
@@ -400,7 +437,10 @@ export class Tank implements TankApi {
 
   /** 0x425b49: a shell's picture — bursting (pyro's 0xc0 …, then 0xd0 …), homing (0x12c …), or not (0x13c …) */
   private drawShell(s: VehicleShot): void {
-    drawShot(this.w, s, s.met === 1 ? 0xc0 : s.met === 2 ? 0xd0 : s.kind === 2 ? 0x12c : 0x13c);
+    let base = s.kind === 2 ? 0x12c : 0x13c;
+    if (s.met === 1) base = 0xc0;
+    else if (s.met === 2) base = 0xd0;
+    drawShot(this.w, s, base);
   }
 
   /** 0x425c89: the first tank the shot meets (0x425cd9) */

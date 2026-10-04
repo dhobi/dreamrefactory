@@ -249,7 +249,7 @@ describe("the loader", () => {
     expect(log).toMatch(/hub\.sett: DreamFactory/);
     expect(log).toContain("listed 7 of the port's day saves");
     expect(p.el("bootpct").textContent).toBe("100%");
-    expect(p.el("bar").getAttribute("aria-valuenow")).toBe("100");
+    expect((p.el("barvalue") as HTMLProgressElement).value).toBe(100);
     expect(calls).toContain("useSaveKind");
     expect(calls).not.toContain("coldBoot");
   });

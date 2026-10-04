@@ -132,7 +132,8 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     const seen = dist !== 32000;
     if (who && inView.get(who) !== seen) {
       inView.set(who, seen);
-      log(`sight: ${who} ${seen ? `in view (${dist})` : "out of view — attention clock reset"}`);
+      const how = seen ? `in view (${dist})` : "out of view — attention clock reset";
+      log(`sight: ${who} ${how}`);
     }
     return dist;
   };
@@ -659,15 +660,19 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
      * conversion below serves both.
      */
     const room = set ? undefined : session.maze?.sett.routes.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
-    const route = rec
-      ? { a: rec.a.toLowerCase(), b: rec.b.toLowerCase(),
-          points: readStarPath(set!.file.containers, rec.container, set!.version) }
-      : room
-        ? { a: room.a.toLowerCase(), b: room.b.toLowerCase(),
-            points: room.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev })) }
-        : set?.version === 1
-          ? [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null
-          : null;
+    const routeOf = () => {
+      if (rec) {
+        return { a: rec.a.toLowerCase(), b: rec.b.toLowerCase(),
+                 points: readStarPath(set!.file.containers, rec.container, set!.version) };
+      }
+      if (room) {
+        return { a: room.a.toLowerCase(), b: room.b.toLowerCase(),
+                 points: room.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev })) };
+      }
+      if (set?.version === 1) return [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null;
+      return null;
+    };
+    const route = routeOf();
     if (route) {
       // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
       // ground plane's second axis and worldZ the height, as walktostar builds it.

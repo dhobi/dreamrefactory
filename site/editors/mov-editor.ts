@@ -20,8 +20,7 @@ import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY } from "./sources";
-import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import {
   NATIVE_FRAME_MS,
@@ -174,14 +173,19 @@ function loadMov(bytes: Uint8Array, name: string, v0 = false): void {
     // the same line the movie player uses (engine/src/web/movie-player.ts)
     const v1 = !v0 && detectVersion(bytes) === 1;
     const v5 = !v0 && !v1 && isMovV5(bytes);
-    readOnly = v0 ? V0_READ_ONLY : v1 ? V1_READ_ONLY : v5 ? V5_READ_ONLY : null;
-    parsed = v0
-      ? movFileFromV0(readMovFileV0(bytes))
-      : v1
-        ? movFileFromV1(readMovFileV1(bytes))
-        : v5
-          ? readMovFileV5(bytes)
-          : readMovFile(bytes);
+    if (v0) {
+      readOnly = V0_READ_ONLY;
+      parsed = movFileFromV0(readMovFileV0(bytes));
+    } else if (v1) {
+      readOnly = V1_READ_ONLY;
+      parsed = movFileFromV1(readMovFileV1(bytes));
+    } else if (v5) {
+      readOnly = V5_READ_ONLY;
+      parsed = readMovFileV5(bytes);
+    } else {
+      readOnly = null;
+      parsed = readMovFile(bytes);
+    }
     // a button that refuses when pressed is worse than one that says so first
     ($("exportBtn") as HTMLButtonElement).disabled = readOnly !== null;
   } catch (e) {
@@ -269,7 +273,7 @@ async function initServerMovies(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerMovies();
+const serverListed = initServerMovies();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -368,30 +372,28 @@ function renderPreview(): void {
   slider.max = String(Math.max(0, seg.frames.length - 1));
   slider.value = String(frameIdx);
   $("frameLabel").textContent = `${frameIdx + 1} / ${seg.frames.length}`;
-  const action = f?.regions.length
+  if (!f) {
+    $("previewInfo").innerHTML = t("movies.noFrames");
+    return;
+  }
+  const action = f.regions.length
     ? t("movies.waitsForClick") + t("counts.clickableRegions", { n: f.regions.length })
-    : f
-      ? actionText(f.type, f.event, f.target)
-      : "";
-  $("previewInfo").innerHTML = f
-    ? t("movies.previewHead", { i: frameIdx, name: f.name || t("movies.unnamed"), action }) +
-      t("movies.previewArt", { loc: f.locationFrame }) +
-      (decoded
-        ? t("movies.previewDecoded", { w: decoded.width, h: decoded.height })
-        : t("movies.previewNotDecoded")) +
-      t("movies.previewPacked", {
-        bytes: formatNumber(mov.file.containers[f.locationFrame]?.data.length ?? 0),
-      }) +
-      t("movies.previewDirty", { w: f.width, h: f.height }) +
-      t("movies.previewLogic", { loc: f.locationClickRegion || t("movies.logicNone"), type: f.type }) +
-      (f.sound ? t("movies.previewSound", { sound: f.sound }) : "") +
-      (seg.actionFrame1 && seg.actionFrame1.toLowerCase() === f.name.toLowerCase()
-        ? t("movies.previewActionFrame", { n: 1 })
-        : "") +
-      (seg.actionFrame2 && seg.actionFrame2.toLowerCase() === f.name.toLowerCase()
-        ? t("movies.previewActionFrame", { n: 2 })
-        : "")
-    : t("movies.noFrames");
+    : actionText(f.type, f.event, f.target);
+  const isActionFrame = (slot: string): boolean => (slot ? slot.toLowerCase() === f.name.toLowerCase() : false);
+  $("previewInfo").innerHTML =
+    t("movies.previewHead", { i: frameIdx, name: f.name || t("movies.unnamed"), action }) +
+    t("movies.previewArt", { loc: f.locationFrame }) +
+    (decoded
+      ? t("movies.previewDecoded", { w: decoded.width, h: decoded.height })
+      : t("movies.previewNotDecoded")) +
+    t("movies.previewPacked", {
+      bytes: formatNumber(mov.file.containers[f.locationFrame]?.data.length ?? 0),
+    }) +
+    t("movies.previewDirty", { w: f.width, h: f.height }) +
+    t("movies.previewLogic", { loc: f.locationClickRegion || t("movies.logicNone"), type: f.type }) +
+    (f.sound ? t("movies.previewSound", { sound: f.sound }) : "") +
+    (isActionFrame(seg.actionFrame1) ? t("movies.previewActionFrame", { n: 1 }) : "") +
+    (isActionFrame(seg.actionFrame2) ? t("movies.previewActionFrame", { n: 2 }) : "");
 }
 
 /** the frame's clickable regions, over the picture */
@@ -410,7 +412,7 @@ function drawOverlay(): void {
     ctx.strokeStyle = i === hoveredRegion ? "#e4f0fc" : "#60c0f0";
     ctx.lineWidth = 1;
     ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.x1 - r.x0, r.y1 - r.y0);
-    const label = `${i}: ${r.type}${r.target ? `→${r.target}` : ""}${r.event ? ` ⇒${r.event}` : ""}`;
+    const label = `${i}: ${r.type}` + (r.target ? `→${r.target}` : "") + (r.event ? ` ⇒${r.event}` : "");
     ctx.fillStyle = "rgba(0,6,15,0.78)";
     ctx.fillRect(r.x0 + 1, r.y0 + 1, ctx.measureText(label).width + 4, 11);
     ctx.fillStyle = i === hoveredRegion ? "#e4f0fc" : "#b4d8f0";
@@ -948,7 +950,7 @@ function filmStep(now: number): void {
       return;
     }
     film.lastTick = now;
-    filmAction(f.type, f.target, f.event, `frame ${frameIdx}${f.name ? ` “${f.name}”` : ""}`, now);
+    filmAction(f.type, f.target, f.event, `frame ${frameIdx}` + (f.name ? ` “${f.name}”` : ""), now);
   }
   if (film) film.raf = requestAnimationFrame(filmStep);
 }
@@ -959,7 +961,7 @@ $("filmBtn").addEventListener("click", () => {
     return;
   }
   const m = mov;
-  if (!m || !m.segments.length) return;
+  if (!m?.segments.length) return;
   stopPlayback();
   // the click is the gesture a browser wants before it will make a sound; a
   // context built on page load starts suspended and the film would play mute
@@ -1174,11 +1176,12 @@ function pacingNote(m: MovSegment): string {
   for (let i = 0; i < m.frames.length; i++) picture += frameHoldMs(m, i) / 1000;
   const floorMs = frameHoldMs(m, 0);
   const note = t("movies.pacing", { ms: Math.round(floorMs), fps: (1000 / floorMs).toFixed(1) });
-  const why = cutsceneAudio > 0
-    ? isBed(cutsceneAudio, m.frames.length)
+  let why = "";
+  if (cutsceneAudio > 0) {
+    why = isBed(cutsceneAudio, m.frames.length)
       ? t("movies.pacingBed", { secs: cutsceneAudio.toFixed(1), picture: picture.toFixed(1) })
-      : t("movies.pacingByAudio", { secs: cutsceneAudio.toFixed(1) })
-    : "";
+      : t("movies.pacingByAudio", { secs: cutsceneAudio.toFixed(1) });
+  }
   return note + why + (framesLoop(m) ? t("movies.pacingLoops") : "");
 }
 
@@ -1323,9 +1326,7 @@ function buildFrameLogic(): void {
         o.regions.some((r) => r.target.toLowerCase() === was.toLowerCase()),
     ).length;
     const slots = [1, 2].filter(
-      (n) =>
-        was &&
-        (n === 1 ? seg.actionFrame1 : seg.actionFrame2).toLowerCase() === was.toLowerCase(),
+      (n) => was !== "" && (n === 1 ? seg.actionFrame1 : seg.actionFrame2).toLowerCase() === was.toLowerCase(),
     );
     const broken = [
       refs ? t("counts.frames", { n: refs }) + t("movies.stillTargetTail", { was }) : "",
@@ -1406,11 +1407,14 @@ function buildRegions(): void {
   wrap.replaceChildren();
   const f = frame();
   const regions = f?.regions ?? [];
-  $("regionsInfo").textContent = f
-    ? t("movies.regionsOnFrame", { i: frameIdx, n: regions.length }) +
+  let info = "";
+  if (f) {
+    info =
+      t("movies.regionsOnFrame", { i: frameIdx, n: regions.length }) +
       (f.locationClickRegion ? t("movies.regionsLogic", { loc: f.locationClickRegion }) : "") +
-      t("movies.regionsRects")
-    : "";
+      t("movies.regionsRects");
+  }
+  $("regionsInfo").textContent = info;
   if (!regions.length) {
     const empty = document.createElement("span");
     empty.className = "dim";
@@ -1490,12 +1494,9 @@ function buildRegions(): void {
       input.className = "ident short";
       input.value = r[key];
       input.maxLength = MOV_NAME_FIELD;
-      input.title =
-        key === "sound"
-          ? t("movies.soundOnClickHint")
-          : key === "event"
-            ? t("movies.eventHint")
-            : t("movies.targetHint");
+      if (key === "sound") input.title = t("movies.soundOnClickHint");
+      else if (key === "event") input.title = t("movies.eventHint");
+      else input.title = t("movies.targetHint");
       input.onchange = () => {
         if (input.value === r[key]) return;
         if (!patchRegionLogic(segment()!, f!, r, { [key]: input.value })) return;
@@ -1645,7 +1646,8 @@ $("pngExportBtn").addEventListener("click", () => {
   if (!f) return;
   const src = $<HTMLCanvasElement>("preview");
   src.toBlob((blob) => {
-    if (blob) download(blob, `${baseName()}.f${frameIdx}${f.name ? `.${f.name}` : ""}.png`);
+    const named = f.name ? "." + f.name : "";
+    if (blob) download(blob, `${baseName()}.f${frameIdx}${named}.png`);
   }, "image/png");
 });
 
@@ -1744,3 +1746,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await serverListed;

@@ -296,9 +296,8 @@ function stopClock(): void {
   clockTick = null;
   if (clockFrom !== null) showClock(clockNow(clockFrom));
   clockFrom = null;
-  clockEl.classList.remove("live");
-  // whatever the wire is doing now, it is not this run's wait any more
-  clockEl.classList.remove("waiting");
+  // the wait too: whatever the wire is doing now, it is not this run's wait any more
+  clockEl.classList.remove("live", "waiting");
 }
 
 function say(message: string, kind: "" | "good" | "bad" = ""): void {
@@ -357,6 +356,10 @@ function renderSplits(
   }
   const loads =
     splits.some((s) => s.loading >= LOAD_SHOWN_MS) || (total?.loading ?? 0) >= LOAD_SHOWN_MS;
+  const loadCell = (loading: number): string => {
+    if (!loads) return "";
+    return `<td class="n load">${loading ? ms(loading) : ""}</td>`;
+  };
   let elapsed = 0;
   const rows = splits
     .map((s) => {
@@ -364,7 +367,7 @@ function renderSplits(
       return (
         `<tr><td>${escape(s.name)}</td><td class="n">${ms(s.ms)}</td>` +
         `<td class="n">${ms(elapsed)}</td>` +
-        (loads ? `<td class="n load">${s.loading ? ms(s.loading) : ""}</td>` : "") +
+        loadCell(s.loading) +
         `<td class="n">${s.frames}f</td><td class="n">${s.actions}</td></tr>`
       );
     })
@@ -376,7 +379,7 @@ function renderSplits(
   const totalRow = total
     ? `<tfoot><tr class="total"><td>TOTAL</td><td class="n">${ms(total.ms)}</td>` +
       `<td class="n">${ms(total.ms)}</td>` +
-      (loads ? `<td class="n load">${total.loading ? ms(total.loading) : ""}</td>` : "") +
+      loadCell(total.loading) +
       `<td class="n">${total.frames}f</td><td class="n"></td></tr></tfoot>`
     : "";
   const head =
@@ -412,8 +415,8 @@ function parse(): Step[] | null {
 function renderLegend(): void {
   const body = document.getElementById("srlegendbody");
   if (!body) return;
-  const dl = (rows: [string, string][]): string =>
-    `<dl>${rows.map(([t, d]) => `<dt>${escape(t)}</dt><dd>${escape(d)}</dd>`).join("")}</dl>`;
+  const entry = ([t, d]: [string, string]): string => `<dt>${escape(t)}</dt><dd>${escape(d)}</dd>`;
+  const dl = (rows: [string, string][]): string => `<dl>${rows.map(entry).join("")}</dl>`;
 
   // The signature as a sheet would write it, and the verb's own options after
   // it. `sig` carries the camelCase spelling — the table is keyed lowercase, so
@@ -424,7 +427,7 @@ function renderLegend(): void {
     // by hand precisely because every sheet ever written is full of them), and
     // the one place still printing the old shape was the manual that tells a
     // first-time reader what to type.
-    const opts = spec.opts?.length ? `  ·  ${spec.opts.map((o) => `${o}:`).join(" ")}` : "";
+    const opts = spec.opts?.length ? `  ·  ${spec.opts.map((o) => o + ":").join(" ")}` : "";
     return [(spec.sig ?? `${name}()`) + opts, spec.help] as [string, string];
   });
 
@@ -879,7 +882,7 @@ async function playAside(steps: Step[], label: string): Promise<void> {
     const result = await runSheet(d, steps, host.actions, { onStep: (s) => say(`${label}: ${s.source}`) });
     const said = result.timings.flatMap((t) => t.says).join(" · ");
     if (result.failure) say(`${label}: ${result.failure.error.message}`, "bad");
-    else say(`${label}${said ? ` — ${said}` : ""}`, "good");
+    else say(said ? `${label} — ${said}` : label, "good");
   } catch (e) {
     if (!(e instanceof Aborted)) say((e as Error).message, "bad");
   } finally {
@@ -1214,7 +1217,7 @@ function moveCheckpoints(from: string, to: string | null): void {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     const point = parseSaveKey(key ?? "");
-    if (!point || point.sheet !== from) continue;
+    if (point?.sheet !== from) continue;
     moving.push({ name: point.name, value: localStorage.getItem(key!) ?? "" });
   }
   for (const { name, value } of moving) {
@@ -1246,7 +1249,8 @@ function migrateUnscopedCheckpoints(): void {
   const sheets = readSheets();
   const names = Object.keys(sheets).sort(byCodeUnit);
   for (const { name, value } of old) {
-    const writes = new RegExp(`\\bsave\\s*\\(\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\)`, "i");
+    const quoted = name.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    const writes = new RegExp(String.raw`\bsave\s*\(\s*${quoted}\s*\)`, "i");
     const owner = names.find((n) => writes.test(sheets[n] ?? "")) ?? active;
     localStorage.setItem(saveKey(owner, name), value);
     localStorage.removeItem(savePrefix() + name);
@@ -1464,7 +1468,7 @@ function savedPoints(): string[] {
   const out: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const point = parseSaveKey(localStorage.key(i) ?? "");
-    if (point && point.sheet === active) out.push(point.name);
+    if (point?.sheet === active) out.push(point.name);
   }
   const order = saveOrder();
   const rank = (n: string): number => order.get(n.toLowerCase()) ?? Infinity;
@@ -1692,12 +1696,13 @@ function showWarm(p: {
   warmBar.hidden = false;
   warmFill.style.width = `${p.total ? Math.round((p.bytes / p.total) * 100) : 0}%`;
   const left = p.files - p.done;
+  const files = left === 1 ? "file" : "files";
   const eta = p.rate > 0 && p.bytes < p.total ? formatEta((p.total - p.bytes) / p.rate) : "";
   warmNum.textContent = [
     `${formatBytes(p.bytes)} / ${formatBytes(p.total)}`,
     formatRate(p.rate),
     eta,
-    left ? `${left} file${left === 1 ? "" : "s"} left` : "",
+    left ? `${left} ${files} left` : "",
     p.failed ? `${p.failed} missing` : "",
   ]
     .filter(Boolean)
@@ -1779,7 +1784,7 @@ async function start(): Promise<void> {
   const sheets = readSheets();
   const legacy = localStorage.getItem(legacyKey());
   if (!Object.keys(sheets).length) {
-    if (legacy && legacy.trim()) sheets["my sheet"] = legacy;
+    if (legacy?.trim()) sheets["my sheet"] = legacy;
     else if (repoSheet) sheets["full run"] = repoSheet;
     else sheets["new sheet"] = "";
     writeSheets(sheets);
@@ -1812,7 +1817,7 @@ async function start(): Promise<void> {
   // from the page's point of view the reset is one action of a sheet that is
   // still going, and it should look like one.
   const back = takePlace();
-  if (!back || back.sheet !== active) return;
+  if (back?.sheet !== active) return;
   setPointer({ line: back.line, skip: back.skip }, true);
   setButtons(false);
   if (!back.play) {

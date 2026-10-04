@@ -33,7 +33,7 @@ export class Machine extends MachineV0 {
   setVolume(level: number): void {
     this.volume = level;
     this.speaker.volume?.(level / 7);
-    this.log(`Sound ▸ ${level ? `Sound Level ${level}` : "Sound Off"}`);
+    this.log(level ? `Sound ▸ Sound Level ${level}` : "Sound ▸ Sound Off");
   }
 
   /** the day's folder, then `SHARED\` (0x40ea4a, the day's folder named by 0x40e8df) */

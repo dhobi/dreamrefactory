@@ -258,7 +258,9 @@ export class Mart {
       if (font) s.text(font, at[1] + 3, at[0] + 14, String(value), ink, at);
     };
     field(CASH, this.r.score, CASH_INK);
-    field(VALUE, sel ? (sel.tier === OWN ? worth(this.r, sel.kind) : PRICES[sel.kind][sel.tier]) : 0, VALUE_INK);
+    let value = 0;
+    if (sel) value = sel.tier === OWN ? worth(this.r, sel.kind) : PRICES[sel.kind][sel.tier];
+    field(VALUE, value, VALUE_INK);
   }
 
   /**

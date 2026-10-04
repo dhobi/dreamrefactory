@@ -19,8 +19,7 @@ import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
-import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { FrameInfo, LEFTTURNS, RIGHTTURNS, SetFile, readSetFile, turnRing } from "@dreamfactory/engine/df/set";
@@ -208,7 +207,7 @@ async function initServerSets(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerSets();
+const serverListed = initServerSets();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -298,12 +297,16 @@ function invalidateFrame(loc: number): void {
 function allRings(): { label: string; frames: FrameInfo[] }[] {
   const out: { label: string; frames: FrameInfo[] }[] = [];
   for (const s of set!.scenes) {
-    out.push({ label: t("sets.turnRightLabel", { scene: s.sceneName }), frames: s.turns[RIGHTTURNS].frames });
-    out.push({ label: t("sets.turnLeftLabel", { scene: s.sceneName }), frames: s.turns[LEFTTURNS].frames });
+    out.push(
+      { label: t("sets.turnRightLabel", { scene: s.sceneName }), frames: s.turns[RIGHTTURNS].frames },
+      { label: t("sets.turnLeftLabel", { scene: s.sceneName }), frames: s.turns[LEFTTURNS].frames },
+    );
   }
   for (const road of set!.transitions) {
-    out.push({ label: `road ${road.transitionName} →`, frames: road.frameRegisters[0].frames });
-    out.push({ label: `road ${road.transitionName} ←`, frames: road.frameRegisters[1].frames });
+    out.push(
+      { label: `road ${road.transitionName} →`, frames: road.frameRegisters[0].frames },
+      { label: `road ${road.transitionName} ←`, frames: road.frameRegisters[1].frames },
+    );
   }
   return out;
 }
@@ -360,25 +363,29 @@ function renderPreview(): void {
   }
   const v = view();
   const fi = standFrameInfo();
-  $("previewInfo").innerHTML = cur
-    ? t("sets.previewContainer", { label: cur.label, loc: cur.loc }) +
-      (f
-        ? t("sets.previewSize", { w: f.width, h: f.height, z: f.zOffset >= 0 ? t("sets.zWith") : t("sets.zNo") })
-        : t("sets.previewUndecodable")) +
-      t("sets.previewPacked", { bytes: formatNumber(set.file.containers[cur.loc]?.data.length ?? 0) }) +
-      (v
-        ? t("sets.previewView", {
-            id: v.viewID,
-            name: v.viewName,
-            deg: ((v.rotation * 180) / Math.PI).toFixed(1),
-            r8: v.rotation8,
-            h: v.cameraHeight.toFixed(3),
-          }) +
-          (fi
-            ? t("sets.previewCamera", { x: fi.posX16, z: fi.posZ16, y: fi.posY16, axis: fi.axisX8 & 0xff })
-            : "")
-        : "")
-    : t("sets.noStandpointFrame");
+  if (cur) {
+    let info = t("sets.previewContainer", { label: cur.label, loc: cur.loc });
+    if (f) {
+      const z = f.zOffset >= 0 ? t("sets.zWith") : t("sets.zNo");
+      info += t("sets.previewSize", { w: f.width, h: f.height, z });
+    } else {
+      info += t("sets.previewUndecodable");
+    }
+    info += t("sets.previewPacked", { bytes: formatNumber(set.file.containers[cur.loc]?.data.length ?? 0) });
+    if (v) {
+      info += t("sets.previewView", {
+        id: v.viewID,
+        name: v.viewName,
+        deg: ((v.rotation * 180) / Math.PI).toFixed(1),
+        r8: v.rotation8,
+        h: v.cameraHeight.toFixed(3),
+      });
+      if (fi) info += t("sets.previewCamera", { x: fi.posX16, z: fi.posZ16, y: fi.posY16, axis: fi.axisX8 & 0xff });
+    }
+    $("previewInfo").innerHTML = info;
+  } else {
+    $("previewInfo").innerHTML = t("sets.noStandpointFrame");
+  }
   drawOverlay();
 }
 
@@ -729,11 +736,14 @@ function buildObjects(): void {
   wrap.replaceChildren();
   const v = view();
   const objects = v?.objects ?? [];
-  $("objInfo").textContent = v
-    ? t("sets.objInfo", { n: objects.length, name: v.viewName }) +
+  let info = "";
+  if (v) {
+    info =
+      t("sets.objInfo", { n: objects.length, name: v.viewName }) +
       (v.locationObjects ? t("sets.objContainer", { loc: v.locationObjects }) : "") +
-      t("sets.objRects")
-    : "";
+      t("sets.objRects");
+  }
+  $("objInfo").textContent = info;
   if (!objects.length) {
     const empty = document.createElement("span");
     empty.className = "dim";
@@ -1225,7 +1235,7 @@ async function importPng(
     pixels[i] = nearestPaletteIndex(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
   }
 
-  const sameSize = old && old.width === bmp.width && old.height === bmp.height;
+  const sameSize = old?.width === bmp.width && old.height === bmp.height;
   const container = set.file.containers[cur.loc];
   const zBlock =
     sameSize && old.zOffset >= 0 ? container.data.subarray(old.zOffset) : undefined;
@@ -1305,3 +1315,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await serverListed;

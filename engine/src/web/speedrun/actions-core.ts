@@ -144,11 +144,9 @@ export const CORE_ACTIONS: ActionTable = {
     sig: "move(u,r,u,l,u,o)",
     help: "a path in one line — l(eft) r(ight) u(p) d(own) o(pen a door), e.g. move(o,ururur,o)",
     expand: path,
-    run: async () => {
-      // unreachable: the parser turns every `move` into the moves it names, and
-      // a `move` that reached the runner would be a Step nobody expanded
-      throw new Error("a move is expanded when the sheet is parsed and cannot be run");
-    },
+    // unreachable: the parser turns every `move` into the moves it names, and
+    // a `move` that reached the runner would be a Step nobody expanded
+    run: () => Promise.reject(new Error("a move is expanded when the sheet is parsed and cannot be run")),
   },
   esc: {
     args: [0, 0],
@@ -515,7 +513,7 @@ export const CORE_ACTIONS: ActionTable = {
         const r = /^[0-9]+$/.test(want)
           ? rs[i]
           : rs.find((x) => String(x.target || "").toLowerCase() === want) ||
-            rs.find((x) => String(x.event || "").toLowerCase().replace(/\.mov$/, "") === want.replace(/\.mov$/, ""));
+            rs.find((x) => String(x.event || "").toLowerCase().replace(/[.]mov$/, "") === want.replace(/[.]mov$/, ""));
         return r ? { x: Math.floor((r.x0 + r.x1) / 2), y: Math.floor((r.y0 + r.y1) / 2) } : null;
       })()`);
       // What IS parked, because "no region called openit" is half an answer and
@@ -527,7 +525,11 @@ export const CORE_ACTIONS: ActionTable = {
             .map((r) => ({ type: r.type, target: String(r.target || ""), event: String(r.event || "") }));
         })()`);
         const list = rs.length
-          ? rs.map((r, i) => `${i}: type ${r.type}${r.target ? ` -> ${r.target}` : ""}${r.event ? ` (${r.event})` : ""}`).join(", ")
+          ? rs.map((r, i) => {
+              const target = r.target ? ` -> ${r.target}` : "";
+              const event = r.event ? ` (${r.event})` : "";
+              return `${i}: type ${r.type}${target}${event}`;
+            }).join(", ")
           : "nothing is parked — the movie is still playing, or there is no movie";
         throw new Error(`no movie region "${want}" here. Parked: ${list}`);
       }
@@ -638,7 +640,8 @@ export const CORE_ACTIONS: ActionTable = {
          * first rung the same way.
          */
         if (await c.d.evaluate<string>(opened)) {
-          c.say(`${turn ? `${turn} turns, then ` : ""}they were already talking`);
+          const turned = turn ? `${turn} turns, then ` : "";
+          c.say(`${turned}they were already talking`);
           return;
         }
         if (at) {
@@ -976,13 +979,12 @@ export const CORE_ACTIONS: ActionTable = {
     wait: "none",
     sig: "pause()",
     help: "stop here and wait for Play — a breakpoint. Ignored by the CLI runner",
-    run: async (c) => {
-      if (!c.d.pause) {
-        c.say("nothing to pause in this runner — carrying on");
-        return;
-      }
-      c.d.pause();
-    },
+    run: (c) =>
+      new Promise((resolve) => {
+        if (c.d.pause) c.d.pause();
+        else c.say("nothing to pause in this runner — carrying on");
+        resolve();
+      }),
   },
   settle: {
     args: [0, 0],
@@ -1146,6 +1148,10 @@ export const CORE_ACTIONS: ActionTable = {
     wait: "none",
     sig: "note(anything at all)",
     help: "a note in the report; does nothing to the game",
-    run: async (c) => c.say(c.step.args[0]),
+    run: (c) =>
+      new Promise((resolve) => {
+        c.say(c.step.args[0]);
+        resolve();
+      }),
   },
 };

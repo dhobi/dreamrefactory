@@ -61,44 +61,38 @@
   --void-700: #13183c;
   --void-600: #1b2249;
   --void-500: #1e2c58;
-}
 
-/* ---- stone: the edges ------------------------------------------------- */
+  /* ---- stone: the edges ------------------------------------------------- */
 
-/* The terrace the pyramid stands on. Lilac, which is what the render makes of
-   limestone under a cold sky — a grey border on this page looks like a mistake
-   next to it. */
-:root {
+  /* The terrace the pyramid stands on. Lilac, which is what the render makes of
+     limestone under a cold sky — a grey border on this page looks like a mistake
+     next to it. */
   --stone-600: #38284e;
   --stone-500: #4b3660;
   --stone-400: #604d71;
   --stone-300: #765e89;
   --stone-200: #8b719a;
   --stone-100: #a090ad;
-}
 
-/* ---- glass: the pyramid, and everything interactive ------------------- */
+  /* ---- glass: the pyramid, and everything interactive ------------------- */
 
-/* Six measured stops, in luminance order rather than in hue order — #14aad4 is
-   the lit blue face and #1fd3d9 the turquoise one, and they are within a shade
-   of each other in value. */
-:root {
+  /* Six measured stops, in luminance order rather than in hue order — #14aad4 is
+     the lit blue face and #1fd3d9 the turquoise one, and they are within a shade
+     of each other in value. */
   --glass-600: #165b68;
   --glass-500: #199ba9;
   --glass-400: #14aad4;
   --glass-300: #1fd3d9;
   --glass-200: #5ed0db;
   --glass-100: #9ae3ee;
-}
 
-/* ---- chrome and nacre: the letters ------------------------------------ */
+  /* ---- chrome and nacre: the letters ------------------------------------ */
 
-/*
- * The bevel, and the shell behind it. `--chrome-200` is the face of the moulding
- * and the commonest light value in the picture; `--chrome-100` is the top rail,
- * which the render takes to pure white because the light is straight above.
- */
-:root {
+  /*
+   * The bevel, and the shell behind it. `--chrome-200` is the face of the moulding
+   * and the commonest light value in the picture; `--chrome-100` is the top rail,
+   * which the render takes to pure white because the light is straight above.
+   */
   --chrome-600: #6b6a6f;
   --chrome-500: #8f8892;
   --chrome-400: #b5a7b6;
@@ -111,11 +105,9 @@
   --nacre-600: #0a3562;
   --nacre-500: #0459ba;
   --nacre-400: #0d66f4;
-}
 
-/* ---- sand: the temple's stair, and the one control that commits ------- */
+  /* ---- sand: the temple's stair, and the one control that commits ------- */
 
-:root {
   --sand-600: #6d5031;
   --sand-500: #976739;
   --sand-400: #a07449;
@@ -131,11 +123,9 @@
    */
   --alarm: #d4685c;
   --ok: #7fd9a8;
-}
 
-/* ---- typography and metrics ------------------------------------------- */
+  /* ---- typography and metrics ------------------------------------------- */
 
-:root {
   --font-display:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-ui:
@@ -151,11 +141,9 @@
 
   /* the light inside the glass, which is what this page lights its title with */
   --glow: 0 0 0 1px rgba(31, 211, 217, 0.28), 0 0 34px -4px rgba(31, 211, 217, 0.38);
-}
 
-/* ---- the 39 roles the chrome asks for --------------------------------- */
+  /* ---- the 39 roles the chrome asks for --------------------------------- */
 
-:root {
   --bg: var(--void-1000);
   --panel: var(--void-800);
   --raised: var(--void-700);

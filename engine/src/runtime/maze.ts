@@ -115,8 +115,8 @@ export const calcTurn = (cur: number, target: number, step: number): number => {
 
 export class MazeRuntime {
   readonly main: ScriptInstance | null;
-  private nodeScripts = new Map<string, ScriptInstance>();
-  private quadScripts = new Map<string, ScriptInstance>();
+  private readonly nodeScripts = new Map<string, ScriptInstance>();
+  private readonly quadScripts = new Map<string, ScriptInstance>();
 
   node: MazeNode | null = null;
   /** the scene you stand in, when it is not a node */
@@ -270,8 +270,12 @@ export class MazeRuntime {
    */
   exitField(scene: string, i: number, what: number): number {
     const f = this.exits(scene)[i - 1]?.frames[0];
-    if (!f) return what === 1 ? this.heading : what === 2 ? this.pitch : this.fov;
-    return what === 1 ? mask(f.headDeg) : what === 2 ? mask(f.pitchDeg) : f.fovDeg;
+    if (!f) {
+      if (what === 1) return this.heading;
+      return what === 2 ? this.pitch : this.fov;
+    }
+    if (what === 1) return mask(f.headDeg);
+    return what === 2 ? mask(f.pitchDeg) : f.fovDeg;
   }
 
   /** `nearexit (scene, deg)`: the exit whose heading is closest, or 0 */

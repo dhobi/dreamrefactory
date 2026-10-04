@@ -124,7 +124,7 @@ test("v41 codec: a re-encoded waveform decodes back to the waveform", () => {
   const smooth = tone(0.05, 220);
   const back = decodeAudioContainer(encodeAudioContainer({ sampleRate: RATE, samples: smooth }));
   expect(back.sampleRate).toBe(RATE);
-  expect(back.samples.length).toBe(smooth.length);
+  expect(back.samples).toHaveLength(smooth.length);
   const smoothErr = error(smooth, back.samples);
   expect(smoothErr.max).toBeLessThan(16.5 / 32768);
   expect(smoothErr.rms).toBeLessThan(10 / 32768);
@@ -148,8 +148,8 @@ test("v41 codec: a re-encoded waveform decodes back to the waveform", () => {
   expect(error(loud, loudBack).max).toBeLessThan(0.01);
 
   // empty and one-sample inputs are the degenerate cases of the loop
-  expect(encodeV41(new Float32Array(0)).length).toBe(0);
-  expect(decodeAudioContainer(encodeAudioContainer({ sampleRate: 11025, samples: new Float32Array(1) })).samples.length).toBe(1);
+  expect(encodeV41(new Float32Array(0))).toHaveLength(0);
+  expect(decodeAudioContainer(encodeAudioContainer({ sampleRate: 11025, samples: new Float32Array(1) })).samples).toHaveLength(1);
 });
 
 test("sound container writer: a template's unknown header fields survive", () => {
@@ -176,10 +176,10 @@ test("sound container writer: a template's unknown header fields survive", () =>
   expect(v.getInt16(0x1a, true)).toBe(2); // rewritten: we only write v41
   expect(v.getInt32(28, true)).toBe(RATE);
   expect(v.getInt32(36, true)).toBe(samples.length * 2);
-  expect(out.length).toBe(56 + samples.length);
+  expect(out).toHaveLength(56 + samples.length);
   // the stale length is the one wrong answer we can rule out
   expect(v.getInt32(12, true)).toBe(samples.length);
-  expect(decodeAudioContainer(out).samples.length).toBe(samples.length);
+  expect(decodeAudioContainer(out).samples).toHaveLength(samples.length);
 });
 
 // --- reading the bank -------------------------------------------------------
@@ -244,7 +244,7 @@ test("track name: renamed in place, clamped to the field, nothing else moved", (
   // more than the field can hold and get exactly what fits
   const limit = readBankTables(file).trackNameLimit;
   const stored = patchTrackName(file, "z".repeat(80));
-  expect(stored.length).toBe(limit);
+  expect(stored).toHaveLength(limit);
   expect(readBankTables(file).trackName).toBe(stored);
 });
 
@@ -307,11 +307,11 @@ test("loop order: reordered, repeated, dropped — and validated", () => {
   back = readContainerFile(writeContainerFile(file));
   expect(readBankTables(back).loopOrder).toEqual([]);
   expect(readAudioBank(back).loopChunks).toEqual([]);
-  expect(back.containers[1].data.length).toBe(before.containers[1].data.length);
+  expect(back.containers[1].data).toHaveLength(before.containers[1].data.length);
 
   // the order field is a fixed 130 slots: a longer list stores its first 130
   const long = patchLoopOrder(file, Array.from({ length: 200 }, (_, i) => (i % 3) + 1));
-  expect(long.length).toBe(LOOP_ORDER_MAX);
+  expect(long).toHaveLength(LOOP_ORDER_MAX);
   expect(readBankTables(readContainerFile(writeContainerFile(file))).loopOrder).toEqual(long);
 });
 
@@ -332,7 +332,7 @@ test("chunk replacement: new audio in one chunk, the rest of the bank as it was"
   const back = readContainerFile(writeContainerFile(file));
   const got = decodeAudioContainer(back.containers[loc].data);
   expect(got.sampleRate).toBe(11025);
-  expect(got.samples.length).toBe(fresh.length);
+  expect(got.samples).toHaveLength(fresh.length);
   expect(error(fresh, got.samples).max).toBeLessThan(0.01);
   // the bank still resolves, with the same tables and every other chunk intact
   expect(readAudioBank(back).loopChunks).toEqual([3, 4, 5, 4]);

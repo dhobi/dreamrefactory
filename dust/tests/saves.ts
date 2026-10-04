@@ -211,7 +211,7 @@ test("every shipped save is discoverable by the pattern the page uses", () => {
   const files = dustSaves();
   if (!files.length) return;
   const paths = files.map((f) => `gamefiles/save/${f}`);
-  expect(shippedDustSaves(paths).length).toBe(files.length);
+  expect(shippedDustSaves(paths)).toHaveLength(files.length);
 });
 
 // ---------------------------------------------------------------------------
@@ -1115,7 +1115,7 @@ test("every record a Dust save has no room for is reported, and the rest is writ
   expect(after.walks.map((w) => w.actor)).toEqual(["leroy", ...Array.from({ length: 15 }, (_, i) => `w${i}`)]);
   expect(after.walks[0]).toMatchObject({ star: "town.leroy1", hasPath: false });
   // no slot names a waypoint container, so none is left behind
-  expect(after.raw.containers.length).toBe(v1Index(after.raw).walks + 1);
+  expect(after.raw.containers).toHaveLength(v1Index(after.raw).walks + 1);
 });
 
 test("new globals grow the base to fit, and only a name too long for its field is refused", () => {

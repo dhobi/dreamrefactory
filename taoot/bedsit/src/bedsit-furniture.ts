@@ -1873,9 +1873,10 @@ function mattress(b: Builder): void {
  * Eighty quads. There is no underside: it lies on the mattress.
  */
 function drawnPillow(
-  b: Builder, x0: number, y0: number, x1: number, y1: number,
+  b: Builder, rect: { x0: number; y0: number; x1: number; y1: number },
   z: number, thick: number, paint: readonly number[],
 ): void {
+  const { x0, y0, x1, y1 } = rect;
   const NU = 10, NV = 8;
   const at = (i: number, j: number): V3 => {
     const u = i / NU, v = j / NV;
@@ -2386,7 +2387,7 @@ function drawnSideTable(b: Builder): void {
  * none of its markings, and this is where the markings are written down.
  */
 function radio(b: Builder): void {
-  const P = FURNITURE_PAINT, R = RADIO, base = SIDE_TABLE.top;
+  const R = RADIO, base = SIDE_TABLE.top;
   const front = R.front, back = front + R.depth;
   const width = R.y1 - R.y0, mid = (R.y0 + R.y1) / 2, radius = width / 2, height = R.top - base;
   const shoulder = R.top - radius;
@@ -3314,7 +3315,7 @@ function drawnDeskLamp(b: Builder): void {
 function deskProps(b: Builder): void {
   const P = FURNITURE_PAINT, D = DESK_PROPS;
   b.material(null);
-  for (const f of D.frames) plate(b, f.x, f.y, f.w, f.h, f.turn, f.oval, f.gilt, f.art as keyof typeof MATERIALS);
+  for (const f of D.frames) plate(b, f, f.oval, f.gilt, f.art as keyof typeof MATERIALS);
 
   // the bottle at the far end: dark glass, a shoulder, a neck, a foil cap
   const B = D.bottle;
@@ -3356,10 +3357,10 @@ function deskProps(b: Builder): void {
   D.magazines.forEach((m, i) => {
     // the lady is TORN, which the film shows and a cut rectangle cannot
     if ("fray" in m && m.fray) {
-      roundSlab(b, m.x, m.y, m.long, m.short, m.thick, m.turn, DESK.top + lift[i], 0, P[m.paint], P.paper,
+      roundSlab(b, layOf(m, DESK.top + lift[i]), 0, P[m.paint], P.paper,
                 m.art as keyof typeof MATERIALS, m.fray);
     } else {
-      slab(b, m.x, m.y, m.long, m.short, m.thick, m.turn, DESK.top + lift[i], P[m.paint], P.paper,
+      slab(b, layOf(m, DESK.top + lift[i]), P[m.paint], P.paper,
            m.art as keyof typeof MATERIALS);
     }
   });
@@ -3374,14 +3375,14 @@ function deskProps(b: Builder): void {
   // the tarot card at the far end, wearing its own face. Three units thick,
   // because a card is one — the magazines are ten and are a sheaf of pages.
   const t = D.tarot;
-  roundSlab(b, t.x, t.y, t.long, t.short, t.thick, t.turn, DESK.top + lift[TAROT], D.cardRadius,
+  roundSlab(b, layOf(t, DESK.top + lift[TAROT]), D.cardRadius,
     P.gilt, P.booklet, "tarot");
 
   // the three postcards fanned out in front of it, riding on each other where
   // they overlap so the fan reads as a pile and not as a plane fighting itself
   D.postcards.forEach((c, i) => {
-    slab(b, c.x, c.y, c.tall, c.wide, c.thick, c.turn, DESK.top + lift[CARDS + i], P.booklet, P.booklet,
-      c.art as keyof typeof MATERIALS);
+    slab(b, { cx: c.x, cy: c.y, long: c.tall, short: c.wide, h: c.thick, turn: c.turn, z: DESK.top + lift[CARDS + i] },
+      P.booklet, P.booklet, c.art as keyof typeof MATERIALS);
   });
 
   // The matchbox: the box, its tray and eighteen matches in it, modelled. It
@@ -3585,6 +3586,19 @@ function stackFlat(
  * is the desk's far end — and the cover's own width across `short`. The edges
  * underneath stay flat `side`, since what shows there is paper and not print.
  */
+/** where a slab lies: its centre in plan, its two sides, its thickness, its turn
+ *  in plan and the height its underside rests at */
+interface Lay {
+  cx: number; cy: number; long: number; short: number; h: number; turn: number; z: number;
+}
+
+/** a desk piece's own lie, at the height it has been lifted to */
+function layOf(
+  m: { x: number; y: number; long: number; short: number; thick: number; turn: number }, z: number,
+): Lay {
+  return { cx: m.x, cy: m.y, long: m.long, short: m.short, h: m.thick, turn: m.turn, z };
+}
+
 /**
  * A slab with ROUNDED corners, for the one thing on this desk that has them.
  *
@@ -3606,10 +3620,10 @@ function stackFlat(
  * number rather than a measurement of somebody's brush.
  */
 function roundSlab(
-  b: Builder, cx: number, cy: number, long: number, short: number, h: number,
-  turn: number, z: number, radius: number, face: readonly number[], side: readonly number[],
+  b: Builder, lay: Lay, radius: number, face: readonly number[], side: readonly number[],
   art?: keyof typeof MATERIALS, fray = 0,
 ): void {
+  const { cx, cy, long, short, h, turn, z } = lay;
   const cs = Math.cos(turn), sn = Math.sin(turn);
   const U = short / 2, V = long / 2;
   const r = Math.min(radius, U * 0.9, V * 0.9);
@@ -3655,7 +3669,7 @@ function roundSlab(
     if (!fray) continue;
     // and the straight run from this corner to the next
     const [nu2, nv2, ] = QUARTER[(qi + 1) % 4];
-    const a0 = outline[outline.length - 1];
+    const a0 = outline.at(-1)!;
     const b0: [number, number] = [nu2 * (U - r) + r * Math.cos(from + Math.PI / 2),
                                  nv2 * (V - r) + r * Math.sin(from + Math.PI / 2)];
     const run = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]);
@@ -3696,10 +3710,10 @@ function roundSlab(
 }
 
 function slab(
-  b: Builder, cx: number, cy: number, long: number, short: number, h: number,
-  turn: number, z: number, face: readonly number[], side: readonly number[],
+  b: Builder, lay: Lay, face: readonly number[], side: readonly number[],
   art?: keyof typeof MATERIALS,
 ): void {
+  const { cx, cy, long, short, h, turn, z } = lay;
   const cs = Math.cos(turn), sn = Math.sin(turn);
   const at = (u: number, v: number): V3 => [cx + u * cs - v * sn, cy + u * sn + v * cs, z + h];
   const foot = (u: number, v: number): V3 => [cx + u * cs - v * sn, cy + u * sn + v * cs, z];
@@ -3821,8 +3835,9 @@ function bottleLabel(b: Builder, B: typeof DESK_PROPS.bottle): void {
   b.material(null);
 }
 
-function plate(b: Builder, x: number, y: number, w: number, h: number, turn: number,
+function plate(b: Builder, frame: { x: number; y: number; w: number; h: number; turn: number },
                oval: boolean, gilt: boolean, art?: keyof typeof MATERIALS): void {
+  const { x, y, w, h, turn } = frame;
   const P = FURNITURE_PAINT;
   const TILT = 0.13, N = oval ? 28 : 4;
   const cs = Math.cos(TILT), sn = Math.sin(TILT);

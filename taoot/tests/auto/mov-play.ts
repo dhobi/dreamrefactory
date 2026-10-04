@@ -98,7 +98,7 @@ test("camelsee.mov: the horses gallop, and keep galloping", () => {
   // moves it. This is the half the port already had right.
   expect(player.framePos).toBe(0);
   expect(run(player, 50)).toEqual([0]);
-  expect(player.waitingRegions.length).toBe(2);
+  expect(player.waitingRegions).toHaveLength(2);
 
   // click the horses — frame 0's second region, target "HORSE 2"
   const mov = readMovFile(bytes);
@@ -197,9 +197,9 @@ test("a cutscene's bed is cut from its authored order, with the overrun margin",
   if (!logo) return;
   // logo.mov's second segment: 23 loop entries over 4 distinct chunks, so the
   // order holds 156 s of music behind a 318-frame picture worth 22.9 s of them.
-  expect(logo.seg.frames.length).toBe(318);
-  expect(logo.seg.audioChunks.length).toBe(23);
-  expect(logo.audio.unique.length).toBe(4);
+  expect(logo.seg.frames).toHaveLength(318);
+  expect(logo.seg.audioChunks).toHaveLength(23);
+  expect(logo.audio.unique).toHaveLength(4);
   expect(logo.audio.audioSec).toBeCloseTo(22.89, 1);
   expect(logo.order).toBeGreaterThan(150);
   // ...and the film is paced BY that 22.9 s, so what plays is the content plus
@@ -221,7 +221,7 @@ test("a cutscene's bed is cut from its authored order, with the overrun margin",
   // second went silent when the bed was cut to the prediction exactly.
   const credits = bedOf("ocredits.mov");
   if (!credits) return;
-  expect(credits.seg.frames.length).toBe(1225);
+  expect(credits.seg.frames).toHaveLength(1225);
   expect(credits.audio.audioSec).toBeCloseTo(71.98, 1);
   // And "the picture" is its AUTHORED length — the holds the player advances on,
   // added up — not `interval x frames`, which is a rate the player never uses.
@@ -256,9 +256,9 @@ test("a bed inherited by later segments is cut to the whole film, not one segmen
   const mov = readMovFile(new Uint8Array(readFileSync(path)));
   const seg = mov.segments[0];
   const audio = segmentAudio(seg)!;
-  expect(mov.segments.length).toBe(4);
-  expect(seg.audioChunks.length).toBe(23);
-  expect(audio.unique.length).toBe(4);
+  expect(mov.segments).toHaveLength(4);
+  expect(seg.audioChunks).toHaveLength(23);
+  expect(audio.unique).toHaveLength(4);
 
   // only the first segment brings a bed, so the other three play under this one
   expect(mov.segments.slice(1).every((s) => s.audioChunks.length === 0)).toBe(true);
@@ -300,8 +300,8 @@ test("an interactive film's bed loops, because there is no runtime to cut it to"
   // four times. There is no telling how long the player leaves it up, so the
   // DISTINCT content plays and repeats — the menu sat in silence before it did.
   expect(menu.seg.frames.some((f) => f.regions.length > 0)).toBe(true);
-  expect(menu.seg.audioChunks.length).toBe(4);
-  expect(menu.audio.unique.length).toBe(1);
+  expect(menu.seg.audioChunks).toHaveLength(4);
+  expect(menu.audio.unique).toHaveLength(1);
   expect(menu.played).toBeCloseTo(menu.audio.audioSec, 3);
   expect(menu.played).toBeCloseTo(7.99, 1);
   expect(menu.bed.loop).toBe(true);

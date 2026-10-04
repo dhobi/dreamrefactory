@@ -45,7 +45,6 @@ import { Rbay } from "./rbay";
 import type { Copilot } from "./combat/copilot";
 import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
 import { readMazeV0 } from "@dreamfactory/engine/df/maze-v0";
-import { readContainerFile as readFile } from "@dreamfactory/engine/df/container";
 import { AMMO_FULL, newRecords, startGame, type Records } from "./records";
 import { inRect } from "./screens";
 import { readRvn, writeRvn, type SavedGame } from "./rvn";
@@ -133,7 +132,7 @@ export class JumpRaven {
   private running = true;
   private run: Co | null = null;
   private puppet: Uint8Array[] = [];
-  private pictures = new Map<number, FrameV0>();
+  private readonly pictures = new Map<number, FrameV0>();
   /** the one palette every film and talk file of the rip carries (all 171 of them) */
   private palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 
@@ -194,7 +193,10 @@ export class JumpRaven {
       }
       for (;;) {
         this.phase = this.level === HIGH_SCORES ? "scores" : "story";
-        const next = isFlying(this.level) ? yield* this.flying() : this.level === HIGH_SCORES ? yield* this.highScores() : yield* this.story();
+        let next: number;
+        if (isFlying(this.level)) next = yield* this.flying();
+        else if (this.level === HIGH_SCORES) next = yield* this.highScores();
+        else next = yield* this.story();
         if (next < 0) return;
         yield* this.go(next);
       }
@@ -233,7 +235,10 @@ export class JumpRaven {
 
   private picture(k: number): FrameV0 {
     let f = this.pictures.get(k);
-    if (!f) this.pictures.set(k, (f = decodeFrameV0(this.puppet[k])));
+    if (!f) {
+      f = decodeFrameV0(this.puppet[k]);
+      this.pictures.set(k, f);
+    }
     return f;
   }
 
@@ -310,7 +315,10 @@ export class JumpRaven {
   /** 0x422bda: DLOG6, the question; true for OK */
   private *askQuit(): Co<boolean> {
     const ask = this.opts.askQuit;
-    if (!ask) return this.m.log("Quit: no dialog to show, so OK"), true;
+    if (!ask) {
+      this.m.log("Quit: no dialog to show, so OK");
+      return true;
+    }
     let ok: boolean | undefined;
     this.asking = true;
     ask((a) => (ok = a));
@@ -347,7 +355,10 @@ export class JumpRaven {
     this.asking = false;
     if (!answer) return;
     if (answer.volume !== m.volume) m.setVolume(answer.volume);
-    if (answer.theme !== m.theme) m.setTheme(answer.theme), m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
+    if (answer.theme !== m.theme) {
+      m.setTheme(answer.theme);
+      m.log(`Sound ▸ Theme ${m.theme ? "on" : "off"}`);
+    }
   }
 
   /**
@@ -367,7 +378,8 @@ export class JumpRaven {
     this.asking = false;
     if (!answer) return;
     this.sco.keys = bindKeys(answer);
-    m.log(`Settings ▸ Keys: ${KEY_ACTIONS.map((a, i) => `${a} ${keyFor(this.sco.keys, i + 1) || "-"}`).join(", ")}`);
+    const keys = KEY_ACTIONS.map((a, i) => a + " " + (keyFor(this.sco.keys, i + 1) || "-"));
+    m.log(`Settings ▸ Keys: ${keys.join(", ")}`);
     this.opts.keepSco?.(writeSco(this.sco));
   }
 
@@ -420,9 +432,18 @@ export class JumpRaven {
   controlKey(key: string): boolean {
     if (this.phase !== "story" || this.asking) return false;
     const k = key.toLowerCase();
-    if (k === ".") return this.m.events.push({ kind: "key", key: ESCAPE }), true;
-    if (k === "q") return (this.quitKey = true), true;
-    if (k >= "0" && k <= "7" && k.length === 1) return this.m.setVolume(Number(k)), true;
+    if (k === ".") {
+      this.m.events.push({ kind: "key", key: ESCAPE });
+      return true;
+    }
+    if (k === "q") {
+      this.quitKey = true;
+      return true;
+    }
+    if (k >= "0" && k <= "7" && k.length === 1) {
+      this.m.setVolume(Number(k));
+      return true;
+    }
     return false;
   }
 
@@ -587,14 +608,16 @@ export class JumpRaven {
   private *flying(): Co<number> {
     const m = this.m;
     this.phase = "flying";
-    const city = readFile((yield* m.file("citymaze", this.day)).data);
+    const city = readContainerFile((yield* m.file("citymaze", this.day)).data);
     const panel = readPanel((yield* m.file("panel", this.day)).data);
     const w = new World(m, readMazeV0(city), this.records, PARAMS[this.difficulty], this.difficulty, this.day);
     const flight = new Flight(m, w, city, panel);
     const hud = yield* assemble(m, w, this.band.value, this.comms, this.hudState);
     flight.hudFrame = () => hud.frame();
     // 0x40b779: the copilot's navigation puts one move in the queue
-    (w.copilot as Copilot).steer = (k: number) => void (flight.state.queue = [k]);
+    (w.copilot as Copilot).steer = (k: number) => {
+      flight.state.queue = [k];
+    };
     // 0x40bb03: the comms box starts the flight over (the pilot's opener)
     this.comms.reset();
     // 0x40bb53 → 0x4233ba: the band's theme tune, round and round, if Theme is on

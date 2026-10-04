@@ -45,7 +45,7 @@ const ESCAPE: Record<string, string> = {
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ESCAPE[c]);
 
 /** `verb(` at the head of a statement */
-const VERB = /^(\s*)([A-Za-z][A-Za-z0-9_]*)(\s*\()/;
+const VERB = /^(\s*)([A-Za-z]\w*)(\s*\()/;
 /**
  * A named argument: `by: esc`, `until: quiet` — a COLON, never an equals.
  *
@@ -61,7 +61,7 @@ const NAMED = /^([A-Za-z][A-Za-z0-9_-]*)(\s*:)/;
  * reader needs to see at a glance is "this is a question about the world", not
  * its three parts.
  */
-const CONDITION = /^([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_.-]+)?)(\s*(?:==|!=|>=|<=|>|<))/;
+const CONDITION = /^([A-Za-z]\w*(?:\.[\w.-]+)?)(\s*(?:==|!=|>=|<=|>|<))/;
 const NUMBER = /^-?\d+(\.\d+)?/;
 const STRING = /^"(?:[^"\\]|\\.)*"/;
 const BEVELS = /^\[[\d,\s]*\]/;
@@ -93,8 +93,7 @@ function code(text: string): Span[] {
   const verb = VERB.exec(rest);
   if (verb) {
     if (verb[1]) out.push({ text: verb[1], cls: "" });
-    out.push({ text: verb[2], cls: "v" });
-    out.push({ text: verb[3], cls: "p" });
+    out.push({ text: verb[2], cls: "v" }, { text: verb[3], cls: "p" });
     rest = rest.slice(verb[0].length);
   }
 
@@ -115,15 +114,13 @@ function code(text: string): Span[] {
     // == c73` puts one directly after a named argument
     const cond = CONDITION.exec(rest);
     if (cond) {
-      out.push({ text: cond[1], cls: "q" });
-      out.push({ text: cond[2], cls: "p" });
+      out.push({ text: cond[1], cls: "q" }, { text: cond[2], cls: "p" });
       rest = rest.slice(cond[0].length);
       continue;
     }
     const named = NAMED.exec(rest);
     if (named) {
-      out.push({ text: named[1], cls: "k" });
-      out.push({ text: named[2], cls: "p" });
+      out.push({ text: named[1], cls: "k" }, { text: named[2], cls: "p" });
       rest = rest.slice(named[0].length);
       continue;
     }
@@ -290,7 +287,7 @@ export function attachEditor(textarea: HTMLTextAreaElement, hooks: EditorHooks =
 
   /** the pixel height of one line, asked of the browser rather than assumed */
   const lineHeight = (): number => {
-    const px = parseFloat(getComputedStyle(highlight).lineHeight);
+    const px = Number.parseFloat(getComputedStyle(highlight).lineHeight);
     return Number.isFinite(px) && px > 0 ? px : 18;
   };
 
@@ -301,11 +298,11 @@ export function attachEditor(textarea: HTMLTextAreaElement, hooks: EditorHooks =
     if (line === null) return;
     gutter.children[line - 1]?.classList.add(cls);
     const h = lineHeight();
-    const pad = parseFloat(getComputedStyle(highlight).paddingTop) || 0;
+    const pad = Number.parseFloat(getComputedStyle(highlight).paddingTop) || 0;
     el.style.height = `${h}px`;
     el.style.top = `${pad + (line - 1) * h - textarea.scrollTop}px`;
     // a band drawn above the padding would sit on top of the row of numbers
-    el.style.visibility = parseFloat(el.style.top) < pad - h ? "hidden" : "visible";
+    el.style.visibility = Number.parseFloat(el.style.top) < pad - h ? "hidden" : "visible";
   };
 
   /** light the gutter numbers, and place both bands */
@@ -346,10 +343,10 @@ export function attachEditor(textarea: HTMLTextAreaElement, hooks: EditorHooks =
     const rows = textarea.value.split("\n").length;
     const span = (e.target as HTMLElement | null)?.closest("span");
     let line: number;
-    if (span && span.parentElement === gutter) {
+    if (span?.parentElement === gutter) {
       line = [...gutter.children].indexOf(span) + 1;
     } else {
-      const pad = parseFloat(getComputedStyle(highlight).paddingTop) || 0;
+      const pad = Number.parseFloat(getComputedStyle(highlight).paddingTop) || 0;
       const y = e.clientY - gutter.getBoundingClientRect().top + gutter.scrollTop - pad;
       line = Math.floor(y / lineHeight()) + 1;
     }

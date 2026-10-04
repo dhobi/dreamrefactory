@@ -166,7 +166,7 @@ test("DOG1.MOV: the second growl starts after the first has finished", () => {
   // the frame rate alone it would be 50 ms and the next growl would land at
   // 100 ms; the film is authored to wait the growl out.
   runTo(600);
-  expect(sink.plays.length).toBe(1);
+  expect(sink.plays).toHaveLength(1);
   const growl = sink.plays[0];
   expect(growl.channel).toBe("sound");
   expect(growl.seconds).toBeGreaterThan(0.8);
@@ -175,12 +175,12 @@ test("DOG1.MOV: the second growl starts after the first has finished", () => {
   // still on frame 2 most of a second later, because the growl is still running
   runTo(1_000);
   expect(player.framePos).toBe(2);
-  expect(sink.plays.length).toBe(1);
+  expect(sink.plays).toHaveLength(1);
 
   // and the second growl arrives only once the first is out of the way, whole
   runTo(2_000);
-  expect(sink.plays.length).toBe(2);
-  expect(growl.displacedAt).toBe(null);
+  expect(sink.plays).toHaveLength(2);
+  expect(growl.displacedAt).toBeNull();
   expect(sink.plays[1].startedAt).toBeGreaterThanOrEqual(
     growl.startedAt + growl.seconds * 1000,
   );
@@ -201,7 +201,7 @@ test("DOG2.MOV: the bone is eaten to the end of the sound, not the pictures", ()
   // come to 0.92 s. Frame 5 is the one that carries the flag, so that is where
   // the film sits and waits — not the last frame, which then plays its own hold
   // out afterwards.
-  expect(sink.plays.length).toBe(1);
+  expect(sink.plays).toHaveLength(1);
   expect(sink.plays[0].seconds).toBeGreaterThan(2.5);
   runTo(1_500);
   expect(player.playing).toBe(true);

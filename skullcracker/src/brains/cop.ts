@@ -685,7 +685,8 @@ function decide(
       e.beat = beat - 1;
       if (beat >= 0 && !k.player.swinging) {
         // ...and the walk above already cleared `obj+0x46`, which takes the frame
-        return backTurned ? false : done ? rewind(e, COP.stance) : false;
+        if (backTurned || !done) return false;
+        return rewind(e, COP.stance);
       }
       e.beat = k.roll(2) + 3;
       /**

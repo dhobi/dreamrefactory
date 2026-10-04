@@ -32,6 +32,12 @@ export interface Grounded {
 
 const HALF = 0x1e;
 
+/** the heading along an axis toward the player and the cell it leads to: back if `d` is positive, else on (none at `d` 0) */
+function toward(d: number, back: number, on: number, c: number): [number, number] {
+  if (d > 0) return [back, c - 1];
+  return [on, d === 0 ? -1 : c + 1];
+}
+
 export class Drone {
   o: Obj = { angle: 0, x: 0, y: 0, z: 0, cellX: 0, cellY: 0 };
   /** +0x18 its step, +0x24 the steps to its point */
@@ -164,18 +170,16 @@ export class Drone {
         const dx = o.cellX - w.cam.cellX;
         const dy = o.cellY - w.cam.cellY;
         // the longer way first: its heading and the cell it leads to, then the other's
-        let [pa, px, py] = [0, o.cellX, o.cellY];
-        let [sa, sx, sy] = [0, o.cellX, o.cellY];
+        let pa: number;
+        let sa: number;
+        let [px, py] = [o.cellX, o.cellY];
+        let [sx, sy] = [o.cellX, o.cellY];
         if (Math.abs(dx) > Math.abs(dy)) {
-          if (dx > 0) (pa = 0x80), px--;
-          else (pa = 0), px++, dx === 0 && (px = -1);
-          if (dy > 0) (sa = 0xc0), sy--;
-          else (sa = 0x40), sy++, dy === 0 && (sy = -1);
+          [pa, px] = toward(dx, 0x80, 0, px);
+          [sa, sy] = toward(dy, 0xc0, 0x40, sy);
         } else {
-          if (dy > 0) (pa = 0xc0), py--;
-          else (pa = 0x40), py++, dy === 0 && (py = -1);
-          if (dx > 0) (sa = 0x80), sx--;
-          else (sa = 0), sx++, dx === 0 && (sx = -1);
+          [pa, py] = toward(dy, 0xc0, 0x40, py);
+          [sa, sx] = toward(dx, 0x80, 0, sx);
         }
         if (Math.abs(dx) === Math.abs(dy) && w.roll(2) === 1) [pa, px, py, sa, sx, sy] = [sa, sx, sy, pa, px, py];
         if (!w.blocked(px, py)) {
@@ -239,7 +243,11 @@ export class Drone {
     const cy = Math.trunc(to.y / CELL);
     // 0x40428b: over the tank or the jeep
     if (this.ground.some((g) => g.o.cellX === cx && g.o.cellY === cy)) to.z += 0x50;
-    if (w.cam.cellX === cx && w.cam.cellY === cy) (to.x = w.cam.x), (to.y = w.cam.y), (to.z = w.cam.z + 0x3c);
+    if (w.cam.cellX === cx && w.cam.cellY === cy) {
+      to.x = w.cam.x;
+      to.y = w.cam.y;
+      to.z = w.cam.z + 0x3c;
+    }
     const dx = to.x - o.x;
     const dy = to.y - o.y;
     const dz = to.z - o.z;

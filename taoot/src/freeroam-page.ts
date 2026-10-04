@@ -112,14 +112,14 @@ const TOUR_LINE = "guided tour — every door opens";
  */
 const isForward = (s: Roam, key: string): boolean => {
   if (key === "uparrow") return true;
-  const north = s.interp.globals.get("keynorth");
+  const north = s.interp.globals.get("keynorth") as string | number | undefined;
   return key.toLowerCase() === String(north || "w").toLowerCase();
 };
 
 /** which CD is mounted, from the label `setpath` wrote */
 const disc = (s: Roam): 1 | 2 => (/2\s*$/.test(s.mountedCd) ? 2 : 1);
 
-void (async () => {
+const freeRoam = async (): Promise<void> => {
   const dbg = await booted();
   if (!dbg?.session) throw new Error("freeroam: the game never came up");
   const session = dbg.session;
@@ -213,4 +213,5 @@ void (async () => {
       return s ? pickDoorway(s, session.interp.globals) : null;
     },
   };
-})();
+};
+await freeRoam();

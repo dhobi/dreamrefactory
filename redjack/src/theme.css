@@ -86,41 +86,37 @@
   --hold-700: #1b1109;
   --hold-600: #281609;
   --hold-500: #361a08;
-}
 
-/* ---- plank: the grain, which is what a border is here ------------------ */
+  /* ---- plank: the grain, which is what a border is here ------------------ */
 
-/*
- * The lit grain on the boards behind the skull, #4e2c14 and #6f4a32 inside the
- * plank's own cells. A border in the plank's grain reads as a joint between two
- * boards rather than as a line drawn on the page.
- */
-:root {
+  /*
+   * The lit grain on the boards behind the skull, #4e2c14 and #6f4a32 inside the
+   * plank's own cells. A border in the plank's grain reads as a joint between two
+   * boards rather than as a line drawn on the page.
+   */
   --plank-500: #3a2311;
   --plank-400: #4e2c14;
   --plank-300: #6f4a32;
   --plank-200: #8c5530;
-}
 
-/* ---- jack: the letters -------------------------------------------------- */
+  /* ---- jack: the letters -------------------------------------------------- */
 
-/*
- * The red half of the picture (18.0% across its two families), and the ramp is
- * the letters read from their shadow to their lit face. The saturation is the
- * point: every cell here runs 92 to 97%, with green and blue channels of 2 to 9
- * — desaturate a red this dark and it goes brown, and on a page of brown wood a
- * brown red is not a brand at all.
- *
- *   #230201   the mean of the red below 12% lightness: the cracks
- *   #580403   #670403 #760403   the shadow side, each ~1.5%
- *   #970503   the commonest red, 1.6%: the face
- *   #b70703   the face where it is lit
- *
- * There is no bright red on the card — the letters never go past #c50903 — and
- * the page does not invent one. Where it needs red to be seen it puts brass
- * round it, which is what the letters do.
- */
-:root {
+  /*
+   * The red half of the picture (18.0% across its two families), and the ramp is
+   * the letters read from their shadow to their lit face. The saturation is the
+   * point: every cell here runs 92 to 97%, with green and blue channels of 2 to 9
+   * — desaturate a red this dark and it goes brown, and on a page of brown wood a
+   * brown red is not a brand at all.
+   *
+   *   #230201   the mean of the red below 12% lightness: the cracks
+   *   #580403   #670403 #760403   the shadow side, each ~1.5%
+   *   #970503   the commonest red, 1.6%: the face
+   *   #b70703   the face where it is lit
+   *
+   * There is no bright red on the card — the letters never go past #c50903 — and
+   * the page does not invent one. Where it needs red to be seen it puts brass
+   * round it, which is what the letters do.
+   */
   --jack-800: #230201;
   --jack-700: #380402;
   --jack-600: #580403;
@@ -128,27 +124,25 @@
   --jack-400: #970503;
   --jack-300: #b70703;
   --jack-200: #c50903;
-}
 
-/* ---- brass: the bevel --------------------------------------------------- */
+  /* ---- brass: the bevel --------------------------------------------------- */
 
-/*
- * A scanline at y=180 across the J of JACK, going into the letter from its
- * left edge:
- *
- *   x=540   #140302   the dark rule outside
- *   x=542   #814711   the bevel's shaded foot
- *   x=544   #eee3a0   its lit lip, the brightest pixel on the letter
- *   x=548   #f4b83f   the bevel's face
- *   x=550   #ecac31
- *   x=554   #dd911f   falling away
- *   x=558   #904b17   into the shadow
- *   x=562   #9e0e02   the red face
- *
- * brass-100 is the census's lit-gold family (hue 40-50, 80%+ saturated, 2.1%),
- * the mean of every pixel where the gold catches the light.
- */
-:root {
+  /*
+   * A scanline at y=180 across the J of JACK, going into the letter from its
+   * left edge:
+   *
+   *   x=540   #140302   the dark rule outside
+   *   x=542   #814711   the bevel's shaded foot
+   *   x=544   #eee3a0   its lit lip, the brightest pixel on the letter
+   *   x=548   #f4b83f   the bevel's face
+   *   x=550   #ecac31
+   *   x=554   #dd911f   falling away
+   *   x=558   #904b17   into the shadow
+   *   x=562   #9e0e02   the red face
+   *
+   * brass-100 is the census's lit-gold family (hue 40-50, 80%+ saturated, 2.1%),
+   * the mean of every pixel where the gold catches the light.
+   */
   --brass-700: #472408;
   --brass-600: #814711;
   --brass-500: #b5660e;
@@ -156,17 +150,15 @@
   --brass-300: #ecac31;
   --brass-200: #f4b83f;
   --brass-100: #f7d37b;
-}
 
-/* ---- parchment: every word on the page --------------------------------- */
+  /* ---- parchment: every word on the page --------------------------------- */
 
-/*
- * The scrap behind the letters and the banner under the plank. Its lit side is
- * #e7b768 (1.3%, the commonest light orange) and the banner #f2cf8d; its shadow
- * is #ae712e and #885827, which are also where the burnt edges go. Dim text on
- * this page is paper in shadow rather than grey.
- */
-:root {
+  /*
+   * The scrap behind the letters and the banner under the plank. Its lit side is
+   * #e7b768 (1.3%, the commonest light orange) and the banner #f2cf8d; its shadow
+   * is #ae712e and #885827, which are also where the burnt edges go. Dim text on
+   * this page is paper in shadow rather than grey.
+   */
   --parchment-100: #f6d997;
   --parchment-200: #f2cf8d;
   --parchment-300: #e7b768;
@@ -174,57 +166,49 @@
   --parchment-500: #ae712e;
   --parchment-600: #885827;
   --parchment-700: #583618;
-}
 
-/* ---- bone: the skull ---------------------------------------------------- */
+  /* ---- bone: the skull ---------------------------------------------------- */
 
-/*
- * Inside the skull, #ecd2ac and #eed2ac are the lit dome, #d5b38c the cheek.
- * Paler and pinker than the parchment it sits beside, which is the only thing
- * that keeps a bone-white skull legible on a card that is nearly all tan.
- */
-:root {
+  /*
+   * Inside the skull, #ecd2ac and #eed2ac are the lit dome, #d5b38c the cheek.
+   * Paler and pinker than the parchment it sits beside, which is the only thing
+   * that keeps a bone-white skull legible on a card that is nearly all tan.
+   */
   --bone-100: #eed2ac;
   --bone-200: #ecc894;
   --bone-300: #d5b38c;
-}
 
-/* ---- silver: the one piece of eight ----------------------------------- */
+  /* ---- silver: the one piece of eight ----------------------------------- */
 
-/*
- * The coin on the right of the plank, and the only cold family in the card:
- * 0.17% of it between 35% and 85% lightness, mean #85796f, lit to #beb7b0 where
- * the relief catches. On this page it is the glint — used for what is live and
- * for nothing that is merely there:
- *
- *   1  the advancing tip of the boot gauge
- *   2  the network spinner in the corner of the picture
- *   3  `--ok`
- *
- * Not for text, not for a border, not for the ground. A silver page would be
- * a different game's.
- */
-:root {
+  /*
+   * The coin on the right of the plank, and the only cold family in the card:
+   * 0.17% of it between 35% and 85% lightness, mean #85796f, lit to #beb7b0 where
+   * the relief catches. On this page it is the glint — used for what is live and
+   * for nothing that is merely there:
+   *
+   *   1  the advancing tip of the boot gauge
+   *   2  the network spinner in the corner of the picture
+   *   3  `--ok`
+   *
+   * Not for text, not for a border, not for the ground. A silver page would be
+   * a different game's.
+   */
   --silver-100: #eaeae8;
   --silver-200: #beb7b0;
   --silver-300: #a69c94;
   --silver-400: #85796f;
   --silver-500: #59504a;
-}
 
-/* ---- the two extras the pages use ------------------------------------- */
+  /* ---- the two extras the pages use ------------------------------------- */
 
-:root {
   /* a warning is not the brand: it is the flame-lit streaks in the letters'
      face (hue 8-22, 0.04% above 48% lightness), orange enough to be told from
      the crimson and bright enough to read, 5.7:1 on the ground */
   --alarm: #e65c25;
   --ok: var(--silver-200);
-}
 
-/* ---- typography and metrics ------------------------------------------- */
+  /* ---- typography and metrics ------------------------------------------- */
 
-:root {
   /* the letters are slab-cut wood type and the banner is a Clarendon-style
      serif; the page carries no webfont for them, so the display face is the
      platform's serif — the nearest thing on every system to type that was
@@ -245,11 +229,9 @@
      thing on the card that shines rather than being lit */
   --glow:
     0 0 0 1px rgba(236, 172, 49, 0.24), 0 0 36px -6px rgba(236, 172, 49, 0.3);
-}
 
-/* ---- the roles the chrome asks for ------------------------------------ */
+  /* ---- the roles the chrome asks for ------------------------------------ */
 
-:root {
   --bg: var(--hold-1000);
   --panel: var(--hold-800);
   --raised: var(--hold-700);

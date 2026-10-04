@@ -1270,8 +1270,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
       },
     ],
     // 0x44f1fd..0x44f280, in the order the handler tests
-    pick: ({ damage, dy, facingAway }) =>
-      damage > 50 ? 3 : dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1,
+    pick: ({ damage, dy, facingAway }) => {
+      if (damage > 50) return 3;
+      if (dy > 50) return 0;
+      return dy >= 30 && !facingAway ? 2 : 1;
+    },
     death: {
       cels: [
         1960, 1961, 1962, 1963, 1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987,
@@ -2335,7 +2338,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
         kraggGroundBlows = 0;
         const mirror = (e.facing ?? 1) < 0;
         const west = playerX !== undefined && pointX !== undefined && playerX < pointX;
-        return west === mirror ? 10 : mirror ? 9 : 8;
+        if (west === mirror) return 10;
+        return mirror ? 9 : 8;
       }
       if (e.script === 8) return damage < 0x2d ? 4 : 3;
       return damage >= 0x2d ? 3 : Math.floor(random() * 3);
@@ -2566,8 +2570,11 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * it has just let the fourth can go, when `0x43b71a` shows the empty
      * machine instead.
      */
-    pick: ({ damage }, e) =>
-      damage >= 75 ? 3 : damage < 30 ? 0 : (e.shaken ?? 0) >= 4 ? 2 : 1,
+    pick: ({ damage }, e) => {
+      if (damage >= 75) return 3;
+      if (damage < 30) return 0;
+      return (e.shaken ?? 0) >= 4 ? 2 : 1;
+    },
     /** `0x43b6f5` / `0x43b71a` / `0x43b6d3` — a can once `AI+2` passes two, four of them */
     shakes: { counts: 30, every: 3, holds: 4, bursts: 75, from: "0x43b6ab" },
     // `0x436682` writes `obj+0x10` as the floor under its x (`0x40bbd0`) less
@@ -2695,8 +2702,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
       { cels: [6042], hold: 4, resume: WEREC_STANCE, from: "0x477a48 tag 2" },
     ],
     // 0x452a87..0x452ae3, and the punk's 0x44f21e is the same four comparisons
-    pick: ({ dy, facingAway }) =>
-      dy > 50 ? 0 : dy >= 30 && !facingAway ? 2 : 1,
+    pick: ({ dy, facingAway }) => {
+      if (dy > 50) return 0;
+      return dy >= 30 && !facingAway ? 2 : 1;
+    },
     death: {
       cels: [6030, 6031, 6032, 6033, 6034, 6035, 6036, 6037],
       hold: 3,
@@ -2993,8 +3002,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * lightly still falls — while the sound plays and the handler answers 1
      * (`0x44fee4`), so the solver knocks it along the street all the same.
      */
-    pick: ({ damage }, e) =>
-      e.script === 2 || damage < 0xa ? -1 : damage >= 0x37 ? 1 : 0,
+    pick: ({ damage }, e) => {
+      if (e.script === 2 || damage < 0xa) return -1;
+      return damage >= 0x37 ? 1 : 0;
+    },
     /**
      * No `floor`: `0x451196` computes the offset per record — the region's
      * floor under its point (`0x40bbd0`) less the point less cel 2410's drawn
@@ -3991,12 +4002,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
      * handler (`0x43041e`): its point lower than the contact is tag 0, and
      * level with it or above is tag 2 (`0x4183a1`, `jle`).
      */
-    pick: ({ damage, contactY, pointY }) =>
-      damage < 0x1e
-        ? 1
-        : contactY === undefined || pointY === undefined || pointY > contactY
-          ? 0
-          : 2,
+    pick: ({ damage, contactY, pointY }) => {
+      if (damage < 0x1e) return 1;
+      return contactY === undefined || pointY === undefined || pointY > contactY ? 0 : 2;
+    },
     // `0x46cbe0` tag 0, kind 6
     death: {
       cels: [3080, 3081, 3082, 3083, 3084, 3085],

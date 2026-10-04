@@ -205,7 +205,7 @@ const newPuff = (): Puff => ({
 });
 
 /** held within ±n */
-const clamp = (v: number, n: number): number => (v < -n ? -n : v > n ? n : v);
+const clamp = (v: number, n: number): number => Math.min(Math.max(v, -n), n);
 
 export class Pyro implements PyroApi {
   /** 0x4379d0: `pyro`'s pictures */
@@ -506,7 +506,8 @@ export class Pyro implements PyroApi {
           s.on = 0;
           return;
         }
-        s.flag = s.tier === 0 && w.roll(kind === ROCKETS ? 4 : 6) === 1 ? 1 : 0;
+        const odds = kind === ROCKETS ? 4 : 6;
+        s.flag = s.tier === 0 && w.roll(odds) === 1 ? 1 : 0;
         s.life = 0x40;
         from(6, 0xa, 0x14);
         this.aimShot(s, pt, 0x20);

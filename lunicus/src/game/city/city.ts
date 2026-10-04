@@ -72,7 +72,8 @@ export function placeOf(level: number): number {
 
 /** 0x40a489: the first (1) or second (2) of a pair — a building, an engine room, the hive or the final chamber */
 export function roomOf(level: number): number {
-  return [8, 12, 16, 19, 21].includes(level) ? 1 : [20, 22].includes(level) ? 2 : 0;
+  if ([8, 12, 16, 19, 21].includes(level)) return 1;
+  return [20, 22].includes(level) ? 2 : 0;
 }
 
 /** 0x40a50b: which bank a level plays — 1 the base's, 2 … 4 the cities', 5 the engine rooms', 6 the hive's */
@@ -83,6 +84,14 @@ export function bankOf(level: number): number {
 /** 0x40a4b2: a level of this mode — a city, a building, an engine room or the hive */
 export function combatLevel(level: number): boolean {
   return [7, 8, 11, 12, 15, 16].includes(level) || (level >= 19 && level <= 22);
+}
+
+/** the cell beside `x`, `y` the way a pose's `dir` faces */
+function cellAhead(x: number, y: number, dir: number): [number, number] {
+  if (dir === 0) return [x, y - 1];
+  if (dir === 1) return [x, y + 1];
+  if (dir === 2) return [x + 1, y];
+  return [x - 1, y];
 }
 
 const pictures = (data: Uint8Array): FrameV0[] => readContainerFile(data).containers.map((c) => decodeFrameV0(c.data));
@@ -103,7 +112,7 @@ export class City {
   /** 0x429f90: `day − 2` of them, none before day three (0x40374c) */
   drones: Drone[] = [];
   weapons!: Weapons;
-  private view = new Uint8Array(VIEW_W * VIEW_H);
+  private readonly view = new Uint8Array(VIEW_W * VIEW_H);
   private lastPresent = -FRAME_TICKS;
   /** set by whatever ends the level: the level to go to */
   next: number | null = null;
@@ -149,7 +158,7 @@ export class City {
     const building = this.building;
     const place = placeOf(p.level);
     const first = roomOf(p.level) === 1;
-    const name = [, "buildmaze", first ? "engin1maze" : "engin2maze", first ? "hivemaze" : "finalmaze", "citymaze"][place]!;
+    const name = [undefined, "buildmaze", first ? "engin1maze" : "engin2maze", first ? "hivemaze" : "finalmaze", "citymaze"][place]!;
     // a level opened again from itself keeps its maze as it was, emptied cabinets and all; the city's is always read afresh
     const reuse = !!kept && place !== 4 && prev === p.level && kept.name === name;
     const maze = reuse ? kept! : new MazeView(name, yield* this.load.get(name));
@@ -162,9 +171,12 @@ export class City {
       m.playAmbience();
     }
     const w = new World(m, maze, combatParams(p.difficulty, this.day), this.hud, p.level, this.day, building, sounds, this.cluts);
-    w.ceiling = place === 3 ? 0x1ae : building ? 0x1a4 : 10000;
+    if (place === 3) w.ceiling = 0x1ae;
+    else w.ceiling = building ? 0x1a4 : 10000;
     w.pyro = pictures(yield* this.load.get("pyro"));
-    w.pose = place === 2 ? { x: 6, y: 12, dir: 0 } : place === 3 ? { x: 7, y: 14, dir: 0 } : building ? { x: 7, y: 14, dir: 0 } : { x: 3, y: 0, dir: 2 };
+    if (place === 2) w.pose = { x: 6, y: 12, dir: 0 };
+    else if (place === 3 || building) w.pose = { x: 7, y: 14, dir: 0 };
+    else w.pose = { x: 3, y: 0, dir: 2 };
     w.target = { ...w.pose };
     w.cam = camera(w.pose, w.pose.dir, 0, FORWARD, building ? INDOORS : OUTDOORS);
     this.world = w;
@@ -238,7 +250,8 @@ export class City {
     if (this.m.draws) {
       const s = this.m.screen;
       const paint = (list: typeof w.draws): void => {
-        for (const d of list.sort((a, b) => b.depth - a.depth)) {
+        list.sort((a, b) => b.depth - a.depth);
+        for (const d of list) {
           if (d.mirror) s.spriteMirrored(d.frame, d.y, d.x, d.clip);
           else s.sprite(d.frame, d.y, d.x, d.clip);
         }
@@ -275,9 +288,12 @@ export class City {
     const at: [number, number, boolean][] = [[0xfa, 0x70, false], [0xc8, 0xc0, true], [0xe1, 0x110, false]];
     if (s === 0) w.flashWith("CLUT129", 1, 1);
     else if (s >= 1 && s <= 6) {
-      if (s === 1) (w.sound(5), w.flashWith("CLUT129", 1, 2));
+      if (s === 1) {
+        w.sound(5);
+        w.flashWith("CLUT129", 1, 2);
+      }
       const base = 35 - (s - 1);
-      at.forEach(([y, x, mirror], k) => w.addFixed(VIEW, 0, y, x, w.pyro[base - (k === 1 ? 2 : k === 2 ? 1 : 0)], mirror));
+      at.forEach(([y, x, mirror], k) => w.addFixed(VIEW, 0, y, x, w.pyro[base - [0, 2, 1][k]], mirror));
     } else if (s === 7 || s === 8) w.shakeAt(3);
     else if (s === 9 || s === 10) w.flashWith("CLUT131", 1, 1);
     else if (s === 11 || s === 12) w.flashWith("CLUT131", 1, 2);
@@ -429,7 +445,8 @@ export class City {
     const kind = [0, FORWARD, LEFT, RIGHT][action] ?? 0;
     if (!kind) return;
     if (this.hud.mode === 2) this.setMode(3);
-    while ((yield* this.move(kind)) && this.m.keysHeld.has(key)) {}
+    let moved = yield* this.move(kind);
+    while (moved && this.m.keysHeld.has(key)) moved = yield* this.move(kind);
   }
 
   /* ---------------------------------------------------------------------- *
@@ -441,7 +458,10 @@ export class City {
     const w = this.world;
     const b = w.maze.byte(w.pose);
     // 0x4017f2: what a film's word and deed will be about
-    Object.assign(this, { item: -1, elevatorDown: 0, lastByte: b, jammed: false });
+    this.item = -1;
+    this.elevatorDown = 0;
+    this.lastByte = b;
+    this.jammed = false;
     const place = placeOf(this.p.level);
     if (place === 4) {
       // 0x401859: a building's door
@@ -671,7 +691,7 @@ export class City {
   private *queen(): Co<boolean> {
     const w = this.world;
     const { x, y, dir } = w.pose;
-    const [ax, ay] = dir === 0 ? [x, y - 1] : dir === 1 ? [x, y + 1] : dir === 2 ? [x + 1, y] : [x - 1, y];
+    const [ax, ay] = cellAhead(x, y, dir);
     if ([this.jeep.o, this.tank.o, this.wasp.o].some((o) => o.cellX === ax && o.cellY === ay)) return false;
     if (this.hud.enemies > 0) {
       this.panel.say(0x2d);

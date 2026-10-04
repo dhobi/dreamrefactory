@@ -214,7 +214,7 @@ export class LoadClock {
    */
   private shown = 0;
   /** fetches in the air, by the id the store gave them */
-  private live = new Map<number, { url: string; from: number }>();
+  private readonly live = new Map<number, { url: string; from: number }>();
   /** the current busy period: when the wire went busy, and the network spans in it */
   private period: { from: number; spans: Span[] } | null = null;
 
@@ -223,7 +223,7 @@ export class LoadClock {
   /** a fetch has been issued */
   begin(id: number, url: string): void {
     const at = this.ports.now();
-    if (!this.period) this.period = { from: at, spans: [] };
+    this.period ??= { from: at, spans: [] };
     this.live.set(id, { url, from: at });
   }
 
@@ -434,7 +434,7 @@ export function servedBy(url: string): Served | null {
     const full = new URL(url, location.href);
     if (LOOPBACK.has(full.hostname)) return "local";
     const entries = performance.getEntriesByName(full.href, "resource") as PerformanceResourceTiming[];
-    const e = entries[entries.length - 1];
+    const e = entries.at(-1);
     if (!e) return null;
     const delivery = (e as PerformanceResourceTiming & { deliveryType?: string }).deliveryType;
     if (delivery === "cache") return "cache";

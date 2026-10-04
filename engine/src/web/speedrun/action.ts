@@ -189,15 +189,21 @@ export const CONDITIONS: { name: string; help: string }[] = [
  * ONE condition. `!`, `or` and `and` belong to `condition()` below, which is
  * what every sheet-facing `until:` and `wait()` actually calls.
  */
-const SHAPE = /^([A-Za-z_][A-Za-z0-9_]*)(?:\.([A-Za-z0-9_.-]+))?\s*(==|!=|>=|<=|>|<)?\s*([\s\S]*)$/;
+function shape(text: string): { key: string; of: string; op: string; rest: string } | null {
+  const head = /^([A-Za-z_]\w*)(?:\.([\w.-]+))?/.exec(text);
+  if (!head) return null;
+  const tail = text.slice(head[0].length).trimStart();
+  const op = /^(?:==|!=|>=|<=|>|<)/.exec(tail)?.[0] ?? "";
+  return { key: head[1], of: head[2] ?? "", op, rest: tail.slice(op.length).trimStart() };
+}
 
 export function predicate(text: string): string {
-  const m = SHAPE.exec(text.trim());
+  const m = shape(text.trim());
   if (!m) throw new Error(`"${text}" is not a condition`);
-  const k = m[1].toLowerCase();
-  const of = (m[2] ?? "").toLowerCase();
-  const op = m[3] ?? "";
-  const value = (m[4] ?? "").trim();
+  const k = m.key.toLowerCase();
+  const of = m.of.toLowerCase();
+  const op = m.op;
+  const value = m.rest.trim();
   const q = (v: string) => JSON.stringify(v.toLowerCase());
 
   // The mistake every sheet written before the grammar changed will make, named
@@ -207,7 +213,7 @@ export function predicate(text: string): string {
     const [name, ...rest] = value.slice(1).split(/[:=]/);
     throw new Error(
       `a named thing is reached with a dot now — ${k}.${name}` +
-        (rest.length && rest[rest.length - 1] ? ` == ${rest[rest.length - 1]}` : ""),
+        (rest.length && rest.at(-1) ? ` == ${rest.at(-1)}` : ""),
     );
   }
   if (!op && value.startsWith("=")) {
@@ -215,12 +221,14 @@ export function predicate(text: string): string {
     // The old spelling of an accessor was a comparison, so say the dot rather
     // than doubling the equals — `owns.map` wants `owns.map`, not `owns == map`.
     const DOTTED: Record<string, boolean> = { owns: true, visible: true, walking: true, actor: true, global: true, g: true };
-    throw new Error(
-      DOTTED[k] && !of
-        ? `a named thing is reached with a dot now — ${k}.${rest.split(/[:=]/)[0]}` +
-          (k === "global" || k === "g" ? ` == <value>` : rest.includes(":") ? ` == ${rest.split(":")[1]}` : "")
-        : `conditions compare with == now — ${k}${of ? `.${of}` : ""} == ${rest}`,
-    );
+    if (DOTTED[k] && !of) {
+      let compared = "";
+      if (k === "global" || k === "g") compared = ` == <value>`;
+      else if (rest.includes(":")) compared = ` == ${rest.split(":")[1]}`;
+      throw new Error(`a named thing is reached with a dot now — ${k}.${rest.split(/[:=]/)[0]}${compared}`);
+    }
+    const dotted = of ? `.${of}` : "";
+    throw new Error(`conditions compare with == now — ${k}${dotted} == ${rest}`);
   }
   /** this condition takes no operand at all */
   const bare = (expr: string): string => {
@@ -244,7 +252,7 @@ export function predicate(text: string): string {
   switch (k) {
     // where we are
     case "set":
-      return reads(`String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\\.set$/, "")`);
+      return reads(String.raw`String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, "")`);
     case "scene":
       return reads(`String(window.dbg.viewer.scene.sceneName || "").toLowerCase()`);
     case "view":
@@ -528,7 +536,7 @@ export function predicate(text: string): string {
      */
     case "js":
       if (!value) throw new Error(`js needs an expression — \`js == window.dbg.session.frameCounter > 0\``);
-      return `(${op === "!=" ? `!(${value})` : value})`;
+      return op === "!=" ? `(!(${value}))` : `(${value})`;
     default:
       throw new Error(
         `unknown condition "${text}" — try set == , scene == , view == , flat == , noflat, ` +
@@ -556,7 +564,7 @@ const splitTop = (text: string, word: "or" | "and"): string[] => {
     else if (ch === ")") depth--;
     else if (depth === 0 && /\s/.test(ch)) {
       const m = /^\s+(or|and)\s+/i.exec(text.slice(i));
-      if (m && m[1].toLowerCase() === word) {
+      if (m?.[1].toLowerCase() === word) {
         parts.push(text.slice(start, i));
         i += m[0].length;
         start = i;
@@ -824,10 +832,8 @@ export async function converse(
           `conversation ended before saying ${wanted.join(",")} (picked ${picked.join(",") || "nothing"})`,
         );
       }
-      c.say(
-        `said ${picked.join(",") || "nothing"}` +
-          (bailed ? `, then left (-1${bailed > 1 ? ` x${bailed}` : ""})` : ""),
-      );
+      const times = bailed > 1 ? ` x${bailed}` : "";
+      c.say(`said ${picked.join(",") || "nothing"}` + (bailed ? `, then left (-1${times})` : ""));
       return;
     }
     if (!s.awaiting) {
@@ -914,11 +920,12 @@ export async function converse(
     } else if (otherwise === "first") {
       idx = 0;
     } else {
+      const offered = choices.map((ch) => ch.id + ":" + ch.text).join(" | ");
       throw new Error(
         wanted.length
-          ? `bevel ${wanted[0]} not offered by ${s.with || "them"}; got ${choices.map((ch) => `${ch.id}:${ch.text}`).join(" | ")}`
+          ? `bevel ${wanted[0]} not offered by ${s.with || "them"}; got ${offered}`
           : `unplanned choice from ${s.with || "them"}: ` +
-            `${choices.map((ch) => `${ch.id}:${ch.text}`).join(" | ")}` +
+            offered +
             // the IDS, because a sheet speaks in numbers and this message used
             // to speak only in words — which made a whole class of failures
             // undiagnosable from the report. `then: stop` is usually what the
@@ -1343,9 +1350,10 @@ export function path(step: Step): Step[] {
     for (const letter of arg.toLowerCase()) {
       const verb = MOVES[letter];
       if (!verb) {
+        const within = arg.length > 1 ? ` (in "${arg}")` : "";
         throw new SheetError(
           step.line,
-          `move has no "${letter}"${arg.length > 1 ? ` (in "${arg}")` : ""} — a path is written in ` +
+          `move has no "${letter}"${within} — a path is written in ` +
             `l(eft), r(ight), u(p), d(own) and o(pen a door)`,
           step.source,
         );

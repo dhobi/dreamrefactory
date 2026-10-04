@@ -213,7 +213,10 @@ export function driveDepot(w: World, r: DepotRec, blocked: (x: number, y: number
         w.hud.x417d4d(mark, b);
         dy = r.cellY - b.cellY;
         dx = r.cellX - b.cellX;
-        if (dx === 0 && dy === 0) return void (r.state = 5);
+        if (dx === 0 && dy === 0) {
+          r.state = 5;
+          return;
+        }
       } else {
         const to = awayCell(w);
         dx = r.cellX - to.cellX;
@@ -267,20 +270,60 @@ export function driveDepot(w: World, r: DepotRec, blocked: (x: number, y: number
       // 0x43137c: round the corner the turn is about
       switch (r.angle) {
         case 0:
-          if (r.goal === 0xc0) (r.state = 3), (r.goalX -= 0x80), (r.goalY -= 0x80), r.toY--;
-          if (r.goal === 0x40) (r.state = 4), (r.goalX -= 0x80), (r.goalY += 0x80), r.toY++;
+          if (r.goal === 0xc0) {
+            r.state = 3;
+            r.goalX -= 0x80;
+            r.goalY -= 0x80;
+            r.toY--;
+          }
+          if (r.goal === 0x40) {
+            r.state = 4;
+            r.goalX -= 0x80;
+            r.goalY += 0x80;
+            r.toY++;
+          }
           break;
         case 0x40:
-          if (r.goal === 0) (r.state = 3), (r.goalX += 0x80), (r.goalY -= 0x80), r.toX++;
-          if (r.goal === 0x80) (r.state = 4), (r.goalX -= 0x80), (r.goalY -= 0x80), r.toX--;
+          if (r.goal === 0) {
+            r.state = 3;
+            r.goalX += 0x80;
+            r.goalY -= 0x80;
+            r.toX++;
+          }
+          if (r.goal === 0x80) {
+            r.state = 4;
+            r.goalX -= 0x80;
+            r.goalY -= 0x80;
+            r.toX--;
+          }
           break;
         case 0x80:
-          if (r.goal === 0xc0) (r.state = 4), (r.goalX += 0x80), (r.goalY -= 0x80), r.toY--;
-          if (r.goal === 0x40) (r.state = 3), (r.goalX += 0x80), (r.goalY += 0x80), r.toY++;
+          if (r.goal === 0xc0) {
+            r.state = 4;
+            r.goalX += 0x80;
+            r.goalY -= 0x80;
+            r.toY--;
+          }
+          if (r.goal === 0x40) {
+            r.state = 3;
+            r.goalX += 0x80;
+            r.goalY += 0x80;
+            r.toY++;
+          }
           break;
         case 0xc0:
-          if (r.goal === 0x80) (r.state = 3), (r.goalX -= 0x80), (r.goalY += 0x80), r.toX--;
-          if (r.goal === 0) (r.state = 4), (r.goalX += 0x80), (r.goalY += 0x80), r.toX++;
+          if (r.goal === 0x80) {
+            r.state = 3;
+            r.goalX -= 0x80;
+            r.goalY += 0x80;
+            r.toX--;
+          }
+          if (r.goal === 0) {
+            r.state = 4;
+            r.goalX += 0x80;
+            r.goalY += 0x80;
+            r.toX++;
+          }
           break;
       }
       r.radius = dist(r.goalX - r.x, r.goalY - r.y, 0);
@@ -449,7 +492,7 @@ export class Fuel implements FuelApi {
   }
 
   /** 0x40b085: a block, a jeep's cell or a tank's */
-  private blocked = (x: number, y: number): boolean => {
+  private readonly blocked = (x: number, y: number): boolean => {
     const w = this.w;
     return w.solid(x, y) || w.jeep.occupied(x, y, -1) || w.tank.occupied(x, y, -1);
   };
@@ -465,7 +508,10 @@ export class Fuel implements FuelApi {
     const w = this.w;
     const r = this.r;
     if (r.self < 0) return;
-    if (tooFar(w, r) && !r.called) return void (r.self = -1);
+    if (tooFar(w, r) && !r.called) {
+      r.self = -1;
+      return;
+    }
     setObj(r.last, r);
     this.think();
     drawDepot(w, r, this.pics, 0x10);

@@ -43,11 +43,8 @@
   --leather-400: #5b422f;
   --leather-300: #78573e;
   --leather-200: #9c7a5a;
-}
 
-/* ---- ember: the letters, and the sun ---------------------------------- */
-
-:root {
+  /* ---- ember: the letters, and the sun ---------------------------------- */
   --ember-700: #7d2a0e;
   --ember-600: #a83714;
   --ember-500: #d1521c;
@@ -55,11 +52,8 @@
   --ember-300: #f2903a;
   --ember-200: #f7b25e;
   --ember-100: #fcd79b;
-}
 
-/* ---- bone: the skull, and the ink ------------------------------------- */
-
-:root {
+  /* ---- bone: the skull, and the ink ------------------------------------- */
   --bone-600: #6b5f4a;
   --bone-500: #8c7d63;
   --bone-400: #b3a288;
@@ -69,11 +63,8 @@
 
   --alarm: #e04b2a;
   --ok: #8fae55;
-}
 
-/* ---- typography and metrics ------------------------------------------- */
-
-:root {
+  /* ---- typography and metrics ------------------------------------------- */
   --font-display:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-ui:
@@ -86,11 +77,8 @@
 
   /* the sun's own glow, which is what this page already lights its title with */
   --glow: 0 0 0 1px rgba(232, 112, 31, 0.3), 0 0 34px -4px rgba(232, 112, 31, 0.4);
-}
 
-/* ---- the 39 roles the chrome asks for --------------------------------- */
-
-:root {
+  /* ---- the 39 roles the chrome asks for --------------------------------- */
   --bg: var(--dusk-1000);
   --panel: var(--dusk-800);
   --raised: var(--dusk-700);

@@ -56,6 +56,16 @@ const errEl = $<HTMLSpanElement>("err");
 
 $("ver").textContent = `v${VERSION}`;
 
+/** the title card, which closes the band up when it fails to load — see #brand in index.html */
+const brandEl = $<HTMLImageElement>("brand");
+function dropBrand(): void {
+  brandEl.hidden = true;
+  document.body.classList.add("nobrand");
+}
+// a module runs after parsing, so the image may already have failed by now
+if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
+else brandEl.addEventListener("error", dropBrand);
+
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
 
 /* ------------------------------------------------------------------------- *
@@ -78,7 +88,9 @@ const say = (line: string): void => {
   logEl.innerHTML += `${esc(line)}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 };
-const toggleLog = (): void => void (logEl.hidden = !logEl.hidden);
+const toggleLog = (): void => {
+  logEl.hidden = !logEl.hidden;
+};
 $("logBtn").addEventListener("click", toggleLog);
 
 installFullscreen($<HTMLButtonElement>("fsBtn"), stageEl, { report: say, landscape: true });
@@ -225,7 +237,10 @@ let pace = Number(params.get("pace") ?? 1) || 1;
 
 useSaveKind(LUNICUS_SAVES);
 const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
-  browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => (complain(String(e)), done()));
+  browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => {
+    complain(String(e));
+    done();
+  });
 };
 
 /* ------------------------------------------------------------------------- *
@@ -289,7 +304,7 @@ function where(): string {
   if (game.phase === "title" && game.won && !m.film?.startsWith("intro")) return "the queen is dead, the game is won — the title again: click it for a new game";
   if (m.film) return `${m.where}`;
   const t = b?.talkState.talk ?? game.city?.talkState.talk;
-  if (t) return `talking: ${t.file}${t.line ? ` · ${t.line}` : ""}`;
+  if (t) return `talking: ${t.file}${t.line ? " · " + t.line : ""}`;
   // a floor's maze is fetched after the floor is up (Base.enter): in a browser
   // that is a frame or more with no maze to name
   if (b && !b.maze) return "loading the floor…";
@@ -474,6 +489,8 @@ interface DriveState {
    *  arrival move: what a driver aims its mouse by */
   screen: { x: number; y: number; width: number; height: number };
 }
+/** a box's place and size, as a plain object */
+const boxOf = ({ x, y, width, height }: DOMRect): DriveState["screen"] => ({ x, y, width, height });
 if (DRIVE) {
   const state = (): DriveState => ({
     t: m.ticks,
@@ -483,7 +500,7 @@ if (DRIVE) {
     score: game.hud.score,
     won: game.won,
     stopped: game.stopped,
-    screen: (({ x, y, width, height }) => ({ x, y, width, height }))(canvas.getBoundingClientRect()),
+    screen: boxOf(canvas.getBoundingClientRect()),
   });
   const drive: Drive = {
     running: () => running,
@@ -506,14 +523,14 @@ addEventListener("blur", () => m.keysHeld.clear());
  * ------------------------------------------------------------------------- */
 
 const charge = $("charge");
-const bar = $("bar");
+const bar = $<HTMLProgressElement>("barvalue");
 const bootsay = $("bootsay");
 const bootpct = $("bootpct");
 
 function gauge(fraction: number, what: string): void {
   const pct = Math.round(fraction * 100);
   charge.style.width = `${pct}%`;
-  bar.setAttribute("aria-valuenow", String(pct));
+  bar.value = pct;
   bootpct.textContent = `${pct}%`;
   bootsay.textContent = what;
 }
@@ -575,4 +592,8 @@ const openSaved = (): void =>
 $("loadBtn").addEventListener("click", openSaved);
 /** the game window's menu bar, on the frame over the picture (src/menu.ts) */
 const menu = installMenu($("frame"), game, input, { open: openSaved, live: () => running && !REPLAY && !savesOpen() && !windowDialogOpen() });
-void boot().catch((e) => complain(String(e)));
+try {
+  await boot();
+} catch (e) {
+  complain(String(e));
+}

@@ -36,10 +36,10 @@ export class MazeView implements RoomLayer {
   readonly spritesByDepth = true;
   private readonly width: number;
   private readonly height: number;
-  private spheres = new Map<number, SphereImage>();
+  private readonly spheres = new Map<number, SphereImage>();
   private film: { container: number; frames: FilmFrames } | null = null;
   private frame: CachedFrame;
-  private rgba: Uint32Array;
+  private readonly rgba: Uint32Array;
   private dirty = true;
   onLog: (line: string) => void = () => {};
 
@@ -215,9 +215,13 @@ export class MazeView implements RoomLayer {
     return this.depth.occ;
   }
   private depth: { key: string; occ: Occlusion } | null = null;
-  private depthSpheres = new Map<number, SphereImage>();
-  applyRoomClut(_dim: ClutDim | null): void {}
-  refreshRoomGamma(): void {}
+  private readonly depthSpheres = new Map<number, SphereImage>();
+  applyRoomClut(_dim: ClutDim | null): void {
+    // a DreamFactory 5 room is drawn in true colour: it has no palette to rebuild
+  }
+  refreshRoomGamma(): void {
+    // nor one for the gamma to move
+  }
 
   advanceRoom(now: number): CachedFrame | null {
     if (this.maze.walkStep(now)) this.dirty = true;
@@ -305,8 +309,8 @@ export class MazeView implements RoomLayer {
   }
 
   /** a click reaches the room through the boot's `mousedown`; nothing to do here */
-  async roomClickAt(_x: number, _y: number): Promise<boolean> {
-    return false;
+  roomClickAt(_x: number, _y: number): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
   /** a quad, and where there is none, the node you stand at */
@@ -375,7 +379,9 @@ export class MazeView implements RoomLayer {
   armRoomNav(): unknown {
     return null;
   }
-  disarmRoomNav(_prev: unknown): void {}
+  disarmRoomNav(_prev: unknown): void {
+    // armRoomNav armed nothing, so there is nothing to put back
+  }
 
   /** give the session back when the room is left */
   release(): void {

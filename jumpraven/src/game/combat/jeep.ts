@@ -205,7 +205,10 @@ export function moveBullet(w: World, s: VehicleShot): void {
     s.met = 2;
     w.sound(7);
   }
-  drawShot(w, s, s.met === 2 ? 0x108 : s.met ? 0xe0 : 8);
+  let base = 8;
+  if (s.met === 2) base = 0x108;
+  else if (s.met) base = 0xe0;
+  drawShot(w, s, base);
   if (s.met) s.on = 0;
 }
 
@@ -351,7 +354,10 @@ export class Jeep implements JeepApi {
       case 0: {
         const dx = r.cellX - w.cam.cellX;
         const dy = r.cellY - w.cam.cellY;
-        if (downTheLine(w, r) && abs(dx) <= 1 && abs(dy) <= 1) return void (r.state = 5);
+        if (downTheLine(w, r) && abs(dx) <= 1 && abs(dy) <= 1) {
+          r.state = 5;
+          return;
+        }
         const way = this.ways(r.angle, dx, dy);
         if (!this.blockedWay(r, way[0])) {
           r.goal = way[0];
@@ -402,20 +408,60 @@ export class Jeep implements JeepApi {
         // 0x431598: round the corner the turn is about
         switch (r.angle) {
           case 0:
-            if (r.goal === 0xc0) (r.state = 3), (r.goalX -= 0x80), (r.goalY -= 0x80), r.toY--;
-            if (r.goal === 0x40) (r.state = 4), (r.goalX -= 0x80), (r.goalY += 0x80), r.toY++;
+            if (r.goal === 0xc0) {
+              r.state = 3;
+              r.goalX -= 0x80;
+              r.goalY -= 0x80;
+              r.toY--;
+            }
+            if (r.goal === 0x40) {
+              r.state = 4;
+              r.goalX -= 0x80;
+              r.goalY += 0x80;
+              r.toY++;
+            }
             break;
           case 0x40:
-            if (r.goal === 0) (r.state = 3), (r.goalX += 0x80), (r.goalY -= 0x80), r.toX++;
-            if (r.goal === 0x80) (r.state = 4), (r.goalX -= 0x80), (r.goalY -= 0x80), r.toX--;
+            if (r.goal === 0) {
+              r.state = 3;
+              r.goalX += 0x80;
+              r.goalY -= 0x80;
+              r.toX++;
+            }
+            if (r.goal === 0x80) {
+              r.state = 4;
+              r.goalX -= 0x80;
+              r.goalY -= 0x80;
+              r.toX--;
+            }
             break;
           case 0x80:
-            if (r.goal === 0xc0) (r.state = 4), (r.goalX += 0x80), (r.goalY -= 0x80), r.toY--;
-            if (r.goal === 0x40) (r.state = 3), (r.goalX += 0x80), (r.goalY += 0x80), r.toY++;
+            if (r.goal === 0xc0) {
+              r.state = 4;
+              r.goalX += 0x80;
+              r.goalY -= 0x80;
+              r.toY--;
+            }
+            if (r.goal === 0x40) {
+              r.state = 3;
+              r.goalX += 0x80;
+              r.goalY += 0x80;
+              r.toY++;
+            }
             break;
           case 0xc0:
-            if (r.goal === 0x80) (r.state = 3), (r.goalX -= 0x80), (r.goalY += 0x80), r.toX--;
-            if (r.goal === 0) (r.state = 4), (r.goalX += 0x80), (r.goalY += 0x80), r.toX++;
+            if (r.goal === 0x80) {
+              r.state = 3;
+              r.goalX -= 0x80;
+              r.goalY += 0x80;
+              r.toX--;
+            }
+            if (r.goal === 0) {
+              r.state = 4;
+              r.goalX += 0x80;
+              r.goalY += 0x80;
+              r.toX++;
+            }
             break;
         }
         r.radius = dist(r.goalX - r.x, r.goalY - r.y, 0);

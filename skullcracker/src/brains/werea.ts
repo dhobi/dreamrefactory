@@ -395,7 +395,8 @@ export const werea: Brain = (e, foe, run, k) => {
          * facing west, and wanting the east side the other way round.
          */
         const east = e.facing > 0;
-        e.vx = (e.side !== 0 ? (east ? 10 : -10) : east ? -10 : 10) * TICKS;
+        const away = e.side !== 0 ? east : !east;
+        e.vx = (away ? 10 : -10) * TICKS;
       }
       if (!done || e.vy !== 0) return false;
       return install(e, WEREA.land);

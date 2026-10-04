@@ -50,7 +50,7 @@ const ARRIVE = "redjack/gamefiles/RJDisk2/movies/arrive.move";
 test.skipIf(!existsSync(ARRIVE))("arrive.move holds silence after its music instead of starting it again", () => {
   const seg = readMovFileV5(new Uint8Array(readFileSync(ARRIVE))).segments[0];
   const [music, ...rest] = seg.audioChunks;
-  expect(rest.length).toBe(8);
+  expect(rest).toHaveLength(8);
   expect(rest.every((c) => c !== music)).toBe(true);
 });
 

@@ -29,7 +29,7 @@
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import { cellV0, readMazeV0, type MazeTransitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
-import { CELL, CELL_CENTRE, FORWARD, FORWARD_DX, FORWARD_DY, HEADING, LEFT, RIGHT, STEP_CLIP, TURN_CLIP, TURN_LEFT, TURN_RIGHT, VIEW_H, VIEW_W } from "./data";
+import { CELL, CELL_CENTRE, FORWARD_DX, FORWARD_DY, HEADING, LEFT, RIGHT, STEP_CLIP, TURN_CLIP, TURN_LEFT, TURN_RIGHT, VIEW_H, VIEW_W } from "./data";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 
 export type Pose = PoseV0;
@@ -140,7 +140,8 @@ export function corridor(c: Camera, p: Placed, has: (x: number, y: number) => bo
     const dx = p.x - c.x;
     const dy = p.y - c.y;
     if (!dx && !dy) return [0, 0, VIEW_H, VIEW_W];
-    dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 3) : dy > 0 ? 1 : 0;
+    if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 2 : 3;
+    else dir = dy > 0 ? 1 : 0;
     if (dir !== c.from.dir && dir !== c.toDir) return null;
     table = TURN_CLIP[dir === c.from.dir ? c.frame : 6 - c.frame];
   }
@@ -231,4 +232,4 @@ export class MazeView {
   }
 }
 
-export { FORWARD };
+export { FORWARD } from "./data";

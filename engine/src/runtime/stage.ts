@@ -13,15 +13,29 @@ import type { GameSession } from "./session";
  * stageName, currentFlat, setVisible, currentThemeName, flatScripts, flatNames)
  * stay on the session and are reached through the session reference.
  */
+/**
+ * A flat variant's name, `A.B.n`, as its base `A.B` and its frame number n —
+ * the number after the last dot, and a dot inside what stands before it; null
+ * for any other name.
+ */
+function frameVariant(name: string): { base: string; n: number } | null {
+  const dot = name.lastIndexOf(".");
+  const base = name.slice(0, dot);
+  const digits = name.slice(dot + 1);
+  const inner = base.indexOf(".", 1);
+  if (dot < 0 || inner < 0 || inner === base.length - 1 || !/^\d+$/.test(digits)) return null;
+  return /[\n\r\u2028\u2029]/.test(base) ? null : { base, n: Number(digits) };
+}
+
 export class StageController {
   constructor(private readonly session: GameSession) {}
 
   stageFile: StgFile | null = null;
-  private flatImageCache = new Map<
+  private readonly flatImageCache = new Map<
     string,
     { pixels: Uint8Array; width: number; height: number; palette: Uint8ClampedArray }
   >();
-  private regionCache = new Map<string, StgRegion[]>();
+  private readonly regionCache = new Map<string, StgRegion[]>();
 
   /** engine primitive: load an STG stage and activate its first flat */
   async openStageFile(fileName: string): Promise<boolean> {
@@ -327,7 +341,7 @@ export class StageController {
       return 0;
     }
     const inst = this.session.instanceFrom(stg.file.containers[region.script]?.data, region.name || "region");
-    if (inst && inst.script.codes.has(handler)) {
+    if (inst?.script.codes.has(handler)) {
       inst.parent = this.session.flatScripts.get(this.session.currentFlat.toLowerCase()) ?? this.session.stageScript;
       // target is the ADDRESSEE, and a button region is a thing — the same value
       // stageClickAt gives this handler when the click resolves by position
@@ -356,7 +370,7 @@ export class StageController {
       ...this.session.bootScripts,
     ];
     for (const lib of libs) {
-      if (!lib || !lib.script.codes.has(handler)) continue;
+      if (!lib?.script.codes.has(handler)) continue;
       const res = await this.session.interp.runHandler(lib, handler, args, {
         me: region.name,
         target: region.name,
@@ -390,7 +404,7 @@ export class StageController {
       const flat0 = this.session.flatScripts.get(this.session.currentFlat.toLowerCase());
       this.session.setPointer(x, y);
       for (const link of [flat0, this.session.stageScript]) {
-        if (!link || !link.script.codes.has("mousedown")) continue;
+        if (!link?.script.codes.has("mousedown")) continue;
         try {
           await this.session.interp.runHandler(link, "mousedown", [hit.name], { me: link.name, target: hit.name });
         } catch (e) {
@@ -531,10 +545,9 @@ export class StageController {
     // three components: `A.B.n`. Two would match the frame number itself
     // (`i0001.605` -> "i0001" and 605), which would chain every flat in the file
     // backwards through its neighbours.
-    const m = /^(.+\..+)\.(\d+)$/.exec(name);
+    const m = frameVariant(name);
     if (!m) return null;
-    const n = Number(m[2]);
-    const previous = n > 1 ? `${m[1]}.${n - 1}` : m[1];
+    const previous = m.n > 1 ? `${m.base}.${m.n - 1}` : m.base;
     if (!this.stageFile?.flats.some((f) => f.name === previous)) return null;
     return this.flatImage(previous);
   }

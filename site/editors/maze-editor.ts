@@ -82,10 +82,10 @@ let wallColor = new Map<number, string>();
 function wallNames(name: string): Map<number, string> {
   const m = new Map<number, string>();
   const n = name.toLowerCase();
-  if (/bas$/.test(n)) {
+  if (n.endsWith("bas")) {
     for (const [b, what] of [[2, "an elevator"], [3, "a screen"], [5, "a desk"], [6, "a bed"], [9, n.includes("lower") ? "the control panel" : "the scope, the greenhouse or the power status"], [0xfe, "the transporter end"]] as const)
       m.set(b, what);
-  } else if (/citymaze$/.test(n)) {
+  } else if (n.endsWith("citymaze")) {
     for (let b = 1; b <= 14; b++) m.set(b, "a building's door");
     for (let b = 15; b <= 0xff; b++) m.set(b, "a door with no entrance");
   } else if (/buildmaz$|engin\dma$/.test(n)) {
@@ -118,6 +118,11 @@ function log(text: string): void {
 const samePose = (a: PoseV0, b: PoseV0): boolean => a.x === b.x && a.y === b.y && a.dir === b.dir;
 const say = (p: PoseV0): string => `${p.x},${p.y} ${FACING[p.dir]}`;
 const hex = (b: number): string => b.toString(16).padStart(2, "0");
+/** one of a cell's bytes, under the initial of the way it faces */
+const facingByte = (b: number, d: number): string => FACING[d][0].toUpperCase() + " " + hex(b);
+/** what a byte opens, if this maze names it, after a space or in brackets */
+const spacedName = (b: number): string => (names.has(b) ? " " + names.get(b) : "");
+const bracketedName = (b: number): string => (names.has(b) ? " (" + names.get(b) + ")" : "");
 
 function moved(p: PoseV0, move: number): PoseV0 {
   if (move === LEFT) return { ...p, dir: TURN_LEFT[p.dir] };
@@ -160,7 +165,7 @@ function loadMaze(bytes: Uint8Array, name: string): void {
   landing.style.display = "none";
   editor.style.display = "flex";
   $("fileName").textContent = name;
-  const cells = [...Array(parsed.width * parsed.height)].filter((_, i) => cellV0(parsed, i % parsed.width, Math.floor(i / parsed.width))).length;
+  const cells = [...new Array(parsed.width * parsed.height)].filter((_, i) => cellV0(parsed, i % parsed.width, Math.floor(i / parsed.width))).length;
   const poses = new Set(parsed.transitions.map((t) => say(t.from))).size;
   const films = parsed.transitions.filter(ownsFilmV0).length;
   $("fileStats").textContent =
@@ -269,7 +274,7 @@ async function initServerMazes(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerMazes();
+const serverListed = initServerMazes();
 
 $("closeBtn").addEventListener("click", () => {
   maze = null;
@@ -301,16 +306,17 @@ function show(): void {
   const rest = restFrame(pose);
   if (rest >= 0) drawFrame(rest);
   const cell = cellV0(maze, pose.x, pose.y);
-  const lines: string[] = [];
-  lines.push(`<b>${say(pose)}</b>`);
-  lines.push(cell ? `the cell's bytes: ${cell.map((b, d) => `${FACING[d][0].toUpperCase()} ${hex(b)}`).join(" · ")}` : "no cell here");
+  const lines: string[] = [
+    `<b>${say(pose)}</b>`,
+    cell ? `the cell's bytes: ${cell.map(facingByte).join(" · ")}` : "no cell here",
+  ];
   const ahead = cell?.[pose.dir] ?? 0;
   lines.push(
     ahead
-      ? `the byte it faces: <b>${hex(ahead)}</b>${names.has(ahead) ? ` (${names.get(ahead)})` : ""} — a wall, and what a click on the view acts on`
+      ? `the byte it faces: <b>${hex(ahead)}</b>${bracketedName(ahead)} — a wall, and what a click on the view acts on`
       : "the byte it faces: 00 — open: a step forward, and a click on the view walks",
+    `at rest: container @${rest}`,
   );
-  lines.push(`at rest: container @${rest}`);
   for (const move of [LEFT, FORWARD, RIGHT]) {
     const tr = transition(pose, moved(pose, move));
     const button = $<HTMLButtonElement>(`${MOVE_NAME[move]}Btn`);
@@ -339,7 +345,10 @@ async function play(tr: MazeTransitionV0): Promise<void> {
   drawFrame(tr.firstFrame);
   for (let k = 1; k <= framesOf(tr); k++) {
     await sleep(ms);
-    if (!maze) return void (playing = false);
+    if (!maze) {
+      playing = false;
+      return;
+    }
     drawFrame(tr.firstFrame + k);
   }
   await sleep(ms);
@@ -386,7 +395,7 @@ function drawMap(): void {
       if (!c) continue;
       const px = x * s;
       const py = y * s;
-      mapCtx.fillStyle = hover && hover.x === x && hover.y === y ? CELL_HOVER : CELL;
+      mapCtx.fillStyle = hover?.x === x && hover.y === y ? CELL_HOVER : CELL;
       mapCtx.fillRect(px + 1, py + 1, s - 2, s - 2);
       // a facing byte that is not 0 is the wall on that side (dir 0 the top edge),
       // in its value's colour
@@ -431,9 +440,13 @@ map.addEventListener("mousemove", (e) => {
   hover = at;
   const c = cellV0(maze, at.x, at.y);
   const facings = [0, 1, 2, 3].filter((dir) => restFrame({ ...at, dir }) >= 0).map((d) => FACING[d]);
-  $("mapSay").textContent = c
-    ? `${at.x},${at.y} · bytes ${c.map((b, d) => `${FACING[d][0].toUpperCase()} ${hex(b)}${names.has(b) ? ` (${names.get(b)})` : ""}`).join(" ")} · ${facings.length ? `views ${facings.join(", ")}` : "no view"}`
-    : `${at.x},${at.y} · no cell`;
+  if (c) {
+    const bytes = c.map((b, d) => facingByte(b, d) + bracketedName(b)).join(" ");
+    const views = facings.length ? `views ${facings.join(", ")}` : "no view";
+    $("mapSay").textContent = `${at.x},${at.y} · bytes ${bytes} · ${views}`;
+  } else {
+    $("mapSay").textContent = `${at.x},${at.y} · no cell`;
+  }
   drawMap();
 });
 map.addEventListener("mouseleave", () => {
@@ -464,7 +477,7 @@ function buildLegend(): void {
     `<span><i style="background:${CELL}"></i>a cell</span>`,
     `<span><i style="background:${YOU}"></i>the view, the way it faces</span>`,
     `<span class="muted">walls, by the byte they face (0 is open):</span>`,
-    ...values.map(([b, n]) => `<span><i style="background:${wallColor.get(b)}"></i>${hex(b)}${names.has(b) ? ` ${names.get(b)}` : ""} ×${n}</span>`),
+    ...values.map(([b, n]) => `<span><i style="background:${wallColor.get(b)}"></i>${hex(b)}${spacedName(b)} ×${n}</span>`),
   ].join("");
 }
 
@@ -482,7 +495,8 @@ function buildFilms(): void {
     const b = document.createElement("button");
     const kind = tr.from.dir === tr.to.dir ? "step" : "turn";
     const more = borrowed.get(tr.firstFrame) ?? 0;
-    b.innerHTML = `@${tr.firstFrame} · ${tr.frames} frames · ${kind} <span class="where">${say(tr.from)} → ${say(tr.to)}${more ? ` · played by ${more} more` : ""}</span>`;
+    const by = more ? ` · played by ${more} more` : "";
+    b.innerHTML = `@${tr.firstFrame} · ${tr.frames} frames · ${kind} <span class="where">${say(tr.from)} → ${say(tr.to)}${by}</span>`;
     b.title = "stand where it starts and play it";
     b.addEventListener("click", () => {
       if (playing) return;
@@ -499,3 +513,4 @@ installGamesMenu();
 void installLanguageMenu();
 installVersion();
 void installSourcePicker($("editionPicker"));
+await serverListed;

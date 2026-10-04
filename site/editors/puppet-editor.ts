@@ -16,8 +16,7 @@ import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { byExtension, chosenSource, encodingOf, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { t, formatNumber } from "@dreamfactory/site/locales";
-import { installI18n } from "@dreamfactory/site/locales";
+import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
@@ -85,11 +84,12 @@ window.addEventListener("beforeunload", (e) => {
 let screen: GameScreen = screenOf(null);
 
 let encoding: DfEncoding = DEFAULT_ENCODING;
-void (async () => {
+async function chooseSource(): Promise<void> {
   const source = chosenSource(await listSources());
   if (source) screen = screenOf(source);
   if (source) encoding = encodingOf(source);
-})();
+}
+const sourceChosen = chooseSource();
 
 /** a DreamFactory 5 file or a DreamFactory 0 talk file, open read-only */
 let readOnly = false;
@@ -134,7 +134,10 @@ function loadPup(bytes: Uint8Array, name: string, v0 = false): void {
   edits.length = 0;
   // a v5 file reads but cannot be written yet (sources.ts), and a v0 one never
   readOnly = v0 || isV5File(bytes);
-  dirtyEl.textContent = v0 ? V0_READ_ONLY : readOnly ? V5_READ_ONLY : "";
+  let status = "";
+  if (v0) status = V0_READ_ONLY;
+  else if (readOnly) status = V5_READ_ONLY;
+  dirtyEl.textContent = status;
   // a button that refuses when pressed is worse than one that says so first
   ($("exportBtn") as HTMLButtonElement).disabled = readOnly;
   stanceIdx = 0;
@@ -230,7 +233,7 @@ async function initServerPups(): Promise<void> {
   }
   wrap.appendChild(row);
 }
-void initServerPups();
+const serverListed = initServerPups();
 
 $("closeBtn").addEventListener("click", () => {
   if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
@@ -517,7 +520,7 @@ function buildLayers(): void {
       const c = document.createElement("canvas");
       c.className = "thumb";
       c.title = `frame ${idx} @${loc}` + (f ? ` — ${f.width}×${f.height}` : " — undecodable");
-      if (f && f.width && f.height) {
+      if (f?.width && f.height) {
         frameToCanvas(f, c);
         const scale = Math.min(48 / f.height, 96 / f.width, 3);
         c.style.width = `${Math.max(1, Math.round(f.width * scale))}px`;
@@ -526,7 +529,7 @@ function buildLayers(): void {
         c.width = c.height = 16;
         c.style.width = c.style.height = "16px";
       }
-      if (selected && selected.layer === l && selected.idx === idx) c.classList.add("selected");
+      if (selected?.layer === l && selected.idx === idx) c.classList.add("selected");
       c.addEventListener("click", () => {
         selected = { layer: l, idx, loc };
         buildLayers();
@@ -789,3 +792,4 @@ installVersion();
 // (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
 // stands between that and unexported edits.
 void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+await Promise.all([sourceChosen, serverListed]);

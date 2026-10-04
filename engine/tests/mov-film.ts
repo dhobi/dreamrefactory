@@ -151,7 +151,7 @@ test.skipIf(!existsSync(ARRIVE))("arrive.move lays out end to end under its soun
   const pic = new FilmPictures(mov).picture(tl.shots[0].segIdx, tl.shots[0].frame)!;
   expect(pic.width * pic.height * 4).toBe(pic.rgba.length);
   const pcm = mixFilmSound(tl, 48000);
-  expect(pcm.length).toBe(Math.ceil((tl.ms / 1000) * 48000));
+  expect(pcm).toHaveLength(Math.ceil((tl.ms / 1000) * 48000));
   expect(pcm.some((s) => s !== 0)).toBe(true);
 });
 

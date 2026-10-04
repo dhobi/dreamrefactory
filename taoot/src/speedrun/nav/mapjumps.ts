@@ -24,7 +24,7 @@
  * but WHETHER the map may be used at all is a script, and that script is the
  * whole reason a route can't simply always jump.
  */
-import { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS } from "./mapjumps.gen";
+import { MAP_JUMPS, MAP_PAGE_BUTTONS } from "./mapjumps.gen";
 /** the script globals a guard is evaluated against — the shipgraph's own type,
  *  restated here so this module carries no dependency on the test tree */
 type FlowState = Record<string, string | number | undefined>;
@@ -57,7 +57,8 @@ export interface MapPageButton {
   region: string;
 }
 
-export { MAP_EXIT_REGION, MAP_JUMPS, MAP_PAGE_BUTTONS };
+export { MAP_JUMPS, MAP_PAGE_BUTTONS };
+export { MAP_EXIT_REGION } from "./mapjumps.gen";
 
 /**
  * Which plan is on screen, from the flat's own name, or null if the map isn't up.

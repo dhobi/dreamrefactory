@@ -902,7 +902,7 @@ body.sr-resizing * {
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
   min-height: 1.55em;
   opacity: 0.85;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 #srstatus.bad { color: #e0928f; }
@@ -1015,7 +1015,6 @@ body.sr-resizing * {
 /* The legend is a modal now (the save browser's own .modal / .modal-box
    chrome, so there is one dialog look on this page and not two); what is
    left here is what the CONTENT inside it reads like. */
-#srlegend { font-size: 0.78rem; }
 #srlegendbody {
   padding: 0.8rem 0.9rem 1rem;
   overflow: auto; /* .modal-box caps the height; the list scrolls inside it */
@@ -1233,7 +1232,7 @@ body.sr-resizing * {
    anything nearer, because the row's own break has to read it — a media
    query can see nothing but the document, and how much window the row
    needs is mostly a question of how much of it the picture is taking. */
-:root {
+:root:not([data-px="1"]):not([data-px="3"]) {
   --px: 2;
 }
 :root[data-px="1"] {
@@ -1298,6 +1297,7 @@ body.sr-resizing * {
   justify-content: center;
   background: rgba(0, 4, 10, 0.76);
   backdrop-filter: blur(3px);
+  font-size: 0.78rem;
 }
 #srlegend .modal-box {
   width: 520px;

@@ -272,10 +272,11 @@ export class GameHost {
    * (taoot/src/editions.ts), so there is no live invalidation to get wrong.
    */
   bootPlan(): Promise<BootPlan> {
-    return (this.plan ??= this.files
+    this.plan ??= this.files
       .load(BOOT_FILE)
       .then((bytes) => (bytes ? readBootPlan(bytes) : EMPTY_BOOT_PLAN))
-      .catch(() => EMPTY_BOOT_PLAN));
+      .catch(() => EMPTY_BOOT_PLAN);
+    return this.plan;
   }
 
   constructor(

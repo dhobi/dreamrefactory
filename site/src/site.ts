@@ -33,9 +33,13 @@ function siteRoot(): string {
   if (root !== null) return root;
   // Node — the tests and the tools — has no document and no site, and the
   // root-absolute form is what those callers have always compared against.
-  if (typeof document === "undefined") return (root = "/");
+  if (typeof document === "undefined") {
+    root = "/";
+    return root;
+  }
   const declared = document.querySelector('meta[name="site-root"]')?.getAttribute("content");
-  return (root = new URL(declared ?? "./", document.baseURI).href);
+  root = new URL(declared ?? "./", document.baseURI).href;
+  return root;
 }
 
 /** a path as the manifest names it (no leading slash), as a URL this page can fetch */

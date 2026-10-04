@@ -179,6 +179,6 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
 
 /** Split a save file basename into its display name (drop the extension). */
 export function displayName(basename: string): string {
-  const ext = kind.ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const ext = kind.ext.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   return basename.replace(new RegExp(`${ext}$`, "i"), "");
 }

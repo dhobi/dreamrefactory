@@ -451,8 +451,7 @@ export const ox: Brain = (e, foe, run, k) => {
        * west: `0x43f418` and `0x43f427` both test `obj+0x28`, the mirror flag,
        * so a thing already walking back out of the overshoot is left alone.
        */
-      if (e.x > e.right && e.facing > 0) e.facing = -e.facing;
-      else if (e.x < e.left && e.facing < 0) e.facing = -e.facing;
+      if ((e.x > e.right && e.facing > 0) || (e.x < e.left && e.facing < 0)) e.facing = -e.facing;
       // `0x43f42d` — `0x442670` is `0x456550` byte for byte: within 60 of the
       // bound it FACES, `obj+0x38` or `obj+0x3a` by the mirror flag
       if (k.atBound(e)) e.facing = -e.facing;

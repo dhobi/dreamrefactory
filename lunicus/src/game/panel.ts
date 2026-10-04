@@ -83,7 +83,7 @@ export class Panel {
   radar: (() => RadarView | null) | null = null;
   /** `[0x42b3dc]` redraws: the radar and the blink go every other one */
   private redraws = 0;
-  private radarPixels = new Uint8Array(RADAR_SIZE * RADAR_SIZE).fill(0x80);
+  private readonly radarPixels = new Uint8Array(RADAR_SIZE * RADAR_SIZE).fill(0x80);
   private blink = false;
 
   draw(): void {
@@ -169,7 +169,9 @@ export class Panel {
   /** the pressed weapon's ammo (0x410aa4) */
   ammo(): number {
     const h = this.hud;
-    return h.mode === 3 ? h.bullets : h.mode === 4 ? h.grenades : h.mode === 5 ? h.rockets : 0;
+    if (h.mode === 3) return h.bullets;
+    if (h.mode === 4) return h.grenades;
+    return h.mode === 5 ? h.rockets : 0;
   }
 
   /** 0x410671: the button a press on the panel is on, or −1 */
@@ -208,8 +210,12 @@ export class Panel {
       if (this.day() >= 4) return h.mode === 3 ? 7 : 14;
       return h.mode === 3 ? 4 : 11;
     }
-    if (i === 4) return h.grenades <= 0 ? 15 : h.mode === 4 ? 5 : 12;
-    return h.rockets <= 0 ? 15 : h.mode === 5 ? 6 : 13;
+    if (i === 4) {
+      if (h.grenades <= 0) return 15;
+      return h.mode === 4 ? 5 : 12;
+    }
+    if (h.rockets <= 0) return 15;
+    return h.mode === 5 ? 6 : 13;
   }
 
   /** 0x4115f1: a bar, 177 px at full, in whole fours, dotted 0x77 */

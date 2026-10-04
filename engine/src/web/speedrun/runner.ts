@@ -315,7 +315,7 @@ export async function runSheet(
   const runWatches = async (): Promise<void> => {
     const live = watches();
     if (!live.length) return;
-    const probe = `[${live.map((w) => `!!(${w.expr})`).join(",")}]`;
+    const probe = "[" + live.map((w) => `!!(${w.expr})`).join(",") + "]";
     let now: boolean[];
     try {
       now = await d.evaluate<boolean[]>(probe);

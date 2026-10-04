@@ -1009,12 +1009,9 @@ function drawFlares(camX: number, camY: number): void {
   for (const f of flares) {
     // tag 0 is one frame of the muzzle cel (`0x43ac8c` installs tag 3 at its
     // end); tag 4's burn-out, then tag 5 holding its last cel
-    const id =
-      f.burn !== null && f.burn >= 0
-        ? FLARE.burn[Math.min(FLARE.burn.length - 1, f.burn)]
-        : f.age <= 1
-          ? FLARE.muzzle
-          : FLARE.flight;
+    let id: number;
+    if (f.burn !== null && f.burn >= 0) id = FLARE.burn[Math.min(FLARE.burn.length - 1, f.burn)];
+    else id = f.age <= 1 ? FLARE.muzzle : FLARE.flight;
     drawLevelCel(id, f.x, f.y, camX, camY);
   }
 }
@@ -1087,22 +1084,11 @@ function drawGobs(camX: number, camY: number): void {
     // ...on its own script: goo, or the player's sweat or blood (`BLEED`),
     // three scripts of one layout and one hold
     const cels = GOB_CELS[g.kind ?? "goo"];
-    const id =
-      g.stage >= 0
-        ? cels.pool[g.stage]
-        : g.vy > 0
-          ? cels.fall[
-              Math.min(
-                cels.fall.length - 1,
-                Math.floor(g.age / SPRAY.fall.hold),
-              )
-            ]
-          : cels.rise[
-              Math.min(
-                cels.rise.length - 1,
-                Math.floor(g.age / SPRAY.rise.hold),
-              )
-            ];
+    let id: number;
+    if (g.stage >= 0) id = cels.pool[g.stage];
+    else if (g.vy > 0)
+      id = cels.fall[Math.min(cels.fall.length - 1, Math.floor(g.age / SPRAY.fall.hold))];
+    else id = cels.rise[Math.min(cels.rise.length - 1, Math.floor(g.age / SPRAY.rise.hold))];
     const loc = player?.byId.get(id);
     if (loc === undefined) continue;
     const art = playerCel(loc);
@@ -1258,12 +1244,11 @@ function loop(now: number): void {
   for (const q of hereOf((l) => l.bushes))
     drawLevelCel(bushCel(q), q.x, q.y, camX, camY, q.mirror);
   for (const r of roaches) {
+    let cel: number;
+    if (r.running) cel = ROACH.run.cels[loopIndex(ROACH.run, r.clock)];
+    else cel = r.spilled ? ROACH.fall.cels[0] : ROACH.drop.cels[0];
     drawLevelCel(
-      r.running
-        ? ROACH.run.cels[loopIndex(ROACH.run, r.clock)]
-        : r.spilled
-          ? ROACH.fall.cels[0]
-          : ROACH.drop.cels[0],
+      cel,
       r.x,
       r.y,
       camX,
@@ -1403,11 +1388,8 @@ function loop(now: number): void {
       // A ladder holds the anchor on the rung instead.
       const rec = celRec(player, id);
       const sx = p.x - camX + W / 2;
-      const left = rec
-        ? p.facing < 0
-          ? sx - (art.width - rec.posX)
-          : sx - rec.posX
-        : sx - art.width / 2;
+      let left = sx - art.width / 2;
+      if (rec) left = p.facing < 0 ? sx - (art.width - rec.posX) : sx - rec.posX;
       const top =
         rec && p.climbing
           ? p.climbY - camY + VIEW.y - rec.posY
@@ -1510,7 +1492,7 @@ function loop(now: number): void {
   const room = p.room;
   const which = room ? `${room.name}/p${room.param}` : "nowhere";
   const doors = room?.exits.length
-    ? ` · doors to ${room.exits.map((e) => `p${e.to}`).join(", ")}`
+    ? " · doors to " + room.exits.map((e) => `p${e.to}`).join(", ")
     : "";
   const celNow = ` · cel ${lastCel}`;
   // which of the two players `0x46b1a8` is on — Shift+C is action 11
@@ -1521,11 +1503,12 @@ function loop(now: number): void {
   // MAZE's big guns and TOWER's lightning, so a probe can watch either run
   const guns = hereOf((l) => l.bigguns);
   const gunSay = guns.length
-    ? ` · ${guns.map((g) => `biggun ${g.state}/${g.hatch} y${Math.round(g.gunY)} cel ${gunCel(g)}`).join(" ")}`
+    ? " · " + guns.map((g) => `biggun ${g.state}/${g.hatch} y${Math.round(g.gunY)} cel ${gunCel(g)}`).join(" ")
     : "";
   const lit = level?.lights.flat() ?? [];
   const flySay = flypasts.length
-    ? ` · ${flypasts.length} flypast ${flypasts.map((f) => `tag${f.tag}@${Math.round(f.x)},${Math.round(f.y)} cel ${flypastCel(f)}`).join(" ")}`
+    ? ` · ${flypasts.length} flypast ` +
+      flypasts.map((f) => `tag${f.tag}@${Math.round(f.x)},${Math.round(f.y)} cel ${flypastCel(f)}`).join(" ")
     : "";
   const litSay = lit.length
     ? ` · lightfx ${levelClock}/${LIGHTFX.period - 1} ${lit.map((q) => lightCel(q)).join(",")}`
@@ -1535,20 +1518,14 @@ function loop(now: number): void {
     cheatSaid && performance.now() - cheatSaid.at < 4000
       ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}`
       : "";
-  const state = p.act
-    ? ` · ${p.act}`
-    : p.bar
-      ? ` · hanging hold ${p.barHold} tag ${p.barTag}` +
-        ` at x ${Math.round(p.x)}, y ${Math.round(p.y)}`
-      : p.climbing
-        ? ` · climbing rung ${p.rung} tag ${p.climbTag}`
-        : !p.onGround
-        ? " · in the air"
-        : p.crouching
-          ? " · crouching"
-          : p.moving
-            ? ` · ${p.running ? "RUNNING" : "walking"} ${Math.abs(p.vx) * ENGINE_HZ}px/s`
-            : "";
+  let state = "";
+  if (p.act) state = ` · ${p.act}`;
+  else if (p.bar)
+    state = ` · hanging hold ${p.barHold} tag ${p.barTag}` + ` at x ${Math.round(p.x)}, y ${Math.round(p.y)}`;
+  else if (p.climbing) state = ` · climbing rung ${p.rung} tag ${p.climbTag}`;
+  else if (!p.onGround) state = " · in the air";
+  else if (p.crouching) state = " · crouching";
+  else if (p.moving) state = ` · ${p.running ? "RUNNING" : "walking"} ${Math.abs(p.vx) * ENGINE_HZ}px/s`;
   const here = solids();
   const box = playerBox();
   const inside = (e: SbkEntity): boolean =>
@@ -1569,22 +1546,22 @@ function loop(now: number): void {
   // where that rect is rather than leaving it to be found by walking
   const g = here.goal;
   const away = g ? (g.left + g.right) / 2 - p.x : 0;
-  const toGoal = won
-    ? ` · <b>THE GOAL — level ${levelIndex + 1} complete</b>`
-    : !g
-      ? ""
-      : craft?.state === "open"
-        ? ` · <b>the screen is coming down</b>`
-        : craft
-          ? inGoal
-            ? ` · <b>at the goal</b> — the television is overhead`
-            : ` · <b>the television is in</b> ${Math.abs(Math.round(away))}px ${away < 0 ? "west" : "east"}, y ${g.top}`
-          : inGoal
-            ? ` · <b>at the goal</b> — ${Math.max(0, alive - stats.allowance)} still to kill${bossSay}`
-            : ready
-              ? ` · <b>the television is coming</b>`
-              : ` · goal ${Math.abs(Math.round(away))}px ${away < 0 ? "west" : "east"}, y ${g.top} — ` +
-                `<b>${Math.max(0, alive - stats.allowance)} still to kill</b>${bossSay}`;
+  const side = away < 0 ? "west" : "east";
+  let toGoal = "";
+  if (won) toGoal = ` · <b>THE GOAL — level ${levelIndex + 1} complete</b>`;
+  else if (g) {
+    if (craft?.state === "open") toGoal = ` · <b>the screen is coming down</b>`;
+    else if (craft)
+      toGoal = inGoal
+        ? ` · <b>at the goal</b> — the television is overhead`
+        : ` · <b>the television is in</b> ${Math.abs(Math.round(away))}px ${side}, y ${g.top}`;
+    else if (inGoal) toGoal = ` · <b>at the goal</b> — ${Math.max(0, alive - stats.allowance)} still to kill${bossSay}`;
+    else if (ready) toGoal = ` · <b>the television is coming</b>`;
+    else
+      toGoal =
+        ` · goal ${Math.abs(Math.round(away))}px ${side}, y ${g.top} — ` +
+        `<b>${Math.max(0, alive - stats.allowance)} still to kill</b>${bossSay}`;
+  }
   // the quota the same way the panel says it: alive minus what may remain
   const quotaSay =
     ` · quota ${Math.max(0, alive - stats.allowance)} of ${Math.max(0, stats.census - stats.allowance)}` +
@@ -1601,23 +1578,23 @@ function loop(now: number): void {
   const near = spawnedHere()
     .filter((e) => FOES[e.kind].panel)
     .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
-  const foe = near
-    ? ` · nearest ${near.kind} ${Math.round(near.hp)}/${near.max}hp ${near.state}` +
+  let foe = "";
+  if (near) {
+    foe =
+      ` · nearest ${near.kind} ${Math.round(near.hp)}/${near.max}hp ${near.state}` +
       ` at x ${Math.round(near.x)}, y ${Math.round(near.y)} cel ${celOf(near)}` +
-      ` facing ${near.facing > 0 ? "east" : "west"}` +
-      // the state of the one class that has states, so a probe can see it decide
-      (near.mode ? ` mode ${near.mode}` : "") +
-      // ...and, for every class with a machine of its own, the state IS the kind
-      // of the script it is playing — `obj+0x18` and `obj+0x44`, straight out of
-      // {@link file://./brains/kit.ts}. A probe that used to read `mode` reads
-      // this instead, and it is the disc's own numbering rather than a name
-      // this page invented
-      (near.script !== undefined
-        ? ` kind ${near.script} tag ${near.tag ?? 0}`
-        : "") +
-      // ...and of the twenty-six that share one — {@link stepFight}
-      (near.fighting ? (near.swing ? " SWINGING" : " closing") : "")
-    : "";
+      ` facing ${near.facing > 0 ? "east" : "west"}`;
+    // the state of the one class that has states, so a probe can see it decide
+    if (near.mode) foe += ` mode ${near.mode}`;
+    // ...and, for every class with a machine of its own, the state IS the kind
+    // of the script it is playing — `obj+0x18` and `obj+0x44`, straight out of
+    // {@link file://./brains/kit.ts}. A probe that used to read `mode` reads
+    // this instead, and it is the disc's own numbering rather than a name
+    // this page invented
+    if (near.script !== undefined) foe += ` kind ${near.script} tag ${near.tag ?? 0}`;
+    // ...and of the twenty-six that share one — {@link stepFight}
+    if (near.fighting) foe += near.swing ? " SWINGING" : " closing";
+  }
   // ...and the nearest thing that can be fought and claims no PLATE, which the
   // line above cannot show. The dog is the case — `0x40d1c0` is never called from
   // any of its functions, so it has no bar and no name on the panel — and so is
@@ -1627,13 +1604,13 @@ function loop(now: number): void {
       (e) => !FOES[e.kind].panel && (FOES[e.kind].death || FOES[e.kind].flinch),
     )
     .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
-  const unplated = plain
-    ? ` · unplated ${plain.kind} ${Math.round(plain.hp)}/${plain.max}hp ${plain.state}` +
-      ` at x ${Math.round(plain.x)}, y ${Math.round(plain.y)} cel ${celOf(plain)}` +
-      (plain.script !== undefined
-        ? ` kind ${plain.script} tag ${plain.tag ?? 0}`
-        : "")
-    : "";
+  let unplated = "";
+  if (plain) {
+    unplated =
+      ` · unplated ${plain.kind} ${Math.round(plain.hp)}/${plain.max}hp ${plain.state}` +
+      ` at x ${Math.round(plain.x)}, y ${Math.round(plain.y)} cel ${celOf(plain)}`;
+    if (plain.script !== undefined) unplated += ` kind ${plain.script} tag ${plain.tag ?? 0}`;
+  }
   // the hydrant and its water: neither has a health bar, and the whole point of
   // the burst is that one object turns into two and back into one
   // the crows, which are the only thing on this page that flies
@@ -1646,22 +1623,23 @@ function loop(now: number): void {
       .sort((a, c) => Math.abs(a.x - p.x) - Math.abs(c.x - p.x))
       .slice(0, 1),
   ].filter((c, i, all) => all.indexOf(c) === i);
-  const bird = birds.length
-    ? ` · ${birds.length} crow${birds.length === 1 ? "" : "s"}: ` +
+  let bird = "";
+  if (birds.length)
+    bird =
+      ` · ${birds.length} crow${birds.length === 1 ? "" : "s"}: ` +
       shown
         .slice(0, 3)
         .map(
           (c) =>
             `${c.state} cel ${crowCel(c)} at ${Math.round(c.x)},${Math.round(c.y)}`,
         )
-        .join(" · ")
-    : "";
+        .join(" · ");
   // the planks: a probe cannot otherwise tell a sound board from one about to go
   const boards = planksHere().filter(
     (k) => k.state !== "intact" || k.crossings > 0,
   );
   const board = boards.length
-    ? ` · ${boards.map((k) => `plank ${k.state} cel ${plankCel(k)} x${Math.round(k.x)} crossed ${k.crossings}`).join(" · ")}`
+    ? " · " + boards.map((k) => `plank ${k.state} cel ${plankCel(k)} x${Math.round(k.x)} crossed ${k.crossings}`).join(" · ")
     : "";
   // the elevators: a probe cannot otherwise tell a car that is waiting from one
   // it never boarded, and the deck's y is the only way to see a ride happen
@@ -1695,18 +1673,20 @@ function loop(now: number): void {
   // level six's levers and what they are pouring, so a probe can see both
   const levers = switchesHere();
   const lever = levers.length
-    ? ` · ${levers.map((w) => `switch ${w.param} ${w.state} cel ${switchCel(w)} at x ${w.x}`).join(" · ")}`
+    ? " · " + levers.map((w) => `switch ${w.param} ${w.state} cel ${switchCel(w)} at x ${w.x}`).join(" · ")
     : "";
   // the level's doors, not the room's: one lever in one region opens a door in
   // another, and the engine holds one list for the stage ({@link broadcast})
   const gates = level?.doors.flat() ?? [];
   const gate = gates.length
-    ? ` · ${gates.map((d) => `door ${d.param} ${d.state}`).join(" · ")}`
+    ? " · " + gates.map((d) => `door ${d.param} ${d.state}`).join(" · ")
     : "";
   const sumps = elevsHere();
   const sump = sumps.length
-    ? ` · ${sumps.map((e) => `lift x${e.x} ${e.state} y${Math.round(e.y)}`).join(" · ")}`
+    ? " · " + sumps.map((e) => `lift x${e.x} ${e.state} y${Math.round(e.y)}`).join(" · ")
     : "";
+  const sprinklers = hereOf((l) => l.sprinklers).length;
+  const column = columns.size ? ` cel ${columnCel([...columns.values()][0])}` : "";
   // the scenery, so a probe can see the two of it that move on their own
   const props = [
     ...hereOf((l) => l.shacks)
@@ -1745,6 +1725,7 @@ function loop(now: number): void {
     ),
     ...hereOf((l) => l.boggs).map((b) => {
       const heals = b.flags[0] || b.flags[1];
+      const healing = heals ? `+${BOGGS.regen} a frame` : "no longer healing";
       const halves = BOGGS.machines
         .map((m, k) =>
           "health" in m
@@ -1755,7 +1736,7 @@ function loop(now: number): void {
         .join(" ");
       return (
         `boggs ${b.dying ? "dying" : (b.lunge ?? "idle")} cel ${boggsCel(b)} at x${Math.round(b.x)}, y${b.y}, ` +
-        `${Math.round(b.hp)}/${scaled(BOGGS.health)}hp, ${heals ? `+${BOGGS.regen} a frame` : "no longer healing"}` +
+        `${Math.round(b.hp)}/${scaled(BOGGS.health)}hp, ${healing}` +
         ` · head ${boggsHeadCel(b)} tag ${b.headTag} · machine ${halves}` +
         ` flags ${b.flags[0] ? 1 : 0}${b.flags[1] ? 1 : 0}`
       );
@@ -1775,9 +1756,7 @@ function loop(now: number): void {
         `bush ${q.state} cel ${bushCel(q)} at x${Math.round(q.x)}, y${Math.round(q.y)}`,
     ),
     roaches.length ? `${roaches.length} roaches` : "",
-    hereOf((l) => l.sprinklers).length
-      ? `${hereOf((l) => l.sprinklers).length} sprinklers, ${columns.size} up${columns.size ? ` cel ${columnCel([...columns.values()][0])}` : ""}`
-      : "",
+    sprinklers ? `${sprinklers} sprinklers, ${columns.size} up${column}` : "",
   ].filter(Boolean);
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
   // what the two tests say about the nearest pickup, which is the only way to
@@ -1824,18 +1803,21 @@ function loop(now: number): void {
   const lying = arms.length
     ? arms.reduce((a, b) => (far(b) < far(a) ? b : a), arms[0])
     : null;
-  const armed =
-    ` · ${inv.drawn ? "holding" : inv.armed ? "carrying" : "no"} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}` +
-    (arms.length
-      ? ` · ${arms.length} guns · nearest ${GUN_CODES[lying!.code]?.name ?? lying!.code} at x ${Math.round(lying!.x)}, y ${Math.round(lying!.y)}${gunAhead() ? " IN REACH" : ""}`
-      : "") +
-    (flares.length ? ` · ${flares.length} flares` : "");
+  let holding = "no";
+  if (inv.drawn) holding = "holding";
+  else if (inv.armed) holding = "carrying";
+  let armed = ` · ${holding} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}`;
+  if (arms.length)
+    armed += ` · ${arms.length} guns · nearest ${GUN_CODES[lying!.code]?.name ?? lying!.code} at x ${Math.round(lying!.x)}, y ${Math.round(lying!.y)}${gunAhead() ? " IN REACH" : ""}`;
+  if (flares.length) armed += ` · ${flares.length} flares`;
   const pools = hereOf((l) => l.sewage);
   const pool = pools.length ? ` · ${pools.length} sewage` : "";
   const nests = nestsHere();
-  const goop = nests.length
-    ? ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling${drips.length ? ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}` : ""}`
-    : "";
+  let goop = "";
+  if (nests.length) {
+    goop = ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling`;
+    if (drips.length) goop += ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}`;
+  }
   const valves = spawnedHere()
     .filter((e) => FOES[e.kind].burst)
     .map(
@@ -1861,65 +1843,67 @@ function loop(now: number): void {
       ? ` · <b>${p.act}</b> frame ${p.heldClock}`
       : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
-  const air =
-    (p.invLoop ? " · <b>INV held</b> — standing, decided on the release" : "") +
-    (bolts.length
-      ? ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}, y ${Math.round(bolts[0].y)} vx ${Math.round(bolts[0].vx)}`
-      : "") +
-    (streams.length
-      ? ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
-        `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`
-      : "") +
-    // what a CREATURE has thrown: the one thing in a fight that is neither the
-    // player's nor standing in front of him, so a probe has no other way to see it
-    (casts.length
-      ? ` · ${casts.length} cast, nearest cel ${castCel(casts[0])} at x ${Math.round(casts[0].x)}` +
-        `, y ${Math.round(casts[0].y)} blow ${castBlow(casts[0])}` +
-        ` vx ${Math.round(casts[0].vx)} vy ${Math.round(casts[0].vy)}` +
-        // ...and how many are playing their impact, and how many are on fire
-        `, ${casts.filter((c) => c.landed !== undefined).length} bursting` +
-        `, ${casts.filter((c) => flames.some((f) => f.on === c)).length} lit` +
-        `, ${casts.filter((c) => c.setOff).length} set off`
-      : "") +
-    // ...and the two things this page makes that belong to nobody's hand
-    (skates.length
-      ? ` · ${skates.length} board, first cel ${skates[0].down ? SKATEBOARD.rest : SKATEBOARD.hop.cel}` +
-        ` at x ${Math.round(skates[0].x)}, y ${Math.round(skates[0].y)} life ${skates[0].life}`
-      : "") +
-    (wormsHere().length
-      ? ` · ${wormsHere().length} worm, first kind ${wormsHere()[0].kind}` +
-        ` cel ${boggsWormCel(wormsHere()[0])} at x ${Math.round(wormsHere()[0].x)}` +
-        `, y ${Math.round(wormsHere()[0].y)}`
-      : "") +
-    // ...and the roller, whose whole first second is standing still, so a probe
-    // needs the countdown as much as it needs the position
-    (flames.length
-      ? ` · ${flames.length} alight, first cel ${flameCel(flames[0])}` +
-        ` at x ${Math.round(flames[0].x)}, y ${Math.round(flames[0].y)}` +
-        ` stage ${flames[0].stage}${flames[0].forever ? " FOREVER" : ""}`
-      : "") +
-    (cans.length
-      ? ` · ${cans.length} can, first cel ${canCel(cans[0])}` +
-        ` at x ${Math.round(cans[0].x)}, y ${Math.round(cans[0].y)}` +
-        ` tag ${cans[0].tag} vx ${Math.round(cans[0].vx)}` +
-        `${cans[0].rest !== undefined ? " RESTING" : ""}`
-      : "") +
-    (rollers.length
-      ? ` · ${rollers.length} roller, first cel ${rollerCel(rollers[0])}` +
-        ` at x ${Math.round(rollers[0].x)}, y ${Math.round(rollers[0].y)}` +
-        ` wait ${rollers[0].wait} vx ${rollers[0].vx} blow ${rollerBlow(rollers[0])}`
-      : "");
+  let air = p.invLoop ? " · <b>INV held</b> — standing, decided on the release" : "";
+  if (bolts.length)
+    air += ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}, y ${Math.round(bolts[0].y)} vx ${Math.round(bolts[0].vx)}`;
+  if (streams.length)
+    air +=
+      ` · stream ${streams[0].state} cel ${streamCel(streams[0])} at x ${Math.round(streams[0].x)}` +
+      `, y ${Math.round(streams[0].y)} blow ${STREAMS[streams[0].weapon]?.blow}`;
+  // what a CREATURE has thrown: the one thing in a fight that is neither the
+  // player's nor standing in front of him, so a probe has no other way to see it
+  if (casts.length)
+    air +=
+      ` · ${casts.length} cast, nearest cel ${castCel(casts[0])} at x ${Math.round(casts[0].x)}` +
+      `, y ${Math.round(casts[0].y)} blow ${castBlow(casts[0])}` +
+      ` vx ${Math.round(casts[0].vx)} vy ${Math.round(casts[0].vy)}` +
+      // ...and how many are playing their impact, and how many are on fire
+      `, ${casts.filter((c) => c.landed !== undefined).length} bursting` +
+      `, ${casts.filter((c) => flames.some((f) => f.on === c)).length} lit` +
+      `, ${casts.filter((c) => c.setOff).length} set off`;
+  // ...and the two things this page makes that belong to nobody's hand
+  if (skates.length)
+    air +=
+      ` · ${skates.length} board, first cel ${skates[0].down ? SKATEBOARD.rest : SKATEBOARD.hop.cel}` +
+      ` at x ${Math.round(skates[0].x)}, y ${Math.round(skates[0].y)} life ${skates[0].life}`;
+  if (wormsHere().length)
+    air +=
+      ` · ${wormsHere().length} worm, first kind ${wormsHere()[0].kind}` +
+      ` cel ${boggsWormCel(wormsHere()[0])} at x ${Math.round(wormsHere()[0].x)}` +
+      `, y ${Math.round(wormsHere()[0].y)}`;
+  // ...and the roller, whose whole first second is standing still, so a probe
+  // needs the countdown as much as it needs the position
+  if (flames.length)
+    air +=
+      ` · ${flames.length} alight, first cel ${flameCel(flames[0])}` +
+      ` at x ${Math.round(flames[0].x)}, y ${Math.round(flames[0].y)}` +
+      ` stage ${flames[0].stage}${flames[0].forever ? " FOREVER" : ""}`;
+  if (cans.length)
+    air +=
+      ` · ${cans.length} can, first cel ${canCel(cans[0])}` +
+      ` at x ${Math.round(cans[0].x)}, y ${Math.round(cans[0].y)}` +
+      ` tag ${cans[0].tag} vx ${Math.round(cans[0].vx)}` +
+      `${cans[0].rest !== undefined ? " RESTING" : ""}`;
+  if (rollers.length)
+    air +=
+      ` · ${rollers.length} roller, first cel ${rollerCel(rollers[0])}` +
+      ` at x ${Math.round(rollers[0].x)}, y ${Math.round(rollers[0].y)}` +
+      ` wait ${rollers[0].wait} vx ${rollers[0].vx} blow ${rollerBlow(rollers[0])}`;
   // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
   // to whatever is closest in x, and TOWER's bats chase, so one of them is
   // always nearer than the thing the room is about
   const bossHere = spawnedHere().find(
     (e) => FOES[e.kind].haunts || FOES[e.kind].preaches || FOES[e.kind].drives,
   );
-  const boss = bossHere
-    ? ` · boss ${bossHere.kind} ${Math.round(bossHere.hp)}/${bossHere.max}hp ${bossHere.state}` +
-      ` at x ${Math.round(bossHere.x)}, y ${Math.round(bossHere.y)} cel ${celOf(bossHere)}` +
-      `${bossHere.asleep ? " asleep" : ""}${bossHere.mode ? ` mode ${bossHere.mode}` : ""}${bossHere.script !== undefined ? ` kind ${bossHere.script} tag ${bossHere.tag ?? 0}` : ""}`
-    : "";
+  let boss = "";
+  if (bossHere) {
+    boss =
+      ` · boss ${bossHere.kind} ${Math.round(bossHere.hp)}/${bossHere.max}hp ${bossHere.state}` +
+      ` at x ${Math.round(bossHere.x)}, y ${Math.round(bossHere.y)} cel ${celOf(bossHere)}`;
+    if (bossHere.asleep) boss += " asleep";
+    if (bossHere.mode) boss += ` mode ${bossHere.mode}`;
+    if (bossHere.script !== undefined) boss += ` kind ${bossHere.script} tag ${bossHere.tag ?? 0}`;
+  }
   // what the RIGHT-HAND BAR is showing, which is a competition every frame and
   // not a property of the room — `0x40d1c0`, and Boggs enters it from its own
   // tick rather than from the census. See {@link claimBar}.
@@ -1929,11 +1913,12 @@ function loop(now: number): void {
   const nearHand = hereOf((l) => l.hands).sort(
     (a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x),
   )[0];
-  const hand = nearHand
-    ? ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
+  let hand = "";
+  if (nearHand)
+    hand =
+      ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
       ` cel ${handCel(nearHand)} at x ${Math.round(nearHand.atX)}` +
-      ` blow ${(nearHand.underfoot ? HAND.underfoot : HAND.anywhere).blow}`
-    : "";
+      ` blow ${(nearHand.underfoot ? HAND.underfoot : HAND.anywhere).blow}`;
   const lives =
     (ended ? " · <b>THE END</b> — credits.mov, and then the front again" : "") +
     ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
@@ -1946,10 +1931,11 @@ function loop(now: number): void {
   const points = ` · ${stats.score} points`;
   // what the panel's middle button wrote, so a probe can see the save happen
   const saved = saidSave ? ` · saved ${saidSave}` : "";
+  const flatFloor = room && !room.ground ? ` · flat floor at y ${room.top + room.floorDrop} (no region)` : "";
   hud.innerHTML =
     `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
     `${lvl.rooms.length} (${which})${doors}` +
-    `${room && !room.ground ? ` · flat floor at y ${room.top + room.floorDrop} (no region)` : ""}` +
+    flatFloor +
     ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${fighting}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${saved}${quotaSay}${prompt}${toGoal}${cheated}` +
     ` · every pixel is the disc's, both facings included, and the motion is SC.EXE's`;
 }
@@ -2014,6 +2000,8 @@ async function boot(): Promise<void> {
   requestAnimationFrame(loop);
 }
 
-void boot().catch((e) => {
+try {
+  await boot();
+} catch (e) {
   hud.textContent = String(e);
-});
+}

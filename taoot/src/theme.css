@@ -104,6 +104,81 @@
   --glow: 0 0 0 1px rgba(96, 192, 240, 0.14), 0 0 34px -6px rgba(96, 192, 240, 0.32);
 
   color-scheme: dark;
+
+  /* ---- roles the chrome asks for by name -------------------------------- */
+
+  /*
+   * Everything above is Titanic's: abyss, hull, ice, brass, sampled out of the
+   * logo. Everything below is a ROLE — what a colour is for — and the chrome in
+   * site/src/chrome.css uses nothing else. That is the whole contract: a palette
+   * supplies these names, the structure consumes them, and a page in a different
+   * world (Dust, or the project's own front door) supplies its own values without
+   * touching a single rule.
+   *
+   * Each one was introduced by reading a rule that had reached past the roles
+   * into the palette, and is defined here with EXACTLY the value that rule had.
+   */
+  /* the accent, brighter on hover and as a line */
+  --accent-hover: var(--ice-300);
+  --accent-line: var(--ice-500);
+
+  /* text selection — 28% of the accent, kept literal because that is what it was */
+  --selection-bg: rgba(96, 192, 240, 0.28);
+
+  /* the bar across the top: two translucent stops over the page */
+  --topbar-top: var(--abyss-700);
+  --topbar-bottom: var(--abyss-900);
+
+  /* an ordinary button under the pointer, and while it is held */
+  --button-hover-bg: var(--abyss-500);
+  --button-active-bg: var(--abyss-600);
+
+  /* a button that reports a state rather than doing something */
+  --state-border: var(--hull-300);
+
+  /* the rule under a page title: dark, mid, bright, dark */
+  --rule-mid: var(--brass-500);
+  --rule-bright: var(--brass-300);
+
+  /* the one control that COMMITS — the only thing wearing the mark's colour
+     as a surface rather than as an edge (see the note on --mark) */
+  --commit-face-bottom: var(--brass-600);
+  --commit-face-deep: var(--brass-700);
+  --commit-edge: var(--brass-300);
+  --commit-edge-hover: var(--brass-200);
+
+  /* ---- roles found hiding as literals ----------------------------------- */
+
+  /*
+   * The same exercise, for values that were written as raw colours rather than as
+   * palette references. Same rule: each is defined with exactly what it was.
+   */
+  /* the cold pool of light at the top of every page — hull-300, thinned */
+  --depth-light: rgba(23, 80, 127, 0.35);
+
+  /* the globe in the topbar glows; the accent, thinned */
+  --mark-glow: rgba(96, 192, 240, 0.35);
+
+  /* what a floating menu casts */
+  --shadow-drop: rgb(0 0 0 / 45%);
+
+  /*
+   * The dropped-open language menu's own background.
+   *
+   * This was `var(--bg-panel, #0d1520)`, and `--bg-panel` IS DEFINED NOWHERE —
+   * not in the old sheet, not in any page, nowhere in the repository. So the
+   * fallback has always BEEN the value, and it is not one of the abyss steps: a
+   * touch lighter and greyer than `--panel`. Kept exactly as it rendered rather
+   * than quietly folded into `--panel`, which would darken a menu nobody asked
+   * to change. Whether it SHOULD be `--panel` is a design question, and it is a
+   * visible one now instead of a dead reference.
+   */
+  --menu-panel: #0d1520;
+
+  /* text on the brass commit button: the one place in the design where the
+     ground is the mark, so the ink has to be near-black brown */
+  --commit-text: #180d00;
+  --commit-text-hover: #1c0f00;
 }
 
 /* ---- semantic layer: the two densities -------------------------------- */
@@ -155,84 +230,4 @@ body.work {
   --text-mute: #5b81a4;
   --gap: 0.65rem;
   --pad: 0.4rem 0.7rem;
-}
-
-
-/* ---- roles the chrome asks for by name -------------------------------- */
-
-/*
- * Everything above is Titanic's: abyss, hull, ice, brass, sampled out of the
- * logo. Everything below is a ROLE — what a colour is for — and the chrome in
- * site/src/chrome.css uses nothing else. That is the whole contract: a palette
- * supplies these names, the structure consumes them, and a page in a different
- * world (Dust, or the project's own front door) supplies its own values without
- * touching a single rule.
- *
- * Each one was introduced by reading a rule that had reached past the roles
- * into the palette, and is defined here with EXACTLY the value that rule had.
- */
-:root {
-  /* the accent, brighter on hover and as a line */
-  --accent-hover: var(--ice-300);
-  --accent-line: var(--ice-500);
-
-  /* text selection — 28% of the accent, kept literal because that is what it was */
-  --selection-bg: rgba(96, 192, 240, 0.28);
-
-  /* the bar across the top: two translucent stops over the page */
-  --topbar-top: var(--abyss-700);
-  --topbar-bottom: var(--abyss-900);
-
-  /* an ordinary button under the pointer, and while it is held */
-  --button-hover-bg: var(--abyss-500);
-  --button-active-bg: var(--abyss-600);
-
-  /* a button that reports a state rather than doing something */
-  --state-border: var(--hull-300);
-
-  /* the rule under a page title: dark, mid, bright, dark */
-  --rule-mid: var(--brass-500);
-  --rule-bright: var(--brass-300);
-
-  /* the one control that COMMITS — the only thing wearing the mark's colour
-     as a surface rather than as an edge (see the note on --mark) */
-  --commit-face-bottom: var(--brass-600);
-  --commit-face-deep: var(--brass-700);
-  --commit-edge: var(--brass-300);
-  --commit-edge-hover: var(--brass-200);
-}
-
-/* ---- roles found hiding as literals ----------------------------------- */
-
-/*
- * The same exercise, for values that were written as raw colours rather than as
- * palette references. Same rule: each is defined with exactly what it was.
- */
-:root {
-  /* the cold pool of light at the top of every page — hull-300, thinned */
-  --depth-light: rgba(23, 80, 127, 0.35);
-
-  /* the globe in the topbar glows; the accent, thinned */
-  --mark-glow: rgba(96, 192, 240, 0.35);
-
-  /* what a floating menu casts */
-  --shadow-drop: rgb(0 0 0 / 45%);
-
-  /*
-   * The dropped-open language menu's own background.
-   *
-   * This was `var(--bg-panel, #0d1520)`, and `--bg-panel` IS DEFINED NOWHERE —
-   * not in the old sheet, not in any page, nowhere in the repository. So the
-   * fallback has always BEEN the value, and it is not one of the abyss steps: a
-   * touch lighter and greyer than `--panel`. Kept exactly as it rendered rather
-   * than quietly folded into `--panel`, which would darken a menu nobody asked
-   * to change. Whether it SHOULD be `--panel` is a design question, and it is a
-   * visible one now instead of a dead reference.
-   */
-  --menu-panel: #0d1520;
-
-  /* text on the brass commit button: the one place in the design where the
-     ground is the mark, so the ink has to be near-black brown */
-  --commit-text: #180d00;
-  --commit-text-hover: #1c0f00;
 }

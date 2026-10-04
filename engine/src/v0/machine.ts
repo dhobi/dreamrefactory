@@ -165,7 +165,10 @@ export abstract class MachineV0 {
     const decoded = order.map((k) => decodeAudioV0(bank[n + k]));
     const samples = new Float32Array(decoded.reduce((a, d) => a + d.samples.length, 0));
     let at = 0;
-    for (const d of decoded) samples.set(d.samples, at), (at += d.samples.length);
+    for (const d of decoded) {
+      samples.set(d.samples, at);
+      at += d.samples.length;
+    }
     this.ambience = { name, samples, rate: decoded[0].sampleRate };
     this.log(`ambience: ${name}, ${order.length} pieces of ${pieces} round and round`);
   }

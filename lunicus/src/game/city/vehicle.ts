@@ -117,7 +117,7 @@ export class Vehicle {
   private blockedAt(x: number, y: number): boolean {
     const w = this.w;
     if ((w.target.x === x && w.target.y === y) || (w.cam.cellX === x && w.cam.cellY === y)) return true;
-    if (this.other && this.other.o.cellX === x && this.other.o.cellY === y) return true;
+    if (this.other?.o.cellX === x && this.other.o.cellY === y) return true;
     return w.blocked(x, y);
   }
 
@@ -187,7 +187,10 @@ export class Vehicle {
     if (pt.depth < 0x19a) return;
     let a = (((w.cam.angle - this.o.angle + 8) & 0xff) >> 4);
     let mirror = false;
-    if (a >= 9) (a = 16 - a), (mirror = true);
+    if (a >= 9) {
+      a = 16 - a;
+      mirror = true;
+    }
     const dist = Math.min(0x1b, Math.max(0, Math.trunc((pt.depth - 0x19a) / 0x69)));
     w.addFixed(within, pt.depth, 0x84, pt.x, this.frames[a * 28 + dist], mirror);
   }
@@ -195,7 +198,10 @@ export class Vehicle {
   /** the cell ahead of its heading `a` (0x41bec5) */
   private ahead(a: number): [number, number] {
     const { cellX: x, cellY: y } = this.o;
-    return a === 0 ? [x + 1, y] : a === 0x40 ? [x, y + 1] : a === 0x80 ? [x - 1, y] : [x, y - 1];
+    if (a === 0) return [x + 1, y];
+    if (a === 0x40) return [x, y + 1];
+    if (a === 0x80) return [x - 1, y];
+    return [x, y - 1];
   }
 
   /** 0x41be48: the first way open of a quarter turn, straight on, and the other two */
@@ -212,7 +218,11 @@ export class Vehicle {
   /** the next cell's centre along the heading, as the coordinate that moves (0x41b60e) */
   private nextCentre(sign: 1 | -1): number {
     const a = this.o.angle;
-    const v = a === 0 ? this.o.x + sign * CELL : a === 0x40 ? this.o.y + sign * CELL : a === 0x80 ? this.o.x - sign * CELL : this.o.y - sign * CELL;
+    let v: number;
+    if (a === 0) v = this.o.x + sign * CELL;
+    else if (a === 0x40) v = this.o.y + sign * CELL;
+    else if (a === 0x80) v = this.o.x - sign * CELL;
+    else v = this.o.y - sign * CELL;
     return Math.trunc(v / CELL) * CELL + CELL_CENTRE;
   }
 
@@ -284,16 +294,32 @@ export class Vehicle {
           [db, b] = dx > 0 ? [0x80, [x - 1, y]] : [0, [dx === 0 ? -1 : x + 1, y]];
         }
         if (Math.abs(dx) === Math.abs(dy) && w.roll(2) === 1) [a, b, da, db] = [b, a, db, da];
-        if (!this.blockedAt(...a)) return void ((this.goal = da), (this.state = 1));
-        if (!this.blockedAt(...b)) return void ((this.goal = db), (this.state = 1));
+        if (!this.blockedAt(...a)) {
+          this.goal = da;
+          this.state = 1;
+          return;
+        }
+        if (!this.blockedAt(...b)) {
+          this.goal = db;
+          this.state = 1;
+          return;
+        }
         this.turnWay = w.roll(2);
         const d = this.detour(this.turnWay);
-        if (d !== null) (this.goal = d), (this.state = 6), (this.count = 6);
+        if (d !== null) {
+          this.goal = d;
+          this.state = 6;
+          this.count = 6;
+        }
         return;
       }
       case 1:
         if (this.o.angle === this.goal) {
-          if (this.w.downTheLine(this.o)) return void ((this.state = 4), (this.cool = 6));
+          if (this.w.downTheLine(this.o)) {
+            this.state = 4;
+            this.cool = 6;
+            return;
+          }
           this.goal = this.nextCentre(1);
           this.state = 2;
         } else this.o.angle = turnToward(this.o.angle, this.goal, this.turn);
@@ -306,29 +332,42 @@ export class Vehicle {
         if (--this.cool < 0) {
           this.cool = 0;
           const hurt = this.damage * 5;
-          if (w.roll(this.k.fireRoll) < hurt) return void (this.state = 5);
+          if (w.roll(this.k.fireRoll) < hurt) {
+            this.state = 5;
+            return;
+          }
           if (w.roll(this.k.fireRoll) < this.k.fireCome - hurt && this.forward()) return;
         }
         if (this.w.downTheLine(this.o)) {
           this.w.warnFrom(this.o);
-          if (this.k.name === "tank") (this.fire(0), this.fire(1));
-          else this.fire(0);
+          this.fire(0);
+          if (this.k.name === "tank") this.fire(1);
           this.fired++;
         } else this.state = 0;
         return;
       }
       case 5: {
-        if (this.sees() === null) return void (this.state = 0);
+        if (this.sees() === null) {
+          this.state = 0;
+          return;
+        }
         const { cellX: x, cellY: y } = this.o;
         let [da, db] = [0xc0, 0x40];
         let [a, b]: [number, number][] = [[x, y - 1], [x, y + 1]];
-        if (!(this.o.angle === 0 || this.o.angle === 0x80)) ([da, db] = [0x80, 0]), ([a, b] = [[x - 1, y], [x + 1, y]]);
+        if (!(this.o.angle === 0 || this.o.angle === 0x80)) {
+          [da, db] = [0x80, 0];
+          [a, b] = [[x - 1, y], [x + 1, y]];
+        }
         if (w.roll(2) === 1) [a, b, da, db] = [b, a, db, da];
         for (const [c, d] of [[a, da], [b, db]] as [[number, number], number][]) {
           if (this.blockedAt(...c)) continue;
           this.state = 1;
           this.goal = d;
-          if (w.roll(3) === 1) (this.state = 6), (this.turnWay = w.roll(2)), (this.count = 5);
+          if (w.roll(3) === 1) {
+            this.state = 6;
+            this.turnWay = w.roll(2);
+            this.count = 5;
+          }
           return;
         }
         if (!this.backward()) this.state = 0;
@@ -343,10 +382,19 @@ export class Vehicle {
       case 7:
         return this.roll(1, 8);
       case 8: {
-        if (this.sees() !== null) return void (this.state = 1);
-        if (--this.count <= 0) return void (this.state = 0);
+        if (this.sees() !== null) {
+          this.state = 1;
+          return;
+        }
+        if (--this.count <= 0) {
+          this.state = 0;
+          return;
+        }
         const d = this.detour(this.turnWay);
-        if (d !== null) (this.goal = d), (this.state = 6);
+        if (d !== null) {
+          this.goal = d;
+          this.state = 6;
+        }
         return;
       }
       case 9: {

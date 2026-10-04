@@ -161,7 +161,8 @@ function download(png: Blob, shotName: string): void {
  */
 function title(page: BugReportPage): string {
   const room = page.where().split("·")[0].trim();
-  return `[${page.game}] ${room ? `Bug in ${room}` : "Bug"}`;
+  const what = room ? `Bug in ${room}` : "Bug";
+  return `[${page.game}] ${what}`;
 }
 
 /**

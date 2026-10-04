@@ -56,17 +56,21 @@ export function placings(name: string, floor: number, day: number, roll: (n: num
       return place(9, 0x15, 0xd2, 0x126, 0xc0);
     case "mccallum":
       if (floor !== UPPER || day >= 5) return null;
-      return day === 2 ? place(0x10, 8, 0xd2, 0x126, 0xc0) : place(0, roll(2) === 1 ? 8 : 6, 0x7e, 0xd2, 0x80);
+      if (day === 2) return place(0x10, 8, 0xd2, 0x126, 0xc0);
+      return place(0, roll(2) === 1 ? 8 : 6, 0x7e, 0xd2, 0x80);
     case "heisenstein":
       if (floor !== UPPER) return null;
       return place(roll(2) === 1 ? 0xa : 8, 0, 0xd2, 0x7e, 0xc0);
     case "raife":
       if (floor !== UPPER) return null;
-      return day === 3 ? place(0xa, 2, 0x126, 0xd2, 0x80) : place(0x12, roll(2) === 1 ? 6 : 8, 0x126, 0xd2, 0);
+      if (day === 3) return place(0xa, 2, 0x126, 0xd2, 0x80);
+      return place(0x12, roll(2) === 1 ? 6 : 8, 0x126, 0xd2, 0);
     case "molotov": {
       if (floor !== LOWER) return null;
       const r = roll(3);
-      return r === 1 ? place(9, 9, 0xd2, 0x7e, 0x40) : r === 2 ? place(8, 9, 0xd2, 0x7e, 0xc0) : place(0xa, 9, 0xd2, 0x7e, 0xc0);
+      if (r === 1) return place(9, 9, 0xd2, 0x7e, 0x40);
+      if (r === 2) return place(8, 9, 0xd2, 0x7e, 0xc0);
+      return place(0xa, 9, 0xd2, 0x7e, 0xc0);
     }
     case "sasha":
       if (floor !== LOWER || day >= 5) return null;
@@ -105,6 +109,12 @@ export function turnToward(angle: number, target: number, step: number): number 
   return a & 0xff;
 }
 
+/** a walking figure's rise at a step of its bob */
+function bobOf(bob: number): number {
+  if (bob < 2) return -2;
+  return bob === 4 || bob === 5 ? 2 : 0;
+}
+
 /** one frame of a figure's walk (0x416700) */
 function walk(f: Figure): void {
   const a = f.at;
@@ -114,7 +124,7 @@ function walk(f: Figure): void {
   const n = Math.trunc(Math.sqrt(dx * dx + dy * dy) / 6) + 1;
   a.x += Math.trunc(dx / n);
   a.y += Math.trunc(dy / n);
-  a.z = 0x78 + (f.bob < 2 ? -2 : f.bob === 4 || f.bob === 5 ? 2 : 0);
+  a.z = 0x78 + bobOf(f.bob);
   f.bob = (f.bob + 1) % 8;
 }
 

@@ -923,14 +923,10 @@ export function wboolyGate(
   // `0x45631e` — the −9 arm lights it and returns before any of this
   if (blow.code < 0) return blow;
   const over = foe.knockdown?.anim;
-  const state =
-    e.state !== "flinch"
-      ? (e.script ?? 0)
-      : e.anim === over
-        ? 7
-        : e.anim === over?.next
-          ? 8
-          : 9;
+  let state: number;
+  if (e.state !== "flinch") state = e.script ?? 0;
+  else if (e.anim === over) state = 7;
+  else state = e.anim === over?.next ? 8 : 9;
   // `0x456470` — taken and answered 1, with the goo (`0x4563a0`) and the
   // grunt (`0x456459`) and the exchange, and no reaction — unless it is the
   // blow that kills, which `0x4563ce` reads first. `AI+0x12` is not stepped

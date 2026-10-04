@@ -191,7 +191,6 @@ export class Bike implements BikeApi {
           angle = 0x80;
           x = w.poseX + 1;
         } else {
-          angle = 0;
           x = w.poseX - 1;
         }
         while (w.solid(x, y)) y += dy;
@@ -356,20 +355,52 @@ export class Bike implements BikeApi {
         // 0x4310b0: turn about the corner on the side it turns to
         switch (r.angle) {
           case 0:
-            if (r.goal === 0xc0) (r.state = 3), (r.goalX -= 0x80), (r.goalY -= 0x80);
-            if (r.goal === 0x40) (r.state = 4), (r.goalX -= 0x80), (r.goalY += 0x80);
+            if (r.goal === 0xc0) {
+              r.state = 3;
+              r.goalX -= 0x80;
+              r.goalY -= 0x80;
+            }
+            if (r.goal === 0x40) {
+              r.state = 4;
+              r.goalX -= 0x80;
+              r.goalY += 0x80;
+            }
             break;
           case 0x40:
-            if (r.goal === 0) (r.state = 3), (r.goalX += 0x80), (r.goalY -= 0x80);
-            if (r.goal === 0x80) (r.state = 4), (r.goalX -= 0x80), (r.goalY -= 0x80);
+            if (r.goal === 0) {
+              r.state = 3;
+              r.goalX += 0x80;
+              r.goalY -= 0x80;
+            }
+            if (r.goal === 0x80) {
+              r.state = 4;
+              r.goalX -= 0x80;
+              r.goalY -= 0x80;
+            }
             break;
           case 0x80:
-            if (r.goal === 0xc0) (r.state = 4), (r.goalX += 0x80), (r.goalY -= 0x80);
-            if (r.goal === 0x40) (r.state = 3), (r.goalX += 0x80), (r.goalY += 0x80);
+            if (r.goal === 0xc0) {
+              r.state = 4;
+              r.goalX += 0x80;
+              r.goalY -= 0x80;
+            }
+            if (r.goal === 0x40) {
+              r.state = 3;
+              r.goalX += 0x80;
+              r.goalY += 0x80;
+            }
             break;
           case 0xc0:
-            if (r.goal === 0x80) (r.state = 3), (r.goalX -= 0x80), (r.goalY += 0x80);
-            if (r.goal === 0) (r.state = 4), (r.goalX += 0x80), (r.goalY += 0x80);
+            if (r.goal === 0x80) {
+              r.state = 3;
+              r.goalX -= 0x80;
+              r.goalY += 0x80;
+            }
+            if (r.goal === 0) {
+              r.state = 4;
+              r.goalX += 0x80;
+              r.goalY += 0x80;
+            }
             break;
         }
         r.radius = dist(r.goalX - r.x, r.goalY - r.y, 0);
@@ -600,7 +631,9 @@ export class Bike implements BikeApi {
     if (p.depth < 0x40) return;
     let i = (p.depth - 0x40) >> 7;
     if (i >= 0x10) i = 0xf;
-    const base = s.met === 2 ? HIT : s.met ? CHIP : SHELL;
+    let base = SHELL;
+    if (s.met === 2) base = HIT;
+    else if (s.met) base = CHIP;
     w.sprite(this.pyro(base + i), p.y, p.x, p.depth);
   }
 

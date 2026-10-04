@@ -22,7 +22,7 @@ import { openWindowDialog, windowDialogOpen } from "@dreamfactory/engine/web/win
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION } from "@dreamfactory/site/version";
-import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND } from "./game/data";
+import { dayOf, SCREEN_H, SCREEN_W, TICKS_PER_SECOND } from "./game/data";
 import { JumpRaven } from "./game/game";
 import { Input } from "./game/input";
 import type { GameFiles, Speaker } from "./game/machine";
@@ -68,6 +68,16 @@ const errEl = $<HTMLSpanElement>("err");
 
 $("ver").textContent = `v${VERSION}`;
 
+/** the title card, which closes the band up when it fails to load — see #brand in index.html */
+const brandEl = $<HTMLImageElement>("brand");
+function dropBrand(): void {
+  brandEl.hidden = true;
+  document.body.classList.add("nobrand");
+}
+// a module runs after parsing, so the image may already have failed by now
+if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
+else brandEl.addEventListener("error", dropBrand);
+
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
 
 /* ------------------------------------------------------------------------- *
@@ -90,7 +100,9 @@ const say = (line: string): void => {
   logEl.innerHTML += `${esc(line)}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 };
-const toggleLog = (): void => void (logEl.hidden = !logEl.hidden);
+const toggleLog = (): void => {
+  logEl.hidden = !logEl.hidden;
+};
 $("logBtn").addEventListener("click", toggleLog);
 
 installFullscreen($<HTMLButtonElement>("fsBtn"), stageEl, { report: say, landscape: true });
@@ -236,7 +248,10 @@ function keepSco(bytes: Uint8Array): void {
 /** the saved games: the HUD's SAVE writes through the shared dialog, File ▸ Open and Load read through it */
 useSaveKind(JUMPRAVEN_SAVES);
 const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
-  browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => (complain(String(e)), done()));
+  browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => {
+    complain(String(e));
+    done();
+  });
 };
 
 const frameEl = $("frame");
@@ -273,15 +288,19 @@ function draw(): void {
 function where(): string {
   if (game.phase === "not-ported" || game.phase === "quit") return `${game.stopped}`;
   const t = game.talkState.talk;
-  if (t) return `briefing: ${t.file}${t.line ? ` · ${t.line}` : ""}`;
+  if (t) return t.line ? `briefing: ${t.file} · ${t.line}` : `briefing: ${t.file}`;
   if (m.film) return m.where;
   const f = game.flight;
   if (f) {
     const r = game.records;
     const k = r.tally.kills;
-    return `flying, day ${game.level === 3 ? 1 : game.level === 5 ? 2 : 3} · ${f.fly ? "FLY" : "HOVER"} (T switches) · ${f.pose.x},${f.pose.y} facing ${"NSEW"[f.pose.dir]} · kills: ${k.jeep} jeeps, ${k.tank} tanks, ${k.bike} bikes, ${k.copter} copters · cash ${r.score} · lives ${r.lives}`;
+    return `flying, day ${dayOf(game.level)} · ${f.fly ? "FLY" : "HOVER"} (T switches) · ${f.pose.x},${f.pose.y} facing ${"NSEW"[f.pose.dir]} · kills: ${k.jeep} jeeps, ${k.tank} tanks, ${k.bike} bikes, ${k.copter} copters · cash ${r.score} · lives ${r.lives}`;
   }
-  if (game.mart) return `the Mart · cash ${game.records.score}${game.mart.selected ? ` · selected tier ${game.mart.selected.tier + 1} of kind ${game.mart.selected.kind}` : ""}`;
+  if (game.mart) {
+    const sel = game.mart.selected;
+    const cash = `the Mart · cash ${game.records.score}`;
+    return sel ? `${cash} · selected tier ${sel.tier + 1} of kind ${sel.kind}` : cash;
+  }
   if (game.phase === "scores") return "the high scores screen — PLAY starts a game";
   return m.where || game.phase;
 }
@@ -349,7 +368,8 @@ function frame(now: number): void {
   menu.sync();
   loadBtn.disabled = !game.canOpen;
   const s = where();
-  const shown = player ? `autoplay${SPEED > 1 ? ` ×${SPEED}` : ""}, seed ${AUTO_SEED || "random"} · ${s}` : s;
+  const speed = SPEED > 1 ? ` ×${SPEED}` : "";
+  const shown = player ? `autoplay${speed}, seed ${AUTO_SEED || "random"} · ${s}` : s;
   if (shown !== lastStatus) locEl.textContent = lastStatus = shown;
   requestAnimationFrame(frame);
 }
@@ -422,14 +442,14 @@ document.addEventListener("keyup", (e) => input.keyUp(e.key));
  * ------------------------------------------------------------------------- */
 
 const charge = $("charge");
-const bar = $("bar");
+const bar = $<HTMLProgressElement>("barvalue");
 const bootsay = $("bootsay");
 const bootpct = $("bootpct");
 
 function gauge(fraction: number, what: string): void {
   const pct = Math.round(fraction * 100);
   charge.style.width = `${pct}%`;
-  bar.setAttribute("aria-valuenow", String(pct));
+  bar.value = pct;
   bootpct.textContent = `${pct}%`;
   bootsay.textContent = what;
 }
@@ -474,4 +494,8 @@ async function enter(): Promise<void> {
 }
 
 $("start").addEventListener("click", () => void enter().catch((e) => complain(String(e))));
-void boot().catch((e) => complain(String(e)));
+try {
+  await boot();
+} catch (e) {
+  complain(String(e));
+}

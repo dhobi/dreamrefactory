@@ -87,7 +87,7 @@ function playToQuestion(intro: NightdiveIntro): number {
     now += 100;
     intro.tick(now);
   }
-  expect(intro.regions().length).toBe(2);
+  expect(intro.regions()).toHaveLength(2);
   return now;
 }
 
@@ -102,9 +102,9 @@ function centre(intro: NightdiveIntro, target: string): { x: number; y: number }
 
 test("the generated movie is a two-segment film: the animation, then the question", () => {
   const mov = readMovFile(MOVIE);
-  expect(mov.segments.length).toBe(2);
+  expect(mov.segments).toHaveLength(2);
   // segment 0 is the GIF, frame for frame, at the GIF's own rate (10 cs = 6 ticks)
-  expect(mov.frames.length).toBe(4);
+  expect(mov.frames).toHaveLength(4);
   expect(mov.minHoldTicks).toBe(6);
   // every frame steps but the last, which exits INTO the question — without a
   // step anywhere the port reads the segment as a click-through close-up and
@@ -161,7 +161,7 @@ test("the film plays itself out and then WAITS on the question", async () => {
   const now = playToQuestion(intro);
   // it parked rather than ran out: more ticks change nothing
   for (let i = 0; i < 50; i++) intro.tick(now + 100 * i);
-  expect(intro.regions().length).toBe(2);
+  expect(intro.regions()).toHaveLength(2);
   expect(intro.answer()).toBe("unanswered");
 });
 
@@ -193,7 +193,7 @@ test("a click outside both buttons answers nothing and does not end the movie", 
   playToQuestion(intro);
   intro.click(2, 2);
   expect(intro.answer()).toBe("unanswered");
-  expect(intro.regions().length).toBe(2);
+  expect(intro.regions()).toHaveLength(2);
 });
 
 test("ESC presses past the FILM and lands on the question (#171)", async () => {
@@ -205,7 +205,7 @@ test("ESC presses past the FILM and lands on the question (#171)", async () => {
   expect(intro.key(".", true)).toBe(true);
   // it did NOT take the question with it — that is the bug this replaced, where
   // one press booted the game without ever asking
-  expect(intro.regions().length).toBe(2);
+  expect(intro.regions()).toHaveLength(2);
   expect(intro.answer()).toBe("unanswered");
 });
 
@@ -214,10 +214,10 @@ test("ESC over the QUESTION does nothing at all (#171)", async () => {
   let now = playToQuestion(intro);
   // the question segment carries no skip flag, so the key filter turns it away
   expect(intro.key(".", true)).toBe(false);
-  expect(intro.regions().length).toBe(2);
+  expect(intro.regions()).toHaveLength(2);
   // and no amount of clock ends it either: it is answered, or it is on screen
   for (let i = 0; i < 200; i++) intro.tick((now += 100));
-  expect(intro.regions().length).toBe(2);
+  expect(intro.regions()).toHaveLength(2);
   expect(intro.answer()).toBe("unanswered");
 
   // ...and the buttons still work, so it is a question and not a trap
