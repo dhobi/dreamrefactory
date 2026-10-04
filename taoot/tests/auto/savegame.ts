@@ -1776,6 +1776,48 @@ test("a save offers every loaded prop, as the original enumerates them", async (
 });
 
 /**
+ * The card table is back on its star after a load from another room (#486).
+ *
+ * `blkjacktable` lives in house.shp and only SMOKE.SET's `openset` places it —
+ * `sendtoprop ("blkjacktable", setupprop ("smoke"))`, whose body is `propset (me,
+ * "smoke")`, `propstar (me, "buick")` — and a load runs no `openset`. The record
+ * carries all of it: `propset` at name+16, `propstar` at name+32 and the world
+ * place at +0x1a/+0x1c/+0x1e. Read only the numeric half and a load from a fresh
+ * boot left the table belonging to no set at the world origin: Riviera and the
+ * table missing from the smoking room, nothing to click, until a walk out and back
+ * ran the room's `openset`. Loading while already in the room hid it, because the
+ * live prop was still placed.
+ */
+test("a sinking save in the smoking room reloads with the card table on its star (#486)", async () => {
+  const session = await newSession();
+  const bytes = new Uint8Array(readFileSync(savePath("ENDGAME2", "07 - Won Boat Pass.ti")));
+  const save = parseSave(bytes);
+  expect(save.set).toBe("smoke");
+  const filed = save.inventory.find((p) => p.name === "blkjacktable")!;
+  const buick = readSetFile(provider("smoke.set")!).actors.find((a) => a.identifier.toLowerCase() === "buick")!;
+  // the file's place IS the star's (ground pair x/z, then the height y), as propstar put it
+  expect([filed.set, filed.star]).toEqual(["smoke", "buick"]);
+  expect([filed.worldX, filed.worldY, filed.worldZ]).toEqual([buick.positionX, buick.positionZ, buick.positionY]);
+
+  const before = session.propRuntime.get("blkjacktable")!;
+  expect(before.setName, "a fresh boot has not been to the smoking room").toBe("");
+
+  expect(await session.loadGame(bytes)).toBe(true);
+  await session.settle();
+  const t = session.propRuntime.get("blkjacktable")!;
+  check("the table belongs to the smoking room", t.setName === "smoke", `set "${t.setName}"`);
+  check("on its star", t.starName === "buick", `star "${t.starName}"`);
+  check("at the star's place", t.worldX === filed.worldX && t.worldY === filed.worldY && t.worldZ === filed.worldZ,
+    `(${t.worldX}, ${t.worldY}, ${t.worldZ})`);
+  check("in the world, shown", t.worldSpace && t.visible);
+
+  // and our own save writes it back, so the next load from elsewhere has it too
+  const back = parseSave(session.snapshotSave()!).inventory.find((p) => p.name === "blkjacktable")!;
+  expect([back.set, back.star, back.worldX, back.worldY, back.worldZ])
+    .toEqual(["smoke", "buick", filed.worldX, filed.worldY, filed.worldZ]);
+});
+
+/**
  * Beatrix trades the child for Conkling's letter after a save and a load (#107).
  *
  * `BX2.PUP` c6 opens on `if propowner("baby") = "bx"`, and `baby` lives in

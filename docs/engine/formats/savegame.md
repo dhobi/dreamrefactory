@@ -661,6 +661,7 @@ local buffer whose name field sits at `buffer+0x4e`:
 | +0x12 | −0x3c | i16 | `propis3d` (`0x417760`) — strictly 0/1 across the corpus. 1 = placed in the world (`propxyz`), so the x/y anchor below is stale; the loader restores this flag, since the live one is whatever the running game last did (TAOOT's watch/bag: 1 in exactly the 4 pre-boarding saves where they still lie on the cabin furniture, 0 in the 105 where they sit in the band) |
 | +0x14 / +0x16 | −0x3a / −0x38 | i16 | `propxy` (`0x4175c0`): **+0x14 is the screen Y and +0x16 the X**. The interface band's props all read x = 256, y = 324 — the band anchor |
 | +0x18 | −0x36 | i16 | `propdeg` (`0x4168a0`, `movsx ecx, word ptr [esp+0x20]`) |
+| +0x1a / +0x1c / +0x1e | −0x34 / −0x32 / −0x30 | i16 | `propxyz` axes 1/2/3 (`0x4173c0`'s getter arms) — the **world place**: the ground pair, then the height. SMOKE's card table reads (11262, 3860, 234) in every save that has it placed — its `buick` star's x, z and y |
 | +0x20 | −0x2e | i16 | current **frame** within the view — a valid index in 7848 of 7848 (`0 ≤ frame < max(1, play length)`) |
 | +0x22 | −0x2c | i16 | **play length** of the current view: the frame count for a real animation, **1 for a deg-selector state** (which shows one frame) — 7404 of 7848; the misses cluster on states whose animated bit the engine decides at play time |
 | +0x24 | −0x2a | i16 | `propspeed` (`0x416b20`) — **4 in every record ever written**; nothing changes a prop's speed |
@@ -669,6 +670,8 @@ local buffer whose name field sits at `buffer+0x4e`:
 | +0x46 | −0x08 | u32 | `propvalue` (`0x416240`) — 0 or 1 in the corpus |
 | +0x4a | −0x04 | i16 | `propzclip` (`0x4162d0`) — 7 distinct values |
 | +0x4e | +0 | pstr | prop **name** |
+| +0x5e | +16 | pstr | `propset` (`0x4160b0`) — the set a world prop draws in, `""` until a room has placed it |
+| +0x6e | +32 | pstr | `propstar` (`0x416490`) — the star it was put on (or a sentinel such as `"custom"`) |
 | +0x7e | +48 | pstr | current `propview` state (`0x416610`, `lea ecx, [esp+0x86]`) — `"large"`, `"panel1"`, … |
 | +0x8e | +64 | pstr | `propowner` (`0x4161c0`, `lea ecx, [esp+0x96]`) — `"frank"` = in Frank's possession, else `"none"`/`"vlad"`/`"purser"`/… |
 
@@ -692,9 +695,7 @@ same kind of independent check from the open pocketwatch, whose four pieces read
 assigns them, in that order.
 
 Still structured but unnamed — all engine bookkeeping, none of it restorable
-state: `+0x1a`–`+0x1e` (animation timing scratch — non-zero only on the two
-ever-animated big-scale props, the watch and the bag, with tick-sized values),
-`+0x30` (a per-prop constant across all 109 — 0 for the inventory items, small
+state: `+0x30` (a per-prop constant across all 109 — 0 for the inventory items, small
 ordinals for some interface chrome; not the state index, not the shop-wide state
 ordinal, both tested), and `+0x34`…`+0x42`, eight consecutive small words that
 look like two screen rects (last-drawn bounds). The pointer columns are
@@ -712,8 +713,9 @@ numeric half.
 ### What we write back
 
 `applyPatch` overwrites a record **in place**, in records the original wrote: the
-two string fields (`view`, `owner`) and the whole numeric half — `visible`, the
-screen anchor, `deg`, `dist`, `scale`, `value` and `zclip`. A prop with no record
+four string fields (`set`, `star`, `view`, `owner`) and the whole numeric half —
+`visible`, the screen anchor, the world place, `deg`, `dist`, `scale`, `value` and
+`zclip`. A prop with no record
 in the base is skipped: unlike
 [the actor container](#the-actor-container-fixed-160-byte-actor-records), this one
 is not grown, and the extras it would take — the props of a room's own shop, on top

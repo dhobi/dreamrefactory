@@ -137,11 +137,17 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
     name: p.name,
     view: p.view,
     owner: p.owner,
+    set: p.set,
+    star: p.star,
     visible: p.visible,
     is3d: p.is3d,
     // the screen anchor, which v4 keeps in the same two fields
     x: p.screenX,
     y: p.screenY,
+    // the world position: x across and y into the screen are the ground pair
+    worldX: p.x,
+    worldY: p.y,
+    worldZ: p.z,
     deg: p.deg,
     dist: p.dist,
     scale: p.scale,
@@ -413,27 +419,12 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
       session,
       save.actors.map((a) => asV4Actor(session, a)),
     );
+    // world positions included: the shooting star is at (2784, 4864) at
+    // height 499 and no script puts it back there on a load
     restoreProps(
       session,
       save.props.map((p) => asV4Prop(session, p)),
     );
-    /*
-     * ...and then the world positions, which `restoreProps` does not carry.
-     *
-     * A v4 prop record has no world coordinates at all — TAOOT's world props are
-     * placed by the room's own `openset` — so the shared restore has nothing to
-     * apply. Dust's record does have them, and its world props need them: the
-     * shooting star is at (2784, 4864) at height 499 and no script puts it back
-     * there on a load.
-     */
-    for (const sp of save.props) {
-      if (!sp.is3d) continue;
-      const p = session.propRuntime.get(sp.name);
-      if (!p) continue;
-      p.worldX = sp.x;
-      p.worldY = sp.y;
-      p.worldZ = sp.z;
-    }
 
     // the scheduler table, mid-count: the idles that make the town act, the
     // scene's own timer, the star that crosses the sky

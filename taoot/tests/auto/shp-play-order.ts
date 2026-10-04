@@ -116,3 +116,26 @@ test("a deg-split state's script is read as steps WITHIN the variant", () => {
   // the two variants really are different art, so the deg-1 check meant something
   expect(shown(BOIL, closing, 0), "the variants differ").not.toEqual(shown(BOIL, closing, 1));
 });
+
+test("the deck map rolls up from fully open to shut — a step names a GROUP (#485)", () => {
+  // house.shp's map stores `close` as twelve frames, six per variant like
+  // `open`, but not in step order: the deg-0 frames are half-open … fully open
+  // and then shut, LAST (record groups 1,2,3,4,5,0). TI.EXE draws, at each step,
+  // the record whose +8 group is the step's entry (0x419105–0x419151), so
+  // `6,5,4,3,2,1` is fully open → shut. Taken as positions in the variant it
+  // started on the shut frame and jumped open — the shut map flashing partway
+  // through the roll that #485 reports.
+  const open = state(HOUSE, "map", "open");
+  const close = state(HOUSE, "map", "close");
+  expect(close.playOrder, "close's script").toEqual([5, 4, 3, 2, 1, 0]);
+  expect(close.groups, "the shut frame is stored last").toEqual([1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0]);
+  for (const deg of [0, 1]) {
+    const up = shown(HOUSE, open, deg);
+    expect(up.length, `deg ${deg}: six pictures`).toBe(6);
+    expect(shown(HOUSE, close, deg), `deg ${deg}: the map closes the way it opened, backwards`).toEqual(
+      [...up].reverse(),
+    );
+  }
+  // the frames themselves: fully open first, the shut frame (container 641) last
+  expect(playSequence(close, degVariantFrames(close, 0))).toEqual([4, 3, 2, 1, 0, 11]);
+});

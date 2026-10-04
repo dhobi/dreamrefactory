@@ -187,6 +187,14 @@ export function degVariantFrames(st: PropState, deg: number): number[] | null {
  * backwards". Mapping through the variant is what makes those close animations
  * run the right way for every variant and not just the first.
  *
+ * A step names a GROUP, not a position: TI.EXE reads the step's entry (0x419105)
+ * and draws, of the records whose i16 at +8 equals it, the one nearest the prop's
+ * degree (0x41911f–0x419151) — so within a variant, the frame whose group is the
+ * step. Stored order is not always step order, and the deck map's `close` is the
+ * case that found it: its deg-0 frames are stored half-open … fully open, then
+ * shut LAST (groups 1,2,3,4,5,0), so `6,5,4,3,2,1` by position started on the
+ * shut frame and jumped open (#485); by group it rolls up from fully open to shut.
+ *
  * A script that reaches past the variant is not about the variant, so it is used
  * as it stands; one that cannot be either is dropped in favour of the variant.
  */
@@ -194,6 +202,8 @@ export function playSequence(st: PropState, variant: number[] | null): number[] 
   const list = st.playOrder;
   if (!list) return variant;
   if (!variant) return list;
+  const byGroup = list.map((g) => variant.find((i) => st.groups?.[i] === g) ?? -1);
+  if (byGroup.every((i) => i >= 0)) return byGroup;
   if (list.every((i) => i < variant.length)) return list.map((i) => variant[i]);
   if (list.every((i) => variant.includes(i))) return list;
   return variant;
