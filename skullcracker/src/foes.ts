@@ -128,7 +128,7 @@ export interface FoeAnim {
    * with separate rates, and flattening them into one list would play the get-up
    * a third too fast.
    */
-  then?: FoeAnim;
+  next?: FoeAnim;
   /**
    * What the class's own machine is handed when this reaction ends: installed
    * as its state, script and tag, rather than the gait. The punk's get-up is
@@ -1017,7 +1017,7 @@ export const WEREA_FLOORED: FoeAnim = {
   kind: 10,
   tag: 1,
   from: "0x477580 tag 1",
-  then: {
+  next: {
     cels: [1951, 1952, 1953, 1954, 1955, 1956, 1957],
     hold: 2,
     kind: 10,
@@ -1068,7 +1068,7 @@ const COP_GUNNER_DEATH: FoeAnim = {
   hold: 1,
   kind: 9,
   tag: 3,
-  then: COP_DEATH,
+  next: COP_DEATH,
   from: "0x46c8f0 tag 3",
 };
 
@@ -1265,7 +1265,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
         dx: [150, 150, 75, 75],
         kind: 10,
         tag: 0,
-        then: WEREA_FLOORED,
+        next: WEREA_FLOORED,
         from: "0x477580 tag 0",
       },
     ],
@@ -1513,7 +1513,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
     /**
      * `0x456496`: the third blow landed in the melee half puts it over instead,
      * and zeroes `AI+4` (`0x4564c5`), so the get-up heads home. The get-up is
-     * its own script at its own rate, which is what {@link FoeAnim.then} is
+     * its own script at its own rate, which is what {@link FoeAnim.next} is
      * for — `0x478518` runs two frames a cel and `0x478578` three — and
      * `0x456033` hands it to the melee stance.
      *
@@ -1527,7 +1527,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
         hold: 2,
         kind: 7,
         tag: 0,
-        then: {
+        next: {
           cels: [3110, 3100, 3111, 3101, 3112, 3102, 3113],
           hold: 3,
           kind: 8,
@@ -2820,7 +2820,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
           kind: 9,
           tag: 0,
           from: "0x477488 tag 0",
-          then: WEREA_FLOORED,
+          next: WEREA_FLOORED,
         },
       },
     },
@@ -3367,7 +3367,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
         dy: [0, 0, 0, 0, 0, 0, 0, -420, 0],
         kind: 6,
         tag: 0,
-        then: {
+        next: {
           cels: [1266, 1267, 1268],
           hold: 2,
           kind: 6,

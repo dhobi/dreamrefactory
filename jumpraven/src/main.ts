@@ -35,6 +35,7 @@ import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/we
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { JUMPRAVEN_SAVES } from "./saves";
 import { Player } from "./player";
+import { pageUrl } from "@dreamfactory/engine/web/page-url";
 
 const SCALE = 2;
 const RIP = "gamefiles/RAVEN/";
@@ -115,7 +116,7 @@ installBugReport($<HTMLButtonElement>("bugBtn"), {
  * The disc
  * ------------------------------------------------------------------------- */
 
-const url = (path: string): string => new URL(path, document.baseURI).href;
+const url = (path: string): string => pageUrl(path);
 let sizes: Record<string, number> = {};
 const bytes = new Map<string, Uint8Array>();
 const fetching = new Map<string, Promise<Uint8Array>>();

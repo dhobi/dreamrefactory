@@ -52,7 +52,7 @@
  * texel this is finer than the frames, and a wall seen from across the room would
  * otherwise sparkle.
  */
-import { CHARTS, Chart, DOOR, PENDANT, RUG, SurfaceId } from "./bedsit-room";
+import { CHARTS, Chart, PENDANT, RUG, SurfaceId } from "./bedsit-room";
 
 export interface Painted {
   id: SurfaceId;

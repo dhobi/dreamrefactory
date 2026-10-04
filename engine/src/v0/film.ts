@@ -36,8 +36,9 @@ const PRESS_PEN = 3;
  * the hotspot's index — the elevators' floor buttons.
  */
 export interface FilmHooks {
-  word?: () => Co;
-  deed?: () => Co;
+  /** a hook with nothing to wait on is a plain function; one that waits is a generator */
+  word?: () => Co | void;
+  deed?: () => Co | void;
   button?: (index: number) => void;
   /**
    * Asked on every tick a frame is held: something to play over the film
@@ -65,21 +66,21 @@ export function* playOneFilm(
   function* hooksAt(frame: number): Co {
     if (!worded && wordAt >= 0 && frame === wordAt) {
       worded = true;
-      if (hooks.word) yield* hooks.word();
+      yield* hook(hooks.word);
     }
     if (!deeded && deedAt >= 0 && frame === deedAt) {
       deeded = true;
-      if (hooks.deed) yield* hooks.deed();
+      yield* hook(hooks.deed);
     }
   }
   function* hooksLeft(): Co {
     if (!worded && wordAt >= 0) {
       worded = true;
-      if (hooks.word) yield* hooks.word();
+      yield* hook(hooks.word);
     }
     if (!deeded && deedAt >= 0) {
       deeded = true;
-      if (hooks.deed) yield* hooks.deed();
+      yield* hook(hooks.deed);
     }
   }
   m.log(`▶ ${path} — ${film.frames.length} frames`);
@@ -226,6 +227,12 @@ export function* trackPress(m: Machine, rect: readonly [number, number, number, 
  * return goes back to the caller at the frame the call named — Jump Raven's
  * help film calls each topic's film, and each ends by coming back.
  */
+/** run a film hook, waiting on it only if it is a generator */
+function* hook(h?: () => Co | void): Co {
+  const ran = h?.();
+  if (ran) yield* ran;
+}
+
 export function* playFilm(m: Machine, name: string, day: number, hooks: FilmHooks = {}): Co {
   let at = name;
   let from = 0;

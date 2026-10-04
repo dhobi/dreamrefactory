@@ -270,7 +270,7 @@ export const KNIFEBOY_KNIFE: CastKit = {
   blow: 0x64,
   divisor: 2,
   /** tag 1, and its strides are why a knife speeds up on its way to you */
-  then: {
+  next: {
     cels: [1871, 1872, 1873, 1874, 1875, 1876, 1877],
     hold: 1,
     strides: [0, 50, 0, 50, 0, 0, 0],
@@ -298,7 +298,7 @@ export const KNIFEBOY_LOB: CastKit = {
   lift: 0x14,
   blow: 0x64,
   divisor: 2,
-  then: { cels: [1876, 1875, 1874, 1873], hold: 1 },
+  next: { cels: [1876, 1875, 1874, 1873], hold: 1 },
   /** `0x43c6cf` — one launch frame and four of falling, and then it is gone */
   life: 5,
   from: "0x43a500, script 0x4736f8, class 0x43c520",

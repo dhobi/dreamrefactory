@@ -215,7 +215,7 @@ jobs:
           fi
           ln -sfn "$rip" "$GAME/gamefiles"
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       # Three hosts to satisfy, so this asks rather than assumes:
       #   * the container (tools/runner/) already carries browsers matched to the
@@ -229,9 +229,9 @@ jobs:
           if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]; then
             echo "browsers come from the image: $PLAYWRIGHT_BROWSERS_PATH"
           elif sudo -n true 2>/dev/null; then
-            npx playwright install --with-deps chromium
+            node_modules/.bin/playwright install --with-deps chromium
           else
-            npx playwright install chromium
+            node_modules/.bin/playwright install chromium
           fi
 
       # `vite preview` cannot serve this: the /gamefiles middleware is a

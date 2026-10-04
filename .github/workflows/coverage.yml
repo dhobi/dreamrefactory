@@ -44,7 +44,7 @@ jobs:
       - name: Link the rips into the workspace
         run: tools/runner/link-rips.sh
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: Every suite, with coverage
         run: npm run coverage

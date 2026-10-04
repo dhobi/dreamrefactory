@@ -254,7 +254,7 @@
       </div>
       <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
       <div id="serverMovies"></div>
-      <input id="fileInput" type="file" accept=".mov,.MOV,.move,.MOVE" />
+      <input aria-label=".mov file" id="fileInput" type="file" accept=".mov,.MOV,.move,.MOVE" />
     </div>
 
     <div id="editor">
@@ -320,7 +320,7 @@
           </div>
           <div id="scrub">
             <button id="prevBtn" title="the frame before this one" data-i18n-attr="title:movies.prevTitle">◀</button>
-            <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" />
+            <input aria-label="frame" id="frameSlider" type="range" min="0" max="0" value="0" step="1" />
             <button id="nextBtn" title="the frame after this one" data-i18n-attr="title:movies.nextTitle">▶</button>
             <span id="frameLabel"></span>
           </div>

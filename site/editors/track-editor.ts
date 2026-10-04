@@ -22,7 +22,6 @@ import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
 import { installVersion } from "@dreamfactory/site/version";
 import { wavBlob } from "./wav";
 import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
-import { siteUrl } from "@dreamfactory/site/site";
 import { t as tr, formatNumber } from "@dreamfactory/site/locales";
 import { installI18n } from "@dreamfactory/site/locales";
 import {

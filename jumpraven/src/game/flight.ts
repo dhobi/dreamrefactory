@@ -43,7 +43,7 @@
 import { readContainerFile, type DFContainerFile } from "@dreamfactory/engine/df/container";
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
-import { readMazeV0, transitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
+import { transitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { Co, Machine } from "./machine";
 import { COS, SIN, VIEW_H as W_VIEW_H, VIEW_W as W_VIEW_W, cosMul, sinMul, type World } from "./combat/world";

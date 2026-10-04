@@ -333,7 +333,7 @@ const GOTO: Action = {
         const ids = spoken.split(/[|\s]+/).map(Number).filter((n) => Number.isFinite(n));
         await CORE_ACTIONS.say.run({
           ...c,
-          step: { ...c.step, args: [], bevels: ids, opts: { ...c.step.opts, then: "leave" } },
+          step: { ...c.step, args: [], bevels: ids, ending: "leave" },
           wait: "none",
         });
         return;
@@ -364,7 +364,7 @@ const GOTO: Action = {
         }
         await CORE_ACTIONS.say.run({
           ...c,
-          step: { ...c.step, args: [], bevels: [offered[0]], opts: { ...c.step.opts, then: "stop" } },
+          step: { ...c.step, args: [], bevels: [offered[0]], ending: "stop" },
           wait: "none",
         });
       }
@@ -1098,7 +1098,7 @@ const OFFER: Action = {
       const before = await c.d.evaluate<string>(QUESTION);
       await CORE_ACTIONS.say.run({
         ...c,
-        step: { ...c.step, args: [], bevels: [55555], opts: { ...c.step.opts, then: "stop" } },
+        step: { ...c.step, args: [], bevels: [55555], ending: "stop" },
         wait: "none",
       });
       // the three endings, as alternatives — see the note above
@@ -1603,7 +1603,7 @@ const TALK_OUT: Action = {
       tried.set(key, spent);
       await CORE_ACTIONS.say.run({
         ...c,
-        step: { ...c.step, args: [], bevels: [pick], opts: { ...c.step.opts, then: "stop" } },
+        step: { ...c.step, args: [], bevels: [pick], ending: "stop" },
         wait: "none",
       });
       said.push(pick);

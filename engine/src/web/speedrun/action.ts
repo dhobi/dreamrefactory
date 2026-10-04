@@ -711,6 +711,7 @@ export function otherwiseOf(step: Step): "stop" | "first" | "last" {
  * gave before there was an option: fall through to `otherwise:`.
  */
 export function thenOf(step: Step): "leave" | "stop" | undefined {
+  if (step.ending) return step.ending;
   const asked = step.opts.then;
   if (asked === undefined) return undefined;
   const v = asked.trim().toLowerCase();

@@ -713,7 +713,7 @@ export interface CastKit {
    * for as long as the thing is in the air. A kit without this holds its last
    * cel instead, which is what a finished script does when nothing reinstalls.
    */
-  then?: { cels: readonly number[]; hold: number; strides?: readonly number[] };
+  next?: { cels: readonly number[]; hold: number; strides?: readonly number[] };
   /**
    * Some of them fly HARMLESS until they are close, and this is that rule.
    *
@@ -843,7 +843,7 @@ export interface CastKit {
    */
   rest?: number;
   /**
-   * ...and where {@link CastKit.then} plays ONCE and hands to a loop of its
+   * ...and where {@link CastKit.next} plays ONCE and hands to a loop of its
    * own: the hardcore's `0x43c968` puts tag 3 on when tag 2 ends, and
    * `0x43c989` puts tag 3 on again when tag 3 ends.
    */

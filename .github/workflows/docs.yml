@@ -61,7 +61,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       # `ignoreDeadLinks: false` — a broken link between doc pages fails this
       # build, which is the whole safety net the doc set has.

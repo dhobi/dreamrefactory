@@ -131,11 +131,11 @@ test.skipIf(!haveRip())("cavern", async () => {
       fail(`...and facing west, west of its point is its face`);
     bones.facing = 1;
     const knock = s.flinch![3];
-    if (knock.dy?.[7] !== -420 || knock.dx?.[7] !== 170 || !knock.then)
+    if (knock.dy?.[7] !== -420 || knock.dx?.[7] !== 170 || !knock.next)
       fail(`0x46fcf0 tag 0 throws it on cel 1265 (dx 170, dy -420) and tag 1 gets it up`);
     // `0x423941`: and the get-up hands to the walk, kind 1 — not to the statue
-    if (knock.then.resume?.kind !== 1 || knock.then.resume.cels[0] !== SKEL.walk.cels[0])
-      fail(`0x423941 installs 0x46fac0, the walk, as the get-up ends; it resumes kind ${knock.then.resume?.kind}`);
+    if (knock.next.resume?.kind !== 1 || knock.next.resume.cels[0] !== SKEL.walk.cels[0])
+      fail(`0x423941 installs 0x46fac0, the walk, as the get-up ends; it resumes kind ${knock.next.resume?.kind}`);
     // `0x42391d`: the get-up waits for the landing
     const flying = foe("initskel", knock, "flinch");
     const knockRun = knock.cels.length * knock.hold;

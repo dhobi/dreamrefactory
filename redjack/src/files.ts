@@ -1,4 +1,6 @@
 import type { HostFiles } from "@dreamfactory/engine/web/host";
+import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /**
  * The three RedJack CDs as one {@link HostFiles}.
@@ -31,7 +33,7 @@ import type { HostFiles } from "@dreamfactory/engine/web/host";
 const ALIASES: Record<string, string> = { bootfile: "bootfile.boot" };
 
 /** this page's own URL for a served path, so it runs from any directory */
-const url = (path: string): string => new URL(path, document.baseURI).href;
+const url = (path: string): string => pageUrl(path);
 
 export class RedJackFiles implements HostFiles {
   private urls = new Map<string, string>();
@@ -63,7 +65,7 @@ export class RedJackFiles implements HostFiles {
     const store = new RedJackFiles();
     const res = await fetch(url("gamefiles.json"));
     const manifest: Record<string, number> = res.ok ? await res.json() : {};
-    for (const path of Object.keys(manifest).sort()) {
+    for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
       const base = path.split("/").pop()!.toLowerCase();
       const disc = Number(/\/RJDisk(\d)\//i.exec(path)?.[1] ?? 0);

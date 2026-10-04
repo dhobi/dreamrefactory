@@ -478,7 +478,7 @@ function floorOf(e: Enemy, foe: Parameters<Reaction>[1], run: number): void {
   if (!fall) return;
   // the fall's last frame is the one `0x44ee2f` hands on from
   if (e.anim === fall && e.clock + 1 >= run) e.floor = LAID;
-  else if (e.anim === fall.then?.then) e.floor = 0;
+  else if (e.anim === fall.next?.next) e.floor = 0;
 }
 
 /** `0x44ee45` / `0x44ef94` — `mov word ptr [esi+0x10], 0xfff4` */

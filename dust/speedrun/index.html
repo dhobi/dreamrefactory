@@ -207,7 +207,7 @@
         <div id="dbgState" hidden>
           <div id="dbgSpine"></div>
           <div id="dbgTools">
-            <input
+            <input aria-label="filter"
               id="dbgFilter"
               type="search"
               placeholder="filter"
@@ -248,11 +248,11 @@
         <div id="saveList" class="save-list"></div>
         <div class="modal-foot">
           <div id="saveNewRow">
-            <input id="saveNameInput" type="text" placeholder="save name" />
+            <input aria-label="save name" id="saveNameInput" type="text" placeholder="save name" />
             <button id="saveConfirmBtn" type="button">Save</button>
           </div>
           <button id="saveUploadBtn" type="button">⬆ Upload .rtd</button>
-          <input id="saveUploadInput" type="file" accept=".rtd" />
+          <input aria-label=".rtd file" id="saveUploadInput" type="file" accept=".rtd" />
         </div>
       </div>
     </div>

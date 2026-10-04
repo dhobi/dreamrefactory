@@ -256,7 +256,7 @@ export const VPRIEST_BOLT: CastKit = {
   lift: VPRIEST.bolt.up,
   blow: VPRIEST.bolt.strength,
   reach: VPRIEST.bolt.reach,
-  then: { cels: VPRIEST.bolt.flight, hold: 1 },
+  next: { cels: VPRIEST.bolt.flight, hold: 1 },
   from: "0x426bc0 / 0x46f908, class 0x426c80",
 };
 

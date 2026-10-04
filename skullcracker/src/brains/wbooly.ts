@@ -292,7 +292,7 @@ function ball(t: { dx: number; dy: number; vx: number; vy: number }): CastKit {
     friction: THROW.friction,
     fastBlow: THROW.fastBlow,
     rest: THROW.rest,
-    then: { cels: THROW.flight, hold: 1 },
+    next: { cels: THROW.flight, hold: 1 },
     burst: { cels: THROW.burst, hold: 1 },
     onCode: ballBurns,
     from: "0x456240 / 0x478250, class 0x455520",
@@ -928,7 +928,7 @@ export function wboolyGate(
       ? (e.script ?? 0)
       : e.anim === over
         ? 7
-        : e.anim === over?.then
+        : e.anim === over?.next
           ? 8
           : 9;
   // `0x456470` — taken and answered 1, with the goo (`0x4563a0`) and the

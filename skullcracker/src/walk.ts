@@ -47,9 +47,8 @@
  * which is the same mechanism a falling plank uses to take its floor down —
  * `0x42fcb9`, and {@link file://./props.ts} has both.
  */
-import { readSbkFile, SbkEntity, LEVEL_ORDER, PLAY_PLANE_Z } from "@dreamfactory/engine/df/sbk";
+import { SbkEntity, LEVEL_ORDER, PLAY_PLANE_Z } from "@dreamfactory/engine/df/sbk";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
-import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
@@ -64,24 +63,19 @@ import { CRAFT, GOB_CELS, SPARK, SPRAY, VANISH } from "./effects";
 import { REACH, Sounds } from "./sound";
 import { ELEVATOR, Plank, crowCel, elevatorCel, ibeamCel, crushCel, plankCel, PICKUP, shackCel, PIPE, ROACH, doorCel, switchCel, dripCel, HAND, LIGHTFX, BOGGS, SKATEBOARD } from "./props";
 import { MISSIONS } from "./mission";
-import { BOLT, FLARE, GUN_CODES, STREAMS, WEAPONS, type Gun } from "./guns";
+import { FLARE, GUN_CODES, STREAMS, WEAPONS, type Gun } from "./guns";
 import { keyName } from "./prefs";
 import { NAME_PROMPT, loadBoards, offerScore, saveBoards } from "./scores";
 import { CEL, paintHud } from "./hud";
 import {
   BLOW_CODES,
   CHARACTER,
-  Cast,
   ENGINE_HZ,
-  GameUi,
   INVENTED,
   KEYS,
   Level,
   PAUSE,
   PREFS,
-  QUERY,
-  RollerBody,
-  Solids,
   VIEW,
   alarmCel,
   aliveNow,
@@ -158,8 +152,6 @@ import {
   inv,
   jawsAt,
   jawsCel,
-  jumpPressed,
-  kickPressed,
   lastCel,
   level,
   levelClock,
@@ -181,13 +173,11 @@ import {
   playerPal,
   playerSprite,
   pops,
-  punchPressed,
   ridingElevator,
   roaches,
   rollerBlow,
   rollerCel,
   rollers,
-  roomAt,
   roundsIn,
   runCheat,
   scaled,
@@ -199,11 +189,8 @@ import {
   tallyDial,
   setJumpPressed,
   setKickPressed,
-  setPlayer,
-  setPlayerPal,
   setPunchPressed,
   setSound,
-  setStartTicks,
   startGame,
   setUpPressed,
   sink,
@@ -213,7 +200,6 @@ import {
   spawnedHere,
   sparks,
   spritesTouch,
-  startTicks,
   stats,
   streamCel,
   streams,
@@ -221,7 +207,6 @@ import {
   switchesHere,
   tick,
   ui,
-  upPressed,
   useCharacter,
   view,
   viewH,
@@ -1828,6 +1813,7 @@ function loop(now: number): void {
     ? (() => {
         const q = got.reduce((a, b) =>
           Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a,
+          got[0],
         );
         return ` · ${got.length} pickups · nearest ${PICKUP.kinds[q.code].name} ${q.code} at x ${q.x}, y ${q.y}`;
       })()
@@ -1836,7 +1822,7 @@ function loop(now: number): void {
   const gun = WEAPONS[inv.weapon];
   const far = (g: Gun): number => Math.hypot(g.x - p.x, g.y - p.y);
   const lying = arms.length
-    ? arms.reduce((a, b) => (far(b) < far(a) ? b : a))
+    ? arms.reduce((a, b) => (far(b) < far(a) ? b : a), arms[0])
     : null;
   const armed =
     ` · ${inv.drawn ? "holding" : inv.armed ? "carrying" : "no"} ${gun ? gun.name : inv.weapon} ${roundsIn(inv.weapon)}/${gun ? gun.max : 0}` +

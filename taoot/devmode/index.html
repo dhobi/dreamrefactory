@@ -92,7 +92,7 @@
             <div id="dbgState" hidden>
               <div id="dbgSpine"></div>
               <div id="dbgTools">
-                <input id="dbgFilter" type="search" placeholder="filter" title="One or more terms, | or , apart" />
+                <input aria-label="filter" id="dbgFilter" type="search" placeholder="filter" title="One or more terms, | or , apart" />
                 <label title="Every global, not just the ones that have just moved"
                   ><input type="checkbox" id="dbgAll" />
                   <span data-i18n="play.debugAll">all</span></label
@@ -119,12 +119,12 @@
         <div id="saveList" class="save-list"></div>
         <div class="modal-foot">
           <div id="saveNewRow" class="save-newrow">
-            <input id="saveNameInput" type="text" placeholder="save name" />
+            <input aria-label="save name" id="saveNameInput" type="text" placeholder="save name" />
             <button id="saveConfirmBtn">Save</button>
           </div>
           <div>
             <button id="saveUploadBtn">⬆ Upload .ti</button>
-            <input id="saveUploadInput" type="file" accept=".ti" />
+            <input aria-label=".ti file" id="saveUploadInput" type="file" accept=".ti" />
           </div>
         </div>
       </div>

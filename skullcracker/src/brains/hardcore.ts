@@ -273,7 +273,7 @@ export const HARDCORE_THROW: CastKit = {
   /** `0x43c8a0` / `0x43c8b1` — `mall.snd` 0x3e, the whoosh, looped in flight */
   hum: 0x3e,
   /** `0x474870` tag 2, the ordinary flight — once */
-  then: { cels: [2101, 2102, 2103], hold: 1 },
+  next: { cels: [2101, 2102, 2103], hold: 1 },
   /** ...and tag 3, round and round until it lands (`0x43c968`, `0x43c989`) */
   thenLoop: { cels: [2104, 2105, 2106, 2107], hold: 1 },
   /** `0x474910` tag 0 — it coming apart where it lands */

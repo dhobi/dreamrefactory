@@ -978,7 +978,7 @@ export class Scheduler {
     this.clockDispatching = true;
     // trackIdle, not track: the heartbeat must not read as a busy player script
     // or the input queue drops what was posted while it settles (see session.ts)
-    this.session.trackIdle(
+    void this.session.trackIdle(
       (async () => {
         try {
           for (let i = 0; i < calls; i++) await this.session.runGlobal("calctime");
@@ -1123,7 +1123,8 @@ export class Scheduler {
    *  persistent one re-arms in its own handler (TI.EXE semantics, see GameLoop) */
   private fireNow(due: GameLoop[]): void {
     if (!due.length) return;
-    this.session.track(
+    // track logs a failure itself, so nothing here waits on it
+    void this.session.track(
       (async () => {
         for (const l of due) {
           // Take each loop out of the table IMMEDIATELY BEFORE running it, not

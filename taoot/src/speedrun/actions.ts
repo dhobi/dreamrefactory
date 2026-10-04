@@ -36,13 +36,9 @@ import type { VerbSpec } from "@dreamfactory/engine/web/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
 import { QUIET } from "@dreamfactory/engine/web/speedrun/driver";
 import {
-  IDLE,
-  STANDING,
-  aimAtSettled,
   arrow,
   clickThing,
   composeActions,
-  condition,
   key,
   loadPoint,
   predicate,
@@ -53,6 +49,7 @@ import {
   type ActionTable,
 } from "@dreamfactory/engine/web/speedrun/action";
 import { jumpTo, pageButton, jumpableSets } from "./nav/mapjumps";
+import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /* ------------------------------------------------------------------ *
  * The planner escape hatch
@@ -576,7 +573,7 @@ export const TITANIC_ACTIONS: ActionTable = {
     // whether a jump actually works.
     help:
       "the deck plan, as literal clicks: open, turn to the page, press the stairwell. Reaches " +
-      [...jumpableSets()].sort().join(", "),
+      [...jumpableSets()].sort(byCodeUnit).join(", "),
     run: async (c) => {
       const goal = c.step.args[0].toLowerCase();
       const deck = c.step.opts.deck ?? (await c.d.evaluate<string>(
@@ -585,7 +582,7 @@ export const TITANIC_ACTIONS: ActionTable = {
       const red = jumpTo(goal, deck);
       if (!red) {
         throw new Error(
-          `no red area for ${goal} on any deck plan — the map reaches ${[...jumpableSets()].sort().join(", ")}`,
+          `no red area for ${goal} on any deck plan — the map reaches ${[...jumpableSets()].sort(byCodeUnit).join(", ")}`,
         );
       }
       // `deck:` is a PREFERENCE, not a constraint: `jumpTo` falls back to the

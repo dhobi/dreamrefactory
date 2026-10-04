@@ -389,7 +389,7 @@ export class Base {
     this.hud.message = -1;
     this.films.push(name);
     const b = this.maze.byte(this.pose);
-    const word = (): Co => this.filmWord(b);
+    const word = (): void => this.filmWord(b);
     const deed = (): Co => this.filmDeed(b);
     yield* playFilm(this.m, name, this.day, { word, deed });
     this.m.screen.setPalette(this.clut);
@@ -398,7 +398,7 @@ export class Base {
     yield* this.present();
   }
 
-  private *filmWord(b: number): Co {
+  private filmWord(b: number): void {
     if (this.floor !== UPPER) return;
     if (b === 4) this.say(this.p.weapon ? 0x11 : 0x10);
     if (b === 8) this.say(this.p.suit ? 0x1b : 0x1a);
@@ -433,7 +433,7 @@ export class Base {
           this.say(MSG.leavingFloor);
           let button = 0;
           this.films.push("lowerin.move");
-          yield* playFilm(this.m, "lowerin.move", this.day, { word: function* (this: Base) { this.say(0x1d); }.bind(this), button: (b) => (button = b) });
+          yield* playFilm(this.m, "lowerin.move", this.day, { word: () => this.say(0x1d), button: (b) => (button = b) });
           if (button === 0) {
             p.came = 2;
             this.films.push("upperout.move");
@@ -483,7 +483,7 @@ export class Base {
         p.elevator = this.pose.dir === 3 ? 0 : 1;
         this.say(MSG.leavingFloor);
         this.films.push("upperin.move", "lowerout.move");
-        yield* playFilm(this.m, "upperin.move", this.day, { word: function* (this: Base) { this.say(0x1d); }.bind(this) });
+        yield* playFilm(this.m, "upperin.move", this.day, { word: () => this.say(0x1d) });
         p.came = 1;
         yield* playFilm(this.m, "lowerout.move", this.day);
         this.next = p.level + 1;

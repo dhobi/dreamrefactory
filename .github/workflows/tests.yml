@@ -45,7 +45,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: Automatic suites, minus the ones that read the rip
         run: npm run test:portable
@@ -118,7 +118,7 @@ jobs:
       - name: Report the toolchain
         run: node --version && npm --version
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       # Which games' machine suites this change needs — and why the automatic
       # suite below is deliberately NOT filtered the same way. Each game's step

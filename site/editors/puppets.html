@@ -111,7 +111,7 @@
         color: var(--ice-300);
         font-family: ui-monospace, monospace;
       }
-      /* min-width: 0 — an <input> brings its own ~20-character intrinsic width,
+      /* min-width: 0 — a text input brings its own ~20-character intrinsic width,
          which on a phone made the row (9em ident + input + ▶) a few px wider
          than the screen and scrolled the whole page sideways */
       .dlgrow input[type="text"] {
@@ -186,7 +186,7 @@
       </div>
       <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
       <div id="serverPups"></div>
-      <input id="fileInput" type="file" accept=".pup,.PUP" />
+      <input aria-label=".pup file" id="fileInput" type="file" accept=".pup,.PUP" />
     </div>
 
     <div id="editor">
@@ -240,7 +240,7 @@
               <div style="display: flex; gap: 0.4rem">
                 <button id="pngExportBtn" data-i18n="editors.exportPng">⬇ Export PNG</button>
                 <button id="pngImportBtn" data-i18n="editors.replacePng">⬆ Replace with PNG…</button>
-                <input id="pngInput" type="file" accept="image/png,image/*" />
+                <input aria-label="image file" id="pngInput" type="file" accept="image/png,image/*" />
               </div>
             </div>
           </div>

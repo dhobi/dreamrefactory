@@ -25,6 +25,7 @@ import { DfEncoding } from "@dreamfactory/engine/df/text";
 import type { WireEvent } from "@dreamfactory/engine/web/host";
 import { NEUTRAL, TITANIC, editionOfUrl as editionOfUrlIn } from "@dreamfactory/site/games";
 import { encodingOf, isEditionCode } from "./languages";
+import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /** the CD a manifest URL sits on, from its `titanic1`/`titanic2` path segment */
 export type Disc = 1 | 2;
@@ -372,7 +373,7 @@ export class FileStore {
         if (name.endsWith(".set")) names.add(name);
       }
     }
-    return [...names].sort();
+    return [...names].sort(byCodeUnit);
   }
 
   has(name: string): boolean {

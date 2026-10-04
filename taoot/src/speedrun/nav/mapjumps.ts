@@ -115,7 +115,8 @@ export function jumpTo(setName: string, preferDeck?: string): MapJump | null {
   const candidates = MAP_JUMPS.filter((j) => j.to === want);
   if (!candidates.length) return null;
   const onDeck = preferDeck ? candidates.filter((j) => j.deck === preferDeck.toLowerCase()) : [];
-  return (onDeck.length ? onDeck : candidates).reduce((a, b) => (a.page <= b.page ? a : b));
+  const pool = onDeck.length ? onDeck : candidates;
+  return pool.reduce((a, b) => (a.page <= b.page ? a : b), pool[0]);
 }
 
 /** every set the map can reach, for a route that wants to know before it walks */
