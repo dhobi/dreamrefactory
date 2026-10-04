@@ -1,0 +1,58 @@
+name: SonarQube Cloud
+
+# SonarQube Cloud's analysis of master after every merge, so the README's Sonar
+# badges follow master within minutes rather than waiting for the nightly
+# (docs/reference/ci.md#sonarqube-cloud).
+#
+# Coverage is not measured here: that is coverage.yml's twenty minutes on the
+# self-hosted runner. This scan hands Sonar the LCOV report the last nightly
+# uploaded instead, so master's coverage figure stays last night's rather than
+# going blank. Files changed since then carry that night's line coverage until
+# the next one. With no report to hand (none uploaded yet, or expired), it
+# scans without coverage, and the nightly puts the figure back.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: sonar
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sonar:
+    name: SonarQube Cloud
+    # GitHub's machine, not the self-hosted one: a scan needs no rip, and a
+    # merge's scan must not queue behind the nightlies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # blame for every line, which is how Sonar tells new code from old
+          fetch-depth: 0
+
+      - name: The last nightly's coverage report
+        id: lcov
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow coverage.yml --branch master \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run" ] && gh run download "$run" --repo "$GITHUB_REPOSITORY" --name lcov --dir coverage/vitest; then
+            echo "coverage from run $run"
+            echo "args=" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::no coverage report to hand; scanning without coverage"
+            echo "args=-Dsonar.coverage.exclusions=**/*" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: ${{ steps.lcov.outputs.args }}
