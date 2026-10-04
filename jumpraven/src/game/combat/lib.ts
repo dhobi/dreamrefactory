@@ -224,8 +224,7 @@ export function callShell(w: World, o: Obj): void {
  * 0x40ce63's cases (0x431558; the fuel station's 0x43133c, the weapons ship's
  * 0x432b20): facing `angle`, `dx`, `dy` from the cell it is heading for, the
  * three ways a street-bound thing may take without turning back, the first
- * toward it by the longer way; a tie across is settled by a roll of 2 (the
- * jeep keeps its own copy, src/game/combat/jeep.ts)
+ * toward it by the longer way; a tie across is settled by a roll of 2
  */
 export function waysToward(w: World, angle: number, dx: number, dy: number): [number, number, number] {
   const ax = abs(dx);

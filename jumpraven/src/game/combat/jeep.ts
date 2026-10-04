@@ -43,8 +43,10 @@
  */
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { JeepApi } from "./api";
-import { aimAt, downTheLine, meets, tooFar, turnToward, type EnemyShot } from "./lib";
-import { KIND, abs, copyObj, cosMul, dist, inside, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
+import { countUp, drawPyro, findAt, nthUp, objOf, occupiedBy, pickNearest, shiftFleet, shiftTo, standFire, type Unit } from "./fleet";
+import { aimAt, downTheLine, meets, tooFar, waysToward, type EnemyShot } from "./lib";
+import { chooseWay, rollAlong, setOff, turnRound } from "./street";
+import { KIND, abs, copyObj, cosMul, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 
 /** a jeep, the EXE's 0x84 bytes at 0x436aa8 (its object the first 0x18) */
@@ -182,11 +184,7 @@ export function drawVehicle(w: World, o: Obj, pics: (FrameV0 | undefined)[]): { 
 
 /** 0x40db7a / 0x425c34 (pyro's 0xe0 … by distance), 0x40dac4 / 0x425a93 (0x108 … into ours, 0xe0 … into a block, 8 … flying): a shot's picture by `base` */
 export function drawShot(w: World, s: VehicleShot, base: number): void {
-  const p = w.project(s.o);
-  if (p.depth < 0x40) return;
-  let n = (p.depth - 0x40) >> 7;
-  if (n >= 0x10) n = 0xf;
-  w.sprite(w.pyro.pics[base + n], p.y, p.x, p.depth, false);
+  drawPyro(w, s.o, base);
 }
 
 /** 0x40d9c3 / 0x425771's bullets: a step, into a block or the ground, into ours (0x15 strong), drawn; gone if it met anything */
@@ -212,13 +210,6 @@ export function moveBullet(w: World, s: VehicleShot): void {
   if (s.met) s.on = 0;
 }
 
-/** a record's object alone, the EXE's `movsd` ×6 into a local */
-export function objOf(r: Obj): Obj {
-  const o = newObj();
-  setObj(o, r);
-  return o;
-}
-
 /**
  * 0x40dc1f / 0x425cd9's test: the shot from `a` to `b` is within `reach` of
  * `o` on every axis (on each, not both ends beyond it the same way)
@@ -231,6 +222,77 @@ export function withinReach(o: Obj, a: Obj, b: Obj, reach: number): boolean {
   if (o.y - reach > a.y && o.y - reach > b.y) return false;
   if (o.y + reach < a.y && o.y + reach < b.y) return false;
   return true;
+}
+
+/** what the jeep's record and the tank's share, each at its own offsets */
+export interface Roller extends Unit {
+  /** where it was at the frame's start */
+  last: Obj;
+  state: number;
+  speed: number;
+  strength: number;
+  /** frames to its next shot */
+  reload: number;
+  /** the cell it is going to */
+  toX: number;
+  toY: number;
+  /** its slot; frames till it comes */
+  slot: number;
+  wait: number;
+}
+
+/**
+ * 0x40c807 / 0x42498e's start: up in its slot, at the cell and heading
+ * {@link comeIn} finds clear of what `blocked` says (its own slot aside), at
+ * the cell's centre 1 up, going to that cell
+ */
+export function comeInAt(w: World, r: Roller, blocked: (x: number, y: number, self: number) => boolean): void {
+  r.self = r.slot;
+  const c = comeIn(w, (x, y) => blocked(x, y, r.self));
+  r.angle = c.angle;
+  r.cellX = c.cellX;
+  r.cellY = c.cellY;
+  r.x = (r.cellX << 8) + 0x80;
+  r.y = (r.cellY << 8) + 0x80;
+  r.z = 1;
+  r.toX = c.cellX;
+  r.toY = c.cellY;
+}
+
+/**
+ * 0x40c807 / 0x42498e's end: choosing, not drawn, loaded, `strength` strong,
+ * where it is its frame's start, and one time in eight, while fewer than two
+ * pieces of wreckage are up and the flight is on, a pod to drop
+ */
+export function setOut(w: World, r: Roller, strength: number): void {
+  r.state = 0;
+  r.shown = 0;
+  r.reload = 0;
+  r.strength = strength;
+  setObj(r.last, r);
+  r.pod = 0;
+  if (w.pyro.wreckage() < 2 && w.roll(8) === 1 && w.state < 2) r.pod = 1;
+}
+
+/**
+ * 0x40cc90 / 0x424d78: one's frame — down, it counts its wait to `comeIn`;
+ * nine cells from the craft it is `gone`; else it moves (`think`) from where
+ * it was and is drawn, and while it can be aimed at its rect and depth are kept
+ */
+export function rollOne<R extends Roller>(w: World, r: R, pics: (FrameV0 | undefined)[], comeIn: (r: R) => void, gone: (r: R) => void, think: (r: R) => void): void {
+  r.shown = 0;
+  if (r.self < 0) {
+    if (--r.wait <= 0) comeIn(r);
+    return;
+  }
+  if (tooFar(w, r)) return gone(r);
+  setObj(r.last, r);
+  think(r);
+  const d = drawVehicle(w, r, pics);
+  if (!d) return;
+  r.rect = d.rect;
+  r.depth = d.depth;
+  r.shown = 1;
 }
 
 export class Jeep implements JeepApi {
@@ -281,16 +343,7 @@ export class Jeep implements JeepApi {
   /** 0x40c807 */
   private comeIn(r: JeepRec): void {
     const w = this.w;
-    r.self = r.slot;
-    const c = comeIn(w, (x, y) => this.blocked(x, y, r.self));
-    r.angle = c.angle;
-    r.cellX = c.cellX;
-    r.cellY = c.cellY;
-    r.x = (r.cellX << 8) + 0x80;
-    r.y = (r.cellY << 8) + 0x80;
-    r.z = 1;
-    r.toX = c.cellX;
-    r.toY = c.cellY;
+    comeInAt(w, r, (x, y, self) => this.blocked(x, y, self));
     switch (r.angle) {
       case 0:
         r.x -= 0x80;
@@ -314,13 +367,7 @@ export class Jeep implements JeepApi {
         break;
     }
     r.speed = w.params.x43cf6a;
-    r.state = 0;
-    r.shown = 0;
-    r.reload = 0;
-    r.strength = w.params.x43cfb2;
-    setObj(r.last, r);
-    r.pod = 0;
-    if (w.pyro.wreckage() < 2 && w.roll(8) === 1 && w.state < 2) r.pod = 1;
+    setOut(w, r, w.params.x43cfb2);
   }
 
   /** 0x40cc5e: every jeep, then the shots (0x40d9c3) */
@@ -331,20 +378,7 @@ export class Jeep implements JeepApi {
 
   /** 0x40cc90 */
   private one(r: JeepRec): void {
-    const w = this.w;
-    r.shown = 0;
-    if (r.self < 0) {
-      if (--r.wait <= 0) this.comeIn(r);
-      return;
-    }
-    if (tooFar(w, r)) return this.gone(r);
-    setObj(r.last, r);
-    this.think(r);
-    const d = drawVehicle(w, r, this.pics);
-    if (!d) return;
-    r.rect = d.rect;
-    r.depth = d.depth;
-    r.shown = 1;
+    rollOne(this.w, r, this.pics, (r) => this.comeIn(r), (r) => this.gone(r), (r) => this.think(r));
   }
 
   /** 0x40cded */
@@ -358,222 +392,24 @@ export class Jeep implements JeepApi {
           r.state = 5;
           return;
         }
-        const way = this.ways(r.angle, dx, dy);
-        if (!this.blockedWay(r, way[0])) {
-          r.goal = way[0];
-          if (w.roll(10) <= 1) {
-            if (!this.blockedWay(r, way[1])) r.goal = way[1];
-            else if (!this.blockedWay(r, way[2])) r.goal = way[2];
-          }
-        } else if (!this.blockedWay(r, way[1])) r.goal = way[1];
-        else if (!this.blockedWay(r, way[2])) r.goal = way[2];
-        else {
+        if (!chooseWay(w, r, waysToward(w, r.angle, dx, dy), (a) => !this.blockedWay(r, a))) {
           if (downTheLine(w, r)) this.fire(r);
           return;
         }
-        r.toX = r.cellX;
-        r.toY = r.cellY;
-        r.goalX = (r.cellX << 8) + 0x80;
-        r.goalY = (r.cellY << 8) + 0x80;
-        if (r.goal === r.angle) {
-          // 0x431578: on to the cell's far edge
-          switch (r.angle) {
-            case 0:
-              r.goalX += 0x80;
-              r.state = 1;
-              r.way = 1;
-              r.toX++;
-              break;
-            case 0x40:
-              r.goalY += 0x80;
-              r.state = 2;
-              r.way = 1;
-              r.toY++;
-              break;
-            case 0x80:
-              r.goalX -= 0x80;
-              r.state = 1;
-              r.way = 0;
-              r.toX--;
-              break;
-            case 0xc0:
-              r.goalY -= 0x80;
-              r.state = 2;
-              r.way = 0;
-              r.toY--;
-              break;
-          }
-          return this.think(r);
-        }
-        // 0x431598: round the corner the turn is about
-        switch (r.angle) {
-          case 0:
-            if (r.goal === 0xc0) {
-              r.state = 3;
-              r.goalX -= 0x80;
-              r.goalY -= 0x80;
-              r.toY--;
-            }
-            if (r.goal === 0x40) {
-              r.state = 4;
-              r.goalX -= 0x80;
-              r.goalY += 0x80;
-              r.toY++;
-            }
-            break;
-          case 0x40:
-            if (r.goal === 0) {
-              r.state = 3;
-              r.goalX += 0x80;
-              r.goalY -= 0x80;
-              r.toX++;
-            }
-            if (r.goal === 0x80) {
-              r.state = 4;
-              r.goalX -= 0x80;
-              r.goalY -= 0x80;
-              r.toX--;
-            }
-            break;
-          case 0x80:
-            if (r.goal === 0xc0) {
-              r.state = 4;
-              r.goalX += 0x80;
-              r.goalY -= 0x80;
-              r.toY--;
-            }
-            if (r.goal === 0x40) {
-              r.state = 3;
-              r.goalX += 0x80;
-              r.goalY += 0x80;
-              r.toY++;
-            }
-            break;
-          case 0xc0:
-            if (r.goal === 0x80) {
-              r.state = 3;
-              r.goalX -= 0x80;
-              r.goalY += 0x80;
-              r.toX--;
-            }
-            if (r.goal === 0) {
-              r.state = 4;
-              r.goalX += 0x80;
-              r.goalY += 0x80;
-              r.toX++;
-            }
-            break;
-        }
-        r.radius = dist(r.goalX - r.x, r.goalY - r.y, 0);
-        // a quarter circle, 0x3d5b / 0x2710 ≈ π/2 of the radius, in 0x40 of heading
-        r.way = Math.trunc((r.speed << 6) / Math.trunc((r.radius * 0x3d5b) / 0x2710));
+        setOff(r);
         return this.think(r);
       }
       case 1:
-      case 2: {
-        const alongX = r.state === 1;
-        const t = alongX ? r.goalY : r.goalX;
-        let across = (alongX ? r.y : r.x) + w.roll(5) - 3;
-        if (t - 0x40 > across) across = t - 0x40;
-        if (t + 0x40 < across) across = t + 0x40;
-        if (alongX) r.y = across;
-        else r.x = across;
-        const goal = alongX ? r.goalX : r.goalY;
-        if (r.way) {
-          if (alongX) r.x += r.speed;
-          else r.y += r.speed;
-          if ((alongX ? r.x : r.y) >= goal) this.arrive(r);
-        } else {
-          if (alongX) r.x -= r.speed;
-          else r.y -= r.speed;
-          if ((alongX ? r.x : r.y) <= goal) this.arrive(r);
-        }
+      case 2:
+        rollAlong(w, r, 0x40);
         if (downTheLine(w, r)) this.fire(r);
         return;
-      }
       case 3:
-      case 4: {
-        r.angle = turnToward(r.angle, r.goal, r.way, 0x100);
-        const a = (r.angle + (r.state === 3 ? 0x40 : -0x40)) & 0xff;
-        r.x = cosMul(a, r.radius) + r.goalX;
-        r.y = sinMul(a, r.radius) + r.goalY;
-        if (r.angle === r.goal) this.arrive(r);
-        return;
-      }
-      case 5: {
-        const dx = r.cellX - w.cam.cellX;
-        const dy = r.cellY - w.cam.cellY;
-        if (downTheLine(w, r) && abs(dx) <= 2 && abs(dy) <= 2) this.fire(r);
-        else r.state = 0;
-        return;
-      }
+      case 4:
+        return turnRound(r);
+      case 5:
+        return standFire(w, r, (r) => this.fire(r));
     }
-  }
-
-  /**
-   * 0x40ce63's cases (0x431558): facing `angle`, `dx`, `dy` from the craft's
-   * cell, the three ways it may take, the first toward the craft by the longer
-   * way; a tie across is settled by a roll of 2
-   */
-  private ways(angle: number, dx: number, dy: number): [number, number, number] {
-    const w = this.w;
-    const ax = abs(dx);
-    const ay = abs(dy);
-    /** [p, q] if `yes`, or on a tie one time in two; else [q, p] */
-    const pair = (yes: boolean, tie: boolean, p: number, q: number): [number, number] =>
-      yes || (tie && w.roll(2) === 1) ? [p, q] : [q, p];
-    switch (angle) {
-      case 0:
-        if (ax > ay) {
-          if (dx < 0) return [0, ...pair(dy > 0, dy === 0, 0xc0, 0x40)];
-          return [...pair(dy > 0, dy === 0, 0xc0, 0x40), 0];
-        }
-        return dy < 0 ? [0x40, 0, 0xc0] : [0xc0, 0, 0x40];
-      case 0x40:
-        if (ax < ay) {
-          if (dy < 0) return [0x40, ...pair(dx < 0, dx === 0, 0, 0x80)];
-          return [...pair(dx < 0, dx === 0, 0, 0x80), 0x40];
-        }
-        return dx < 0 ? [0, 0x40, 0x80] : [0x80, 0x40, 0];
-      case 0x80:
-        if (ax > ay) {
-          if (dx > 0) return [0x80, ...pair(dy > 0, dy === 0, 0xc0, 0x40)];
-          return [...pair(dy > 0, dy === 0, 0xc0, 0x40), 0x80];
-        }
-        return dy < 0 ? [0x40, 0x80, 0xc0] : [0xc0, 0x80, 0x40];
-      case 0xc0:
-        if (ax < ay) {
-          if (dy > 0) return [0xc0, ...pair(dx < 0, dx === 0, 0, 0x80)];
-          return [...pair(dx < 0, dx === 0, 0, 0x80), 0xc0];
-        }
-        return dx < 0 ? [0, 0xc0, 0x80] : [0x80, 0xc0, 0];
-    }
-    throw new Error(`0x40cded: a jeep facing ${angle} chooses`);
-  }
-
-  /** 0x40d782: at the edge — into the next cell, its point on the edge, and choose again */
-  private arrive(r: JeepRec): void {
-    r.toX = r.cellX;
-    r.toY = r.cellY;
-    switch (r.angle) {
-      case 0:
-        r.cellX++;
-        r.x = r.cellX << 8;
-        break;
-      case 0x40:
-        r.cellY++;
-        r.y = r.cellY << 8;
-        break;
-      case 0x80:
-        r.x = r.cellX << 8;
-        r.cellX--;
-        break;
-      case 0xc0:
-        r.y = r.cellY << 8;
-        r.cellY--;
-        break;
-    }
-    r.state = 0;
   }
 
   /** 0x40d7f5: the next cell along heading `a` is blocked */
@@ -599,11 +435,7 @@ export class Jeep implements JeepApi {
 
   /** 0x40dfe6 */
   occupied(x: number, y: number, self: number): boolean {
-    for (const r of this.recs) {
-      if (r.self < 0 || r.self === self) continue;
-      if ((r.toX === x && r.toY === y) || (r.cellX === x && r.cellY === y)) return true;
-    }
-    return false;
+    return occupiedBy(this.recs, x, y, self);
   }
 
   /** 0x40d89a: a shot, if one is due and a slot is free */
@@ -674,59 +506,26 @@ export class Jeep implements JeepApi {
 
   /** 0x40dd68 */
   shift(dx: number, dy: number): void {
-    const cx = dx >> 8;
-    const cy = dy >> 8;
-    for (const r of this.recs) {
-      if (r.self < 0) continue;
-      r.x += dx;
-      r.y += dy;
-      r.cellX += cx;
-      r.cellY += cy;
-      r.goalX += dx;
-      r.goalY += dy;
-      r.toX += cx;
-      r.toY += cy;
-    }
-    for (const s of this.shots) {
-      if (!s.on) continue;
-      s.o.x += dx;
-      s.o.y += dy;
-      s.o.cellX += cx;
-      s.o.cellY += cy;
-    }
+    shiftFleet(this.recs, this.shots, dx, dy, shiftTo);
   }
 
   /** 0x40de04 */
   count(): number {
-    return this.recs.filter((r) => r.self >= 0).length;
+    return countUp(this.recs);
   }
 
   /** 0x40de30 */
   nth(k: number): { obj: Obj; kind: number; flag: number; dying: number } {
-    for (const r of this.recs) {
-      if (r.self >= 0) k--;
-      if (k < 0) return { obj: objOf(r), kind: KIND.jeep, flag: r.pod, dying: 0 };
-    }
-    throw new Error("0x40de30: no such jeep (0x41e28a 0x6b, 0x24)");
+    return nthUp(this.recs, k, KIND.jeep, () => false, "0x40de30: no such jeep (0x41e28a 0x6b, 0x24)");
   }
 
   /** 0x40dea3 */
   pick(pt: Pt): Obj | null {
-    let best: JeepRec | null = null;
-    let near = 0x7fff;
-    for (const r of this.recs) {
-      if (r.shown && r.depth < near && inside(pt.y, pt.x, r.rect)) {
-        best = r;
-        near = r.depth;
-      }
-    }
-    return best;
+    return pickNearest(this.recs, pt);
   }
 
   /** 0x40df1c */
   find(o: Obj): Obj {
-    const r = this.recs.find((r) => r.x === o.x && r.y === o.y && r.z === o.z);
-    if (!r) throw new Error("0x40df1c: no jeep there (0x41e28a 0x6b, 0x25)");
-    return r;
+    return findAt(this.recs, o, "0x40df1c: no jeep there (0x41e28a 0x6b, 0x25)");
   }
 }

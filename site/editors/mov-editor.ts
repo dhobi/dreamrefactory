@@ -16,11 +16,18 @@
  * exports the file it read (see taoot/tests/auto/mov-editor.ts).
  */
 import { FrameBuffer, decodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, screenOf, V5_READ_ONLY } from "./sources";
-import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
+import { byExtension, chosenSource, filesIn, listSources, screenOf, V5_READ_ONLY } from "./sources";
+import {
+  download,
+  exportContainerFile,
+  fillSwatches,
+  installEditorPage,
+  regionRow,
+  serverNote,
+  serverRow,
+  wireFileOpen,
+} from "./editor-kit";
+import { t, formatNumber } from "@dreamfactory/site/locales";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import {
   NATIVE_FRAME_MS,
@@ -34,7 +41,6 @@ import {
   segmentInterval,
 } from "@dreamfactory/engine/df/mov-pace";
 import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
-import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { movFileFromV1, readMovFileV1 } from "@dreamfactory/engine/df/mov-v1";
 import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
@@ -214,28 +220,7 @@ function loadMov(bytes: Uint8Array, name: string, v0 = false): void {
   refresh();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadMov(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadMov(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /** dev-server mode: offer every .mov in the gamefiles manifest */
 async function initServerMovies(): Promise<void> {
@@ -249,29 +234,15 @@ async function initServerMovies(): Promise<void> {
   const movies = filesIn(source, byExtension(".mov", ".move"));
   if (!movies.length) return;
   const wrap = $("serverMovies");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent = t("common.pickFromGamefilesBig");
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row movies";
-  for (const f of movies) {
-    const b = document.createElement("button");
-    b.className = "movie";
-    b.textContent = f.base;
-    b.title = `${source.game.short} · ${f.path}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadMov(new Uint8Array(await r.arrayBuffer()), f.base, source.game.dreamFactory0 === true);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverNote(wrap, t("common.pickFromGamefilesBig"));
+  serverRow(wrap, {
+    source,
+    files: movies,
+    rowClass: "movies",
+    buttonClass: "movie",
+    log,
+    open: (bytes, f) => loadMov(bytes, f.base, source.game.dreamFactory0 === true),
+  });
 }
 const serverListed = initServerMovies();
 
@@ -1425,21 +1396,10 @@ function buildRegions(): void {
   }
 
   regions.forEach((r, i) => {
-    const row = document.createElement("div");
-    row.className = "regionrow";
-    row.onpointerenter = () => {
-      hoveredRegion = i;
+    const row = regionRow(i, (h) => {
+      hoveredRegion = h;
       drawOverlay();
-    };
-    row.onpointerleave = () => {
-      hoveredRegion = -1;
-      drawOverlay();
-    };
-
-    const lead = document.createElement("span");
-    lead.className = "lead";
-    lead.textContent = String(i);
-    row.appendChild(lead);
+    });
 
     row.appendChild(
       typeSelect(r.type, (type) => {
@@ -1626,15 +1586,8 @@ function buildAudio(): void {
 }
 
 function buildPalette(): void {
-  const wrap = $("palette");
-  wrap.replaceChildren();
+  fillSwatches($("palette"), palette);
   $("paletteInfo").textContent = t("movies.paletteInfo");
-  for (let i = 0; i < 256; i++) {
-    const d = document.createElement("div");
-    d.style.background = `rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    d.title = `${i}: rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    wrap.appendChild(d);
-  }
 }
 
 // --- PNG export (one way only) ----------------------------------------------
@@ -1707,43 +1660,15 @@ $("videoExportBtn").addEventListener("click", async () => {
 
 // --- export -----------------------------------------------------------------
 
-function download(blob: Blob, name: string): void {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
-
 $("exportBtn").addEventListener("click", () => {
   if (!mov) return;
   if (readOnly) {
     log(readOnly);
     return;
   }
-  const bytes = writeContainerFile(mov.file);
-  try {
-    readMovFile(bytes); // sanity: the export must read back as a movie
-  } catch (e) {
-    log(t("common.exportFailed", { message: (e as Error).message }));
-    return;
-  }
-  download(new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }), fileName);
-  log(
-    t("common.exported", { file: fileName, bytes: formatNumber(bytes.length) }) +
-      (edits.length
-        ? t("common.exportedWithEdits", { n: edits.length, edits: edits.join(", ") })
-        : t("common.exportedUnmodified")),
-  );
+  // sanity: the export must read back as a movie
+  exportContainerFile(mov.file, readMovFile, fileName, edits, log);
 });
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-// Which edition's files the landing screen lists, and which copy of a basename an
-// edit is written back into: the same row the play page and the collection carry
-// (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
-// stands between that and unexported edits.
-void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+void installEditorPage();
 await serverListed;

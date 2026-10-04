@@ -60,11 +60,9 @@ import {
   readRooms,
   readSbkFile,
 } from "@dreamfactory/engine/df/sbk";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { installI18n, t } from "@dreamfactory/site/locales";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
+import { t } from "@dreamfactory/site/locales";
+import { byExtension, chosenSource, filesIn, listSources } from "./sources";
+import { installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -201,27 +199,7 @@ function loadBook(bytes: Uint8Array, name: string): void {
   cameraHome();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadBook(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadBook(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /**
  * Dev-server mode: offer every `.sbk` there is.
@@ -245,37 +223,31 @@ async function initServerBooks(): Promise<void> {
     books = filesIn(elsewhere, byExtension(".sbk"));
   }
   const wrap = $("serverBooks");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent =
+  serverNote(
+    wrap,
     source === chose
       ? t("common.pickFromGamefiles")
-      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with sprite books in it`;
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row books";
+      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with sprite books in it`,
+  );
   // in the order the game plays them, not the order the directory sorts them —
   // see LEVEL_ORDER, which is recovered from SC.EXE and not from the discs
   books.sort((a, b) => (levelNumber(a.base) || 99) - (levelNumber(b.base) || 99));
-  for (const f of books) {
-    const n = levelNumber(f.base);
-    const b = document.createElement("button");
-    b.className = "book";
-    b.textContent = n ? `${n}. ${f.base}` : f.base;
-    const which = n ? ` · level ${n} of 16` : " · the player, not a level";
-    b.title = `${source.game.short} · ${f.path}${which}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadBook(new Uint8Array(await r.arrayBuffer()), f.base);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverRow(wrap, {
+    source,
+    files: books,
+    rowClass: "books",
+    buttonClass: "book",
+    label: (f) => {
+      const n = levelNumber(f.base);
+      return n ? `${n}. ${f.base}` : f.base;
+    },
+    more: (f) => {
+      const n = levelNumber(f.base);
+      return n ? ` · level ${n} of 16` : " · the player, not a level";
+    },
+    log,
+    open: (bytes, f) => loadBook(bytes, f.base),
+  });
 }
 const serverListed = initServerBooks();
 
@@ -790,9 +762,5 @@ function draw(): void {
     `camera ${Math.round(camX)},${Math.round(camY)} · ${drawn} of ${drawList.length} placements in view`;
 }
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-void installSourcePicker($("editionPicker"));
+void installEditorPage();
 await serverListed;

@@ -15,13 +15,23 @@
  * so an untouched load exports the file it read (see taoot/tests/auto/set-editor.ts).
  */
 import { decodeFrame, encodeFrame, FrameBuffer, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources } from "./sources";
-import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
-import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
-import { writeContainerFile } from "@dreamfactory/engine/df/container";
+import { byExtension, chosenSource, filesIn, listSources } from "./sources";
+import {
+  appendScripts,
+  artSizes,
+  download,
+  exportContainerFile,
+  indexPixels,
+  installEditorPage,
+  LazyFill,
+  readImage,
+  savePng,
+  serverNote,
+  serverRow,
+  wireFileOpen,
+  wirePngImport,
+} from "./editor-kit";
+import { t, formatNumber } from "@dreamfactory/site/locales";
 import { FrameInfo, LEFTTURNS, RIGHTTURNS, SetFile, readSetFile, turnRing } from "@dreamfactory/engine/df/set";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
@@ -149,28 +159,7 @@ function loadSet(bytes: Uint8Array, name: string): void {
   refresh();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadSet(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadSet(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /** dev-server mode: offer every .set in the gamefiles manifest */
 async function initServerSets(): Promise<void> {
@@ -183,29 +172,15 @@ async function initServerSets(): Promise<void> {
   const sets = filesIn(source, byExtension(".set"));
   if (!sets.length) return;
   const wrap = $("serverSets");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent = t("common.pickFromGamefiles");
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row sets";
-  for (const f of sets) {
-    const b = document.createElement("button");
-    b.className = "set";
-    b.textContent = f.base;
-    b.title = `${source.game.short} · ${f.path}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadSet(new Uint8Array(await r.arrayBuffer()), f.base);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverNote(wrap, t("common.pickFromGamefiles"));
+  serverRow(wrap, {
+    source,
+    files: sets,
+    rowClass: "sets",
+    buttonClass: "set",
+    log,
+    open: (bytes, f) => loadSet(bytes, f.base),
+  });
 }
 const serverListed = initServerSets();
 
@@ -501,27 +476,9 @@ $("playRing").addEventListener("click", () => {
  * Decoding and drawing every ring of a set up front is wasted work — the boat
  * deck has dozens. Thumbnails fill themselves in when they scroll into view.
  */
-let observer: IntersectionObserver | null = null;
-const pending = new Map<Element, () => void>();
-
-function whenVisible(el: Element, fill: () => void): void {
-  observer ??= new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      pending.get(e.target)?.();
-      pending.delete(e.target);
-      observer!.unobserve(e.target);
-    }
-  });
-  pending.set(el, fill);
-  observer.observe(el);
-}
-
-function resetObserver(): void {
-  observer?.disconnect();
-  observer = null;
-  pending.clear();
-}
+const lazy = new LazyFill();
+const whenVisible = (el: Element, fill: () => void): void => lazy.whenVisible(el, fill);
+const resetObserver = (): void => lazy.reset();
 
 // --- rendering --------------------------------------------------------------
 
@@ -1143,24 +1100,7 @@ function buildScripts(): void {
     wrap.appendChild(empty);
     return;
   }
-  for (const e of entries) {
-    const det = document.createElement("details");
-    det.className = "script";
-    const sum = document.createElement("summary");
-    sum.textContent = `${e.label} (container @${e.loc})`;
-    det.appendChild(sum);
-    const pre = document.createElement("pre");
-    // decompiling is only worth it when opened — a set carries dozens
-    let filled = false;
-    det.ontoggle = () => {
-      if (filled || !det.open) return;
-      filled = true;
-      const tokens = sniffScript(s.file.containers[e.loc]?.data ?? new Uint8Array(0));
-      pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
-    };
-    det.appendChild(pre);
-    wrap.appendChild(det);
-  }
+  appendScripts(wrap, entries, s.file.containers);
 }
 
 function buildPalette(): void {
@@ -1188,18 +1128,12 @@ $("pngExportBtn").addEventListener("click", () => {
   if (!f) return;
   const c = document.createElement("canvas");
   frameToCanvas(f, c);
-  c.toBlob((blob) => {
-    if (blob) download(blob, `${baseName()}.frame${cur!.loc}.png`);
-  }, "image/png");
+  savePng(c, `${baseName()}.frame${cur!.loc}.png`);
 });
 
-const pngInput = $<HTMLInputElement>("pngInput");
-$("pngImportBtn").addEventListener("click", () => pngInput.click());
-pngInput.addEventListener("change", () => {
-  const file = pngInput.files?.[0];
-  pngInput.value = "";
+wirePngImport((file) => {
   const cur = currentFrame();
-  if (file && cur) void importPng(file, cur);
+  if (cur) void importPng(file, cur);
 });
 
 /**
@@ -1216,41 +1150,23 @@ async function importPng(
 ): Promise<void> {
   if (!set) return;
   const old = frameAt(cur.loc, cur.ring);
-  let bmp: ImageBitmap;
-  try {
-    bmp = await createImageBitmap(file);
-  } catch {
-    log(t("common.notAnImage", { file: file.name }));
-    return;
-  }
-  const c = document.createElement("canvas");
-  c.width = bmp.width;
-  c.height = bmp.height;
-  const ctx = c.getContext("2d")!;
-  ctx.drawImage(bmp, 0, 0);
-  const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
+  const img = await readImage(file, log);
+  if (!img) return;
+  // the view palette only: the entries past colorCount are not the frames'
+  const pixels = indexPixels(img, palette, set.colorCount);
 
-  const pixels = new Uint8Array(bmp.width * bmp.height);
-  for (let i = 0; i < pixels.length; i++) {
-    pixels[i] = nearestPaletteIndex(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
-  }
-
-  const sameSize = old?.width === bmp.width && old.height === bmp.height;
+  const sameSize = old?.width === img.width && old.height === img.height;
   const container = set.file.containers[cur.loc];
   const zBlock =
     sameSize && old.zOffset >= 0 ? container.data.subarray(old.zOffset) : undefined;
-  const data = encodeFrame(pixels, bmp.width, bmp.height, zBlock);
+  const data = encodeFrame(pixels, img.width, img.height, zBlock);
   set.file.containers[cur.loc] = { id: container.id, data };
   invalidateFrame(cur.loc);
   markEdit(t("sets.artEdit", { loc: cur.loc, file: file.name }));
   log(
     t("sets.artReplaced", {
       loc: cur.loc,
-      file: file.name,
-      w: bmp.width,
-      h: bmp.height,
-      kb: (data.length / 1024).toFixed(1),
-      was: (container.data.length / 1024).toFixed(1),
+      ...artSizes(file, img, data, container.data),
     }) +
       (old && !sameSize ? t("sets.artSizeWarn", { w: old.width, h: old.height }) : ""),
   );
@@ -1258,31 +1174,7 @@ async function importPng(
   renderPreview();
 }
 
-function nearestPaletteIndex(r: number, g: number, b: number): number {
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < set!.colorCount; i++) {
-    const dr = palette[i * 4] - r;
-    const dg = palette[i * 4 + 1] - g;
-    const db = palette[i * 4 + 2] - b;
-    const d = dr * dr + dg * dg + db * db;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
-}
-
 // --- export -----------------------------------------------------------------
-
-function download(blob: Blob, name: string): void {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
 
 $("exportBtn").addEventListener("click", () => {
   if (readOnlyV1) {
@@ -1290,29 +1182,9 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   if (!set) return;
-  const bytes = writeContainerFile(set.file);
-  try {
-    readSetFile(bytes); // sanity: the export must read back as a set
-  } catch (e) {
-    log(t("common.exportFailed", { message: (e as Error).message }));
-    return;
-  }
-  download(new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }), fileName);
-  log(
-    t("common.exported", { file: fileName, bytes: formatNumber(bytes.length) }) +
-      (edits.length
-        ? t("common.exportedWithEdits", { n: edits.length, edits: edits.join(", ") })
-        : t("common.exportedUnmodified")),
-  );
+  // sanity: the export must read back as a set
+  exportContainerFile(set.file, readSetFile, fileName, edits, log);
 });
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-// Which edition's files the landing screen lists, and which copy of a basename an
-// edit is written back into: the same row the play page and the collection carry
-// (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
-// stands between that and unexported edits.
-void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+void installEditorPage();
 await serverListed;

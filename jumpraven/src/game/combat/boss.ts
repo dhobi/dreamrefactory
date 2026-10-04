@@ -47,7 +47,8 @@
  */
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { BossApi } from "./api";
-import { drawShot, objOf, withinReach, type VehicleShot } from "./jeep";
+import { drawShot, withinReach, type VehicleShot } from "./jeep";
+import { objOf } from "./fleet";
 import { aimAt, callShell, inBlock, lookAlong, meets } from "./lib";
 import { KIND, abs, copyObj, cosMul, newObj, readPictures, sinMul, type Obj, type World } from "./world";
 

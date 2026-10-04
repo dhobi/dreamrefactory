@@ -1677,7 +1677,7 @@ export class SetViewer implements RoomLayer {
    * scene hittest just named — and the event forwards along scene → set main →
    * stage the way every other scene event does.
    *
-   * This used to fall through to {@link clickFlatSurface}, which is the STAGE's
+   * This used to fall through to the director's `clickFlatSurface`, which is the STAGE's
    * answer and belongs to a click in the band. In a room that meant the current
    * flat's mousedown ran for a click on the floor — in TAOOT the current flat is
    * main.stg's `main 1`, whose mousedown is `sendtoshop("house.shp",
@@ -1693,24 +1693,6 @@ export class SetViewer implements RoomLayer {
     );
   }
 
-  /** nothing specific was hit: flat script -> stage script */
-  private async clickFlatSurface(): Promise<void> {
-    const flat = this.session.flatScripts.get(this.session.currentFlat.toLowerCase());
-    const interp = this.session.interp;
-    interp.eventConsumed = false;
-    for (const inst of [flat, this.session.stageScript]) {
-      if (!inst?.script.codes.has("mousedown")) continue;
-      try {
-        const res = await interp.runHandler(inst, "mousedown", [""], { me: inst.name, target: "" });
-        if (interp.eventConsumed || (res.handled && !res.passed)) return;
-      } catch (e) {
-        this.onLog(`script error in ${inst.name}.mousedown: ${(e as Error).message}`);
-      }
-    }
-  }
-
-  /** the front-most prop sprite under a screen position — world-projected
-   *  while the set is visible, screen-space over an overlay flat */
   /** the front-most prop sprite under a screen position — the director's, and
    *  its own, because a prop is screen-space unless a room is showing */
   propUnder(x: number, y: number): ReturnType<GameSession["propRuntime"]["propAt"]> {

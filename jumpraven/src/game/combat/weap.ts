@@ -29,7 +29,7 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { WeapApi } from "./api";
 import { approach, callDepot, craftOver, depotWhere, driveDepot, driveOff, drawDepot, newDepot, shiftDepot } from "./fuel";
-import { objOf } from "./jeep";
+import { objOf } from "./fleet";
 import { tooFar } from "./lib";
 import { KIND, cosMul, readPictures, setObj, sinMul, type Obj, type World } from "./world";
 

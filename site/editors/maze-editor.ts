@@ -36,11 +36,9 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { FrameBuffer, decodeFrame, indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
 import { cellV0, ownsFilmV0, readMazeV0, type MazeTransitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { installI18n, t } from "@dreamfactory/site/locales";
-import { chosenSource, filesIn, installSourcePicker, listSources, type Source } from "./sources";
+import { t } from "@dreamfactory/site/locales";
+import { chosenSource, filesIn, listSources, type Source } from "./sources";
+import { fetchBytes, installEditorPage, serverNote, wireFileOpen } from "./editor-kit";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -177,15 +175,6 @@ function loadMaze(bytes: Uint8Array, name: string): void {
   show();
 }
 
-async function fetchBytes(url: string, path: string): Promise<Uint8Array | null> {
-  const r = await fetch(url);
-  if (!r.ok) {
-    log(t("common.fetchFailed", { path, status: r.status }));
-    return null;
-  }
-  return new Uint8Array(await r.arrayBuffer());
-}
-
 function loadPalette(bytes: Uint8Array, name: string): boolean {
   try {
     palette = readClutV0(bytes, "CLUT128");
@@ -208,22 +197,9 @@ async function loadFromFile(f: File): Promise<void> {
   } else loadMaze(bytes, f.name);
 }
 
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
+wireFileOpen(loadFromFile, (dropped) => {
   // a maze and its DLL can come in one drop: the palette first, so the view opens in it
-  const files = [...(e.dataTransfer?.files ?? [])].sort((a, b) => Number(/\.dll$/i.test(b.name)) - Number(/\.dll$/i.test(a.name)));
+  const files = [...(dropped ?? [])].sort((a, b) => Number(/\.dll$/i.test(b.name)) - Number(/\.dll$/i.test(a.name)));
   void (async () => {
     for (const f of files) await loadFromFile(f);
   })();
@@ -246,13 +222,12 @@ async function initServerMazes(): Promise<void> {
   const mazes = filesIn(source, isMaze).sort((a, b) => a.path.localeCompare(b.path));
   const dll = filesIn(source, (p) => /lunires\.dll$/i.test(p))[0];
   const wrap = $("serverMazes");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent =
+  serverNote(
+    wrap,
     source === chose
       ? t("common.pickFromGamefiles")
-      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with mazes in it`;
-  wrap.appendChild(note);
+      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with mazes in it`,
+  );
   const row = document.createElement("div");
   row.className = "row mazes";
   for (const f of mazes) {
@@ -263,11 +238,11 @@ async function initServerMazes(): Promise<void> {
     b.title = `${source.game.short} · ${f.path}`;
     b.addEventListener("click", async () => {
       if (!palette && dll) {
-        const bytes = await fetchBytes(dll.url, dll.path);
+        const bytes = await fetchBytes(dll.url, dll.path, log);
         if (bytes) loadPalette(bytes, dll.base);
       }
       log(t("common.loading", { path: f.path }));
-      const bytes = await fetchBytes(f.url, f.path);
+      const bytes = await fetchBytes(f.url, f.path, log);
       if (bytes) loadMaze(bytes, b.textContent!);
     });
     row.appendChild(b);
@@ -508,9 +483,5 @@ function buildFilms(): void {
   }
 }
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-void installSourcePicker($("editionPicker"));
+void installEditorPage();
 await serverListed;

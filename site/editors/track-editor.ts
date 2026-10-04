@@ -14,15 +14,13 @@
  * encodeAudioContainer / writeContainerFile, so an untouched load exports the
  * file it read (see taoot/tests/auto/trk-editor.ts).
  */
-import { DFContainerFile, readContainerFile, writeContainerFile } from "@dreamfactory/engine/df/container";
+import { DFContainerFile, readContainerFile } from "@dreamfactory/engine/df/container";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { SndFile, readSndFile, sndLoopChunks } from "@dreamfactory/engine/df/snd";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
 import { wavBlob } from "./wav";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
-import { t as tr, formatNumber, installI18n } from "@dreamfactory/site/locales";
+import { byExtension, chosenSource, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
+import { download, exportContainerFile, installEditorPage, LazyFill, serverNote, serverRow, wireFileOpen } from "./editor-kit";
+import { t as tr } from "@dreamfactory/site/locales";
 import {
   DecodedAudio,
   V0_SAMPLE_RATE,
@@ -240,28 +238,7 @@ function loadBank(bytes: Uint8Array, name: string, v0 = false): void {
   refresh();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadBank(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadBank(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /** dev-server mode: offer every audio bank in the gamefiles manifest */
 async function initServerBanks(): Promise<void> {
@@ -281,29 +258,15 @@ async function initServerBanks(): Promise<void> {
   );
   if (!banks.length) return;
   const wrap = $("serverBanks");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent = tr("common.pickFromGamefiles");
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row banks";
-  for (const f of banks) {
-    const b = document.createElement("button");
-    b.className = "bank";
-    b.textContent = f.base;
-    b.title = `${source.game.short} · ${f.path}`;
-    b.addEventListener("click", async () => {
-      log(tr("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(tr("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadBank(new Uint8Array(await r.arrayBuffer()), f.base, source.game.dreamFactory0 === true);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverNote(wrap, tr("common.pickFromGamefiles"));
+  serverRow(wrap, {
+    source,
+    files: banks,
+    rowClass: "banks",
+    buttonClass: "bank",
+    log,
+    open: (bytes, f) => loadBank(bytes, f.base, source.game.dreamFactory0 === true),
+  });
 }
 const serverListed = initServerBanks();
 
@@ -388,27 +351,9 @@ function drawWave(canvas: HTMLCanvasElement, samples: Float32Array): void {
  * UNILIB.TRK carries hundreds of voice lines. Rows fill themselves in when they
  * first scroll into view.
  */
-let observer: IntersectionObserver | null = null;
-const pending = new Map<Element, () => void>();
-
-function whenVisible(el: Element, fill: () => void): void {
-  observer ??= new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      pending.get(e.target)?.();
-      pending.delete(e.target);
-      observer!.unobserve(e.target);
-    }
-  });
-  pending.set(el, fill);
-  observer.observe(el);
-}
-
-function resetObserver(): void {
-  observer?.disconnect();
-  observer = null;
-  pending.clear();
-}
+const lazy = new LazyFill();
+const whenVisible = (el: Element, fill: () => void): void => lazy.whenVisible(el, fill);
+const resetObserver = (): void => lazy.reset();
 
 // --- playback ---------------------------------------------------------------
 
@@ -487,14 +432,6 @@ function themeAudio(): DecodedAudio | null {
 }
 
 // --- WAV in and out ---------------------------------------------------------
-
-function download(blob: Blob, name: string): void {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
 
 const wavName = (id: string): string =>
   `${fileName.replace(/\.[^.]+$/, "").toLowerCase()}.${(id || "chunk").replace(/[^\w.-]/g, "_")}.wav`;
@@ -896,31 +833,18 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   if (!file) return;
-  const bytes = writeContainerFile(file);
-  try {
-    const back = readContainerFile(bytes);
-    readBankTables(back);
-    readAudioBank(back); // sanity: the export must read back as a bank
-  } catch (e) {
-    log(tr("common.exportFailed", { message: (e as Error).message }));
-    return;
-  }
-  download(new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }), fileName);
-  log(
-    tr("common.exported", { file: fileName, bytes: formatNumber(bytes.length) }) +
-      (edits.length
-        ? tr("common.exportedWithEdits", { n: edits.length, edits: edits.join(", ") })
-        : tr("common.exportedUnmodified")),
+  exportContainerFile(
+    file,
+    (bytes) => {
+      const back = readContainerFile(bytes);
+      readBankTables(back);
+      readAudioBank(back); // sanity: the export must read back as a bank
+    },
+    fileName,
+    edits,
+    log,
   );
 });
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-// Which edition's files the landing screen lists, and which copy of a basename an
-// edit is written back into: the same row the play page and the collection carry
-// (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
-// stands between that and unexported edits.
-void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+void installEditorPage();
 await serverListed;

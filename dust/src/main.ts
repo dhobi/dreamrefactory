@@ -72,6 +72,7 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
+import { titleRise } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
@@ -592,44 +593,9 @@ async function waitForStart(): Promise<void> {
   );
 }
 
-let risen = false;
-function raiseTitle(): void {
-  if (risen) return; // the failure paths can both reach here; the move happens once
-  risen = true;
-  const bar = bootEl.getBoundingClientRect();
-  if (bar.width) {
-    bootEl.style.position = "fixed";
-    bootEl.style.left = `${bar.left}px`;
-    bootEl.style.top = `${bar.top}px`;
-    bootEl.style.width = `${bar.width}px`;
-  }
-  const first = brandEl?.getBoundingClientRect();
-  document.body.classList.remove("booting");
-  document.body.classList.add("playing");
-  const last = brandEl?.getBoundingClientRect();
-  if (brandEl && first?.width && last?.width) {
-    const k = first.width / last.width;
-    const dx = first.left + first.width / 2 - (last.left + last.width / 2);
-    const dy = first.top + first.height / 2 - (last.top + last.height / 2);
-    brandEl.style.transition = "none";
-    brandEl.style.transform = `translate(${dx}px, ${dy}px) scale(${k})`;
-    // two frames: one for the browser to accept the start pose, one to leave it
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        brandEl.style.transition =
-          "transform 980ms cubic-bezier(.28,.74,.22,1)";
-        brandEl.style.transform = "";
-      }),
-    );
-  }
-  // the fuse burns out: down, dim, and blurred, under the rising card
-  bootEl.style.opacity = "0";
-  bootEl.style.translate = "0 18px";
-  bootEl.style.filter = "blur(3px)";
-  bootEl.addEventListener("transitionend", () => bootEl.remove(), {
-    once: true,
-  });
-}
+/** the title card rises off the burnt-out fuse, by FLIP, once however many
+ *  failure paths reach it (engine/src/web/page-shell.ts) */
+const raiseTitle = titleRise(bootEl, brandEl);
 
 /** the sets on the disc, in the order the CD lists them — resolved through
  *  siteUrl like every URL a page builds, so the page runs from any directory */

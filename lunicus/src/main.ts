@@ -16,25 +16,22 @@
  * click on the title, or Enter, starts the game. The machine tests
  * (`tests/machine/`) drive the same machine with no page at all.
  */
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
+import { $, GESTURE_KEYS, V0Page } from "@dreamfactory/engine/web/v0-page";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { VERSION } from "@dreamfactory/site/version";
-import { SCREEN_H, SCREEN_W, TICKS_PER_SECOND, VIEW_H, VIEW_W } from "./game/data";
-import { TouchGestures, type GestureKey } from "@dreamfactory/engine/web/touch";
+import { TICKS_PER_SECOND, VIEW_H, VIEW_W } from "./game/data";
+import { TouchGestures } from "@dreamfactory/engine/web/touch";
 import { Lunicus } from "./game/game";
 import { Input, type Recording } from "./game/input";
-import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
+import { browseForLoad, savesOpen } from "@dreamfactory/engine/web/save-browser";
 import { windowDialogOpen } from "@dreamfactory/engine/web/window-dialog";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { LUNICUS_SAVES, seedLunicusSaves } from "./saves";
 import { installMenu } from "./menu";
 import { askHighScoreName, editKeys } from "./dialogs";
-
-import type { GameFiles, Speaker } from "./game/machine";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 
-const SCALE = 2;
 const RIP = "gamefiles/LUNICUS/";
 /** what the opening and day one's lower floor read, fetched before Enter */
 const PRELOAD = [
@@ -45,171 +42,11 @@ const PRELOAD = [
 /** a tab left in the background comes back to this many ticks of catching up, not minutes */
 const MAX_CATCH_UP = 6;
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-const canvas = $<HTMLCanvasElement>("screen");
-const ctx = canvas.getContext("2d")!;
-ctx.imageSmoothingEnabled = false;
-const stageEl = $<HTMLDivElement>("stage");
-const logEl = $<HTMLPreElement>("log");
-const locEl = $<HTMLPreElement>("loc");
-const errEl = $<HTMLSpanElement>("err");
-
-$("ver").textContent = `v${VERSION}`;
-
-/** the title card, which closes the band up when it fails to load — see #brand in index.html */
-const brandEl = $<HTMLImageElement>("brand");
-function dropBrand(): void {
-  brandEl.hidden = true;
-  document.body.classList.add("nobrand");
-}
-// a module runs after parsing, so the image may already have failed by now
-if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
-else brandEl.addEventListener("error", dropBrand);
-
-const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
-
-/* ------------------------------------------------------------------------- *
- * The log
- * ------------------------------------------------------------------------- */
-
-const logLines: string[] = [];
-const step = (line: string): void => {
-  logLines.push(line);
-  logEl.innerHTML += `<b>${esc(line)}</b>\n`;
-};
-const complain = (line: string): void => {
-  logLines.push(line);
-  logEl.innerHTML += `<i>${esc(line)}</i>\n`;
-  errEl.textContent = line;
-  logEl.hidden = false;
-};
-const say = (line: string): void => {
-  logLines.push(line);
-  logEl.innerHTML += `${esc(line)}\n`;
-  logEl.scrollTop = logEl.scrollHeight;
-};
-const toggleLog = (): void => {
-  logEl.hidden = !logEl.hidden;
-};
-$("logBtn").addEventListener("click", toggleLog);
-
-installFullscreen($<HTMLButtonElement>("fsBtn"), stageEl, { report: say, landscape: true });
-
-const BUG_NOTE_MS = 6000;
-const bugNote = $("bugNote");
-installBugReport($<HTMLButtonElement>("bugBtn"), {
-  game: "Lunicus",
-  canvas,
-  shotName: "lunicus-bug.png",
-  version: VERSION,
-  where: () => locEl.textContent ?? "",
-  edition: () => "Lunicus CD (gamefiles/LUNICUS/)",
-  log: (n) => logLines.slice(-n),
-  note: (how) => {
-    bugNote.textContent =
-      how === "clipboard" ? "the screen is on the clipboard — paste it into the issue" : "the screen was downloaded — attach it to the issue";
-    setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-  },
-});
-
-/* ------------------------------------------------------------------------- *
- * The disc
- * ------------------------------------------------------------------------- */
-
+/** the log, the disc, the sound and the screen: the shell Jump Raven's page shares (engine/src/web/v0-page.ts) */
+const page = new V0Page({ name: "Lunicus", year: 1994, slug: "lunicus", rip: RIP, version: VERSION });
+const { canvas, locEl, complain, say, toggleLog, fetchBytes, files, speaker, at } = page;
+installBugReport($<HTMLButtonElement>("bugBtn"), page.bugReport);
 const url = (path: string): string => pageUrl(path);
-let sizes: Record<string, number> = {};
-const bytes = new Map<string, Uint8Array>();
-const fetching = new Map<string, Promise<Uint8Array>>();
-
-function fetchBytes(path: string, onProgress?: (got: number) => void): Promise<Uint8Array> {
-  let p = fetching.get(path);
-  if (!p) {
-    p = (async () => {
-      const res = await fetch(url(RIP + path));
-      if (!res.ok || !res.body) throw new Error(`${path}: ${res.status}`);
-      const reader = res.body.getReader();
-      const parts: Uint8Array[] = [];
-      let got = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        parts.push(value);
-        got += value.length;
-        onProgress?.(got);
-      }
-      const out = new Uint8Array(got);
-      let at = 0;
-      for (const part of parts) (out.set(part, at), (at += part.length));
-      bytes.set(path, out);
-      return out;
-    })();
-    p.catch((e) => complain(String(e)));
-    fetching.set(path, p);
-  }
-  return p;
-}
-
-const files: GameFiles = {
-  has: (p) => RIP + p in sizes,
-  get: (p) => bytes.get(p) ?? null,
-  want: (p) => {
-    if (!fetching.has(p)) say(`reading ${p} (${(sizes[RIP + p] / 1e6).toFixed(1)} MB)…`);
-    void fetchBytes(p);
-  },
-};
-
-/* ------------------------------------------------------------------------- *
- * Sound
- * ------------------------------------------------------------------------- */
-
-let audio: AudioContext | null = null;
-/** Sound ▸ Sound Off … Level 7: the device's volume, which every channel goes through */
-let master: GainNode | null = null;
-let volume = 1;
-const out = (): AudioNode => {
-  if (!master) {
-    master = audio!.createGain();
-    master.gain.value = volume;
-    master.connect(audio!.destination);
-  }
-  return master;
-};
-const playing = new Set<AudioBufferSourceNode>();
-const speaker: Speaker = {
-  play(samples, rate) {
-    if (!audio) return;
-    const buf = audio.createBuffer(1, samples.length, rate);
-    buf.getChannelData(0).set(samples);
-    const src = audio.createBufferSource();
-    src.buffer = buf;
-    src.connect(out());
-    src.onended = () => playing.delete(src);
-    playing.add(src);
-    src.start();
-  },
-  stop() {
-    for (const s of playing) s.stop();
-    playing.clear();
-  },
-  loop(samples, rate) {
-    ambience?.stop();
-    ambience = null;
-    if (!audio || !samples) return;
-    const buf = audio.createBuffer(1, samples.length, rate);
-    buf.getChannelData(0).set(samples);
-    ambience = audio.createBufferSource();
-    ambience.buffer = buf;
-    ambience.loop = true;
-    ambience.connect(out());
-    ambience.start();
-  },
-  volume(level) {
-    volume = level;
-    if (master) master.gain.value = level;
-  },
-};
-/** the ambience's channel: one source, looping */
-let ambience: AudioBufferSourceNode | null = null;
 
 /* ------------------------------------------------------------------------- *
  * The machine
@@ -236,12 +73,6 @@ let pace = Number(params.get("pace") ?? 1) || 1;
  * ------------------------------------------------------------------------- */
 
 useSaveKind(LUNICUS_SAVES);
-const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
-  browseForSave(bytes, name, { log: (l) => say(`  ${l}`) }).then(done, (e) => {
-    complain(String(e));
-    done();
-  });
-};
 
 /* ------------------------------------------------------------------------- *
  * LUNICUS.SCO — the key table and the high scores (game/sco.ts) — kept in the
@@ -250,49 +81,21 @@ const saver = (bytes: Uint8Array, name: string, done: () => void): void => {
  * own keys or a name dialog would part it from the run.
  * ------------------------------------------------------------------------- */
 
-const SCO_KEY = "lunicus.sco";
 const OWN_SCO = !DRIVE && !REPLAY;
-function storedSco(): Uint8Array | undefined {
-  try {
-    const b64 = localStorage.getItem(SCO_KEY);
-    return b64 ? Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-function keepSco(bytes: Uint8Array): void {
-  try {
-    localStorage.setItem(SCO_KEY, btoa(String.fromCharCode(...bytes)));
-  } catch (e) {
-    complain(`the high scores and keys could not be kept: ${String(e)}`);
-  }
-}
 
 const game = new Lunicus(files, {
   speaker,
-  saver,
+  saver: page.saver,
   seed: params.has("seed") ? Number(params.get("seed")) : Date.now() & 0xffff,
   log: say,
   ...(OWN_SCO && {
-    sco: storedSco(),
-    keepSco,
+    sco: page.storedSco(),
+    keepSco: page.keepSco,
     keysDialog: (fields, defaults, done) => editKeys($("frame"), fields, defaults, done),
     askName: (done) => askHighScoreName($("frame"), done),
   }),
 });
 const m = game.m;
-const image = ctx.createImageData(SCREEN_W, SCREEN_H);
-const off = new OffscreenCanvas(SCREEN_W, SCREEN_H);
-const offCtx = off.getContext("2d")!;
-let drawn = -1;
-
-function draw(): void {
-  if (m.screen.version === drawn) return;
-  drawn = m.screen.version;
-  m.screen.rgba(image.data);
-  offCtx.putImageData(image, 0, 0);
-  ctx.drawImage(off, 0, 0, SCREEN_W * SCALE, SCREEN_H * SCALE);
-}
 
 function status(): string {
   return (replay ? `replay ×${pace} · checkpoint ${replay.cp} of ${replay.rec.checkpoints.length} · ` : "") + where();
@@ -335,7 +138,7 @@ function frame(now: number): void {
     complain(String(e));
     running = false;
   }
-  draw();
+  page.draw(m.screen);
   // the status line is a readout: if it ever throws, say so and keep the game
   // running rather than dropping out of the frame loop for good
   try {
@@ -352,28 +155,8 @@ function frame(now: number): void {
  * Input
  * ------------------------------------------------------------------------- */
 
-/**
- * A pointer event in the screen's pixels. Pointer events and not mouse events:
- * a mouse event's position is rounded to whole CSS pixels, and with the canvas
- * at a fractional place on the page (it is centred) and a screen pixel under
- * two CSS pixels wide, that rounding can land a click in the pixel next door.
- * A pointer event carries the position as it is.
- *
- * One over the canvas is on the screen by definition, so it is held inside it
- * (a click on the canvas's very edge is still on its edge pixel); a release let
- * go off the canvas keeps where it really was.
- */
-const at = (e: PointerEvent): { x: number; y: number } => {
-  const r = canvas.getBoundingClientRect();
-  const x = Math.floor(((e.clientX - r.left) / r.width) * SCREEN_W);
-  const y = Math.floor(((e.clientY - r.top) / r.height) * SCREEN_H);
-  if (e.target !== canvas) return { x, y };
-  return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
-};
 /** the one door the page's hands and the machine tests' share (game/input.ts) */
 const input = new Input(game);
-/** a gesture's key, as `KeyboardEvent.key` names it */
-const GESTURE_KEYS: Record<GestureKey, string> = { uparrow: "ArrowUp", downarrow: "ArrowDown", leftarrow: "ArrowLeft", rightarrow: "ArrowRight", ".": "Escape" };
 /**
  * A finger (engine/src/web/touch.ts): a double tap is Esc — on a phone the
  * only way to skip a film, whose taps go to its hotspots — and a swipe an
@@ -522,55 +305,11 @@ addEventListener("blur", () => m.keysHeld.clear());
  * The boot
  * ------------------------------------------------------------------------- */
 
-const charge = $("charge");
-const bar = $<HTMLProgressElement>("barvalue");
-const bootsay = $("bootsay");
-const bootpct = $("bootpct");
-
-function gauge(fraction: number, what: string): void {
-  const pct = Math.round(fraction * 100);
-  charge.style.width = `${pct}%`;
-  bar.value = pct;
-  bootpct.textContent = `${pct}%`;
-  bootsay.textContent = what;
-}
-
-async function boot(): Promise<void> {
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  step("Lunicus (1994) — DreamFactory 0");
-  const res = await fetch(url("gamefiles.json"));
-  if (!res.ok) throw new Error(`no gamefiles.json (${res.status}) — is lunicus/gamefiles/ there?`);
-  const manifest = (await res.json()) as Record<string, number>;
-  sizes = Object.fromEntries(Object.entries(manifest).filter(([k]) => k.startsWith(RIP)));
-  // the port's day saves (gamefiles/save/), into the saved games once
-  void seedLunicusSaves((path) => (`gamefiles/${path}` in manifest ? url(`gamefiles/${path}`) : null)).then((n) => {
-    if (n) say(`listed ${n} of the port's day saves in the saved games`);
-  });
-  const missing = PRELOAD.filter((p) => !(RIP + p in sizes));
-  if (missing.length) throw new Error(`not in the rip: ${missing.join(", ")}`);
-  const total = PRELOAD.reduce((n, p) => n + sizes[RIP + p], 0);
-  const got = new Map<string, number>();
-  await Promise.all(
-    PRELOAD.map((p) =>
-      fetchBytes(p, (n) => {
-        got.set(p, n);
-        gauge([...got.values()].reduce((a, b) => a + b, 0) / total, `reading ${p}…`);
-      }),
-    ),
-  );
-  gauge(1, "ready");
-  $("boot").classList.add("ready");
-  document.body.classList.remove("booting");
-  step("ready — Enter plays the intro; click the title to start a new game");
-}
-
 async function enter(): Promise<void> {
-  audio ??= new AudioContext();
-  await audio.resume();
+  await page.startSound();
   if (REPLAY && !replay && !running) await loadReplay(REPLAY);
   // an ambience asked for before there was sound to play it on
-  if (m.ambiencePlaying && !ambience) m.playAmbience();
+  if (m.ambiencePlaying && !page.looping) m.playAmbience();
   document.body.classList.add("playing");
   if (running) return;
   running = true;
@@ -593,7 +332,15 @@ $("loadBtn").addEventListener("click", openSaved);
 /** the game window's menu bar, on the frame over the picture (src/menu.ts) */
 const menu = installMenu($("frame"), game, input, { open: openSaved, live: () => running && !REPLAY && !savesOpen() && !windowDialogOpen() });
 try {
-  await boot();
+  await page.boot({
+    preload: PRELOAD,
+    ready: "ready — Enter plays the intro; click the title to start a new game",
+    // the port's day saves (gamefiles/save/), into the saved games once
+    manifest: (manifest) =>
+      void seedLunicusSaves((path) => (`gamefiles/${path}` in manifest ? url(`gamefiles/${path}`) : null)).then((n) => {
+        if (n) say(`listed ${n} of the port's day saves in the saved games`);
+      }),
+  });
 } catch (e) {
   complain(String(e));
 }

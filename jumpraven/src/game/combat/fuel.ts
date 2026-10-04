@@ -38,13 +38,16 @@
  * jeep's: 32 distances by 9 headings, the other seven mirrored (0x409d5f).
  *
  * The weapons ship (src/game/combat/weap.ts) is the same record and the same
- * streets with other ends; what they share is here.
+ * streets with other ends; what they share is here, and how all three of them
+ * and the jeep drive a street is in src/game/combat/street.ts.
  */
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { FuelApi } from "./api";
-import { comeIn, objOf, withinReach } from "./jeep";
-import { tooFar, turnToward, waysToward } from "./lib";
-import { KIND, cosMul, dist, newObj, readPictures, setObj, sinMul, type Obj, type World } from "./world";
+import { comeIn, withinReach } from "./jeep";
+import { objOf } from "./fleet";
+import { tooFar, waysToward } from "./lib";
+import { chooseWay, farEdge, rollAlong, setOff, turnRound } from "./street";
+import { KIND, newObj, readPictures, setObj, type Obj, type World } from "./world";
 
 /**
  * The fuel station's record, the EXE's at 0x4360dc — and the weapons ship's at
@@ -171,31 +174,6 @@ export function blockedWay(r: DepotRec, a: number, blocked: (x: number, y: numbe
   throw new Error(`0x40adc1: a heading of ${a} (0x41e28a 0x6b, 0x1f)`);
 }
 
-/** 0x40ad36 / 0x42a6e1: at the edge — into the next cell, its point on the edge, and choose again */
-function arrive(r: DepotRec): void {
-  r.toX = r.cellX;
-  r.toY = r.cellY;
-  switch (r.angle) {
-    case 0:
-      r.cellX++;
-      r.x = r.cellX << 8;
-      break;
-    case 0x40:
-      r.cellY++;
-      r.y = r.cellY << 8;
-      break;
-    case 0x80:
-      r.x = r.cellX << 8;
-      r.cellX--;
-      break;
-    case 0xc0:
-      r.y = r.cellY << 8;
-      r.cellY--;
-      break;
-  }
-  r.state = 0;
-}
-
 /**
  * States 0 to 4 of 0x409e30 / 0x42982f, which the two share but for the
  * wobble (0x33 the station's, 0x2a the ship's): choose a way toward the
@@ -223,144 +201,16 @@ export function driveDepot(w: World, r: DepotRec, blocked: (x: number, y: number
         dy = r.cellY - to.cellY;
       }
       const way = waysToward(w, r.angle, dx, dy);
-      const open = (a: number): boolean => !blockedWay(r, a, blocked);
-      if (open(way[0])) {
-        r.goal = way[0];
-        if (w.roll(10) <= 1) {
-          if (open(way[1])) r.goal = way[1];
-          else if (open(way[2])) r.goal = way[2];
-        }
-      } else if (open(way[1])) r.goal = way[1];
-      else if (open(way[2])) r.goal = way[2];
-      else return;
-      r.toX = r.cellX;
-      r.toY = r.cellY;
-      r.goalX = (r.cellX << 8) + 0x80;
-      r.goalY = (r.cellY << 8) + 0x80;
-      if (r.goal === r.angle) {
-        // 0x43135c: on to the cell's far edge
-        switch (r.angle) {
-          case 0:
-            r.goalX += 0x80;
-            r.state = 1;
-            r.way = 1;
-            r.toX++;
-            break;
-          case 0x40:
-            r.goalY += 0x80;
-            r.state = 2;
-            r.way = 1;
-            r.toY++;
-            break;
-          case 0x80:
-            r.goalX -= 0x80;
-            r.state = 1;
-            r.way = 0;
-            r.toX--;
-            break;
-          case 0xc0:
-            r.goalY -= 0x80;
-            r.state = 2;
-            r.way = 0;
-            r.toY--;
-            break;
-        }
-        return again();
-      }
-      // 0x43137c: round the corner the turn is about
-      switch (r.angle) {
-        case 0:
-          if (r.goal === 0xc0) {
-            r.state = 3;
-            r.goalX -= 0x80;
-            r.goalY -= 0x80;
-            r.toY--;
-          }
-          if (r.goal === 0x40) {
-            r.state = 4;
-            r.goalX -= 0x80;
-            r.goalY += 0x80;
-            r.toY++;
-          }
-          break;
-        case 0x40:
-          if (r.goal === 0) {
-            r.state = 3;
-            r.goalX += 0x80;
-            r.goalY -= 0x80;
-            r.toX++;
-          }
-          if (r.goal === 0x80) {
-            r.state = 4;
-            r.goalX -= 0x80;
-            r.goalY -= 0x80;
-            r.toX--;
-          }
-          break;
-        case 0x80:
-          if (r.goal === 0xc0) {
-            r.state = 4;
-            r.goalX += 0x80;
-            r.goalY -= 0x80;
-            r.toY--;
-          }
-          if (r.goal === 0x40) {
-            r.state = 3;
-            r.goalX += 0x80;
-            r.goalY += 0x80;
-            r.toY++;
-          }
-          break;
-        case 0xc0:
-          if (r.goal === 0x80) {
-            r.state = 3;
-            r.goalX -= 0x80;
-            r.goalY += 0x80;
-            r.toX--;
-          }
-          if (r.goal === 0) {
-            r.state = 4;
-            r.goalX += 0x80;
-            r.goalY += 0x80;
-            r.toX++;
-          }
-          break;
-      }
-      r.radius = dist(r.goalX - r.x, r.goalY - r.y, 0);
-      // a quarter circle, 0x3d5b / 0x2710 ≈ π/2 of the radius, in 0x40 of heading
-      r.way = Math.trunc((r.speed << 6) / Math.trunc((r.radius * 0x3d5b) / 0x2710));
+      if (!chooseWay(w, r, way, (a) => !blockedWay(r, a, blocked))) return;
+      setOff(r);
       return again();
     }
     case 1:
-    case 2: {
-      const alongX = r.state === 1;
-      const t = alongX ? r.goalY : r.goalX;
-      let across = (alongX ? r.y : r.x) + w.roll(5) - 3;
-      if (t - wobble > across) across = t - wobble;
-      if (t + wobble < across) across = t + wobble;
-      if (alongX) r.y = across;
-      else r.x = across;
-      const goal = alongX ? r.goalX : r.goalY;
-      if (r.way) {
-        if (alongX) r.x += r.speed;
-        else r.y += r.speed;
-        if ((alongX ? r.x : r.y) >= goal) arrive(r);
-      } else {
-        if (alongX) r.x -= r.speed;
-        else r.y -= r.speed;
-        if ((alongX ? r.x : r.y) <= goal) arrive(r);
-      }
-      return;
-    }
+    case 2:
+      return rollAlong(w, r, wobble);
     case 3:
-    case 4: {
-      r.angle = turnToward(r.angle, r.goal, r.way, 0x100);
-      const a = (r.angle + (r.state === 3 ? 0x40 : -0x40)) & 0xff;
-      r.x = cosMul(a, r.radius) + r.goalX;
-      r.y = sinMul(a, r.radius) + r.goalY;
-      if (r.angle === r.goal) arrive(r);
-      return;
-    }
+    case 4:
+      return turnRound(r);
   }
 }
 
@@ -393,32 +243,7 @@ export function driveOff(r: DepotRec, blocked: (x: number, y: number) => boolean
   if (blockedWay(r, r.angle, blocked)) return false;
   r.goalX = r.x;
   r.goalY = r.y;
-  switch (r.angle) {
-    case 0:
-      r.goalX += 0x80;
-      r.state = 1;
-      r.way = 1;
-      r.toX++;
-      break;
-    case 0x40:
-      r.goalY += 0x80;
-      r.state = 2;
-      r.way = 1;
-      r.toY++;
-      break;
-    case 0x80:
-      r.goalX -= 0x80;
-      r.state = 1;
-      r.way = 0;
-      r.toX--;
-      break;
-    case 0xc0:
-      r.goalY -= 0x80;
-      r.state = 2;
-      r.way = 0;
-      r.toY--;
-      break;
-  }
+  farEdge(r);
   return true;
 }
 

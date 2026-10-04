@@ -48,12 +48,9 @@ import { readSettFile, exitsOf, type MazeFilm, type MazeNode, type MazeQuad, typ
 import { patchQuad, patchStar, SETT_NAME_MAX } from "@dreamfactory/engine/df/sett-patch";
 import { FilmFrames, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
 import { inPolygon, projectQuad, walkFrameMs, type MazeCamera } from "@dreamfactory/engine/runtime/maze";
-import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { installI18n, t } from "@dreamfactory/site/locales";
-import { chosenSource, filesIn, installSourcePicker, listSources, type Source } from "./sources";
+import { t } from "@dreamfactory/site/locales";
+import { chosenSource, filesIn, listSources, type Source } from "./sources";
+import { appendScripts, installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -184,36 +181,7 @@ function loadRoom(data: Uint8Array, name: string): void {
   goTo(parsed.first);
 }
 
-async function fetchBytes(url: string, path: string): Promise<Uint8Array | null> {
-  const r = await fetch(url);
-  if (!r.ok) {
-    log(t("common.fetchFailed", { path, status: r.status }));
-    return null;
-  }
-  return new Uint8Array(await r.arrayBuffer());
-}
-
-async function loadFromFile(f: File): Promise<void> {
-  loadRoom(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadRoom(new Uint8Array(await f.arrayBuffer()), f.name));
 
 const isSettPath = (path: string): boolean => /\.sett$/i.test(path);
 
@@ -227,13 +195,12 @@ async function initServerRooms(): Promise<void> {
   if (!source) return;
   const rooms = filesIn(source, isSettPath).sort((a, b) => a.path.localeCompare(b.path));
   const wrap = $("serverRooms");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent =
+  serverNote(
+    wrap,
     source === chose
       ? t("common.pickFromGamefiles")
-      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with rooms in it`;
-  wrap.appendChild(note);
+      : `${t("common.pickFromGamefiles")} — ${source.game.short}, the only source here with rooms in it`,
+  );
   const discs = new Map<string, typeof rooms>();
   for (const f of rooms) {
     const disc = f.path.split("/").find((p) => /disk\d/i.test(p)) ?? "";
@@ -246,21 +213,15 @@ async function initServerRooms(): Promise<void> {
       d.textContent = disc;
       wrap.appendChild(d);
     }
-    const row = document.createElement("div");
-    row.className = "row rooms";
-    for (const f of files) {
-      const b = document.createElement("button");
-      b.className = "room";
-      b.textContent = f.base.replace(/\.sett$/i, "");
-      b.title = `${source.game.short} · ${f.path}`;
-      b.addEventListener("click", async () => {
-        log(t("common.loading", { path: f.path }));
-        const data = await fetchBytes(f.url, f.path);
-        if (data) loadRoom(data, f.base);
-      });
-      row.appendChild(b);
-    }
-    wrap.appendChild(row);
+    serverRow(wrap, {
+      source,
+      files,
+      rowClass: "rooms",
+      buttonClass: "room",
+      label: (f) => f.base.replace(/\.sett$/i, ""),
+      log,
+      open: (data, f) => loadRoom(data, f.base),
+    });
   }
 }
 const serverListed = initServerRooms();
@@ -1019,29 +980,8 @@ function buildScripts(): void {
     wrap.textContent = "no scripts";
     return;
   }
-  for (const e of entries) {
-    const det = document.createElement("details");
-    det.className = "script";
-    const sum = document.createElement("summary");
-    sum.textContent = `${e.label} (container @${e.loc})`;
-    det.appendChild(sum);
-    const pre = document.createElement("pre");
-    // decompiling is only worth it when opened — a big room carries dozens
-    let filled = false;
-    det.ontoggle = () => {
-      if (filled || !det.open) return;
-      filled = true;
-      const tokens = sniffScript(s.file.containers[e.loc]?.data ?? new Uint8Array(0));
-      pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
-    };
-    det.appendChild(pre);
-    wrap.appendChild(det);
-  }
+  appendScripts(wrap, entries, s.file.containers);
 }
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-void installSourcePicker($("editionPicker"));
+void installEditorPage();
 await serverListed;

@@ -15,13 +15,23 @@
  */
 import { FrameBuffer, decodeFrame, encodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { decodeFrameV5, frameSizeV5, isKeyFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { byExtension, chosenSource, filesIn, installSourcePicker, listSources, V5_READ_ONLY, isV5File } from "./sources";
-import { t, formatNumber, installI18n } from "@dreamfactory/site/locales";
-import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
-import { writeContainerFile } from "@dreamfactory/engine/df/container";
+import { byExtension, chosenSource, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
+import {
+  appendScripts,
+  artSizes,
+  exportContainerFile,
+  fillSwatches,
+  indexPixels,
+  installEditorPage,
+  readImage,
+  regionRow,
+  savePng,
+  serverNote,
+  serverRow,
+  wireFileOpen,
+  wirePngImport,
+} from "./editor-kit";
+import { t, formatNumber } from "@dreamfactory/site/locales";
 import {
   FLAT_NAME_FIELD,
   REGION_NAME_FIELD,
@@ -120,28 +130,7 @@ function loadStg(bytes: Uint8Array, name: string): void {
   refresh();
 }
 
-async function loadFromFile(f: File): Promise<void> {
-  loadStg(new Uint8Array(await f.arrayBuffer()), f.name);
-}
-
-const fileInput = $<HTMLInputElement>("fileInput");
-$("openBtn").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files?.[0]) void loadFromFile(fileInput.files[0]);
-  fileInput.value = "";
-});
-
-document.body.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  document.body.classList.add("dragover");
-});
-document.body.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
-document.body.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.body.classList.remove("dragover");
-  const f = e.dataTransfer?.files?.[0];
-  if (f) void loadFromFile(f);
-});
+wireFileOpen(async (f) => loadStg(new Uint8Array(await f.arrayBuffer()), f.name));
 
 /** dev-server mode: offer every .stg in the gamefiles manifest */
 async function initServerStages(): Promise<void> {
@@ -158,29 +147,15 @@ async function initServerStages(): Promise<void> {
   const stages = filesIn(source, byExtension(".stg", ".flt", ".stag"));
   if (!stages.length) return;
   const wrap = $("serverStages");
-  const note = document.createElement("div");
-  note.className = "note";
-  note.textContent = t("common.pickFromGamefiles");
-  wrap.appendChild(note);
-  const row = document.createElement("div");
-  row.className = "row stages";
-  for (const f of stages) {
-    const b = document.createElement("button");
-    b.className = "stage";
-    b.textContent = f.base;
-    b.title = `${source.game.short} · ${f.path}`;
-    b.addEventListener("click", async () => {
-      log(t("common.loading", { path: f.path }));
-      const r = await fetch(f.url);
-      if (!r.ok) {
-        log(t("common.fetchFailed", { path: f.path, status: r.status }));
-        return;
-      }
-      loadStg(new Uint8Array(await r.arrayBuffer()), f.base);
-    });
-    row.appendChild(b);
-  }
-  wrap.appendChild(row);
+  serverNote(wrap, t("common.pickFromGamefiles"));
+  serverRow(wrap, {
+    source,
+    files: stages,
+    rowClass: "stages",
+    buttonClass: "stage",
+    log,
+    open: (bytes, f) => loadStg(bytes, f.base),
+  });
 }
 const serverListed = initServerStages();
 
@@ -428,21 +403,10 @@ function buildRegions(): void {
   }
 
   regions.forEach((r, i) => {
-    const row = document.createElement("div");
-    row.className = "regionrow";
-    row.onpointerenter = () => {
-      hoveredRegion = i;
+    const row = regionRow(i, (h) => {
+      hoveredRegion = h;
       drawOverlay();
-    };
-    row.onpointerleave = () => {
-      hoveredRegion = -1;
-      drawOverlay();
-    };
-
-    const lead = document.createElement("span");
-    lead.className = "lead";
-    lead.textContent = String(i);
-    row.appendChild(lead);
+    });
 
     const name = document.createElement("input");
     name.type = "text";
@@ -526,37 +490,13 @@ function buildScripts(): void {
       entries.push({ label: `region “${r.name}” (${f?.name ?? flatIdx})`, loc: r.script });
     }
   }
-  for (const e of entries) {
-    const det = document.createElement("details");
-    det.className = "script";
-    const sum = document.createElement("summary");
-    sum.textContent = `${e.label} (container @${e.loc})`;
-    det.appendChild(sum);
-    const pre = document.createElement("pre");
-    // decompiling is only worth it when opened — a mini-game stage carries dozens
-    let filled = false;
-    det.ontoggle = () => {
-      if (filled || !det.open) return;
-      filled = true;
-      const tokens = sniffScript(s.file.containers[e.loc]?.data ?? new Uint8Array(0));
-      pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
-    };
-    det.appendChild(pre);
-    wrap.appendChild(det);
-  }
+  appendScripts(wrap, entries, s.file.containers);
 }
 
 function buildPalette(): void {
-  const wrap = $("palette");
-  wrap.replaceChildren();
+  fillSwatches($("palette"), palette);
   $("paletteInfo").textContent =
     t("stages.paletteInfo");
-  for (let i = 0; i < 256; i++) {
-    const d = document.createElement("div");
-    d.style.background = `rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    d.title = `${i}: rgb(${palette[i * 4]},${palette[i * 4 + 1]},${palette[i * 4 + 2]})`;
-    wrap.appendChild(d);
-  }
 }
 
 // --- PNG round trip ---------------------------------------------------------
@@ -569,17 +509,11 @@ $("pngExportBtn").addEventListener("click", () => {
   if (!img) return;
   const c = document.createElement("canvas");
   imageToCanvas(img, c);
-  c.toBlob((blob) => {
-    if (blob) download(blob, `${baseName()}.${f.name || flatIdx}.png`);
-  }, "image/png");
+  savePng(c, `${baseName()}.${f.name || flatIdx}.png`);
 });
 
-const pngInput = $<HTMLInputElement>("pngInput");
-$("pngImportBtn").addEventListener("click", () => pngInput.click());
-pngInput.addEventListener("change", () => {
-  const file = pngInput.files?.[0];
-  pngInput.value = "";
-  if (file) void importPng(file);
+wirePngImport((file) => {
+  void importPng(file);
 });
 
 /**
@@ -592,29 +526,14 @@ async function importPng(file: File): Promise<void> {
   const f = flat();
   if (!stg || !f) return;
   const old = imageAt(f.locationFrame);
-  let bmp: ImageBitmap;
-  try {
-    bmp = await createImageBitmap(file);
-  } catch {
-    log(t("common.notAnImage", { file: file.name }));
-    return;
-  }
-  const c = document.createElement("canvas");
-  c.width = bmp.width;
-  c.height = bmp.height;
-  const ctx = c.getContext("2d")!;
-  ctx.drawImage(bmp, 0, 0);
-  const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
-
-  const pixels = new Uint8Array(bmp.width * bmp.height);
-  for (let i = 0; i < pixels.length; i++) {
-    pixels[i] = nearestPaletteIndex(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
-  }
+  const img = await readImage(file, log);
+  if (!img) return;
+  const pixels = indexPixels(img, palette);
 
   const container = stg.file.containers[f.locationFrame];
-  const sameSize = old?.width === bmp.width && old.height === bmp.height;
+  const sameSize = old?.width === img.width && old.height === img.height;
   const zBlock = sameSize && old.zOffset >= 0 ? container.data.subarray(old.zOffset) : undefined;
-  const data = encodeFrame(pixels, bmp.width, bmp.height, zBlock);
+  const data = encodeFrame(pixels, img.width, img.height, zBlock);
   stg.file.containers[f.locationFrame] = { id: container.id, data };
   // every flat after it may be drawn over it
   imageCache.clear();
@@ -622,11 +541,7 @@ async function importPng(file: File): Promise<void> {
   log(
     t("stages.artReplaced", {
       name: f.name,
-      file: file.name,
-      w: bmp.width,
-      h: bmp.height,
-      kb: (data.length / 1024).toFixed(1),
-      was: (container.data.length / 1024).toFixed(1),
+      ...artSizes(file, img, data, container.data),
     }) +
       (old && !sameSize
         ? t("stages.artSizeWarn", {
@@ -640,31 +555,7 @@ async function importPng(file: File): Promise<void> {
   renderPreview();
 }
 
-function nearestPaletteIndex(r: number, g: number, b: number): number {
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < 256; i++) {
-    const dr = palette[i * 4] - r;
-    const dg = palette[i * 4 + 1] - g;
-    const db = palette[i * 4 + 2] - b;
-    const d = dr * dr + dg * dg + db * db;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
-}
-
 // --- export -----------------------------------------------------------------
-
-function download(blob: Blob, name: string): void {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
 
 $("exportBtn").addEventListener("click", () => {
   if (!stg) return;
@@ -672,29 +563,9 @@ $("exportBtn").addEventListener("click", () => {
     log(V5_READ_ONLY);
     return;
   }
-  const bytes = writeContainerFile(stg.file);
-  try {
-    readStgFile(bytes); // sanity: the export must read back as a stage
-  } catch (e) {
-    log(t("common.exportFailed", { message: (e as Error).message }));
-    return;
-  }
-  download(new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" }), fileName);
-  log(
-    t("common.exported", { file: fileName, bytes: formatNumber(bytes.length) }) +
-      (edits.length
-        ? t("common.exportedWithEdits", { n: edits.length, edits: edits.join(", ") })
-        : t("common.exportedUnmodified")),
-  );
+  // sanity: the export must read back as a stage
+  exportContainerFile(stg.file, readStgFile, fileName, edits, log);
 });
 
-void installI18n();
-installGamesMenu();
-void installLanguageMenu();
-installVersion();
-// Which edition's files the landing screen lists, and which copy of a basename an
-// edit is written back into: the same row the play page and the collection carry
-// (taoot/src/editions.ts). A click reloads, and this page's beforeunload guard is what
-// stands between that and unexported edits.
-void installSourcePicker(document.getElementById("editionPicker") as HTMLElement);
+void installEditorPage();
 await serverListed;
