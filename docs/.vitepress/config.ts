@@ -136,6 +136,7 @@ export default withMermaid(
             { text: "8 · Skull Cracker", link: "/skullcracker/" },
             { text: "9 · RedJack", link: "/redjack/" },
             { text: "Glossary", link: "/glossary" },
+            { text: "Collaboration", link: "/collaboration" },
           ],
         },
         {

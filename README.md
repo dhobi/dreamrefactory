@@ -192,7 +192,8 @@ is a port of that C++ code, and the format docs lean on M3tox's own plain-Englis
 notes. Where a doc knows something, it tries to say where the knowledge came from.
 
 Reverse-engineering credit: **M3tox** (DFET) and **MRXstudios**. Built with the
-support of Claude Opus and Claude Fable.
+support of Claude Opus and Claude Fable — how a human and a machine make it
+together is in [Collaboration](docs/collaboration.md).
 
 ## Licensing
 
