@@ -607,6 +607,8 @@ export const en = {
     degPicksOne: "propdeg() picks ONE of these frames by its stored degree; they never play" as Text,
     degList: " · deg {degs} · state container @{loc}" as Text,
     playThisState: "select this state and play it" as Text,
+    soundMeta: " · sound @{loc} — {secs} s, {rate} Hz" as Text,
+    playSound: "play this view's sound — named by the view's 0x0c; when the game plays it is not known" as Text,
     noStateMatches: "no state matches “{filter}”" as Text,
     framesHeadState: "“{state}” · " as Text,
     inPlayOrder: " in stored play order" as Text,

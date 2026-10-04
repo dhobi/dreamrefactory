@@ -40,6 +40,8 @@
   "degPicksOne": "propdeg() wählt EINES dieser Einzelbilder über seinen gespeicherten Grad; sie laufen nie ab",
   "degList": " · Grad {degs} · Zustands-Container @{loc}",
   "playThisState": "diesen Zustand auswählen und abspielen",
+  "soundMeta": " · Klang @{loc} — {secs} s, {rate} Hz",
+  "playSound": "den Klang dieser Ansicht abspielen — benannt im Feld 0x0c der Ansicht; wann das Spiel ihn abspielt, ist nicht bekannt",
   "noStateMatches": "kein Zustand passt zu „{filter}“",
   "framesHeadState": "„{state}“ · ",
   "inPlayOrder": " in gespeicherter Abspielreihenfolge",

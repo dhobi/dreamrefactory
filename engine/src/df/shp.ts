@@ -105,6 +105,15 @@ export interface PropState {
    * `propdeg` to choose from, and stepping through them opened and shut it.
    */
   playCount?: number;
+  /**
+   * DreamFactory 5 only: the container location of this view's sound, from the
+   * view's u32 at 0x0c — absent when that is 0 or does not name a `SOUN`.
+   * Measured from Disney's Villains Revenge (`Title/v105/v105a.shop`), where
+   * each SOUN sits right after the VIEW that names it; no executable we have
+   * says when the game plays it, so the engine never does. RedJack's shops
+   * hold no SOUN and 0 in every view's 0x0c.
+   */
+  sound?: number;
 }
 
 export interface PropGroup {
@@ -222,6 +231,9 @@ export const STATE_ID_FIELD = 15;
  *     going down: "start up", "loop up" and "finish up" hold no pictures, only
  *     the down views' location there and their steps listed backwards.
  *   - SPRI, a picture: see {@link decodeShpFrame}.
+ *   - SOUN, a view's sound (Villains Revenge's shops; RedJack's have none): the
+ *     chunk `decodeAudioContainer` reads ({@link file://./audio.ts}), named by the view's u32 at 0x0c
+ *     (PropState.sound).
  */
 const C0_V5 = { mainScript: 0x24, refName: 0x28, groupCount: 0x38, groupTable: 0x3c } as const;
 const STATE_V5 = {
@@ -231,6 +243,8 @@ const STATE_V5 = {
   frameCount: 0x232,
   frames: 0x236,
   frameSource: 0x10,
+  /** the view's SOUN container, or 0 (PropState.sound) */
+  sound: 0x0c,
   /** in each 44-byte frame record: the angle, an i32 in 2^24ths of a turn
    *  (RedJack.exe 0x42d211); the group is v4's {@link STATE.frameGroup} (0x42d202) */
   frameAngle: 0x26,
@@ -387,6 +401,7 @@ function readGroup(
       ...(at === STATE_V5 && ed.length >= 0x230 ? { frameTicks: ev.getInt16(0x22e, true), playCount: orderCount } : {}),
       groups,
       ...(at === STATE_V5 ? { steps: order.length ? order : [0] } : {}),
+      ...(at === STATE_V5 ? viewSound(ev, containers) : {}),
     });
   }
   orientToSettledPose(states, containers);
@@ -396,6 +411,13 @@ function readGroup(
     group.depthRef = new DataView(d.buffer, d.byteOffset, d.byteLength).getInt16(0x14, true);
   }
   return group;
+}
+
+/** a v5 view's sound (PropState.sound), when its 0x0c names a SOUN */
+function viewSound(view: DataView, containers: Container[]): { sound?: number } {
+  if (view.byteLength < STATE_V5.sound + 4) return {};
+  const loc = view.getUint32(STATE_V5.sound, true);
+  return loc && containers[loc] && isV5(containers[loc].data, "SOUN") ? { sound: loc } : {};
 }
 
 /**

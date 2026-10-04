@@ -18,6 +18,7 @@ import { DFContainerFile, readContainerFile } from "@dreamfactory/engine/df/cont
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { SndFile, readSndFile, sndLoopChunks } from "@dreamfactory/engine/df/snd";
 import { wavBlob } from "./wav";
+import { context, play, stopPlayback } from "./playback";
 import { byExtension, chosenSource, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
 import { download, exportContainerFile, installEditorPage, LazyFill, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 import { t as tr } from "@dreamfactory/site/locales";
@@ -355,58 +356,7 @@ const lazy = new LazyFill();
 const whenVisible = (el: Element, fill: () => void): void => lazy.whenVisible(el, fill);
 const resetObserver = (): void => lazy.reset();
 
-// --- playback ---------------------------------------------------------------
-
-let audioCtx: AudioContext | null = null;
-/** the one playback at a time, and the button showing it as stoppable */
-let playing: { btn: HTMLButtonElement; stop: () => void } | null = null;
-
-function context(): AudioContext {
-  audioCtx ??= new AudioContext();
-  if (audioCtx.state === "suspended") void audioCtx.resume();
-  return audioCtx;
-}
-
-function stopPlayback(): void {
-  playing?.stop();
-  playing = null;
-}
-
-/** play one waveform, taking over the button that started it as a stop button */
-function play(audio: DecodedAudio, btn: HTMLButtonElement, loop = false): void {
-  const again = playing?.btn === btn;
-  stopPlayback();
-  if (again || !audio.samples.length) return;
-
-  const ctx = context();
-  const buf = ctx.createBuffer(1, audio.samples.length, Math.max(3000, audio.sampleRate));
-  buf.getChannelData(0).set(audio.samples);
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.loop = loop;
-  src.connect(ctx.destination);
-  src.start();
-
-  const label = btn.textContent;
-  btn.textContent = "◼";
-  const handle = {
-    btn,
-    stop: () => {
-      btn.textContent = label;
-      try {
-        src.stop();
-      } catch {
-        /* already ended */
-      }
-    },
-  };
-  // only the play that is still current clears the state — a stopped source
-  // fires "ended" after its successor has already started
-  src.addEventListener("ended", () => {
-    if (playing === handle) stopPlayback();
-  });
-  playing = handle;
-}
+// --- playback (./playback.ts, shared with the shop editor) -----------------
 
 /**
  * The theme as the engine plays it: the loop chunks concatenated in play order,
