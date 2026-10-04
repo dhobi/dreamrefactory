@@ -84,7 +84,7 @@ export class DustFiles extends RipFiles {
    * is the safe direction and deliberately so: under-removing makes a route look
    * slower than it was, over-removing invents a record.
    */
-  private background = new Set<string>();
+  private readonly background = new Set<string>();
   /**
    * Every path the manifest listed, verbatim — not just the disc's.
    *
