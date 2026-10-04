@@ -15,7 +15,8 @@
  */
 import { FrameBuffer, decodeFrame, encodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { decodeFrameV5, frameSizeV5, isKeyFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
-import { byExtension, chosenSource, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
+import { byExtension, chosenSource, encodingOf, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
+import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
   appendScripts,
   artSizes,
@@ -65,6 +66,8 @@ interface FlatImage {
 }
 
 let stg: StgFile | null = null;
+/** the code page the chosen tree's text is in — what a script's player-facing strings decode with */
+let encoding: DfEncoding = DEFAULT_ENCODING;
 let fileName = "stage.stg";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** decoded flat art by frame container location */
@@ -140,6 +143,7 @@ async function initServerStages(): Promise<void> {
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
   if (!source) return; // production / no dev server: upload only
+  encoding = encodingOf(source);
   // `.flt` as well: DreamFactory 1's name for a stage. Its container-0 header IS
   // at different offsets, and both the reader and the patches take their tables
   // from the file's own version tag (`C0_BY_VERSION`, `FLAT_BY_VERSION`), so an
@@ -493,7 +497,7 @@ function buildScripts(): void {
       entries.push({ label: `region “${r.name}” (${f?.name ?? flatIdx})`, loc: r.script });
     }
   }
-  appendScripts(wrap, entries, s.file.containers);
+  appendScripts(wrap, entries, s.file.containers, encoding);
 }
 
 function buildPalette(): void {

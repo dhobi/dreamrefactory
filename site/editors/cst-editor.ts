@@ -16,7 +16,8 @@
  */
 import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
-import { byExtension, chosenSource, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
   artSizes,
   drawScreenBands,
@@ -112,6 +113,8 @@ const AIR = 16;
 // --- editor state -----------------------------------------------------------
 
 let cst: CstFile | null = null;
+/** the code page the chosen tree's text is in — what a script's player-facing strings decode with */
+let encoding: DfEncoding = DEFAULT_ENCODING;
 let fileName = "cast.cst";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** decoded sprites by container location (one cast open at a time) */
@@ -211,6 +214,7 @@ async function initServerCasts(): Promise<void> {
   // before any of this rip's actors are drawn — see the note on `screen`
   if (source) screen = screenOf(source);
   if (!source) return; // production / no dev server: upload only
+  encoding = encodingOf(source);
   const casts = filesIn(source, byExtension(".cst", ".cast"));
   if (!casts.length) return;
   const wrap = $("serverCasts");
@@ -745,7 +749,7 @@ function buildScripts(): void {
       if (filled || !det.open) return;
       filled = true;
       const tokens = sniffScript(c.file.containers[m.scriptLocation]?.data ?? new Uint8Array(0));
-      pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
+      pre.textContent = tokens ? scriptToText(tokens, encoding) : t("common.notAScript");
     };
     det.appendChild(pre);
     wrap.appendChild(det);
