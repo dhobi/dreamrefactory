@@ -65,6 +65,15 @@ jobs:
             commit -q -m "Coverage badges for ${GITHUB_SHA::7}"
           git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
 
+      # The LCOV report for sonar.yml, which scans master after every merge
+      # without measuring coverage again
+      - name: Keep the coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: lcov
+          path: coverage/vitest/lcov.info
+          retention-days: 14
+
       # SonarQube Cloud's analysis of master, with the LCOV report the run
       # above just wrote (sonar-project.properties says where): coverage is
       # measured once, here, and Sonar shows the same numbers as the badges. Last,

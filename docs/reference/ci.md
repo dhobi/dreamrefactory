@@ -68,6 +68,7 @@ skipped.
 | [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly from 02:17 Swiss time, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
 | [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage) — then the [SonarQube Cloud](#sonarqube-cloud) analysis. Not a check: it gates nothing |
+| [`sonar.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/sonar.yml) | every push to master, manual | the [SonarQube Cloud](#sonarqube-cloud) analysis of master with the last nightly's coverage report, on GitHub's machine, so the Sonar badges follow each merge. Not a check |
 | [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*` or `lunicus-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
@@ -113,7 +114,11 @@ runs it now.
 [SonarQube Cloud](https://sonarcloud.io/project/overview?id=dhobi_dreamrefactory)
 analyses master as the last step of that same nightly run, and reads the LCOV
 report the run has just written (`coverage/vitest/lcov.info`), so coverage is
-measured once and Sonar's figure is the badges' figure.
+measured once and Sonar's figure is the badges' figure. Between nightlies,
+`sonar.yml` scans master after every merge, on GitHub's machine, with the report
+the last nightly kept as an artifact (`lcov`, fourteen days): the badges follow
+the merge, and the coverage figure stays last night's rather than going blank.
+`gh workflow run sonar.yml` runs it by hand.
 [`sonar-project.properties`](https://github.com/dhobi/dreamrefactory/blob/master/sonar-project.properties)
 says what it looks at: the code that ships, not the suites, the hand-run tools
 or generated tables. It also leaves out of the coverage figure what the coverage
