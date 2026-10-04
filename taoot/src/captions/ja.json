@@ -3,7 +3,8 @@
     "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank and clip names do.",
     "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the ja edition's audio, written by ear, so that a player who cannot hear them can read them (#50).",
     "'who' names the speaker. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving. The gramophone in Carlson's trunk (oldboss.trk, #471) plays the English recording; its lines are here with the English timings and no words yet, waiting for a translation.",
+    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470). It names no speaker.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording."
   ],
   "edition": "ja",
@@ -118,6 +119,18 @@
       { "from": 28.3, "to": 32.9, "text": "しかし、日本軍はビルマの油田に近づいている", "who": "ラジオ", "guess": true, "listened": true },
       { "from": 33.8, "to": 35.5, "text": "以上でニュースを終わる", "who": "ラジオ", "guess": true, "listened": true },
       { "from": 36.3, "to": 38.4, "text": "それでは音楽番組に戻ろう", "who": "ラジオ", "guess": true, "listened": true }
+    ],
+    "bedsit1.trk": [
+      { "from": 0, "to": 28.8, "text": "[空襲警報のサイレン]", "guess": true }
+    ],
+    "oldboss.trk": [
+      { "from": 0, "to": 6.2, "text": "", "who": "蓄音機" },
+      { "from": 7.2, "to": 11.6, "text": "", "who": "蓄音機" },
+      { "from": 12.5, "to": 16, "text": "", "who": "蓄音機" },
+      { "from": 16.8, "to": 22, "text": "", "who": "蓄音機" },
+      { "from": 23.6, "to": 28, "text": "", "who": "蓄音機" },
+      { "from": 28.8, "to": 32.7, "text": "", "who": "蓄音機" },
+      { "from": 33.3, "to": 34.5, "text": "", "who": "蓄音機" }
     ]
   }
 }

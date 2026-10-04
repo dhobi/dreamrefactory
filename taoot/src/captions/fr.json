@@ -5,7 +5,8 @@
     "Every line is a draft from speech recognition (Whisper large-v3-turbo, run locally on the French edition's own audio), corrected by hand where it misheard (mostly names), not yet checked by ear. The French film splits its narration differently from the English one, so its clips are not translations of the English clips of the same name.",
     "A clip with no text is not captioned. In the French edition some are SILENCE, not missing words: z3.06 and the landlady's three lines through the door (0.51 s). Shailagh's unilib.trk line plays Georgia's \"Entrez.\", the same recording. The fencing master is the English recording, so his lines are the English file's.",
     "'who' names the speaker. 'heard' is what the recogniser wrote, where the text differs from it. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The French radio news is its own recording, read at its own pace; its timings and words are from speech recognition on the French track.",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop. The French radio news is its own recording, read at its own pace; its timings and words are from speech recognition on the French track. The gramophone in Carlson's trunk (oldboss.trk, #471) is its own recording too, and its briefing is another message than the English one: a new German code to be intercepted on its way to New York. Its timings and draft words are from speech recognition on the French track, not yet checked by ear.",
+    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470). It names no speaker.",
     "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
   "edition": "fr",
@@ -129,6 +130,20 @@
       { "from": 25, "to": 28.2, "text": "mais les forces japonaises se rapprochent des champs de pétrole birmans.", "who": "Radio" },
       { "from": 28.2, "to": 31.3, "text": "C'est la fin de notre bulletin d'information.", "who": "Radio" },
       { "from": 31.5, "to": 34.7, "text": "Nous reprenons maintenant notre programme musical.", "who": "Radio" }
+    ],
+    "bedsit1.trk": [
+      { "from": 0, "to": 28.8, "text": "[sirène d'alerte aérienne]" }
+    ],
+    "oldboss.trk": [
+      { "from": 0, "to": 4.9, "text": "Le gouvernement de Sa Majesté pense que les pouvoirs centraux de l'Allemagne et de l'Autriche", "who": "Gramophone" },
+      { "from": 4.9, "to": 9.1, "text": "ont développé un nouveau code pour que leurs agents puissent communiquer entre eux.", "who": "Gramophone" },
+      { "from": 9.8, "to": 15.1, "text": "Ce code et sa clé doivent être livrés dans leurs ambassades du nord des États-Unis", "who": "Gramophone", "guess": true },
+      { "from": 15.1, "to": 17.7, "text": "par un agent allemand qui est à bord du Titanic.", "who": "Gramophone" },
+      { "from": 18.9, "to": 25.9, "text": "Votre mission ? Intercepter ce code et l'acheminer en toute sécurité jusqu'à New York.", "who": "Gramophone" },
+      { "from": 26.5, "to": 33.4, "text": "Une fois déchiffré par nos spécialistes, ce code nous permettra de surveiller les préparatifs de guerre de l'ennemi", "who": "Gramophone" },
+      { "from": 33.4, "to": 37.1, "text": "et d'empêcher éventuellement le déclenchement d'une guerre mondiale.", "who": "Gramophone" },
+      { "from": 37.3, "to": 43.3, "text": "Pour un rapport plus détaillé de la situation internationale au printemps 1912, consultez le document ci-joint.", "who": "Gramophone", "heard": "Pour un rapport plus détaillé de la situation internationale au printemps 1912, consultez le document 6 juin.", "guess": true },
+      { "from": 43.5, "to": 44.2, "text": "Ce sera tout.", "who": "Gramophone" }
     ]
   }
 }
