@@ -17,6 +17,9 @@ import { join } from "node:path";
 import { DEFAULT_ENCODING, decodeText, encodeText, sniffEncoding } from "@dreamfactory/engine/df/text";
 import { LANGUAGES, encodingOf } from "../../src/languages";
 import { readPupFile } from "@dreamfactory/engine/df/pup";
+import { scriptToText, sniffScript, type Token } from "@dreamfactory/engine/df/script";
+import { TITANIC } from "@dreamfactory/site/games";
+import { encodingOf as editorEncodingOf } from "../../../site/editors/sources";
 import { wrapText } from "@dreamfactory/engine/web/fonts";
 import { gamefilesRoot } from "../../tools/gamefiles";
 
@@ -149,6 +152,46 @@ test("an unknown language, and the neutral tree, fall back to Mac OS Roman", () 
   expect(encodingOf("zz")).toBe(DEFAULT_ENCODING);
   expect(encodingOf("EN")).toBe("macintosh");
   expect(encodingOf("ja")).toBe("shift_jis");
+});
+
+// --- script text, as the editors show it -----------------------------------
+
+test("scriptToText shows string literals in the code page it is given, and bytes without one", () => {
+  const bevel = raw(0x8f, 0x97, 0x95, 0xa8, 0x82, 0xcc);
+  const tokens: Token[] = [
+    { kind: "op", id: 4018, name: "(" },
+    { kind: "str", value: bevel },
+    { kind: "op", id: 4019, name: ")" },
+  ];
+  expect(scriptToText(tokens, "shift_jis")).toBe('("女物の") ');
+  // the tools that grep or recompile the text still get one character per byte
+  expect(scriptToText(tokens)).toBe(`("${bevel}") `);
+});
+
+/**
+ * Issue #478: the puppet editor printed burns1.pup's `puppetbevel` choices a
+ * byte at a time. Every editor that shows a script asks its source for the code
+ * page the way this does (`encodingOf` in site/editors/sources.ts), so this is
+ * the chain the editors run, against the file the report showed.
+ */
+test("a Japanese puppet's script choices read as Japanese in the editors' code page", () => {
+  const p = pupsIn("ja", Infinity).find((f) => /burns1\.pup$/i.test(f));
+  if (!p) return; // the Japanese tree is not installed
+  const encoding = editorEncodingOf({ game: TITANIC, edition: "ja", label: "", id: "", paths: [] });
+  const pup = readPupFile(readFileSync(p), encoding);
+  const bevels: string[] = [];
+  for (const s of pup.scripts) {
+    const tokens = sniffScript(pup.file.containers[s.location]?.data ?? new Uint8Array(0));
+    if (!tokens) continue;
+    for (const line of scriptToText(tokens, encoding).split("\n")) {
+      if (line.includes("puppetbevel (")) bevels.push(line);
+    }
+  }
+  expect(bevels.length, "burns1.pup has no puppetbevel lines").toBeGreaterThan(0);
+  for (const line of bevels) {
+    expect(line, line).not.toContain("\uFFFD");
+    expect(line, line).toMatch(/[\u3040-\u30ff\u4e00-\u9fff]/);
+  }
 });
 
 // --- line breaking ----------------------------------------------------------

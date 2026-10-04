@@ -30,6 +30,7 @@ const SEGMENT = 8;
 
 import { pstrAt, writePstrAt } from "./binary";
 import { DF5_OPCODES, OPCODES } from "./opcodes";
+import { DfEncoding, decodeText } from "./text";
 
 export { OPCODES } from "./opcodes";
 
@@ -181,8 +182,18 @@ const OP_RPAREN = 4019;
 const OP_COMMA = 4020;
 const OP_MINUS = 8002;
 
-/** Render tokens as readable source, closely matching dfet's output style. */
-export function scriptToText(tokens: Token[]): string {
+/**
+ * Render tokens as readable source, closely matching dfet's output style.
+ *
+ * `encoding` is for a reader: string literals are pool bytes (`text.ts`), and
+ * the ones a player sees — a `puppetbevel` choice, a `drawstring` — are in the
+ * tree's code page, so a Japanese choice printed a byte at a time is mojibake.
+ * Pass the tree's encoding to show them as the game does; leave it out and the
+ * bytes come back one character each, which is what the tools that grep the
+ * text or compile it back need. Identifiers are ASCII in every code page, so
+ * decoding every literal leaves them alone.
+ */
+export function scriptToText(tokens: Token[], encoding?: DfEncoding): string {
   let out = "";
   const trimTrailingSpace = () => {
     if (out.endsWith(" ")) out = out.slice(0, -1);
@@ -190,7 +201,7 @@ export function scriptToText(tokens: Token[]): string {
   for (const t of tokens) {
     switch (t.kind) {
       case "str":
-        out += `"${t.value}" `;
+        out += `"${encoding ? decodeText(t.value, encoding) : t.value}" `;
         break;
       case "int":
         out += `${t.value} `;

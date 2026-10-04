@@ -15,7 +15,8 @@
  * so an untouched load exports the file it read (see taoot/tests/auto/set-editor.ts).
  */
 import { decodeFrame, encodeFrame, FrameBuffer, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { byExtension, chosenSource, filesIn, listSources } from "./sources";
+import { byExtension, chosenSource, encodingOf, filesIn, listSources } from "./sources";
+import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
   appendScripts,
   artSizes,
@@ -92,6 +93,8 @@ const RING_BUDGET_BYTES = 64 * 1024 * 1024;
 // --- editor state -----------------------------------------------------------
 
 let set: SetFile | null = null;
+/** the code page the chosen tree's text is in — what a script's player-facing strings decode with */
+let encoding: DfEncoding = DEFAULT_ENCODING;
 let fileName = "room.set";
 /** the 128 colours SET frames use, and the full 256 the maps do */
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
@@ -169,6 +172,7 @@ async function initServerSets(): Promise<void> {
   // what chooses, and it is the same choice the game reads (taoot/src/editions.ts).
   const source = chosenSource(await listSources());
   if (!source) return; // production / no dev server: upload only
+  encoding = encodingOf(source);
   const sets = filesIn(source, byExtension(".set"));
   if (!sets.length) return;
   const wrap = $("serverSets");
@@ -1100,7 +1104,7 @@ function buildScripts(): void {
     wrap.appendChild(empty);
     return;
   }
-  appendScripts(wrap, entries, s.file.containers);
+  appendScripts(wrap, entries, s.file.containers, encoding);
 }
 
 function buildPalette(): void {

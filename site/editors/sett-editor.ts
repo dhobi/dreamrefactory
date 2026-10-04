@@ -49,7 +49,8 @@ import { patchQuad, patchStar, SETT_NAME_MAX } from "@dreamfactory/engine/df/set
 import { FilmFrames, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
 import { inPolygon, projectQuad, walkFrameMs, type MazeCamera } from "@dreamfactory/engine/runtime/maze";
 import { t } from "@dreamfactory/site/locales";
-import { chosenSource, filesIn, listSources, type Source } from "./sources";
+import { chosenSource, encodingOf, filesIn, listSources, type Source } from "./sources";
+import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import { appendScripts, installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -87,6 +88,8 @@ const C = {
 
 let bytes = new Uint8Array(0);
 let sett: SettFile | null = null;
+/** the code page the chosen tree's text is in — what a script's player-facing strings decode with */
+let encoding: DfEncoding = DEFAULT_ENCODING;
 let fileName = "";
 let edits = 0;
 
@@ -193,6 +196,7 @@ async function initServerRooms(): Promise<void> {
   const has = (s: Source): boolean => filesIn(s, isSettPath).length > 0;
   const source = has(chose) ? chose : sources.find(has);
   if (!source) return;
+  encoding = encodingOf(source);
   const rooms = filesIn(source, isSettPath).sort((a, b) => a.path.localeCompare(b.path));
   const wrap = $("serverRooms");
   serverNote(
@@ -980,7 +984,7 @@ function buildScripts(): void {
     wrap.textContent = "no scripts";
     return;
   }
-  appendScripts(wrap, entries, s.file.containers);
+  appendScripts(wrap, entries, s.file.containers, encoding);
 }
 
 void installEditorPage();

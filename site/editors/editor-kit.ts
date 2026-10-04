@@ -15,6 +15,7 @@ import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import type { ShpFrame } from "@dreamfactory/engine/df/shp";
+import type { DfEncoding } from "@dreamfactory/engine/df/text";
 import type { GameScreen } from "@dreamfactory/site/games";
 import { installGamesMenu } from "@dreamfactory/site/games-menu";
 import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
@@ -173,8 +174,18 @@ export function regionRow(i: number, hover: (i: number) => void): HTMLDivElement
   return row;
 }
 
-/** the file's scripts, each decompiled the first time it is opened — a big file carries dozens */
-export function appendScripts(wrap: HTMLElement, entries: { label: string; loc: number }[], containers: Container[]): void {
+/**
+ * The file's scripts, each decompiled the first time it is opened — a big file
+ * carries dozens. `encoding` is the tree's code page (`encodingOf`): a script's
+ * player-facing strings are in it, and the Japanese tree's are not one byte a
+ * character.
+ */
+export function appendScripts(
+  wrap: HTMLElement,
+  entries: { label: string; loc: number }[],
+  containers: Container[],
+  encoding: DfEncoding,
+): void {
   for (const e of entries) {
     const det = document.createElement("details");
     det.className = "script";
@@ -187,7 +198,7 @@ export function appendScripts(wrap: HTMLElement, entries: { label: string; loc: 
       if (filled || !det.open) return;
       filled = true;
       const tokens = sniffScript(containers[e.loc]?.data ?? new Uint8Array(0));
-      pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
+      pre.textContent = tokens ? scriptToText(tokens, encoding) : t("common.notAScript");
     };
     det.appendChild(pre);
     wrap.appendChild(det);

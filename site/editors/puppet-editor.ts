@@ -647,7 +647,7 @@ function buildScripts(): void {
     det.appendChild(sum);
     const pre = document.createElement("pre");
     const tokens = sniffScript(pup!.file.containers[s.location]?.data ?? new Uint8Array(0));
-    pre.textContent = tokens ? scriptToText(tokens) : t("common.notAScript");
+    pre.textContent = tokens ? scriptToText(tokens, encoding) : t("common.notAScript");
     det.appendChild(pre);
     wrap.appendChild(det);
   }

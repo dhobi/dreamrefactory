@@ -15,7 +15,8 @@
  * taoot/tests/auto/shp-editor.ts).
  */
 import { paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { byExtension, chosenSource, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
+import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
   appendScripts,
   artSizes,
@@ -82,6 +83,8 @@ const anchorHome = (): { x: number; y: number } => ({
 // --- editor state -----------------------------------------------------------
 
 let shp: ShpFile | null = null;
+/** the code page the chosen tree's text is in — what a script's player-facing strings decode with */
+let encoding: DfEncoding = DEFAULT_ENCODING;
 let fileName = "props.shp";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** decoded frames by container location (one shop open at a time) */
@@ -172,6 +175,7 @@ async function initServerShops(): Promise<void> {
   if (!source) return; // production / no dev server: upload only
   // before any of this rip's props are drawn — see the note on `screen`
   screen = screenOf(source);
+  encoding = encodingOf(source);
   // `.prp` as well: it is the same format under DreamFactory 1's name for it, and
   // the reader takes both (`readShpFile` accepts version 1 and 4 through one
   // layout — the PRP header did not move). Dust ships 14 of them and they were
@@ -638,7 +642,7 @@ function buildScripts(): void {
       entries.push({ label: `prop “${g.name}”`, loc: g.scriptContainerLocation });
     }
   }
-  appendScripts(wrap, entries, s.file.containers);
+  appendScripts(wrap, entries, s.file.containers, encoding);
 }
 
 function buildPalette(): void {
