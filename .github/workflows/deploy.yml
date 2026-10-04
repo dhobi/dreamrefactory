@@ -127,7 +127,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       # Which of the eight is this? The tag says so itself; a manual dispatch
       # says so in its input.

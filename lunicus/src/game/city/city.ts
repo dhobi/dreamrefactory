@@ -527,7 +527,7 @@ export class City {
   }
 
   /** 0x4024a5: a film's word — the elevator's floor, or what the cabinet held */
-  private *word(): Co {
+  private word(): void {
     const place = placeOf(this.p.level);
     if (place === 3) {
       if (this.lastByte === 3) this.panel.say(0x1d);

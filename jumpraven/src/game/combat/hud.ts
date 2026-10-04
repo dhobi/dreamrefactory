@@ -241,7 +241,7 @@ export class Hud implements HudApi {
     readonly s: HudState = newHudState(),
   ) {
     this.rect = pics.map((f) => (f ? World.rectOf(f, 0, 0, false) : ([0, 0, 0, 0] as Rect)));
-    const union = (ks: number[]): Rect => ks.map((k) => this.rect[k]).reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]);
+    const union = (ks: number[]): Rect => ks.map((k) => this.rect[k]).reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])], this.rect[ks[0]]);
     this.menuAll = union([5, 10, 7, 9, 6, 8]);
     this.modeAll = union([11, 12]);
     this.weaponsAll = union([15, 16, 17, 18, 19, 20]);

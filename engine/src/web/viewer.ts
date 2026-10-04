@@ -8,7 +8,6 @@ import { Value } from "@dreamfactory/engine/runtime/interp";
 import { SetScripts } from "@dreamfactory/engine/runtime/setscripts";
 import { GameSession, MOVE_SPEED_MS } from "@dreamfactory/engine/runtime/session";
 import { DrawSignature } from "@dreamfactory/engine/runtime/signature";
-import { PUPPET_ART_H } from "./puppet-view";
 import { CachedFrame, RingCache } from "./ring-cache";
 import { ScreenPresenter } from "./screen-presenter";
 import { ClutDim, RoomLayer, ScreenDirector, dimPalette } from "./screen-director";

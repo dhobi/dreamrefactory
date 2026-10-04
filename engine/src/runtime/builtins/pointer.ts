@@ -1,5 +1,5 @@
 import { toNum, toStr } from "../interp";
-import { packPoint, pointX, pointY, s16 } from "../point";
+import { packPoint, pointX, pointY } from "../point";
 import { decodeText } from "../../df/text";
 import { BuiltinCtx } from "./context";
 

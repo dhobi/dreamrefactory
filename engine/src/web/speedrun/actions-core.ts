@@ -18,7 +18,6 @@
  * {@link ActionContext.verbs}, which is what lets `watchFor` parse a line
  * against the table the run is actually using.
  */
-import { parseSheet } from "./sheet";
 import { SHOWING } from "./driver";
 import {
   IDLE,

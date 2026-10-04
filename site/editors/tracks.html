@@ -185,7 +185,7 @@
       <!-- `.snd` belongs here for the same reason it is in the gamefiles list: the
          editor routes by CONTENT (`detectVersion` picks the v1 reader), so a
          dropped .SND has always worked and only this dialog was hiding them. -->
-    <input
+    <input aria-label=".trk file"
       id="fileInput"
       type="file"
       accept=".trk,.TRK,.sfx,.SFX,.11k,.11K,.snd,.SND"
@@ -223,7 +223,7 @@
           <button id="themeImport" title="replace the theme with an audio file, split across its chunks" data-i18n="tracks.themeImport" data-i18n-attr="title:tracks.themeImportTitle">
             ⬆ Replace all music…
           </button>
-          <input id="themeInput" type="file" accept="audio/*" />
+          <input aria-label="audio file" id="themeInput" type="file" accept="audio/*" />
         </div>
         <div class="body">
           <div id="order"></div>
@@ -236,7 +236,7 @@
           <span data-i18n="tracks.oneShotHead">One-shot sounds</span>
           <span class="spacer"></span>
           <span class="plain" id="soundsInfo"></span>
-          <input type="text" id="soundFilter" data-i18n-attr="placeholder:tracks.soundFilterPlaceholder" placeholder="filter…" />
+          <input aria-label="filter…" type="text" id="soundFilter" data-i18n-attr="placeholder:tracks.soundFilterPlaceholder,aria-label:tracks.soundFilterPlaceholder" placeholder="filter…" />
         </div>
         <div class="body"><div id="singles"></div></div>
       </div>

@@ -59,6 +59,7 @@ beforeEach(() => {
   fetches = [];
   serve = () => new Response(null, { status: 404 });
   vi.stubGlobal("document", { baseURI: BASE });
+  vi.stubGlobal("location", { origin: new URL(BASE).origin });
   vi.stubGlobal("fetch", async (input: string) => {
     const url = String(input);
     fetches.push(url);

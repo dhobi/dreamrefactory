@@ -106,6 +106,7 @@ import { siteUrl } from "@dreamfactory/site/site";
 import { VERSION } from "@dreamfactory/site/version";
 import { installBugReport } from "@dreamfactory/site/bug-report";
 import { DUST } from "@dreamfactory/site/games";
+import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /**
  * The screen, at the size the play page uses — 1024x768.
@@ -829,7 +830,7 @@ async function browse(): Promise<void> {
   const sets = Object.keys(manifest)
     .filter((p) => /^gamefiles\/dustcd\/DATA\/.+\.SET$/i.test(p))
     .map((p) => p.split("/").pop()!)
-    .sort();
+    .sort(byCodeUnit);
   if (!sets.length) {
     if (errEl) errEl.textContent = "no Dust sets found under gamefiles/dustcd/DATA/";
     return;

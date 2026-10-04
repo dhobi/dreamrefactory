@@ -78,6 +78,7 @@ import { installColumnOrder } from "./columns";
 import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
 import { installColumnWidths, installPictureScale } from "./widths";
+import { byCodeUnit } from "../../order";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -1243,7 +1244,7 @@ function migrateUnscopedCheckpoints(): void {
   }
   if (!old.length) return;
   const sheets = readSheets();
-  const names = Object.keys(sheets).sort();
+  const names = Object.keys(sheets).sort(byCodeUnit);
   for (const { name, value } of old) {
     const writes = new RegExp(`\\bsave\\s*\\(\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\)`, "i");
     const owner = names.find((n) => writes.test(sheets[n] ?? "")) ?? active;
@@ -1259,7 +1260,7 @@ function renderSheets(): void {
   label.textContent = "sheets";
   sheetsEl.append(label);
 
-  for (const name of Object.keys(readSheets()).sort()) {
+  for (const name of Object.keys(readSheets()).sort(byCodeUnit)) {
     const chip = document.createElement("span");
     chip.className = `chip${name === active ? " on" : ""}`;
 
@@ -1299,7 +1300,7 @@ function renderSheets(): void {
       // behind they would be storage nobody can see, let alone clear
       moveCheckpoints(name, null);
       if (name === active) {
-        const left = Object.keys(sheets).sort()[0];
+        const left = Object.keys(sheets).sort(byCodeUnit)[0];
         if (left) openSheet(left);
         else addSheet(freeName("new sheet"), "");
       } else renderSheets();
@@ -1784,7 +1785,7 @@ async function start(): Promise<void> {
     writeSheets(sheets);
     localStorage.removeItem(legacyKey());
   }
-  if (!sheets[active]) active = Object.keys(sheets).sort()[0];
+  if (!sheets[active]) active = Object.keys(sheets).sort(byCodeUnit)[0];
 
   sheetEl.value = sheets[active] ?? "";
   editor.refresh();

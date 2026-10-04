@@ -405,12 +405,12 @@
         <div id="saveList" class="save-list"></div>
         <div class="modal-foot">
           <div id="saveNewRow" class="save-newrow">
-            <input id="saveNameInput" type="text" data-i18n-attr="placeholder:play.savesNamePlaceholder" placeholder="save name" />
+            <input aria-label="save name" id="saveNameInput" type="text" data-i18n-attr="placeholder:play.savesNamePlaceholder,aria-label:play.savesNamePlaceholder" placeholder="save name" />
             <button id="saveConfirmBtn" data-i18n="play.savesSave">Save</button>
           </div>
           <div>
             <button id="saveUploadBtn" data-i18n="play.savesUpload">⬆ Upload .ti</button>
-            <input id="saveUploadInput" type="file" accept=".ti" />
+            <input aria-label=".ti file" id="saveUploadInput" type="file" accept=".ti" />
           </div>
         </div>
       </div>
@@ -540,8 +540,8 @@
         <div id="dbgState" hidden>
           <div id="dbgSpine"></div>
           <div id="dbgTools">
-            <input id="dbgFilter" type="search"
-              data-i18n-attr="placeholder:play.debugFilter,title:play.debugFilterTitle"
+            <input aria-label="filter" id="dbgFilter" type="search"
+              data-i18n-attr="placeholder:play.debugFilter,title:play.debugFilterTitle,aria-label:play.debugFilter"
               placeholder="filter" title="One or more terms, | or , apart: hrs|min|sec — matched against a variable's name or a row's type (prop, actor)" />
             <label data-i18n-attr="title:play.debugAllTitle" title="Every global, not just the ones that have just moved"
               ><input type="checkbox" id="dbgAll" />

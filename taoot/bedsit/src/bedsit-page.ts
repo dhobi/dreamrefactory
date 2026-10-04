@@ -1223,7 +1223,8 @@ addEventListener("blur", () => held.clear());
 const touch = matchMedia("(pointer: coarse)").matches;
 document.body.classList.toggle("touch", touch);
 
-canvas.addEventListener("click", () => { if (!touch) canvas.requestPointerLock(); });
+// a refused lock (the browser wants a fresh gesture) leaves the mouse free, which is fine
+canvas.addEventListener("click", () => { if (!touch) void canvas.requestPointerLock(); });
 let dragging = false;
 canvas.addEventListener("pointerdown", (e) => { if (e.pointerType !== "touch") dragging = true; });
 addEventListener("pointerup", () => { dragging = false; });

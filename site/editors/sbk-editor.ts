@@ -48,7 +48,6 @@
 import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { ShpFrame, decodeShpFrame } from "@dreamfactory/engine/df/shp";
 import {
-  SbkEntity,
   SbkFile,
   SbkPlacement,
   SbkRoom,

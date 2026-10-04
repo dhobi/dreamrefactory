@@ -1,4 +1,6 @@
 import type { HostFiles } from "@dreamfactory/engine/web/host";
+import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /**
  * The four Timelapse CDs as one {@link HostFiles} — what lets the real engine
@@ -85,7 +87,7 @@ const INSTALLED = [
 ];
 
 /** this page's own URL for a served path, so it runs from any directory */
-const url = (path: string): string => new URL(path, document.baseURI).href;
+const url = (path: string): string => pageUrl(path);
 
 export class TimelapseFiles implements HostFiles {
   private urls = new Map<string, string>();
@@ -127,7 +129,7 @@ export class TimelapseFiles implements HostFiles {
     const store = new TimelapseFiles();
     const res = await fetch(url("gamefiles.json"));
     const manifest: Record<string, number> = res.ok ? await res.json() : {};
-    for (const path of Object.keys(manifest).sort()) {
+    for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
       const base = path.split("/").pop()!.toLowerCase();
       // lowest disc wins: the keys are sorted, so the first one seen is it

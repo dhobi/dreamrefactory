@@ -271,7 +271,7 @@ export const WEREC_SHOT: CastKit = {
   cels: [6004, 6004],
   hold: 1,
   /** ...and then the flight cel, which holds — `0x452dea` installs tag 1 */
-  then: { cels: [6005], hold: 1 },
+  next: { cels: [6005], hold: 1 },
   /** unused: every shot's velocity is worked out at the throw. See {@link Aim} */
   speed: 0,
   /** `0x452b6a` — twenty along the facing... */

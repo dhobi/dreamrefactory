@@ -4753,7 +4753,7 @@ export function strikeFoe(
   /**
    * ...and the blow that puts it over instead. `0x456496` counts the boss's
    * consecutive hits and every third one installs the knockdown rather than a
-   * take. The get-up follows on {@link FoeAnim.then} at its own rate.
+   * take. The get-up follows on {@link FoeAnim.next} at its own rate.
    */
   const over = foe.knockdown;
   if (over && e.dents % over.every === 0) {
@@ -12249,7 +12249,7 @@ function flightCel(kit: CastKit, clock: number): number {
   if (i < kit.cels.length) return kit.cels[i];
   // the launch has run out: either the flight takes over and loops, or the last
   // cel holds, which is what a finished script does with nobody to reinstall it
-  const then = kit.then;
+  const then = kit.next;
   if (!then) return kit.cels[kit.cels.length - 1];
   const since = clock - kit.cels.length * hold;
   const j = Math.floor(since / Math.max(1, then.hold));
@@ -12272,7 +12272,7 @@ export function castStride(c: Cast): number {
   const hold = Math.max(1, c.kit.hold);
   const div = c.kit.divisor ?? 1;
   const i = Math.floor(c.clock / hold);
-  const then = c.kit.then;
+  const then = c.kit.next;
   if (i < c.kit.cels.length || !then) {
     const dx = c.kit.strides?.[Math.min(i, c.kit.cels.length - 1)] ?? 0;
     return dx ? roundAway(dx / div) : 0;
@@ -13628,14 +13628,14 @@ export function stepEnemies(): void {
       }
       /**
        * ...a death that is two scripts hands to its second half at its own
-       * rate, as a flinch does ({@link FoeAnim.then}). The gunner TCop's kind 9
+       * rate, as a flinch does ({@link FoeAnim.next}). The gunner TCop's kind 9
        * tag 3 is the case: `0x414566` waits for it to end, drops the blaster a
        * hundred pixels behind it (`0x414599`, `0x45b060(6, …)`) and installs
        * kind 11 (`0x4145a4`), which is the removal.
        */
-      if (e.anim.then && e.clock >= run) {
+      if (e.anim.next && e.clock >= run) {
         if (e.kind === "initcop" && e.param) dropBlaster(e);
-        e.anim = e.anim.then;
+        e.anim = e.anim.next;
         e.clock = 0;
         if (e.anim.kind !== undefined) {
           e.script = e.anim.kind;
@@ -13754,9 +13754,9 @@ export function stepEnemies(): void {
       continue;
     }
     // a two-script state hands to its second half at its own rate — the boss's
-    // knockdown into its get-up, {@link FoeAnim.then}
-    if (e.state === "flinch" && e.anim.then && e.clock >= run) {
-      e.anim = e.anim.then;
+    // knockdown into its get-up, {@link FoeAnim.next}
+    if (e.state === "flinch" && e.anim.next && e.clock >= run) {
+      e.anim = e.anim.next;
       e.clock = 0;
       continue;
     }

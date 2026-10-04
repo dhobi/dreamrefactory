@@ -710,6 +710,18 @@ export function otherwiseOf(step: Step): "stop" | "first" | "last" {
  * conversation and close it on its own line. Absent is the answer this language
  * gave before there was an option: fall through to `otherwise:`.
  */
+/**
+ * `opts` with `then:` set, for an action that hands a bevel list to `say` and
+ * decides itself how it ends.
+ *
+ * Built from entries rather than as `{ ...opts, then: v }`: an object literal
+ * with a `then` key is a thenable to anything that awaits it, and while these
+ * never are awaited, the option's name is the sheet language's and stays.
+ */
+export function withThen(opts: Record<string, string>, v: "leave" | "stop"): Record<string, string> {
+  return Object.fromEntries([...Object.entries(opts), ["then", v]]);
+}
+
 export function thenOf(step: Step): "leave" | "stop" | undefined {
   const asked = step.opts.then;
   if (asked === undefined) return undefined;

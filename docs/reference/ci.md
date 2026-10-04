@@ -130,6 +130,12 @@ coverage run per change. The job leaves every file out of coverage
 to judge; without that, Sonar counts a file with no report as 0% covered. A fork's pull
 request is not scanned, since it cannot read the token.
 
+Every workflow installs with `npm ci --ignore-scripts`, so no dependency's
+install script runs on a runner. Nothing here needs one: our packages declare
+none, and the two dependencies that do (esbuild and fsevents) work without
+theirs. Playwright is run as `node_modules/.bin/playwright`, never through
+`npx`, which could fetch a package that is not in the lockfile.
+
 ## Setting the runner up
 
 ```bash

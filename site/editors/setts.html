@@ -226,7 +226,7 @@
       </div>
       <div class="note" data-i18n="editors.dropNote">or drop a file anywhere on this page</div>
       <div id="serverRooms"></div>
-      <input id="fileInput" type="file" accept=".sett" />
+      <input aria-label=".sett file" id="fileInput" type="file" accept=".sett" />
     </div>
 
     <div id="editor">
@@ -284,7 +284,7 @@
             What a click can find: a w × h rectangle set down at a point, turned and pitched.
             Degrees here; the file keeps radians. A renamed quad is one the room's scripts no longer find by its old name.
           </div>
-          <div class="tableWrap"><table class="records" id="quads"></table></div>
+          <div class="tableWrap"><table class="records" id="quads"><thead><tr><th>name</th><th>x</th><th>y</th><th>z</th><th>turn</th><th>pitch</th><th>w</th><th>h</th><th>script</th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
 
@@ -295,7 +295,7 @@
             The named points <code>propstar</code> and <code>walkonpath</code> reach. A star with a route to
             another is marked; moving it leaves the route's points where they were.
           </div>
-          <div class="tableWrap"><table class="records" id="stars"></table></div>
+          <div class="tableWrap"><table class="records" id="stars"><thead><tr><th>name</th><th>x</th><th>y</th><th>z</th><th>route</th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
 

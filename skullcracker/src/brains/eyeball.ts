@@ -206,7 +206,7 @@ export const EYEBALL_GLOBS: readonly CastKit[] = LAUNCH.map((cels, i) => ({
   cels,
   // `0x4725c0` is ticksPerFrame 3, and that is engine frames a cel
   hold: 3,
-  then: { cels: FLIGHT[i], hold: 3 },
+  next: { cels: FLIGHT[i], hold: 3 },
   /** `0x43e84d` — `obj+0xc` written outright, and `0x43e851` leaves `obj+0xa` at 0 */
   speed: 13,
   /** `0x43e83c` — twenty-five in front, and `0x43e825` copies the point unlifted */

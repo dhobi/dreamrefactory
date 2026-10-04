@@ -866,7 +866,7 @@ function nameInput(value: string): HTMLInputElement {
   return input;
 }
 
-function row(table: HTMLTableElement, cells: (Node | string)[]): HTMLTableRowElement {
+function row(table: HTMLTableSectionElement, cells: (Node | string)[]): HTMLTableRowElement {
   const tr = document.createElement("tr");
   for (const c of cells) {
     const td = document.createElement("td");
@@ -877,16 +877,6 @@ function row(table: HTMLTableElement, cells: (Node | string)[]): HTMLTableRowEle
   return tr;
 }
 
-function header(table: HTMLTableElement, names: string[]): void {
-  const tr = document.createElement("tr");
-  for (const n of names) {
-    const th = document.createElement("th");
-    th.textContent = n;
-    tr.appendChild(th);
-  }
-  table.appendChild(tr);
-}
-
 function edited(what: string): void {
   edits++;
   markDirty();
@@ -894,15 +884,18 @@ function edited(what: string): void {
 }
 
 function buildQuads(): void {
-  const table = $<HTMLTableElement>("quads");
+  // the header row is in setts.html; only the body is rebuilt
+  const head = $<HTMLTableElement>("quads").tHead!;
+  const table = $<HTMLTableElement>("quads").tBodies[0];
   table.replaceChildren();
   const s = sett!;
   $("quadStats").textContent = `${s.quads.length}`;
   if (!s.quads.length) {
+    head.hidden = true;
     row(table, ["this room has no quads"]);
     return;
   }
-  header(table, ["name", "x", "y", "z", "turn", "pitch", "w", "h", "script"]);
+  head.hidden = false;
   s.quads.forEach((q, i) => {
     const name = nameInput(q.name);
     const x = numberInput(q.x);
@@ -944,15 +937,18 @@ function buildQuads(): void {
 }
 
 function buildStars(): void {
-  const table = $<HTMLTableElement>("stars");
+  // the header row is in setts.html; only the body is rebuilt
+  const head = $<HTMLTableElement>("stars").tHead!;
+  const table = $<HTMLTableElement>("stars").tBodies[0];
   table.replaceChildren();
   const s = sett!;
   $("starStats").textContent = `${s.stars.length} · ${s.routes.length} routes`;
   if (!s.stars.length) {
+    head.hidden = true;
     row(table, ["this room has no stars"]);
     return;
   }
-  header(table, ["name", "x", "y", "z", "route"]);
+  head.hidden = false;
   s.stars.forEach((st, i) => {
     const name = nameInput(st.name);
     const x = numberInput(st.x);

@@ -53,8 +53,11 @@
  * a film library, which is all the page needs it to be.
  */
 
+import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { byCodeUnit } from "@dreamfactory/engine/order";
+
 /** this page's own URL for a served path, so it runs from any directory */
-const url = (path: string): string => new URL(path, document.baseURI).href;
+const url = (path: string): string => pageUrl(path);
 
 /**
  * Basenames where the INSTALLED copy is the real one, not the CD's.
@@ -127,7 +130,7 @@ export class SkullFiles {
     root: string,
   ): SkullFiles {
     const store = new SkullFiles();
-    for (const path of Object.keys(manifest).sort()) {
+    for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
       const base = path.split("/").pop()!.toLowerCase();
       const installed = path.toLowerCase().includes(INSTALLED_DIR);
@@ -147,7 +150,7 @@ export class SkullFiles {
 
   /** every film in the rip, lowercase, sorted — what the page's picker offers */
   movies(): string[] {
-    return [...this.urls.keys()].filter((n) => n.endsWith(".mov")).sort();
+    return [...this.urls.keys()].filter((n) => n.endsWith(".mov")).sort(byCodeUnit);
   }
 
   /** what the manifest says this file weighs; 0 for one it does not list */

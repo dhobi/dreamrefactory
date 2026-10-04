@@ -32,6 +32,7 @@ import { installMenu } from "./menu";
 import { askHighScoreName, editKeys } from "./dialogs";
 
 import type { GameFiles, Speaker } from "./game/machine";
+import { pageUrl } from "@dreamfactory/engine/web/page-url";
 
 const SCALE = 2;
 const RIP = "gamefiles/LUNICUS/";
@@ -103,7 +104,7 @@ installBugReport($<HTMLButtonElement>("bugBtn"), {
  * The disc
  * ------------------------------------------------------------------------- */
 
-const url = (path: string): string => new URL(path, document.baseURI).href;
+const url = (path: string): string => pageUrl(path);
 let sizes: Record<string, number> = {};
 const bytes = new Map<string, Uint8Array>();
 const fetching = new Map<string, Promise<Uint8Array>>();
