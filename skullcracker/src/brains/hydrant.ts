@@ -18,8 +18,8 @@
  * **`obj+0x44`, the TAG** — `0x44fb36  movsx eax, word ptr [esi + 0x44]`,
  * then `cmp eax, 3` / `cmp eax, 4` — and the third argument to `0x45d090` is
  * what every install in the class varies. The five tags of that one script are
- * the five states, and this file's switch is over `e.tag` for that reason and
- * not over `e.script`, which is 0 for all five.
+ * the five states, and the list below is by `e.tag` for that reason and not by
+ * `e.script`, which is 0 for all five.
  *
  * ```
  *   tag 0  0x477d30  cel 9700  the valve shut — what a hydrant stands as
@@ -179,42 +179,23 @@ export const HYDRANT = {
  * never suppresses the animation.** Returning `true` from a tag-0 hydrant would
  * freeze cel 9700 and leave the thing unable to be opened at all.
  *
- * The switch is over `e.tag`, not `e.script`. `e.script` is {@link Enemy}'s
+ * The states are tags, not scripts. `e.script` is {@link Enemy}'s
  * `obj+0x18` and for this class it is 0 in all five states, because all five
  * are tags of one kind-0 script; `0x44fb36` reads `obj+0x44` for exactly that
- * reason. The cases are written out in full rather than collapsed to a bare
- * `return false` so that the next reader can see that the emptiness was read
- * out of the executable and is not an omission.
+ * reason. State by state, so that the next reader can see that the emptiness
+ * was read out of the executable and is not an omission:
+ *
+ * - 0, 1, 2 — `0x44fb4d`: the if-chain does not name them. Nothing.
+ * - 3, `0x44fb55`: the burst, when the open valve's frame ends. The page owns
+ *   it — {@link Foe.burst} spawns the water {@link HYDRANT.dx} to the side,
+ *   plays {@link HYDRANT.burst} and puts this one back on tag 0 — so there is
+ *   nothing for the brain to do but let the frame run.
+ * - 4, `0x44fbb4`: the water, and the class's single `mov ax, 1`. The one
+ *   frame in `SC.EXE` where this class suppresses anything is the frame the
+ *   spray object is removed, and removal is not a state the brain can express:
+ *   `Brain` returns "has a script been chosen", not "am I finished". The page
+ *   removes the burst when its animation ends.
  */
-export const hydrant: Brain = (e) => {
-  switch (e.tag ?? 0) {
-    // ---- 0, 1, 2 — `0x44fb4d`: the if-chain does not name them. Nothing.
-    case 0:
-    case 1:
-    case 2:
-      return false;
-    /**
-     * ---- 3, `0x44fb55`: the burst, when the open valve's frame ends.
-     *
-     * The page owns it — {@link Foe.burst} spawns the water {@link HYDRANT.dx}
-     * to the side, plays {@link HYDRANT.burst} and puts this one back on tag 0
-     * — so there is nothing for the brain to do but let the frame run.
-     */
-    case 3:
-      return false;
-    /**
-     * ---- 4, `0x44fbb4`: the water, and the class's single `mov ax, 1`.
-     *
-     * The one frame in `SC.EXE` where this class suppresses anything is the
-     * frame the spray object is removed, and removal is not a state the brain
-     * can express: `Brain` returns "has a script been chosen", not "am I
-     * finished". The page removes the burst when its animation ends.
-     */
-    case 4:
-      return false;
-    default:
-      return false;
-  }
-};
+export const hydrant: Brain = () => false;
 
 export { NOT_HERE as HYDRANT_NOT_HERE };

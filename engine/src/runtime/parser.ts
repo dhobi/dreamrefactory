@@ -401,14 +401,14 @@ class Parser {
         case OP.IF: {
           this.pos++;
           const cond = this.parseExpr();
-          const then = this.parseBlock([OP.ELSE, OP.ENDIF]);
+          const body = this.parseBlock([OP.ELSE, OP.ENDIF]);
           let else_: Stmt[] | undefined;
           if (this.atOp(OP.ELSE)) {
             this.pos++;
             else_ = this.parseBlock([OP.ENDIF]);
           }
           this.expectCloser(OP.ENDIF, "endif");
-          return { t: "if", cond, then, else_ };
+          return { t: "if", cond, body, else_ };
         }
         case OP.SWITCH: {
           this.pos++;

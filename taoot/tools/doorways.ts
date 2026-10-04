@@ -245,7 +245,7 @@ function exits(stmts: Stmt[]): boolean {
       st.t === "exitcode" ||
       st.t === "return" ||
       (st.t === "callstmt" && /^(error|quit)$/i.test(st.call.name)) ||
-      (st.t === "if" && !!st.else_ && exits(st.then) && exits(st.else_)),
+      (st.t === "if" && !!st.else_ && exits(st.body) && exits(st.else_)),
   );
 }
 
@@ -283,9 +283,9 @@ function collect(stmts: Stmt[], when: Cond[], out: Site[]): void {
         fromExpr(s.value);
         break;
       case "if":
-        collect(s.then, [...here, ...conds(s.cond, false)], out);
+        collect(s.body, [...here, ...conds(s.cond, false)], out);
         if (s.else_) collect(s.else_, [...here, ...conds(s.cond, true)], out);
-        if (exits(s.then) && !s.else_) below = [...below, ...afterExit(s.cond)];
+        if (exits(s.body) && !s.else_) below = [...below, ...afterExit(s.cond)];
         break;
       case "switch": {
         const name = s.subject.t === "var" ? s.subject.name.toLowerCase() : undefined;
@@ -356,12 +356,12 @@ function walkThroughs(set: SetFile): Map<string, Lead[]> {
         const here = [...when, ...below];
         if (st.t === "if") {
           const facts = guardFacts(st.cond);
-          visit(st.then, facts.view ?? view, door || facts.door, [
+          visit(st.body, facts.view ?? view, door || facts.door, [
             ...here,
             ...conds(st.cond, false),
           ]);
           if (st.else_) visit(st.else_, view, door, [...here, ...conds(st.cond, true)]);
-          if (exits(st.then) && !st.else_) below = [...below, ...afterExit(st.cond)];
+          if (exits(st.body) && !st.else_) below = [...below, ...afterExit(st.cond)];
         } else if (st.t === "switch") {
           const name = st.subject.t === "var" ? st.subject.name.toLowerCase() : undefined;
           for (const cse of st.cases) {

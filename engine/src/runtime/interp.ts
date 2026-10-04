@@ -413,7 +413,7 @@ export class Interpreter {
         await this.evalCall(st.call, frame);
         return NORMAL;
       case "if":
-        if (truthy(await this.evalExpr(st.cond, frame))) return this.execBlock(st.then, frame);
+        if (truthy(await this.evalExpr(st.cond, frame))) return this.execBlock(st.body, frame);
         if (st.else_) return this.execBlock(st.else_, frame);
         return NORMAL;
       case "switch": {

@@ -211,53 +211,27 @@ export const MAILBOX = {
  * rather than a behaviour and is not something a {@link Brain} can express —
  * `Brain` answers "has a script been chosen", not "am I finished".
  *
- * The cases are written out in full rather than collapsed to a bare
- * `return false` so the next reader can see that the emptiness was read out of
- * the executable and is not an omission.
+ * State by state, so the next reader can see that the emptiness was read out
+ * of the executable and is not an omission (`obj+0x18`):
+ *
+ * - 0, `0x44fe26`: intact, and the if-chain does not name it. No pinning, no
+ *   velocity zeroing, no tracker, no decision. A mailbox standing on the street
+ *   is the one thing this class does, and it does it by running no code.
+ * - 1, `0x44fe2b`: the two dents, sub-dispatched on `obj+0x44`. Tag 0
+ *   reinstalls the intact cel when its frame ends (`0x44fe4c`) and tag 1 writes
+ *   state 2 when its four end (`0x44fe60`). Both are the page's flinch path —
+ *   the topple's `resume` for the second — and a brain is never called while a
+ *   foe is flinching, so neither is here.
+ * - 2, `0x44fe26`: on its side for good, and also not in the if-chain.
+ *   `0x45d090` never wrote this one — `0x44fe60` did, by hand — so there is no
+ *   script to end and nothing to decide. Cel 2413 holds; the hit handler's
+ *   first test (`0x44febd`) installs nothing, but it still plays its sound and
+ *   hands the blow's momentum over.
+ * - 3, `0x44fe6b`: the removal, and it is unreachable. The class's only
+ *   `mov ax, 1`, and no script of this class carries kind 3 and no instruction
+ *   in `SC.EXE` writes a 3 into `obj+0x18`. Noted so the search that proved it
+ *   is not repeated.
  */
-export const mailbox: Brain = (e) => {
-  switch (e.script ?? 0) {
-    /**
-     * ---- 0, `0x44fe26`: intact, and the if-chain does not name it.
-     *
-     * No pinning, no velocity zeroing, no tracker, no decision. A mailbox
-     * standing on the street is the one thing this class does, and it does it
-     * by running no code.
-     */
-    case 0:
-      return false;
-    /**
-     * ---- 1, `0x44fe2b`: the two dents, sub-dispatched on `obj+0x44`.
-     *
-     * Tag 0 reinstalls the intact cel when its frame ends (`0x44fe4c`) and tag
-     * 1 writes state 2 when its four end (`0x44fe60`). Both are the page's
-     * flinch path — the topple's `resume` for the second — and a brain is
-     * never called while a foe is flinching, so neither is here.
-     */
-    case 1:
-      return false;
-    /**
-     * ---- 2, `0x44fe26`: on its side for good, and also not in the if-chain.
-     *
-     * `0x45d090` never wrote this one — `0x44fe60` did, by hand — so there is
-     * no script to end and nothing to decide. Cel 2413 holds; the hit
-     * handler's first test (`0x44febd`) installs nothing, but it still plays
-     * its sound and hands the blow's momentum over.
-     */
-    case 2:
-      return false;
-    /**
-     * ---- 3, `0x44fe6b`: the removal, and it is unreachable.
-     *
-     * The class's only `mov ax, 1`, and no script of this class carries kind 3
-     * and no instruction in `SC.EXE` writes a 3 into `obj+0x18`. Kept as a case
-     * so the search that proved it is not repeated.
-     */
-    case 3:
-      return false;
-    default:
-      return false;
-  }
-};
+export const mailbox: Brain = () => false;
 
 export { NOT_HERE as MAILBOX_NOT_HERE };

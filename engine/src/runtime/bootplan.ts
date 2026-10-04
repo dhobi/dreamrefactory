@@ -198,7 +198,7 @@ function walkStmts(body: Stmt[], onCall: (c: CallExpr) => void): void {
         break;
       case "if":
         walkExpr(s.cond, onCall);
-        walkStmts(s.then, onCall);
+        walkStmts(s.body, onCall);
         if (s.else_) walkStmts(s.else_, onCall);
         break;
       case "switch":
