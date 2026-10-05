@@ -191,10 +191,15 @@ test("the animation advances once per 50 ms service pass, not per frame", () => 
   session.actorRuntime.addCast("gang.cst", cast("gang.cst"));
   const a = session.actorRuntime.get("morrow")!;
   a.poseName = "walk";
-  session.tickTime(0); // the first tick only sets the anchor
-  session.tickTime(1000);
+  // from 1 s, because the scheduler reads a stamp of 0 as "not started"
+  session.tickTime(1000); // the first tick only sets the anchor
+  for (let ms = 1050; ms <= 2000; ms += 50) session.tickTime(ms);
   // twenty passes in a second: one whole cycle, back where it started
   expect(a.step).toBe(0);
-  session.tickTime(1500);
+  for (let ms = 2050; ms <= 2500; ms += 50) session.tickTime(ms);
   expect(a.step).toBe(10);
+  // and one call that comes half a second late is ONE pass, as in TI.EXE
+  // (clock.ts passDue): the walk steps once, it does not leap ten
+  session.tickTime(3000);
+  expect(a.step).toBe(11);
 });

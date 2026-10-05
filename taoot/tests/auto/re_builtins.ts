@@ -240,12 +240,13 @@ test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyabort
   // frame() counts DISPLAYED frames, and framerate() is ticks per displayed
   // frame (default 3) — so one frame every 3/60 s = 50 ms of the CLOCK, which
   // is TI.EXE's own rule: 0x43a940 holds a frame until
-  // `now >= lastFrame + framerate` ticks. 4300 establishes the baseline stamp;
-  // the 500 ms from there to 4800 is ten 50 ms frames.
-  for (let i = 0; i < 6; i++) session.tickTime(4300 + i * 100);
+  // `now >= lastFrame + framerate` ticks. 4300 establishes the baseline stamp,
+  // and a host calling every 50 ms gets a frame each time.
+  session.tickTime(4300);
+  for (let i = 1; i <= 10; i++) session.tickTime(4300 + i * 50);
   expect(Number(callBuiltin(session, "frame"))).toBe(10);
   session.frameRate = 1; // unthrottled: one frame per tick, 16.67 ms apart
-  session.tickTime(5000); // 200 ms more, so 12 further frames
+  for (let i = 1; i <= 12; i++) session.tickTime(4800 + (i * 50) / 3);
   expect(Number(callBuiltin(session, "frame"))).toBe(22);
 
   // and the property that matters: gang.cst's hasattention(seconds) waits
@@ -256,24 +257,31 @@ test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyabort
   timed.frameRate = 3;
   const threshold = (4 * 60) / timed.frameRate; // 80 displayed frames
   timed.tickTime(0); // baseline
-  // ticked one displayed frame at a time (50 ms at framerate 3), the way a host
-  // that is keeping up delivers them — a single four-second JUMP is the stall
-  // case instead, and is deliberately clamped (MAX_FRAME_CATCHUP)
   for (let ms = 50; ms <= 4000 - 50; ms += 50) timed.tickTime(ms);
   expect(timed.frameCounter).toBeLessThan(threshold);
   timed.tickTime(4000);
   expect(timed.frameCounter).toBe(threshold);
 
-  // ...and it must not matter HOW OFTEN the host ticks, which is the whole
-  // point: the same four seconds delivered in 40 calls and in 400 calls is the
-  // same number of displayed frames. Counting calls made this 40 vs 400.
-  for (const step of [100, 10]) {
-    const host = new GameSession(() => null, new NullAudioSink());
-    host.frameRate = 3;
-    host.tickTime(0);
-    for (let ms = step; ms <= 4000; ms += step) host.tickTime(ms);
-    expect(host.frameCounter, `${4000 / step} calls over four seconds`).toBe(threshold);
-  }
+  // A host calling FASTER than twenty a second changes nothing — 400 calls over
+  // four seconds are still 80 frames, which is what keeps a 120 Hz screen from
+  // running the game twice as fast.
+  const fast = new GameSession(() => null, new NullAudioSink());
+  fast.frameRate = 3;
+  fast.tickTime(0);
+  for (let ms = 10; ms <= 4000; ms += 10) fast.tickTime(ms);
+  expect(fast.frameCounter, "400 calls over four seconds").toBe(threshold);
+
+  // A host calling SLOWER gets one frame per call and no more: TI.EXE stamps
+  // `now` after a late pass (0x43a95a) and never makes the lost frames up, so a
+  // machine that manages ten passes a second runs the game at half speed. The
+  // port used to replay them (up to 64 at once), lurching instead of slowing.
+  const slow = new GameSession(() => null, new NullAudioSink());
+  slow.frameRate = 3;
+  slow.tickTime(0);
+  for (let ms = 100; ms <= 4000; ms += 100) slow.tickTime(ms);
+  expect(slow.frameCounter, "40 calls over four seconds").toBe(40);
+  slow.tickTime(60_000); // a backgrounded tab, back after a minute
+  expect(slow.frameCounter, "a minute away is one frame, not a burst").toBe(41);
 
   // setparam / menuvisible / keyaborts round-trip
   expect(Number(callBuiltin(session, "setparam", 3))).toBe(0); // default

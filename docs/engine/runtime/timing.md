@@ -52,9 +52,22 @@ the master service order observed in `TI.EXE` — and then advances every actor
 one step along its pose's [play
 script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held),
 which is where the original's pass ends too (`0x442550` closes by drawing a
-frame, and the animation advances at the head of that draw). After a long stall
-(a suspended browser tab), catch-up is capped at **64 steps** so the whole gap
-isn't replayed as a burst.
+frame, and the animation advances at the head of that draw).
+
+**A late pass is not made up.** One call from the host runs at most one service
+step, one displayed frame and one `calctime`, as in the original: `TI.EXE`'s
+throttle (`0x43a940`) waits until a frame is due and then stamps the current
+time (`0x43a95a`), and the pass adds exactly one to the frame counter
+(`0x439b80`). A machine too slow for twenty passes a second therefore runs the
+game slower, loops, walks and the pocketwatch alike, and a tab that comes back
+from the background takes one step, not a burst. The port used to replay the
+missed steps, up to 64 at once, so a slow machine lurched instead of slowing.
+What the port does not copy is stamping the current time on a pass that was
+on time: the original spins to the exact tick, a browser is only called on
+screen refreshes, and stamping the refresh would run every pass late (about
+10% on a 144 Hz screen). So an on-time pass keeps the rhythm and only a pass a
+whole period late drops its debt (`passDue` in `clock.ts`). `delay()` is not
+a pass: it waits on the real clock in the original (`0x41deb0`) and here.
 
 ## `makeloop`: a loop that isn't a loop
 

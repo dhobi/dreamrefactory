@@ -16,7 +16,7 @@ import { PropRuntime, type PropInstance } from "./props";
 import { PluginBus } from "./plugins";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink } from "./audio";
-import { Clock, ENGINE_STEP_MS, RAMP_STEP_MS, ticksAt } from "./clock";
+import { Clock, ENGINE_STEP_MS, RAMP_STEP_MS, passDue, ticksAt } from "./clock";
 import { EventQueue } from "./input";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
@@ -29,14 +29,6 @@ import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "./bootplan";
 import { PHOTO_H, PHOTO_W, Photo, PhotoAlbum } from "./photos";
-
-/**
- * Most displayed frames one call may make up after a stall — a backgrounded
- * tab stops rAF, and waking up owing four minutes of them must not fire four
- * minutes of frame()-based timers in one go. Same spirit (and size) as the
- * scheduler's service-step cap.
- */
-const MAX_FRAME_CATCHUP = 64;
 
 /**
  * The loaded title's boot-level UI shops — the ones whose screen props belong on
@@ -1141,12 +1133,11 @@ export class GameSession {
       this.lastFrameTick = t;
       return;
     }
-    const due = Math.floor((t - this.lastFrameTick) / period);
-    if (due <= 0) return;
-    // A suspended tab must not replay its whole absence as a burst of frames;
-    // the stamp still moves all the way up, so the catch-up happens once.
-    this.frameCounter += Math.min(due, MAX_FRAME_CATCHUP);
-    this.lastFrameTick += due * period;
+    // one displayed frame at most, and a late one is not made up (passDue)
+    const pass = passDue(this.lastFrameTick, t, period);
+    if (!pass.due) return;
+    this.frameCounter += 1;
+    this.lastFrameTick = pass.next;
   }
   /**
    * sendto* dispatch, shared by the sendto special forms and loop firing:
