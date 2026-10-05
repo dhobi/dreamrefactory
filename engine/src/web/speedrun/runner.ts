@@ -115,6 +115,13 @@ export interface RunHooks {
   onSplit?(split: Split): void;
   /** a standing watch fired while a step was running — see `watchFor` (#255) */
   onWatch?(watch: Watch, said: string[]): void;
+  /**
+   * Multiplies every step's `budget:` — for a slow machine or a slow link,
+   * where a line that works takes longer in WALL time than the ten seconds a
+   * stuck line is allowed. A budget only decides when a run is called stuck;
+   * under a sheet's clock it changes nothing the run measures (#508).
+   */
+  patience?: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -339,7 +346,7 @@ export async function runSheet(
           d,
           step: w.action,
           wait: waitOf(actions, w.action),
-          budget: Number(w.action.opts.budget ?? 10_000),
+          budget: Number(w.action.opts.budget ?? 10_000) * (hooks.patience ?? 1),
           gap: Number(w.action.opts.gap ?? 16),
           say: (m: string) => said.push(m),
           suggest: () => {},
@@ -358,7 +365,7 @@ export async function runSheet(
       while (!done()) {
         await runWatches();
         if (done()) return;
-        await d.sleep(WATCH_TICK_MS);
+        await (d.wallWait ?? d.sleep).call(d, WATCH_TICK_MS);
       }
     })();
 
@@ -412,7 +419,7 @@ export async function runSheet(
          * It costs nothing when a line works: the budget is a ceiling on a
          * hold, not a wait, and a hold resolves the moment its condition does.
          */
-        budget: Number(step.opts.budget ?? 10_000),
+        budget: Number(step.opts.budget ?? 10_000) * (hooks.patience ?? 1),
         gap: Number(step.opts.gap ?? 16),
         say: (m: string) => says.push(m),
         suggest: (line: string) => (suggestion = line),

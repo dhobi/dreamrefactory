@@ -102,6 +102,12 @@ const HEADED = flag("headed") || (!!process.env.HEADED && process.env.HEADED !==
  */
 const SLOWMO = Number(process.env.SLOWMO ?? 0);
 /**
+ * `--patience=N` (or PATIENCE=N): every step's budget times N, for a slow
+ * machine or link where working lines outlast the ten seconds a stuck one is
+ * given. It decides only when a run is called stuck, never what it measures.
+ */
+const PATIENCE = Number(argv.find((a) => a.startsWith("--patience="))?.split("=")[1] ?? process.env.PATIENCE ?? 1);
+/**
  * Unseeded by default: every run is a fresh course, the way a real attempt is.
  *
  * The playthrough suites pin 19120415 because they diff against a golden and a
@@ -258,6 +264,14 @@ async function main(): Promise<void> {
   // before anything runs: advanceday draws the arrival second at the very end of
   // the boot, and the bomb's fuse is drawn in the flat
   const seedIt = async (): Promise<void> => {
+    // A sheet's clock (#508): the game runs only while this runner waits on it,
+    // in passes of game time, so the frame count is the same on any machine
+    // and any connection — see GameSession.sheetClock.
+    await page.evaluate(() => {
+      const s = (window as any).dbg.session;
+      s.nominalTime = true;
+      s.sheetClock = true;
+    });
     if (SEED === null) return;
     await page.evaluate((seed) => (window as any).dbg.session.seedRandom(seed), SEED);
   };
@@ -277,6 +291,7 @@ async function main(): Promise<void> {
   const r = await runSheet(d, steps, ACTIONS, {
     onWatch: (w, said) =>
       console.log(`  WATCH ${w.source} -> ${w.action.source}${said.length ? `  (${said.join("; ")})` : ""}`),
+    patience: PATIENCE,
     onStep: (step, i, total) =>
       process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
   });

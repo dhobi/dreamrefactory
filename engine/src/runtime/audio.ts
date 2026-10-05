@@ -191,6 +191,72 @@ interface RecordedPlay {
 }
 
 /** headless/no-op sink that still answers isDone(); records calls for tests */
+/**
+ * The session's sink: the real one, plus each channel's END in game time, so
+ * that under speedrun time `voicedone`/`sounddone` are answered by the clip's
+ * own length rather than by the sound card (#508).
+ *
+ * The original waits on speech through waveOut (`voicedone`, 0x44d8c0), i.e.
+ * in real time, and so does play here; but a real-time wait is the one thing
+ * that makes a slow machine cost passes, so speedrun time asks "has this line's
+ * length of game time gone by" instead. The sound still plays; it just no
+ * longer decides anything.
+ */
+export class TimedAudio implements AudioSink {
+  private endsAt: Partial<Record<AudioChannel, number>> = {};
+
+  constructor(
+    readonly inner: AudioSink,
+    private readonly now: () => number,
+    private readonly nominal: () => boolean,
+  ) {}
+
+  play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
+    const ms = (audio.samples.length / Math.max(1, audio.sampleRate)) * 1000;
+    const end = opts?.loop ? Number.POSITIVE_INFINITY : this.now() + ms;
+    this.endsAt[channel] = end;
+    const handle = this.inner.play(channel, audio, opts);
+    let stopped = false;
+    const nominal = this.nominal;
+    // `currentsound()` asks the handle rather than the channel, so the handle
+    // follows the same rule: under speedrun time it is over when its length of
+    // game time has gone by, or when the next play on its channel replaced it
+    const over = (): boolean => this.now() >= end || this.endsAt[channel] !== end;
+    return {
+      get done(): boolean {
+        return stopped || (nominal() ? over() : handle.done);
+      },
+      stop: (): void => {
+        stopped = true;
+        handle.stop();
+      },
+      place: handle.place ? (volume: number, pan: number) => handle.place?.(volume, pan) : undefined,
+    };
+  }
+
+  halt(channel: AudioChannel): void {
+    this.endsAt[channel] = 0;
+    this.inner.halt(channel);
+  }
+
+  isDone(channel: AudioChannel): boolean {
+    if (!this.nominal()) return this.inner.isDone(channel);
+    return this.now() >= (this.endsAt[channel] ?? 0);
+  }
+
+  setChannelVolume(channel: AudioChannel, volume: number): void {
+    this.inner.setChannelVolume(channel, volume);
+  }
+
+  setSuspended(on: boolean): void {
+    this.inner.setSuspended(on);
+  }
+
+  setMuted(on: boolean): void {
+    this.inner.setMuted?.(on);
+  }
+}
+
 export class NullAudioSink implements AudioSink {
   calls: RecordedPlay[] = [];
   /** last master gain set per channel — tests assert the volume plumbing */

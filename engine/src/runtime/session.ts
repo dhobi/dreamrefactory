@@ -15,7 +15,7 @@ import type { WorldCamera } from "./geometry";
 import { PropRuntime, type PropInstance } from "./props";
 import { PluginBus } from "./plugins";
 import { seededRng } from "./rng";
-import { AudioLibrary, AudioSink } from "./audio";
+import { AudioLibrary, AudioSink, TimedAudio } from "./audio";
 import { Clock, ENGINE_STEP_MS, RAMP_STEP_MS, passDue, ticksAt } from "./clock";
 import { EventQueue } from "./input";
 import { Scheduler } from "./scheduler";
@@ -770,10 +770,14 @@ export class GameSession {
     }
   }
 
+  /** the sound sink, behind {@link TimedAudio} so speedrun time can answer `voicedone` */
+  readonly audio: AudioSink;
+
   constructor(
     readonly files: FileProvider,
-    readonly audio: AudioSink,
+    audio: AudioSink,
   ) {
+    this.audio = new TimedAudio(audio, () => this.gameNow, () => this.nominalTime);
     registerGameBuiltins(this); // core + game families, see builtins/index.ts
     // a transcript's words arrive with their bank, however it was opened (#50)
     this.audioLib.onBankOpened = (bank, sounds) => {
@@ -1061,8 +1065,90 @@ export class GameSession {
    * frame counter, no wave buffer refilled. See {@link freezeTime}.
    */
   gameTime(raw: number): number {
+    const held = this.blockedOnFiles > 0 || (this.sheetClock && this.sheetRunning === 0 && this.sheetPasses === 0);
+    if (held && this.lastRaw !== null) this.blockedTotal += raw - this.lastRaw;
+    this.lastRaw = raw;
     this.rawNow = raw;
-    return (this.frozenSince ?? raw) - this.frozenTotal;
+    const real = (this.frozenSince ?? raw) - this.frozenTotal - this.blockedTotal;
+    if (!this.nominalTime && !this.sheetClock) return (this.gameNow = real);
+    // Stepped: one 50 ms pass of game time per due pass of real time, never
+    // more (passDue) — so everything timed off this reading counts passes, not
+    // milliseconds, whatever the machine managed in between (#508).
+    if (this.stepAnchor === null) {
+      this.stepAnchor = real;
+      this.gameNow = Math.max(this.gameNow, real);
+    } else {
+      const pass = passDue(this.stepAnchor, real, ENGINE_STEP_MS);
+      if (pass.due) {
+        this.stepAnchor = pass.next;
+        this.gameNow += ENGINE_STEP_MS;
+        if (this.sheetRunning === 0 && this.sheetPasses > 0) this.sheetPasses--;
+      }
+    }
+    return this.gameNow;
+  }
+
+  /**
+   * Speedrun time: game time advances by exactly one 50 ms pass per pass the
+   * engine runs, instead of following the real clock (#508).
+   *
+   * Everything the engine times is a delta off {@link gameTime} — the service
+   * pass, `delay`, the fade and wipe ramps, prop animation, film pacing — so
+   * under this switch each of them costs the same number of passes on a slow
+   * machine as on a fast one: a slow machine runs fewer passes a second, not
+   * different ones. What the real clock still decided — speech and sound
+   * effects, which the original waits on through the sound card — is answered
+   * from the clip's own length in game time instead ({@link TimedAudio}).
+   *
+   * Off for play: there the original's real-time waits stay real time.
+   */
+  nominalTime = false;
+
+  /**
+   * A sheet's clock: the game stands still unless the runner is waiting on it
+   * (#508). A speedrun sheet's own thinking — the round trip from the runner,
+   * deciding the next line — is not the route's, and on a slow machine it is
+   * longer; so under this switch time moves only inside a hold
+   * ({@link sheetRunning}, until the condition the runner waits for comes
+   * true, checked in the page every frame) or for a set number of passes
+   * ({@link sheetPasses}, a pause between presses). Each step then ends on the
+   * pass the game decided, whatever the machine. Off for a human, whose
+   * waiting is theirs. Implies {@link nominalTime}.
+   */
+  sheetClock = false;
+  /** holds open — the runner is waiting on the game, so it runs */
+  sheetRunning = 0;
+  /** passes still to run with no hold open */
+  sheetPasses = 0;
+  /** the game time {@link gameTime} last returned */
+  gameNow = 0;
+  private stepAnchor: number | null = null;
+
+  /**
+   * How many of the engine's own file loads it is stopped for right now — a
+   * room and its casts, a film about to play, a file a script opened, a save
+   * being restored ({@link whileLoading}).
+   *
+   * While any is open, {@link gameTime} stands still: no pass, no frame, no
+   * `delay` running down. The original read its disc synchronously, so its
+   * loop did nothing at all until the read returned, and a run's frame count
+   * must not depend on how fast the file arrived — over the network or off a
+   * slow disk (#508). Fetches nobody waits for (the boot's preload, background
+   * warming) do not count: the game plays on through those, in the original's
+   * intro too.
+   */
+  private blockedOnFiles = 0;
+  private blockedTotal = 0;
+  private lastRaw: number | null = null;
+
+  /** run `load` with the game's clock stopped — see {@link blockedOnFiles} */
+  async whileLoading<T>(load: Promise<T>): Promise<T> {
+    this.blockedOnFiles++;
+    try {
+      return await load;
+    } finally {
+      this.blockedOnFiles--;
+    }
   }
 
   get frozen(): boolean {

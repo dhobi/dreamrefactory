@@ -312,7 +312,7 @@ export class GameHost {
     // on-demand loaders (puppets/casts/movies) await this, so the first click
     // works even before the file is cached
     this.session.ensureFile = async (name) => {
-      await this.files.load(name);
+      await this.session.whileLoading(this.files.load(name));
     };
     // A movie chain has ended: give its bytes back. Nothing needs them again —
     // and the ones that hurt are the big cutscenes (TAOOT: leave.mov 37.5 MB,
@@ -369,7 +369,7 @@ export class GameHost {
     }
     // the boot's changeset() (TAOOT's name for it): the engine asks for another set, we put it on screen
     this.session.onSetChange = async (fileName, sceneName, viewName) => {
-      const data = await this.files.load(fileName);
+      const data = await this.session.whileLoading(this.files.load(fileName));
       if (!data) {
         this.ui.log(`cannot travel to ${fileName}: file not available`);
         return;
@@ -383,7 +383,7 @@ export class GameHost {
       // the room's own files, plus the story cast the boot opened: every room can
       // spawn from it, and it is the one boot resource a set change re-asserts
       const { casts } = await this.bootPlan();
-      await Promise.all([...siblingFiles(base), ...casts].map((f) => this.files.load(f)));
+      await this.session.whileLoading(Promise.all([...siblingFiles(base), ...casts].map((f) => this.files.load(f))));
       this.ui.setsChanged();
       await this.activateSet(fileName, sceneName, viewName, { scripted: true });
     };
@@ -556,7 +556,7 @@ export class GameHost {
     session.onPlayMovie = async (movieName, startFrame) => {
       const v = this.current;
       if (!v) return;
-      await this.files.load(movieName);
+      await this.session.whileLoading(this.files.load(movieName));
       await v.playMovie(movieName, startFrame);
     };
     viewer.refreshHud();
@@ -663,7 +663,7 @@ export class GameHost {
   /** fetch a set and everything it needs, then activate it */
   async loadServerSet(setName: string, opts: { skipOpen?: boolean } = {}): Promise<void> {
     this.ui.hud(`loading ${setName}…`);
-    const data = await this.files.load(setName);
+    const data = await this.session.whileLoading(this.files.load(setName));
     if (!data) {
       this.ui.hud(`could not fetch ${setName}`);
       return;
@@ -674,8 +674,8 @@ export class GameHost {
     // that may be reached without `boot()` having run (a dev jump, a resumed
     // save) and `ensureBooted` needs them in hand.
     const plan = await this.bootPlan();
-    await Promise.all(
-      [...siblingFiles(base), ...plan.resources].map((f) => this.files.load(f)),
+    await this.session.whileLoading(
+      Promise.all([...siblingFiles(base), ...plan.resources].map((f) => this.files.load(f))),
     );
     if (!this.parseInto(setName, data, (m) => this.ui.hud(m))) return;
     this.ui.setsChanged();
@@ -800,7 +800,7 @@ export class GameHost {
     session.fade.level = 1;
     // the movies the boot plays before anything else, so it cannot stall mid-logo
     const plan = await this.bootPlan();
-    await Promise.all(plan.resources.map((f) => this.files.load(f)));
+    await this.session.whileLoading(Promise.all(plan.resources.map((f) => this.files.load(f))));
 
     /*
      * A boot with a LANDING ROOM has a day machine, and the sequence below is
