@@ -23,12 +23,17 @@
  * as long as they take. A run is therefore something a person could in principle
  * do, and watching it in `--headed` shows exactly the run the number describes.
  *
- * The one deliberate concession is the SEED. `session.seedRandom` is called once
- * before the boot, exactly as the playthrough suites do it, because the
- * smokestack draws its maze from that stream (`mazenumber = random(4)`) and one
- * of the four mazes has a dead-end entry. An unseeded run is a different course
- * every time and its times cannot be compared to each other. `--noseed` runs wild
- * for anyone who wants that; the report says which it was.
+ * The one possible concession is the SEED, which is off by default (see
+ * `seedArg` below). Pinned, `session.seedRandom` is called before the boot and
+ * again at every load point, in the same page call that starts the load
+ * (`SpeedrunDriver.seed`). The second matters more than the first: the boot room
+ * rolls dice for as long as it is on screen (the London flat's street sounds,
+ * BEDSIT1 scene3 `sfx`, draw `random(1000)` every two passes), so a seed set
+ * only at page start fixes the ORDER of the dice and not which draw lands
+ * where. Measured from the `m3p0 smokestack` point with seed 20: one run in four
+ * drew one street sound fewer before the load, and its smokestack was maze 4
+ * instead of maze 2. A run from the cold boot is still not reproducible under a
+ * seed, because it plays the flat for as long as it takes to.
  *
  * ## Reading the report
  *
@@ -38,10 +43,15 @@
  *     spent downloading the game (see **load** below), and it still moves with
  *     machine load — so a 3 % gain is not distinguishable from a quiet afternoon.
  *   - **frames** is `session.frameCounter`, the engine's own displayed-frame
- *     count. It is reproducible and immune to load, and it is what actually goes
- *     down when a route gets better.
- *
- * Tune against frames. Brag about seconds.
+ *     count: one per main-loop pass, twenty a second on a machine that keeps up
+ *     (docs/engine/runtime/timing.md). It is NOT immune to load. Passes run on
+ *     the real clock, so a slow machine or a slow round trip from this runner
+ *     costs frames as well as seconds. Measured on the stack-to-mission-4 leg:
+ *     time 25.1-25.6 s and 41.2-41.4 s with the CPU throttled 4x; frames the
+ *     engine spent busy rose by a third under the throttle and the idle ones
+ *     between gestures to two and a half times as many. So frames and time
+ *     move together, and a route is compared on a quiet machine over a few
+ *     runs, where the spread was about 2 %.
  *
  * **load** is the third column, and only appears when there was something to
  * report ([#251](https://github.com/dhobi/dreamrefactory/issues/251)). It is how
@@ -101,9 +111,11 @@ const SLOWMO = Number(process.env.SLOWMO ?? 0);
  * smokestack's `mazenumber = random(4)`. Freezing those makes a time that no
  * unseeded run could match.
  *
- * So the dice are live, the maze is read off the run rather than fixed in advance (`climbStack` walks the route for whichever was drawn), and
- * a fuse is however long it is. `SEED=<n>` or `--seed=<n>` pins one anyway, for
- * comparing two routes against each other rather than against the clock.
+ * So the dice are live, the maze is read off the run rather than fixed in
+ * advance (`climbStack` walks the route for whichever was drawn), and a fuse is
+ * however long it is. `SEED=<n>` or `--seed=<n>` pins one anyway, for comparing
+ * two routes against each other rather than against the clock — from a load
+ * point (`--from`), where it holds; see the SEED note at the top.
  */
 const seedArg = argv.find((a) => a.startsWith("--seed="))?.split("=")[1] ?? process.env.SEED;
 const SEED = seedArg ? Number(seedArg) : null;
@@ -255,6 +267,8 @@ async function main(): Promise<void> {
     log: (m) => process.env.VERBOSE && console.log(`    ${m}`),
     // a `reset()` reloads the page, which throws the seeded stream away with it
     onReload: seedIt,
+    // and at every load point, or the boot room's dice decide the course
+    seed: SEED,
   });
 
   // the loop is shared with the in-page previewer (taoot/src/speedrun/runner.ts) so the
