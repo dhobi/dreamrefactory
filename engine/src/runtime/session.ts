@@ -1076,7 +1076,10 @@ export class GameSession {
     this.rawNow = raw;
     const real = (this.frozenSince ?? raw) - this.frozenTotal - this.blockedTotal;
     this.realNow = real;
-    if (!this.nominalTime && !this.sheetClock) return (this.gameNow = real);
+    if (!this.nominalTime && !this.sheetClock) {
+      this.gameNow = real;
+      return real;
+    }
     // Stepped: one 50 ms pass of game time per due pass of real time, never
     // more (passDue) — so everything timed off this reading counts passes, not
     // milliseconds, whatever the machine managed in between (#508).
