@@ -2345,7 +2345,7 @@ test("a save names the casts and banks the game had open, not the template's", a
     const path = new TextDecoder("latin1").decode(c0.subarray(o + 5, o + 5 + c0[o + 4]));
     manifest.set(v0.getUint32(o, true), path.slice(path.lastIndexOf(":") + 1).toLowerCase());
   }
-  expect(c0.length).toBe(0x1310 + manifest.size * 0x104);
+  expect(c0).toHaveLength(0x1310 + manifest.size * 0x104);
   const handles = (ci: number, stride: number) => {
     const d = raw.containers[ci].data;
     const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);

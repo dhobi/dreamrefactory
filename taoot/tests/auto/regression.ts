@@ -7758,10 +7758,10 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
   session.captions = [];
   session.captionClip("door1", live);
   session.scheduler.playSound("oldcar", true);
-  check("a clip's caption stays up over a sound effect", shown() === "Landlady: Sneaking out, are ya? I want my money!", shown());
+  check("a clip's caption stays up over a sound effect", shown() === "Landlady: Sneaking out, are ya? I want me money!", shown());
   session.scheduler.playSound("door1", true);
   check("the sound channel captions a clip with words",
-    session.captions.some((c) => c.text === "Sneaking out, are ya? I want my money!" && c.handle !== live));
+    session.captions.some((c) => c.text === "Sneaking out, are ya? I want me money!" && c.handle !== live));
 
   // the radio: its news is the TRACK, and the caption follows the loop's clock.
   // The second station's bank calls its track "bedrad1.trk" too; the caption
