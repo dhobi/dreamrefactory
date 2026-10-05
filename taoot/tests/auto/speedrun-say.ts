@@ -44,6 +44,10 @@ type Beat =
    * and the override below.
    */
   | { kind: "plaque"; ids: number[]; minusOne?: Beat[] }
+  /** a film over the puppet, which is hidden but still open — a `spotmovie` */
+  | { kind: "clip" }
+  /** the puppet has closed and a film of the ROOM's is up, between parked frames */
+  | { kind: "roomfilm" }
   | { kind: "over" };
 
 /** what the loop did, in order — `click 102`, `esc line`, `esc plaque` */
@@ -67,6 +71,8 @@ function puppet(script: Beat[]): { d: SpeedrunDriver; gestures: Gesture[] } {
   const state = (): Record<string, unknown> => {
     const b = beat();
     if (b.kind === "over") return { conversing: false };
+    if (b.kind === "clip") return { conversing: false, open: true, playing: true, regions: 0 };
+    if (b.kind === "roomfilm") return { conversing: false, open: false, playing: true, regions: 0 };
     if (b.kind === "line") return { conversing: true, with: "sasha", speaking: true, awaiting: false };
     return {
       conversing: true,
@@ -109,7 +115,11 @@ function puppet(script: Beat[]): { d: SpeedrunDriver; gestures: Gesture[] } {
       i++;
     },
     sleep: async () => {},
-    hammer: async () => 0,
+    hammer: async () => {
+      gestures.push(`esc ${beat().kind}`);
+      i++;
+      return 1;
+    },
   };
   // A partial on purpose: a fake that implemented all forty of the driver's
   // methods would be forty chances to describe a browser this test does not use.
@@ -244,4 +254,28 @@ test("an `otherwise:` nobody defined is too", async () => {
   const r = await say({ otherwise: "lsat" }, [101], SASHA);
   expect(r.error).toBe("sheet line 42: otherwise: lsat is not stop|first|last");
   expect(r.gestures).toEqual([]);
+});
+
+test("a film once the puppet has closed is the room's, and is left alone", async () => {
+  // the purser leaving opens his office (maino1.mov) on the very pass he goes;
+  // pressed at as an inline clip, it shut and left Frank in the corridor
+  const r = await say({ otherwise: "last" }, [102], [
+    { kind: "plaque", ids: [102] },
+    { kind: "line" },
+    { kind: "roomfilm" },
+  ]);
+  expect(r.error).toBeUndefined();
+  expect(r.gestures).toEqual(["click 102", "esc line"]);
+  expect(r.said).toEqual(["said 102"]);
+});
+
+test("a film over a puppet still open is an inline clip, and is still skipped", async () => {
+  const r = await say({ otherwise: "last" }, [102], [
+    { kind: "plaque", ids: [102] },
+    { kind: "clip" },
+    { kind: "line" },
+    { kind: "over" },
+  ]);
+  expect(r.error).toBeUndefined();
+  expect(r.gestures).toEqual(["click 102", "esc clip", "esc line"]);
 });

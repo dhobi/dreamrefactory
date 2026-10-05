@@ -624,6 +624,7 @@ export const TALK_STATE = `(() => {
   if (!v) return { conversing: false };
   return {
     conversing: !!v.conversing,
+    open: !!window.dbg.session.puppet,
     with: v.conversingWith || "",
     awaiting: !!v.awaitingChoice,
     speaking: !!v.speaking,
@@ -636,6 +637,8 @@ export const TALK_STATE = `(() => {
 
 interface TalkState {
   conversing: boolean;
+  /** a puppet is open — hidden behind an inline clip counts, closed does not */
+  open?: boolean;
   with?: string;
   awaiting?: boolean;
   speaking?: boolean;
@@ -769,6 +772,17 @@ export async function converse(
 
   const left = () => Math.max(1000, deadline - budgetNow(c.d));
 
+  /** the conversation is over: report it, or say what it ended before */
+  const finish = (): void => {
+    if (wanted.length) {
+      throw new Error(
+        `conversation ended before saying ${wanted.join(",")} (picked ${picked.join(",") || "nothing"})`,
+      );
+    }
+    const times = bailed > 1 ? ` x${bailed}` : "";
+    c.say(`said ${picked.join(",") || "nothing"}` + (bailed ? `, then left (-1${times})` : ""));
+  };
+
   for (let turn = 0; turn < maxTurns; ) {
     if (budgetNow(c.d) > deadline) {
       throw new Error(
@@ -776,6 +790,17 @@ export async function converse(
       );
     }
     const s = await d.evaluate<TalkState>(TALK_STATE);
+    /**
+     * The conversation is OVER once its puppet has closed — whatever is on the
+     * screen. A film then is the room's, not the conversation's: the purser
+     * leaving opens `maino1.mov`, his office with the cargo manifest on it, on
+     * the very pass he goes, and between its parked frames it shows no regions
+     * — so the inline-clip skip below took it for a `spotmovie` and pressed
+     * ESC at it, which shut the office and left Frank in the corridor. Played
+     * on the wall clock the loop used to see the puppet go before the film
+     * came; on a sheet's clock (#508) both land on one pass.
+     */
+    if (!s.open && !s.conversing) return finish();
     /**
      * A FILM FIRST, and before asking whether the conversation is still going.
      *
@@ -826,16 +851,7 @@ export async function converse(
       c.say(`skipped an inline clip (${n} ESC)`);
       continue;
     }
-    if (!s.conversing) {
-      if (wanted.length) {
-        throw new Error(
-          `conversation ended before saying ${wanted.join(",")} (picked ${picked.join(",") || "nothing"})`,
-        );
-      }
-      const times = bailed > 1 ? ` x${bailed}` : "";
-      c.say(`said ${picked.join(",") || "nothing"}` + (bailed ? `, then left (-1${times})` : ""));
-      return;
-    }
+    if (!s.conversing) return finish();
     if (!s.awaiting) {
       /*
        * ONE Escape per spoken line — never a hammer.
