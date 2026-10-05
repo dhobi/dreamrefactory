@@ -414,12 +414,53 @@ action table, and optionally a Warm list, what that button should say, and a
 sheet to copy (`Workbench` in `engine/src/web/speedrun/workbench.ts`). Dust
 supplies the first two.
 
-Both clocks are **load-removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)):
-the timer stops while the game is being fetched, because a route played out of a
-browser would otherwise be timed against the link it arrived over. The report's
-`time` column is the route and its `load` column is what came out of it (present
-only when there was something to remove); on the workbench the stopwatch says
-`LOADING` while it is stopped. `time + load` is the wall clock, exactly.
+### The clock: in-game time
+
+A run is measured by **in-game time**: how far the game's own clock moved
+([#508](https://github.com/dhobi/dreamrefactory/issues/508)). The same sheet
+shows the same in-game time on a slow machine as on a fast one, and over a slow
+link as over a fast one. Four things in the engine make it so:
+
+- **A late pass is not made up**, as in `TI.EXE` ([timing](../engine/runtime/timing.md)):
+  one frame per main-loop pass.
+- **Game time stands still while the engine waits on a file** it needs now — a
+  room, its casts, a film, a script's file, a save (`GameSession.whileLoading`).
+  The original read its disc synchronously. This is on for every page.
+- **Speedrun time** (`nominalTime`) moves game time by exactly 50 ms per pass,
+  so `delay`, fades, films and animation cost passes rather than milliseconds,
+  and `voicedone`/`sounddone`/`currentsound` end a clip by its own length
+  (`TimedAudio`) rather than the sound card's.
+- **A sheet's clock** (`sheetClock`): the game runs only while the runner waits
+  on it. A hold hands its condition to the session, which stops the game on the
+  very pass it comes true; a pause between presses is a number of passes. The
+  runner's own round trips and thinking cost nothing.
+
+Both runners play on a sheet's clock: the CLI runner always, the workbench
+while a sheet runs (by hand, the page is the game again). Measured on the
+stack-to-mission-4 leg, seed 20: 8239–8242 frames at full speed, with the CPU
+throttled 4×, over a throttled link and with both, while the wall time ran from
+25.5 s to 40 s. Before, a slow CPU added about a hundred frames and a slow link
+about four hundred.
+
+**A person's run** is timed with **Time me** on the workbench: speedrun time on,
+a sheet's clock off. The stopwatch counts the game's passes while it is busy and
+the player's real time while it waits for them (`GameSession.countRun`), so the
+player's own waiting is theirs at full speed even on a machine too slow for
+twenty passes a second, and loads the engine waited on are out of both.
+
+A sheet's time is what a **frame-perfect** player could do: every input on the
+first pass it could take effect, pressed within that 50 ms by anticipation
+rather than reaction. It is the floor for its route, and a person's run is on
+the same scale. Inputs are taken one per screen refresh, for both.
+
+The report leads with `in-game`; `time` beside it is the wall clock with
+downloads taken out (the load remover,
+[#251](https://github.com/dhobi/dreamrefactory/issues/251)), and its `load`
+column is what came out of it, present only when there was something to remove.
+`time + load` is the wall clock, exactly. On the workbench the stopwatch shows
+in-game time with the wall time small beside it, and says `LOADING` while the
+link is busy. On a slow machine `--patience=N` gives every line N times its
+budget; a budget only decides when a run is called stuck.
 
 ### A coin on arrival
 

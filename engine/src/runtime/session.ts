@@ -1065,11 +1065,13 @@ export class GameSession {
    * frame counter, no wave buffer refilled. See {@link freezeTime}.
    */
   gameTime(raw: number): number {
-    const held = this.blockedOnFiles > 0 || (this.sheetClock && this.sheetRunning === 0 && this.sheetPasses === 0);
+    this.closeSheetHolds();
+    const held = this.blockedOnFiles > 0 || (this.sheetClock && this.sheetHolds.size === 0 && this.sheetPasses === 0);
     if (held && this.lastRaw !== null) this.blockedTotal += raw - this.lastRaw;
     this.lastRaw = raw;
     this.rawNow = raw;
     const real = (this.frozenSince ?? raw) - this.frozenTotal - this.blockedTotal;
+    this.realNow = real;
     if (!this.nominalTime && !this.sheetClock) return (this.gameNow = real);
     // Stepped: one 50 ms pass of game time per due pass of real time, never
     // more (passDue) — so everything timed off this reading counts passes, not
@@ -1082,7 +1084,7 @@ export class GameSession {
       if (pass.due) {
         this.stepAnchor = pass.next;
         this.gameNow += ENGINE_STEP_MS;
-        if (this.sheetRunning === 0 && this.sheetPasses > 0) this.sheetPasses--;
+        if (this.sheetHolds.size === 0 && this.sheetPasses > 0) this.sheetPasses--;
       }
     }
     return this.gameNow;
@@ -1109,19 +1111,66 @@ export class GameSession {
    * (#508). A speedrun sheet's own thinking — the round trip from the runner,
    * deciding the next line — is not the route's, and on a slow machine it is
    * longer; so under this switch time moves only inside a hold
-   * ({@link sheetRunning}, until the condition the runner waits for comes
+   * ({@link sheetHolds}, until the condition the runner waits for comes
    * true, checked in the page every frame) or for a set number of passes
    * ({@link sheetPasses}, a pause between presses). Each step then ends on the
    * pass the game decided, whatever the machine. Off for a human, whose
    * waiting is theirs. Implies {@link nominalTime}.
    */
   sheetClock = false;
-  /** holds open — the runner is waiting on the game, so it runs */
-  sheetRunning = 0;
+  /**
+   * Holds open — what the runner is waiting for, by id. The ENGINE asks them,
+   * each time it is about to decide whether a pass may run — which is just
+   * after the last pass's work — and closes each the moment it holds: so the clock stops on the
+   * very pass the condition came true, not a frame later when a driver
+   * polling on its own beat noticed — which is what left runs a frame or
+   * three apart.
+   */
+  readonly sheetHolds = new Map<number, () => boolean>();
   /** passes still to run with no hold open */
   sheetPasses = 0;
+
+  /** close every hold whose condition now holds (a throwing one counts as not yet) */
+  closeSheetHolds(): void {
+    for (const [id, met] of this.sheetHolds) {
+      let ok = false;
+      try {
+        ok = met();
+      } catch {
+        ok = false;
+      }
+      if (ok) this.sheetHolds.delete(id);
+    }
+  }
   /** the game time {@link gameTime} last returned */
   gameNow = 0;
+  /** the real time it was read off, less loads and freezes — what a waiting player spends */
+  private realNow = 0;
+
+  /**
+   * A run's in-game time, in ms, counted on from whenever: a timer takes the
+   * difference of two readings (#508). The host calls {@link countRun} once
+   * a frame, saying whether the game is waiting for the player.
+   *
+   * While the game is busy — a film, a walk, a line being spoken — it counts
+   * the game time that went by, which under speedrun time is passes, the same
+   * on any machine. While it waits for a PERSON, it counts the real time they
+   * took, at full speed whatever the machine: that wait is theirs, and a slow
+   * machine running fewer passes must not shrink it. A sheet's waiting is
+   * counted as game time too, which under a sheet's clock is none. Loads the
+   * engine waited on are out of both.
+   */
+  runMs = 0;
+  private runFrom: { real: number; game: number } | null = null;
+
+  countRun(waitingForPlayer: boolean): void {
+    const at = { real: this.realNow, game: this.gameNow };
+    if (this.runFrom) {
+      const theirs = waitingForPlayer && !this.sheetClock;
+      this.runMs += Math.max(0, theirs ? at.real - this.runFrom.real : at.game - this.runFrom.game);
+    }
+    this.runFrom = at;
+  }
   private stepAnchor: number | null = null;
 
   /**

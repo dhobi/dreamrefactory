@@ -111,25 +111,32 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
    * pass the game decided and the round trip back here costs none.
    */
   let holdIds = 0;
-  const running = (expr: string, id: number): string => `(() => {
-    const s = window.dbg && window.dbg.session;
-    const ok = !!(${expr});
-    if (s && s.sheetClock) {
-      const open = s.__holds || (s.__holds = new Set());
-      if (ok) open.delete(${id}); else open.add(${id});
-      s.sheetRunning = open.size;
-    }
-    return ok;
-  })()`;
+  /**
+   * Open a hold in the page: under a sheet's clock the SESSION evaluates the
+   * condition and closes the hold on the pass it comes true; without one,
+   * nothing is registered and the wait below is the plain predicate.
+   */
+  const openHold = (expr: string, id: number): Promise<boolean> =>
+    page
+      .evaluate(`(() => {
+        const s = window.dbg && window.dbg.session;
+        if (!s || !s.sheetClock) return false;
+        s.sheetHolds.set(${id}, () => !!(${expr}));
+        return true;
+      })()`)
+      .then((on) => !!on, () => false);
+  const waitExpr = (expr: string, id: number, held: boolean): string =>
+    held ? `!window.dbg || !window.dbg.session.sheetHolds.has(${id})` : expr;
   const closeHold = (id: number): Promise<void> =>
     page
-      .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (s && s.__holds) { s.__holds.delete(${id}); s.sheetRunning = s.__holds.size; } })()`)
+      .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (s && s.sheetHolds) s.sheetHolds.delete(${id}); })()`)
       .then(() => undefined, () => undefined);
 
-  const hold = (expr: string, what: string, budget = timeout): Promise<void> => {
+  const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
     const id = ++holdIds;
+    const held = await openHold(expr, id);
     return page
-      .waitForFunction(running(expr, id), null, { timeout: budget })
+      .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
       .then(() => undefined)
       .catch(async (e: Error) => {
         await closeHold(id);
@@ -138,10 +145,11 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
   };
 
   /** the same, but running out is an answer rather than a failure */
-  const tryHold = (expr: string, budget: number): Promise<boolean> => {
+  const tryHold = async (expr: string, budget: number): Promise<boolean> => {
     const id = ++holdIds;
+    const held = await openHold(expr, id);
     return page
-      .waitForFunction(running(expr, id), null, { timeout: budget })
+      .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
       .then(() => true)
       .catch(async () => {
         await closeHold(id);
@@ -188,10 +196,10 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
    * charged to the route.
    */
   const clock = async (): Promise<Clock> => {
-    const [frames, loading] = await evaluate<[number, number]>(
-      "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
+    const [frames, loading, game] = await evaluate<[number, number, number]>(
+      "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
     );
-    return { ms: Date.now(), frames, loading };
+    return { ms: Date.now(), frames, loading, game };
   };
 
   /** canvas pixel (512x384) -> page point, so the click is a real mouse event */

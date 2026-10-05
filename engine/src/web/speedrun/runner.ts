@@ -59,6 +59,8 @@ export interface Timing {
   /** wall ms with the loading taken out — what the action cost the route */
   ms: number;
   frames: number;
+  /** game ms — in-game time, the same on any machine under a sheet's clock (#508) */
+  game: number;
   /** ms of it spent waiting on the network or with the tab hidden (#375), and
    *  therefore not in `ms` */
   loading: number;
@@ -73,6 +75,8 @@ export interface Split {
   /** wall ms with the loading taken out — see the note above */
   ms: number;
   frames: number;
+  /** game ms — in-game time (#508) */
+  game: number;
   /** ms of it spent waiting on the network, and therefore not in `ms` */
   loading: number;
   actions: number;
@@ -81,7 +85,7 @@ export interface Split {
 export interface RunResult {
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number; loading: number };
+  total: { ms: number; frames: number; game: number; loading: number };
   failure: { step: Step; error: Error } | null;
   /** where the game was standing when it stopped — only sampled on failure */
   where: string | null;
@@ -376,6 +380,7 @@ export async function runSheet(
         name: step.args[0] ?? `split ${splits.length + 1}`,
         ms: netMs(splitFrom, now),
         frames: now.frames - splitFrom.frames,
+        game: now.game - splitFrom.game,
         loading: now.loading - splitFrom.loading,
         actions: splitActions,
       };
@@ -447,6 +452,7 @@ export async function runSheet(
       step,
       ms: netMs(before, after),
       frames: after.frames - before.frames,
+      game: after.game - before.game,
       loading: after.loading - before.loading,
       padded: d.padded() - paddedBefore,
       says,
@@ -464,6 +470,7 @@ export async function runSheet(
       name: failure ? "(unfinished)" : "(final)",
       ms: netMs(splitFrom, ended),
       frames: ended.frames - splitFrom.frames,
+      game: ended.game - splitFrom.game,
       loading: ended.loading - splitFrom.loading,
       actions: splitActions,
     };
@@ -479,6 +486,7 @@ export async function runSheet(
     total: {
       ms: netMs(started, ended),
       frames: ended.frames - started.frames,
+      game: ended.game - started.game,
       loading: ended.loading - started.loading,
     },
     failure,

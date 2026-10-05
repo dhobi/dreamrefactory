@@ -119,6 +119,11 @@ split(boot)"></textarea>
     <button id="srstop" class="icon" type="button" title="Stop — put the pointer back at the top" aria-label="Stop"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="7.15" y="7.15" width="9.7" height="9.7" rx="1.4"/></svg></button>
     <button id="srcheck" type="button">Check</button>
     <button id="srclear" type="button">Clear</button>
+    <!-- Time a run played by HAND (#508): the stopwatch counts in-game time,
+         the game's own passes while it is busy and the player's real time
+         while it waits for them, so the reading is the same on a slow machine
+         as on a fast one. A word, not a glyph: it is not the sheet's transport. -->
+    <button id="srtimeme" type="button" title="Time a run you play by hand, in in-game time">Time me</button>
     <!-- Pull the whole English tree through the browser cache before a run,
          so the route is timed against memory rather than against the wire
          (engine/src/web/cache-warmup.ts). A word rather than a glyph: it is not a

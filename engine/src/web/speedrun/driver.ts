@@ -164,6 +164,8 @@ export function clientPointFor(
 export interface Clock {
   ms: number;
   frames: number;
+  /** the session's game time (`GameSession.gameNow`) — what a run is measured by (#508) */
+  game: number;
   /** cumulative ms the page has been waiting on the network — see the load remover */
   loading: number;
 }

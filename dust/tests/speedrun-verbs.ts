@@ -228,7 +228,7 @@ function driver(): SpeedrunDriver {
     return false;
   };
   return {
-    clock: async () => ({ ms: 0, frames: 0, loading: 0 }),
+    clock: async () => ({ ms: 0, frames: 0, game: 0, loading: 0 }),
     evaluate: async <T>(expr: string) => ev<T>(expr),
     hold: async (expr, what) => {
       if (!(await until(expr))) throw new Error(`stuck waiting for ${what}`);

@@ -920,6 +920,14 @@ body.sr-resizing * {
   transition: color 120ms linear;
 }
 #srclock.live { color: var(--rule-mid); }
+/* The wall time, small beside the in-game time the run is measured by (#508):
+   the big number is what compares between machines, this one is what the
+   afternoon cost. */
+#srclock .real {
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
 /* Paused by the load remover: the run is downloading, so the reading is
    standing still on purpose (engine/src/web/load-clock.ts, #251). It has to SAY
    that — a stopwatch that stops with no explanation reads as a hung page,
