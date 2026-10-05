@@ -39,6 +39,8 @@ import {
   arrow,
   clickThing,
   composeActions,
+  condition,
+  converse,
   key,
   loadPoint,
   predicate,
@@ -91,7 +93,6 @@ async function planner(c: ActionContext, method: "travel" | "hunt" | "stand", ta
   }
   return plannerImpl(c, method, target);
 }
-/** the verbs Titanic adds to the engine's — see the header */
 /**
  * The smokestack's four mazes, as speedrunners climb them (#489): Thundertala's
  * rules tell them apart on the way up — maze 1 shows boxes in the distance only
@@ -110,6 +111,252 @@ const STACK_ROUTES: Record<number, string> = {
 };
 const STACK_KEYS: Record<string, string> = { u: "ArrowUp", l: "ArrowLeft", r: "ArrowRight" };
 
+/**
+ * The room a map jump leaves, remembered so the arrival can be told from it.
+ *
+ * "The right set, no flat, quiet" was enough while a jump always went somewhere
+ * else. A jump to the landing you are standing on (the one `until:` repeats)
+ * is already "the right set" before the click, so the hold has to ask for the
+ * room to have been OPENED AGAIN. Every open builds a new `SetScripts`, which
+ * writes itself to `session.currentBinding` (engine/src/runtime/setscripts.ts),
+ * so a binding that is not the one we left is a room that was reopened.
+ */
+const MARK_ROOM = `void (window.dbg.__jumpFrom = window.dbg.session.currentBinding)`;
+const FRESH_ROOM = `(window.dbg.session.currentBinding !== window.dbg.__jumpFrom)`;
+
+/** one map jump, open to arrival — the whole of `mapJump` without `until:` */
+async function jumpOnce(c: ActionContext, goal: string, red: NonNullable<ReturnType<typeof jumpTo>>): Promise<void> {
+  const page = () =>
+    c.d.evaluate<number | null>(
+      String.raw`(() => { const m = /^map (\d+)$/i.exec(String(window.dbg.session.currentFlat || "")); return m ? Number(m[1]) : null; })()`,
+    );
+  // TWO clicks, doing DIFFERENT things — so they must not be waited on the
+  // same way. house.shp c609's mousedown switches on the map's own view:
+  // "dark" runs activateinterface(), which lights the band and returns with
+  // nothing to animate and nothing to load, and only "light" runs open().
+  //
+  // So waiting for the map PAGE after the first click waits for something
+  // that click was never going to produce, and it always ran out: measured
+  // here at a flat 4 s of the 5.3 s a map jump cost, and measured at 4.8 s
+  // in the browser gate before nav/navigator.ts fixed the same bug. Wait for
+  // "the band is lit OR the map is up" and it ends the moment either click
+  // lands.
+  const lit = `String((window.dbg.session.propRuntime.get("map") || {}).stateName || "") === "light"`;
+
+  // WAIT FOR THE WORLD TO BE ABLE TO TAKE THE CLICK, before sending one.
+  //
+  // The same gate `key()` puts in front of a press (see SpeedrunDriver.key),
+  // and missing here for the same reason it was missing there: the click is
+  // sent, it is swallowed, and the only evidence is the four seconds spent
+  // afterwards waiting for a map that was never going to open. Then the loop
+  // below clicks again, it works, and the line costs 4 s more than it looks
+  // like it should — reported as "it takes way too long until the map is
+  // clicked; it's clickable, I don't know what we are waiting for".
+  //
+  // What makes a route hit it is a `changeset` in the line before. A
+  // conversation whose last bevel changes the set — SASHA1.PUP's `want` 102,
+  // handing over Vlad's package — ends when the puppet closes, which is
+  // BEFORE the room it asked for has loaded and faded in. A click into that
+  // gap reaches an engine that is not taking any.
+  //
+  // Bounded, and it does not fail if it runs out: a state that never goes
+  // quiet leaves the loop below exactly as it was, retry and all.
+  await c.d.tryHold(QUIET, Math.min(c.budget, 10_000));
+  await c.d.evaluate(MARK_ROOM);
+
+  for (let i = 0; i < 3 && (await page()) === null; i++) {
+    // `!wasLight` rather than `wasDark`, which is the same test for the two
+    // states the map is normally in and a better one for every other: the
+    // map only opens from `light`, so from ANY other state the first click
+    // is the one that lights the band and "the band lit" is the outcome to
+    // wait for. Asking `wasDark` gave a map caught in some third state — mid
+    // animation, or not yet built — no early exit at all, and it spent the
+    // whole 4 s. Waiting for the page alone is right when it was ALREADY
+    // light, and only then, because that click opens it and a second one
+    // would shut it again.
+    const wasLight = await c.d.evaluate<boolean>(lit);
+    await clickThing(c, "map", "taken");
+    const orLit = wasLight ? "" : " || (" + lit + ")";
+    const answered = await c.d.tryHold(
+      String.raw`/^map \d+$/i.test(String(window.dbg.session.currentFlat || ""))${orLit}`,
+      4000,
+    );
+    // A click that did nothing costs the whole backstop, and until now it did
+    // so in silence — the line simply took four seconds longer than it looks
+    // like it should, with nothing in the report to point at. Say so, with
+    // what the map was doing at the time, so the next one of these arrives
+    // already diagnosed instead of as "it feels slow sometimes".
+    if (!answered) {
+      const now = await c.d.evaluate<string>(
+        `String((window.dbg.session.propRuntime.get("map") || {}).stateName || "(no map prop)")`,
+      );
+      c.say(`click ${i + 1} on the map did nothing in 4 s — map state "${now}", retrying`);
+    }
+  }
+  const on = await page();
+  if (on === null) throw new Error(`the map would not open here (mapdisabled, or no bag/watch yet)`);
+  if (on !== red.page) {
+    const button = pageButton(red.page);
+    if (!button) throw new Error(`no page button for deck plan ${red.page}`);
+    await clickThing(c, button.region, "taken");
+  }
+  await clickThing(c, red.region, "none");
+  // exitmap() runs the close animation and transfromflat() before the engine
+  // consumes jumpset, so arriving takes a moment longer than the click.
+  //
+  // `quiet` and not merely "the right set, no flat": the arrival is still
+  // FADING when those two become true, and a movement key pressed into a
+  // fade is silently discarded (viewer.ts on `pressNav`). Handing over early
+  // does not save the wait, it moves it — measured, the first `left()` after
+  // a jump cost 2.0 s in three presses, two of them dropped, while every
+  // later move in the same room cost 0.2 s. Waiting for the room to settle
+  // here pays the fade once instead of guessing at it twice.
+  await c.d.hold(
+    `(${predicate("set == " + goal)}) && (${predicate("noflat")}) && (${predicate("quiet")}) && ${FRESH_ROOM}`,
+    `the jump to ${goal}`,
+    c.budget,
+  );
+}
+
+/**
+ * The three rooms where the Gorse-Joneses can stop you on arrival, and why a
+ * line asking for them may be refused before it starts.
+ *
+ * BOOTFILE `restorescreen` offers them after a map jump into `recept1c`,
+ * `gstair2` or `gstair3`, and ELEV1.PUP `doelev` after a lift ride to any of
+ * the same three, both through BOOTFILE `jonesok`:
+ *
+ *     if tour | jonesphase != 0          return false
+ *     if mission = 1 & phase = 0         return false
+ *     if mission = 2  -> phase = 2       (no coin either way)
+ *     if random (100) < 50               return false
+ *
+ * So `until: talking` on a ride into one of them is a coin flip — 51 in 100,
+ * our `random(n)` being 1..n — except in the states below, where they never
+ * come. Those are REPORTED, not refused: when `max:` runs out on a ride into
+ * one of these rooms, the error names the gate that was shut. Refusing up
+ * front would read `talking` as "the Joneses", and it is anyone — `until:` is
+ * the sheet's, not the Joneses', and nothing is ever blocked on a guess.
+ *
+ * Re-rolling on the landing you are standing on is the original's own: MAP.STG's
+ * red area only stores the target, `changeset` closes the room before it opens
+ * one, and TI.EXE's `opensetfile` (0x43cac6 -> 0x407590) compares no names — so
+ * a jump to where you are reopens the room and draws again (#474).
+ */
+const JONES_ROOMS = new Set(["recept1c", "gstair2", "gstair3"]);
+
+async function jonesShut(c: ActionContext): Promise<string | null> {
+  const g = await c.d.evaluate<Record<string, string | number>>(`(() => {
+    const g = window.dbg.session.interp.globals;
+    const o = {};
+    for (const k of ["tour", "jonesphase", "mission", "phase"]) o[k] = g.get(k) ?? 0;
+    return o;
+  })()`);
+  const n = (k: string) => Number(g[k]) || 0;
+  if (n("tour")) return "the tour has no Joneses (BOOTFILE jonesok)";
+  if (n("jonesphase") !== 0) return "jonesphase is already 1, so the Joneses will not come again (BOOTFILE jonesok)";
+  if (n("mission") === 1 && n("phase") === 0) return "mission 1, phase 0 has no Joneses (BOOTFILE jonesok)";
+  if (n("mission") === 2 && n("phase") !== 2) return `mission 2 has the Joneses in phase 2 only, this is phase ${n("phase")} (BOOTFILE jonesok)`;
+  return null;
+}
+
+/**
+ * `until:` on a ride — go again until the condition holds, at most `max:` times.
+ *
+ * Checked AFTER each arrival, never before the first ride unless it already
+ * holds (then nothing moves, as `clickAt` does). `go` makes one ride and says
+ * where it ended; it is handed the attempt number for the lift, which has to
+ * alternate.
+ */
+async function untilArrival(c: ActionContext, rooms: string[], go: (n: number) => Promise<string>): Promise<void> {
+  const text = c.step.opts.until!;
+  const until = condition(text);
+  const max = Number(c.step.opts.max ?? 20);
+  if (!Number.isInteger(max) || max < 1) throw new Error(`max: ${c.step.opts.max} is not a whole number of rides`);
+  if (await c.d.evaluate<boolean>(`!!(${until})`)) {
+    c.say(`${text} already — not moving`);
+    return;
+  }
+  for (let n = 1; n <= max; n++) {
+    const where = await go(n);
+    if (await c.d.evaluate<boolean>(`!!(${until})`)) {
+      c.say(`${text} after ${n} ride${n === 1 ? "" : "s"}, ${where}`);
+      return;
+    }
+  }
+  const shut = rooms.some((r) => JONES_ROOMS.has(r)) ? await jonesShut(c) : null;
+  throw new Error(`${max} rides and ${text} never came true` + (shut ? ` — note: ${shut}` : ""));
+}
+
+/**
+ * The lift's four stops, as ELEV1.PUP `outsidelift` answers them: the bevel id,
+ * the set it lands in, and for the two in GSTAIR3 the `savedeck` that tells B
+ * from C. `calcbevels` never offers the stop you are at — so a lift cannot be
+ * re-ridden in place the way the map can, and `until:` alternates instead.
+ */
+const LIFT_STOPS: Record<string, { set: string; deck?: string; bevel: number }> = {
+  a: { set: "gstair2", bevel: 101 },
+  b: { set: "gstair3", deck: "b", bevel: 102 },
+  c: { set: "gstair3", deck: "c", bevel: 103 },
+  d: { set: "recept1c", bevel: 104 },
+};
+/**
+ * Where each room's lift is: the scene and view a ride arrives at (ELEV1.PUP
+ * `doelev`'s changesets). The map lands elsewhere in the same rooms — gstair2's
+ * red area is scene14 — and from there the attendant is not in sight, so a
+ * ride that does not start in this scene walks here first.
+ */
+const LIFT_LOBBY: Record<string, { scene: string; view: string }> = {
+  gstair2: { scene: "scene10", view: "view18" },
+  gstair3: { scene: "scene10", view: "view18" },
+  recept1c: { scene: "scene15", view: "view46" },
+};
+/** where `until:` goes when it is already at the stop it wants to end on */
+const LIFT_AWAY: Record<string, string> = { a: "b", b: "c", c: "b", d: "c" };
+
+/** the stop you are at, as `calcbevels` reads it, or null away from the lift */
+async function liftStop(c: ActionContext): Promise<string | null> {
+  const [set, deck] = await c.d.evaluate<[string, string]>(
+    `[String(window.dbg.session.currentSetName || "").toLowerCase(), String(window.dbg.session.interp.globals.get("savedeck") ?? "").toLowerCase()]`,
+  );
+  for (const [k, s] of Object.entries(LIFT_STOPS)) {
+    if (s.set === set && (!s.deck || s.deck === deck)) return k;
+  }
+  return null;
+}
+
+/** one ride: ask the attendant, answer the stop, arrive */
+async function rideOnce(c: ActionContext, to: string): Promise<string> {
+  const stop = LIFT_STOPS[to];
+  // `accost` takes anyone already talking as the attendant having answered, so
+  // a ride started inside somebody else's conversation would answer them with a deck
+  if (await c.d.evaluate<boolean>(predicate("talking"))) {
+    throw new Error(`someone is already talking — answer them before taking the lift`);
+  }
+  const [set, scene] = await c.d.evaluate<[string, string]>(
+    `[String(window.dbg.session.currentSetName || "").toLowerCase(), String(window.dbg.viewer?.scene?.sceneName || "").toLowerCase()]`,
+  );
+  const lobby = LIFT_LOBBY[set];
+  if (lobby && scene !== lobby.scene) {
+    await ACTIONS.stand.run({ ...c, step: { ...c.step, args: [lobby.view], opts: {} } });
+  }
+  await ACTIONS.accost.run({ ...c, step: { ...c.step, args: ["elev"], opts: {} } });
+  // The ride is ONE conversation: his lines, the bevel, `elevext.mov`, his lines
+  // in the car, the changeset and the arrival film all run inside `outsidelift`.
+  // `converse` ESCs the lines and clips and returns when it closes — or, when
+  // the Joneses take over at the far end (doelev opens jones1.pup in the same
+  // dispatch), at THEIR plaque, which `then: stop` leaves for the next line.
+  await converse(c, [stop.bevel], "stop", "stop");
+  const deck = stop.deck ? ` && String(window.dbg.session.interp.globals.get("savedeck") ?? "").toLowerCase() === ${JSON.stringify(stop.deck)}` : "";
+  await c.d.hold(
+    `(${predicate("set == " + stop.set)})${deck} && (${predicate("quiet")})`,
+    `the lift to deck ${to}`,
+    c.budget,
+  );
+  return `deck ${to}`;
+}
+
+/** the verbs Titanic adds to the engine's — see the header */
 export const TITANIC_ACTIONS: ActionTable = {
 
   closeup: {
@@ -584,7 +831,7 @@ export const TITANIC_ACTIONS: ActionTable = {
   mapjump: {
     args: [1, 1],
     wait: "none",
-    opts: ["deck"],
+    opts: ["deck", "until", "max"],
     sig: "mapJump(gstair1, deck: bd)",
     // The reachable sets are read off MAP.STG's own red areas rather than typed
     // out here, so this list cannot go stale against the table that decides
@@ -611,96 +858,49 @@ export const TITANIC_ACTIONS: ActionTable = {
       if (deck && red.deck !== deck.toLowerCase()) {
         c.say(`no ${goal} on deck ${deck} — took deck ${red.deck} instead`);
       }
-      const page = () =>
-        c.d.evaluate<number | null>(
-          String.raw`(() => { const m = /^map (\d+)$/i.exec(String(window.dbg.session.currentFlat || "")); return m ? Number(m[1]) : null; })()`,
-        );
-      // TWO clicks, doing DIFFERENT things — so they must not be waited on the
-      // same way. house.shp c609's mousedown switches on the map's own view:
-      // "dark" runs activateinterface(), which lights the band and returns with
-      // nothing to animate and nothing to load, and only "light" runs open().
-      //
-      // So waiting for the map PAGE after the first click waits for something
-      // that click was never going to produce, and it always ran out: measured
-      // here at a flat 4 s of the 5.3 s a map jump cost, and measured at 4.8 s
-      // in the browser gate before nav/navigator.ts fixed the same bug. Wait for
-      // "the band is lit OR the map is up" and it ends the moment either click
-      // lands.
-      const lit = `String((window.dbg.session.propRuntime.get("map") || {}).stateName || "") === "light"`;
-
-      // WAIT FOR THE WORLD TO BE ABLE TO TAKE THE CLICK, before sending one.
-      //
-      // The same gate `key()` puts in front of a press (see SpeedrunDriver.key),
-      // and missing here for the same reason it was missing there: the click is
-      // sent, it is swallowed, and the only evidence is the four seconds spent
-      // afterwards waiting for a map that was never going to open. Then the loop
-      // below clicks again, it works, and the line costs 4 s more than it looks
-      // like it should — reported as "it takes way too long until the map is
-      // clicked; it's clickable, I don't know what we are waiting for".
-      //
-      // What makes a route hit it is a `changeset` in the line before. A
-      // conversation whose last bevel changes the set — SASHA1.PUP's `want` 102,
-      // handing over Vlad's package — ends when the puppet closes, which is
-      // BEFORE the room it asked for has loaded and faded in. A click into that
-      // gap reaches an engine that is not taking any.
-      //
-      // Bounded, and it does not fail if it runs out: a state that never goes
-      // quiet leaves the loop below exactly as it was, retry and all.
-      await c.d.tryHold(QUIET, Math.min(c.budget, 10_000));
-
-      for (let i = 0; i < 3 && (await page()) === null; i++) {
-        // `!wasLight` rather than `wasDark`, which is the same test for the two
-        // states the map is normally in and a better one for every other: the
-        // map only opens from `light`, so from ANY other state the first click
-        // is the one that lights the band and "the band lit" is the outcome to
-        // wait for. Asking `wasDark` gave a map caught in some third state — mid
-        // animation, or not yet built — no early exit at all, and it spent the
-        // whole 4 s. Waiting for the page alone is right when it was ALREADY
-        // light, and only then, because that click opens it and a second one
-        // would shut it again.
-        const wasLight = await c.d.evaluate<boolean>(lit);
-        await clickThing(c, "map", "taken");
-        const orLit = wasLight ? "" : " || (" + lit + ")";
-        const answered = await c.d.tryHold(
-          String.raw`/^map \d+$/i.test(String(window.dbg.session.currentFlat || ""))${orLit}`,
-          4000,
-        );
-        // A click that did nothing costs the whole backstop, and until now it did
-        // so in silence — the line simply took four seconds longer than it looks
-        // like it should, with nothing in the report to point at. Say so, with
-        // what the map was doing at the time, so the next one of these arrives
-        // already diagnosed instead of as "it feels slow sometimes".
-        if (!answered) {
-          const now = await c.d.evaluate<string>(
-            `String((window.dbg.session.propRuntime.get("map") || {}).stateName || "(no map prop)")`,
-          );
-          c.say(`click ${i + 1} on the map did nothing in 4 s — map state "${now}", retrying`);
+      if (c.step.opts.until === undefined) {
+        await jumpOnce(c, goal, red);
+        c.say(`deck ${red.deck}`);
+        return;
+      }
+      await untilArrival(c, [goal], () => jumpOnce(c, goal, red).then(() => `deck ${red.deck}`));
+    },
+  },
+  /**
+   * The lift, for a run without the map — ELEV1.PUP's attendant, who stands in
+   * GSTAIR2, GSTAIR3 and RECEPT1C until mission 4 (gang.cst `setupactor`).
+   *
+   * `lift(deck: c)` turns to him, asks, answers 103 and waits for the far end;
+   * at deck C already it does nothing, because he would not offer it.
+   * `until:` rides again until a condition holds — alternating, since the stop
+   * you are at is never offered — and ends wherever it came true, which may
+   * not be `deck:`. A plain `lift(deck: c)` on the next line takes you there.
+   */
+  lift: {
+    args: [0, 0],
+    wait: "none",
+    opts: ["deck", "until", "max"],
+    sig: "lift(deck: c)",
+    help: "ride the lift to deck a, b, c or d (the stairwells and D reception); until: rides again until it holds",
+    run: async (c) => {
+      const want = (c.step.opts.deck ?? "").trim().toLowerCase();
+      if (!LIFT_STOPS[want]) throw new Error(`lift needs deck: a, b, c or d`);
+      if (!(await liftStop(c))) {
+        throw new Error(`no lift here — the attendant stands at gstair2, gstair3 and recept1c`);
+      }
+      if (c.step.opts.until === undefined) {
+        if ((await liftStop(c)) === want) {
+          c.say(`already at deck ${want}`);
+          return;
         }
+        c.say(await rideOnce(c, want));
+        return;
       }
-      const on = await page();
-      if (on === null) throw new Error(`the map would not open here (mapdisabled, or no bag/watch yet)`);
-      if (on !== red.page) {
-        const button = pageButton(red.page);
-        if (!button) throw new Error(`no page button for deck plan ${red.page}`);
-        await clickThing(c, button.region, "taken");
-      }
-      await clickThing(c, red.region, "none");
-      // exitmap() runs the close animation and transfromflat() before the engine
-      // consumes jumpset, so arriving takes a moment longer than the click.
-      //
-      // `quiet` and not merely "the right set, no flat": the arrival is still
-      // FADING when those two become true, and a movement key pressed into a
-      // fade is silently discarded (viewer.ts on `pressNav`). Handing over early
-      // does not save the wait, it moves it — measured, the first `left()` after
-      // a jump cost 2.0 s in three presses, two of them dropped, while every
-      // later move in the same room cost 0.2 s. Waiting for the room to settle
-      // here pays the fade once instead of guessing at it twice.
-      await c.d.hold(
-        `(${predicate("set == " + goal)}) && (${predicate("noflat")}) && (${predicate("quiet")})`,
-        `the jump to ${goal}`,
-        c.budget,
-      );
-      c.say(`deck ${red.deck}`);
+      const rooms = [...new Set(Object.values(LIFT_STOPS).map((s) => s.set))];
+      await untilArrival(c, rooms, async () => {
+        const here = await liftStop(c);
+        return rideOnce(c, here === want ? LIFT_AWAY[want] : want);
+      });
     },
   },
   travel: {

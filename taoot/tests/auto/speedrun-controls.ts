@@ -504,3 +504,68 @@ test("a map that never answers is retried three times, each miss reported, then 
   expect(out.said).toEqual([1, 2, 3].map((n) => `click ${n} on the map did nothing in 4 s — map state "dark", retrying`));
   expect(out.error).toBe("the map would not open here (mapdisabled, or no bag/watch yet)");
 });
+
+/**
+ * `until:` — jump again until something holds, for the Gorse-Joneses (#474).
+ *
+ * The plans above with a coin behind them: each red area pressed lands on the
+ * next of `coins`, and `talking` reads the last one. `jonesok`'s state is the
+ * globals the verb reads before it starts.
+ */
+function jonesLanding(coins: boolean[], globals: Record<string, number> = { mission: 1, phase: 1 }) {
+  const m = deckPlans({ band: "light", savedeck: "c" });
+  let talking = false;
+  let jumps = 0;
+  const inner = m.d.evaluate.bind(m.d);
+  const clickAt = m.d.clickAt.bind(m.d);
+  Object.assign(m.d, {
+    evaluate: async <T,>(expr: string): Promise<T> => {
+      if (expr.includes("viewer.conversing")) return talking as T;
+      if (expr.includes('"jonesphase"')) return { tour: 0, jonesphase: 0, ...globals } as T;
+      return inner(expr) as Promise<T>;
+    },
+    // gstair3 on deck c is page 4's Button41 (mapjumps.gen.ts): each press is a landing
+    clickAt: async (x: number, ...rest: unknown[]) => {
+      await (clickAt as (...a: unknown[]) => Promise<void>)(x, ...rest);
+      if (m.clicks.at(-1) === "Button41") talking = coins[jumps++] ?? false;
+    },
+  });
+  return { ...m, jumps: () => jumps };
+}
+
+test("until: jumps to the same landing again until someone talks, and says how many it took", async () => {
+  const m = jonesLanding([false, false, true]);
+  const out = await run(m.d, "mapjump", ["gstair3"], { deck: "c", until: "talking" });
+  expect(out.error).toBeUndefined();
+  expect(m.jumps()).toBe(3);
+  expect(m.clicks.filter((n) => n === "Button41")).toHaveLength(3);
+  expect(out.said.at(-1)).toBe("talking after 3 rides, deck c");
+});
+
+test("until: gives up after max: rides, saying so", async () => {
+  const m = jonesLanding([]);
+  const out = await run(m.d, "mapjump", ["gstair3"], { deck: "c", until: "talking", max: "4" });
+  expect(m.jumps()).toBe(4);
+  expect(out.error).toBe("4 rides and talking never came true");
+});
+
+test("until: never refuses on a guess — when max: runs out where jonesok is shut, the error says why", async () => {
+  for (const [globals, why] of [
+    [{ mission: 1, phase: 1, jonesphase: 1 }, /— note: jonesphase is already 1, so the Joneses will not come again/],
+    [{ mission: 1, phase: 0 }, /— note: mission 1, phase 0 has no Joneses/],
+    [{ mission: 2, phase: 1 }, /— note: mission 2 has the Joneses in phase 2 only, this is phase 1/],
+  ] as const) {
+    const m = jonesLanding([], globals);
+    const out = await run(m.d, "mapjump", ["gstair3"], { deck: "c", until: "talking", max: "2" });
+    expect(m.jumps()).toBe(2);
+    expect(out.error).toMatch(/^2 rides and talking never came true/);
+    expect(out.error).toMatch(why);
+  }
+});
+
+test("someone else talking counts too: until: talking is anyone, whatever jonesok says", async () => {
+  const m = jonesLanding([true], { mission: 1, phase: 1, jonesphase: 1 });
+  const out = await run(m.d, "mapjump", ["gstair3"], { deck: "c", until: "talking" });
+  expect(out.error).toBeUndefined();
+  expect(out.said.at(-1)).toBe("talking after 1 ride, deck c");
+});

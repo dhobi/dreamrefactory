@@ -421,6 +421,34 @@ browser would otherwise be timed against the link it arrived over. The report's
 only when there was something to remove); on the workbench the stopwatch says
 `LOADING` while it is stopped. `time + load` is the wall clock, exactly.
 
+### A coin on arrival
+
+Some of the ship is decided by a die. The Gorse-Joneses, the only people who
+tell Frank about Burns besides a failed debrief with Penny, stop you on arrival
+in `recept1c`, `gstair2` or `gstair3` on BOOTFILE `jonesok`'s
+`random (100) < 50`, after a map jump or a lift ride alike
+([#474](https://github.com/dhobi/dreamrefactory/issues/474)). A route that
+needs them goes again until they come, and says so in one line:
+
+```
+mapJump(gstair3, deck: c, until: talking, max: 20)
+say([101])
+```
+
+`until:` on a ride is checked after each arrival, and `max:` (20 by default)
+turns a run of bad luck into an error instead of a run that never ends. A map
+jump to the landing you are standing on draws again, because the original
+does: MAP.STG's red area only stores the target, `changeset` closes the room
+before opening one, and TI.EXE's `opensetfile` (`0x43cac6` → `0x407590`)
+compares no names. The lift cannot do that, because its attendant never offers
+the stop you are at (ELEV1.PUP `calcbevels`), so `lift(deck: c, until:
+talking)` alternates and ends wherever they spoke; a plain `lift(deck: c)` on
+the next line takes you to C, or does nothing if you are there. `until:
+talking` means anyone, not the Joneses, so nothing is refused up front; when
+`max:` runs out on a ride into those rooms where `jonesok` could never say yes
+(the tour, phase 0 of mission 1, mission 2 outside phase 2, or once they have
+told Frank about Burns), the error says which.
+
 ### A route is a line; the sinking is not
 
 `watchFor(<condition>, <action>)` is a standing rule — *whenever this becomes
