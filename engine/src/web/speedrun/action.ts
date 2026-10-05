@@ -36,7 +36,7 @@
  */
 import { SheetError, type Step, type VerbSpec } from "./sheet";
 import type { SpeedrunDriver, WaitMode } from "./driver";
-import { SCREEN, SHOWING } from "./driver";
+import { SCREEN, SHOWING, budgetNow } from "./driver";
 
 export interface ActionContext {
   d: SpeedrunDriver;
@@ -765,12 +765,12 @@ export async function converse(
   /** how many plaques were answered -1 on the way out — `then: leave` */
   let bailed = 0;
   const maxTurns = Number(c.step.opts.maxturns ?? 60);
-  const deadline = Date.now() + c.budget;
+  const deadline = budgetNow(c.d) + c.budget;
 
-  const left = () => Math.max(1000, deadline - Date.now());
+  const left = () => Math.max(1000, deadline - budgetNow(c.d));
 
   for (let turn = 0; turn < maxTurns; ) {
-    if (Date.now() > deadline) {
+    if (budgetNow(c.d) > deadline) {
       throw new Error(
         `conversation ran past its ${c.budget} ms budget (picked ${picked.join(",") || "nothing"})`,
       );
@@ -941,7 +941,7 @@ export async function converse(
     await d.hold(
       `!(window.dbg.viewer && window.dbg.viewer.awaitingChoice)`,
       `bevel ${idx} to be taken`,
-      Math.max(1000, deadline - Date.now()),
+      Math.max(1000, deadline - budgetNow(c.d)),
     );
   }
   throw new Error(`conversation did not close in ${maxTurns} turns (picked ${picked.join(",") || "nothing"})`);

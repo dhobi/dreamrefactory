@@ -113,3 +113,60 @@ test("a person's waiting counts in real time on any machine, the game's busy tim
   }
   expect(sheet.runMs).toBe(0);
 });
+
+test("a standing watch stops the game on the pass it rises, and only its own action runs it until answered", () => {
+  const s = session();
+  s.sheetClock = true;
+  (s as unknown as { coreLoaded: boolean }).coreLoaded = true;
+  s.gameTime(0);
+  // a line waiting on something far off, and a watch for a film at 300 ms
+  s.sheetHolds.set(1, () => s.gameNow >= 5000);
+  s.sheetWatches.set(1, { met: () => s.gameNow >= 300, was: false, rose: false });
+  for (let ms = 50; ms <= 1000; ms += 50) s.gameTime(ms);
+  expect(s.gameNow).toBe(300); // halted on the very pass, however long the runner takes
+  expect(s.sheetWatches.get(1)!.rose).toBe(true);
+
+  // the interrupted line's holds neither run the game nor close, even when met
+  s.sheetHolds.set(2, () => true);
+  s.sheetPasses = 5;
+  for (let ms = 1050; ms <= 1500; ms += 50) s.gameTime(ms);
+  expect(s.gameNow).toBe(300);
+  expect(s.sheetHolds.has(2)).toBe(true);
+
+  // the watch's action does: its own hold, then its own pause
+  s.sheetHolds.set(3, () => s.gameNow >= 400);
+  s.sheetWatchHolds.add(3);
+  for (let ms = 1550; ms <= 2000; ms += 50) s.gameTime(ms);
+  expect(s.gameNow).toBe(400);
+  s.sheetWatchPasses = 2;
+  for (let ms = 2050; ms <= 2500; ms += 50) s.gameTime(ms);
+  expect(s.gameNow).toBe(500);
+
+  // answered: the line goes on from where it stood
+  s.sheetHalted = false;
+  s.sheetWatchHolds.clear();
+  s.gameTime(2550);
+  expect(s.sheetHolds.has(2)).toBe(false);
+  for (let ms = 2600; ms <= 3000; ms += 50) s.gameTime(ms);
+  expect(s.gameNow).toBeGreaterThan(500);
+});
+
+test("under a sheet's clock a hold does not close while a file is coming, and the runner can tell", async () => {
+  const s = session();
+  s.sheetClock = true;
+  (s as unknown as { coreLoaded: boolean }).coreLoaded = true;
+  s.gameTime(0);
+  let land!: () => void;
+  const loading = s.whileLoading(new Promise<void>((r) => (land = r)));
+  s.sheetHolds.set(1, () => true); // met already, but the screen is half-loaded
+  for (let ms = 50; ms <= 500; ms += 50) s.gameTime(ms);
+  expect(s.loadingFiles).toBe(true);
+  expect(s.sheetHolds.has(1)).toBe(true);
+  expect(s.gameNow).toBe(0);
+  land();
+  await loading;
+  expect(s.loadingFiles).toBe(false);
+  s.gameTime(550);
+  expect(s.sheetHolds.has(1)).toBe(false); // closed before any pass ran
+  expect(s.gameNow).toBe(0);
+});

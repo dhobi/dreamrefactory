@@ -81,6 +81,8 @@ export interface PageDriverOptions {
   log?(message: string): void;
   /** raised to abort a run mid-flight; every wait checks it */
   signal?: AbortSignal;
+  /** the clock budgets count on — {@link SpeedrunDriver.budgetNow}; the wall when left out */
+  budgetNow?(): number;
   /**
    * Called just before a `reset()` reloads the document.
    *
@@ -214,439 +216,454 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
 
   const frame = (): Promise<void> => new Promise((r) => win.requestAnimationFrame(() => r()));
 
-  /**
-   * A pause the game runs through: under a sheet's clock, `ms / 50` passes of it
-   * (at least one) rather than `ms` of the wall, so a gap between presses is
-   * the same length on any machine (#508); otherwise wall time, as before.
-   */
-  const sleep = async (ms: number): Promise<void> => {
-    const passes = Math.max(1, Math.round(ms / 50));
-    const stepped = run<boolean>(`(() => {
-      const s = window.dbg && window.dbg.session;
-      if (!s || !s.sheetClock) return false;
-      s.sheetPasses = ${passes};
-      return true;
-    })()`);
-    if (!stepped) return wallWait(ms);
-    while (!run<boolean>(`!window.dbg || !window.dbg.session.sheetClock || window.dbg.session.sheetPasses === 0`)) {
-      check();
-      await frame();
-    }
-  };
-
-  /** wall time that does not move the game — what polls beside a step use */
-  const wallWait = (ms: number): Promise<void> =>
-    new Promise((resolve, reject) => {
-      const t = win.setTimeout(() => resolve(), ms);
-      opts.signal?.addEventListener(
-        "abort",
-        () => {
-          win.clearTimeout(t);
-          reject(new Aborted());
-        },
-        { once: true },
-      );
-    });
-
-  /**
-   * Poll a predicate on the animation frame.
-   *
-   * rAF and not a timer, because the engine advances on rAF: waiting on the same
-   * beat means a condition is seen the moment the frame that caused it has been
-   * drawn, never a timer-slice later. It also stops the loop dead when the tab is
-   * hidden, which is right — the game stops too.
-   */
-  const until = async (expr: string, budget: number): Promise<boolean> => {
-    const deadline = performance.now() + budget;
-    // Under a sheet's clock the session asks the condition itself and stops the
-    // game on the pass it comes true (GameSession.sheetHolds, #508); this loop
-    // only watches for that. Without one it asks, as it always did.
-    const id = ++holdIds;
-    const held = run<boolean>(`(() => {
-      const s = window.dbg && window.dbg.session;
-      if (!s || !s.sheetClock) return false;
-      s.sheetHolds.set(${id}, () => !!(${expr}));
-      return true;
-    })()`);
-    const met = held ? `!window.dbg || !window.dbg.session.sheetHolds.has(${id})` : expr;
-    try {
-      for (;;) {
-        check();
-        if (run<boolean>(met)) return true;
-        if (performance.now() > deadline) return false;
-        await frame();
-      }
-    } finally {
-      if (held) run(`void (window.dbg && window.dbg.session.sheetHolds.delete(${id}))`);
-    }
-  };
   let holdIds = 0;
-
-  const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
-    if (!(await until(expr, budget))) throw new Error(`stuck waiting for ${what}`);
-  };
-
-  const tryHold = (expr: string, budget: number): Promise<boolean> => until(expr, budget);
-
-  const settle = async (mode: WaitMode, what: string, budget = timeout): Promise<void> => {
-    const expr = waitExpr(mode);
-    if (!expr) return;
-    await hold(expr, `${what} to settle`, budget);
-  };
-
-  /** canvas pixel (512x384) -> a client point, through main.ts's own mapping */
-  const clientPoint = (x: number, y: number): Point =>
-    clientPointFor(x, y, canvas.getBoundingClientRect(), canvas);
-
-  const pointer = (type: string, at: Point, target: EventTarget = canvas): void => {
-    target.dispatchEvent(
-      new win.PointerEvent(type, {
-        clientX: at.x,
-        clientY: at.y,
-        pointerId: pointerId++,
-        // explicitly a mouse: the pointerdown handler sends a TOUCH down
-        // `beginTouch`, which is a different gesture entirely
-        pointerType: "mouse",
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: type === "pointerup" ? 0 : 1,
-      }),
-    );
-  };
-
+  const budgetClock = opts.budgetNow ?? (() => performance.now());
   /**
-   * Move the cursor — which takes TWO events, and a `pointermove` is not one of
-   * them.
-   *
-   * main.ts listens for a moving mouse in `mousemove` (the one that reads
-   * `session.pointerDown` and republishes the cursor mid-drag), and its
-   * `pointermove` listener is the TOUCH gesture recogniser, which drops anything
-   * whose pointerId is not the finger it is following. A real browser hides the
-   * difference: a physical move fires `pointermove` and then a compatibility
-   * `mousemove`, so a page that listens to either one sees the move. A
-   * SYNTHESIZED PointerEvent generates no compatibility event at all — nothing
-   * else does, since the compatibility event comes from the input pipeline rather
-   * than from dispatch.
-   *
-   * So a drag built out of `pointermove` alone pressed in the right place and
-   * then never moved: `mouse()` kept answering the grab point for every turn of
-   * the held script's `while stilldown()` loop. Silent, because every gesture
-   * still went in and the loop still ran — the coal lever simply stayed on
-   * whatever deg the cursor was pressed at (deg 0, its travel starting below the
-   * point `aimAtThing` grabs it by), and the five turbine dials saw `delt = 0`
-   * every frame and never turned at all.
-   *
-   * Both events, in the order a browser sends them, at the canvas.
+   * The driver, twice over (#509): the run's own, and {@link SpeedrunDriver.forWatch}'s
+   * for a standing watch's action, whose holds and pauses are marked as the
+   * watch's — the only ones that move the game while a risen watch has halted
+   * it (GameSession.sheetHalted).
    */
-  const movePointer = (at: Point): void => {
-    pointer("pointermove", at);
-    canvas.dispatchEvent(
-      new win.MouseEvent("mousemove", {
-        clientX: at.x,
-        clientY: at.y,
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-      }),
-    );
-  };
-
-  /**
-   * How long a click holds the button down — because a click is not an instant.
-   *
-   * A hand takes 50–150 ms between pressing and letting go, and the game reads
-   * that gap. Whole gestures are decided inside it: `while stilldown()` loops
-   * carry a held item and read `mouse()` every turn, `trackbut` lights a stage
-   * button only while it is held, and INVEN.SHP's `stdmouse` decides where a
-   * carried object LANDS from what `hittest` finds when the button comes up.
-   *
-   * Dispatching down and up in one task gives the engine no gap at all. The press
-   * is handled asynchronously (`session.track(viewer.press(...))`), so by the time
-   * the script chain runs its first line the button is already up and every one of
-   * those loops falls straight through. Measured on the coal lever, whose
-   * mousedown IS such a loop:
-   *
-   *     instant        deg 9 -> 9    coal 50 -> 50   stilldown turns 1
-   *     held 3 frames  deg 9 -> 11   coal 50 -> 47   stilldown turns 3
-   *
-   * One turn means the loop was entered and `stilldown()` was already false. The
-   * symptom higher up is a click that "does nothing" — putting the Rubaiyat down
-   * in the coal bunker, where the drop is the release and the release never
-   * happened while anything was listening.
-   *
-   * Three frames is what that measurement needed; it is deliberately a count of
-   * frames rather than milliseconds, because what has to fit in the gap is a turn
-   * of an engine loop and the engine runs on frames.
-   */
-  const CLICK_FRAMES = 3;
-  const heldFrames = async (): Promise<void> => {
-    for (let i = 0; i < CLICK_FRAMES; i++) await frame();
-  };
-
-  const pressKey = (name: string): void => {
-    // `key` is what main.ts reads; the rest are filled in because a listener
-    // further up the page may look at them, and a half-built event is a bug
-    // waiting for the first person who adds one
-    const key = name === "Space" ? " " : name;
-    win.dispatchEvent(
-      new win.KeyboardEvent("keydown", { key, code: keyCode(key), bubbles: true, cancelable: true }),
-    );
-    win.dispatchEvent(
-      new win.KeyboardEvent("keyup", { key, code: keyCode(key), bubbles: true, cancelable: true }),
-    );
-  };
-
-  /** a best-effort `code` for the few keys a sheet actually sends */
-  const keyCode = (key: string): string => {
-    if (key === " ") return "Space";
-    if (key === "Escape") return "Escape";
-    if (key.startsWith("Arrow")) return key;
-    if (key.length === 1) return /[a-z]/i.test(key) ? `Key${key.toUpperCase()}` : "";
-    return key;
-  };
-
-  return {
+  const make = (watch: boolean): SpeedrunDriver => {
+    const passesField = watch ? "sheetWatchPasses" : "sheetPasses";
+    /** the line that marks a hold as the watch's, or none */
+    const watchMark = (id: number): string => (watch ? "s.sheetWatchHolds.add(" + id + ");" : "");
     /**
-     * Wall clock, engine frames and the load remover's total (#251), sampled
-     * together — the two page-side numbers in ONE compiled expression, so they
-     * are a reading of one instant rather than of two.
-     *
-     * The wall clock is this window's `performance.now` and the loading total is
-     * measured on the GAME window's, which are two time origins if the game is
-     * ever in a frame. That is harmless and stays harmless: nothing subtracts
-     * one from the other, only a difference of one from a difference of the
-     * other, and both count real milliseconds at the same rate.
+     * A pause the game runs through: under a sheet's clock, `ms / 50` passes of it
+     * (at least one) rather than `ms` of the wall, so a gap between presses is
+     * the same length on any machine (#508); otherwise wall time, as before.
      */
-    clock: (): Promise<Clock> =>
-      new Promise((resolve) => {
-        const [frames, loading, game] = run<[number, number, number]>(
-          "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
-        );
-        resolve({ ms: performance.now(), frames, loading, game });
-      }),
-    evaluate,
-    hold,
-    tryHold,
-    settle,
-    sleep,
-    wallWait,
-    pad: async (ms) => {
-      if (!ms) return;
-      paddedMs += ms;
-      await sleep(ms);
-    },
-    padded: () => paddedMs,
-
-    key: async (name, wait = "ready", budget = timeout) => {
-      await hold(KEY_SAFE, `the engine to accept ${name}`, budget);
-      pressKey(name);
-      await settle(wait, `key ${name}`, budget);
-    },
-    rawKey: async (name) => {
-      pressKey(name);
-      await frame();
-    },
-
-    clickAt: async (x, y, wait = "taken", budget = timeout) => {
-      const at = clientPoint(x, y);
-      pointer("pointerdown", at);
-      await heldFrames();
-      pointer("pointerup", at, win);
-      await settle(wait, `click ${x},${y}`, budget);
-    },
-
-    holdAt: async (x, y, opts, budget = timeout) => {
-      // ARM FIRST, then press — see HoldOptions.arm
-      const armed = opts.arm ? await until(opts.arm, opts.armBudget ?? Math.min(budget, 10_000)) : true;
-      if (!armed) return { armed, held: false };
-      const at = clientPoint(x, y);
-      movePointer(at);
-      pointer("pointerdown", at);
-      let held = false;
-      try {
-        held = await until(opts.until, budget);
-      } finally {
-        // released whatever happened: leaving the button down would make every
-        // later gesture a drag
-        pointer("pointerup", at, win);
-      }
-      await heldFrames();
-      return { armed, held };
-    },
-
-    hammer: async (name, { until: goal, arm, gap = defaultGap, budget = timeout, what }: HammerOptions) => {
-      const deadline = performance.now() + budget;
-      let pressed = 0;
-      for (;;) {
+    const sleep = async (ms: number): Promise<void> => {
+      const passes = Math.max(1, Math.round(ms / 50));
+      const stepped = run<boolean>(`(() => {
+        const s = window.dbg && window.dbg.session;
+        if (!s || !s.sheetClock) return false;
+        s[${JSON.stringify(passesField)}] = ${passes};
+        return true;
+      })()`);
+      if (!stepped) return wallWait(ms);
+      while (!run<boolean>(`!window.dbg || !window.dbg.session.sheetClock || (!window.dbg.session[${JSON.stringify(passesField)}] && !window.dbg.session.loadingFiles)`)) {
         check();
-        if (run<boolean>(goal)) return pressed;
-        if (performance.now() > deadline) {
-          throw new Error(`stuck waiting for ${what}: ${pressed} presses of ${name} in ${budget} ms`);
-        }
-        // only press when the key means what we think it means, and only when it
-        // will not be dropped
-        if ((!arm || run<boolean>(arm)) && run<boolean>(KEY_SAFE)) {
-          pressKey(name);
-          pressed++;
-        }
-        await (gap ? sleep(gap) : frame());
-      }
-    },
-
-    aim: async (kind, name) => {
-      // the engine's own hit test, called directly — this is the sweep the
-      // Playwright driver has to inject as source, and here it is simply local
-      const { aimAtThing, aimAtHotspot } = await import("./aim");
-      const dbg = (win as unknown as { dbg: any }).dbg;
-      const s = dbg.session;
-      const v = dbg.viewer;
-      const adapter = {
-        // the framebuffer's size, not this canvas's: Dust draws 512x384 through
-        // a 1024x768 canvas, and a hit test is asked in framebuffer pixels
-        width: dbg.host.screen.width,
-        height: dbg.host.screen.height,
-        hitTest: (x: number, y: number) => s.hitTestAt(x, y),
-        propUnder: (x: number, y: number) => {
-          const p = v.propUnder(x, y);
-          return p ? p.group.name : null;
-        },
-        inFlat: !s.viewShowing && !!s.stageScript,
-        hotspot: (n: string) => {
-          const obj = v.scene.views[v.viewIdx].objects.find(
-            (o: { identifier?: string }) => (o.identifier || "").toLowerCase() === n.toLowerCase(),
-          );
-          return obj
-            ? { x0: obj.startRegionX, y0: obj.startRegionY, x1: obj.endRegionX, y1: obj.endRegionY }
-            : null;
-        },
-      };
-      return kind === "thing" ? aimAtThing(adapter, name) : aimAtHotspot(adapter, name);
-    },
-
-    drag: async (from, to, steps = 8) => {
-      const a = clientPoint(from.x, from.y);
-      const b = clientPoint(to.x, to.y);
-      // the steps matter: main.ts publishes the pointer as the mouse moves and
-      // the held script's `while stilldown()` loop reads it every frame, so a
-      // jump from press to release drops the item where it was picked up
-      movePointer(a);
-      pointer("pointerdown", a);
-      for (let i = 1; i <= steps; i++) {
-        movePointer({ x: a.x + ((b.x - a.x) * i) / steps, y: a.y + ((b.y - a.y) * i) / steps });
         await frame();
       }
-      pointer("pointerup", b, win);
-    },
+    };
 
-    dragOnto: async (from, to, o = {}) => {
-      const budget = o.budget ?? timeout;
-      const a = clientPoint(from.x, from.y);
-      const b = clientPoint(to.x, to.y);
-      movePointer(a);
-      pointer("pointerdown", a);
-      let armed = true;
-      let landed = true;
-      try {
-        // ARM, then move: see the interface note. Capped rather than given the
-        // whole budget, because a loop that has not taken the press in ten
-        // seconds is not going to.
-        if (o.armed) armed = await until(o.armed, Math.min(budget, 10_000));
-        movePointer(b);
-        if (o.landed) landed = await until(o.landed, Math.min(budget, 10_000));
-      } finally {
-        // Released WHEREVER the drag got to, and released even when the waits
-        // above came back false: leaving the button down makes every later
-        // gesture a drag (the same rule holdAt follows).
-        pointer("pointerup", b, win);
-      }
-      // and NOTHING after it — the release is the end of this gesture, and what
-      // it set off belongs to the next line of the sheet
-      return { armed, landed };
-    },
-
-    dragProp: async (at, next, budget = timeout) => {
-      const from = clientPoint(at.x, at.y);
-      // `realYieldSeq` counts the frames a script has given up, bumped twice per
-      // turn of exactly the `while stilldown()` loop holding the drag — the
-      // `stilldown()` opening the turn and the `forceupdate()` closing it. So
-      // this waits one turn, which is the rate the dial itself steps at; see
-      // HELD_YIELDS for why one turn rather than the two this used to take.
-      const held = async (): Promise<void> => {
-        const was = run<number>("window.dbg.session.realYieldSeq");
-        await until(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
-      };
-      movePointer(from);
-      pointer("pointerdown", from);
-      // where the cursor actually is, so the release happens there rather than
-      // back at the grab point — which is where a real hand lets go
-      let last = from;
-      try {
-        await held();
-        for (let to = await next(at); to; to = await next(at)) {
-          last = clientPoint(to.x, to.y);
-          movePointer(last);
-          await held();
-        }
-      } finally {
-        pointer("pointerup", last, win);
-        // The release is a gesture too, and a control that snaps on the button
-        // coming up has not snapped yet — see the long note on the Playwright
-        // twin of this method (taoot/tests/speedrun/driver.ts).
-        await until(
-          `!window.dbg.session.pollingInput() && !window.dbg.session.scriptBusy`,
-          Math.min(budget, 5_000),
+    /** wall time that does not move the game — what polls beside a step use */
+    const wallWait = (ms: number): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const t = win.setTimeout(() => resolve(), ms);
+        opts.signal?.addEventListener(
+          "abort",
+          () => {
+            win.clearTimeout(t);
+            reject(new Aborted());
+          },
+          { once: true },
         );
-      }
-    },
-
-    // localStorage, because the page has no disk. A `.ti` is a few kilobytes and
-    // base64 costs a third on top, which is nothing against the 5 MB a browser
-    // gives an origin — and it survives the reload that rebooting the game takes.
-    putSave: (name: string, bytes: Uint8Array) =>
-      new Promise<void>((resolve) => {
-        let bin = "";
-        for (const b of bytes) bin += String.fromCharCode(b);
-        localStorage.setItem(opts.keys.key(opts.sheet(), name), btoa(bin));
-        resolve();
-      }),
-    getSave: (name: string) =>
-      new Promise<Uint8Array | null>((resolve) => {
-        const raw = localStorage.getItem(opts.keys.key(opts.sheet(), name));
-        if (!raw) {
-          resolve(null);
-          return;
-        }
-        const bin = atob(raw);
-        const out = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-        resolve(out);
-      }),
+      });
 
     /**
-     * Reload the document, and never come back.
+     * Poll a predicate on the animation frame.
      *
-     * The promise deliberately never settles. The reload tears down this
-     * JavaScript context, so an action that awaited it and carried on would be
-     * running against a dying page — a torn-off canvas, a `window.dbg` that is
-     * about to stop existing — and would report whatever nonsense it read there
-     * as the state of the game. Hanging is the honest shape: the run ends here,
-     * and it is the page that comes back, not this call.
+     * rAF and not a timer, because the engine advances on rAF: waiting on the same
+     * beat means a condition is seen the moment the frame that caused it has been
+     * drawn, never a timer-slice later. It also stops the loop dead when the tab is
+     * hidden, which is right — the game stops too.
      */
-    // the sheet's own breakpoint; the page catches this and keeps the pointer
-    pause: () => {
-      throw new Paused();
-    },
+    const until = async (expr: string, budget: number): Promise<boolean> => {
+      const deadline = budgetClock() + budget;
+      // Under a sheet's clock the session asks the condition itself and stops the
+      // game on the pass it comes true (GameSession.sheetHolds, #508); this loop
+      // only watches for that. Without one it asks, as it always did.
+      const id = ++holdIds;
+      const held = run<boolean>(`(() => {
+        const s = window.dbg && window.dbg.session;
+        if (!s || !s.sheetClock) return false;
+        s.sheetHolds.set(${id}, () => !!(${expr}));
+      ${watchMark(id)}
+        return true;
+      })()`);
+      const met = held ? `!window.dbg || !window.dbg.session.sheetHolds.has(${id})` : expr;
+      try {
+        for (;;) {
+          check();
+          if (run<boolean>(met)) return true;
+          if (budgetClock() > deadline) return false;
+          await frame();
+        }
+      } finally {
+        if (held) run(`void (window.dbg && window.dbg.session.sheetHolds.delete(${id}))`);
+      }
+    };
 
-    restart: () => {
-      opts.beforeRestart?.();
-      win.location.reload();
-      return new Promise<void>(() => {});
-    },
+    const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
+      if (!(await until(expr, budget))) throw new Error(`stuck waiting for ${what}`);
+    };
 
-    log,
+    const tryHold = (expr: string, budget: number): Promise<boolean> => until(expr, budget);
+
+    const settle = async (mode: WaitMode, what: string, budget = timeout): Promise<void> => {
+      const expr = waitExpr(mode);
+      if (!expr) return;
+      await hold(expr, `${what} to settle`, budget);
+    };
+
+    /** canvas pixel (512x384) -> a client point, through main.ts's own mapping */
+    const clientPoint = (x: number, y: number): Point =>
+      clientPointFor(x, y, canvas.getBoundingClientRect(), canvas);
+
+    const pointer = (type: string, at: Point, target: EventTarget = canvas): void => {
+      target.dispatchEvent(
+        new win.PointerEvent(type, {
+          clientX: at.x,
+          clientY: at.y,
+          pointerId: pointerId++,
+          // explicitly a mouse: the pointerdown handler sends a TOUCH down
+          // `beginTouch`, which is a different gesture entirely
+          pointerType: "mouse",
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: type === "pointerup" ? 0 : 1,
+        }),
+      );
+    };
+
+    /**
+     * Move the cursor — which takes TWO events, and a `pointermove` is not one of
+     * them.
+     *
+     * main.ts listens for a moving mouse in `mousemove` (the one that reads
+     * `session.pointerDown` and republishes the cursor mid-drag), and its
+     * `pointermove` listener is the TOUCH gesture recogniser, which drops anything
+     * whose pointerId is not the finger it is following. A real browser hides the
+     * difference: a physical move fires `pointermove` and then a compatibility
+     * `mousemove`, so a page that listens to either one sees the move. A
+     * SYNTHESIZED PointerEvent generates no compatibility event at all — nothing
+     * else does, since the compatibility event comes from the input pipeline rather
+     * than from dispatch.
+     *
+     * So a drag built out of `pointermove` alone pressed in the right place and
+     * then never moved: `mouse()` kept answering the grab point for every turn of
+     * the held script's `while stilldown()` loop. Silent, because every gesture
+     * still went in and the loop still ran — the coal lever simply stayed on
+     * whatever deg the cursor was pressed at (deg 0, its travel starting below the
+     * point `aimAtThing` grabs it by), and the five turbine dials saw `delt = 0`
+     * every frame and never turned at all.
+     *
+     * Both events, in the order a browser sends them, at the canvas.
+     */
+    const movePointer = (at: Point): void => {
+      pointer("pointermove", at);
+      canvas.dispatchEvent(
+        new win.MouseEvent("mousemove", {
+          clientX: at.x,
+          clientY: at.y,
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: 1,
+        }),
+      );
+    };
+
+    /**
+     * How long a click holds the button down — because a click is not an instant.
+     *
+     * A hand takes 50–150 ms between pressing and letting go, and the game reads
+     * that gap. Whole gestures are decided inside it: `while stilldown()` loops
+     * carry a held item and read `mouse()` every turn, `trackbut` lights a stage
+     * button only while it is held, and INVEN.SHP's `stdmouse` decides where a
+     * carried object LANDS from what `hittest` finds when the button comes up.
+     *
+     * Dispatching down and up in one task gives the engine no gap at all. The press
+     * is handled asynchronously (`session.track(viewer.press(...))`), so by the time
+     * the script chain runs its first line the button is already up and every one of
+     * those loops falls straight through. Measured on the coal lever, whose
+     * mousedown IS such a loop:
+     *
+     *     instant        deg 9 -> 9    coal 50 -> 50   stilldown turns 1
+     *     held 3 frames  deg 9 -> 11   coal 50 -> 47   stilldown turns 3
+     *
+     * One turn means the loop was entered and `stilldown()` was already false. The
+     * symptom higher up is a click that "does nothing" — putting the Rubaiyat down
+     * in the coal bunker, where the drop is the release and the release never
+     * happened while anything was listening.
+     *
+     * Three frames is what that measurement needed; it is deliberately a count of
+     * frames rather than milliseconds, because what has to fit in the gap is a turn
+     * of an engine loop and the engine runs on frames.
+     */
+    const CLICK_FRAMES = 3;
+    const heldFrames = async (): Promise<void> => {
+      for (let i = 0; i < CLICK_FRAMES; i++) await frame();
+    };
+
+    const pressKey = (name: string): void => {
+      // `key` is what main.ts reads; the rest are filled in because a listener
+      // further up the page may look at them, and a half-built event is a bug
+      // waiting for the first person who adds one
+      const key = name === "Space" ? " " : name;
+      win.dispatchEvent(
+        new win.KeyboardEvent("keydown", { key, code: keyCode(key), bubbles: true, cancelable: true }),
+      );
+      win.dispatchEvent(
+        new win.KeyboardEvent("keyup", { key, code: keyCode(key), bubbles: true, cancelable: true }),
+      );
+    };
+
+    /** a best-effort `code` for the few keys a sheet actually sends */
+    const keyCode = (key: string): string => {
+      if (key === " ") return "Space";
+      if (key === "Escape") return "Escape";
+      if (key.startsWith("Arrow")) return key;
+      if (key.length === 1) return /[a-z]/i.test(key) ? `Key${key.toUpperCase()}` : "";
+      return key;
+    };
+
+    return {
+      /**
+       * Wall clock, engine frames and the load remover's total (#251), sampled
+       * together — the two page-side numbers in ONE compiled expression, so they
+       * are a reading of one instant rather than of two.
+       *
+       * The wall clock is this window's `performance.now` and the loading total is
+       * measured on the GAME window's, which are two time origins if the game is
+       * ever in a frame. That is harmless and stays harmless: nothing subtracts
+       * one from the other, only a difference of one from a difference of the
+       * other, and both count real milliseconds at the same rate.
+       */
+      clock: (): Promise<Clock> =>
+        new Promise((resolve) => {
+          const [frames, loading, game] = run<[number, number, number]>(
+            "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
+          );
+          resolve({ ms: performance.now(), frames, loading, game });
+        }),
+      evaluate,
+      hold,
+      tryHold,
+      settle,
+      sleep,
+      wallWait,
+      pad: async (ms) => {
+        if (!ms) return;
+        paddedMs += ms;
+        await sleep(ms);
+      },
+      padded: () => paddedMs,
+
+      key: async (name, wait = "ready", budget = timeout) => {
+        await hold(KEY_SAFE, `the engine to accept ${name}`, budget);
+        pressKey(name);
+        await settle(wait, `key ${name}`, budget);
+      },
+      rawKey: async (name) => {
+        pressKey(name);
+        await frame();
+      },
+
+      clickAt: async (x, y, wait = "taken", budget = timeout) => {
+        const at = clientPoint(x, y);
+        pointer("pointerdown", at);
+        await heldFrames();
+        pointer("pointerup", at, win);
+        await settle(wait, `click ${x},${y}`, budget);
+      },
+
+      holdAt: async (x, y, opts, budget = timeout) => {
+        // ARM FIRST, then press — see HoldOptions.arm
+        const armed = opts.arm ? await until(opts.arm, opts.armBudget ?? Math.min(budget, 10_000)) : true;
+        if (!armed) return { armed, held: false };
+        const at = clientPoint(x, y);
+        movePointer(at);
+        pointer("pointerdown", at);
+        let held = false;
+        try {
+          held = await until(opts.until, budget);
+        } finally {
+          // released whatever happened: leaving the button down would make every
+          // later gesture a drag
+          pointer("pointerup", at, win);
+        }
+        await heldFrames();
+        return { armed, held };
+      },
+
+      hammer: async (name, { until: goal, arm, gap = defaultGap, budget = timeout, what }: HammerOptions) => {
+        const deadline = budgetClock() + budget;
+        let pressed = 0;
+        for (;;) {
+          check();
+          if (run<boolean>(goal)) return pressed;
+          if (budgetClock() > deadline) {
+            throw new Error(`stuck waiting for ${what}: ${pressed} presses of ${name} in ${budget} ms`);
+          }
+          // only press when the key means what we think it means, and only when it
+          // will not be dropped
+          if ((!arm || run<boolean>(arm)) && run<boolean>(KEY_SAFE)) {
+            pressKey(name);
+            pressed++;
+          }
+          await (gap ? sleep(gap) : frame());
+        }
+      },
+
+      aim: async (kind, name) => {
+        // the engine's own hit test, called directly — this is the sweep the
+        // Playwright driver has to inject as source, and here it is simply local
+        const { aimAtThing, aimAtHotspot } = await import("./aim");
+        const dbg = (win as unknown as { dbg: any }).dbg;
+        const s = dbg.session;
+        const v = dbg.viewer;
+        const adapter = {
+          // the framebuffer's size, not this canvas's: Dust draws 512x384 through
+          // a 1024x768 canvas, and a hit test is asked in framebuffer pixels
+          width: dbg.host.screen.width,
+          height: dbg.host.screen.height,
+          hitTest: (x: number, y: number) => s.hitTestAt(x, y),
+          propUnder: (x: number, y: number) => {
+            const p = v.propUnder(x, y);
+            return p ? p.group.name : null;
+          },
+          inFlat: !s.viewShowing && !!s.stageScript,
+          hotspot: (n: string) => {
+            const obj = v.scene.views[v.viewIdx].objects.find(
+              (o: { identifier?: string }) => (o.identifier || "").toLowerCase() === n.toLowerCase(),
+            );
+            return obj
+              ? { x0: obj.startRegionX, y0: obj.startRegionY, x1: obj.endRegionX, y1: obj.endRegionY }
+              : null;
+          },
+        };
+        return kind === "thing" ? aimAtThing(adapter, name) : aimAtHotspot(adapter, name);
+      },
+
+      drag: async (from, to, steps = 8) => {
+        const a = clientPoint(from.x, from.y);
+        const b = clientPoint(to.x, to.y);
+        // the steps matter: main.ts publishes the pointer as the mouse moves and
+        // the held script's `while stilldown()` loop reads it every frame, so a
+        // jump from press to release drops the item where it was picked up
+        movePointer(a);
+        pointer("pointerdown", a);
+        for (let i = 1; i <= steps; i++) {
+          movePointer({ x: a.x + ((b.x - a.x) * i) / steps, y: a.y + ((b.y - a.y) * i) / steps });
+          await frame();
+        }
+        pointer("pointerup", b, win);
+      },
+
+      dragOnto: async (from, to, o = {}) => {
+        const budget = o.budget ?? timeout;
+        const a = clientPoint(from.x, from.y);
+        const b = clientPoint(to.x, to.y);
+        movePointer(a);
+        pointer("pointerdown", a);
+        let armed = true;
+        let landed = true;
+        try {
+          // ARM, then move: see the interface note. Capped rather than given the
+          // whole budget, because a loop that has not taken the press in ten
+          // seconds is not going to.
+          if (o.armed) armed = await until(o.armed, Math.min(budget, 10_000));
+          movePointer(b);
+          if (o.landed) landed = await until(o.landed, Math.min(budget, 10_000));
+        } finally {
+          // Released WHEREVER the drag got to, and released even when the waits
+          // above came back false: leaving the button down makes every later
+          // gesture a drag (the same rule holdAt follows).
+          pointer("pointerup", b, win);
+        }
+        // and NOTHING after it — the release is the end of this gesture, and what
+        // it set off belongs to the next line of the sheet
+        return { armed, landed };
+      },
+
+      dragProp: async (at, next, budget = timeout) => {
+        const from = clientPoint(at.x, at.y);
+        // `realYieldSeq` counts the frames a script has given up, bumped twice per
+        // turn of exactly the `while stilldown()` loop holding the drag — the
+        // `stilldown()` opening the turn and the `forceupdate()` closing it. So
+        // this waits one turn, which is the rate the dial itself steps at; see
+        // HELD_YIELDS for why one turn rather than the two this used to take.
+        const held = async (): Promise<void> => {
+          const was = run<number>("window.dbg.session.realYieldSeq");
+          await until(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
+        };
+        movePointer(from);
+        pointer("pointerdown", from);
+        // where the cursor actually is, so the release happens there rather than
+        // back at the grab point — which is where a real hand lets go
+        let last = from;
+        try {
+          await held();
+          for (let to = await next(at); to; to = await next(at)) {
+            last = clientPoint(to.x, to.y);
+            movePointer(last);
+            await held();
+          }
+        } finally {
+          pointer("pointerup", last, win);
+          // The release is a gesture too, and a control that snaps on the button
+          // coming up has not snapped yet — see the long note on the Playwright
+          // twin of this method (taoot/tests/speedrun/driver.ts).
+          await until(
+            `!window.dbg.session.pollingInput() && !window.dbg.session.scriptBusy`,
+            Math.min(budget, 5_000),
+          );
+        }
+      },
+
+      // localStorage, because the page has no disk. A `.ti` is a few kilobytes and
+      // base64 costs a third on top, which is nothing against the 5 MB a browser
+      // gives an origin — and it survives the reload that rebooting the game takes.
+      putSave: (name: string, bytes: Uint8Array) =>
+        new Promise<void>((resolve) => {
+          let bin = "";
+          for (const b of bytes) bin += String.fromCharCode(b);
+          localStorage.setItem(opts.keys.key(opts.sheet(), name), btoa(bin));
+          resolve();
+        }),
+      getSave: (name: string) =>
+        new Promise<Uint8Array | null>((resolve) => {
+          const raw = localStorage.getItem(opts.keys.key(opts.sheet(), name));
+          if (!raw) {
+            resolve(null);
+            return;
+          }
+          const bin = atob(raw);
+          const out = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+          resolve(out);
+        }),
+
+      /**
+       * Reload the document, and never come back.
+       *
+       * The promise deliberately never settles. The reload tears down this
+       * JavaScript context, so an action that awaited it and carried on would be
+       * running against a dying page — a torn-off canvas, a `window.dbg` that is
+       * about to stop existing — and would report whatever nonsense it read there
+       * as the state of the game. Hanging is the honest shape: the run ends here,
+       * and it is the page that comes back, not this call.
+       */
+      // the sheet's own breakpoint; the page catches this and keeps the pointer
+      pause: () => {
+        throw new Paused();
+      },
+
+      restart: () => {
+        opts.beforeRestart?.();
+        win.location.reload();
+        return new Promise<void>(() => {});
+      },
+
+      log,
+      budgetNow: opts.budgetNow,
+    };
   };
+  return { ...make(false), forWatch: () => make(true) };
 }
 
 export { SHOWING } from "./driver";
