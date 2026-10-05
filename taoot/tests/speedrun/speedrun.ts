@@ -37,21 +37,29 @@
  *
  * ## Reading the report
  *
- * Two clocks, and the difference between them is the point:
+ * The run is measured by **in-game** time, and that is the number to quote
+ * ([#508](https://github.com/dhobi/dreamrefactory/issues/508)). This runner
+ * plays on a sheet's clock (`GameSession.sheetClock`, `nominalTime`): the game
+ * moves only while the runner waits on it, in 50 ms passes rather than
+ * milliseconds, stands still while the engine waits on a file, and ends speech
+ * by the clip's length rather than the sound card's. So in-game time is the
+ * same on a slow machine as on a fast one and over a slow link as over a fast
+ * one. Measured on the stack-to-mission-4 leg, seed 20: 8239-8242 frames at
+ * full speed, with the CPU throttled 4x, over a throttled link and with both,
+ * while the wall time ran from 25.5 s to 40 s.
  *
- *   - **time** is the speedrun. It is what a stopwatch says, less what the run
- *     spent downloading the game (see **load** below), and it still moves with
- *     machine load — so a 3 % gain is not distinguishable from a quiet afternoon.
- *   - **frames** is `session.frameCounter`, the engine's own displayed-frame
- *     count: one per main-loop pass, twenty a second on a machine that keeps up
- *     (docs/engine/runtime/timing.md). It is NOT immune to load. Passes run on
- *     the real clock, so a slow machine or a slow round trip from this runner
- *     costs frames as well as seconds. Measured on the stack-to-mission-4 leg:
- *     time 25.1-25.6 s and 41.2-41.4 s with the CPU throttled 4x; frames the
- *     engine spent busy rose by a third under the throttle and the idle ones
- *     between gestures to two and a half times as many. So frames and time
- *     move together, and a route is compared on a quiet machine over a few
- *     runs, where the spread was about 2 %.
+ * What a sheet's time means for a person: the runner gives every input on the
+ * first pass it could take effect, which a FRAME-PERFECT player could also do
+ * — press within the same 50 ms pass, by anticipation rather than reaction. A
+ * sheet's time is therefore the floor for its route, and a human run is on the
+ * same scale. (Inputs are taken one per screen refresh, for the sheet and the
+ * player alike.)
+ *
+ *   - **in-game** is that time.
+ *   - **time** is the wall clock less downloads — what the afternoon cost.
+ *   - **frames** is `session.frameCounter`, the displayed-frame count. From a
+ *     load point it starts at the save's own count, so only a difference of
+ *     two readings of it means anything.
  *
  * **load** is the third column, and only appears when there was something to
  * report ([#251](https://github.com/dhobi/dreamrefactory/issues/251)). It is how
@@ -101,6 +109,12 @@ const HEADED = flag("headed") || (!!process.env.HEADED && process.env.HEADED !==
  * defaults it to 250 ms. A watched speedrun should be the speedrun.
  */
 const SLOWMO = Number(process.env.SLOWMO ?? 0);
+/**
+ * `--patience=N` (or PATIENCE=N): every step's budget times N, for a slow
+ * machine or link where working lines outlast the ten seconds a stuck one is
+ * given. It decides only when a run is called stuck, never what it measures.
+ */
+const PATIENCE = Number(argv.find((a) => a.startsWith("--patience="))?.split("=")[1] ?? process.env.PATIENCE ?? 1);
 /**
  * Unseeded by default: every run is a fresh course, the way a real attempt is.
  *
@@ -258,6 +272,14 @@ async function main(): Promise<void> {
   // before anything runs: advanceday draws the arrival second at the very end of
   // the boot, and the bomb's fuse is drawn in the flat
   const seedIt = async (): Promise<void> => {
+    // A sheet's clock (#508): the game runs only while this runner waits on it,
+    // in passes of game time, so the frame count is the same on any machine
+    // and any connection — see GameSession.sheetClock.
+    await page.evaluate(() => {
+      const s = (window as any).dbg.session;
+      s.nominalTime = true;
+      s.sheetClock = true;
+    });
     if (SEED === null) return;
     await page.evaluate((seed) => (window as any).dbg.session.seedRandom(seed), SEED);
   };
@@ -277,6 +299,7 @@ async function main(): Promise<void> {
   const r = await runSheet(d, steps, ACTIONS, {
     onWatch: (w, said) =>
       console.log(`  WATCH ${w.source} -> ${w.action.source}${said.length ? `  (${said.join("; ")})` : ""}`),
+    patience: PATIENCE,
     onStep: (step, i, total) =>
       process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
   });
@@ -296,13 +319,13 @@ function report(r: {
   steps: Step[];
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number; loading: number };
+  total: { ms: number; frames: number; game: number; loading: number };
   failure: { step: Step; error: Error } | null;
   where: string | null;
   errors: string[];
   seeded: number | null;
 }): void {
-  const line = "─".repeat(72);
+  const line = "─".repeat(78);
   console.log(`\n${line}`);
   console.log(`SPLITS${r.seeded === null ? "   (unseeded — a fresh course, dice live)" : `   (seed ${r.seeded} — pinned, not a clean run)`}`);
   console.log(line);
@@ -316,16 +339,16 @@ function report(r: {
   const loadCol = (n: number): string => (loads ? padl(n ? ms(n) : "", 10) : "");
   const loadHead = loads ? padl("load", 10) : "";
   console.log(
-    `${pad("split", 34)}${padl("time", 10)}${loadHead}${padl("frames", 10)}${padl("actions", 9)}`,
+    `${pad("split", 28)}${padl("in-game", 10)}${padl("time", 10)}${loadHead}${padl("frames", 10)}${padl("actions", 9)}`,
   );
   for (const s of r.splits) {
     console.log(
-      `${pad(s.name, 34)}${padl(ms(s.ms), 10)}${loadCol(s.loading)}${padl(String(s.frames), 10)}${padl(String(s.actions), 9)}`,
+      `${pad(s.name, 28)}${padl(ms(s.game), 10)}${padl(ms(s.ms), 10)}${loadCol(s.loading)}${padl(String(s.frames), 10)}${padl(String(s.actions), 9)}`,
     );
   }
   console.log(line);
   console.log(
-    `${pad(r.failure ? "TOTAL (incomplete)" : "TOTAL", 34)}${padl(ms(r.total.ms), 10)}${loadCol(r.total.loading)}${padl(String(r.total.frames), 10)}${padl(String(r.timings.length), 9)}`,
+    `${pad(r.failure ? "TOTAL (incomplete)" : "TOTAL", 28)}${padl(ms(r.total.game), 10)}${padl(ms(r.total.ms), 10)}${loadCol(r.total.loading)}${padl(String(r.total.frames), 10)}${padl(String(r.timings.length), 9)}`,
   );
 
   /**
@@ -413,7 +436,7 @@ function report(r: {
     // this is the line that gets quoted, and a time is only comparable with
     // another time if both say what they removed.
     console.log(
-      `FINISHED — ${ms(r.total.ms)}, ${r.total.frames} engine frames` +
+      `FINISHED — ${ms(r.total.game)} in-game (${ms(r.total.ms)} real, ${r.total.frames} engine frames)` +
         (r.total.loading > 0 ? ` (${ms(r.total.loading)} of loading removed)` : ""),
     );
   }

@@ -188,6 +188,7 @@ const playBtn = $<HTMLButtonElement>("srrun");
 const pauseBtn = $<HTMLButtonElement>("srpause");
 const stopBtn = $<HTMLButtonElement>("srstop");
 const stepBtn = $<HTMLButtonElement>("srstep");
+const timeMeBtn = $<HTMLButtonElement>("srtimeme");
 const checkBtn = $<HTMLButtonElement>("srcheck");
 const clearBtn = $<HTMLButtonElement>("srclear");
 const recBtn = $<HTMLButtonElement>("srrec");
@@ -256,16 +257,37 @@ const ms = (n: number): string => {
  * reads hangs off it.
  */
 const clockEl = $<HTMLDivElement>("srclock");
-/** wall clock and network total at Play, as one reading; null when not running */
-let clockFrom: { ms: number; loading: number } | null = null;
+/** wall clock, network total and game time at Play, as one reading; null when not running */
+let clockFrom: { ms: number; loading: number; game: number } | null = null;
 let clockTick: number | null = null;
 
-/** the route's own time since Play: wall time, less what the wire took */
+/** the session, for its game time — the page's own handle on it */
+interface ClockedSession {
+  runMs: number;
+  nominalTime: boolean;
+  sheetClock: boolean;
+}
+const session = (): ClockedSession | null =>
+  (window as unknown as { dbg?: { session?: ClockedSession } }).dbg?.session ?? null;
+
+/** the route's wall time since Play, less what the wire took */
 const clockNow = (from: { ms: number; loading: number }): number =>
   Math.max(0, performance.now() - from.ms - (loadClock.ms - from.loading));
 
-const showClock = (at: number): void => {
-  clockEl.textContent = ms(at);
+/**
+ * The route's IN-GAME time since Play or Time me (#508), off the session's run
+ * counter (GameSession.runMs): the game's own passes while it is busy, and —
+ * for a person — their real time while it waits for them. A sheet runs on a
+ * sheet's clock, where its waiting costs nothing. Either way it reads the same
+ * on a slow machine or a slow link as on a fast one.
+ */
+const gameClockNow = (from: { game: number }): number => Math.max(0, (session()?.runMs ?? from.game) - from.game);
+
+const realEl = document.createElement("span");
+realEl.className = "real";
+const showClock = (at: number, real?: number): void => {
+  realEl.textContent = real === undefined ? "" : ` real ${ms(real)}`;
+  clockEl.replaceChildren(document.createTextNode(ms(at)), realEl);
 };
 
 /** the page's hidden total at Play, so a finished run can say what of its
@@ -273,7 +295,7 @@ const showClock = (at: number): void => {
 let hiddenAtPlay = 0;
 
 function startClock(): void {
-  clockFrom = { ms: performance.now(), loading: loadClock.ms };
+  clockFrom = { ms: performance.now(), loading: loadClock.ms, game: session()?.runMs ?? 0 };
   hiddenAtPlay = loadClock.hiddenMs;
   showClock(0);
   clockEl.classList.add("live");
@@ -282,7 +304,7 @@ function startClock(): void {
   // number that has not changed
   clockTick = window.setInterval(() => {
     if (clockFrom === null) return;
-    showClock(clockNow(clockFrom));
+    showClock(gameClockNow(clockFrom), clockNow(clockFrom));
     // on the same tick as the reading it explains, so the two can never
     // disagree about whether the number standing still is a download
     clockEl.classList.toggle("waiting", loadClock.waiting);
@@ -294,7 +316,7 @@ function startClock(): void {
 function stopClock(): void {
   if (clockTick !== null) window.clearInterval(clockTick);
   clockTick = null;
-  if (clockFrom !== null) showClock(clockNow(clockFrom));
+  if (clockFrom !== null) showClock(gameClockNow(clockFrom), clockNow(clockFrom));
   clockFrom = null;
   // the wait too: whatever the wire is doing now, it is not this run's wait any more
   clockEl.classList.remove("live", "waiting");
@@ -647,6 +669,7 @@ function setButtons(live: boolean): void {
   recBtn.disabled = !!warming;
   warmBtn.disabled = live;
   pauseBtn.disabled = !live;
+  timeMeBtn.disabled = live || !!warming;
   // The glyph is ▶ either way — a transport does not relabel itself — so the
   // difference between starting at the top and carrying on from the pointer is
   // said in the tooltip, which is also what a screen reader reads. A control
@@ -732,6 +755,12 @@ async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
   running = new AbortController();
   setButtons(true);
   splitsEl.textContent = "";
+  // a sheet runs on a sheet's clock, so its time is the same on any machine (#508)
+  const s0 = session();
+  if (s0) {
+    s0.nominalTime = true;
+    s0.sheetClock = true;
+  }
   startClock();
 
   const d = pageDriver({
@@ -845,6 +874,12 @@ async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
   } finally {
     running = null;
     stopClock();
+    // and the page is a game again: by hand, the real-time waits are real time
+    const s1 = session();
+    if (s1) {
+      s1.sheetClock = false;
+      s1.nominalTime = false;
+    }
     setButtons(false);
     remark();
   }
@@ -888,6 +923,12 @@ async function playAside(steps: Step[], label: string): Promise<void> {
   } finally {
     running = null;
     stopClock();
+    // and the page is a game again: by hand, the real-time waits are real time
+    const s1 = session();
+    if (s1) {
+      s1.sheetClock = false;
+      s1.nominalTime = false;
+    }
     setButtons(false);
     remark();
   }
@@ -968,6 +1009,34 @@ async function stopAll(): Promise<void> {
   say("stopped — pointer back at the top");
 }
 checkBtn.addEventListener("click", () => parse());
+
+/**
+ * A run played by hand, timed in in-game time (#508). Speedrun time on, a
+ * sheet's clock off: the game's real-time waits count their nominal length,
+ * and the player's own waiting counts at full speed (GameSession.countRun).
+ * Play and Step are off meanwhile — a sheet and a person cannot both be the
+ * one playing — and pressing it again stops the clock where it is.
+ */
+let timingMe = false;
+timeMeBtn.addEventListener("click", () => {
+  const s = session();
+  if (!s) return say("the game has not booted yet — wait for the screen to come up", "bad");
+  timingMe = !timingMe;
+  if (timingMe) {
+    s.nominalTime = true;
+    s.sheetClock = false;
+    startClock();
+    timeMeBtn.textContent = "Stop timing";
+    playBtn.disabled = stepBtn.disabled = true;
+    say("timing you — in-game time, your waiting at full speed", "");
+  } else {
+    stopClock();
+    s.nominalTime = false;
+    timeMeBtn.textContent = "Time me";
+    setButtons(false);
+    say(`your run: ${clockEl.firstChild?.textContent ?? ""} in-game`, "");
+  }
+});
 
 /* ------------------------------------------------------------------ *
  * Record mode

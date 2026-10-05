@@ -214,7 +214,28 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
 
   const frame = (): Promise<void> => new Promise((r) => win.requestAnimationFrame(() => r()));
 
-  const sleep = (ms: number): Promise<void> =>
+  /**
+   * A pause the game runs through: under a sheet's clock, `ms / 50` passes of it
+   * (at least one) rather than `ms` of the wall, so a gap between presses is
+   * the same length on any machine (#508); otherwise wall time, as before.
+   */
+  const sleep = async (ms: number): Promise<void> => {
+    const passes = Math.max(1, Math.round(ms / 50));
+    const stepped = run<boolean>(`(() => {
+      const s = window.dbg && window.dbg.session;
+      if (!s || !s.sheetClock) return false;
+      s.sheetPasses = ${passes};
+      return true;
+    })()`);
+    if (!stepped) return wallWait(ms);
+    while (!run<boolean>(`!window.dbg || !window.dbg.session.sheetClock || window.dbg.session.sheetPasses === 0`)) {
+      check();
+      await frame();
+    }
+  };
+
+  /** wall time that does not move the game — what polls beside a step use */
+  const wallWait = (ms: number): Promise<void> =>
     new Promise((resolve, reject) => {
       const t = win.setTimeout(() => resolve(), ms);
       opts.signal?.addEventListener(
@@ -237,13 +258,29 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
    */
   const until = async (expr: string, budget: number): Promise<boolean> => {
     const deadline = performance.now() + budget;
-    for (;;) {
-      check();
-      if (run<boolean>(expr)) return true;
-      if (performance.now() > deadline) return false;
-      await frame();
+    // Under a sheet's clock the session asks the condition itself and stops the
+    // game on the pass it comes true (GameSession.sheetHolds, #508); this loop
+    // only watches for that. Without one it asks, as it always did.
+    const id = ++holdIds;
+    const held = run<boolean>(`(() => {
+      const s = window.dbg && window.dbg.session;
+      if (!s || !s.sheetClock) return false;
+      s.sheetHolds.set(${id}, () => !!(${expr}));
+      return true;
+    })()`);
+    const met = held ? `!window.dbg || !window.dbg.session.sheetHolds.has(${id})` : expr;
+    try {
+      for (;;) {
+        check();
+        if (run<boolean>(met)) return true;
+        if (performance.now() > deadline) return false;
+        await frame();
+      }
+    } finally {
+      if (held) run(`void (window.dbg && window.dbg.session.sheetHolds.delete(${id}))`);
     }
   };
+  let holdIds = 0;
 
   const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
     if (!(await until(expr, budget))) throw new Error(`stuck waiting for ${what}`);
@@ -384,16 +421,17 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
      */
     clock: (): Promise<Clock> =>
       new Promise((resolve) => {
-        const [frames, loading] = run<[number, number]>(
-          "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
+        const [frames, loading, game] = run<[number, number, number]>(
+          "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
         );
-        resolve({ ms: performance.now(), frames, loading });
+        resolve({ ms: performance.now(), frames, loading, game });
       }),
     evaluate,
     hold,
     tryHold,
     settle,
     sleep,
+    wallWait,
     pad: async (ms) => {
       if (!ms) return;
       paddedMs += ms;

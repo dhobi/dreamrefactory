@@ -164,6 +164,8 @@ export function clientPointFor(
 export interface Clock {
   ms: number;
   frames: number;
+  /** the session's game time (`GameSession.gameNow`) — what a run is measured by (#508) */
+  game: number;
   /** cumulative ms the page has been waiting on the network — see the load remover */
   loading: number;
 }
@@ -224,8 +226,19 @@ export interface SpeedrunDriver {
   tryHold(expr: string, budget: number): Promise<boolean>;
   /** the wait half of a gesture — what a sheet's `wait:` moves */
   settle(mode: WaitMode, what: string, budget?: number): Promise<void>;
-  /** plain delay; the one thing a run should never need and sometimes does */
+  /**
+   * Plain delay; the one thing a run should never need and sometimes does.
+   * Under a sheet's clock (`GameSession.sheetClock`) it lets the GAME run
+   * `ms / 50` passes, at least one, rather than the wall clock pass `ms` — a
+   * pause between presses is then the same length on any machine (#508).
+   */
   sleep(ms: number): Promise<void>;
+  /**
+   * Wall time that does NOT move the game, for whatever polls beside a step
+   * (the `watchFor` watchdog): under a sheet's clock a `sleep` there would run
+   * passes the step never asked for. Defaults to `sleep`.
+   */
+  wallWait?(ms: number): Promise<void>;
   /** `after:` padding, counted separately so the report can call it dead time */
   pad(ms: number): Promise<void>;
   padded(): number;

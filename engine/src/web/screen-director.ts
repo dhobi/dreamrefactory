@@ -470,6 +470,8 @@ export class ScreenDirector {
     // reading stops moving and every delta below it is zero, which is the
     // original's own state under a blocking file dialog (GameSession.gameTime).
     now = this.session.gameTime(now);
+    // a run's in-game time: the player's own waiting counts in real time (#508)
+    this.session.countRun(this.quiescent);
     this.lockedAtPass = this.inputLocked;
     this.room?.refreshRoomGamma();
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see

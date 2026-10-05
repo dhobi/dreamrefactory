@@ -104,20 +104,70 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
 
   const evaluate = <T>(expr: string): Promise<T> => page.evaluate(expr) as Promise<T>;
 
-  const hold = (expr: string, what: string, budget = timeout): Promise<void> =>
+  /**
+   * A wait on the game, which under a sheet's clock is also what lets the game
+   * RUN (`GameSession.sheetClock`, #508): the hold opens itself in the page and
+   * closes on the very frame its condition comes true, so the step ends on the
+   * pass the game decided and the round trip back here costs none.
+   */
+  let holdIds = 0;
+  /**
+   * Open a hold in the page: under a sheet's clock the SESSION evaluates the
+   * condition and closes the hold on the pass it comes true; without one,
+   * nothing is registered and the wait below is the plain predicate.
+   */
+  const openHold = (expr: string, id: number): Promise<boolean> =>
     page
-      .waitForFunction(expr, null, { timeout: budget })
+      .evaluate(`(() => {
+        const s = window.dbg && window.dbg.session;
+        if (!s || !s.sheetClock) return false;
+        s.sheetHolds.set(${id}, () => !!(${expr}));
+        return true;
+      })()`)
+      .then((on) => !!on, () => false);
+  const waitExpr = (expr: string, id: number, held: boolean): string =>
+    held ? `!window.dbg || !window.dbg.session.sheetHolds.has(${id})` : expr;
+  const closeHold = (id: number): Promise<void> =>
+    page
+      .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (s && s.sheetHolds) s.sheetHolds.delete(${id}); })()`)
+      .then(() => undefined, () => undefined);
+
+  const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
+    const id = ++holdIds;
+    const held = await openHold(expr, id);
+    return page
+      .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
       .then(() => undefined)
-      .catch((e: Error) => {
+      .catch(async (e: Error) => {
+        await closeHold(id);
         throw new Error(`stuck waiting for ${what}: ${e.message}`);
       });
+  };
 
   /** the same, but running out is an answer rather than a failure */
-  const tryHold = (expr: string, budget: number): Promise<boolean> =>
-    page
-      .waitForFunction(expr, null, { timeout: budget })
+  const tryHold = async (expr: string, budget: number): Promise<boolean> => {
+    const id = ++holdIds;
+    const held = await openHold(expr, id);
+    return page
+      .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
       .then(() => true)
+      .catch(async () => {
+        await closeHold(id);
+        return false;
+      });
+  };
+
+  /** a pause the game runs through: passes under a sheet's clock, ms otherwise */
+  const sleep = async (ms: number): Promise<void> => {
+    const passes = Math.max(1, Math.round(ms / 50));
+    const stepped = await page
+      .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (!s || !s.sheetClock) return false; s.sheetPasses = ${passes}; return true; })()`)
       .catch(() => false);
+    if (!stepped) return page.waitForTimeout(ms);
+    await page
+      .waitForFunction(`!window.dbg || !window.dbg.session.sheetClock || window.dbg.session.sheetPasses === 0`, null, { timeout })
+      .catch(() => undefined);
+  };
 
   /**
    * Put the game back to a cold boot.
@@ -146,10 +196,10 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
    * charged to the route.
    */
   const clock = async (): Promise<Clock> => {
-    const [frames, loading] = await evaluate<[number, number]>(
-      "[window.dbg.session.frameCounter, window.dbg.loading().ms]",
+    const [frames, loading, game] = await evaluate<[number, number, number]>(
+      "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
     );
-    return { ms: Date.now(), frames, loading };
+    return { ms: Date.now(), frames, loading, game };
   };
 
   /** canvas pixel (512x384) -> page point, so the click is a real mouse event */
@@ -189,7 +239,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
   const pad = async (ms: number): Promise<void> => {
     if (!ms) return;
     paddedMs += ms;
-    await page.waitForTimeout(ms);
+    await sleep(ms);
   };
 
   return {
@@ -212,7 +262,8 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
      * allowed to be thrown away. See {@link KEY_SAFE}.
      */
     /** plain delay — the one thing a run should never need and sometimes does */
-    sleep: (ms: number): Promise<void> => page.waitForTimeout(ms),
+    sleep,
+    wallWait: (ms: number): Promise<void> => page.waitForTimeout(ms),
 
     /**
      * An UNGATED key press, for the few aimed at something that is not the
@@ -318,7 +369,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
           await page.keyboard.press(name);
           pressed++;
         }
-        await page.waitForTimeout(gap);
+        await sleep(gap);
       }
     },
 

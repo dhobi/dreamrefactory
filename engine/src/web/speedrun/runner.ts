@@ -59,6 +59,8 @@ export interface Timing {
   /** wall ms with the loading taken out — what the action cost the route */
   ms: number;
   frames: number;
+  /** game ms — in-game time, the same on any machine under a sheet's clock (#508) */
+  game: number;
   /** ms of it spent waiting on the network or with the tab hidden (#375), and
    *  therefore not in `ms` */
   loading: number;
@@ -73,6 +75,8 @@ export interface Split {
   /** wall ms with the loading taken out — see the note above */
   ms: number;
   frames: number;
+  /** game ms — in-game time (#508) */
+  game: number;
   /** ms of it spent waiting on the network, and therefore not in `ms` */
   loading: number;
   actions: number;
@@ -81,7 +85,7 @@ export interface Split {
 export interface RunResult {
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number; loading: number };
+  total: { ms: number; frames: number; game: number; loading: number };
   failure: { step: Step; error: Error } | null;
   /** where the game was standing when it stopped — only sampled on failure */
   where: string | null;
@@ -115,6 +119,13 @@ export interface RunHooks {
   onSplit?(split: Split): void;
   /** a standing watch fired while a step was running — see `watchFor` (#255) */
   onWatch?(watch: Watch, said: string[]): void;
+  /**
+   * Multiplies every step's `budget:` — for a slow machine or a slow link,
+   * where a line that works takes longer in WALL time than the ten seconds a
+   * stuck line is allowed. A budget only decides when a run is called stuck;
+   * under a sheet's clock it changes nothing the run measures (#508).
+   */
+  patience?: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -339,7 +350,7 @@ export async function runSheet(
           d,
           step: w.action,
           wait: waitOf(actions, w.action),
-          budget: Number(w.action.opts.budget ?? 10_000),
+          budget: Number(w.action.opts.budget ?? 10_000) * (hooks.patience ?? 1),
           gap: Number(w.action.opts.gap ?? 16),
           say: (m: string) => said.push(m),
           suggest: () => {},
@@ -358,7 +369,7 @@ export async function runSheet(
       while (!done()) {
         await runWatches();
         if (done()) return;
-        await d.sleep(WATCH_TICK_MS);
+        await (d.wallWait ?? d.sleep).call(d, WATCH_TICK_MS);
       }
     })();
 
@@ -369,6 +380,7 @@ export async function runSheet(
         name: step.args[0] ?? `split ${splits.length + 1}`,
         ms: netMs(splitFrom, now),
         frames: now.frames - splitFrom.frames,
+        game: now.game - splitFrom.game,
         loading: now.loading - splitFrom.loading,
         actions: splitActions,
       };
@@ -412,7 +424,7 @@ export async function runSheet(
          * It costs nothing when a line works: the budget is a ceiling on a
          * hold, not a wait, and a hold resolves the moment its condition does.
          */
-        budget: Number(step.opts.budget ?? 10_000),
+        budget: Number(step.opts.budget ?? 10_000) * (hooks.patience ?? 1),
         gap: Number(step.opts.gap ?? 16),
         say: (m: string) => says.push(m),
         suggest: (line: string) => (suggestion = line),
@@ -440,6 +452,7 @@ export async function runSheet(
       step,
       ms: netMs(before, after),
       frames: after.frames - before.frames,
+      game: after.game - before.game,
       loading: after.loading - before.loading,
       padded: d.padded() - paddedBefore,
       says,
@@ -457,6 +470,7 @@ export async function runSheet(
       name: failure ? "(unfinished)" : "(final)",
       ms: netMs(splitFrom, ended),
       frames: ended.frames - splitFrom.frames,
+      game: ended.game - splitFrom.game,
       loading: ended.loading - splitFrom.loading,
       actions: splitActions,
     };
@@ -472,6 +486,7 @@ export async function runSheet(
     total: {
       ms: netMs(started, ended),
       frames: ended.frames - started.frames,
+      game: ended.game - started.game,
       loading: ended.loading - started.loading,
     },
     failure,

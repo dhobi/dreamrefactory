@@ -69,6 +69,16 @@ screen refreshes, and stamping the refresh would run every pass late (about
 whole period late drops its debt (`passDue` in `clock.ts`). `delay()` is not
 a pass: it waits on the real clock in the original (`0x41deb0`) and here.
 
+**Game time stands still while the engine waits on a file.** Every timed thing
+is a delta off one reading, `GameSession.gameTime`, and while the engine is
+stopped for a load it needs now — a room and its casts, a film about to play, a
+file a script opened, a save being restored (`whileLoading`) — that reading
+does not move: no pass, no frame, no `delay` running down. The original read
+its disc synchronously and its loop did nothing until the read returned. A
+speedrun additionally runs on **speedrun time**, where the reading moves by
+exactly one 50 ms pass per pass and speech ends by its own length; see
+[the speedrun's clock](../../reference/tests.md#the-clock-in-game-time).
+
 ## `makeloop`: a loop that isn't a loop
 
 A "loop" is really a **one-shot delayed callback**.
