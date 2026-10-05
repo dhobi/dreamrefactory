@@ -183,8 +183,11 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
       return () => f(win);
     },
     requestAnimationFrame,
-    setTimeout,
-    clearTimeout,
+    // wrapped, not handed over: the driver calls them as `win.setTimeout(…)`,
+    // and a browser's own refuses a `this` that is not its global ("Illegal
+    // invocation" — in the worker, at the first standing watch's poll)
+    setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
+    clearTimeout: (t?: ReturnType<typeof setTimeout>) => clearTimeout(t),
     PointerEvent: StandInEvent,
     MouseEvent: StandInEvent,
     KeyboardEvent: StandInEvent,
