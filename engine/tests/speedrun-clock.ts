@@ -59,11 +59,17 @@ test("under a sheet's clock the game stands still until the runner waits, and st
   const s = session();
   s.sheetClock = true;
   s.gameTime(0);
+  // before the boot, nothing is the game's yet — the page's own intro is not
+  s.sheetHolds.set(9, () => false);
   for (let ms = 50; ms <= 500; ms += 50) s.gameTime(ms);
-  expect(s.gameNow).toBe(0); // nobody waiting: nothing moves
+  expect(s.gameNow).toBe(0);
+  s.sheetHolds.delete(9);
+  (s as unknown as { coreLoaded: boolean }).coreLoaded = true; // what ensureBooted sets
+  for (let ms = 550; ms <= 1000; ms += 50) s.gameTime(ms);
+  expect(s.gameNow).toBe(0); // booted, but nobody waiting: nothing moves
 
   s.sheetHolds.set(1, () => s.gameNow >= 200);
-  for (let ms = 550; ms <= 2000; ms += 50) s.gameTime(ms);
+  for (let ms = 1050; ms <= 2000; ms += 50) s.gameTime(ms);
   expect(s.gameNow).toBe(200); // exactly where the condition came true, not a pass more
   expect(s.sheetHolds.has(1)).toBe(false);
 
@@ -98,6 +104,7 @@ test("a person's waiting counts in real time on any machine, the game's busy tim
 
   const sheet = session();
   sheet.sheetClock = true;
+  (sheet as unknown as { coreLoaded: boolean }).coreLoaded = true;
   sheet.gameTime(0);
   sheet.countRun(true);
   for (let ms = 50; ms <= 2000; ms += 50) {

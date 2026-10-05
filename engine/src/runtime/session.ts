@@ -1066,7 +1066,11 @@ export class GameSession {
    */
   gameTime(raw: number): number {
     this.closeSheetHolds();
-    const held = this.blockedOnFiles > 0 || (this.sheetClock && this.sheetHolds.size === 0 && this.sheetPasses === 0);
+    // Under a sheet's clock, nothing before the boot is the game's: the page's
+    // own intro and its question run on the page, not on passes (#508)
+    const held =
+      this.blockedOnFiles > 0 ||
+      (this.sheetClock && (!this.coreLoaded || (this.sheetHolds.size === 0 && this.sheetPasses === 0)));
     if (held && this.lastRaw !== null) this.blockedTotal += raw - this.lastRaw;
     this.lastRaw = raw;
     this.rawNow = raw;
