@@ -62,6 +62,12 @@ export default defineConfig({
   root: HERE,
   publicDir: join(HERE, "public"),
   /**
+   * The workbench's Calculate worker (src/speedrun/calc-worker.ts) is an ES
+   * module: it reaches the engine's speedrun code, which loads one module on
+   * demand, and the default `iife` worker cannot be split (#509).
+   */
+  worker: { format: "es" },
+  /**
    * Every URL the build emits is relative to the page that names it, so the
    * output runs from a subdirectory of some other host as readily as from a
    * domain root. Vite does that rewriting for what it can see — the module

@@ -1039,7 +1039,10 @@ export const CORE_ACTIONS: ActionTable = {
         try { b = s.snapshotSave(); } finally { s.onLog = prev; }
         return { bytes: b ? Array.from(b) : null, notes: notes.filter((n) => /^savegame:/.test(n)) };
       })()`);
-      if (!got.bytes) throw new Error(`the engine would not produce a save here`);
+      if (!got.bytes) {
+        const why = got.notes.length ? " (" + got.notes.join("; ") + ")" : "";
+        throw new Error(`the engine would not produce a save here${why}`);
+      }
       await c.d.putSave(name, new Uint8Array(got.bytes));
       c.say(`${(got.bytes.length / 1024).toFixed(1)} kB`);
       for (const note of got.notes) c.say(note.replace(/^savegame: /, ""));

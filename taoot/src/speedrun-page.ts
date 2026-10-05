@@ -18,6 +18,42 @@ import { siteUrl } from "@dreamfactory/site/site";
 import { ACTIONS } from "./speedrun/actions";
 import { gamefileSizes } from "./editions";
 import { editionOfUrl, NEUTRAL } from "./files";
+import { gamefileManifest } from "./editions";
+import { loadTemplates, saveTemplateFor } from "./save-seed";
+import { calculateInWorker } from "./speedrun/calc";
+import type { CalcProgress, CalcResult } from "@dreamfactory/engine/web/speedrun/calculate";
+
+/**
+ * Calculate (#509): the sheet, played headless in a worker. The worker is handed
+ * what this page knows and it cannot find out — every hosted file as the play
+ * page registers it (main.ts initServerBrowser), as ABSOLUTE URLs since a
+ * worker resolves a relative one against its own script; the edition; and the
+ * shipped saves main.ts has already loaded for a fresh game to write over.
+ */
+async function calculate(
+  sheet: { text: string; saves: Record<string, Uint8Array> },
+  onProgress: (p: CalcProgress) => void,
+  signal: AbortSignal,
+): Promise<CalcResult> {
+  const files = (await gamefileManifest()).map(
+    (p): [string, string] => [p.split("/").pop()!, new URL(siteUrl(p), location.href).href],
+  );
+  // main.ts loads them shortly after the page opens; a press before that
+  // would have a `save()` line with nothing to write over
+  if (!saveTemplateFor("1")) await loadTemplates();
+  return calculateInWorker(
+    {
+      text: sheet.text,
+      files,
+      edition: warmEdition(),
+      saves: sheet.saves,
+      templates: [saveTemplateFor("1"), saveTemplateFor("2")],
+      seed: null,
+    },
+    onProgress,
+    signal,
+  );
+}
 
 /**
  * Which edition the Warm button pulls through the cache.
@@ -71,4 +107,5 @@ startWorkbench({
    * worked in dev and fetched nothing once deployed under a subdirectory.
    */
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
+  calculate,
 });

@@ -71,6 +71,7 @@ import { loadClock } from "../load-clock";
 import { replyIds } from "../puppet-view";
 import { formatBytes, formatEta, formatRate, warmCache, type WarmFile } from "../cache-warmup";
 import { attachEditor } from "./editor";
+import type { CalcProgress, CalcResult } from "./calculate";
 import { attachRecorder } from "./recorder";
 import { attachInputMonitor } from "./inputs";
 import { installMute } from "./mute";
@@ -137,6 +138,18 @@ export interface Workbench {
    * site served from a subdirectory would fetch somebody else's file.
    */
   fixtureSheet?: string;
+  /**
+   * Work the open sheet's time out without playing it on screen, or absent for a
+   * game with no Calculate button (#509): headless, in a Web Worker, as fast as
+   * the CPU goes. The game builds the worker, because what it needs to boot —
+   * which files the site has, the edition, a save to write over — is the game's
+   * page's to know; the workbench hands over the sheet and its checkpoints.
+   */
+  calculate?(
+    sheet: { text: string; saves: Record<string, Uint8Array> },
+    onProgress: (p: CalcProgress) => void,
+    signal: AbortSignal,
+  ): Promise<CalcResult>;
 }
 
 /**
@@ -196,6 +209,10 @@ const warmBtn = $<HTMLButtonElement>("srwarm");
 const warmBar = $<HTMLDivElement>("srwarmbar");
 const warmFill = $<HTMLDivElement>("srwarmfill");
 const warmNum = $<HTMLDivElement>("srwarmnum");
+const calcBtn = $<HTMLButtonElement>("srcalc");
+const calcBar = $<HTMLDivElement>("srcalcbar");
+const calcFill = $<HTMLDivElement>("srcalcfill");
+const calcNum = $<HTMLDivElement>("srcalcnum");
 const sheetsEl = $<HTMLDivElement>("srsheets");
 const pointsEl = $<HTMLDivElement>("srparts");
 const statusEl = $<HTMLDivElement>("srstatus");
@@ -1819,6 +1836,90 @@ async function warmup(): Promise<void> {
 warmBtn.addEventListener("click", () => void warmup());
 
 /* ------------------------------------------------------------------ *
+ * Calculate (#509)
+ * ------------------------------------------------------------------ */
+
+let calculating: AbortController | null = null;
+
+/** the open sheet's checkpoints, decoded, for its `load()` lines */
+function sheetSaves(): Record<string, Uint8Array> {
+  const out: Record<string, Uint8Array> = {};
+  for (const name of savedPoints()) {
+    const raw = localStorage.getItem(KEYS.key(active, name));
+    if (!raw) continue;
+    const bin = atob(raw);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    out[name] = bytes;
+  }
+  return out;
+}
+
+/** put the editor's caret at the start of `line` and bring it into view */
+function goToLine(line: number): void {
+  const lines = sheetEl.value.split("\n");
+  let at = 0;
+  for (let i = 0; i < line - 1 && i < lines.length; i++) at += lines[i].length + 1;
+  sheetEl.focus();
+  sheetEl.setSelectionRange(at, at);
+  editor.reveal(line);
+}
+
+function showCalc(p: CalcProgress): void {
+  calcBar.hidden = false;
+  calcFill.style.width = `${p.total ? Math.round((p.done / p.total) * 100) : 0}%`;
+  calcNum.textContent = `line ${p.line} · ${p.done} / ${p.total} actions · ${ms(p.game)} in-game`;
+}
+
+function showCalcResult(r: CalcResult): void {
+  calcBar.hidden = false;
+  calcNum.textContent = "";
+  if (r.ok) {
+    calcFill.style.width = "100%";
+    calcNum.textContent = `${ms(r.game)} in-game · ${r.frames} frames — worked out in ${ms(r.real)}`;
+    say(`this sheet: ${ms(r.game)} in-game, ${r.frames} engine frames`, "good");
+    return;
+  }
+  calcNum.append(`stopped at line ${r.line} after ${ms(r.game)} in-game (${ms(r.real)}) `);
+  const go = document.createElement("button");
+  go.type = "button";
+  go.className = "sr-calc-go";
+  go.textContent = `go to line ${r.line}`;
+  go.addEventListener("click", () => goToLine(r.line));
+  calcNum.append(go);
+  say(`calculation stopped at line ${r.line}: ${r.error.split("\n")[0]}`, "bad");
+}
+
+async function calculate(): Promise<void> {
+  // a second press is Stop, as Warm's is
+  if (calculating) {
+    calculating.abort();
+    return;
+  }
+  if (!host.calculate || !parse()) return;
+  calculating = new AbortController();
+  calcBtn.classList.add("on");
+  calcBtn.textContent = "Stop calculating";
+  calcFill.style.width = "0";
+  calcNum.textContent = "starting…";
+  calcBar.hidden = false;
+  say(`calculating "${active}" headless, at full speed…`);
+  try {
+    showCalcResult(await host.calculate({ text: sheetEl.value, saves: sheetSaves() }, showCalc, calculating.signal));
+  } catch (e) {
+    const stopped = calculating.signal.aborted;
+    calcNum.textContent = stopped ? "stopped" : `failed: ${(e as Error).message}`;
+    say(stopped ? "calculation stopped" : `the calculation failed: ${(e as Error).message}`, stopped ? "" : "bad");
+  } finally {
+    calculating = null;
+    calcBtn.classList.remove("on");
+    calcBtn.textContent = "Calculate";
+  }
+}
+
+calcBtn.addEventListener("click", () => void calculate());
+
+/* ------------------------------------------------------------------ *
  * Boot
  * ------------------------------------------------------------------ */
 
@@ -1962,5 +2063,6 @@ export function startWorkbench(open: Workbench): void {
   // No files to warm, no button: the control would be a press that says
   // "nothing to warm", which is a worse answer than not offering it
   warmBtn.hidden = !open.warmup;
+  calcBtn.hidden = !open.calculate;
   void start();
 }

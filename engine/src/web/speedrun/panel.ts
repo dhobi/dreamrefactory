@@ -124,6 +124,10 @@ split(boot)"></textarea>
          while it waits for them, so the reading is the same on a slow machine
          as on a fast one. A word, not a glyph: it is not the sheet's transport. -->
     <button id="srtimeme" type="button" title="Time a run you play by hand, in in-game time">Time me</button>
+    <!-- Work the sheet's in-game time out without playing it on screen (#509):
+         headless, in a worker, at full CPU speed. A word, like Warm's: it is
+         not the sheet's transport, and the game on screen is not touched. -->
+    <button id="srcalc" type="button" title="Work out this sheet's in-game time headless, at full CPU speed — the game on screen is not touched">Calculate</button>
     <!-- Pull the whole English tree through the browser cache before a run,
          so the route is timed against memory rather than against the wire
          (engine/src/web/cache-warmup.ts). A word rather than a glyph: it is not a
@@ -152,6 +156,12 @@ split(boot)"></textarea>
   <div id="srwarmbar" hidden>
     <div id="srwarmtrack"><div id="srwarmfill"></div></div>
     <div id="srwarmnum"></div>
+  </div>
+  <!-- Calculate's bar: how far through the sheet, then the answer — or the
+       line it stopped at, with a button to go there. -->
+  <div id="srcalcbar" hidden>
+    <div id="srcalctrack"><div id="srcalcfill"></div></div>
+    <div id="srcalcnum"></div>
   </div>
   <div id="srlegend" class="modal">
     <div class="modal-box">

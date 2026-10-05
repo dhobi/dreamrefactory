@@ -485,6 +485,16 @@ browser). Load points are shared with the browser runner (`out/speedrun/`).
 What it cannot run is what the workbench cannot: `travel`, `hunt` and `stand`.
 Its budgets count its own frames, not the wall.
 
+**On the workbench, Calculate** does the same in a Web Worker beside the page
+(`taoot/src/speedrun/calc-worker.ts`): it plays the open sheet from a cold boot,
+headless and at full CPU speed, with a bar for how far it has got, and ends in
+one of two answers — the sheet's in-game time and frames, or the line it stopped
+at, how far in, and a button that puts the editor on that line. The game on
+screen is not touched; the files come through the browser's cache, and the
+sheet's checkpoints go with it for its `load()` lines. The dice are live, as on
+the workbench, so a sheet that depends on them can come out differently on the
+next press.
+
 Two rules make the runners agree, and both are the sheet clock's, not the
 headless runner's:
 
