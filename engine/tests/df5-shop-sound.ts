@@ -94,7 +94,7 @@ test("a v5 view's 0x0c names its SOUN, and that SOUN decodes as IMA ADPCM", () =
 
   const audio = decodeAudioContainer(s.file.containers[sounding.sound!].data);
   expect(audio.sampleRate).toBe(22050);
-  expect(audio.samples.length).toBe(101);
+  expect(audio.samples).toHaveLength(101);
   expect(audio.samples[0]).toBe(1000 / 32768);
   // index 0's step is 7: code 4 adds step + step/8, 7
   expect(audio.samples[1]).toBe(1007 / 32768);
