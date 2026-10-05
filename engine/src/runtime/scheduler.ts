@@ -1,13 +1,11 @@
 import { PlayHandle } from "./audio";
-import { ENGINE_STEP_MS } from "./clock";
+import { ENGINE_STEP_MS, passDue } from "./clock";
 import { bearing, bearingV5 } from "./geometry";
 import type { GameSession } from "./session";
 
 /** TI.EXE's fixed table sizes for scheduled loops and crickets */
 const MAX_LOOPS = 32;
 const MAX_CRICKETS = 16;
-/** after a long stall (suspended tab) replay at most this many service steps */
-const MAX_CATCHUP_STEPS = 64;
 
 /**
  * One scheduled callback (makeloop). TI.EXE semantics: the countdown
@@ -927,12 +925,11 @@ export class Scheduler {
   tickTime(now: number): void {
     this.session.clock.advance(now);
     if (!this.timeLastTick) this.timeLastTick = now;
-    let steps = Math.floor((now - this.timeLastTick) / ENGINE_STEP_MS);
-    if (steps > 0) {
-      this.timeLastTick += steps * ENGINE_STEP_MS;
-      // after a long stall (suspended tab) don't replay the whole gap
-      if (steps > MAX_CATCHUP_STEPS) steps = MAX_CATCHUP_STEPS;
-      for (let s = 0; s < steps; s++) this.serviceStep();
+    // one service pass at most, and a late one is not made up (clock.ts passDue)
+    const pass = passDue(this.timeLastTick, now, ENGINE_STEP_MS);
+    if (pass.due) {
+      this.timeLastTick = pass.next;
+      this.serviceStep();
     }
     // last, so its dispatch cannot be in flight while this pass fires its loops.
     // By the next pass the microtask has settled and inflight is empty again.
@@ -986,17 +983,17 @@ export class Scheduler {
       return;
     }
     const CALCTIME_MS = 50; // 20 calls / real second -> 1 second-hand tick / sec
-    let calls = Math.floor((now - this.clockLastMs) / CALCTIME_MS);
-    if (calls <= 0) return;
-    this.clockLastMs += calls * CALCTIME_MS;
-    if (calls > 20) calls = 20; // cap a stall's catch-up to one game-second
+    // once per pass, like the original's idle(); a late pass is not made up
+    const pass = passDue(this.clockLastMs, now, CALCTIME_MS);
+    if (!pass.due) return;
+    this.clockLastMs = pass.next;
     this.clockDispatching = true;
     // trackIdle, not track: the heartbeat must not read as a busy player script
     // or the input queue drops what was posted while it settles (see session.ts)
     void this.session.trackIdle(
       (async () => {
         try {
-          for (let i = 0; i < calls; i++) await this.session.runGlobal("calctime");
+          await this.session.runGlobal("calctime");
         } finally {
           this.clockDispatching = false;
         }

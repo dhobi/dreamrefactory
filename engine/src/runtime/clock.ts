@@ -107,6 +107,32 @@ export const RAMP_STEP_MS = ENGINE_STEP_MS / 3;
  * derive from this rather than from counting host callbacks.
  */
 export const ticksAt = (ms: number): number => Math.floor((ms * 3) / 50);
+/**
+ * Is a main-loop pass due, and where does the next one count from?
+ *
+ * TI.EXE runs at most ONE pass per turn of its loop and never makes up a late
+ * one: the throttle (0x43a940) spins until `now >= lastFrame + framerate`, then
+ * stamps `lastFrame = now` (0x43a95a), and the pass at 0x442550 adds exactly one
+ * to the frame counter (`inc [0x489efa]` at 0x439b80) and counts every loop,
+ * walk and cricket down by one. A machine too slow for twenty passes a second
+ * therefore runs the game SLOWER — fewer frames, fewer loop steps, a slower
+ * pocketwatch — and lost time is dropped, not replayed.
+ *
+ * The port used to replay it: after a stall it made up to 64 frames and 64
+ * service steps and twenty `calctime`s at once, so a slow pass lurched the
+ * world forward instead of slowing it. One pass per call is the original's
+ * rule. What is NOT copied is stamping `now` on a pass that was on time: TI.EXE
+ * spins and so stamps the very tick it was due, but a browser is only called
+ * on screen refreshes, and stamping the refresh rounds every pass up to it —
+ * about 10% slow on a 144 Hz panel. So an on-time pass keeps the rhythm
+ * (`last + period`) and only a pass a whole period late forgets the debt.
+ */
+export function passDue(last: number, now: number, period: number): { due: boolean; next: number } {
+  const late = now - last;
+  if (late < period) return { due: false, next: last };
+  return { due: true, next: late >= 2 * period ? now : last + period };
+}
+
 export class Clock {
   now = 0;
   private waiters: { at: number; resolve: () => void }[] = [];
