@@ -1081,6 +1081,7 @@ export async function loadPoint(c: ActionContext, name: string): Promise<void> {
     const w = window;
     w.__srLoadDone = false;
     w.__srLoadError = "";
+    ${c.d.seed == null ? "" : `w.dbg.session.seedRandom(${Number(c.d.seed)});`}
     w.dbg.session.track(w.dbg.host.loadSavedGame(new Uint8Array([${Array.from(bytes).join(",")}])))
       .then(() => { w.__srLoadDone = true; }, (e) => { w.__srLoadError = String(e); });
     return true;

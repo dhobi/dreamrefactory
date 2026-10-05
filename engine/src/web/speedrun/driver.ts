@@ -342,6 +342,21 @@ export interface SpeedrunDriver {
   getSave?(name: string): Promise<Uint8Array | null>;
 
   /**
+   * The script dice's seed, when the run pins one — set again at every load
+   * point, in the same page call that starts the load.
+   *
+   * Pinning at page start fixes only the ORDER of the dice, not which draw
+   * lands where: the boot room keeps rolling until the save replaces it (the
+   * London flat's street sounds, BEDSIT1 scene3 `sfx`, draw `random(1000)`
+   * every two passes), so how many it used depends on how quickly the load
+   * came, and every later draw — the smokestack's maze among them — shifts by
+   * that many. Seeded at the load, the course from a load point is the same
+   * every run. A run from the cold boot still is not: it plays the flat, for as
+   * long as it takes.
+   */
+  readonly seed?: number | null;
+
+  /**
    * Put the game back to a cold boot — `reset()`.
    *
    * A reload, in both hosts, because that is the only thing that is honestly the

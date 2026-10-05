@@ -90,6 +90,8 @@ export interface SpeedrunDriverOptions {
    * which is exactly the comparability the seed exists to buy.
    */
   onReload?(): Promise<void>;
+  /** the pinned seed, set again at every load point (SpeedrunDriver.seed) */
+  seed?: number | null;
 }
 
 export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {}): Promise<SpeedrunDriver & { page: Page; pagePoint(x: number, y: number): Promise<Point> }> {
@@ -482,6 +484,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
       const file = join(process.cwd(), "out", "speedrun", `${name}.ti`);
       return existsSync(file) ? new Uint8Array(readFileSync(file)) : null;
     },
+    seed: opts.seed ?? null,
 
     restart,
     log,
