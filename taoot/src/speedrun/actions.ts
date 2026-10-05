@@ -485,7 +485,11 @@ export const TITANIC_ACTIONS: ActionTable = {
       if (end !== "smstack3 scene39 view55") {
         throw new Error(`maze ${maze}'s route ended at ${end}, not at the notebook (smstack3 scene39 view55)`);
       }
-      c.say(`maze ${maze}, ${route.length} moves, at the notebook`);
+      // The keys actually pressed, written as the sheet line that presses them,
+      // so the report shows the route rather than only its outcome and a
+      // fixed-seed sheet can paste it in place of the verb.
+      const pressed = route.slice(from);
+      c.say(`maze ${maze}: move(${pressed}), ${pressed.length} moves, at the notebook`);
     },
   },
 
