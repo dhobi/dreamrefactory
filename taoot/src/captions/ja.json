@@ -1,14 +1,18 @@
 {
   "notice": [
-    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank and clip names do.",
-    "Titanic: Adventure Out of Time voices these clips and never prints them. This is a transcript of the ja edition's audio, written by ear, so that a player who cannot hear them can read them (#50).",
-    "'who' names the speaker. 'guess': true marks a line whose wording is uncertain. 'listened': true marks a line someone has checked by ear.",
-    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop; the timings were taken from the English edition and may need moving. The gramophone in Carlson's trunk (oldboss.trk, #471) plays the English recording; its lines are here with the English timings and no words yet, waiting for a translation.",
-    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470). It names no speaker.",
-    "Corrections are welcome, and should be made by listening to the clip, not by editing the wording."
+    "NOT ORIGINAL DATA. None of the text in this file comes from the game's files; only the bank, film and clip names do.",
+    "Titanic: Adventure Out of Time voices these clips and never prints them. This is our best-effort transcript of the ja edition's audio, so that a player who cannot hear them can read them (#50).",
+    "'heard' is what the recogniser wrote, kept wherever the text differs from it. 'guess': true marks a line whose wording is uncertain even after correction.",
+    "'who' names the speaker, shown before the words because captions can be up together (the radio and the landlady). The names were assigned from the lines' content and the clips' names; correct them by ear too.",
+    "'speakers' names who says the lines read from the game's own puppets (the ending, the films' voice-overs), by puppet file, or by puppet#line where one puppet holds several voices. Assigned by us, not the game. A puppet that seats two people in one close-up (wilzeit1.pup: Zeitel on the left, Willie on the right; shahack1.pup and shahack2.pup: Jack on the left, Shailagh on the right) says in each line's stance whose mouth moves, and the close-up shows it, so a line said there is captioned without a name. A name is only needed where a film plays a puppet's line, and the films' lines from these puppets are voice-overs that move neither face: wilzeit1.pup's are the gymnasium tour (tour3.mov), Willie's, who greets you there with his own mouth (wilfenc1.72) (#479).",
+    "'tracks' are looping tracks that talk, timed in seconds from the start of the loop as the engine assembles it: the bedsit radio's first station reads the news, and the gramophone in Carlson's trunk (oldboss.trk, cabin C-73) plays the service's briefing (#471), transcribed the same way and not yet checked by ear.",
+    "A caption in square brackets is not words but a sound that tells the player something they would otherwise miss, as subtitles for the deaf and hard of hearing do: the air-raid siren over the London flat (bedsit1.trk's track, #470), after which the room cannot be used. It names no speaker. Captions cover what is said and such sounds, not every sound in the game.",
+    "'films' are clips a film keeps in its own sound table and no puppet holds the words of: the narration over the opening credits (ocredits.mov). Transcribed the same way, from the film.",
+    "'listened': true marks a line someone has checked by ear. Where it is missing, the line is only as good as the recogniser and the context.",
+    "Corrections are welcome, and should be made by listening to the clip, not by editing the wording: the caption editor (taoot/captions/) plays every clip."
   ],
   "edition": "ja",
-  "made": "written by ear in the caption editor (taoot/captions/)",
+  "made": "A combination of text from official sources, individual translation and editing, and tool-assisted translations. Community translated content is based on the English script.",
   "speakers": {
     "narrate.pup": "カールソン",
     "narrate.pup#01": "上司",
@@ -108,6 +112,15 @@
       "ach": { "text": "あっ！", "who": "ウイリー", "guess": true, "listened": true }
     }
   },
+  "films": {
+    "ocredits.mov": {
+      "voice.1": { "text": "過去は永遠に氷海と後悔の中に閉じこめられている。だがもし、過去をかえられるとしたら？", "who": "カールソン", "listened": true },
+      "voice.2": { "text": "私のせいで世界は戦火に覆われた…あの夜から30年。1912年。諜報部は私をタイタニック号へ派遣した", "who": "カールソン", "listened": true },
+      "voice.3": { "text": "私は仲間からの接触をキャビンで待っていた。船にはかつての恋人ジョージアも乗っていた。私は仲間と彼女を間違えてしまった", "who": "カールソン", "listened": true },
+      "voice.4": { "text": "接触は失敗。２度目のチャンスはなかった。全ては遅すぎたのだ", "who": "カールソン", "listened": true },
+      "voice.5": { "text": "もし仲間に会えていたら？あの惨劇を防げたら？もし過去を変えることができるのなら…", "who": "カールソン", "listened": true }
+    }
+  },
   "tracks": {
     "bedrad1.trk": [
       { "from": 1.7, "to": 4.3, "text": "もう一度、本日の主なニュースをお伝えする", "who": "ラジオ", "guess": true, "listened": true },
@@ -121,16 +134,14 @@
       { "from": 36.3, "to": 38.4, "text": "それでは音楽番組に戻ろう", "who": "ラジオ", "guess": true, "listened": true }
     ],
     "bedsit1.trk": [
-      { "from": 0, "to": 28.8, "text": "[空襲警報のサイレン]", "guess": true }
+      { "from": 0, "to": 28.8, "text": "[空襲警報のサイレン]", "listened": true }
     ],
     "oldboss.trk": [
-      { "from": 0, "to": 6.2, "text": "", "who": "蓄音機" },
-      { "from": 7.2, "to": 11.6, "text": "", "who": "蓄音機" },
-      { "from": 12.5, "to": 16, "text": "", "who": "蓄音機" },
-      { "from": 16.8, "to": 22, "text": "", "who": "蓄音機" },
-      { "from": 23.6, "to": 28, "text": "", "who": "蓄音機" },
-      { "from": 28.8, "to": 32.7, "text": "", "who": "蓄音機" },
-      { "from": 33.3, "to": 34.5, "text": "", "who": "蓄音機" }
+      { "from": 0, "to": 6.2, "text": "我々はドイツとオーストリアの諜報員がタイタニックに乗船しているという情報を得ている", "who": "英国諜報部", "guess": true, "listened": true },
+      { "from": 7.2, "to": 11.6, "text": "詳しくは船に乗っている諜報員から説明がある", "who": "英国諜報部", "guess": true, "listened": true },
+      { "from": 12.5, "to": 22, "text": "君の任務は彼らの運んでいる物を全て捜し出し、ニューヨークまで届けることだ", "who": "英国諜報部", "guess": true, "listened": true },
+      { "from": 23.6, "to": 32.7, "text": "現在の国際情勢については、指令の一部である政府の公式報告書を読んで欲しい", "who": "英国諜報部", "listened": true },
+      { "from": 33.3, "to": 34.5, "text": "以上だ", "who": "英国諜報部", "listened": true }
     ]
   }
 }

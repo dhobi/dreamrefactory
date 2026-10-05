@@ -86,9 +86,9 @@
       "z1.13": { "text": "Let us plan.", "who": "Zeitel", "listened": true }
     },
     "bedsit1.trk": {
-      "door1": { "text": "Sneaking out, are ya? I want my money!", "who": "Landlady", "listened": true },
+      "door1": { "text": "Sneaking out, are ya? I want me money!", "who": "Landlady", "listened": true },
       "door2": { "text": "They said you was important once. Not now. You're just old, old and broke.", "who": "Landlady", "listened": true },
-      "door3": { "text": "When do I get my money?! When?!", "who": "Landlady", "listened": true },
+      "door3": { "text": "When do I get me money?! When?!", "who": "Landlady", "listened": true },
       "lady2": { "text": "About time, you're awake. You're two weeks late with the rent.", "who": "Landlady", "heard": "Mom, you're awake. You're two weeks late with the rent.", "listened": true },
       "lady3": { "text": "War or no war, a tenant in arrears is not a tenant I'll put up with.", "who": "Landlady", "heard": "War or no war, a tenant in a raise is not a tenant I'll put up with.", "listened": true },
       "lady4": { "text": "You don't pay by today, it's the street, I promise!", "who": "Landlady", "listened": true }
@@ -117,7 +117,7 @@
     "ocredits.mov": {
       "voice.1": { "text": "The past, forever locked in regret. But what if the past could be changed?", "who": "Carlson" },
       "voice.2": { "text": "Thirty years have come and gone since the night that saw the end of a world, my world. The service needed someone on the Titanic. They chose me.", "who": "Carlson" },
-      "voice.3": { "text": "I was to wait for a signal from my contact, so I remained in my cabin. I left only once Georgia was on board.", "who": "Carlson" },
+      "voice.3": { "text": "I was to wait for a signal from my contact, so I remained in my cabin. I left only once: Georgia was on board.", "who": "Carlson" },
       "voice.4": { "text": "And that's when it came. There'd be no second chance. It was Sunday, April 14th. Too late, you see. For the Titanic. For me.", "who": "Carlson" },
       "voice.5": { "text": "What if I'd met with my contact? Prevented disaster. What if the past could be changed? What then?", "who": "Carlson" }
     }
