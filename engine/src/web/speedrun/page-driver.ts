@@ -512,7 +512,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
       aim: async (kind, name) => {
         // the engine's own hit test, called directly — this is the sweep the
         // Playwright driver has to inject as source, and here it is simply local
-        const { aimAtThing, aimAtHotspot } = await import("./aim");
+        const { aimAtThing, aimAtHotspot, flatWhere } = await import("./aim");
         const dbg = (win as unknown as { dbg: any }).dbg;
         const s = dbg.session;
         const v = dbg.viewer;
@@ -527,6 +527,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
             return p ? p.group.name : null;
           },
           inFlat: !s.viewShowing && !!s.stageScript,
+          where: (n: string) => flatWhere(s, n),
           hotspot: (n: string) => {
             const obj = v.scene.views[v.viewIdx].objects.find(
               (o: { identifier?: string }) => (o.identifier || "").toLowerCase() === n.toLowerCase(),

@@ -787,6 +787,11 @@ export class PropRuntime {
     return ended;
   }
 
+  /** the props drawn on screen right now, bottom first — the ones a click can hit */
+  drawn(): PropInstance[] {
+    return this.drawList(false);
+  }
+
   /**
    * Blit all visible props into an RGBA view buffer, colorizing through the
    * ACTIVE SET's palette (the engine shares one CLUT across set and props).

@@ -401,6 +401,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
             hitTest: (x, y) => s.hitTestAt(x, y),
             propUnder: (x, y) => { const p = v.propUnder(x, y); return p ? p.group.name : null; },
             inFlat: !s.viewShowing && !!s.stageScript,
+            where: (n) => flatWhere(s, n),
             hotspot: (n) => {
               const obj = v.scene.views[v.viewIdx].objects.find(
                 (o) => (o.identifier || "").toLowerCase() === n.toLowerCase());
