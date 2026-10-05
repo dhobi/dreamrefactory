@@ -101,7 +101,7 @@ const SLOWMO = Number(process.env.SLOWMO ?? 0);
  * smokestack's `mazenumber = random(4)`. Freezing those makes a time that no
  * unseeded run could match.
  *
- * So the dice are live, the maze is solved rather than known (`climbStack`), and
+ * So the dice are live, the maze is read off the run rather than fixed in advance (`climbStack` walks the route for whichever was drawn), and
  * a fuse is however long it is. `SEED=<n>` or `--seed=<n>` pins one anyway, for
  * comparing two routes against each other rather than against the clock.
  */

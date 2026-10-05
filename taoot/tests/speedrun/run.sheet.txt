@@ -796,12 +796,11 @@ settle()
 save(m3p0 smokestack)
 up()
 up()
-# climbStack reads mazenumber and solves whichever of the four was drawn — one
-# of the sixteen (maze, entry) pairs is a dead end, so the entry is chosen
-# rather than taken in order.
+# climbStack reads mazenumber, which is what a runner reads off the crates on
+# the way up, and walks the runners' route for that maze (#489) — all four go
+# up the first ladder and end facing the notebook.
 climbStack()
 save(m3p0 smokestackdone)
-stand(view55, set: smstack3)
 click(notebook)
 wait(talking)
 say([101,101,101,101,101], otherwise: last, maxturns: 30)

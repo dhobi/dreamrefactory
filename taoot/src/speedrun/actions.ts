@@ -92,6 +92,24 @@ async function planner(c: ActionContext, method: "travel" | "hunt" | "stand", ta
   return plannerImpl(c, method, target);
 }
 /** the verbs Titanic adds to the engine's — see the header */
+/**
+ * The smokestack's four mazes, as speedrunners climb them (#489): Thundertala's
+ * rules tell them apart on the way up — maze 1 shows boxes in the distance only
+ * after "up, right, forward" twice, maze 2 shows none by then, maze 3 shows
+ * boxes off the path after "up, right", maze 4 is blocked by them at once —
+ * and will_pal's routes avoid every dead end. Each runs from the smstack1
+ * landing (scene14 view40) — `u` to its ladder, `u` up it — to the notebook on
+ * top (smstack3 scene39 view55), the last two or three keys being the walk and
+ * turn to it.
+ */
+const STACK_ROUTES: Record<number, string> = {
+  1: "uurulurululururulurululurulururulurulu" + "rr",
+  2: "uurulurululurulurulururululururulurulu" + "rur",
+  3: "uurulurulurululururululurulururululuru" + "rur",
+  4: "uurllururulurulurulurulurululururululuru" + "rr",
+};
+const STACK_KEYS: Record<string, string> = { u: "ArrowUp", l: "ArrowLeft", r: "ArrowRight" };
+
 export const TITANIC_ACTIONS: ActionTable = {
 
   closeup: {
@@ -185,53 +203,42 @@ export const TITANIC_ACTIONS: ActionTable = {
     args: [0, 0],
     wait: "none",
     sig: "climbStack()",
-    help: "climb the false smokestack, solving whichever maze was drawn",
+    help: "climb the false smokestack by the runners' route for whichever maze was drawn, ending at the notebook",
     run: async (c) => {
       // The one place the sheet cannot be literal, because the course is drawn
       // rather than authored: ENGINE.SET's keydown at View120 does
-      // `mazenumber = random(4)`, and one of the sixteen (maze, entry) pairs is a
-      // DEAD END — maze 4 into scene39 has both its neighbouring gaps shut on the
-      // first floor, so a run that walked in there could only go back down.
-      //
-      // So the maze is read and solved. `planStack` breadth-firsts over
-      // (level, position) using SMSTACK2's own `setupblocks()` table, and
-      // `pickEntry` tries all four of smstack1's ways up and takes one that
-      // solves — which is the choice smstack1 exists to offer.
-      const { pickEntry } = await import("./nav/smokestack");
+      // `mazenumber = random(4)`. A runner tells the four apart by what they
+      // see on the way up (#489) and then walks a route known to have no dead
+      // end; reading `mazenumber` is that recognition, and the routes are theirs
+      // (STACK_ROUTES), so the walk is the one a person would make.
+      const where = String.raw`[String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, ""), String(window.dbg.viewer?.scene?.sceneName || "").toLowerCase(), String(window.dbg.viewer?.scene?.views[window.dbg.viewer.viewIdx]?.viewName || "").toLowerCase()].join(" ")`;
+      await c.d.settle("quiet", "the smokestack landing", c.budget);
+      // The routes start on the landing: their first `u` walks to the ladder
+      // (smstack1 scene10 view42) and the second climbs it. Standing at the
+      // ladder already, the first is spent.
+      const start = await c.d.evaluate<string>(where);
+      const from = { "smstack1 scene14 view40": 0, "smstack1 scene10 view42": 1 }[start];
+      if (from === undefined) {
+        throw new Error(`climbStack starts on the smstack1 landing (scene14 view40) or at its ladder (scene10 view42), not ${start}`);
+      }
       const maze = await c.d.evaluate<number>(
         `Number(window.dbg.session.interp.globals.get("mazenumber") ?? 0)`,
       );
-      const chosen = pickEntry(maze);
-      if (!chosen) throw new Error(`maze ${maze} has no way up from any of the four entries`);
-      c.say(`maze ${maze}, in at ${chosen.entry.scene}, ${chosen.plan.length} moves`);
-
-      const sceneNow = `String(window.dbg.viewer.scene.sceneName || "").toLowerCase()`;
-      const setNow = String.raw`String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, "")`;
-
-      // in at the entry smstack1 offers
-      await ACTIONS.face.run({ ...c, step: { ...c.step, args: [chosen.entry.stand], opts: {} } });
-      await c.d.key("ArrowUp", "none", c.budget);
-      await c.d.hold(`(${setNow}) === "smstack2"`, "the first floor of the stack", c.budget);
-
-      for (const m of chosen.plan) {
-        await ACTIONS.face.run({ ...c, step: { ...c.step, args: [m.view], opts: {} } });
-        await c.d.key("ArrowUp", "none", c.budget);
-        const arrived =
-          m.to === "smstack3"
-            ? `(${setNow}) === "smstack3"`
-            : `(${setNow}) === "smstack2" && (${sceneNow}) === ${JSON.stringify(m.to)} ` +
-              `&& Number(window.dbg.session.interp.globals.get("stacklevel")) === ${m.level}`;
-        await c.d.hold(arrived, `${m.kind} to ${m.to} (level ${m.level})`, c.budget);
+      const route = STACK_ROUTES[maze];
+      if (!route) throw new Error(`mazenumber is ${maze}, and there are routes for 1-4`);
+      for (let i = from; i < route.length; i++) {
+        try {
+          await arrow(STACK_KEYS[route[i]])({ ...c, wait: "none" });
+        } catch (e) {
+          throw new Error(`maze ${maze}, move ${i + 1} of ${route.length} (${route.slice(0, i)}[${route[i]}]): ${(e as Error).message}`);
+        }
       }
-      // The top is a CHANGESET, and the set name flips before the viewer that
-      // serves it exists (see the note in `stand`). Returning on the name alone
-      // hands the next line the departing room to read, so the climb is not over
-      // until the arriving one is quiet.
       await c.d.settle("quiet", "the top of the stack to arrive", c.budget);
-      const ended = await c.d.evaluate<string>(
-        `String(window.dbg.session.currentSetFile || "") + " " + String(window.dbg.viewer.scene.sceneName || "")`,
-      );
-      c.say(`up in ${ended}`);
+      const end = await c.d.evaluate<string>(where);
+      if (end !== "smstack3 scene39 view55") {
+        throw new Error(`maze ${maze}'s route ended at ${end}, not at the notebook (smstack3 scene39 view55)`);
+      }
+      c.say(`maze ${maze}, ${route.length} moves, at the notebook`);
     },
   },
 
