@@ -107,5 +107,7 @@ startWorkbench({
    * worked in dev and fetched nothing once deployed under a subdirectory.
    */
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
+  /** the contributed sheets (taoot/speedrun/sheets/), resolved the same way */
+  contributedSheets: siteUrl("speedrun/sheets.json"),
   calculate,
 });

@@ -709,6 +709,11 @@ body.sr-resizing * {
   opacity: 0.8;
 }
 #srsheets button:hover { opacity: 1; }
+#srsheets select.contributed {
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.2rem 0.4rem;
+  max-width: 18rem;
+}
 #srsheets .sep,
 #srparts .sep {
   opacity: 0.4;
