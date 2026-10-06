@@ -1070,7 +1070,7 @@ export class GameSession {
     // own intro and its question run on the page, not on passes (#508)
     const held =
       this.blockedOnFiles > 0 ||
-      (this.sheetClock && (!this.coreLoaded || (this.sheetHolds.size === 0 && this.sheetPasses === 0)));
+      (this.sheetClock && (!this.coreLoaded || (this.runningHolds() === 0 && this.pausePasses === 0)));
     if (held && this.lastRaw !== null) this.blockedTotal += raw - this.lastRaw;
     this.lastRaw = raw;
     this.rawNow = raw;
@@ -1091,7 +1091,10 @@ export class GameSession {
       if (pass.due) {
         this.stepAnchor = pass.next;
         this.gameNow += ENGINE_STEP_MS;
-        if (this.sheetHolds.size === 0 && this.sheetPasses > 0) this.sheetPasses--;
+        if (this.runningHolds() === 0 && this.pausePasses > 0) {
+          if (this.sheetHalted) this.sheetWatchPasses--;
+          else this.sheetPasses--;
+        }
       }
     }
     return this.gameNow;
@@ -1136,17 +1139,60 @@ export class GameSession {
   readonly sheetHolds = new Map<number, () => boolean>();
   /** passes still to run with no hold open */
   sheetPasses = 0;
+  /**
+   * A sheet's standing watches (`watchFor`), by id, asked beside the holds
+   * (#509). A watch never runs the game; RISING, it stops it — on the very pass
+   * its condition came true — until the runner has acted on it. Polled from the
+   * runner's own beat instead, a watch pressed its key some passes after the
+   * film it watches for began, and how many was the machine's.
+   */
+  readonly sheetWatches = new Map<number, { met: () => boolean; was: boolean; rose: boolean }>();
+  /**
+   * A watch has risen and the runner has not acted on it yet: the interrupted
+   * line stands still — its holds neither run the game nor close, its pauses
+   * do not count down — and only the watch's own action moves the game, through
+   * {@link sheetWatchHolds} and {@link sheetWatchPasses}. The runner clears it
+   * when the action is done.
+   */
+  sheetHalted = false;
+  /** the holds a watch's action opened — the only ones that count while halted */
+  readonly sheetWatchHolds = new Set<number>();
+  /** a watch's action's pause, in passes — the only one that counts while halted */
+  sheetWatchPasses = 0;
 
-  /** close every hold whose condition now holds (a throwing one counts as not yet) */
+  /** the open holds that may run the game: the watch's own while halted, else all */
+  private runningHolds(): number {
+    if (!this.sheetHalted) return this.sheetHolds.size;
+    let n = 0;
+    for (const id of this.sheetHolds.keys()) if (this.sheetWatchHolds.has(id)) n++;
+    return n;
+  }
+  /** the pause in passes that counts right now */
+  private get pausePasses(): number {
+    return this.sheetHalted ? this.sheetWatchPasses : this.sheetPasses;
+  }
+
+  /** close every hold whose condition now holds, and note every watch that rose */
   closeSheetHolds(): void {
-    for (const [id, met] of this.sheetHolds) {
-      let ok = false;
+    const asked = (met: () => boolean): boolean => {
       try {
-        ok = met();
+        return met();
       } catch {
-        ok = false;
+        return false; // a throwing condition counts as not yet
       }
-      if (ok) this.sheetHolds.delete(id);
+    };
+    if (this.blockedOnFiles > 0) return; // not while a file is coming — see loadingFiles
+    for (const [id, met] of this.sheetHolds) {
+      if (this.sheetHalted && !this.sheetWatchHolds.has(id)) continue;
+      if (asked(met)) this.sheetHolds.delete(id);
+    }
+    for (const w of this.sheetWatches.values()) {
+      const now = asked(w.met);
+      if (now && !w.was) {
+        w.rose = true;
+        this.sheetHalted = true;
+      }
+      w.was = now;
     }
   }
   /** the game time {@link gameTime} last returned */
@@ -1209,6 +1255,18 @@ export class GameSession {
 
   get frozen(): boolean {
     return this.frozenSince !== null;
+  }
+
+  /**
+   * Is the engine waiting on a file right now? A sheet's runner does not look
+   * at the game while it is (#509): a pause is not over and a hold does not
+   * close until the load has landed. Else a runner on a slow link saw a film
+   * that was still downloading as no film at all, paused a pass, and the pass
+   * ran the moment the file came — with the film on screen and nobody pressing
+   * ESC at it — where a runner with the file to hand pressed first.
+   */
+  get loadingFiles(): boolean {
+    return this.blockedOnFiles > 0;
   }
 
   /**

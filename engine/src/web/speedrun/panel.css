@@ -872,21 +872,21 @@ body.sr-resizing * {
 }
 #srparts button.points:hover { opacity: 1; color: #e0928f; border-color: #e0928f; }
 /* ---- the cache warmup (taoot/src/cache-warmup.ts) ---- */
-#srwarmbar { margin-top: 0.55rem; }
-#srwarmtrack {
+#srwarmbar, #srcalcbar { margin-top: 0.55rem; }
+#srwarmtrack, #srcalctrack {
   height: 3px;
   background: var(--inset);
   border: 1px solid var(--border);
   border-radius: 999px;
   overflow: hidden;
 }
-#srwarmfill {
+#srwarmfill, #srcalcfill {
   height: 100%;
   width: 0;
   background: linear-gradient(to right, var(--accent-line), var(--accent));
   transition: width 140ms linear;
 }
-#srwarmnum {
+#srwarmnum, #srcalcnum {
   margin-top: 0.35rem;
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -894,7 +894,7 @@ body.sr-resizing * {
 }
 /* Warming. The same on-state as the record dot's, in ice rather than red:
    it is running, it is not urgent, and it is stopped by the same button. */
-#srwarm.on {
+#srwarm.on, #srcalc.on {
   color: var(--accent);
   border-color: var(--accent);
 }
@@ -1525,4 +1525,15 @@ body.sr-resizing * {
 #dbgRows .none,
 #dbgState .quiet {
   color: var(--text-mute);
+}
+
+/* Calculate's "go to line" — a link-sized button inside the bar's reading */
+.sr-calc-go {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
 }

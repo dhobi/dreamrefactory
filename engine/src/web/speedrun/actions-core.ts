@@ -18,7 +18,7 @@
  * {@link ActionContext.verbs}, which is what lets `watchFor` parse a line
  * against the table the run is actually using.
  */
-import { SHOWING } from "./driver";
+import { SHOWING, budgetNow } from "./driver";
 import {
   IDLE,
   aimAtSettled,
@@ -245,8 +245,8 @@ export const CORE_ACTIONS: ActionTable = {
        */
       const until = condition(c.step.opts.until);
       const max = Number(c.step.opts.max ?? 40);
-      const deadline = Date.now() + c.budget;
-      const left = () => Math.max(250, deadline - Date.now());
+      const deadline = budgetNow(c.d) + c.budget;
+      const left = () => Math.max(250, deadline - budgetNow(c.d));
       if (await c.d.evaluate<boolean>(`!!(${until})`)) {
         c.say(`${c.step.opts.until} already — no click needed`);
         return;
@@ -259,7 +259,7 @@ export const CORE_ACTIONS: ActionTable = {
       let taps = 0;
       for (;;) {
         if (await c.d.evaluate<boolean>(`!!(${until})`)) break;
-        if (Date.now() > deadline) {
+        if (budgetNow(c.d) > deadline) {
           throw new Error(
             `clicked ${x},${y} ${taps} time(s) in ${c.budget} ms and ${c.step.opts.until} never came true`,
           );
@@ -789,11 +789,11 @@ export const CORE_ACTIONS: ActionTable = {
         return { x: Number(m[1]), y: Number(m[2]) };
       });
       const max = Number(c.step.opts.max ?? 400);
-      const deadline = Date.now() + c.budget;
+      const deadline = budgetNow(c.d) + c.budget;
       let thrown = 0;
       for (; thrown < max; thrown++) {
         if (await c.d.evaluate<boolean>(`(() => !!(${until}))()`)) break;
-        if (Date.now() > deadline) throw new Error(`combo ran past its ${c.budget} ms budget after ${thrown}`);
+        if (budgetNow(c.d) > deadline) throw new Error(`combo ran past its ${c.budget} ms budget after ${thrown}`);
         /**
          * ONE BLOW PER IDLE ENGINE, and both halves of that are load-bearing.
          *
@@ -868,11 +868,11 @@ export const CORE_ACTIONS: ActionTable = {
       if (!c.step.opts.until) throw new Error(`hammer needs an until: condition, or it would never stop`);
       const until = condition(c.step.opts.until);
       const max = Number(c.step.opts.max ?? 400);
-      const deadline = Date.now() + c.budget;
+      const deadline = budgetNow(c.d) + c.budget;
       let taps = 0;
       for (;;) {
         if (await c.d.evaluate<boolean>(`!!(${until})`)) break;
-        if (Date.now() > deadline) {
+        if (budgetNow(c.d) > deadline) {
           throw new Error(
             `hammered ${name} ${taps} time(s) in ${c.budget} ms and ${c.step.opts.until} never came true`,
           );
@@ -1039,7 +1039,10 @@ export const CORE_ACTIONS: ActionTable = {
         try { b = s.snapshotSave(); } finally { s.onLog = prev; }
         return { bytes: b ? Array.from(b) : null, notes: notes.filter((n) => /^savegame:/.test(n)) };
       })()`);
-      if (!got.bytes) throw new Error(`the engine would not produce a save here`);
+      if (!got.bytes) {
+        const why = got.notes.length ? " (" + got.notes.join("; ") + ")" : "";
+        throw new Error(`the engine would not produce a save here${why}`);
+      }
       await c.d.putSave(name, new Uint8Array(got.bytes));
       c.say(`${(got.bytes.length / 1024).toFixed(1)} kB`);
       for (const note of got.notes) c.say(note.replace(/^savegame: /, ""));

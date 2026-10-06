@@ -462,6 +462,51 @@ in-game time with the wall time small beside it, and says `LOADING` while the
 link is busy. On a slow machine `--patience=N` gives every line N times its
 budget; a budget only decides when a run is called stuck.
 
+**A standing watch** (`watchFor`) is asked by the session too, on every pass: on
+the pass its condition rises the game stops, the interrupted line stands still,
+and only the watch's own action moves the game until it is done. Polled on the
+runner's beat instead, the ESC for a sinking film landed some passes in, and how
+many was the machine's.
+
+### Without a browser
+
+```
+npm run speedrun -w taoot -- --headless --from="m3p0 smokestack" --seed=20
+```
+
+`--headless` plays the sheet in node against the same host the playthrough
+suites drive, with no drawing, as fast as the CPU goes
+([#509](https://github.com/dhobi/dreamrefactory/issues/509)). It drives the game
+with the workbench's own driver over a stand-in window, so every gesture is the
+same code, and it gives the browser's numbers: the sheet from a cold boot, seed
+20, came out the same to the millisecond of in-game time on every one of 361
+lines in both runners (2:45 of it, in 17 s headless against 3:36 in the
+browser). Load points are shared with the browser runner (`out/speedrun/`).
+What it cannot run is what the workbench cannot: `travel`, `hunt` and `stand`.
+Its budgets count its own frames, not the wall.
+
+**On the workbench, Calculate** does the same in a Web Worker beside the page
+(`taoot/src/speedrun/calc-worker.ts`): it plays the open sheet from a cold boot,
+headless and at full CPU speed, with a bar for how far it has got, and ends in
+one of two answers — the sheet's in-game time and frames, or the line it stopped
+at, how far in, and a button that puts the editor on that line. The game on
+screen is not touched; the files come through the browser's cache, and the
+sheet's checkpoints go with it for its `load()` lines. The dice are live, as on
+the workbench, so a sheet that depends on them can come out differently on the
+next press.
+
+Two rules make the runners agree, and both are the sheet clock's, not the
+headless runner's:
+
+- **The runner looks at the game only once the frame's work has settled.** A
+  browser settles every promise between one animation-frame callback and the
+  next; the headless runner gives each callback a task of its own for the same
+  reason.
+- **The runner does not look at the game while it waits on a file**
+  (`GameSession.loadingFiles`): a pause is not over and a hold does not close
+  until the load has landed. A runner that saw a film still downloading as no
+  film let a pass run the moment it arrived, before pressing ESC at it.
+
 ### A coin on arrival
 
 Some of the ship is decided by a die. The Gorse-Joneses, the only people who

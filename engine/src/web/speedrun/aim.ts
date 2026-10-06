@@ -51,6 +51,17 @@ export interface Aim {
   propUnder(x: number, y: number): string | null;
   /** an overlay flat is covering the room, so there is no room to aim into */
   inFlat: boolean;
+  /**
+   * Where a thing by this name could be hit right now, when that is known
+   * (#509): a list of rectangles to search instead of the screen — empty for
+   * nowhere — or null for "could be anywhere", which sweeps it all.
+   *
+   * A whole-screen sweep is twelve thousand hit tests, about 50 ms, and a verb
+   * that waits for something to REAPPEAR asks every pass — `hammer(startfence)`
+   * through a fencing bout swept 743 times, 39 s of CPU, more than each pass
+   * lasts. A flat's button can only be hit inside its own rectangle.
+   */
+  where?(name: string): { x0: number; y0: number; x1: number; y1: number }[] | null;
   /** the named hotspot's rectangle in the current view, or null */
   hotspot(name: string): { x0: number; y0: number; x1: number; y1: number } | null;
   /** the game's framebuffer width — `host.screen.width`, never the canvas's */
@@ -92,6 +103,18 @@ export function aimAtThing(a: Aim, name: string): { x: number; y: number } | nul
     if (spot) return spot;
   }
   const kinds = new Set(["actor", "prop", "button", "painting"]);
+  const only = a.where?.(want) ?? null;
+  if (only) {
+    for (const r of only) {
+      for (let y = r.y0; y <= r.y1; y += AIM_STEP) {
+        for (let x = r.x0; x <= r.x1; x += AIM_STEP) {
+          const hit = a.hitTest(x, y);
+          if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
+        }
+      }
+    }
+    return null;
+  }
   for (let y = 2; y < a.height; y += AIM_STEP) {
     for (let x = 2; x < a.width; x += AIM_STEP) {
       const hit = a.hitTest(x, y);
@@ -108,9 +131,41 @@ export function aimAtThing(a: Aim, name: string): { x: number; y: number } | nul
  * definitions and the real constant, so there is nothing to keep in step by hand:
  * evaluate this, then call `aimAtThing(adapter, name)` or `aimAtHotspot(...)`.
  */
+/**
+ * {@link Aim.where} for Titanic's engine, asked of a live session: over a
+ * DreamFactory 4 flat with the room away, a hit is one of the flat's buttons or
+ * a prop drawn over it (ScreenDirector's `hitTestAt`). A name no drawn prop
+ * carries can then only be a button, inside its own rectangle — or nowhere.
+ * Anywhere else anything may answer, and it says so with null.
+ *
+ * Self-contained, because the Playwright driver ships it into the page as
+ * source ({@link aimSource}) and it may close over nothing.
+ */
+export function flatWhere(s: any, n: string): { x0: number; y0: number; x1: number; y1: number }[] | null {
+  if (s.viewShowing || !s.stageScript || s.isV5 || s.isV1) return null;
+  // No named inner function: the source of this one is shipped into a page,
+  // and a bundler's `__name` wrapper around one is a helper the page has not got.
+  //
+  // The props the hit test asks — the ones drawn — not every prop loaded: the
+  // fencing bout's start button is a prop too, hidden while it is not offered.
+  for (const p of s.propRuntime.drawn()) {
+    if ((p.name ?? "").toLowerCase() === n || (p.group?.name ?? "").toLowerCase() === n) return null;
+  }
+  return s.stageCtrl
+    .currentFlatRegions()
+    .filter((r: { name: string }) => (r.name ?? "").toLowerCase() === n)
+    .map((r: { left: number; top: number; right: number; bottom: number }) => ({
+      x0: r.left,
+      y0: r.top,
+      x1: r.right,
+      y1: r.bottom,
+    }));
+}
+
 export function aimSource(): string {
   return (
     `const AIM_STEP = ${AIM_STEP};\n` +
+    `const flatWhere = ${flatWhere.toString()};\n` +
     `const aimAtHotspot = ${aimAtHotspot.toString()};\n` +
     `const aimAtThing = ${aimAtThing.toString()};\n`
   );

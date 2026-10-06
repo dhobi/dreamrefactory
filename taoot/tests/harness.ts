@@ -42,6 +42,12 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
      * this (taoot/src/main.ts), so how OFTEN it fires is part of the host's contract.
      */
     onShowStage?: () => void;
+    /**
+     * Leave the boot library for `coldBoot` to open, as the page does. A
+     * speedrun counts the game's time from that moment (#508), so a host
+     * opened early would count the boot films a page does not (#509).
+     */
+    cold?: boolean;
   } = {},
 ): Promise<{
   host: GameHost;
@@ -99,7 +105,7 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
   // a game whose `boot()` opens its own resources has to arrive at that boot
   // un-booted, or the stand-in has already opened the interface band and in-game
   // stage its menu never asked for.
-  if ((await host.bootPlan()).landingSet) await host.session.ensureBooted();
+  if (!opts.cold && (await host.bootPlan()).landingSet) await host.session.ensureBooted();
   // Seed `random()`, so a suite run is a repeatable one.
   //
   // Left on Math.random, any test whose timing a script draws is a coin toss —

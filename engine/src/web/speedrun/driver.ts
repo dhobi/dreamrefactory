@@ -400,6 +400,22 @@ export interface SpeedrunDriver {
    */
   pause?(): never;
 
+  /**
+   * The clock a step's `budget:` counts on, in ms — the wall clock when left
+   * out. A runner that plays the game faster than real time (the headless one,
+   * #509) counts its own frames instead, or a stuck line would run hours of
+   * the game inside ten seconds of the wall.
+   */
+  budgetNow?(): number;
+
+  /**
+   * The same driver for a standing watch's action (`watchFor`, #509): its holds
+   * and pauses are the watch's, the only ones that move the game while a watch
+   * that rose has halted it under a sheet's clock (GameSession.sheetHalted). A
+   * driver without it has its watches polled on the runner's beat instead.
+   */
+  forWatch?(): SpeedrunDriver;
+
   log(message: string): void;
   /**
    * The Playwright page, when there is one.
@@ -514,3 +530,6 @@ export function waitExpr(mode: WaitMode): string | null {
   if (mode === "ready") return KEY_SAFE;
   return QUIET;
 }
+
+/** now, on the clock `d`'s budgets count on — see {@link SpeedrunDriver.budgetNow} */
+export const budgetNow = (d: SpeedrunDriver): number => d.budgetNow?.() ?? Date.now();

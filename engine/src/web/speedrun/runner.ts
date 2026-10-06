@@ -323,31 +323,27 @@ export async function runSheet(
    * as a single array. Nothing is polled at all when no watch is registered, so
    * a sheet that does not use them pays nothing.
    */
-  const runWatches = async (): Promise<void> => {
+  const runWatches = async (sheet: boolean): Promise<void> => {
     const live = watches();
     if (!live.length) return;
-    const probe = "[" + live.map((w) => `!!(${w.expr})`).join(",") + "]";
-    let now: boolean[];
+    let fire: boolean[];
     try {
-      now = await d.evaluate<boolean[]>(probe);
+      fire = sheet
+        ? await d.evaluate<boolean[]>(takeRises(live))
+        : edges(live, await d.evaluate<boolean[]>("[" + live.map((w) => `!!(${w.expr})`).join(",") + "]"));
     } catch {
       return; // a page mid-navigation is not a watch failing
     }
     for (let i = 0; i < live.length; i++) {
+      if (!fire[i]) continue;
       const w = live[i];
-      if (!now[i]) {
-        w.armed = false; // the edge is re-armed by the condition going false
-        continue;
-      }
-      if (w.armed) continue;
-      w.armed = true;
       w.fired++;
       const act = resolve(w.action.verb);
       if (!act) continue;
       const said: string[] = [];
       try {
         await act.run({
-          d,
+          d: sheet ? watchDriver : d,
           step: w.action,
           wait: waitOf(actions, w.action),
           budget: Number(w.action.opts.budget ?? 10_000) * (hooks.patience ?? 1),
@@ -361,18 +357,98 @@ export async function runSheet(
         hooks.onWatch?.(w, [`failed: ${(e as Error).message}`]);
       }
     }
+    // acted on: the interrupted line may go on
+    if (sheet && fire.some(Boolean)) {
+      await d.evaluate(`void (window.dbg && ${UNHALT})`).catch(() => {});
+    }
   };
 
-  /** poll the watches until the step it is running beside is done */
-  const watchdog = (done: () => boolean): Promise<void> =>
+  /** which watches rose since the last poll on the runner's beat; going false re-arms the edge */
+  const edges = (live: Watch[], now: boolean[]): boolean[] =>
+    live.map((w, i) => {
+      const rose = now[i] && !w.armed;
+      w.armed = now[i];
+      return rose;
+    });
+
+  /*
+   * Under a sheet's clock the SESSION asks the watches, on every pass, and
+   * halts the game on the pass one rises (GameSession.sheetWatches) — so a
+   * watch fires at the same point of the game on any machine (#509). These
+   * open them for the length of a step, collect what rose, and hand the edge
+   * back at the end.
+   */
+  const watchDriver = d.forWatch?.() ?? d;
+  const UNHALT = `((s) => { s.sheetHalted = false; s.sheetWatchHolds.clear(); s.sheetWatchPasses = 0; })(window.dbg.session)`;
+  const watchIds = new Map<Watch, number>();
+  const idOf = (w: Watch): number => {
+    if (!watchIds.has(w)) watchIds.set(w, watchIds.size + 1);
+    return watchIds.get(w)!;
+  };
+  const openWatches = (live: Watch[]): Promise<boolean> => {
+    if (!d.forWatch) return Promise.resolve(false);
+    const open = live
+      .map((w) => "s.sheetWatches.set(" + idOf(w) + ", { met: () => !!(" + w.expr + "), was: " + w.armed + ", rose: false });")
+      .join("\n");
+    return d
+      .evaluate<boolean>(`(() => {
+        const s = window.dbg && window.dbg.session;
+        if (!s || !s.sheetClock || !s.sheetWatches) return false;
+        ${open}
+        return true;
+      })()`)
+      .catch(() => false);
+  };
+  const takeRises = (live: Watch[]): string => `(() => {
+    const s = window.dbg.session;
+    return [${live.map(idOf).join(",")}].map((id) => {
+      const w = s.sheetWatches.get(id);
+      const rose = !!(w && w.rose);
+      if (w) w.rose = false;
+      return rose;
+    });
+  })()`;
+  /** close them, keeping the edge: a rise nobody acted on yet fires at the next step */
+  const closeWatches = async (live: Watch[]): Promise<void> => {
+    const was = await d
+      .evaluate<(boolean | null)[]>(`(() => {
+        const s = window.dbg && window.dbg.session;
+        if (!s || !s.sheetWatches) return [];
+        const out = [${live.map(idOf).join(",")}].map((id) => {
+          const w = s.sheetWatches.get(id);
+          s.sheetWatches.delete(id);
+          return w ? w.was && !w.rose : null;
+        });
+        ${UNHALT};
+        return out;
+      })()`)
+      .catch((): (boolean | null)[] => []);
+    live.forEach((w, i) => {
+      const v = was[i];
+      if (typeof v === "boolean") w.armed = v;
+    });
+  };
+
+  /**
+   * Poll the watches until the step it is running beside is done — and stop
+   * the moment it is: the tick's wait is cut short by `finished`, or every step
+   * under a watch would wait out the rest of a quarter second before the next
+   * one began (#509, where that was the whole of a headless run's wall time).
+   */
+  const watchdog = (done: () => boolean, finished: Promise<void>): Promise<void> =>
     (async () => {
-      while (!done()) {
-        await runWatches();
-        if (done()) return;
-        await (d.wallWait ?? d.sleep).call(d, WATCH_TICK_MS);
+      const live = watches();
+      const sheet = await openWatches(live);
+      try {
+        while (!done()) {
+          await runWatches(sheet);
+          if (done()) return;
+          await Promise.race([(d.wallWait ?? d.sleep).call(d, WATCH_TICK_MS), finished]);
+        }
+      } finally {
+        if (sheet) await closeWatches(live);
       }
     })();
-
   for (const step of steps) {
     if (step.verb === "split") {
       const now = await d.clock();
@@ -431,8 +507,10 @@ export async function runSheet(
         verbs,
       };
       let over = false;
+      let finish = (): void => {};
+      const finished = new Promise<void>((r) => (finish = r));
       const dog = watches().length && step.verb !== "watchfor"
-        ? watchdog(() => over)
+        ? watchdog(() => over, finished)
         : null;
       try {
         for (let i = 0; i < step.repeat; i++) {
@@ -441,6 +519,7 @@ export async function runSheet(
         }
       } finally {
         over = true;
+        finish();
         if (dog) await dog;
       }
     } catch (e) {

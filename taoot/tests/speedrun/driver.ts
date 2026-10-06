@@ -116,12 +116,13 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
    * condition and closes the hold on the pass it comes true; without one,
    * nothing is registered and the wait below is the plain predicate.
    */
-  const openHold = (expr: string, id: number): Promise<boolean> =>
+  const openHold = (expr: string, id: number, watch: boolean): Promise<boolean> =>
     page
       .evaluate(`(() => {
         const s = window.dbg && window.dbg.session;
         if (!s || !s.sheetClock) return false;
         s.sheetHolds.set(${id}, () => !!(${expr}));
+        ${watch ? "s.sheetWatchHolds.add(" + id + ");" : ""}
         return true;
       })()`)
       .then((on) => !!on, () => false);
@@ -132,414 +133,425 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
       .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (s && s.sheetHolds) s.sheetHolds.delete(${id}); })()`)
       .then(() => undefined, () => undefined);
 
-  const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
-    const id = ++holdIds;
-    const held = await openHold(expr, id);
-    return page
-      .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
-      .then(() => undefined)
-      .catch(async (e: Error) => {
-        await closeHold(id);
-        throw new Error(`stuck waiting for ${what}: ${e.message}`);
+  /**
+   * The driver, twice over (#509): the run's own, and `forWatch`'s for a
+   * standing watch's action, whose holds and pauses are the watch's — the only
+   * ones that move the game while a risen watch has halted it.
+   */
+  const make = (watch: boolean) => {
+    const passesField = watch ? "sheetWatchPasses" : "sheetPasses";
+    const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
+      const id = ++holdIds;
+      const held = await openHold(expr, id, watch);
+      return page
+        .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
+        .then(() => undefined)
+        .catch(async (e: Error) => {
+          await closeHold(id);
+          throw new Error(`stuck waiting for ${what}: ${e.message}`);
+        });
+    };
+
+    /** the same, but running out is an answer rather than a failure */
+    const tryHold = async (expr: string, budget: number): Promise<boolean> => {
+      const id = ++holdIds;
+      const held = await openHold(expr, id, watch);
+      return page
+        .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
+        .then(() => true)
+        .catch(async () => {
+          await closeHold(id);
+          return false;
+        });
+    };
+
+    /** a pause the game runs through: passes under a sheet's clock, ms otherwise */
+    const sleep = async (ms: number): Promise<void> => {
+      const passes = Math.max(1, Math.round(ms / 50));
+      const stepped = await page
+        .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (!s || !s.sheetClock) return false; s[${JSON.stringify(passesField)}] = ${passes}; return true; })()`)
+        .catch(() => false);
+      if (!stepped) return page.waitForTimeout(ms);
+      await page
+        .waitForFunction(`!window.dbg || !window.dbg.session.sheetClock || (!window.dbg.session[${JSON.stringify(passesField)}] && !window.dbg.session.loadingFiles)`, null, { timeout })
+        .catch(() => undefined);
+    };
+
+    /**
+     * Put the game back to a cold boot.
+     *
+     * From out here a reload is nothing special — the Node side of the run
+     * survives it, so the promise resolves and the sheet carries on. That is the
+     * whole difference from the workbench, where the reload takes the run with it.
+     */
+    const restart = async (): Promise<void> => {
+      await page.reload();
+      await page.waitForFunction(() => !!(window as unknown as { dbg?: unknown }).dbg, null, {
+        timeout: 30_000,
       });
-  };
-
-  /** the same, but running out is an answer rather than a failure */
-  const tryHold = async (expr: string, budget: number): Promise<boolean> => {
-    const id = ++holdIds;
-    const held = await openHold(expr, id);
-    return page
-      .waitForFunction(waitExpr(expr, id, held), null, { timeout: budget })
-      .then(() => true)
-      .catch(async () => {
-        await closeHold(id);
-        return false;
-      });
-  };
-
-  /** a pause the game runs through: passes under a sheet's clock, ms otherwise */
-  const sleep = async (ms: number): Promise<void> => {
-    const passes = Math.max(1, Math.round(ms / 50));
-    const stepped = await page
-      .evaluate(`(() => { const s = window.dbg && window.dbg.session; if (!s || !s.sheetClock) return false; s.sheetPasses = ${passes}; return true; })()`)
-      .catch(() => false);
-    if (!stepped) return page.waitForTimeout(ms);
-    await page
-      .waitForFunction(`!window.dbg || !window.dbg.session.sheetClock || window.dbg.session.sheetPasses === 0`, null, { timeout })
-      .catch(() => undefined);
-  };
-
-  /**
-   * Put the game back to a cold boot.
-   *
-   * From out here a reload is nothing special — the Node side of the run
-   * survives it, so the promise resolves and the sheet carries on. That is the
-   * whole difference from the workbench, where the reload takes the run with it.
-   */
-  const restart = async (): Promise<void> => {
-    await page.reload();
-    await page.waitForFunction(() => !!(window as unknown as { dbg?: unknown }).dbg, null, {
-      timeout: 30_000,
-    });
-    await opts.onReload?.();
-    log("reset: the game was reloaded");
-  };
-
-  /**
-   * Wall clock, engine frames and the load remover's total (#251).
-   *
-   * The two page-side numbers come back in ONE evaluate, and that is not
-   * tidiness: this driver's readings cost a round trip each, `clock()` is called
-   * at the top and bottom of every action, and a wall clock taken here with a
-   * loading total taken a round trip later are readings of two different
-   * instants — with the second subtracted from the first, so the gap would be
-   * charged to the route.
-   */
-  const clock = async (): Promise<Clock> => {
-    const [frames, loading, game] = await evaluate<[number, number, number]>(
-      "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
-    );
-    return { ms: Date.now(), frames, loading, game };
-  };
-
-  /** canvas pixel (512x384) -> page point, so the click is a real mouse event */
-  /** the gap a click holds the button down for — see clickAt */
-  const CLICK_FRAMES = 3;
-  const heldFrames = (): Promise<void> =>
-    // anonymous arrows only: this is serialized into the page, and a NAMED
-    // function would carry tsx's `__name` helper across with it and throw there
-    page.evaluate(async (n: number) => {
-      for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r(0)));
-    }, CLICK_FRAMES);
-
-  /**
-   * Canvas pixel -> the client point that lands on it. The arithmetic is
-   * {@link clientPointFor}'s and is shared with the page driver on purpose
-   * (#277): the page reads a coordinate back with `Math.floor`, so aiming at the
-   * half-pixel misses by one below a 2x scale. Only the RECT is measured in the
-   * page; the sum is done here so there is one copy of the rule.
-   */
-  const pagePoint = async (x: number, y: number): Promise<Point> => {
-    const m = await page.evaluate(() => {
-      const c = document.getElementById("screen") as HTMLCanvasElement;
-      const r = c.getBoundingClientRect();
-      return { left: r.left, top: r.top, width: r.width, height: r.height, cw: c.width, ch: c.height };
-    });
-    return clientPointFor(x, y, m, { width: m.cw, height: m.ch });
-  };
-
-  /** the wait half of every gesture, and the only thing a `wait:` option moves */
-  const settle = async (mode: WaitMode, what: string, budget = timeout): Promise<void> => {
-    if (mode === "none") return;
-    if (mode === "taken") return hold(QUEUE_EMPTY, `${what} to be taken`, budget);
-    if (mode === "ready") return hold(KEY_SAFE, `the engine to be ready after ${what}`, budget);
-    return hold(QUIET, `${what} to settle`, budget);
-  };
-
-  const pad = async (ms: number): Promise<void> => {
-    if (!ms) return;
-    paddedMs += ms;
-    await sleep(ms);
-  };
-
-  return {
-    page,
-    clock,
-    pagePoint,
-    settle,
-    pad,
-    hold,
-    tryHold,
-    evaluate,
-    /** ms spent in `after:` padding — dead time, reported as such */
-    padded: () => paddedMs,
+      await opts.onReload?.();
+      log("reset: the game was reloaded");
+    };
 
     /**
-     * A key press, gated so it cannot be eaten by a fade.
+     * Wall clock, engine frames and the load remover's total (#251).
      *
-     * The gate is BEFORE the press and is not skippable by `wait: none`: `wait`
-     * says how much of the CONSEQUENCE to wait for, never whether the gesture is
-     * allowed to be thrown away. See {@link KEY_SAFE}.
+     * The two page-side numbers come back in ONE evaluate, and that is not
+     * tidiness: this driver's readings cost a round trip each, `clock()` is called
+     * at the top and bottom of every action, and a wall clock taken here with a
+     * loading total taken a round trip later are readings of two different
+     * instants — with the second subtracted from the first, so the gap would be
+     * charged to the route.
      */
-    /** plain delay — the one thing a run should never need and sometimes does */
-    sleep,
-    wallWait: (ms: number): Promise<void> => page.waitForTimeout(ms),
-
-    /**
-     * An UNGATED key press, for the few aimed at something that is not the
-     * engine — the Nightdive intro answers before there is a viewer at all, so
-     * {@link KEY_SAFE} has nothing to ask and would refuse forever.
-     */
-    rawKey: async (name: string): Promise<void> => {
-      await page.keyboard.press(name);
-    },
-
-    key: async (name: string, wait: WaitMode = "ready", budget = timeout): Promise<void> => {
-      await hold(KEY_SAFE, `the engine to accept ${name}`, budget);
-      await page.keyboard.press(name);
-      await settle(wait, `key ${name}`, budget);
-    },
-
-    /**
-     * A click at a canvas pixel. Defaults to `taken` rather than `none` because
-     * a click that was never consumed and a click that did nothing are the same
-     * thing from out here, and only one of them is a bug worth stopping for.
-     */
-    /**
-     * A click, with the button held down long enough for the game to notice.
-     *
-     * `page.mouse.click` is press-and-release with no gap, and no gap is not what
-     * a hand does — the game reads the time between them. `while stilldown()`
-     * loops carry a held item and read `mouse()` every turn, and INVEN.SHP's
-     * `stdmouse` decides where a carried object LANDS from what `hittest` finds
-     * when the button comes UP. Measured on the coal lever, whose mousedown is
-     * such a loop, all three ways of clicking it:
-     *
-     *     playwright     deg 9 -> 9    coal 50 -> 50   stilldown turns 1
-     *     page-side      deg 9 -> 9    coal 50 -> 50   stilldown turns 1
-     *     held 3 frames  deg 9 -> 11   coal 50 -> 47   stilldown turns 3
-     *
-     * One turn means the loop was entered and `stilldown()` was already false.
-     * Being outside the browser is no protection: two CDP commands back to back
-     * still leave the renderer no frame in between.
-     *
-     * The wait is counted in the page's own frames rather than milliseconds,
-     * because what has to fit in the gap is a turn of an engine loop.
-     */
-    clickAt: async (x: number, y: number, wait: WaitMode = "taken", budget = timeout): Promise<void> => {
-      const pt = await pagePoint(x, y);
-      await page.mouse.move(pt.x, pt.y);
-      await page.mouse.down();
-      await heldFrames();
-      await page.mouse.up();
-      await settle(wait, `click ${x},${y}`, budget);
-    },
-
-    /** press and hold until a condition holds — see SpeedrunDriver.holdAt */
-    holdAt: async (x: number, y: number, opts: HoldOptions, budget = timeout): Promise<HoldResult> => {
-      // ARM FIRST, then press — see HoldOptions.arm
-      const armed = opts.arm ? await tryHold(opts.arm, opts.armBudget ?? Math.min(budget, 10_000)) : true;
-      if (!armed) return { armed, held: false };
-      const pt = await pagePoint(x, y);
-      await page.mouse.move(pt.x, pt.y);
-      await page.mouse.down();
-      let held = false;
-      try {
-        held = await tryHold(opts.until, budget);
-      } finally {
-        // released whatever happened: leaving the button down would make every
-        // later gesture a drag
-        await page.mouse.up();
-      }
-      await heldFrames();
-      return { armed, held };
-    },
-
-    /**
-     * Press a key repeatedly until a page-side predicate holds.
-     *
-     * This is `skipMovie` and the conversation line-skipper underneath — the
-     * "hammering ESC" of the sheet. Two things keep it honest. It re-checks the
-     * ARM predicate before every press, so it cannot press into a state where
-     * that key means something else (ESC at a plaque ANSWERS -1 and walks the
-     * player out of the conversation, #131 — hammering blindly there loses the
-     * story). And it gates on {@link KEY_SAFE} like any other key.
-     *
-     * `gap` is the tuning knob and the reason this is a driver primitive rather
-     * than a loop in the runner: how fast ESC may be repeated before the engine
-     * stops distinguishing the presses is a per-clip fact, and a sheet finds it
-     * by trying.
-     */
-    hammer: async (
-      name: string,
-      { until, arm, gap = defaultGap, budget = timeout, what }:
-        { until: string; arm?: string; gap?: number; budget?: number; what: string },
-    ): Promise<number> => {
-      const deadline = Date.now() + budget;
-      let pressed = 0;
-      for (;;) {
-        if (await evaluate<boolean>(`(() => !!(${until}))()`)) return pressed;
-        if (Date.now() > deadline) {
-          throw new Error(`stuck waiting for ${what}: ${pressed} presses of ${name} in ${budget} ms`);
-        }
-        // only press when the key means what we think it means, and only when it
-        // will not be dropped; otherwise give the engine the gap and look again
-        const armed = arm ? await evaluate<boolean>(`(() => !!(${arm}))()`) : true;
-        if (armed && (await evaluate<boolean>(KEY_SAFE))) {
-          await page.keyboard.press(name);
-          pressed++;
-        }
-        await sleep(gap);
-      }
-    },
-
-    /**
-     * Aim at a named thing the way the browser suite does — through the engine's
-     * OWN hit test, never a hardcoded pixel.
-     *
-     * Shared with engine/src/web/speedrun/aim.ts rather than reimplemented, for the
-     * reason that file gives at length: whether a thing is clickable from where
-     * you stand decides whether a route walks on, so two different sweeps explore
-     * a room differently and end up facing different ways. A speedrun that aimed
-     * its own way would be running a different game.
-     */
-    aim: async (kind: "thing" | "hotspot", name: string): Promise<Point | null> => {
-      const { aimSource } = await import("@dreamfactory/engine/web/speedrun/aim");
-      const adapter = `(() => {
-        const dbg = window.dbg, s = dbg.session, v = dbg.viewer;
-        return {
-          width: dbg.host.screen.width,
-          height: dbg.host.screen.height,
-          hitTest: (x, y) => s.hitTestAt(x, y),
-          propUnder: (x, y) => { const p = v.propUnder(x, y); return p ? p.group.name : null; },
-          inFlat: !s.viewShowing && !!s.stageScript,
-          hotspot: (n) => {
-            const obj = v.scene.views[v.viewIdx].objects.find(
-              (o) => (o.identifier || "").toLowerCase() === n.toLowerCase());
-            return obj ? { x0: obj.startRegionX, y0: obj.startRegionY, x1: obj.endRegionX, y1: obj.endRegionY } : null;
-          },
-        };
-      })()`;
-      const fn = kind === "thing" ? "aimAtThing" : "aimAtHotspot";
-      return evaluate<Point | null>(
-        `(() => { ${aimSource()} return ${fn}(${adapter}, ${JSON.stringify(name)}); })()`,
+    const clock = async (): Promise<Clock> => {
+      const [frames, loading, game] = await evaluate<[number, number, number]>(
+        "[window.dbg.session.frameCounter, window.dbg.loading().ms, window.dbg.session.gameNow]",
       );
-    },
+      return { ms: Date.now(), frames, loading, game };
+    };
+
+    /** canvas pixel (512x384) -> page point, so the click is a real mouse event */
+    /** the gap a click holds the button down for — see clickAt */
+    const CLICK_FRAMES = 3;
+    const heldFrames = (): Promise<void> =>
+      // anonymous arrows only: this is serialized into the page, and a NAMED
+      // function would carry tsx's `__name` helper across with it and throw there
+      page.evaluate(async (n: number) => {
+        for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r(0)));
+      }, CLICK_FRAMES);
 
     /**
-     * A held drag over a series of points — a dial, a lever, a pump handle.
-     *
-     * The wait between moves is the important part and is not a sleep: the prop's
-     * script is sitting in a `while stilldown()` loop, and `session.realYieldSeq`
-     * counts the frames a script has given up, bumped once per turn of exactly
-     * that loop (builtins/pointer.ts). Waiting for it to advance means a whole
-     * iteration has begun and finished SINCE the cursor moved — so the dial has
-     * seen where the cursor now is.
-     *
-     * FOUR because a loop body gives up more than one frame (the `stilldown()`
-     * that begins the turn and the `forceupdate()` that ends it both bump the
-     * counter), so +2 can be satisfied with the body in between never having run.
-     * A speedrun cannot shave this one: waiting less does not make the dial move
-     * sooner, it makes the next read a frame stale, and a stale `deg` sends the
-     * next swing the wrong way — which costs a whole extra pass around the dial.
+     * Canvas pixel -> the client point that lands on it. The arithmetic is
+     * {@link clientPointFor}'s and is shared with the page driver on purpose
+     * (#277): the page reads a coordinate back with `Math.floor`, so aiming at the
+     * half-pixel misses by one below a 2x scale. Only the RECT is measured in the
+     * page; the sum is done here so there is one copy of the rule.
      */
-    /** the twin of the page driver's — see {@link SpeedrunDriver.dragOnto} for
-     *  why this one returns at the release and `dragProp` does not */
-    dragOnto: async (
-      from: Point,
-      to: Point,
-      o: { armed?: string; landed?: string; budget?: number } = {},
-    ): Promise<{ armed: boolean; landed: boolean }> => {
-      const budget = o.budget ?? timeout;
-      const a = await pagePoint(from.x, from.y);
-      const b = await pagePoint(to.x, to.y);
-      await page.mouse.move(a.x, a.y);
-      await page.mouse.down();
-      let armed = true;
-      let landed = true;
-      try {
-        if (o.armed) armed = await tryHold(o.armed, Math.min(budget, 10_000));
-        await page.mouse.move(b.x, b.y);
-        if (o.landed) landed = await tryHold(o.landed, Math.min(budget, 10_000));
-      } finally {
-        // released whatever the waits said, and at the far end — a button left
-        // down turns every later gesture into a drag
-        await page.mouse.up();
-      }
-      return { armed, landed };
-    },
+    const pagePoint = async (x: number, y: number): Promise<Point> => {
+      const m = await page.evaluate(() => {
+        const c = document.getElementById("screen") as HTMLCanvasElement;
+        const r = c.getBoundingClientRect();
+        return { left: r.left, top: r.top, width: r.width, height: r.height, cw: c.width, ch: c.height };
+      });
+      return clientPointFor(x, y, m, { width: m.cw, height: m.ch });
+    };
 
-    dragProp: async (
-      at: Point,
-      next: (start: Point) => Point | null | Promise<Point | null>,
-      budget = timeout,
-    ): Promise<void> => {
-      const from = await pagePoint(at.x, at.y);
-      const seq = () => evaluate<number>("window.dbg.session.realYieldSeq");
-      // one turn of the control's `while stilldown()` loop — see HELD_YIELDS
-      const held = async (): Promise<void> => {
-        const was = await seq();
-        await tryHold(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
-      };
-      await page.mouse.move(from.x, from.y);
-      await page.mouse.down();
-      try {
-        // a turn of the loop before the first move, cursor unmoved: the dial does
-        // not move but the body publishes its global
-        await held();
-        for (let to = await next(at); to; to = await next(at)) {
-          const pt = await pagePoint(to.x, to.y);
-          await page.mouse.move(pt.x, pt.y);
-          await held();
+    /** the wait half of every gesture, and the only thing a `wait:` option moves */
+    const settle = async (mode: WaitMode, what: string, budget = timeout): Promise<void> => {
+      if (mode === "none") return;
+      if (mode === "taken") return hold(QUEUE_EMPTY, `${what} to be taken`, budget);
+      if (mode === "ready") return hold(KEY_SAFE, `the engine to be ready after ${what}`, budget);
+      return hold(QUIET, `${what} to settle`, budget);
+    };
+
+    const pad = async (ms: number): Promise<void> => {
+      if (!ms) return;
+      paddedMs += ms;
+      await sleep(ms);
+    };
+
+    return {
+      page,
+      clock,
+      pagePoint,
+      settle,
+      pad,
+      hold,
+      tryHold,
+      evaluate,
+      /** ms spent in `after:` padding — dead time, reported as such */
+      padded: () => paddedMs,
+
+      /**
+       * A key press, gated so it cannot be eaten by a fade.
+       *
+       * The gate is BEFORE the press and is not skippable by `wait: none`: `wait`
+       * says how much of the CONSEQUENCE to wait for, never whether the gesture is
+       * allowed to be thrown away. See {@link KEY_SAFE}.
+       */
+      /** plain delay — the one thing a run should never need and sometimes does */
+      sleep,
+      wallWait: (ms: number): Promise<void> => page.waitForTimeout(ms),
+
+      /**
+       * An UNGATED key press, for the few aimed at something that is not the
+       * engine — the Nightdive intro answers before there is a viewer at all, so
+       * {@link KEY_SAFE} has nothing to ask and would refuse forever.
+       */
+      rawKey: async (name: string): Promise<void> => {
+        await page.keyboard.press(name);
+      },
+
+      key: async (name: string, wait: WaitMode = "ready", budget = timeout): Promise<void> => {
+        await hold(KEY_SAFE, `the engine to accept ${name}`, budget);
+        await page.keyboard.press(name);
+        await settle(wait, `key ${name}`, budget);
+      },
+
+      /**
+       * A click at a canvas pixel. Defaults to `taken` rather than `none` because
+       * a click that was never consumed and a click that did nothing are the same
+       * thing from out here, and only one of them is a bug worth stopping for.
+       */
+      /**
+       * A click, with the button held down long enough for the game to notice.
+       *
+       * `page.mouse.click` is press-and-release with no gap, and no gap is not what
+       * a hand does — the game reads the time between them. `while stilldown()`
+       * loops carry a held item and read `mouse()` every turn, and INVEN.SHP's
+       * `stdmouse` decides where a carried object LANDS from what `hittest` finds
+       * when the button comes UP. Measured on the coal lever, whose mousedown is
+       * such a loop, all three ways of clicking it:
+       *
+       *     playwright     deg 9 -> 9    coal 50 -> 50   stilldown turns 1
+       *     page-side      deg 9 -> 9    coal 50 -> 50   stilldown turns 1
+       *     held 3 frames  deg 9 -> 11   coal 50 -> 47   stilldown turns 3
+       *
+       * One turn means the loop was entered and `stilldown()` was already false.
+       * Being outside the browser is no protection: two CDP commands back to back
+       * still leave the renderer no frame in between.
+       *
+       * The wait is counted in the page's own frames rather than milliseconds,
+       * because what has to fit in the gap is a turn of an engine loop.
+       */
+      clickAt: async (x: number, y: number, wait: WaitMode = "taken", budget = timeout): Promise<void> => {
+        const pt = await pagePoint(x, y);
+        await page.mouse.move(pt.x, pt.y);
+        await page.mouse.down();
+        await heldFrames();
+        await page.mouse.up();
+        await settle(wait, `click ${x},${y}`, budget);
+      },
+
+      /** press and hold until a condition holds — see SpeedrunDriver.holdAt */
+      holdAt: async (x: number, y: number, opts: HoldOptions, budget = timeout): Promise<HoldResult> => {
+        // ARM FIRST, then press — see HoldOptions.arm
+        const armed = opts.arm ? await tryHold(opts.arm, opts.armBudget ?? Math.min(budget, 10_000)) : true;
+        if (!armed) return { armed, held: false };
+        const pt = await pagePoint(x, y);
+        await page.mouse.move(pt.x, pt.y);
+        await page.mouse.down();
+        let held = false;
+        try {
+          held = await tryHold(opts.until, budget);
+        } finally {
+          // released whatever happened: leaving the button down would make every
+          // later gesture a drag
+          await page.mouse.up();
         }
-      } finally {
-        await page.mouse.up();
-        /**
-         * THE RELEASE IS A GESTURE TOO, and this is it being acted on.
-         *
-         * Half the controls in this game snap on the button coming up rather
-         * than as the cursor moves — the coal lever, the wireless breaker and
-         * sender — so the owner or the deg a caller is about to read is set by
-         * the release and not by any move. `page.mouse.up()` resolves when the
-         * event is DISPATCHED, which is several frames before the held script
-         * notices `stilldown()` is false, leaves its loop and runs that snap.
-         *
-         * Read in that gap and the answer is the setting from before the drag.
-         * That is what "the sender went to off at y=40, not on" was: the drag
-         * was perfect, the reading was early. The dials never showed it because
-         * `turnDial` and `setLever` take hold up to three times and the next
-         * grab's opening `held()` paid this wait by accident.
-         *
-         * `pollingInput()` going false is the loop letting go and `scriptBusy`
-         * going false is the script that owned it running out — which is the
-         * snap, and on the sender also `senderon()` lighting its four lamps a
-         * frame apart. Both halves, because the first alone can be true in the
-         * step between leaving the loop and executing the line after it.
-         *
-         * NOT `held()`. That waits for four more yields, and the whole point of
-         * this moment is that nothing is yielding any more: the loop that was
-         * bumping `realYieldSeq` has gone. Waiting on it costs its full 20 s
-         * timeout and then reads the right answer for the wrong reason —
-         * measured, 20.8 s on `wireless(sender, on)` and the same on the
-         * breaker.
-         */
-        await tryHold(
-          `!window.dbg.session.pollingInput() && !window.dbg.session.scriptBusy`,
-          Math.min(budget, 5_000),
+        await heldFrames();
+        return { armed, held };
+      },
+
+      /**
+       * Press a key repeatedly until a page-side predicate holds.
+       *
+       * This is `skipMovie` and the conversation line-skipper underneath — the
+       * "hammering ESC" of the sheet. Two things keep it honest. It re-checks the
+       * ARM predicate before every press, so it cannot press into a state where
+       * that key means something else (ESC at a plaque ANSWERS -1 and walks the
+       * player out of the conversation, #131 — hammering blindly there loses the
+       * story). And it gates on {@link KEY_SAFE} like any other key.
+       *
+       * `gap` is the tuning knob and the reason this is a driver primitive rather
+       * than a loop in the runner: how fast ESC may be repeated before the engine
+       * stops distinguishing the presses is a per-clip fact, and a sheet finds it
+       * by trying.
+       */
+      hammer: async (
+        name: string,
+        { until, arm, gap = defaultGap, budget = timeout, what }:
+          { until: string; arm?: string; gap?: number; budget?: number; what: string },
+      ): Promise<number> => {
+        const deadline = Date.now() + budget;
+        let pressed = 0;
+        for (;;) {
+          if (await evaluate<boolean>(`(() => !!(${until}))()`)) return pressed;
+          if (Date.now() > deadline) {
+            throw new Error(`stuck waiting for ${what}: ${pressed} presses of ${name} in ${budget} ms`);
+          }
+          // only press when the key means what we think it means, and only when it
+          // will not be dropped; otherwise give the engine the gap and look again
+          const armed = arm ? await evaluate<boolean>(`(() => !!(${arm}))()`) : true;
+          if (armed && (await evaluate<boolean>(KEY_SAFE))) {
+            await page.keyboard.press(name);
+            pressed++;
+          }
+          await sleep(gap);
+        }
+      },
+
+      /**
+       * Aim at a named thing the way the browser suite does — through the engine's
+       * OWN hit test, never a hardcoded pixel.
+       *
+       * Shared with engine/src/web/speedrun/aim.ts rather than reimplemented, for the
+       * reason that file gives at length: whether a thing is clickable from where
+       * you stand decides whether a route walks on, so two different sweeps explore
+       * a room differently and end up facing different ways. A speedrun that aimed
+       * its own way would be running a different game.
+       */
+      aim: async (kind: "thing" | "hotspot", name: string): Promise<Point | null> => {
+        const { aimSource } = await import("@dreamfactory/engine/web/speedrun/aim");
+        const adapter = `(() => {
+          const dbg = window.dbg, s = dbg.session, v = dbg.viewer;
+          return {
+            width: dbg.host.screen.width,
+            height: dbg.host.screen.height,
+            hitTest: (x, y) => s.hitTestAt(x, y),
+            propUnder: (x, y) => { const p = v.propUnder(x, y); return p ? p.group.name : null; },
+            inFlat: !s.viewShowing && !!s.stageScript,
+            where: (n) => flatWhere(s, n),
+            hotspot: (n) => {
+              const obj = v.scene.views[v.viewIdx].objects.find(
+                (o) => (o.identifier || "").toLowerCase() === n.toLowerCase());
+              return obj ? { x0: obj.startRegionX, y0: obj.startRegionY, x1: obj.endRegionX, y1: obj.endRegionY } : null;
+            },
+          };
+        })()`;
+        const fn = kind === "thing" ? "aimAtThing" : "aimAtHotspot";
+        return evaluate<Point | null>(
+          `(() => { ${aimSource()} return ${fn}(${adapter}, ${JSON.stringify(name)}); })()`,
         );
-      }
-    },
+      },
 
-    /** a drag, for the inventory — press, carry, release */
-    drag: async (from: Point, to: Point, steps = 8): Promise<void> => {
-      const a = await pagePoint(from.x, from.y);
-      const b = await pagePoint(to.x, to.y);
-      // the steps matter: main.ts publishes the pointer on mousemove and the
-      // held script's `while stilldown()` loop reads it every frame, so a jump
-      // from press to release drops the item where it was picked up
-      await page.mouse.move(a.x, a.y);
-      await page.mouse.down();
-      await page.mouse.move(b.x, b.y, { steps });
-      await page.mouse.up();
-    },
+      /**
+       * A held drag over a series of points — a dial, a lever, a pump handle.
+       *
+       * The wait between moves is the important part and is not a sleep: the prop's
+       * script is sitting in a `while stilldown()` loop, and `session.realYieldSeq`
+       * counts the frames a script has given up, bumped once per turn of exactly
+       * that loop (builtins/pointer.ts). Waiting for it to advance means a whole
+       * iteration has begun and finished SINCE the cursor moved — so the dial has
+       * seen where the cursor now is.
+       *
+       * FOUR because a loop body gives up more than one frame (the `stilldown()`
+       * that begins the turn and the `forceupdate()` that ends it both bump the
+       * counter), so +2 can be satisfied with the body in between never having run.
+       * A speedrun cannot shave this one: waiting less does not make the dial move
+       * sooner, it makes the next read a frame stale, and a stale `deg` sends the
+       * next swing the wrong way — which costs a whole extra pass around the dial.
+       */
+      /** the twin of the page driver's — see {@link SpeedrunDriver.dragOnto} for
+       *  why this one returns at the release and `dragProp` does not */
+      dragOnto: async (
+        from: Point,
+        to: Point,
+        o: { armed?: string; landed?: string; budget?: number } = {},
+      ): Promise<{ armed: boolean; landed: boolean }> => {
+        const budget = o.budget ?? timeout;
+        const a = await pagePoint(from.x, from.y);
+        const b = await pagePoint(to.x, to.y);
+        await page.mouse.move(a.x, a.y);
+        await page.mouse.down();
+        let armed = true;
+        let landed = true;
+        try {
+          if (o.armed) armed = await tryHold(o.armed, Math.min(budget, 10_000));
+          await page.mouse.move(b.x, b.y);
+          if (o.landed) landed = await tryHold(o.landed, Math.min(budget, 10_000));
+        } finally {
+          // released whatever the waits said, and at the far end — a button left
+          // down turns every later gesture into a drag
+          await page.mouse.up();
+        }
+        return { armed, landed };
+      },
 
-    // Disk, because Playwright starts a fresh browser profile every run and
-    // anything in localStorage would go with it. Under out/ so it is ignored by
-    // git: a load point is a working file, not something to commit.
-    putSave: async (name: string, bytes: Uint8Array) => {
-      const dir = join(process.cwd(), "out", "speedrun");
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, `${name}.ti`), bytes);
-    },
-    getSave: async (name: string) => {
-      const file = join(process.cwd(), "out", "speedrun", `${name}.ti`);
-      return existsSync(file) ? new Uint8Array(readFileSync(file)) : null;
-    },
-    seed: opts.seed ?? null,
+      dragProp: async (
+        at: Point,
+        next: (start: Point) => Point | null | Promise<Point | null>,
+        budget = timeout,
+      ): Promise<void> => {
+        const from = await pagePoint(at.x, at.y);
+        const seq = () => evaluate<number>("window.dbg.session.realYieldSeq");
+        // one turn of the control's `while stilldown()` loop — see HELD_YIELDS
+        const held = async (): Promise<void> => {
+          const was = await seq();
+          await tryHold(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
+        };
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        try {
+          // a turn of the loop before the first move, cursor unmoved: the dial does
+          // not move but the body publishes its global
+          await held();
+          for (let to = await next(at); to; to = await next(at)) {
+            const pt = await pagePoint(to.x, to.y);
+            await page.mouse.move(pt.x, pt.y);
+            await held();
+          }
+        } finally {
+          await page.mouse.up();
+          /**
+           * THE RELEASE IS A GESTURE TOO, and this is it being acted on.
+           *
+           * Half the controls in this game snap on the button coming up rather
+           * than as the cursor moves — the coal lever, the wireless breaker and
+           * sender — so the owner or the deg a caller is about to read is set by
+           * the release and not by any move. `page.mouse.up()` resolves when the
+           * event is DISPATCHED, which is several frames before the held script
+           * notices `stilldown()` is false, leaves its loop and runs that snap.
+           *
+           * Read in that gap and the answer is the setting from before the drag.
+           * That is what "the sender went to off at y=40, not on" was: the drag
+           * was perfect, the reading was early. The dials never showed it because
+           * `turnDial` and `setLever` take hold up to three times and the next
+           * grab's opening `held()` paid this wait by accident.
+           *
+           * `pollingInput()` going false is the loop letting go and `scriptBusy`
+           * going false is the script that owned it running out — which is the
+           * snap, and on the sender also `senderon()` lighting its four lamps a
+           * frame apart. Both halves, because the first alone can be true in the
+           * step between leaving the loop and executing the line after it.
+           *
+           * NOT `held()`. That waits for four more yields, and the whole point of
+           * this moment is that nothing is yielding any more: the loop that was
+           * bumping `realYieldSeq` has gone. Waiting on it costs its full 20 s
+           * timeout and then reads the right answer for the wrong reason —
+           * measured, 20.8 s on `wireless(sender, on)` and the same on the
+           * breaker.
+           */
+          await tryHold(
+            `!window.dbg.session.pollingInput() && !window.dbg.session.scriptBusy`,
+            Math.min(budget, 5_000),
+          );
+        }
+      },
 
-    restart,
-    log,
+      /** a drag, for the inventory — press, carry, release */
+      drag: async (from: Point, to: Point, steps = 8): Promise<void> => {
+        const a = await pagePoint(from.x, from.y);
+        const b = await pagePoint(to.x, to.y);
+        // the steps matter: main.ts publishes the pointer on mousemove and the
+        // held script's `while stilldown()` loop reads it every frame, so a jump
+        // from press to release drops the item where it was picked up
+        await page.mouse.move(a.x, a.y);
+        await page.mouse.down();
+        await page.mouse.move(b.x, b.y, { steps });
+        await page.mouse.up();
+      },
+
+      // Disk, because Playwright starts a fresh browser profile every run and
+      // anything in localStorage would go with it. Under out/ so it is ignored by
+      // git: a load point is a working file, not something to commit.
+      putSave: async (name: string, bytes: Uint8Array) => {
+        const dir = join(process.cwd(), "out", "speedrun");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, `${name}.ti`), bytes);
+      },
+      getSave: async (name: string) => {
+        const file = join(process.cwd(), "out", "speedrun", `${name}.ti`);
+        return existsSync(file) ? new Uint8Array(readFileSync(file)) : null;
+      },
+      seed: opts.seed ?? null,
+
+      restart,
+      log,
+    };
   };
+  const run = make(false);
+  return { ...run, forWatch: () => make(true) };
 }
 
 /** what this driver is, concretely: the shared contract plus the Playwright-only

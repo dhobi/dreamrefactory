@@ -39,6 +39,7 @@ const NEEDS_THE_RIP = [
   "smokestack",
   "devmode",
   "freeroam",
+  "speedrun-headless",
 ];
 
 export default defineConfig({

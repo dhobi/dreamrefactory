@@ -7,6 +7,7 @@
  *   npm run speedrun:lint -w taoot               # parse the sheet and say nothing else
  *   npm run speedrun -w taoot -- --verbs         # what a sheet may contain
  *   npm run speedrun -w taoot -- --from="m4p0 cabin"   # enter at one of its save points
+ *   npm run speedrun -w taoot -- --headless      # in node, no browser (headless.ts)
  *   SHEET=taoot/tests/speedrun/any.sheet npm run speedrun -w taoot
  *
  * This is NOT a test and does not gate anything. `npm run test:browser:playthrough -w taoot`
@@ -94,6 +95,7 @@ import { ACTIONS, VERBS, setPlanner } from "../../src/speedrun/actions";
 import { speedrunDriver } from "./driver";
 import { runSheet, type Split, type Timing } from "@dreamfactory/engine/web/speedrun/runner";
 import { playwrightPlanner } from "./planner";
+import { headlessRun } from "./headless";
 import { playUrl } from "../browser/driver";
 import { DEFAULT_LANGUAGE } from "../../src/languages";
 
@@ -102,6 +104,12 @@ const ROOT = join(HERE, "..", "..");
 
 const argv = process.argv.slice(2);
 const flag = (name: string) => argv.includes(`--${name}`);
+/**
+ * `--headless`: play the sheet in node, with no browser at all (#509) — see
+ * headless.ts. The same in-game time and frame count as the browser, in a
+ * fraction of the wall time; what it cannot run is `travel`/`hunt`/`stand`.
+ */
+const HEADLESS = flag("headless");
 const HEADED = flag("headed") || (!!process.env.HEADED && process.env.HEADED !== "0");
 /**
  * Slow motion is a debugging aid and the enemy of the thing being measured, so
@@ -253,6 +261,27 @@ async function main(): Promise<void> {
   if (flag("lint")) {
     console.log("sheet parses.");
     return;
+  }
+
+  if (HEADLESS) {
+    const { driver } = await headlessRun({
+      prepare: (s) => {
+        s.nominalTime = true;
+        s.sheetClock = true;
+        if (SEED !== null) s.seedRandom(SEED);
+      },
+      seed: SEED,
+      log: (m) => process.env.VERBOSE && console.log(`    ${m}`),
+    });
+    const r = await runSheet(driver, steps, ACTIONS, {
+      onWatch: (w, said) =>
+        console.log(`  WATCH ${w.source} -> ${w.action.source}${said.length ? `  (${said.join("; ")})` : ""}`),
+      patience: PATIENCE,
+      onStep: (step, i, total) =>
+        process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
+    });
+    report({ steps, ...r, errors: [], seeded: SEED });
+    process.exit(r.failure ? 1 : 0);
   }
 
   const url = playUrl();
