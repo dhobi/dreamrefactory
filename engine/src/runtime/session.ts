@@ -2332,6 +2332,15 @@ export class GameSession {
    */
   everyLineSubtitled = false;
   /**
+   * Where a line has both, caption it from the port's transcript rather than
+   * the game's own text (#505). The game's text is a script, not the
+   * recording: TAOOT's `bedcards.mov` plays the boss's dismissal as English
+   * recorded it, sombre, over NARRATE.PUP's earlier draft ("It's war!"). Off,
+   * the game's files win; a line with no transcript is captioned from them
+   * either way. The port's own setting, like the one above.
+   */
+  preferPortCaptions = false;
+  /**
    * Sound bank → where the words of its clips are (#50). A game's own
    * knowledge, set by its page, in one of two forms:
    *
@@ -2498,16 +2507,16 @@ export class GameSession {
     if (ready) start(ready);
     else void (this.puppetWords.get(source.puppet) as Promise<Map<string, string>>).then(start);
   }
-  /** a film has played one of its sounds: caption it if it is a puppet line, or has a transcript */
+  /** a film has played one of its sounds: caption it if it is a puppet line, or has a transcript ({@link preferPortCaptions} picks between them) */
   captionMovieSound(movie: string, sound: string, handle: { done: boolean }): void {
     if (!this.everyLineSubtitled) return;
     const line = sound.toLowerCase();
-    const puppet = this.movieSoundSources.get(movie.toLowerCase())?.[line];
+    const transcript = this.movieSoundWords.get(movie.toLowerCase())?.[line];
+    const puppet = transcript && this.preferPortCaptions ? undefined : this.movieSoundSources.get(movie.toLowerCase())?.[line];
     if (!puppet) {
-      const words = this.movieSoundWords.get(movie.toLowerCase())?.[line];
-      if (!words) return;
+      if (!transcript) return;
       this.captions = this.captions.filter((c) => !c.handle.done);
-      this.captions.push({ ...words, handle });
+      this.captions.push({ ...transcript, handle });
       return;
     }
     const show = (words: Map<string, string>): void => {

@@ -11,6 +11,8 @@
   "subtitlesLabel": "Ondertitels",
   "everyLine": "elke regel die je hoort",
   "everyLineTitle": "Ook ondertitelen wat het origineel alleen laat horen: wat Penny bij haar tussenbeelden zegt, en geluiden zoals brekend glas",
+  "preferPort": "ondertitels van de port verkiezen",
+  "preferPortTitle": "Heeft een regel zowel de tekst uit de spelbestanden als onze transcriptie van de opname, toon dan de transcriptie: het script in het spel wijkt soms af van wat is opgenomen",
   "reportBug": "🪲 Bug melden",
   "reportBugTitle": "Iets melden dat de port verkeerd doet",
   "bugShotClipboard": "Het scherm staat op je klembord — plak het in het issue.",

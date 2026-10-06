@@ -7842,6 +7842,15 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
   check("zeit.mov: Penny names Zeitel over his photograph",
     (await sounded("zeit.mov", "penny1.132")).startsWith("Penny: A German colonel named Zeitel."), shown());
   check("bedcards.mov: the boss, not Carlson", (await sounded("bedcards.mov", "01")).startsWith("Boss: See here!"), shown());
+  // #505: NARRATE.PUP holds an earlier draft than English recorded; preferring
+  // the port's captions shows the transcript of the recording instead
+  check("bedcards.mov: the game's text by default", (await sounded("bedcards.mov", "03")).includes("It's war!"), shown());
+  session.preferPortCaptions = true;
+  check("bedcards.mov: the port's transcript when preferred",
+    (await sounded("bedcards.mov", "03")) === "Boss: Especially now.", shown());
+  check("zeit.mov: a line with no transcript still comes from the game",
+    (await sounded("zeit.mov", "penny1.132")).startsWith("Penny: A German colonel named Zeitel."), shown());
+  session.preferPortCaptions = false;
   check("boom.mov: the ending's last line, without its direction",
     (await sounded("boom.mov", "final.01")) === "Carlson: If only the past could be changed...", shown());
   check("tour9.mov: the tour's studio note goes",
@@ -7940,7 +7949,11 @@ test("each edition's radio news is timed by its own recording", () => {
 test("the Dutch and Japanese editions speak the English recordings, so en.json is their fallback", () => {
   // files an edition re-encoded with the same words in them, checked by speech recognition
   // (ja's oldboss.trk is stored differently and decodes to the English track sample for sample)
-  const sameWords: Record<string, string[]> = { ja: ["unilib.trk", "ocredits.mov", "oldboss.trk"] };
+  // (bedcards.mov's watch: the boss's clips are the English bytes; the pictures differ)
+  const sameWords: Record<string, string[]> = {
+    ja: ["unilib.trk", "ocredits.mov", "oldboss.trk", "bedcards.mov"],
+    nl: ["bedcards.mov"],
+  };
   for (const [edition, voices] of Object.entries(VOICES_OF)) {
     const file = CAPTION_FILES[voices];
     const names = [...Object.keys(file.banks), ...Object.keys(file.films ?? {}), ...Object.keys(file.tracks ?? {})];

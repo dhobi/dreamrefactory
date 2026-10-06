@@ -111,6 +111,13 @@
     }
   },
   "films": {
+    "bedcards.mov": {
+      "01": { "text": "Verstehen Sie doch, es geht hier nicht um Ihre Hingabe an die Sache. Pringle bezeugt Ihre Loyalität voll und ganz.", "who": "Boss" },
+      "02": { "text": "Nein, Ihre Entlassung ist eine Folge der Titanic-Mission. Dieses Versagen kann nicht länger übersehen werden, besonders jetzt.", "who": "Boss", "heard": "Nein, ihre Entlassung ist eine Folge der Titanic-Mission. Dieses Versagen kann nicht länger übersehen werden, besonders jetzt." },
+      "03": { "text": "Großer Gott, haben Sie denn die Berichte in den Morgenzeitungen nicht gelesen? Der Kaiser macht mobil, jetzt, während wir miteinander reden. Es ist Krieg!", "who": "Boss" },
+      "06": { "text": "Der Geheimdienst, verstehen Sie?", "who": "Boss" },
+      "07": { "text": "…dass wir nicht dafür verantwortlich gemacht werden können.", "who": "Boss", "heard": "dass wir nicht dafür verantwortlich gemacht werden können." }
+    },
     "ocredits.mov": {
       "voice.1": { "text": "Die Vergangenheit. Eine frosterstarrte Landschaft, auf ewig beklagt und verschlossen. Aber was wäre, wenn man die Vergangenheit ändern könnte?", "who": "Carlson" },
       "voice.2": { "text": "30 Jahre sind dahingegangen seit jener Nacht, die das Ende einer Welt erlebte. Meiner Welt. Einer Welt, die ich hätte retten können. Es war im Jahre 1912. Krieg war im Kommen.", "who": "Carlson", "heard": "30 Jahre sind dahin gegangen seit jener Nacht, die das Ende einer Welt erlebte. Meiner Welt. Einer Welt, die ich hätte retten können. Es war im Jahre 1912. Krieg war im Kommen." },
