@@ -103,7 +103,7 @@ function reverseTable(enc: DfEncoding): Map<string, number[]> {
     const s = dec.decode(one);
     // U+FFFD means the byte is not assigned; the first mapping wins so that
     // ASCII always beats an alias
-    if (s.length === 1 && s !== "�" && !table.has(s)) table.set(s, [b]);
+    if (s.length === 1 && s !== "\uFFFD" && !table.has(s)) table.set(s, [b]);
   }
   if (enc === "shift_jis") {
     const two = new Uint8Array(2);

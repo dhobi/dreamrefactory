@@ -45,10 +45,13 @@ self.onmessage = async (e: MessageEvent<CalcRequest>) => {
           };
         },
         deliver: deliverInput,
-        getSave: async (name) => saves.get(name) ?? null,
+        getSave: (name) => Promise.resolve(saves.get(name) ?? null),
         // kept for the rest of this calculation, never written back: Calculate
         // reports, it does not move the sheet's checkpoints
-        putSave: async (name, bytes) => void saves.set(name, bytes),
+        putSave: (name, bytes) => {
+          saves.set(name, bytes);
+          return Promise.resolve();
+        },
         seed: req.seed,
       },
       req.text,
