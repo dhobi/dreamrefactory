@@ -105,6 +105,7 @@ for (const file of files) {
   test(`${file} plays to its end`, async () => {
     try {
       const r = await check(file);
+      expect(r.times.length).toBeGreaterThan(0);
       rows.push(`| ${cell(r.title)} | ${cell(r.author)} | ${r.seed} | ${r.times.join("<br>")} | \`${file}\` |`);
     } catch (e) {
       const r = (e as { row?: { title: string; author: string; seed: string } }).row;

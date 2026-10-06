@@ -28,20 +28,30 @@ export interface SheetHeader {
 /** the keys a header may carry; only `title` is required, on line 1 */
 export const HEADER_KEYS = ["title", "author", "notes"] as const;
 
+/** `# key: value` → its key (lowercase) and value, or null for any other line */
+function keyOf(raw: string): { key: string; value: string } | null {
+  const line = raw.trim();
+  if (!line.startsWith("#")) return null;
+  const colon = line.indexOf(":");
+  if (colon < 0) return null;
+  const key = line.slice(1, colon).trim().toLowerCase();
+  const value = line.slice(colon + 1).trim();
+  return /^[a-z]+$/.test(key) && value ? { key, value } : null;
+}
+
 /** the header, or what is missing from it */
 export function readSheetHeader(text: string): { header: SheetHeader } | { error: string } {
   // an editor may save a byte-order mark in front of line 1
   const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
-  const first = /^#\s*title\s*:\s*(.+)$/i.exec(lines[0]?.trim() ?? "");
-  if (!first) return { error: 'line 1 must be the title: "# title: …"' };
-  const found: Record<string, string> = { title: first[1].trim() };
+  const first = keyOf(lines[0] ?? "");
+  if (first?.key !== "title") return { error: 'line 1 must be the title: "# title: …"' };
+  const found: Record<string, string> = { title: first.value };
   for (const raw of lines.slice(1)) {
     const line = raw.trim();
     if (!line) continue;
     if (!line.startsWith("#")) break;
-    const m = /^#\s*([a-z]+)\s*:\s*(.+)$/i.exec(line);
-    const key = m?.[1].toLowerCase();
-    if (m && key && (HEADER_KEYS as readonly string[]).includes(key) && !(key in found)) found[key] = m[2].trim();
+    const kv = keyOf(line);
+    if (kv && (HEADER_KEYS as readonly string[]).includes(kv.key) && !(kv.key in found)) found[kv.key] = kv.value;
   }
   return {
     header: {
