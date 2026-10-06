@@ -25,9 +25,10 @@ export interface CalcProgress {
 }
 
 export type CalcResult =
-  | { ok: true; game: number; frames: number; real: number }
+  | { ok: true; game: number; frames: number; real: number; seed: number | null }
   | {
       ok: false;
+      seed: number | null;
       /** the sheet line it stopped at */
       line: number;
       error: string;
@@ -50,7 +51,7 @@ export async function calculateSheet(
     steps = parseSheet(text, { verbs: verbsOf(actions) });
   } catch (e) {
     const line = e instanceof SheetError ? e.line : 1;
-    return { ok: false, line, error: (e as Error).message, game: 0, real: real() };
+    return { ok: false, line, error: (e as Error).message, game: 0, real: real(), seed: game.seed };
   }
   const { driver, host } = await headlessRun({
     ...game,
@@ -71,7 +72,14 @@ export async function calculateSheet(
     },
   });
   if (r.failure) {
-    return { ok: false, line: r.failure.step.line, error: r.failure.error.message, game: r.total.game, real: real() };
+    return {
+      ok: false,
+      line: r.failure.step.line,
+      error: r.failure.error.message,
+      game: r.total.game,
+      real: real(),
+      seed: driver.seed ?? null,
+    };
   }
-  return { ok: true, game: r.total.game, frames: r.total.frames, real: real() };
+  return { ok: true, game: r.total.game, frames: r.total.frames, real: real(), seed: driver.seed ?? null };
 }

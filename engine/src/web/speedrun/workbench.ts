@@ -72,6 +72,7 @@ import { replyIds } from "../puppet-view";
 import { formatBytes, formatEta, formatRate, warmCache, type WarmFile } from "../cache-warmup";
 import { attachEditor } from "./editor";
 import type { CalcProgress, CalcResult } from "./calculate";
+import { keepBootSeed } from "./boot-seed";
 import { attachRecorder } from "./recorder";
 import { attachInputMonitor } from "./inputs";
 import { installMute } from "./mute";
@@ -480,7 +481,17 @@ function renderLegend(): void {
     `<code>wait(set == c73, budget: 90000)</code>, <code>talk(purser[1,3,5])</code>. ` +
     `<code>#</code> comments to end of line, <code>;</code> separates actions on ` +
     `one line, <code>xN</code> inside the brackets repeats it N times, and a value ` +
-    `needing a comma of its own is quoted: <code>wait(js == "a, b")</code>.</p>`;
+    `needing a comma of its own is quoted: <code>wait(js == "a, b")</code>.</p>` +
+    `<h3>Seeds</h3>` +
+    `<p class="n">Without a seed the game's dice are live, as for a player: the bomb's fuse, ` +
+    `the smokestack's maze, the Gorse-Joneses' coin and the fencing bout come out ` +
+    `differently every run, and so can the time. <code>reset(seed: 360)</code> as the first ` +
+    `line boots the game with the dice pinned, so the run is the same course every ` +
+    `time, here, in Calculate and from the command line alike. The original took ` +
+    `its seed once, at start-up, from the clock, so one seed at the start is fair ` +
+    `game for a TAS-style run — but a seeded time is a category of its own, never ` +
+    `ranked against an unseeded one. A seed is best only for the sheet it was ` +
+    `found for: an edit before a die changes every draw after it.</p>`;
 }
 
 /**
@@ -787,6 +798,8 @@ async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
     sheet: () => active,
     keys: KEYS,
     beforeRestart: () => keepPlace(true),
+    // a `reset(seed: N)` reload: the next page boots from N
+    keepSeed: (seed) => keepBootSeed(host.game, seed),
   });
   const live: Split[] = [];
 
@@ -929,6 +942,8 @@ async function playAside(steps: Step[], label: string): Promise<void> {
     sheet: () => active,
     keys: KEYS,
     beforeRestart: () => keepPlace(true),
+    // a `reset(seed: N)` reload: the next page boots from N
+    keepSeed: (seed) => keepBootSeed(host.game, seed),
   });
   try {
     const result = await runSheet(d, steps, host.actions, { onStep: (s) => say(`${label}: ${s.source}`) });
@@ -1876,8 +1891,9 @@ function showCalcResult(r: CalcResult): void {
   calcNum.textContent = "";
   if (r.ok) {
     calcFill.style.width = "100%";
-    calcNum.textContent = `${ms(r.game)} in-game · ${r.frames} frames — worked out in ${ms(r.real)}`;
-    say(`this sheet: ${ms(r.game)} in-game, ${r.frames} engine frames`, "good");
+    const seeded = r.seed === null ? "" : ` · seed ${r.seed}`;
+    calcNum.textContent = `${ms(r.game)} in-game · ${r.frames} frames${seeded} — worked out in ${ms(r.real)}`;
+    say(`this sheet: ${ms(r.game)} in-game, ${r.frames} engine frames${seeded}`, "good");
     return;
   }
   calcNum.append(`stopped at line ${r.line} after ${ms(r.game)} in-game (${ms(r.real)}) `);
