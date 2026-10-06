@@ -1073,18 +1073,41 @@ export const CORE_ACTIONS: ActionTable = {
     args: [0, 0],
     once: true,
     wait: "quiet",
-    sig: "reset()",
-    help: "boot the game from the beginning — does nothing if it is already there",
+    opts: ["seed"],
+    sig: "reset(seed: 360)",
+    help: "boot the game from the beginning — does nothing if it is already there; seed: pins the dice, a seeded run timed as its own category",
     run: async (c) => {
+      /*
+       * `seed:` pins the script dice from this boot on (#509). A seeded run is
+       * TAS-style and its time a category of its own: one seed chosen at the
+       * start, as TI.EXE took its own once at start-up from the clock (0x435180
+       * -> 0x4357c0, seeded with `timeGetTime() * 3 / 50`) and never again —
+       * loading a save does not re-seed in the original. So it rides on a BOOT:
+       * mid-sheet it starts the run over rather than changing the dice under a
+       * game in progress. The driver carries it across the reboot: a fresh
+       * host, a reloaded page, or on the workbench a note for the next page's
+       * boot (boot-seed.ts).
+       */
+      const raw = c.step.opts.seed;
+      const seed = raw === undefined ? null : Number(raw);
+      if (seed !== null) {
+        if (!Number.isInteger(seed) || seed < 0) throw new Error(`seed: needs a whole number, not "${raw}"`);
+        if (!c.d.pinSeed) throw new Error(`this runner cannot pin a seed`);
+        c.d.pinSeed(seed);
+      }
       const started = await c.d.evaluate<boolean>(
         `!!(window.dbg && window.dbg.session) && window.dbg.session.propRuntime.props.size > 0`,
       );
       if (!started) {
-        c.say("already at the beginning");
+        // Nothing the run keeps has been drawn before the title menu is left
+        // (measured: seeded here and seeded before the boot, the same course to
+        // the frame), so a fresh game is seeded where it stands.
+        if (seed !== null) await c.d.evaluate(`void window.dbg.session.seedRandom(${seed})`);
+        c.say(seed === null ? "already at the beginning" : `seed ${seed}, at the beginning`);
         return;
       }
       if (!c.d.restart) throw new Error(`this runner cannot restart the game`);
-      c.say("reloading");
+      c.say(seed === null ? "reloading" : `seed ${seed}, reloading`);
       // In the workbench this never returns — the reload takes the run with it,
       // and the page resumes itself on the other side. Under Playwright the run
       // is outside the page and simply carries on, so the waits below are real.

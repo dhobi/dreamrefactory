@@ -89,6 +89,8 @@ export interface HeadlessRun {
 /** a booted game and the workbench's driver over it */
 export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
   let host!: GameHost;
+  /** the seed every boot starts from — the run's own, or one a `reset(seed: N)` line pinned */
+  let pinned = game.seed;
   let wall = 0;
   /**
    * The frames a budget counts: those in which the game could run. While the
@@ -146,6 +148,7 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     s.hasRealFrames = true;
     s.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
     game.prepare(s);
+    if (pinned !== null) s.seedRandom(pinned);
     // the first reading of the clock, as a page's first frame takes it — or the
     // first line of the sheet is charged the frame before it
     host.director.tick(wall);
@@ -220,7 +223,12 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     ...page,
     putSave: (name, bytes) => game.putSave(name, bytes),
     getSave: (name) => game.getSave(name),
-    seed: game.seed,
+    get seed() {
+      return pinned;
+    },
+    pinSeed: (seed: number) => {
+      pinned = seed;
+    },
     // a fresh session, booted as a page would boot it after a reload
     restart: boot,
     // nobody to press Play again

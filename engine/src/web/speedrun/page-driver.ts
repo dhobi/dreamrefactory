@@ -81,6 +81,11 @@ export interface PageDriverOptions {
   log?(message: string): void;
   /** raised to abort a run mid-flight; every wait checks it */
   signal?: AbortSignal;
+  /**
+   * Leave a pinned seed for the page a `restart()` reload brings up — the
+   * workbench's `keepBootSeed` (boot-seed.ts). Without it a reload boots live.
+   */
+  keepSeed?(seed: number): void;
   /** the clock budgets count on — {@link SpeedrunDriver.budgetNow}; the wall when left out */
   budgetNow?(): number;
   /**
@@ -217,6 +222,8 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
   const frame = (): Promise<void> => new Promise((r) => win.requestAnimationFrame(() => r()));
 
   let holdIds = 0;
+  /** the seed a `reset(seed: N)` line pinned, for every boot and load point after it */
+  let pinned: number | null = null;
   const budgetClock = opts.budgetNow ?? (() => performance.now());
   /**
    * The driver, twice over (#509): the run's own, and {@link SpeedrunDriver.forWatch}'s
@@ -655,6 +662,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
       },
 
       restart: () => {
+        if (pinned !== null) opts.keepSeed?.(pinned);
         opts.beforeRestart?.();
         win.location.reload();
         return new Promise<void>(() => {});
@@ -662,9 +670,16 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
 
       log,
       budgetNow: opts.budgetNow,
+      get seed() {
+        return pinned;
+      },
+      pinSeed: (seed: number) => {
+        pinned = seed;
+      },
     };
   };
-  return { ...make(false), forWatch: () => make(true) };
+  // assigned rather than spread, which would read `seed` once and keep that
+  return Object.assign(make(false), { forWatch: () => make(true) });
 }
 
 export { SHOWING } from "./driver";

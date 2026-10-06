@@ -25,7 +25,13 @@
 # does the same thing from inside a sheet.
 # =====================================================================
 
-reset()
+# A SEEDED RUN: the game from the beginning with its dice pinned, so every run
+# of this sheet is the same course. 360 sets the bedsit bomb off before the
+# card trick's last line is over — the earliest the flat allows — and of the
+# twelve seeds in 1..1000 that do, it plays the whole sheet fastest (6:24.9
+# in-game). Re-find it after an edit: a change before a die moves every draw
+# after it. Seeded times are a category of their own (see the workbench's ?).
+reset(seed: 360)
 
 # The Nightdive film, English edition only. A no-op in the workbench, which
 # boots with `<meta name="skip-intro">` — and NOT optional under `npm run
