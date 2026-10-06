@@ -113,6 +113,13 @@
     }
   },
   "films": {
+    "bedcards.mov": {
+      "01": { "text": "See here, this isn't about your dedication. Pringle certainly attests to your loyalty.", "who": "上司" },
+      "02": { "text": "No, your dismissal stems from the Titanic mission. That failure can no longer be ignored.", "who": "上司" },
+      "03": { "text": "Especially now.", "who": "上司" },
+      "06": { "text": "I am sorry, but someone must shoulder the blame. The Service, you understand.", "who": "上司", "heard": "I am sorry, but someone must shoulder the blame. The service you understand." },
+      "07": { "text": "We can't be held responsible.", "who": "上司" }
+    },
     "ocredits.mov": {
       "voice.1": { "text": "過去は永遠に氷海と後悔の中に閉じこめられている。だがもし、過去をかえられるとしたら？", "who": "カールソン", "listened": true },
       "voice.2": { "text": "私のせいで世界は戦火に覆われた…あの夜から30年。1912年。諜報部は私をタイタニック号へ派遣した", "who": "カールソン", "listened": true },

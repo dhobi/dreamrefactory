@@ -165,6 +165,7 @@ const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | n
 const thBox = document.getElementById("thBox") as HTMLInputElement | null;
 /** whether the lines the original only lets you hear are subtitled too (#50) */
 const everyLineBox = document.getElementById("everyLineBox") as HTMLInputElement | null;
+const preferPortBox = document.getElementById("preferPortBox") as HTMLInputElement | null;
 const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 /** where the bug button says what became of the screenshot */
 const bugNote = document.getElementById("bugNote");
@@ -537,6 +538,8 @@ const bootSeed = takeBootSeed("taoot");
 if (bootSeed !== null) session.seedRandom(bootSeed);
 // the lines the original voices and never prints (engine/src/runtime/puppet.ts heardSubtitle)
 if (everyLineBox) bindRememberedBox(everyLineBox, "taoot.subtitles.everyLine", (on) => (session.everyLineSubtitled = on));
+// where a line has both, our transcript of the recording over the game's script (#505)
+if (preferPortBox) bindRememberedBox(preferPortBox, "taoot.subtitles.preferPort", (on) => (session.preferPortCaptions = on));
 
 // dialog builtins -> native browser dialogs; quit reloads to the boot screen
 session.onNoteDialog = (message) => {

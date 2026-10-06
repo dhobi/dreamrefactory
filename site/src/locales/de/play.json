@@ -11,6 +11,8 @@
   "subtitlesLabel": "Untertitel",
   "everyLine": "jede Zeile, die zu hören ist",
   "everyLineTitle": "Auch untertiteln, was man im Original nur hört: was Penny zu ihren Einblendungen sagt, und Geräusche wie klirrendes Glas",
+  "preferPort": "Untertitel der Portierung bevorzugen",
+  "preferPortTitle": "Hat eine Zeile sowohl den Text aus den Spieldateien als auch unsere Abschrift der Aufnahme, die Abschrift zeigen: das Drehbuch im Spiel weicht manchmal von der Aufnahme ab",
   "reportBug": "🪲 Fehler melden",
   "reportBugTitle": "Etwas melden, das die Portierung falsch macht",
   "bugShotClipboard": "Das Bild des Bildschirms liegt in der Zwischenablage — im Issue einfügen.",

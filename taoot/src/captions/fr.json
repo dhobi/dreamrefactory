@@ -111,6 +111,13 @@
     }
   },
   "films": {
+    "bedcards.mov": {
+      "01": { "text": "Tiens, voilà une belle récompense pour votre dévouement. Pringle nous a confirmé votre loyauté.", "who": "Boss" },
+      "02": { "text": "Non, c'est plutôt le souvenir de votre démission après votre échec à bord du Titanic. Un échec que nous ne pouvons plus ignorer, surtout maintenant.", "who": "Boss" },
+      "03": { "text": "Mais enfin, vous avez lu les journaux du matin ? Le Kaiser est en train de mobiliser en ce moment même. C'est la guerre.", "who": "Boss" },
+      "06": { "text": "Le service, vous comprenez ?", "who": "Boss" },
+      "07": { "text": "Nous ne pouvons pas être responsables.", "who": "Boss" }
+    },
     "ocredits.mov": {
       "voice.1": { "text": "Le passé, un paysage gelé, enfermé à jamais dans les regrets. Et si l'on pouvait changer le passé ?", "who": "Carlson", "heard": "Le passé, un paysage gelé, enfermé à jamais dans les regrets, et sinon pouvait changer le passé." },
       "voice.2": { "text": "Il s'est passé 30 ans depuis que j'ai assisté à la fin d'un monde, le mien, un monde que j'aurais pu sauver. C'était en 1912. La guerre allait éclater.", "who": "Carlson" },

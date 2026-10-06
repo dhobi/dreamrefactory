@@ -114,6 +114,13 @@
     }
   },
   "films": {
+    "bedcards.mov": {
+      "01": { "text": "See here, this isn't about your dedication. Pringle certainly attests to your loyalty.", "who": "Boss" },
+      "02": { "text": "No, your dismissal stems from the Titanic mission. That failure can no longer be ignored.", "who": "Boss" },
+      "03": { "text": "Especially now.", "who": "Boss" },
+      "06": { "text": "I am sorry, but someone must shoulder the blame. The Service, you understand.", "who": "Boss", "heard": "I am sorry, but someone must shoulder the blame. The service you understand." },
+      "07": { "text": "We can't be held responsible.", "who": "Boss" }
+    },
     "ocredits.mov": {
       "voice.1": { "text": "The past, forever locked in regret. But what if the past could be changed?", "who": "Carlson" },
       "voice.2": { "text": "Thirty years have come and gone since the night that saw the end of a world, my world. The service needed someone on the Titanic. They chose me.", "who": "Carlson" },

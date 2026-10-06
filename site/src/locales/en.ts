@@ -186,6 +186,9 @@ export const en = {
     everyLine: "every line that is heard" as Text,
     everyLineTitle:
       "Also subtitle what the original only lets you hear: what Penny says over her cut-aways, and sounds such as breaking glass" as Text,
+    preferPort: "prefer port captions" as Text,
+    preferPortTitle:
+      "Where a line has both an original caption (text from the game's files) and a port caption (our transcript of the recording), show the port caption: the game's script does not always match what was recorded" as Text,
     reportBug: "🪲 Report a bug" as Text,
     reportBugTitle: "Report something the port gets wrong" as Text,
     // what became of the screenshot the button took. GitHub accepts no image in

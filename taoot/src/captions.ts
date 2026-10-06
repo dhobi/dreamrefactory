@@ -2,6 +2,20 @@
 /**
  * Where Titanic's uncaptioned voice has words (#50; GameSession.captionSources).
  *
+ * The words, as this port uses them (#505):
+ *  - SUBTITLES: what a puppet says, printed by the original itself, mid-canvas
+ *    over the answer choices;
+ *  - ORIGINAL CAPTIONS: text in the game's files the original never prints —
+ *    a film's puppet lines, NARRATE.PUP — shown by the port at the bottom;
+ *  - PORT CAPTIONS: our transcripts of audio that has no text anywhere in the
+ *    game, ./captions/<edition>.json, shown at the bottom;
+ *  - BURNT-IN CAPTIONS: the Japanese edition's text drawn into the film
+ *    frames — speech at the bottom, on-screen writing at the right. Part of
+ *    the picture: always there, and the settings below work the same over it.
+ * A line is captioned from one source, never both: the original caption,
+ * unless the player prefers port captions and the line has one
+ * (GameSession.preferPortCaptions).
+ *
  * Two sources, and they are not alike:
  *
  *  - the ending's narration, whose words ARE on the disc — NARRATE.PUP, a

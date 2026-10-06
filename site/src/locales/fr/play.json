@@ -11,6 +11,8 @@
   "subtitlesLabel": "Sous-titres",
   "everyLine": "chaque réplique entendue",
   "everyLineTitle": "Sous-titrer aussi ce que l'original laisse seulement entendre : ce que dit Penny pendant ses inserts, et des bruits comme du verre brisé",
+  "preferPort": "préférer les sous-titres du portage",
+  "preferPortTitle": "Quand une réplique a à la fois le texte des fichiers du jeu et notre transcription de l'enregistrement, afficher la transcription : le script du jeu ne correspond pas toujours à ce qui a été enregistré",
   "reportBug": "🪲 Signaler un bug",
   "reportBugTitle": "Signaler quelque chose que le portage rend mal",
   "bugShotClipboard": "L'image de l'écran est dans le presse-papiers — collez-la dans le ticket.",
