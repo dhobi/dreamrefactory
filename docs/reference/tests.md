@@ -523,6 +523,21 @@ The repository's sheet uses 360. Of seeds 1–1000, twelve set the bedsit bomb o
 before the card trick's last line is over, the earliest the flat allows, and of
 those 360 plays the whole sheet fastest: 6:24.9 in-game, against 6:30.4 for 20.
 
+### Contributed sheets
+
+Sheets come in by pull request as plain sheet files in
+[`taoot/speedrun/sheets/`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/speedrun/sheets/README.md): line 1 is
+`# title: …`, and `author` and `notes` may follow in the comments
+before the first action (`engine/src/web/speedrun/sheet-header.ts`). The
+workbench lists them under **Contributed sheets…** (the `run-sheet` plugin
+publishes the folder as `speedrun/sheets.json`), in place of the "Copy the full
+run" button.
+
+`taoot/tests/speedrun/sheets.ts`, one of Titanic's machine suites, plays each to
+its last line headless on the sheet clock and fails at the line one stops on. A
+seeded sheet is one run; an unseeded one is played on seeds 1, 2 and 3 and must
+finish on each. The times go to `out/speedrun/sheets.md` and the CI job summary.
+
 ### A coin on arrival
 
 Some of the ship is decided by a die. The Gorse-Joneses, the only people who

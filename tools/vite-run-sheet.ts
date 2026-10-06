@@ -16,13 +16,28 @@
  * file, the page's fetch fails, and the panel simply offers no button. That is
  * what Dust looked like before it had one.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { Plugin } from "vite";
 
 /** where the page asks for it, relative to the game's own root */
 const SHEET_URL = "/speedrun/run.sheet.txt";
+/** where the page asks for the contributed sheets, all in one file */
+const SHEETS_URL = "/speedrun/sheets.json";
 
-export function runSheet(src: string): Plugin {
+/**
+ * The contributed sheets (`<game>/speedrun/sheets/*.sheet.txt`), as
+ * `[{ file, text }]` in file order. The text whole: a sheet is a few dozen KB,
+ * and the page reads each one's header (its first line is its title) itself,
+ * with the same code the CI check uses — engine/src/web/speedrun/sheet-header.ts.
+ */
+function contributed(dir: string): string {
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".sheet.txt")).sort() : [];
+  return JSON.stringify(files.map((file) => ({ file, text: readFileSync(join(dir, file), "utf8") })));
+}
+
+/** `src` is the route; `sheetsDir`, if the game takes contributions, is where they are */
+export function runSheet(src: string, sheetsDir?: string): Plugin {
   return {
     name: "run-sheet",
     configureServer(server) {
@@ -33,6 +48,13 @@ export function runSheet(src: string): Plugin {
         res.setHeader("cache-control", "no-store");
         res.end(readFileSync(src));
       });
+      if (sheetsDir) {
+        server.middlewares.use(SHEETS_URL, (_req, res) => {
+          res.setHeader("content-type", "application/json; charset=utf-8");
+          res.setHeader("cache-control", "no-store");
+          res.end(contributed(sheetsDir));
+        });
+      }
     },
     /**
      * Emitted rather than written, so it lands under the build output wherever
@@ -41,6 +63,7 @@ export function runSheet(src: string): Plugin {
      * it by the path above.
      */
     generateBundle() {
+      if (sheetsDir) this.emitFile({ type: "asset", fileName: "speedrun/sheets.json", source: contributed(sheetsDir) });
       if (!existsSync(src)) return; // no sheet, no button — a valid build
       this.emitFile({
         type: "asset",

@@ -29,13 +29,15 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")).version as string;
 
 /**
- * Titanic's route — the fixture the headless runner drives, and what the panel's
- * "Copy the full run" button starts you from.
+ * Titanic's route — the fixture the headless runner drives, and what a first
+ * visit to the workbench starts from.
  *
  * The plugin is `tools/vite-run-sheet.ts`, shared with Dust: the two games differ
  * only in where the fixture sits.
  */
 const SHEET_SRC = join(HERE, "tests/speedrun/run.sheet.txt");
+/** the sheets contributed by pull request, each checked by tests/auto/speedrun-sheets.ts */
+const SHEETS_DIR = join(HERE, "speedrun/sheets");
 
 /**
  * `nightdive.mov` from its GIF, when the GIF is the newer of the two.
@@ -95,7 +97,7 @@ export default defineConfig({
   plugins: [
     nightdiveMovie(),
     gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") }),
-    runSheet(SHEET_SRC),
+    runSheet(SHEET_SRC, SHEETS_DIR),
     siblingSignposts([
       { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
       { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },

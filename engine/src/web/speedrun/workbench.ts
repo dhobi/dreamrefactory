@@ -53,6 +53,7 @@
  * and the arrows reach the game again. Nothing here has to do anything about it,
  * which is worth writing down so nobody later "fixes" it.
  */
+import { readSheetHeader, type SheetHeader } from "./sheet-header";
 import { parseSheet, describeSheet, type Step, type VerbSpec } from "./sheet";
 import { pageDriver, saveKeys, Aborted, type SaveKeys } from "./page-driver";
 import { Paused } from "./driver";
@@ -127,8 +128,9 @@ export interface Workbench {
   /** what the Warm button says it will fetch — "the English edition" */
   warmWhat?: string;
   /**
-   * A sheet the build publishes beside the page, for the "copy the full run"
-   * button, or absent for a game with no route written yet.
+   * A sheet the build publishes beside the page: what a first visit starts
+   * from, and the "copy the full run" button for a game that takes no
+   * {@link contributedSheets}; absent for a game with no route written yet.
    *
    * A URL rather than the text, because the page fetches it — and a RESOLVED
    * one, which is the whole reason it is asked for rather than worked out here.
@@ -139,6 +141,14 @@ export interface Workbench {
    * site served from a subdirectory would fetch somebody else's file.
    */
   fixtureSheet?: string;
+  /**
+   * The sheets contributed by pull request, as `[{ file, text }]` — offered in
+   * a list, each by the title on its first line, in place of the "copy the
+   * full run" button.
+   * A resolved URL for the same reason as {@link fixtureSheet}; absent for a
+   * game that takes none.
+   */
+  contributedSheets?: string;
   /**
    * Work the open sheet's time out without playing it on screen, or absent for a
    * game with no Calculate button (#509): headless, in a Web Worker, as fast as
@@ -1429,7 +1439,8 @@ function renderSheets(): void {
   });
   sheetsEl.append(add);
 
-  if (repoSheet !== null) {
+  // a game that takes contributed sheets lists its route among them instead
+  if (repoSheet !== null && !host.contributedSheets) {
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = "full";
@@ -1443,6 +1454,32 @@ function renderSheets(): void {
       say(`copied the repository's sheet into "${name}"`, "good");
     });
     sheetsEl.append(copy);
+  }
+
+  if (contributed.length) {
+    const pick = document.createElement("select");
+    pick.className = "contributed";
+    pick.title = "sheets contributed to the repository by pull request, each checked to play to its end";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "Contributed sheets…";
+    pick.append(none);
+    contributed.forEach((c, i) => {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = c.author ? `${c.title} — ${c.author}` : c.title;
+      if (c.notes) o.title = c.notes;
+      pick.append(o);
+    });
+    pick.addEventListener("change", () => {
+      const c = contributed[Number(pick.value)];
+      pick.value = "";
+      if (!c) return;
+      const name = freeName(c.title);
+      addSheet(name, c.text);
+      say(`copied "${c.title}" into "${name}"`, "good");
+    });
+    sheetsEl.append(pick);
   }
 }
 
@@ -1941,6 +1978,8 @@ calcBtn.addEventListener("click", () => void calculate());
 
 /** the repository's sheet, offered as a starting point rather than as THE sheet */
 let repoSheet: string | null = null;
+/** the contributed sheets with a readable header, in file order ({@link Workbench.contributedSheets}) */
+let contributed: (SheetHeader & { text: string })[] = [];
 
 async function start(): Promise<void> {
   /*
@@ -1963,6 +2002,19 @@ async function start(): Promise<void> {
     repoSheet = await res.text();
   } catch {
     repoSheet = null;
+  }
+  try {
+    if (host.contributedSheets) {
+      const res = await fetch(host.contributedSheets);
+      if (!res.ok) throw new Error(String(res.status));
+      const files = (await res.json()) as { file: string; text: string }[];
+      contributed = files.flatMap(({ text }) => {
+        const read = readSheetHeader(text);
+        return "header" in read ? [{ ...read.header, text }] : [];
+      });
+    }
+  } catch {
+    contributed = [];
   }
 
   // Whatever the single-sheet workbench was holding becomes a sheet, so nobody

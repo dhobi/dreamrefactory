@@ -207,6 +207,8 @@ npm run speedrun:lint -w taoot            # parse the sheet and say nothing else
 npm run speedrun -w taoot -- --verbs      # every verb a sheet may use
 ```
 
+Routes of your own go in [`taoot/speedrun/sheets/`](speedrun/sheets/README.md), by pull request; CI plays each one to its end.
+
 The route lives in [`taoot/tests/speedrun/run.sheet.txt`](tests/speedrun/run.sheet.txt):
 
 ```
