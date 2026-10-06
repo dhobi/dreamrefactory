@@ -370,6 +370,14 @@ export interface SpeedrunDriver {
   readonly seed?: number | null;
 
   /**
+   * Pin the script dice to `seed` from the next boot on — what a sheet's
+   * `reset(seed: N)` line asks, just before it reboots the game. Kept across every
+   * reboot this driver makes (a reload, a fresh host) and applied at every load
+   * point, as {@link seed} is. Optional: a host that cannot reboot cannot honour it.
+   */
+  pinSeed?(seed: number): void;
+
+  /**
    * Put the game back to a cold boot — `reset()`.
    *
    * A reload, in both hosts, because that is the only thing that is honestly the

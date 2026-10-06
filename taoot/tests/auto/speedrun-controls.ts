@@ -569,3 +569,44 @@ test("someone else talking counts too: until: talking is anyone, whatever joneso
   expect(out.error).toBeUndefined();
   expect(out.said.at(-1)).toBe("talking after 1 ride, deck c");
 });
+
+// --- reset(seed:) ------------------------------------------------------------
+
+/** a game that has or has not left its title menu, and what reset(seed:) did to it */
+function seedable(started: boolean) {
+  const log: string[] = [];
+  const d = {
+    evaluate: async (expr: string) => {
+      if (expr.includes("props.size > 0")) return started;
+      const seeded = /seedRandom\((\d+)\)/.exec(expr);
+      if (seeded) log.push(`seeded ${seeded[1]} in place`);
+      return null;
+    },
+    hold: async () => {},
+    settle: async () => {},
+    pinSeed: (seed: number) => log.push(`pinned ${seed}`),
+    restart: async () => void log.push("restarted"),
+  } as unknown as SpeedrunDriver;
+  return { d, log };
+}
+
+test("reset(seed:) on a fresh game pins the seed and seeds it where it stands", async () => {
+  const { d, log } = seedable(false);
+  const r = await run(d, "reset", [], { seed: "360" });
+  expect(r.error).toBeUndefined();
+  expect(log).toEqual(["pinned 360", "seeded 360 in place"]);
+});
+
+test("reset(seed:) on a played game pins the seed and boots afresh", async () => {
+  const { d, log } = seedable(true);
+  const r = await run(d, "reset", [], { seed: "360" });
+  expect(r.error).toBeUndefined();
+  expect(log).toEqual(["pinned 360", "restarted"]);
+});
+
+test("reset(seed:) refuses a seed that is not a whole number, before touching the game", async () => {
+  const { d, log } = seedable(true);
+  const r = await run(d, "reset", [], { seed: "3.5" });
+  expect(r.error).toMatch(/whole number/);
+  expect(log).toEqual([]);
+});

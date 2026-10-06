@@ -280,7 +280,7 @@ async function main(): Promise<void> {
       onStep: (step, i, total) =>
         process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
     });
-    report({ steps, ...r, errors: [], seeded: SEED });
+    report({ steps, ...r, errors: [], seeded: driver.seed ?? null });
     process.exit(r.failure ? 1 : 0);
   }
 
@@ -298,6 +298,8 @@ async function main(): Promise<void> {
   await page.goto(url.toString());
   await page.waitForFunction(() => !!(window as unknown as { dbg?: unknown }).dbg, null, { timeout: 20_000 });
 
+  /** the seed every boot starts from: `--seed`, until a `reset(seed: N)` line pins another */
+  let pinned: number | null = SEED;
   // before anything runs: advanceday draws the arrival second at the very end of
   // the boot, and the bomb's fuse is drawn in the flat
   const seedIt = async (): Promise<void> => {
@@ -309,8 +311,8 @@ async function main(): Promise<void> {
       s.nominalTime = true;
       s.sheetClock = true;
     });
-    if (SEED === null) return;
-    await page.evaluate((seed) => (window as any).dbg.session.seedRandom(seed), SEED);
+    if (pinned === null) return;
+    await page.evaluate((seed) => (window as any).dbg.session.seedRandom(seed), pinned);
   };
   await seedIt();
 
@@ -320,6 +322,8 @@ async function main(): Promise<void> {
     onReload: seedIt,
     // and at every load point, or the boot room's dice decide the course
     seed: SEED,
+    // a sheet's `reset(seed: N)` line: every reload after it is seeded from N
+    onPin: (seed) => (pinned = seed),
   });
 
   // the loop is shared with the in-page previewer (taoot/src/speedrun/runner.ts) so the
@@ -333,7 +337,7 @@ async function main(): Promise<void> {
       process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
   });
 
-  report({ steps, ...r, errors, seeded: SEED });
+  report({ steps, ...r, errors, seeded: pinned });
 
   const failed = !!r.failure || errors.length > 0;
   if (HEADED && process.env.KEEPOPEN !== "0") {

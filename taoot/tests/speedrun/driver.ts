@@ -92,6 +92,8 @@ export interface SpeedrunDriverOptions {
   onReload?(): Promise<void>;
   /** the pinned seed, set again at every load point (SpeedrunDriver.seed) */
   seed?: number | null;
+  /** a sheet's `reset(seed: N)` line pinned one: what `onReload` should seed from now on */
+  onPin?(seed: number): void;
 }
 
 export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {}): Promise<SpeedrunDriver & { page: Page; pagePoint(x: number, y: number): Promise<Point> }> {
@@ -138,6 +140,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
    * standing watch's action, whose holds and pauses are the watch's — the only
    * ones that move the game while a risen watch has halted it.
    */
+  let pinned: number | null = opts.seed ?? null;
   const make = (watch: boolean) => {
     const passesField = watch ? "sheetWatchPasses" : "sheetPasses";
     const hold = async (expr: string, what: string, budget = timeout): Promise<void> => {
@@ -544,14 +547,20 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
         const file = join(process.cwd(), "out", "speedrun", `${name}.ti`);
         return existsSync(file) ? new Uint8Array(readFileSync(file)) : null;
       },
-      seed: opts.seed ?? null,
+      get seed() {
+        return pinned;
+      },
+      pinSeed: (seed: number) => {
+        pinned = seed;
+        opts.onPin?.(seed);
+      },
 
       restart,
       log,
     };
   };
-  const run = make(false);
-  return { ...run, forWatch: () => make(true) };
+  // assigned rather than spread, which would read `seed` once and keep that
+  return Object.assign(make(false), { forWatch: () => make(true) });
 }
 
 /** what this driver is, concretely: the shared contract plus the Playwright-only

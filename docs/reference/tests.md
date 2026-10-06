@@ -507,6 +507,22 @@ headless runner's:
   until the load has landed. A runner that saw a film still downloading as no
   film let a pass run the moment it arrived, before pressing ESC at it.
 
+### A seeded run
+
+`reset(seed: 360)` as a sheet's first line boots the game with its script dice
+pinned, so the sheet is the same course every time — on the workbench, in
+Calculate and from the command line (`--seed=N` does the same from outside). It
+is a boot, not a setting: the original took its seed once, at start-up, from the
+clock (`TI.EXE` `0x435180` -> `0x4357c0`, `timeGetTime() * 3 / 50`), and loading a
+save never re-seeds it. One seed at the start is fair for a TAS-style run, and a
+seeded time is a category of its own, never ranked against an unseeded one. A
+seed is best only for the sheet it was found for: an edit before a die changes
+every draw after it.
+
+The repository's sheet uses 360. Of seeds 1–1000, twelve set the bedsit bomb off
+before the card trick's last line is over, the earliest the flat allows, and of
+those 360 plays the whole sheet fastest: 6:24.9 in-game, against 6:30.4 for 20.
+
 ### A coin on arrival
 
 Some of the ship is decided by a die. The Gorse-Joneses, the only people who
