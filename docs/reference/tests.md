@@ -566,6 +566,32 @@ talking` means anyone, not the Joneses, so nothing is refused up front; when
 (the tour, phase 0 of mission 1, mission 2 outside phase 2, or once they have
 told Frank about Burns), the error says which.
 
+### Blackjack for the boat pass
+
+In mission 4 Buick plays Frank for his boat pass, and the Rubaiyat or the real
+necklace is the stake. A 100% route needs the pass, a 0% route may need to lose
+the stake, and either is one line
+([#487](https://github.com/dhobi/dreamrefactory/issues/487)):
+
+```
+blackjack(win, bet: rubaiyat)
+blackjack(lose, bet: realneck)
+```
+
+It starts where the table is clickable. It looks only at what a player at the
+table sees: its own cards after one press of SHOW, and Buick's face-up card,
+the fourth one dealt. It never reads `dealerdowncard`, `dealertotal` or the
+deck. The game settles the bet before Buick's play-again plaque
+(BLKJACK2.PUP `playerwin`/`buickwin`/`draw`), so a draw is played again at the
+table. A hand that went the wrong way is undone with a save the verb writes
+before walking up, `blackjack retry`, and loads without re-seeding the dice, as
+TI.EXE's own load does; re-seeded, every retry would be dealt the same cards.
+`max:` (20 hands by default) turns bad luck into an error.
+
+`taoot/tests/speedrun/blackjack.ts`, a machine suite, plays both from the
+shipped save "In the Smoking Room" (`en/save/ENDGAME1`) on seeds that between them win, lose, draw and load;
+`taoot/tests/auto/speedrun-blackjack.ts` pins the hit-or-stay table.
+
 ### A route is a line; the sinking is not
 
 `watchFor(<condition>, <action>)` is a standing rule — *whenever this becomes

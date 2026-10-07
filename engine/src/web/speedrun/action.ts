@@ -1054,11 +1054,15 @@ export async function dismissMovie(c: ActionContext): Promise<void> {
  * from its own openscene and sit inside it waiting for an answer — so the
  * dispatch does not resolve until the story moves, and awaiting it hangs.
  *
+ * `reseed: false` leaves a pinned seed's dice where they are, as TI.EXE's own
+ * load does (it never re-seeds). For a verb that loads to try again
+ * (`blackjack`): re-seeded, every retry would be dealt the same cards.
+ *
  * The flags live on `window` and not on `dbg`, because `window.dbg` is a getter
  * that builds a fresh object per read: a property set on one read is gone by the
  * next.
  */
-export async function loadPoint(c: ActionContext, name: string): Promise<void> {
+export async function loadPoint(c: ActionContext, name: string, opts: { reseed?: boolean } = {}): Promise<void> {
   if (!c.d.getSave) throw new Error(`this runner has no load points`);
   const bytes = await c.d.getSave(name);
   if (!bytes) {
@@ -1097,7 +1101,7 @@ export async function loadPoint(c: ActionContext, name: string): Promise<void> {
     const w = window;
     w.__srLoadDone = false;
     w.__srLoadError = "";
-    ${c.d.seed == null ? "" : `w.dbg.session.seedRandom(${Number(c.d.seed)});`}
+    ${c.d.seed == null || opts.reseed === false ? "" : `w.dbg.session.seedRandom(${Number(c.d.seed)});`}
     w.dbg.session.track(w.dbg.host.loadSavedGame(new Uint8Array([${Array.from(bytes).join(",")}])))
       .then(() => { w.__srLoadDone = true; }, (e) => { w.__srLoadError = String(e); });
     return true;

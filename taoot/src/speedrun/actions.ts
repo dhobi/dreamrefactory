@@ -51,6 +51,7 @@ import {
   type ActionTable,
 } from "@dreamfactory/engine/web/speedrun/action";
 import { jumpTo, pageButton, jumpableSets } from "./nav/mapjumps";
+import { BLACKJACK } from "./blackjack";
 import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /* ------------------------------------------------------------------ *
@@ -1107,6 +1108,8 @@ export const TITANIC_ACTIONS: ActionTable = {
       await c.d.hold(`!window.dbg.intro`, "the intro to let go", 30_000);
     },
   },
+  /** Mission 4's blackjack for the boat pass, played to a chosen end: ./blackjack.ts (#487) */
+  blackjack: BLACKJACK,
   mission: {
     args: [1, 1],
     once: true,
