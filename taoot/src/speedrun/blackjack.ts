@@ -51,6 +51,8 @@ const BETS: Record<string, number> = { realneck: 102, rubaiyat: 103 };
 const RETRY = "blackjack retry";
 /** hands the verb plays before it gives up (`max:`) */
 const MAX_HANDS = 20;
+/** the game's verdict on a hand, as the report says it */
+const VERDICT: Record<string, string> = { draw: "a draw", player: "Frank won", dealer: "Buick won" };
 
 /** one card's value as a player reads it: an ace is 11, a face card 10 */
 export function cardValue(card: string): number {
@@ -161,6 +163,8 @@ export const BLACKJACK: Action = {
     await CORE_ACTIONS.save.run({ ...c, step: { ...c.step, args: [RETRY], opts: {} }, wait: "quiet", say: () => {} });
     const done = goal === "win" ? `${owner("boatpass")} === "frank" && ${owner(bet)} === "frank"` : `${owner(bet)} === "buick"`;
     const plaque = { ...c, budget };
+    const goalDone = goal === "win" ? "won the boat pass" : `lost the ${bet}`;
+    const goalMissed = goal === "win" ? "lost the boat pass" : `took the ${bet}`;
     let loads = 0;
     let atTable = false;
     for (let hand = 1; hand <= max; hand++) {
@@ -171,12 +175,12 @@ export const BLACKJACK: Action = {
         atTable = true;
       }
       const winner = await playHand(c, goal, budget);
-      c.say(`hand ${hand}: ${winner === "draw" ? "a draw" : winner === "player" ? "Frank won" : "Buick won"}`);
+      c.say(`hand ${hand}: ${VERDICT[winner] ?? "Buick won"}`);
       await d.hold(predicate("choosing"), "Buick's play-again plaque", budget);
       if (await d.evaluate<boolean>(done)) {
         await converse(plaque, [102], "stop");
         await d.settle("quiet", "the room after the table", budget);
-        c.say(`${goal === "win" ? "won the boat pass" : `lost the ${bet}`} on hand ${hand}` + (loads ? `, after ${loads} load(s)` : ""));
+        c.say(`${goalDone} on hand ${hand}` + (loads ? `, after ${loads} load(s)` : ""));
         return;
       }
       if (winner === "draw") {
@@ -190,6 +194,6 @@ export const BLACKJACK: Action = {
       loads++;
       atTable = false;
     }
-    throw new Error(`${max} hands and Buick never ${goal === "win" ? "lost the boat pass" : `took the ${bet}`}`);
+    throw new Error(`${max} hands and Buick never ${goalMissed}`);
   },
 };
