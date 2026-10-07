@@ -590,7 +590,36 @@ TI.EXE's own load does; re-seeded, every retry would be dealt the same cards.
 
 `taoot/tests/speedrun/blackjack.ts`, a machine suite, plays both from the
 shipped save "In the Smoking Room" (`en/save/ENDGAME1`) on seeds that between them win, lose, draw and load;
-`taoot/tests/auto/speedrun-blackjack.ts` pins the hit-or-stay table.
+`taoot/tests/auto/speedrun-blackjack.ts` pins the hit-or-stay table, which Dust's
+table plays too (`engine/src/web/speedrun/blackjack.ts`).
+
+### Blackjack for cash, in Dust
+
+Dust's money comes from Jan's table in the saloon, and a route that needs some
+of it says how much
+([#490](https://github.com/dhobi/dreamrefactory/issues/490)):
+
+```
+blackjack(800)
+```
+
+It starts where the table is clickable, with some cash, and plays until the
+cash in hand is at least that much. The table has no limit (JAN.PUP
+`drawbetbevel` adds $1, $5 or $10 a press while the cash lasts), so each hand
+bets what is still missing, `min(cash, target - cash)`: as many hands as going
+all in, fewer presses, no overshoot beyond a blackjack's 3:2. What it looks at
+is Titanic's verb's: its own cards after one press of SEECARD, and the dealer's
+face-up card, the fourth one dealt. A draw is bet again at the table. A save,
+`blackjack retry`, is written before the first sitting and again after every
+hand that won, so a loss costs one hand: the verb gets up (or is sent away
+broke), loads it without re-seeding, and sits down to a new shuffle, because
+`initgame` reshuffles at every sitting. `max:` (100 hands by default) turns bad
+luck into an error. The verb ends standing in the saloon, up from the table.
+
+`dust/tests/speedrun/blackjack.ts`, a machine suite under Dust's own headless
+driver (`dust/tests/speedrun/headless.ts`), plays it from the disc's save
+`D1E_002` ($400, facing the table) on seeds that between them go broke, lose
+part of a bet, draw, are paid for a blackjack and load.
 
 ### A route is a line; the sinking is not
 

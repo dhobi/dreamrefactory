@@ -81,12 +81,11 @@ export function indexDisc(root = CD): Map<string, string> {
   return found;
 }
 
-/** a host over the real disc, booted, with a seeded `random()` */
-export async function newDustHost(): Promise<{
-  host: GameHost;
-  session: GameSession;
-  logs: string[];
-}> {
+/**
+ * A host over the real disc, not yet booted: what {@link newDustHost} boots,
+ * and what a headless sheet (tests/speedrun/headless.ts) boots its own way.
+ */
+export function dustHost(): { host: GameHost; logs: string[] } {
   const index = indexDisc();
   const read = (name: string): Uint8Array | null => {
     const path = index.get(name.toLowerCase());
@@ -105,6 +104,16 @@ export async function newDustHost(): Promise<{
   const host = new GameHost(files, new NullAudioSink(), { log: (l) => logs.push(l) });
   // a save is a dump of the engine's own tables, and those are v1's here
   host.session.dfVersion = 1;
+  return { host, logs };
+}
+
+/** a host over the real disc, booted, with a seeded `random()` */
+export async function newDustHost(): Promise<{
+  host: GameHost;
+  session: GameSession;
+  logs: string[];
+}> {
+  const { host, logs } = dustHost();
   await host.coldBoot();
   /*
    * There IS a frame source here, and saying so is what makes a walk finishable.

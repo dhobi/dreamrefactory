@@ -30,11 +30,10 @@
  *   - Walking up costs two minutes of the sinking clock (`min = min + 2` in
  *     the table's `mousedown`); the load gives them back, as it would a player.
  *
- * The strategy is the one #487 proposed. A soft hand (an ace counted 11,
- * `playeraceten`) hits to 17, stays from 19 and on 18 hits only against a 9,
- * a 10 or an ace. A hard hand hits to 11, stays from 17, and in between hits
- * only against a 7 or more. `lose` hits until it busts.
+ * The strategy is the one #487 proposed, shared with Dust's table
+ * (engine/src/web/speedrun/blackjack.ts).
  */
+import { cardValue, hitOrStay } from "@dreamfactory/engine/web/speedrun/blackjack";
 import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
 import {
   clickThing,
@@ -53,27 +52,6 @@ const RETRY = "blackjack retry";
 const MAX_HANDS = 20;
 /** the game's verdict on a hand, as the report says it */
 const VERDICT: Record<string, string> = { draw: "a draw", player: "Frank won", dealer: "Buick won" };
-
-/** one card's value as a player reads it: an ace is 11, a face card 10 */
-export function cardValue(card: string): number {
-  const rank = card.slice(0, -1).toLowerCase();
-  if (rank === "a") return 11;
-  if (rank === "j" || rank === "q" || rank === "k") return 10;
-  return Number(rank);
-}
-
-/** hit or stay, from what the player can see */
-export function hitOrStay(goal: "win" | "lose", total: number, soft: boolean, up: number): "hit" | "stay" {
-  if (goal === "lose") return "hit";
-  if (soft) {
-    if (total <= 17) return "hit";
-    if (total >= 19) return "stay";
-    return up >= 9 ? "hit" : "stay";
-  }
-  if (total <= 11) return "hit";
-  if (total >= 17) return "stay";
-  return up >= 7 ? "hit" : "stay";
-}
 
 /** the table's state, all of it read off globals BLKJACK.STG writes */
 const TABLE = `(() => {
