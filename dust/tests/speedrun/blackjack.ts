@@ -7,8 +7,9 @@
  *
  * From the disc's own save D1E_002: the saloon's ground floor, facing the
  * table, with $400. The seeds are picked so every way the verb can go is
- * played: 3 goes broke and is sent away by Jan, wins, draws at the table, and
- * loses part of a bet; 15 is paid 3:2 for a blackjack; 16 draws twice running.
+ * played: 21 goes broke and is sent away by Jan, draws at the table, wins, and
+ * loses part of a bet, each loss loaded back through the horn's panel; 22 is
+ * paid 3:2 for a blackjack.
  */
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
@@ -46,7 +47,7 @@ async function play(line: string, seed: number): Promise<{ cash: number; set: st
 const run = haveRip() ? test : test.skip;
 const SEEDS = process.env.SEEDS
   ? process.env.SEEDS.split(",").map((s) => [Number(s), 1000] as const)
-  : ([[1, 1000], [3, 1000], [15, 500], [16, 500]] as const);
+  : ([[21, 1000], [22, 1000]] as const);
 
 for (const [seed, target] of SEEDS) {
   run(`$400 to $${target} (seed ${seed})`, async () => {

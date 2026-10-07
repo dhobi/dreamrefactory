@@ -8,8 +8,9 @@
  * From the shipped save "In the Smoking Room" (en/save/ENDGAME1): Mission 4,
  * Buick at his table with the boat pass, and Frank carrying both things Buick
  * will play for. The seeds are picked so every way the verb can go is played:
- * 1 wins and loses on the first hand, 3 loses a hand and loads to win, 11 wins
- * by accident and loads to lose, and 16 draws and plays again at the table.
+ * 5 wins and loses on the first hand, 3 loses a hand and loads to win, 22 wins
+ * by accident and loads to lose, and 28 draws and plays again at the table.
+ * Each load goes through the control panel, as a player's would.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -52,7 +53,7 @@ async function play(line: string, seed: number): Promise<{ owners: Record<string
   return { owners, said: `${last?.says.join("; ") ?? ""} (${((last?.game ?? 0) / 1000).toFixed(1)} s in game)` };
 }
 
-const SEEDS = process.env.SEEDS ? process.env.SEEDS.split(",").map(Number) : [1, 3, 11, 16];
+const SEEDS = process.env.SEEDS ? process.env.SEEDS.split(",").map(Number) : [5, 3, 22, 28];
 
 for (const seed of SEEDS) {
   test(`win, betting the Rubaiyat (seed ${seed})`, async () => {

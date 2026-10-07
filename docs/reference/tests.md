@@ -583,9 +583,15 @@ table sees: its own cards after one press of SHOW, and Buick's face-up card,
 the fourth one dealt. It never reads `dealerdowncard`, `dealertotal` or the
 deck. The game settles the bet before Buick's play-again plaque
 (BLKJACK2.PUP `playerwin`/`buickwin`/`draw`), so a draw is played again at the
-table. A hand that went the wrong way is undone with a save the verb writes
-before walking up, `blackjack retry`, and loads without re-seeding the dice, as
-TI.EXE's own load does; re-seeded, every retry would be dealt the same cards.
+table. A hand that went the wrong way is undone with a save the verb makes
+before walking up, and loads without re-seeding the dice, as TI.EXE's own load
+does; re-seeded, every retry would be dealt the same cards. It saves and loads
+the way a player has to: the life preserver, the control panel's lever, the
+fades both ways
+([#523](https://github.com/dhobi/dreamrefactory/issues/523)). Only the game's
+Save As and Open dialogs are answered at once, and those froze the game in
+the original too. `save()` and `load()` stay load points for working on a
+route, and skip all of that.
 `max:` (20 hands by default) turns bad luck into an error.
 
 `taoot/tests/speedrun/blackjack.ts`, a machine suite, plays both from the
@@ -609,11 +615,12 @@ cash in hand is at least that much. The table has no limit (JAN.PUP
 bets what is still missing, `min(cash, target - cash)`: as many hands as going
 all in, fewer presses, no overshoot beyond a blackjack's 3:2. What it looks at
 is Titanic's verb's: its own cards after one press of SEECARD, and the dealer's
-face-up card, the fourth one dealt. A draw is bet again at the table. A save,
-`blackjack retry`, is written before the first sitting and again after every
-hand that won, so a loss costs one hand: the verb gets up (or is sent away
-broke), loads it without re-seeding, and sits down to a new shuffle, because
-`initgame` reshuffles at every sitting. `max:` (100 hands by default) turns bad
+face-up card, the fourth one dealt. A draw is bet again at the table. The verb
+saves before the first sitting and again after every hand that won, so a loss
+costs one hand: it gets up (or is sent away broke), loads without re-seeding,
+and sits down to a new shuffle, because `initgame` reshuffles at every sitting.
+Saving and loading go through the panel behind the horn, its barn-door wipes
+and button presses included, as Titanic's go through the control panel. `max:` (100 hands by default) turns bad
 luck into an error. The verb ends standing in the saloon, up from the table.
 
 `dust/tests/speedrun/blackjack.ts`, a machine suite under Dust's own headless

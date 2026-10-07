@@ -30,27 +30,36 @@
  *   - Broke, Jan ends the game himself (`mainbetbj ()`, `playercash = 0`).
  *   - A lost hand cannot be undone in the game, so the verb saves before it
  *     sits down and loads to try again — and saves again after every hand that
- *     won, so a loss only ever costs the one hand. That means getting up after
- *     a win (Quit blackjack.), because the control panel is not there while
- *     the cards are, and sitting down again, which plays Jan's greeting.
+ *     won, so a loss only ever costs the one hand. It saves and loads the way a
+ *     player does, through the panel behind the horn, wipes and button presses
+ *     and all (#523). That means getting up after a win (Quit blackjack.),
+ *     because the control panel is not there while the cards are, and sitting
+ *     down again, which plays Jan's greeting.
  *   - The deck is shuffled every time you sit down (`initgame ()` sets
  *     `usedcount = 52`, which `newgame ()` takes as "time for a new deck"), and
  *     the load does not re-seed — DF.EXE's never did — so a retry is dealt new
  *     cards.
  */
 import { cardValue, hitOrStay } from "@dreamfactory/engine/web/speedrun/blackjack";
-import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
 import {
   clickThing,
   converse,
-  loadPoint,
+  menuLoad,
+  menuSave,
   TALK_STATE,
   type Action,
   type ActionContext,
+  type GameMenu,
 } from "@dreamfactory/engine/web/speedrun/action";
 
-/** the load point the verb keeps for itself, written before every sitting */
-const RETRY = "blackjack retry";
+/** the panel behind the horn: NEW.FLT's "score" flat, with Save, Open and OK */
+const PANEL: GameMenu = {
+  open: "horn",
+  save: "save",
+  load: "open",
+  close: "OK",
+  shown: `String(window.dbg.session.currentFlat ?? "") === "score"`,
+};
 /** hands the verb plays before it gives up (`max:`) */
 const MAX_HANDS = 100;
 /** the game's verdict on a hand, as the report says it */
@@ -171,9 +180,6 @@ async function sitDown(c: ActionContext, budget: number): Promise<void> {
   if (!(await backToJan(c, budget))) throw new Error(`Jan did not take a bet`);
 }
 
-const save = (c: ActionContext): Promise<void> =>
-  CORE_ACTIONS.save.run({ ...c, step: { ...c.step, args: [RETRY], opts: {} }, wait: "quiet", say: () => {} });
-
 export const BLACKJACK: Action = {
   args: [1, 1],
   once: true,
@@ -182,7 +188,7 @@ export const BLACKJACK: Action = {
   sig: "blackjack(800)",
   help:
     "play Jan's table in the saloon until the cash in hand is at least that much, from where the table is clickable — " +
-    "bets what is still missing, saves after each win and loads to retry a loss; max: hands",
+    "bets what is still missing, saves after each win and loads to retry a loss, through the horn's panel; max: hands",
   run: async (c) => {
     const { d } = c;
     const target = Number(c.step.args[0].replace(/^\$/, ""));
@@ -199,7 +205,8 @@ export const BLACKJACK: Action = {
     if (cash <= 0) throw new Error(`no cash to bet`);
     if (!(await d.aim("thing", "blackjack"))) throw new Error(`the blackjack table is not clickable from here`);
 
-    await save(c);
+    const panel = { ...c, budget };
+    let retry = await menuSave(panel, PANEL);
     await sitDown(c, budget);
     let loads = 0;
     for (let hand = 1; hand <= max; hand++) {
@@ -217,9 +224,9 @@ export const BLACKJACK: Action = {
       if (cash === before && seated) continue; // a draw: bet again
       if (seated) await getUp(c, budget);
       if (cash > before) {
-        await save(c);
+        retry = await menuSave(panel, PANEL);
       } else {
-        await loadPoint({ ...c, budget, say: () => {} }, RETRY, { reseed: false });
+        await menuLoad(panel, PANEL, retry);
         loads++;
         cash = await d.evaluate<number>(CASH);
       }
