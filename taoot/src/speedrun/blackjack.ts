@@ -24,9 +24,10 @@
  *     pass to Buick.
  *   - So a draw is replayed at the table: "Ja" (101), then the same bet.
  *   - A hand that went the wrong way cannot be undone in the game, so the verb
- *     saves before it walks up to the table and loads to try again. The load
- *     does not re-seed: TI.EXE's never does, and a re-seeded retry would be
- *     dealt the same cards forever.
+ *     saves before it walks up to the table and loads to try again — through
+ *     the control panel behind the life preserver, lever animations and fades
+ *     and all, as a player has to (#523). The load does not re-seed: TI.EXE's
+ *     never does, and a re-seeded retry would be dealt the same cards forever.
  *   - Walking up costs two minutes of the sinking clock (`min = min + 2` in
  *     the table's `mousedown`); the load gives them back, as it would a player.
  *
@@ -34,20 +35,27 @@
  * (engine/src/web/speedrun/blackjack.ts).
  */
 import { cardValue, hitOrStay } from "@dreamfactory/engine/web/speedrun/blackjack";
-import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
 import {
   clickThing,
   converse,
-  loadPoint,
+  menuLoad,
+  menuSave,
   predicate,
   type Action,
   type ActionContext,
+  type GameMenu,
 } from "@dreamfactory/engine/web/speedrun/action";
 
 /** what each bet is called in the game, and its bevel on Buick's bet plaque */
 const BETS: Record<string, number> = { realneck: 102, rubaiyat: 103 };
-/** the load point the verb keeps for itself, written each time the verb starts */
-const RETRY = "blackjack retry";
+/** the control panel: the life preserver opens it, CTL.STG's levers save and load */
+const PANEL: GameMenu = {
+  open: "life",
+  save: "save",
+  load: "open",
+  close: "ok",
+  shown: `/^ctl/i.test(String(window.dbg.session.stageName || ""))`,
+};
 /** hands the verb plays before it gives up (`max:`) */
 const MAX_HANDS = 20;
 /** the game's verdict on a hand, as the report says it */
@@ -116,7 +124,7 @@ export const BLACKJACK: Action = {
   sig: "blackjack(win, bet: rubaiyat)",
   help:
     "Mission 4: play Buick for the boat pass until you win it (win) or lose the bet (lose), from where the table is clickable — " +
-    "bet: rubaiyat or realneck; it loads its own save to try again",
+    "bet: rubaiyat or realneck; it saves and loads through the control panel to try again",
   run: async (c) => {
     const { d } = c;
     const goal = c.step.args[0].toLowerCase();
@@ -138,9 +146,9 @@ export const BLACKJACK: Action = {
     if (!ours.includes(bet)) throw new Error(`Frank does not have the ${bet}`);
     if (!(await d.aim("thing", "blkjacktable"))) throw new Error(`the blackjack table is not clickable from here`);
 
-    await CORE_ACTIONS.save.run({ ...c, step: { ...c.step, args: [RETRY], opts: {} }, wait: "quiet", say: () => {} });
-    const done = goal === "win" ? `${owner("boatpass")} === "frank" && ${owner(bet)} === "frank"` : `${owner(bet)} === "buick"`;
     const plaque = { ...c, budget };
+    const retry = await menuSave(plaque, PANEL);
+    const done = goal === "win" ? `${owner("boatpass")} === "frank" && ${owner(bet)} === "frank"` : `${owner(bet)} === "buick"`;
     const goalDone = goal === "win" ? "won the boat pass" : `lost the ${bet}`;
     const goalMissed = goal === "win" ? "lost the boat pass" : `took the ${bet}`;
     let loads = 0;
@@ -168,7 +176,7 @@ export const BLACKJACK: Action = {
       // the wrong way: leave the table and go back to before it
       await converse(plaque, [102], "stop");
       await d.settle("quiet", "the room after the table", budget);
-      await loadPoint(plaque, RETRY, { reseed: false });
+      await menuLoad(plaque, PANEL, retry);
       loads++;
       atTable = false;
     }

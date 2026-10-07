@@ -1054,15 +1054,11 @@ export async function dismissMovie(c: ActionContext): Promise<void> {
  * from its own openscene and sit inside it waiting for an answer — so the
  * dispatch does not resolve until the story moves, and awaiting it hangs.
  *
- * `reseed: false` leaves a pinned seed's dice where they are, as TI.EXE's own
- * load does (it never re-seeds). For a verb that loads to try again
- * (`blackjack`): re-seeded, every retry would be dealt the same cards.
- *
  * The flags live on `window` and not on `dbg`, because `window.dbg` is a getter
  * that builds a fresh object per read: a property set on one read is gone by the
  * next.
  */
-export async function loadPoint(c: ActionContext, name: string, opts: { reseed?: boolean } = {}): Promise<void> {
+export async function loadPoint(c: ActionContext, name: string): Promise<void> {
   if (!c.d.getSave) throw new Error(`this runner has no load points`);
   const bytes = await c.d.getSave(name);
   if (!bytes) {
@@ -1101,7 +1097,7 @@ export async function loadPoint(c: ActionContext, name: string, opts: { reseed?:
     const w = window;
     w.__srLoadDone = false;
     w.__srLoadError = "";
-    ${c.d.seed == null || opts.reseed === false ? "" : `w.dbg.session.seedRandom(${Number(c.d.seed)});`}
+    ${c.d.seed == null ? "" : `w.dbg.session.seedRandom(${Number(c.d.seed)});`}
     w.dbg.session.track(w.dbg.host.loadSavedGame(new Uint8Array([${Array.from(bytes).join(",")}])))
       .then(() => { w.__srLoadDone = true; }, (e) => { w.__srLoadError = String(e); });
     return true;
@@ -1114,6 +1110,121 @@ export async function loadPoint(c: ActionContext, name: string, opts: { reseed?:
      String(window.dbg.session.interp.globals.get("phase") ?? "?")`,
   );
   c.say(`mission/phase ${at}`);
+}
+
+/* ------------------------------------------------------------------ *
+ * Saving and loading the way a player does
+ * ------------------------------------------------------------------ */
+
+/**
+ * A game's own save/load menu, by the names its things answer to.
+ *
+ * Titanic's is the control panel behind the life preserver, Dust's the panel
+ * behind the horn. Both open and close with a transition, and each lever or
+ * button animates before it acts — time a player cannot skip, so a verb that
+ * saves and loads to try something again (`blackjack`) pays it too (#523).
+ * `save()` and `load()` stay what they are: load points for working on a
+ * route, not moves in a run.
+ */
+export interface GameMenu {
+  /** clicked where the game is played, to open the menu */
+  open: string;
+  save: string;
+  load: string;
+  /** clicked to leave the menu */
+  close: string;
+  /** a predicate: the menu is on screen */
+  shown: string;
+}
+
+/**
+ * Hand the game's save/open dialog to the verb for one call: what `savegame`
+ * would offer the player's Save As lands in `window.__srMenuSave`, and
+ * `opengame`'s Open is answered with `bytes`. The dialog freezes the game in
+ * the original as here, so answering it at once costs the run nothing it
+ * would not cost a player.
+ */
+const takeDialog = (bytes?: Uint8Array): string => `(() => {
+  const w = window, s = w.dbg.session;
+  w.__srMenuSave = null;
+  w.__srMenuAsked = false;
+  w.__srMenuHooks = [s.onSaveGame, s.onLoadGame];
+  s.onSaveGame = (b) => { w.__srMenuSave = Array.from(b); };
+  s.onLoadGame = () => { w.__srMenuAsked = true; return Promise.resolve(${bytes ? `new Uint8Array([${Array.from(bytes).join(",")}])` : "null"}); };
+  return true;
+})()`;
+const giveDialogBack = `(() => {
+  const w = window, s = w.dbg.session;
+  if (w.__srMenuHooks) [s.onSaveGame, s.onLoadGame] = w.__srMenuHooks;
+  w.__srMenuHooks = null;
+  return true;
+})()`;
+
+/**
+ * Click a menu control in the middle of the flat's button of that name, where
+ * the game's own `pointinbutton` looks — not wherever its prop is first hit.
+ * Titanic's levers are props whose left end is a handle: a click there starts
+ * a drag (house.shp `stdswitch`), and only a click in the button pulls the
+ * lever by itself.
+ */
+async function clickMenu(c: ActionContext, name: string): Promise<void> {
+  const at = await c.d.evaluate<{ x: number; y: number } | null>(`(() => {
+    const s = window.dbg.session;
+    const r = s.stageCtrl.flatRegion(String(s.currentFlat), ${JSON.stringify(name)});
+    if (!r) return null;
+    const o = s.isV5 ? s.stageOrigin : { x: 0, y: 0 };
+    return { x: Math.floor((r.left + r.right) / 2) + o.x, y: Math.floor((r.top + r.bottom) / 2) + o.y };
+  })()`);
+  if (!at) return clickThing(c, name, "none");
+  await c.d.clickAt(at.x, at.y, "none", c.budget);
+}
+
+async function openMenu(c: ActionContext, menu: GameMenu): Promise<void> {
+  await c.d.settle("quiet", "the game before its menu", c.budget);
+  await clickThing(c, menu.open, "none");
+  await c.d.hold(menu.shown, "the game's menu", c.budget);
+  await c.d.settle("quiet", "the game's menu", c.budget);
+}
+
+async function closeMenu(c: ActionContext, menu: GameMenu): Promise<void> {
+  if (!(await c.d.evaluate<boolean>(menu.shown))) return;
+  await clickMenu(c, menu.close);
+  await c.d.hold(`!(${menu.shown})`, "the game after its menu", c.budget);
+  await c.d.settle("quiet", "the game after its menu", c.budget);
+}
+
+/** save through the game's menu, as a player would; the save's bytes */
+export async function menuSave(c: ActionContext, menu: GameMenu): Promise<Uint8Array> {
+  await openMenu(c, menu);
+  await c.d.evaluate<boolean>(takeDialog());
+  try {
+    await clickMenu(c, menu.save);
+    await c.d.hold(`!!window.__srMenuSave`, "the game to save", c.budget);
+    await c.d.settle("quiet", "the menu after saving", c.budget);
+  } finally {
+    await c.d.evaluate<boolean>(giveDialogBack);
+  }
+  const bytes = await c.d.evaluate<number[]>(`window.__srMenuSave`);
+  await closeMenu(c, menu);
+  return new Uint8Array(bytes);
+}
+
+/**
+ * Load `bytes` through the game's menu, as a player would. The load does not
+ * re-seed — the original's never did — so a retry is dealt new cards.
+ */
+export async function menuLoad(c: ActionContext, menu: GameMenu, bytes: Uint8Array): Promise<void> {
+  await openMenu(c, menu);
+  await c.d.evaluate<boolean>(takeDialog(bytes));
+  try {
+    await clickMenu(c, menu.load);
+    await c.d.hold(`window.__srMenuAsked`, "the game to ask for a save", c.budget);
+    await c.d.settle("quiet", "the game to load", c.budget);
+  } finally {
+    await c.d.evaluate<boolean>(giveDialogBack);
+  }
+  // Titanic's load lever leaves the panel itself; Dust's stays on its panel
+  await closeMenu(c, menu);
 }
 
 /* ------------------------------------------------------------------ *
