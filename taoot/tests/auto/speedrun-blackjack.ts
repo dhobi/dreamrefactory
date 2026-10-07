@@ -1,9 +1,9 @@
 /**
- * The decisions behind `blackjack(win|lose)` (taoot/src/speedrun/blackjack.ts):
+ * The decisions behind `blackjack` (engine/src/web/speedrun/blackjack.ts):
  * a card read the way a player reads it, and hit or stay from what a player sees.
  */
 import { expect, test } from "vitest";
-import { cardValue, hitOrStay } from "../../src/speedrun/blackjack";
+import { cardValue, hitOrStay } from "@dreamfactory/engine/web/speedrun/blackjack";
 
 test("a card is worth what it shows; an ace up is 11", () => {
   expect(["2h", "9s", "10d", "jc", "qh", "ks", "ad"].map(cardValue)).toEqual([2, 9, 10, 10, 10, 10, 11]);

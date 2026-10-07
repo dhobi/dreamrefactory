@@ -34,9 +34,9 @@
  *     `handflag = 1` the first press opens a picker that has to be worked.
  *   - **the shooting range**, and the gun generally: a light-gun aim, which is
  *     `combo`'s shape (a cycle of points until a condition) but wants naming.
- *   - **the saloon's card games**, whose scripts this port already runs
- *     (dust/tests/salgames.ts) and which are a plaque-and-bevel dialogue that
- *     `say` may or may not be able to hold up its end of.
+ *   - **poker**, the saloon's other card game. Blackjack has its verb
+ *     (./blackjack.ts, #490): Jan's bet plaque is asked again on the very pass
+ *     it is answered, which `say` cannot see go by, so it is pressed there.
  *
  * None of those is guessed at here. A verb earns its place by a route needing
  * it, and a table of verbs written before any route exists is a table that will
@@ -53,6 +53,7 @@ import {
   type Action,
   type ActionTable,
 } from "@dreamfactory/engine/web/speedrun/action";
+import { BLACKJACK } from "./blackjack";
 
 /**
  * Give the thing in your hand to somebody, or to something.
@@ -1628,6 +1629,7 @@ const TALK_OUT: Action = {
 
 /** what Dust adds to the engine's vocabulary — see the header */
 export const DUST_ACTIONS: ActionTable = {
+  blackjack: BLACKJACK,
   doorat: DOOR_AT,
   give: GIVE,
   goto: GOTO,

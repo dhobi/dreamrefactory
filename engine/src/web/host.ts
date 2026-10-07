@@ -690,6 +690,16 @@ export class GameHost {
    * set, load that, then hand the bytes over.
    */
   async loadSavedGame(bytes: Uint8Array): Promise<void> {
+    // A DF1 save (Dust) is not this file format at all, and `loadGameV1` opens
+    // the set itself — the way Dust's own page loads one (`dbg.loadSave`).
+    // Parsed as a TAOOT save it failed on the HUD and resolved, so a speedrun
+    // `load()` reported success over the game it had not left.
+    if (this.session.isV1) {
+      this.current?.abandonMovie();
+      if (!(await this.session.loadGame(bytes))) throw new Error(`not a game this engine could load`);
+      this.session.fade.level = 0;
+      return;
+    }
     let save;
     try {
       save = parseSave(bytes);
