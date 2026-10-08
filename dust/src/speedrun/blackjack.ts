@@ -168,6 +168,8 @@ async function backToJan(c: ActionContext, budget: number): Promise<boolean> {
 /** from Jan's bet plaque back to the saloon */
 async function getUp(c: ActionContext, budget: number): Promise<void> {
   await bevel(c, QUIT, `!(${CHOOSING})`, budget);
+  // Jan's goodbye, cut short with ESC as a player would (#525)
+  await converse({ ...c, budget, say: () => {} }, [], "stop", "stop");
   await c.d.hold(`!(${AT_TABLE})`, "the saloon after the table", budget);
   await c.d.settle("quiet", "the saloon after the table", budget);
 }
