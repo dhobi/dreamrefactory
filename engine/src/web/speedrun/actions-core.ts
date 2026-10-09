@@ -1121,8 +1121,9 @@ export const CORE_ACTIONS: ActionTable = {
     rest: true,
     once: true,
     wait: "quiet",
+    voidsTime: true,
     sig: "load(m1p2)",
-    help: "start from a load point written by save() — load(m1p2)",
+    help: "start from a load point written by save() — load(m1p2); instant, so the run's time is not a valid one (menuLoad is on the clock)",
     run: async (c) => loadPoint(c, c.step.args[0]),
   },
   watchfor: {

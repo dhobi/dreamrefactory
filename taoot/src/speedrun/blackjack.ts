@@ -43,19 +43,11 @@ import {
   predicate,
   type Action,
   type ActionContext,
-  type GameMenu,
 } from "@dreamfactory/engine/web/speedrun/action";
+import { PANEL } from "./menu";
 
 /** what each bet is called in the game, and its bevel on Buick's bet plaque */
 const BETS: Record<string, number> = { realneck: 102, rubaiyat: 103 };
-/** the control panel: the life preserver opens it, CTL.STG's levers save and load */
-const PANEL: GameMenu = {
-  open: "life",
-  save: "save",
-  load: "open",
-  close: "ok",
-  shown: `/^ctl/i.test(String(window.dbg.session.stageName || ""))`,
-};
 /** hands the verb plays before it gives up (`max:`) */
 const MAX_HANDS = 20;
 /** the game's verdict on a hand, as the report says it */

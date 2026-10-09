@@ -904,8 +904,8 @@ async function playing(all: Step[], todo: Step[], once = false): Promise<void> {
         (network >= LOAD_SHOWN_MS ? `, ${ms(network)} of loading removed` : "") +
         (hidden >= LOAD_SHOWN_MS ? `, ${ms(hidden)} with the tab hidden removed` : "");
       say(
-        `finished — ${ms(result.total.ms)}, ${result.total.frames} engine frames${removed}`,
-        "good",
+        `finished — ${ms(result.total.ms)}, ${result.total.frames} engine frames${removed}` + voided(result.invalid),
+        result.invalid.length ? "" : "good",
       );
     }
   } catch (e) {
@@ -1917,6 +1917,17 @@ function goToLine(line: number): void {
   editor.reveal(line);
 }
 
+/**
+ * A time that used an instant load says so in its headline, because that is
+ * the line somebody copies into an issue (#523). The first culprit is named;
+ * the rest are counted.
+ */
+function voided(invalid: string[]): string {
+  if (!invalid.length) return "";
+  const more = invalid.length > 1 ? ` and ${invalid.length - 1} more` : "";
+  return ` — NOT A VALID TIME: ${invalid[0]}${more} loads instantly (use menuLoad on the clock)`;
+}
+
 function showCalc(p: CalcProgress): void {
   calcBar.hidden = false;
   calcFill.style.width = `${p.total ? Math.round((p.done / p.total) * 100) : 0}%`;
@@ -1930,7 +1941,7 @@ function showCalcResult(r: CalcResult): void {
     calcFill.style.width = "100%";
     const seeded = r.seed === null ? "" : ` · seed ${r.seed}`;
     calcNum.textContent = `${ms(r.game)} in-game · ${r.frames} frames${seeded} — worked out in ${ms(r.real)}`;
-    say(`this sheet: ${ms(r.game)} in-game, ${r.frames} engine frames${seeded}`, "good");
+    say(`this sheet: ${ms(r.game)} in-game, ${r.frames} engine frames${seeded}` + voided(r.invalid), r.invalid.length ? "" : "good");
     return;
   }
   calcNum.append(`stopped at line ${r.line} after ${ms(r.game)} in-game (${ms(r.real)}) `);

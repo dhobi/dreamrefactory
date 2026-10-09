@@ -49,17 +49,9 @@ import {
   TALK_STATE,
   type Action,
   type ActionContext,
-  type GameMenu,
 } from "@dreamfactory/engine/web/speedrun/action";
+import { PANEL } from "./menu";
 
-/** the panel behind the horn: NEW.FLT's "score" flat, with Save, Open and OK */
-const PANEL: GameMenu = {
-  open: "horn",
-  save: "save",
-  load: "open",
-  close: "OK",
-  shown: `String(window.dbg.session.currentFlat ?? "") === "score"`,
-};
 /** hands the verb plays before it gives up (`max:`) */
 const MAX_HANDS = 100;
 /** the game's verdict on a hand, as the report says it */

@@ -25,7 +25,15 @@ export interface CalcProgress {
 }
 
 export type CalcResult =
-  | { ok: true; game: number; frames: number; real: number; seed: number | null }
+  | {
+      ok: true;
+      game: number;
+      frames: number;
+      real: number;
+      seed: number | null;
+      /** what makes the time not a valid one — instant loads (#523); empty when it stands */
+      invalid: string[];
+    }
   | {
       ok: false;
       seed: number | null;
@@ -81,5 +89,12 @@ export async function calculateSheet(
       seed: driver.seed ?? null,
     };
   }
-  return { ok: true, game: r.total.game, frames: r.total.frames, real: real(), seed: driver.seed ?? null };
+  return {
+    ok: true,
+    game: r.total.game,
+    frames: r.total.frames,
+    real: real(),
+    seed: driver.seed ?? null,
+    invalid: r.invalid,
+  };
 }

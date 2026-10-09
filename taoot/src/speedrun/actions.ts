@@ -39,6 +39,7 @@ import {
   arrow,
   clickThing,
   composeActions,
+  menuVerbs,
   condition,
   converse,
   key,
@@ -52,6 +53,7 @@ import {
 } from "@dreamfactory/engine/web/speedrun/action";
 import { jumpTo, pageButton, jumpableSets } from "./nav/mapjumps";
 import { BLACKJACK } from "./blackjack";
+import { PANEL } from "./menu";
 import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /* ------------------------------------------------------------------ *
@@ -1136,7 +1138,7 @@ export const TITANIC_ACTIONS: ActionTable = {
  * implementation, and the workbench's legend needs both. One table so that a
  * sheet cannot mean one thing to the CLI runner and another in the page.
  */
-export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, TITANIC_ACTIONS);
+export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, menuVerbs(PANEL), TITANIC_ACTIONS);
 
 /** the grammar half of {@link ACTIONS}, for the parser */
 export const VERBS: Record<string, VerbSpec> = verbsOf(ACTIONS);
