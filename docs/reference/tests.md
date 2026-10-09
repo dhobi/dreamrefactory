@@ -523,6 +523,35 @@ The repository's sheet uses 360. Of seeds 1–1000, twelve set the bedsit bomb o
 before the card trick's last line is over, the earliest the flat allows, and of
 those 360 plays the whole sheet fastest: 6:24.9 in-game, against 6:30.4 for 20.
 
+### Saving and loading on the clock
+
+Two pairs of verbs, for two different jobs
+([#523](https://github.com/dhobi/dreamrefactory/issues/523)):
+
+```
+save(m1p2)       load(m1p2)        # load points, instant: for working on a route
+menuSave(m1p2)   menuLoad(m1p2)    # the game's own menu, on the clock: for a run
+```
+
+`save()` and `load()` restore a game on the spot, which is what makes them
+useful while a route is being written, and it is also why a time that used
+`load()` (or Dust's `loadSave()`) is not a time. Such a run still finishes, but
+its headline says NOT A VALID TIME and names the line. Verbs say so with
+`voidsTime` (`engine/src/web/speedrun/action.ts`).
+
+`menuSave()` and `menuLoad()` go the way a player has to: Titanic's life
+preserver, the control panel's save or open lever and the OK lever, with the
+fades both ways; Dust's horn, the panel's barn-door wipe and its button
+presses. Only the game's Save As and Open dialogs are answered at once, and
+those froze the game in the original too. Measured on the shipped saves, a
+`menuSave` costs 2.1 s of game time in Titanic and 1.65 s in Dust, a
+`menuLoad` 0.9 s and 0.6 s. The levers' animations draw on the script dice,
+so a seeded sheet is dealt differently once one is added. `menuLoad()` loads
+only what `menuSave()` wrote in the same game: a point `save()` wrote for free
+would skip the half of the cost the save should have paid. `blackjack` saves
+and loads the same way. Each game names its menu in `src/speedrun/menu.ts`;
+`tests/speedrun/menu-saves.ts` in both games is the machine suite.
+
 ### Contributed sheets
 
 Sheets come in by pull request as plain sheet files in
@@ -590,8 +619,7 @@ the way a player has to: the life preserver, the control panel's lever, the
 fades both ways
 ([#523](https://github.com/dhobi/dreamrefactory/issues/523)). Only the game's
 Save As and Open dialogs are answered at once, and those froze the game in
-the original too. `save()` and `load()` stay load points for working on a
-route, and skip all of that.
+the original too, as with `menuSave()`/`menuLoad()` (see above).
 `max:` (20 hands by default) turns bad luck into an error.
 
 `taoot/tests/speedrun/blackjack.ts`, a machine suite, plays both from the

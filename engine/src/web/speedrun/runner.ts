@@ -89,6 +89,12 @@ export interface RunResult {
   failure: { step: Step; error: Error } | null;
   /** where the game was standing when it stopped — only sampled on failure */
   where: string | null;
+  /**
+   * The lines that make this run's time not a valid one, as "load(m1p2) on
+   * line 12" — each a verb that sets {@link Action.voidsTime} (#523). Empty
+   * for a time that stands.
+   */
+  invalid: string[];
 }
 
 /**
@@ -293,6 +299,7 @@ export async function runSheet(
   const verbs = verbsOf(actions);
   const timings: Timing[] = [];
   const splits: Split[] = [];
+  const invalid: string[] = [];
   let failure: { step: Step; error: Error } | null = null;
 
   // a watch belongs to the run that registered it, not to the process
@@ -539,6 +546,7 @@ export async function runSheet(
     };
     timings.push(timing);
     hooks.onDone?.(timing);
+    if (action.voidsTime) invalid.push(`${step.source.trim()} on line ${step.line}`);
     splitActions++;
     if (failure) break;
   }
@@ -570,5 +578,6 @@ export async function runSheet(
     },
     failure,
     where,
+    invalid,
   };
 }

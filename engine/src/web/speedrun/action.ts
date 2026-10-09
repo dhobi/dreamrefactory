@@ -89,6 +89,17 @@ export type Action = VerbSpec & {
    * Everything else is stopped at the next line instead.
    */
   interruptible?: boolean;
+  /**
+   * Using it makes the run's time not a valid one (#523).
+   *
+   * `load()` and Dust's `loadSave()` restore a game on the spot, with none of
+   * the menu, transitions and button animations a player has to sit through
+   * to load. That is what they are for — starting from a checkpoint while a
+   * route is worked on — and it is why a time that used one is not a time.
+   * The run still finishes and reports; it says it is not valid, and why. A
+   * run that saves and loads on the clock uses `menuSave()`/`menuLoad()`.
+   */
+  voidsTime?: boolean;
 };
 
 /* ------------------------------------------------------------------ *
@@ -1225,6 +1236,62 @@ export async function menuLoad(c: ActionContext, menu: GameMenu, bytes: Uint8Arr
   }
   // Titanic's load lever leaves the panel itself; Dust's stays on its panel
   await closeMenu(c, menu);
+}
+
+/**
+ * `menuSave(m1p2)` and `menuLoad(m1p2)`: a save and a load on the clock, the
+ * way a player makes them — through `menu` (#523). What `save()` and `load()`
+ * do instantly, for working on a route, these do at the price the game
+ * charges, so a run that uses them keeps a valid time.
+ *
+ * `menuLoad` takes only what `menuSave` wrote in this game. A point written by
+ * `save()` was written for free, and loading it would skip the half of the
+ * cost the save should have paid. The marks live in the page, so a reboot
+ * (`reset()`) clears them along with the game they belonged to.
+ */
+export function menuVerbs(menu: GameMenu): ActionTable {
+  const budgetOf = (c: ActionContext): number => Math.max(c.budget, 60_000);
+  return {
+    menusave: {
+      args: [1, 1],
+      rest: true,
+      once: true,
+      wait: "quiet",
+      sig: "menuSave(m1p2)",
+      help: "save through the game's own menu, on the clock — menuSave(m1p2), then menuLoad(m1p2) to go back to it",
+      run: async (c) => {
+        const name = c.step.args[0];
+        if (!c.d.putSave) throw new Error(`this runner cannot keep save files`);
+        const bytes = await menuSave({ ...c, budget: budgetOf(c) }, menu);
+        await c.d.putSave(name, bytes);
+        await c.d.evaluate<boolean>(
+          `((window.__srMenuSaved = window.__srMenuSaved || {})[${JSON.stringify(name)}] = true)`,
+        );
+        c.say(`${(bytes.length / 1024).toFixed(1)} kB`);
+      },
+    },
+    menuload: {
+      args: [1, 1],
+      rest: true,
+      once: true,
+      wait: "quiet",
+      sig: "menuLoad(m1p2)",
+      help: "load what menuSave() wrote, through the game's own menu, on the clock — menuLoad(m1p2)",
+      run: async (c) => {
+        const name = c.step.args[0];
+        const ours = await c.d.evaluate<boolean>(`!!(window.__srMenuSaved || {})[${JSON.stringify(name)}]`);
+        if (!ours) {
+          throw new Error(
+            `menuLoad(${name}) loads what menuSave(${name}) wrote in this game — ` +
+              `put menuSave(${name}) before it, or use load(${name}) to start from a checkpoint`,
+          );
+        }
+        const bytes = c.d.getSave ? await c.d.getSave(name) : null;
+        if (!bytes) throw new Error(`no save called "${name}"`);
+        await menuLoad({ ...c, budget: budgetOf(c) }, menu, bytes);
+      },
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ *

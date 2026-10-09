@@ -47,6 +47,7 @@ import type { VerbSpec } from "@dreamfactory/engine/web/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
 import {
   composeActions,
+  menuVerbs,
   type ActionContext,
   resolveIn,
   verbsOf,
@@ -54,6 +55,7 @@ import {
   type ActionTable,
 } from "@dreamfactory/engine/web/speedrun/action";
 import { BLACKJACK } from "./blackjack";
+import { PANEL } from "./menu";
 
 /**
  * Give the thing in your hand to somebody, or to something.
@@ -1294,6 +1296,7 @@ const LOAD_SAVE: Action = {
   args: [1, 1],
   once: true,
   wait: "quiet",
+  voidsTime: true,
   sig: "loadSave(D1E_001)",
   help: "load one of the disc's own saved games — loadSave(D1E_001). Not load(), which is a checkpoint",
   run: async (c) => {
@@ -1650,7 +1653,7 @@ export const DUST_ACTIONS: ActionTable = {
  * (`engine/src/web/speedrun/runner.ts`, `runSheet`) — otherwise a sheet means one
  * thing in the page and another to the runner.
  */
-export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, DUST_ACTIONS);
+export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, menuVerbs(PANEL), DUST_ACTIONS);
 
 /** the grammar half of {@link ACTIONS}, for the parser */
 export const VERBS: Record<string, VerbSpec> = verbsOf(ACTIONS);
