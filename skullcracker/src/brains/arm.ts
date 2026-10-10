@@ -1,10 +1,9 @@
 /**
  * LAB's ARM — `initarm`, `0x4187a0`, and there are ten of them in the level.
  *
- * ## It is a jump table after all
+ * ## It is a jump table
  *
- * The note this port was written from said `0x4187a0` dispatches with an
- * if-chain. It does not: `0x4187cb` is
+ * `0x4187a0` does not dispatch with an if-chain: `0x4187cb` is
  *
  * ```
  *   movsx ecx, word ptr [esi+0x18]
@@ -21,7 +20,7 @@
  *   4  0x418992   5  0x418a6c   6  0x418ab2   7  0x418acd   8  0x418af6
  * ```
  *
- * The if-chain the note meant is one level down, inside state 2: `0x4188a4`
+ * The if-chain is one level down, inside state 2: `0x4188a4`
  * reads the band out of the frame and tests it against 0, 1 and 2 with three
  * `cmp`s rather than a second table.
  *

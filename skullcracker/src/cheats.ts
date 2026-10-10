@@ -46,7 +46,7 @@ export interface Cheat {
 /**
  * The eight, in the order their lengths put them in `0x404140`.
  *
- * Two of them are not what this port had written down. **`jetson` is TIME, not
+ * Two of them are not what they look like. **`jetson` is TIME, not
  * score**: `0x40d350`'s argument is a signed one, positive sets `[0x4a4d68]` and
  * negative adds to it, and `[0x4a4d68]` is the mission clock — the same word
  * every chapter's entry function fills from its book's `timer` record. And

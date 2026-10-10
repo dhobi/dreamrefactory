@@ -39,13 +39,13 @@
  *
  * The one input this page takes is `session.onHotspotClick`, which the engine
  * fires from the bottom of the hotspot dispatch chain once every handler in it
- * has run. Listening for `pointerdown` instead was wrong twice over, and both
- * showed up on a phone first: a finger is ambiguous until it moves, so
- * TouchGestures holds the press back for 220 ms, and a page that judged on
- * pointerdown ran BEFORE the game — opening the door, and then watching the
- * game's own `setupprop` arrive and restart the animation from shut. The same
- * listener could not tell a tap on a door from a swipe that merely started on
- * one, so walking away from a door opened it.
+ * has run. Listening for `pointerdown` instead is wrong twice over, both on a
+ * phone: a finger is ambiguous until it moves, so TouchGestures holds the press
+ * back for 220 ms, and a page that judged on pointerdown would run BEFORE the
+ * game — opening the door, and then watching the game's own `setupprop` arrive
+ * and restart the animation from shut. The same listener cannot tell a tap on a
+ * door from a swipe that merely started on one, so walking away from a door
+ * would open it.
  */
 import {
   doorSpot,

@@ -171,10 +171,10 @@ export const CHOOSER_SIZE = { width: SCREEN_W, height: SCREEN_H } as const;
  * Validated against every EDITION code and not just the six languages
  * ({@link isEditionCode}), which is the difference between the demo booting and
  * the demo bouncing off this function into a chooser whose art has no button for
- * it: `?edition=demo` was a code the chooser could not offer AND, while this
- * checked `isLanguageCode`, a code that did not count as already chosen — so the
- * one edition that can only be picked from the page's own row was the one edition
- * the page then refused to act on.
+ * it: `?edition=demo` is a code the chooser cannot offer, and checked with
+ * `isLanguageCode` it would not count as already chosen — so the one edition
+ * that can only be picked from the page's own row would be the one edition the
+ * page refused to act on.
  */
 export function preselectedEdition(opts: {
   query?: string | null;

@@ -13,8 +13,8 @@
  * no script, set, hotspot or film sees a different screen, and the pointer maps
  * back to it as before: every shell converts a click with the canvas's width and
  * height SEPARATELY (`(clientX - left) / width * screenW`, and the same for y),
- * which a non-uniform stretch does not disturb. The one thing that did assume a
- * uniform scale is the cursor, which {@link CursorSheet.css} now takes per axis.
+ * which a non-uniform stretch does not disturb. The one thing that would assume a
+ * uniform scale is the cursor, which {@link CursorSheet.css} takes per axis.
  *
  * ## Why only fullscreen
  *

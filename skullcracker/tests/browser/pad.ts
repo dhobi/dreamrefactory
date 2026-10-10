@@ -4,18 +4,17 @@
  *   npm run dev -w skullcracker                # in one terminal
  *   npm run test:browser:pad -w skullcracker   # in another
  *
- * The page used to answer a finger with four invisible regions — the left half
- * of the canvas held LEFT, the right half RIGHT, the top third UP-and-jump, the
- * bottom third DOWN — and three of the original's eight actions (PUNCH, KICK,
- * INV) could not be reached at all. A touchscreen could walk the whole game and
- * never hit anything, which is the one thing this game is. The pad replaces it:
- * four directions at the left of the picture, and INV, JUMP, PUNCH and KICK at
- * the right — all eight of the original's own actions.
+ * The pad is four directions at the left of the picture, and INV, JUMP, PUNCH
+ * and KICK at the right — all eight of the original's own actions. The picture
+ * itself is not a control: invisible regions over the canvas (left half LEFT,
+ * right half RIGHT, top third UP-and-jump, bottom third DOWN) would leave PUNCH,
+ * KICK and INV unreachable, and a touchscreen could walk the whole game and
+ * never hit anything, which is the one thing this game is.
  *
  * What this suite is for is that the pad is the ONLY control on a machine with
  * no keyboard, so every one of its eight keys has to be there and be the thing
- * a thumb lands on, and the old behaviour has to be provably gone rather than
- * merely unmentioned.
+ * a thumb lands on, and the picture has to provably not walk rather than
+ * merely not be mentioned.
  *
  * ## How it presses
  *
@@ -33,11 +32,10 @@
  *     with `elementFromPoint` before it is pressed: if the pad were behind the
  *     canvas, or off the bottom of it, the presses below would sail into the
  *     picture and the "no walking" assertions would all pass.
- *   - **A short press cannot tell the old page from the new one.** The old
- *     regions held their direction while the finger was down, so a TAP on the
- *     old left half moved the player a pixel or two either way. The A/B here
- *     holds the old region down for 800ms — on the old page that is ~96px of
- *     walking, and on this one it must be nothing at all.
+ *   - **A short press cannot tell a walking picture from a still one.** A
+ *     region that holds its direction while the finger is down moves the
+ *     player only a pixel or two on a TAP. So the left half is held down for
+ *     800ms — ~96px of walking if it walked, and here it must be nothing at all.
  *   - **"the state changed" is not the assertion.** The keys pressed here are
  *     checked for the state they produce — walking, `headbutt` — out of the
  *     status line the page already writes. What every one of the eight
@@ -80,7 +78,7 @@ console.log(`ok    the pad shows itself on a phone, with all ${KEYS.length} keys
 // ---- 2 — and each key is really the topmost thing at its own middle ---------
 //
 // Without this the presses below could all be landing on the canvas, and a
-// suite that proved "the picture does not walk any more" would pass on a pad
+// suite that proved "the picture does not walk" would pass on a pad
 // that was never hit once.
 const centre = async (act: string): Promise<{ x: number; y: number }> => {
   const box = await page.locator(`#pad button[data-act="${act}"]`).boundingBox();
@@ -136,10 +134,10 @@ const hold = async (acts: string[], ms: number): Promise<string[]> => {
 };
 const saidWhile = (seen: string[], what: RegExp): boolean => seen.some((s) => what.test(s));
 
-// ---- 3 — the old regions are gone ------------------------------------------
+// ---- 3 — the picture itself does not walk ----------------------------------
 //
-// The middle of the left half of the picture: LEFT, for as long as a finger was
-// on it, on every build of this page until now. It is taken at 40% of the
+// The middle of the left half of the picture, where a half-canvas region would
+// read LEFT for as long as a finger is on it. It is taken at 40% of the
 // height, which is above the pad's own keys — asserted, not assumed, by the
 // `elementFromPoint` below.
 const canvas = (await page.locator("#screen").boundingBox())!;

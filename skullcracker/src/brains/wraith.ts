@@ -41,7 +41,7 @@
  *   band 4    inside 60    0x424bd1  the claw, and only if it is level with him
  * ```
  *
- * The first of those is the one the old reading missed entirely. At long range
+ * The first of those is the one that is easy to miss. At long range
  * this thing does not walk: `0x4248e9` never touches a script, it pushes a pair
  * of numbers through `0x42f8b0` — which divides them by `obj+0xe`, the class's
  * divisor of ten, and ADDS them to `obj+0xa`/`obj+0xc`. So the wraith accelerates

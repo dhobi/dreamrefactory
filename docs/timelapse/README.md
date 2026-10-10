@@ -150,7 +150,8 @@ with the lantern unlit (`J.862`, which is i005's).
 
 The roll is seeded (`SEED`, 19961031), so a run is the same run every time.
 
-Playing it through found these in the engine, each fixed:
+Playing it through is what settled these engine rules, each with the place it
+shows:
 
 - **The last region wins** where two overlap (TI.EXE `0x44703b` walks a flat's
   table backwards): the time gate's buttons lay inside its `down` region.
@@ -159,14 +160,14 @@ Playing it through found these in the engine, each fixed:
 - **A click made while a loop runs is replayed** when there is no room to do it.
 - **A film's first segment with more after it plays out** instead of waiting
   for a click (`E020.Mov` after the red gem).
-- **`closeshopfile` finds a shop by its stem or its ref name**, as it already
-  did for DreamFactory 5: the snakes game's props stayed on the screen.
-- **`propxy (name, 3)` answers the point**, not x alone: the red spiders never
-  turned, and the Sun temple's stones shuffled off the board.
-- **A key is a tracked script**, as a click is (not in DreamFactory 5): a loop
-  fired into a step's transition and broke the gold heart's cooling.
+- **`closeshopfile` finds a shop by its stem or its ref name**, as for
+  DreamFactory 5, or the snakes game's props stay on the screen.
+- **`propxy (name, 3)` answers the point**, not x alone: otherwise the red
+  spiders never turn, and the Sun temple's stones shuffle off the board.
+- **A key is a tracked script**, as a click is (not in DreamFactory 5): otherwise a loop
+  fires into a step's transition and breaks the gold heart's cooling.
 - **A script's own loops fire in its `forceupdate`** unless that would re-enter
-  one: the match could not light the Anasazi's fire while held.
+  one: otherwise the match cannot light the Anasazi's fire while held.
 - **`pointinprop` tests the frame the prop shows, and its pixels** (TI.EXE
   `0x417120`): the tablets' 45 glyphs are one group told apart by degree.
 - **`plugin ("scrollflat")` turns**: Atlantis calls `lefttoframe` directly.

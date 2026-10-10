@@ -6,9 +6,8 @@
  *   npm run test:browser:endgame -w taoot  # headless, same route, voice waits skipped
  *
  * The route reaches this in segment 27 and only there, after a whole carried
- * game — so every look at the ending used to cost the whole run. `SEGMENTS=27`
- * (which loads out/checkpoints/m4anti.ti) works now — the load comes back
- * inside Zeitel's ambush and the gate answers it (TODO 7a, fixed) — but it
+ * game. `SEGMENTS=27` (which loads out/checkpoints/m4anti.ti) works — the load
+ * comes back inside Zeitel's ambush and the gate answers it (TODO 7a) — but it
  * still plays the whole segment. So this deals the boat deck by hand,
  * the way BOOTFILE's `advanceday("startdisk2")` deals the sinking, sets
  * `clock = "endgame"` and calls `advanceday()` — which is the whole ending:
@@ -16,10 +15,10 @@
  * `quit()`.
  *
  * It reports what is on the screen and what is playing twice a second and
- * screenshots every change of movie or flat into out/endgame — because every
- * bug this was written for was a picture: the closing narration under a black
- * that nothing lifted, the boat deck we left still covering the top of the
- * screen, prozac.mov showing in the strip below it. The soundtrack half is in
+ * screenshots every change of movie or flat into out/endgame — because what can
+ * go wrong here is a picture: the closing narration under a black that nothing
+ * lifts, the boat deck we left still covering the top of the screen, prozac.mov
+ * showing in the strip below it. The soundtrack half is in
  * the report rather than the pictures: `theme=` is what is playing, and the
  * sinking's `sink1.trk` has to be gone by the time leave.mov starts.
  *
@@ -94,19 +93,17 @@ const line = (s: any) =>
 /**
  * Get to the boot menu, pressing a real Escape past whatever is in the way.
  *
- * A bare `waitForFunction` for `awaitingInput` could not do it on a machine that
+ * A bare `waitForFunction` for `awaitingInput` cannot do it on a machine that
  * HAS the intro film — which, since the build compiles one from the tracked GIF,
- * is every machine including CI. The film used to be absent from a checkout, so
- * CI booted straight to the menu and only local runs sat through a 120 s timeout
- * (#63).
+ * is every machine including CI (#63).
  *
  * Three states to press past, which is why this is a poll rather than a wait:
  *
  * - the Nightdive intro. A MOV in its OWN MoviePlayer (taoot/src/nightdive.ts), so
  *   `dbg.viewer` is still null and no viewer predicate can see it. It also only
  *   appears once its 6 MB have been fetched, so a single check at t=0 finds
- *   nothing — that is the trap this walked into first. ESC presses past the
- *   FILM; since #171 the question that follows carries no skip flag, so it has
+ *   nothing. ESC presses past the FILM; the question that follows carries no
+ *   skip flag (#171), so it has
  *   to be clicked — YES, because NO navigates to gog.com.
  * - the boot's own clips, in the viewer, with no regions to wait on.
  * - nothing yet: a fetch in flight, so wait.
@@ -252,11 +249,9 @@ async function main(): Promise<void> {
     try {
       s = await page.evaluate(SAMPLE);
     } catch {
-      // quit() used to reload the page and this was how the test knew it had
-      // worked. It restarts in place now, so a navigation here is the OLD
-      // behaviour coming back — and it takes the run with it (the full
-      // playthrough reported "Execution context was destroyed" and then read the
-      // theme off a dead page).
+      // quit() restarts in place, so a navigation here is a reload — and it
+      // takes the run with it ("Execution context was destroyed", and then the
+      // theme read off a dead page).
       log("    the page NAVIGATED — quit() is supposed to restart in place");
       navigated = true;
       break;

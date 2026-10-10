@@ -238,7 +238,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
  * keep their whole track as a run of records named by disc offset
  * ("disk 376832", 8 KiB apart) and list only the first 48 in the order:
  * v104a.move's 837 records are 155.5 s, its 1556 frames at 100 ms each, and the
- * order alone is 8.9 s that looped under the rest of the picture (#460). A
+ * order alone is 8.9 s that would loop under the rest of the picture (#460). A
  * stream is played record by record, to the end.
  */
 export function bedOrder(order: number[], names: string[]): number[] {

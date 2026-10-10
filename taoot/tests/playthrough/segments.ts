@@ -470,8 +470,8 @@ export const PLANT_LEVELS = new Set(["boiler", "turbine", "steamtank", "condenso
  * that instant is a count of frames. Measured on two runs of identical code, one
  * passed and the other came out `boilpres 10937` against a golden `12500`,
  * `valvpres 1562` against `0`, `boiltemp`/`condtemp` -24 against -32. The same
- * beat had previously diverged on `props.light` instead — one race wearing
- * whichever field the frame count happened to leave unsettled.
+ * beat can diverge on `props.light` instead — one race wearing whichever field
+ * the frame count happens to leave unsettled.
  */
 export const PLANT_GAUGES = new Set([
   "boilpres", "valvpres", "seaspres", "condpres", "boiltemp", "condtemp",
@@ -1262,7 +1262,7 @@ export async function necklace(s: Story): Promise<void> {
  *                 dead end — two plaques, "I haven't found the Rubaiyat" and
  *                 "I'll do better next time", `joneshint = 1`, no advance. This
  *                 is why segment 5 has to come out of the boiler room holding the
- *                 book; the version that let Vlad have it could reach phase 4 and
+ *                 book; a route that lets Vlad have it can reach phase 4 and
  *                 never leave it.
  *   the debrief   past the gate it is a three-flag loop, and 109 only appears once
  *                 all three are set: 103 is the decoded telegram (`zeitclue =
@@ -1277,8 +1277,7 @@ export async function necklace(s: Story): Promise<void> {
  * The necklace sub-plot rides along in front of the debrief — see {@link necklace}
  * for why it has to be somewhere in missions 1-3 and why this is the first window
  * that works. Nothing in it touches what Penny asks about, and Sasha's kickout
- * leaves us on A deck, so the trip to F deck below starts from a different place
- * than it used to and is otherwise unchanged.
+ * leaves us on A deck, which is where the trip to F deck below starts.
  */
 export async function segment6(s: Story): Promise<void> {
   const { nav, d, beat } = s;
@@ -1342,13 +1341,10 @@ export async function segment6(s: Story): Promise<void> {
  *                  where 101 ("Could I help?") hands over `thayergram` and sets
  *                  the owner to "sendgram".
  *   leaving         ESC, and only ESC — see the comment at the gesture.
- *   Morrow          his permission SURVIVES the mission rollover, and the earlier
- *                   reading of this route — that he heads you off twice and has to
- *                   be persuaded again — was an artefact of the port not saving
- *                   actor owners. A checkpoint taken at the end of segment 6 came
- *                   back with every actorowner at its default, so he had forgotten
- *                   letting you in. Now that they are saved (engine/src/df/savegame.ts
- *                   SavedActor) he remembers: `resetpupvars()` on the rollover
+ *   Morrow          his permission SURVIVES the mission rollover; he does not head
+ *                   you off twice. Actor owners are saved (engine/src/df/savegame.ts
+ *                   SavedActor), so a checkpoint taken at the end of segment 6
+ *                   remembers letting you in: `resetpupvars()` on the rollover
  *                   zeroes the puppet's GLOBALS (morrowphase goes to 0) and leaves
  *                   `actorowner("morrow") = "enterwireless"` alone, which is what
  *                   DECKBD.SET c110 actually reads. The retry below is kept
@@ -1357,11 +1353,9 @@ export async function segment6(s: Story): Promise<void> {
  *   the key         WIRELESS.STG c29 `tx()` promotes "sendgram" to "sentgram" on
  *                   ANY morse key, so one tap at the apparatus sends it.
  *
- * This used to be one segment rather than two, because `actorowner` did not
- * survive a savegame and a checkpoint taken here brought the Purser back at
- * "none" with his errand forgotten. It is split at m2gram now that the actor
- * container is written (docs/engine/formats/savegame.md), and segment 8's first
- * assertion is his rung — so the playthrough is the regression test for it.
+ * Split at m2gram, which depends on the actor container being written
+ * (docs/engine/formats/savegame.md): segment 8's first assertion is the
+ * Purser's rung, so the playthrough tests it.
  */
 export async function segment7(s: Story): Promise<void> {
   const { nav, d, beat } = s;
@@ -1448,10 +1442,10 @@ export async function segment7(s: Story): Promise<void> {
  * Segment 8 — sending Mr. Thayer's telegram, which means working the wireless
  * set for the first time.
  *
- * Starts from a checkpoint like every other segment. It could not, until actor
- * owners were saved (they are in the format on their own grid — engine/src/df/savegame.ts
- * SavedActor): a checkpoint taken here used to come back with the Purser at
- * "none", no memory of the errand, and this segment's first assertion failing.
+ * Starts from a checkpoint like every other segment, which depends on actor
+ * owners being saved (they are in the format on their own grid —
+ * engine/src/df/savegame.ts SavedActor): without them a checkpoint taken here
+ * brings the Purser back at "none", no memory of the errand.
  *
  * A save records the room, not the close-up that was open over it — so a resumed
  * run is standing in the wireless room and opens the apparatus again, which is
@@ -1459,7 +1453,7 @@ export async function segment7(s: Story): Promise<void> {
  * `WIRELESS.SHP openshop`, which is why the set is found powered down whichever
  * way the segment is reached.
  *
- * What it took to find, all of it now in nav/wireless.ts: the morse key is dead
+ * What it takes, all of it in nav/wireless.ts: the morse key is dead
  * unless `propowner("tapperdown") = "tx"`, only `setuptx()` sets that, and
  * `openflat()` calls it only if the set is ALREADY powered, switched to send and
  * tuned when the operating flat opens. So this is four gestures in a fixed order
@@ -1720,7 +1714,7 @@ export async function segment10(s: Story): Promise<void> {
   const reception = await nav.travel("recept1c");
   expect(reception.ok, reception.reason).toBe(true);
 
-  // -- Max first, and that IS the fix ----------------------------------------
+  // -- Max first ---------------------------------------------------------------
   // This is the first time mission 2 walks into recept1c, and `RECEPT1C.SET
   // openset` puts Max there for the whole of it. His idle (gang.cst c350,
   // `maxidle`) is:
@@ -1738,9 +1732,9 @@ export async function segment10(s: Story): Promise<void> {
   // puppet holds the dispatch, a visible puppet makes SetViewer.busy true, so
   // every gesture is swallowed and the navigator paces on the spot until its
   // budget runs out. Measured: `gave up hunting for cufflink1 in recept1c`, in a
-  // full browser run, which then fell back to loading and cost 46 of the run's 50
-  // divergences downstream. Headless does not lose it — but it is the same race
-  // and only the pacing differs, which is the sort of thing that stops being true.
+  // full browser run, which then falls back to loading and costs 46 of the run's
+  // 50 divergences downstream. Headless does not lose it — but it is the same
+  // race and only the pacing differs.
   //
   // Nothing is skipped by choosing the moment: `hasattention` accosts by sending
   // Max his own `mousedown(0)`, which is the same `walktopuppet` a click gives
@@ -1781,14 +1775,11 @@ export async function segment10(s: Story): Promise<void> {
   expect(d.propOwner("cufflink"), "Straus's cufflink").toBe("frank");
   expect(s.actorOwner("purs"), "and addinven told the Purser").toBe("foundcuff");
 
-  // The segment stops here, in the close-up, deliberately — and that is now a
-  // choice rather than a workaround. It used to be the one cross-host divergence
-  // nobody could close: this flat's OK closes headless and would not in a browser.
-  // The button was innocent. `RECEPT1C.SET openset` places Max in this room for
-  // the whole of mission 2, `hasattention(4)` sends his own mousedown after four
-  // seconds of proximity without asking what you are doing, and the OK was being
-  // pressed into an engine held by his conversation. `actordist` answers the 32000
-  // not-present sentinel through a stage flat now (docs/taoot/verification.md), so the
+  // The segment stops here, in the close-up, deliberately — a choice rather than
+  // a workaround. `RECEPT1C.SET openset` places Max in this room for the whole of
+  // mission 2, and `hasattention(4)` sends his own mousedown after four seconds of
+  // proximity without asking what you are doing. `actordist` answers the 32000
+  // not-present sentinel through a stage flat (docs/taoot/verification.md), so the
   // close-up stops the clock instead of running it down, and the OK closes on the
   // first press in both hosts. Leaving it up costs nothing — a savegame records
   // the room and not the close-up over it — so it stays as written, which is one
@@ -2206,10 +2197,8 @@ export async function segment13(s: Story): Promise<void> {
   // answers.
   //
   // But he is MEANT to approach you here — c837 calls `hasattention(2)` — and
-  // since frame() became clock-paced (60/framerate Hz off the clock rather than
-  // one per host callback) that fires while we are still walking in. It used to
-  // take three times as long headless, so the route always got to him first and
-  // this read as "hasattention is not implemented". It is; he just has to be
+  // with frame() clock-paced (60/framerate Hz off the clock rather than one per
+  // host callback) that fires while we are still walking in. He just has to be
   // given two seconds — `smethidle` re-arms every 20 steps and calls
   // `hasattention(2)` while `realdist(me) < hotdist()`, dropping the claim
   // (`clearattention`) on any firing from outside it.
@@ -3121,10 +3110,10 @@ export async function segment24(s: Story): Promise<void> {
   // Wait for the mission to have actually TURNED OVER before the beat, not just
   // for the phase number: `advancephase()` into mission 4 changes set to c73 and
   // deals mission 4's world through `inven.shp initprops` (the antidote, the baby,
-  // the boat pass). The browser run diverged here on exactly that — set "none"
-  // mid-load against a golden "c73", and three props not yet dealt — because how
-  // far a transition has got when a beat is taken depends on frames drawn. Waiting
-  // for the far side of it is the fix; nothing here is masked.
+  // the boat pass). A beat taken mid-transition reads set "none" against a
+  // golden "c73", and three props not yet dealt, because how far a transition
+  // has got when a beat is taken depends on frames drawn. Waiting for the far
+  // side of it is the answer; nothing here is masked.
   await s.waitFor(
     () => d.setName() === "c73" && d.propOwner("antidote") === "zeit",
     "mission 4 to open in Frank's cabin",
@@ -3152,9 +3141,8 @@ export async function segment24(s: Story): Promise<void> {
  * and there are six of them, which is what the six `sink0..5.trk` themes are.
  *
  * **Which is why this segment is short.** `serviceGameClock` runs on both hosts
- * now — it used to be gated on `hasRealFrames`, which froze the sinking in the
- * host that writes the goldens and made every mission-4 golden the trace of a
- * ship that isn't sinking. Ungated, the two agree to the minute, because
+ * — gated on `hasRealFrames` it would freeze the sinking in the host that writes
+ * the goldens. Ungated, the two agree to the minute, because
  * `canadvance()` pins hrs/min at each threshold until `sinkmovie()` has played
  * (docs/taoot/mission-flow.md). What still differs is how many real seconds a host
  * spends between beats, so a mission-4 segment has a wall-clock budget it can
@@ -3340,12 +3328,12 @@ export async function bomb(s: Story): Promise<void> {
  * refuses it.** Zeitel has poisoned Lady Georgia and will hand over the antidote
  * for the painting — `zeit2.pup`'s `poison()` → `savegeorgia()` → `givepaint()`,
  * which does `giveinven("painting", "zeit")` and `addinven("antidote")` in the same
- * breath. The route used to take that deal and buy the painting back with a boat
- * pass off Buick's blackjack table, and the trouble with that is not the morality:
+ * breath. Taking that deal means buying the painting back with a boat pass off
+ * Buick's blackjack table, and the trouble with that is not the morality:
  * `shuffle()` is 52 draws off the seeded stream, so which hand the table deals is a
  * property of every step the run took to get there. Correcting six door guards in
- * the ship graph turned a winning hand into two busts (docs/reference/route.md), and with
- * the pass went the painting, `twohappens`, and the good ending.
+ * the ship graph turns a winning hand into two busts (docs/reference/route.md), and with
+ * the pass go the painting, `twohappens`, and the good ending.
  *
  * The two ways to keep `twohappens = false` are therefore: **win a hand of
  * blackjack, or never let go of the painting.** Only one of them is the route's to
@@ -3364,17 +3352,17 @@ export async function bomb(s: Story): Promise<void> {
  * Her `clarisdream()` needs BOTH of its questions answered before it lets go
  * (`while f1 = 0 | f2 = 0`), so the route says 101 and then 102.
  *
- * The shawl is a souvenir now, and the route takes it because it cannot refuse it:
+ * The shawl is a souvenir, and the route takes it because it cannot refuse it:
  * `clarisdream()` ends on `sendtoshop("inven.shp", addinven("shawl"))` and only then
  * sets `clarisphase = 1`, so owning it is the cheapest proof her puppet ran to the
  * end — which is all the `waitFor` below is asking.
  *
- * It used to be the point of the trip. `vlad2.pup`'s `tradevlad()` takes it in
- * exchange for any one thing Vlad is holding, and one of those is the real necklace
- * — which is one of the four ownerships the closing narration reads (narend.stg
- * `worldwar1()`). That was retired segment 28, and the necklace sub-plot in mission 1
- * phase 4 ({@link necklace}) makes `propowner("realneck")` "frank" from the first
- * hour instead, so there is nothing left to trade for.
+ * `vlad2.pup`'s `tradevlad()` takes it in exchange for any one thing Vlad is
+ * holding, and one of those is the real necklace — which is one of the four
+ * ownerships the closing narration reads (narend.stg `worldwar1()`). The
+ * necklace sub-plot in mission 1 phase 4 ({@link necklace}) makes
+ * `propowner("realneck")` "frank" from the first hour instead, so there is
+ * nothing left to trade for.
  *
  * **Two minutes a conversation, and that is the clock.** `gang.cst`'s
  * `prepuppet()` does `min = min + 2` at `mission = 4`, and `doclaris()` and the
@@ -3516,14 +3504,13 @@ const JONES_STAND = { views: ["view211", "view212"], scene: "scene44" };
  *   `futures()`     all three false is "7,50,51,51b,52,53,54,proz", the one arm
  *                   that sets `mission = "good"` and plays the credits
  *
- * So the ending is scored on the bag, and the route now arrives with all four of
+ * So the ending is scored on the bag, and the route arrives with all four of
  * those ownerships ours — which is the whole of `futures()`'s first arm and the only
  * one that sets `mission = "good"`:
  *
  *   the Rubaiyat   ours since the coal bunker, mission 1 phase 3
  *   the necklace   ours since mission 1 phase 4 — the necklace sub-plot
- *                  ({@link necklace}), which is what let the turbine-room trade
- *                  that used to be a segment of its own be dropped altogether
+ *                  ({@link necklace}), so there is no turbine-room trade
  *   the painting   ours because segment 26 refuses Zeitel's deal. Lady Georgia dies
  *                  of the poison for it; the alternative is to hand the painting
  *                  over and win it back at Buick's blackjack table, and what that
@@ -3594,11 +3581,10 @@ export async function segment27(s: Story): Promise<void> {
   // Which conversation it IS has to be read off the plaques, because the flag that
   // says so (`jonesphase`) is only set at the END of their scene.
   // Nothing brings them sooner — but nothing has to be waited out on its own
-  // either, and two waits used to sit here doing exactly that: ninety seconds of
-  // a predicate that cannot hold, for the frame gate, and then a second wait for
-  // phase 1 that the wait at the top of this segment has already made true
-  // (nothing between them can lower `phase`). Both were dead time in front of a
-  // loop that IS the wait: each try presses up, and a press that lands before
+  // either: a wait for the frame gate, or for phase 1 (which the wait at the top
+  // of this segment has already made true, and nothing between them can lower),
+  // would be dead time in front of a loop that IS the wait: each try presses
+  // up, and a press that lands before
   // the gate opens is an ordinary walk along the boat deck which spends ~200
   // frames of the 2000 the gate wants. A carried game arrives with `frame()` in
   // the tens of thousands and takes the boat on the first try; a resumed one

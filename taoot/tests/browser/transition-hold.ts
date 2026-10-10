@@ -166,7 +166,7 @@ const check = (name: string, ok: boolean, detail = ""): void => {
 /**
  * Every composite in `[from, to)` that put a LIT world on the canvas. Two things
  * make a composite harmless and both have to be excluded, or the probe reports
- * the fix as the bug: a composite while the screen belongs to a movie is the
+ * a correct hold as the bug: a composite while the screen belongs to a movie is the
  * movie's own frame, and one at a fade level of 1 is black however lit the thing
  * it drew was — `paint` applies the level, so that is a black rectangle over a
  * black screen.

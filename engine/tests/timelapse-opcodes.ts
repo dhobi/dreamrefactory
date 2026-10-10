@@ -376,12 +376,12 @@ test("a reveal reaches the right-hand column of a 640-wide screen", async () => 
   const { session, dir } = await scene();
   await fire(session, "arm");
   // x = 634, so the aperture's right edge is at 643 — past the screen, which the
-  // blit must clip rather than wrap into the next row. And 634 is past the 512
-  // this engine's framebuffer used to be fixed at.
+  // blit must clip rather than wrap into the next row. And 634 is past 512, so a
+  // framebuffer fixed at Titanic's width cannot pass this.
   await fire(session, "aim", [634, 240]);
   dir.paintWorldInto();
   // on the diamond's horizontal axis, 5 px from its centre — inside the shape and
-  // 122 px past the 512 this engine's framebuffer used to be fixed at
+  // 122 px past Titanic's 512
   expect(slotAt(dir, W - 1, 240)).toBe("hidden");
   expect(slotAt(dir, W - 1, 200), "clipped, not wrapped into another row").toBe("visible");
 });
@@ -472,8 +472,8 @@ test("the memory report keeps Timelapse on the turn path this port implements", 
   expect(await ask("sysmem () / 1024 < 10000")).toBeTruthy();
   // ...and they are REGISTERED, which the two lines above cannot tell on their
   // own: an unregistered builtin answers 0, and 0 is under both thresholds too.
-  // So the flag came out right by accident before this, and a log line per boot
-  // was the only sign either question had been asked.
+  // Unregistered, the flag would come out right by accident, with a log line per
+  // boot the only sign either question had been asked.
   expect(await ask("freemem ()")).toBeGreaterThan(0);
   expect(await ask("sysmem () > freemem ()"), "a machine has more than is free of it").toBeTruthy();
 });
@@ -481,10 +481,10 @@ test("the memory report keeps Timelapse on the turn path this port implements", 
 /**
  * `sendtobootfx(GameOpen2())` — the SINGLE-argument form, where the target is
  * implicit, and the one place in the `sendto*` family where the `fx` suffix
- * changed which object answered.
+ * could change which object answers.
  *
- * The dispatch loop chose the implicit target with `cmd === "sendtoboot"`, so the
- * `fx` spelling fell through to the STAGE. Timelapse asks it once, and it is the
+ * Choosing the implicit target with `cmd === "sendtoboot"` alone would let the
+ * `fx` spelling fall through to the STAGE. Timelapse asks it once, and it is the
  * last thing the game ever does: after the ending,
  *
  *     if questiondialog ("Would you like to open a saved game?")
@@ -492,7 +492,7 @@ test("the memory report keeps Timelapse on the turn path this port implements", 
  *         if not sendtobootfx (GameOpen2 ())
  *             quit ()
  *
- * — so a call that reached the wrong object read as a refusal, and the game quit
+ * — so a call that reaches the wrong object reads as a refusal, and the game quits
  * on the player instead of offering the dialog. The decoy below is what makes
  * this a real test: the flat carries a `GameOpen2` of its own, answering
  * differently, so "did it reach the boot" cannot be confused with "did it reach
@@ -501,9 +501,9 @@ test("the memory report keeps Timelapse on the turn path this port implements", 
 /**
  * `sendtopost` addresses the BOOT's containers, and Timelapse has 110 of them.
  *
- * The dispatch loop registers it as a deferred form and then hands anything that
- * is not `sendtoboot` the STAGE as its implicit target — so all 110 resolved to a
- * script with no such handler and answered 0 without a word. Every one of the
+ * Handed the STAGE as its implicit target, as the other deferred forms are, all
+ * 110 would resolve to a script with no such handler and answer 0 without a
+ * word. Every one of the
  * seven handlers they name (`gotostage` 58 times, `jumptoframe` 29,
  * `righttoframe`, `lefttoframe`, `invdropcur`, `gototheme`, `invnewprop`) is
  * defined in the BOOTFILE library and nowhere else in the corpus, which is what
@@ -511,9 +511,9 @@ test("the memory report keeps Timelapse on the turn path this port implements", 
  *
  * What it looks like is the cave: the four views that approach the lantern each
  * carry a `Lantern` region whose entire mousedown is `sendtopost (jumptoframe
- * (873))`, so the lamp showed a `touch` cursor and clicking it did nothing.
- * Measured on the discs (i0090.867/.877/.967) — each now walks to i0090.873, and
- * before this stayed where it was. The other 58 are stage-to-stage moves.
+ * (873))`, so a miss shows the lamp with a `touch` cursor and a click that does
+ * nothing. Measured on the discs (i0090.867/.877/.967) — each walks to
+ * i0090.873. The other 58 are stage-to-stage moves.
  */
 test("sendtopost reaches the boot library, where all of its handlers live", async () => {
   const { session } = await scene();
@@ -538,9 +538,8 @@ test("sendtobootfx addresses the boot, not the stage", async () => {
 /**
  * `currentstage()` — the stage's own name, with its FILE in `result()`.
  *
- * Not one of the six missing opcodes: this one was REGISTERED and answering the
- * wrong string, which is the harder kind of gap to see. It answered the filename,
- * and on Titanic that is indistinguishable from the right answer because all
+ * Answering the filename instead is the hard kind of gap to see: on Titanic it
+ * is indistinguishable from the right answer because all
  * fifteen of its stages store their own filename in the name field. Timelapse's
  * `p.stg` is called `"interface"`, and its space bar is
  *
@@ -549,9 +548,9 @@ test("sendtobootfx addresses the boot, not the stage", async () => {
  *     else
  *         begininterface (1)
  *
- * so the panel opened and could never close: the branch that puts it away could
- * not be reached. Measured in a browser before the fix — SPACE twice left the
- * game on `p.stg` both times.
+ * so on the filename the panel opens and can never close: the branch that puts
+ * it away cannot be reached. Measured in a browser on the filename answer —
+ * SPACE twice left the game on `p.stg` both times.
  */
 test("currentstage answers the stage's own name and result() the file", async () => {
   const { session } = await scene();

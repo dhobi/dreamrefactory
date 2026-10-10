@@ -13,20 +13,20 @@
  *
  * ## 1. The engine never asks the wall clock anything
  *
- * `SetViewer.walkAfterFade` polled `session.fading` with `setTimeout(r, 0)`.
+ * The case: a `SetViewer.walkAfterFade` that polls `session.fading` with
+ * `setTimeout(r, 0)`.
  * `fading` clears in `GameSession.tickFade`, which steps the ramp on the GAME
- * clock one `ENGINE_STEP_MS` at a time — so that line asked a question about game
- * time and waited for an answer in real milliseconds. Headless the pump drives
+ * clock one `ENGINE_STEP_MS` at a time — so that line asks a question about game
+ * time and waits for an answer in real milliseconds. Headless the pump drives
  * one engine step per `setImmediate` and an arbitrary, load-dependent number of
  * those fit inside the ~1 ms a `setTimeout(0)` takes, so the arrival walk into a
- * room landed a different number of engine steps after the fade on every run.
- * That one line was the whole of why the playthrough oracle was not
- * deterministic: two identical headless runs first diverged at `attentionspan`
- * 15388 against 15393 in segment 10 — the frame Max's `hasattention(4)` is
- * measured from, in the room the staircase arrives into — every later segment
- * inherited the drift, and the run that lost the race failed outright with `gave
- * up hunting for max in recept1c`. On `session.nextFrame` all 27 goldens record
- * byte-identical across two full runs.
+ * room lands a different number of engine steps after the fade on every run.
+ * Measured on that one line: two identical headless runs first diverge at
+ * `attentionspan` 15388 against 15393 in segment 10 — the frame Max's
+ * `hasattention(4)` is measured from, in the room the staircase arrives into —
+ * every later segment inherits the drift, and the run that loses the race fails
+ * outright with `gave up hunting for max in recept1c`. On `session.nextFrame`
+ * all 27 goldens record byte-identical across two full runs.
  *
  * So: anything the engine waits on has to be the engine's own frame or the
  * engine's own clock. `session.nextFrame` is that primitive — `setImmediate`
@@ -43,37 +43,37 @@
  * taoot/tests/playthrough/play.ts, and page-side in the browser suites) so they cannot
  * drift apart: `session.rng` is what a script's `random()` draws from, and
  * `session.ambientRng` is what the engine's own ambient timers draw from — today
- * just cricket re-arm jitter. `Scheduler.rand` was calling bare `Math.random` —
- * the one draw in the engine no seed reached, and the reason this rule is a test
- * rather than a convention.
+ * just cricket re-arm jitter. A bare `Math.random` in `Scheduler.rand` would be
+ * a draw no seed reaches, which is why this rule is a test rather than a
+ * convention.
  *
- * It was latent rather than active, which is what made it worth pinning down. The
+ * Such a draw is latent rather than active, which is what makes it worth
+ * pinning down. The
  * only crickets in the corpus with a jitter are `steam1`/`steam2` in BOOTFILE
  * container 2 (`200, 200`; every other one is 0, or the -1 one-shot), so the draw
- * only ever chose when a steam hiss re-armed in the boiler and engine rooms. But a
+ * only chooses when a steam hiss re-arms in the boiler and engine rooms. But a
  * cricket writes its name to sound channel 2 when it fires, `currentsound(2)` is
  * how a script asks whether a sound has finished, and that is exactly how the
  * bedsit landlady sequences her five lines. One route not polling it today is not
  * a property to rely on.
  *
- * TI.EXE has one `rand()`, so ONE stream is the faithful arrangement, and this
- * file used to say that settled it. It doesn't, and the reason is worth keeping.
- * Pointing the crickets at `session.rng` re-recorded 24 goldens once (a different
- * maze, the Vlad fight 4-8 units apart, different crowd extras, the plant's
- * accumulators by one, `min` one minute on in three segments) — and then went on
- * re-recording them, because those draws happen ON THE CLOCK. Measured over carried
- * segments 1-5: the crickets draw **4 times** against the scripts' **834**, and
- * un-shadowing `trackbut` changed the script draw COUNT not at all while still
- * flipping the Gorse/Jones coin and reshuffling the crowd — 4 ambient draws had
- * slid to different places in the shared sequence and re-valued all 834.
+ * TI.EXE has one `rand()`, so ONE stream would be the faithful arrangement, and
+ * it is not good enough. With the crickets on `session.rng`, goldens re-record
+ * whenever anything moves the clock (24 at once: a different maze, the Vlad
+ * fight 4-8 units apart, different crowd extras, the plant's accumulators by
+ * one, `min` one minute on in three segments), because those draws happen ON
+ * THE CLOCK. Measured over carried segments 1-5: the crickets draw **4 times**
+ * against the scripts' **834**, and un-shadowing `trackbut` changes the script
+ * draw COUNT not at all while still flipping the Gorse/Jones coin and
+ * reshuffling the crowd — 4 ambient draws slide to different places in the
+ * shared sequence and re-value all 834.
  *
- * So they are split (`GameSession.ambientRng`), which cost one more re-record and
- * ends that class of failure. The fidelity point given up is unobservable in
+ * So they are split (`GameSession.ambientRng`). The fidelity point given up is unobservable in
  * principle: which arbitrary value a draw returns is arbitrary either way, and the
  * original seeded its `rand()` from the clock, so its sequence is not a thing this
- * port could match even if it tried. What was bought is that an engine change with
- * no effect on what scripts ASK for now has no effect on what they GET — and the
- * headless golden can assert the coin flip again (engine/src/runtime/masks.ts).
+ * port could match even if it tried. What is bought is that an engine change with
+ * no effect on what scripts ASK for has no effect on what they GET — and the
+ * headless golden can assert the coin flip (engine/src/runtime/masks.ts).
  */
 import { describe, expect, test } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -122,16 +122,15 @@ const WALL_CLOCK = /\b(setTimeout|setInterval|Date\.now|performance\.now|new Dat
  * workbench (`/speedrun/`) is part of the built site and cannot import from the
  * test tree. That is a packaging fact, not a claim that it is engine code.
  *
- * ## What this walk no longer reaches
+ * ## What this walk does not reach
  *
  * The harness's game-neutral half — the parser, the run loop, the two drivers,
- * the aim sweep and the panel — is `engine/src/web/speedrun/` now, and SRC below
+ * the aim sweep and the panel — is `engine/src/web/speedrun/`, and SRC below
  * is this package's `src/` alone. So the rule does not cover those files, and
  * several of them read the wall clock for the reasons above. That is a GAP in
  * the rule's coverage and not a decision about them: the engine has no
- * equivalent walk today (`engine/src/web/host.ts` has always been free to
- * `setTimeout`), and closing it would need an allow-list of its own. Worth
- * knowing before the next thing moves.
+ * equivalent walk (`engine/src/web/host.ts` is free to `setTimeout`), and
+ * closing it would need an allow-list of its own.
  *
  * The engine's own reproducibility is untouched by this exemption — the rule
  * still covers every file of THIS game that the game actually runs.

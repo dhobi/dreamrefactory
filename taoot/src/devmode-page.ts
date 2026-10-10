@@ -74,7 +74,7 @@ if (!slot) throw new Error("devmode: the page has no #devslot");
  * `window.dbg` is published from main.ts's first lines, so a module that waits
  * for the handle and then raises the flag raises it before the boot does
  * anything, and `boot()`'s `debugging = false` lands on top of it. Measured, not
- * reasoned about: the first version of this page read back 0.
+ * reasoned about: raised that early, it reads back 0.
  *
  * A VIEWER is the signal. Not because it means `boot()` has RETURNED — it does
  * not, and that is worth being exact about: the boot opens a set before

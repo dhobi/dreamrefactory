@@ -73,10 +73,11 @@ up with the engine rather than here:
 
 ## The code
 
-`dust/` in the repository: two pages, its own disc, its own tools and suites.
+`dust/` in the repository: three pages (the game, `/collection/` and the
+unlisted `/speedrun/` workbench), its own disc, its own tools and suites.
 [The architecture map](../engine/architecture.md#dust-—-dust-s-shell) has the file
-list; the short version is that the shell is three modules, because one volume
-and one edition need much less than six editions and two CDs.
+list; the short version is that the shell is small, because one volume and one
+edition need much less than six editions and two CDs.
 
 Its suites are `dust/tests/` — the movie layout against the whole disc, the
 player on a clock, the `.rtd` round trip, every set read without a game tick
@@ -85,7 +86,33 @@ that open the disc **skip** rather than fail without a rip, which is why the
 CI runner treats Dust's disc as optional ([Continuous
 integration](../reference/ci.md)). The [test reference](../reference/tests.md#dusts-suites--dusttests)
 lists them all. Its tools are
-`dust/tools/`: `dustsets.ts`, the sweep the v1 SET reader was built against, and
-`mkdustlogo.ts` for the title card.
+`dust/tools/`: `dustsets.ts`, the sweep the v1 SET reader was built against,
+`rtdthread.ts` for [the golden thread](thread.md), `mkdustlogo.ts` for the title
+card, and the two that write run sheets below.
+
+## The speedrun
+
+Dust has Titanic's speedrun workbench, off the same engine modules
+([the speedrun](../reference/tests.md#the-speedrun)), at `/speedrun/`. Its own
+verbs are in `dust/src/speedrun/actions.ts`, each earned by the route: `goto` a
+grid cell (the shape the whole map and the thread's ladder are written in),
+`give`, `offer`, `takeInHand`, `talkOut`, `doorAt`, `meet`, `loadSave`, and
+`blackjack(800)`, which plays Jan's table in the Hard Drive Saloon until the
+cash in hand reaches the target
+([#490](https://github.com/dhobi/dreamrefactory/issues/490)). `menuSave` and
+`menuLoad` go through the horn and the control panel, on the clock
+(`dust/src/speedrun/menu.ts`); `loadSave()`, like Titanic's `load()`, makes a run
+NOT A VALID TIME.
+
+`dust/tests/speedrun/run.sheet.txt` is the route as legs, one per rung of the
+thread, and every leg opens by loading the save it starts from — so it is the
+route, not yet a continuous run, and its total is not a time. The commands
+around it:
+
+```
+npm run speedrun:sheet -w dust    # regenerate the sheet from the thread's ladder (overwrites; diff first)
+npm run speedrun:rung -w dust -- d2a006   # one playthrough rung's gestures as sheet lines (--all for every rung)
+npm run speedrun:legs -w dust     # every leg in one boot, against a dev server (ONLY=, FROM=)
+```
 
 Back to [Documentation](../README.md).

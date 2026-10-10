@@ -22,8 +22,8 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // findword("a,b,c", ",", 2) -> "b": a word list is a string split on a
   // separator, and the idx is 1-based.
   //
-  // An EMPTY delimiter is a mode of its own — the idx-th CHARACTER — and not,
-  // as this used to have it, a default separator of space. TI.EXE says so
+  // An EMPTY delimiter is a mode of its own — the idx-th CHARACTER — and not a
+  // default separator of space. TI.EXE says so
   // outright: `findword`'s implementation (0x428b20 → the body at 0x428b6d)
   // branches on the delimiter's length byte, and the empty arm at 0x428c5f is
   //

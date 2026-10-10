@@ -3,25 +3,23 @@
  *
  *   npm run test:built -w dust
  *
- * This exists because a layout bug shipped to production through every gate the
- * project had. `dust/index.html` links the shared chrome and then overrides it in
- * its own `<style>`; the build resolves that `<link>` into a bundle and re-inserts
- * it at the END of `<head>`, after the inline block. Two `body` rules of equal
- * specificity therefore swapped places, the chrome's `display: flex; align-items:
- * center` won, and a centred flex child shrink-wraps — so `#stage`, whose children
- * are all absolutely positioned, collapsed from 1280px to its own two pads, 32px,
- * and the picture went off the right-hand edge of the window.
+ * `dust/index.html` links the shared chrome and then overrides it in its own
+ * `<style>`; the build resolves that `<link>` into a bundle and re-inserts it at
+ * the END of `<head>`, after the inline block. Two `body` rules of equal
+ * specificity can therefore swap places: let the chrome's `display: flex;
+ * align-items: center` win, and a centred flex child shrink-wraps — so `#stage`,
+ * whose children are all absolutely positioned, collapses from 1280px to its own
+ * two pads, 32px, and the picture goes off the right-hand edge of the window.
  *
- * Everything looked fine on the way there. Dev served the authored order and was
- * correct. `tsc` has no opinion on CSS. The unit suites never lay out a page. The
- * deployed HTML was byte-identical to the build it came from, so diffing it found
- * nothing. The bug existed only in the arrangement the browser saw, and only after
- * a build, and nothing ever looked at that.
+ * Nothing else sees that. Dev serves the authored order. `tsc` has no opinion on
+ * CSS. The unit suites never lay out a page. The deployed HTML is byte-identical
+ * to the build it came from, so diffing it finds nothing. The bug exists only in
+ * the arrangement the browser sees, and only after a build.
  *
  * `site/tests/cascade.ts` is the cheap half — it reads the two stylesheets and
  * fails on any declaration whose outcome the bundler decides. This is the half
- * that would have caught it even if the mechanism had been something else
- * entirely: it builds the page, serves the build, and measures the result.
+ * that catches it whatever the mechanism: it builds the page, serves the build,
+ * and measures the result.
  *
  * ## Reachable, not merely visible
  *
@@ -32,13 +30,12 @@
  * — so a test that could only hit-test the button would quietly check nothing on
  * a machine with no disc. When the button IS there, it is hit-tested too.
  *
- * This is a separate bug, caught the same way:
- * `#frame` comes after `#curtain` in the DOM with no z-index, so the canvas
- * painted over the button and swallowed the click while the frame was still
- * `opacity: 0`. Nothing looked wrong; the button was simply dead. And it was a
+ * `#frame` comes after `#curtain` in the DOM, so with no z-index the canvas
+ * paints over the button and swallows the click while the frame is still
+ * `opacity: 0`. Nothing looks wrong; the button is simply dead. And it is a
  * RACE — the canvas has to exist before it can cover anything, so clicking the
- * instant the button appeared won locally and lost on a real connection every
- * time. Hence the deliberate wait below: a test that clicks immediately proves
+ * instant the button appears wins locally and loses on a real connection.
+ * Hence the deliberate wait below: a test that clicks immediately proves
  * nothing about a user who takes a second to reach for the mouse.
  *
  * ## No game data needed
@@ -179,9 +176,8 @@ async function measure(page: Page, url: string): Promise<Measured> {
 
 async function main(): Promise<void> {
   console.log("building dust…");
-  // `-w dust` and not `build:dust`, which the root package.json stopped
-  // carrying when each package took its own commands (#333) — this line went
-  // on naming it and the suite has failed at its first step ever since
+  // `-w dust` and not `build:dust`: the root package.json carries no such
+  // script, because each package takes its own commands (#333)
   await run("npm", ["run", "build", "-w", "dust"]);
   const server = await servePreview();
   const browser = await chromium.launch();

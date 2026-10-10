@@ -7,10 +7,9 @@
  * between one beat and the next. A synthetic fixture of six would prove none of
  * that.
  *
- * Those counts used to be 161. They came down when `dumpglobal` was fixed to
- * destroy what it names (#85) — the game tears its puzzles' working variables down
- * as it leaves them, and a third of the table was scratch the session had been
- * holding on to.
+ * Those counts depend on `dumpglobal` destroying what it names (#85) — the game
+ * tears its puzzles' working variables down as it leaves them, and without that
+ * the table would hold 161, a third of it scratch.
  */
 import { test, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -212,11 +211,10 @@ test("the filter searches a row's TYPE as well as its name (#178)", () => {
   const trace = endOfGame();
   const props = stateView(trace, { spine: SPINE, filter: "prop" }).rest;
   expect(props.length, "the fixture owns props").toBeGreaterThan(0);
-  // What this used to answer, and the reason it is a bug: `saveprops`,
-  // `saveprops1` and `saveprops2` are the globals that ENCODE the props, which
-  // is the last thing somebody looking for the props wants. They match "prop"
-  // as names and are still here — what changed is that the props themselves are
-  // here too, and they are the majority.
+  // Globals alone would be a bug here: `saveprops`, `saveprops1` and
+  // `saveprops2` are the globals that ENCODE the props, which is the last thing
+  // somebody looking for the props wants. They match "prop" as names and are
+  // here — and so are the props themselves, and they are the majority.
   expect(props.some((r) => r.name.startsWith("prop ")), "the props themselves").toBe(true);
   expect(props.filter((r) => r.name.startsWith("prop "))).toHaveLength(
     Object.keys(trace.props).length,

@@ -215,8 +215,8 @@ test("a half turn travels half the screen, a full one all of it", async () => {
  * the current flat every frame where the original only ever moves strips. Without
  * settling, the frame between the legs is the mid-turn flat drawn WHOLE, and
  * those are 320 columns of art in a 640 canvas: the second leg would capture the
- * blank margin and scroll it across the screen. Measured before this: 50% of the
- * middle row white at the start of leg two, against 1% after.
+ * blank margin and scroll it across the screen. Measured: 50% of the middle row
+ * white at the start of leg two without settling, against 1% with it.
  */
 test("a finished turn keeps its composite for the next leg to capture", async () => {
   const s = await scene();

@@ -30,7 +30,7 @@ other half: the page, its DOM, and which disc it reads.
 | [`window-dialog.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-dialog.ts) | a game window's dialog box on the same frame: a Win32 dialog template drawn as laid out, modal over the picture, with the dialog manager's keys |
 
 **The page around it** — a game's own `src/`. Titanic's is the fuller one and
-is what this page's examples are drawn from; Dust's is three files, because one
+is what this page's examples are drawn from; Dust's is smaller, because one
 volume and one edition need much less:
 
 | File | Role |
@@ -38,7 +38,7 @@ volume and one edition need much less:
 | [`taoot/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/main.ts) | the page: DOM, the cold boot it starts, input, the rAF loop — nothing about the engine |
 | [`taoot/src/files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/files.ts) | `FileStore` — game files by lowercase basename, lazy dev-server fetching, six editions and two CDs |
 | [`taoot/src/log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts) | the lines behind X, bounded — and the tail a bug report carries |
-| [`taoot/src/debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/debug-panel.ts) | what state the game is in, as a list that patches rather than redraws |
+| [`engine/src/web/debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/debug-panel.ts) | what state the game is in, as a list that patches rather than redraws — kept in the engine, because every game's page shows one |
 | [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard. Shared, because both games carry it |
 | [`dust/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) / [`dust/src/files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the same two jobs for [Dust](../../dust/README.md), against one disc |
 
@@ -139,7 +139,7 @@ the last eight lines the engine logged — the three questions every report abou
 this port otherwise has to be asked. The title names **the game and then the
 room** — `[Dust] Bug in nite scene g15`, `[Timelapse] Bug in flat i0001.100.6` —
 because that is what makes an issue list readable when one repository takes
-reports about three games, and because `[Dust]` in the search box is then a
+reports about every game, and because `[Dust]` in the search box is then a
 filter. The game comes from the page's own registry entry (`site/src/games.ts`),
 so it has one spelling.
 
@@ -171,7 +171,7 @@ boot ends up in. A hardcoded list of TAOOT filenames (`bedsit1.set`, `logo.mov`,
 runs any of them: the 1996 demo shares four of those names and needs a fifth.
 
 Both are read out of the game's own BOOTFILE
-([`engine/bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts)),
+([`engine/src/runtime/bootplan.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/bootplan.ts)),
 because every one of those files is named as a string literal by the boot's own
 scripts — `opencastfile("gang.cst")`, `openshopfile("house.shp")`,
 `opentrackfile("unilib.trk")`, `openstagefile("main.stg")`, `playmovie("logo.mov")`,
@@ -424,7 +424,7 @@ the right-turn ring, high-resolution in the left-turn one, paired by `framePairI
 That asymmetry is what `original` reproduces, and it is the default. The other three
 make every direction agree — `sharp`, `transition` (soft for one beat, then sharp),
 and `soft`, which keeps the low-res standpoint for the settled view as well and so
-leaves the whole room at low resolution (the port's rendering before #68). Remembered under
+leaves the whole room at low resolution. Remembered under
 `taoot.picture.landing`; a player who had ticked the old **always land sharp** box
 (`taoot.picture.sharplanding`) starts on `sharp`.
 
@@ -653,7 +653,7 @@ door you're facing).
 **A press made while a move is on screen is queued, not dropped** — one press per
 key stays pending however long the key is held, which is what walks a corridor
 instead of a room, and letting go leaves at most one more move to come (the
-queue's own policies are TI.EXE's, recovered in `engine/input.ts`). The gate is in
+queue's own policies are TI.EXE's, recovered in `engine/src/runtime/input.ts`). The gate is in
 `SetViewer.keyDown` and applies to **every** key, because that is where the
 original keeps it: its window proc posts and its main loop pops, both above any
 notion of *which* key it was, since the letter is only translated afterwards by
@@ -775,7 +775,7 @@ that one prop. Under a filter the owned props and actors join the list without
 want.
 
 The clock is excluded from "what just moved" by
-[`engine/masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts) —
+[`engine/src/runtime/masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts) —
 the same predicate the trace comparisons drop. Without it the list would
 permanently show `sec` and `clockcount` and nothing else.
 

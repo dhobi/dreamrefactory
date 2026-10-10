@@ -7,11 +7,11 @@
  * what it needs, booting the shipped `BOOTFILE boot()`, resuming a save.
  *
  * It exists because that lifecycle is game knowledge, not page knowledge, and
- * it used to live in `main.ts` purely because the mutable `viewer` did. Three
- * defects hid there — the theme blip, the stale scene loop across a set swap,
- * the audio-unlock desync — untestable, because the test harness could not
- * import a module that touches `document`, and so had hand-rolled its own
- * shorter `onSetChange` instead. Anything a test could contradict belongs here.
+ * in a page's `main.ts` it would be untestable: the test harness cannot import
+ * a module that touches `document`, and would hand-roll its own shorter
+ * `onSetChange` instead — which is where defects like the theme blip, the stale
+ * scene loop across a set swap and the audio-unlock desync hide. Anything a
+ * test could contradict belongs here.
  *
  * Nothing in this file may reference `document`, `window` or WebAudio: the page
  * passes its side in as {@link HostFiles} (a file source), {@link HostUi} (five
@@ -101,10 +101,8 @@ export interface HostFiles {
   /**
    * Every `.set` this edition offers.
    *
-   * A LISTING, and nothing more. The cold boot used to take `[0]` of it as a
-   * surface to play its logos on, which is why Dust's implementation still
-   * carries a comment about being "the boot's movie host"; the screen needs no
-   * room now, so nothing here does. A shell may still use it to ask whether it
+   * A LISTING, and nothing more: the screen needs no room to play on, so
+   * nothing here takes one. A shell may still use it to ask whether it
    * has any game data at all (taoot/src/main.ts).
    */
   serverSetNames?(): string[];
@@ -141,8 +139,8 @@ export interface HostUi {
   showStage(): void;
   /** the viewer was replaced or its map toggled */
   mapChanged(): void;
-  /** a set was parsed and cached. Nothing on the play page listens any more —
-   *  the set dropdown it was for is gone — but the host still says so, because
+  /** a set was parsed and cached. Nothing on the play page listens, but the
+   *  host still says so, because
    *  "which rooms are in hand" is a fact about the run and not about a widget. */
   setsChanged(): void;
 }
@@ -169,11 +167,11 @@ const siblingFiles = (base: string): string[] =>
  * The one file this layer knows the name of: a DreamFactory game's entry point,
  * and the manifest for everything else it needs (engine/src/runtime/bootplan.ts).
  *
- * What used to be here instead was three lists of TAOOT filenames — the boot
- * library's shops and stages, `gang.cst`, the logos, `bedsit1.set` — sixteen names
- * belonging to one game, in the layer that is supposed to run any of them. They
- * are read out of the BOOTFILE now: it names every one of them itself, because
- * opening them is what its `boot()` does.
+ * Not lists of TAOOT filenames — the boot library's shops and stages,
+ * `gang.cst`, the logos, `bedsit1.set` — which would be names belonging to one
+ * game, in the layer that is supposed to run any of them. They are read out of
+ * the BOOTFILE: it names every one of them itself, because opening them is what
+ * its `boot()` does.
  */
 const BOOT_FILE = "bootfile";
 
@@ -240,7 +238,7 @@ export class GameHost {
    * swapped with it (the session's fade snapshot holds it across exactly that
    * gap). It also has to exist when there is no viewer AT ALL: see
    * screen-director.ts, and *Timelapse*, which has no `.SET` on any of its four
-   * discs and used to get no screen at all as a result.
+   * discs and would otherwise get no screen at all.
    */
   readonly director: ScreenDirector;
   /** the framebuffer, which is the director's — kept as a property because the
@@ -264,7 +262,7 @@ export class GameHost {
 
   /**
    * What this game's boot needs, read from its own BOOTFILE — the resource lists
-   * that used to be hardcoded here (engine/src/runtime/bootplan.ts).
+   * (engine/src/runtime/bootplan.ts).
    *
    * Fetch-and-parse once, shared: five call sites want it, one of them per set
    * change, and re-reading a 90 KB script container on each would be work done to
@@ -307,7 +305,7 @@ export class GameHost {
     // Subtitles and drawstring are bytes in the tree's own code page and no DF
     // file says which (engine/src/df/text.ts) — the tree is the only thing that knows.
     // Asked live rather than copied, so a language switch cannot leave the
-    // session decoding the one it used to be reading.
+    // session decoding the previous one.
     this.session.textEncoding = () => files.textEncoding?.() ?? DEFAULT_ENCODING;
     // on-demand loaders (puppets/casts/movies) await this, so the first click
     // works even before the file is cached
@@ -514,7 +512,7 @@ export class GameHost {
     // Direct activation (set list / a dev jump) bypasses openSetFile — and with
     // it the boot's changeset, whose closeset -> putdownsound stops the room's
     // scheduled work. Nothing else will: loops are keyed by scene/prop name on
-    // a session-wide scheduler, so leaving TAOOT's flat by dropdown kept its
+    // a session-wide scheduler, so leaving TAOOT's flat by dropdown would keep its
     // window-lady scene loop running (a handler on a scene that no longer
     // exists, every 400 ms) and the citycricket sound loop flagged on, inside
     // the next set. Clear it here, the same way loading a save does — a
@@ -615,11 +613,11 @@ export class GameHost {
    * Everything {@link coldBoot} would otherwise wait for, fetched BEFORE it runs
    * and reported as it lands.
    *
-   * The play page used to start the boot the moment it knew which edition to read
-   * and let the rest stream in behind it: the logos played over a page that was
-   * still pulling the 19.6 MB cast, and what the player saw of the wait was a
-   * black canvas and, if they were unlucky, a movie that stalled mid-frame. So the
-   * wait is now in front of the game instead of inside it — the boot text stays up
+   * Starting the boot the moment the page knows which edition to read, with the
+   * rest streaming in behind it, plays the logos over a page still pulling the
+   * 19.6 MB cast, and what the player sees of the wait is a black canvas and, if
+   * they are unlucky, a movie that stalls mid-frame. So the wait is in front of
+   * the game instead of inside it — the boot text stays up
    * with a bar under it, and the game starts on files that are already here.
    *
    * `onProgress` is called with BYTES, not files: the list is one 19.6 MB cast
@@ -788,11 +786,11 @@ export class GameHost {
    * The restart as a whole is not tracked by the session, on purpose:
    * prepareRestart awaits `settle()`, and a restart added to `inflight` would be
    * waiting for itself. The BOOT is, once the teardown is behind it, exactly as a
-   * launch tracks it (taoot/src/main.ts). Left untracked, the game read as idle
-   * all through the second boot: between `playmode.mov` and the first day's
-   * `datebed.mov` nothing was in flight, a speedrun's `skipMovie(until: quiet)`
-   * stopped there, and the next line's click landed under the date film, whose
-   * ESC then let the close-up it opened play on (#378).
+   * launch tracks it (taoot/src/main.ts). Left untracked, the game would read as
+   * idle all through the second boot: between `playmode.mov` and the first day's
+   * `datebed.mov` nothing is in flight, a speedrun's `skipMovie(until: quiet)`
+   * would stop there, and the next line's click land under the date film, whose
+   * ESC then lets the close-up it opened play on (#378).
    */
   async restart(opts: ColdBootOptions = {}): Promise<void> {
     await this.session.prepareRestart();
@@ -839,19 +837,13 @@ export class GameHost {
         return;
       }
       /*
-       * ...and NOTHING is opened to draw into, which is the whole of what changed
-       * here.
+       * ...and NOTHING is opened to draw into. This boot plays a movie and then
+       * opens a menu stage with no set behind either, and borrowing one of the
+       * game's rooms to draw on — a 9 MB room opened with `skipOpen` and painted
+       * black — would parent the screen to a room it has nothing to do with.
        *
-       * This used to borrow a room. A stage was composited by a `SetViewer`, the
-       * frame loop only drew when there was one, and this boot plays a movie and
-       * then opens a menu stage with no set behind either — so it opened one of
-       * the game's rooms with `skipOpen`, painted black over it, and let the
-       * menu's own flat cover the screen. "Any of the game's rooms will do" was
-       * the comment, and a comment saying that about a 9 MB room is a comment
-       * about the wrong abstraction: the screen was parented to a room.
-       *
-       * It is not any more (engine/src/web/screen-director.ts). The director
-       * composites flats, films and fades with no room layer at all, so a boot
+       * The director (engine/src/web/screen-director.ts) composites flats, films
+       * and fades with no room layer at all, so a boot
        * that has no room simply has no room — the demo's menu, Dust's two intro
        * films, and every frame of a game that has no `.SET` on any of its discs.
        */

@@ -132,11 +132,10 @@ const doubleTap = async (at: { x: number; y: number }): Promise<void> => {
  *
  * These films end on their own and chain onwards: that is the boot sequence
  * working. So "the intro is playing now" is not evidence that a double-tap did
- * anything, and the first version of this file made exactly that mistake — it
- * polled for the intro over 20 seconds a try, `cyber.Mov` (318 frames at about
- * ten a second) played itself out inside that window, and the test passed with
- * the touch branch of `pointerdown` compiled out entirely. It was measuring the
- * boot sequence.
+ * anything: polling for the intro over 20 seconds a try, `cyber.Mov` (318
+ * frames at about ten a second) plays itself out inside that window, and the
+ * test passes with the touch branch of `pointerdown` compiled out entirely —
+ * measuring the boot sequence.
  *
  * So every skip below is an A/B against the same clock: watch for this long and
  * require the film to STAY, then double-tap and require it to go. A skip is

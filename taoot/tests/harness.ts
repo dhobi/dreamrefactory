@@ -22,10 +22,9 @@ export const root = gamefilesRoot();
  * the host is parameterised on differ: files come off the disk index instead of
  * HTTP, and the sink records instead of making noise.
  *
- * This used to be a hand-rolled 7-line `onSetChange` standing in for the host's
- * 139, which is exactly why a run of host-side defects (a theme blip on entry,
- * a scene loop surviving a set swap) were invisible here: the suite tested a
- * stand-in that didn't do those things at all.
+ * Not a hand-rolled `onSetChange` standing in for the host's: a stand-in hides
+ * host-side defects (a theme blip on entry, a scene loop surviving a set swap)
+ * because it does not do those things at all.
  */
 export async function newHost<S extends AudioSink = NullAudioSink>(
   opts: {
@@ -108,14 +107,13 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
   if (!opts.cold && (await host.bootPlan()).landingSet) await host.session.ensureBooted();
   // Seed `random()`, so a suite run is a repeatable one.
   //
-  // Left on Math.random, any test whose timing a script draws is a coin toss —
-  // and the coin was being tossed. C73's openset arms the door-knock loop, and
-  // `smethknock` re-arms itself `60 + random(180)` ticks out: whether a knock
-  // cricket happens to be outstanding at the tick the test counts them therefore
-  // depended on the draw. `taoot/tests/auto/regression.ts`'s "one-shot cricket removed
-  // after firing" failed about two runs in five in a full suite and passed alone
-  // (nothing before it had moved the stream), which reads exactly like a
-  // regression from whatever else changed and is not one.
+  // Left on Math.random, any test whose timing a script draws is a coin toss.
+  // C73's openset arms the door-knock loop, and `smethknock` re-arms itself
+  // `60 + random(180)` ticks out: whether a knock cricket happens to be
+  // outstanding at the tick the test counts them therefore depends on the draw.
+  // Unseeded, `taoot/tests/auto/regression.ts`'s "one-shot cricket removed after
+  // firing" fails about two runs in five in a full suite and passes alone, which
+  // reads exactly like a regression from whatever else changed and is not one.
   //
   // The playthrough harness seeds its own (taoot/tests/playthrough/play.ts, SEED) for
   // the same reason and per-segment, so this only fills the gap for everything

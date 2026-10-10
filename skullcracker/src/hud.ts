@@ -95,8 +95,8 @@
  * is the magazine, `+6` what is left in it. The value is scaled to 0…64 and laid
  * out as four rows of sixteen at x417 stepping 7 down from y333 — cel `14300` for
  * a full row, `14316 - remainder` for a partial one — and the whole block clips
- * to the special-weapon window at 290,305–380,450. An earlier reading of this
- * file had it as the player's health; the health is the sliding slab above.
+ * to the special-weapon window at 290,305–380,450. The health is the sliding
+ * slab above.
  *
  * ### The buttons light up
  *

@@ -998,14 +998,13 @@ overwrites. Measured over the shipped corpus, every cast and track record's hand
 names a manifest record whose basename is the record's own name, and every actor
 record's +2 names `gang.cst` or `extra.cst`.
 
-The port's writer patches a skeleton, and it used to copy these two lists from it.
-A save therefore named whatever the **skeleton** had open: a game started fresh
-patches a London-flat template, so a save in the smoking room during the sinking
-listed `gang.cst` and the flat's banks, and the reload had no `extra.cst` to
-instance the crowd from (`sendtoactor("paul1b3", extraidle(..)) — target not
-loaded`) and no `insddest.sfx` for the sinking's ambience (`sound not found: `).
-`SavePatch.casts` and `SavePatch.banks` now carry the session's open casts and
-banks, in the order they were opened:
+The port's writer patches a skeleton, but these two lists cannot come from it:
+a game started fresh patches a London-flat template, which lists `gang.cst` and
+the flat's banks, so a save in the smoking room during the sinking would reload
+with no `extra.cst` to instance the crowd from (`sendtoactor("paul1b3",
+extraidle(..)) — target not loaded`) and no `insddest.sfx` for the sinking's
+ambience (`sound not found: `). `SavePatch.casts` and `SavePatch.banks` carry the
+session's open casts and banks, in the order they were opened:
 
 - a file the skeleton also had keeps its record (a bank keeps its three arrays,
   whose live halves the theme then rewrites);

@@ -6,7 +6,7 @@
  *
  * No save made by the original survives, so the port ships its own: one at the
  * start of each of days two to six, written by the machine route. What the page
- * promises about them, which until now only ever ran in a browser:
+ * promises about them, which otherwise only runs in a browser:
  *
  *   - **each is offered exactly once**: a second launch fetches none, a save
  *     the player deleted stays deleted, and one that could not be fetched (no

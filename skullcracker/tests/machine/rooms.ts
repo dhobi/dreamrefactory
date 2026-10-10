@@ -65,7 +65,7 @@ test.skipIf(!haveRip())("rooms", async () => {
   if (room() !== "newroom/p3") fail(`expected to start in the street, got ${room()}`);
   ok(`starts in the street at x ${p.x}`);
 
-  // 1. walking through the door must do NOTHING — this is the trap regression
+  // 1. walking through the door must do NOTHING — this is the trap
   walkTo("right", 5100);
   if (room() !== "newroom/p3") fail(`walking through the door teleported to ${room()}`);
   if (p.x < 5000) fail(`the walk east stopped at x ${p.x}, short of the door's far side`);
@@ -79,8 +79,7 @@ test.skipIf(!haveRip())("rooms", async () => {
   // 3. pressing up takes it: the door back's point goes into the ANCHOR, x4395
   //    y2667 (`0x428fdb`), and the player drops the 28px from there onto the
   //    basement floor at y2785. An arrival that is merely "somewhere in the
-  //    basement" would mean the keypress that opened the door also jumped,
-  //    which is what it used to do.
+  //    basement" would mean the keypress that opened the door also jumped.
   h.hold("up", true);
   h.frame(1);
   h.hold("up", false);

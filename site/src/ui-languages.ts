@@ -14,12 +14,11 @@
  *    is one game's business and lives in `taoot/src/editions.ts` over that game's
  *    own `languages.ts`, with `?edition=` and its own storage key.
  *
- * They used to be one setting with a fallback between them, which read as one
- * question with two answers. Then they were two settings in one file — this list
- * was derived from Titanic's `LANGUAGES`, whose entries carry a code page per
- * pressing and a label drawn into that game's chooser art. So the chrome's own
- * translations depended on one game's release history, and a shared package could
- * not use them without importing a game.
+ * One setting with a fallback between them would read as one question with two
+ * answers. And deriving this list from Titanic's `LANGUAGES`, whose entries
+ * carry a code page per pressing and a label drawn into that game's chooser
+ * art, would make the chrome's own translations depend on one game's release
+ * history, so a shared package could not use them without importing a game.
  *
  * That the two lists have the SAME six codes is a coincidence of authorship —
  * the chrome was translated into the languages the game shipped in — and not a
@@ -56,7 +55,7 @@ export const DEFAULT_UI_LANGUAGE = "en";
 /**
  * Where the page remembers the reader's choice.
  *
- * The value stays `taoot.uilang` even though this axis is no longer Titanic's:
+ * The value stays `taoot.uilang` even though this axis is not Titanic's:
  * it is a key in real readers' `localStorage`, and renaming it would quietly
  * forget every choice anyone has made. The name is history, not meaning.
  */

@@ -49,9 +49,8 @@ const VERB = /^(\s*)([A-Za-z]\w*)(\s*\()/;
 /**
  * A named argument: `by: esc`, `until: quiet` — a COLON, never an equals.
  *
- * The two used to share the `name=value` shape and this highlighter could not
- * tell them apart either; it painted a condition as if it were an argument. Now
- * the grammar does the telling (sheet.ts) and so can the colour.
+ * The grammar tells a named argument from a condition by it (sheet.ts), and so
+ * can the colour.
  */
 const NAMED = /^([A-Za-z][A-Za-z0-9_-]*)(\s*:)/;
 /**

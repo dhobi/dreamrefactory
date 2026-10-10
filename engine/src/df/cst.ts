@@ -80,10 +80,9 @@ export interface CastPose {
    *
    * That holding is the whole of #181. Every walk in the game draws ten pictures
    * and lists twenty steps — `1,1,2,2,…,10,10` — so a walker's legs move at half
-   * the service rate. The port cycled the ten pictures directly, one per pass,
-   * and the reporter's side-by-side video shows exactly what that looks like:
-   * the same walk, over the same ground, in the same time, with the feet going
-   * twice as fast. `stok1`'s `dig` and `throw` are the other authored ones
+   * the service rate. Cycling the ten pictures directly, one per pass, gives the
+   * same walk, over the same ground, in the same time, with the feet going twice
+   * as fast. `stok1`'s `dig` and `throw` are the other authored ones
    * (14 steps over 7 pictures).
    */
   play: number[];
@@ -134,9 +133,6 @@ export interface CstFile {
    *     0x40db7b: lea ecx, [ebx + 0x928]   ; the ref name
    *     0x40db8b: mov ecx, [ebx + 0x924]   ; THIS
    *     0x40db93: mov [esi + 8], ecx       ;   -> cast->mainScript
-   *
-   * `runtime/session.ts` used to reach for `containers[1]` with no constant, no
-   * comment and no docs entry (#325).
    */
   mainScriptLocation: number;
   members: CastMember[];

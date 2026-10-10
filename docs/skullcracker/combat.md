@@ -980,9 +980,9 @@ own seam rather than being bent into a `CastKit`:
 
   The two states that let **twelve** go — the vanish at `0x4261df` and the death
   at `0x4262f7`, the latter followed by `0x4263e0` killing every bat on the level
-  with a lift of −40 — are not reachable here and are not done. Both live in
-  states `Foe.flinch` and `Foe.death` own, and a brain is never called while
-  either is playing.
+  with a lift of −40 — are not reachable from the brain. Both live in states
+  `Foe.flinch` and `Foe.death` own, and a brain is never called while either is
+  playing, so they are the bishop's `Reaction` (`vpriestReacts`, below).
 
 - **`BrainCtx.roller`** — the one HAZARD a creature builds, and the one class in
   the game with no `init*` name, because no level can place it. `initmaskboy`'s

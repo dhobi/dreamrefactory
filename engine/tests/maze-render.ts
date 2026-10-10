@@ -9,7 +9,7 @@
  * picture. This builds the rest. The case that matters is a patch HALF the
  * width of RedJack's finest, as Villains' Revenge's Wonderland maze is full of
  * (#444): the sphere is looked up on a grid of cells as wide as its finest
- * patch, and on RedJack's 22.5° grid such a patch was either lost or smeared
+ * patch, and on RedJack's 22.5° grid such a patch would be either lost or smeared
  * over the cell around it.
  *
  * Pictures are 256 × 256, a sphere tile's size, every row a literal run; a

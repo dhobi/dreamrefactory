@@ -92,10 +92,9 @@ import { DFContainerFile, readContainerFile } from "./container";
  *     at +237, +351, +465 and +579 into every sequencer). Each book name is
  *     pushed exactly once from exactly one function, so the pairing is total.
  *
- * That gives all sixteen, and it corrects an earlier reading of this table. The
- * first version paired each book with the theme bank pushed beside it —
- * `streets.sbk` with `theme01.snd`, `city.sbk` with `theme02.snd` — and sorted
- * by theme number, which put `sewer` third. It is seventh: `theme03.snd` is
+ * That gives all sixteen. Pairing each book with the theme bank pushed beside
+ * it — `streets.sbk` with `theme01.snd`, `city.sbk` with `theme02.snd` — and
+ * sorting by theme number would put `sewer` third. It is seventh: `theme03.snd` is
  * `sewer.sbk`'s bank, but `0x436b51`, the only place `sewer.sbk` is loaded, is
  * inside the case that plays `chp07`. The theme numbers agree with the play
  * order for fifteen of the sixteen levels and the sewer is the one that moved.

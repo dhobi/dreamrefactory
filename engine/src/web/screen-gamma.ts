@@ -20,9 +20,9 @@
  *     in   16   32   64   96  128  160  200  240
  *     out  42   66  104  135  163  188  218  245
  *
- * We had none of this — `paletteToRGBA` takes each channel's byte verbatim, i.e.
- * gamma 1.0 — which is why the port was reported as "very dark in general" (#115).
- * That was never a comfort setting we lacked; it was a rendering step missing.
+ * Without it — `paletteToRGBA` takes each channel's byte verbatim, i.e. gamma
+ * 1.0 — the picture is "very dark in general" (#115). That is not a comfort
+ * setting; it is a rendering step.
  *
  * The player can move it: the WM_KEYDOWN handler (0x41acda) dispatches on the
  * virtual key through a jump table (0x41b118, byte index at 0x41b158, key =
@@ -45,8 +45,8 @@
 export const DEFAULT_SCREEN_GAMMA = 0.65;
 /** what one keypress is worth — 0x45a050 (up) is the reciprocal of 0x45a058 */
 export const SCREEN_GAMMA_STEP = 1.05;
-/** the clamp either end of which is already unusable: 1.0 is the raw palette (what
- *  #115 fixed) and 0.3 is washed out. Keeps a stored or fat-fingered value sane. */
+/** the clamp either end of which is already unusable: 1.0 is the raw palette
+ *  (#115) and 0.3 is washed out. Keeps a stored or fat-fingered value sane. */
 const MIN_GAMMA = 0.3;
 const MAX_GAMMA = 1.6;
 

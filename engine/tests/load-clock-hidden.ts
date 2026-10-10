@@ -4,11 +4,11 @@
  *
  *   npx vitest run engine/tests/load-clock-hidden.ts
  *
- * A hidden page gets no animation frames, so the game stands still, but the
- * wall clock went on: one look at another tab on the way down to G deck cost a
- * run ten seconds. The fix puts the hidden time into the same stopwatch the
- * network waits go into, so every reading that already took the loading out
- * (the ticking clock, every split, the total) takes the tab out too. These pin
+ * A hidden page gets no animation frames, so the game stands still while the
+ * wall clock goes on: one look at another tab on the way down to G deck would
+ * cost a run ten seconds. The hidden time goes into the same stopwatch the
+ * network waits go into, so every reading that takes the loading out (the
+ * ticking clock, every split, the total) takes the tab out too. These pin
  * the arithmetic, on a clock whose `now` the test turns by hand, and the wiring
  * to the page's events, on an `EventTarget` standing where `document` and
  * `window` would.

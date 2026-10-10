@@ -4,8 +4,7 @@
  * One source of truth: `version` in the package that OWNS the page — Titanic's,
  * Dust's, or this one's. Each package's Vite config substitutes its own for
  * `__APP_VERSION__` at build time, so no page fetches a manifest to find out
- * what it is, and no manifest speaks for a game it does not hold. There used to
- * be a second constant here because one build served two games. Node — the tests and the tools — does no
+ * what it is, and no manifest speaks for a game it does not hold. Node — the tests and the tools — does no
  * such substitution, hence the `typeof` guard and the `-dev` fallback; an
  * undeclared identifier is safe to `typeof` but throws when read.
  */

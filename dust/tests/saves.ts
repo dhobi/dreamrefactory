@@ -76,8 +76,8 @@ test("a Dust save is the same container a Titanic save is", () => {
     expect.soft(raw.containers.length, `${f}: containers`).toBeGreaterThan(0);
     /*
      * ...and that the count is one the positional map can account for. NOT a
-     * fixed 18: that was true of the saves this was written against and is
-     * not a property of the format — `count = 7 + 3·banks + 5 + payloads`
+     * fixed 18: that is not a property of the format —
+     * `count = 7 + 3·banks + 5 + payloads`
      * (v1Index), so a save with one open sound bank is 15 and one carrying an
      * active walk's waypoints is 19. A larger collection has both: `D2E_001`
      * with one bank, `D1E_005` with a walk payload. What IS a property is that
@@ -85,8 +85,8 @@ test("a Dust save is the same container a Titanic save is", () => {
      * `v1Index` throws when it does not — so parsing is the assertion, and the
      * arithmetic is checked here rather than a magic number.
      *
-     * Three things it now throws on rather than one (#325): container 6 having
-     * no room for the banks (the original, one-sided check), the three service
+     * Three things it throws on (#325): container 6 having no room for the
+     * banks, the three service
      * tables not being at the tail the count puts them at, and the leftover
      * container count disagreeing with how many walk slots declare waypoints.
      */
@@ -235,9 +235,9 @@ test("a patched Dust save reads back what was written into it", () => {
   /*
    * The base is the EARLIEST save in the directory, found by frame rather than
    * named: whatever collection is installed, the beginning of its session is the
-   * honest lender for the fields a patch does not understand. It used to be
-   * `START.RTD` by name, and naming a file made this the one test in here that
-   * could not survive a different set of saves.
+   * honest lender for the fields a patch does not understand. Naming a file
+   * would make this the one test in here that could not survive a different
+   * set of saves.
    */
   const base = readSaveFile(earliest(files).bytes);
   const before = parseSaveV1(writeSaveFile(base));
@@ -398,8 +398,8 @@ test("the shipped saves decode to the game they came from", () => {
    * The room these reopen is the NIGHT town, not the day one.
    *
    * Both files call themselves "town" inside, so the name field cannot tell them
-   * apart — and the name is what a load used to trust, which brought a midnight
-   * save back at noon with the day palette over it.
+   * apart — and a load that trusted the name would bring a midnight save back
+   * at noon with the day palette over it.
    *
    * The collection demonstrates it BOTH ways, which is the strongest form this
    * claim has: saves calling themselves "town" and holding `nite.set`, and saves
@@ -694,8 +694,8 @@ test("a load fetches the saved room before reading its grid", async () => {
 // --- the room's own two packs, and its colours ------------------------------
 
 /**
- * A save carries container indices out of the SET FILE it was taken in, and the
- * port used to leave them pointing at the wrong room.
+ * A save carries container indices out of the SET FILE it was taken in, and a
+ * port-written save has to point them into the room it is written for.
  *
  * Reported from the original: a port-written save would not load at all —
  * "Dust cannot find a file. Be sure the Dust CD is in your computer's CD-ROM
@@ -703,12 +703,11 @@ test("a load fetches the saved room before reading its grid", async () => {
  * found as `push 0x14f1`.
  *
  * ADDRESSES ARE `SUPPORT/BETA43/DFPENT.EXE`, which is on the disc, so every one
- * of them can be checked from a rip. They were first read in the DF.EXE an
- * INSTALL unpacks from `INSTALL/DATAPENT.Z`, which is NOT on the disc unpacked —
- * this comment used to quote that build (`push 0x14f1 at 0x42ef2a`, acquire at
- * `0x42d160`, globals at `0x4609xx`) and so pointed at nothing a reader could
- * open. The two are the same code: every data global below sits exactly 0x5F00
- * lower here, and the shipped build puts `push 0x14f1` at 0x424921.
+ * of them can be checked from a rip. The DF.EXE an INSTALL unpacks from
+ * `INSTALL/DATAPENT.Z`, which is NOT on the disc unpacked, is the same code
+ * (`push 0x14f1 at 0x42ef2a`, acquire at `0x42d160`, globals at `0x4609xx`):
+ * every data global below sits exactly 0x5F00 lower here, and the shipped
+ * build puts `push 0x14f1` at 0x424921.
  *
  *     0x4248cc  call 0x424a00            ; reopen the set file by path
  *     0x4248e1  call 0x401500            ; acquire pack 0             -> 5360
@@ -730,7 +729,7 @@ test("a load fetches the saved room before reading its grid", async () => {
  * Leaving them stale is invisible until the room changes SIZE. `town.set` and
  * `nite.set` are the same 3111-container file twice, so a save moved between the
  * day and night town loads; `mayupper.set` has 205 containers, and a save moved
- * there asked the original for pack 259 of 205.
+ * there asks the original for pack 259 of 205.
  *
  * Both halves below are measurements against the disc, not assertions about it.
  */
@@ -878,21 +877,20 @@ function bareSession(): GameSession {
 /**
  * Every global a session holds survives being written and read back (#357).
  *
- * The oracle this fix was built against, kept as a test because it is the only
- * thing that says when the writer is honest. Counting the writer's own `onDrop`
- * reports is not enough: on master those named 31 rungs of the playthrough, and
- * the round trip below found 22 rungs losing 164 globals — the difference being
- * everything that was written to a slot no reader would look at.
+ * The only thing that says when the writer is honest. Counting the writer's own
+ * `onDrop` reports is not enough: they miss everything written to a slot no
+ * reader would look at (measured over the playthrough, the reports named 31
+ * rungs where the round trip below found 22 rungs losing 164 globals).
  *
- * Three separate faults were in that gap, and each one is invisible without the
+ * Three faults live in that gap, and each one is invisible without the
  * comparison:
  *
- *  - `newVarRecord` never fixed the PREVIOUS node's vtable, which is what
- *    validates the new name, so on a base whose list ends on a junk one every
- *    new record was written to the same invisible slot. Five calls in a row
- *    answered 3132 on `D1E_001.RTD` and the record count never moved.
- *  - the writer patched the FIRST slot a duplicated name decodes at and
- *    `parseSaveV1` keeps the LAST, so `mwifelike` came back as the other copy.
+ *  - `newVarRecord` has to fix the PREVIOUS node's vtable, which is what
+ *    validates the new name, or on a base whose list ends on a junk one every
+ *    new record is written to the same invisible slot (five calls in a row
+ *    answering 3132 on `D1E_001.RTD`, the record count never moving).
+ *  - `parseSaveV1` keeps the LAST slot a duplicated name decodes at, so a
+ *    writer patching the FIRST brings `mwifelike` back as the other copy.
  *  - `poolIntern` refuses to allocate unless the pool header and container agree
  *    on the size, and `BLDSTPZ.RTD`'s disagree by its own alignment padding.
  *
@@ -918,7 +916,7 @@ test("a save carries every global the session holds", async () => {
      * Grow the session past its base before writing, because otherwise this
      * proves nothing.
      *
-     * Since #344 a load PRUNES the globals to exactly what the file carries, so
+     * A load PRUNES the globals to exactly what the file carries (#344), so
      * a session that has only just loaded holds nothing the base has no record
      * for — every name round trips by construction and a broken writer sails
      * through. Real play is the opposite: rooms and puzzles declare as they go,
@@ -954,8 +952,7 @@ test("a save carries every global the session holds", async () => {
      * and then the strings, so the string wins; a checker that reads `numGlobals`
      * first disagrees with the engine and reports losses that are not there.
      * Titanic's `coalchute` is exactly that shape — `num=0` and `str="coal4"` in
-     * the shipped file — and an earlier version of this comparison called it a
-     * bug (#361, closed as not one) before the reload settled it.
+     * the shipped file, and it is not a bug (#361).
      *
      * So the oracle is the session: write the file, load it into a fresh one, and
      * ask what it is holding. That is the only resolution that matters.
@@ -1014,9 +1011,9 @@ test("a load drops the globals the file does not carry (#344)", async () => {
  * A load stops the scripts the abandoned game was running (#344, second half).
  *
  * A suspended script is suspended inside a builtin, and the teardown in
- * `loadGameV1` RELEASES those without stopping them — so before
- * `abandonRunning()` the next statement ran in a game that no longer existed,
- * against globals the load had just replaced.
+ * `loadGameV1` RELEASES those without stopping them — so without
+ * `abandonRunning()` the next statement would run in a game that no longer
+ * exists, against globals the load has just replaced.
  *
  * A movie stands in for the suspension because it is the one this is reported
  * through: `onPlayMovie` returns a promise the test holds open, and

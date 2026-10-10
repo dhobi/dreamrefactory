@@ -6,12 +6,11 @@
  * anything. `inven.shp`'s `stdmouse` gates every object lying in a room on
  * `realdist(what) < hotdist()`, so a click from across the room hits the object and
  * is then discarded — and `ok` to that sends the failure downstream, to whichever
- * later assertion notices the thing was never picked up (an hour of debugging the
- * first time, and five warnings in segments.ts).
+ * later assertion notices the thing was never picked up.
  *
  * The playthrough cannot cover this, and that is the point of testing it here: the
- * route was tuned AROUND the bug, standpoint by standpoint, so a full green run
- * makes not one dud click. Proving the fix needs a room where the click is
+ * route is tuned AROUND dud clicks, standpoint by standpoint, so a full green run
+ * makes not one. Proving the answer needs a room where the click is
  * guaranteed to do nothing, which is what the stub below is.
  *
  * The driver is a stub rather than the real one for the same reason: a dud is
@@ -33,8 +32,8 @@ import type { SetFile } from "@dreamfactory/engine/df/set";
  * EMPTIED, which the slicing alone does not do: `turnRing` reads
  * `scene.turns[dir].frames` and will happily name a view that is no longer in the
  * list, so a set with one view and a live ring plans a turn to a standpoint that
- * does not exist — which is how the first version of this test span out to the
- * 60-gesture budget instead of reaching the verdict.
+ * does not exist, and the test spins out to the 60-gesture budget instead of
+ * reaching the verdict.
  */
 async function oneStandpointSet(): Promise<SetFile> {
   const { session } = await newHost();

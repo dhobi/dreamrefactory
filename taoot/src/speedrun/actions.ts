@@ -184,11 +184,11 @@ async function jumpOnce(c: ActionContext, goal: string, red: NonNullable<ReturnT
       String.raw`/^map \d+$/i.test(String(window.dbg.session.currentFlat || ""))${orLit}`,
       4000,
     );
-    // A click that did nothing costs the whole backstop, and until now it did
-    // so in silence — the line simply took four seconds longer than it looks
-    // like it should, with nothing in the report to point at. Say so, with
-    // what the map was doing at the time, so the next one of these arrives
-    // already diagnosed instead of as "it feels slow sometimes".
+    // A click that did nothing costs the whole backstop, and silently the line
+    // just takes four seconds longer than it looks like it should, with nothing
+    // in the report to point at. Say so, with what the map was doing at the
+    // time, so it arrives already diagnosed instead of as "it feels slow
+    // sometimes".
     if (!answered) {
       const now = await c.d.evaluate<string>(
         `String((window.dbg.session.propRuntime.get("map") || {}).stateName || "(no map prop)")`,
@@ -589,10 +589,10 @@ export const TITANIC_ACTIONS: ActionTable = {
           // that consumed the last move, is that moment: `next` then reads a deg
           // the engine has actually settled on.
           //
-          // Filling it only once before the press is what the first version did,
-          // and it steers a dial by a photograph: the number never changes, so
-          // the swing never turns round and never stops. valve3 asked for 7 wound
-          // 2->19, 19->0, 0->19 across its three grabs and was called stuck.
+          // Filling it only once before the press steers a dial by a
+          // photograph: the number never changes, so the swing never turns round
+          // and never stops (valve3 asked for 7 winds 2->19, 19->0, 0->19 across
+          // its three grabs and is called stuck).
           await c.d.dragProp(
             at,
             async () => {
@@ -970,11 +970,11 @@ export const TITANIC_ACTIONS: ActionTable = {
        * is made from the old room's scenes and roads, and it is not obviously
        * wrong — it is a correct route through a room nobody is in.
        *
-       * That is what it looked like: `planning in smstack3 (from scene65)`,
-       * smstack3's name against smstack2's geometry, routed through a `view70`
-       * that only exists downstairs. The room, sampled a moment later when the
-       * step failed, was `smstack3 Scene39/View58` — one right turn from the
-       * target and no roads at all.
+       * It looks like `planning in smstack3 (from scene65)`: smstack3's name
+       * against smstack2's geometry, routed through a `view70` that only exists
+       * downstairs, while the room, sampled a moment later when the step fails,
+       * is `smstack3 Scene39/View58` — one right turn from the target and no
+       * roads at all.
        *
        * A settle closes the window, because a changeset is not quiet while it is
        * happening. This is exactly what `settle()`'s own help means by "needed
@@ -1005,9 +1005,9 @@ export const TITANIC_ACTIONS: ActionTable = {
        *
        * The false smokestack has `scene39/view55` in BOTH `smstack2` (the nine
        * floors you climb) and `smstack3` (the top, where the notebook is). So
-       * `stand(view55)` reached for one room and planned a correct route through
+       * `stand(view55)` can reach for one room and plan a correct route through
        * the other — through `view70`, a standpoint that exists only in smstack2 —
-       * and reported turning a ring that was never going to contain it.
+       * and report turning a ring that is never going to contain it.
        *
        * `set:` is the guard. It costs a word and it turns "the walk went
        * somewhere strange" into "you are not where you think you are", which is

@@ -174,9 +174,8 @@ function read(a: any, comps: number): number[] {
 /**
  * The WORLD transform of every mesh node, walked from the scene's roots.
  *
- * This used to take the mesh node's own scale and offset and nothing else, which
- * is all gltfpack's quantization needs and all any file here had ever carried.
- * It is not all a Sketchfab export carries: those hang the model under a root
+ * Not just the mesh node's own scale and offset, which is all gltfpack's
+ * quantization needs. A Sketchfab export carries more: it hangs the model under a root
  * holding the Z-up-to-Y-up turn as a matrix, and ignoring it hands the fitter a
  * pillow lying on its side. The fit still succeeds — it stretches whatever it is
  * given into whatever box it is told — so nothing errors; the giveaway is in the

@@ -97,7 +97,7 @@ const STRINGS = new Map([...CATALOGUE].filter((e): e is [string, string] => type
 /**
  * The keys the TypeScript asks for by name.
  *
- * The markup is no longer the only consumer: the editors build strings too, and
+ * The markup is not the only consumer: the editors build strings too, and
  * `t("common.loading", …)` is as real a use as a `data-i18n` attribute. Scanned
  * rather than imported because the modules touch `document` at load.
  */

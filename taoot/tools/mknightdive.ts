@@ -305,8 +305,8 @@ function filmSegment(gif: GifImage): MovBuildSegment & { seconds: number; logoFr
    * The frame the question is asked over: the last one the logo is fully up in.
    *
    * Not `art.at(-1)`, which on this card is four frames into a fade to black —
-   * the animation ends on nothing, and a question asked over nothing is the plain
-   * screen this used to draw. "Fully up" is measured rather than typed in: the
+   * the animation ends on nothing, and a question asked over nothing is a plain
+   * screen. "Fully up" is measured rather than typed in: the
    * last frame within 5% of the brightest, which on the Nightdive card is frame
    * 65 of 70 (it holds from 48 to 65, then fades over the last four).
    */

@@ -12,7 +12,7 @@
  * forgets what you were typing — ten engine frames.
  *
  * What each match does is read at the other end of the call, and two of them are
- * not what this port had them down as:
+ * not what they look like:
  *
  *   - **`jetson` is TIME.** `0x40d350`'s argument is signed: positive sets
  *     `[0x4a4d68]` and negative adds to it, and `[0x4a4d68]` is the mission

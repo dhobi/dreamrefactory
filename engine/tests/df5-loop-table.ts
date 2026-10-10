@@ -4,13 +4,12 @@
  *   npx vitest run engine/tests/df5-loop-table.ts
  *
  * A film's records are 34 bytes from 0x226, where RedJack.exe's move.c reads
- * them (banks.ts has the addresses). `readLoopTableV5` used to start them at
- * 0x228, which reads every field but puts the last record 2 bytes past the end
- * of a table that ends exactly — so it was dropped, and every order entry
- * naming it went with it: `arrive.move`'s order `1,2,2,…` (the music, then
- * `silence` held) lost `silence`, and the film's music started again from the
- * top under its last second and a half. Reported in #379 as long films' audio
- * skipping back to the first chunk.
+ * them (banks.ts has the addresses). Starting them at 0x228 reads every field
+ * but puts the last record 2 bytes past the end of a table that ends exactly —
+ * so it is dropped, and every order entry naming it goes with it: `arrive.move`'s
+ * order `1,2,2,…` (the music, then `silence` held) loses `silence`, and the
+ * film's music starts again from the top under its last second and a half — long
+ * films' audio skipping back to the first chunk (#379).
  */
 import { existsSync, readFileSync } from "node:fs";
 import { test, expect } from "vitest";

@@ -46,15 +46,28 @@ npm test -w skullcracker                              every suite
 npm test -w skullcracker -- speed foes                just these
 ```
 
-The runner gives each suite a process of its own — the game keeps its world in
-module state, one per process — and runs several at once. The whole set takes
-about twenty seconds; the browser suites it replaced took about an hour and
-still needed a retry pass to tell flakes from regressions.
+The runner is vitest (`vitest.machine.config.ts`, on the shared
+`tools/vitest-machine.ts`): a file with a `test(` in it is a suite, and its forks
+pool gives each suite a process of its own — the game keeps its world in module
+state, one per process — and runs several at once. The whole set takes about
+twenty seconds; the same checks as browser suites took about an hour and still
+needed a retry pass to tell flakes from regressions.
 
 Two things carry across `h.load()` in one process, because the game carries
 them from level to level: the score and lives (a suite that wants a clean start
 passes `score=` and `lives=`, the game's own saved-game switches), and what the
 player is holding.
+
+## The page's pieces
+
+`skullcracker/tests/*.ts` check pieces on their own, with no level played: the
+panel and HUD painter (`hud`), the file store (`files`), the film player
+(`film`), the touch pad's logic (`pad`), and the states a playthrough does not
+happen to reach — the floating barrels frame by frame (`barrels`) and the class
+think functions against a stand-in context, where the test holds the dice
+(`brains`). They are quick, so they run in the repository's
+gate with every other package's (`npm test` at the root; `vitest.config.ts`
+here), while the machine suites stay out of it.
 
 ## Page suites
 

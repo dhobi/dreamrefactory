@@ -156,11 +156,11 @@ const C0 = {
    * set's real main-script container across all 35 of them: 2 for undertak.set
    * and 1 for the other 34.
    *
-   * Reading 0x1c instead cost that room its entire script. No main means no
+   * Reading 0x1c instead costs that room its entire script. No main means no
    * `openset`, and undertak.set's openset is the only thing in the corpus that
    * ever places the undertaker (`sendtoactor ("side", setupactor ("store"))`),
    * while the same container holds the `keydown` that drives the room's arrows
-   * — so you walked in to an empty room you could not leave (#291).
+   * — so you would walk in to an empty room you could not leave (#291).
    */
   mainScript: 0x1b78, // i32
   /**
@@ -660,13 +660,11 @@ function readTransitions(
  * record with an i32 nothing reads and pads the slot to 54; v1 has neither, so
  * every offset is v4's less 4 and the stride is 50.
  *
- * It read as "two coordinates and a name, the rest a fixed tail" for as long as
- * only the primary was wanted, and that cost real stars: `gang.cst` places Leroy
- * on `town.leroy1`, which is not a primary anywhere on the disc — it is the
- * secondary of `town.leroy2`, packed in the tail this reader was skipping. The
- * same skip in the v4 reader is what once kept Sasha from walking down the hall
- * (see `readActors` in set.ts), so the failure and the fix are both the second
- * time round.
+ * Reading it as "two coordinates and a name, the rest a fixed tail" would do for
+ * the primary alone, and costs real stars: `gang.cst` places Leroy on
+ * `town.leroy1`, which is not a primary anywhere on the disc — it is the
+ * secondary of `town.leroy2`, packed in the tail. The same skip in the v4 reader
+ * would keep Sasha from walking down the hall (see `readActors` in set.ts).
  *
  * The tail is NOT zero-filled — every record carries the same f64-looking bytes
  * — so the stride has to be the constant and a secondary is recognised by its

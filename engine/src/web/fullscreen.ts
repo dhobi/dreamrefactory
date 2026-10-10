@@ -28,12 +28,11 @@
  *   can take those away from an iPhone — but the picture gets every pixel
  *   underneath them, which is the whole of what the button was ever for.
  *
- * What matters is that the two routes share ONE stylesheet path. The pages used
- * to letterbox off `#stage:fullscreen`, and the obvious move was to widen each
- * selector to `#stage:fullscreen, #stage.fs`. That is the trap: a selector list
- * is dropped ENTIRELY by any engine that cannot parse one member of it, so the
- * pseudo would have taken the class down with it on exactly the browsers this
- * exists for. So the pseudo is gone from the sheets altogether. {@link FS_CLASS}
+ * What matters is that the two routes share ONE stylesheet path. Widening a
+ * `#stage:fullscreen` selector to `#stage:fullscreen, #stage.fs` is the trap: a
+ * selector list is dropped ENTIRELY by any engine that cannot parse one member
+ * of it, so the pseudo would take the class down with it on exactly the
+ * browsers this exists for. So the sheets do not use the pseudo at all. {@link FS_CLASS}
  * is the only thing that letterboxes, this module puts it on by both routes, and
  * `:fullscreen` is left to the UA to mean whatever it means.
  *
@@ -85,7 +84,7 @@ import { isMobileBrowser } from "./mobile";
  * The class the stage wears while it is filling the screen — by EITHER route.
  *
  * The pages' letterbox rules key off this and off nothing else; see the note
- * above on why they no longer name `:fullscreen`.
+ * above on why they do not name `:fullscreen`.
  */
 export const FS_CLASS = "fs";
 
@@ -107,7 +106,7 @@ export interface FullscreenOptions {
    * itself the moment the stage goes up and put back when it comes down, so a
    * translated page keeps its translation without this module owning a string
    * table. (Only the play page translates the label at all — the exit wording is
-   * English on every page today, as it was before this module existed.)
+   * English on every page.)
    */
   exitLabel?: string;
   /** where to say that the real API refused and the page took over */

@@ -66,8 +66,8 @@ Two consequences of that reach further than Skull Cracker:
   container location and a one-shot table's count are `long`s. Their low half is
   the same number on a little-endian file and the empty half on a big-endian one,
   so read as an i16 this game's menu has no music and its buttons no click.
-  `engine/src/df/banks.ts` reads all three as 32 bits; every bank and film in the
-  other three rips reads identically either way (1973 films, 646 banks, no
+  `engine/src/df/banks.ts` reads all three as 32 bits; every bank and film in
+  Titanic's, Dust's and Timelapse's rips reads identically either way (1973 films, 646 banks, no
   differences).
 - **The two reserved palette entries belong to the build being rendered, not to
   the format.** Palettised Windows reserves black at 0 and white at 255, so the
@@ -427,6 +427,8 @@ a level with no class anywhere.
   [how it is checked](verification.md)
 - `skullcracker/tests/machine/harness.ts` — the game stood up headless on the rip,
   stepped a frame at a time
+- `skullcracker/tests/*.ts` — the page's pieces on their own (HUD, files, film,
+  pad, barrels, brains), in the repository's gate
 - `skullcracker/tools/runsuites.mts` — the page suites, one process, one Chromium:
   `npm run test:browser:all -w skullcracker`
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser

@@ -33,7 +33,7 @@ export class SetScripts {
     /**
      * The set's OWN name, falling back to the opened file's basename.
      *
-     * This used to prefer the file, on the belief that TAOOT's `DECKBD.SET` calls
+     * Preferring the file would rest on a belief that TAOOT's `DECKBD.SET` calls
      * itself "decka" while scripts address it as "deckbd". It does not: across the
      * seven editions in `gamefiles/`, all 495 sets carry an internal name and not
      * one of them differs from its file's basename. So on Titanic the two rules
@@ -222,15 +222,14 @@ export class SetScripts {
   /**
    * The lifecycle a JUMP owes — `SetViewer.teleport`'s cross-view cut. The
    * BOOT defaults of closescene run (closes open doors/signs, reds the nav
-   * arrow — #71's mid-air door is what firing nothing looked like), then the
+   * arrow — firing nothing leaves #71's mid-air door), then the
    * full openscene chain for the view now being stood at.
    *
-   * A turn or walk no longer comes through here: TI.EXE's movement fires the
+   * A turn or walk does not come through here: TI.EXE's movement fires the
    * full closescene chain at the move's START and the full openscene chain at
    * its settle (see `SetViewer.departScene` for the disassembly), so the
-   * viewer's turn()/walk() call closeScene/openScene directly. What this keeps
-   * from that era is the evidence that `openscene` is a per-VIEW event, which
-   * is why every settle re-fires it:
+   * viewer's turn()/walk() call closeScene/openScene directly. The evidence that
+   * `openscene` is a per-VIEW event, which is why every settle re-fires it:
    *
    *  - 33 of 51 shipped openscene handlers gate on currentview() and only act
    *    when you come to face a particular view (HALLA's "Sasha walks down the

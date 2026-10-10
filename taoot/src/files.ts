@@ -44,8 +44,8 @@ export type { WireEvent };
  * The disc a manifest URL sits on: which of `volumes` its path passes through.
  *
  * The volume names come from the game's own `setpath`, which is the only place
- * they are stated (engine/src/runtime/bootplan.ts) — this used to be a `/titanic([12])/`
- * regex, one title's CD labels in the layer that resolves any title's files.
+ * they are stated (engine/src/runtime/bootplan.ts) — not a regex of one title's
+ * CD labels in the layer that resolves any title's files.
  *
  * No volumes means a single-volume game and so no disc to be on: null, which
  * {@link FileStore} reads as disc 1. That is also the answer for this port's own
@@ -69,10 +69,10 @@ export function discOfUrl(url: string, volumes: readonly string[] = []): Disc | 
  * `gamefiles/demo/…` → `"demo"`).
  *
  * Matched against the known codes ({@link isEditionCode}) rather than by shape:
- * it used to be any two-letter directory, which named the six languages neatly
- * and then had no way to admit `demo/` — a tree whose name is not a language code
- * would have read as NEUTRAL and had its files offered under every language at
- * once, colliding with the real game's basenames. A list is also what tells
+ * "any two-letter directory" names the six languages neatly and has no way to
+ * admit `demo/` — a tree whose name is not a language code would read as
+ * NEUTRAL and have its files offered under every language at once, colliding
+ * with the real game's basenames. A list is also what tells
  * `gamefiles/titanic1/…` (a flat dump, no edition level at all) from an edition.
  *
  * Anything unrecognised is **edition-NEUTRAL** ({@link NEUTRAL}) and reachable
@@ -130,9 +130,9 @@ export class FileStore {
    * edition -> lowercase basename -> server URL per disc (dev-server manifest).
    *
    * Nested because a basename is not unique across the tree once six editions
-   * are installed: `bedsit1.set` exists once per edition, and before this map
-   * had an edition level they collided on the basename and one arbitrary tree
-   * (whichever won `preferredUrl`) served the whole game.
+   * are installed: `bedsit1.set` exists once per edition, and without an edition
+   * level they would collide on the basename and one arbitrary tree (whichever
+   * won `preferredUrl`) would serve the whole game.
    */
   private readonly urls = new Map<string, Map<string, { 1?: string; 2?: string }>>();
   /** every registration as it came in, so {@link setVolumes} can re-index */
@@ -152,8 +152,8 @@ export class FileStore {
    * page draws its busy mark from the COUNT (taoot/src/main.ts): a mark is up
    * while anything is outstanding, whatever it is. The load remover
    * (engine/src/web/load-clock.ts) needs the fetches THEMSELVES — which URL, and how
-   * long it took — because since [#369](https://github.com/dhobi/dreamrefactory/issues/369)
-   * it only stops a speedrun's clock for the ones that went to the network, and
+   * long it took — because it only stops a speedrun's clock for the ones that
+   * went to the network ([#369](https://github.com/dhobi/dreamrefactory/issues/369)), and
    * a cache hit is a read the original did off its CD as well.
    *
    * So the event carries both, and the count comes along on every event rather
@@ -327,8 +327,8 @@ export class FileStore {
    * convention exists across the two discs. Entries are kept PER DISC, because
    * a shared basename is not a duplicate: `gstair2.set` on TITANIC1 and
    * `GSTAIR2.SET` on Titanic2 are the grand staircase before and after the
-   * sinking. Collapsing them (as keying by basename alone used to) silently
-   * picked one act's scenery for the whole game.
+   * sinking. Collapsing them (keying by basename alone) would silently pick one
+   * act's scenery for the whole game.
    */
   registerServerFile(key: string, url: string): void {
     this.registered.push([key, url]);

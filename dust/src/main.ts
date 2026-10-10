@@ -2,16 +2,12 @@
  * The Dust shell — *Dust: A Tale of the Wired West* (Cyberflix, 1995) rendered
  * by the Titanic port's own file layer.
  *
- * It began as an EXPERIMENT that shared `engine/src/df/` with the play page and
- * nothing else — no engine, no interpreter, no saves — answering one narrow
- * question by standing you in a room and letting you walk: how much of a
- * DreamFactory **1** disc can a DreamFactory **4** port read?
- *
- * The answer turned out to be most of it, and the page grew into the answer. It
- * now boots off the disc through the same {@link GameHost} Titanic uses, plays
+ * It boots off the disc through the same {@link GameHost} Titanic uses, plays
  * the intro films through the engine's own `MoviePlayer`, and saves and loads
- * `.rtd` through the shared save browser. What is left of the experiment is
- * {@link browse}, the standalone set walker, which {@link start} keeps as the
+ * `.rtd` through the shared save browser. {@link browse}, the standalone set
+ * walker, shares `engine/src/df/` and nothing else — no engine, no interpreter,
+ * no saves — and asks how much of a DreamFactory **1** disc a DreamFactory
+ * **4** port can read by standing you in a room; {@link start} keeps it as the
  * FALLBACK for a boot that cannot produce a viewer — a failure should leave
  * something on screen that says so and still shows the disc.
  *
@@ -175,9 +171,8 @@ const tick = (): Promise<void> =>
 /**
  * Dust can be HEARD, and that is a measurement rather than an ambition.
  *
- * This page ran on a `NullAudioSink` — every sound the game asked for was decoded
- * and dropped. Which is not a missing luxury: it is the game's only way of
- * answering some things at all. A locked door is the case. NITE.SET's jail is shut
+ * Sound is not a luxury here: it is the game's only way of answering some
+ * things at all. A locked door is the case. NITE.SET's jail is shut
  * on day 1 and its script says so out loud —
  *
  *     if currentview () = "west" & pointinjail (arg)
@@ -185,7 +180,7 @@ const tick = (): Promise<void> =>
  *         else            sendtoprop ("door", setupprop ("jail"))
  *
  * — so the whole difference between "this door is locked" and "this door is
- * broken" was a sound going into a bin. Measured on that click: the sink is
+ * broken" is a sound. Measured on that click: the sink is
  * handed 13312 samples at 22050 Hz, a real six-tenths of a second of knocking,
  * out of a bank the reader already opens without a warning (all 26 of them do).
  *
@@ -194,11 +189,11 @@ const tick = (): Promise<void> =>
  * frame and the real sink is attached on one — which also starts whatever loops
  * the game began meanwhile (see DeferredAudioSink).
  *
- * THE GESTURE IS THE START BUTTON, and only that. This used to be a pair of
- * `{ once: true }` listeners on the window, which took the first click the player
- * happened to make and was wrong twice over: whatever that click was FOR arrived
- * with the audio still cold, and the theme the boot had started came in late, over
- * a room the player was already walking around in. A page that needs a gesture
+ * THE GESTURE IS THE START BUTTON, and only that. A `{ once: true }` listener on
+ * the window would take the first click the player happens to make, which is
+ * wrong twice over: whatever that click was FOR arrives with the audio still
+ * cold, and the theme the boot started comes in late, over a room the player is
+ * already walking around in. A page that needs a gesture
  * should ask for one. So the boot ends on a button (see waitForStart) and this is
  * called from it, after `play` has run — which is the ordering that matters,
  * because the theme can only be started through a viewer and `playing` is what
@@ -330,17 +325,15 @@ const logEl = document.getElementById("log") as HTMLPreElement;
 const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
 
 /**
- * The log, and it is now the page's ONLY prose surface.
+ * The log, and it is the page's ONLY prose surface.
  *
- * The strip used to carry a live readout — room, scene, view, how many of the cast
- * are standing here and how many are in shot, and the canvas's backing size
- * against its CSS size. Each of those was added for a question (the last one for
- * "the actors look too big", where a number both ends could compare beat an
- * impression), and each of them then sat there overwriting itself sixty times a
- * second. Written HERE instead they become a trace: one line per move, scrollable,
- * next to the boot that produced the room they describe.
+ * A live readout — room, scene, view, how many of the cast are standing here and
+ * how many are in shot, the canvas's backing size against its CSS size — would
+ * overwrite itself sixty times a second. Written HERE those become a trace: one
+ * line per move, scrollable, next to the boot that produced the room they
+ * describe.
  *
- * Which is why this is module-scope and no longer a closure inside `runBoot`. It
+ * Which is why this is module-scope and not a closure inside `runBoot`. It
  * appends rather than rebuilding `textContent`, because unlike a boot a trace has
  * no end, and it keeps only the last {@link LOG_MAX} lines for the same reason.
  */
@@ -669,7 +662,7 @@ function clearScreen(): void {
 /**
  * Open the boot stage and decode its opening flat.
  *
- * The same two readers the play page uses — `readStgFile` now reads both engines,
+ * The same two readers the play page uses — `readStgFile` reads both engines,
  * because a v1 `.FLT` is a v4 `.STG` with a shorter header and a 28-byte flat
  * record instead of 46. Nothing here knows which it got.
  */
@@ -836,13 +829,12 @@ async function browse(): Promise<void> {
  *
  * THE BOOT RUNS AFTER START, WITH THE FRAME LOOP LIVE — because the boot is the
  * opening of the game: BOOTFILE plays `intro.mov` and `intro2.mov` (chaining
- * `intro3.mov`) before it opens its menu stage. This page used to run the boot
- * headless behind the title card, where `playmovie` starts a film and moves on
- * (no frame source, nothing modal), and the report that ended that was exact:
- * "we start straight in the town — in the original there is a game dust mov
- * followed by a cyberflix mov first". `coldBoot` gives the films their surface
- * (DustFiles.serverSetNames — town.set as the movie host, under the boot's own
- * blackscreen) and `play(host)` before it is what makes `playmovie` block.
+ * `intro3.mov`) before it opens its menu stage. Run headless behind the title
+ * card, `playmovie` would start a film and move on (no frame source, nothing
+ * modal), and the game would start straight in the town without the Dust and
+ * CyberFlix films. The films play on the screen, not a room
+ * (engine/src/web/screen-director.ts), and `play(host)` before the boot is what
+ * makes `playmovie` block.
  *
  * The log still measures what it always did: which files the boot opened, which
  * it asked for and did not get, and where the globals ended up. `day = 1`,
@@ -1185,7 +1177,7 @@ function play(host: GameHost, files: DustFiles): void {
     },
   };
   (window as unknown as { dbg: unknown }).dbg = dbg;
-  (window as unknown as { dust: unknown }).dust = dbg; // the name this page had first
+  (window as unknown as { dust: unknown }).dust = dbg; // the older name, kept as an alias
   // The boot's chatter has been read by whoever wanted it; the game gets a clean
   // picture. Except where the log IS part of the page rather than an overlay on
   // it ({@link DETAILS_ALWAYS}) — on the workbench it is a column, and a column
@@ -1222,9 +1214,7 @@ function play(host: GameHost, files: DustFiles): void {
   );
   const loop = (now: number): void => {
     // The SCREEN's frame, not a room's — which is what lets this disc's two
-    // intro films play before the town is open. They used to need `town.set`
-    // loaded and pinned black behind them purely so this loop had a viewer to
-    // call (see files.ts's serverSetNames, and screen-director.ts).
+    // intro films play before the town is open (see screen-director.ts).
     host.director.tick(now);
     host.director.render(ctx);
     th.frame(!!host.director.currentRoom && host.director.picture === "view", host.director.awaitingChoice, now);
@@ -1302,15 +1292,12 @@ addEventListener("keydown", (e) => {
    * Typed into something on the PAGE, not at the game
    * (engine/src/web/keys.ts) — and the reason it is the first question asked.
    *
-   * This listens on `window` and takes every letter, so anything on the page
-   * with a text field lost it: the speedrun workbench's sheet is a `<textarea>`
-   * and nothing could be typed into it at all, because every keystroke came
-   * here, went to the director as a game key, and was `preventDefault`ed on the
-   * way out. Titanic's handler has always asked (taoot/src/main.ts); what this
-   * one had instead was a bare `e.target instanceof HTMLSelectElement`, which
-   * covered the room picker that used to sit in the strip and nothing else. A
-   * `SELECT` is one of the things `focusOwnsKey` answers for, so that check is
-   * gone rather than kept beside this one.
+   * This listens on `window` and takes every letter, so without the question
+   * anything on the page with a text field loses it: the speedrun workbench's
+   * sheet is a `<textarea>`, and every keystroke would come here, go to the
+   * director as a game key, and be `preventDefault`ed on the way out. Titanic's
+   * handler asks the same (taoot/src/main.ts). A `SELECT` is one of the things
+   * `focusOwnsKey` answers for.
    */
   // which key is whose: src/input.ts
   const act = keyAction(e);
@@ -1387,11 +1374,10 @@ function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: 
  * Press, move, release — three listeners and not one, because Dust asks the
  * button a question a whole click cannot answer.
  *
- * This page used to call `viewer.click()`, which is a press with the release
- * already in it and `pointerDown` never set. That is enough for anything that
- * happens ON the press, which is why walking and doors and conversations all
- * worked — and it silently disables everything the game does by POLLING, because
- * `stilldown()` and `button()` read `session.pointerDown` and it was never true.
+ * `viewer.click()` is a press with the release already in it and `pointerDown`
+ * never set. That is enough for anything that happens ON the press — walking,
+ * doors, conversations — and it silently disables everything the game does by
+ * POLLING, because `stilldown()` and `button()` read `session.pointerDown`.
  *
  * Dust polls in two places a player lives in. Carrying an object is the first
  * (INVEN.PRP `stdmouse`): the held item is dragged out of the panel and dropped
@@ -1413,9 +1399,8 @@ function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: 
  * press — which is the bone in the panel, where no actor and no room is — and
  * the item goes straight back to 316,320 having been offered to nobody.
  *
- * That was the SECOND gate on the same gesture. The first was that the click
- * never reached the prop at all (see BOOT_UI_SHOPS in engine/src/runtime/session.ts); this is
- * what stops it once it does.
+ * That is the SECOND gate on the same gesture. The first is the click reaching
+ * the prop at all (see BOOT_UI_SHOPS in engine/src/runtime/session.ts).
  *
  * The second is the whole "would you like this?" screen (`handleselect`), a modal
  * pump that is nothing but `if button ()` around a `hittest` — with the button
@@ -1426,16 +1411,15 @@ function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: 
  * gesture started.
  */
 /**
- * The pointer, drawn with Dust's own art — and this page never asked for one.
+ * The pointer, drawn with Dust's own art.
  *
  * `cursor("touch")` names a `CURS.*` cursor resource inside the engine's own
  * executable (`tools/dumpcursors.ts` has the mechanism), and `DF.EXE` carries
  * nine. Dust's scripts ask for seven of them 285 times: touch (205), arrow (40),
- * watch (34), sight (3), and one each of gostrait, goright and goleft. This shell
- * dropped every one of those on the floor — it never called `hover` at all, so
- * the pointer over Dust was whatever the browser felt like, including over the
- * three `sight` crosshairs and the direction arrows that are the only sign a
- * doorway can be walked through.
+ * watch (34), sight (3), and one each of gostrait, goright and goleft. Without
+ * `hover` the pointer over Dust is whatever the browser feels like, including
+ * over the three `sight` crosshairs and the direction arrows that are the only
+ * sign a doorway can be walked through.
  *
  * DreamFactory 1's set is not Titanic's: it has no `godown`/`goup` at all (and no
  * script asks for one), and its `CURS.TOUCH` is drawn differently — the two
@@ -1485,12 +1469,9 @@ canvas.addEventListener("pointerdown", (e) => {
    * handler's note): what a double-tap means is ESCAPE, and a film is skipped
    * through the director with no room open at all.
    *
-   * This asked for `host.viewer` and dropped the gesture when there was none, so
-   * the opening films were unskippable BY FINGER while the keyboard skipped them
-   * — the same bug as the keyboard's, in the half nobody retested. Reported as
-   * "I cannot skip a mov with double tap anymore", and it is a regression rather
-   * than an old fault: films used to play over an open set, and they play on the
-   * ScreenDirector now, which is when `viewer` became null underneath this.
+   * Films play on the ScreenDirector with `viewer` null, so a gesture that
+   * waited for `host.viewer` would leave the opening films unskippable BY
+   * FINGER while the keyboard skips them.
    */
   if (e.pointerType === "touch") {
     // TH's right click, on a phone: a second finger makes it a two-finger

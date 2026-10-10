@@ -88,10 +88,8 @@ export interface Mission {
    * The chapter's own opener, on the first stage of each chapter and nowhere
    * else: `Bomb.Mov`, `Mall.Mov`, `Belfry.Mov`, `Cycle.Mov`.
    *
-   * WHERE it sits was read wrong here for as long as it went unplayed. This
-   * file said the opener is queued "BEFORE both", on the strength of chapter
-   * one — and chapter one is the exception. The four cases, each decoded at its
-   * own push:
+   * WHERE it sits is not "BEFORE both": chapter one does that, and chapter one
+   * is the exception. The four cases, each decoded at its own push:
    *
    * ```
    *   44d794 Bomb.Mov    44d7b9 Boggs01.Mov  44d7de Chp01.Mov
@@ -252,9 +250,8 @@ export const DEATH_FILMS = [
  * ledge from x271 to x691 and then **y7250 for the rest of the level**, 2919
  * below the bottom of its own room rect and 2900 below anything it draws (see
  * `rasteriseGround` in `engine/src/df/sbk.ts` — "CITY has no floor. It has 73
- * platforms and 20 planks, and the ground is the fall"). Walking east off that
- * ledge, this page used to land the player on y7250 and let them walk in the
- * void for ever.
+ * platforms and 20 planks, and the ground is the fall"). Without one, walking
+ * east off that ledge lands the player on y7250 to walk in the void for ever.
  *
  * The line is drawn where the data leaves room for it. Measured over all 48
  * shipped regions, the deepest a room's floor goes below its own rect is

@@ -551,12 +551,11 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
   // One-shot chunks in the NON-looping block: named EVENT sounds, fired by
   // entering a frame or clicking a region and by nothing else — the engine has
   // no other path to them (its only auto-started audio is the loop chain,
-  // 0x426170). This used to also serve as a play-once soundtrack when the
-  // loop table was empty, which was a model, not a measurement: for the
-  // single-chunk cutscenes it was built on, the chunk is ALSO frame 0's entry
-  // sound, so the two are indistinguishable — until leave.mov's segment 2,
-  // where the same rule played the smokestack falling at segment START and
-  // again at its authored frame 57.
+  // 0x426170). They are not also a play-once soundtrack when the loop table is
+  // empty — that would be a model, not a measurement: for the single-chunk
+  // cutscenes the chunk is ALSO frame 0's entry sound, so the two are
+  // indistinguishable — until leave.mov's segment 2, where such a rule plays
+  // the smokestack falling at segment START and again at its authored frame 57.
   //
   // A record is 42 bytes and holds TWO 15-char name fields, not one 31-char
   // one: the sound's own name, then the frame to jump to when it ends
@@ -617,12 +616,11 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
 //
 // Every patch below is addressed to a MovSegment, not to the file: a movie is a
 // chain of segments and each carries its own header, frame table, palette and
-// action-frame slots (see the module comment). These used to hardcode container
-// 0, which is only the FIRST segment's header — so an edit made while looking at
-// a later segment wrote its frame name into segment 0's table, at the same
+// action-frame slots (see the module comment). Container 0 is only the FIRST
+// segment's header — so a patch addressed there, made while looking at a later
+// segment, would write its frame name into segment 0's table, at the same
 // record offset, silently renaming an unrelated frame. `seg.bias` is that
-// segment's own header container, and 0 for the first, so a single-segment movie
-// patches exactly where it always did.
+// segment's own header container, and 0 for the first.
 //
 // Frame ART is deliberately NOT editable, and that is a property of the codec
 // rather than a missing feature. MOV frames are delta-encoded in ONE chain for

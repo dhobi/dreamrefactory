@@ -44,11 +44,11 @@ export class ActorInstance {
    * weathervane and the seven pop-up targets with `actorxy (name, x, y)` — screen
    * pixels, a painted booth — and the tower, the water jets and the birds with
    * `actoris3d (name, true)` + `actorxyz`, out in the scene where the camera can
-   * see round them. Neither opcode existed here, so the whole 2D half was placed
-   * nowhere and drawn nowhere: "the targets didn't appear ... trying to shoot
+   * see round them. Without either opcode the whole 2D half is placed nowhere
+   * and drawn nowhere: "the targets didn't appear ... trying to shoot
    * where the props should be results in nothing happening" (#292).
    *
-   * True by default, which is the port as it was and Titanic as it is: every
+   * True by default, which is Titanic as it is: every
    * TAOOT actor is placed by `actorstar`/`actorxyz`, and a v4 cast has no 2D
    * actors at all. `actorxy` is what moves an actor OUT of the world, exactly as
    * `propxy` does for a prop.
@@ -244,9 +244,9 @@ export class ActorRuntime {
    * `new.flt`'s `advanceday` calls `sendtocast("gang", initactors())`, which runs
    * `setupactor` for the whole town while whatever room the player is standing in
    * is the open one. So most of those calls name a star the current set has never
-   * heard of, and land the actor at the origin — which is how this was found:
-   * Leroy read `star=town.leroy1 xyz=0,0,0` while the horses, placed by a script
-   * that happened to run in `town`, read real coordinates.
+   * heard of, and would land the actor at the origin: Leroy would read
+   * `star=town.leroy1 xyz=0,0,0` while the horses, placed by a script that
+   * happened to run in `town`, read real coordinates.
    *
    * Deferring to set entry is enough because an actor is only ever DRAWN in its
    * own set ({@link currentSet}), so a position is only required to be right by
@@ -303,8 +303,8 @@ export class ActorRuntime {
    * and the two draw paths that are not that one pass a flag saying "do not
    * advance" (0x43abd1). A still pose comes to the same thing anyway — every
    * `stand` in the game has a one-step script — but `stok1`'s `dig` and `throw`
-   * do not, and the port used to advance only walkers, so the stoker shovelled
-   * one frozen frame of coal.
+   * do not, and advancing only walkers would leave the stoker shovelling one
+   * frozen frame of coal.
    */
   /** answers the actors whose pose came round to its first step again (see GameSession.endAnim) */
   advanceAnimation(): string[] {
@@ -436,12 +436,12 @@ export class ActorRuntime {
    *   5. **the sprite rectangle intersected with the view's** (0x435300) — and
    *      an empty intersection is a refusal like any other.
    *
-   * Step 5 is the one this port was missing, and #180 is what that costs: a
-   * character standing a deck below you, or behind your shoulder, is inside
-   * `hotdist()` all the same, so `cashidle` kept re-arming, `hasattention(6)`
-   * came due against a distance that was merely SHORT rather than VISIBLE, and
-   * Daisy Cashmore stopped you on the A-deck landing while she was down on B.
-   * The reporter's six standpoints in `stair1c1` all separate on this and
+   * Step 5 is the easy one to miss, and #180 is what that costs: a character
+   * standing a deck below you, or behind your shoulder, is inside `hotdist()`
+   * all the same, so without it `cashidle` keeps re-arming, `hasattention(6)`
+   * comes due against a distance that is merely SHORT rather than VISIBLE, and
+   * Daisy Cashmore stops you on the A-deck landing while she is down on B.
+   * The six reported standpoints in `stair1c1` all separate on this and
    * nothing else — distance alone predicts the wrong answer at five of them.
    *
    * The depth window (step 4) is not ported: its two globals are screen-space

@@ -56,8 +56,8 @@ cs.setOption(Const.CS_OPT_SYNTAX, Const.CS_OPT_SYNTAX_INTEL);
 /**
  * Every address that is the target of a `call rel32`, computed by bytes.
  *
- * This is the real function-entry oracle. `int3`-run detection was wrong twice
- * — MSVC pads with fewer than three, and a jump table before a function leaves
+ * This is the real function-entry oracle. `int3`-run detection is not — MSVC
+ * pads with fewer than three, and a jump table before a function leaves
  * no padding at all — so a boundary is better taken as "the greatest call target
  * at or before this address". A function that nothing calls (a jump-table case,
  * a tail) is invisible to this, which is a known and stated limit rather than a
@@ -182,8 +182,8 @@ if (mode === "find") {
    *     call 0x40b850                       register -> id in AX
    *     mov  word ptr [g], ax   OR   mov si, ax
    *
-   * So rather than assume a byte layout (a first version did, and matched 7 of
-   * 125), this disassembles the window before each site and takes the last
+   * So rather than assume a byte layout (which matches 7 of 125), this
+   * disassembles the window before each site and takes the last
    * `push imm32` that resolves to a string in .data. A site with no such push
    * is reported, never guessed.
    */
@@ -488,7 +488,7 @@ if (mode === "find") {
    */
   const inside = Number(arg.split(":")[0]);
   // entry = the call target at or before the address (see CALL_TARGETS); the end
-  // is the next entry, so a jump table or missing padding no longer matters
+  // is the next entry, so a jump table or missing padding does not matter
   const entry = entryBefore(inside);
   if (entry < 0) { console.log("no call target at or before that address"); }
   else {

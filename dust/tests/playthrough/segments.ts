@@ -141,8 +141,8 @@ export const segment1: Segment = {
 /**
  * Day 1, night: dinner at the Mayor's, and Marie at the gate.
 
- * **The dinner is Marie's conversation, not the wife's.** That took four
- * attempts and a question from Daniel to see. `MWIFE.PUP runyoself()` opens with
+ * **The dinner is Marie's conversation, not the wife's.** `MWIFE.PUP
+ * runyoself()` opens with
  *
  *     if mariephase = 1
  *         puppetspeak ("mwife.14")
@@ -163,18 +163,18 @@ export const segment1: Segment = {
  *
  * `mariephase = 3` is `mrs3()`'s own 101, the last question of the evening.
  *
- * **NOT ON THE ROUTE — and what is left is the last few feet.** Ten attempts got
- * everything above working against the real engine: the display case, the
- * postcards in hand, her case 3 closing the study and opening `maydine`, both
- * women seated, `mwifephase 4`, `mariephase 1`. A probe run from the table
- * reached `mwifephase 10` and `mariephase 3` — the rung's own numbers — and was
- * shown out into the night town, so the evening IS drivable.
+ * **NOT ON THE ROUTE — and what is left is the last few feet.** Everything above
+ * works against the real engine: the display case, the postcards in hand, her
+ * case 3 closing the study and opening `maydine`, both women seated,
+ * `mwifephase 4`, `mariephase 1`. A probe run from the table reaches
+ * `mwifephase 10` and `mariephase 3` — the rung's own numbers — and is shown
+ * out into the night town, so the evening IS drivable.
  *
- * What is not settled is how to drive it. Waiting alone does not finish it (the
- * tenth attempt timed out at the table); clicking Marie the way `clickActor`
- * does fails too, because her file opens and closes inside one settle and the
- * "is a puppet open?" test misses it. The probe that got through clicked and
- * then pumped in small steps, checking after each. So the fix is a conversation
+ * What is not settled is how to drive it. Waiting alone does not finish it (it
+ * times out at the table); clicking Marie the way `clickActor` does fails too,
+ * because her file opens and closes inside one settle and the "is a puppet
+ * open?" test misses it. A probe that clicks and then pumps in small steps,
+ * checking after each, gets through. So the fix is a conversation
  * driver that watches for a puppet ACROSS a wait rather than after one — which
  * is a harness change, and worth making once for all 54 rungs rather than here.
  */
@@ -731,11 +731,9 @@ export const segment7: Segment = {
      * `GANG.CST/1010 mousedown ()` drops the click twice over — `if iswalk (me)
      * exitcode` and `if realdist (me) < hotdist ()` — and Bolivar spends the
      * morning walking between `store.check` at the counter and `store.bolivar2`
-     * in the aisle. The route used to click him from the arrival standpoint and
-     * get away with it, because he happened to be at the counter by the time the
-     * first click landed. #352 took a tick off every move, he settles in the
-     * aisle instead, and 40 clicks from scene d2 all fell outside `hotdist` —
-     * `converse` saw no puppet open at all in 48000 ticks.
+     * in the aisle. Where he is when the first click lands is a draw from the
+     * seeded stream: settled in the aisle, 40 clicks from scene d2 all fall
+     * outside `hotdist` and `converse` sees no puppet open at all in 48000 ticks.
      *
      * So ask the engine where he is, as `rungs/d3m005.ts` does for Jones, and go
      * there. Which star he idles on stops mattering.
@@ -1631,10 +1629,9 @@ export const segment13: Segment = {
      *
      * So which of the three he is on when we arrive decides whether he ever
      * comes, and that is a draw from the seeded stream rather than anything the
-     * route does. It used to land near: he was mid-walk towards us the moment we
-     * stopped. #352 took a tick off every move, the stream moved with it, and he
-     * was parked at `town.help` a cell and a half away — 20000 steps of standing
-     * outside the saloon and `clearattention ()` every one of them.
+     * route does: parked at `town.help`, a cell and a half away, he gives 20000
+     * steps of standing outside the saloon and `clearattention ()` every one of
+     * them.
      *
      * Waiting where HE is rather than where the original stood keeps the accost
      * (his `mousedown` would open the same file, but it also counts an
@@ -1681,12 +1678,10 @@ export const segment13: Segment = {
      * to — so the way out is ESC (`talkOut`'s own, and `puppetevent` answers
      * -1). That ends the conversation and nothing else: six seconds later
      * `mayoridle` accosts again, and it will keep accosting for as long as we
-     * are next to him. So "a whole window with nothing on screen" is not
-     * something that can happen here at all while we wait for it — which is
-     * what it used to wait for, and what made this rung a draw from the seeded
-     * stream: it passed while he happened to accost from a cell far enough from
-     * where we then stood, and #394's route fix moved the stream enough to
-     * land him beside us instead.
+     * are next to him. So "a whole window with nothing on screen" cannot happen
+     * here while we are beside him, and waiting for it makes the rung a draw
+     * from the seeded stream: it passes only when he accosts from a cell far
+     * enough from where we stand.
      *
      * So: one closure is enough here, then walk out of his reach and let
      * `walkTo` answer him if he catches us on the way (the Mayor is exactly the
@@ -1704,9 +1699,8 @@ export const segment13: Segment = {
      * its plaques whose only exit is **555**, which is also `mayorphase = 1` and
      * a state this rung has no right to, so the way out is ESC, and six seconds
      * later `mayoridle` accosts again. Waiting for quiet where he can reach us
-     * is waiting for something that cannot happen; it only ever passed because
-     * the seeded stream happened to put him a few cells further off, and #394's
-     * route fix moved the stream enough to park him beside us instead.
+     * is waiting for something that cannot happen, and it passes only when the
+     * seeded stream puts him a few cells further off.
      *
      * So: leave each conversation as it opens, walk what we can between them,
      * and stop when the standpoint is ours. `stopWhen` is how a walk hands the

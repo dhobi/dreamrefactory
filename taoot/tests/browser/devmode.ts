@@ -286,7 +286,7 @@ const main = async (): Promise<void> => {
    * 0 in all of them, so `loadGame` puts it straight back down. Reported from
    * the page. The headless twin pins that the load really does lower it
    * (taoot/tests/auto/devmode.ts); what this pins is that the PAGE notices and
-   * puts it back, which is the whole of the fix.
+   * puts it back.
    */
   await page.evaluate(() => (window as any).dbg.session.transFromFlat());
   await page.waitForTimeout(300);

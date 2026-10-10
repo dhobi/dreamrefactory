@@ -135,9 +135,8 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
   // instead of leaving it to be discovered as a global that "doesn't persist".
   //
   // And say it about the ITEMS, not about the save: the file is written and is
-  // perfectly loadable, and "savegame: not written" read as though it were not
-  // (#85 — "it says not written, but the save appears to have saved
-  // successfully"). What becomes of a dropped item differs by kind — a global
+  // perfectly loadable, and "savegame: not written" would read as though it were
+  // not (#85). What becomes of a dropped item differs by kind — a global
   // keeps the base's value, a dropped walk is simply absent (#191) — so the
   // per-item reason is the message and the sentence claims nothing more.
   if (dropped.length) {
@@ -201,11 +200,11 @@ function themeSnapshot(session: GameSession): ThemePatch | null {
  * The walks table: every walk in flight, as the record TI.EXE's mover reads
  * (#191).
  *
- * This used to be a log line saying the walk was lost. The loader half arrived
- * first (#189) — a shipped save that catches someone mid-stride puts them back
- * on their own route — so the round trip was asymmetric: load save 17 and Daisy
- * finishes crossing the Grand Staircase, save that same moment through our own
- * writer and reload, and she is standing still. It shows the moment a player
+ * The loader puts a walker caught mid-stride back on their own route (#189), so
+ * a writer that only logged the walk as lost would make the round trip
+ * asymmetric: load save 17 and Daisy finishes crossing the Grand Staircase, save
+ * that same moment through our own writer and reload, and she is standing
+ * still. It would show the moment a player
  * saves mid-conversation-approach, because `walktopuppet` is a walk and it is
  * how most characters reach you.
  *
@@ -263,8 +262,8 @@ function walkSnapshot(session: GameSession): SavedWalk[] {
  *
  * The CROWD is included. `setupgroup` makes the deck extras per room from
  * EXTRA.CST, which is why the shipped saves disagree about which of them exist
- * (25 records to 64) — and why the file is the only witness once a load no
- * longer re-runs the room that would remake them. A crowd record the base save
+ * (25 records to 64) — and why the file is the only witness, since a load does
+ * not re-run the room that would remake them. A crowd record the base save
  * lacks is APPENDED (the actor container has no self-declared capacity; TI.EXE's
  * loader takes the count from the container's size — see applyPatch).
  */
@@ -299,9 +298,8 @@ function actorSnapshot(session: GameSession): SavedActorPatch[] {
  * prop list with no filtering), and the load reads it back instead of letting
  * `showinterface`/`setupsigns`/`setuparrow` re-derive the band (#143).
  *
- * **This used to be a hand-kept list, and it was short twice** (first the
- * bag/pocketwatch/deck map, then `baby` — #107). Hence no list: every prop, as
- * the original does, so there is no third time.
+ * **Every prop, as the original does, and no hand-kept list** — such a list
+ * goes short (the bag/pocketwatch/deck map, then `baby` — #107).
  *
  * The VIEW is written only for a prop whose state a script has actually set
  * (`stateName` non-empty): an untouched prop is still in its file default, and
@@ -361,16 +359,16 @@ function inventorySnapshot(session: GameSession): SavedPropPatch[] {
  * game's own `setpath` names ({@link GameSession.discVolumes}) keeps the disc
  * order the game's, not a `titanic([12])` regex's.
  *
- * What it looked like: the vestibule door out of `veststbd` view18 (#231). Disc
+ * What the wrong disc looks like: the vestibule door out of `veststbd` view18 (#231). Disc
  * 2's copy of that room sends you to `deckbd scene36/view110`, the promenade
  * outside the door; disc 1's older copy still names `scene379`, a scene deckbd
  * does not have — and an unresolvable scene falls back to the set's FIRST, which
  * in deckbd is the `Scene30` stub whose whole openscene is
- * `gotospecial ("decka", "scene354", "view357")`. So the player was handed
+ * `gotospecial ("decka", "scene354", "view357")`. So the player is handed
  * straight through the boat deck and out the other side onto A deck, having been
  * in deckbd for one frame. (Both engines fall back the same way — TI.EXE's scene
  * lookup at 0x409e50 returns "not found" and 0x40a880 adopts record 0 — so the
- * fallback was never the bug; reading the wrong disc's room was.)
+ * fallback is not the problem; reading the wrong disc's room is.)
  */
 function mountSavedDisc(session: GameSession, disk: string): void {
   if (!disk) return;
@@ -424,7 +422,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
    *
    * Before the teardown below rather than after, because the teardown is what
    * WAKES them: `onAbandonMovie` releases a script parked in `playmovie` the
-   * same way the film ending would, and released before the epoch moved it ran
+   * same way the film ending would, and released before the epoch moves it runs
    * on into the next film — measured, `playmovie("debris.mov")` reaching the log
    * while this function was still rebuilding the room.
    *
@@ -446,21 +444,21 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
 
   /*
    * The globals the file does NOT name, which have to GO — the third twin of
-   * `resetCast` and the shop close below, and the last one missing (#340).
+   * `resetCast` and the shop close below (#340).
    *
    * A save's variable records are not a patch over the live session: they are
    * TI.EXE's whole variable list, written out and read back wholesale (the
    * string pool with them, which is why its offsets stay valid across
    * processes — see decodeVars). A global with no record did not exist when the
-   * game was saved, so after `opengame` it does not exist either. The port only
-   * ever `set` them, so it kept everything the file was silent about.
+   * game was saved, so after `opengame` it does not exist either. Only ever
+   * `set`ting them would keep everything the file is silent about.
    *
    * Normally that silence is a room's own doing and the room cleans up after
    * itself: `dumpglobal` (interp.ts) discards a room's globals from `closeset`
    * or `closestage`, and all 64 sites in the corpus sit in a teardown. A load
    * runs no scripts, so no teardown runs, so nothing is dumped.
    *
-   * Reported as the boat deck's Gorse-Joneses going missing after a checkpoint.
+   * Without it, the boat deck's Gorse-Joneses go missing after a checkpoint.
    * `DECKBD2.SET` c1012 opens their lifeboat offer on
    * `frame() - jonesframe > 2000 & jonesphase = 0`, and `jonesframe` is never
    * initialised anywhere — it springs into existence the first time the offer
@@ -519,7 +517,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // as `frame() - stamp` — the cargo hold's ten minutes to reach the painting
   // (#221), the deck's Jones cooldown, the boot clock's own heartbeat. Left
   // counting from the browser tab's start instead of the saved game's, every
-  // one of those deadlines was already long past the moment the save loaded.
+  // one of those deadlines would be long past the moment the save loaded.
   session.frameCounter = save.frame;
   // A save is taken from the CTL menu, which sets lockevents=1 to freeze world
   // input while the panel is up — so every save carries lockevents=1. A load
@@ -531,19 +529,19 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // drop the previous room's timed state; the file's tables are restored below.
   session.scheduler.reset();
   // ...and any speech mid-line — a voice does not follow a load into another
-  // room (puppet.ts only halts it on skip/stop, so it used to).
+  // room (puppet.ts only halts it on skip/stop, so nothing else would).
   session.audio.halt("voice");
   /*
    * ...AND THE CONVERSATION, if one is open.
    *
-   * #254: loaded a Turbine Room checkpoint from the middle of a conversation
-   * with the Gorse-Joneses and they came along for the ride. A conversation is
+   * A Turbine Room checkpoint loaded from the middle of a conversation with the
+   * Gorse-Joneses would bring them along for the ride (#254). A conversation is
    * SESSION state — `SetViewer.conversing` is `session.puppet?.visible` and
    * nothing more — so it does not belong to the room being left and rebuilding
-   * the viewer does not shake it off. Nothing here used to clear it, and the
-   * close-up stayed on screen over whatever room the file named.
+   * the viewer does not shake it off: uncleared, the close-up stays on screen
+   * over whatever room the file names.
    *
-   * The engine's own load lever cannot reach this, which is why it went unseen:
+   * The engine's own load lever cannot reach this:
    * `opengame` is the CTL panel's, and you cannot open the CTL panel with a
    * conversation up. The workbench's checkpoint chips call the host's load
    * directly and at any moment (taoot/src/speedrun-page.ts), so they can.
@@ -574,7 +572,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   /*
    * ...and the film, if one is on screen.
    *
-   * The third of the three things a load used to leave behind, and the only one
+   * The third of the three things a load would otherwise leave behind, and the only one
    * that hung rather than merely showed: see MoviePlayer.abandon for what it
    * costs. Reachable from the workbench the same way the others are — a
    * checkpoint chip pressed during a cutscene — and the ending is full of them:
@@ -615,9 +613,9 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // The cast FILES the save had open, before any record is applied. A room's
     // crowd is not in the boot cast: lounge1c, smoke and deckbd2 each
     // `opencastfile("extra.cst")` from their openset, and a load runs no openset
-    // (#143) — so the eight members the extras are instanced from were missing,
-    // and restoreActors dropped every crowd record it could not find a source
-    // for. 344 of them, across 39 of the 109 shipped saves (#186).
+    // (#143) — so without this the eight members the extras are instanced from
+    // are missing, and restoreActors drops every crowd record it cannot find a
+    // source for: 344 of them, across 39 of the 109 shipped saves (#186).
     //
     // The list is the file's own (SaveGame.castFiles), not a guess from the set
     // being entered: the save records what was open, which is exactly the
@@ -636,7 +634,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     restoreActors(session, save.actors);
 
     // The departing ROOM's props, which the file cannot speak for — the prop
-    // half of `resetCast` above, and it was missing (#339).
+    // half of `resetCast` above (#339).
     //
     // A save's prop table is the BOOT shops and nothing else: all 109 shipped
     // saves carry exactly 72 records, the two persistent shops' props, including
@@ -666,14 +664,14 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
       if (!shop.persistent) await session.closeShop(name);
     }
 
-    // Every prop, both halves, from the file. This replaces the whole family of
-    // script re-runs the old load fought with: initprops' mission defaults, the
-    // house.shp openshop/initprops/showinterface dance, the hand-mirrored open
+    // Every prop, both halves, from the file, in place of the script re-runs a
+    // load would otherwise need: initprops' mission defaults, the
+    // house.shp openshop/initprops/showinterface dance, a hand-mirrored open
     // pocketwatch (its lid/hrs/min/sec anchor and z-order are IN the record:
     // x/y = the band anchor, dist = −6/−5/−5/−4), the nav arrow's lit deg (#4).
     restoreProps(session, save.inventory);
 
-    // The scheduler tables, mid-count. This is what used to need the arriving
+    // The scheduler tables, mid-count, which would otherwise need the arriving
     // room's openset: the idles that make characters act, the scene timers, the
     // room's positional ambience.
     for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
@@ -688,11 +686,10 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // where the save caught them with only what was left to run. See
     // `Scheduler.restoreWalk`.
     //
-    // A walk that cannot be put back is DROPPED and its walker stood up, which
-    // this only claimed to do before: the actor record restores the pose it was
-    // saved in, that pose is `walk`, and an actor steps through its play script
-    // whether a walk is running or not (#181) — so a drop that left the pose
-    // alone left them treadmilling.
+    // A walk that cannot be put back is DROPPED and its walker stood up: the
+    // actor record restores the pose it was saved in, that pose is `walk`, and an
+    // actor steps through its play script whether a walk is running or not
+    // (#181) — so a drop that left the pose alone would leave them treadmilling.
     for (const w of save.walks) {
       const a = session.actorRuntime.get(w.actor);
       const usable = w.type === 0 || w.type === 1 || (w.type === 3 && !!w.path);
@@ -849,13 +846,11 @@ function instanceSource(session: GameSession, name: string): string | null {
  * numeric half — visibility, screen anchor or world place, deg, z-order, scale,
  * value, zclip.
  *
- * This is the read-back of the two fields the port used to parse and discard
- * (`propvisible` and the view) plus the ones it never read at all, and it is
- * what lets a load skip `showinterface`/`setupsigns`/`setuparrow`: the band's
+ * Reading back every field — `propvisible` and the view among them — is what
+ * lets a load skip `showinterface`/`setupsigns`/`setuparrow`: the band's
  * lit-or-dark, the nav arrow's colour AND its lit deg, the destination signs,
  * the open pocketwatch's assembly (anchor + dist stack + wheel degs) all come
- * back exactly as the original engine recorded them. The old special cases —
- * HELD_BAND_PROPS, restoreOpenWatch, relightNavArrow — are this, generalized.
+ * back exactly as the original engine recorded them, with no special cases.
  */
 export function restoreProps(session: GameSession, inventory: SavedProp[]): void {
   for (const sp of inventory) {
@@ -884,9 +879,9 @@ export function restoreProps(session: GameSession, inventory: SavedProp[]): void
     // The set it draws in, and the star it was put on, verbatim. A world prop
     // only draws in its own set, and that is `openset`'s to say too: SMOKE.SET's
     // `sendtoprop ("blkjacktable", setupprop ("smoke"))` is the only thing that
-    // ever names a set for the card table, so a load from any other room left it
-    // belonging nowhere — Riviera and the table missing until you walked out and
-    // back in (#486). The position above is the answer, so no star is pending.
+    // ever names a set for the card table, so a load from any other room would
+    // leave it belonging nowhere — Riviera and the table missing until you walk
+    // out and back in (#486). The position above is the answer, so no star is pending.
     p.setName = sp.set;
     p.starName = sp.star;
     p.starPending = false;
@@ -923,18 +918,19 @@ export function restoreProps(session: GameSession, inventory: SavedProp[]): void
  * Put the sound back from the file: every bank that was open, then the theme
  * that was playing out of one of them.
  *
- * The theme half replaced an older path that halted the music and let the
- * arriving room's `setupsound` re-score it, which needed `currentset` forced to
- * "none" to beat the `themetype` guard and still left rooms silent where
+ * The theme comes from the file rather than halting the music and letting the
+ * arriving room's `setupsound` re-score it, which would need `currentset` forced
+ * to "none" to beat the `themetype` guard and still leave rooms silent where
  * setupsound deliberately scores nothing (#36's flat, gstair3, bind…). The file
  * simply says what was playing.
  *
- * The BANKS are a separate question, and opening only the theme's was #199. A
+ * The BANKS are a separate question, and opening only the theme's is not enough
+ * (#199). A
  * restored loop plays out of a bank that need not be sounding at the moment the
  * save was taken: BOOTFILE's `playcrickets` opens `insddest.sfx` once when
  * mission 4 starts and then picks a random one-shot out of it every few
  * seconds, so the sinking's groaning metal is a live `makeloop` over a SILENT
- * bank. Restoring the loop without the bank gave `countsounds` 0 →
+ * bank. Restoring the loop without the bank gives `countsounds` 0 →
  * `indextosound` "" → `sound not found: ` on every tick, for the rest of the
  * game: `setupsound` only re-opens it when `crickettype` changes, and lnghall,
  * lounge1c and smoke are all "insd".

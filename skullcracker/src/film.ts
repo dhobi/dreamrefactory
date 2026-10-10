@@ -152,9 +152,8 @@ export class Film {
     // game's audio is. Only three films in the rip carry a loop-table bed
     // (`menu.mov` and the chapter briefings); everything else — Boggs' spoken
     // orders, the seven kill vignettes, the four time-out ones — is a one-shot
-    // named by the frame that starts its segment, and this player used to fire
-    // a one-shot only from a CLICKED region. `boggs01.mov` has four segments of
-    // speech (`1a`…`1d`) and played all four in silence.
+    // named by the frame that starts its segment, not by a CLICKED region:
+    // `boggs01.mov` has four segments of speech (`1a`…`1d`), all frame-named.
     this.enterFrame(0);
   }
 
@@ -342,10 +341,8 @@ export class Film {
    * and say so rather than misbehaving: a return stack that has never been
    * exercised against real data would be fiction.
    *
-   * That used to rest on "no film in this rip uses either", which was a reading
-   * of the films that had been opened rather than of the films. It has now been
-   * counted, over every `.mov` in the rip — **65 films, 18,573 frame actions and
-   * 2,175 region actions** — and what is carried is:
+   * Counted over every `.mov` in the rip — **65 films, 18,573 frame actions and
+   * 2,175 region actions** — what is carried is:
    *
    * ```
    *   frames   1 × 257     2 × 9      3 × 4      6 × 18303

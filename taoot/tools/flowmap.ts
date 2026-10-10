@@ -56,12 +56,11 @@ import { activeLanguage, gamefilesRoot } from "./gamefiles";
  * Two things about the default, and the second is the one that matters.
  *
  * It goes through {@link gamefilesRoot} rather than being the string
- * `"gamefiles"`, which is what it was until each game got a package of its own
- * and the rip moved to `taoot/gamefiles`. A bare literal is resolved against
- * the WORKING DIRECTORY, so it named a path that no longer exists from the
- * repository root and a different one from inside `taoot/`; `gamefilesRoot`
- * resolves from this file and honours `TAOOT_GAMEFILES`, which is what the CI
- * runner sets and what every other tool in this directory already used.
+ * `"gamefiles"`. A bare literal is resolved against the WORKING DIRECTORY, so it
+ * names one path from the repository root and a different one from inside
+ * `taoot/`; `gamefilesRoot` resolves from this file and honours
+ * `TAOOT_GAMEFILES`, which is what the CI runner sets and what every other tool
+ * in this directory uses.
  *
  * And it is ONE LANGUAGE TREE, not the whole rip. This tool's output is
  * COMMITTED — `shipgraph.gen.ts` feeds the playthrough navigator and the
@@ -309,10 +308,10 @@ function harvest(stmts: Stmt[]): void {
  *
  * Both CDs ship the 21 shared public rooms, each carrying that room in its own
  * act's state, and 8 of them differ in script content — the act-2 staircases and
- * hallways hold noticeably more guarded exits. Keying on the basename (which is
- * also why the two spellings hallb.set / HALLB.SET used to look like one file)
- * dropped whichever copy the walk reached second, silently losing ~26% of the
- * game's navigation trips, all of them from one act.
+ * hallways hold noticeably more guarded exits. Keying on the basename (under
+ * which the two spellings hallb.set / HALLB.SET look like one file) drops
+ * whichever copy the walk reaches second, silently losing ~26% of the game's
+ * navigation trips, all of them from one act.
  *
  * Keying on content instead gets both properties: the copies that ARE identical
  * still collapse to one entry, so no trip or mission/phase transition is counted

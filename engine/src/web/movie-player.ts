@@ -60,12 +60,11 @@ const MOVIE_CALL_DEPTH = 5;
 /**
  * A segment's palette as the screen shows it.
  *
- * Nothing version-specific left in here, and the removal is the point. This used
- * to re-apply mov-v1's entry-255-is-entry-0 alias on the RGBA, because
- * `paletteToRGBA`'s v4 reserve pins 255 back to white and the alias would
- * otherwise be undone by it. The reserve was right and the alias was wrong: on a
- * segment's first frame 0xff is a colour and not transparency, and the colour is
- * white. `movFileFromV1` names the six films that show it.
+ * Nothing version-specific in here. `paletteToRGBA`'s v4 reserve pins 255 to
+ * white, and that is right for v1 too: on a segment's first frame 0xff is a
+ * colour and not transparency, and the colour is white, so no entry-255-is-
+ * entry-0 alias belongs on the RGBA. `movFileFromV1` names the six films that
+ * show it.
  */
 function moviePalette(seg: MovSegment): Uint8ClampedArray {
   return paletteToRGBA(seg.paletteRaw, 256, seg.file.order);
@@ -461,9 +460,9 @@ export class MoviePlayer {
     const heard = audioSec ? `, ${audioSec.toFixed(1)}s audio` : "";
     this.onLog(`movie: ${fileName}${segment} (${frames.length} frames${heard}${hasRegions ? ", interactive" : ""})`);
     // The frame a segment OPENS on is a frame entered, so its entry sound fires
-    // like any other — {@link enter} does both halves for every later frame and
-    // this used to do only the actionframe one, so the first frame's sound was
-    // the one sound in a film that never played.
+    // like any other — {@link enter} does both halves for every later frame, and
+    // doing only the actionframe one here would leave the first frame's sound the
+    // one sound in a film that never plays.
     //
     // 55 start frames in 29 of the English tree's 275 movies carry one, and they
     // are the ones that could hardly be anything else: `crowd1` on the bomb
@@ -846,14 +845,14 @@ export class MoviePlayer {
    * Give up the film because the GAME is being replaced.
    *
    * A load is a film's ESC as far as the film is concerned: nobody is going to
-   * watch the rest of it, and the one thing that must not happen is the thing
-   * that used to. A `MoviePlayer` belongs to a `SetViewer`, a load builds a new
-   * viewer, and nothing disposes the old one — so the film stopped being ticked
-   * (the viewer forwards those) while `resolveWhenDone` stayed pending for ever.
-   * The script that called `playmovie()` was awaiting that promise inside a
-   * tracked dispatch, so `session.scriptBusy` never came back down: the game
-   * looked locked and the workbench's own `load()` — which waits for `quiet` —
-   * could never finish. Measured with a real load over `logo.mov`: the promise
+   * watch the rest of it, and the one thing that must not happen is a film left
+   * pending. A `MoviePlayer` belongs to a `SetViewer`, a load builds a new
+   * viewer, and nothing disposes the old one — so the film would stop being
+   * ticked (the viewer forwards those) while `resolveWhenDone` stayed pending for
+   * ever. The script that called `playmovie()` awaits that promise inside a
+   * tracked dispatch, so `session.scriptBusy` would never come back down: the
+   * game would look locked and the workbench's own `load()` — which waits for
+   * `quiet` — could never finish. Measured with a real load over `logo.mov`: the promise
    * was still unsettled six seconds later.
    *
    * `finish(true)` and not a teardown of its own, because the dismissal path is

@@ -21,13 +21,10 @@ import { siteUrl } from "@dreamfactory/site/site";
  * ship their own `CHECKERS.PRP` and so on), {@link PREFERRED} decides, and DATA
  * wins because that is the directory `boot()` sets as its search path.
  *
- * **`serverSetNames` is a listing again.** It used to name the boot's MOVIE HOST:
- * `GameHost.coldBoot` asked for a room to draw into on the no-landing-room path,
- * because a film needed a viewer to draw through, and Dust's boot opens no room of
- * its own (its `advanceday` lives in `new.flt`). The intro films were invisible
- * for exactly as long as this answered "none". The screen is no longer a room's to
- * own (engine/src/web/screen-director.ts), so the films play with nothing loaded
- * behind them and this is back to meaning what it says.
+ * **`serverSetNames` is a listing**, not a movie host. Dust's boot opens no room
+ * of its own (its `advanceday` lives in `new.flt`), and the screen is not a
+ * room's to own (engine/src/web/screen-director.ts), so the intro films play
+ * with nothing loaded behind them.
  */
 
 /** where a basename is looked for first when the disc carries it twice */
@@ -61,8 +58,8 @@ export class DustFiles extends RipFiles {
    * (`engine/src/web/load-clock.ts`, #251).
    *
    * {@link onBusyChange} cannot answer it: the clock needs each fetch by
-   * NAME, because since #369 it stops only for the ones that went to the
-   * network and a cache hit is a read the original did off its CD as well. So
+   * NAME, because it stops only for the ones that went to the network (#369)
+   * and a cache hit is a read the original did off its CD as well. So
    * this reports the URL and an id to pair the two ends by, which is the same
    * sentence Titanic's store says (taoot/src/files.ts) and therefore the same
    * arithmetic on top of it.
@@ -118,7 +115,7 @@ export class DustFiles extends RipFiles {
       const have = store.urls.get(base);
       if (!have || rank(url) < rank(have)) {
         store.urls.set(base, url);
-        // the manifest's VALUES, which this store used to throw away: they are
+        // the manifest's VALUES: they are
         // the byte sizes, and they are what lets the bar weigh a 13 MB film
         // against a 47 KB save instead of counting both as one fetch
         store.sizes.set(base, manifest[path]);
@@ -223,11 +220,9 @@ export class DustFiles extends RipFiles {
   /**
    * The sets this disc has, which is one.
    *
-   * No longer load-bearing for the boot: the intro films used to need this to
-   * name a room they could be drawn through, and now they do not. `town.set` is
-   * still prefetched before the boot runs, explicitly, by the loader in main.ts —
-   * which is where a prefetch belongs rather than as a side effect of borrowing a
-   * room to draw on.
+   * Not load-bearing for the boot: the intro films need no room to be drawn
+   * through. `town.set` is prefetched before the boot runs, explicitly, by the
+   * loader in main.ts.
    */
   serverSetNames(): string[] {
     return this.has("town.set") || this.urls.has("town.set") ? ["town.set"] : [];

@@ -110,8 +110,8 @@ test.skipIf(noRip)("a patrol armed from another room still follows the streets",
 
   /*
    * And the counterfactual, because "she is walking" cannot tell a route from a
-   * shortcut: the two stars are 1524 units apart as the crow flies — the walk
-   * this used to start measured 1522, the engine's truncating isqrt of the same
+   * shortcut: the two stars are 1524 units apart as the crow flies — the
+   * shortcut walk measures 1522, the engine's truncating isqrt of the same
    * line — while the street route is 2003. A walk that measures the short one
    * is the bug back.
    */

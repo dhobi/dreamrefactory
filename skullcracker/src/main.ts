@@ -117,8 +117,8 @@ const BOOT_MOVIE = BOOT_SEQUENCE.at(-1)!;
  *
  * `menu.mov` answers by ending on a named one-frame stub ({@link Film.finish}),
  * and the six regions target `"frame 2"`..`"frame 7"` down the right-hand side
- * and across the bottom. What each of those stubs does was guessed here once,
- * from the labels. It did not have to be: `0x45ddd0` is handed the film's
+ * and across the bottom. What each of those stubs does is not a guess from the
+ * labels: `0x45ddd0` is handed the film's
  * CURRENT FRAME INDEX, and
  *
  * ```
@@ -142,7 +142,7 @@ const BOOT_MOVIE = BOOT_SEQUENCE.at(-1)!;
  *   174  "demo frame"  0x45e0cf  the attract branch again
  * ```
  *
- * Two things fall out of that, and both were wrong here before.
+ * Two things fall out of that.
  *
  * **Begin does not begin.** It plays `char.mov`, which is the CHARACTER CHOOSER
  * — there are two Skull Crackers and `0x46b1a8` says which (see
@@ -209,9 +209,9 @@ const EXIT_ACTIONS: Record<
    *
    * A film played after the modal has finished can only be the panel going away.
    * So `prefs.mov` — the chain the menu's own frame 5 names — is the panel
-   * sliding IN, and `prefs2.mov` is it sliding out. This page had them the wrong
-   * way round and suppressed the chain, which played the closing animation to
-   * open it: the panel slid off the screen and then answered clicks.
+   * sliding IN, and `prefs2.mov` is it sliding out. The other way round, the
+   * closing animation opens it: the panel slides off the screen and then
+   * answers clicks.
    */
   "frame 5": { play: ["Prefs.Mov", "Prefs2.Mov"], prefs: true, say: "Prefs — the chain to prefs.mov opens it; 0x4030b1's prefs2.mov closes it" },
   // (the pair is PREFS_FILMS; this list is its `open` half)
@@ -370,10 +370,10 @@ function paint(
  *     a still. The film is right to blit once and stop, and there is no second
  *     blit to draw the board on.
  *
- * Together those left the high-score board off the menu entirely — the one place
- * `0x45de89` draws it — and flashing up for a frame in the transitions, which is
- * where it was being seen instead. So the overlays are no longer the blit's
- * passengers: {@link frameLoop} re-composes whenever they are stale for the
+ * Together those would leave the high-score board off the menu entirely — the
+ * one place `0x45de89` draws it — and flashing up for a frame in the
+ * transitions. So the overlays are not the blit's passengers:
+ * {@link frameLoop} re-composes whenever they are stale for the
  * frame that is actually up.
  */
 let composedName = "";
@@ -616,12 +616,9 @@ function begin(): void {
 /**
  * Hand the screen to the level runner, in this page, without leaving it.
  *
- * This used to be `location.href = "walk.html?..."`, and the split it made was
- * the wrong way round: the game went to the page that says in its own header
- * that it is an experiment, and the page that claims to BE Skull Cracker stopped
- * at the menu. Now the front end plays the whole thing — logo, intro, menu,
- * chooser, levels — and `walk.html` is what it always should have been, the
- * level bench a developer opens on one level at a time.
+ * Not a navigation to `walk.html`: the page that claims to BE Skull Cracker
+ * plays the whole thing — logo, intro, menu, chooser, levels — and `walk.html`
+ * is the level bench a developer opens on one level at a time.
  *
  * The two words the chooser settled still travel in the query string, because
  * that is what the level runner reads them out of; `replaceState` puts them
@@ -894,7 +891,7 @@ function boardSay(): string {
 /**
  * Once the level page has the screen, the front end stops drawing on it.
  *
- * See {@link begin}: the menu does not navigate away any more, so its own loop
+ * See {@link begin}: the menu does not navigate away, so its own loop
  * has to let go or it would keep blitting a film over a level.
  */
 let handedOver = false;
@@ -1003,8 +1000,8 @@ async function boot(): Promise<void> {
 
 // ---- the controls, which are the ones every page in the project has ----------
 
-// The STAGE, not the frame — this page was the odd one out. #frame is the
-// picture plus two mouldings, so handing THAT to the UA stretched the moulding
+// The STAGE, not the frame. #frame is the
+// picture plus two mouldings, so handing THAT to the UA stretches the moulding
 // to the height of a monitor; the other three ports all fill with #stage and
 // take the moulding off in `#stage.fs`. A class and not the `:fullscreen`
 // pseudo because an iPhone has no element fullscreen to match, and the page
@@ -1014,16 +1011,11 @@ installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { r
 installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, $<HTMLDivElement>("stage"), "skullcracker.picture.stretch");
 
 /**
- * Whether this page offers to file a bug. It does now.
+ * Whether this page offers to file a bug. It does.
  *
- * It did not, and the reason it did not has expired. This used to be a film
- * player over a menu, with the walking kept on another page that says in its own
- * header that it is an experiment — and "the port gets this wrong" is not a
- * useful thing to say about a page whose gaps are all "not read yet". What this
- * page is now is the game: logo, intro, menu, the chooser, sixteen levels and
- * the credits, all of it in this document. A player who meets a wall they cannot
- * pass or a foe that will not die has something worth reporting, and until this
- * flag turned over they had nowhere to report it from.
+ * This page is the game: logo, intro, menu, the chooser, sixteen levels and the
+ * credits, all of it in this document. A player who meets a wall they cannot
+ * pass or a foe that will not die has something worth reporting.
  */
 const BUG_REPORTS = true;
 
@@ -1031,7 +1023,7 @@ const bugBtn = $<HTMLButtonElement>("bugBtn");
 if (BUG_REPORTS) {
   installBugReport(bugBtn, {
     canvas,
-    // ...and WHERE is not always a film any more. Once the chooser has handed
+    // ...and WHERE is not always a film. Once the chooser has handed
     // the canvas to the level runner this page stops drawing, `film` is null for
     // good, and the level's own status line is what knows where the player is —
     // its first fields are the level, the room and the position, which is
@@ -1158,7 +1150,7 @@ function prefsKey(e: KeyboardEvent): boolean {
  *
  * - **tap** is the click, which is the whole of the menu.
  * - **double-tap** is `ESCAPE`, and here that is the only way to skip a film on a
- *   machine with no keyboard. It was reachable by keyboard alone before this.
+ *   machine with no keyboard.
  * - **swipe** would be an arrow key, and nothing in this page reads one: there is
  *   no interpreter to send it to, no `keyrepeat`, no navigation. A swipe is
  *   logged and dropped, which is at least sayable in the log when someone
@@ -1231,7 +1223,7 @@ window.addEventListener("keydown", (e) => {
     if (prefsKey(e)) e.preventDefault();
   } else if (e.key === "b") {
     // the page's own account of itself — the log and the film line together.
-    // There is no button for it any more: neither was ever addressed to a
+    // There is no button for it: neither is addressed to a
     // reader, and a film position under the picture is the page talking to
     // itself. `b` is what a developer presses; the bug reporter is what a
     // player presses, and it sends the log without showing it.

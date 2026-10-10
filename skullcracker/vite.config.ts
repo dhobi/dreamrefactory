@@ -1,9 +1,8 @@
 /**
  * Skull Cracker's one page, and it is an experiment rather than a game.
  *
- * *Skull Cracker* (1996) is CyberFlix's own, and until this branch it was one of
- * the two titles the docs deliberately did NOT claim for the engine — no source
- * consulted attributes it to DreamFactory. Its files answer for themselves: the
+ * *Skull Cracker* (1996) is CyberFlix's own, and no source consulted attributes
+ * it to DreamFactory. Its files answer for themselves: the
  * containers are DreamFactory containers, container 0 of every film says version
  * 4, and this port reads them with the same code that reads Titanic's. What is
  * new is which way round they are. The rip is a **Macintosh** one — the first

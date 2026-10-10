@@ -74,8 +74,7 @@ export interface CstBuildOptions {
    * The cast's MAIN SCRIPT — the shared handlers (`stdactor`, `stdscale`,
    * `endwalk`) every member falls back to, named by container 0 at +0x924 the way
    * TI.EXE reads it (see {@link CstFile.mainScriptLocation}). Omitted, a minimal
-   * empty script is written: a built cast used to name none at all, so the reader
-   * had nothing to open (#325).
+   * empty script is written, so the reader always has one to open (#325).
    */
   main?: Uint8Array;
   members: CstBuildMember[];

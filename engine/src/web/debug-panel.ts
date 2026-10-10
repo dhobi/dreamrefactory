@@ -134,8 +134,8 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
   /**
    * Matched against the LABEL the row will carry, not against the bare name,
    * which is what makes the type searchable (#178): a prop's row reads `prop
-   * bag`, so `prop` finds every prop and `bag` still finds that one. Before
-   * this, `prop` was matched against the globals' names and answered with
+   * bag`, so `prop` finds every prop and `bag` still finds that one. Against the
+   * bare names, `prop` would match only the globals and answer with
    * `saveprops`, `saveprops1`, `saveprops2` — the three variables that ENCODE
    * the props, and the last thing somebody looking for the props wants.
    */
@@ -177,7 +177,7 @@ export function stateView(trace: StateTrace, opts: StateViewOptions = {}): State
   }
   // Under a filter as well as under `all`, and for the same reason the globals
   // are: the reader has named what they want, and "the props are only visible
-  // when EVERYTHING is" is the shape that made `prop` unanswerable (#178). The
+  // when EVERYTHING is" is the shape that would make `prop` unanswerable (#178). The
   // owned props and actors are a couple of dozen rows, so a filter that reaches
   // them costs nothing when it does not match.
   if (everything) {

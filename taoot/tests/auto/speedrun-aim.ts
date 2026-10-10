@@ -9,17 +9,16 @@
  *
  *     Math.floor((client - origin) / size * n)
  *
- * so the aim is only correct if it survives that floor. It used to be
- * `origin + (v + 0.5) * scale`, which does when a canvas pixel is two client
+ * so the aim is only correct if it survives that floor.
+ * `origin + (v + 0.5) * scale` does when a canvas pixel is two client
  * pixels wide and does not when it is one — the coordinate that arrives is a
  * whole number, so half a pixel of centring plus a fractional `rect.top` rounds
  * down into the pixel BEFORE the one asked for.
  *
- * Reported as `dial(slider, 7)` landing on 6, because the coal lever is the one
+ * It shows as `dial(slider, 7)` landing on 6, because the coal lever is the one
  * control with no tolerance: `calcswitchdeg` clamps the cursor to 245..345 and
  * divides by 5, so one pixel is one whole setting. Everything else the driver
- * clicks is a hotspot many pixels wide, which is why the same one-pixel error
- * was invisible everywhere else.
+ * clicks is a hotspot many pixels wide, which hides the same one-pixel error.
  *
  * This is the arithmetic on its own, exhaustively — the browser half is measured
  * against a real page in taoot/tests/browser (see docs/reference/tests.md).

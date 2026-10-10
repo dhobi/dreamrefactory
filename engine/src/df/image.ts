@@ -493,14 +493,15 @@ function decodeZLayer(
  * Both ends are forced whatever `colorCount` says, because the reserve belongs to
  * the DISPLAY and `colorCount` describes a CONTRIBUTOR. A set contributes entries
  * 0..127 and the stage owns the rest ({@link file://./set.ts}'s `colorCount`), so
- * the room view asks for 128 — and used to get an upper half of nothing, which is
- * opaque black once {@link indexedToRGBA} stamps the alpha on.
+ * the room view asks for 128 — and without the forced ends would get an upper
+ * half of nothing, which is opaque black once {@link indexedToRGBA} stamps the
+ * alpha on.
  *
- * That was #351. Two sets in the corpus draw a view pixel above 127 — c73 and
+ * That is #351. Two sets in the corpus draw a view pixel above 127 — c73 and
  * lnghall, the same two `SetViewer.bandPropPalette` names — and the only index
  * either of them strays onto is 255. In c73 that is 6811 pixels: the ceiling
- * light and the pool under the table lamp in the mission-4 cabin, which came out
- * as black blobs in the middle of the highlight. The pixels touching one average
+ * light and the pool under the table lamp in the mission-4 cabin, which would
+ * come out as black blobs in the middle of the highlight. The pixels touching one average
  * rgb(210,208,179), so they are the brightest part of a bright thing, and 255 on
  * a Windows display is white.
  *

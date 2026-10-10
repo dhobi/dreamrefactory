@@ -23,7 +23,7 @@
  * opens `cmp word ptr [esi+0x46], 0; je <return>` — *do nothing until my own
  * script has finished, then choose the next one.* A port that re-decides every
  * tick instead burns a class's whole repertoire in three frames and hovers; that
- * was measured, and it is why `stepWerea` sat unwired until this page existed.
+ * was measured.
  * Here that flag is {@link Brain}'s `run` argument against `e.clock`.
  *
  * `obj+0x1a` scales the blow this thing would land. **Nothing hits the player

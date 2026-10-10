@@ -102,10 +102,10 @@ export const LANG_FLAT = { choose: "choose", wait: "wait" } as const;
  *    {@link EDITION_STORAGE_KEY}. One of the six languages' trees or one of
  *    {@link EXTRA_EDITIONS} — a cut of the game that is not a translation of it.
  *
- * They used to be one setting with a fallback between them, which read as one
- * question with two answers: switching the data language moved the chrome, and
- * `?lang=` meant different things to different modules. Now `?lang=` is the page
- * and `?edition=` is the game, and neither writes the other's storage key.
+ * One setting with a fallback between them would read as one question with two
+ * answers: switching the data language would move the chrome, and `?lang=`
+ * would mean different things to different modules. `?lang=` is the page and
+ * `?edition=` is the game, and neither writes the other's storage key.
  *
  * The edition still DEFAULTS to the reader's UI language where that tree exists,
  * which is what keeps two controls from reading as two chores — see

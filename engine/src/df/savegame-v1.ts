@@ -41,9 +41,9 @@
  * Which means the indices are **positional**, not searched for: the count is
  * `7 + 3·banks + 5 + payloads`, so `banks` follows from the count and every index
  * follows from `banks`, checked against the file's own structures (see
- * {@link v1Index}). v4 is read the same way now — it used to hunt by content, and
- * its globals probe looked for the strings `mission` and `playerdeath`, which are
- * TAOOT's vocabulary and appear in no Dust save, so a Dust-shaped `.ti` read as
+ * {@link v1Index}). v4 is read the same way: hunting by content — a globals
+ * probe looking for the strings `mission` and `playerdeath`, which are TAOOT's
+ * vocabulary and appear in no Dust save — would read a Dust-shaped `.ti` as
  * having no globals at all (#325).
  *
  * ## What a load may and may not touch
@@ -310,17 +310,16 @@ const ACTOR_SCALE = 44;
  * `actorturn` and `actorspeed` — how fast a character turns on the spot, and how
  * fast they walk.
  *
- * Read off the RUNNING GAME rather than guessed from plausible-looking numbers,
- * which is what makes these two right where a first attempt was wrong. The port's
- * own boot is script-driven, so the values Dust's scripts set are observable:
+ * Read off the RUNNING GAME rather than guessed from plausible-looking numbers.
+ * The port's own boot is script-driven, so the values Dust's scripts set are observable:
  * Leroy, the dog and the horse all run at speed 3 and turn 7, the pig at 12 and
  * 16. The record reads exactly 3 at +40 and 7 at +36 for those three, and 16 at
  * +36 for the pig's group.
  *
- * The first attempt took +78 and +80 — where the numbers are 32, 64, 100 and a
- * uniform 100 — because they LOOK like a speed and a turn rate. They are an order
- * of magnitude out, so every restored walker crossed the town at a sprint and
- * spun on the spot. Whatever those two fields are, they are not these.
+ * Not +78 and +80, where the numbers are 32, 64, 100 and a uniform 100 and LOOK
+ * like a speed and a turn rate: they are an order of magnitude out, and restored
+ * as these every walker would cross the town at a sprint and spin on the spot.
+ * Whatever those two fields are, they are not these.
  *
  * Worth restoring at all because only a script ever sets them and a load runs no
  * script: left at the cast's defaults, a resumed walk finishes at the wrong pace.
@@ -648,9 +647,9 @@ function tailFits(raw: RawSaveFile, banks: number): boolean {
  * a real file; our own writer can produce a save with more.
  *
  * So the count proposes and the file confirms, and the confirmation is what makes
- * this a reading rather than a second convention (#325 — the check used to be
- * container 6's capacity alone, which is one-sided: an over-derived count that
- * still fits the array passed silently):
+ * this a reading rather than a second convention (#325 — container 6's capacity
+ * alone would be one-sided: an over-derived count that still fits the array
+ * would pass silently):
  *
  *  - the three service tables are FIXED sizes, so the tail of the map has to land
  *    on all three. Measured over the 56 shipped saves, exactly one `banks` value
@@ -1143,8 +1142,8 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
     /**
      * Where this variable's DFValue is, or null if it cannot be placed.
      *
-     * The offset may legitimately be NEGATIVE, and getting that wrong cost this
-     * writer Dust's most important global. The pairing rule (see
+     * The offset may legitimately be NEGATIVE, and getting that wrong costs
+     * Dust's most important global. The pairing rule (see
      * `save-vars.ts`) is that a node's name goes with the PREVIOUS node's
      * DFValue — so the list HEAD's value sits one stride back, in the blob's own
      * header, at +20/+22. That is real storage: the header's other fields are
@@ -1155,8 +1154,8 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
      * could not write it would come back on the wrong day.
      */
     const slotFor = (name: string): number[] | null => {
-      // EVERY slot the name decodes at, because a reader keeps the last and this
-      // writer used to patch only the first — see {@link recordSlots}
+      // EVERY slot the name decodes at, because a reader keeps the last and a
+      // writer patching only the first would lose the write — see {@link recordSlots}
       const have = slots.get(name)?.filter((at) => at + NODE_TYPE >= 0);
       if (have?.length) return have;
       // the base has no record for this variable: make one in the free tail of
@@ -1446,7 +1445,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (w.hasPath) drop(w.actor, "walking an authored route — written as the straight line");
       slot++;
     }
-    // No slot references a waypoint container any more, so the base's own
+    // No slot written here references a waypoint container, so the base's own
     // payloads go with the table that named them. DF.EXE's loader reads one
     // container per DECLARING slot, so leaving them would be harmless to it —
     // but it would leave the file's own count disagreeing with its own walks

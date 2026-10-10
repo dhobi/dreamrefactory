@@ -5,8 +5,7 @@
  *   npx vitest run dust/tests/save-seed.ts
  *
  * `saves.ts` beside this pins the FILES; this pins what the page does with
- * them, which until now only ever ran in a browser. Two promises, and each was
- * broken once in the play page's twin before anybody noticed:
+ * them. Two promises, and each is easy to break without anybody noticing:
  *
  *   - **a shipped save is offered exactly once.** New files arrive on the next
  *     launch, a file the player deleted stays deleted, and a launch that could

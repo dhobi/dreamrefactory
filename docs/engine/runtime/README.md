@@ -53,13 +53,16 @@ Read in any order — each names its own prerequisites.
    scripts that do the moving, the camera sprites are drawn through, how big a
    sprite is, pictures that stand in the room, and the two depth sources that
    hide a sprite, at a node and on film.
+11. **[TH mode](th-mode.md)** — Titanic and Dust on a wide display: the room's
+   view alone, with the menu band tucked away until it is wanted.
 
 ## Where the code lives
 
 Paths are relative to `engine/src/` — `runtime/` is the recovered engine,
 `web/` is the browser layer around it, `df/` is the format library
-([the architecture map](../architecture.md) has the full inventory). The last
-two rows are a *game's* code rather than the engine's, and are named as such.
+([the architecture map](../architecture.md) has the full inventory). The
+**Page + input** row is a *game's* code rather than the engine's, and is named
+as such.
 
 | Subsystem | Source | Page |
 |-----------|--------|------|

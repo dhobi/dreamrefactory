@@ -40,7 +40,7 @@ export async function playDay1(h: Headless): Promise<void> {
 
   // Lyle, on the beach: Node58's openscene has him jump Nick the first time,
   // walking up to him first (gang.cast `walkandtalk`) — and facing the way he
-  // walks, which RedJack's 2^24ths of a turn had him not doing (#447)
+  // walks, which needs facings reckoned in RedJack's 2^24ths of a turn (#447)
   const facing = watchFacing(h, "lyle");
   await goTo(h, "Node58");
   facing.stop();

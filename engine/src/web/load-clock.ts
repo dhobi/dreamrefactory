@@ -21,13 +21,13 @@
  *
  * ## Only the NETWORK, not every fetch ([#369](https://github.com/dhobi/dreamrefactory/issues/369))
  *
- * The first version of this stopwatch ran whenever a fetch was in the air, and
- * that removes time the run really did spend. A file already in the browser's
+ * A stopwatch that runs whenever a fetch is in the air removes time the run
+ * really did spend. A file already in the browser's
  * memory or disk cache is not a download: it is a read, of the kind the original
  * did off a CD every time it opened a room, and the original's clock counted
  * those. Removing them would credit a route for work the game has to do
- * wherever it runs — and it made the workbench's times unaccountably faster than
- * the runner's, which is what #369 reported.
+ * wherever it runs — and make the workbench's times unaccountably faster than
+ * the runner's (#369).
  *
  * So a fetch only stops the clock if the browser says it went to the network.
  * The browser will say ({@link LoadClockPorts.served}, Resource Timing's
@@ -37,7 +37,7 @@
  *
  * ## And only the fetches the game is STOPPED for
  *
- * The other half of #369, and the half that matters on a deployed page, where
+ * The second half of the rule, and the half that matters on a deployed page, where
  * the rip really does come over a link. `HostFiles.load` is awaited by whoever
  * called it — a set activation blocks on the room and all of its siblings and
  * casts before anything is composited — so the game is stopped for the whole of
@@ -339,9 +339,8 @@ export const loadClock = new LoadClock({
  * The filtering lives here rather than in each page because it is the subtle
  * part: only the fetches somebody is WAITING for are removed
  * ({@link WireEvent.waited}, #369), and a page that got that rule slightly wrong
- * would report times that cannot be compared with any other page's. It was
- * written out by hand in `taoot/src/main.ts` and would have been written out
- * again, differently, in Dust's.
+ * would report times that cannot be compared with any other page's — so it is
+ * written once, not by hand in each page.
  *
  * A store with no wire to watch (`onWire` is optional on {@link HostFiles} —
  * Timelapse has none) is not an error: nothing is subscribed and the clock reads
@@ -411,9 +410,8 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "[::1]", ""]);
  * project's own server: a reload transfers `bedsit1.set`'s 217 KB again, in
  * 80-150 ms, with `deliveryType: ""` and a full `transferSize`, because Vite
  * serves `gamefiles/` with no caching headers. Removing that would make a
- * route's time a fact about the reader's disk, and it is why the whole of #369
- * was reported: the workbench's times came out unaccountably faster than the
- * runner's on the same route.
+ * route's time a fact about the reader's disk — the workbench's times coming
+ * out unaccountably faster than the runner's on the same route (#369).
  *
  * **Whose cache.** For anything off the machine, Resource Timing carries the
  * answer in two spellings, because the tidy one is newer than some browsers:

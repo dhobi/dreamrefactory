@@ -161,14 +161,14 @@ const C0 = {
    * and DF.EXE carries the same `mov ecx, [ebx+0x924]` beside the same `+0x928`,
    * twice each, so the field is the same in DreamFactory 1 and 4.
    *
-   * This used to read offset 20, with `|| 1` on top of it — the container-1
-   * convention hardcoded over a field that is 0 in 149 of the 207 and 1 in the
-   * other 58, i.e. never a pointer. That is the shape #291 charged us for in
-   * `set-v1.ts`: a constant read as a ref, working only because the authoring tool
-   * put the script in container 1, until `undertak.set` didn't. Nothing in the
-   * corpus exercises the difference — every shop's main script IS container 1 —
-   * so this is a correctness fix with no behaviour change, which is the only kind
-   * available before a counterexample turns up (#325).
+   * Not offset 20 with `|| 1` on top of it — the container-1 convention
+   * hardcoded over a field that is 0 in 149 of the 207 and 1 in the other 58,
+   * i.e. never a pointer. That is the shape of #291 in `set-v1.ts`: a constant
+   * read as a ref, working only because the authoring tool put the script in
+   * container 1, until `undertak.set` didn't. Nothing in the corpus exercises
+   * the difference — every shop's main script IS container 1 — so reading the
+   * real field changes no behaviour today; it is the reading that holds when a
+   * counterexample turns up (#325).
    */
   mainScript: 2340,
   refName: 2344,

@@ -150,10 +150,10 @@ line (`0x41cd30`).
 The port reads them into the room's `routes` and walks them with the walker
 Titanic's star paths use (`startPathWalk` in
 `engine/src/runtime/builtins/actors.ts`), only the open room's, since RedJack's
-star names repeat from room to room. Until it did, `walkonpath` walked the
-straight line. The walk ended on the same star and fired the same `endwalk`,
-so no suite failed, but most routes bend, and the actor cut the corner and
-arrived early. The day-three suite now checks that Port Royal's soldiers and
+star names repeat from room to room. A straight line would end on the same
+star and fire the same `endwalk`, so only a check on the path itself can tell
+the two apart: most routes bend, and an actor walking straight cuts the corner
+and arrives early. The day-three suite checks that Port Royal's soldiers and
 runners walk their routes.
 
 ## Not read

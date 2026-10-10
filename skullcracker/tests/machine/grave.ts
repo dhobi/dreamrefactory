@@ -3,7 +3,7 @@
  *
  *   npm test -w skullcracker -- grave
  *
- * One region, 6131 pixels of graveyard, and three things this port had none of:
+ * One region, 6131 pixels of graveyard, and three things no earlier level has:
  *
  *   - **the zombie** (`0x41eee0`), sixteen of them, and the biggest ordinary
  *     creature in the game so far: two hundred health against chapter two's 25 and

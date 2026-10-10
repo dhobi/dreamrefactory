@@ -64,8 +64,8 @@ const DOT_WIDE = 0.030 * WIDE;
  * The beam: how thick, and how far it goes when it is pointing at nothing.
  *
  * A hand needs to be able to FIND the board, and a pointer that only exists
- * once it is already on the target is no help at all in doing that — which is
- * what the first version of this was. So the beam is drawn whenever the board
+ * once it is already on the target is no help at all in doing that. So the
+ * beam is drawn whenever the board
  * is up, whether or not it is hitting anything, and it stops in mid-air when it
  * is not.
  *
@@ -146,12 +146,12 @@ function rows(pieces: () => Iterable<string>): Row[] {
       get: () => settings.fill, set: (v) => set({ fill: v }),
     },
     /**
-     * Exposure, which until now was `[` and `]` and nothing else.
+     * Exposure, as a slider and not only `[` and `]`.
      *
      * Two keys, on a page whose whole point is that it can be stood in — and a
-     * headset has no keyboard, so the one control that answers "this room is
-     * brighter than it should be" was the one control a visitor wearing it
-     * could not reach. It is bounded below at 0.4 rather than 0 because the
+     * headset has no keyboard, so keys alone leave the one control that answers
+     * "this room is brighter than it should be" out of reach of a visitor
+     * wearing it. It is bounded below at 0.4 rather than 0 because the
      * bottom of this track is a black room, which is not a setting anybody
      * means to choose.
      */

@@ -162,9 +162,6 @@ export const CONDITIONS: { name: string; help: string }[] = [
   { name: "puppet", help: "a conversation puppet is loaded — the earliest sign a character took the gesture" },
   { name: "choosing", help: "a conversation is parked on a plaque, waiting to be answered" },
   { name: "asking", help: "a movie is parked on clickable regions" },
-  // Missing from this table until now, though it is the panel's OWN example of a
-  // skip target (panel.ts) and what `watchFor`'s signature shows — so the legend
-  // documented every condition except the one a route reaches for first.
   { name: "awaiting", help: "the engine has stopped and wants a click — the boot menu, not a clip passing through regions" },
   { name: "playing", help: "a movie is on screen, asking or not" },
   { name: "nomovie", help: "no movie is on screen" },
@@ -186,8 +183,8 @@ export const CONDITIONS: { name: string; help: string }[] = [
  *     accessor     owns.map · visible.penny · walking.morrow · actor.purs
  *     comparison   set == c73 · global.mission == 1 · actor.purs == sentgram
  *
- * The accessor is the one worth explaining. `owns.map` used to read as a
- * comparison and it never was one — the question is not "does the thing owned
+ * The accessor is the one worth explaining. `owns.map` is not a comparison —
+ * the question is not "does the thing owned
  * equal map", it is "is map owned", and a dot says so. It also makes the
  * Purser's two forms one idea rather than two spellings: `actor.purs` is
  * loaded, `actor.purs == sentgram` is loaded and on that rung.
@@ -217,9 +214,8 @@ export function predicate(text: string): string {
   const value = m.rest.trim();
   const q = (v: string) => JSON.stringify(v.toLowerCase());
 
-  // The mistake every sheet written before the grammar changed will make, named
-  // rather than left to fall through as "not a condition".
-  // `global.mission == 1` — the old accessor, whose colon now means a named argument
+  // `global:mission == 1`, named rather than left to fall through as "not a
+  // condition": the accessor is `global.mission`, and a colon means a named argument
   if (!op && !of && value.startsWith(":")) {
     const [name, ...rest] = value.slice(1).split(/[:=]/);
     throw new Error(
@@ -677,11 +673,10 @@ interface TalkState {
  * ## Two different questions, two different options (#265)
  *
  * `otherwise:` answers "the plaque offered is not the one I named". `then:`
- * answers "I have said everything I came to say". They used to be the same
- * `else` branch, which is why a bevel list had to run to the end of the
- * conversation or throw: a run that only needs a beat — Sasha hands over Vlad's
- * package on the third answer and the last two turns are pleasantries — could
- * not say so.
+ * answers "I have said everything I came to say". As one `else` branch, a bevel
+ * list would have to run to the end of the conversation or throw: a run that
+ * only needs a beat — Sasha hands over Vlad's package on the third answer and
+ * the last two turns are pleasantries — could not say so.
  *
  * They are kept apart because folding them together would make a MIS-TYPED bevel
  * walk out of a conversation instead of failing, which is the story quietly not
@@ -711,8 +706,8 @@ interface TalkState {
  *
  * Read through a function rather than cast at each call site so the two verbs
  * that take it cannot drift, and so a typo is a named refusal rather than a
- * silent `stop`: `otherwise: lsat` used to parse (the parser checks option KEYS,
- * not their values) and then quietly meant "throw on anything unplanned".
+ * silent `stop`: `otherwise: lsat` parses (the parser checks option KEYS, not
+ * their values), and unchecked would quietly mean "throw on anything unplanned".
  */
 export function otherwiseOf(step: Step): "stop" | "first" | "last" {
   const asked = step.opts.otherwise;
@@ -806,10 +801,10 @@ export async function converse(
      * screen. A film then is the room's, not the conversation's: the purser
      * leaving opens `maino1.mov`, his office with the cargo manifest on it, on
      * the very pass he goes, and between its parked frames it shows no regions
-     * — so the inline-clip skip below took it for a `spotmovie` and pressed
-     * ESC at it, which shut the office and left Frank in the corridor. Played
-     * on the wall clock the loop used to see the puppet go before the film
-     * came; on a sheet's clock (#508) both land on one pass.
+     * — so the inline-clip skip below would take it for a `spotmovie` and press
+     * ESC at it, which shuts the office and leaves Frank in the corridor. On the
+     * wall clock the loop can see the puppet go before the film comes; on a
+     * sheet's clock (#508) both land on one pass.
      */
     if (!s.open && !s.conversing) return finish();
     /**
@@ -834,10 +829,10 @@ export async function converse(
     /**
      * An INLINE CLIP — `spotmovie`, which suspends the puppet and plays a film.
      *
-     * Waited out in full until now, and that is minutes: ZEIT1.PUP's `willie`
-     * runs `spotmovie("berg.mov")` between the second plaque and the notebook,
-     * and the loop had no branch for it — not `speaking`, not `awaiting`, not
-     * parked on regions — so it sat there until the iceberg had finished.
+     * Waited out in full, that is minutes: ZEIT1.PUP's `willie` runs
+     * `spotmovie("berg.mov")` between the second plaque and the notebook, and it
+     * is not `speaking`, not `awaiting`, not parked on regions — so without this
+     * branch the loop would sit there until the iceberg had finished.
      *
      * ESC is safe here in a way it is nowhere else in this function, and the
      * engine is what makes it safe rather than our timing: `SetViewer.keyDown`
@@ -872,22 +867,22 @@ export async function converse(
        * a plaque it answers -1 and LEAVES (#131). So a press that arrives a beat
        * late does not skip anything, it walks out of the conversation.
        *
-       * Hammering made that likely rather than rare. At a 16 ms gap a two-second
-       * line took ~125 presses, of which the first did all the work: `speakSkip`
-       * resolves on it and the line ends. The rest were fired against a puppet
-       * that was already moving on, and `p.speakSkip` is only nulled a tick after
+       * Hammering makes that likely rather than rare. At a 16 ms gap a two-second
+       * line takes ~125 presses, of which the first does all the work: `speakSkip`
+       * resolves on it and the line ends. The rest are fired against a puppet
+       * that is already moving on, and `p.speakSkip` is only nulled a tick after
        * the race resolves (puppet.ts) — so `speaking` reads true for a moment
        * after the line is over, the guard passes, and the extra ESC lands on the
        * plaques that just appeared.
        *
-       * Reported as a conversation that "is not correctly skipped on the very
+       * It shows as a conversation that "is not correctly skipped on the very
        * first run, and works fine afterwards", which is exactly the shape of a
        * race: a cold run fetches, allocates and compiles, and stretches that
        * moment past the gap far more often than a warm one does.
        *
        * So: press once, then WAIT for the line to be over before considering
-       * another. It is also strictly less work — the other 124 presses never did
-       * anything but risk this.
+       * another. It is also strictly less work — the other 124 presses would do
+       * nothing but risk this.
        */
       /**
        * The line is over — or something else has taken the screen.
@@ -1624,10 +1619,10 @@ export const composeActions = (...tables: ActionTable[]): ActionTable =>
 /**
  * The grammar half of a table, for the parser.
  *
- * By SUBTRACTION, not by listing. This used to name the grammar fields one by
- * one, and a field added to {@link VerbSpec} then reached the parser only if
- * somebody remembered to add it here as well — which is how `move`'s `expand`
- * came to be declared, tested and silently ignored (#250). Dropping the three
+ * By SUBTRACTION, not by listing. Naming the grammar fields one by one would
+ * let a field added to {@link VerbSpec} reach the parser only if somebody
+ * remembered to add it here as well — leaving it declared, tested and silently
+ * ignored (#250). Dropping the three
  * fields that are about EXECUTION leaves the grammar whatever it is, so the next
  * one arrives on its own.
  */

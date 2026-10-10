@@ -133,9 +133,8 @@ const bad = (reason: string): WirelessResult => ({ ok: false, reason });
  *
  * Answers on the flat that is actually up afterwards, not on the click landing:
  * clicking a region while a script still holds the flat is accepted by the hit test
- * and dropped by the stage. That was the same trap `hunt()` used to fall into
- * (fixed — it judges a click by what moved now). This stays as it
- * is, and not because it is a workaround: what this function promises is a
+ * and dropped by the stage (`hunt()` judges a click by what moved for the same
+ * reason). This is not a workaround: what this function promises is a
  * PARTICULAR panel, which is a stronger claim than "something happened".
  */
 export async function openPanel(

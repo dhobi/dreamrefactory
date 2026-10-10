@@ -255,8 +255,8 @@ export function plankFrames(k: Plank): number {
  *
  * `0x4520d0` opens on `cmp word ptr [esi + 0x1a], -9`, before the class test and
  * before anything else, which makes the crow the **eighth** reader of the burn
- * code — the one this port had read every other owner of and could not put a
- * name to, because the class it hangs off has no name to put. `0x451990`, called
+ * code, and the one without a name, because the class it hangs off has no name
+ * to put. `0x451990`, called
  * from CITY's own entry at `0x451628`, registers it straight off the handler
  * (`0x430cc0(0x4519b0)`) with no `init*` string, since no level places one: the
  * level's creator `0x450910` does, off the `initcrow` records.
@@ -524,8 +524,8 @@ export function burnCrow(c: Crow): void {
  * the foot of it: the art is mostly the cable it hangs from) and **1160..1163 is
  * the winch** that hauls it, four frames of a turning drum. The car carries no
  * script at all — nothing installs one — so it simply shows 1150 while the winch
- * above it animates. Drawing the winch as the car is what this port did first,
- * and it put a motor where the lift should be.
+ * above it animates. Drawn as the car, the winch would put a motor where the
+ * lift should be.
  *
  * ## The five states are the script's five tags
  *
@@ -554,8 +554,8 @@ export function burnCrow(c: Crow): void {
  *
  * ## `obj+0x46` is not a trigger
  *
- * Every state above gates on it, and this port first read it as a call button and
- * then as a boarding latch. It is neither. `obj+0x46` is written by exactly one
+ * Every state above gates on it, and it is neither a call button nor a boarding
+ * latch. `obj+0x46` is written by exactly one
  * routine in the executable — the animation stepper `0x45d0f0`, at `0x45d151`
  * (0) and `0x45d15f` (1) — and it means **"my script's last frame completed this
  * frame"**. So a state that "waits on `obj+0x46`" is waiting for its own
@@ -1682,8 +1682,8 @@ export const BUSH = {
    * `0x402f00` returns 0 when the player's kind is 10, 9, 0x18 or 0xd — held,
    * knocked down, or freshly spawned — so the latch moves on **the frame after
    * the grab takes**. And `0x402f60` returns 1 while the player's kind is under
-   * 0x1a, which is ALIVE, not dying: this page had that one backwards and
-   * recorded -5 as "what it gives a player who is already dying".
+   * 0x1a, which is ALIVE, not dying: -5 is not "what it gives a player who is
+   * already dying".
    *
    * So the bush grabs you for about a frame and then slumps you: -3 holds, -5 is
    * `0x42e8b3`'s half-gravity drop and holds nothing. The held cels 4570..4572
@@ -1708,10 +1708,9 @@ export const BUSH = {
    * takes you under with it, and at the bottom `0x43f007` installs `0x472b70`,
    * whose six cels carry no strike box at all.
    *
-   * This page had it waiting for the player to be released before it would sink,
-   * and the player waiting for the bush's cel to stop gripping before being
-   * released. Two things each waiting for the other is a level you cannot walk
-   * through: SEWER's entrance bush held you at x1964 for ever.
+   * It does not wait for the player to be released before it sinks: the player
+   * waits for the bush's cel to stop gripping, and two things each waiting for
+   * the other would hold you at SEWER's entrance bush, x1964, for ever.
    */
   risePerFrame: 0x28,
   sinkPerFrame: 0xa,
@@ -2230,9 +2229,6 @@ export interface Hole {
  * takes hold and the two-second pause `0x4704b8` gives it is a hazard rather
  * than a picture of one. `tests/machine/grave.ts` watches one come up on cel
  * 1556 under the player's own feet.
- *
- * This note used to end "cannot yet take hold of anything", which was true when
- * nothing in the port read a code at all.
  */
 export const HAND = {
   /** param 0 — `0x470400` tags 0 and 2, `0x4704b8` tag 1. 66px across */
@@ -3028,8 +3024,8 @@ export interface Fitting {
  *   41be7c  add word ptr [0x4a50e8], 0x1e   ; ...THIRTY a frame, back on
  * ```
  *
- * A first reading of the hit handler `0x41bc50` had both of its tests wrong and
- * this is the corrected one. `0x41bc57` calls `0x41aad0`, which is a
+ * The hit handler `0x41bc50` has two tests, and neither is what it looks like.
+ * `0x41bc57` calls `0x41aad0`, which is a
  * FRIENDLY-FIRE filter and nothing more: it turns a blow away only when the
  * striker is one of Boggs' own four parts, a member of either of its two lists
  * (`0x46e0a8`, `0x46e0ac`), or showing a cel in 5900..5996 — its own range and
@@ -3061,7 +3057,7 @@ export const BOGGS = {
   /** `0x41bbd6` — the cel the object is made on */
   cel: 5980,
   /**
-   * ...and it LUNGES, which this page had it standing still through.
+   * ...and it LUNGES.
    *
    * `0x41be50` rolls once a frame while its kind is 0 — the idle — and one in
    * six takes it:
@@ -3390,8 +3386,7 @@ export const BOGGS = {
     from: "0x41b156..0x41b209",
   },
   /**
-   * ...and what the idle does when it does NOT lunge, which this page had as
-   * nothing at all.
+   * ...and what the idle does when it does NOT lunge.
    *
    * `0x41bffc`'s seven-in-forty-two is only the first roll of the frame. What
    * the other thirty-five take is `0x41c068`, and it is a range test on the
@@ -3593,8 +3588,7 @@ export const BOGGS = {
  * ```
  *
  * So the record is not a lift and not a spawn table: it is a region where a
- * dropped board is swept away almost at once, and SERVICE places one. An
- * earlier reading of this page had the 10 and the 180 as a lift.
+ * dropped board is swept away almost at once, and SERVICE places one.
  */
 export const SKATEBOARD = {
   /** `0x43762d` — `obj+0xe`, what the hop's own stride is divided by */

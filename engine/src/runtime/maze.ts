@@ -604,8 +604,8 @@ export class MazeRuntime {
 
   /**
    * Every quad's outline for the camera as it stands, kept until the camera
-   * moves: `idle ()` hit-tests the pointer every frame, and each test used to
-   * project every quad in the room again.
+   * moves: `idle ()` hit-tests the pointer every frame, and each test would
+   * otherwise project every quad in the room again.
    */
   private quadOutlines(width: number, height: number): ([number, number][] | null)[] {
     const cam = this.camera();

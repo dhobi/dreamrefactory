@@ -173,9 +173,9 @@ const aimCall = (fn: "aimAtThing" | "aimAtHotspot", name: string): string =>
  * read `mouse()` and acted on it. The mirror sampled next is therefore about a
  * frame that knows where the cursor now is.
  *
- * A fixed sleep instead of this is what a first version did, and 60 ms was not
- * always enough — the pump dials run their loop at `framerate(2)`. The reads then
- * lag the dial by a step, which reads as the dial overshooting its target and is
+ * A fixed sleep instead of this is not enough — 60 ms misses, because the pump
+ * dials run their loop at `framerate(2)`. The reads then lag the dial by a
+ * step, which reads as the dial overshooting its target and is
  * the sort of intermittent nonsense this suite exists to not produce.
  *
  * FOUR rather than two because a loop body gives up more than one frame: the
@@ -362,7 +362,7 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
    * — a conversation waits for every spoken line, and in a browser those play in
    * real time — and sampling the whole mirror across the wire every few
    * milliseconds for minutes on end is enough traffic to take the page down with
-   * it, which is exactly how the first version of this driver died. So the
+   * it. So the
    * predicate runs page-side and the mirror is sampled ONCE, when the wait ends.
    */
   const waitInPage = (expr: string, what: string, budget = timeout): Promise<void> =>

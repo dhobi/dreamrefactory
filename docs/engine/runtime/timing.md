@@ -60,8 +60,8 @@ throttle (`0x43a940`) waits until a frame is due and then stamps the current
 time (`0x43a95a`), and the pass adds exactly one to the frame counter
 (`0x439b80`). A machine too slow for twenty passes a second therefore runs the
 game slower, loops, walks and the pocketwatch alike, and a tab that comes back
-from the background takes one step, not a burst. The port used to replay the
-missed steps, up to 64 at once, so a slow machine lurched instead of slowing.
+from the background takes one step, not a burst. Replaying the missed steps
+instead would make a slow machine lurch rather than slow down.
 What the port does not copy is stamping the current time on a pass that was
 on time: the original spins to the exact tick, a browser is only called on
 screen refreshes, and stamping the refresh would run every pass late (about

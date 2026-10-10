@@ -112,9 +112,9 @@ export function presetOf(gamma: number): string {
 }
 
 /**
- * The picture mode a stored answer means: the dropdown's own key, or the
- * checkbox it used to be — whose `"1"` meant "always sharp", and a player who
- * ticked it keeps that answer — or the original.
+ * The picture mode a stored answer means: the dropdown's own key, or the older
+ * checkbox's `"1"` for "always sharp", which a player who ticked it keeps — or
+ * the original.
  */
 export function pictureModeOf(stored: string | null, legacySharp: string | null): PictureMode {
   const value = stored === null && legacySharp === "1" ? "sharp" : stored;

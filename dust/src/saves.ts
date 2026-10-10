@@ -82,20 +82,18 @@ const SEEDED_PATHS = "seededPaths";
 /**
  * Which shipped saves this browser has already been offered.
  *
- * Seeding used to be gated on one boolean — *have we ever seeded?* — which was
- * right while the shipped set was fixed and wrong as soon as it was not. Adding
- * a save to `gamefiles/save/` after a first launch left it invisible forever,
- * with no symptom except that it never appeared, and the only cure was deleting
- * the database by hand.
+ * One boolean — *have we ever seeded?* — is not enough once the shipped set
+ * changes: a save added to `gamefiles/save/` after a first launch would stay
+ * invisible forever, with no symptom except that it never appears.
  *
- * A set of paths answers the question the boolean was standing in for. A save is
+ * A set of paths answers the real question. A save is
  * offered exactly once: new files arrive on the next launch, and a file the
  * player deleted stays deleted, because its path is in the set whether or not it
  * is in the store.
  *
  * **Migrating from the boolean**, once: the paths already in the store are taken
- * as the ones already offered. A player who had deleted a shipped save before
- * this upgrade gets that one back a single time — a one-launch cost, and the
+ * as the ones already offered. A player who had deleted a shipped save under
+ * the boolean gets that one back a single time — a one-launch cost, and the
  * alternative is marking files as offered that never were.
  */
 async function seededPaths(): Promise<Set<string>> {
@@ -164,11 +162,10 @@ let template: Uint8Array | null = null;
  * the game is the honest choice: the fields a patch does not understand then
  * carry the beginning's values rather than some other run's.
  *
- * Which file that is has to be **derived, not named**. It used to be
- * `START.RTD`, which was right while the shipped set was one player's opening
- * saves and wrong the moment the directory held the disc's own collection
- * instead — the fallback was alphabetical, and alphabetically first in that
- * collection is a day-4 save taken underground. `frame` is the service-pass
+ * Which file that is has to be **derived, not named**. A fixed name like
+ * `START.RTD` fits only one player's opening saves, and alphabetically first
+ * in the disc's own collection is a day-4 save taken underground. `frame` is
+ * the service-pass
  * counter, so the lowest one is the earliest moment anybody saved.
  *
  * Best-effort throughout: a save that will not parse is skipped rather than

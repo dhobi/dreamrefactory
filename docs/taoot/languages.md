@@ -254,7 +254,7 @@ storage key:
 | | The **UI language** | The **edition** |
 |---|---|---|
 | what it changes | the words on every page | what a page's content is read from |
-| control | the 🌐 dropdown in the top bar, on all eleven pages | the button row on Play, the Editors and the Collection |
+| control | the 🌐 dropdown in the top bar, on every page | the button row on Play, the Editors and the Collection |
 | parameter / storage | `?lang=` / `taoot.lang` | `?edition=` / `taoot.edition` |
 | the list | the six the site is translated into, always | the editions that page can actually offer |
 | module | `site/src/lang-menu.ts` | `taoot/src/editions.ts` |
@@ -319,9 +319,54 @@ spaced small-caps line read as a label, does the opposite to kana: a `:lang(ja)`
 rule at the end of the sheet takes it back off. Cyrillic keeps it, wanting the
 same treatment Latin does.
 
+## Captions for what is only heard
+
+Titanic prints what a puppet says in a conversation, and much of the rest of its
+voice it never prints at all. The play page's **Subtitles: every line that is
+heard** setting (`GameSession.everyLineSubtitled`) captions that voice at the
+bottom of the picture, each line with its speaker, stacked when several speak at
+once; the game's own subtitles switch still turns it all off
+([#50](https://github.com/dhobi/dreamrefactory/issues/50)). Four words keep the
+sources apart (`taoot/src/captions.ts`):
+
+- **subtitles** — puppet speech the original prints itself, mid-canvas over the
+  answer choices;
+- **original captions** — text in the game's files that the original never
+  prints: the starred puppet lines `TI.EXE` keeps dark (cut-aways, and sound
+  cues in capitals, shown bracketed), the voice lines films play as frame
+  sounds (indexed by `taoot/src/movie-lines.json`, regenerated with
+  `taoot/tools/mkmovielines.ts`), `cash.mov`'s voice-over from `CASH1.PUP`, and
+  the ending's narration from `NARRATE.PUP`, a puppet no script opens
+  (`taoot/src/narration.ts`);
+- **port captions** — this repository's transcripts of audio that has no text
+  anywhere in the game, `taoot/src/captions/<edition>.json`: the gossip, the
+  London landlady, the voices behind cabin doors, the fencing master, the bedsit
+  radio's news, the gramophone's briefing, the opening credits' narration, and
+  sounds a deaf or hard-of-hearing player would otherwise miss, in square
+  brackets. They are a speech recogniser's draft corrected by ear, and every file
+  says **NOT ORIGINAL DATA** at the top; an edition without a file gets no
+  transcript;
+- **burnt-in captions** — the Japanese edition's text drawn into the film frames.
+  It is part of the picture, and the settings work the same over it.
+
+A line is captioned from one source, never both. **Prefer port captions**
+(`GameSession.preferPortCaptions`) shows the transcript where a line has one,
+because the game's script does not always match what was recorded, and falls
+back to the original caption where it does not. A talking track such as the
+radio news is recorded anew at its own pace in some editions, so its timings
+come from that edition's own recording.
+
+The **caption editor**, `taoot/captions/` (`taoot/src/captions-editor.ts`), plays
+every clip out of the chosen edition's own bank or film, shows what the
+recogniser heard, and lets someone who speaks the language write what is said
+and mark a line as a guess or as listened to. An edition with no file starts
+from the English file's list of clips. Edits stay in the browser as a draft;
+Export writes the file in the repository's own layout, one clip per line, and
+**Send to GitHub** opens a prefilled issue.
+
 ## What has not been tested
 
-The chooser and the two selectors are exercised by `npm test` (three suites, no
+The chooser and the two selectors are exercised by `npm test` (no
 game data needed) and were watched end to end in a real browser — but against a
 **synthetic** second language tree, so what those runs prove is *which files get
 asked for*.

@@ -79,39 +79,39 @@ export class StageController {
      * with `blacktoscreen`, and the PHOTO ALBUM (flat 3, container 32) does not:
      * its `openflatx` checks the film count and arms `makeloop ("flat", me,
      * "updateflat", 2)`, nothing more. So a level that outlived the stage swap
-     * left the album's caption, its furniture and the photograph itself painted
-     * correctly into a framebuffer nobody could see — reported from play as the
-     * album being a black screen.
+     * would leave the album's caption, its furniture and the photograph itself
+     * painted correctly into a framebuffer nobody could see — the album a black
+     * screen.
      *
      * `blacktoscreen` still ramps, because it reveals FROM black by definition —
      * see the note on it in builtins/scene.ts.
      *
      * ## HERE, and not before the bytes (#308)
      *
-     * The clear used to be the first thing this method did, above `ensureFile` —
-     * and the justification for it, that the palette it ramped against is gone,
+     * The clear does not come first, above `ensureFile`: the justification for
+     * it, that the palette it ramped against is gone,
      * is only true once the replacement is actually in hand. In TI.EXE the
      * distinction cannot arise: `openstagefile` reads the file with the
      * interpreter blocked inside it, nothing repaints, and the screen is still
      * the black `screentoblack` left until the new stage draws. Ours awaits a
      * NETWORK FETCH there, with the rAF loop compositing throughout — so
-     * lifting the black first handed the screen back to `world` for the whole
+     * lifting the black first would hand the screen back to `world` for the whole
      * download. First open of the map and of the save panel: fade to black, the
-     * room you left painted over it again for as long as `p.stg` took to arrive,
+     * room you left painted over it again for as long as `p.stg` takes to arrive,
      * then a snap back to black for `blacktoscreen` to ramp out of.
      *
      * And the post-movie hold (`fade.pendingReveal`, see ScreenDirector.
      * screenOwner) is not this method's to end at all. Opening a stage file is
      * not a script saying what the screen should look like; the four statements
      * that ARE end it, and `tickFade` lifts it when the script falls quiet.
-     * TAOOT's boot is what that cost: `playmode.mov` ends, and the cast, four
+     * TAOOT's boot shows what that would cost: `playmode.mov` ends, and the cast, four
      * shops and `main.stg` load before `advanceday` reaches `datebed.mov` with
      * no screen statement in between. `main.stg` is in that window, so ending
-     * the hold there lit the apartment up — through `bedsit1.set`'s own load and
-     * on until the date caption started — which is exactly the flash #209 was
-     * about, one stage swap further along.
+     * the hold there would light the apartment up — through `bedsit1.set`'s own
+     * load and on until the date caption starts — which is exactly the flash
+     * #209 is about, one stage swap further along.
      *
-     * ## …unless the script BLANKED the screen (#308 again)
+     * ## …unless the script BLANKED the screen (#308)
      *
      * A ramp is the only black this may lift, because a ramp is the only black
      * that belongs to the palette being replaced. `blackscreen()` is the
@@ -148,8 +148,6 @@ export class StageController {
       this.session.fade.level = 0;
     }
     // the container the STAGE names, not container 1 — see StgFile.mainScriptLocation
-    // (this line hardcoded the index, and did not even use the constant that stood
-    // beside the reader for it — #325)
     this.session.stageScript = this.session.instanceFrom(
       stg.file.containers[stg.mainScriptLocation]?.data,
       key,
@@ -172,9 +170,9 @@ export class StageController {
     // entry step is the game's `transtoflat` script's business — in TAOOT: its middle
     // switch (`sendtostage(openwireless())`), its flat switch (blkjack's `initgame`,
     // fight's `openfight`) and its entry effects (the darkroom's mixclut, the
-    // trunk's trnkopen.mov). This used to mirror all three from tables of TAOOT
-    // stage names, which both duplicated the script and confined the primitive to
-    // one game's stages.
+    // trunk's trnkopen.mov). Mirroring all three from tables of TAOOT stage names
+    // would both duplicate the script and confine the primitive to one game's
+    // stages.
     return true;
   }
 
@@ -465,8 +463,8 @@ export class StageController {
    * A flat's own lifecycle event — `openflat` / `closeflat` — sent along the
    * CHAIN rather than straight at the flat's script.
    *
-   * It used to go straight there, so a flat with no handler of its own was the
-   * end of it. That is right for the first two games and wrong for the third,
+   * Straight there, a flat with no handler of its own would be the end of it.
+   * That is right for the first two games and wrong for the third,
    * because a boot library may hold the DEFAULT: Timelapse's does, and its
    * defaults are what keep the game's own idea of where it is up to date —
    *

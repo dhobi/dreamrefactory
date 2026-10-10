@@ -3,9 +3,9 @@
  * source's files, draw a sprite, take a PNG back in, export, and boot the page.
  *
  * The pages differ in what a file IS — a cast, a shop, a stage — and that stays
- * in each of them. What is here is the furniture they share, which used to be
- * copied into each page and drift: one fix to the drop handler, or to the
- * nearest-colour match, had to be made ten times. Every piece takes what differs
+ * in each of them. What is here is the furniture they share, so it cannot
+ * drift: copied into each page, one fix to the drop handler, or to the
+ * nearest-colour match, would have to be made ten times. Every piece takes what differs
  * (the loader, the palette, the names) as an argument, and reads the page's
  * elements by the ids every editor's markup already uses (`openBtn`,
  * `fileInput`, `pngImportBtn`, `pngInput`, `editionPicker`).

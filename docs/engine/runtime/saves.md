@@ -59,11 +59,11 @@ writes:
 
 - the **open cast files and audio banks** (containers 3 and 6, with each bank's
   three arrays) — the session's, in the order they were opened, which a load
-  reopens before it places anybody or restarts a loop. These used to be copied
-  from the base, so a save named whatever its *skeleton* had open: a fresh game's
-  London-flat template made a sinking save in the smoking room reload without
-  `extra.cst` (the crowd: `target not loaded`) or `insddest.sfx` (the groaning
-  metal: `sound not found`). Each record leads with the file's manifest handle,
+  reopens before it places anybody or restarts a loop. They are the session's
+  and not the base save's because the base is only a skeleton: a fresh game's
+  London-flat template names neither `extra.cst` (the sinking's crowd) nor
+  `insddest.sfx` (its groaning metal), and a smoking-room save that listed the
+  skeleton's files would reload with `target not loaded` and `sound not found`. Each record leads with the file's manifest handle,
   which is how TI.EXE's resume finds the file, so a file the base's manifest lacks
   gets a manifest record of its own — see
   [the open-file lists](../formats/savegame.md#the-open-file-lists-are-the-sessions-not-the-skeletons).

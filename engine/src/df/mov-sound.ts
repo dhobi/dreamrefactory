@@ -2,10 +2,10 @@
  * A movie segment's SOUNDTRACK — the bed, and how much of it to play.
  *
  * Kept on its own, beside {@link file://./mov-pace.ts}, for the same reason that
- * file exists: two players must not each have their own idea of it. The rule
- * used to live inside `MoviePlayer.enterSegment`, welded to a `GameSession`, so
- * the movie editor's preview could only ever be a silent approximation of a film
- * the game plays with music under it. Everything here is a pure function of a
+ * file exists: two players must not each have their own idea of it. Inside
+ * `MoviePlayer.enterSegment`, welded to a `GameSession`, the rule would leave
+ * the movie editor's preview a silent approximation of a film the game plays
+ * with music under it. Everything here is a pure function of a
  * segment, so the editor plays the bed the game plays and no second reading of
  * the loop table exists to drift.
  *
@@ -62,13 +62,12 @@ export interface SegmentAudio {
 /**
  * Decode a segment's bed, or null if it brings none.
  *
- * `audioLoops` used to gate this as well (`!hasRegions || seg.audioLoops`), and
- * for a v4 movie that was already a no-op: df/mov.ts sets `audioLoops =
- * audioChunks.length > 0`, so the two conditions were the same condition. It
- * stops being one for DreamFactory 1, whose chunks are a plain run played once
- * rather than a loop order (df/mov-v1.ts) — and 45 of Dust's 136 films with
- * sound are interactive, so the old reading would have kept them silent. What
- * `audioLoops` still decides is whether the bed REPEATS while an interactive
+ * `audioLoops` does not gate this (`!hasRegions || seg.audioLoops`). For a v4
+ * movie that gate is a no-op: df/mov.ts sets `audioLoops = audioChunks.length >
+ * 0`, so the two conditions are the same condition. It stops being one for
+ * DreamFactory 1, whose chunks are a plain run played once rather than a loop
+ * order (df/mov-v1.ts) — and 45 of Dust's 136 films with sound are interactive,
+ * so that gate would keep them silent. What `audioLoops` decides is whether the bed REPEATS while an interactive
  * frame waits, which is the question it should be asked ({@link soundtrackFor}).
  *
  * The loop table is an `order` sequence over a handful of chunk records, and
@@ -183,14 +182,14 @@ export function soundtrackFor(
   // prediction runs out — and running out is not silence, it is the loop backstop
   // below starting the bed again from its first chunk. See `bedRuntimeMs` in
   // df/mov-pace.ts, where the demo's open.mov is measured: 25.18 s of bed cut
-  // from a 156 s loop order, under 27.57 s of film, so 2.4 s into the last
-  // segment the CyberFlix fanfare began again under the Titanic title (#299).
+  // from a 156 s loop order, under 27.57 s of film, so without it 2.4 s into the
+  // last segment the CyberFlix fanfare begins again under the Titanic title (#299).
   //
   // Passed in rather than derived here because a segment does not know its
   // successors and this file may not learn: `soundtrackFor` is what the game and
   // the movie editor share so that neither can have its own idea of a bed, and
   // that only holds while it is a function of what it is handed. A caller that
-  // leaves it out gets exactly the old answer.
+  // leaves it out gets the answer from the segment alone.
   const runtime = Math.max(audioSec, predicted, onScreenMs / 1000);
   const cap = Math.max(1, Math.ceil(runtime * OVERRUN_MARGIN * rate));
   // ...and loop as the backstop, but ONLY once the author's order has actually
@@ -200,13 +199,13 @@ export function soundtrackFor(
   // stopped at the CAP there is more order behind it, and reaching the end of
   // what we took is our estimate having been short, not the music having ended:
   // rewinding there plays the author's FIRST chunk, which is never what comes
-  // next. That is what the demo's opening did — 25.18 s taken out of a 156 s
+  // next. That is the demo's opening with a short cap — 25.18 s taken out of a 156 s
   // order, and the CyberFlix fanfare back over the Titanic title card (#299).
   // Silence for a moment at the end of a film is a smaller wrong than the wrong
   // music, and with the runtime measured properly above it does not arise.
   //
   // If `concat` stopped because the ORDER ran out, repeating it is the authored
-  // answer and the old one. The player halts the bed the moment the film really
+  // answer. The player halts the bed the moment the film really
   // does end, so neither can outlive the movie.
   const samples = concat(resampled, cap);
   return {

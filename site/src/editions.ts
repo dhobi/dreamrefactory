@@ -48,9 +48,9 @@ export { NEUTRAL } from "./games";
  * Every game file the pages may fetch, and what it weighs: `gamefiles.json`,
  * fetched at most once per page.
  *
- * A FILE, not an endpoint. It is the only thing this site ever needed a server
- * for — the listing used to be `/api/gamefiles`, a directory walk per request —
- * and making it a build artifact (`tools/manifest.ts`; served live by the dev
+ * A FILE, not an endpoint. It is the only thing this site would need a server
+ * for — as an endpoint it is a directory walk per request — and making it a
+ * build artifact (`tools/manifest.ts`; served live by the dev
  * server so a changed tree needs no rebuild) is what lets the whole site be
  * hosted as static files.
  *

@@ -104,8 +104,8 @@ export function focusOwnsKey(target: EventTarget | null, key: string): boolean {
  * panorama reading — the finger pushes the world, not the camera — and walking has
  * the same argument in reverse), so both are checkboxes.
  *
- * The FOURTH used to be nothing at all, on the reasoning that `ArrowDown` is not a
- * navigation key in the original either: it goes to the script chain like any other
+ * The FOURTH is not nothing, although `ArrowDown` is not a navigation key in
+ * the original either: it goes to the script chain like any other
  * key, and almost nothing reads it. Almost. The exceptions are
  * `SMSTACK2`/`SMSTACK3` views 43, 50, 54 and 56 — the false smokestack's ladder
  * platforms, whose scene `keydown` is the only way down a level. The way OUT of the

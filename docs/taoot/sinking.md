@@ -193,13 +193,16 @@ A phase transition then *sets* the clock (`hrs`/`min` to the timetable time,
 `sec = random(60) - 1`), which is why finishing a conversation at 13:16 still
 leaves you at 13:15 after the cutscene.
 
-## What this port does today
+## What this port does
 
 The heartbeat is faithful:
 [`serviceGameClock`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts)
 dispatches `calctime` every 50 ms of the host's clock, on both hosts — wall time
-in the browser, the pumped virtual clock headless. It skips while a script is in
-flight and re-anchors, as the original's `idle()` only ran between events.
+in the browser, the pumped virtual clock headless. It runs at most once per pass
+and never makes up a late one, as `TI.EXE` does not, so a machine too slow for
+twenty passes a second runs the sinking slower rather than in bursts
+([timing](../engine/runtime/timing.md)). It skips while a script is in flight
+and re-anchors, as the original's `idle()` only ran between events.
 
 The movement bump fires on both kinds of arrival. A turn runs the `openscene` of
 the scene script, the set main and the **boot** scripts, which is where the bump

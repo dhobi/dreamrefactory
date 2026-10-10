@@ -1,16 +1,14 @@
 /**
  * Write ONE game's gamefiles manifest — the file a static deployment needs that
- * a directory listing used to provide.
+ * in place of a directory listing.
  *
  *   npx tsx tools/mkmanifest.ts [outDir] [gamefilesDir] [publicDir]
  *   npx tsx tools/mkmanifest.ts dist/taoot                      # after a build
  *   cd …/dreamrefactory/taoot && npx tsx …/mkmanifest.ts . ./gamefiles .
  *   cd …/dreamrefactory/dust  && npx tsx …/mkmanifest.ts . ./gamefiles .
  *
- * Run it once per game, in that game's directory. It used to write a second file
- * beside the first — `gamefiles-dust.json`, the same walk filtered to keys under
- * `gamefiles/dust/` — because one tree held both games. Two trees do not need it:
- * each game's manifest is the walk of its own rip, at its own site root.
+ * Run it once per game, in that game's directory: each game's manifest is the
+ * walk of its own rip, at its own site root.
  *
  * The paths are RELATIVE on purpose: a key is the walked path as written, so an
  * absolute `gamefilesDir` writes keys nothing can resolve.

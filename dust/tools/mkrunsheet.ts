@@ -77,11 +77,11 @@ if (existsSync(SAVES)) {
 /**
  * WHAT EACH LEG CLAIMS, read off the rung that plays it.
  *
- * A leg used to end at `split()` and nothing else, which meant a green leg had
- * proved only that no line threw. That is a very weak thing to be told about a
- * route: the sheet could walk to the right cell, miss every conversation on the
- * way and still print a split — and for a while it did, because a dropped knock
- * is a conversation that never happened and nothing downstream asked.
+ * A leg that ends at `split()` and nothing else proves only that no line threw.
+ * That is a very weak thing to be told about a route: the sheet can walk to the
+ * right cell, miss every conversation on the way and still print a split,
+ * because a dropped knock is a conversation that never happened and nothing
+ * downstream asks.
  *
  * The rungs already answer this and answer it better than a guess would. Each
  * carries a `claims: [...]` list naming the globals THAT rung is about, and

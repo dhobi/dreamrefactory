@@ -52,9 +52,8 @@ function packagesImportedBy(pkg: string): Set<string> {
       // IMPORTS, not mentions: a static import's specifier, a dynamic import's
       // argument, and a CSS @import's target. Matching any occurrence of the
       // scope would lint prose instead of code — and this file's own header
-      // names the edge it exists to forbid, so the first version of this test
-      // failed on its own sentence, and the second on the comment explaining
-      // the first. Hence no example specifier written out anywhere below.
+      // names the edge it exists to forbid, so a text match would fail on its
+      // own sentence. Hence no example specifier written out anywhere below.
       const src = readFileSync(p, "utf8");
       const specifier = /(?:from|import|@import)\s*\(?\s*["']@dreamfactory\/([a-z]+)/g;
       for (const [, name] of src.matchAll(specifier)) {

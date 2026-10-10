@@ -12,7 +12,7 @@ the conventions a new segment will trip on. The suites that run it are
 continuous session and the closing narration comes out `mission = "good"` — all
 four artifacts the ending is scored on in Frank's hands, `onehappens`,
 `twohappens` and `revhappens` all false. Both hosts agree: `npm run
-test:machine` **30/30** headless, and the browser gate **91 beats over 27
+test:machine` headless, and the browser gate **91 beats over 27
 segments with no divergence at all** — every one of them carried, zero checkpoint
 loads, 23.7 min, ending on `credits.mov`.
 
@@ -88,13 +88,11 @@ spends most of its time replaying untouched segments.
 
 The last row matters most: a change to the shared navigation, aiming or driver
 code is what can break an old segment, and that is when the full run is worth its
-twenty-four minutes. TODO §4a records what brought it down from 36.5 — the accost
-sweep's dud clicks, one wait in the ending, and the deck plan the map lands you
-on; none of them the game's own pace.
+twenty-four minutes.
 
 ```
 npm test                        # the gate
-npm run test:machine        # 27 segments + 3 property tests — writes out/checkpoints/*.ti
+npm run test:machine        # the 27 segments and the property tests — writes out/checkpoints/*.ti
 TAOOT_RECORD=1 npx vitest run --config taoot/vitest.machine.config.ts   # re-record goldens
 TAOOT_RECHECKPOINT=1 …          # …and rebuild the .ti checkpoints (after a save change)
 npm run watch:m2p0 -w taoot              # watch segment 7 in a real window

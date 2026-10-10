@@ -90,9 +90,9 @@ test("a badge shows the studio it claims in its attribute", () => {
 /**
  * And the two claims that are not per-game, both in the lede.
  *
- * It began as "CyberFlix built an engine and shipped three adventures on it",
- * which was wrong twice. Wrong about the third — *Timelapse* is not CyberFlix's,
- * and that half is the sentence that made the badges necessary. And wrong about
+ * Not "CyberFlix built an engine and shipped three adventures on it", which is
+ * wrong twice. Wrong about the third — *Timelapse* is not CyberFlix's, and that
+ * half is the sentence that makes the badges necessary. And wrong about
  * the number: DreamFactory was Bill Appleton's authoring system and it carried
  * *Lunicus* and *Jump Raven* as well, besides being licensed to studios outside
  * CyberFlix altogether. THREE is how many of them this port plays, which is a

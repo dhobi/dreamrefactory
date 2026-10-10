@@ -719,11 +719,10 @@ const HEAD = standardLampHead();
  * drawn on it, and two darkenings of the same patch is one too many.
  *
  * Its light point comes from the fitting itself rather than from a number
- * written beside it. It used to be written down, as 3,900, which was where the
- * DRAWN pendant's bulb sat — and this fitting hangs at 4,280 to 4,940, so the
- * light was 380 below the bottom of the lamp it belongs to. A point light does
- * not care whether it is inside its own shade, so nothing complained until the
- * shadow map made the mistake visible.
+ * written beside it: the fitting hangs at 4,280 to 4,940, and a written-down
+ * 3,900 would put the light 380 below the bottom of the lamp it belongs to. A
+ * point light does not care whether it is inside its own shade, so only the
+ * shadow map shows that.
  */
 const LAMPS: Lamp[] = [
   {
@@ -923,10 +922,10 @@ const LAMP_TINT: readonly (readonly [number, number, number])[] = [
 /**
  * The sliders: one gain per lamp — the two skies share one — and the fill.
  *
- * READ FROM THE PANEL rather than written twice. These used to start at 1 here
- * and at 1 in the markup, which is one number in two files: change the room's
- * opening light and the sliders say something the room is not doing until the
- * first drag corrects it. The markup is the single place now, and this follows.
+ * READ FROM THE PANEL rather than written twice. A starting value here and in
+ * the markup is one number in two files: change the room's opening light and
+ * the sliders say something the room is not doing until the first drag
+ * corrects it. The markup is the single place, and this follows.
  *
  * `LAMP_TINT` above is still the room as it is MEANT to be lit, and 1.00 is
  * still that. What the panel opens at is a setting, not a correction of it.
@@ -947,27 +946,27 @@ const uFill = gl.getUniformLocation(prog, "uFill");
  *
  * Every lit pixel ends at `pow(lit, 1/TONEMAP)`. The street does not: it is a
  * photograph hung beyond the glass and drawn unlit, so it returns before that
- * line and its own pixels reach the screen as they are. The slider therefore
- * used to act in two different spaces at once — linear on the city, tonemapped
- * on the light coming from it — and the two came apart as soon as it moved.
+ * line and its own pixels reach the screen as they are. Left alone, the slider
+ * acts in two different spaces at once — linear on the city, tonemapped on the
+ * light coming from it — and the two come apart as soon as it moves.
  *
  * Measured, with every other source off: the city plane falls as g^1.00 and the
  * sash laid on the ceiling as g^0.54, which is 1/1.85 and no coincidence. At
  * the slider's top the shaft is 0.43 of the city, which is what a patch of
  * lit ceiling should be. By 0.15 it is 1.04, and by 0.10 it is 1.25 — the
  * daylight on the ceiling brighter than the sky it comes through. That is not a
- * look, it is an impossibility, and it is why a very low setting still showed
- * the sash clearly across a dark room.
+ * look, it is an impossibility: a very low setting would still show the sash
+ * clearly across a dark room.
  *
  * So the two window lamps are raised to TONEMAP before they are used, which the
  * shader's own exponent then takes straight back out: the light they lay in the
  * room falls as g^1.00, exactly as the city does, and the ratio between them
  * holds at 0.43 wherever the slider is put. The street and the smoke are left
- * alone — they were never the ones in the wrong space.
+ * alone — they are not the ones in the wrong space.
  *
  * It is exact while the windows are what is lighting a surface, and approximate
  * once a lamp is on it too, because the tonemap is applied to the SUM. That is
- * the right way round: the mismatch only ever showed in a dark room.
+ * the right way round: the mismatch only shows in a dark room.
  */
 function applyLights(): void {
   const sky = (i: number): number => (i >= 3 ? settings.lamp[i] ** TONEMAP : settings.lamp[i]);
@@ -1074,10 +1073,9 @@ const uShadowTaps = gl.getUniformLocation(prog, "uShadowTaps");
  * budget, and `uShadowOn` is what carries it.
  *
  * Working it out HERE, from the session and the setting together, is what lets
- * a second interface show the shadows honestly. The page used to save the old
- * value into a `tapsWas` on the way into a session and put it back on the way
- * out, which worked exactly as long as nothing else could change the setting
- * while the visitor was wearing the headset.
+ * a second interface show the shadows honestly. Saving the value on the way
+ * into a session and putting it back on the way out works only as long as
+ * nothing else can change the setting while the visitor is wearing the headset.
  */
 function applyShadows(): void {
   const chosen = settings.shadowTaps;
@@ -1385,8 +1383,8 @@ detail.addEventListener("change", () => { set({ detail: +detail.value }); });
  *
  * It is a TOOL before it is a saving. The shell is the part of this room that
  * was measured off the frames, and the only way to hold a SET frame up against
- * it is to move what is standing in the way — which until now meant editing the
- * source. The room already ships a skin mode for the same kind of reason.
+ * it is to move what is standing in the way without editing the source. The
+ * room ships a skin mode for the same kind of reason.
  *
  * Taking a piece out re-bakes the shadows, because a room whose armchair has
  * gone but whose armchair's shadow has not is the one picture that is wrong
@@ -1509,11 +1507,11 @@ shadows.addEventListener("change", () => { set({ shadowTaps: +shadows.value }); 
 /**
  * The PANEL's half of the store: every control put where the setting is.
  *
- * This is the half that did not exist before, and the half that makes a second
- * interface possible at all. A control used to be the only record of its own
- * setting, so anything else changing the room left the panel saying something
- * the room was not doing. Now the panel is told, and a slider moved from a
- * headset — or from the console, or by a test — moves here too.
+ * This is the half that makes a second interface possible at all. If a control
+ * were the only record of its own setting, anything else changing the room
+ * would leave the panel saying something the room is not doing. The panel is
+ * told, so a slider moved from a headset — or from the console, or by a test —
+ * moves here too.
  *
  * Writing to `value` fires no event, so this cannot loop back into the handlers
  * above.
@@ -1678,8 +1676,8 @@ const pad = (id: string): HTMLButtonElement => document.getElementById(id) as HT
 /**
  * Both panels start PUT AWAY, on a desk as well as a phone.
  *
- * What a visitor came for is the room, and the first thing they used to get was
- * a readout of their own coordinates and five sliders, over the top of it. The
+ * What a visitor came for is the room, not a readout of their own coordinates
+ * and five sliders over the top of it. The
  * key list stays — it is one dim line along the bottom, and it is the thing
  * that says X and L will bring the other two back, so hiding it as well would
  * leave no way to find them.
@@ -1761,8 +1759,8 @@ let last = performance.now();
 /**
  * The room, drawn once, from one eye.
  *
- * It used to be the second half of the frame loop, and it is a function of its
- * own because a headset asks for it TWICE — once per eye, with a projection and
+ * A function of its own, not the second half of the frame loop, because a
+ * headset asks for it TWICE — once per eye, with a projection and
  * a view apiece — and because the two callers own different things. What is
  * NOT in here is the clear and the viewport: in stereo neither is the same for
  * both eyes, and a clear per eye would wipe out the eye drawn before it.
@@ -1816,9 +1814,9 @@ function drawRoom(proj: Float32Array, look: Float32Array, at: [number, number, n
      * pictures — so the shader's lamps light it and the sliders reach it that
      * way. The street is not: it is a photograph of a morning, hung on a
      * backdrop plane beyond the glass and drawn unlit so its own pixels reach
-     * the screen as they are. Nothing lights it, so nothing dimmed it, and
-     * pulling the window light down used to leave a bright terrace behind a
-     * dark room. It is the sky's own picture, so it follows the sky.
+     * the screen as they are. Nothing lights it, so nothing else dims it, and
+     * pulling the window light down would leave a bright terrace behind a dark
+     * room. It is the sky's own picture, so it follows the sky.
      */
     const sky = part.surface === "street" ? settings.lamp[3] : 1;
     const e = settings.exposure;
@@ -2378,11 +2376,11 @@ const PICTURE_FILES: Readonly<Record<string, string>> = {
    * The book on the armchair — not a picture on a wall, but the same thing to
    * this: one file, laid on one chart.
    *
-   * SUPPLIED, and no longer the rectification off `bedobit.mov`. The film's
+   * SUPPLIED, not the rectification off `bedobit.mov`. The film's
    * close-up is the best look the game ever gives of this cover and it is still
    * a 320 by 400 crop of a 1996 video, which resolves "Futility" and loses
    * everything around it — the subtitle reads as a smear and the author's name
-   * as three marks. What replaces it says the same words at 400 by 500 and
+   * as three marks. The supplied plate says the same words at 400 by 500 and
    * carries the embossing the film only implies.
    *
    * `taoot/bedsit/tools/bedsitobit.ts` STILL WRITES THIS PATH. Re-run it and
@@ -2575,16 +2573,11 @@ async function toothPhoto(): Promise<void> {
 }
 
 /**
- * THE RIP IS NO LONGER READ. This page used to fetch BEDSIT1.SET — four
- * megabytes — alongside the paint, and by the end it was buying four material
- * swatches and nothing else: every picture on these walls had arrived as a
- * supplied file, and nine of the thirteen materials were drawn. Those four are
- * cut once now by `bedsitmats.ts` and served as 16 kB of PNG each, so the room
- * is the same room off none of the rip at all.
- *
- * What went with it: the swatch loop, the projection fallback for a picture with
- * no file — which had been dead for as long as every picture has had one — and
- * the bake's `coverage` readout, which only ever reported on that fallback.
+ * THE RIP IS NOT READ. BEDSIT1.SET is four megabytes for four material
+ * swatches: every picture on these walls is a supplied file, and nine of the
+ * thirteen materials are drawn. Those four are cut once by `bedsitmats.ts` and
+ * served as 16 kB of PNG each, so the room is the same room off none of the rip
+ * at all.
  */
 async function skin(): Promise<void> {
   step("tooth", 0, "reading the room");
@@ -2608,7 +2601,7 @@ async function skin(): Promise<void> {
   },
   /** where the eye is, for a console or a test that drives the page by touch */
   get where(): unknown { return { x: me.x, y: me.y, z: me.z, yaw: me.yaw, pitch: me.pitch, fov: fovY }; },
-  /** the room is up and painted — there is no bake to wait for any more */
+  /** the room is up and painted — there is no bake to wait for */
   get ready(): boolean { return roomReady; },
   get painted(): boolean { return parts.some((p) => p.painted !== null); },
   set skin(mode: string) { if ((SKINS as readonly string[]).includes(mode)) set({ skin: mode as typeof settings.skin }); },
@@ -2635,8 +2628,8 @@ async function skin(): Promise<void> {
    * The same door the session uses — `headset.point` — so that the board's VR
    * path can be driven, and therefore checked, on a machine with no headset on
    * it. That is the whole of why it is here: a pointer that only exists inside
-   * a session is a pointer nobody can test, and the first version of this one
-   * shipped with no beam at all because it had only ever been read.
+   * a session is a pointer nobody can test — one that has only ever been read
+   * can ship with no beam at all.
    */
   /** which row the board's pointer is on, or −2 for off it: see `aimed` */
   get aimedRow(): number { return panel.aimed; },

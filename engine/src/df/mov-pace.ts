@@ -92,10 +92,10 @@ export const BED_STRETCH_LIMIT = 2;
 /**
  * Is this soundtrack far longer than the picture it plays over?
  *
- * REPORTING ONLY — the editor shows it, and nothing paces on it. It was briefly the
- * pacing rule and that was wrong twice over: see the note above, and `debris.mov`,
- * a shipped credits film it misclassified, where repeating the picture displaced a
- * spoken line the previous film had left running.
+ * REPORTING ONLY — the editor shows it, and nothing paces on it. As a pacing rule
+ * it is wrong twice over: see the note above, and `debris.mov`, a shipped credits
+ * film it misclassifies, where repeating the picture would displace a spoken line
+ * the previous film left running.
  */
 export function isBed(audioSec: number, frameCount: number): boolean {
   return (audioSec * 1000) / frameCount > NATIVE_FRAME_MS * BED_STRETCH_LIMIT;
@@ -248,10 +248,10 @@ export function segmentOnScreenMs(seg: MovSegment): number {
  *
  * That is #299's third symptom, and it is audible. The demo's `open.mov` carries
  * a 23-entry loop order — 6.73 s + 5.39 s + 3.76 s of CyberFlix logo music and
- * then a 7.01 s tail listed twenty times, 156 s of material in all. The bed was
- * cut to 25.18 s, being the first segment's own predicted runtime plus a margin,
- * while the film runs 31.5 s across four segments; so partway through the last
- * one the fanfare started over underneath the Titanic title card and its own
+ * then a 7.01 s tail listed twenty times, 156 s of material in all. A bed cut
+ * to 25.18 s, being the first segment's own predicted runtime plus a margin,
+ * while the film runs 31.5 s across four segments, has the fanfare start over
+ * partway through the last one, underneath the Titanic title card and its own
  * sting: "when open.mov segment 4/4 starts, the main theme and the Cyberflix
  * theme play over each other".
  *

@@ -81,11 +81,11 @@ async function newSession(): Promise<{
  * active camera, at eye height, visible and at a drawable scale.
  *
  * Three scenarios below need a character the accost machinery will look at, and
- * since #180 that takes more than a short distance: `actordist` answers the
- * 32000 not-present sentinel unless the actor's sprite actually lands on the
- * screen. Placing them by hand near the LISTENER — which is a ground position,
- * with no facing and no height — was enough while distance was the whole test
- * and is not enough now, so the placement lives here once and is asserted.
+ * that takes more than a short distance (#180): `actordist` answers the 32000
+ * not-present sentinel unless the actor's sprite actually lands on the screen.
+ * Placing them by hand near the LISTENER — which is a ground position, with no
+ * facing and no height — is not enough, so the placement lives here once and
+ * is asserted.
  */
 function standInView(session: GameSession, who: string, dist = 300): boolean {
   const a = session.actorRuntime.get(who);
@@ -153,11 +153,10 @@ test("host: set activation — theme, scheduler, and boot resources", async () =
   check("and a viewer is up for the last set", viewer().set.setName.toLowerCase() === "c73");
 
   // 5. showStage fires on EVERY activation, not once per game — so nothing that
-  // belongs to a game may be reset by it. main.ts used to clear the details pane
-  // there, which threw the script log away and shut the pane the player had
-  // opened at every changeset (#22, "resets on every set change"): 28 rooms over
-  // a full playthrough. The page now resets on the boot instead, and this is the
-  // number that says why it had to.
+  // belongs to a game may be reset by it. Clearing the details pane there would
+  // throw the script log away and shut the pane the player had opened at every
+  // changeset (#22): 28 rooms over a full playthrough, which is why the page
+  // resets on the boot instead.
   check(
     "the stage is shown once per set activation",
     stageShown === 3,
@@ -544,9 +543,8 @@ test("host: the guided tour gets the tour's band, and not the game's", async () 
 );
 
 // --- 0b2. the boot's resource list, read out of the BOOTFILE ----------------
-// It used to be three hardcoded lists of TAOOT filenames in engine/src/web/host.ts. Now the
-// BOOTFILE is the manifest — every one of those files is named by the boot's own
-// scripts — which is what lets the host start a game it knows nothing about.
+// The BOOTFILE is the manifest — every file the host needs is named by the boot's
+// own scripts — which is what lets the host start a game it knows nothing about.
 test("bootplan: what the boot needs is read from the BOOTFILE, not known", () => {
   const boot = gamefiles(root).resolve("bootfile");
   if (!boot) return; // no tree to read
@@ -570,8 +568,8 @@ test("bootplan: what the boot needs is read from the BOOTFILE, not known", () =>
   // the demo's CD check names a 9 MB room it only wants to know the existence of
   check("a fileexists() probe is not a resource", !plan.resources.includes("gstair2.set"));
   // `setpath` names the volumes: currentcd("Titanic1"/"Titanic2"), in disc order.
-  // This is what decides which copy of a both-discs room wins, and it used to be a
-  // /titanic([12])/ regex in the file layer.
+  // This is what decides which copy of a both-discs room wins, not a filename
+  // regex in the file layer.
   check(
     "and the volumes are derived, in disc order",
     plan.volumes.join() === "titanic1,titanic2",
@@ -639,11 +637,8 @@ test.skipIf(noDemo)("host: the demo edition boots its own way", async () => {
       !session.interp.globals.has("__propsinit"),
     `shops=${[...session.propRuntime.shops.keys()].join()} life=${!!session.propRuntime.get("life")}`,
   );
-  // ...and it opened NO ROOM AT ALL, which is the inversion of what this used to
-  // assert. The port had to borrow one — "any of the game's rooms will do", 9 MB
-  // of grand staircase pinned black — because the frame loop drew through a
-  // SetViewer and the demo's boot plays a movie and opens a stage with no room
-  // behind either. The screen is not a room's any more
+  // ...and it opened NO ROOM AT ALL: the demo's boot plays a movie and opens a
+  // stage with no room behind either, and the screen is not a room's
   // (engine/src/web/screen-director.ts), so the honest state here is no viewer,
   // no set, nothing showing, and a director compositing the menu stage anyway.
   check(
@@ -865,12 +860,12 @@ test("engine: an unclosed switch ends at endcode, not at the next handler", asyn
 // first, wherever the point is; then the SET, if the point is inside the image it
 // draws — a hotspot there is a "painting" and the room behind them is the "scene",
 // BY NAME; then the STAGE, where the set's image is not — a click-region is a
-// "button" and the rest is the current "flat". Three of the four were wrong in a
-// room: no prop step at all, hotspots labelled "scene", and the room itself
-// answering nothing while the click went to the band's flat.
+// "button" and the rest is the current "flat". In a room that means a prop step,
+// hotspots labelled "painting" not "scene", and the room itself answering
+// rather than the click going to the band's flat.
 //
 // The property worth pinning is the AGREEMENT: whatever the click path dispatches
-// to, hittest must name — they are one function and one zone test apart now.
+// to, hittest must name — they are one function and one zone test apart.
 test("hittest: the four answers a room gives, and the click path agrees", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("c73.set");
@@ -956,10 +951,10 @@ test("hittest: the four answers a room gives, and the click path agrees", async 
   }
   check("no actor answers below the room, where none is drawn", !bandActors, bandActors);
 
-  // And the click path agrees with all four. The one that had been wrong in the
-  // room is the fourth: a click on the FLOOR ran the current flat's mousedown,
+  // And the click path agrees with all four. The fourth is the one that matters
+  // in the room: a click on the FLOOR must not run the current flat's mousedown,
   // which in-game is `sendtoshop("house.shp", deactivateinterface())` — clicking
-  // the carpet put the interface away. Now only the band does that.
+  // the carpet would put the interface away. Only the band does that.
   await session.sendEvent("sendtoshop", "house.shp", "activateinterface", [], "test");
   const lit = () => session.propRuntime.get("light")?.visible === true;
   const wasLit = lit();
@@ -1196,9 +1191,9 @@ test("cross-set travel via stage gotospecial, globals persist", async () => {
 // turk.shp belongs to TURK.STG, which opens it in `openstage` and closes it in
 // `closestage` (0001:3 and 0001:8) — the ROOM must arrive without it. Five shops
 // share a room's name (boil, cargo, turk, wireless, bridge) and all five are
-// stage shops; entering the room used to open them anyway, which is how the
-// boiler's chute controls and the cargo hold's painting crate ended up drawn
-// over the save panel and clickable there (#17, #18).
+// stage shops; opening them on entering the room would draw the boiler's chute
+// controls and the cargo hold's painting crate over the save panel, clickable
+// there (#17, #18).
 test("props: shop loads, prop state machinery works (TURK)", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("turk.set");
@@ -1260,8 +1255,8 @@ test("hall crossover: uparrow at a dead-end toggles hallside + cuts across", asy
   v.jumpTo("scene52", "view59");
   await runAnimations(v);
   // uparrow: HALLC keydown does currentscene("scene10")/currentview("view15")
-  // to cut to the mirrored (port) side — the currentscene/currentview setters
-  // that were previously no-ops, leaving the player stuck at the dead-end.
+  // to cut to the mirrored (port) side — without those setters the player is
+  // stuck at the dead-end.
   const consumed = await v.keyDown("uparrow");
   await runAnimations(v);
   check(
@@ -1489,19 +1484,19 @@ test("ESC skips a movie, and the rest of its chain with it", async () => {
 );
 
 /**
- * `currentstage()` answers the stage's own NAME now, not its filename — and on
- * this disc those are the same string, which is the claim that has to hold.
+ * `currentstage()` answers the stage's own NAME, not its filename — and on this
+ * disc those are the same string, which is the claim that has to hold.
  *
  * The field is a 16-byte Pascal string at 2104 of container 0 (`StgFile.refName`),
- * v4 only, and it went unread for as long as it did because Titanic fills it with
- * its own filename in every stage it ships. Timelapse does not: its `p.stg` is
- * called `"interface"` and its space bar tests for exactly that, so the panel
- * opened and could never be closed while the file was the answer.
+ * v4 only, and Titanic fills it with its own filename in every stage it ships.
+ * Timelapse does not: its `p.stg` is called `"interface"` and its space bar tests
+ * for exactly that, so with the file as the answer the panel opens and can never
+ * be closed.
  *
- * So this is the regression guard on the OTHER side of that change. If any stage
- * on this disc stored something else there, Titanic's own `currentstage()`
- * comparisons — `!= "bomb.stg"`, `!= "fence.stg"`, `= "main.stg"`, `!= "ctl.stg"`
- * — would have silently started failing, and each of those guards a door or a
+ * So this is the guard on Titanic's side. If any stage on this disc stored
+ * something else there, Titanic's own `currentstage()` comparisons —
+ * `!= "bomb.stg"`, `!= "fence.stg"`, `= "main.stg"`, `!= "ctl.stg"` — would
+ * silently fail, and each of those guards a door or a
  * panel rather than throwing anything.
  *
  * The two that do NOT match are named here rather than excused: `inven1.stg` and
@@ -1717,10 +1712,10 @@ test("audio started while muted: loops survive to the unlock, one-shots don't", 
 // the next sentence"). LENIN.MOV — Penny's Lenin aside, PENNY2.PUP 0006:
 // `spotmovie("lenin.mov")` then straight into `puppetspeak("penny2.30")` —
 // fires a 3.5 s spoken line (penny2.29) as its middle frame's ENTRY sound and
-// then waits for the OK region. Click through early and that line used to run
+// then waits for the OK region. Click through early and the line must not run
 // on over Penny's next sentence: event sounds play on the shared "sound"
-// channel (next to room ambience, so the channel can't just be halted) and
-// nothing stopped them.
+// channel (next to room ambience, so the channel can't just be halted), so the
+// movie has to stop them itself.
 test("a movie's event sounds stop when the movie does (LENIN.MOV over Penny)", async () => {
   const { session, sink, viewer } = await newSession();
   await session.openSetFile("c73.set");
@@ -1752,17 +1747,16 @@ test("a movie's event sounds stop when the movie does (LENIN.MOV over Penny)", a
 // cut when the movie has no more frames to play?" — yes, it was).
 //
 // leave.mov's FIRST SEGMENT is 70 frames with no regions anywhere. Frame 41
-// fires Morrow's `morrow2.83`, 3.34 s, and pacing it off the 5.57 s `cloop3`
-// bed entered that frame at 3.26 s and ended the film at 5.57 s, cutting the
-// line 1.03 s short. Nobody dismissed anything; the film ran out. The stop in
+// fires Morrow's `morrow2.83`, 3.34 s, and paced off the 5.57 s `cloop3` bed
+// entered that frame at 3.26 s the film would end at 5.57 s, cutting the line
+// 1.03 s short. Nobody dismisses anything; the film runs out. The stop in
 // finish() belongs to the LENIN case above, where the PLAYER clicks past a
 // line, and an interactive clip is what that case always is.
 //
 // The file does not stop there: it is TEN segments, 1628 frames — the whole
-// sinking montage (MovFile.segments; the port played segment 0 and called it
-// the movie, which is where "leave.mov alone is 37.5 MB" for 70 frames came
-// from). Segment 0's exit now leads to segment 1, so this also pins the
-// transition: the film keeps playing past the old truncation point, and the
+// sinking montage (MovFile.segments — which is why "leave.mov alone is 37.5 MB"
+// for a 70-frame first segment). Segment 0's exit leads to segment 1, so this
+// also pins the transition: the film keeps playing past segment 0, and the
 // line is intact when it does.
 test("a cutscene's line outlives the last frame, and the next film (leave.mov)", async () => {
   const { session, sink, viewer } = await newSession();
@@ -1780,8 +1774,8 @@ test("a cutscene's line outlives the last frame, and the next film (leave.mov)",
   // Both of segment 0's event sounds, by the frame that fires them — NOT by a
   // duration window. Frame 2 fires "Track 87.SE" (3.07 s, the davits) and
   // frame 41 fires "morrow2.83" (3.34 s, the line), and a `find` for 3–4 s
-  // matches the DAVITS: this test used to assert about the wrong sound
-  // entirely, and would have passed with Morrow's line cut to nothing.
+  // matches the DAVITS: a duration window asserts about the wrong sound
+  // entirely, and passes with Morrow's line cut to nothing.
   const fired = sink.calls.filter((c) => c.channel === "sound");
   check(
     "segment 0's two event sounds fired, in frame order",
@@ -2007,9 +2001,9 @@ test("clut/mixclut: the darkroom light switch dims the CABIN palette", async () 
   // than bounding loosely. `mixclut(…,240)` scales the CLUT by (255-240)/255 = 5.9%
   // in the palette's own space; the screen then shows `pow(0.059, 0.65)` = 15.9% of
   // the lit picture, because the gamma is applied AFTER the dim exactly as TI.EXE
-  // applies it after everything (see engine/src/web/screen-gamma.ts). This test read ~6% while
-  // the port rendered the palette verbatim — the darkroom used to go almost pitch
-  // black where the original only drops it to a sixth (#115).
+  // applies it after everything (see engine/src/web/screen-gamma.ts). Rendered
+  // verbatim the palette reads ~6% — the darkroom almost pitch black where the
+  // original only drops it to a sixth (#115).
   const predicted = Math.pow((255 - 240) / 255, screenGamma());
   check(
     "clut/mixclut: and the dim lands where the display gamma puts it",
@@ -3156,8 +3150,8 @@ test("wavevolume() and the volume keys write one value", async () => {
 // The plaque wait takes ESC too, and its answer is -1 (0x4418a7). That is not a
 // spare value: every one of the 516 puppetevent calls in the tree is
 // `puppetevent (-1)` followed by a switch with a `case -1` arm — SMETH1's
-// `regular()` and `intro()` both `exitcode` there — so until now those were
-// branches the authors wrote and nothing could reach (#131).
+// `regular()` and `intro()` both `exitcode` there — branches the authors wrote
+// that only ESC reaches (#131).
 test("ESC at a dialogue plaque answers -1", async () => {
   const { session, viewer } = await newSession();
   await session.openSetFile("c73.set");
@@ -3439,7 +3433,7 @@ test("a click on the picture repeats the last exchange", async () => {
   const second = await skipTo(() => v.choices.length > 0 && texts().join() !== firstTexts.join());
   const secondTexts = texts();
   const voicesBefore = sink.calls.filter((c) => c.channel === "voice").length;
-  // the click the old build used to skip a line with: y=4 is the picture
+  // a click on the picture, y=4, which must not skip a line
   await v.click(4, 4);
   await drain();
   const duringTexts = texts();
@@ -3710,15 +3704,13 @@ test("actorinstance: a copy is placed and idles like the member it came from", a
 /**
  * A walk started on an actorinstance belongs to the INSTANCE (#212).
  *
- * The start functions used to key the walks table on `a.member.name` — the
- * SOURCE cast member for an instance, since `instance()` shares the source's
- * member object — so `stok10`'s turn was filed under `stok1`: the mover stepped
- * the wrong character's facing, `iswalk("stok10")` answered false while the
- * walk ran, and `stopWalk("stok10")` missed the record. The crowd is nothing
- * but instances and `extraidle` turns them constantly, so this fired routinely;
- * and since #191 the writer persists the table, so the mis-key outlived the
- * session. `restoreWalk` was already keyed right — its docblock said so — which
- * is what made the start functions the odd ones out.
+ * Keyed on `a.member.name` — the SOURCE cast member for an instance, since
+ * `instance()` shares the source's member object — `stok10`'s turn would be
+ * filed under `stok1`: the mover steps the wrong character's facing,
+ * `iswalk("stok10")` answers false while the walk runs, and `stopWalk("stok10")`
+ * misses the record. The crowd is nothing but instances and `extraidle` turns
+ * them constantly, and the writer persists the table (#191), so a mis-key
+ * would outlive the session. `restoreWalk` keys by instance too.
  */
 test("a walk started on an actorinstance is the instance's, not its source's (#212)", async () => {
   const { session } = await newHost();
@@ -4298,11 +4290,11 @@ test("puppetbase seats the character in a line's resting pose", async () => {
 // slots between them — WILZEIT1 (Willie and Colonel Zeitel, shoulder to shoulder)
 // parks the animated `jaw` at x=171 in stances 0/1 (the left face) and at x=388
 // in stance 2 (the right one), holding the silent one's mouth on another slot.
-// Which stance a line is animated against is a field of the LINE (record+0), and
-// the port used to pin stance 0 for the whole file: the anchors then still came
-// from the tick (the talker's side of the frame) while the sprites came from
-// stance 0 (the other face's lips), so the wrong mouth moved — and the layers
-// stance 0 has fewer frames for clamped, smearing a second head over the first.
+// Which stance a line is animated against is a field of the LINE (record+0).
+// Pinning stance 0 for the whole file takes the anchors from the tick (the
+// talker's side of the frame) and the sprites from stance 0 (the other face's
+// lips), so the wrong mouth moves — and the layers stance 0 has fewer frames
+// for clamp, smearing a second head over the first.
 //
 // The measure of that, needing no screenshot: a face layer's tick anchor sits
 // within a few px of where its own stance parks that layer, and hundreds of px
@@ -4443,7 +4435,7 @@ test("walkdest names the destination, so an interrupted walk can resume", async 
   const sentinel = morrow.starName === "defer";
 
   // now do what walktopuppet does: stop them, then send them back with the
-  // saved value. This is the step that used to die on "not found".
+  // saved value. This is the step a wrong saved value dies on, with "not found".
   session.scheduler.stopWalk("morrow");
   const from = logs.length;
   await walkto(session.interp, ["morrow", walking as string], null as never, null as never);
@@ -4557,8 +4549,8 @@ test("substring(haystack, needle) is a 1-based find, not a slice", async () => {
 // arm at TI.EXE 0x428c5f returns a one-character result, `source[idx]`, and ""
 // when the idx falls outside the string (see the builtin). The shipped saves are
 // the corroboration: they carry `saveprops2 = "11111101100111110"`, dense, 17
-// characters for the 17 indices the scripts read back, and the space-joined form
-// this test used to assert matched none of them.
+// characters for the 17 indices the scripts read back, and a space-joined form
+// matches none of them.
 test("putword/findword round-trip (save/restore prop lists)", async () => {
   const { session } = await newSession();
   const put = session.interp.builtins.get("putword")!;
@@ -4862,9 +4854,9 @@ test("TURBINE plant: continuous sim loop, control -> gauge response", async () =
   // gauge reflects the sim: pressure1 deg == numtodeg(boilpres, 5000) clamped 0..19
   const expectDeg = Math.max(0, Math.min(19, Math.floor((g("boilpres") * 19) / 5000)));
   const gaugeDeg = session.propRuntime.get("pressure1")?.deg;
-  // slider parse-regression: boilsound ends with a bare `exitcode` (no
-  // `endcode`), which used to make it swallow the following calcswitchdeg
-  // handler — the slider then read 0 always and pinned to one end. Verify the
+  // slider parse: boilsound ends with a bare `exitcode` (no `endcode`), which
+  // must not swallow the following calcswitchdeg handler — else the slider
+  // reads 0 always and pins to one end. Verify the
   // handler survives parsing and maps mouse-Y (245..345) -> deg 0..20.
   const slider = session.propScripts.get("slider")!;
   const hasCalc = slider.script.codes.has("calcswitchdeg");
@@ -5215,9 +5207,9 @@ test("dev \"give kit\": bag + watch + map dock into the bottom band", async () =
 
 // --- 54. life preserver keeps its tour/mission variant across state changes -
 // The band's "life" button is deg 0 (mission) / 1 (tour); each of its states
-// holds both variants as 2 frames. propview used to animate through them and
-// end on the last (tour), so a mission-mode click flipped the icon to the tour
-// art. A deg-locked selector must re-pick its variant by deg on every state.
+// holds both variants as 2 frames. Animating through them ends on the last
+// (tour), so a mission-mode click would flip the icon to the tour art. A
+// deg-locked selector must re-pick its variant by deg on every state.
 test("life preserver keeps its tour/mission variant across state changes", async () => {
   const { session } = await newSession();
   await session.openSetFile("smoke.set"); // house.shp (persistent) -> life prop
@@ -5583,8 +5575,8 @@ test("fence M4: a full match to five touches ends the bout", async () => {
 // The duel is a STG overlay (set stays the squash court), and its openstage does
 // playnewtheme("fence.trk"). Overlays bypass changeset, so setupsound never runs
 // to swap the theme back; declining the rematch travels same-deck, which is
-// seamless (no replay) -> the combat theme used to keep looping in the hall.
-// transToFlat now remembers the ambient theme and transFromFlat restores it.
+// seamless (no replay) -> the combat theme would keep looping in the hall.
+// transToFlat remembers the ambient theme and transFromFlat restores it.
 test("fence theme doesn't leak: leaving the overlay restores the ambient", async () => {
   const { session } = await newSession();
   await session.openSetFile("squash.set");
@@ -5594,7 +5586,7 @@ test("fence theme doesn't leak: leaving the overlay restores the ambient", async
   await call("opentrackfile", ["bomb.trk"]);
   // through the boot library, not the builtin table: playnewtheme is BOOTFILE
   // script (`playtheme` + `themevol`), which is how every caller in the game
-  // reaches it — there is no builtin of that name to fetch any more
+  // reaches it — there is no builtin of that name to fetch
   await session.runGlobal("playnewtheme", ["bomb.trk"]);
   const ambient = session.currentThemeName;
   await session.transToFlat("fence.stg"); // openstage -> playnewtheme("fence.trk")
@@ -5700,8 +5692,8 @@ test("fight M3: a knock-out ends the bout", async () => {
   // `fightover` is NOT among the outcomes: endfight sets it true and then
   // `dumpglobal`s it four lines later, along with the rest of the bout's working
   // set. What survives a fight is the actor's owner, which is what the room's
-  // openscene reads. (This check used to assert fightover was true, which only
-  // passed because dumpglobal was being read as a declaration — see #85.)
+  // openscene reads. (Asserting fightover true passes only if dumpglobal is
+  // read as a declaration — see #85.)
   const scratch = ["playerpower", "vladpower", "fightover", "oldside", "firstpunch", "secondpunch", "thirdpunch"];
   const left = scratch.filter((n) => g.has(n));
   check("...and the bout's working globals are destroyed with it", left.length === 0, `still held: ${left.join(", ")}`);
@@ -5751,13 +5743,13 @@ test("fuse stage (M1 staging): the fusebox opens with its fuses lit", async () =
 // settles the switch into its resting light/off frame. The door opens only when
 // the boot progress(1,4) + neckphase + view61 + port gate holds.
 //
-// The order matters and this test used to have it wrong. It closed the door again
-// before clicking a fuse, and passed — because clicks over a flat resolved the
-// click REGION before the prop, so the press went straight through the shut door
-// to the region behind it. BOOTFILE 0001 dispatches `hittest`'s answer, which is
-// prop-first (see clickDispatch), and `fusedoor` closed spans x 91..346 — over
-// all four fuse regions. So the door has to be OPEN to reach a fuse, which is
-// what a player does and what is checked here now, shut door included.
+// The order matters. Closing the door again before clicking a fuse passes only
+// if clicks over a flat resolve the click REGION before the prop, sending the
+// press straight through the shut door to the region behind it. BOOTFILE 0001
+// dispatches `hittest`'s answer, which is prop-first (see clickDispatch), and
+// `fusedoor` closed spans x 91..346 — over all four fuse regions. So the door
+// has to be OPEN to reach a fuse, which is what a player does and what is
+// checked here, shut door included.
 test("fuse M2: fuses toggle (light<->off) + door opens/closes", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
@@ -5869,10 +5861,9 @@ test("actor putdownactor (boot lifecycle helper) hides the actor", async () => {
 // `openscene` is a per-view event all the way down, and BOOTFILE's arm of it does
 // three things: setuparrow(), setupsigns() and — at mission 4 only — the sinking
 // clock's `sec = sec + 1`, throttled to one bump per 20 rendered frames via
-// `secframe`. viewChanged() used to stop after the set main, so a turn got none of
-// them: viewer.ts hand-rolled the first two as sendtoprops and nobody noticed the
-// third was gone, which made turning in place free in the endgame where the
-// original charges a second for it.
+// `secframe`. A turn owes all three: stopping viewChanged() after the set main
+// would make turning in place free in the endgame, where the original charges a
+// second for it.
 test("a turn runs boot's openscene, so the sinking clock charges for it (#127)", async () => {
   const turn = async (mission: number) => {
     const { session, viewer } = await newSession();
@@ -5914,8 +5905,7 @@ test("a turn runs boot's openscene, so the sinking clock charges for it (#127)",
     m4.secframe > 0 && m4.sec > m4.before,
     `secframe=${m4.secframe} sec ${m4.before}->${m4.sec}`,
   );
-  // the arrow the turn produced is the arrow ENTERING at that view produces —
-  // the equivalence that used to be maintained by hand in viewer.ts
+  // the arrow the turn produced is the arrow ENTERING at that view produces
   const { session: s2 } = await newSession();
   await s2.openSetFile("lounge1c.set", "scene14", m4.view);
   await s2.settle(50);
@@ -5936,9 +5926,9 @@ test("a turn runs boot's openscene, so the sinking clock charges for it (#127)",
 
 // entering Scene52 facing View62 fires HALLA.SET openscene -> walkonpath(sasha,
 // sasha.1, sasha.2). sasha.2 lives in the actor table's nested SECONDARY slot
-// (record tail +32) — the fixed-41 skip used to drop it, so the star wasn't
-// found and Sasha stood frozen in the doorway (rendering huge/headless right in
-// front of the camera). With the star recovered the walk runs and he leaves.
+// (record tail +32) — a fixed-41 skip drops it, and without the star Sasha
+// stands frozen in the doorway (rendering huge/headless right in front of the
+// camera). With the star recovered the walk runs and he leaves.
 test("Sasha walks away down the hall (sasha.1 -> sasha.2)", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("neckphase", 7);
@@ -6014,8 +6004,8 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 // --- matryoshka doll (PATTY.STG): a visible foreground prop with its own
 //     mousedown script must intercept clicks before the flat click-regions
 //     beneath it. The doll prop overlaps the doll1/dial hotspots that revealed
-//     it; before the fix every "open a layer" click on the doll's left half was
-//     swallowed by those regions and the doll only ever closed. ---
+//     it; otherwise every "open a layer" click on the doll's left half is
+//     swallowed by those regions and the doll only ever closes. ---
 test("a foreground prop's own mousedown wins over the flat regions beneath it (PATTY.STG doll)", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
@@ -6671,7 +6661,7 @@ test("canadvance: mission 4 pins hrs/min at a phase threshold until the movie ta
 // clear the claim — while frame() keeps climbing. Come back and they accost you
 // on the doorstep instead of after four seconds, for ever.
 //
-// Measured before the fix: leave stair2c with the claim held and
+// Measured without the guard: leave stair2c with the claim held and
 // attentionspan froze at 46 while frame() ran to 266, with zero loops armed.
 test("attention: putting a character down drops their claim on your attention", async () => {
   const { session } = await newSession();
@@ -6711,7 +6701,7 @@ test("attention: putting a character down drops their claim on your attention", 
 // is the engine saying the room is not being drawn at all — a stage flat is over
 // it — so the sentinel is the honest answer there.
 //
-// Measured before the fix, in recept1c with cuff.stg open: maxidle re-armed every
+// Measured without the guard, in recept1c with cuff.stg open: maxidle re-armed every
 // 20 ticks, hasattention(4) came due at frame 122 and Max walked up and started a
 // conversation ON TOP of the chair close-up, which left the flat's own OK
 // unreachable behind the puppet. Headless the route was out of the flat inside
@@ -6852,7 +6842,7 @@ test("hasattention: a character you cannot see does not accost you (#180)", asyn
     );
   }
 
-  // ...and the trace the reporter asked for alongside the fix: who has claimed
+  // ...and the trace the reporter asked for: who has claimed
   // you, and whether they can see you. Both are on the pane, in the same place
   // the scripts' own `msg:` lines are.
   check(
@@ -6872,8 +6862,8 @@ test("hasattention: a character you cannot see does not accost you (#180)", asyn
 // --- 59d. An engine-driven arrival runs no idle ----------------------------
 // The guards above cover a conversation that is ALREADY open. This is the window
 // before it: `walktopuppet` walks the character to you with `moveactorxyz` ->
-// `walktoxyz` and holds `while iswalk(who) forceupdate()`, and their arrival used
-// to run their own idle inside that wait.
+// `walktoxyz` and holds `while iswalk(who) forceupdate()`, and their arrival must
+// not run their own idle inside that wait.
 //
 // `endwalk` runs the idle, the idle calls `hasattention`, and `hasattention` only
 // releases its claim (`curattention = ""`) AFTER `sendtoactor(target,
@@ -6881,7 +6871,7 @@ test("hasattention: a character you cannot see does not accost you (#180)", asyn
 // `attentionspan` is still stale, and it accosts you again on the spot, nesting
 // one more `walktopuppet` each round.
 //
-// Measured before the fix, standing still and touching nothing: boil gave 13
+// Measured without the guard, standing still and touching nothing: boil gave 13
 // `msg: vlad` (that line is `walktopuppet`'s own `message(who)`), 9 opens of
 // vlad1.pup and `dispatch cycle … at depth 64`; recept1c the same with Max. The
 // count is a stack ceiling, not a rate — every repeat walk is 1 unit long
@@ -6895,9 +6885,9 @@ test("hasattention: a character you cannot see does not accost you (#180)", asyn
 //
 // What stops all three is the arrival STAR, which is where TAOOT put the guard:
 // a `walktoxyz` lands on `"custom"` and every `endwalk` in the corpus opens by
-// returning on it. The port used to leave the old star in place, so the guard
-// never fired. This test held with an engine-side rule instead (arrivals deferred
-// out of a running script) and holds identically with the sentinel — the A/B is
+// returning on it. Leave the previous star in place and the guard never fires.
+// This test also holds with an engine-side rule instead (arrivals deferred out
+// of a running script), identically to the sentinel — the A/B is
 // in #31; take the sentinel out and boil goes back to 5 accosts and decka hangs.
 test("actor arrival: an engine-driven arrival runs no idle", async () => {
   // room, character, and whether the player clicks them or just stands there
@@ -6929,10 +6919,9 @@ test("actor arrival: an engine-driven arrival runs no idle", async () => {
     // is what arms the accost — and do it here rather than before the settle,
     // because a patrol would have walked them off again.
     //
-    // "On screen" is the half added by #180. The old placement put them 200
-    // units to the side at a height of `lis.y + 200` — thousands of units in the
-    // air, nowhere the camera looks — which was inside hotdist() and so used to
-    // arm the accost all the same. That is the bug this suite now refuses.
+    // "On screen" is the half #180 requires: 200 units to the side at a height
+    // of `lis.y + 200` — thousands of units in the air, nowhere the camera
+    // looks — is inside hotdist() and must not arm the accost.
     session.scheduler.stopWalk(who);
     check(`${set}: ${who} stands where the camera sees them`, standInView(session, who), who);
     // 300 units ahead, because `hotdist("decka")` is the tightest in the game
@@ -6964,9 +6953,9 @@ test("actor arrival: an engine-driven arrival runs no idle", async () => {
 // A bag opened FROM a puppet conversation (INVEN.SHP selhandbevel -> transtoflat
 // -> handleselect) is driven by handleselect's own modal poll loop, which reads
 // hittest()/result() itself rather than going through the host click path — and
-// `switch result()` on "prop" (select item) / "button" (OK, examine). The
-// overlay hitTestAt used to resolve EVERY hit as "flat", so nothing was
-// selectable. Assert it now matches the real engine's ordering: foreground prop
+// `switch result()` on "prop" (select item) / "button" (OK, examine). Resolving
+// EVERY hit as "flat" leaves nothing selectable. Assert the overlay hitTestAt
+// matches the real engine's ordering: foreground prop
 // first, then a named flat region as "button". (Also the contract HOUSE.SHP's
 // invenctl relies on: `if result()="button" sendtobutton else sendtoflat`.)
 test("overlay bag hittest: items resolve as props, OK/examine as buttons (conversation gift path)", async () => {
@@ -7101,29 +7090,29 @@ test("passcode off the end of a chain reaches the shop main (notebook setcursor)
 });
 
 // --- 82. a load and a restart both arrive from nowhere ----------------------
-// Two entry points that are not a walk between rooms, and both used to leave the
+// Two entry points that are not a walk between rooms, and neither may leave the
 // screen set up for the room the player was leaving.
 //
 // LOAD (#36). `changeset` records `oldset = currentset()` before it opens
 // anything, and the arriving room's `setupsound` opens with `if themetype
 // (currentset ()) = themetype (oldset) exitcode` — the guard that keeps a deck
 // theme playing as you walk. Load a save of the room you are ALREADY in and the
-// two are equal, so nothing scored the room; the load path had just halted the
-// theme, so that meant silence, and the host's startTheme fallback then played
-// the SET-NAMED bank. Measured over the shipped saves, reloading in place:
+// two are equal, so nothing scores the room; the load path has just halted the
+// theme, so that means silence, and a startTheme fallback would then play the
+// SET-NAMED bank. Measured over the shipped saves, reloading in place unguarded:
 // gstair3, bind, hallb and sqhall came back silent, and the London flat came
 // back playing `bedsit1.trk` — the BOMBING score, not the flat's radio.
 //
 // Which in bedsit1 is a lock, not a wrong tune: BEDSIT1.SET's `setcursor` gives
 // memory, paper, cabinet, obit, cards, mantle, poster and radio a `touch` cursor
 // only while `currenttheme (2) != "bedsit1.trk"`. The game's own first save
-// saves the room you start in, so loading it started the sirens and left only
-// the door and the landlady clickable.
+// saves the room you start in, so loading it would start the sirens and leave
+// only the door and the landlady clickable.
 //
 // RESTART (#35). Quit is reached from the CTL panel, which is a flat — so
 // `transtoflat("ctl.stg")` has already pushed main.stg onto the overlay stack
 // and set `setVisible = false`, and the player quits instead of taking the
-// `transfromflat` that would put it back. The new game then opened its rooms
+// `transfromflat` that would put it back. The new game would then open its rooms
 // behind a room nobody could see: audio, loops and traffic over a white void.
 test("a load and a restart both arrive from nowhere", async () => {
   // --- the load ---
@@ -7315,7 +7304,7 @@ test("a click holds the engine: no loop dispatches over an open movie", async ()
 
 // --- 84. the air raid reaches the window from every standpoint ---------------
 // BEDSIT1's air raid walks you to the window and turns you to face it, from
-// wherever you were standing. Two things it relies on were wrong (#40).
+// wherever you were standing, and it relies on two things (#40).
 //
 // It WAITS for a turn and it does not wait for a road (container 0005, Scene2):
 //
@@ -7336,15 +7325,15 @@ test("a click holds the engine: no loop dispatches over an open movie", async ()
 //     ...
 //     bombit ()
 //
-// 1. `walk()` and `turn()` open with `if (this.busy) return`, which is right for
-//    a player leaning on a key and wrong for a script: a script is not repeating
-//    itself, so the turn that arrived while the road still ran was DROPPED and
-//    you watched the bombing from the bed or the chair.
+// 1. `if (this.busy) return` at the top of `walk()` and `turn()` is right for a
+//    player leaning on a key and wrong for a script: a script is not repeating
+//    itself, so a turn that arrives while the road still runs must not be
+//    DROPPED, or you watch the bombing from the bed or the chair.
 // 2. Ten passes for a 7-frame road (Road4, Scene2->Scene1) or a 6-frame one
 //    (Road43, Scene3->Scene1) is the script author naming the original's rate:
-//    one frame per pass. At FRAME_MS a road spends 2n+1 passes on n frames, so
-//    Scene2's road wanted 15 of its 10 and the deferred turn still came in after
-//    `bombit` had played bedex.mov.
+//    one frame per pass. At FRAME_MS a road would spend 2n+1 passes on n frames,
+//    so Scene2's road would want 15 of its 10 and the deferred turn would come
+//    in after `bombit` had played bedex.mov.
 //
 // Scene1's views by facing are View32=0 View38=42 View34=82 View36=112
 // View31=180 View37=222 View33=262 View35=292; the roads land you on View36 from
@@ -7384,14 +7373,15 @@ for (const [scene, view] of [["scene1", "view37"], ["scene2", "view14"], ["scene
 }
 
 // --- 85. a nested gesture gives the camera back -----------------------------
-// Gestures nest, and the pair that arms the camera for one did not account for
+// Gestures nest, and the pair that arms the camera for one has to account for
 // it. `press()` arms the viewer's nav hooks, runs the click, and disarms in a
-// `finally` — by writing no-ops, not by putting back what it found.
+// `finally` — by putting back what it found, not by writing no-ops.
 //
 // A modal movie is dismissed by a click, and that click is a gesture of its own
 // (press -> clickDispatch -> movies.click) running while the script that OPENED
-// the movie is still suspended inside `spotmovie`. So the inner press disarmed
-// the outer press's hooks and the outer script came back to a dead camera.
+// the movie is still suspended inside `spotmovie`. An inner press that wrote
+// no-ops would disarm the outer press's hooks and the outer script would come
+// back to a dead camera.
 //
 // SCOT3's rope close-up is the one that shows it (#47). It turns you to Hacker
 // before he speaks:
@@ -7408,12 +7398,12 @@ for (const [scene, view] of [["scene1", "view37"], ["scene2", "view14"], ["scene
 //         ...
 //         sendtoactor ("hack", mousedown (0))
 //
-// Dismiss the close-up and view22 never came round: 3000 service steps, 3022
-// turns asked for and not one attempted, the player still facing the rope with
-// the room no longer answering. With the hooks restored the turn lands on the
-// 12th ask and hack1.pup opens.
+// Without the restore, dismiss the close-up and view22 never comes round: 3000
+// service steps, 3022 turns asked for and not one attempted, the player still
+// facing the rope with the room not answering. With the hooks restored the turn
+// lands on the 12th ask and hack1.pup opens.
 //
-// The scheduler's own withNavDriversArmed has always been a save/restore pair.
+// The scheduler's own withNavDriversArmed is a save/restore pair.
 // This is that rule at the other entry point.
 test("a click inside a click gives the camera back to the script that owns it", async () => {
   const { session, viewer } = await newHost();
@@ -8332,11 +8322,11 @@ test("a walk lands the way the picture setting says", async () => {
 // and Scene3 — alone of the three — already runs a loop on that key: `sfx`, the
 // city traffic, re-arming itself every 2 passes at the top of its own handler.
 //
-// `fireNow` used to splice the whole due batch out of the table before running
-// any of it, so on the pass where both came due `sfx` re-armed AFTER `gotowin`
-// was armed and replaced it (makeloop clears the (kind, name) match first). The
-// sirens then played over a room that never turned, which is the softlock (#74,
-// and the half of #33 that #45 did not reach). TI.EXE clears one slot and runs
+// Splicing the whole due batch out of the table before running any of it would
+// let `sfx`, on the pass where both come due, re-arm AFTER `gotowin` is armed
+// and replace it (makeloop clears the (kind, name) match first). The sirens then
+// play over a room that never turns, which is the softlock (#74, #33). TI.EXE
+// clears one slot and runs
 // that handler to completion before looking at the next (0x442ae0), so a slot a
 // previous handler has replaced is simply not serviced.
 //
@@ -8825,7 +8815,7 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
   session.endWipe();
   void effect(session.interp, ["wipeleft", 99999]);
   check("steps are capped at 1000", session.wipe.steps === 1000, `steps=${session.wipe.steps}`);
-  // an effect the corpus never asks for keeps the old instant reveal
+  // an effect the corpus never asks for keeps the instant reveal
   session.endWipe();
   void effect(session.interp, ["venetian", 20]);
   check("an unused effect stays instant", !session.wiping, `dir=${session.wipe.dir}`);
@@ -9032,8 +9022,8 @@ test("a fade takes one script tick a step, not one service pass", async () => {
 });
 
 // --- 12d. the display gamma TI.EXE applies to every palette entry (#115).
-// The port used to hand each channel's byte to the canvas verbatim, i.e. gamma 1.0,
-// and was reported as "very dark in general". TI.EXE builds its hardware palette as
+// Each channel's byte handed to the canvas verbatim is gamma 1.0, and reads as
+// "very dark in general". TI.EXE builds its hardware palette as
 // `pow(c/255, gamma) * 255` per channel with the exponent defaulting to 0.65
 // (0x419c9c, feeding AnimatePalette at 0x419da8), which BRIGHTENS — most of all in
 // the dark half of the range, which is most of this game.
@@ -9372,15 +9362,15 @@ test("a new game after a bad ending starts with nothing carried (#89)", async ()
 
 // --- 12g. the reserved white a room view is still allowed to use (#351) -------
 // A set fills CLUT entries 0..127 and the stage owns the rest, so `SetViewer`
-// builds the view palette with `colorCount` (128) — and `paletteToRGBA` used to
-// give the reserve back only when it was handed all 256. The upper half came out
-// as unwritten zeroes, which `indexedToRGBA` stamps opaque, so every view pixel
-// above 127 rendered BLACK.
+// builds the view palette with `colorCount` (128) — and `paletteToRGBA` has to
+// give the reserve back then too, not only when it is handed all 256. Otherwise
+// the upper half comes out as unwritten zeroes, which `indexedToRGBA` stamps
+// opaque, so every view pixel above 127 renders BLACK.
 //
 // Two sets in the corpus have such pixels — c73 and lnghall — and the only index
 // either strays onto is 255, the entry a Windows display reserves for WHITE. In
 // c73 that is the ceiling light and the pool under the table lamp of the
-// mission-4 cabin: 6811 pixels of highlight, drawn as black blobs.
+// mission-4 cabin: 6811 pixels of highlight, otherwise drawn as black blobs.
 test("a room view's index-255 pixels are the display's white, not unwritten black (#351)", async () => {
   // the arithmetic, with no set in it: 128 entries in, both ends of the reserve out
   const raw = new Uint8Array(256 * 8);
@@ -9545,7 +9535,7 @@ test("walkonpath follows the SET's authored route, corners and all (#122)", asyn
   const s2 = star("sasha.2");
   // Standing on sasha.1, which HALLA.SET's openscene makes a CONDITION of the
   // call (`& actorstar ("sasha") = "sasha.1"`). Placing her is the test's job
-  // since #230: a route walk no longer teleports the actor onto its head, it
+  // (#230): a route walk does not teleport the actor onto its head, it
   // leaves them where they are and the first movement pass puts them on it —
   // TI.EXE builds the record with the actor's own position (0x4437f0) and reads
   // every later one out of the route.
@@ -9575,7 +9565,7 @@ test("walkonpath follows the SET's authored route, corners and all (#122)", asyn
   check("she arrives at sasha.2", sasha.worldX === s2.positionX && sasha.worldY === s2.positionZ,
     `at (${sasha.worldX},${sasha.worldY}) want (${s2.positionX},${s2.positionZ})`);
 
-  // The straight line from sasha.1 to sasha.2 is the wall she used to clip. Every
+  // The straight line from sasha.1 to sasha.2 is the wall a diagonal walk clips. Every
   // sample must be measurably off it — the route's own midpoints are 300+ units
   // away, and a diagonal walk would hug it to within rounding.
   const off = (p: { x: number; z: number }): number => {
@@ -9933,7 +9923,7 @@ test("engine: a stage swap does not un-black the screen while it loads (#308)", 
     viewer.screenOwner() === "held" && !rest.length,
     `owner=${viewer.screenOwner()} lit=${rest.map(([n, o]) => `${n}:${o}`).join(", ")}`);
 
-  // 3. the painting crate, reported against the fix above (#308 reopened): the
+  // 3. the painting crate (#308): the
   // same window one statement further on, because the swap is not the end of the
   // transition — the CLIP is.
   //
@@ -9943,7 +9933,7 @@ test("engine: a stage swap does not un-black the screen while it loads (#308)", 
   // `setvisible(false)`, `playmovie("cratep.mov")`. Nothing in there says what
   // the screen should look like between the swap and the clip, so the black
   // `blackscreen()` put up is what has to cover the clip's download — 648 KB of
-  // it — and clearing the level at the swap painted the arriving flat instead,
+  // it — and clearing the level at the swap would paint the arriving flat instead,
   // which is the open crate with the painting in it: the end of the animation,
   // before the animation. Measured in a browser at 75 frames
   // (taoot/tests/browser/transition-hold.ts, leg 3).

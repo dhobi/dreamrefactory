@@ -53,8 +53,8 @@ describe("what the room is set to", () => {
    *
    * A slider fires an `input` event per pixel of travel, and several of those
    * land on the value it already had — the drag that starts before it moves,
-   * the one that comes back. Every one of them used to reach `applyLights`, and
-   * one of them reaching `bakeAll` is eighteen passes over the room for nothing.
+   * the one that comes back. None of them may reach `applyLights`: one of them
+   * reaching `bakeAll` is eighteen passes over the room for nothing.
    */
   it("says nothing when a setting is set to what it already was", () => {
     set({ fill: 0.4 });

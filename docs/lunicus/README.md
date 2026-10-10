@@ -139,8 +139,8 @@ Playing it through this way found a good deal in the EXE:
   second (`_portgetime` is `timeGetTime` × 3 / 50). A frame with bit 0 of its
   flags is then held on until both sound channels are idle (`0x40e6e5` →
   `0x420904`). The intro's lecture is one: its eighteen slides run at two a
-  second, and the last is held until the narration ends. The port kept only
-  the hold, so the next scene came early and the voice ran on over it.
+  second, and the last is held until the narration ends; on the hold alone the
+  next scene would come early and the voice run on over it.
 - **The ENTERING message** shows only when the level before was not a combat
   level (`0x40a4b2`).
 

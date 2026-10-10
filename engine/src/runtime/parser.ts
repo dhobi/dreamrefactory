@@ -148,12 +148,12 @@ class Parser {
    * closed by it rather than allowed to swallow what follows. The corpus needs
    * this in exactly one place and needs it badly: SMETH1.PUP's `before` script
    * has `stewardwell` opening two `switch`es and closing one, and without this
-   * that handler's last case ate the four handlers after it — `soundfx`,
-   * `idlespeaks`, `byesmeth` and `smethellslounger`. Which is why Smethells
-   * never turned you away from the first class lounge (#177): the `nolounge`
-   * branch called a handler that had been eaten.
+   * that handler's last case eats the four handlers after it — `soundfx`,
+   * `idlespeaks`, `byesmeth` and `smethellslounger` — and Smethells never turns
+   * you away from the first class lounge (#177): the `nolounge` branch calls a
+   * handler that has been eaten.
    *
-   * The same tolerance already existed one level up, for a handler ending in a
+   * The same tolerance exists one level up, for a handler ending in a
    * bare `exitcode` with no `endcode` at all (TURBINE's `boilsound`); this is
    * that rule applied at every depth instead of only at the top.
    */
@@ -178,9 +178,9 @@ class Parser {
    *
    * Both arms return, so an `endif` would be dead and it is not written. The next
    * `case` is what closes the `if`, exactly as the original's jump table does —
-   * and without this the parse died there and took the whole container with it.
-   * Five of Timelapse's stage mains are this shape, which is five stages whose
-   * navigation table was missing entirely.
+   * and without this the parse dies there and takes the whole container with it.
+   * Five of Timelapse's stage mains are this shape, which would be five stages
+   * whose navigation table is missing entirely.
    *
    * It cannot change a well-formed script: where an `endif` IS written, the
    * block's own closer is reached first and this is never consulted. A switch's
@@ -236,8 +236,8 @@ class Parser {
    *
    * Timelapse is where that shows. Its BOOTFILE's first container ends
    * `endcode ( )` — two tokens past the last handler — and `parseStmt` on a bare
-   * `(` throws, so `instanceFrom` discarded all fifteen handlers of it, `boot`
-   * among them, and the game could not start at all. Its stages have the same
+   * `(` throws, so without recovery `instanceFrom` would discard all fifteen
+   * handlers of it, `boot` among them, and the game could not start at all. Its stages have the same
    * shape at scale: most stage mains are followed by the `case`/`return` limbs of
    * a `getframeaction` switch that is no longer inside any `code`. Across the four
    * discs 100 of 100,701 script containers fail this way; the other 99.90% never
@@ -248,8 +248,8 @@ class Parser {
    * from where it gave up — a statement that consumed tokens before throwing must
    * not be able to swallow the `code` that follows it.
    *
-   * The tolerance costs nothing where it does not apply: it is gated on having
-   * parsed a handler already. A container whose FIRST statement will not parse is
+   * The tolerance costs nothing where it does not apply: it is gated on the
+   * container having a handler somewhere. A container with no `code` at all is
    * still a parse error, which is what keeps a genuine gap in this grammar from
    * being silently absorbed — the corpus is how the grammar was found, and a
    * parser that shrugs at everything cannot tell you it was wrong.
@@ -272,9 +272,9 @@ class Parser {
           topLevel.push(this.parseStmt());
         } catch (e) {
           // Gated on the container HAVING handlers — anywhere in it, not just
-          // already-parsed ones. It was "at least one parsed already", which
-          // caught dead tokens after a handler and not the same rubbish in front
-          // of one: three of Timelapse's flat scripts open with a stray integer
+          // already-parsed ones. "At least one parsed already" would catch dead
+          // tokens after a handler and not the same rubbish in front of one:
+          // three of Timelapse's flat scripts open with a stray integer
           // and then a perfectly good `code setcursor (arg)` (M038.STG's
           // container 17 is `355` and then the handler), and losing a container
           // for a token before it says as little as losing one for a token after

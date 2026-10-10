@@ -97,7 +97,7 @@ test("a cricket is visible to currentsound while it plays", async () => {
  * `lady()` re-arms itself on a short loop and starts the next line only when
  * the previous one has stopped; the lines are 1.6–5.2 s long. So the claim is
  * simply that no two of them are ever in the air at once — which is what a
- * listener in the bedsit hears, and what was wrong.
+ * listener in the bedsit hears.
  */
 test("the bedsit landlady says her lines one after another", async () => {
   const sink = new TimedAudioSink();
@@ -226,18 +226,18 @@ test("a closed track bank stops answering for its sounds", async () => {
  * A `soundloop`-flagged cricket starts once and loops in place forever — that is
  * how every set runs positional ambience. Nothing in the corpus stops one:
  * `stopcricket("all")` appears exactly once in the whole script corpus, in
- * BOOTFILE's `initall`. So leaving a set by any other path left its ambience
- * sounding, positioned in a room that was no longer on screen, and closing its
- * bank did not help — an unloaded bank cannot stop a play that already started.
+ * BOOTFILE's `initall`. So leaving a set by any other path would leave its
+ * ambience sounding, positioned in a room that is no longer on screen, and
+ * closing its bank does not help — an unloaded bank cannot stop a play that
+ * already started.
  *
  * `advanceday`'s endgame arm is that path: `closesetfile()` and straight into the
- * flats. The boat deck's five crowd loops talked all the way through leave.mov,
- * debris.mov, the closing narration and prozac.mov.
+ * flats, so the boat deck's five crowd loops would talk all the way through
+ * leave.mov, debris.mov, the closing narration and prozac.mov.
  *
  * Asserted here on the bedsit's traffic loop, which is the same shape and does
  * not need mission 4 dealt out: fire it, leave the set the way the endgame does,
- * and it must be stopped — not merely skipped by the re-fire guard, which is all
- * it ever was.
+ * and it must be stopped — not merely skipped by the re-fire guard.
  */
 test("a set's looping ambience stops when the set closes", async () => {
   const sink = new TimedAudioSink();

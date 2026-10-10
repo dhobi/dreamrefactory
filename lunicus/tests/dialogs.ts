@@ -5,7 +5,7 @@
  *   npx vitest run lunicus/tests/dialogs.ts
  *
  * The machine suite `tests/machine/scores.ts` hands the game ready answers;
- * this pins what turns a press of a button into one, which until now only ran
+ * this pins what turns a press of a button into one, which otherwise only runs
  * in a browser:
  *
  *   - **High Score** (dlog2, 0x418a98): OK takes the field, an empty field is

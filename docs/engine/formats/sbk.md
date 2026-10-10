@@ -266,7 +266,7 @@ basement. Entering a door is a deliberate act — the up key, in this port.
 
 That last step is a reading and not a field the executable has been watched
 using; `SbkExit.side` says so. What it is checked against is the whole corpus and
-`skullcracker/tests/browser/rooms.ts`, whose first assertion is the negative one:
+`skullcracker/tests/machine/rooms.ts`, whose first assertion is the negative one:
 walking through STREETS' door does nothing.
 
 **`goal` is not a door and neither is `door`.** Both were candidates and both

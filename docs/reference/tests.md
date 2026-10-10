@@ -9,9 +9,10 @@ caught, and what the comparison deliberately ignores — see
 
 ## Where the suites are
 
-**Each package tests itself**, and `npm test` collects all five — the include
-list in `vitest.config.ts` is `taoot/tests/auto/`, `dust/tests/`,
-`timelapse/tests/`, `engine/tests/` and `site/tests/`. Most of it reads the original game files (a
+**Each package tests itself**, and `npm test` collects them all: the root
+`vitest.config.ts` names no game, only the glob `*/vitest.config.ts`, and each
+package's own config includes its `tests/*.ts` (Titanic's `tests/auto/*.ts`), so
+a package joins the gate by having one. Most of it reads the original game files (a
 local `gamefiles/` copy), which is where the port's correctness claims bottom
 out; the rest builds its own fixtures and travels anywhere
 ([Continuous integration](ci.md) is the split).
@@ -22,15 +23,17 @@ out; the rest builds its own fixtures and travels anywhere
 | `dust/` | `dust/tests/` | *Dust*'s own: its movies, its `.rtd` saves, its v1 movie playback, and its saloon games |
 | `timelapse/` | `timelapse/tests/` | *Timelapse*'s own: the mouse cursors out of its engine build, the half of its interface that says where the player may go. Its machine suites, the whole game played headless world by world, are `timelapse/tests/machine/` and run with `npm test -w timelapse` ([Timelapse](../timelapse/README.md#machine-suites)) |
 | `engine/` | `engine/tests/` | what needs no game at all: the write-path scaffolding, the focus rule for keys, a screen with no room on it, what the parser tolerates around a handler, the opcodes Timelapse needs, touch gestures, a stage that moves on its own, and the geometry of a sliding turn |
-| `site/` | `site/tests/` | the shared layer: the layering rule, the chrome cascade, the six locale catalogues, and who the front page credits |
+| `site/` | `site/tests/` | the shared layer: the layering rule, the chrome cascade, the six locale catalogues, who the front page credits, the docs nav, the deploy lanes and the web-app icons |
+| `redjack/`, `lunicus/`, `jumpraven/` | `<game>/tests/` | the page's half of each game — its file store, saves, dialogs and input; the games themselves are played by their machine suites, below |
+| `skullcracker/` | `skullcracker/tests/` | see [Skull Cracker](../skullcracker/README.md) |
 
 Titanic has two further categories that are *not* in `npm test`, each with
 its own budget:
 
 | Category | Directory | Command | What it is |
 |----------|-----------|---------|------------|
-| **playthrough** | `taoot/tests/playthrough/` | `npm run test:machine` | the game *played* from the boot to the ending, asserting a recorded state trace — 27 segments plus 3 property tests, ~75 s |
-| **browser** | `taoot/tests/browser/` | `npm run test:browser -w taoot` | the same route through real mouse and keyboard events against a live dev server, diffed against the same trace — ~39 min, because it costs what the game costs |
+| **playthrough** | `taoot/tests/playthrough/` | `npm run test:machine` | the game *played* from the boot to the ending, asserting a recorded state trace — the 27 segments of [the route](route.md) and a few property tests, ~75 s |
+| **browser** | `taoot/tests/browser/` | `npm run test:browser -w taoot` | the same route through real mouse and keyboard events against a live dev server, diffed against the same trace — ~24 min, because it costs what the game costs |
 
 A playthrough segment covers minutes of game time and the route grows as it
 reaches further into the story; keeping it out of `npm test` keeps the gate
@@ -82,6 +85,14 @@ read it before diagnosing a flaky failure.
 | [`cursors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/cursors.ts) | the mouse cursors out of `ti.exe` — eleven `CURS.*` resources, byte-identical across the demo and every shipped edition, covering all five names the corpus asks for (touch 809, arrow 75, hand 36, watch 18, fist 2). Three of the other six have no CSS keyword with their meaning, which is half of why the art is carried rather than mapped; the other half is that it is the 1996 artwork. `godown` is checked by its SHAPE, because Timelapse's build redraws that one and a swapped table would otherwise go unnoticed. A name this build has no art for still hides the pointer: `hidecursor()` answers `none`, and only Timelapse ships a `CURS.NONE` |
 | [`konami.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/konami.ts) | the front page's one hidden door, tested on false starts rather than the happy path: a cursor-based matcher that resets on a wrong key passes hand-testing and still locks out a player who presses an extra ↑ |
 | [`ui-languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/ui-languages.ts) | the chrome's six languages and this game's six editions are the same six — a coincidence, not a constraint, so the test fails naming which side moved rather than offering a language chooser a page nobody wrote |
+| [`devmode.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/devmode.ts) + [`map-overlay.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/map-overlay.ts) | developer mode's menu bar against the `RT_MENU` resource it is generated from: every command names a case BOOTFILE's `menuselect` has, or is a hole the page knows about; and the deck-map overlay's frame loop — shown only on the map stage, rebuilt when the plan turns, not every frame |
+| [`freeroam.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/freeroam.ts) | [free roam](../taoot/freeroam.md): the tour is still a mode in the corpus and still shuts the doors the page opens, which editions have a tour, and that the doorway table is read from the corpus |
+| [`files-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/files-cache.ts) | what the browser file store keeps: movies past the byte budget evicted oldest first and refetched, the movie just asked for never the one evicted, and nothing that cannot be fetched again ever dropped |
+| [`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/save-seed.ts) | the shipped saves seeded into the save browser once per language, a language switch replacing them while keeping the player's own, and no seed marker when nothing was stored |
+| [`prop-views-go-round.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/prop-views-go-round.ts) | a prop's view keeps playing while the prop stands in it, as `TI.EXE`'s prop pass (`0x418bb0`) does every displayed frame: the trunk gramophone's crank turns while the record plays ([#472](https://github.com/dhobi/dreamrefactory/issues/472)) and the deck map keeps rolling open until a script changes its view; Dust's views still play once and hold |
+| [`bedsit-settings.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/bedsit-settings.ts) + [`bedsit-xr.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/bedsit-xr.ts) | the bedsit page's settings store (a change reaches every listener, a non-change reaches none) and its WebXR pose maths against a faked headset — scale, handedness and the direction of a forward step |
+| [`speedrun-controls.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/speedrun-controls.ts) + [`speedrun-hands.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/speedrun-hands.ts) + [`speedrun-stand.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/speedrun-stand.ts) + [`speedrun-move.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/speedrun-move.ts) + [`speedrun-say.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/speedrun-say.ts) | the [speedrun](#the-speedrun) verbs one rule at a time: `dial`, `wireless` and `mapJump`; `take`, `use`, `closeUp`, `intro` and `mission`; `stand` planning over the room in memory; `move(u,r,u,o)` expanding into the actions it names ([#250](https://github.com/dhobi/dreamrefactory/issues/250)); and `then: leave` / `then: stop` out of a conversation ([#265](https://github.com/dhobi/dreamrefactory/issues/265)) |
+| [`speedrun-headless.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/speedrun-headless.ts) | the sheet's opening played twice in node under the sheet clock, ending on the same pass both times — a run is a function of the sheet ([#509](https://github.com/dhobi/dreamrefactory/issues/509)) |
 
 The suite boots real `GameSession`s and drives a **virtual clock** — no DOM,
 no wall time, no audio output (the
@@ -112,6 +123,14 @@ Dust's rip as optional; the ones that stub what they read need no rip at all.
 | [`input.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/input.ts) | which key is whose (`src/input.ts`): the arrows by the boot's names, W/A/D passed through for its own mapping, Escape as the movie player's `.`, a held key said as held, `b` for the log, and shortcuts, named keys and a text field's keys left alone; a pointer floored onto 512x384; the save dialog's default name |
 | [`meter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/meter.ts) | the loader's network meter (`src/meter.ts`): no rate before the window settles, old samples forgotten but the total kept, the fraction and the time left once the remainder is known |
 | [`speedrun-page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/speedrun-page.ts) | the workbench page's wiring: Dust's own key space, actions and published route, and a state pane that waits for a game |
+| [`speedrun-verbs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/speedrun-verbs.ts) | Dust's own speedrun verbs against a fake that evaluates the same `window.dbg` expressions the page does: every verb reachable by name, the repository's route parsing against Dust's vocabulary, and a verb's grammar checked when the sheet is read |
+| [`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/save-seed.ts) | the shipped saves reaching the browser (`seedDustSaves`) and the base a first save is patched into (`loadDustTemplate`): a deleted save stays deleted, a new one still arrives |
+| [`banks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/banks.ts) | the v1 `.snd` banks, which have no loop-order container: every bank's one-shot and loop counts, and the theme a script asks for being the bed at the end of the bank |
+| [`setmain.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/setmain.ts) | which container a v1 set calls its main script — the field, not header `0x1c`, which is a constant; `undertak.set` names container 2 |
+| [`lifecycle.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/lifecycle.ts) | a jump made from inside `openscene` does not re-enter it, which froze the morning after sleeping in the hotel |
+| [`conversation.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/conversation.ts) + [`patrol.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/patrol.ts) | an actor keeps where it was going through a turn and a conversation ([#289](https://github.com/dhobi/dreamrefactory/issues/289)), and walks its authored route along the streets rather than straight through the buildings ([#394](https://github.com/dhobi/dreamrefactory/issues/394)) |
+| [`props.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/props.ts) + [`targets.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/targets.ts) | a prop assigned to a set is scenery seated when that set opens, not a screen overlay ([#290](https://github.com/dhobi/dreamrefactory/issues/290)); the shooting range's 2D-actor targets placed, drawn and hit ([#292](https://github.com/dhobi/dreamrefactory/issues/292)) |
+| [`checkers-script.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tests/checkers-script.ts) | `CHECKERS.PRP`'s own `win ()` run against the disc: losing to Bolivar ends the game instead of stopping with his gloat half-said |
 
 ## Timelapse's own — `timelapse/tests/`
 
@@ -170,6 +189,17 @@ mode: the Load button lists the port's day saves (`gamefiles/save/`, written by
 lower floor; the panel's save button brings up the dialog and keeps a named
 file; and that file opens back into the same game.
 
+Four suites beside them are in `npm test`, and pin what turns the page's own
+input into an answer the machine suites hand the game ready-made:
+[`dialogs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/dialogs.ts) (the High Score and Keys
+boxes, answered as LUNICUS.EXE's procedures answered them),
+[`menu-bar.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/menu-bar.ts) (what the bar shows and
+greys, and its picks),
+[`sco.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/sco.ts) (`LUNICUS.SCO`'s key table at its
+edges, and a file of the wrong size met with the defaults) and
+[`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/save-seed.ts) (the port's day saves
+put into the browser once, a deleted one staying deleted).
+
 | Suite | Verifies |
 |-------|----------|
 | [`menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/machine/menu.ts) | the menu bar's commands through the page's door: the bar up on the title and not over the intro; Settings ▸ Expert, and a new game opening with it; Sound levels and Theme; Help ▸ About over the title, Esc out of its credits, and the title given back pixel for pixel; then in a game File ▸ Save as the save button, Help ▸ Help as the help button, the title's commands ignored, and File ▸ Exit back to the title with no death counted |
@@ -199,6 +229,12 @@ Every gesture goes through `jumpraven/src/game/input.ts`. See
 | `wholegame.ts` | the intro, three days and the copilot's ending, chained, with the game set up |
 | `fairgame.ts` | the whole game won by `src/player.ts` with nothing set, on seed 7 |
 | `menu.ts`, `saves.ts`, `films.ts` | the menu bar and the HUD's buttons; the `.RVN` save written, read back and opened before the run and on the high scores screen; a film's voice cutting the one before it |
+| `screens.ts`, `weapons.ts` | with the drawing on (`draws: true`): the screens between flights, each picture and number where RAVEN.EXE put it, checked against the window's palette indexes; and each of the six weapons fired from the view |
+
+[`jumpraven/tests/dialogs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/jumpraven/tests/dialogs.ts)
+is in `npm test`: what each of RAVEN.EXE's dialog procedures hands back for its
+buttons — the high score's name, Quit, Pause — which the machine suites stand in
+for with callbacks.
 
 ## The engine's own — `engine/tests/`
 
@@ -218,6 +254,19 @@ when the rip is not there.
 | [`touch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/touch.ts) | a finger on the glass, and the four things it can mean. The recogniser is `engine/src/web/touch.ts`, shared by *Titanic*'s, *Dust*'s and *Timelapse*'s pages; the speedrun driver deliberately steers around it with `pointerType: "mouse"`. A gesture must start with no room open: *Dust*'s films play on the director with no set open, while on *Titanic* the boot opens a set before the logos roll and the one film with no viewer, the Nightdive intro's, is not the director's film and has its own line in the page. What is under test is the ambiguity: a finger going down begins a tap AND a swipe, so the mousedown is withheld until the gesture declares itself, and every bug this can have is a wrong declaration — a click delivered on a swipe (the camera turns *and* the thing under your finger opens), a swipe eaten by a drag loop, a press handed over and never released on `pointercancel`. Also: a diagonal decides nothing rather than guessing the nearer axis; a tap clicks where the finger LANDED rather than where it lifted; a third quick tap is a fresh first and not another escape; a finger on a prop or a button is pressed at once so a `while stilldown()` drag is never ruled a swipe; a FIRST tap at clock zero is a click — the previous-tap time is a sentinel as well as a time, so `0` must not mean both, or a tap inside the first 320 ms of a page's life sends the escape (the other tests start their clock at 1000 and cannot see this); and the recogniser tracks ONE pointer: a second finger's move and release are not the first one's, which is what `owns()` answers. No DOM: the hooks are the seam and the clock is injected |
 | [`flat-anim.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/flat-anim.ts) | a stage that moves on its own. Timelapse animates by walking a RUN OF FLATS — `flatstartanim(2, 54, "FlatAnimDone()", 8)` — 433 times across its discs, and never in the other two games. Three requirements, none of them about animation: `makeLoop` keeps the callback NAME's case (Titanic's 67 loop callbacks are all lowercase; Timelapse names 9 of 34 in CamelCase and Dust one, `SOUNDFXS`, Chinatown's ambient loop); a flat loop can reach a handler the BOOT owns (a flat with no script resolves to its stage, so the chain is never empty, only unable to answer); and flats are not each decoded into a fresh `FrameBuffer`, because the cels are DELTAS — `image.ts` warns about exactly that at the top. Includes a hand-assembled delta frame (row mode 10, "keep this row from the previous image") and the claim that protects the other two games: a keyframe decodes the same whatever preceded it. A fourth, found in play: `gotoflat` sends a flat's `openflat`/`closeflat` along the chain rather than straight at its own script, so Timelapse's BOOTFILE defaults run and `baseflat` follows every move within a stage (otherwise the sea shows one view's water while the player stands at another). A loop that comes due mid-DRAG: `fireDueLoops` counts a timer loop down whether or not a script is in flight and then declines to fire it, so a loop armed inside a `while stilldown()` handler would sit at zero until the player let go. Timelapse's match is the worked example — striking it plays the sound and arms `makeloop("prop", "Matches", "MatchBurn()", 30 / 6)`, and the flame must start before the button comes up. `forceupdate()` is the drag's own yield and in the original it IS a service pass, so the pump fires a due timer loop as well as the per-frame ones — without counting it down, which keeps the pace the engine's rather than the display's. And a JUMP into the middle of a variant chain: a flat named `i{region}.{frame}.{n}` — three components — is a delta over the variant before it, `.1` over the base and `.2` over `.1`, so seeding from the flat on screen is right for an animation (walked in order) and wrong when a script jumps. Timelapse jumps on purpose: the lantern's instruction sheet is `gotoflat("i0001.605.1")` with the matches on the table and `gotoflat("i0001.605.2")` once they are taken, both from the table; `.2` decoded over the table changes 4,771 of its pixels and leaves 302,429, so the table shows instead of the instructions |
 | [`turn-effect.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/turn-effect.ts) | `visualeffect(turnleft|turnright)`, the sliding turn — a PUSH, where both pictures move, against the wipes where only the arriving one does. Every number is `tl.exe`'s: the four turn slots of the jump table at 0x447c18 are the only ones calling 0x448cb0, which clips BOTH its rects against the screen (what a copy must do on one surface) where the wipes call the offscreen blit 0x448c20 twice; `turnhalf*` halves the width at 0x448b48 before dividing by the steps; and a half turn's source cursor starts a QUARTER in (0x448b66). That last one is invisible until it is wrong — a mid-turn flat is 320 columns of art centred in a 640 canvas, so an edge-sourced cursor slides the blank margin across the screen. A HALF turn SETTLES rather than ending, so the second leg captures the composite the first left rather than the destination flat drawn whole — and the settled composite must outlive `visualeffect`'s own return, because `gotoflat(namedest)` runs between the legs and any frame it yields would otherwise put the live world back on screen (the left turn's mid-picture jump, 66 at the join against a median of 13). Both of a turn's pictures are HELD for the whole ramp, as the original's modal effect over an untouchable offscreen surface gives it for free: otherwise a destination flat that animates (i0001.103 is water) hands different passes different art. And `plain` is a REDRAW rather than a no-op (0x448630 blits the screen rect to itself), which is how a script makes a change visible before the next effect captures the screen — without it the compass the game hides before every turn stays in the buffer and slides off with the picture |
+| [`df5-script.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/df5-script.ts) + [`df5-room.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/df5-room.ts) + [`df5-loop-table.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/df5-loop-table.ts) + [`maze-render.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/maze-render.ts) | [DreamFactory 5](../engine/formats/dreamfactory-5.md): the opcodes and segment kind v5 added to a script, the room's angle arithmetic and click projector (and, with the rip, every RedJack room read and every sphere agreeing with the films that leave it), a film's loop table read from 0x226 so its last record is kept, and a node's sphere and a road's film drawn on rooms built in the test |
+| [`df5-shop-sound.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/df5-shop-sound.ts) | a v5 view's own sound: the u32 at 0x0c names a SOUN container of IMA ADPCM, measured from *Villains' Revenge* ([#477](https://github.com/dhobi/dreamrefactory/issues/477)) and built from nothing here, since that game is not carried |
+| [`savegame-v5.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/savegame-v5.ts) + [`savegame-builtins.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/savegame-builtins.ts) | RedJack's `.save` as bytes — writer, reader and the two checks RedJack.exe's loader makes first — and `savegame`/`opengame` at their edges, including RedJack.exe's two refusals |
+| [`set-any.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/set-any.ts) + [`container-refs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/container-refs.ts) | a SET opened by the version container 0 states, never by its name or game; and every container index a header names checked against what it points at ([#325](https://github.com/dhobi/dreamrefactory/issues/325)) |
+| [`v0-screen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/v0-screen.ts) | the DreamFactory 0 game window's drawing primitives, which Lunicus's and Jump Raven's machine suites run with `draws` off |
+| [`mov-film.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/mov-film.ts) | a film laid out on a clock for the movie editor's video export ([#435](https://github.com/dhobi/dreamrefactory/issues/435)): holds, loops closed at their jump back, and one event sound at a time |
+| [`fade-after-movie.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/fade-after-movie.ts) | a fade after a film takes down the film's last frame, not the room behind it — the lift gate that shut again for a moment ([#380](https://github.com/dhobi/dreamrefactory/issues/380)) |
+| [`checkers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/checkers.ts) | Bolivar's checkers opponent, `pluginfx("checkmove", …)`, standing in for `CHECKERS.DLL` |
+| [`audio-mute.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/audio-mute.ts) + [`audio-sinks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/audio-sinks.ts) | the listener's mute kept apart from the game's own `wavevolume`/`themevol`, and the two browser sinks and the bank library on paths the machine suites (which play into `NullAudioSink`) never take |
+| [`speedrun-clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-clock.ts) + [`load-clock-hidden.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/load-clock-hidden.ts) | the [speedrun clock](#the-clock-in-game-time): game time that counts passes, stands still while the engine waits on a file, and stops while the tab is hidden ([#375](https://github.com/dhobi/dreamrefactory/issues/375)) |
+| [`speedrun-condition.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-condition.ts) + [`speedrun-sheet-header.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-sheet-header.ts) + [`reply-ids.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/reply-ids.ts) | the sheet grammar's joined conditions (`a or b`, `a and b`, `!a`); a [contributed sheet's](#contributed-sheets) header, title on line 1 and the rest optional; and the answer ids a conversation can show for `say([…])` ([#377](https://github.com/dhobi/dreamrefactory/issues/377)) |
+| [`fullscreen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/fullscreen.ts) + [`stretch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/stretch.ts) + [`tylerhartman.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/tylerhartman.ts) | the Fullscreen button on a browser with no `requestFullscreen` (an iPhone), the stretched fullscreen's remembered box and pointer maths, and [TH mode's](../engine/runtime/th-mode.md) layout on a 16:9 display |
+| [`page-url.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/page-url.ts) | `pageUrl` resolves a path against the page and refuses anything that leaves the site |
 
 ## The shared layer — `site/tests/`
 
@@ -227,13 +276,17 @@ when the rip is not there.
 | [`cascade.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/cascade.ts) | the bundler does not get a vote on what anything looks like. Every page links the shared chrome and then writes its own `<style>` after it; in a build Vite re-inserts the `<link>` at the END of `<head>`, so two declarations of equal specificity swap places. Dust's page is a grid and the chrome sets `display: flex` on `body` — the pair this file exists for |
 | [`front-doors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/front-doors.ts) | the front page credits the right studio for each game. CyberFlix wrote the engine and made two of the three; *Timelapse* is GTE Interactive Media's. The credit is a field on the registry AND a badge in the markup — two copies of one fact — and this holds them together, including that the badge's visible text is the attribute the test reads, so the two cannot agree while a reader sees something else |
 | [`locales.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/locales.ts) | the catalogue must say exactly what the markup says. The pages carry their English inline (so an English reader needs no JavaScript and `git diff` shows the sentence that changed) and `locales/en.ts` carries the same English for translators — two copies of a string, kept in step by this file failing when one moves |
+| [`docs-nav.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/docs-nav.ts) | every documentation page is reachable from the hand-written nav in `docs/.vitepress/config.ts`, and every nav link goes to a page — add a page to the nav in the same change |
+| [`deploy-lanes.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/deploy-lanes.ts) + [`nightly-suites.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/nightly-suites.ts) | every game has a deploy lane and every lane names a game, across the four places `deploy.yml` says it; and the nightly `browser.yml` runs what was meant ([CI](ci.md)) |
+| [`manifest-keys.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/manifest-keys.ts) | a manifest's keys are paths as served, whichever directory it was written from |
+| [`app-icons.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/app-icons.ts) + [`landscape.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tests/landscape.ts) | the home-screen web-app manifests and their icons (`npm run mkappicons`), and every game's page going fullscreen when a phone is turned on its side |
 
 ## Running the playthrough
 
 ```
-npm run test:machine                  # all 27 segments, headless, ~75 s
-npx vitest run taoot/tests/playthrough/playthrough.ts -t "playthrough 13"   # one segment
-TAOOT_RECORD=1 npx vitest run taoot/tests/playthrough/playthrough.ts        # re-record the goldens
+npm run test:machine -w taoot         # the 27 segments and the speedrun suites, headless
+npx vitest run --config taoot/vitest.machine.config.ts -t "playthrough 13"   # one segment
+TAOOT_RECORD=1 npx vitest run --config taoot/vitest.machine.config.ts        # re-record the goldens
 ```
 
 Checkpoints are written to `out/checkpoints/` as `.ti` files, one per segment,
@@ -297,6 +350,13 @@ npm run test:browser:m0 -w taoot                   # segment 1
 npm run test:browser:m1 -w taoot                   # segments 2–6
 npm run test:browser:m2 -w taoot                   # segments 7–16
 SEGMENTS=13 npm run test:browser:seg -w taoot      # one segment
+npm run test:browser:minigames -w taoot            # the minigames booted on their own, with no ship behind them
+npm run test:browser:devmode -w taoot              # developer mode's menu bar and overlay
+npm run test:browser:freeroam -w taoot             # free roam's opened doors
+npm run test:browser:transitions -w taoot          # nothing paints the world while a transition waits for bytes
+npm run test:browser:vr -w taoot                   # the bedsit's VR vignette
+npm run test:browser:board -w taoot                # the bedsit's board
+npm run test:browser -w dust                       # Dust: a load's standpoint, the shooting range, the walk back
 ```
 
 `APP_URL` overrides where it looks; the driver treats it as the **game's
@@ -405,14 +465,16 @@ in-page driver, the aim sweep and the panel's own modules —
 `taoot/src/speedrun/` holds Titanic's verbs and its routes' navigation, and
 `taoot/tests/speedrun/` the Playwright driver that is the clock of record.
 
-**Dust has the same workbench** at `dust/speedrun/`, off the same modules, and
-adds no verbs of its own — every gesture a route needs so far is written against
-a DreamFactory session and Dust is one, so a sheet runs on its disc unchanged
-(`dust/src/speedrun/actions.ts` says what would go there and why nothing has
-yet). What each game supplies is five facts about itself: its key namespace, its
-action table, and optionally a Warm list, what that button should say, and a
-sheet to copy (`Workbench` in `engine/src/web/speedrun/workbench.ts`). Dust
-supplies the first two.
+**Dust has the same workbench** at `dust/speedrun/`, off the same modules. The
+engine's verbs are written against a DreamFactory session and Dust is one, so
+most of a route needs nothing more; what its disc asks that Titanic's does not —
+`goto` a grid cell, `give`, `offer`, `meet`, `talkout`, `takeinhand`, `doorat`,
+`loadsave`, its saloon's `blackjack`, and `menuSave`/`menuLoad` through its own
+panel — is `DUST_ACTIONS` in `dust/src/speedrun/actions.ts`, laid over the core
+table so a name there wins. What each game supplies is five facts about itself:
+its key namespace, its action table, and optionally a Warm list, what that
+button should say, and a sheet to copy (`Workbench` in
+`engine/src/web/speedrun/workbench.ts`).
 
 ### The clock: in-game time
 
@@ -439,8 +501,8 @@ Both runners play on a sheet's clock: the CLI runner always, the workbench
 while a sheet runs (by hand, the page is the game again). Measured on the
 stack-to-mission-4 leg, seed 20: 8239–8242 frames at full speed, with the CPU
 throttled 4×, over a throttled link and with both, while the wall time ran from
-25.5 s to 40 s. Before, a slow CPU added about a hundred frames and a slow link
-about four hundred.
+25.5 s to 40 s. Timed on the wall clock instead, the same leg gained about a
+hundred frames on the slow CPU and about four hundred over the slow link.
 
 **A person's run** is timed with **Time me** on the workbench: speedrun time on,
 a sheet's clock off. The stopwatch counts the game's passes while it is busy and

@@ -30,8 +30,8 @@ const PRESS_FLOOR_MS = (10 / 60) * 1000;
  * of those tables (the window proc sets it from `GetKeyState(VK_CONTROL)` alone,
  * 0x41ad08), so these are Ctrl+0..Ctrl+9 there. A browser cannot have them:
  * Ctrl+0 is zoom reset and Ctrl+1..Ctrl+9 switch tabs, and `preventDefault()`
- * does not stop either. #115's brightness keys had no such problem — the manual
- * named Ctrl+F1 but the code tested the virtual key alone, so bare F1 was
+ * does not stop either. #115's brightness keys have no such problem — the manual
+ * names Ctrl+F1 but the code tests the virtual key alone, so bare F1 is
  * faithful AND reachable. Here the two disagree, so the digits are bound bare and
  * the chord is simply unavailable (#129).
  *
@@ -374,7 +374,7 @@ export class PuppetController {
     // script last asked for: RedJack.exe's Pupp.c calls its `CURS.ARROW` setter
     // (0x46a150 / 0x46a230) from 0x42e6b0, 0x42eed0 and 0x431550. The cast's
     // `walkandtalk` has just said `cursor ("watch")`, and without this the
-    // hourglass stood over every choice (#446). It is the engine's current
+    // hourglass would stand over every choice (#446). It is the engine's current
     // cursor afterwards too, as the original's is, until a script names another.
     if (this.session.isV5) this.session.cursorName = "arrow";
     this.session.onLog(`puppet opened: ${key} (${pup.dialogue.size} lines, ${pup.scripts.length} scripts)`);
@@ -481,7 +481,7 @@ export class PuppetController {
     // ...and silences it. Only the NEXT puppetspeak would otherwise cut it (a
     // non-overlapping play halts the channel first), and what follows a line is
     // often not another line: PENNY2.PUP's Lenin beat runs `puppetspeak(28)`,
-    // `puppetclear()`, `spotmovie("lenin.mov")` — skip line 28 and it used to
+    // `puppetclear()`, `spotmovie("lenin.mov")` — skip line 28 and it would
     // keep talking under the movie. Waiting the line out makes this a no-op:
     // the race outlasts the audio by 150 ms.
     this.session.audio.halt("voice");
@@ -608,8 +608,8 @@ export class PuppetController {
    * intent: five plaques carrying only the ids 101 and 102, where the answer
    * has to be read rather than counted along the row.
    *
-   * Reported as #298 — the Recomp offered Morrow's choices in the order the
-   * puppet defines them, every time, because this was a no-op stub.
+   * As a no-op, the Recomp would offer Morrow's choices in the order the puppet
+   * defines them, every time (#298).
    */
   puppetScramble(): void {
     const p = this.puppet;
@@ -662,8 +662,7 @@ export class PuppetController {
     // The PLAQUE wait answers ESC too, and its answer is -1 (0x4418a7) — which is
     // how a player walks out of a conversation. Every one of the 516 puppetevent
     // calls in the tree is `puppetevent (-1)` followed by a `switch` with a
-    // `case -1` arm, so this is a branch the authors wrote and nothing could
-    // reach until now (#131).
+    // `case -1` arm, so this is a branch the authors wrote (#131).
     //
     // Deliberately NOT setting the skip flag: unlike a spoken-line ESC this must
     // not swallow what comes next, because the script's own -1 arm may have a
@@ -760,10 +759,10 @@ export class PuppetController {
    * `rand()`, so a faithful port would put them on `session.rng` — but they are
    * re-armed on the CLOCK, which is exactly the shape that made the crickets a
    * problem: how many times they draw depends on how long the host dwells at a
-   * plaque, and moving them re-values every script draw that follows. That cost
-   * the Gorse/Jones coin its determinism once already, and the fix was to split
-   * the streams ({@link GameSession.ambientRng}, where the 834-vs-838 measurement
-   * lives). Which arbitrary value an idle timer gets is unobservable to any
+   * plaque, and moving them re-values every script draw that follows. On one
+   * stream that costs the Gorse/Jones coin its determinism, which is why the
+   * streams are split ({@link GameSession.ambientRng}, where the 834-vs-838
+   * measurement lives). Which arbitrary value an idle timer gets is unobservable to any
    * script; when the story's coin lands is not.
    */
   private nextIdleDelay(t: { minTicks: number; maxTicks: number }): number {
@@ -874,7 +873,7 @@ export class PuppetController {
       return;
     }
     // Only while the choices are up. During a spoken line the wait ignores the
-    // mouse outright, which is why this no longer skips — see {@link key}.
+    // mouse outright, which is why this does not skip — see {@link key}.
     if (inPicture && p.eventWaiter) void this.repeatLastExchange();
   }
 

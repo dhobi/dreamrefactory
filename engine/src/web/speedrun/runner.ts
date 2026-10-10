@@ -279,9 +279,9 @@ export async function runSheet(
    * The vocabulary to run against — the engine's verbs plus this game's
    * (`taoot/src/speedrun/actions.ts`, `ACTIONS`).
    *
-   * A parameter and not an import, which is the seam that let this loop into the
-   * engine at all: it used to reach for one module-level table, and that table
-   * was Titanic's. The run loop has no opinion about what verbs exist — it looks
+   * A parameter and not an import, which is the seam that lets this loop live in
+   * the engine at all: one module-level table would be one game's. The run loop
+   * has no opinion about what verbs exist — it looks
    * each line's verb up, asks how much to wait for, and calls it — so the table
    * is the caller's to supply, and a second game supplies its own.
    *
@@ -440,7 +440,7 @@ export async function runSheet(
    * Poll the watches until the step it is running beside is done — and stop
    * the moment it is: the tick's wait is cut short by `finished`, or every step
    * under a watch would wait out the rest of a quarter second before the next
-   * one began (#509, where that was the whole of a headless run's wall time).
+   * one began (#509: otherwise that is the whole of a headless run's wall time).
    */
   const watchdog = (done: () => boolean, finished: Promise<void>): Promise<void> =>
     (async () => {

@@ -14,12 +14,10 @@
  *
  * ## What this is for, and what it is NOT for
  *
- * {@link Navigator.accost} used to click and then wait `8000` ms for a conversation,
- * from standpoint after standpoint. Two jobs were tangled in that: REACHING someone,
- * and WAITING for them to arrive — the cast walks, and `hasattention` used to bring
- * them over. Measured the hard way: skipping the too-far clicks outright broke
- * routes the sweep had always managed (`ga` on decka, hotdist 500, is only ever
- * reached because the route kept clicking while she walked in). The waiting was
+ * Accosting someone is two jobs: REACHING them, and WAITING for them to arrive —
+ * the cast walks, and `hasattention` brings them over. Skipping the too-far
+ * clicks outright breaks routes (`ga` on decka, hotdist 500, is only ever
+ * reached because the route keeps clicking while she walks in). The waiting is
  * load-bearing.
  *
  * So this is used to make the waiting PRODUCTIVE, not to skip it: watch the distance

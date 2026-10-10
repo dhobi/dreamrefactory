@@ -11,9 +11,9 @@
  *
  * ## Why a PNG and not a keyword
  *
- * The port used to map these names onto CSS keywords — `touch` to `pointer`,
- * `watch` to `wait` — which is the right first move and is still the fallback
- * here. But Timelapse navigates by CURSOR: 11,031 of its 13,200 `cursor(...)`
+ * Mapping these names onto CSS keywords — `touch` to `pointer`, `watch` to
+ * `wait` — is the right first move and is still the fallback here. But
+ * Timelapse navigates by CURSOR: 11,031 of its 13,200 `cursor(...)`
  * calls are the two arrows that say "you can step forward here" / "back up here",
  * and both of them were REDRAWN for this game (Titanic's `CURS.GOUP` is a plain
  * arrow, Timelapse's has a foot on it). No keyword carries that, and the ones

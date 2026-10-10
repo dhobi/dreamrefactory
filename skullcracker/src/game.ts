@@ -2,6 +2,14 @@
  * The game itself — Skull Cracker's world, stepped a tick at a time, with no
  * page, no canvas and no clock of its own. {@link file://./walk.ts} shows it;
  * a headless run (`tests/machine`) drives it directly. See {@link tick}.
+ *
+ * This file is one large module on purpose. Skull Cracker has no script to
+ * interpret: its game logic is compiled into `SC.EXE`, and this is that logic
+ * ported from the disassembly, function by function, with the module-level
+ * `let`s standing in for the executable's globals. The focus of dreamREfactory
+ * is the DreamFactory engine (`engine/`), not this port, so the file keeps the
+ * executable's shape, where every block can be checked against the address it
+ * cites. Splitting it into subsystems is not planned.
  */
 import { readSbkFile, SbkCel, SbkEntity, SbkFile, SbkRoom, LEVEL_ORDER, PLANE_Z, PLAY_PLANE_Z, arrivalIn, placementRate, readRooms } from "@dreamfactory/engine/df/sbk";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
@@ -67,8 +75,8 @@ import { random, roll as scRoll, seedRandom } from "./random";
  *   jump      dy -420           ONE frame, dx 0 standing or 95 running
  * ```
  *
- * Nothing about the scale is missing any more. The scripts themselves are in
- * `.data` and each carries its own header, so the rate is in the file too:
+ * The scripts themselves are in `.data` and each carries its own header, so
+ * the rate is in the file too:
  *
  * ```
  *   0x471920  count 12  ticksPerFrame 1  kind  1   cels 100..111  dx  95   walk
@@ -223,14 +231,13 @@ export function dragged(v: number, rate: number = DRAG): number {
 /**
  * Divide the way `0x42f8b0` divides: round AWAY from zero.
  *
- * This is the whole of the jump's shape and it took far too long to notice. The
- * mover does not move an object by a fraction of a pixel — it does an `idiv` with
+ * This is the whole of the jump's shape. The mover does not move an object by a fraction of a pixel — it does an `idiv` with
  * an explicit away-from-zero adjustment (`sub ax,cx; inc ax` when negative,
  * `lea eax,[ecx+eax-1]` when positive) and adds a WHOLE number of pixels. So every
  * frame's step has its magnitude rounded UP, and over a jump that compounds:
  * stepping `-420` by hand at the player's divisor of 12 gives moves of
  * `-35 -27 -19 -10 -2` — an apex of 93px where the same numbers integrated as
- * floats give 73.5. The port had been integrating as floats.
+ * floats give 73.5.
  */
 export function roundAway(v: number): number {
   return v < 0 ? -Math.ceil(-v) : Math.ceil(v);
@@ -343,26 +350,20 @@ export const DIVISOR = 12;
  * is called from **all sixteen level frame functions** (STREETS' `0x44dc10` at
  * +614). Four sixtieths is a fifteenth: a frame is 1/15s.
  *
- * That is the number everything else was missing. The animation stepper advances
- * one cel per frame, so every animation in the game plays at 15fps — this page
- * had been running them at 34, which is why the punch was a blur. And it turns
- * {@link MEASURED}'s per-frame pixels into pixels per SECOND at last: the walk's
+ * The animation stepper advances one cel per frame, so every animation in the
+ * game plays at 15fps. It also turns {@link MEASURED}'s per-frame pixels into
+ * pixels per SECOND: the walk's
  * 8 a frame settles against the ground's drag at 12 — 180 a second — the run's
  * 15 at 22 (330), and the launch leaves the ground at 35 in one frame.
  */
 export const ENGINE_HZ = 15;
 
 /**
- * There is no jump scale any more, and the history of the one there was is worth
- * a paragraph. `JUMP_SCALE = 1.2` was a deliberate 20% boost on the launch, added
- * because the float-integrated jump "played low" — and then found to be
- * load-bearing: at 1.0 the port could not clear CITY's first wall. It was
- * compensating for two misreadings at once. Gravity was taken as `100/12` when
- * `0x46a110` is 10.0 and `obj+0x24` is simply 10; and the airborne horizontal was
- * taken as the run speed when tag 5's frames carry `dx 0` and `0x429fef` drives
- * `obj+0xc` to 30. With the engine's own integer velocity model in place the disc's
- * numbers clear everything they should at exactly 1.0, and the dial is deleted
- * rather than parked, so that nothing can quietly lean on it again.
+ * There is no jump scale: with the engine's own integer velocity model the
+ * disc's numbers clear everything they should at exactly 1.0. Gravity is
+ * `0x46a110`'s 10.0 with `obj+0x24` simply 10 (not `100/12`), and the airborne
+ * horizontal is not the run speed: tag 5's frames carry `dx 0` and `0x429fef`
+ * drives `obj+0xc` to 30.
  */
 
 export const INVENTED = {
@@ -709,12 +710,10 @@ export function poseFeet(): void {
 /**
  * The camera — `0x4309f0`, and all of it is in `SC.EXE`.
  *
- * This page had an invented one for a long time, on the belief that the engine
- * "scrolls by moving the world rather than the view" and so has no camera
- * variable to read. It has one. `0x4309d0` answers with `[0x4a8970]`, the view
- * rect's own corner in WORLD coordinates, and every draw subtracts it. What
- * misled the earlier reading is that nothing writes that global directly: it is
- * written by `0x4308a0`, which takes a requested corner and clamps it.
+ * `0x4309d0` answers with `[0x4a8970]`, the view rect's own corner in WORLD
+ * coordinates, and every draw subtracts it. Nothing writes that global
+ * directly: it is written by `0x4308a0`, which takes a requested corner and
+ * clamps it.
  *
  * ```
  *   4309f0  per engine frame, mode 0 (follow the tracked object [0x4a8994])
@@ -732,13 +731,12 @@ export function poseFeet(): void {
  * behind four bits of {@link SbkRoom.flags}. The floor is applied after the cap,
  * so a room narrower than the view is pinned to its left edge.
  *
- * Two things this replaces. The old camera centred on the middle of the player's
- * collision box; the engine's target is the object's own point, held at the
- * middle of `0x4a6938` — which for a 512x232 window is its middle too, so the
- * pose no longer enters into it. And the old clamp used {@link roomSpan}, the
- * extent of the FLOOR, which is narrower than the room in nine levels: VAT's
- * chamber loses 35 pixels that way, and machine B — `0x46e088`'s `+373`, at
- * x6694 — could never be brought on screen.
+ * The target is the object's own point, not the middle of its collision box,
+ * held at the middle of `0x4a6938` — which for a 512x232 window is its middle
+ * too, so the pose does not enter into it. And the clamp is the room, not
+ * {@link roomSpan}: the extent of the FLOOR is narrower than the room in nine
+ * levels, so VAT's chamber would lose 35 pixels and machine B — `0x46e088`'s
+ * `+373`, at x6694 — could never be brought on screen.
  *
  * What is NOT the engine's: the ease runs once an engine frame here, the way it
  * does there, but this page's frame is a quarter of a tick rather than a whole
@@ -2167,9 +2165,9 @@ export async function loadLevel(index: number): Promise<void> {
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
     // then p4, p1, p2 into one node array that 0x40e520 paints in order. So the
     // player sits between p0 and p4, and plane 2 — the giant lamp-post and the
-    // overhead cables — is painted LAST, in FRONT of everything. (An earlier
-    // build drew it behind AND dimmed it; both were wrong. The cables are light
-    // grey on purpose, and they belong over the wall, not mixed into it.)
+    // overhead cables — is painted LAST, in FRONT of everything, and undimmed.
+    // (The cables are light grey on purpose, and they belong over the wall, not
+    // mixed into it.)
     draw: sbk.placements
       .map((q) => ({
         // the frame cels this placement cycles — [id] for a still one, the glow
@@ -2253,10 +2251,9 @@ export async function loadLevel(index: number): Promise<void> {
  *
  * So the rect does nothing at all until the quota is met, and then what appears
  * is a THING rather than a live rect — see {@link craft} and
- * {@link file://./effects.ts}. Two frames of this port used to stand in for that
- * thing (a rect that became touchable, plus a latch so a level whose spawn sits
- * in its own goal could not complete on load); the latch is still here, because
- * the craft should not open on the frame it arrives either.
+ * {@link file://./effects.ts}. A latch stops a level whose spawn sits in its
+ * own goal completing on load, and the craft does not open on the frame it
+ * arrives either.
  */
 export function goalReady(): boolean {
   // RAVECAVE's and TOWER's cases ask the flag and NOT the count (`0x4219e5`,
@@ -2913,8 +2910,7 @@ export function solidsIn(sbk: SbkFile, room: SbkRoom): Solids {
  *   `initplayer` count (`0x46b9b4`) and jumps to `0x402760` — it walks the level's
  *   spawn points and teleports the player to each. That is this function.
  * - **action 11** (`0x402d22`) toggles `0x46b1a8`, and that word selects between
- *   two whole player implementations. The pairing is `0x402950`'s, and the
- *   addresses this page named before were wrong:
+ *   two whole player implementations. The pairing is `0x402950`'s:
  *
  *   ```
  *     402950  movsx eax, word ptr [0x46b1a8]
@@ -2967,20 +2963,18 @@ export function everyAnim(foe: Foe): FoeAnim[] {
  * record's point is the anchor, and the rect is only the patrol territory the AI
  * struct keeps (`0x450fc3` stores both corners into it).
  *
- * This page had been standing them on the rect's BOTTOM edge, centred in its
- * width. In STREETS and CITY the two are close enough that nothing showed; in
- * WOODS the rects are wide territories whose bottom edge is well under the
- * ground, so every foe in the level spawned inside the terrain, fell through it
- * and was still falling thousands of pixels down when the level ended.
+ * The rect's BOTTOM edge is not the anchor: in WOODS the rects are wide
+ * territories whose bottom edge is well under the ground, so a foe stood there
+ * spawns inside the terrain and falls through it.
  */
 /**
  * ...and a record belongs to ONE room, which is the engine's own rule.
  *
  * `0x40b940`'s kind 2 walks the region table and answers with the FIRST region
  * whose rect contains the point. Rooms overlap — that is how you walk out of one
- * and into the next — and a creature standing in a seam was being spawned once
- * per room it fell in. BARREL's rooms overlap x7464..7691 and its cop at x7521
- * stands in that seam, which is why a level of twelve had a census of thirteen
+ * and into the next — and a creature standing in a seam would otherwise spawn
+ * once per room it falls in. BARREL's rooms overlap x7464..7691 and its cop at
+ * x7521 stands in that seam: a level of twelve would have a census of thirteen
  * and a kill quota that could never be met.
  */
 export function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): Enemy[] {
@@ -2998,10 +2992,9 @@ export function spawnIn(sbk: SbkFile, room: SbkRoom, taken?: Set<SbkEntity>): En
     )
       continue;
     taken?.add(e);
-    // every cel it needs has to be in this book, or it is some other level's —
-    // and that now includes the flinches and the death, which is the check that
-    // would have caught the old cross-chapter mix-up: this chapter's rat has no
-    // 3080 to die on and the other chapter's does
+    // every cel it needs, flinches and death included, has to be in this book,
+    // or it is another level's: one chapter's rat has death cel 3080 and the
+    // other's does not
     if (!everyAnim(foe).every((a) => a.cels.every((id) => sbk.byId.has(id))))
       continue;
     // this page carries a foe by its FEET and {@link foeAnchor} converts, so the
@@ -3530,8 +3523,8 @@ export function surfaceUnder(x: number, fromY: number, toY: number): number | nu
 }
 
 /**
- * An `obstacle` is a volume your ANCHOR may not be inside — and this page had it
- * as a box your whole sprite may not touch, which made CITY impassable.
+ * An `obstacle` is a volume your ANCHOR may not be inside — not a box your whole
+ * sprite may not touch, which would make CITY impassable.
  *
  * `0x430146` is the engine's rule, in the same mover that steps every object:
  *
@@ -3553,9 +3546,9 @@ export function surfaceUnder(x: number, fromY: number, toY: number): number | nu
  * `y3852..4160, x1873..1933`, with the tank's roof a `platform` at y3920 starting
  * at the same x. Standing on the walkway below (feet 4041, anchor 3953) the wall
  * ejects you west; a jump that lifts the anchor past 3852 — 101 pixels — is over
- * it, and the roof platform catches the feet. Tested as a BOX that needed the
+ * it, and the roof platform catches the feet. Tested as a BOX it would need the
  * sprite's whole 148 rows clear of y3852, which is 189 pixels of jump: there is no
- * such jump, and the level ended there.
+ * such jump.
  *
  * And an obstacle is not a surface. The engine ejects UPWARD when that is the
  * shortest way out, which lands the anchor on the rect's top edge with the feet 88
@@ -3715,18 +3708,16 @@ export function canLetGo(): boolean {
  *   four times over, installing the climb script `0x471e78` and decrementing a
  *   rung counter at `0x4ac406` each time — so a ladder is counted in rungs.
  *
- * Which is why this page felt slow: it had W as "up", the run had no key at all,
- * and the game only ever walked. Holding it now does both jobs, as the original
- * does. The other four are the band's own labels: J jumps, K and P are the two
- * attack sets, I is INV.
+ * So W is not "up": holding it does both jobs, as the original does. The other
+ * four are the band's own labels: J jumps, K and P are the two attack sets, I
+ * is INV.
  *
  * And the eight letters are only the DEFAULTS. Every one of them is rebindable
  * from the preferences panel — `0x46b210` is what the panel writes and this is
  * what reads it, so see {@link file://./prefs.ts} and `keyTable` below. The four
  * shipped entries beside the letters are characters 24…27, which `0x40e980`
  * names `J4`, `J3`, `J2` and `J1`: a joystick's four buttons, bound to the
- * punch, the kick, the jump and INV. This port had them written down as arrow
- * keys.
+ * punch, the kick, the jump and INV, not arrow keys.
  */
 
 /**
@@ -4068,8 +4059,8 @@ export function knockback(
  * 111x53 to 115x259 to 132x87, and their anchors follow one point on the rat
  * while the art around it looms (3046 reaches 137px ABOVE the anchor) and then
  * drops away (3048's `posY` is −35, so the whole cel hangs BELOW it). Hung from
- * their feet, as this page hung every enemy cel until now, that animation is a rat
- * growing upwards out of the pavement and off the top of the window.
+ * their feet, that animation is a rat growing upwards out of the pavement and
+ * off the top of the window.
  *
  * What the object's own y IS in the engine has not been read — the punk's walking
  * cel anchors 63px above its own feet, so it is not the ground. So the anchor is
@@ -4096,8 +4087,7 @@ export function foeAnchor(e: Enemy, lvl: Level): { x: number; y: number } | null
  * Every cel carries its own, and for a thing that changes shape they are not the
  * same box. The mailbox is the case: upright, cel 2410's box reaches 93 pixels
  * below the anchor; on its side, cel 2413's reaches 56. Landing a fallen mailbox
- * where the upright one's base would go leaves it floating 37 pixels up, which is
- * what this page did until the two boxes were told apart.
+ * where the upright one's base would go leaves it floating 37 pixels up.
  *
  * For a gait cel the box bottom and the cel's own extent agree to within a pixel,
  * which is why the standing placement never needed this.
@@ -4105,12 +4095,11 @@ export function foeAnchor(e: Enemy, lvl: Level): { x: number; y: number } | null
 /**
  * One book's cels by id, remembered.
  *
- * `SbkFile.byId` maps an id to a LOCATION — the container the art lives in — and
- * everything that wants the record itself was scanning the array for it. That is
- * a linear walk of 1229 entries in the player's book and a few hundred in a
- * level's, and the fight put it on the hot path: `strikeBox` alone was doing one
- * per enemy per tick, twenty enemies at sixty ticks a second. MAZE went from 160
- * seconds to 216 and four suites starved of frames.
+ * `SbkFile.byId` maps an id to a LOCATION — the container the art lives in — so
+ * the record itself would be a scan of the array: a linear walk of 1229 entries
+ * in the player's book and a few hundred in a level's, on the fight's hot path.
+ * `strikeBox` alone does one per enemy per tick, twenty enemies at sixty ticks a
+ * second; scanning, MAZE takes 216 seconds against 160.
  */
 export const celMemo = new WeakMap<SbkFile, Map<number, SbkCel | undefined>>();
 export function celRec(
@@ -4143,13 +4132,12 @@ export function celRec(
  * rat's −13, `0x44dfa0`) or holds it up. The platforms are measured against the
  * same foot (`0x42fe8c`).
  *
- * This used to stand things on the bottom of their collision BOX, which is
- * authored and not the art: the dog's pounce cels end their boxes 14 to 20
- * pixels above their art where its stand does not, so its feet leapt about in
- * the air and it fell through a rock; the CHOPPER's 4884 box ends 34 ABOVE its
- * anchor where the art ends 25 below; and the rat's hole cels carry no box at
- * all. The art's extent moves by a few pixels between poses, as the engine's
- * does.
+ * Not the bottom of the collision BOX, which is authored and not the art: the
+ * dog's pounce cels end their boxes 14 to 20 pixels above their art where its
+ * stand does not, so on the box its feet leap about in the air; the CHOPPER's
+ * 4884 box ends 34 ABOVE its anchor where the art ends 25 below; and the rat's
+ * hole cels carry no box at all. The art's extent moves by a few pixels between
+ * poses, as the engine's does.
  */
 export function baseOf(e: Enemy, lvl: Level, cel = celOf(e)): number {
   const a = foeAnchor(e, lvl);
@@ -4253,10 +4241,10 @@ export const stats = {
  * (`0x44f0a0` for the punk, and every other one in the game is the same shape):
  * the spray first, then the subtraction, then either the death or a flinch.
  *
- * Nothing in it is invented any more. The strike box and the damage come off the
- * cel ({@link strikeBox}), the health and the award off the class, and the flinch
- * off the handler's own test — which is why a punch and a kick now do visibly
- * different things: a punch is 47 and staggers a punk, a kick is 87 and puts it
+ * The strike box and the damage come off the cel ({@link strikeBox}), the
+ * health and the award off the class, and the flinch off the handler's own
+ * test — which is why a punch and a kick do visibly different things: a punch
+ * is 47 and staggers a punk, a kick is 87 and puts it
  * on the ground, because `0x44f1fd` compares the blow with 50. A punk takes six
  * punches or three kicks to its 250.
  *
@@ -5344,8 +5332,8 @@ export function takeCode(
     p.vyRaw = 0;
   }
   if (r.gravity !== null) p.gravityScale = r.gravity;
-  // No reaction in CHARACTER 0's table shoves — the ±50 this page used to apply
-  // is `0x448cf4`, in character 1's. Kept because the field is still read.
+  // No reaction in CHARACTER 0's table shoves — a ±50 shove is `0x448cf4`, in
+  // character 1's. Kept because the field is still read.
   if (r.shove) p.vx -= r.shove * p.facing;
   if (r.sound !== undefined) {
     const which = r.sound + (r.soundRoll ? roll(r.soundRoll) : 0);
@@ -5709,12 +5697,11 @@ export function takeHits(): void {
    * function runs at all with the damage switch off.
    *
    * Order is not the reason — a code is not damage, so the switch has nothing
-   * to do with it, and the reactions have to land either way. Cost is: with the
-   * switch off this used to do nothing, and letting the whole loop below run
-   * instead added a linear scan of the level's cel table per hitter per frame.
-   * ARCADE is the suite that noticed, because it is the one that judges a boss
-   * fight by the wall clock, and it went from passing to failing two runs in
-   * three. Three short loops always; the long one only when it can do anything.
+   * to do with it, and the reactions have to land either way. Cost is: letting
+   * the whole loop below run with the switch off adds a linear scan of the
+   * level's cel table per hitter per frame, and ARCADE, which judges a boss
+   * fight by the wall clock, fails two runs in three with it. Three short loops
+   * always; the long one only when it can do anything.
    */
   // `0x417208` — the claw's first blow is a hundred, and its second is the code
   for (const c of hereOf((l) => l.claws)) {
@@ -10212,8 +10199,7 @@ export function stepGuns(): void {
  *   maze    3200   barrel 8200  lab 2500    vat      —
  * ```
  *
- * This page had been giving all sixteen the full dial, which is `CLOCK_FULL`
- * — 7200, and so right only for WOODS and SEWER by accident.
+ * The full dial, `CLOCK_FULL`, is 7200 — right only for WOODS and SEWER.
  */
 export function clockFor(sbk: SbkFile): number {
   const rec = sbk.entities.find((e) => e.name === "timer");
@@ -12859,11 +12845,10 @@ export function stepFight(e: Enemy, foe: Foe, run: number): boolean {
   /**
    * ...and a class whose own walk carries no stride does not close on anybody.
    *
-   * LAB's `initarm` is the case and it is the one the regression caught: ten
-   * arms out of a wall, whose `0x46cf10` tag 0 is seven cels of reaching and
-   * nothing else. The class HAS a script with a stride in its data, but the
-   * thing the level places does not use it, and giving it one had ten arms
-   * crawling across the floor. If {@link Foe.gait} does not travel, neither does
+   * LAB's `initarm` is the case: ten arms out of a wall, whose `0x46cf10` tag 0
+   * is seven cels of reaching and nothing else. The class HAS a script with a
+   * stride in its data, but the thing the level places does not use it, and
+   * giving it one sets ten arms crawling across the floor. If {@link Foe.gait} does not travel, neither does
    * this — it stands where it is and swings when you are inside the last band.
    */
   const rooted = !travels(foe);
@@ -12920,12 +12905,11 @@ export function stepFight(e: Enemy, foe: Foe, run: number): boolean {
      *
      * A class's think function is called from the frame dispatcher, fifteen
      * times a second; this page ticks at sixty. Every state that ACCUMULATES is
-     * wrong by a factor of four otherwise, and kragg is what showed it: kind 5
-     * steers by adding `away(dy)` to its velocity every call (`0x440ff1`), so
-     * four calls a frame put four times the correction in and the boss dived
-     * through the floor and kept going. The same factor was quietly spending
-     * `AI+2` beats and `AI+4` decision budgets four times too fast in every
-     * other class.
+     * wrong by a factor of four otherwise: kragg's kind 5 steers by adding
+     * `away(dy)` to its velocity every call (`0x440ff1`), so four calls a frame
+     * would put four times the correction in and dive the boss through the
+     * floor, and every other class would spend `AI+2` beats and `AI+4` decision
+     * budgets four times too fast.
      *
      * Between frames the thing still plays and still moves — that is the page's
      * job below, not the machine's.
@@ -14026,18 +14010,18 @@ export function stepEnemies(): void {
         e.vx += roundAway(dx / (e.divisor ?? foe.divisor)) * TICK_SCALE * e.facing;
     }
     /**
-     * A leap is an IMPULSE, not an offset — which is the whole of the fix.
+     * A leap is an IMPULSE, not an offset.
      *
      * `0x477368 tag 0` carries `dy -480` on the frame cel 1942 shows, and the
      * engine spends a number like that the way it spends the player's own jump:
      * `0x42f8b0` rounds `dy / divisor` away from zero and writes it into
      * `obj+0xa`, ONCE, on the frame it appears. Gravity takes it from there.
      *
-     * Adding it straight to `e.y` instead — which this did — moved the thing
-     * ninety-six pixels in four frames with no velocity to show for it, so the
-     * landing test never saw a fall: `foeSurfaceUnder` reaches {@link CLIMB_PX}
-     * below the feet and no further, found nothing, and WOODS' CHOPPER went nine
-     * thousand pixels out of the level still swinging. As velocity it uses the
+     * Adding it straight to `e.y` instead moves the thing ninety-six pixels in
+     * four frames with no velocity to show for it, so the landing test never
+     * sees a fall: `foeSurfaceUnder` reaches {@link CLIMB_PX} below the feet and
+     * no further, finds nothing, and WOODS' CHOPPER goes nine thousand pixels
+     * out of the level still swinging. As velocity it uses the
      * flight path every knocked-back thing already uses, sweeping the surfaces
      * along the way down, and it lands.
      *
@@ -14070,27 +14054,25 @@ export function stepEnemies(): void {
     /**
      * ...and a class with a machine of its own is never pinned ({@link still}).
      *
-     * {@link travels} reads {@link Foe.gait}, and `gait` was picked per class by
+     * {@link travels} reads {@link Foe.gait}, and `gait` is picked per class by
      * eye: for `initwerea`, `inittube`, `inithardcore`, `initarm`, `initslurp`
-     * and `initknotboy` it landed on a standing, gesturing or lever script that
-     * carries no stride, so those classes read as rooted and had every `dx`
-     * thrown away. A brain installs the script the executable installs, by kind,
-     * so it does not need the guess — and the guess is wrong for six of them.
+     * and `initknotboy` it is a standing, gesturing or lever script that carries
+     * no stride, so pinned by it those classes would read as rooted and lose
+     * every `dx`. A brain installs the script the executable installs, by kind,
+     * so it does not need the guess.
      * A floater's own hover keeps `vy` busy for ever, and its script's stride
      * has to travel anyway.
      */
     // and a NEGATIVE stride is a stride: `0x4771a0 tag 0` is the punk walking
     // backwards at -225, and every class that gives ground has one
     /**
-     * ...and the walk is SWEPT, because a stride can now be longer than a wall.
+     * ...and the walk is SWEPT, because a stride can be longer than a wall.
      *
      * Every test in this block — the climbable step, the patrol edge, the pin
-     * that follows — reads the one place the move ends at. That was safe while
-     * a stride was the script's `dx` over a divisor: a dozen pixels, less than
-     * {@link CLIMB_PX}. It is not safe now that a stride is a settled velocity,
-     * and the CHOPPER proved it: at two hundred pixels an engine frame it
-     * stepped clean over WOODS' ledges, found nothing under the far side and
-     * fell fifty-six thousand pixels out of the level.
+     * that follows — reads the one place the move ends at, and a stride is a
+     * settled velocity, not a dozen pixels under {@link CLIMB_PX}: the CHOPPER
+     * at two hundred pixels an engine frame steps clean over WOODS' ledges,
+     * finds nothing under the far side and falls out of the level.
      *
      * So the move is cut into pieces no longer than the wall it has to notice,
      * and each piece is tested and pinned on its own. Same arithmetic, sampled
@@ -14174,13 +14156,11 @@ export function stepEnemies(): void {
       }
     }
     /**
-     * They stand on the same surfaces the player does — and that is the whole of
-     * this fix. It used to be `groundAt(e.x)` alone, the ROOM's floor, which is
-     * fine in fifteen levels and catastrophic in the sixteenth: CITY's floor is a
-     * ledge to x691 and then y7250, so every one of its eight foes was pinned
-     * 3300 pixels under the level on the first frame and none could ever be
-     * fought. The level's kill quota was unmeetable and its goal therefore
-     * unreachable, which looked exactly like "no opponents spawn".
+     * They stand on the same surfaces the player does, not on `groundAt(e.x)`
+     * alone, the ROOM's floor: CITY's floor is a ledge to x691 and then y7250,
+     * so on it every one of its eight foes would be pinned 3300 pixels under the
+     * level on the first frame, its kill quota unmeetable and its goal
+     * unreachable.
      *
      * A platform top counts, the floor counts, and finding neither within a step
      * means there is nothing underfoot — so it falls, rather than teleporting to
@@ -14218,13 +14198,10 @@ function stepOff(e: Enemy, foe: Foe): void {
 /**
  * One spawned thing, feet on the ground, flipped by its facing.
  *
- * ...and the flip is the correction. A creature's art is drawn facing EAST and
- * mirrored to face west, which is the same way round as the player
- * (`mirror: p.facing < 0`, where the player is composed); this drew a foe
- * mirrored when it faced east instead, so every one of them was turned the
- * wrong way. Nothing showed it up while the classes only patrolled, because a
- * thing pacing its own territory looks equally plausible either way. Give them
- * their own machines and they close on you with their backs turned.
+ * A creature's art is drawn facing EAST and mirrored to face west, which is the
+ * same way round as the player (`mirror: p.facing < 0`, where the player is
+ * composed). A thing pacing its own territory looks equally plausible either
+ * way round; one closing on you with its back turned does not.
  *
  * {@link hurtBox} mirrors on the same test, because a box that does not follow
  * the art is a box in the wrong place.
@@ -15140,7 +15117,7 @@ export function tick(): void {
      * Where the record says and facing the way it says: `0x42b2b2` writes the
      * record's own `pointX` straight into the player's x and `0x42b279` turns
      * them by the sign of the spacing, so neither is a snap of this page's
-     * invention any more. {@link ladderAt} has the trigger the engine tests.
+     * invention. {@link ladderAt} has the trigger the engine tests.
      */
     const spacing = Math.abs(ladder.param) || 35;
     const last = Math.floor((ladder.bottom - ladder.top) / spacing);
@@ -15217,9 +15194,8 @@ export function tick(): void {
      * THIS axis as much as on the other.
      *
      * The walk already re-asks `0x40b940(2, point)` every time it moves the
-     * player sideways. Nothing re-asked it when the player moved UP, because
-     * until now nothing moved the player far enough for it to matter. A
-     * ladder does: seven of the nine reach out of the region they start in,
+     * player sideways; a climb moves the player UP far enough to matter too.
+     * Seven of the nine ladders reach out of the region they start in,
      * TOWER's second spans three and its third spans four, and MAZE's first
      * runs 1426px from room 1 down into room 5. Without this the climb tops
      * out still standing in the room below — which has no floor up there and
@@ -15371,8 +15347,8 @@ export function tick(): void {
        * -420)`) or tag 7 without (`200(dx 120, dy -210)`: a HOP, 10 forward
        * and 18 up). Both tags dispatch to the steering handler from their
        * first frame, so a held direction drives this to 30 at once. Without
-       * it — which was the old behaviour — the player drops straight down the
-       * rail and misses the roof the ladder was there to reach.
+       * it the player drops straight down the rail and misses the roof the
+       * ladder was there to reach.
        */
       if (dir) p.facing = dir;
       const leap = held.jump || jumpPressed;

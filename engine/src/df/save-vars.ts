@@ -84,9 +84,9 @@ export function poolStringAt(pool: Uint8Array, off: number): string | null {
  *
  * The value is a raw code pointer the original engine dumped along with every
  * node, so it is only a constant for as long as the engine is loaded at the same
- * address. Our own corpus made that look safe: all 109 shipped saves read
- * 0x00431e0f, so the byte pattern was the thing the node grid was located by. It
- * is not safe — a save a player made in DosBox reads 0x87c4596f (#179), and a
+ * address. The shipped corpus makes it look safe to locate the node grid by —
+ * all 109 shipped saves read 0x00431e0f — but it is not: a save a player made
+ * in DosBox reads 0x87c4596f (#179), and a
  * hardcoded pattern matches nothing in it, decodes zero variables, and loads a
  * room with the PREVIOUS game's mission, phase and every other global still in
  * place. Nothing announces that: the set opens, the characters are there, and
@@ -184,8 +184,8 @@ export function decodeVarSlots(d: Uint8Array): { name: string; valueSlot: number
  * why the offsets stay valid across processes.
  *
  * **The number is 32 bits wide, not 16** ([#221](https://github.com/dhobi/dreamrefactory/issues/221)).
- * A word was read here for a long time, which is right for every variable the
- * game keeps a phase or a count in and wrong for the handful it keeps a FRAME
+ * A word would be right for every variable the game keeps a phase or a count
+ * in and wrong for the handful it keeps a FRAME
  * STAMP in. The node has room for it — the value field runs +26..+30 inside a
  * 32-byte node — and the corpus settles it: across all 109 shipped saves the
  * high word is 0 in every string (3380 records) and every boolean (1015), and
@@ -193,9 +193,8 @@ export function decodeVarSlots(d: Uint8Array): { name: string; valueSlot: number
  * word and as the obvious thing at full width — `lowmemory` = 6144000 (a byte
  * count), `condensor` = 40000, and the four frame stamps `secframe`,
  * `lastsail`, `jonesframe`, `paintframe`, each landing a few hundred frames
- * below the save's own frame counter ({@link SaveGame.frame}). Reading
- * `paintframe` as a word is what stopped the cargo-hold painting timer from
- * surviving a save.
+ * below the save's own frame counter ({@link SaveGame.frame}). Read as a word,
+ * `paintframe` would stop the cargo-hold painting timer from surviving a save.
  *
  * Names up to 15 chars overflow the 12-byte name field and clobber the low
  * bytes of their own node's vtable (a DreamFactory quirk the original engine
@@ -416,7 +415,7 @@ export function ensureVarRoom(
      * its mind about existing.
      *
      * Restoring is the worse of the two: it resurrects whatever leftover bytes
-     * sit in the next slot as a record. Measured before this guard, writing the
+     * sit in the next slot as a record. Measured without this guard, writing the
      * vtable on every rename brought `dealercount` and `dealerstand` back from
      * the dead three times over and gave `mwifelike` a twin one stride along,
      * which the writer then filled from a different variable — the round trip
@@ -530,14 +529,14 @@ export function poolFind(pool: Uint8Array, s: string, limit = pool.length): numb
  * never held it — at the pool allocator's own watermark, inside the block.
  *
  * A string global's value is a `Uint16` offset into the globals' string pool, so
- * a patch can only name strings that are in there. Refusing to add them was a
- * quiet way to lose story state: a save taken after mission 1's Enigma work came
- * back with `zeitclue = 0` instead of "decoder", and PENNY1.PUP's `m1p4()` calls
- * `error()` when it is neither "decoder" nor "mirror" — so the debrief that ends
- * mission 1 could not be held at all. `handitem` and `savedeck` went the same
- * way ("rubaiyat", "boil3").
+ * a patch can only name strings that are in there. Refusing to add them would be
+ * a quiet way to lose story state: a save taken after mission 1's Enigma work
+ * would come back with `zeitclue = 0` instead of "decoder", and PENNY1.PUP's
+ * `m1p4()` calls `error()` when it is neither "decoder" nor "mirror" — so the
+ * debrief that ends mission 1 could not be held at all. `handitem` and
+ * `savedeck` would go the same way ("rubaiyat", "boil3").
  *
- * ## The watermark, and why this no longer appends past the end
+ * ## The watermark, and why this does not append past the end
  *
  * The blob describes the pool it owns: the u32 at **+12 is the pool's size** —
  * 2048 in every one of the 109 shipped saves, and equal to the pool container's
@@ -546,13 +545,13 @@ export function poolFind(pool: Uint8Array, s: string, limit = pool.length): numb
  * 81 of the 109, and past it (an allocation whose variable was later overwritten)
  * in the rest. +16 is the pool's heap pointer, which the loader rebuilds.
  *
- * The first version of this appended to the END of the container instead, leaving
- * a pool longer than the size its own header declares. This port reads a string
+ * Appending to the END of the container instead would leave a pool longer than
+ * the size its own header declares. This port reads a string
  * by offset and never notices; TI.EXE allocates +12 bytes and copies the container
  * into it, so an over-long pool is either truncated (the string is lost, silently)
  * or copied past the end of its block. A save has to load in the original engine,
  * so allocating the way the original allocator does — bump the watermark, stay
- * inside the block — is the only version of this that is safe in both. The
+ * inside the block — is the only way that is safe in both. The
  * template has 1930 of its 2048 bytes free, so in practice everything fits.
  *
  * -1 means the string cannot be represented (no room, or longer than a Pascal

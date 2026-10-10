@@ -596,10 +596,10 @@ export async function enterXR(room: Room): Promise<void> {
    * and that is not belt and braces. `turn` changes the play space's BEARING
    * before calling this, and a head that is not sitting exactly on the origin
    * is somewhere else entirely the moment the bearing changes — so the figure
-   * to correct against is the one measured after the turn, not before it. The
-   * version that trusted the old figure turned the room about the origin and
-   * called it turning about the visitor, which is wrong by however far they
-   * were standing from the middle of their own floor.
+   * to correct against is the one measured after the turn, not before it.
+   * Trusting the figure from before the turn turns the room about the origin
+   * and calls it turning about the visitor, which is wrong by however far they
+   * are standing from the middle of their own floor.
    */
   const put = (x: number, y: number): void => {
     const now = where();
@@ -758,10 +758,9 @@ export async function enterXR(room: Room): Promise<void> {
          *
          * This room's bearing is the game's — 0 is +x and +y is on the right —
          * so a yaw that INCREASES turns the visitor to their right. The stick
-         * reads positive pushed right. The two agree, and the negation that
-         * used to be here made them disagree: a shove right turned the room
-         * left, which is a thing you cannot see on a screenshot and cannot
-         * miss standing up wearing it.
+         * reads positive pushed right. The two agree, so there is no negation:
+         * with one a shove right would turn the room left, which is a thing
+         * you cannot see on a screenshot and cannot miss standing up wearing it.
          */
         turn(Math.sign(ax) * TURN);
         buzz(BUZZ.turn);
@@ -818,7 +817,7 @@ export async function enterXR(room: Room): Promise<void> {
     if (!base) return;
 
     // Everything from here is drawn into the SESSION's framebuffer. `null` is
-    // the canvas, and the canvas is not on the screen any more.
+    // the canvas, and the canvas is not on the screen during a session.
     gl.bindFramebuffer(gl.FRAMEBUFFER, base.framebuffer);
     // one clear for both eyes, over the whole framebuffer: the per-eye viewports
     // below are halves of it, and a clear inside one of them would leave the
@@ -882,8 +881,8 @@ export async function enterXR(room: Room): Promise<void> {
      *
      * Down, then the move, then up — and the move is here rather than in
      * `drive` because "when the view is black" is a fact about this ramp and
-     * nothing to do with which button was pressed. `stand` is the same call the
-     * press used to make directly; all that has changed is that nobody sees it.
+     * nothing to do with which button was pressed. `stand` is the same call a
+     * press would make directly; the blink only means nobody sees it.
      */
     if (jump !== null) {
       blink = Math.min(1, blink + dt / BLINK.out);

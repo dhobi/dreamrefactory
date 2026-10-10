@@ -275,9 +275,8 @@ export const en = {
       "Every press and click, what it hit, and what it did — in the log, so a report carries it" as Text,
     debugFilter: "filter" as Text,
     // What the box accepts, which is not guessable from the word "filter":
-    // several terms at once (#178). The example is the timer, which is the
-    // case the ask came from — `hrs`, `min` and `sec` are only worth watching
-    // together.
+    // several terms at once (#178). The example is the timer — `hrs`, `min`
+    // and `sec` are only worth watching together.
     debugFilterTitle:
       "One or more terms, | or , apart: hrs|min|sec — matched against a variable's name or a row's type (prop, actor)" as Text,
     debugCopy: "⧉ Copy details" as Text,
@@ -770,7 +769,7 @@ export const en = {
     audioIn: " in the " as Text,
     audioEventNote: " — on an interactive movie these are event sounds, not music" as Text,
     // what the PLAYER will do with this file, from the shared rule (engine/src/df/mov-pace.ts):
-    // the editor used to preview everything at the native rate and quietly disagree
+    // so the editor's preview cannot disagree with the game
     pacing: "<br>plays at {ms} ms a frame ({fps} fps)" as Text,
     pacingBed: " — its audio is a BED ({secs}s over a {picture}s picture), so the picture repeats and the bed ends the movie" as Text,
     pacingByAudio: " — paced by its {secs}s soundtrack" as Text,
@@ -880,8 +879,8 @@ export const en = {
   /**
    * The counted strings, which is why {@link Plural} exists.
    *
-   * Every one of these used to be `${n} thing${n === 1 ? "" : "s"}` — English
-   * grammar compiled into seven TypeScript files. They are a namespace of their
+   * Not `${n} thing${n === 1 ? "" : "s"}`, which is English grammar compiled
+   * into TypeScript. They are a namespace of their
    * own because the tools share most of them, and because a translator wants
    * them in one place: they are the entries where getting the language right
    * takes more than knowing the word.

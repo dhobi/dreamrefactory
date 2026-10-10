@@ -120,10 +120,9 @@ test.skipIf(!have)('win("me") returns too — the arm that never had the wait', 
 /**
  * And the same wait where the flute room opens it.
  *
- * Three of these loops are `currentsound ()` rather than `currentvoice ()`, and
- * they were found first — a rung of the playthrough monkeypatched the builtin so
- * it could play the room, which left the suite green and the browser hung. Same
- * cause, so it belongs in the same file as the fix.
+ * Three of these loops are `currentsound ()` rather than `currentvoice ()`. Same
+ * cause, so they belong in the same file: a rung that monkeypatches the builtin
+ * to play the room leaves the suite green and the browser hung.
  */
 test("an idle channel says `none`, which is what every one of these loops waits for", async () => {
   const session = new GameSession(() => null, new NullAudioSink());

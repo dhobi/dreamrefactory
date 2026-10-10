@@ -26,8 +26,8 @@ import { registerDf5Builtins } from "./df5";
  * The command families are split across this folder's modules; each receives
  * the shared {@link createBuiltinCtx} plumbing. Every builtin name is
  * registered exactly once across the whole folder — Interpreter.register
- * throws on a duplicate, because a silent overwrite is how a wrong `calcmod`
- * (the plain-% one interp.ts used to register) stayed hidden.
+ * throws on a duplicate, because a silent overwrite lets a wrong builtin (a
+ * plain-% `calcmod`, say) hide behind the right one.
  */
 export function registerGameBuiltins(session: GameSession): void {
   if (session.builtinsRegistered) return;

@@ -6,8 +6,8 @@
  * and calls them there, because the loop below is tens of thousands of hit tests
  * and cannot be run one round trip at a time. Nothing here may reference anything
  * outside this module, and what it references inside it, `aimSource` must carry
- * along — the first version shipped `aimAtThing` alone and the page threw on the
- * sibling it calls.
+ * along — shipping `aimAtThing` alone makes the page throw on the sibling it
+ * calls.
  *
  * That matters more than it sounds. These functions decide not just where a
  * click lands but WHETHER a thing is reachable from where you are standing —
@@ -24,8 +24,8 @@
  *
  * ## How big the screen is, is the GAME's fact
  *
- * The full-screen sweep used to run `y < 384, x < 512`, which is Titanic's
- * screen written into the layer that aims at any DreamFactory game. Two of the
+ * A full-screen sweep of `y < 384, x < 512` would be Titanic's screen written
+ * into the layer that aims at any DreamFactory game. Two of the
  * three ports on this site are that size — Dust presents 512x384 through a
  * 1024x768 canvas — and the third is not: Timelapse is 640x480 and says so
  * (`ScreenPresenter`), so a sweep with Titanic's numbers in it would have

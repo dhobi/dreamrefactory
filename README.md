@@ -25,7 +25,7 @@ than from the source** — every container format decoded, the script language
 parsed and interpreted, and the games played in a browser with nothing installed.
 No DOSBox, no emulator.
 
-Seven of its games are here. Four are adventures the interpreter runs:
+Its games here are of two kinds. The adventures the interpreter runs:
 
 | | | |
 |---|---|---|
@@ -34,7 +34,7 @@ Seven of its games are here. Four are adventures the interpreter runs:
 | **[Timelapse: Ancient Civilizations](timelapse/)** | 1996 | DreamFactory 4 on four discs, and **no `.SET` anywhere** — its rooms are stage flats, and it navigates by the shape of the cursor |
 | **[RedJack: Revenge of the Brethren](redjack/)** | 1998 | DreamFactory 5, CyberFlix's last game, and the first with a real camera: rooms are points you look round from in every direction, joined by films |
 
-…and three have no interpreter to run, because they have nothing to interpret:
+…and the games with no interpreter to run, because they have nothing to interpret:
 
 | | | |
 |---|---|---|
@@ -54,7 +54,7 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Nine sites build out of this one repository, each from its own root and its own
+Every site builds out of this one repository, each from its own root and its own
 port, so they can run at once. **The two that are about the whole project come
 first, then one port per game in the order it was ported** — so the next game
 to be ported takes 5182 and nothing has to move:

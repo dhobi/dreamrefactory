@@ -116,10 +116,9 @@ function rulesIn(css: string): Map<string, Map<string, string>> {
  * A page's own CSS: its inline `<style>` blocks, and the stylesheets it links
  * out of its own package.
  *
- * The linked half was added when Dust's page stopped having an inline block at
- * all — a game with two pages moved its chrome into `dust/src/game.css` so both
- * could link it, and this test, which looked for `<style>`, quietly stopped
- * covering the page the whole file was written about. A `<link>` collides with
+ * The linked half matters because a game with two pages keeps its chrome in a
+ * linked sheet (`dust/src/game.css`) so both can link it, and a test that
+ * looked only for `<style>` would quietly stop covering it. A `<link>` collides with
  * the shared chrome exactly the way an inline block does, and for the same
  * reason: the build resolves both into bundles and their relative order is the
  * bundler's to decide.

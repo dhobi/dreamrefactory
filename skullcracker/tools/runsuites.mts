@@ -5,25 +5,23 @@
  *   npm run test:browser:all -w skullcracker  # in another
  *   npm run test:browser:all -w skullcracker -- vat sewer codes
  *
- * Thirty separate `tsx` processes each imported Playwright from scratch and each
- * launched a browser of its own. The first cost about a second apiece. The
- * second cost correctness: on a machine with a gigabyte free, suites run back to
- * back failed in ways they never failed alone — a score that did not arrive, a
- * HUD with no position in it, a TypeError out of the page, a pickup not taken —
- * and every one of those cost a re-run to tell apart from a real regression.
+ * Thirty separate `tsx` processes would each import Playwright from scratch and
+ * each launch a browser of its own. The first costs about a second apiece. The
+ * second costs correctness: on a machine with a gigabyte free, suites run back
+ * to back fail in ways they never fail alone — a score that does not arrive, a
+ * HUD with no position in it, a TypeError out of the page, a pickup not taken.
  *
  * One process, one browser, one import of Playwright. A suite gets a context of
  * its own and gives it back; see `tests/browser/harness.ts`.
  *
  * A suite is a module whose top level awaits its own work, so importing it IS
- * running it, and a `fail()` inside one throws rather than exiting. That is the
- * only thing the suites had to change.
+ * running it, and a `fail()` inside one throws rather than exiting.
  *
  * A failure is not taken at its word. Ten of these suites fail pooled about one
  * run in three and pass standalone every time — `codes`, `lift`, `mall`, `vat`,
- * `woods`, `grave`, `service`, `ravecave`, `mission`, `foes` — which made a red
- * run say nothing at all: every failure cost a standalone re-run by hand to tell
- * a flake from a regression. So the runner does that re-run itself, and the two
+ * `woods`, `grave`, `service`, `ravecave`, `mission`, `foes` — so a red run
+ * alone says nothing until a standalone re-run tells a flake from a real
+ * failure. So the runner does that re-run itself, and the two
  * things that make a pooled failure different from a standalone one are undone
  * before it:
  *

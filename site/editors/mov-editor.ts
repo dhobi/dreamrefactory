@@ -91,9 +91,8 @@ let mov: MovFile | null = null;
 /**
  * The segment on screen — a film is a CHAIN of them (engine/src/df/mov.ts), each with
  * its own palette, frame table, audio and action-frame slots, and this page
- * shows one at a time. It used to show `MovFile`'s own fields, which are
- * segment 0's, so a 13-segment film read as its first fragment and there was
- * no way to reach the rest.
+ * shows one at a time. `MovFile`'s own fields are segment 0's, so showing those
+ * would read a 13-segment film as its first fragment with no way to reach the rest.
  */
 let segIdx = 0;
 const segment = (): MovSegment | null => mov?.segments[segIdx] ?? null;
@@ -592,7 +591,7 @@ $("playBtn").addEventListener("click", () => {
  * {@link file://../../engine/src/df/mov-sound.ts} for the soundtrack, both shared
  * with {@link file://../../engine/src/web/movie-player.ts}) rather than from a
  * second reading of them kept here, which is the only reason a preview is worth
- * trusting: a 13-segment film used to show you its first fragment in silence.
+ * trusting: a second reading could show a 13-segment film as its first fragment in silence.
  *
  * Three things it does not do, each because this page has one file open and no
  * game around it:

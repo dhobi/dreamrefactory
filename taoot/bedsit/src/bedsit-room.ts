@@ -97,10 +97,9 @@ export const STANDPOINTS = [
  * PITCHED to the eaves over the window wall — the roof is the ceiling for the
  * last 1.8 m of it.
  *
- * TWO POINTS, because the section is two straight lines meeting at an arris.
- * This table used to hold a curve that flattened into the ceiling, and the
- * curve was an artefact of smoothing the measurement rather than reading it:
- * sample the upward rays of every standpoint in the band BETWEEN the two
+ * TWO POINTS, because the section is two straight lines meeting at an arris,
+ * not a curve flattening into the ceiling — that is an artefact of smoothing the
+ * measurement rather than reading it: sample the upward rays of every standpoint in the band BETWEEN the two
  * dormers — y 7000 to 8900, where nothing vaults — take the 95th percentile of
  * z per 100-unit slab of x, and the points sit on a line of 0.86 from the wall
  * to about x 4800 and on the flat ceiling after it, with nothing between them
@@ -117,7 +116,7 @@ const PITCH: readonly (readonly [number, number])[] = [[ROOM.x0, 3400], [ARRIS, 
  * centre line.
  *
  * These are the **glass**, at `x0 - reveal`, not the hole in the room face — and
- * the difference is the whole reason these numbers were wrong once. Cast the
+ * the difference matters. Cast the
  * daylight in the frames onto the wall plane and the two windows come out 700
  * units wide and 650 apart from the pair's true spacing, because a plane 600
  * units in front of the glass foreshortens everything on it towards the eye.
@@ -146,10 +145,9 @@ export const WINDOW = {
    *
    * The top edge of the daylight in `Scene3/View23`, column by column, back-cast
    * onto the glass plane, is seventeen points that fit a circle of radius 470
-   * springing at 3,855 to an rms of NINE UNITS. It used to be an ellipse with a
-   * crown of its own, 835 of rise over 540 of half-width, which is pointed —
-   * and a pointed arch is what you get for letting the crown be a free number
-   * instead of asking what curve the points are on.
+   * springing at 3,855 to an rms of NINE UNITS. Letting the crown be a free
+   * number instead (an ellipse, 835 of rise over 540 of half-width) gives a
+   * pointed arch.
    */
   spring: 3855,
   /** the glass sits this far outboard of the room face of the wall */
@@ -216,11 +214,10 @@ export const WINDOW = {
  * ONE HEIGHT, not a table. The recess is the window and its border carried
  * straight back into the roof, LEVEL: its roof neither rises nor falls on the
  * way in, so where it ends is simply where the pitch has climbed to meet it —
- * about x 4200. This used to be a table that rose from 4500 at the wall to the
- * ceiling's own 4940, and the rise was a measuring error: the sampling takes
- * the 95th percentile of z in the dormer's band of y, and past x 4000 there is
- * no recess left in that band to sample, so what it was reading was the
- * ceiling. Inside the recess — x 3000 to 4000 — the same sampling reads 4465,
+ * about x 4200. A rise from 4500 at the wall to the ceiling's own 4940 would be
+ * a measuring error: the sampling takes the 95th percentile of z in the
+ * dormer's band of y, and past x 4000 there is no recess left in that band to
+ * sample, so what it reads is the ceiling. Inside the recess — x 3000 to 4000 — the same sampling reads 4465,
  * 4350, 4452, 4533, 4490, 4438: level, within its own noise, and a pick on the
  * soffit's crown in `Scene3/View23` lands at 4521.
  *
@@ -229,7 +226,7 @@ export const WINDOW = {
  * plus the shoulder, and the width is the opening's plus the same — nothing is
  * free to drift out of step with the window it is cut for. Which is also the
  * only way the two can be kept apart: with the recess and the opening described
- * by different curves, the recess once cleared the head by ten units, and ten
+ * by different curves the recess can clear the head by ten units, and ten
  * units of plaster at that distance is a black tick where they cross.
  */
 
@@ -253,12 +250,11 @@ export const DOOR = { x0: 9350, x1: 11337, head: 3300, reveal: 80 } as const;
  * the other side of this wall, so the recess costs only the strip of plaster it
  * replaces.
  *
- * It is EXACTLY the fire opening the slips are cut to, and that is worth saying
- * because it went the other way first. A recess bigger than its opening hides
- * its own corners behind the surround — which is what you want when the surround
- * stands proud of the wall. Once the chimneypiece was set back INTO the wall
- * there was nothing left in front to hide them with, and every unit of margin
- * showed as a step of recess standing outside the fire. So the two are the same
+ * It is EXACTLY the fire opening the slips are cut to. A recess bigger than its
+ * opening hides its own corners behind the surround — which is what you want
+ * when the surround stands proud of the wall. With the chimneypiece set back
+ * INTO the wall there is nothing in front to hide them with, and every unit of
+ * margin would show as a step of recess standing outside the fire. So the two are the same
  * hole: `mouth` stops at the back of the slips and the slips carry on from
  * there, edge to edge, with nothing overlapping and nothing coplanar.
  *
@@ -266,10 +262,10 @@ export const DOOR = { x0: 9350, x1: 11337, head: 3300, reveal: 80 } as const;
  * either: the stone plugs the wall from the boards up to 196 across the whole
  * width of the fireplace.
  *
- * `mouth` is the back of the slips panel, which the recess closes against. The
- * chimneypiece used to stand proud of the plaster, and cutting this hole turned
- * the void behind it into something an oblique look could see straight down —
- * so the piece is now set 275 INTO the wall until its slips meet it. What that
+ * `mouth` is the back of the slips panel, which the recess closes against. A
+ * chimneypiece standing proud of the plaster would leave the void behind it
+ * open to an oblique look straight down — so the piece is set 275 INTO the
+ * wall until its slips meet it. What that
  * buys is that the recess and the fireplace share a mouth and there is no gap
  * between them anywhere. The hearth stone did not go back with it: its front
  * edge is measured, not modelled.
@@ -283,9 +279,8 @@ export const CHIMNEY = { x0: 6664.8, x1: 7885.2, head: 1416.2, depth: 600, floor
  * larger than the picture, brightened, with a ten-texel grid over it — by
  * finding the row and the column where the plaster stops. That is a better
  * measurement than back-casting a corner through its depth level, which at
- * these distances moves a pick 300 along the wall, and it is why all three
- * moved by 40-200 units when it was redone: the painting had been losing its
- * bottom 200 units and its frame entirely.
+ * these distances moves a pick 300 along the wall — enough to lose the
+ * painting's bottom 200 units and its frame entirely.
  */
 export const PICTURES = {
   /** the LONDON poster — the Grohe helmet, "he's watching you" — paper, unframed */
@@ -296,19 +291,18 @@ export const PICTURES = {
    *  frame — the black band across the top of it is that frame, seen from below */
   painting: { x0: 6293, x1: 8413, z0: 2864, z1: 4384, frame: 110 },
   /**
-   * And the four in the corner the armchair stands in, which the room went
-   * without until they were measured off Scene2/View13, Scene2/View18,
-   * Scene1/View33 and Scene3/View25 — every camera that sees that corner. Each
+   * And the four in the corner the armchair stands in, measured off
+   * Scene2/View13, Scene2/View18, Scene1/View33 and Scene3/View25 — every
+   * camera that sees that corner. Each
    * corner of each was read off a bake of the wall AROUND it — a chart
    * deliberately larger than the picture, at four units a texel, with a grid
    * over it — by finding the row and the column where the plaster stops. See
    * {@link file://../tools/bedsitwall.ts}.
    *
-   * That is a better measurement than picking corners in a frame, and it is
-   * why every one of these moved when it was redone: a picture in this corner
-   * is forty pixels of a 512-wide frame, so a pick is a hundred units out and
-   * three views disagree by three hundred. The print had been a fifth of its
-   * own width to the right, hanging half on plaster.
+   * That is a better measurement than picking corners in a frame: a picture in
+   * this corner is forty pixels of a 512-wide frame, so a pick is a hundred
+   * units out and three views disagree by three hundred — enough to hang the
+   * print a fifth of its own width to the right, half on plaster.
    */
   /** the portrait on the window wall, in the pier between the corner and the
    *  first window: a bald man's head, three-quarters on, in a black frame */
@@ -355,18 +349,10 @@ export const PICTURES = {
  * only the shades are white — which is what says the body is metal, and what
  * names the type.
  *
- * ALL THAT IS LEFT OF IT HERE IS WHERE IT HANGS. It used to carry the whole
- * description as numbers — the finial's tip at 3,540, the collar's foot, the
- * rim at 4,200, the body's top and radius, six shades of a given width with
- * five ribs and three steps — because those numbers were what DREW it. They
- * stopped drawing anything when the fitting became an imported mesh, and nine
- * dead fields sat here describing a lamp that is not in the room.
- *
- * That is not merely untidy, it is how the bulb went wrong: `bulb: 3,900` was
- * one of them, still true of the drawn pendant and 775 units below the mesh
- * that replaced it, and it was read as gospel until a shadow map made the
- * mistake visible. What the fitting is now, as light and as an obstacle, comes
- * from the mesh's own boxes in {@link pendantFitting} — which cannot say
+ * ALL THAT IS HERE IS WHERE IT HANGS. The fitting is an imported mesh, so
+ * numbers describing its shape here would draw nothing and could only drift
+ * from the lamp in the room. What the fitting is, as light and as an obstacle,
+ * comes from the mesh's own boxes in {@link pendantFitting} — which cannot say
  * something the room does not draw.
  */
 export const PENDANT = { x: 7300, y: 7600 } as const;
@@ -428,10 +414,9 @@ function recessTop(y: number): number {
  * of a dormer's opening where that stands higher. A HARD maximum — the two meet
  * along an edge, and the edge is cut, not blended.
  *
- * It used to be blended, over the last 140 units of height, for a reason worth
- * recording: the two surfaces meet along a curve, and a hard maximum sampled on
- * a grid that does not follow that curve comes out of the triangles as a saw
- * edge. The answer is not to blunt the edge but to make the grid follow it —
+ * The two surfaces meet along a curve, and a hard maximum sampled on a grid
+ * that does not follow that curve comes out of the triangles as a saw edge.
+ * The answer is not to blunt the edge but to make the grid follow it —
  * see {@link ceilingRails}, which is where the mesh gets the curve from, so
  * every quad is wholly recess or wholly pitch and the two share their corners
  * along it exactly.
@@ -454,16 +439,13 @@ export function pendantFitting(): { radius: number; z0: number; z1: number; bulb
     z0: origin,
     z1: top,
     /**
-     * WHERE THE LIGHT COMES FROM, and it had to be worked out here rather than
-     * written down, because written down is how it went wrong.
+     * WHERE THE LIGHT COMES FROM, worked out here rather than written down,
+     * because a written-down height drifts from the mesh.
      *
-     * `PENDANT.bulb` used to say 3,900. That was true of the DRAWN pendant,
-     * which stood on its finial's point at 3,540 with its rim at 4,200. This
-     * fitting is hung from the plaster instead, so it occupies 4,280 to 4,940 —
-     * and the bulb was left behind, 380 below the bottom of the lamp it belongs
-     * to. Nothing complained: a point light does not care whether it is inside
-     * its own shade, and the room had no shadows to make the mistake visible.
-     * Giving the pendant a shadow map is what finally showed it up.
+     * This fitting is hung from the plaster, so it occupies 4,280 to 4,940; a
+     * bulb at a fixed 3,900 would sit 380 below the bottom of the lamp it
+     * belongs to. Nothing complains about that: a point light does not care
+     * whether it is inside its own shade, and only a shadow map shows it.
      *
      * So it is the middle of the golden inner shell — the piece this file's own
      * note calls "where the bulb sits" — which puts it at 4,685, and it moves
@@ -740,7 +722,7 @@ export const CHARTS: readonly Chart[] = [
     // glass, wide enough to be looked at obliquely from either end of the room.
     // Sharp, so each texel is one view's own pixels and not several views'
     // disagreement about where a chimney is; the views disagree because the
-    // street is not really a plane, and a smear of them is what the glass used to
+    // street is not really a plane, and a smear of them is all the glass would
     // show. What no view sees is grown from what one did.
     // The span is what an eye anywhere in the room can see through either
     // opening: from Scene2 the far window looks 20 m along this plane.
@@ -1586,10 +1568,9 @@ export function buildRoom(): Part[] {
     b.quad([pic.x0, y0, pic.z0], [pic.x1, y0, pic.z0], [pic.x1, yp, pic.z0], [pic.x0, yp, pic.z0], PAINT.photo, [0, 0, -1]);
   }
 
-  // and the one no camera sees the inside of. It used to be a frame drawn in
-  // geometry with a flat plate inside it, because there was nothing to put
-  // there; it now takes a chart like the other three, so a drawn file can hang
-  // on it and carry its own frame. Without that file it is PAINT.hidden — the
+  // and the one no camera sees the inside of. It takes a chart like the other
+  // three, so a drawn file can hang on it and carry its own frame. Without that
+  // file it is PAINT.hidden — the
   // dark reddish brown the slivers between the lamp shade and the wall agree
   // on, and no more.
   {

@@ -461,8 +461,7 @@ export async function openDoor(
    * does not exist in ("no route to Scene G12 facing west from jail scene a1").
    *
    * Going through is what the caller wanted, so notice it and stop rather than
-   * insisting on the ceremony. Found on `rungs/d3e005.ts` at the jail door after
-   * #352 shortened every move by a tick and moved which press was outstanding.
+   * insisting on the ceremony. It happens on `rungs/d3e005.ts` at the jail door.
    */
   const startedIn = p.session.currentSetFile;
   const wentThrough = (): boolean => p.session.currentSetFile !== startedIn;

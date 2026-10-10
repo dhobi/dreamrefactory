@@ -7,17 +7,17 @@
  * never at a host's root, and that is a difference no other test could see. `npm
  * run dev` serves at `/`, `vite preview` serves at `/`, and the whole build uses a
  * relative base so that it works at either — which means a URL that is wrong for a
- * subdirectory is RIGHT everywhere a test used to look.
+ * subdirectory is RIGHT everywhere else a test looks.
  *
- * That is how the games menu shipped four broken images. Vite rebases every URL it
+ * That is how a games menu ships broken images. Vite rebases every URL it
  * can see — the module scripts, the stylesheets, the `public/` files the HTML names
  * — and it cannot see one assembled in TypeScript at runtime:
  *
  *     icon.src = `/${mark}`;      // → https://www.danielhobi.ch/mark-taoot.png
  *     icon.src = siteUrl(mark);   // → …/dreamrefactory/mark-taoot.png
  *
- * `site/src/site.ts` exists for exactly this and says so at length; the fix was to
- * use it. This probe is the check that the class of mistake cannot come back: it
+ * `site/src/site.ts` exists for exactly this and says so at length. This probe
+ * is the check that the class of mistake cannot come back: it
  * serves `dist/site` under a `/dreamrefactory/` prefix, the way the host does, and
  * fails on any request the page makes that does not answer 200 — not just the
  * marks, and not just the front page, because the editors sit one level further

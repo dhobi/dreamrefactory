@@ -23,9 +23,9 @@ npm install
 npm run dev          # the front door, on http://localhost:5173/
 ```
 
-Six sites build out of this one repository, each from its own root and its own
+Every site builds out of this one repository, each from its own root and its own
 port, so they can run at once — the two about the whole project first, then one
-per game in the order the engine shipped them:
+per game:
 
 | | | |
 |---|---|---|
@@ -35,16 +35,19 @@ per game in the order the engine shipped them:
 | `npm run dev -w dust` | 5176 | Dust |
 | `npm run dev -w timelapse` | 5177 | Timelapse |
 | `npm run dev -w skullcracker` | 5178 | Skull Cracker (experimental) |
+| `npm run dev -w redjack` | 5179 | RedJack |
+| `npm run dev -w lunicus` | 5180 | Lunicus |
+| `npm run dev -w jumpraven` | 5181 | Jump Raven |
 
 Add `-- --host` to any of them to reach it from another machine.
 
 A link from one to another **404s in dev with a page telling you which server
-serves it** — the deployed tree resolves those links normally, but six Vite
+serves it** — the deployed tree resolves those links normally, but separate Vite
 roots cannot be one origin (see `tools/vite-siblings.ts`). See
 [Layout](../README.md#layout).
 
 What follows is this game's own half of the project: its pages, its suites, its
-game data and how it releases. For the engine underneath it, the three other
+game data and how it releases. For the engine underneath it, the other
 games, the format editors and the repository's layout, see the
 [root README](../README.md).
 
@@ -107,7 +110,7 @@ scene readout and script log.
 
 ## Editors
 
-The **eight asset editors** belong to the site, not this package (`site/editors/`, served from the front door at `/editors/`, which is
+The **asset editors** belong to the site, not this package (`site/editors/`, served from the front door at `/editors/`, which is
 itself a page listing them) and they know no game — each asks the registry which
 rips exist and offers them as sources, so Titanic is chosen there the same way
 one of its editions is (`site/editors/sources.ts`).
@@ -115,8 +118,8 @@ one of its editions is (`site/editors/sources.ts`).
 Seven of them round-trip a format this game uses — `.PUP` puppets,
 `.TRK`/`.SFX`/`.11K` audio banks, `.SET` rooms, `.SHP` shops, `.STG` stages,
 `.CST` casts and `.MOV` movies — loading a file by upload or straight out of
-this game's manifest and exporting the repacked original. (The eighth, the
-`.SBK` sprite-book viewer, is Skull Cracker's and reads only.) What each page
+this game's manifest and exporting the repacked original. (The others read
+other games' formats, such as Skull Cracker's `.SBK` sprite books.) What each page
 does is in the [docs](../docs/editors/README.md); where they sit in the
 repository is in the [root README](../README.md#layout).
 
@@ -205,6 +208,8 @@ npm run speedrun -w taoot                 # run it, print the splits
 npm run speedrun:watch -w taoot           # the same run in a real window, not slowed down
 npm run speedrun:lint -w taoot            # parse the sheet and say nothing else
 npm run speedrun -w taoot -- --verbs      # every verb a sheet may use
+npm run speedrun -w taoot -- --headless   # the same sheet in node, no browser, as fast as the CPU goes
+npm run speedrun -w taoot -- --from="m4p0 cabin"   # enter at one of its save points
 ```
 
 Routes of your own go in [`taoot/speedrun/sheets/`](speedrun/sheets/README.md), by pull request; CI plays each one to its end.
@@ -243,17 +248,25 @@ the standpoint changed and press again if it did not.
 
 The run is **human-legal**: every gesture is a real Playwright mouse or keyboard
 event at the canvas, nothing writes to the engine, `framerate()` is untouched and
-no fade is collapsed. The one concession is the seed, so that the smokestack
-draws the same maze each time and two runs are comparable; `--noseed` opts out
-and the report says which it was.
+no fade is collapsed. The dice are live: the smokestack's maze and the raid's
+fuse are whatever the run draws, and `climbStack` walks the route for the maze it
+gets. `reset(seed: N)` as a sheet's first line, or `--seed=N`, boots the game
+with the dice pinned; a seeded time is a category of its own, never ranked
+against an unseeded one.
 
-The report gives wall clock *and* `session.frameCounter`. Tune against frames —
-they are immune to machine load — and quote the seconds.
+The report leads with **in-game time**: how far the game's own clock moved, which
+is the same on a slow machine as on a fast one and over a slow link as over a
+fast one, because the runner plays on a sheet's clock — the game runs only while
+the runner waits on it, at 50 ms of game time per pass — and game time stands
+still while the engine waits on a file. How the clock is built, Time me for a
+person's run, and the measurements behind it are in
+[docs/reference/tests.md](../docs/reference/tests.md#the-clock-in-game-time).
 
-**Loads are removed** ([#251](https://github.com/dhobi/dreamrefactory/issues/251)),
-and only the ones that crossed a link ([#369](https://github.com/dhobi/dreamrefactory/issues/369)).
-A room fetched over the internet moves the clock for reasons unrelated to the
-route, so the timer stops for it, as a PC speedrun's load remover does. The
+Beside it, `time` is the wall clock with **loads removed**
+([#251](https://github.com/dhobi/dreamrefactory/issues/251)), and only the ones
+that crossed a link ([#369](https://github.com/dhobi/dreamrefactory/issues/369)).
+A room fetched over the internet moves the wall clock for reasons unrelated to
+the route, so that timer stops for it, as a PC speedrun's load remover does. The
 fetcher is the only thing that knows a download has begun, so it reports it
 (`FileStore.onWire` → `engine/src/web/load-clock.ts`), and the run loop subtracts
 that total from every leg.
@@ -275,8 +288,9 @@ nobody, and one that looks faster invents a record.
 
 Nothing is hidden either way — a `load` column appears beside the splits when
 there was something to remove, and `time + load` is the wall clock to the
-millisecond. On the workbench the clock says `LOADING` while it is stopped, so a
-reading standing still cannot be mistaken for a hung page.
+millisecond. On the workbench the stopwatch shows in-game time with the wall
+time small beside it, and says `LOADING` while the link is busy, so a reading
+standing still cannot be mistaken for a hung page.
 
 **The workbench.** `/speedrun/` is an unlisted page — nothing links to it, it is
 not in the top bar, it carries `noindex` — that puts an editor under the game:
@@ -289,14 +303,30 @@ clean game far more often than it is opened to play one.
 It shares the parser, the action table and the run loop with the CLI — all three
 are the engine's (`engine/src/web/speedrun/`), with this ship's own verbs
 layered over them (`taoot/src/speedrun/actions.ts`) — so a sheet cannot mean one
-thing there and another here. Dust has the same workbench off the same modules
-and no verbs of its own yet. What differs is only delivery: the CLI drives real OS-level input over Playwright,
+thing there and another here. Dust has the same workbench off the same modules,
+with verbs of its own in `dust/src/speedrun/` (`goto` a grid cell, `give`,
+`blackjack` and others). What differs is only delivery: the CLI drives real OS-level input over Playwright,
 while the page synthesizes `PointerEvent`/`KeyboardEvent` against the canvas.
 `main.ts` never asks `isTrusted`, so the engine cannot tell — but the synthetic
 path skips the browser's real input pipeline, so **the page is a previewer and
-the CLI is the clock of record**. Measured over the boot and the London flat the
-two agree to within 1% on engine frames (216 against 218) and about 6% on wall
-clock: same game, slightly different stopwatch.
+the CLI is the clock of record**. Both play on a sheet's clock, which is what
+makes their in-game times agree.
+
+**Calculate** on the workbench plays the open sheet from a cold boot in a Web
+Worker beside the page (`taoot/src/speedrun/calc-worker.ts`), headless and at
+full CPU speed, and answers with the sheet's in-game time or the line it stopped
+at; the game on screen is not touched. `--headless` on the command line does the
+same in node.
+
+**Blackjack** has its own verb, because a sheet does not branch and the play is
+a loop: `blackjack(win, bet: rubaiyat)` plays Mission 4's game with Buick for his
+boat pass to the outcome a route needs
+([#487](https://github.com/dhobi/dreamrefactory/issues/487)), looking only at
+what a player at the table sees. A hand that went the wrong way cannot be undone
+in the game, so the verb saves before it walks up to the table and loads to try
+again through the control panel, on the clock, as `menuSave`/`menuLoad` do
+(`taoot/src/speedrun/blackjack.ts`). Dust's `blackjack(800)` plays Jan's saloon
+table up to a cash target the same way.
 
 `pause()` is a breakpoint: the run stops and the pointer lands on the line
 *after* it, so the breakpoint can be got past. The CLI has nobody to press
@@ -305,8 +335,8 @@ a leg is worked on and the whole thing still times under
 `npm run speedrun -w taoot`.
 
 The workbench plays the **music**: a run is read by its sound as much as by its
-picture, and the theme is part of knowing where you are. `<meta
-name="mute-theme">` in `speedrun/index.html`'s head (applied as the cold boot's
+picture, and the theme is part of knowing where you are. Adding `<meta
+name="mute-theme">` to `speedrun/index.html`'s head (applied as the cold boot's
 theme mix) turns it off, for when the same twenty seconds of a room play over and
 over while a route is tuned.
 
@@ -374,22 +404,28 @@ file format: a `.ti`'s variable table is fixed-size so globals that do not fit
 are dropped, `actorvalue` has no record at all, and the room is rebuilt by
 re-running its own `openset`/`openscene` at the restored progress. Faithful —
 the original reloads the same way — but a game reached by loading is not the game
-a player would be standing in. Route with it, time with the full sheet. Measured:
+a player would be standing in. Route with it, time with the full sheet: a run
+that used `load()` still finishes, but its headline says NOT A VALID TIME and
+names the line (verbs declare it with `voidsTime`,
+`engine/src/web/speedrun/action.ts`). A route that needs a save and a load uses
+`menuSave()`/`menuLoad()` instead, which go the way a player has to — the life
+preserver, the control panel's levers, the fades both ways — and are on the
+clock ([#523](https://github.com/dhobi/dreamrefactory/issues/523)); `menuLoad()`
+loads only what `menuSave()` wrote in the same game. Measured:
 reloading at `m1p0` comes back in c73's Scene49/View52, the set's rebuilt
 opening, rather than the Scene51/View63 the save was taken in; and the watch
 comes back owned by nobody.
 
-The pathfinding verbs (`travel`, `hunt`, `stand`) exist only in the CLI — they
-run the real `Navigator`, which parses `.SET` files off disk, and the page says
-so. All three are escape hatches that print the literal gestures they used, so a
+The pathfinding verbs (`travel`, `hunt`, `stand`) exist only in the Playwright
+CLI — they run the real `Navigator`, which parses `.SET` files off disk, so
+neither the page nor `--headless` can run them, and the page says so. All three are escape hatches that print the literal gestures they used, so a
 sheet can stop needing them.
 
 ## Releases
 
-The version is `version` in **this package's** `taoot/package.json` — **0.9.58**,
-semver, shown in the top bar of every page of this game and carried into a bug
-report. Every package holds its own number (the site, Dust, Timelapse and
-Skull Cracker each release on theirs), and each `vite.config.ts` substitutes its
+The version is `version` in **this package's** `taoot/package.json`, semver, shown in the top bar of every page of this game and carried into a bug
+report. Every package holds its own number (the site and each other game
+release on theirs), and each `vite.config.ts` substitutes its
 own for `__APP_VERSION__`. Tagging is what publishes, and `master` is protected
 (the two `tests.yml` jobs are required checks, admins included), so the bump goes
 through a pull request like anything else:
@@ -401,16 +437,21 @@ git commit -am "Version 0.9.59" && git push -u origin release/0.9.59
 gh pr create --fill && gh pr merge --rebase --delete-branch   # once checks are green
 
 git switch master && git pull
-git tag taoot-v0.9.59 && git push --tags
+npm run release -- taoot      # tags taoot-v0.9.59, pushes it, checks the deploy started
 ```
+
+`npm run release` (`tools/release.mts`) pushes one tag per push and then checks
+that each started a deploy, dispatching it if not: GitHub starts no workflow run
+at all when more than three tags arrive in one push, so `git push --tags` is the
+shape that fails for a release of several games.
 
 The tag must sit on a commit whose `taoot/package.json` already says that version
 — `deploy.yml` compares the two and fails the deploy rather than announce a
 version nobody tagged. The `taoot-v` prefix matters twice over: a bare `v*` tag
-is not matched (this game's tags were bare up to `v0.9.50`), so `npm version`'s
-own `v0.9.59` would deploy nothing at all; and a tag naming none
-of the five targets (`site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`,
-`skullcracker-v*`) is an error rather than a default — see
+is not matched, so `npm version`'s own `v0.9.59` would deploy nothing at all;
+and a tag naming none of the targets (`site-v*`, `taoot-v*`, `dust-v*`,
+`timelapse-v*`, `skullcracker-v*`, `redjack-v*`, `lunicus-v*`, `jumpraven-v*`)
+is an error rather than a default — see
 [Releasing and deploying](../docs/reference/deploy.md).
 
 `.github/workflows/deploy.yml` builds that commit and uploads `dist/taoot` to
@@ -487,6 +528,5 @@ game.
 
 ---
 
-Part of **[dreamREfactory](../README.md)** — the engine, the three other games
-(Dust, Timelapse, Skull Cracker), the format editors, and the
+Part of **[dreamREfactory](../README.md)** — the engine, the other games, the format editors, and the
 [documentation](../docs/README.md).

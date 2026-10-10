@@ -156,8 +156,8 @@ const ready = new Map<string, Bank>();
 /**
  * One `<audio>` element plays every clip, not Web Audio. The click has to START
  * the sound — browsers only let a page make a noise inside the user's gesture,
- * and the first version made its AudioContext after awaiting the bank's fetch,
- * where a browser may treat the gesture as over and leave the context silent.
+ * and an AudioContext made after awaiting the bank's fetch may come when a
+ * browser treats the gesture as over, leaving the context silent.
  * Banks are loaded up front for the same reason. And an iPhone's silent switch
  * mutes Web Audio but not media.
  */

@@ -417,8 +417,8 @@ function stopPlayback(): void {
  * 50 ms service pass, looping.
  *
  * Through the script, not through the pictures — the two are not the same
- * length, and a preview that walks the pictures directly is the same bug the
- * runtime had (#181). Every walk in the game lists its ten pictures twice, so a
+ * length, and a preview that walks the pictures directly would run walks at
+ * double speed (#181). Every walk in the game lists its ten pictures twice, so a
  * stride takes a second here as well; `stok1`'s `dig` is the same and every
  * `stand` lists one step, which is why those do not offer a cycle at all.
  */

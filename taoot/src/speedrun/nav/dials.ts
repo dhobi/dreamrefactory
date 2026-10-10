@@ -369,8 +369,8 @@ export async function setLever(d: DialDriver, lever: DragLever, want: number): P
   // clamped cursor Y by the pitch, so every Y in `[top + want*pitch, +pitch)`
   // gives the same deg — and the first of them is the one pixel of the band that
   // a rounding error can fall out of. Aiming at the centre spends the tolerance
-  // the control already has (#277); the driver's own aim is exact again
-  // (clientPointFor), so this is belt and braces rather than the fix.
+  // the control already has (#277); the driver's own aim is exact
+  // (clientPointFor), so this is belt and braces.
   const band = lever.top + want * lever.pitch;
   const y = band + Math.floor((lever.pitch - 1) / 2);
   if (band < lever.top || band > lever.bottom) {
