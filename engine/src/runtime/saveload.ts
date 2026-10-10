@@ -155,7 +155,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
  * NAME the port writes at C1 @596 is not what it opens. Without this, a save
  * taken in a different room than its base re-opens the BASE's set in the
  * original engine and dies looking up our scene in its register ("Fatal error
- * at line 4248 (code 2)" in DosBox — see SavePatch.setFile in df/savegame.ts).
+ * at line 4248 (code 2)" in DosBox — see SavePatch.setFile in df/savegame-patch.ts).
  */
 function setFileSnapshot(session: GameSession): SavePatch["setFile"] {
   if (!session.currentSetFile) return undefined;
@@ -184,7 +184,7 @@ function setFileSnapshot(session: GameSession): SavePatch["setFile"] {
  * the BANK's tables and only takes volume/pan from the save's records, so a
  * list shorter than the bank's runs off both heap blocks in the original
  * engine (the DosBox "Memory error at line 301: Unknown compression format"
- * fatal — see SavePatch.theme in df/savegame.ts). The chunks therefore come
+ * fatal — see SavePatch.theme in df/savegame-patch.ts). The chunks therefore come
  * from the open bank itself; a bank the library cannot resolve is passed with
  * empty chunks, which applyPatch writes as a silent room and reports.
  */

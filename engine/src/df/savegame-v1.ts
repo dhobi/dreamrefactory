@@ -1030,7 +1030,7 @@ export interface SavePatchV1 {
   /**
    * What the LOADER needs from the set FILE itself, when the room changes.
    *
-   * The counterpart of Titanic's `SavePatch.setFile` (engine/src/df/savegame.ts),
+   * The counterpart of Titanic's `SavePatch.setFile` (engine/src/df/savegame-patch.ts),
    * and the same two omissions it already covers: the registers the load
    * re-acquires ({@link C1_TRANSITION_REGISTER}) and the palette the screen comes
    * back in.

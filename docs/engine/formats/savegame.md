@@ -497,13 +497,13 @@ satisfying the B59 knock's `letterphase = 2 | letterphase = 3`, so Conkling says
 an interlude, *not* what was playing — see
 [the track containers](#the-track-containers-what-was-playing).)
 
-**Loader policy** ([`parseSave`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)):
+**Loader policy** ([`parseSave`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame-read.ts)):
 `decodeVars` walks the grid with the shifted pairing and decodes both kinds —
 numbers into `numGlobals`, strings (via the pool) into `strGlobals`; both are
 restored into the interpreter on load. Duplicate names keep the first
 occurrence (the engine's lookup walks the list from the head).
 
-**Writing** ([`applyPatch`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts))
+**Writing** ([`applyPatch`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame-patch.ts))
 targets the same shifted slot: numbers are written inline and tagged type 4,
 strings as a pool offset tagged type 3.
 
@@ -677,7 +677,7 @@ local buffer whose name field sits at `buffer+0x4e`:
 
 The offsets that matter for reading are the ones from the **record base**, because
 that is what the getters use; the second column is the same field measured from the
-name, which is what [`walkPropGrid`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)
+name, which is what [`walkPropGrid`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame-read.ts)
 locks the grid onto — so every numeric field is at a *negative* offset there, and
 every read of one is bounds-checked at both ends.
 

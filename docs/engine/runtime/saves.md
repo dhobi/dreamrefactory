@@ -459,7 +459,7 @@ does not lean on it. Four kinds of loss:
   `turbine`, `condensor`, `steamtank`, all four pressures), the smokestack maze
   (`mazenumber`, `stacklevel`), the darkroom's plates, `stokerphase`, `troutmoney`,
   `turkwater`, `fencelevel` and `stackmax`. Ranking the shipped saves by
-  [`globalsCapacity`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame.ts)
+  [`globalsCapacity`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/df/savegame-patch.ts)
   instead takes disk 1 to **44** dropped and disk 2 to **24**, and what is left is
   blackjack-table and fistfight scratch that a load re-initialises anyway (#85).
 - **Inherited from the skeleton.** A patch-write starts from a *shipped* save, so
