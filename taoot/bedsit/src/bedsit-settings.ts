@@ -1,14 +1,12 @@
 /**
  * What the room is set to — and nothing at all about how it is set.
  *
- * Every one of these numbers used to live in the control that happened to
- * change it: the lamp gains in a `gain` object beside the slider handler, the
- * skin and the smoke in a `let` beside the key that toggled them, and the
- * shadow taps NOWHERE but the GPU — `shadows.value`, a string on a `<select>`,
- * was the only record of what the shadows were set to. That is workable while
- * the panel is the one way in, and it is the reason there can only ever BE one
- * way in: a second interface would have to reach into the first one's DOM and
- * read a string off an element to find out what the room is currently doing.
+ * Kept out of the controls that change it: a number living beside its slider
+ * handler or toggle key — or nowhere but the GPU and a string on a `<select>` —
+ * is workable while the panel is the one way in, and it is the reason there
+ * could only ever BE one way in: a second interface would have to reach into
+ * the first one's DOM and read a string off an element to find out what the
+ * room is currently doing.
  *
  * So the state comes out here, the controls become views of it, and a change
  * arrives at the room the same way whichever view made it. What this module

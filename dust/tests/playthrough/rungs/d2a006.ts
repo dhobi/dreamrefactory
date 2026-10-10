@@ -121,9 +121,8 @@ import {
  * `1` (and on `1` again at four ticks, so it is robust to a settle of either
  * length). The predicate therefore waits for the second tick of the pair rather
  * than for the value, which is the difference between landing on a phase and
- * landing on a phase from a known side. Before #352 shortened every move by one
- * tick the pump happened to stop on the second anyway, which is exactly the kind
- * of luck a rung should not be built on.
+ * landing on a phase from a known side. A pump that merely happens to stop on
+ * the second is exactly the kind of luck a rung should not be built on.
  */
 export const rung: Segment = {
   from: "D2A_005",

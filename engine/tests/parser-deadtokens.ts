@@ -24,8 +24,9 @@ const handlers = (source: string): string[] => [...parseScript(assembleScript(so
 
 /**
  * The Timelapse BOOTFILE's shape exactly: a stray pair of parentheses after the
- * last `endcode`. `(` opens an expression statement that never closes, so this
- * used to throw `expected ), got undefined` and take all of the handlers with it.
+ * last `endcode`. `(` opens an expression statement that never closes, so a
+ * strict parse throws `expected ), got undefined` and takes all of the handlers
+ * with it.
  */
 test("a stray expression after the last endcode does not cost the handlers", () => {
   expect(
@@ -86,13 +87,13 @@ endcode
  * Dead tokens BEFORE the first handler, too — the same rubbish, on the other
  * side of it.
  *
- * The gate used to be "at least one handler has parsed already", which caught a
- * fragment after a handler and not the identical fragment in front of one. Three
+ * A gate of "at least one handler has parsed already" would catch a fragment
+ * after a handler and not the identical fragment in front of one. Three
  * of Timelapse's flat scripts open with a stray integer and then a perfectly good
  * `code setcursor (arg)`, and Dust has one: BOLIVAR.PUP's container 34 carries a
  * whole abandoned compile at top level — a closed `switch`, an `if` with an
  * unbalanced paren, and a `case` outside any switch at all — in front of
- * `runyoself`, `dbljump` and `hasjump`, and was losing all three.
+ * `runyoself`, `dbljump` and `hasjump`, and would lose all three.
  *
  * Nothing is lost by dropping it: the engine dispatches handlers BY NAME and
  * never runs a container's top level, which is why the compiler could leave that

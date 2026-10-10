@@ -509,10 +509,8 @@ function decide(
    * `0x44e710` compares the player's x with its own and writes `obj+0x28` **1
    * when the player is east**, and `0x45eff3` settles that 1 is facing west. So
    * a punk standing west of a floored man turns his back on him and wanders
-   * off. This page had it the other way round — punks standing over you — and
-   * four separate readings of `initwraith`, `initvpriest`, `inithardcore` and
-   * `initknotboy` all found the identical four instructions in their own class
-   * and read them this way.
+   * off. `initwraith`, `initvpriest`, `inithardcore` and `initknotboy` carry the
+   * identical four instructions in their own class.
    */
   if (k.player.down) {
     e.facing = k.player.x > k.anchorX(e) ? -1 : 1;

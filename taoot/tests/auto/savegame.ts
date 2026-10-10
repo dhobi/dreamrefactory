@@ -91,8 +91,7 @@ function containersEqual(a: RawSaveFile, b: RawSaveFile): boolean {
 // rule: a port save is a patched copy of one of these files, and the one reader
 // that matters is the original game, which we cannot debug. So the writer puts
 // back even the bytes it does not understand — the process junk the original left
-// behind the live slots of the position table (RawSaveFile.table), which this
-// writer used to zero-fill.
+// behind the live slots of the position table (RawSaveFile.table) included.
 //
 // `containersEqual` stays as the diagnostic: it says whether what the LOADER
 // reads survived, which is the more useful failure message when the bytes move.
@@ -154,8 +153,8 @@ test("applyPatch writes globals + location that parse back", () => {
 
 // The string is allocated the way the ORIGINAL allocator does: at the pool's own
 // watermark (the u32 at globals-blob +8), inside the block whose size the blob
-// declares at +12. The first version appended past the container's end instead —
-// which this port reads back happily, because it resolves a string by offset, and
+// declares at +12. Appending past the container's end instead is something this
+// port reads back happily, because it resolves a string by offset, and
 // TI.EXE cannot: it allocates +12 bytes and copies the container into them, so an
 // over-long pool is either truncated (the string silently lost) or copied past the
 // end of its block. A save has to load in the original engine too.
@@ -246,11 +245,11 @@ test("loadGame restores globals + clock and travels to the saved room", async ()
 /**
  * `clock` is the variable list's HEAD, so its DFValue lives one stride back, in
  * the blob header. Reading it out of the location container's savestate stack
- * instead (the old heuristic: the token after the first "titanicN:" path) picked
- * the FIRST day event ever pushed, which is "startdisk1" on every save in the
- * game — including saves taken hours later. TAOOT's `advanceday` switches on
- * this value, so a save loaded into the London flat replayed the whole intro
- * when the bombs fell instead of sailing (#52).
+ * instead (the token after the first "titanicN:" path) picks the FIRST day
+ * event ever pushed, which is "startdisk1" on every save in the game —
+ * including saves taken hours later. TAOOT's `advanceday` switches on this
+ * value, so a save loaded into the London flat would replay the whole intro
+ * when the bombs fall instead of sailing (#52).
  *
  * The shape below is the game's own: `advanceday`'s startdisk1 arm sets
  * clock = "bedsit" and nothing overwrites it until the sinking, where calctime's
@@ -376,7 +375,7 @@ test("loadSavedGame gives up the film BEFORE it throws the viewer away", async (
   // The ordering is the whole test. GameHost.loadSavedGame replaces the viewer
   // before it calls session.loadGame, so a film abandoned from inside the load
   // reaches a fresh player with nothing playing — and the real one keeps its
-  // promise for ever. Measured against a live page before this was right: the
+  // promise for ever. Measured against a live page with the order reversed: the
   // promise was still unsettled six seconds after the load.
   const { host, session, viewer } = await newHost();
   await host.loadSavedGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
@@ -977,13 +976,13 @@ test("parseSave decodes the crew's actorowner state", () => {
 // The container map is the writer's own walk (0x413910) and every index is
 // COMPUTED from the file's numbers — container 6's length gives the open-track
 // count and that places everything after it. This is the guard on that reading
-// (#325): the six content probes it replaced are gone, so the map has to hold on
-// every shipped file, and one of them — the actor grid — has to decode out of the
-// container the map names rather than out of a look-alike. The globals blob was
+// (#325): there are no content probes, so the map has to hold on every shipped
+// file, and one of them — the actor grid — has to decode out of the
+// container the map names rather than out of a look-alike. The globals blob is
 // the trap: a grid of 32-byte variable nodes, and 32 divides 160, so every fifth
 // node sits one actor stride from the last and a pair of variable names 64 bytes
-// apart decodes as a name/owner record. Three ENDGAME2 saves preferred it to
-// their real cast container on record count alone.
+// apart decodes as a name/owner record. On record count alone, three ENDGAME2
+// saves prefer it to their real cast container.
 test("every shipped save matches the positional container map", () => {
   const saves = allSaves();
   expect(saves.length).toBeGreaterThan(0);
@@ -1101,10 +1100,9 @@ test("snapshotSave and loadGame carry actorvalue, in both directions", async () 
 // creates a global on first assignment — so an early save has no record for a
 // later one, and a patch had nothing to write into. `savedeck` and `hallside` are
 // missing from exactly the four pre-boarding saves of the 109 shipped, and the
-// template picker used to take the first file in save/1, which is one of them: with
-// that template 12 of the 107 globals the engine holds at the end of mission 2
-// phase 0 were silently dropped. (Which base is lent is now ranked by capacity —
-// see the two tests below.)
+// first file in save/1 is one of them: with that template 12 of the 107 globals
+// the engine holds at the end of mission 2 phase 0 would be silently dropped.
+// (Which base is lent is ranked by capacity — see the two tests below.)
 test("applyPatch makes a record for a global the base has never held", () => {
   const path = savePath("1", "01 - April 14th, 1942.ti");
   const save = parseSave(new Uint8Array(readFileSync(path)));
@@ -1421,13 +1419,13 @@ test("the dev-server manifest's shipped saves are all recognised for seeding", (
  * darkens all four. The arrow is the only piece whose lit state is a DEGREE
  * rather than a view — the SHP says so, `navarrow` carrying green/red/yellow of
  * two frames each where `life`, `watch` and `map` have separate dark/light
- * states — so the old view-only band restore (`HELD_BAND_PROPS`, retired by
- * #143) could not carry it, and `initprops`' re-run of `initinterface` had just
- * set it to 0. It now rides the record's own `propdeg` like everything else.
+ * states — so a view-only band restore cannot carry it, and `initprops`' re-run
+ * of `initinterface` has just set it to 0. It rides the record's own `propdeg`
+ * like everything else (#143).
  *
  * All 109 shipped saves record `life` as "light" (a save is taken from the CTL
- * panel, and the way in is a click on the lit lifebuoy), so this fired on every
- * load there is.
+ * panel, and the way in is a click on the lit lifebuoy), so this matters on
+ * every load there is.
  */
 test("a load brings the nav arrow back as lit as the rest of the band", async () => {
   const session = await newSession();
@@ -1569,8 +1567,8 @@ test("actorvalue is attributed to the character whose record holds it", () => {
  *   Scene110 openscene   at M3P1, `sendtoactor("vlad", mousedown(0))` — the fight
  *
  * So the thing a load has to keep is not really his visibility, it is his POSITION:
- * gang.cst's mousedown opens with `if realdist(me) < hotdist()`, and a load used to
- * leave him at (0,0,0) with no set at all, from which Scene110's gesture reaches
+ * gang.cst's mousedown opens with `if realdist(me) < hotdist()`, and a load that
+ * left him at (0,0,0) with no set at all would be one from which Scene110's gesture reaches
  * nobody and the phase never advances. Measured both ways at the moment of arriving
  * at Scene110 — with the placement restored his `vlad1.pup` opens; without it he is
  * at (0,0,0) and no puppet opens at all.
@@ -1926,7 +1924,7 @@ test("loading in front of Zeitel does not start his conversation (#125)", async 
     for (let i = 0; i < n; i++) { one.host.viewer?.tick((c += 50)); await drain(); }
   };
   const path = savePath("ENDGAME1", "05 - Traded Painting for Antidote with Zeitel.ti");
-  // The load has to RETURN. Before the fix it did not: the accost fired inside it.
+  // The load has to RETURN, not fire the accost inside it.
   await session.loadGame(new Uint8Array(readFileSync(path)));
   await run();
 
@@ -2213,8 +2211,8 @@ test("every shipped save's placed, visible characters are actually there (#186)"
  * The room's ambience, over the whole corpus — issue #199.
  *
  * A save records every audio bank it had open, and only one of them is playing.
- * The loader used to open that one — the theme — and the restored
- * `makecricket`/`makeloop` tables then reached into banks that were not there:
+ * Opening only that one — the theme — leaves the restored
+ * `makecricket`/`makeloop` tables reaching into banks that are not there:
  * over the 18 shipped saves with a live cricket table, **49 of 50** cricket
  * records could not resolve their sound from the theme's bank alone, and every
  * one of them resolves from the banks the save names (measured both ways below,
@@ -2235,7 +2233,7 @@ test("a load reopens every bank the save had open, not just the theme's (#199)",
     const bytes = new Uint8Array(readFileSync(path));
     const save = parseSave(bytes);
     if (!save.crickets.length) continue;
-    // a `.sfx` bank is open and NOT playing — the shape the old loader missed
+    // a `.sfx` bank is open and NOT playing — the shape a theme-only loader misses
     expect.soft(save.trackFiles, path).toContain(save.theme?.track ?? "");
     for (const t of save.trackFiles) if (t.endsWith(".sfx")) expect.soft(t, path).not.toBe(save.theme?.track);
     expect.soft(await session.loadGame(bytes), path).toBe(true);
@@ -2290,14 +2288,14 @@ test("the sinking's ambience survives a load into lounge1c (#199)", async () => 
 /**
  * The two lists a load reopens are the SESSION's, not the base save's.
  *
- * Found while fixing #486: the port writes a save by patching a skeleton, and
- * the open-cast list (container 3) and the open-bank list (container 6, with its
- * three arrays per bank) were copied from that skeleton untouched. A game
- * started fresh patches a London-flat template, so a save taken in the smoking
- * room during the sinking named `gang.cst` and the flat's banks — no
- * `extra.cst` for the crowd, no `insddest.sfx` for the groaning metal — and
- * the reload logged `sendtoactor("paul1b3", extraidle(..)) — target not loaded`
- * for every extra and `sound not found: ` for the ambience, for good.
+ * The port writes a save by patching a skeleton, and the open-cast list
+ * (container 3) and the open-bank list (container 6, with its three arrays per
+ * bank) must not be copied from that skeleton untouched. A game started fresh
+ * patches a London-flat template, so a save taken in the smoking room during
+ * the sinking would name `gang.cst` and the flat's banks — no `extra.cst` for
+ * the crowd, no `insddest.sfx` for the groaning metal — and the reload would
+ * log `sendtoactor("paul1b3", extraidle(..)) — target not loaded` for every
+ * extra and `sound not found: ` for the ambience, for good.
  *
  * TI.EXE's writer (0x413910) dumps the live tables at 0x489f0c (casts) and
  * 0x489f24 (banks), and its resume (0x414a70) reopens each record's FILE through
@@ -2536,14 +2534,14 @@ test("an authored route resumes on its waypoints, not on the straight line", asy
  *
  * Nothing but a script ever sets it — it is an accessor, and every room passes
  * `stdturn` from its own `openset` — and a load runs no `openset` (#143). So a
- * restored character kept the runtime's `0` and turned at `stepDeg`'s floor of 1
- * instead of 10: a half-circle went from 13 service passes to 128. It is most
- * visible in `walktopuppet`, which waits on `iswalk` before anyone speaks, so the
- * approach became seconds of a character rotating on the spot.
+ * restored character without it keeps the runtime's `0` and turns at
+ * `stepDeg`'s floor of 1 instead of 10: a half-circle takes 128 service passes
+ * instead of 13. It is most visible in `walktopuppet`, which waits on `iswalk`
+ * before anyone speaks, so the approach becomes seconds of a character
+ * rotating on the spot.
  *
- * Found while writing the walks table (#191) and fixed with it, being the same
- * family as the crowd (#186) and the open banks (#199): state that `openset` used
- * to re-derive, in the file all along, in a field nobody had carried across.
+ * The same family as the crowd (#186) and the open banks (#199): state that
+ * `openset` re-derives, and that is in the file all along.
  *
  * The census is what says +32 is this field and not something else: over the 3465
  * shipped records it takes exactly TWO values, and they separate on whether the
@@ -2590,13 +2588,12 @@ test("a load restores actorturn, and a restored character turns at speed", async
 // ---- the writer's half of the walks table (#191) ---------------------------
 
 /**
- * The round trip was ASYMMETRIC, and this is the census that says it no longer
- * is.
+ * The round trip is SYMMETRIC, and this is the census that says so.
  *
- * #189 taught the loader to resume a walk; the writer still zeroed the table, so
- * a walk taken in one of OUR saves was lost — load save 17 and Daisy finishes
- * crossing the Grand Staircase, save that same moment through our own writer and
- * reload, and she is standing still. It shows the moment a player saves
+ * The loader resumes a walk (#189), so the writer has to write the table too,
+ * or a walk taken in one of OUR saves is lost — load save 17 and Daisy finishes
+ * crossing the Grand Staircase, save that same moment through a writer that
+ * zeroes the table and reload, and she is standing still. It shows the moment a player saves
  * mid-conversation-approach, because `walktopuppet` is a walk and it is how most
  * characters reach you.
  *
@@ -2799,7 +2796,7 @@ test("a walk saved by our own writer resumes — the round trip is symmetric (#1
  *
  * A turn is a walk to `iswalk` (it tests the slot's occupied flag and its actor
  * name, never the mode — see `Scheduler.turning`), so a save taken inside that
- * `while` used to reload with the record gone and the conversation's own wait
+ * `while` must not reload with the record gone and the conversation's own wait
  * already over.
  *
  * Started here rather than loaded from a shipped save, which makes it the one
@@ -3002,7 +2999,7 @@ test("a save names the disc it was taken on, across the mission-4 crossing (#231
 
   // and loading it leaves disc 1 in play. A fresh session is already there (the
   // cold boot's own setpath(1)), so the assertion is that nothing moved it OFF —
-  // which is exactly what the mission-3 skeleton's stale label used to do.
+  // which is exactly what a skeleton's stale disc label would do.
   const bytes = session.snapshotSave()!;
   const { session: reloaded, logs: reloadLogs } = await newHost();
   check("reloading it leaves disc 1 in play",
@@ -3014,12 +3011,12 @@ test("a save names the disc it was taken on, across the mission-4 crossing (#231
 
 // --- a load leaves no ROOM behind it -----------------------------------------
 //
-// The prop half of `resetCast`, missing until #339 found it in the false
-// smokestack. A save's prop table is the BOOT shops and nothing else — all 109
-// shipped saves carry exactly 72 records — so `restoreProps` speaks for those and
-// leaves every other prop in the state the abandoned game left it. With the
-// departing room's shop still loaded, its props came along: the smokestack's
-// crates are the visible case, because they are the maze.
+// The prop half of `resetCast` (#339). A save's prop table is the BOOT shops and
+// nothing else — all 109 shipped saves carry exactly 72 records — so
+// `restoreProps` speaks for those and leaves every other prop in the state the
+// abandoned game left it. With the departing room's shop still loaded, its props
+// would come along: the smokestack's crates are the visible case, because they
+// are the maze.
 //
 // Asserted over the shops rather than one game's props: what must not survive a
 // load is a ROOM, and the two persistent shops are the two that must.

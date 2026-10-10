@@ -144,8 +144,8 @@ export interface NavDriver {
    * does `playnewtheme("sink" @ phase @ ".trk")` the same way. A pumped host runs
    * that tail in less time than it takes a browser to ask, so a beat taken on
    * "the conversation stopped" records two different tunes on the two hosts and
-   * neither engine has done anything wrong. Waiting on the tune is the fix, and
-   * that means being able to read it.
+   * neither engine has done anything wrong. Waiting on the tune is the answer,
+   * and that means being able to read it.
    */
   theme(): string;
   /** a conversation close-up is on screen (speaking or waiting on a choice) */
@@ -1177,11 +1177,11 @@ export class Navigator {
    * carry a red area for the same set — `stair2c` is on all seven — and pressing one
    * writes its `deck` into `savedeck`, which is exactly what the ship graph's trips
    * are guarded on (GSTAIR3's landings are the same set with it flipped). Costing
-   * every candidate against the savedeck you are LEAVING scored them identically, and
-   * the tie then fell to table order.
+   * every candidate against the savedeck you are LEAVING scores them identically, and
+   * the tie then falls to table order.
    *
-   * Measured, c73 -> the control room at mission 1 phase 2: the old rule presses the
-   * C-deck plan and walks down six decks — 62 gestures, 661 ticks. Costing by the
+   * Measured, c73 -> the control room at mission 1 phase 2: costing by the savedeck
+   * left presses the C-deck plan and walks down six decks — 62 gestures, 661 ticks. Costing by the
    * deck the plan sets lands at the standpoint the next trip already stands at —
    * 37 gestures, 383 ticks.
    *
@@ -1194,7 +1194,7 @@ export class Navigator {
    * in a line, from the F-deck landing at the bottom to the boat-deck landing at the
    * top (nav/stair2c.ts). So a plan that lands you at the top and one that lands you
    * at the bottom score IDENTICALLY for any goal below decks, while being twenty
-   * gestures apart, and the tie fell to table order: page 1, the boat deck.
+   * gestures apart, and the tie falls to table order: page 1, the boat deck.
    *
    * Measured in the browser gate: four trips landed at `stair2c (deck bd)` and then
    * walked the whole staircase down to the F-deck exit at **27.1 s each**, where the
@@ -1275,9 +1275,9 @@ export class Navigator {
       if (here === goal) return { ok: true, gestures: this.count };
       // Ask the map again, every hop — not once at the start. `mapdisabled()` refuses
       // in `boil`, `cargo`, `bind`/`bing`/`binl` and the staircase tops, so a trip
-      // DECIDED in one of those rooms used to walk the whole way even though the very
+      // DECIDED once in one of those rooms walks the whole way even though the very
       // next room could travel. Measured in the browser run, segment 5:
-      // `boil -> halla` planned NINE hops on foot — boil, engine, scot2, scot3,
+      // asked once, `boil -> halla` plans NINE hops on foot — boil, engine, scot2, scot3,
       // stair2c, deckbd, decka, gstair2, halla — and took 94 seconds with twenty-odd
       // turns inside stair2c alone. It is two hops when the map is re-asked one room
       // out. (Segment 13 hand-patches the same thing with travelPast(carghall).)

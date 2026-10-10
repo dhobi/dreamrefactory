@@ -16,7 +16,7 @@ test.skipIf(!haveRip())("day3", async () => {
   await playDay2(h);
   ok("days one and two played");
   // Port Royal's walkonpath walks follow the room's DRIV routes (RedJack.exe
-  // 0x41c820), which bend; the port used to walk them all as straight lines
+  // 0x41c820), which bend, rather than straight lines
   const routed: string[] = [];
   const startWalkPath = h.session.scheduler.startWalkPath.bind(h.session.scheduler);
   h.session.scheduler.startWalkPath = (name, points, arrive) => {

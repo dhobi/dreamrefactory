@@ -191,7 +191,7 @@ export interface PlayerKit {
 const MEASURED_0: PlayerMeasured = { walk: 95, run: 180, jump: 420, runJumpDy: 420, rise: 125, launchDx: 100, runJumpDx: 180, crawl: 47, flyKickDx: 190, flyKickDy: 310, hopDx: 120, hopDy: 210, barSwing: 120 };
 
 /**
- * Which cels are which — `SC.EXE`'s own table, not a guess any more.
+ * Which cels are which — `SC.EXE`'s own table, not a guess.
  *
  * The engine's animation scripts live in `.data` (see {@link MEASURED} for the
  * format and how they move things). Each is `{count, ticksPerFrame, kind}` and
@@ -211,26 +211,25 @@ const MEASURED_0: PlayerMeasured = { walk: 95, run: 180, jump: 420, runJumpDy: 4
  * flamer, the soaker and the scepter, each with a complete script of its own;
  * 7700s and 8300s are the second character, whose walk is 105 and run 200.
  *
- * Two things this corrects, both of which had been guessed by looking at cel
- * runs and both of which were wrong:
+ * Two things that guessing from cel runs gets wrong:
  *
- * - **the walk was not 650..655.** The engine's script for those cels is
+ * - **the walk is not 650..655.** The engine's script for those cels is
  *   `650 651 652 653(+95) 654(+95) 655(+95) 654(-95) 653(-95) 652 651` — it goes
  *   out and comes back, so it is a lunge or a swing. The walk is 100..111, and
  *   it is twelve frames rather than six.
- * - **the player IS mirrored.** The old table paired 660..665 with 650..655 as
- *   "the disc carries both facings". It does not: there is one set of cels, and
+ * - **the player IS mirrored.** 660..665 are not 650..655's other facing; the
+ *   disc does not carry both facings: there is one set of cels, and
  *   the engine flips them, which is exactly what `0x45d0f0` does to the frame's
  *   own `dx` when `obj+0x28` says the other way.
  */
 const ANIM_0: PlayerAnim = {
   /**
    * `0x471648` kind 0 tag 0, at its own `ticksPerFrame` of **2** — the idle, and
-   * it is an ANIMATION rather than the single cel this used to be. Fourteen
+   * it is an ANIMATION rather than a single cel. Fourteen
    * frames out and back, `1 2 3 4 5 6 7 8` then `7 6 5 4 3 2`, held two frames
    * each: 1.87s of breathing on a loop. The walk state installs it whenever no
    * direction is held (`0x429acc`), so it is what the player does when the keys
-   * are quiet, and standing on cel 1 forever was simply missing it.
+   * are quiet.
    *
    * The same script carries two more idles that this page cannot reach yet, and
    * they are worth writing down because they are gated on HEALTH: `0x429690`
@@ -283,8 +282,7 @@ const ANIM_0: PlayerAnim = {
    * tag 0 — so the pose held in FLIGHT is this, not the 251/252 flail. The flail
    * is the deep-fall pose: `0x42a109` compares `[player+0x32]` against 0x168 and
    * only a fall past 360 gets `0x471c68`'s slow loop (plus sound 10 through
-   * `0x402ac0`). The legs-forward jump is the tuck, and this page used to skip
-   * it entirely.
+   * `0x402ac0`). The legs-forward jump is the tuck.
    */
   tuck: [200, 220],
   /**
@@ -351,8 +349,8 @@ const ANIM_0: PlayerAnim = {
    * airborne loop. `0x42a109` is in the tag-0 handler's GROUNDED branch: the frame
    * after a fall of more than 360 lands, this is installed for sixteen frames, with
    * sound 5 and ten health off through `0x402ac0`. The hard landing. In the air the
-   * tuck holds all the way down. This page used to play it as a mid-air flail past
-   * 360 pixels fallen, which is the same test read on the wrong side of the ground.
+   * tuck holds all the way down. A mid-air flail past 360 pixels fallen would be
+   * the same test read on the wrong side of the ground.
    */
   air: [251, 252, 251, 250],
   /**
@@ -394,13 +392,13 @@ const ANIM_0: PlayerAnim = {
 };
 
 /**
- * The two attacks — and the kick is a SEPARATE SCRIPT, which is the correction.
+ * The two attacks — and the kick is a SEPARATE SCRIPT.
  *
  * The lower band reads JUMP / KICK / PUNCH / INV. and the keys are the initials,
- * J K P I. What each installs was read wrong here once: both attacks were taken
- * out of `0x471c90`, and K was given that script's tag 8 — `650 651 652 653(+95)
- * 654(+95) 655(+95) 654(-95) 653(-95) 652 651`, which goes out and comes back and
- * is a **headbutt**, not a kick. The walk state settles it in six instructions:
+ * J K P I. The two attacks do not share `0x471c90`: that script's tag 8 —
+ * `650 651 652 653(+95) 654(+95) 655(+95) 654(-95) 653(-95) 652 651`, which goes
+ * out and comes back — is a **headbutt**, not a kick. The walk state settles it
+ * in six instructions:
  *
  * ```
  *   429a1e  cmp word ptr [0x4ac394], 0    P -> 0x45d090(player, 0x471c90, 0)
@@ -468,12 +466,12 @@ const ACTIONS_0: PlayerActions = {
   duckKick: { cels: [720, 721, 722, 723, 724, 724, 722, 720], dx: [0, 0, 0, 0, 0, 0, 0, 0], move: { id: 8, from: 1 }, from: "0x4717c8 tags 8, 9" },
   // S+P+K — the crouch machine reaches into the kick script for tag 6
   /**
-   * S + P + K — and it is a DIVE, not the three cels this page had.
+   * S + P + K — and it is a DIVE.
    *
    * `0x42ab4a` installs `0x471d68` tag 6, and that tag is
    * `4100(dx 700, dy -80) 4101 4102 4103` — seven hundred, which is four times
    * the run. 630..632 is tag 6 of the PUNCH script `0x471c90`, a different
-   * script with the same tag number, and that is what was written here.
+   * script with the same tag number.
    */
   duckCombo: { cels: [4100, 4101, 4102, 4103], dx: [700, 0, 0, 0], dy: [-80, 0, 0, 0], move: { id: 12, from: 0 }, from: "0x471d68 tag 6, from 0x42ab4a" },
   /**

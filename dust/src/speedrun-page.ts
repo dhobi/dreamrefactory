@@ -90,10 +90,9 @@ startWorkbench({
    *
    * Resolved HERE, through `siteUrl`, and handed over whole: where a page sits in
    * the deployed tree is `site/`'s question and the engine may not ask it
-   * (site/tests/layering.ts). Titanic's carries the note about the bug this line
-   * used to have there — written "/speedrun/…" it asks the host's root rather
-   * than this game's, so it works in dev and fetches nothing once deployed under
-   * a subdirectory.
+   * (site/tests/layering.ts). Written "/speedrun/…" it would ask the host's root
+   * rather than this game's, so it would work in dev and fetch nothing once
+   * deployed under a subdirectory.
    */
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
 });

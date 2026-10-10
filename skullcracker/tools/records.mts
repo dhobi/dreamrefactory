@@ -4,9 +4,8 @@
  *   npx tsx skullcracker/tools/records.mts
  *   npx tsx skullcracker/tools/records.mts --gaps
  *
- * The coverage figure in `docs/skullcracker/README.md` used to be a number
- * somebody counted once, and every level built since made it a little more
- * wrong. This counts it instead: every entity record in every shipped book,
+ * A coverage figure counted once by hand goes stale with every level built, so
+ * this counts it: every entity record in every shipped book,
  * against the class names `walk.ts` actually asks `placed()` for.
  *
  * The one thing it cannot see is a record placed by some other route — a

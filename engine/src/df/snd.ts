@@ -31,9 +31,9 @@ import type { BankChunk } from "./banks";
  *
  * ## The two counts at 0x18, which are one field read as the wrong width
  *
- * This file used to describe "an i32 at 0x18 that equals the sound count in 38 of
- * the 40 banks, and reads 327687 and 720896 in FLUTE.SND and MINE.SND" — so
- * either not the count or not only the count, and not worth guessing at.
+ * Read as one i32, 0x18 equals the sound count in 38 of the 40 banks, and reads
+ * 327687 and 720896 in FLUTE.SND and MINE.SND — so either not the count or not
+ * only the count.
  *
  * It is **two i16s**, and together they are the bank's own split:
  *
@@ -154,27 +154,27 @@ export function readSndFileFrom(file: DFContainerFile): SndFile {
  * playback order.
  *
  * A v4 bank keeps a loop ORDER table in a container of its own. A v1 bank has no
- * such container, which is why this file once answered "no loop chunks" and Dust
- * ran without music — but the bank does say: the loops are the LAST
+ * such container — looked for, it answers "no loop chunks" and Dust runs
+ * without music — but the bank does say: the loops are the LAST
  * `i16 @ 0x1a` sounds of its name table (see the module doc's split).
  *
- * That replaced a name heuristic (#325 item 8), which took the bed to be the run
- * at the end of the table that is one stem plus ascending numbers from 1, with two
- * rules to keep dialogue out. It was right about the eight banks the scripts ask
- * for music from and wrong about three of the forty, in both directions — the
- * "eight positive cases and no negative control" its own docblock admitted:
+ * Read, not guessed by a name heuristic (#325 item 8) that takes the bed to be
+ * the run at the end of the table that is one stem plus ascending numbers from
+ * 1, with two rules to keep dialogue out. Such a heuristic is right about the
+ * eight banks the scripts ask for music from and wrong about three of the
+ * forty, in both directions — eight positive cases and no negative control:
  *
  *  - `DOORLIB.SND` and `SALGAMES.SND` store NO loops (0 either way), and the
- *    heuristic invented a bed out of `lsing1..3` — three hinge-squeak variants —
+ *    heuristic invents a bed out of `lsing1..3` — three hinge-squeak variants —
  *    and `discard1..4`, four card sounds. Harmless only because nothing asks
  *    either bank for a theme;
  *  - `MISSION.SND` stores **five**, and they are `silence wind1 wind2 chantwind1
  *    chantwind2` — a bed of two stems, which a single-stem rule cannot find. It
- *    played the last two, so `playtheme("mission.snd")` was missing three of its
+ *    plays the last two, so `playtheme("mission.snd")` would miss three of its
  *    five bars, and `mission.snd` IS one of the eight.
  *
  * The field agrees with the heuristic on the other 37, which is what says the two
- * were measuring the same thing.
+ * measure the same thing.
  */
 export function sndLoopChunks(snd: SndFile): number[] {
   // a bed of one is not a bed, and a count the bank cannot hold is not a count —

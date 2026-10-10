@@ -1,32 +1,17 @@
 /**
  * The screen, and who owns it — independent of whether the game has a room.
  *
- * This is the half of the old `SetViewer` that was never about a SET. Movies,
- * conversation close-ups, stage flats, the prop and actor layers, the fades, the
- * wipes, the CLUT, the text overlay and the "is this picture already on the
- * canvas?" check are all screen business, and none of them needs a room — but all
- * of them lived on a class whose constructor demanded a `SetFile`, so a game with
- * no SET got none of them.
+ * Movies, conversation close-ups, stage flats, the prop and actor layers, the
+ * fades, the wipes, the CLUT, the text overlay and the "is this picture already
+ * on the canvas?" check are all screen business, and none of them needs a room —
+ * on a class whose constructor demanded a `SetFile`, a game with no SET would
+ * get none of them.
  *
- * ## What that cost, before this existed
- *
- * Three workarounds in the tree, each of them the same bug wearing a different
- * hat:
- *
- *   - `GameHost.coldBoot`'s no-landing-room path opened a room it did not want
- *     with `skipOpen`, purely so the boot's films had a surface, and said so:
- *     "It still needs a room to draw INTO… Any of the game's rooms will do."
- *   - `DustFiles.serverSetNames` answers `["town.set"]` and explains that the
- *     room doubles as the movie host — the intro films were invisible for as
- *     long as it answered "none".
- *   - `paintWorldInto` already handled `viewShowing === false`. It always knew
- *     the room might be absent; nothing could reach it without one.
- *
- * *Timelapse* (1996) is what forced the issue: 465 game files across four discs
+ * *Timelapse* (1996) is the case that needs it: 465 game files across four discs
  * and not one `.SET` on any of them. Its rooms ARE stage flats, reached by
  * `gotostage(stage, region, frame)`, with the navigation graph written out as a
  * script table in each stage's own container 1 rather than as a set's turn rings.
- * So there is no room to borrow, and until this file existed that meant no
+ * So there is no room to borrow, and without this file that would mean no
  * movies, no fades and no compositing at all.
  *
  * ## The split
@@ -419,12 +404,9 @@ export class ScreenDirector {
    * composites without one rather than holding a stale reference to the room it
    * has left.
    *
-   * The stage dim is dropped on every change, and that is DELIBERATELY the
-   * behaviour it had when it was a field on the viewer: a new `SetViewer` used to
-   * re-wire `session.onClut` and start with `stageDim` unset, so a set change
-   * cleared it. Keeping the screen across a set change would otherwise carry a
-   * `mixclut("stage", …)` — the darkroom's — into the next room, which is a
-   * change this refactor has no business making. In practice nothing notices
+   * The stage dim is dropped on every change, DELIBERATELY: keeping it across a
+   * set change would carry a `mixclut("stage", …)` — the darkroom's — into the
+   * next room. In practice nothing notices
    * either way: `openStageFile` clears the stage dim itself on every open.
    */
   setRoom(room: RoomLayer | null): void {
@@ -457,10 +439,10 @@ export class ScreenDirector {
    * One frame of everything that is not a script: the session's own services,
    * then the movie or the room.
    *
-   * This is the loop body every shell's `requestAnimationFrame` calls, and it
-   * used to be `SetViewer.tick` — where the whole session's per-frame service
+   * This is the loop body every shell's `requestAnimationFrame` calls, and it is
+   * here rather than in `SetViewer.tick` so the whole session's per-frame service
    * (the fade, the wipe, the delay clock, the prop animation, the frame loops)
-   * ran inside the ROOM's tick and therefore not at all without one.
+   * runs without a room as well.
    *
    * Returns the room frame now showing, or null, because that is what
    * `SetViewer.tick` returned and a hundred test call sites read it.
@@ -498,8 +480,8 @@ export class ScreenDirector {
       if (e?.kind === "keydown") void this.session.track(this.keyDown(e.key, e.special).then(() => {}), `queued key ${e.key}`);
       else if (e) {
         // the click is where it was made, and the pointer stays where the hand
-        // is now: a replay that left it at the old point left it in the scroll
-        // margin, and the view turned on its own
+        // is now: a replay that left it at the old point would leave it in the
+        // scroll margin, and the view would turn on its own
         const { pointerX: px, pointerY: py } = this.session;
         void this.session.track(this.click(e.x, e.y).then(() => this.session.setPointer(px, py)), `queued click ${e.x},${e.y}`);
       }
@@ -717,10 +699,10 @@ export class ScreenDirector {
    * screen belongs to nobody. `playmovie` in TI.EXE returns having freed its
    * buffers and restored nothing (`0x448b00`'s exit path, `0x44969e`–
    * `0x4496c7`): the clip's last frame is simply still in the framebuffer, and
-   * the palette is still the clip's, until a script says otherwise. Ours handed
-   * the screen straight back to `world` on the frame the movie ended, and with
-   * the script resuming a rAF later that is one fully-lit frame of the room
-   * between a movie and whatever the script does next — #209, measured at
+   * the palette is still the clip's, until a script says otherwise. Handing the
+   * screen straight back to `world` on the frame the movie ends, with the script
+   * resuming a rAF later, would give one fully-lit frame of the room between a
+   * movie and whatever the script does next — #209, measured at
    * exactly one 16 ms frame of the un-bombed apartment between `bedex.mov` and
    * `ocredits.mov`. `fade.pendingReveal` already means precisely "a movie ended
    * and nothing has said what the screen should look like", so it is also the
@@ -860,8 +842,7 @@ export class ScreenDirector {
         f.height >= this.screen.height;
       // ...so only a clip that leaves screen showing pays for the screen under
       // it (short-circuit: the full-screen 302 never build one), and where
-      // there is no screen to show, black — which is what the clear used to do
-      // for every clip, wanted or not.
+      // there is no screen to show, black.
       if (covers || !this.paintWorldInto()) this.screen.clearFrame();
       const buf = this.screen.scratchFor(f.width * f.height * 4);
       indexedToRGBA(f.pixels, f.width, f.height, f.palette, buf);
@@ -1219,8 +1200,7 @@ export class ScreenDirector {
       // video at (247,241,222), and reproduced walking gstair3 Scene50/View53
       // into the next set, where 109 of 120 sampled frames were matte.
       //
-      // Two different windows uncover it, which is why fixing one did not fix
-      // the bug. `changeset` runs `closesetfile` FIRST — that sets
+      // Two different windows uncover it. `changeset` runs `closesetfile` FIRST — that sets
       // currentSetName to "none", so viewShowing goes false while the departing
       // room's frame is still in hand and the blit below is skipped — and then
       // the host's load runs before the arriving viewer exists. The rule here
@@ -1699,9 +1679,9 @@ export class ScreenDirector {
     //     case "button"  sendtobutton (currentflat (), thename, mousedown (…))
     //     case "flat"    sendtoflat (thename, mousedown (thepoint))
     //
-    // so it is also the order {@link hitTestAt} already answers in, and the two
-    // used to disagree: this dispatched the region first, so anything aiming by
-    // hit test was told a prop would take the click and then it didn't.
+    // so it is also the order {@link hitTestAt} answers in, and the two must
+    // agree: dispatching the region first would tell anything aiming by hit test
+    // that a prop takes the click, and then it wouldn't.
     //
     // Two TAOOT flats say it out loud. FUSE.SHP's `fuseokdark` script is one line
     // — `sendtobutton(currentflat(), me, mousedown(0))` — a prop hand-forwarding
@@ -2055,7 +2035,7 @@ export class ScreenDirector {
   /**
    * A LINE is being spoken right now — the only state ESC skips.
    *
-   * Exposed because ESC is no longer harmless anywhere else in a conversation:
+   * Exposed because ESC is not harmless anywhere else in a conversation:
    * at a plaque it answers with -1 and walks the player out (#131). So anything
    * driving the game has to aim its skip rather than hammer it, and this is the
    * aim. `speakSkip` is set for exactly the length of the race in `playLine`.

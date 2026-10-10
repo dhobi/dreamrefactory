@@ -650,10 +650,9 @@ addEventListener("keyup", (e) => {
 /**
  * A tap on the picture belongs to the film, and to nothing else.
  *
- * It used to be the walk as well: the left half of the canvas held LEFT, the
- * right half RIGHT, the top third UP — which was also the jump — and the bottom
- * third DOWN. Three things were wrong with it, and none of them is fixable
- * without leaving it behind:
+ * It is not the walk. Regions over the canvas — the left half LEFT, the right
+ * half RIGHT, the top third UP and the jump, the bottom third DOWN — have three
+ * faults, and none of them is fixable without leaving the regions behind:
  *
  *   - the regions are INVISIBLE. The only way to find out where the game thought
  *     your thumb was is to press and watch what the man does, and a press that
@@ -666,9 +665,9 @@ addEventListener("keyup", (e) => {
  *     region, so a touchscreen could walk the whole game and never hit anything —
  *     which is the one thing this game is.
  *
- * So the walk moved to the pad below, which is drawn where it can be seen, and
- * this keeps what a tap on the picture was always good at: skipping a film, and
- * answering the pause panel's three buttons.
+ * So the walk is the pad below, which is drawn where it can be seen, and a tap
+ * on the picture does what it is good at: skipping a film, and answering the
+ * pause panel's three buttons.
  */
 canvas.addEventListener("pointerdown", (e) => {
   wakeAudio();
@@ -1588,9 +1587,8 @@ function loop(now: number): void {
     if (near.mode) foe += ` mode ${near.mode}`;
     // ...and, for every class with a machine of its own, the state IS the kind
     // of the script it is playing — `obj+0x18` and `obj+0x44`, straight out of
-    // {@link file://./brains/kit.ts}. A probe that used to read `mode` reads
-    // this instead, and it is the disc's own numbering rather than a name
-    // this page invented
+    // {@link file://./brains/kit.ts}. A probe reads this rather than `mode`:
+    // it is the disc's own numbering rather than a name this page invented
     if (near.script !== undefined) foe += ` kind ${near.script} tag ${near.tag ?? 0}`;
     // ...and of the twenty-six that share one — {@link stepFight}
     if (near.fighting) foe += near.swing ? " SWINGING" : " closing";

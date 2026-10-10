@@ -224,9 +224,9 @@ const main = async (): Promise<void> => {
   /**
    * What each one has to be true of, and it is the GAME rather than the page.
    *
-   * "A stage opened" passes on a table that deals nothing — the first run of this
-   * file reported blackjack booting while its globals were `{}`, because
-   * `initgame` had been fired at the stage main instead of the flat that owns it.
+   * "A stage opened" passes on a table that deals nothing — blackjack "boots"
+   * with its globals `{}` if `initgame` is fired at the stage main instead of
+   * the flat that owns it.
    * So each row names something only its own scripts could have written: the
    * fencing bout's opening stance, and a hand of cards.
    */

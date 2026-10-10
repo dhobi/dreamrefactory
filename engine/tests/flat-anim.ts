@@ -267,7 +267,7 @@ test("a delta cel keeps the pixels it does not mention", async () => {
   const img = session.stageCtrl.flatImage()!;
   // the row the cel DOES mention
   expect([...img.pixels.subarray(3 * W, 4 * W)].every((p) => p === 2)).toBe(true);
-  // ...and every row it does not, which is the assertion that carries the fix
+  // ...and every row it does not, which keeps the flat underneath
   expect([...img.pixels.subarray(0, 3 * W)].every((p) => p === 1), "kept, not blacked").toBe(true);
   expect([...img.pixels.subarray(4 * W)].every((p) => p === 1)).toBe(true);
 });
@@ -298,8 +298,8 @@ test("a keyframe decodes the same whatever preceded it", async () => {
  * `gotoflat` sends a flat's lifecycle events along the CHAIN, so a boot library's
  * DEFAULT `openflat`/`closeflat` gets them.
  *
- * These used to go straight at the flat's own script, so a flat with no handler
- * was the end of it — right for two games and wrong for the third. Timelapse's
+ * Going straight at the flat's own script would make a flat with no handler the
+ * end of it — right for two games and wrong for the third. Timelapse's
  * BOOTFILE holds the defaults, and they are what keep the game's own idea of
  * where it is up to date: `openflat` sets `baseflat = currentflat()` and calls
  * `PatchEnterFrame`, `closeflat` clears it and calls `PatchLeaveFrame`, and those

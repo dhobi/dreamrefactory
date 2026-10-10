@@ -512,7 +512,7 @@ const PATH_BY_VERSION: Record<DfVersion, { count: number; first: number }> = {
  * The first point is the `a` star and the last is `b`, so a two-point path is a
  * straight line and everything between is the authored detour. HALLA's
  * `sasha.1` → `sasha.2` is five points: out of the cabin door, two turns along
- * the hall, then down it — which is why walking the straight line instead cut
+ * the hall, then down it — which is why walking the straight line instead cuts
  * the corner of the wall (#122).
  */
 export function readStarPath(
@@ -635,9 +635,9 @@ export const C0 = {
    * Three i32 container refs, and the corpus cannot tell them from constants:
    * across all 474 `.set` files in the seven editions and the demo, 0x58 reads 3,
    * 0x5c reads 1 and 0x60 reads 2, without exception. That is exactly the shape of
-   * the v1 bug — `set-v1.ts`'s old `mainScript` was a word that read 1 in all 35
-   * Dust sets and turned out not to be a pointer at all, which cost `undertak.set`
-   * its whole script (#291).
+   * the v1 trap — in `set-v1.ts` a word that reads 1 in all 35 Dust sets is not a
+   * pointer at all, and taking it for the main script costs `undertak.set` its
+   * whole script (#291).
    *
    * **The disassembly settles all three, and they are pointers.** `opensetfile`'s
    * header parser is `0x4076f0`, with `edi` on container 0, and each of the three
@@ -651,19 +651,18 @@ export const C0 = {
    *     0x407904: mov ecx, [edi + 0x58]   ; -> actor register    (esi+0x6c)
    *     0x407913: call 0x4385f0
    *
-   * The layout argument that used to stand in for this was the right one — they sit
+   * The layout argument agrees — they sit
    * in a run with four refs that demonstrably ARE pointers (mapLight 0x18, mapDark
    * 0x1c, 0x50, transitionRegister 0x54 — 62 distinct values each, and provably
    * positional: in every set they are the file's last four containers except
-   * `FORE.SET`, which has 739 and points at 733-736) — and now it is a reading
+   * `FORE.SET`, which has 739 and points at 733-736) — but this is a reading
    * rather than an inference (#325). `set-build.ts` writes all four back at these
    * offsets, and {@link C0.sceneCount} at 0x64 is confirmed twice over: TI.EXE
    * stores it beside the register it counts, it equals the scene count in all 474
    * v4 sets, and a save's container 1 dumps the same pair at +652/+656.
    *
    * (TI.EXE is `<lang>/titanic1/install/bin/ti.exe` — the 461 KB engine, not the
-   * 83 KB CD launcher beside the data. This note used to say the rip had only the
-   * launcher.)
+   * 83 KB CD launcher beside the data.)
    */
   actorRegister: 0x58,
   mainScript: 0x5c,

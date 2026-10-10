@@ -13,9 +13,8 @@ import { defaultExclude, defineConfig } from "vitest/config";
  * The suites that open the rip, and so cannot run on a machine without one.
  *
  * This list lives here, next to the files it names, because it is a fact about
- * Titanic's tests and nothing else. It used to sit in `.github/workflows/tests.yml`
- * as an `--exclude` on a root vitest run, where a suite renamed in this directory
- * would not have moved it.
+ * Titanic's tests and nothing else: as an `--exclude` in a workflow file, a suite
+ * renamed in this directory would not move it.
  *
  * `NO_GAMEFILES=1` is the repository-wide way to ask for "only what runs
  * anywhere" (`npm run test:portable`); any other package that grows a

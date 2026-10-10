@@ -74,8 +74,8 @@ test("no tag pattern releases something that is not a game or the site", () => {
 test("each lane has the build script it runs", () => {
   // The workflow's build step is `npm run build -w ${target}`, so the script has
   // to be in THAT package rather than at the root — a lane without it fails after
-  // the checkout rather than before the tag. The root has no per-game build script
-  // any more: each package carries its own, and `npm run build` fans out.
+  // the checkout rather than before the tag. The root has no per-game build script:
+  // each package carries its own, and `npm run build` fans out.
   for (const target of ["site", ...DEPLOYED.map((g) => g.dir)]) {
     const pkg = JSON.parse(readFileSync(`${ROOT}/${target}/package.json`, "utf8")) as {
       scripts?: Record<string, string>;

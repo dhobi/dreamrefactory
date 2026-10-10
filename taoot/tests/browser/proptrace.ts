@@ -11,26 +11,18 @@
  * same hook and neither decides what a line looks like, so a diff of their output
  * is a diff of the two hosts rather than of two probes.
  *
- * ## What this replaces, and why it had to be replaced
+ * ## Why a hook on the write, not a sampler
  *
- * An earlier throwaway probe (never committed) read
- * `propRuntime.get("light").owner` once per animation
- * frame and recorded the transitions it saw. Over two runs of segments 1-5 it saw
- * `none -> on` and nothing else, and the conclusion drawn from that — printed in
- * its own header — was that the browser never writes `"off"` at all, so a
- * `props.light` divergence had to be something else wearing that field.
+ * A per-frame sampler of `propRuntime.get("light").owner` can only report values
+ * that survive to a frame boundary and can only report a RUN it was present for,
+ * so it cannot distinguish "never happens" from "did not happen this time": over
+ * two runs of segments 1-5 it sees `none -> on` and nothing else, while a full
+ * 27-segment run shows the browser does write `"off"`, and once it does the
+ * value sticks for the rest of the run. A hook on the write itself cannot miss
+ * one, and says which script did it.
  *
- * That was wrong, and a full 27-segment run showed it: the browser does write
- * `"off"`, and once it does the value sticks for the rest of the run. Those two
- * probe runs simply were not runs where it happened. A per-frame sampler can only
- * report values that survive to a frame boundary and can only report a RUN it was
- * present for, so it cannot distinguish "never happens" from "did not happen this
- * time" — and it read as the former. A hook on the write itself cannot miss one,
- * and says which script did it.
- *
- * Not on the dispatch path, either, which the earlier attempt also got wrong: a
- * `sendEvent` wrapper doing sessionStorage + JSON.stringify hung segment 1
- * outright. `propowner` with a value is script bookkeeping — `hideinterface`
+ * Not on the dispatch path, either: a `sendEvent` wrapper doing sessionStorage
+ * + JSON.stringify hangs segment 1 outright. `propowner` with a value is script bookkeeping — `hideinterface`
  * writes this one — so the hook costs a push per write and nothing per frame.
  */
 import type { Page } from "playwright";

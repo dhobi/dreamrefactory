@@ -120,8 +120,8 @@ let activeCode: string = DEFAULT_UI_LANGUAGE;
  *
  * ## Plurals
  *
- * The editors count things, and until now they said so in English grammar:
- * `${n} flat${n === 1 ? "" : "s"}`, forty-five times over. That rule is a fact
+ * The editors count things, and English grammar —
+ * `${n} flat${n === 1 ? "" : "s"}` — is a fact
  * about English and it is wrong nearly everywhere else — Russian needs four
  * forms and picks between them on the last two digits, Japanese has one and
  * inflects nothing. So a counted string is not a string here, it is an object of

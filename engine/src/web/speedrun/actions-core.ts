@@ -105,8 +105,8 @@ export const CORE_ACTIONS: ActionTable = {
    * ArrowDown goes to the script chain like any other key and hardly anything
    * reads it — `SMSTACK2`/`SMSTACK3` views 43, 50, 54 and 56 are the exceptions,
    * the false smokestack's ladder platforms whose scene `keydown` is the only way
-   * down a level (engine/src/web/keys.ts, and #100 for the soft-lock that got it
-   * bound at all). So this is confirmed like the other three and will say so
+   * down a level (engine/src/web/keys.ts, and #100 for the soft-lock without
+   * it). So this is confirmed like the other three and will say so
    * anywhere it does nothing, which is most places and is the right answer there.
    */
   down: {
@@ -346,10 +346,10 @@ export const CORE_ACTIONS: ActionTable = {
         r = await c.d.holdAt(x, y, { arm: polling, until: idle }, c.budget);
       }
       // A hold that gave up is a FAILURE, and saying so is most of what this verb
-      // is for. It used to read as a success, so a condition that could never
-      // arrive spent the whole budget looking like a working gesture and then
-      // broke the next line instead — which is exactly how `!owns.rubaiyat` hides
-      // a drop that landed back in the bag.
+      // is for. Read as a success, a condition that could never arrive would
+      // spend the whole budget looking like a working gesture and then break the
+      // next line instead — which is exactly how `!owns.rubaiyat` would hide a
+      // drop that landed back in the bag.
       if (!r.armed) {
         throw new Error(
           `nothing was waiting for a press at ${x},${y} — no script polled ` +

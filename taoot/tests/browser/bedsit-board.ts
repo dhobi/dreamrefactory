@@ -118,11 +118,10 @@ async function main(): Promise<void> {
   /**
    * The pitch that puts the gaze on a given row — FOUND, not written down.
    *
-   * It used to be a number in a comment, worked out from the board's own
-   * measurements, and it was wrong twice in one afternoon: once when a row was
-   * added and once when a second one was, because a row's angle depends on how
-   * many rows there are. A suite that searches for the row cannot go stale that
-   * way, and it fails loudly if the row cannot be found at all.
+   * A number worked out from the board's own measurements goes stale whenever a
+   * row is added, because a row's angle depends on how many rows there are. A
+   * suite that searches for the row cannot go stale that way, and it fails
+   * loudly if the row cannot be found at all.
    *
    * The sweep runs top to bottom because the rows do, and the board is about
    * ±0.35 rad tall from an arm's length away.

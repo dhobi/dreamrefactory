@@ -238,7 +238,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
     /**
      * A pause the game runs through: under a sheet's clock, `ms / 50` passes of it
      * (at least one) rather than `ms` of the wall, so a gap between presses is
-     * the same length on any machine (#508); otherwise wall time, as before.
+     * the same length on any machine (#508); otherwise wall time.
      */
     const sleep = async (ms: number): Promise<void> => {
       const passes = Math.max(1, Math.round(ms / 50));
@@ -281,7 +281,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
       const deadline = budgetClock() + budget;
       // Under a sheet's clock the session asks the condition itself and stops the
       // game on the pass it comes true (GameSession.sheetHolds, #508); this loop
-      // only watches for that. Without one it asks, as it always did.
+      // only watches for that. Without one it asks itself.
       const id = ++holdIds;
       const held = run<boolean>(`(() => {
         const s = window.dbg && window.dbg.session;
@@ -594,7 +594,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
         // turn of exactly the `while stilldown()` loop holding the drag — the
         // `stilldown()` opening the turn and the `forceupdate()` closing it. So
         // this waits one turn, which is the rate the dial itself steps at; see
-        // HELD_YIELDS for why one turn rather than the two this used to take.
+        // HELD_YIELDS for why one turn rather than two.
         const held = async (): Promise<void> => {
           const was = run<number>("window.dbg.session.realYieldSeq");
           await until(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));

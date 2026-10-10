@@ -299,10 +299,10 @@ test("makehands deals four whole hands out of one deck", async () => {
  * In DUST.EXE a `drawstring` paints into the composited screen and the pixels
  * stand until something composites over them, so that flash IS the erase. Ours
  * keeps the drawn strings and re-applies them over the props every frame, which
- * made the patch a no-op — and because the field is right-aligned by shifting x
- * by 4 px per missing digit, the new value never landed on the old one's key and
- * never replaced it. Reported as CASH and WAGER holding every value they had
- * ever shown at once: "$100" under "$10" under "$0".
+ * makes the patch a no-op — and because the field is right-aligned by shifting x
+ * by 4 px per missing digit, a new value does not land on the previous one's key
+ * and so does not replace it: CASH and WAGER would hold every value they have
+ * ever shown at once, "$100" under "$10" under "$0".
  *
  * The assertion is per FIELD, not per layer: `drawcash` rewrites both, 40 px
  * apart, and a fix that wiped the text layer wholesale would pass a one-field

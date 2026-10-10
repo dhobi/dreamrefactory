@@ -129,9 +129,9 @@ test("leave.mov is the whole sinking montage", () => {
 
 /**
  * Flags bit 2 — "these regions are live, but do not stop for them" (retail
- * 0x44979f). The bug it caused, #172: the port waited on any frame carrying
- * regions, so the gym's horses showed one frame of their gallop and then
- * advanced a frame per click. There is no "loops forever" field in the format —
+ * 0x44979f). Ignored (#172), playback waits on any frame carrying regions, so
+ * the gym's horses show one frame of their gallop and then advance a frame per
+ * click. There is no "loops forever" field in the format —
  * the cycle is a plain backward goto that playback only reaches by falling
  * through the region count the bit zeroes.
  */

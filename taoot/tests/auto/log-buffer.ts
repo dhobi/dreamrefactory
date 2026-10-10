@@ -1,9 +1,9 @@
 /**
  * The pane's rolling log (taoot/src/log-buffer.ts).
  *
- * The pane used to be its own storage — main.ts appended to a `<pre>` and the bug
- * reporter split the text back apart — so there was nothing to test and nothing
- * capping it. What matters now is that it stays bounded, that the lines a report
+ * The pane is not its own storage (a `<pre>` appended to and split back apart
+ * would leave nothing to test and nothing capping it). What matters is that it
+ * stays bounded, that the lines a report
  * carries are the NEWEST ones, and that a full repaint is rare rather than
  * per-line.
  */

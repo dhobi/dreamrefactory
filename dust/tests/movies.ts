@@ -60,13 +60,10 @@ import {
 import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 
 /*
- * Anchored to THIS FILE, not to the working directory, and not to the old layout.
+ * Anchored to THIS FILE, not to the working directory.
  *
- * It was `<cwd>/gamefiles/dust/dustcd/MOVIES`, which is where the rip lived before
- * the monorepo split moved it to `dust/gamefiles/`. Nothing failed: `movies()`
- * returned an empty list, `skip()` decided there was no rip, and all nine tests
- * passed by not running. They reported green through the entire restructuring and
- * through a release in which every Dust film was frozen on its first frame.
+ * A wrong path fails silently: `movies()` returns an empty list, `skip()`
+ * decides there is no rip, and all nine tests pass by not running.
  *
  * `import.meta.url` because a vitest run's cwd is the repo root and a package
  * script's is the package — the rip's location is a fact about the tree, so ask
@@ -130,8 +127,8 @@ test.skipIf(noRip)("every sound a frame or a click references is an audio contai
   }
   // the disc's own numbers, so a regression in the ref reader cannot pass as
   // "no refs found, nothing to check" — 213 frame refs (191 into the up-front
-  // bank, 22 negatives at interleaved chunks) and 224 click refs (the old
-  // 16-byte-only region reading saw 79 of these; the typed walk reads the
+  // bank, 22 negatives at interleaved chunks) and 224 click refs (a
+  // 16-byte-only region reading sees 79 of these; the typed walk reads the
   // PAPERs' and the other odd tables too)
   expect(frameRefs).toBe(213);
   expect(clickRefs).toBe(224);
@@ -195,7 +192,7 @@ test.skipIf(noRip)("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no ret
   // The put-back half is reached only by the click-away boxes, and they live on
   // frame 16 — the one moment the swing stops for a click, which is the
   // "steerable mid-swing" the format doc describes (goto 0-based 20 = frame 21).
-  // On the old reading nothing stopped there and those three boxes were dead.
+  // A reading that does not stop there leaves those three boxes dead.
   const away = sg.frames[15].regions.filter((r) => r.target === 20);
   expect(away).toHaveLength(3);
 
@@ -294,15 +291,14 @@ test.skipIf(noRip)("a frame waits because it OWNS hotspots, not because it is fr
    * the remainder of the movie's frames and closes"; same for the hotel room's
    * blinds. In both cases the picture you clicked to reach never stopped.
    *
-   * The cause was one field. `waitsForClick` read record +0x06, which the movie
-   * loop never touches — its bits amount to "this is the first frame" and "this
-   * is the last frame" — so frame 0 was the only frame that ever waited, and
-   * every frame reached BY a click played straight on. The count is at +0x00
-   * and the play-through override is +0x1a bit 2.
+   * The cause is one field. Record +0x06 is never touched by the movie loop —
+   * its bits amount to "this is the first frame" and "this is the last frame" —
+   * so reading it, frame 0 is the only frame that ever waits, and every frame
+   * reached BY a click plays straight on. The count is at +0x00 and the
+   * play-through override is +0x1a bit 2.
    *
-   * Both films have the same shape, and it is the shape the old reading could
-   * not express: frame 0 owns nothing and steps on, and every frame that owns
-   * boxes waits.
+   * Both films have the same shape, and it is the shape +0x06 cannot express:
+   * frame 0 owns nothing and steps on, and every frame that owns boxes waits.
    */
   const lett = read("MAYLETT.MOV").segments[0];
   expect(lett.frames.map((f) => f.hotspotCount)).toEqual([0, 3, 2, 2, 2, 2, 0, 0, 0]);
@@ -329,11 +325,11 @@ test.skipIf(noRip)("a frame waits because it OWNS hotspots, not because it is fr
   ).toEqual([2, 3]);
 
   /*
-   * The count also bounds the run. `hotspotRun` used to walk from +0x24 until a
-   * record failed to decode, which sails into the NEXT frame's boxes whenever
-   * two frames' runs are adjacent — and they always are, because each run is
-   * exactly its own count of records long. That is how frame 0, owning none,
-   * came to answer clicks with frame 1's boxes at all.
+   * The count also bounds the run. Walking from +0x24 until a record fails to
+   * decode sails into the NEXT frame's boxes whenever two frames' runs are
+   * adjacent — and they always are, because each run is exactly its own count
+   * of records long — so frame 0, owning none, would answer clicks with frame
+   * 1's boxes.
    */
   expect(lett.frames[0].regions).toEqual([]);
   expect(win.frames[0].regions).toEqual([]);
@@ -392,11 +388,10 @@ test.skipIf(noRip)("index 255 is transparent: a wait frame HOLDS the picture bef
   expect(shown[16]).toEqual(shown[15]);
   expect(shown[19]).toEqual(shown[18]);
   expect(shown[16].every((p) => p === 255)).toBe(false);
-  // ...and the first frame keeps its raw indices, which the adapter no longer
-  // second-guesses. It used to paint entry 255 as entry 0 here, on the reading
-  // that a keyframe's 0xff has nothing under it and so should come out as the
-  // background. It comes out as a COLOUR — see the keyframe test below, where
-  // that alias turned INTRO3's sun into a black hole in a purple sky. The
+  // ...and the first frame keeps its raw indices, which the adapter does not
+  // second-guess. A keyframe's 0xff is not the background: it comes out as a
+  // COLOUR — see the keyframe test below, where aliasing it to entry 0 turns
+  // INTRO3's sun into a black hole in a purple sky. The
   // palette goes through untouched and paletteToRGBA's reserve decides 255.
   const mov = movFileFromV1(v1);
   expect(Array.from(mov.paletteRaw.subarray(255 * 8, 255 * 8 + 8))).toEqual(
@@ -545,17 +540,17 @@ test("stepsForward refuses to touch a DreamFactory 4 film", () => {
 /**
  * On a segment's FIRST frame, 0xff is white — it is a colour, not transparency.
  *
- * `movFileFromV1` used to alias palette entry 255 onto entry 0 on the grounds that
- * DF.EXE folds 0xff into 0 and that 0xff is transparent anyway. Transparency is
- * real and handled at decode by `compositeFrameV1`, which is what lets a DELTA
- * frame hold the picture before it. A KEYFRAME has nothing to hold, so there the
- * index is just a colour, and the alias painted it black.
+ * `movFileFromV1` does not alias palette entry 255 onto entry 0, although DF.EXE
+ * folds 0xff into 0 and 0xff is transparent. Transparency is real and handled at
+ * decode by `compositeFrameV1`, which is what lets a DELTA frame hold the
+ * picture before it. A KEYFRAME has nothing to hold, so there the index is just
+ * a colour, and an alias paints it black.
  *
  * Six segments on the disc carry enough index-255 on their first frame to see it:
  * INTRO3's sun, DOCTCHES's and DOCTBONE's anatomy charts, and PAPER1-3. Asserted
  * on the two extremes rather than all six, and on the pixels rather than on the
  * palette alone, because the palette is pinned twice on the way to the screen
- * (`paletteToRGBA`'s reserve, and once upon a time this alias after it) and only
+ * (`paletteToRGBA`'s reserve, and any alias after it) and only
  * the pixels say which pinning won.
  */
 /**

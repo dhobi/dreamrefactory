@@ -339,7 +339,7 @@ export class PuppetView {
     // pose from the last record
     const state = this.session.puppetCtrl.puppetFrame();
     // the display gamma is in the key because `rgba` below is post-gamma: without
-    // it, moving the brightness mid-conversation left the character at the old one
+    // it, moving the brightness mid-conversation would leave the character at the old one
     // until their next lip-sync frame changed the key by itself
     const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
       state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
@@ -353,19 +353,19 @@ export class PuppetView {
      * how the director tells its own repaints apart as well —
      * `sig.ref(this.room?.roomFrame())`.
      *
-     * Left out, the cache held a picture of one room and reused it in another.
+     * Left out, the cache would hold a picture of one room and reuse it in another.
      * Measured on `mwife.pup`: the backdrop is 96,875 of the conversation
      * screen's 135,168 pixels — Dust's stances are matte plates, so nearly
      * three quarters of a Dust conversation IS the room — and compositing the
-     * same character over a different room changed none of them.
+     * same character over a different room changes none of them.
      *
-     * What that looks like is what was reported alongside #289: "at the very
+     * What that looks like (#289): "at the very
      * beginning of the talk to the puppet, the background from the previous talk
      * is still visible for a very brief moment". Every conversation opens on the
      * character's neutral pose (PuppetCtrl.openPuppetFile's `defaultPose`), so
-     * talking to the same person twice built the identical key — and the screen
-     * came up over the room the LAST conversation happened in, until the first
-     * lip-sync record moved the key along.
+     * talking to the same person twice builds the identical key — and the screen
+     * would come up over the room the LAST conversation happened in, until the
+     * first lip-sync record moves the key along.
      */
     const backdropPixels = backdrop?.pixels ?? null;
     const backdropPalette = backdrop?.palette ?? null;

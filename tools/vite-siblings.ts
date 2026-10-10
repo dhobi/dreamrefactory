@@ -20,8 +20,8 @@
  * ## So: an honest 404 with directions
  *
  * `appType: "mpa"` already stops Vite answering an unknown path with this
- * package's `index.html`, which is what used to make a broken cross-site link
- * look like a working one — 200, with the wrong page in it. This turns the
+ * package's `index.html`, which would make a broken cross-site link look like
+ * a working one — 200, with the wrong page in it. This turns the
  * resulting 404 into a sentence naming the command to run and the URL to open.
  */
 import type { Plugin } from "vite";

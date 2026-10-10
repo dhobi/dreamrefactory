@@ -145,7 +145,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     //    asks too). This is what keeps the map/life/navarrow "dark"/"light"
     //    mission(0)/tour(1) pair on its normal frame even on the load path, where
     //    initinterface's owned-item shortcut sets the view WITHOUT a propdeg — the
-    //    map used to auto-animate to frame 1, the tour icon.
+    //    map would otherwise auto-animate to frame 1, the tour icon.
     //  - the state IS a variant animation (its degrees repeat) and propdeg chose
     //    the variant in THIS same event: TAOOT's `signs` idiom `propdeg(dir);
     //    propview(dest)`, up to 10 directional variants, wants the still frame.
@@ -158,7 +158,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // nothing to hold. Nothing that wants the still frame is caught by it —
     // `signs` stores one frame per direction and a 2-frame icon two, while a
     // variant split needs two or more GROUPS of two or more frames — and
-    // without it the second card of a blackjack hand froze on its first
+    // without it the second card of a blackjack hand freezes on its first
     // picture, the deal before it having set degVariants inside the same event
     // (#223).
     const variant = st ? degVariantFrames(st, Number(p.deg) || 0) : null;
@@ -247,12 +247,12 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
    * `propset(name, set)` says which SET a prop belongs to — and belonging to a
    * set is what makes it scenery.
    *
-   * The port stored the name and nothing else, and the set filter that reads it
-   * lives in {@link PropRuntime.worldDrawList} — which a screen-space prop never
-   * reaches. So a prop that had been assigned to a room but not yet positioned
-   * stayed in the SCREEN draw list, pinned at the default anchor (256, 192) and
-   * drawn over every room in the game. #290 is that, reported from the Mayor's
-   * spare room on the morning of day 2: a pile of dung, a tumbleweed and a vase
+   * Storing the name and nothing else is not enough: the set filter that reads
+   * it lives in {@link PropRuntime.worldDrawList} — which a screen-space prop
+   * never reaches. So a prop assigned to a room but not yet positioned would stay
+   * in the SCREEN draw list, pinned at the default anchor (256, 192) and drawn
+   * over every room in the game. #290 is that, in the Mayor's spare room on the
+   * morning of day 2: a pile of dung, a tumbleweed and a vase
    * of flowers stacked in mid-air at the centre of the view, unchanged by turning
    * or walking, and clickable.
    *
@@ -358,8 +358,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // and `deal` stores the hand-to-table swing twice — a clean deck (degrees
     // 0) and a dusty one (degrees 1), interleaved, with a play script written
     // in terms of the VARIANT (indices 0..4 against five frames each). Pinned
-    // by the propdeg, Riveria held the first picture for all nineteen passes
-    // and the card simply appeared on the table (#223).
+    // by the propdeg, Riveria would hold the first picture for all nineteen
+    // passes and the card simply appear on the table (#223).
     const variant = st && p.animating ? degVariantFrames(st, Number(v) || 0) : null;
     if (variant) {
       // swap the variant under the animation, mid-flight: every variant of a
@@ -514,10 +514,10 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
      * case: its star names are qualified by set — the identifiers in the SET
      * itself are `town.flower`, `town.jug`, `town.bone` — and the scripts that
      * place these props run wherever the player happens to be. `INVEN.PRP`'s
-     * `initprops` is the one #290 caught: on the morning of day 2 it does
+     * `initprops` is the case #290 shows: on the morning of day 2 it does
      * `sendtoprop ("flowers", setupprop ("grave"))`, whose body is `propset (me,
      * "town")` and `propstar (me, "town.flower")`, and the player is asleep in
-     * `mayroom` — so the star misses and the vase had no position at all.
+     * `mayroom` — so the star misses and the vase has no position at all.
      *
      * The answer is the one {@link ActorRuntime.settleStars} already gives for
      * the cast, for the same reason and with the same restraint: remember that

@@ -20,11 +20,10 @@ import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
 import { CHUNK_ID_FIELD, LOOP_ORDER_MAX } from "./banks";
 
 /**
- * Container 0. Both table pointers are written, which they always should have
- * been: the reader used to take the loop table's location as a constant 1 and now
- * reads the field at +28 the way every shipped bank fills it in (see
- * `readBankTables`). A file that named only its one-shot table read back with no
- * music at all.
+ * Container 0. Both table pointers are written: the reader takes the loop
+ * table's location from the field at +28 the way every shipped bank fills it in
+ * (see `readBankTables`), so a file that named only its one-shot table would
+ * read back with no music at all.
  */
 const C0 = { size: 64, loopTable: 28, oneShotTable: 32, name: 36, nameField: 31 } as const;
 

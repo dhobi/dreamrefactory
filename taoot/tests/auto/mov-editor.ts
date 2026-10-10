@@ -357,7 +357,7 @@ test("chain: an edit lands in the segment it was aimed at, not in container 0", 
   const before = readContainerFile(bytes);
   const two = mov.segments[1];
 
-  // every one of these used to write container 0 — the FIRST segment's header
+  // none of these may write container 0 — the FIRST segment's header
   expect(patchFrameName(two, 0, "arrived")).toBe("arrived");
   expect(patchActionFrames(two, "arrived", "")).toEqual({
     actionFrame1: "arrived",

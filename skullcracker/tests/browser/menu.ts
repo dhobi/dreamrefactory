@@ -255,13 +255,12 @@ console.log(`ok    and the button at the bottom right is the one way out of it`)
 
 // 5 — the click that starts the game.
 //
-// "different from before" is NOT the assertion, and the first version of this
-// file made it: the click really did reach the region, the menu really did end
-// on "frame 2" as it should, and nothing picked that up — so the page went
-// blank, `#loc` went empty, "after !== before" held, and the test reported PASS
-// on a broken page.
+// "different from before" is NOT the assertion: the click can reach the region
+// and the menu end on "frame 2" as it should with nothing picking that up — the
+// page goes blank, `#loc` goes empty, "after !== before" holds, and that test
+// reports PASS on a broken page.
 //
-// What Begin MEANS is the correction. It does not begin: `menu.mov`'s "frame 2"
+// What Begin MEANS is the assertion. It does not begin: `menu.mov`'s "frame 2"
 // is frame index 168, and `0x45df7c` — the 168th slot of the jump table at
 // `0x45e1ac` — sets `[0x46b208] = -1`, which `0x40312c` plays as `char.mov`. The
 // game asks which of its two players you are before it starts.
@@ -330,13 +329,11 @@ await at(ACCEPT);
 /**
  * ...and the game starts HERE, on this page.
  *
- * This used to wait for the string `walk.html` to appear in the front end's own
- * status line, because accepting the chooser navigated there. It does not any
- * more: `begin` puts the chooser's two answers in the query string with
- * `replaceState`, stops this page's frame loop, hands the canvas over and
- * imports the level runner. So what proves the chooser started the game is the
- * level's own HUD, and the front end's status line goes quiet because the front
- * end is no longer drawing anything.
+ * Accepting the chooser does not navigate: `begin` puts the chooser's two
+ * answers in the query string with `replaceState`, stops this page's frame
+ * loop, hands the canvas over and imports the level runner. So what proves the
+ * chooser started the game is the level's own HUD, and the front end's status
+ * line goes quiet because the front end is not drawing anything.
  */
 {
   const level = page.locator("#hud");

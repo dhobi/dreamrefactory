@@ -3,21 +3,20 @@
  *
  *   npx vitest run engine/tests/container-refs.ts
  *
- * This is #325 made permanent. The bug class it guards is one shape: **a
- * container index that is guessed, searched for, or hardcoded by convention,
- * where the file names it.** The repo has been bitten by it three times —
- * `banks.ts` assumed the loop table was container 1 (true of 615 of 630 v4 banks,
- * false for exactly Skull Cracker's fifteen music banks), `sbk.ts` found the
- * palette by its 2056-byte size until `STREETS.SBK` turned out to have two, and
- * `set-v1.ts` read the main script from a header word that is a CONSTANT, which
- * cost `undertak.set` its entire script (#291).
+ * The bug class it guards (#325) is one shape: **a container index that is
+ * guessed, searched for, or hardcoded by convention, where the file names it.**
+ * Three readers sit on it — the loop table is container 1 in 615 of 630 v4 banks
+ * but not in exactly Skull Cracker's fifteen music banks (`banks.ts`), a
+ * 2056-byte size does not find the palette in `STREETS.SBK`, which has two
+ * (`sbk.ts`), and the header word `set-v1.ts` must not take the main script from
+ * is a CONSTANT, which costs `undertak.set` its entire script (#291).
  *
  * What makes the class dangerous is that a wrong reading is invisible in a
  * corpus where the convention holds. Every field here reads the same value in
  * every shipped file: the SHP and CST main scripts are container 1 in all 207
  * and all 13, the STG main script is container 1 in all 388. So this suite
  * cannot prove the offsets — the disassembly did that, and each reader carries
- * the instructions it was read from. What it CAN do, and what #291 needed, is
+ * the instructions it was read from. What it CAN do is
  * fail the moment a file turns up whose header points somewhere else and the
  * target is not a script. That is the file that would otherwise be read
  * silently wrong.
@@ -29,11 +28,10 @@
  *     main carries, which is the format's way of saying "none" and decompiles to
  *     nothing).
  *
- * Both would have been false on `undertak.set` before #291, on the old offset.
+ * Both are false on `undertak.set` read through the constant header word.
  *
  * It reads whatever rips are present and skips LOUDLY when none is, the way
- * `sbk.ts` and `byte-order.ts` do — a silent skip let five of `byte-order.ts`'s
- * tests pass by not running for a day.
+ * `sbk.ts` and `byte-order.ts` do — a silent skip lets tests pass by not running.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";

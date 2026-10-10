@@ -165,9 +165,8 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
  * The sound: the banks the save had open, and the loop that was sounding out of
  * one of them.
  *
- * The v1 loader restored neither, and both halves were audible. Reported as
- * "loading a game does not restore the playing theme": load `D1E_002` in DUST.EXE
- * and the saloon theme is there at once, load it here and the saloon was silent.
+ * Both halves are audible: load `D1E_002` in DUST.EXE and the saloon theme is
+ * there at once, so a load that restored neither would leave the saloon silent.
  *
  * ## The banks come first, and not only for the theme
  *
@@ -277,10 +276,10 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
    * releases exactly those — `scheduler.reset()`, `puppetCtrl.closePuppetFile()`,
    * `endWipe()`, `onAbandonMovie`. Released and not stopped, a script runs its
    * next statement in a game that no longer exists, reading the globals the load
-   * has just replaced. On the Titanic side that was the reported symptom: the
-   * ending's straight-line script resumed at the next film after a checkpoint
-   * load and reached its `if mission = "good"` branch holding the checkpoint's
-   * mission, so the good ending finished on the bad ending's restart screen.
+   * has just replaced. On the Titanic side that shows as the ending's
+   * straight-line script resuming at the next film after a checkpoint load and
+   * reaching its `if mission = "good"` branch holding the checkpoint's mission,
+   * so the good ending finishes on the bad ending's restart screen.
    *
    * Before the teardown, not after, so nothing is ever woken into the gap. The
    * epoch machinery is `Interpreter.abandonRunning()` — every `Frame` carries the
@@ -333,8 +332,7 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
    * counters span 4885 to 261166, so a stamp that survives a load while the
    * counter rewinds under it goes negative and stays there. Dust's own
    * `attentionspan` is carried by all 56 and is safe by luck — the same luck
-   * Titanic's `jonesframe` did not have, 8 of 109, which is how #340 was
-   * reported.
+   * Titanic's `jonesframe` does not have, 8 of 109 (#340).
    *
    * Deleted rather than zeroed: a `global` declaration recreates a missing name
    * at 0, which is what the original hands a script reading a variable its
@@ -342,11 +340,11 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
    * not the file's to speak for — `snapshotSaveV1` skips the same prefix writing.
    *
    * This is safe only because the writer is honest about capacity. Dust's bases
-   * are small and it used to drop what would not fit, which meant a file could
-   * be silent about a global that DID exist — 164 of them over the playthrough,
-   * `handitem` among them. Deleting on top of that would have turned every one
-   * into lost state. #357 closed it, and `dust/tests/saves.ts`'s round trip is
-   * what keeps it closed.
+   * are small, and a writer that dropped what would not fit would leave a file
+   * silent about a global that DID exist — 164 of them over the playthrough,
+   * `handitem` among them — and deleting on top of that would turn every one
+   * into lost state. `dust/tests/saves.ts`'s round trip holds the writer to it
+   * (#357).
    */
   for (const name of session.interp.globals.keys()) {
     if (name.startsWith("__")) continue;
@@ -435,13 +433,13 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
      * A character caught walking is caught in TWO tables, and restoring only one
      * of them is worse than restoring neither: the cast record gives them the
      * `walk` pose, and an actor steps through its walk animation whether or not a
-     * walk is actually running — so Jones came back marching on the spot in the
-     * middle of the street. (Reported after loading AFTERDOG, which has him 82%
-     * of the way to `town.jones2`.)
+     * walk is actually running — so Jones would come back marching on the spot
+     * in the middle of the street. (AFTERDOG has him 82% of the way to
+     * `town.jones2`.)
      *
      * So each walk is resumed from where the save caught it, with only what was
      * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
-     * the other half of the same bug. The play page learned this one first (#181).
+     * the other half of the same rule, and the one the play page follows (#181).
      */
     for (const w of save.walks) {
       const a = session.actorRuntime.get(w.actor);

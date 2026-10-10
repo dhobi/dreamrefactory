@@ -61,9 +61,9 @@ test("a checkbox owns only Space — the arrows still walk", () => {
 });
 
 /**
- * SPACE is the game's door-opener, and it was taken on the way past: measured over
- * the Report button, Space then Enter gave 1 activation before this and 2 after, so
- * Space had never once pressed a button on this page.
+ * SPACE is the game's door-opener, and it must not be taken on the way past a
+ * focused button: measured over the Report button, Space then Enter gives 2
+ * activations when the button owns Space and 1 when the game takes it.
  */
 test("a button owns the two keys that press it", () => {
   expect(focusOwnsKey(el("btn"), " "), "Space presses a button").toBe(true);
@@ -108,10 +108,10 @@ test("the state list's own filter box is covered", () => {
 });
 
 // --- which arrow a swipe means (engine/src/web/keys.ts) --------------------------------
-// Three of the four are the arrow keys' reading of the axes. The fourth used to be
-// nothing, on the reasoning that `ArrowDown` is not a navigation key in the original
-// either — but SMSTACK2/SMSTACK3 views 43/50/54/56 read it as "climb down a level",
-// and the way out of the smokestack is at level 1, so a touch-only player could
+// Three of the four are the arrow keys' reading of the axes. The fourth is not
+// nothing, although `ArrowDown` is not a navigation key in the original either:
+// SMSTACK2/SMSTACK3 views 43/50/54/56 read it as "climb down a level", and the way
+// out of the smokestack is at level 1, so without it a touch-only player could
 // climb the maze and not leave it (#100).
 test("a swipe names the arrow it points at, down included", () => {
   const D = 100;

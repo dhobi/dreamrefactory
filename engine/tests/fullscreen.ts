@@ -3,14 +3,12 @@
  *
  *   npx vitest run engine/tests/fullscreen.ts
  *
- * Four pages carried the same twelve lines and all four were dead on an iPhone,
- * which is the browser nobody here can run: `Element.requestFullscreen` does not
- * exist on it, so `stage.requestFullscreen()` threw on the CALL and the
- * `.catch()` chained to it never ran — no log line, no fallback, and an uncaught
+ * An iPhone is the browser nobody here can run: `Element.requestFullscreen`
+ * does not exist on it, so `stage.requestFullscreen()` throws on the CALL and a
+ * `.catch()` chained to it never runs — no log line, no fallback, and an uncaught
  * TypeError in a console no player opens. That failure is invisible to a type
  * checker (the DOM lib says the method is there) and invisible to a desktop, so
- * the only thing that can hold the fix in place is a test that takes the method
- * away.
+ * the only thing that can guard against it is a test that takes the method away.
  *
  * Which linkedom does for free: it implements no fullscreen at all, so the DOM
  * these tests run against IS the iPhone's for this purpose. The other three

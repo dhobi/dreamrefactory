@@ -169,8 +169,7 @@ export const VPRIEST = {
    *   `obj+0x28` as its own.
    */
   /**
-   * ...and its strength, which an earlier reading of this page had as never
-   * written and which is in fact written on **every path of the think**.
+   * ...and its strength, which is written on **every path of the think**.
    *
    * `0x426d60` dispatches on the kind, and all four arms of that dispatch —
    * the two returns and both falls — land on the same two instructions:
@@ -180,14 +179,13 @@ export const VPRIEST = {
    *   426e24  mov ax, di                      ; ...and di is the die flag
    * ```
    *
-   * It is the class's tail rather than a branch of it, which is why looking for
-   * it inside the arms found nothing. The same shape as the bishop ITSELF —
+   * It is the class's tail rather than a branch of it, so no arm holds it. The
+   * same shape as the bishop ITSELF —
    * `0x425d69` is `mov word ptr [esi+0x1a], 0x64` beside an `xor ax, ax` — and
    * the same hundred. So the bolt is the hardest thing thrown in the game, on a
-   * level with the boss's fireball, and the earlier "harmless, or read
-   * somewhere this reading has not found" is resolved: it was the tail.
+   * level with the boss's fireball.
    *
-   * The rest was already read. `0x426bc0` stands it a hundred in front and
+   * `0x426bc0` stands it a hundred in front and
    * thirty-five up, copies the facing, and installs `0x46f908` tag 0 — `dx 600`
    * over the class's own divisor of 13, so 46 pixels an engine frame;
    * `0x426c97` gives the class no weight, so it flies flat; `0x426db3` takes it

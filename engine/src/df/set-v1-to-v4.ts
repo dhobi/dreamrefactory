@@ -107,14 +107,14 @@ const FACING_BEARING: Record<number, number> = { 1: 192, 2: 64, 3: 0, 4: 128 };
 /**
  * A standpoint's view is named for the COMPASS DIRECTION it looks along.
  *
- * Not `view1`..`view4`, which is what this used to build and what nothing in the
- * game could use: Dust's scripts name a view 636 times and every one of them says
+ * Not `view1`..`view4`, which nothing in the game could use: Dust's scripts
+ * name a view 636 times and every one of them says
  * north, south, east or west. Every door in the town is behind one of those
  * comparisons —
  *
  *     if arg = "uparrow" & currentview () = "west" & propowner ("door") = "saloon"
  *
- * — so under the old names not one of them opened. (The other two names a script
+ * — so under any other names not one of them would open. (The other two names a script
  * ever uses are the engine's own mid-motion pseudo-views, "moving" and "turning".)
  *
  * The mapping is derived, not chosen. North is where -z is: the grid labels a
@@ -135,10 +135,10 @@ const COMPASS: Record<number, string> = { 192: "north", 0: "east", 64: "south", 
  * which is most of them: a room whose only exit is one door has one walkable
  * facing, and a one-cell room has none at all.
  *
- * It used to extrapolate instead — take a heading the walks DID pin and step it
- * by 64 per position in `facings` — and that was wrong, because `facings` is
- * sorted by facing ID and the IDs are not in rotational order (the cycle is
- * 1, 3, 2, 4). It handed two different facings the same heading on 16 of the 29
+ * It does not extrapolate — take a heading the walks DID pin and step it by 64
+ * per position in `facings` — because `facings` is sorted by facing ID and the
+ * IDs are not in rotational order (the cycle is 1, 3, 2, 4). Extrapolating
+ * hands two different facings the same heading on 16 of the 29
  * sets, which is a room where two of the four ways you can look point the same
  * way and the props stand in the wrong places in both.
  */
@@ -165,12 +165,12 @@ function headingsFrom(walks: V1Transition[], facings: number[]): Map<number, num
  * visits them, and the reverse is the left. Nothing about the ID ordering enters,
  * which matters because the IDs are not in compass order.
  *
- * This used to be read out of the turn RECORDS instead: build "what does facing f
- * turn into" from the first record naming each facing, and follow it round. That
- * relies on the register storing one whole cycle before the other, and on 3 of
- * the 29 sets it does not — DOCTOR1's single cell came out 1, 2, 3, 4, whose
- * headings step 192, 128, 64, 128 rather than 64 each. The art for each step is
- * still found in the records; only the ORDER now comes from the geometry.
+ * Not read out of the turn RECORDS: building "what does facing f turn into" from
+ * the first record naming each facing, and following it round, relies on the
+ * register storing one whole cycle before the other, and on 3 of the 29 sets it
+ * does not — DOCTOR1's single cell comes out 1, 2, 3, 4, whose headings step
+ * 192, 128, 64, 128 rather than 64 each. The art for each step is still found
+ * in the records; only the ORDER comes from the geometry.
  */
 function cycleOf(facings: number[], headings: Map<number, number>): number[] | null {
   if (facings.length !== 4) return null;
@@ -461,9 +461,8 @@ export function setFileFromV1(v1: SetFileV1): SetFile {
      * Every one of the 10616 room frames on the disc carries a Z layer — the
      * per-pixel depth `decodeFrame` already reads out of the tail of a frame
      * container, in the same place and the same encoding v4 puts it. So a v1 set
-     * occludes sprites behind its scenery exactly as a v4 one does, and this used
-     * to say the opposite and switch the depth test off with a pair of zeroes.
-     * What was actually true was narrower: v1 has no HEADER field naming the
+     * occludes sprites behind its scenery exactly as a v4 one does, and the depth
+     * test stays on. What is true is narrower: v1 has no HEADER field naming the
      * quantization, and that is what these two are.
      *
      * **24 levels**, because that is the highest value any of those frames uses

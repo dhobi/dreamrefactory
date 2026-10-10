@@ -130,10 +130,9 @@ export class TimelapseFiles extends RipFiles {
    * `gotostage(stage, region, frame)`, with the navigation graph written out as a
    * script table (`getframeaction`) in each stage's own container 1.
    *
-   * Answering none used to mean no screen at all, because the compositor was a
-   * room's. It is the `ScreenDirector`'s now, so this game composites, plays films
-   * and fades with no room layer ever attached — which is what made this page a
-   * game rather than a file report.
+   * Answering none costs nothing, because the compositor is the
+   * `ScreenDirector`'s, not a room's: this game composites, plays films and fades
+   * with no room layer ever attached.
    */
   serverSetNames(): string[] {
     return [];

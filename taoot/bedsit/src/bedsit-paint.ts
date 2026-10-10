@@ -109,9 +109,8 @@ const scale = (c: RGB, k: number): RGB => [c[0] * k, c[1] * k, c[2] * k];
  * walls look in the frames on purpose — the pendant the shader lights it with is
  * amber, and the frames' walls are this wash under that lamp, not the wash.
  */
-/** the walls' limewash: WHITE, where it used to be a warm cream — the yellow
- *  in [0.85, 0.81, 0.71] is what made them read as clean paint rather than as
- *  a floated coat */
+/** the walls' limewash: WHITE, not a warm cream — the yellow in a cream such
+ *  as [0.85, 0.81, 0.71] reads as clean paint rather than as a floated coat */
 const WHITEWASH: RGB = [0.875, 0.862, 0.832];
 /**
  * The flat ceiling is a COOLER and darker white than the walls — distemper over
@@ -129,9 +128,9 @@ const STAIN: RGB = [0.19, 0.105, 0.065];
  * stain under it but painted rather than soaked in, so the moulding still reads
  * as its own piece of wood.
  *
- * It was a pale grey, [0.66, 0.65, 0.62], and that was wrong: at 1.42 on its top
- * face it came out brighter than the limewash above it, so the one horizontal
- * line in the room was also the brightest thing in it.
+ * Not a pale grey such as [0.66, 0.65, 0.62]: at 1.42 on its top face that comes
+ * out brighter than the limewash above it, so the one horizontal line in the
+ * room would also be the brightest thing in it.
  *
  * DO NOT REASON ABOUT THE TOP FACE TO PREDICT WHAT THIS LOOKS LIKE. The rail is
  * 90 units of a chart whose texel is eight, and the lit face is 34 of those —
@@ -153,7 +152,7 @@ const STAIN: RGB = [0.19, 0.105, 0.065];
  * UNDER the boards rather than over them, so it reads as a line rather than as a
  * bar, without going to the near-black the desk is.
  *
- * The shaping below is untouched through all of this — the top face catches, the
+ * The shaping below is the same whatever the colour — the top face catches, the
  * fillet is a shade under it, the underside turns away — because that is what
  * makes a few pixels of chart read as a moulding at all, and it works as well on
  * a dark line as on a light one.
@@ -246,10 +245,9 @@ function plaster(u: number, v: number, seed: number, wash: RGB, blotchScale: num
   if (TOOTH && tooth > 0) {
     /**
      * The photograph carrying the whole surface — its sweep, its lumps, its
-     * sand and its pinholes — and not, as it did at first, only the finest band
-     * with three invented ones under it. That blend was why it looked like no
-     * change had been made: the three slow bands are most of what the eye reads
-     * on a wall, and they were still the old noise.
+     * sand and its pinholes — and not only the finest band with three invented
+     * ones under it: the three slow bands are most of what the eye reads on a
+     * wall, and invented noise there hides the photograph.
      *
      * One slow band of noise is kept over the top. It is not texture, it is the
      * anti-repeat: at four metres the tile comes round 1.4 times across a wall,
@@ -606,18 +604,17 @@ function boards(u: number, v: number, seed: number): RGB {
 const RUG_BORDER = 110;
 
 /**
- * The rag rug, drawn — which is now only what stands in for the photograph if
- * the photograph does not arrive.
+ * The rag rug, drawn — which only stands in for the photograph if the
+ * photograph does not arrive.
  *
  * `bedsit-rug.jpg` is a real rug, and it is laid on the rug's own chart by the
- * page the way the pictures are hung. This is the same thing the floor wore
- * before that: a hooked rug of rags, a speckle of tufts — cream, grey, a
+ * page the way the pictures are hung. This is a hooked rug of rags, a speckle of tufts — cream, grey, a
  * blue-grey and a brown, each the size of a thumb — with a darker border.
  *
  * It is drawn in the rug chart's own (u, v), which is the room's (x, y) over
  * {@link RUG}, so `edge` is the distance to the rug's own hem. There is no cut
- * at that hem any more and no `null` off it: the rug is its own quad now, and
- * the quad's edges ARE the rug's edges.
+ * at that hem and no `null` off it: the rug is its own quad, and the quad's
+ * edges ARE the rug's edges.
  */
 function rug(u: number, v: number, seed: number): RGB {
   const edge = Math.min(u - RUG.x0, RUG.x1 - u, v - RUG.y0, RUG.y1 - v);

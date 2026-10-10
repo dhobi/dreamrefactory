@@ -471,9 +471,9 @@ export class Scheduler {
    * Keyed on the actor's own name rather than their cast member's, which is what
    * `serviceWalks` looks back up — the two differ for an `actorinstance` (the
    * instance shares its source's member object), and the crowd (`ani1a2` and
-   * friends) is nothing but instances. The start functions key the same way
-   * since #212; they used to file an instance's walk under its SOURCE, so the
-   * mover stepped the wrong character and `iswalk(instance)` answered false.
+   * friends) is nothing but instances. The start functions key the same way;
+   * filing an instance's walk under its SOURCE would have the mover step the
+   * wrong character and `iswalk(instance)` answer false.
    */
   restoreWalk(
     name: string,
@@ -513,7 +513,7 @@ export class Scheduler {
    * whole of #122: Georgia's ten-point curve around the boat deck's structures
    * (`deckbd` `ga.1`→`ga.2`), Sasha's five-point route out of the cabin and down
    * the hall (`halla`), and the hacker's nine (`scot3`). Walking the straight
-   * line instead took Georgia through the second-class stairs and clipped Sasha
+   * line instead takes Georgia through the second-class stairs and clips Sasha
    * through the corner of a wall.
    *
    * Modelled as one progress scalar over the whole polyline, because that is what
@@ -555,9 +555,9 @@ export class Scheduler {
     // the actor's CURRENT position and leaves them standing on it; the mover
     // (0x443eff -> 0x444d70) reads every later position out of the route, so the
     // first movement pass is what puts them on it — after the turn, not before
-    // it. Snapping here moved them a pass early and, for a `"resume"` walk, to
-    // the wrong place entirely: the route's own first point rather than the one
-    // resumeFrom had just trimmed it to (#230).
+    // it. Snapping here would move them a pass early and, for a `"resume"` walk,
+    // to the wrong place entirely: the route's own first point rather than the
+    // one resumeFrom has just trimmed it to (#230).
     this.walks.set(name.toLowerCase(), {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ,
       dx: 0, dy: 0, dz: 0,
@@ -585,10 +585,10 @@ export class Scheduler {
    *     while iswalk (who)  forceupdate ()  endwhile
    *     runpuppet (pupname, pupmessage)
    *
-   * Setting the facing outright — which is what this did — left `iswalk` false,
-   * so the wait never spun and `runpuppet` opened in the same breath: Zeitel took
-   * your approach in the first-class lounge without ever turning round, and the
-   * conversation began with his back to you (#124). 86 calls in the corpus reach
+   * Setting the facing outright would leave `iswalk` false, so the wait never
+   * spins and `runpuppet` opens in the same breath: Zeitel takes your approach in
+   * the first-class lounge without ever turning round, and the conversation
+   * begins with his back to you (#124). 86 calls in the corpus reach
    * here, most of them an idle loop facing the player.
    *
    * A turn to the facing the actor ALREADY has records nothing. That is what keeps
@@ -614,7 +614,7 @@ export class Scheduler {
     // `walktopuppet` opens with `pauseloop ("actor", who, true)`, both of which
     // silence the idle that would otherwise turn someone mid-stride — so the
     // original never has to answer this question. Where it does arise (a walk
-    // started without stopping the idle first) the old outright set is the
+    // started without stopping the idle first) an outright set is the
     // conservative answer: it cannot cancel a journey, and no script waits on
     // `iswalk` for a turn issued during a walk.
     if (this.walks.has(name.toLowerCase())) {
@@ -633,9 +633,9 @@ export class Scheduler {
        *
        * `+0x3e` copied from the actor's current star, as the block above says
        * 0x443550 does — a turn does not change anyone's destination, and this
-       * field is the destination. It had been left unset, and one caller reads
-       * it: `walkdest`, whose no-record answer is `"custom"`. So a turn made an
-       * actor answer "I am on my way to nowhere anybody named".
+       * field is the destination. One caller reads it: `walkdest`, whose
+       * no-record answer is `"custom"`. Left unset, a turn would make an actor
+       * answer "I am on my way to nowhere anybody named".
        *
        * Which is a save-breaking answer, because of who asks. GANG.CST's
        * `walktopuppet` opens a conversation by memorising where the character
@@ -655,17 +655,16 @@ export class Scheduler {
        * the player is within `hotdist`, every 21 service steps, all conversation
        * long. Click a character during one of those turns — likelier the moment
        * you walk up to them, since the turn then has 128 units to cover — and
-       * `savestar` was `"custom"`, so the walk home was `walktostar (me,
+       * `savestar` is `"custom"`, so the walk home is `walktostar (me,
        * "custom")`: not found, no walk, no arrival, no `endwalk`. The character
        * stands where they met you with `"custom"` in `actorstar` and no idle loop
        * left, and nothing in the corpus places them again: `setupactor` is only
        * ever called from a puppet, so re-entering the room does not fix it and
-       * neither does a save. Reported as the Mayor's wife blocking the guest-room
-       * door on night 1, and confirmed in the save attached to #289: `Mwife ·
-       * mayupper · star "custom"`, standing at the player's feet, absent from the
-       * loop table.
+       * neither does a save. The save attached to #289 shows it — the Mayor's
+       * wife blocking the guest-room door on night 1: `Mwife · mayupper · star
+       * "custom"`, standing at the player's feet, absent from the loop table.
        *
-       * Titanic never reached it. Its `walktopuppet` opens with `pauseloop
+       * Titanic never reaches it. Its `walktopuppet` opens with `pauseloop
        * ("actor", who, true)`, so the idle that would turn anyone is already
        * silent; Dust's has no such line and leans on the engine answering this
        * correctly instead.
@@ -703,7 +702,7 @@ export class Scheduler {
    * A whole turn in the units a facing is held in: 256 for the older engines,
    * 2^24 for DreamFactory 5, whose `actordeg`, `calcdeg` and `actorturn` all
    * count in 2^24ths (RedJack's `stdturn` is 1,050,000 a pass, about 22°). Walks
-   * reckoned in 256ths there gave every RedJack walk a facing within a degree of
+   * reckoned in 256ths there give every RedJack walk a facing within a degree of
    * 0, whichever way the actor went: Lyle crossing to you at liznite's Node58
    * looking off to the side (#447).
    */
@@ -881,8 +880,8 @@ export class Scheduler {
     // arrival lands on `"custom"` (see the walktoxyz builtin) and every endwalk
     // in the corpus opens by returning on it, so `walktopuppet`'s approach walk
     // runs no idle and starts no patrol. `"custom"` is compared in 29 script
-    // files; the port used to leave the old star in place, and the guard never
-    // fired — which is the whole of #10/#19/#21.
+    // files, and leaving the previous star in place would keep that guard from
+    // ever firing (#10/#19/#21).
     //
     // (Fired after the loop so a new walk it starts doesn't perturb this pass.)
     for (const key of arrived) {
@@ -944,16 +943,16 @@ export class Scheduler {
    * and (mission 4) progresses the sinking countdown through `advancephase()`.
    *
    * Runs on BOTH hosts, off whatever `now` the host feeds `tickTime` — wall time
-   * in a browser, the pumped virtual clock headless. It used to be gated on
-   * `hasRealFrames` for fear that an auto-advancing clock would fire the
-   * mission-4 sinkmovie/death chain mid-run, and the gate cost more than it
-   * bought: TAOOT's `calctime` is where `sinkflag` turns into `advancephase()`,
-   * so headless the sinking never started at all and the mission-4 goldens were
-   * traces of a ship that isn't sinking. `clock` kept the pending event name the
-   * save restored ("startdisk1") because nothing ever overwrote it with the
+   * in a browser, the pumped virtual clock headless. Gating it on
+   * `hasRealFrames`, for fear that an auto-advancing clock would fire the
+   * mission-4 sinkmovie/death chain mid-run, costs more than it buys: TAOOT's
+   * `calctime` is where `sinkflag` turns into `advancephase()`, so headless the
+   * sinking would never start and the mission-4 goldens would be traces of a
+   * ship that isn't sinking, with `clock` keeping the pending event name the
+   * save restored ("startdisk1") because nothing overwrites it with the
    * BOOTFILE's `clock = hrs * 100 + min`.
    *
-   * The fear was misplaced on its own terms. Outside mission 4 `sinkflag` is
+   * The fear is misplaced on its own terms. Outside mission 4 `sinkflag` is
    * false, and calctime's not-sinking arm only winds `clockcount`/`sec` and the
    * pocketwatch's `propdeg` — no phase, no script dispatch, nothing a test can
    * see beyond the second hand. Inside mission 4 the chain is the level.
@@ -1191,17 +1190,17 @@ export class Scheduler {
    * (see fireCricket) — that is how a set runs positional ambience, and nothing
    * in the TAOOT corpus ever stops one: `stopcricket("all")` appears exactly
    * once, in its BOOTFILE `initall`. So every path that leaves a set WITHOUT
-   * initall left its ambience sounding, positioned in a world that is no longer
-   * on screen.
+   * initall would leave its ambience sounding, positioned in a world that is no
+   * longer on screen.
    *
    * TAOOT's `advanceday` endgame arm is that path: it calls `closesetfile()` and
    * goes straight into the flats, so the boat deck's five `party` crowd loops
-   * (EXTRA.CST `crowdcrickets`, one per lifeboat star) talked through leave.mov,
-   * debris.mov, the closing narration and prozac.mov. Measured in
-   * taoot/tests/browser/endgame.ts: `crickets=[party1..party5]` on every sample from
-   * the deck to the credits, with `cricket.sfx` already closed — they could no
-   * longer re-fire, they simply never stopped. The re-fire guard below has
-   * always skipped them; only the audio was missing from it.
+   * (EXTRA.CST `crowdcrickets`, one per lifeboat star) would talk through
+   * leave.mov, debris.mov, the closing narration and prozac.mov. Measured in
+   * taoot/tests/browser/endgame.ts without this: `crickets=[party1..party5]` on
+   * every sample from the deck to the credits, with `cricket.sfx` already closed —
+   * not re-firing, simply never stopped. The re-fire guard below skips them; this
+   * stops their audio too.
    *
    * The handle is dropped as well as stopped, so coming back to the set starts
    * the ambience again rather than being blocked by a play that is still "not
@@ -1255,9 +1254,9 @@ export class Scheduler {
    *    that a sound behind pans as the one in front of it: dead ahead is 128,
    *    a quarter turn anticlockwise 0 (full left at 0x4721e0), clockwise 255.
    *
-   * There was no v5 rule before: a v5 room sets no {@link GameSession.listener},
-   * so every one of RedJack's sounds played at full volume and centred wherever
-   * it was — liznite's surf, dock and fire, radii of 200,000 to 400,000 units,
+   * A v5 room sets no {@link GameSession.listener}, so without this rule every
+   * one of RedJack's sounds would play at full volume and centred wherever it
+   * was — liznite's surf, dock and fire, radii of 200,000 to 400,000 units,
    * all at once and over Lyle (#447).
    */
   private cricketPlaceV5(c: Cricket): { volume: number; pan: number } | null {

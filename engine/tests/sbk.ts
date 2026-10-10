@@ -26,8 +26,7 @@
  * like levels while `PLAYER.SBK` behaves like the one book that is not one.
  *
  * Skips when no Skull Cracker disc is present, the way `dust/tests/movies.ts`
- * does — and the skip is LOUD, because the sibling `byte-order.ts` was silently
- * skipped for a day when a disc was swapped and five of its tests passed by not
+ * does — and the skip is LOUD, because a silent skip lets tests pass by not
  * running.
  */
 import { existsSync, readdirSync } from "node:fs";
@@ -434,7 +433,7 @@ test.skipIf(missing)("+10 is a 32-bit field whose upper half is zero on disc", (
  *
  * `SC.EXE`'s backdrop consumer switches on the low byte with `cmp eax, 4; ja
  * <error>`, so every shipped placement must carry 0..4 there — which is also the
- * corpus fact that falsifies the old whole-i32 reading: under it, one layer
+ * corpus fact that falsifies a whole-i32 reading: under it, one layer
  * appeared as several factors a few 1/65536ths apart.
  */
 test.skipIf(missing)("every placement's plane byte is 0..4, and depths no longer split by type", () => {

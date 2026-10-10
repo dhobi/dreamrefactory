@@ -6,7 +6,7 @@
  *
  * The machine suite `tests/machine/menu.ts` drives the commands through
  * `Input.menu`, the door this module opens; this pins the module itself, which
- * until now only ever ran in a browser:
+ * otherwise only runs in a browser:
  *
  *   - **the bar is up on the title and nowhere else** (0x418701), its marks
  *     the game's difficulty, sound level, Theme and Cache Mazes, New and Open

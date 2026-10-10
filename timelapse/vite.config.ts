@@ -3,10 +3,9 @@
  *
  * *Timelapse: Ancient Civilizations* (1996) is the third title to ship on this
  * engine and the only one of the three not made by CyberFlix — GTE Interactive
- * Media's game on CyberFlix's engine. This package existed to check the web's
- * claim that it is DreamFactory 4 like Titanic rather than 1 like Dust. It is: the tags in
- * container 0 say so and the port boots the discs. So the page is no longer a
- * file report with a canvas on it — it is the game, with its own build, its own
+ * Media's game on CyberFlix's engine, and DreamFactory 4 like Titanic rather
+ * than 1 like Dust: the tags in container 0 say so and the port boots the
+ * discs. The page is the game, with its own build, its own
  * dev server, its own palette (`src/theme.css`) and its own title card.
  *
  * Its own build is also what a `timelapse-v*` release would mean: the output is

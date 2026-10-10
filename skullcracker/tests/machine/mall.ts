@@ -3,7 +3,7 @@
  *
  *   npm test -w skullcracker -- mall
  *
- * Level five opens a chapter whose classes this port had none of, and it is laid
+ * Level five opens a chapter of classes no earlier level has, and it is laid
  * out unlike anything before it: **three regions side by side**, overlapping,
  * with no `exitroom` between them. You walk out of one and into the next, which
  * is what the mover's side test does (`0x4300cf`): a point past the end of its
@@ -454,9 +454,8 @@ test.skipIf(!haveRip())("mall", async () => {
   ok(`ran all three rooms to the goal at x ${game.p.x}, y ${game.p.y}, on ${jumps} jump${jumps === 1 ? "" : "s"}`);
 
   // the roaches. The nest at x6004 lets them out beside a ramp, and a roach that
-  // runs off its top end falls: `0x43b1be` gave it a gravity of 0.6 and the mover
-  // spends it whenever there is no floor, running or not. They used to keep the
-  // height of the ramp's end and run on across the air
+  // runs off its top end falls: `0x43b1be` gives it a gravity of 0.6 and the mover
+  // spends it whenever there is no floor, running or not
   {
     await go("&foes=0&x=6004&y=8221");
     let offRamp = 0;

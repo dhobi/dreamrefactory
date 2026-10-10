@@ -4,11 +4,10 @@
  *   npx vitest run dust/tests/banks.ts
  *
  * A v4 `.trk` keeps a loop ORDER table in a container of its own. A v1 `.snd` has
- * no such container, and this port therefore derived the music bed from the NAMES
- * for a while: the trailing run of one stem plus ascending numbers from 1, with
- * two rules to keep dialogue out. It worked on the eight banks the scripts ask for
- * music from, which was also all the evidence it had — "eight positive cases and
- * no negative control", as its own docblock said (#325 item 8).
+ * no such container, and the NAMES are only a heuristic: the trailing run of one
+ * stem plus ascending numbers from 1, with two rules to keep dialogue out. It
+ * fits the eight banks the scripts ask for music from — "eight positive cases
+ * and no negative control" (#325 item 8).
  *
  * The bank says. Container 0 carries a pair of i16s at `0x18`: how many one-shots,
  * then how many loop chunks follow them. The two tests below are the two halves of
@@ -18,12 +17,12 @@
  *     identifies the pair and its order (read as one i32 the field looks like
  *     nonsense — 327687 and 720896 are (7,5) and (0,11));
  *  2. the loop half **lands on the run the names suggest**, for every bank where
- *     the names suggest one unambiguously — so the field and the old heuristic are
+ *     the names suggest one unambiguously — so the field and the name heuristic are
  *     measuring the same thing, on the 37 of 40 where they agree.
  *
  * And the three where they disagree are pinned by name, because they are the whole
- * reason the field is worth reading: the heuristic invented a bed for two banks
- * that have none and found two bars of a five-bar one.
+ * reason the field is worth reading: the heuristic invents a bed for two banks
+ * that have none and finds two bars of a five-bar one.
  *
  * Skips LOUDLY without the Dust rip, the way `dust/tests/movies.ts` does.
  */

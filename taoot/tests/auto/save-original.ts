@@ -4,14 +4,14 @@
  * Every other save test reads the 109 `.ti` files that ship on the discs
  * (taoot/tests/auto/savegame.ts). Those are a corpus with a hidden thing in common:
  * they were all taken by the same build of TI.EXE, in the same session, at the
- * same load address. A player's own save is not, and that turned out to matter —
- * see {@link NODE_VTABLE_OFF} below and `nodeVtable` in engine/src/df/savegame.ts.
+ * same load address. A player's own save is not, and that matters — see
+ * {@link NODE_VTABLE_OFF} below and `nodeVtable` in engine/src/df/savegame.ts.
  *
  * `M4P0FCL.ti` is Nicholas Mischler's, attached to #179: mission 4 phase 0, in
- * the First Class Lounge, made in DosBox and loaded into the port at 0.9.29. It
- * opened the right room with the WRONG game — the previous game's mission, phase
- * and every other global still in place, which is why Trask showed him the clock
- * and the shawl in his hand raised a script error.
+ * the First Class Lounge, made in DosBox. Misread, it opens the right room with
+ * the WRONG game — the previous game's mission, phase and every other global
+ * still in place, so Trask shows the clock and the shawl in hand raises a
+ * script error.
  *
  * **It is tracked, unlike `gamefiles/`.** The rip is a CD and never enters the
  * repository, so the save suite can only run on the machine that has one; this
@@ -33,9 +33,9 @@ const SAVE = new Uint8Array(readFileSync(new URL("../data/M4P0FCL.ti", import.me
  * 109 shipped saves happen to hold.
  *
  * It is a raw code address the engine dumped along with each node, so it is a
- * constant only for as long as the engine is loaded at the same address. The
- * reader used to LOCATE the node grid by matching that byte pattern, which the
- * corpus made look like a format fact. This file is the counter-example.
+ * constant only for as long as the engine is loaded at the same address, so it
+ * cannot LOCATE the node grid, however much the corpus makes it look like a
+ * format fact. This file is the counter-example.
  */
 const NODE_STRIDE = 32;
 const NODE_VTABLE_OFF = 20;
@@ -99,7 +99,7 @@ test("it names the cast files it had open, crowd included (#186)", () => {
   expect(save.index.casts).toBe(3);
   expect(save.castFiles).toEqual(["gang.cst", "extra.cst"]);
   // the eight members the lounge's diners are instanced from live in that file;
-  // the records naming them are the ones a load used to drop
+  // the records naming them are the ones a misread load drops
   const crowd = save.actors.filter((a) => /^(paul1|brown1|jim1|bruce1|jay1)/.test(a.name));
   expect(crowd.length).toBeGreaterThan(5);
 });

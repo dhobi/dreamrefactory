@@ -115,8 +115,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
     // master slider otherwise. The order matters because the two games use
     // opposite ones: Dust sets the volume and then plays (its saloon scores one
     // piano at 55 from the bar and 24 from the landing above), TAOOT plays and
-    // then sets. Reading the global unconditionally, as this used to, threw
-    // Dust's answer away at the instant the music started.
+    // then sets. Reading the global unconditionally would throw Dust's answer
+    // away at the instant the music starts.
     const asked = track ? session.volumeForTrack(track) : undefined;
     session.setThemeVolume(asked ?? toNum(interp.globals.get("themevolume") ?? 255), track || undefined);
   };

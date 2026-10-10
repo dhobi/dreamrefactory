@@ -176,7 +176,7 @@ interface RecordedPlay {
   stopped: boolean;
   /**
    * Set when the SINK ended it rather than its owner: a `halt`, or a later play
-   * taking the channel over. This is the half a no-op sink used to be blind to —
+   * taking the channel over. This is the half a no-op sink would be blind to —
    * see {@link NullAudioSink.play} — and it is how a spoken line gets cut by
    * whatever speaks next without anybody calling stop().
    *
@@ -646,13 +646,13 @@ export class AudioLibrary {
    * Find a one-shot sound by identifier in any OPEN bank.
    *
    * The cache is keyed by bank as well as by name, and that is the whole point:
-   * keyed by name alone it answered for banks that had been closed, and a decode
+   * keyed by name alone it would answer for banks that have been closed, and a decode
    * is not a licence to keep playing something the game has unloaded. Measured
    * at TAOOT's ending — the boat deck's `party1`..`party5` crowd murmurs are
    * positional crickets (makecricket) that nothing stops, and DECKBD2's closeset
    * closes the bank they come from, so they SHOULD fall silent when the ship is
-   * left. Instead they were still being decoded out of the cache and were still
-   * talking over debris.mov and the closing narration.
+   * left — and out of a name-only cache they would still be decoded, talking
+   * over debris.mov and the closing narration.
    */
   sound(identifier: string): DecodedAudio | null {
     const key = identifier.toLowerCase().replace(/\.wav$/, "");

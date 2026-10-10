@@ -25,8 +25,7 @@
  *
  * Only control 8 returns zero, and `0x45d6ea` loops while the return is not zero
  * — so the wide rect across the bottom right is the one way out of the panel.
- * This page had `0x4791c8` written down as the slider; it is the OK button, and
- * the slider is the rect after it.
+ * `0x4791c8` is the OK button, and the slider is the rect after it.
  *
  * ## The eight boxes are the key bindings
  *
@@ -49,8 +48,7 @@
  * `0x403b90` reads `0x46b210[char]` and `0x403820` turns the action into a bit,
  * which `0x402be0` spends on one global apiece — the table in
  * {@link file://./walk.ts}'s `KEYS`. The shipped defaults are the second half of
- * `0x46b210`'s own contents, and they are the eight letters this port has been
- * using all along.
+ * `0x46b210`'s own contents.
  */
 
 /** one of the eight things a key can be bound to, in the engine's own order */
@@ -95,7 +93,7 @@ export const PREFS_ACTIONS: readonly PrefsAction[] = [
  * other four entries are: 24, 25, 26 and 27 arrive bound to punch, kick, jump
  * and inv beside the letters. This page has no joystick and binds none of them;
  * they are here because the panel draws them and because it settles what those
- * four table entries were, which this port had guessed at as arrow keys.
+ * four table entries are, which are not arrow keys.
  */
 export const STICK_NAMES: Readonly<Record<number, string>> = { 24: "J4", 25: "J3", 26: "J2", 27: "J1" };
 

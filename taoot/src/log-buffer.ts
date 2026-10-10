@@ -1,9 +1,9 @@
 /**
  * The lines behind X, bounded.
  *
- * The pane used to BE the storage: main.ts appended to a `<pre>`'s textContent
- * and the bug reporter read the tail back off the DOM, so nothing capped it and
- * a long session grew a string without end. This holds the lines instead, drops
+ * The pane is not the storage: appended to a `<pre>`'s textContent and read
+ * back off the DOM, nothing would cap it and a long session would grow a
+ * string without end. This holds the lines instead, drops
  * the oldest when it has too many, and tells the caller whether the pane can be
  * appended to or has to be repainted — the DOM stays main.ts's business.
  */

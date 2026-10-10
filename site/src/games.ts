@@ -249,9 +249,6 @@ export const TIMELAPSE: GameEditions = {
  * `GameHost` to boot. Everything `skullcracker/` does it does by having been
  * read out of that executable with a disassembler — and it does play, from the
  * logo through the menu and the chooser into sixteen levels and the credits.
- * This comment used to say the page was "a film player over the game's own
- * menu", which it was until the chooser started handing the canvas to the level
- * runner.
  *
  * What the editors can open is its sprite books, which hold every cel and every
  * level plan the game has (`engine/src/df/sbk.ts`).

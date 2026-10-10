@@ -108,8 +108,8 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
    * One animation frame: the page loop's tick, then everyone else who asked —
    * EACH IN A TASK OF ITS OWN, because that is what a browser gives them: it
    * settles every promise between one frame callback and the next. Called
-   * back in the tick's own task, the driver looked at the game before the
-   * pass's work had finished resolving, saw the boot still busy, and paid two
+   * back in the tick's own task, the driver would look at the game before the
+   * pass's work had finished resolving, see the boot still busy, and pay two
    * passes more than a page for the same line (#509).
    */
   const frame = (): void => {

@@ -27,8 +27,8 @@
  * the range test says so.
  *
  * **Seven of the eight have a sender.** Decoding from function entries rather
- * than a window sweep — a sweep desynchronises and silently loses writes, which
- * cost a first reading of this table two of them — every negative written into
+ * than a window sweep — a sweep desynchronises and silently loses writes —
+ * every negative written into
  * an `obj+0x1a` anywhere in `SC.EXE` is:
  *
  * ```
@@ -133,8 +133,8 @@ export interface CodeReaction {
  * `0x42eda8` -> `42e781 42e807 42e86d 42e8b3 42e8f9 42e995 42ea34 42eaaa`, which
  * is index 0 = code -8 through index 7 = code -1.
  *
- * **Character 0's table**, and which character owns it is the whole of why this
- * page showed two different people being held in GRAVE. There are two players in
+ * **Character 0's table**, and which character owns it matters. There are two
+ * players in
  * `PLAYER.SBK` and `0x402950` picks between them:
  *
  * ```
@@ -145,15 +145,14 @@ export interface CodeReaction {
  *
  * Each has its own hit handler — `0x42e750` for character 0, installed on the
  * player object at `0x42e443`, and `0x448c10` for character 1 — and each has its
- * own eight-slot table of reactions, with its own scripts. This page had been
- * reading character 1's (`0x4492b8`) while playing character 0: the grab
- * reaction installed 9570..9572 and the held loop that followed it installed
- * 4570..4572, so a hand in GRAVE took hold of you and you flickered between the
- * two of them, once every two frames.
+ * own eight-slot table of reactions, with its own scripts. Reading character
+ * 1's (`0x4492b8`) while playing character 0 installs 9570..9572 for the grab
+ * and 4570..4572 for the held loop that follows it, so a hand in GRAVE takes
+ * hold of you and you flicker between the two of them every two frames.
  *
  * Character 1's cels are character 0's plus five thousand in most rows —
- * 4550 -> 9550, 4570 -> 9570, 20 -> 5020 — which is what made the wrong table
- * look plausible for as long as it did.
+ * 4550 -> 9550, 4570 -> 9570, 20 -> 5020 — which makes the wrong table look
+ * plausible.
  */
 const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
   [-8]: {
@@ -164,8 +163,8 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
     gravity: null,
     stops: false,
     /**
-     * Character 0 does NOT shove. `0x448cf4` — the ±50 against `obj+0x28` this
-     * page used to carry — is in character 1's handler, and character 0's
+     * Character 0 does NOT shove. `0x448cf4` — the ±50 against `obj+0x28` — is
+     * in character 1's handler, and character 0's
      * `0x42e781` writes no velocity at all: the cels carry the fall.
      */
     /** `0x42e7f6` — `0x40c900(y, 0x78, 0)` */
@@ -256,10 +255,8 @@ const BLOW_CODES_0: Readonly<Record<number, CodeReaction>> = {
    * returns 1. Everything else gets the jolt below and returns 0, which is the
    * branch this row describes.
    *
-   * The condition is **not modelled**, and it is now reachable, which is a
-   * change worth stating plainly: this note used to say that no class a level
-   * places sends -2, and that was true for as long as no class could throw.
-   * `0x43dbda` is one of the four writers and it belongs to the EYEBALL's glob
+   * The condition is **not modelled**, and it is reachable: `0x43dbda` is one
+   * of the four writers and it belongs to the EYEBALL's glob
    * — SEWER places nine eyes, they spit, and `tests/machine/casts.ts` watches
    * the jolt land. So the row below is what a glob does to a player who is
    * neither crouching nor on the board, and a player who IS one of those two
@@ -449,10 +446,7 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
     act: "grabbed",
     /**
      * `0x476698` tag 0, kind 10, and the held loop that follows it is tag 0 of
-     * the SAME script — `0x442ad0`'s kind-10 case against `0x428080`'s. The note
-     * that used to stand here, about the reaction and the loop being in two
-     * different sets of cels, was this page reading one character's table while
-     * wearing the other's skin.
+     * the SAME script — `0x442ad0`'s kind-10 case against `0x428080`'s.
      */
     anim: { cels: [9570, 9571, 9572, 9571], hold: 2, from: "0x476698 tag 0" },
     /** `0x448ef4` — `0x42f850(player, 0)`: no gravity while something has you */
@@ -473,10 +467,8 @@ const BLOW_CODES_1: Readonly<Record<number, CodeReaction>> = {
    * returns 1. Everything else gets the jolt below and returns 0, which is the
    * branch this row describes.
    *
-   * The condition is **not modelled**, and it is now reachable, which is a
-   * change worth stating plainly: this note used to say that no class a level
-   * places sends -2, and that was true for as long as no class could throw.
-   * `0x43dbda` is one of the four writers and it belongs to the EYEBALL's glob
+   * The condition is **not modelled**, and it is reachable: `0x43dbda` is one
+   * of the four writers and it belongs to the EYEBALL's glob
    * — SEWER places nine eyes, they spit, and `tests/machine/casts.ts` watches
    * the jolt land. So the row below is what a glob does to a player who is
    * neither crouching nor on the board, and a player who IS one of those two

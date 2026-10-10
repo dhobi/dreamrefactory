@@ -30,8 +30,7 @@
  * So the staircase is walked, not planned, and it is walked differently in each
  * direction. **Descending needs no help at all**: the planner's ordinary walk
  * presses up at each standpoint, View18 among them, and every accidental press
- * relabels the deck downward — which is exactly where the walk was going. That is
- * why `travel("turb")` reached the turbine room before any of this was understood.
+ * relabels the deck downward — which is exactly where the walk was going.
  *
  * **Climbing has to be driven**, because the same accidents fight you: a plan that
  * walks back to View51 after a climb passes through View15, which writes "e", and
@@ -40,26 +39,26 @@
  * standing in and presses up at that scene's upward view, one step at a time —
  * the same shape as the smokestack (nav/smokestack.ts): a loop, not a search.
  *
- * ## It used to stop at C deck, and that was ours — FIXED
+ * ## Why the climb does not stop at C deck
  *
  * The rung works by `passcode`: the keydown relabels the deck, cuts you to
  * Scene10/View15, and passes the key on so the engine's own default move walks you
  * up out of it. Two of the six rungs call a helper that ends in `exitcode` just
  * before that `passcode` — `setupshayhack()` when it has Shay and the Hacker to
  * place (`savedeck = "c"` with the baby unclaimed) and `setupcsea()` when it has the
- * Chief Engineer to place (`savedeck = "b"`). The rung passcoded correctly every
- * time, but our `eventConsumed` was set by ANY `exitcode` anywhere under the
- * dispatch, so the default walk was suppressed and you were left standing ON
- * View15 — where the only road onward writes `savedeck = "e"` and undoes two decks
- * of climbing. Measured: f -> e -> d -> c, then c -> e -> d -> c for ever.
+ * Chief Engineer to place (`savedeck = "b"`). If ANY `exitcode` anywhere under
+ * the dispatch consumed the event, the default walk would be suppressed and you
+ * would be left standing ON View15 — where the only road onward writes
+ * `savedeck = "e"` and undoes two decks of climbing (measured: f -> e -> d -> c,
+ * then c -> e -> d -> c for ever).
  *
- * The rule was ours, not TI.EXE's, and the fix is one comparison: `exitcode` sets
- * the flag only for the event its own frame is a handler OF (engine/src/runtime/interp.ts).
- * The climb now runs f -> e -> d -> c -> b -> a, so **the turbine room is not a
- * one-way trip** and the endgame's checkpoint is not a dead end
- * (docs/taoot/verification.md, on `exitcode` and the staircase).
+ * TI.EXE's rule is that `exitcode` sets the flag only for the event its own frame
+ * is a handler OF (engine/src/runtime/interp.ts). So the climb runs
+ * f -> e -> d -> c -> b -> a, **the turbine room is not a one-way trip** and the
+ * endgame's checkpoint is not a dead end (docs/taoot/verification.md, on
+ * `exitcode` and the staircase).
  *
- * What stops a climb now is the ship being inhabited: decks C and B are where those
+ * What stops a climb is the ship being inhabited: decks C and B are where those
  * two helpers PLACE Shay, the Hacker and the Chief Engineer, whose `hotdist()` a
  * passing walk trips. `travel()` is right to refuse to continue mid-sentence, so
  * `nav.travelThrough` answers first and walks on — with the plan still the

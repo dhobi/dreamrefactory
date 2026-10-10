@@ -98,15 +98,14 @@ export function clientAxis(v: number, origin: number, size: number, n: number): 
  *
  * A dragged control is a script spinning in `while stilldown() { … forceupdate() }`,
  * and BOTH of those bump the counter — so one turn of that loop is two bumps and
- * this is a wait of exactly one turn. It used to be four, which is two turns, and
- * the dial steps once per turn: the driver was therefore turning every dial at
- * half the rate the game can be turned at, which is what the report measured
- * against its author's own hand (~12 s of script against 7–9 s by hand).
+ * this is a wait of exactly one turn. The dial steps once per turn, so four
+ * bumps — two turns — would turn every dial at half the rate the game can be
+ * turned at (~12 s of script against 7–9 s by hand).
  *
  * Two is not a proof that the move has been consumed. Within a turn the bumps
  * are `stilldown` then `forceupdate` with the body between them, and depending
  * which of the two we sampled after, two bumps either straddle a body that ran
- * after our move or land just short of one. Four was the number that made it
+ * after our move or land just short of one. Four is the number that makes it
  * certain.
  *
  * Certainty is not needed, because the gesture is CLOSED-LOOP: `turnOnce` reads

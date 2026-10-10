@@ -126,17 +126,16 @@ import { answer, ask, clickActor, meet, openDoor, room, set, walkTo, type Segmen
  * bookkeeping and land on the save's values in this run, but they are the hand's
  * and not the route's, so they are left with the rest of them.
  *
- * The second reason is `dumpglobal`, and this rung turned out to be the run
- * that settled the open question `docs/engine/scripting-language.md` used to
- * keep a table of. `closecards ("poker")` ends in `dumpsalgamesglobals ()`,
+ * The second reason is `dumpglobal`, and this rung is the run that settles it
+ * (`docs/engine/scripting-language.md`). `closecards ("poker")` ends in
+ * `dumpsalgamesglobals ()`,
  * sixteen `dumpglobal` lines; the port destroys every name on them, and after
  * this run `winner`, `betorder`, `hasnopair`, `has1pair`, `has2pair`,
  * `playerhand`, `playerhandtemp`, `playerbet`, `playerphase` and `playercount`
- * are simply not in the table. `D3E_003` has all ten — which for a long time
- * read as the port destroying more than `DF.EXE` did, because `winner` and
- * `betorder` are the fourth and fifth names of one list while `hasnopair`
- * survived as its own list's FIRST name, and no reading of `dumpglobal`
- * allowed both.
+ * are simply not in the table. `D3E_003` has all ten, which reads as the port
+ * destroying more than `DF.EXE` did: `winner` and `betorder` are the fourth
+ * and fifth names of one list while `hasnopair` survives as its own list's
+ * FIRST name, and no reading of `dumpglobal` allows both.
  *
  * **All ten are dead records.** A dumped name keeps its 32-byte node until
  * something is allocated over it, so a save reports it exactly as if it were

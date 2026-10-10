@@ -2,26 +2,24 @@
  * What the editors are looking at: a corpus, not a game.
  *
  * These pages read and write DreamFactory containers, and a SET is a SET whoever
- * pressed it. What they used to be tied to was the way they FOUND one — the
- * EDITION axis, which is one game's list of `gamefiles/<code>/` trees, imported
- * straight out of `taoot/`. So opening the editors showed Titanic's top bar and
- * Titanic's six editions, on a page that is the project's own tooling and sits at
- * `/dreamrefactory/editors/`.
+ * pressed it. Tying them to one game's way of FINDING one — the EDITION axis,
+ * that game's list of `gamefiles/<code>/` trees, imported straight out of
+ * `taoot/` — would show Titanic's top bar and Titanic's six editions on a page
+ * that is the project's own tooling and sits at `/dreamrefactory/editors/`.
  *
  * A SOURCE is one rip of one game, in one edition: "Dust", "Titanic · English",
  * "Titanic · 日本語". Every game in the registry (`site/src/games.ts`) contributes
  * however many it actually has on disk, and a game with one disc contributes one.
- * The row at the top of each editor picks between them, which is the same control
- * it always was and no longer belongs to either game.
+ * The row at the top of each editor picks between them, and belongs to neither
+ * game.
  *
  * ## Where the files come from
  *
  * Each game's build writes its own `gamefiles.json` at its own site root, so
  * there is one manifest per game and this fetches all of them — `taoot/…` and
  * `dust/…`, resolved from the editors' page through the PROJECT root, which is
- * what their `<meta name="site-root">` now names. That is the whole reason the
- * meta changed: it used to say `../taoot/`, which was these pages admitting they
- * could only see one game.
+ * what their `<meta name="site-root">` names — not `../taoot/`, which would be
+ * these pages admitting they could only see one game.
  *
  * A game whose manifest is missing or empty simply contributes nothing. That is
  * the normal case in a production build with no rip beside it, and it is why the
@@ -127,10 +125,9 @@ export function listSources(): Promise<Source[]> {
  * default worth defending.
  *
  * The list is ordered oldest engine first, so `available[0]` is Dust — which
- * would make the smallest corpus the default for everyone, and quietly change
- * what the editors open for anyone who had been using them. The old edition row
- * defaulted to the reader's own UI language where that tree existed, and the
- * reason it did is worth keeping: two controls should not read as two chores.
+ * would make the smallest corpus the default for everyone. Defaulting to the
+ * reader's own UI language where that tree exists is worth keeping: two
+ * controls should not read as two chores.
  *
  * So: an edition matching the language the page is being READ in, then the
  * FULLEST rip on the disk, then whatever there is. A German reader gets Titanic's

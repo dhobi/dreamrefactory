@@ -273,8 +273,8 @@ test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyabort
 
   // A host calling SLOWER gets one frame per call and no more: TI.EXE stamps
   // `now` after a late pass (0x43a95a) and never makes the lost frames up, so a
-  // machine that manages ten passes a second runs the game at half speed. The
-  // port used to replay them (up to 64 at once), lurching instead of slowing.
+  // machine that manages ten passes a second runs the game at half speed.
+  // Replaying them (up to 64 at once) would lurch instead of slowing.
   const slow = new GameSession(() => null, new NullAudioSink());
   slow.frameRate = 3;
   slow.tickTime(0);

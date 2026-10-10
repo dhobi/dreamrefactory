@@ -34,9 +34,9 @@ const WALK_DEFER = "defer";
  * — `walktopuppet` (gang.cst 0001), the single comparison of the word in the
  * whole corpus. It is how a conversation you started mid-route puts the walker
  * back on the ROUTE afterwards rather than sending them at the destination in a
- * straight line, and the port stamping "defer" here left that branch dead: the
- * hacker was interrupted in Scotland Road and resumed as a straight line, and
- * Georgia's curve around the boat deck (the whole of #122) would have gone back
+ * straight line, and stamping "defer" here would leave that branch dead: the
+ * hacker interrupted in Scotland Road would resume as a straight line, and
+ * Georgia's curve around the boat deck (the whole of #122) would go back
  * through the second-class stairs.
  */
 const WALK_ON_PATH = "walkonpath";
@@ -69,10 +69,10 @@ interface RoutePoint { x: number; y: number; z: number; fromPrev: number }
  *
  *  - `walktopuppet` stands the hacker in front of the camera for the
  *    conversation, so the `walkonpath (me, "resume", "hack1")` that follows it
- *    (gang.cst 0258 mousedown) threw him back to `hack2` — 4000-odd units up
- *    Scotland Road — before he set off;
- *  - interrupt the walk itself and the same call restarted the route from the
- *    top, so he re-walked the hallway he had already walked.
+ *    (gang.cst 0258 mousedown) would throw him back to `hack2` — 4000-odd units
+ *    up Scotland Road — before he sets off;
+ *  - interrupt the walk itself and the same call would restart the route from
+ *    the top, so he re-walks the hallway he has already walked.
  *
  * Against an original where "Jack turns and begins walking after the
  * conversation, and resumes where he left off when interrupted".
@@ -115,8 +115,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   r("actorexists", (_i, [n]) => sceneCell(n)?.[1] ?? (actor(n) ? 1 : 0));
 
   /**
-   * The accost trace, asked for alongside #180 — "can you log when we get the
-   * attention of a puppet, just to trace it?".
+   * The accost trace: a log line whenever a puppet claims your attention (#180).
    *
    * `hasattention` is the only caller of `actordist` in the shipped corpus and
    * it asks only about the actor `curattention` names, so this is not a distance
@@ -143,7 +142,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    * actordist(target) = 32000`). Mirrors propdist for cast actors.
    *
    * **"Present" means DRAWN, not near** — see {@link ActorRuntime.onScreen} for
-   * the gate and for #180, the report that showed the difference. The original
+   * the gate (#180). The original
    * does not measure a distance at all: 0x40e790 runs the actor→screen
    * projection and reports the DEPTH it computed, or 32000 where it refused. We
    * keep the ground distance, because the magnitude has no consumer — the only
@@ -168,15 +167,15 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    * `recept1c`, where `maxidle` re-arms every 20 ticks and `hasattention(4)` came
    * due while `cuff.stg` was open, leaving the puppet on top of the chair and the
    * flat's own OK unreachable behind it (its script cannot run while the puppet
-   * holds the dispatch). Headless the route was simply out of the flat inside
-   * four seconds; a browser spends real ones, which is why it only ever showed
-   * there — and is what had been read for a while as a dead OK button.
+   * holds the dispatch). Headless the route is out of the flat inside four
+   * seconds; a browser spends real ones, which is why it only shows there — as
+   * what looks like a dead OK button.
    *
-   * A CONVERSATION counts too, and for the same reason — this is where the flat
-   * case above was only half the rule. A puppet close-up replaces the world
+   * A CONVERSATION counts too, and for the same reason — the flat case above is
+   * only half the rule. A puppet close-up replaces the world
    * display without touching `setVisible` (only a stage flat clears that), so the
-   * cast's idles went on counting down while you were already talking to someone,
-   * and `hasattention` came due and accosted you IN the conversation:
+   * cast's idles would go on counting down while you were already talking to
+   * someone, and `hasattention` come due and accost you IN the conversation:
    * `sendtoactor(target, mousedown(0))` re-enters the character's mousedown, which
    * runs `walktopuppet` a second time and replays the whole exchange. Reported as
    * every console line arriving twice — `msg: vlad` twice from walktopuppet's own
@@ -236,7 +235,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     // it could not draw: `actordist` answers 32000 whenever the actor→screen
     // projection refuses, and an empty intersection with the view rectangle is
     // one of the ways it refuses. See ActorRuntime.onScreen for the gates and
-    // for what leaving this one out cost.
+    // for what leaving this one out costs.
     const cam = session.activeCamera();
     if (cam && !session.actorRuntime.onScreen(a, cam)) return sight(n, 32000);
     // the GROUND pair is (worldX, worldY) — worldZ is the height (see propxyz,
@@ -306,8 +305,8 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   };
   // ...and watch it, so the log says who has claimed you and when they let go.
   // The engine knows this name already — everything above is about holding
-  // `clearattention()`'s invariant — and #180 is a report about a claim nobody
-  // could see being made. Paired with the `sight:` lines, the two questions a
+  // `clearattention()`'s invariant — and a claim nobody can see being made is
+  // what #180 is about. Paired with the `sight:` lines, the two questions a
   // reader has ("who wants me?", "can they see me?") are both on the pane.
   session.interp.watchGlobals.add("curattention");
   acc("actorvisible", 0, (a) => (a.visible ? 1 : 0), (a, v, n) => {
@@ -352,9 +351,8 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    * Dust's shooting range is built out of it: `TARGET.CST`'s `initactors` puts
    * the three bottles, the three cans, the weathervane, the dummy and the seven
    * pop-up targets at screen pixels, because they are a painted booth and not
-   * scenery. Nothing answered to the name, so all fourteen were placed nowhere,
-   * drawn nowhere and hit nowhere — #292, "the target's didn't appear ... trying
-   * to shoot where the props should be results in nothing happening".
+   * scenery. Without it all fourteen are placed nowhere, drawn nowhere and hit
+   * nowhere (#292).
    *
    * Getter by arity like every other actor command, with `propxy`'s axes: 1 = x,
    * 2 = y. Setting it takes the actor OUT of the world, which is exactly what
@@ -638,9 +636,9 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
      * {@link GameSession.starRegistry} already makes for the DESTINATION: Dust
      * starts the Mayor's Wife's street patrol from inside the saloon
      * (`SALLOWER.SET`'s door `keydown`, which runs `setupactor ("street")` and
-     * only then `gototown`), so the star was found and the route was not, and
-     * she walked her first leg straight through the buildings. Nothing else
-     * would have re-started that patrol either: her `mwifeidle` has arms for the
+     * only then `gototown`), so with the open set alone the star is found and
+     * the route is not, and she walks her first leg straight through the
+     * buildings. Nothing else would re-start that patrol either: her `mwifeidle` has arms for the
      * `jones` stars alone, so the mwife1<->mwife2 ping-pong lives entirely in
      * `endwalk`, which only fires if this first walk happens.
      *
@@ -685,15 +683,13 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
         points.reverse();
         // A point's `fromPrev` is the length of the leg BEHIND it, so reversing
         // the polyline has to carry each length one point along — the leg that
-        // used to arrive at a point is the one that now leaves it. Reversing the
-        // array alone pairs every leg with the wrong length: SCOT3's nine-point
-        // route out of Scotland Road walked its 3983-unit hallway as though it
-        // were 856 (4.65x too fast), its corners at 0.29x and 0.45x, and its
-        // last leg to the door with a stored length of ZERO — the hacker
-        // teleporting the final 752 units. Reported as "first too fast down the
-        // hallway, then too slow in the corner, then too fast and too slow
-        // reaching the door" (#224); the route's total came out 4678 against
-        // the 8661 its own container header declares.
+        // arrives at a point one way is the one that leaves it the other.
+        // Reversing the array alone pairs every leg with the wrong length:
+        // SCOT3's nine-point route out of Scotland Road walks its 3983-unit
+        // hallway as though it were 856 (4.65x too fast), its corners at 0.29x
+        // and 0.45x, and its last leg to the door with a stored length of ZERO —
+        // the hacker teleporting the final 752 units (#224); the route's total
+        // comes out 4678 against the 8661 its own container header declares.
         for (let i = points.length - 1; i > 0; i--) points[i].fromPrev = points[i - 1].fromPrev;
         points[0].fromPrev = 0;
       }
@@ -757,10 +753,10 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
    *         …
    *     sendtoactor (who, moveactorstar (savestar))   → walktostar (me, savestar)
    *
-   * so the value has to be something `walktostar` can resolve. We used to return
-   * a packed (x<<16)|y point here, which came back as the star name `"529465746"`
-   * and resolved to nothing — every walking character on every deck stood still
-   * for the rest of the set once you had talked to them (#41).
+   * so the value has to be something `walktostar` can resolve. A packed
+   * (x<<16)|y point comes back as the star name `"529465746"` and resolves to
+   * nothing — every walking character on every deck would stand still for the
+   * rest of the set once you had talked to them (#41).
    */
   r("walkdest", (_i, [n]) => {
     const w = session.scheduler.walks.get(toStr(n ?? "").toLowerCase());

@@ -88,14 +88,14 @@ export class Frame {
      * dispatches `calctime` through `trackIdle` precisely so it does NOT read as
      * a busy player script, so a press drained on the same tick begins while
      * calctime is still suspended at an await. A shared field set only at depth 0
-     * therefore never got set for that press at all: it still said "calctime",
-     * every `exitcode` in the press's chain compared against the wrong name and
-     * quietly stopped consuming, and the chain ran on into the engine default.
+     * would never be set for that press at all: it would still say "calctime",
+     * every `exitcode` in the press's chain would compare against the wrong name
+     * and quietly stop consuming, and the chain would run on into the engine default.
      *
      * That is #232 — SMSTACK2's `keydown` is nothing but
-     * `if blocked & arg = "uparrow" exitcode`, so the crate stopped stopping you
-     * and a held key walked you through it. Intermittent by construction: it
-     * needed the heartbeat to be mid-flight at the instant the press was
+     * `if blocked & arg = "uparrow" exitcode`, so the crate would stop stopping
+     * you and a held key walk you through it. Intermittent by construction: it
+     * needs the heartbeat to be mid-flight at the instant the press is
      * dispatched, which is most of the time when a key is HELD and the queue is
      * drained on the tick boundary the heartbeat also fires on.
      */
@@ -162,23 +162,21 @@ export class Interpreter {
    * runs only when nothing exitcoded — a handler merely ending (like boot's
    * keydown after routing) does not consume the event.
    *
-   * "Of the event being dispatched" is the whole of it, and it used to say
-   * "any handler run during the current dispatch", which is a different and
-   * wrong thing. A handler routinely calls routines and fires OTHER events, and
+   * "Of the event being dispatched" is the whole of it, and "any handler run
+   * during the current dispatch" is a different and wrong thing. A handler
+   * routinely calls routines and fires OTHER events, and
    * those end in `exitcode` for their own reasons — so a flag set from any depth
    * reports the wrong answer for the event the player actually made:
    *
    *  - TAOOT's `recept1c openset` does `sendtoactor("elev", setupactor())` and then
-   *    passcodes. setupactor exitcodes, so the openset looked consumed and
-   *    boot2's openset (setupsound) was skipped — a silent room on the wrong
-   *    theme. {@link SetScripts.fireLifecycle} worked around it locally by
-   *    ignoring this flag and reading the handler's own signal instead.
+   *    passcodes. setupactor exitcodes, so the openset would look consumed and
+   *    boot2's openset (setupsound) be skipped — a silent room on the wrong
+   *    theme.
    *  - `STAIR2C.SET`'s keydown rung calls `setupshayhack()` / `setupcsea()`
-   *    before its `passcode`, and both end in `exitcode`. The rung passcoded
-   *    correctly, but this flag was already set, so the engine default move —
-   *    the walk that carries you up out of View15 — never ran. The 2nd-class
-   *    staircase could not be climbed past C deck, which is what made the
-   *    turbine room a one-way trip and the segment that went there a leaf
+   *    before its `passcode`, and both end in `exitcode`. The rung passcodes
+   *    correctly, but the flag would already be set, so the engine default
+   *    move — the walk that carries you up out of View15 — would never run, and
+   *    the 2nd-class staircase could not be climbed past C deck
    *    (docs/taoot/verification.md).
    *
    * So the test is by NAME against the event under dispatch, which keeps the
@@ -237,9 +235,9 @@ export class Interpreter {
    *
    * Bumping the epoch is all it takes, because a suspended script is suspended
    * INSIDE a builtin — `playmovie`, `delay`, `voicewait` — and the load already
-   * releases those (`onAbandonMovie`, the scheduler reset). What it did not do
-   * was stop the script that was released: it went on to its next statement, in
-   * a game that had just been replaced under it. Now it unwinds instead, from
+   * releases those (`onAbandonMovie`, the scheduler reset). Released and not
+   * stopped, a script goes on to its next statement, in a game that has just
+   * been replaced under it. With the bump it unwinds instead, from
    * whatever depth it had reached, and its dispatch promise resolves so
    * `scriptBusy` clears with it.
    *
@@ -248,11 +246,11 @@ export class Interpreter {
    * finish, and the workbench's checkpoint chips call the load from INSIDE
    * `session.track(...)`, so a load that settled would be waiting for itself.
    *
-   * Reported as the ending sequence surviving a checkpoint
+   * Without it the ending sequence survives a checkpoint
    * ([#340](https://github.com/dhobi/dreamrefactory/issues/340)). BOOTFILE's
    * `advanceday()` endgame arm is one straight-line script — leave.mov,
    * debris.mov, the narend.stg slideshow, then `if mission = "good"` — so a load
-   * taken during it resumed at the next film and reached that test with the
+   * taken during it would resume at the next film and reach that test with the
    * CHECKPOINT's mission in the global. Measured in a browser: narend scored the
    * good ending, the load replaced `mission` with the checkpoint's, and the
    * surviving script played the bad ending's `playmore.mov` over the loaded room
@@ -390,10 +388,10 @@ export class Interpreter {
           //
           // The shipped saves agree from the other side: `coal`, `valve1..3`,
           // `pump1`, `pump2` and `savenorth` — all dumped on a stage close — have
-          // a record in NONE of the 109, and reading them as declarations left
-          // them in the session for the rest of the game. Which is what made a
-          // save complain about 37 variables it could not store (#85), and what
-          // let a script read last time's value of a puzzle that had been reset.
+          // a record in NONE of the 109, and reading them as declarations would
+          // leave them in the session for the rest of the game: a save
+          // complaining about 37 variables it cannot store (#85), and a script
+          // reading last time's value of a puzzle that has been reset.
           for (const n of st.names) this.globals.delete(n);
         } else {
           // local (dumplocal too — no script in the corpus uses it, and a local

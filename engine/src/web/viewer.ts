@@ -48,21 +48,18 @@ import { overlayFont } from "./fonts";
  *
  * Ten passes for a road of 7 frames (Road4, Scene2->Scene1) or 6 (Road43,
  * Scene3->Scene1): one frame per pass and a few passes' slack. At 90 ms a road
- * spent 2n+1 passes on n frames, so the 7-frame road wanted 15, and the turn
- * after it landed after `bombit` had played bedex.mov (#40). BOIL.SHP's coal
+ * would spend 2n+1 passes on n frames, so the 7-frame road would want 15, and
+ * the turn after it would land after `bombit` had played bedex.mov (#40). BOIL.SHP's coal
  * chute is the same shape and the same arithmetic (see `tick`, #15).
  *
- * So it is one constant now, not two. A scripted move used to be paced at 50 ms
- * and a player's at 90 — the split existed only because #40 had to be fixed
- * without reopening the feel decision, and the feel decision turns out to have
- * been the guess. A player's turn was 1.8x slower than the original's: measured
- * over every shipped set, 66% of turns hold one in-motion frame between adjacent
- * standpoints and 33% hold two, so a press was ~270 ms where TI.EXE takes ~150.
- * (User-reported: "when the real game TI.EXE is run in DosBox, the player
- * movement feels much faster".)
+ * So scripted and player moves share one constant. A player's turn at 90 ms
+ * would be 1.8x slower than the original's: measured over every shipped set, 66%
+ * of turns hold one in-motion frame between adjacent standpoints and 33% hold
+ * two, so a press would take ~270 ms where TI.EXE takes ~150. (User-reported:
+ * "when the real game TI.EXE is run in DosBox, the player movement feels much
+ * faster".)
  *
- * It is one constant again and not two, but a player may now ask for a different
- * one for their OWN moves — see {@link SetViewer.playerPace} and
+ * A player may ask for a different one for their OWN moves — see {@link SetViewer.playerPace} and
  * `GameSession.moveSpeed` (#222). This stays what a SCRIPT's move is paced at,
  * whatever they ask for, because the paragraphs above are what a script's move
  * has to be paced at.
@@ -175,9 +172,9 @@ export class SetViewer implements RoomLayer {
     // left you watching the bombing from the bed or the chair (#40).
     //
     // Waiting is half of it; the other half is the RATE the waited-for road
-    // runs at — see {@link FRAME_MS}. Both are needed: at the 90 ms this used to
-    // pace at, the 7-frame road spent 15 of its 10 passes, so the deferred turn
-    // still landed after `bombit` had played bedex.mov.
+    // runs at — see {@link FRAME_MS}. Both are needed: at 90 ms the 7-frame road
+    // spends 15 of its 10 passes, so the deferred turn still lands after `bombit`
+    // has played bedex.mov.
     if (this.session.navFromScript) {
       // A player's move is untouched: it still drops when one is already
       // running, which is what keeps a held key from stacking up turns.
@@ -369,8 +366,8 @@ export class SetViewer implements RoomLayer {
    * gestures NEST. A modal movie is dismissed by a click, and that click is a
    * gesture of its own — press -> clickDispatch -> movies.click — running while
    * the script that opened the movie is still suspended inside `spotmovie`. So
-   * the inner press used to tear down the outer press's hooks and hand the
-   * script back a dead camera for the rest of its life.
+   * writing no-ops, the inner press would tear down the outer press's hooks and
+   * hand the script back a dead camera for the rest of its life.
    *
    * That is #47, Scotland Road. SCOT3's rope close-up ends in
    *
@@ -384,8 +381,8 @@ export class SetViewer implements RoomLayer {
    *     endwhile
    *
    * to turn you to Hacker before he speaks. Dismiss the close-up and every
-   * `currentscene("right")` after it went to a no-op, so view22 never came
-   * round: the room stopped answering with the player still facing the rope —
+   * `currentscene("right")` after it would go to a no-op, so view22 never comes
+   * round: the room stops answering with the player still facing the rope —
    * "as if waiting for Hacker to turn me and talk, but he never does". Measured
    * headless: 3000 service steps, 1494 turns asked for and not one taken; with
    * the hooks restored the turn lands on the 12th ask and hack1.pup opens.
@@ -493,8 +490,7 @@ export class SetViewer implements RoomLayer {
     /**
      * The screen to be a layer of. The host passes its one persistent director;
      * a caller without one (tests driving a bare viewer, `tools/navdump.ts`)
-     * gets a private screen with the same behaviour — which is exactly the
-     * fallback the `screen` parameter used to be, one level up.
+     * gets a private screen with the same behaviour.
      */
     director: ScreenDirector | null = null,
   ) {
@@ -645,14 +641,13 @@ export class SetViewer implements RoomLayer {
    * the event a standpoint change owes (#71 — the purser's door, left hanging down
    * the corridor when it did not).
    *
-   * Which makes it a trap for a TEST, and one that has already been walked into:
-   * 21 checks in the suite reach a state with this, and `openscene` is a per-VIEW
-   * event that 33 of the 51 shipped handlers gate on `currentview()`. So anything
-   * asserted about view-gated behaviour after a `jumpTo` is asserted against a
-   * state the game cannot arrive in. Diagnosing #88 that way produced a bug report
-   * (#96) for a defect that did not exist: the flag under test still held the value
-   * the set's opening `openScene` had left, because nothing here had recomputed it,
-   * and 200 further engine steps of watching it never would.
+   * Which makes it a trap for a TEST: `openscene` is a per-VIEW event that 33 of
+   * the 51 shipped handlers gate on `currentview()`, so anything asserted about
+   * view-gated behaviour after a `jumpTo` is asserted against a state the game
+   * cannot arrive in. Diagnosing that way reports defects that do not exist
+   * (#96): the flag under test still holds the value the set's opening
+   * `openScene` left, because nothing here recomputes it, and 200 further engine
+   * steps of watching it never would.
    *
    * A test that owes the lifecycle should drive the script path — `armNavHooks()`,
    * then `onSceneJump`/`onViewJump` — the way the #71 regression test does.
@@ -829,7 +824,7 @@ export class SetViewer implements RoomLayer {
   /**
    * `clut("set")` / `mixclut("set", …)`: rebuild this room's palettes.
    *
-   * The set half of what used to be the viewer's own `setClut` — the stage half,
+   * The set half of the CLUT work — the stage half,
    * and the decision about which target a bare `clut("current")` means, are the
    * director's, because the stage outlives any one room.
    *
@@ -867,13 +862,13 @@ export class SetViewer implements RoomLayer {
    * authored per room (house.shp's `door` and `plant`, and each room's own
    * shop) are 48%-99.8% below it.
    *
-   * Taking all 256 from the set looked equivalent because 74 of the 75 carry a
+   * Taking all 256 from the set looks equivalent because 74 of the 75 carry a
    * byte-identical copy of main.stg's upper half — dead bytes in TI.EXE, which
-   * is how one of them got to drift without anyone noticing. bridge.set is that
+   * is how one of them can drift without anyone noticing. bridge.set is that
    * one: its copy is uniformly darker (median 0.82x the red channel), so the
-   * band's `light` plate, a solid 251x120 rectangle, stopped matching the flat
-   * it is drawn over and the middle third of the band grew a seam down both
-   * sides of it (#158, reported in the guided tour and only ever there).
+   * band's `light` plate, a solid 251x120 rectangle, would stop matching the
+   * flat it is drawn over and the middle third of the band grow a seam down both
+   * sides of it (#158, seen in the guided tour and only there).
    *
    * Memoised like {@link flatPalette}, and on the same three things plus which
    * stage's palette it composed: this runs on every frame that draws a band.
@@ -1271,8 +1266,8 @@ export class SetViewer implements RoomLayer {
     if (!v) return null;
     // the view's stand frame carries the camera's true world position
     // (posX16/posZ16/posY16) — scale-free across sets (C73 is 150 units/m,
-    // DECKBD 55/m; the old cameraHeight×512 only held for C73's scale and
-    // floated deck cameras 2-3× too high).
+    // DECKBD 55/m; a cameraHeight×512 rule holds only for C73's scale and
+    // floats deck cameras 2-3× too high).
     const fi = this.standFrameInfo();
     return this.cameraFrom({
       x: fi ? fi.posX16 : sc.xAxisMap,
@@ -1355,7 +1350,7 @@ export class SetViewer implements RoomLayer {
    *
    * Fired, not awaited — the interpreter is async and a synchronous host loop
    * must still see the animation start this tick. In a real host the chain
-   * resolves in the microtasks before the next paint, which is all the fix
+   * resolves in the microtasks before the next paint, which is all this
    * needs. Two divergences from TI.EXE, both accepted: it CANCELS the move if
    * a closescene handler jumps the scene (0x407ce6) — no shipped closescene
    * navigates, so the cancel is not modelled — and a closescene that waits on
@@ -1383,8 +1378,8 @@ export class SetViewer implements RoomLayer {
    * currentview(theview)` — the demo build's script style; the full game
    * passes the pair INSIDE changeset instead) and C59's Zeitel entry, which
    * turns you to face him with a currentscene("right") loop. With the hooks
-   * dark, the warps' changeset still fired but the jumps were dropped, and
-   * every deck-b/c climb landed at the arriving set's DEFAULT scene. A
+   * dark, the warps' changeset would still fire but the jumps be dropped, and
+   * every deck-b/c climb land at the arriving set's DEFAULT scene. A
    * changeset in the chain swaps the viewer and re-arms on the new one (host
    * activateSet, keyed on navGestureActive); disarming writes the shared
    * session fields, so doing it through the old viewer is fine.
@@ -1458,8 +1453,8 @@ export class SetViewer implements RoomLayer {
     // 1944 end rows record a height that disagrees with the standpoint they
     // stand on — gstair2's Road58.0/Road62.0/Road61.0 carry the UPPER landing's
     // 7645 against the A-deck's 5976 (#253), gstair3 mirrors it, and stair2c's
-    // reused flight is off by whole decks. The port does present those beats,
-    // one tick each, which pasted the crowd 140–210 px down the frame for
+    // reused flight is off by whole decks. The port presents those beats, one
+    // tick each, which would paste the crowd 140–210 px down the frame for
     // exactly one frame (shift = 256 * Δy / depth).
     //
     // So each end borrows its standpoint's HEIGHT — the departure end from the
@@ -1677,12 +1672,12 @@ export class SetViewer implements RoomLayer {
    * scene hittest just named — and the event forwards along scene → set main →
    * stage the way every other scene event does.
    *
-   * This used to fall through to the director's `clickFlatSurface`, which is the STAGE's
-   * answer and belongs to a click in the band. In a room that meant the current
-   * flat's mousedown ran for a click on the floor — in TAOOT the current flat is
+   * Not the director's `clickFlatSurface`, which is the STAGE's answer and
+   * belongs to a click in the band. In a room that would run the current flat's
+   * mousedown for a click on the floor — in TAOOT the current flat is
    * main.stg's `main 1`, whose mousedown is `sendtoshop("house.shp",
-   * deactivateinterface())`: clicking the carpet darkened the watch, shut the bag,
-   * reset the nav arrow and played `lightoff`. That is the band's own behaviour —
+   * deactivateinterface())`: clicking the carpet would darken the watch, shut
+   * the bag, reset the nav arrow and play `lightoff`. That is the band's own behaviour —
    * click the band background and the interface goes away — reached from the one
    * place the shipped hit test never sends it.
    */
@@ -1769,10 +1764,10 @@ export class SetViewer implements RoomLayer {
       // The first frame is due NOW, not one interval from now (#352).
       //
       // Backdating the stamp by a whole interval is what makes the frame below
-      // due on this very tick. Stamping `now` instead spent the first tick of
-      // every animation initialising the clock and drawing nothing, so a move
-      // took one interval longer than the frames in it — 200 ms for a 3-frame
-      // turn paced at 50.
+      // due on this very tick. Stamping `now` instead would spend the first tick
+      // of every animation initialising the clock and drawing nothing, so a move
+      // would take one interval longer than the frames in it — 200 ms for a
+      // 3-frame turn paced at 50.
       //
       // The original draws it inside the gesture: 0x439e10 shows frame 0 before
       // the keypress returns, which is the same disassembly {@link walk} reads
@@ -1780,14 +1775,14 @@ export class SetViewer implements RoomLayer {
       // the port's, and it is not a rounding error — it is a full standpoint's
       // worth of stillness on every turn and every walk.
       //
-      // C59 is where it was reported. Zeitel's entry turns you to face the door
-      // with `while currentview() != "view29": currentscene("right")`, and the
-      // road lands you four standpoints away, so the loop makes four turns of
-      // three frames each. At 200 ms apiece the camera stopped dead on each
-      // standpoint for 50 ms and the sweep read as separate turns; at 150 the
-      // next turn starts on the tick the last one settles and it is one motion.
-      // Measured, turn starts from the keypress: 400/600/800/1000 ms before,
-      // 350/500/650/800 after.
+      // C59 shows it. Zeitel's entry turns you to face the door with
+      // `while currentview() != "view29": currentscene("right")`, and the road
+      // lands you four standpoints away, so the loop makes four turns of three
+      // frames each. At 200 ms apiece the camera stops dead on each standpoint
+      // for 50 ms and the sweep reads as separate turns; at 150 the next turn
+      // starts on the tick the last one settles and it is one motion. Measured,
+      // turn starts from the keypress: 400/600/800/1000 ms stamping `now`,
+      // 350/500/650/800 backdated.
       if (!this.lastTick) this.lastTick = now - this.animationPace;
       // ONE frame a tick, normally — and more than one only when the pace asks
       // for a frame more often than the host ticks (#222).
@@ -1797,7 +1792,7 @@ export class SetViewer implements RoomLayer {
       // frame, so a machine that cannot keep up stretches the move rather than
       // dropping frames out of it, and every host we have ticks at least that
       // often (50 ms headless, the display's refresh in a browser). A stutter is
-      // then a late frame, not a missing one, which is what it was before this.
+      // then a late frame, not a missing one.
       //
       // Below the step there is no tick to hang each frame on: `fast` wants a
       // frame every 25 ms and headless offers one every 50, `instant` wants all

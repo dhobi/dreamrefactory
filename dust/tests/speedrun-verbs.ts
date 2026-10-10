@@ -359,9 +359,9 @@ test("goto takes a road only the way it was authored", async () => {
 
 /**
  * A pass that walks all the way to the goal says so and returns, so one try is
- * enough for a walk nothing interrupts. (It used to fall through to the next
- * pass, whose top is where arrival was noticed: with `tries: 1` there was no
- * next pass, and a walk that had arrived threw "1 plans and never reached".)
+ * enough for a walk nothing interrupts. (Leaving arrival to the top of the
+ * next pass would make a walk that arrived with `tries: 1` throw "1 plans and
+ * never reached".)
  */
 test("goto with one try that arrives reports arriving", async () => {
   w.standAt(0, 0, "east");

@@ -11,7 +11,7 @@
  * WORKS, and a 34 MB set arriving mid-walk looks exactly like a hang.
  *
  * The browser already solves this and is never asked to: a file fetched once is
- * served from the memory or disk cache the next time, whoever asks. So the fix
+ * served from the memory or disk cache the next time, whoever asks. So the answer
  * is not a cache of our own — it is to ask for everything, early, and throw the
  * bytes away. What is left behind is the HTTP cache, warm, and every later fetch
  * the game makes hits it (#147).

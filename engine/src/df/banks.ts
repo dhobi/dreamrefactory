@@ -44,13 +44,13 @@ const LOOP_TABLE_MIN = LOOP_RECORDS_AT;
  * Container 0 fields: the loop table's location, the one-shot table's, then the
  * bank's name.
  *
- * The loop pointer at +28 used to be read as a constant 1, because on 615 of the
+ * The loop pointer at +28 is read, not assumed to be 1, although on 615 of the
  * 630 v4 banks across four discs that is what it says. The other fifteen are
  * Skull Cracker's music: `THEME01.SND` is 14 containers with its loop table in
  * **12** and its (empty) one-shot table in 13, the bars in 1..11. Nothing else
  * about the layout differs — same 52-byte header, same name at +36, same 26-byte
- * records, same codec — so the field was always the right thing to read and the
- * constant was right by luck.
+ * records, same codec — so the field is the right thing to read and a constant
+ * would be right by luck.
  */
 const BANK_LOOPINFO_AT = 28;
 const BANK_CHUNKINFO2_AT = 32;
@@ -200,8 +200,8 @@ export interface BankTables {
  * dwords and a word) and takes the container at +12 (0x44defb) and the name at
  * +18 (0x44df15). Read from 0x228 instead, the same fields land at +10 and +16
  * and every record but the last reads the same — the last one runs 2 bytes off
- * the end of a table that ends exactly, and was dropped. That silenced
- * `arrive.move`'s `silence` and looped its music in its place (#379).
+ * the end of a table that ends exactly, and is dropped. That silences
+ * `arrive.move`'s `silence` and loops its music in its place (#379).
  */
 const V5_PREFIX = 0x18;
 const V5_LOOP_RECORDS = {

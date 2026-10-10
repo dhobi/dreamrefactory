@@ -60,9 +60,9 @@ export interface RepaintReport {
  * A `changeset` builds a whole new SetViewer, so it patches the PROTOTYPE and
  * not the instance, or it would go quiet exactly when the game moved somewhere
  * new. And the playthrough harness RE-NAVIGATES between segments to load a
- * checkpoint, which wipes both the patch and its counters — the first version
- * of this was installed once after boot and reported "0 frames, 0 skipped"
- * over a five-segment run, i.e. it silently checked nothing. So it runs on
+ * checkpoint, which wipes both the patch and its counters — installed once after
+ * boot, it reports "0 frames, 0 skipped" over a five-segment run, i.e. it
+ * silently checks nothing. So it runs on
  * every document (`addInitScript`), waits for `dbg.viewer` to exist, and keeps
  * its tally in sessionStorage, which is what survives a same-tab navigation.
  */

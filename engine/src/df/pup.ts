@@ -113,8 +113,8 @@ const STANCE_SIZE = 22 + 11 * 262;
  *
  * Container 0 carries three read container refs (`bandLocation`, and per dialogue
  * line the `audioLocation`/`animLogicLocation` pair), so this is a ref-bearing
- * header with literals in it, and #325 listed the literals as suspect on exactly
- * that ground. They are not. Both engines' puppet openers read containers 0..3 as
+ * header with literals in it, which makes the literals look suspect (#325).
+ * They are not. Both engines' puppet openers read containers 0..3 as
  * IMMEDIATES, one call each, into four globals:
  *
  *     TI.EXE 0x43ef30            DF.EXE 0x435910
@@ -291,13 +291,10 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
    * `taoot/gamefiles/de/titanic1/PUPPETS2/bsea2.pup` is a MACINTOSH build that got
    * into the German Windows rip: `detectByteOrder` says `be` for it and `le` for
    * the other 353 puppets in the three rips, including the English copy of the same
-   * file. `readContainerFile` already honoured that and handed back its 209
-   * containers correctly; this reader then read every field little-endian, so the
-   * dialogue count came out 16896 instead of 66 (0x0042 the other way round), the
-   * loop walked off container 0, and Ben-Sea did not load at all in that edition.
-   *
-   * Nothing subtle was wrong — the order was simply never threaded through. Found
-   * by the corpus audit in `engine/tests/container-refs.ts` (#325).
+   * file. `readContainerFile` honours that and hands back its 209 containers
+   * correctly; reading every field here little-endian regardless would make the
+   * dialogue count 16896 instead of 66 (0x0042 the other way round), walk the
+   * loop off container 0, and leave Ben-Sea unloadable in that edition.
    */
   const order = file.order;
   const r0 = new BinaryReader(c0, 0, order);
@@ -336,9 +333,9 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
    * The declared count, CLAMPED to what the container actually holds.
    *
    * Not defensiveness: one shipped file needs it. The German `bsea2.pup` says 512
-   * scripts in a 104-byte container — room for two — and the loop walked straight
-   * off the end, so `readPupFile` threw and the puppet did not load at all in that
-   * edition. Every other one of the 354 puppets in the three rips agrees with its
+   * scripts in a 104-byte container — room for two — and an unclamped loop walks
+   * straight off the end, so `readPupFile` would throw and the puppet not load at
+   * all in that edition. Every other one of the 354 puppets in the three rips agrees with its
    * own container, so this is a bad word in one build rather than a misread offset,
    * and the container's own size is the reading that survives it (#325).
    */
@@ -388,8 +385,8 @@ export function readPupFile(data: Uint8Array, encoding: DfEncoding = DEFAULT_ENC
     const only = readStance(PUP_STANCES);
     if (only) stances.push(only);
   } else {
-    // guarded, unlike the sibling reads it used to sit beside: a puppet with fewer
-    // than four containers is malformed, and answering "no stances" beats throwing
+    // guarded: a puppet with fewer than four containers is malformed, and
+    // answering "no stances" beats throwing
     const r3 = new BinaryReader(file.containers[PUP_STANCES]?.data ?? new Uint8Array(0), 0, order);
     for (let t = 0; t < 64; t++) {
       r3.seek(22 + t * 4);

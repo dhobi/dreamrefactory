@@ -118,9 +118,9 @@ export async function newPlaythrough(): Promise<Playthrough> {
   // turn animation steps on `now - lastTick >= FRAME_MS` and would stall.
   const advance = (): number => (clock = Math.max(clock + STEP, session.clock.now));
 
-  // (No nextFrame wiring: forceupdate()'s frame is the host's job now — see
-  // GameHost's constructor. This used to be a second copy of it, which is how
-  // the same starved-loop bug stayed live everywhere the playthrough isn't.)
+  // (No nextFrame wiring: forceupdate()'s frame is the host's job — see
+  // GameHost's constructor. A second copy here would let a starved-loop bug
+  // stay live everywhere the playthrough isn't.)
 
   /**
    * TAOOT_WAITCOST=<file> writes one line per wait: how many engine steps it
@@ -258,15 +258,14 @@ export function saveOf(p: Playthrough): Uint8Array {
  * clock, and the session clock only advances while something pumps, so awaiting
  * the load before pumping deadlocks it — the load never finishes, the pump never
  * starts, and the test dies on its own timeout with nothing to say. The endgame's
- * lounge checkpoint is the first save that made this happen; it was luck that no
- * earlier room needed a frame to open.
+ * lounge checkpoint is the first save that needs a frame to open.
  *
  * A restored room is also allowed to ASK (TODO 7a). The same lounge's own
  * `openscene` (LOUNGE1C.SET c320) ambushes the view the m4anti save records, so
  * the load itself opens Zeitel's conversation and its dispatch then waits inside
  * `puppetevent(-1)` for an answer nobody else can give — while the game sits
  * there playable. A game that is up and asking the player something IS settled;
- * requiring `loaded` first is what used to spin here for 40000 steps. WHICH
+ * requiring `loaded` first spins here for 40000 steps. WHICH
  * answer is story, so the caller supplies it (segments.ts `refuseZeitelAgain`
  * for m4anti), and the load's own tail — the second restoreProps/restoreActors
  * pass — only runs once the answer lands, which is why the pump goes back to

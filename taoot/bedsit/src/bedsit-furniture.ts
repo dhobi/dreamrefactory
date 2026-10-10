@@ -449,8 +449,8 @@ export const BED = {
    * foot: how far along the bed, how far off the floor the cloth hangs there,
    * and how far it stands out from the bed's own line.
    *
-   * It hangs the whole length — not, as a first reading of the frames had it,
-   * in one trailing stretch with a tidy hem either side. What varies is how
+   * It hangs the whole length — not in one trailing stretch with a tidy hem
+   * either side. What varies is how
    * FAR: it is turned back at the head where the sheet shows, drags almost to
    * the boards over the middle, and lifts a little again at the foot. A hem
    * that is level all the way is a hotel; this is a bed somebody got out of.
@@ -524,13 +524,9 @@ export const COUNTER = {
    * The counter, off `Scene1/View32`: its ends, its top on the row 1,560 up,
    * and its front two levels out of the wall.
    *
-   * EVERYTHING BELOW IS DERIVED FROM THESE. It was not, until the curtains were
-   * re-simulated. The carcase used to be a separate set of absolute numbers —
-   * 3,076 long where this says 3,500, and a worktop 41 units high — because the
-   * cloth had been settled against an imported model of the wrong size and
-   * could not be re-fitted by editing a number. Re-simulating the cloth is what
-   * let the two be reconciled, and this is the shape that leaves: one measured
-   * box, and a carcase worked out from it.
+   * EVERYTHING BELOW IS DERIVED FROM THESE: one measured box, and a carcase
+   * worked out from it. The curtains are simulated against this carcase, so
+   * changing it means re-simulating them, not editing a number.
    */
   y0: 7300, y1: 10800,
   top: 1550, slab: 60,
@@ -730,8 +726,8 @@ export const FIREPLACE = {
  * the SET's focal length is 256 — so 268 of them is 1,485 units, 96 cm over the
  * rails. That is not a trinket: it is half the shelf's 2,950, and three fifths
  * of it as the frame sees it, which is what "two thirds of the fireplace top"
- * was describing. She was 450 mm before, which was a guess at what a mantel
- * ornament usually is, and the frame says this room's is not a usual one.
+ * was describing. That is far bigger than a usual mantel ornament, and the frame
+ * says this room's is not a usual one.
  *
  * DEPTH AND LENGTH TRADE OFF EXACTLY, and only one of them can be measured. The
  * apparent span is 268 px whatever she is; turning that into units needs her
@@ -749,7 +745,7 @@ export const FIREPLACE = {
  * `top` is the shelf's own height and is NOT `FIREPLACE.mantel`. That 2,200 is
  * the DRAWN chimneypiece's shelf, kept below as reference; the room builds the
  * imported one, whose shelf tops out at 2,280. Measured off the mesh, not off
- * the constant that used to describe it.
+ * that constant.
  */
 export const SHIP = {
   /** pushed right of the shelf's middle, clear of where the album stands */
@@ -799,19 +795,19 @@ export const SHIP = {
  * 6,038 · 2,727 · 2,280 and the SET's own z level puts it at 6,014 · 2,701 ·
  * 2,277, which is agreement to 25 units on a thing 690 across.
  *
- * IT IS A CUBOID, which sounds like it goes without saying and did not. The
- * first build took the cover as measured and pushed a second copy of it 110
- * units in -y to make the back, which is a SHEARED prism: its ends are
- * parallelograms and its thickness is horizontal rather than square to the
- * boards. A book is a box. So the back face is the front face moved along the
- * cover's OWN normal, and everything else follows from that.
+ * IT IS A CUBOID, which sounds like it goes without saying and does not. The
+ * cover as measured, with a second copy of it pushed 110 units in -y for the
+ * back, is a SHEARED prism: its ends are parallelograms and its thickness is
+ * horizontal rather than square to the boards. A book is a box. So the back
+ * face is the front face moved along the cover's OWN normal, and everything
+ * else follows from that.
  *
  * AND IT LEANS LIKE A LADDER, which is what fixes which edge it stands on. A
  * ladder's top is against the wall and its foot is out on the floor, so the
  * edge taking the weight is the one at the BACK of the foot — and the front of
  * the foot lifts by the thickness times the sine of the lean, 13 units here.
- * Standing it on its front edge instead, which is what the old build did by
- * accident, buries the back of it 13 units into the shelf.
+ * Standing it on its front edge instead buries the back of it 13 units into
+ * the shelf.
  *
  * The lean comes off the frame rather than by eye. A world-vertical line
  * projects to an image-vertical line in this camera, so the album's ends would
@@ -943,10 +939,10 @@ export const DESK_PROPS = {
   /**
    * The four photographs standing along the back.
    *
-   * They used to share one `frameX` and stand square to the wall, which is a row
-   * of pictures nobody arranged: four frames on a desk are set down one at a
-   * time and each ends up at its own distance and its own angle. Each carries
-   * both now. `turn` is about the frame's own vertical axis, on top of the
+   * Not one shared `frameX`, square to the wall, which is a row of pictures
+   * nobody arranged: four frames on a desk are set down one at a time and each
+   * ends up at its own distance and its own angle. Each carries both. `turn` is
+   * about the frame's own vertical axis, on top of the
    * 0.13 radians of LEAN that `plate` gives every one of them.
    */
   frames: [
@@ -1030,7 +1026,7 @@ export const DESK_PROPS = {
    * The pocket watch: where its CASE is, how wide that case is, and which way
    * its bow points.
    *
-   * `r` no longer draws anything — the watch is a model and carries its own
+   * `r` draws nothing — the watch is a model and carries its own
    * size. It is kept because it is the number that model was fitted to: 68
    * across the case, which is what `bedsitglb.ts` was given and what the plan
    * view draws. Change it and the bake has to be re-run, which is why it is
@@ -1078,8 +1074,8 @@ export const DESK_PROPS = {
     /**
      * And a THIRD, on its own further along the desk behind the lamp.
      *
-     * Missed on the first reading because the lamp is between it and the
-     * camera: in `bedcards.mov` it is a pale packet with a red face at frame
+     * Easy to miss because the lamp is between it and the camera: in
+     * `bedcards.mov` it is a pale packet with a red face at frame
      * pixels 308..337 across by 156..177 down, which is the same height in the
      * frame as the pair — so the same depth on the desk — and about 146 pixels
      * further along it.
@@ -1090,13 +1086,13 @@ export const DESK_PROPS = {
      * NEW WORLD gives y 7568; from the magazines alone, 7556. It is at 7578,
      * which is inside that spread.
      *
-     * Its DEPTH is no longer the pair's, and that is a deliberate departure
-     * from what the frame pixels were read as saying. It was at x 3560 because
-     * the packet stands the same height in the film as the two by the lamp, and
-     * the same height in that frame is the same depth on the desk. It is at
-     * 3384 now — set back where the desk is empty, 103 clear of the lamp's foot
-     * instead of 21, and still 41 short of the photographs leaning along the
-     * back. The film's reading is the better evidence and this is not it.
+     * Its DEPTH is not the pair's, and that is a deliberate departure from what
+     * the frame pixels say: the packet stands the same height in the film as
+     * the two by the lamp, and the same height in that frame is the same depth
+     * on the desk, x 3560. It is at 3384 — set back where the desk is empty, 103
+     * clear of the lamp's foot instead of 21, and still 41 short of the
+     * photographs leaning along the back. The film's reading is the better
+     * evidence and this is not it.
      */
     third: { x: 3179, y: 7518, turn: 1.861 },
   },
@@ -1211,18 +1207,18 @@ export const DESK_PROPS = {
    * is somewhere they plausibly are rather than somewhere they are. 90 by 140
    * mm is the postcard the sizes come from.
    *
-   * They are 1 unit thick. They were 2, which is 1.3 mm, and a postcard that
-   * has 1.3 mm of white edge showing all the way round reads as a coaster. 1 is
+   * They are 1 unit thick. 2 would be 1.3 mm, and a postcard that has 1.3 mm of
+   * white edge showing all the way round reads as a coaster. 1 is
    * 0.65 mm here, or half a millimetre at life size once this desk's third-over
    * scale is taken back out, which is a postcard.
    *
-   * They were briefly INSIDE THE LADY, which is the fault this desk is most
-   * liable to and the reason {@link stackFlat} exists. A card that overlaps
+   * Burying a card INSIDE THE LADY is the fault this desk is most liable to and
+   * the reason {@link stackFlat} exists. A card that overlaps
    * something in plan and stands on `DESK.top` like it does is not lying ON it
    * — it is buried in it, with the other thing's own plane cutting through the
    * card. Nothing in the room shows that: from the walker's eye a buried card
    * and a stacked one are the same picture, and only a plan view catches it. So
-   * no flat thing on this desk is given its height by hand any more; they are
+   * no flat thing on this desk is given its height by hand; they are
    * laid down in order and each one rides on whatever it actually covers.
    */
   postcards: [
@@ -1267,11 +1263,11 @@ export const FURNITURE_PAINT = {
   /**
    * The counterpane: one flat brown, and no tile at all.
    *
-   * It wore a patch of `Scene2/View15` at 700 units to the repeat — fifteen
-   * units to a frame pixel on the largest surface in the room, so fifteen units
-   * of blur over the whole of it. It was then given a drawn two-and-two twill,
-   * which was sharp and was wrong: the original has no weave in it to see. So
-   * it is the colour that twill was drawn at, carried up a sixth.
+   * A patch of `Scene2/View15` at 700 units to the repeat would be fifteen units
+   * to a frame pixel on the largest surface in the room, so fifteen units of
+   * blur over the whole of it; a drawn twill would be sharp and wrong, because
+   * the original has no weave in it to see. So it is the twill's colour, carried
+   * up a sixth.
    */
   blanket: [0.455, 0.358, 0.228],
   pillow: [0.90, 0.88, 0.82],
@@ -1404,15 +1400,15 @@ export const FURNITURE_PAINT = {
   sitter: [0.14, 0.12, 0.10],
   face: [0.52, 0.47, 0.39],
   /**
-   * The frames' moulding: NEUTRAL, where it used to be a warm red-brown.
+   * The frames' moulding: NEUTRAL, not a warm red-brown.
    *
    * Measured as a ratio and not as a colour, the way the bedstead's brass was,
    * because the film is a lamplit night and this room has its own lamps: in
    * `bedcards.mov` frame 0 the naval officer's moulding reads 0.512, 0.504 and
    * 0.520 of the photograph beside it, which is the same fraction in all three
    * channels — a dark that takes the lamp's colour and adds none of its own.
-   * Ours read 0.570, 0.481 and 0.410, which is a frame with its own opinion
-   * about red. Each channel is scaled by the ratio between the two.
+   * A red-brown reads 0.570, 0.481 and 0.410, which is a frame with its own
+   * opinion about red. Each channel is scaled by the ratio between the two.
    */
   frameWood: [0.072, 0.057, 0.046],
   /**
@@ -1432,8 +1428,8 @@ export const FURNITURE_PAINT = {
    * the stone slab in front of it and far lighter than the near-black
    * surround around it, which is the order every frame that sees this wall
    * puts the three in. It wears no tile: the joints between its plates are
-   * cut into the mesh now — thirteen square plates on a backing slab — where
-   * they used to be painted on by a tile `taoot/tools/bedsittiles.ts` drew.
+   * cut into the mesh — thirteen square plates on a backing slab — not painted
+   * on by a tile.
    */
   slips: [0.26, 0.26, 0.26],
   /** the bottom of the grooves between the plates, which is all anyone sees of
@@ -1545,26 +1541,25 @@ function bed(b: Builder): void {
     // The whole member: up from the floor, round, across, round, and down to the
     // floor again — ONE bent tube, posts included.
     //
-    // The posts used to be their own turned members, thinner than the rail, with
-    // a ferrule over each joint to cover where the two met. Every version of
-    // that ferrule was a bulge: at the rail's own radius it left two surfaces in
-    // one place and a dark sliver round them, and wide enough to close over the
-    // rail's end it read as a swelling on a bar that has none. A brass bedstead
-    // has no joint there to dress — the head is one bar bent twice — so there is
-    // nothing to cover and the bulge goes with the thing it was covering.
+    // Not posts as their own turned members with a ferrule over each joint:
+    // every such ferrule is a bulge — at the rail's own radius it leaves two
+    // surfaces in one place and a dark sliver round them, and wide enough to
+    // close over the rail's end it reads as a swelling on a bar that has none.
+    // A brass bedstead has no joint there to dress — the head is one bar bent
+    // twice — so there is nothing to cover.
     //
     // Fourteen steps to the quarter, not six. At six, a 90-degree turn of radius
     // 500 is made of 15-degree chords and the crown of the headboard reads as a
-    // row of kinks; the arc is the most looked-at line on this bed and it was
-    // the coarsest thing on it. Twelve sides to the tube for the same reason —
+    // row of kinks, and the arc is the most looked-at line on this bed. Twelve
+    // sides to the tube for the same reason —
     // it is 27 in radius and you stand next to it.
     //
-    // And swept by `bend`, not by a tube per step. Fourteen steps fixed where
-    // the centre line goes and left the SURFACE in fourteen pieces: each one
-    // chose its own cross-section off a reference axis, so the facets jumped a
-    // twelfth of a turn out of line partway round the bend, and each shaded off
-    // its own face normals, so every seam was a hard edge. The curve was right
-    // and the bar round it was a string of sausages.
+    // And swept by `bend`, not by a tube per step. A tube per step fixes where
+    // the centre line goes and leaves the SURFACE in fourteen pieces: each one
+    // chooses its own cross-section off a reference axis, so the facets jump a
+    // twelfth of a turn out of line partway round the bend, and each shades off
+    // its own face normals, so every seam is a hard edge — the curve right and
+    // the bar round it a string of sausages.
     const path: V3[] = [[x, y0, 0], [x, y0, straight]];
     const N = 14;
     for (let i = 1; i <= N; i++) {
@@ -1653,13 +1648,12 @@ function bed(b: Builder): void {
   /**
    * The pillow, imported.
    *
-   * The drawn one was 160 triangles of dome and read as a folded envelope, and
-   * simulating a replacement did not work: a pillow is two rectangles of ticking
-   * sewn at the rim and stuffed, and Blender will do that — cloth with a target
-   * volume, resting at the flat cut — but every setting that held it plump also
-   * walked it across the mattress or blew it into a ball. So it is a model, in
-   * the same footprint the drawn one had: 620 along the bed by 1,360 across,
-   * 200 thick, on the mattress at 860.
+   * A drawn dome reads as a folded envelope, and a simulated pillow does not
+   * work: a pillow is two rectangles of ticking sewn at the rim and stuffed,
+   * and Blender will do that — cloth with a target volume, resting at the flat
+   * cut — but every setting that holds it plump also walks it across the
+   * mattress or blows it into a ball. So it is a model: 620 along the bed by
+   * 1,360 across, 200 thick, on the mattress at 860.
    *
    *     bedsitglb.ts <pillow.glb> pillow 1360 620 200 \
    *         --drop 1,2,3,4,5,6,7,8,9,10,11,12,13 --simplify 2400
@@ -1670,8 +1664,8 @@ function bed(b: Builder): void {
    * and an island that is not the pillow is not the pillow.
    *
    * 11,919 triangles down to 2,399, which is a fifth of what arrived and still
-   * more than the bedstead. It was tried at 1,200 as well, and 1,200 is past the
-   * point: the rim starts to serrate where the decimator runs out of edges to
+   * more than the bedstead. 1,200 is past the point: the rim starts to serrate
+   * where the decimator runs out of edges to
    * spend on it, and the shallower folds across the middle go flat. At 2,400
    * every crease the full mesh has is still there from the far side of the bed,
    * which is where this pillow is seen from.
@@ -1687,13 +1681,12 @@ function bed(b: Builder): void {
    * than the same one the other way about. `place` turns it about its own
    * standing point, which is what half a turn means.
    *
-   * It cost the tool a real fix to import, and the fix stands for whatever comes
-   * next: it hangs under a root node carrying the Z-up-to-Y-up turn as a matrix,
-   * and `bedsitglb` read only the mesh node's own scale and offset — enough for
-   * everything that had come through it before — so the pillow arrived on its
-   * side. Nothing failed: the fitter stretched it into the box it was given
-   * regardless. What said so was the printout, 36 units per model unit one way
-   * against 226 the other, where an upright import reads 44, 36 and 33.
+   * It hangs under a root node carrying the Z-up-to-Y-up turn as a matrix, so
+   * `bedsitglb` has to walk the world transform: the mesh node's own scale and
+   * offset alone import it on its side. Nothing fails — the fitter stretches it
+   * into the box it is given regardless — and what says so is the printout, 36
+   * units per model unit one way against 226 the other, where an upright import
+   * reads 44, 36 and 33.
    *
    * It sits at 871 and not at `BED.mattress`. The mattress crowns 12 above its
    * own edges, and under this footprint it reaches 869 — so a pillow whose base
@@ -1709,9 +1702,8 @@ function bed(b: Builder): void {
 /**
  * The green blanket folded across the foot.
  *
- * It was a box 10 units thick, floating 100 above the mattress — a sheet of
- * paper hanging in the air over the counterpane rather than lying on it. Two
- * things were wrong and only one of them was the shape.
+ * Two things make it a blanket and not a sheet of paper hanging in the air over
+ * the counterpane, and only one of them is the shape.
  *
  * The shape: a blanket folded in three and laid across a bed is a slab with
  * ROUNDED ends, because those ends are folds and a fold has a radius. The cut
@@ -1720,8 +1712,7 @@ function bed(b: Builder): void {
  * single step is most of what makes it read as folded rather than as a cushion.
  *
  * The height: it sits at 907, which is measured off the counterpane beneath it —
- * that surface tops out at 905 under this footprint — and not at the 960 the box
- * was using. It will want re-seating whenever the counterpane is simulated
+ * that surface tops out at 905 under this footprint. It will want re-seating whenever the counterpane is simulated
  * again, because it rests on the counterpane and not on the bed.
  */
 function foldedBlanket(b: Builder): void {
@@ -1941,46 +1932,31 @@ function cupboardWall(b: Builder): void {
   // colour it was toned to is what is worth keeping, and that colour is
   // `FURNITURE_PAINT.curtain`, which is the same measurement.
   //
-  // TWO curtains, and neither of them is the cloth the model came with. That was
-  // six separate hanging strips — an artefact of how gathered it is — and
-  // welding them into two got the topology right without making either of them
-  // hang like cloth. These are simulated instead: a pleated sheet hung from the
+  // TWO curtains, and neither of them is the cloth the model came with: six
+  // separate hanging strips — an artefact of how gathered it is — which, welded
+  // into two, have the right topology without hanging like cloth. These are
+  // simulated instead: a pleated sheet hung from the
   // rail under the worktop, pinned along its heading and nowhere else, dropped
   // against the carcase with self-collision on, and settled over sixty frames.
   //
-  // What the sim wanted, in the order it taught it: bending at 4 rather than
-  // 0.5, because a CORRUGATED sheet with no bending strength buckles into knots
-  // under its own weight; air damping at 3, because a free leading edge on light
-  // cloth swings and a swinging edge curls back and ties itself off; and both
-  // curtains started CLEAR of the end cheeks, because the right one was first
-  // given an outer edge fifteen units inside its cheek, and a cloth born inside
-  // a collider is thrown out of it — it lost every pleat and draped away
-  // sideways while its twin, which happened to miss by one unit, hung perfectly.
+  // What the sim needs: bending at 4 rather than 0.5, because a CORRUGATED
+  // sheet with no bending strength buckles into knots under its own weight; air
+  // damping at 3, because a free leading edge on light cloth swings and a
+  // swinging edge curls back and ties itself off; and both curtains started
+  // CLEAR of the end cheeks, because a cloth born inside a collider is thrown
+  // out of it — it loses every pleat and drapes away sideways.
   //
-  // SIMULATED TWICE. The first pair had a visible kink at the top, and the
-  // measurement says exactly what it was: the heading was pinned at a mean x of
-  // 10,752 and the cloth below it hung at 10,709, so it stepped 43 units
-  // forward in the first 150 of drop — about sixteen degrees — and then fell
-  // plumb to the hem, drifting six. A cloth cannot settle 45 units in FRONT of
-  // its own pin line; gravity swings it back. So that was never a drape. It was
-  // the authored pleated sheet, held in the shape it was authored in by the
-  // very numbers above: bending 4 and air damping 3 are stiff enough not to
-  // knot, and stiff enough not to fall.
+  // The heading hangs on `COUNTER.rail`, under the worktop's front edge. Pinned
+  // to the CARCASE's top rail instead, 45 units behind that edge, the cloth has
+  // to step forward just to get out from under the counter, and bending 4 and
+  // air damping 3 — stiff enough not to knot, and stiff enough not to fall —
+  // hold that step as a kink at the top (measured: 43 units forward in the
+  // first 150 of drop, then plumb). On the rail the step is 0.4 units on one
+  // curtain and 0.2 on the other, and the lean over the whole drop is 11.
   //
-  // The pin was in the wrong place, and it was in the wrong place because there
-  // was no curtain rail. The cloth was pinned to the CARCASE's top rail, 45
-  // units behind the worktop's front edge, so it had to step forward just to
-  // get out from under the counter. `COUNTER.rail` puts a rail under that edge
-  // now and the heading hangs on it: the step is 0.4 units on one curtain and
-  // 0.2 on the other, the lean over the whole drop is 11, and the two are
-  // symmetric where they used to be 6 and 18.
-  //
-  // Re-simulating is also what let the carcase be built to its own measurement.
-  // The old cloth had been settled against an imported model 424 units short of
-  // the counter the frames show, and could not be re-fitted by editing a
-  // number — so the carcase had been kept wrong to match it. Both are right
-  // now, which is the whole reason to re-run a simulation rather than nudge
-  // what it produced.
+  // The cloth is settled against the carcase as measured, which is the whole
+  // reason to re-run a simulation rather than nudge what it produced: a cloth
+  // cannot be re-fitted by editing a number.
   //
   // Simulated at 40 by 30 and shipped at 40 by 8: cloth never changes how many
   // vertices it has or what order they are in, so the settled positions read
@@ -2000,18 +1976,17 @@ function cupboardWall(b: Builder): void {
   b.mesh(CUPBOARD_POSITION, CUPBOARD_INDICES, at, P.cupboard, 0, true);
   b.material(null);
   /**
-   * The knobs: brass, turned on ten segments, 108 across and 76 long. The
-   * model's own were 324-face lumps that still read as crumpled paper, and they
-   * are 140 triangles for the pair now. `Scene3/View22` reads them at z 2,389
+   * The knobs: brass, turned on ten segments, 108 across and 76 long, 140
+   * triangles for the pair (the model's own are 324-face lumps that read as
+   * crumpled paper). `Scene3/View22` reads them at z 2,389
    * and 2,394 and 624 apart — which is `COUNTER.knob.z` of 2,400 and this
    * module's own note about "brass knobs LOW on them", arrived at three separate
    * times and agreeing every time.
    *
    * THE HEIGHT WAS RIGHT AND THE DEPTH WAS NOT. The pair is baked spanning x
    * -230 to -154, and the doors' own face is at -190 — so 36 of the 76 were
-   * inside the door and only 40 stood out of it. A note here used to say they
-   * stood 76 proud; that was true of the model and never true of where it was
-   * put.
+   * inside the door and only 40 stood out of it — 76 proud is true of the model,
+   * not of where it is put.
    *
    * Pulled forward 30, which seats the turning on the face with six units of
    * shank still in the wood — enough that no gap can open along the rim from a
@@ -2151,9 +2126,9 @@ function drawnCupboard(b: Builder): void {
  * The table's mesh was fitted to 1200 x 750 x 1970 — the box the frames give
  * the table AND the set that stood on it, `Scene1/View32` putting the top on
  * 1,050 and the set's top on 1,970 — and the radio's islands dropped afterwards,
- * which is why its BOX tops out at 1,118.7 and not at 1,970. That fit is now
+ * which is why its BOX tops out at 1,118.7 and not at 1,970. That fit is
  * BAKED INTO THE COORDINATES and must not be done twice: the file the tool
- * reads today is the mended table exported back out of Blender in the room's
+ * reads is the mended table exported back out of Blender in the room's
  * own frame, and it is taken as it stands.
  *
  *     bedsitglb.ts <sidetable.glb> sidetable 1 1 1 --exact 1549.375 \
@@ -2164,14 +2139,12 @@ function drawnCupboard(b: Builder): void {
  *
  *     bedsitglb.ts <ashtray.glb> ashtray 1 1 1 --exact 1549.375
  *
- * It is BUILT rather than imported, and built to the dimensions of the one it
- * replaces. That one was a generated model of 4,282 triangles brought down to
- * 900, and the ring of its rim did not survive the decimation: the brim came out
- * crumpled into facets, the four cigarette rests dissolved into that creasing,
- * and the bowl floor was a faceted cone. None of it was the shape — it was
- * damage, and no budget was going to undo it.
+ * It is BUILT rather than imported, to the dimensions of the generated model
+ * (4,282 triangles, which decimated to 900 crumple the brim into facets,
+ * dissolve the four cigarette rests and make the bowl floor a faceted cone —
+ * damage no budget undoes).
  *
- * So the old mesh was measured instead. Sections cut through it give an outer
+ * So the generated mesh was measured instead. Sections cut through it give an outer
  * radius of 89.5 mm, a total height of 27.4, the bowl's floor inside at 2.27 and
  * its mouth at r = 60, and the brim a flat-bottomed flange at 24.8 crowning at
  * 27.4 over r = 68 — a slab two millimetres thick. The bowl wall is a measured
@@ -2186,7 +2159,7 @@ function drawnCupboard(b: Builder): void {
  * under a four-fold modulation rather than by cutting it, which is why it is
  * symmetrical to the last decimal and why there is no boolean's seam in it.
  *
- * It costs 2,448 triangles against the old 900. That is the price of a rim that
+ * It costs 2,448 triangles against a decimated 900. That is the price of a rim that
  * is actually round: the columns are graded four-fold — close together at each
  * rest, where the dip is six degrees wide at half depth, and spread between them
  * — and at 72 of them the widest gap flattens the silhouette by 0.17 mm.
@@ -2194,13 +2167,13 @@ function drawnCupboard(b: Builder): void {
  * The build script is `ashbuild.py`, which talks to Blender over the bridge; the
  * profile is a table at the top of it.
  *
- * WHAT WAS MENDED: the lower shelf hung in the middle of the table, touching
- * nothing. It had been cut to the legs' bounding boxes, and a bounding box is a
- * tapered leg at its widest — these run 70 units square at the head and 30 at
- * the foot, and the shelf sits a fifth of the way up, where every leg is still
- * near its foot. So it missed all four; and on the +y side it ran 38 units past
- * the OUTSIDE of a leg as well, which is the ear that stood out. It is now a
- * plain box cut to each leg's face interpolated to the height it actually meets
+ * THE LOWER SHELF is cut to the legs, not to their bounding boxes: a bounding
+ * box is a tapered leg at its widest — these run 70 units square at the head
+ * and 30 at the foot, and the shelf sits a fifth of the way up, where every leg
+ * is still near its foot — so a shelf cut to it misses all four and hangs in
+ * the middle touching nothing (and on the +y side runs 38 units past the
+ * OUTSIDE of a leg as well). It is a plain box cut to each leg's face
+ * interpolated to the height it actually meets
  * it, buried 12 units into all four — which reads as joinery from any angle the
  * room offers and is hidden inside a leg 30 units thick at that height.
  */
@@ -2236,11 +2209,11 @@ function sideTable(b: Builder): void {
    * THE BOOK IS DRAWN, NOT IMPORTED, and it is a box: twelve triangles, which
    * is the fewest a book can be and the fewest it needs.
    *
-   * It used to be an island cut out of the table's own generated file, fitted
-   * to a box by `bedsitglb`. That was a lot of machinery for a slab, and worse,
-   * it invited the slab to be measured off the frame — which is where a long
-   * detour went wrong. Read off a crop magnified thirty-seven times, the thing
-   * on the table gives four corners that un-project into a rectangle 418 by 575
+   * Not an island cut out of the table's own generated file and fitted by
+   * `bedsitglb`: that is a lot of machinery for a slab, and worse, it invites
+   * the slab to be measured off the frame. Read off a crop magnified
+   * thirty-seven times, the thing on the table gives four corners that
+   * un-project into a rectangle 418 by 575
    * with three quarters of it out over the front edge, or, on a lower surface,
    * onto a rectangle sitting square on top of the wireless. Neither is a book
    * lying on a table.
@@ -2249,10 +2222,7 @@ function sideTable(b: Builder): void {
    * four corners really are a rectangle on one plane, and forty pixels of a
    * 512 by 264 frame will not say whether they are. Forced through a rectangle
    * solver, a shape that is not one comes back as a rectangle somewhere it
-   * cannot be — which is exactly what happened. Both of the conclusions that
-   * detour reached about this TABLE, that its top was at 866 and then that it
-   * was not, were built on that, and neither was evidence. The table is where
-   * it was, at the height it was.
+   * cannot be, and nothing it says about this TABLE's height is evidence.
    *
    * So this is a plain closed book of a plausible size, lying where the frame
    * has one lie: 420 along by 300 across by 45 thick, its front edge a tenth of
@@ -2260,7 +2230,7 @@ function sideTable(b: Builder): void {
    * TURN is the one thing carried over from the reading, because an angle in
    * plan is the one thing no error in the surface's height can touch.
    *
-   * ALL THREE OF THESE ARE NOW SET BY HAND, off a plan view of the table with
+   * ALL THREE OF THESE ARE SET BY HAND, off a plan view of the table with
    * the props draggable on it. That is the right instrument for the job: the
    * only view the game gives of this top is a grazing one, where a row of
    * pixels is thirty-five units of depth and depth and size trade against one
@@ -2271,8 +2241,8 @@ function sideTable(b: Builder): void {
   /**
    * THE QUARTERLY, on the closed-book model.
    *
-   * Six quads before this — a box, which is the fewest a book can be and was
-   * always going to read as one. It is the same model the armchair's Futility
+   * Not a box of six quads, which is the fewest a book can be and reads as a
+   * box. It is the same model the armchair's Futility
    * wears, cut the same way and fitted to this book's own 300 by 420 by 45, so
    * the two agree about what a book looks like without sharing a module: the
    * bake is `--exact`, and an exact bake has the piece's size in it.
@@ -2533,16 +2503,14 @@ function settee(b: Builder, S: Settee): void {
 /**
  * The book on the armchair: `Futility`, or the Wreck of the Titan.
  *
- * It came in with the armchair as an imported mesh and went back out again. A
- * closed book is a rectangular block — that is the whole of its shape — and the
- * generated one was a block with a wobble in every face, which on something 630
- * long put a visible kink down the cover the rectified cover art then had to lie
- * across.
+ * Not the armchair's imported book. A closed book is a rectangular block — that
+ * is the whole of its shape — and the generated one is a block with a wobble in
+ * every face, which on something 630 long puts a visible kink down the cover
+ * the rectified cover art has to lie across.
  *
- * It is also smaller than the one it replaces, which was 631 by 499 by 36 — 407
- * by 322 millimetres, a folio, on the seat of a chair. This is 300 by 240 by 38,
+ * It is also smaller than the generated one, which is 631 by 499 by 36 — 407 by
+ * 322 millimetres, a folio, on the seat of a chair. This is 300 by 240 by 38,
  * which is 194 by 155 by 25: a small hardback, which is what an 1898 novella is.
- * It keeps the old block's centre, so it sits where that one sat.
  *
  * The 300 by 240 is not a round number chosen for its roundness. The rectified
  * cover `taoot/tools/bedsitobit.ts` cuts is 320 by 400 pixels, and the chart
@@ -2560,10 +2528,9 @@ function settee(b: Builder, S: Settee): void {
  * front edge — where a book gets put down, rather than propped against the back
  * where the cushion is already rising.
  *
- * It rests at 918, and the seat it rests on was measured again when the chair
- * was replaced. The new cushion is not flat: along the book's line it comes up
+ * It rests at 918. The cushion is not flat: along the book's line it comes up
  * from 878 at y 430 to a crown of 923 at y 580 and back down to 899 by y 730.
- * So the book was slid to 460..700, the flattest 240 there is, where the seat
+ * So the book is at 460..700, the flattest 240 there is, where the seat
  * runs 906 to 923 — and it is set six units UNDER that crown rather than on top
  * of it, because a book left on a feather cushion sinks into it, and a flat
  * block resting on the one high point floats at all four corners.
@@ -2696,7 +2663,7 @@ function upholstered(b: Builder, S: Settee, position: Float32Array, index: Uint1
  *
  * Four anchors and a tangent are enough to pin the arm's oval, and the leg's
  * arc is the one that holds every reading above z 20 to within four; the
- * readings below that are the old model's tapered-to-nothing toe rather than a
+ * readings below that are the generated model's tapered-to-nothing toe rather than a
  * centre line, so the toe here rests on a rounded end instead.
  *
  * Bentwood is a rod of ONE section bent to ONE curve, so every member here is a
@@ -2709,10 +2676,10 @@ function upholstered(b: Builder, S: Settee, position: Float32Array, index: Uint1
  * radii cannot come out lopsided, and four members off one curve cannot differ
  * — which is the whole of why it was rebuilt rather than smoothed.
  *
- * The oval is the second answer. The first fitted the hook and the peg as two
- * separate arcs through the same anchors, and the peg's arc missed the ball by
- * fifty units, so the rod had to be crooked sharply back up to reach it — an
- * artefact of the fit that read as a kink. On the oval the rod arrives at the
+ * An oval, not two separate arcs through the same anchors for the hook and the
+ * peg: the peg's arc misses the ball by fifty units, so the rod would have to
+ * be crooked sharply back up to reach it — an artefact of the fit that reads as
+ * a kink. On the oval the rod arrives at the
  * ball already travelling outward, 23 degrees above the horizontal, and the
  * ball goes ON that line instead of standing up off the end of it.
  *
@@ -2921,11 +2888,10 @@ function chimneypiece(b: Builder): void {
   const P = FURNITURE_PAINT, F = FIREPLACE;
   const cx = (F.hearth.x0 + F.hearth.x1) / 2, cy = ROOM.y0 + F.hearth.depth / 2;
   const at: V3 = [cx, cy, 0];
-  // Set into the wall, by the 275 that used to stand between the back of the
-  // slips and the plaster. The chimneypiece was modelled standing off the wall
-  // — its shelf reaches back to 2,600 but its pilasters stop at 2,719 — and
-  // once the wall behind it was cut open that 119 stopped being a place nobody
-  // could see into and became a gap you could look down the side of. There is
+  // Set into the wall by 275, the distance from the back of the slips to the
+  // plaster. The chimneypiece is modelled standing off the wall — its shelf
+  // reaches back to 2,600 but its pilasters stop at 2,719 — and with the wall
+  // behind it cut open that 119 would be a gap you could look down the side of. There is
   // nothing behind this wall, so the piece is simply pushed through it until
   // the slips sit against the plaster; the shelf, the frieze and the capitals
   // go into the wall with it and are none the worse for it.
@@ -3015,7 +2981,7 @@ function slips(b: Builder): void {
 /**
  * The chimney behind the opening.
  *
- * Not an illusion of one any more: the fireplace wall is genuinely cut here —
+ * Not an illusion of one: the fireplace wall is genuinely cut here —
  * `CHIMNEY` in `bedsit-room.ts` takes the strip of plaster out — and this is the
  * recess that goes back into the hole. Six hundred deep, which is a real chimney
  * breast, and lined with the same London stocks the wall shows wherever its
@@ -3081,9 +3047,9 @@ function drawnFireplace(b: Builder): void {
 /**
  * The desk, imported.
  *
- * It was drawn before this, and the drawing is kept below as `drawnDesk`. What
- * replaces it was built against the game's own scan in Blender, part by part,
- * and it differs from the drawing in the places the drawing had to guess:
+ * The drawn desk is kept below as `drawnDesk`. This one was built against the
+ * game's own scan in Blender, part by part, and it differs from the drawing in
+ * the places the drawing had to guess:
  *
  *  - a drawer front is the RECTANGLE the eye can see and nothing wider. The
  *    drawing gave each pedestal a full-width front with a sunk panel inside it,
@@ -3385,11 +3351,9 @@ function deskProps(b: Builder): void {
       P.booklet, P.booklet, c.art as keyof typeof MATERIALS);
   });
 
-  // The matchbox: the box, its tray and eighteen matches in it, modelled. It
-  // was a five-quad slab painted red with cream edges — which is a matchbox at
-  // the size the frames show it and nothing at all from the chair. The PRINT
-  // that used to lie beside it is gone: it was a pale slab with a darker one
-  // inset in it, which is an empty picture frame and nothing else.
+  // The matchbox: the box, its tray and eighteen matches in it, modelled. A
+  // five-quad slab painted red with cream edges is a matchbox at the size the
+  // frames show it and nothing at all from the chair.
   //
   // The matches are their own module because they are their own MATERIAL in the
   // file, which is the only thing that could have gathered them: they are one
@@ -3728,7 +3692,7 @@ function slab(
    * reflection, determinant minus one. Every face therefore reaches the
    * rasterizer with its winding mirrored against its own normal, and a picture
    * pinned to one comes out reversed: right-reading art, wrong-reading room.
-   * Flipping u here is the correction, and it belongs here rather than in
+   * Flipping u here undoes that, and it belongs here rather than in
    * `glOf` because the whole room is built in that mirrored frame and has been
    * measured against the game's frames inside it.
    */

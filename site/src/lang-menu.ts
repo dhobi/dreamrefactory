@@ -23,7 +23,7 @@
  * cannot disagree with itself, and so a link can carry it.
  *
  * The authored chooser (public/lang.stg, taoot/src/lang-chooser.ts) is NOT this
- * control's other half any more: it runs before any tree has been read and what
+ * control's other half: it runs before any tree has been read and what
  * it asks is which EDITION to boot.
  */
 import { UI_LANG_STORAGE_KEY } from "./ui-languages";

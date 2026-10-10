@@ -180,8 +180,7 @@ let PANEL!: PanelKeys;
 let VERBS!: Record<string, VerbSpec>;
 
 /**
- * The save-key helpers as FUNCTIONS rather than the destructured constants this
- * page used to hold.
+ * The save-key helpers as FUNCTIONS rather than destructured constants.
  *
  * A destructure at module scope would have to run before {@link startWorkbench}
  * and there is no game to destructure yet — which is the one real cost of the
@@ -246,9 +245,9 @@ const ms = (n: number): string => {
  * The running clock: seconds since Play, counting — and NOT counting while the
  * page is downloading the game ([#251](https://github.com/dhobi/dreamrefactory/issues/251)).
  *
- * A route is a time, and until this existed the page did not show one until the
- * run was over — the splits table fills in a row at a time, so a leg with no
- * split in it showed nothing at all while it ran. This is the number a stopwatch
+ * A route is a time, and the splits table fills in a row at a time, so without
+ * this a leg with no split in it would show nothing at all while it ran. This is
+ * the number a stopwatch
  * would be showing: it starts on Play, counts while the run does, and stops
  * where the run stopped so the last reading stays on screen to be read.
  *
@@ -472,11 +471,9 @@ function renderLegend(): void {
   // it. `sig` carries the camelCase spelling — the table is keyed lowercase, so
   // taking the key would print `clickat`, which is not a thing anyone types.
   const verbs = Object.entries(VERBS).map(([name, spec]) => {
-    // `name:` and not `name=`. The grammar took an equals until it didn't (see
-    // the named-argument regex in taoot/src/speedrun/sheet.ts, which now rejects one
-    // by hand precisely because every sheet ever written is full of them), and
-    // the one place still printing the old shape was the manual that tells a
-    // first-time reader what to type.
+    // `name:` and not `name=`: the grammar rejects an equals by hand (see the
+    // named-argument regex in taoot/src/speedrun/sheet.ts), so the manual that
+    // tells a first-time reader what to type must print the colon.
     const opts = spec.opts?.length ? `  ·  ${spec.opts.map((o) => o + ":").join(" ")}` : "";
     return [(spec.sig ?? `${name}()`) + opts, spec.help] as [string, string];
   });
@@ -588,10 +585,10 @@ window.addEventListener(
  * Where Play would start.
  *
  * A sheet is a program and this is the instruction pointer, which is the whole
- * reason a checkpoint no longer rewrites the box. Loading `m1p1` used to mean
+ * reason a checkpoint does not rewrite the box. Loading `m1p1` does not mean
  * "here is a new sheet that starts at m1p1" — a copy, immediately diverging from
  * the sheet it was cut out of, and losing everything before it. It means "you
- * are now at line 233 of THIS sheet" instead: one text, one route, and the parts
+ * are now at line 233 of THIS sheet": one text, one route, and the parts
  * you have already validated stay where you wrote them.
  *
  * Only three things move it, and the smallness of that list is deliberate:
@@ -601,14 +598,12 @@ window.addEventListener(
  *     line the restored game is standing at.
  *   - STOP, and reaching the end, put it back to the top.
  *
- * Not the caret and not a keyboard shortcut — but a CLICK IN THE GUTTER, now,
- * and this comment used to say otherwise.
+ * Not the caret and not a keyboard shortcut — but a CLICK IN THE GUTTER.
  *
- * The refusal was right about the hazard and wrong about who it was for. A
- * pointer dropped anywhere is a way to run a sheet from a place the game was
- * never brought to, and the run that follows is nonsense; that is still true.
- * What made it worth allowing is that the alternative was worse in practice: the
- * only ways to reach line 400 were to Step down to it — four hundred actions the
+ * The hazard is real: a pointer dropped anywhere is a way to run a sheet from a
+ * place the game was never brought to, and the run that follows is nonsense.
+ * What makes it worth allowing is that the alternative is worse in practice: the
+ * only ways to reach line 400 would be to Step down to it — four hundred actions the
  * game actually performs — or to delete everything above it, which changes the
  * thing being timed. Both are further from "the state and the pointer are one
  * fact" than a deliberate jump is.
@@ -1203,8 +1198,8 @@ recBtn.addEventListener("click", () => setRecording(!recorder.on));
  *
  * A speedrun is not one file. A route is tried three ways, a leg is pulled out
  * to be worked on alone, the repository's sheet is kept as a reference while
- * something else is written next to it — and until now the box held exactly one
- * text, so every one of those meant destroying the last. They live in
+ * something else is written next to it — and with the box holding exactly one
+ * text, every one of those would mean destroying the last. They live in
  * localStorage because that is what this page has; they are small, and a browser
  * gives an origin megabytes.
  */
@@ -1620,8 +1615,7 @@ function savedPoints(): string[] {
  * Read out of the parse rather than by scanning for the word, for the reason
  * {@link pointerForCheckpoint} gives: `a(); save(x); b()` is one line and three
  * actions. An unparseable sheet answers nothing rather than guessing — every
- * name then ranks equal and the row falls back to name order, which is what it
- * did before this existed.
+ * name then ranks equal and the row falls back to name order.
  */
 function saveOrder(): Map<string, number> {
   const out = new Map<string, number>();

@@ -146,30 +146,28 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  * The port spends it through {@link MovFrame.waitsForVoice}, which is the same
  * sentence in v4's words — "hold until this movie's own sounds are done".
  *
- * ## +0x06 is not wait flags, and what that cost (#324)
+ * ## +0x06 is not wait flags (#324)
  *
  * The movie loop never reads +0x06: no site in .text tests a bit of it, and the
  * values do not behave like flags either — 16 almost everywhere, 18 on a first
- * frame, 17 on a last one. This reader used to derive BOTH waits from it, and
- * the click half was wrong in a way that showed: "bits 1/3" amounts to "this is
- * the first frame", so frame 0 was the only frame that ever stopped for a click
- * and every frame reached BY a click played straight on. Reported twice from
- * play — the Mayor's letters and the hotel room's blinds both opened for one
- * frame and then ran off the end of the film.
+ * frame, 17 on a last one. Deriving the click wait from it goes wrong in a way
+ * that shows: "bits 1/3" amounts to "this is the first frame", so frame 0 would
+ * be the only frame that ever stops for a click and every frame reached BY a
+ * click would play straight on — the Mayor's letters and the hotel room's
+ * blinds opening for one frame and then running off the end of the film.
  *
  * A frame stops because it OWNS hotspots and is not told to play through them:
  * the count at +0x00 (0x404e5a, and 0x404e90 skipping to the action when it is
  * <= 0) and +0x1a bit 2 (0x404e7f, which zeroes the count when no click is in
- * hand). Those are the two the loop reads, and they are what `waitsForClick` is
- * now. Across the disc's 8344 frames, 568 own a hotspot and 358 carry bit 2.
+ * hand). Those are the two the loop reads, and they are what `waitsForClick`
+ * is. Across the disc's 8344 frames, 568 own a hotspot and 358 carry bit 2.
  *
- * The count also BOUNDS the run. `hotspotRun` used to walk from +0x24 until a
- * record failed to decode, which sails into the next frame's boxes whenever two
- * runs are adjacent — and they always are, since each run is exactly its own
- * count of records long. That is how a frame owning none came to answer clicks
- * with the following frame's boxes. All 520 counted runs on the disc decode
- * cleanly for exactly their count, and 372 of them are ones the unbounded walk
- * over-read.
+ * The count also BOUNDS the run. Walking from +0x24 until a record fails to
+ * decode sails into the next frame's boxes whenever two runs are adjacent — and
+ * they always are, since each run is exactly its own count of records long — so
+ * a frame owning none would answer clicks with the following frame's boxes. All
+ * 520 counted runs on the disc decode cleanly for exactly their count, and 372
+ * of them are ones an unbounded walk over-reads.
  *
  * `waitsForVoice` still comes from +0x06 bit 0, OR-ed with the real +0x1a bit 0
  * — see {@link MovFrameV1.holdsForSound}. That one is still an accident ("this
@@ -199,11 +197,11 @@ export interface MovFrameV1 {
    * Hold until a hotspot is clicked: this frame owns at least one (+0x00) and
    * +0x1a bit 2 does not say to play through them.
    *
-   * NOT +0x06, which is what this used to read and is not a field the movie
-   * loop touches — see the module comment. Its bits amount to "first frame" and
-   * "last frame", so only a frame 0 ever waited: click the envelope in
-   * `maylett.mov` or the hotel blinds in `hwin.mov` and the picture showed for
-   * one frame and then ran off the end of the film (#324).
+   * NOT +0x06, which is not a field the movie loop touches — see the module
+   * comment. Its bits amount to "first frame" and "last frame", so read from it
+   * only a frame 0 would ever wait: click the envelope in `maylett.mov` or the
+   * hotel blinds in `hwin.mov` and the picture would show for one frame and then
+   * run off the end of the film (#324).
    */
   waitsForClick: boolean;
   /** +0x00 — how many hotspot records this frame owns */
@@ -407,8 +405,7 @@ const CHAIN_NAME_MAX = 31;
  *
  * Only `voice` is still read, and only as one half of `waitsForVoice`. The
  * click bits are kept named rather than deleted because what they are NOT is
- * the finding: they are what `waitsForClick` used to come from, and #324 is
- * what that cost.
+ * the finding: `waitsForClick` does not come from them (#324).
  */
 const WAIT = { voice: 1, click: 2, clickAlt: 8 } as const;
 
@@ -718,24 +715,20 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
     /*
      * Entry 255 is the film's own colour, and it is usually WHITE.
      *
-     * This used to alias entry 255 onto entry 0 — "DF.EXE's blit rewrites every
-     * 0xff pixel to 0" — reasoning that 0xff is transparent and a segment's first
-     * frame has nothing under it to show through. The first half is right, and it
-     * is handled where it belongs: {@link compositeFrameV1} keys 0xff at decode,
-     * so a DELTA frame holds the picture before it.
+     * Not aliased onto entry 0 on the reasoning that "DF.EXE's blit rewrites
+     * every 0xff pixel to 0" and a segment's first frame has nothing under it to
+     * show through. The first half is right, and it is handled where it belongs:
+     * {@link compositeFrameV1} keys 0xff at decode, so a DELTA frame holds the
+     * picture before it.
      *
-     * The second half was wrong. A segment's first frame is a KEYFRAME: nothing is
+     * The second half is wrong. A segment's first frame is a KEYFRAME: nothing is
      * being held, so 0xff there is not transparency but a colour, and the palette
-     * says which — 255,255,255. Aliasing it to entry 0 painted every one of those
+     * says which — 255,255,255. Aliasing it to entry 0 paints every one of those
      * pixels black. Six segments on the disc carry enough of them to see it at a
-     * glance: INTRO3's sun (9.2% of the frame) became a black hole in a purple
-     * sky, DOCTCHES's and DOCTBONE's anatomy charts lost their paper, and PAPER1-3
+     * glance: INTRO3's sun (9.2% of the frame) becomes a black hole in a purple
+     * sky, DOCTCHES's and DOCTBONE's anatomy charts lose their paper, and PAPER1-3
      * are newspapers. Rendered both ways side by side, all six are right as white
      * and wrong as black.
-     *
-     * It went unseen because those films were also frozen on frame 0 for an
-     * unrelated reason (mov-pace.stepsForward), so the only picture anyone saw of
-     * them was the keyframe this broke.
      *
      * So: passed through untouched. `paletteToRGBA`'s reserve — 0 black, 255 white
      * — already says the same thing.

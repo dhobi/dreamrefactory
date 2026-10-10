@@ -91,9 +91,9 @@ function preferred(a: string, b: string): string {
  * Where Titanic's rip is.
  *
  * Resolved from THIS FILE rather than from the working directory, because the
- * two are no longer the same thing: `npm test` runs from the repository root,
+ * two are not the same thing: `npm test` runs from the repository root,
  * `vite build -w @dreamfactory/taoot` from `taoot/`, and a bare "gamefiles"
- * meant a different tree in each. `TAOOT_GAMEFILES` still overrides it, which is
+ * means a different tree in each. `TAOOT_GAMEFILES` overrides it, which is
  * how a route runs against a second install.
  */
 export function gamefilesRoot(): string {
@@ -112,11 +112,10 @@ interface Scan {
  * The language directory to read, given what the caller asked for (`TAOOT_LANG`,
  * usually) and what the tree holds.
  *
- * An unset language used to mean "walk everything", which was fine while `en/`
- * was the only tree and quietly wrong as soon as a second one existed: the sweep
- * merged all of them into one basename map and `preferred()` picked a winner per
- * name, so a route could read German scenery for one room and English for the
- * next. So an unset language now means {@link DEFAULT_LANGUAGE} whenever that
+ * An unset language does not mean "walk everything": with a second tree the
+ * sweep would merge all of them into one basename map and `preferred()` would
+ * pick a winner per name, so a route could read German scenery for one room and
+ * English for the next. So an unset language means {@link DEFAULT_LANGUAGE} whenever that
  * directory exists, and only a tree with no language directory at all (a flat
  * single-language dump, which is what the tools were first written against) is
  * walked whole.
@@ -313,10 +312,10 @@ export function gameExePath(root = gamefilesRoot()): string {
    * ...and the ENGLISH tree first, because the recovered addresses come from that
    * build and no other. The localised discs ship their own builds — de/BIN is
    * 463,872 bytes against en/BIN's 461,312 — so every hardcoded VA in the RE
-   * tools lands somewhere else in them. This used to sort on the path alone, which
-   * put `de/` first alphabetically, and the failure was silent in the worst way:
+   * tools lands somewhere else in them. Sorting on the path alone puts `de/`
+   * first alphabetically, and the failure is silent in the worst way:
    * `disasmcmd.mts` looks its handler up through jump tables at fixed addresses,
-   * read garbage that wasn't code, and reported "no handler found in dispatch
+   * reads garbage that isn't code, and reports "no handler found in dispatch
    * tables" — indistinguishable from a command nobody has located yet. Measured:
    * `disasmcmd calcvectx` yields 35 instructions against en/BIN and nothing at all
    * against any of the other eleven candidates.

@@ -48,12 +48,12 @@ import { PHOTO_H, PHOTO_W, Photo, PhotoAlbum } from "./photos";
  *
  * Which shops these are is a fact about the shops, so it is applied wherever one
  * of them is opened ({@link GameSession.openShop}) and not by whoever does the
- * opening. It used to be set only by {@link GameSession.loadBootResources} — the
- * port's stand-in for the full game's `boot()` — which is fine for as long as the
- * port is the only thing that ever opens them. TAOOT's 1996 demo opens them
- * itself, from its menu's `dodemo()`, and its interface band came up empty: every
- * prop visible and correctly placed, none of them drawn, because the shop they
- * live in had been opened by the game rather than on its behalf.
+ * opening. Setting it only in {@link GameSession.loadBootResources} — the port's
+ * stand-in for the full game's `boot()` — would hold only while the port is the
+ * only thing that ever opens them. TAOOT's 1996 demo opens them itself, from its
+ * menu's `dodemo()`, and its interface band would come up empty: every prop
+ * visible and correctly placed, none of them drawn, because the shop they live
+ * in was opened by the game rather than on its behalf.
  */
 const BOOT_UI_SHOPS = new Set(["inven.shp", "house.shp", "inven.prp", "house.prp"]);
 
@@ -179,13 +179,13 @@ export class GameSession {
    * reason: the script that starts a walk is frequently not running in the room
    * the walk happens in.
    *
-   * Dust's Mayor's Wife is the case that found it (#394). Her street patrol is
+   * Dust's Mayor's Wife is the case that shows it (#394). Her street patrol is
    * started from INSIDE THE SALOON — `SALLOWER.SET`'s `keydown` on the door runs
    * `sendtoactor ("mwife", setupactor ("street"))`, whose body ends in
    * `moveactor ("town.mwife2")`, and only afterwards does `gototown` change the
-   * set. The star resolved (that is what {@link starRegistry} is for) but the
-   * ROUTE lookup asked the open set, which is the saloon, so she set off in a
-   * straight line and walked through the buildings. The disc's own saves say
+   * set. The star resolves (that is what {@link starRegistry} is for), but a
+   * ROUTE lookup that asked the open set would ask the saloon, so she would set
+   * off in a straight line and walk through the buildings. The disc's own saves say
    * that is not what DF.EXE did: `D1E_005` and `D1E_006` are taken during this
    * very patrol and both carry `hasPath` with the star sentinel `walkonpath`.
    *
@@ -239,23 +239,23 @@ export class GameSession {
    * carries `view` and `visible` beside its owner, an actor record carries
    * visibility, facing, position, speed and zclip.
    *
-   * Ours used to arrive by running the game's `changeset`, which is how it got
-   * both events — and the scene half was a trigger. LOUNGE1C Scene45's is
+   * Arriving by running the game's `changeset` would fire both events — and the
+   * scene half is a trigger. LOUNGE1C Scene45's is
    *
    *     if mission = 4 & actorvisible ("zeit") & currentview () = "view49"
    *         sendtoactor ("zeit", mousedown (0))
    *
-   * and `openset` had just made Zeitel visible, so loading the shipped save taken
-   * in front of him opened the conversation inside the load (#125).
+   * and `openset` would just have made Zeitel visible, so loading the shipped
+   * save taken in front of him would open the conversation inside the load (#125).
    *
-   * This flag now mutes the WHOLE set lifecycle (SetScripts.fireLifecycle):
+   * This flag mutes the WHOLE set lifecycle (SetScripts.fireLifecycle):
    * closeset, openset, openscene, closescene. The load restores from the file
    * what those scripts would produce — the cast (with `actorscale` from the
    * record), every prop's visible/view/anchor/deg/dist, the loop and cricket
-   * tables, the playing theme — which is the script-free restore #143 asked
-   * for. The scene is still recorded as current, so the first turn or step
-   * re-fires `openscene` normally, matching the original (the #125 reporter's
-   * own account: moving off the spot and back still fires it).
+   * tables, the playing theme — the script-free restore of #143. The scene is
+   * still recorded as current, so the first turn or step re-fires `openscene`
+   * normally, matching the original (moving off the spot and back still fires
+   * it there, #125).
    */
   restoringSave = false;
   /**
@@ -283,13 +283,13 @@ export class GameSession {
    *
    * A `soundloop`-flagged cricket loops in place forever, and a title's scripts
    * may only ever bulk-stop crickets in one place (TAOOT: only `initall` calls
-   * `stopcricket("all")`), so any other way out of a set used to leave the
+   * `stopcricket("all")`), so any other way out of a set would leave the
    * ambience sounding — TAOOT's `advanceday` endgame arm (`closesetfile()` and
-   * straight into the flats) left the boat deck's five crowd loops talking under
+   * straight into the flats) would leave the boat deck's five crowd loops talking under
    * leave.mov and the whole closing narration. The scheduler silences them on its
    * next service pass, but that is not soon enough here: the endgame arm goes into
    * `playmovie` in the same script, game time stops for the movie, and the crowd
-   * was still audible half a second in (measured — taoot/tests/browser/endgame.ts's
+   * would still be audible half a second in (measured — taoot/tests/browser/endgame.ts's
    * `sounding=[party1,party2,party4]` on the first sample after the deck closed).
    * Hanging it on the name means every path out of a set is covered by
    * construction, rather than each one having to remember.
@@ -735,7 +735,7 @@ export class GameSession {
       // instant the movie ends — is what keeps a boot sequence black (TAOOT:
       // boot() ends the main-menu movie and then spends many frames opening
       // bedsit1 and playing the date caption before advanceday's blacktoscreen
-      // fades the flat in; revealing at movie end flashed the room, fully lit,
+      // fades the flat in; revealing at movie end would flash the room, fully lit,
       // in between). A stage that never fades still gets its reveal (TAOOT's
       // bomb: blackscreen -> bombopen.mov -> setvisible(false), no fade follows).
       if (f.pendingReveal && !f.snapshot && !this.scriptBusy) {
@@ -814,22 +814,22 @@ export class GameSession {
    * The stream the ENGINE's own ambient timers draw from — today just cricket
    * re-arm jitter (`Scheduler.rand`).
    *
-   * It used to be `rng`, deliberately, on the argument that TI.EXE has one
-   * `rand()` so sharing is the faithful arrangement. The argument was true and
-   * the cost was too high, and the measurement (TAOOT) is stark. Over carried
+   * Not `rng`, although TI.EXE has one `rand()` and sharing would be the
+   * faithful arrangement: the cost is too high, and the measurement (TAOOT) is
+   * stark. Over carried
    * segments 1-5, the crickets draw **4 times** and scripts draw **834**; the
    * TAOOT corpus's only jittered crickets (`steam1`/`steam2`, BOOTFILE container
    * 2) re-arm on the CLOCK, so those 4 draws move whenever anything moves the
-   * clock — and moving them re-values all 834. Un-shadowing `trackbut` changed
-   * the script draw COUNT not at all (834 either side) and still flipped the
-   * Gorse/Jones coin and reshuffled the crowd extras, because 4 ambient draws
-   * had slid into different places in the sequence.
+   * clock — and moving them re-values all 834. On a shared stream, un-shadowing
+   * `trackbut` changed the script draw COUNT not at all (834 either side) and
+   * still flipped the Gorse/Jones coin and reshuffled the crowd extras, because 4
+   * ambient draws had slid into different places in the sequence.
    *
    * Splitting costs a fidelity point that NO SCRIPT CAN OBSERVE: which arbitrary
    * value a draw returns is arbitrary either way, and the original's own sequence
    * came from a time seed nobody can reproduce. What it buys is that an engine
-   * change with no effect on what scripts ask for now has no effect on what they
-   * get. Crickets stay deterministic — that was the real point of seeding them at
+   * change with no effect on what scripts ask for has no effect on what they
+   * get. Crickets stay deterministic — that is the real point of seeding them at
    * all, since a cricket writes its name to sound channel 2 and `currentsound(2)`
    * is script-readable (TAOOT's bedsit landlady sequences her five lines on it).
    */
@@ -837,7 +837,7 @@ export class GameSession {
 
   /**
    * Seed both streams from one number — the only way a host should do it, so the
-   * two cannot drift apart the way the two mask lists once did. The ambient
+   * two cannot drift apart. The ambient
    * stream is offset rather than shared so it draws a different sequence.
    */
   seedRandom(seed: number): void {
@@ -923,12 +923,11 @@ export class GameSession {
    * straight through, synchronously, once per main-loop pass: in the original it
    * cannot possibly overlap the event
    * dispatch further down the same handler. Here it is an async dispatch, so
-   * putting it in `inflight` made the engine look busy for the microtask it took
-   * to settle — and `scriptBusy` is what the input queue waits on. The clock then
-   * ate keys and clicks: a press made during a walk went `posted=3 taken=0
-   * dropped=2` once the heartbeat ran on both hosts, which is the heartbeat
-   * poisoning the input path the same way it used to poison its own service pass
-   * (see tickTime). Separating the two sets is what lets the clock tick without
+   * putting it in `inflight` would make the engine look busy for the microtask it
+   * takes to settle — and `scriptBusy` is what the input queue waits on. The
+   * clock would then eat keys and clicks: measured with the heartbeat in
+   * `inflight` on both hosts, a press made during a walk went `posted=3 taken=0
+   * dropped=2`. Separating the two sets is what lets the clock tick without
    * the player's input paying for it.
    */
   private readonly idleInflight = new Set<Promise<unknown>>();
@@ -1143,8 +1142,8 @@ export class GameSession {
    * A sheet's standing watches (`watchFor`), by id, asked beside the holds
    * (#509). A watch never runs the game; RISING, it stops it — on the very pass
    * its condition came true — until the runner has acted on it. Polled from the
-   * runner's own beat instead, a watch pressed its key some passes after the
-   * film it watches for began, and how many was the machine's.
+   * runner's own beat instead, a watch would press its key some passes after the
+   * film it watches for began, and how many would be the machine's.
    */
   readonly sheetWatches = new Map<number, { met: () => boolean; was: boolean; rose: boolean }>();
   /**
@@ -1260,10 +1259,10 @@ export class GameSession {
   /**
    * Is the engine waiting on a file right now? A sheet's runner does not look
    * at the game while it is (#509): a pause is not over and a hold does not
-   * close until the load has landed. Else a runner on a slow link saw a film
-   * that was still downloading as no film at all, paused a pass, and the pass
-   * ran the moment the file came — with the film on screen and nobody pressing
-   * ESC at it — where a runner with the file to hand pressed first.
+   * close until the load has landed. Else a runner on a slow link would see a
+   * film that is still downloading as no film at all, pause a pass, and the pass
+   * would run the moment the file came — with the film on screen and nobody
+   * pressing ESC at it — where a runner with the file to hand presses first.
    */
   get loadingFiles(): boolean {
     return this.blockedOnFiles > 0;
@@ -1311,20 +1310,14 @@ export class GameSession {
    * Counting the calls instead only agrees when the caller arrives exactly 60
    * times a second, and neither host does:
    *
-   *  * the browser delivers whatever rAF gives. At 38 fps (this laptop before
-   *    the renderer stopped redrawing unchanged frames) every frame()-based
-   *    timer ran 37% slow; on a 120 Hz panel the same code runs them twice as
-   *    fast.
+   *  * the browser delivers whatever rAF gives. At 38 fps every frame()-based
+   *    timer would run 37% slow; on a 120 Hz panel twice as fast.
    *  * the pumped-clock host advances 50 ms per forceupdate — which already IS
    *    one displayed frame at the default framerate of 3 (3 ticks = 50 ms), so
-   *    dividing by framerate again counted every frame three times. That the two
+   *    dividing by framerate again would count every frame three times. That the two
    *    coincide is not luck: the boot's clock handler (TAOOT: calctime) fixes a
    *    main-loop pass at 50 ms (20 passes to the pocketwatch's second), and at
    *    framerate 3 a pass is a frame.
-   *
-   * The goldens recorded before this ran frame() at 6.67 Hz headless where the
-   * original runs it at 20; they were re-recorded, which is the only reason a
-   * change this deep in the clock shows up as a diff and not as a mystery.
    */
   private advanceFrames(now: number): void {
     const period = Math.max(1, Math.round(this.frameRate));
@@ -1370,7 +1363,7 @@ export class GameSession {
     const inst = this.resolveEventTarget(cmd, targetName, handler);
     const chain = this.buildEventChain(cmd, inst, handler);
     if (!chain.length) {
-      // Two different things used to say "target not loaded", and only one of them
+      // Two different things can mean "target not loaded", and only one of them
       // is a fault. A name nothing answers to is a real miss; a target that IS open
       // and simply has no handler for this event is the engine working — the boot
       // fires `sendtoshop(curworldchar, updateallfx())` for every Timelapse world
@@ -1884,12 +1877,12 @@ export class GameSession {
     // The event is the SENDING FRAME's, not an interpreter-wide "outermost
     // dispatch" — chains overlap; see Frame.dispatch.
     //
-    // A PROP is the same case one command over, and was left out: `initprop`, the
+    // A PROP is the same case one command over: `initprop`, the
     // boot's default that hides a prop and zeroes it, is what 70 of the 72 props
     // two open shops give you rely on — only `door` and `signs` carry their own.
     // So `addinven`'s opening `sendtoprop ("invenhelp", initprop ())`, which takes
     // the HELP button down before putting the item you were just handed in its
-    // place, reached nothing and the item was drawn on top of HELP (#123).
+    // place, would reach nothing and the item be drawn on top of HELP (#123).
     if (
       (cmd === "sendtoactor" || cmd === "sendtoprop") &&
       parent?.dispatch !== handler
@@ -2108,10 +2101,10 @@ export class GameSession {
    * forget the boot so {@link ensureBooted} runs again.
    *
    * This is what lets `quit()` return to the front door in place instead of
-   * reloading the page. The reason it could not before is real and is handled by
-   * the caller, not here: `quit()` is called from inside the script that just
-   * played the credits, so a boot re-entered underneath it would be building sets
-   * while the old game was still talking. The host schedules this for a later
+   * reloading the page. The obstacle is real and is handled by the caller, not
+   * here: `quit()` is called from inside the script that just played the
+   * credits, so a boot re-entered underneath it would be building sets while the
+   * old game is still talking. The host schedules this for a later
    * task, and the `settle()` below is the second half of that guarantee — nothing
    * is torn down until the dispatch that asked for it has finished unwinding.
    *
@@ -2259,9 +2252,9 @@ export class GameSession {
    * TAOOT's endgame is where the difference is visible. `advanceday()` runs
    * `closesetfile()` and only then transtoflat()s to the closing narration — so
    * the boot's own `if currentset() != "none": setvisible(false)` does NOT fire,
-   * the flag stays raised over a set that no longer exists, and the viewer went
-   * on compositing the room's last decoded frame over the top of every
-   * newspaper flat and the final movie: the boat deck we left, with the ending
+   * the flag stays raised over a set that no longer exists, and the viewer would
+   * go on compositing the room's last decoded frame over the top of every
+   * newspaper flat and the final movie: the boat deck you left, with the ending
    * showing in the strip of screen below it.
    */
   get viewShowing(): boolean {
@@ -2606,15 +2599,14 @@ export class GameSession {
   /**
    * Theme (music) loudness as the scripts see it, 0..255 — what `themevol(track)`
    * reads back and `themevol(track, v)` writes. Held here because it has to be
-   * READABLE: the getter used to answer nothing, and the scripts duck the score
-   * with a read-modify-write.
+   * READABLE: the scripts duck the score with a read-modify-write.
    *
    * `themevol(currenttheme(2), themevol(currenttheme(2)) / 4)` is the idiom, and
    * with the getter answering 0 it means "set the music to zero and, on the way
    * back up, multiply zero by four". TAOOT's 1996 demo does exactly that around
-   * every conversation (gang.cst `prepuppet`/`postpuppet`), so its music died at
-   * the first puppet and never came back; NAREND.STG's bad-ending narration
-   * ducks in three stages the same way and went silent at the first newspaper.
+   * every conversation (gang.cst `prepuppet`/`postpuppet`), so its music would
+   * die at the first puppet and never come back; NAREND.STG's bad-ending narration
+   * ducks in three stages the same way and would go silent at the first newspaper.
    *
    * A single channel, so the track name is informational (see the themevol
    * builtin). Starts at 255 — the engine's own full-volume default, which is
@@ -2633,13 +2625,13 @@ export class GameSession {
    *     SALUPPER  themevol ("saloonsep.snd", 24) ; playtheme ("saloonsep.snd")
    *
    * — the piano heard from the bar, and the same piano heard through the floor
-   * from the landing above it. `playtheme` used to finish by applying the master
-   * `themevolume` global, which threw both of those away: the score came back at
-   * 255 the instant it started. Downstairs that was invisible, because SALLOWER
-   * runs a scene loop that re-sets the volume from your distance to the piano
-   * every two ticks — so the clobber was corrected before anyone could hear it.
-   * Upstairs nothing corrects it, and the music stayed at full volume through
-   * every conversation on that landing.
+   * from the landing above it. Finishing `playtheme` by applying the master
+   * `themevolume` global would throw both of those away: the score would come
+   * back at 255 the instant it started. Downstairs that would be invisible,
+   * because SALLOWER runs a scene loop that re-sets the volume from your distance
+   * to the piano every two ticks — so the clobber is corrected before anyone can
+   * hear it. Upstairs nothing corrects it, and the music would stay at full
+   * volume through every conversation on that landing.
    *
    * So a track's volume is remembered under its name, and starting a track
    * applies what the script asked for that track. TAOOT is unaffected in
@@ -2747,8 +2739,8 @@ export class GameSession {
    * a field cleared flashes an opaque patch across it: show, `forceupdate`,
    * hide, `forceupdate`, and the old string is painted over on the way in and
    * restored-from-flat on the way out. Ours recomposites every frame with the
-   * text ON TOP, so the patch was invisible and every value a field ever held
-   * stayed on screen, stacked.
+   * text ON TOP, so the patch alone would be invisible and every value a field
+   * ever held would stay on screen, stacked.
    *
    * Both games do it, which is why this is a rule about props and not a name:
    *
@@ -2758,7 +2750,8 @@ export class GameSession {
    *     statements over `blankscore`, moved to the field being rewritten with
    *     `propxy` first, and only THEN `drawstring ("$" @ num, …)`. Both fields
    *     are right-aligned by shifting x by 4 px per missing digit, so the new
-   *     value never lands where the old one did and nothing replaced it: #288,
+   *     value never lands where the old one did, and without the patch nothing
+   *     replaces it: #288,
    *     "$100" and "$10" and "$0" all at once in the WAGER box.
    *
    * By RECT and not the whole layer, because the patch is a patch: TAOOT's
@@ -2920,16 +2913,16 @@ export class GameSession {
    * props, stacking it in savestage1..3, opening the new one and running its
    * setup, then fading back in.
    *
-   * The port used to reimplement it, which meant transcribing its two per-stage
-   * switches into tables of TAOOT stage names — and reimplementing it less well:
-   * TAOOT's shipped `restorescreen` handles a dead player, the unlit cabin, the
-   * guided tour and the long fade after the Vlad fight, none of which the
-   * transcription had.
+   * Reimplementing it would mean transcribing its two per-stage switches into
+   * tables of TAOOT stage names — and reimplementing it less well: TAOOT's
+   * shipped `restorescreen` handles a dead player, the unlit cabin, the guided
+   * tour and the long fade after the Vlad fight, none of which a transcription
+   * would.
    *
    * These stay as methods rather than becoming bare `runGlobal` calls at each
    * caller because the host, the dev bar and the suite all reach the overlay
    * system through them, and what they mean ("go to this flat") is stable even
-   * though what performs it has moved into the data.
+   * though what performs it lives in the data.
    */
   transToFlat(fileName: string) { return this.runGlobal("transtoflat", [fileName]); }
   transFromFlat() { return this.runGlobal("transfromflat"); }
@@ -3001,7 +2994,7 @@ export class GameSession {
    * Player setting: how fast a move the PLAYER asked for animates (#222).
    *
    * The rate itself is not a preference — it is a number in the binary, and
-   * getting it wrong by 1.8x is what #205 was (see `SetViewer.FRAME_MS`).
+   * getting it wrong by 1.8x is #205 (see `SetViewer.FRAME_MS`).
    * `original` is that number and the default, so nothing here reopens it. What
    * this adds is the choice the ORIGINAL also offered, under the name
    * `framerate`: the request (#222) is from players who get motion-sick at 20
@@ -3449,7 +3442,7 @@ export class GameSession {
      *
      * Without it `new.flt`'s `sendtocast("gang", initactors())` reaches
      * `sendtoactor("horse2", setupactor("street"))` and the port answers "target
-     * not loaded", which is how this was found. After `opencast`, which is the
+     * not loaded". After `opencast`, which is the
      * order TI.EXE lists them in: the cast's own open first, then its characters.
      *
      * The two closing halves stay unimplemented on purpose — no script on either
@@ -3640,10 +3633,10 @@ export class GameSession {
     }
     /**
      * Each prop's own `openprop` — the shop-open lifecycle handler, and the prop
-     * twin of `openstage`/`openflat`/`openshop`. Nothing fired it, and nothing in
-     * either corpus CALLS it either (unlike `initprop`, which the set scripts send
-     * themselves: `sendtoprop ("door", initprop ())`), so what it sets up simply
-     * never happened.
+     * twin of `openstage`/`openflat`/`openshop`. Nothing in either corpus CALLS
+     * it (unlike `initprop`, which the set scripts send themselves:
+     * `sendtoprop ("door", initprop ())`), so unless the engine fires it, what it
+     * sets up never happens.
      *
      * All six in Dust are structural, and they are the props that come in pairs:
      *
@@ -3651,10 +3644,10 @@ export class GameSession {
      *         propinstance ("dung1", "dung2")
      *         propzclip (me, 16)
      *
-     * plus powderkeg2/3, buildrand2/3, table2 and two more `propzclip`s. So the
-     * second of each pair did not exist, and #290's report has the engine saying
-     * so out loud — `sendtoprop("dung2", setupprop(..)) — target not loaded`,
-     * from `initprops` addressing a prop whose maker had never run. Titanic
+     * plus powderkeg2/3, buildrand2/3, table2 and two more `propzclip`s. Unfired,
+     * the second of each pair does not exist, and the engine says so out loud
+     * (#290) — `sendtoprop("dung2", setupprop(..)) — target not loaded`, from
+     * `initprops` addressing a prop whose maker never ran. Titanic
      * defines none, so this is Dust's alone until Timelapse says otherwise.
      *
      * Before the shop's own `openshop`: a group that makes an instance is making
@@ -3695,12 +3688,11 @@ export class GameSession {
    * Replay the resource openings this game's `boot()` performs, without its game
    * flow — the movies it plays and the day it advances into.
    *
-   * Derived, not listed. This used to name TAOOT's `inven.trk`, `unilib.trk`,
-   * `inven.shp`, `house.shp`, `gang.cst` and `main.stg`, which is one game's boot
+   * Derived, not listed. Naming TAOOT's `inven.trk`, `unilib.trk`, `inven.shp`,
+   * `house.shp`, `gang.cst` and `main.stg` here would be one game's boot
    * transcribed into the engine; {@link bootPlan} reads the same six out of the
    * BOOTFILE that opens them, so a different title's stand-in opens ITS resources
-   * instead. The order is the boot's own, which is also more faithful than the
-   * grouping this replaced (banks, then shops, then the cast).
+   * instead. The order is the boot's own.
    *
    * Dispatch is by extension, because that is what the primitive the boot called
    * is determined by: `.cst` was an `opencastfile`, `.shp` an `openshopfile`. A

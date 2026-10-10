@@ -84,8 +84,8 @@ import { answer, ask, openDoor, room, set, walkTo, type Segment } from "../route
  *     `NEW.FLT/0002 bullet ()` resolves a shot with `hittest (thepoint)`, so the
  *     route sweeps `hittest` across the picture and fires at the first pixel
  *     that answers a living gunman.
- *  4. **Three conditions, and they are not the same condition.** The first
- *     draft of the driver ran them together and lost the fight twice.
+ *  4. **Three conditions, and they are not the same condition.** A driver
+ *     that runs them together loses the fight.
  *
  *       - **Armed** is `variable (me) = 1`. `initxyz ()` makes the gunman
  *         visible and then hides him again unless `actordist (me) = 32000`, so
@@ -103,9 +103,9 @@ import { answer, ask, openDoor, room, set, walkTo, type Segment } from "../route
  *         `20 + random (20)` and `statloop ()` brings him back by itself, so a
  *         driver that turns while a placed gunman is up pays for it in the one
  *         currency that matters: `TOWN.SET/0001 hit ()` is `if day = 4 &
- *         playerhits > 30` → `playerdeath = "by gang"`, and turning at
- *         kidgang5's station took twenty-one hits before this was separated out.
- *         With the three apart the fight is won on 22 of the 30.
+ *         playerhits > 30` → `playerdeath = "by gang"`, and with the three run
+ *         together turning at kidgang5's station costs twenty-one hits. With
+ *         the three apart the fight is won on 22 of the 30.
  *  5. **`closefight ()` does not end the fight flag.** Its day-4 arm is
  *     `phase = 3`, `currentcd ("player", 0, 0)` and the three kegs put down —
  *     and `fighton`, although declared, is never assigned. That is why `fighton`
@@ -425,7 +425,7 @@ export const rung: Segment = {
            * kidgang5 stands on a roof at z = 200, and from Scene G4, one cell
            * away, `actordist ()` answers 297 and no pixel of him is on the
            * screen at all: he is above its top edge. Standing there and waiting
-           * cost twenty-one hits before this line existed.
+           * costs twenty-one hits.
            */
           at++;
           await walkTo(p, town, cells[at % cells.length], done);

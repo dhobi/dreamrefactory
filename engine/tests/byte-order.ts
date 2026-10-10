@@ -14,8 +14,8 @@
  * Detection is the load-bearing part — every reader downstream inherits whatever
  * it decides — and it is decidable from a 1040-byte header, so those tests build
  * their own and run anywhere. The rule they pin is the asymmetry: little-endian
- * is tried first and wins ties, so no file that read correctly before this
- * existed can be re-read as something else.
+ * is tried first and wins ties, so a file that reads as little-endian is never
+ * re-read as something else.
  *
  * ## The half that needs a disc — EITHER disc
  *
@@ -28,11 +28,10 @@
  * colour covers 17.9% of it. The files are 1.74 MB and 1.08 MB and every integer
  * in them runs the other way.
  *
- * This shape is not tidiness. The file used to hard-code the Macintosh path, and
- * within a day of being written the Mac disc was replaced by the Windows one and
- * five of these tests began passing by not running — with the warning not even
- * surfacing through the runner. That is the trap this file's own header warns
- * about, sprung on the file itself.
+ * This shape is not tidiness. Hard-coding one disc's path would leave these
+ * tests passing by not running whenever the other disc is the one present —
+ * with the warning not even surfacing through the runner. That is the trap
+ * this file's own header warns about.
  *
  * ## Two assertions that need explaining
  *

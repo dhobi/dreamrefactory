@@ -4,18 +4,17 @@
  *
  *   npx vitest run taoot/tests/auto/speedrun-say.ts
  *
- * A bevel list used to have to run to the end of the conversation. It could not
- * be a prefix: the plaque branch of `converse` had ONE `else` for two unrelated
- * situations — "the plaque offered is not the one I named" and "I have said
- * everything I came to say" — and both threw. So a run that only needs a beat
- * (Sasha hands over Vlad's package on the third answer; the last two turns are
- * pleasantries) had to sit through the rest, or answer `otherwise: last` all the
- * way to the close, which is the same thing more slowly.
+ * A bevel list can be a prefix. The plaque branch of `converse` tells apart two
+ * unrelated situations — "the plaque offered is not the one I named" and "I
+ * have said everything I came to say" — so a run that only needs a beat (Sasha
+ * hands over Vlad's package on the third answer; the last two turns are
+ * pleasantries) does not have to sit through the rest, or answer
+ * `otherwise: last` all the way to the close.
  *
  * `then:` is the second question asked separately. What is pinned here is mostly
  * what it must NOT do: a mis-typed bevel must still stop the run rather than
  * quietly walking out of a conversation, and a sheet that does not say `then:`
- * must behave exactly as it did before there was one — six of the shipped run's
+ * must keep the prefix-free behaviour — six of the shipped run's
  * `say` lines take a short list with `otherwise: last` and mean it.
  *
  * Driven against a scripted puppet rather than the game. What is being tested is

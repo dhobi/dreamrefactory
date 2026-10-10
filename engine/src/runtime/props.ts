@@ -48,13 +48,12 @@ export function becomeWorldProp(p: PropInstance, v1 = false): void {
    * trunc(scale x ref / 1000) x src / depth (0x4150d1) — so 1000 is the
    * identity, and Dust never propscales its doors at all: HOUSE.PRP's `door`
    * group (55 one-frame states, refScale 160) is placed with `propstar` and
-   * simply expected to draw. Under the port's 0 default the worldDrawList's
-   * `scale <= 0` skip dropped every one of them: "doors don't draw".
+   * simply expected to draw. Under a 0 default the worldDrawList's
+   * `scale <= 0` skip would drop every one of them: "doors don't draw".
    *
-   * This default was tried before and REVERTED ("the doors are too big now"),
-   * and both readings were right: the doors drew oversized because the v1
-   * camera was missing its 64-unit setback and f was 256 instead of 310 —
-   * every world sprite was too near. With the camera fixed, a door at its
+   * The doors only draw oversized ("the doors are too big now") with a v1 camera
+   * that lacks its 64-unit setback and has f at 256 instead of 310 — every world
+   * sprite too near. With the camera right, a door at its
    * usual ~156 depth draws at 160/156 of its art, which is the authored look.
    * v4 keeps 0: TAOOT propscales every world prop it shows, and a v4 prop
    * placed without one staying invisible is the measured behaviour.
@@ -191,9 +190,9 @@ export function degVariantFrames(st: PropState, deg: number): number[] | null {
  * and draws, of the records whose i16 at +8 equals it, the one nearest the prop's
  * degree (0x41911f–0x419151) — so within a variant, the frame whose group is the
  * step. Stored order is not always step order, and the deck map's `close` is the
- * case that found it: its deg-0 frames are stored half-open … fully open, then
- * shut LAST (groups 1,2,3,4,5,0), so `6,5,4,3,2,1` by position started on the
- * shut frame and jumped open (#485); by group it rolls up from fully open to shut.
+ * case that shows it: its deg-0 frames are stored half-open … fully open, then
+ * shut LAST (groups 1,2,3,4,5,0), so `6,5,4,3,2,1` by position would start on the
+ * shut frame and jump open (#485); by group it rolls up from fully open to shut.
  *
  * A script that reaches past the variant is not about the variant, so it is used
  * as it stands; one that cannot be either is dropped in favour of the variant.
@@ -801,13 +800,11 @@ export class PropRuntime {
    * set view (persistentOnly) only boot-UI shops qualify, so a set/stage
    * shop's screen props don't bleed onto the room (the boiler flat controls).
    *
-   * There used to be a third filter here hiding house.shp's `door`/`signs`
-   * overlays during a turn/walk, so the standpoint-bound door image didn't
-   * float "position:absolute" over the rotating scene. It was a patch over the
-   * departure `closescene` firing at arrival instead of at the move's start:
-   * boot's closescene is what puts exactly those two props away, and now that
+   * Nothing here hides house.shp's `door`/`signs` overlays during a turn/walk:
+   * boot's departure closescene is what puts exactly those two props away, and
    * it runs before the first motion frame (SetViewer.departScene, from the
-   * TI.EXE disassembly), there is nothing left to suppress.
+   * TI.EXE disassembly), so the standpoint-bound door image never floats over
+   * the rotating scene.
    */
   private drawList(persistentOnly = false): PropInstance[] {
     return [...this.props.values()]
@@ -904,8 +901,8 @@ export class PropRuntime {
     const f = p.shop.frame(st.frames[idx]);
     // TI.EXE world→screen: k = propscale(per-mille) × refScale / (1000 × depth).
     // refScale is the frame record's i16 @+42 (uniformly 96 across TAOOT's shipped
-    // shops — the same field GANG.CST stores for actors); the old hardcoded 180
-    // was a fit that ballooned near props (e.g. the wireless message slips).
+    // shops — the same field GANG.CST stores for actors); a hardcoded fit such as
+    // 180 balloons near props (e.g. the wireless message slips).
     const k = cam.v5
       ? cam.v5.size(p.worldX, p.worldY, p.worldZ, p.scale, p.group.depthRef ?? 0)
       : (p.scale * (st.refScales[idx] ?? 96)) / (1000 * proj.depth);
@@ -952,17 +949,17 @@ export class PropRuntime {
        * Dust is where that costs a click (#393). Its view is 512x264 of a
        * 512x384 screen and the interface band below belongs to the stage flat
        * `mainpanel` — so the saloon's `blackjack` prop, a 207x193 sprite at
-       * `propscale 3300` that you stand right in front of, reached rows
-       * 264..384 in the hit test alone. `hittest` answered "prop" over the
-       * band, Dust's BOOTFILE `mousedown` sent the click on with
-       * `sendtoprop`, and clicking the SKULL dealt a hand of blackjack
-       * instead of opening the save menu (its `setcursor` put the touch
-       * cursor over the band for the same reason).
+       * `propscale 3300` that you stand right in front of, reaches rows
+       * 264..384 in an unclipped hit test alone. `hittest` would answer "prop"
+       * over the band, Dust's BOOTFILE `mousedown` send the click on with
+       * `sendtoprop`, and clicking the SKULL deal a hand of blackjack instead
+       * of opening the save menu (its `setcursor` putting the touch cursor
+       * over the band for the same reason).
        *
-       * Titanic never showed it because its band IS screen props, and those
+       * Titanic never shows it because its band IS screen props, and those
        * are the loop above — asked first, and unclipped on purpose, since a
        * screen prop is placed in screen space and the band is where it lives.
-       * Actors were bounded for this same reason already: RoomLayer.roomHitTest
+       * Actors are bounded for this same reason: RoomLayer.roomHitTest
        * and clickActor gate on the room image before asking ActorRuntime.
        */
       if (x >= cam.clipW || y >= cam.clipH) return null;
@@ -986,7 +983,6 @@ export class PropRuntime {
         // a world prop is only clickable where it is actually drawn: scenery
         // nearer than the prop hides that pixel in composite() (the SET Z map),
         // so a hit there must miss too — else props are clickable THROUGH walls
-        // (the click hit-test used to ignore occlusion entirely).
         if (occ && sceneryOccludes(occ, x, y, this.occludeAt(p, hiddenBy(proj), occ))) continue;
         return p;
       }

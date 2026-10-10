@@ -148,9 +148,8 @@ export function installStateList(o: StateListOptions): StateList {
   const changeWatch = new ChangeWatch();
   /**
    * The two lists, each keeping its element in step by touching only what
-   * differs. Rebuilt lists were the first version and the wrong one: this polls,
-   * so `replaceChildren` threw away and re-made every row four times a second
-   * whether or not the game had done anything.
+   * differs, not rebuilt: this polls, so `replaceChildren` would throw away and
+   * re-make every row four times a second whether or not the game had done anything.
    */
   const spineView = new RowView(spineEl, { row: "span", name: "span", value: "span" }, "");
   const rowsView = new RowView(rowsEl);

@@ -59,9 +59,9 @@ const HEADED = !!process.env.HEADED && process.env.HEADED !== "0";
 /**
  * The smallest sheet that still goes all the way round the loop.
  *
- * Deliberately game-free. The first version opened with `settle()` and failed —
- * correctly, and with a useful message: a workbench that has just been opened is
- * mid-`coldBoot` with `logo.mov` on screen, so nothing is settled and nothing is
+ * Deliberately game-free. Opening with `settle()` fails — correctly, and with a
+ * useful message: a workbench that has just been opened is mid-`coldBoot` with
+ * `logo.mov` on screen, so nothing is settled and nothing is
  * going to be for a while. That is a fact about Titanic's boot, and a suite about
  * the PANEL should not be able to fail for it.
  *

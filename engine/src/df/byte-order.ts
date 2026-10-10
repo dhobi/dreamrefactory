@@ -7,14 +7,13 @@
  * — same container envelope, same frame codec, same MOV header at the same
  * offsets, and every integer reversed.
  *
- * ## That disc is no longer here, and this still detects
+ * ## That disc is not in the corpus, and this still detects
  *
- * The Mac pressing went in by mistake, ahead of the Windows release of the same
- * game. The Windows one is what `skullcracker/` reads now and it is
+ * The Windows release of the same game is what `skullcracker/` reads, and it is
  * little-endian like everything else, so nothing in the corpus fires the
- * big-endian path any more.
+ * big-endian path.
  *
- * It is kept anyway, for the shape of the test rather than out of sentiment.
+ * It stays for the shape of the test rather than out of sentiment.
  * Detection asks the FILE (the header's own size field, below), costs one u32
  * compare, tries little-endian first and wins ties — so on an all-little-endian
  * corpus it is a branch that is never taken and changes no reading, and the day
@@ -74,8 +73,8 @@
  * and the read-me, none of which is a DreamFactory file.
  *
  * **Little-endian is tried first and wins ties**, which is the whole safety
- * argument: a file that read correctly before this module existed still reads
- * exactly as it did, and big-endian is reached only when the little-endian
+ * argument: a file that reads correctly as little-endian keeps exactly that
+ * reading, and big-endian is reached only when the little-endian
  * answer is demonstrably wrong. Two files in the corpus are ambiguous
  * (`tour8.mov`, whose 657920 bytes are a palindrome in hex), and both are PC
  * files that go on being read as such.
@@ -106,7 +105,7 @@ export const little = (order: ByteOrder): boolean => order !== "be";
  * size field matches the bytes actually present — see the module comment for why
  * that asymmetry is deliberate. A file too short to hold a header, or one whose
  * size field matches neither way, is called little-endian: that is what every
- * caller assumed before this existed, and a malformed file should fail in the
+ * reader assumes, and a malformed file should fail in the
  * reader that understands it rather than here.
  */
 export function detectByteOrder(data: Uint8Array): ByteOrder {

@@ -155,9 +155,9 @@ function callBuiltin(session: GameSession, name: string, ...args: Value[]): Valu
 /**
  * The change the whole page rests on, and the one with a blast radius outside it.
  *
- * `optionkey()` and `commandkey()` used to be `() => 0`. They read the session
- * now, and the session leaves them false — so the play page, which sets neither,
- * still gets the 0 it always got. That equivalence is the thing to pin: the
+ * `optionkey()` and `commandkey()` read the session, and the session leaves
+ * them false — so the play page, which sets neither, gets 0. That equivalence
+ * is the thing to pin: the
  * regression this could cause is not on the dev page, it is a player suddenly
  * able to option-drag a smokestack prop out of shape.
  */

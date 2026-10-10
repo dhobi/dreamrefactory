@@ -41,9 +41,9 @@
  * engine: `SetViewer.keyDown` queues on `movingCamera` but refuses on
  * `inputLocked`, and the two differ by exactly `session.fading` (viewer.ts, the
  * long NOTE on `pressNav`). A key pressed in that gap is silently dropped — no
- * handler runs, nothing is logged. It cost the browser suite a 120 s timeout at
- * ENGINE.SET's View120 once, diagnosed only because adding instrumentation before
- * the press accidentally made it land.
+ * handler runs, nothing is logged (ENGINE.SET's View120 is a measured case: a
+ * 120 s timeout in the browser suite, and instrumentation before the press
+ * makes it land).
  *
  * A speedrun presses keys earlier than anything else ever has, so it walks into
  * that gap constantly. {@link KEY_SAFE} is the gate, and it is not optional: a
@@ -497,10 +497,10 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
            * notices `stilldown()` is false, leaves its loop and runs that snap.
            *
            * Read in that gap and the answer is the setting from before the drag.
-           * That is what "the sender went to off at y=40, not on" was: the drag
-           * was perfect, the reading was early. The dials never showed it because
-           * `turnDial` and `setLever` take hold up to three times and the next
-           * grab's opening `held()` paid this wait by accident.
+           * That is what "the sender went to off at y=40, not on" means: the
+           * drag is perfect, the reading early. The dials do not show it
+           * because `turnDial` and `setLever` take hold up to three times and
+           * the next grab's opening `held()` pays this wait by accident.
            *
            * `pollingInput()` going false is the loop letting go and `scriptBusy`
            * going false is the script that owned it running out — which is the

@@ -231,12 +231,12 @@ const GESTURES = new RegExp(
  * where they happen.
  *
  * The rungs define twenty-odd — `const knock = async (what) => { p.fire(...) }`
- * — and a scanner that reads calls by position got both halves wrong at once:
- * the body was transcribed at the DEFINITION, which is above the walk that
- * should precede it, and the `knock(...)` calls were transcribed not at all.
- * Ruby's leg is the case the sheet was failing on: it knocked once, before
- * walking to her door, and then `talkOut([301,201,...])` reported "conversation
- * ended before saying 999" for a conversation the knock is supposed to START.
+ * — and a scanner that reads calls by position gets both halves wrong at once:
+ * the body is transcribed at the DEFINITION, which is above the walk that
+ * should precede it, and the `knock(...)` calls not at all. Ruby's leg is the
+ * case: it would knock once, before walking to her door, and then
+ * `talkOut([301,201,...])` would report "conversation ended before saying 999"
+ * for a conversation the knock is supposed to START.
  *
  * ## Which ones are inlined is read off the BODY
  *
@@ -247,15 +247,14 @@ const GESTURES = new RegExp(
  * and belongs in no sheet line at all.
  *
  * That distinction is also why this handles the non-async and expression-bodied
- * forms. An earlier version matched only `const NAME = async (…) => {`, and the
- * accounting immediately found what it had been skipping: `pressProp`, `dial`,
+ * forms: matching only `const NAME = async (…) => {` skips `pressProp`, `dial`,
  * `turnDial`, `gunUp`, `reload`, `notch`, `sight` and a dozen more, some of them
  * gesturing.
  *
  * Textual, and deliberately so: the parameters are substituted by name and the
  * body is re-scanned as if it had been written out. A substitution that does not
  * make an argument literal (`walkTo(p, town, BESIDE[star])`) still comes out a
- * marked gap, which is the same answer it gave before — just in the right place.
+ * marked gap, in the right place.
  */
 function inlineLocals(src: string): { text: string; reads: Set<string> } {
   /*
@@ -271,15 +270,12 @@ function inlineLocals(src: string): { text: string; reads: Set<string> } {
   const cuts: [number, number][] = [];
 
   /*
-   * The definitions are found ONCE and kept, which is the fix for a bug that
-   * left half of them in place.
+   * The definitions are found ONCE and kept, because a pass strips them.
    *
-   * They used to be re-derived every pass — and a pass strips them, so the
-   * second pass found none, hit `if (!defs.size) break` and stopped. Anything
-   * called from INSIDE another helper's body therefore survived: `station ()`
-   * was inlined, and the `closeIn (who)` in the body it inserted was never
-   * looked at again. The accounting is what surfaced it, by naming six calls to
-   * a helper the tool believed it had already dealt with.
+   * Re-derived every pass, the second pass would find none, hit
+   * `if (!defs.size) break` and stop, and anything called from INSIDE another
+   * helper's body would survive: `station ()` inlined, and the `closeIn (who)`
+   * in the body it inserted never looked at again.
    */
   for (const m of src.matchAll(DEF)) {
     const declared = m[1] ?? m[3];
@@ -573,14 +569,13 @@ function setVars(src: string): Map<string, string> {
  * EVERY CALL IS ACCOUNTED FOR, and this table is the half that says "not a
  * gesture".
  *
- * The scan below used to look for calls it KNEW and emit nothing for the rest,
- * which is a translator that cannot tell "the rung does not do that" from "I do
- * not read that". Five separate bugs were the same bug wearing that hat: the raw
- * click was absent from the call list and 105 knocks vanished; a locally-defined
- * helper had its body transcribed at the definition and its call sites dropped;
- * a `for` of known length contributed one gesture instead of three. Each was
- * found by a run dying somewhere downstream, which is the most expensive way to
- * find anything.
+ * A scan that looks for calls it KNOWS and emits nothing for the rest is a
+ * translator that cannot tell "the rung does not do that" from "I do not read
+ * that": a raw click absent from the call list loses 105 knocks; a
+ * locally-defined helper has its body transcribed at the definition and its
+ * call sites dropped; a `for` of known length contributes one gesture instead
+ * of three. Each shows only as a run dying somewhere downstream, which is the
+ * most expensive way to find anything.
  *
  * So it is inverted. Every call site in a rung's body is either transcribed, or
  * named HERE as something that reads or asserts, or it comes out as a marked
@@ -589,7 +584,7 @@ function setVars(src: string): Map<string, string> {
  * `p.settle`), or an assertion (`expect`, `Error`). Nothing goes in it because
  * the output was noisy.
  *
- * The consequence is that the TODO count is now a MEASUREMENT rather than a
+ * The consequence is that the TODO count is a MEASUREMENT rather than a
  * mood: it can only be reduced by transcribing something or by declaring it,
  * and a new construct in a rung raises it instead of disappearing.
  */
@@ -655,10 +650,10 @@ const LANGUAGE_METHOD = new Set([
 /**
  * A call the accounting may pass over in silence.
  *
- * Judged on the LAST segment of a dotted name, which is the fix for the first
- * version of this: it tested the whole path, so `room (p).toLowerCase ()` came
- * through as the bare name `toLowerCase` and matched nothing, and the sheet came
- * out with 892 marked gaps of which 500 were the string methods of the language.
+ * Judged on the LAST segment of a dotted name: testing the whole path lets
+ * `room (p).toLowerCase ()` through as the bare name `toLowerCase`, matching
+ * nothing, and the sheet comes out with 892 marked gaps of which 500 are the
+ * string methods of the language.
  * A loud tool that is loud about everything says as little as a quiet one.
  *
  * `reads` is the set {@link inlineLocals} derived from the rung itself — local
@@ -1000,12 +995,10 @@ export function transcribe(raw: string, inherited?: Map<string, string>): string
         break;
       }
       case "meet": {
-        // `meet` and `accost` are one idea: get through to somebody who may be
-        // walking. The verb is the engine's now, so this is no longer a gap.
-        // `meet` is its own verb now: `accost` turns the ring where it stands,
-        // and this walks to wherever they have got to. Flattening one into the
-        // other is what left `accost(jones)` turning four ways at an empty
-        // street with Jones three cells up the town.
+        // `meet` is its own verb: `accost` turns the ring where it stands, and
+        // this walks to wherever they have got to. Flattening one into the
+        // other leaves `accost(jones)` turning four ways at an empty street with
+        // Jones three cells up the town.
         const who = lit(rest[1]);
         out.push(
           who
@@ -1197,12 +1190,11 @@ function coalesce(lines: string[]): string[] {
        * holds for `!awaitingChoice` after every pick, so the second 101 can only
        * land on a plaque the engine parked AFTER the first was consumed.
        *
-       * This split them for a while, on the theory that a list could answer one
-       * plaque twice. It cannot. What actually failed was the missing `then:` —
-       * the list ran out, Gus asked his main menu, and `otherwise:`'s default
-       * threw: "unplanned choice from gus.pup: Care to chat? | Would you like
-       * something...? | Bye, Gus." One line with `then: stop` is both shorter
-       * and the fix.
+       * A list cannot answer one plaque twice, so splitting them buys nothing.
+       * What matters is the `then:` — without it the list runs out, Gus asks
+       * his main menu, and `otherwise:`'s default throws: "unplanned choice
+       * from gus.pup: Care to chat? | Would you like something...? | Bye, Gus."
+       * One line with `then: stop` is both shorter and right.
        */
       run ??= { ids: [], labels: [] };
       run.ids.push(m[1]);

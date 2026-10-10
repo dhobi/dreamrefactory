@@ -34,10 +34,10 @@
  * from the other volume here, a synchronous index swap there).
  *
  * It costs roughly what the game costs, in real time — conversations play their
- * lines, walks play their frames. What it no longer pays for is cutscene: ESC
+ * lines, walks play their frames. What it does not pay for is cutscene: ESC
  * skips a clip in the original and does here (docs/engine/formats/mov.md), so `rush`
  * presses it through every stretch that isn't asking the player anything, which
- * took ~160 s off the crossing alone. Timed loops still take their time, which
+ * saves ~160 s on the crossing alone. Timed loops still take their time, which
  * is the case for keeping the headless run as the one that gates a commit.
  */
 import { chromium, Browser, Page } from "playwright";
@@ -71,45 +71,38 @@ const REPAINT_CHECK = !!process.env.REPAINT_CHECK && process.env.REPAINT_CHECK !
 /**
  * Which segments to run, in order — a subset is for watching, not for gating.
  *
- * The default is every segment, endgame included — which it has not always been.
- * A default that stopped at 20 while 21-24 sat in the tables below reported
- * "PASSED — 68 beats over 20 segment(s)" without replaying the fight or the
- * smokestack. Extending it to 29 then failed 10 ways, and the cause was not the
- * routes: `serviceGameClock` was gated on `hasRealFrames`, so headless the
- * sinking never started, `clock` kept the pending event name the save restored,
- * and the mission-4 goldens were traces of a ship that isn't sinking. With the
- * clock running on both hosts the two agree to the minute — 13:15 in each — and
- * what was left was the route racing the game rather than the hosts disagreeing:
- * the last segment was taking a lifeboat before `sinkmovie()` had had its chance
- * on a crowded deck, and sampling the ending while the closing narration was still
- * reading the papers out. Both are waits now, and the endgame gates.
+ * The default is every segment, endgame included: a default that stops short
+ * reports "PASSED" without replaying the fight or the smokestack. The endgame
+ * needs the game clock on both hosts (`serviceGameClock` not gated on
+ * `hasRealFrames`, or headless the sinking never starts) — the two then agree
+ * to the minute, 13:15 in each — and it needs the route to wait for the game:
+ * for `sinkmovie()` to have its chance on a crowded deck before a lifeboat is
+ * taken, and for the closing narration to finish reading the papers out before
+ * the ending is sampled.
  *
- * The count is written here, so adding segment 29 to the tables below is a
+ * The count is written here, so adding a segment to the tables below is a
  * deliberate line in this file rather than a silent extension of the gate.
  *
  * **The gate is one carried game, cold boot to credits, and nothing in it loads.**
- * That took removing a segment rather than fixing one. There used to be a
- * twenty-ninth, and the old twenty-eighth went six decks down to trade Clariss's
- * shawl for the real necklace — a segment that could only ever LOAD, because the
- * trip crosses the boat deck, where `DECKBD2.SET` c1012 stands the Gorse-Joneses at
- * the rail the first time you press up, and their offer of a place in a lifeboat is
- * a one-shot that a walk-through answers away. A carried version of it left the
- * ending segment with nobody at the rail, and routing it through C deck in both
- * directions was measured and did not avoid that (`jonesphase` 0 when it started
- * and 1 by the time it reached `turb`).
+ * So no segment goes six decks down to trade Clariss's shawl for the real
+ * necklace: that trip crosses the boat deck, where `DECKBD2.SET` c1012 stands the
+ * Gorse-Joneses at the rail the first time you press up, and their offer of a
+ * place in a lifeboat is a one-shot that a walk-through answers away. Carried, it
+ * leaves the ending segment with nobody at the rail, and routing it through C
+ * deck in both directions does not avoid that (measured: `jonesphase` 0 at the
+ * start and 1 by `turb`).
  *
- * What removed it was getting the necklace somewhere else: the sub-plot in mission 1
- * phase 4 (segments.ts `necklace`) leaves `propowner("realneck")` = "frank" from the
- * first hour, so the trade had nothing left to buy. The boat deck is now visited
- * exactly once, by the segment that ends the game there.
+ * The necklace comes from the sub-plot in mission 1 phase 4 instead (segments.ts
+ * `necklace`), which leaves `propowner("realneck")` = "frank" from the first
+ * hour. The boat deck is visited exactly once, by the segment that ends the game
+ * there.
  *
- * A second retirement followed, for the same shape of reason. The antidote errand and
- * the blackjack table both existed only to undo segment 26 handing the painting to
- * Zeitel; refusing his deal keeps it, and the pass it was buying back is not needed
- * for anything else. That took the RNG out of the endgame — what Buick deals is 52
- * draws off the seeded stream, so the run's verdict used to depend on where the
- * stream happened to be (docs/reference/route.md). Each retirement handed its number back, so these
- * run 1..27 with no gap.
+ * Nor is there an antidote errand or a blackjack table: both exist only to undo
+ * segment 26 handing the painting to Zeitel, and refusing his deal keeps it, so
+ * the pass they would buy back is not needed for anything else. That keeps the
+ * RNG out of the endgame — what Buick deals is 52 draws off the seeded stream,
+ * so the run's verdict would depend on where the stream happened to be
+ * (docs/reference/route.md). These run 1..27 with no gap.
  */
 const GATED_SEGMENTS = Array.from({ length: 27 }, (_, i) => String(i + 1)).join(",");
 const SEGMENTS = (process.env.SEGMENTS ?? GATED_SEGMENTS).split(",").map((n) => n.trim()).filter(Boolean);
@@ -196,8 +189,8 @@ const BEDSIT_OBJECTS = ["memory", "obit", "paper", "cabinet", "cards", "poster",
  * Game-clock globals, excluded from the comparison.
  *
  * Not flakiness — a real difference in what the two hosts do, and one that
- * survives `serviceGameClock` no longer being gated on hasRealFrames. The clock
- * now runs on both hosts, but it deliberately discards any time that passes
+ * survives `serviceGameClock` running on both hosts: the clock deliberately
+ * discards any time that passes
  * while a script is busy (BOOTFILE's `idle()` only ran between events, so it
  * cannot tick through a movie or a walk). What is left is IDLE time — and a
  * browser spends real seconds idle between gestures while a pumped host spends
@@ -207,10 +200,10 @@ const BEDSIT_OBJECTS = ["memory", "obit", "paper", "cabinet", "cards", "poster",
  *
  * `clock` is in the list because it IS one of these: BOOTFILE's calctime does
  * `clock = hrs * 100 + min`, so it carries exactly the same information as the
- * masked `hrs`/`min` pair. It was missing, which is why the endgame's first
- * browser run reported `clock: browser 1301 vs golden "startdisk1"` — the
- * golden's value being the pending clock-event name the save restored, which
- * nothing had yet overwritten. What mission 4 actually turns on is `phase`, and
+ * masked `hrs`/`min` pair. Unmasked, the endgame reports e.g. `clock: browser
+ * 1301 vs golden "startdisk1"` — the golden's value being the pending
+ * clock-event name the save restored, which nothing has yet overwritten. What
+ * mission 4 actually turns on is `phase`, and
  * that is compared: `canadvance()` pins hrs/min at each threshold until
  * sinkmovie() takes, so the phase a route reaches does not depend on how many
  * seconds the host spent getting there. The arrival time the route asserts
@@ -218,8 +211,8 @@ const BEDSIT_OBJECTS = ["memory", "obit", "paper", "cabinet", "cards", "poster",
  *
  * `idlecount` joins them for the same reason one step removed: it is BOOTFILE's
  * own idle-pass counter, `idlecount + 1` mod 4 in `idle()`, so its value is
- * "how many idle passes have gone by" and nothing else. It became visible at all
- * only once the clock ran on both hosts.
+ * "how many idle passes have gone by" and nothing else. It is visible only
+ * because the clock runs on both hosts.
  */
 const CLOCK_GLOBALS = ["clock", "clockcount", "sec", "secframe", "min", "hrs", "idlecount"];
 
@@ -234,10 +227,9 @@ const CLOCK_GLOBALS = ["clock", "clockcount", "sec", "secframe", "min", "hrs", "
  * `…frame` names are the same idea per sub-plot.
  *
  * The list itself is {@link isHarnessPaced}, shared with the headless comparison,
- * because it had been copied and the copies drifted: `lastsail` was masked there
- * and not here, so every segment from 13 on reported `lastsail: browser 9926 vs
- * golden 7478` — a frame stamp the fencing bout sets, already measured at 7473
- * and 7481 across two identical headless runs. `curattention` is added here and
+ * because copies drift: `lastsail`, a frame stamp the fencing bout sets, reads
+ * `browser 9926 vs golden 7478` from segment 13 on, and measures 7473 and 7481
+ * across two identical headless runs. `curattention` is added here and
  * not there for the ordinary reason this comparison masks more than that one.
  */
 const isFrameCounter = (name: string): boolean =>
@@ -579,15 +571,13 @@ const settle = (page: Page, what: string) => waitFor(page, "dbg.viewer && dbg.vi
  *
  * It runs BEFORE the boot — there is no viewer and no session set until the boot
  * activates one — so every viewer-shaped predicate in this file is `undefined`
- * while it is on screen, `rush`'s included. That is how a run came to spend its
- * whole 300 s budget "stuck waiting for the boot menu" at a film that was itself
- * waiting: the page had reached `nightdive.mov segment 2/2 (3 frames,
- * interactive)`, which is the ownership question, and `rush` only presses Escape
- * while `dbg.viewer.moviePlaying`, so it pressed nothing and watched.
+ * while it is on screen, `rush`'s included. So a run can spend its whole 300 s
+ * budget "stuck waiting for the boot menu" at a film that is itself waiting: the
+ * page at `nightdive.mov segment 2/2 (3 frames, interactive)`, which is the
+ * ownership question, and `rush` only presses Escape while
+ * `dbg.viewer.moviePlaying`, so it presses nothing and watches.
  *
- * **Escape alone stopped being enough in #171.** It used to end the whole film,
- * question included, and `main.ts` booted the game for `unanswered` exactly as
- * for `owns` — so one press was the whole job. Now the film carries the skip flag
+ * **Escape alone is not enough (#171).** The film carries the skip flag
  * and the question does not: Escape presses past the picture and lands ON the
  * question, which is answered or it is still there. So this presses once and then
  * clicks YES, the way a player does.
@@ -638,8 +628,8 @@ const SHOWING = "dbg.viewer && dbg.viewer.moviePlaying && dbg.viewer.movieRegion
 
 /**
  * Wait for `done`, pressing a real Escape past every clip on the way — the
- * browser twin of Navigator.rush, and the reason this suite no longer costs the
- * ~160 s of crossing it used to. Both predicates are page-side expressions.
+ * browser twin of Navigator.rush, and the reason this suite does not cost ~160 s
+ * of crossing. Both predicates are page-side expressions.
  */
 async function rush(page: Page, done: string, what: string, budgetMs = 300_000): Promise<void> {
   const deadline = Date.now() + budgetMs;
@@ -956,8 +946,8 @@ async function loadCheckpoint(page: Page, name: string): Promise<boolean> {
   // FIRED, never awaited — the same shape as headless resume(), for the same two
   // reasons (taoot/tests/playthrough/play.ts): a restored room may delay(), and m4anti's
   // restored lounge ASKS — its own openscene opens Zeitel's conversation and the
-  // load dispatch waits inside it for an answer. Awaiting here is what used to
-  // hang this evaluate with no timeout until somebody killed the run (TODO 7a).
+  // load dispatch waits inside it for an answer. Awaiting here would hang this
+  // evaluate with no timeout (TODO 7a).
   // The flags live on WINDOW, not on dbg: window.dbg is a getter that builds a
   // fresh object per read (taoot/src/main.ts), so a property set on one read is gone
   // by the next — a flag written there is a flag nobody ever sees again.

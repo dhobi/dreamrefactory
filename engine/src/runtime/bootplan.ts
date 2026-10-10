@@ -3,11 +3,11 @@
  *
  * The host has to know two things before it can start a DreamFactory game over
  * HTTP: which files to have in hand so `boot()` never waits mid-sequence, and
- * which room the boot ends up in. Both used to be hardcoded lists of TAOOT
- * filenames — `bedsit1.set`, `logo.mov`, `gang.cst`, `house.shp`, sixteen of them
- * — which is knowledge about one game sitting in the layer that runs any of them.
- * The 1996 demo shares four of those names and needs a fifth the list had never
- * heard of, and a different CyberFlix title would share almost none.
+ * which room the boot ends up in. A hardcoded list of TAOOT filenames —
+ * `bedsit1.set`, `logo.mov`, `gang.cst`, `house.shp`, sixteen of them — would be
+ * knowledge about one game sitting in the layer that runs any of them. The 1996
+ * demo shares four of those names and needs a fifth, and a different CyberFlix
+ * title would share almost none.
  *
  * So they are read instead. Every one of those files is named, as a string
  * literal, by the boot's own scripts:
@@ -84,8 +84,8 @@ const ROOM_CALLS = new Set(["initall", "changeset", "opensetfile", "gotospecial"
  * Which is invisible in a game that runs its own `boot()` and unmissable in
  * anything that does not: Titanic's three standalone minigame pages parse the
  * BOOTFILE for its script library and deliberately never run `boot()` (there is
- * no voyage to begin), so until this was read every answer Buick and Willie
- * offered was drawn over a screw (#391).
+ * no voyage to begin), so unread, every answer Buick and Willie offer is drawn
+ * over a screw (#391).
  *
  * Collected across the same startup walk as {@link RESOURCE_CALLS} rather than
  * from `boot()`'s own body, so a game that sets its params in a helper the boot
@@ -137,7 +137,7 @@ export interface BootPlan {
    * Empty for a single-volume game, which is the honest answer rather than a
    * degenerate one: the demo has no `setpath` at all, and nothing about it needs a
    * disc. {@link FileStore.setVolumes} turns this into "which copy of a basename
-   * that ships twice wins", which used to be a `/titanic([12])/` regex.
+   * that ships twice wins".
    */
   volumes: string[];
   /**
@@ -232,9 +232,9 @@ function walkStmts(body: Stmt[], onCall: (c: CallExpr) => void): void {
  * The boot library's handlers by lowercase name — **every** definition of each,
  * in container order.
  *
- * This used to keep the first and drop the rest, "which is the order events
- * traverse the containers in". That is the right rule for DISPATCH and the wrong
- * one here, and the difference is not hypothetical: a real BOOTFILE defines
+ * Keeping the first and dropping the rest, "which is the order events traverse
+ * the containers in", is the right rule for DISPATCH and the wrong one here,
+ * and the difference is not hypothetical: a real BOOTFILE defines
  * `keydown` TWICE, in containers 1 and 2, and the two are the two ends of one
  * chain. Container 1's filters `lockevents`, remaps the configurable
  * `keynorth`/`keyeast`/`keywest`, handles SPACE for doors and forwards to the
@@ -242,7 +242,7 @@ function walkStmts(body: Stmt[], onCall: (c: CallExpr) => void): void {
  * and it is what calls `currentscene("strait"/"left"/"right")` — the code that
  * actually moves you. Timelapse duplicates `mousedown` the same way.
  *
- * The runtime never had this wrong: `GameSession` keeps `bootScripts` as a list
+ * The runtime has this right: `GameSession` keeps `bootScripts` as a list
  * and builds passcode chains across all of them, so both halves are reachable.
  * But this is a RESOURCE SCAN, and a scan that stops at the first definition
  * cannot see what a later one opens. Visiting all of them removes the tie-break

@@ -95,8 +95,8 @@ test("the screen composites a stage flat with no room ever attached", async () =
   expect(dir.paintWorldInto()).toBe("flat");
 
   // ...and the pixels are the flat's, at the flat's own size. The right-hand
-  // column is the assertion that matters: 639 is past the 512-wide framebuffer
-  // this engine used to hardcode, so a screen still pinned to Titanic's geometry
+  // column is the assertion that matters: 639 is past Titanic's 512-wide
+  // framebuffer, so a screen pinned to Titanic's geometry
   // cannot pass this line however well everything else works.
   expect(W).toBeGreaterThan(SCREEN_W);
   expect(dir.screen.width).toBe(W);
@@ -117,8 +117,8 @@ test("the screen composites a stage flat with no room ever attached", async () =
 test("the screen's own per-frame service runs with no room", () => {
   const { session, dir } = newDirector();
   // A fade is the clearest case: it is a script-driven ramp the session steps in
-  // `tickFade`, it used to be stepped inside `SetViewer.tick`, and a game with no
-  // room therefore never faded at all.
+  // `tickFade`, and stepped inside `SetViewer.tick` a game with no room would
+  // never fade at all.
   session.fade.level = 1;
   session.fade.queue.push({ to: 0, steps: 4 });
   let now = 0;
@@ -143,9 +143,9 @@ test("a click reaches a flat's region with no room in the chain", async () => {
 
   // The whole priority chain, not a shortcut into the stage: `press` is a movie's
   // clicks, then a conversation's, then the `lockevents` gate, then the queue,
-  // then props, then the ROOM — absent here — then the stage. Every one of those
-  // steps used to live on a class that needed a `SetFile` to exist, so this call
-  // was unreachable for a game with no rooms.
+  // then props, then the ROOM — absent here — then the stage. None of those steps
+  // may need a `SetFile` to exist, or this call is unreachable for a game with
+  // no rooms.
   session.pointerDown = true;
   await dir.press(320 + 40, 240);
   dir.release(360, 240);
@@ -174,8 +174,8 @@ test("a key with no room is offered to the screen and then not consumed", async 
   const { session, dir } = newDirector();
   await session.stageCtrl.openStageFile("test.stg");
   // The stage here handles no keys and there is no room to navigate, so nothing
-  // takes it — which is the honest answer, and it is an ANSWER rather than a
-  // crash, which is what asking a null viewer used to be.
+  // takes it — which is the honest answer, and it is an ANSWER rather than the
+  // crash of asking a null viewer.
   expect(await dir.keyDown("w")).toBe(false);
 });
 
@@ -255,7 +255,7 @@ test("a film is fetched before it is played, so the FIRST play works", async () 
  * whatever is under it. In the original that hourglass appears the instant the
  * lock goes up, because its idle loop calls `cursor("watch")` and `SetCursor`
  * every pass — the player waiting for a character to walk over to them has a
- * still hand, and a still hand used to mean a stale pointer here.
+ * still hand, and a still hand must not mean a stale pointer here.
  *
  * Reported as a memory of the sand clock: "when for example a character is
  * approaching you".

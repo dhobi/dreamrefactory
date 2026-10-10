@@ -738,8 +738,7 @@ export class Sounds {
    * `0x45d743` clamps the click to 0…9 and hands it to `0x4274e0`, which is one
    * `cmp` and a call into the mixer (`0x45ad40`): what a step is worth in
    * loudness is that library's and is not in `SC.EXE`, so the curve here is this
-   * page's — the full gain the page already used, scaled by `(v + 1) / 10`, which
-   * leaves step 9 exactly where the page was before there was a slider.
+   * page's — the full gain scaled by `(v + 1) / 10`, so step 9 is full gain.
    */
   setVolume(step: number): void {
     this.level = Math.max(0, Math.min(9, Math.trunc(step)));

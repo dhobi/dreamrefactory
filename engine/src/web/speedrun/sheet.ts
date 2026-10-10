@@ -300,7 +300,8 @@ function parseStatement(
   const source = statement.trim();
   const call = CALL.exec(source);
   if (!call) {
-    // Almost always the old grammar rather than a typo, so say which it is. A
+    // Almost always a verb written without its call parentheses rather than a
+    // typo, so say which it is. A
     // sheet is a file people keep, and "unknown action" would send someone
     // looking for a missing verb that is sitting right there.
     const bare = /^([A-Za-z]\w*)\b/.exec(source);

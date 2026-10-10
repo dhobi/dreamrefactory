@@ -118,9 +118,9 @@ export const ticksAt = (ms: number): number => Math.floor((ms * 3) / 50);
  * therefore runs the game SLOWER — fewer frames, fewer loop steps, a slower
  * pocketwatch — and lost time is dropped, not replayed.
  *
- * The port used to replay it: after a stall it made up to 64 frames and 64
- * service steps and twenty `calctime`s at once, so a slow pass lurched the
- * world forward instead of slowing it. One pass per call is the original's
+ * Replaying it — up to 64 frames and 64 service steps and twenty `calctime`s at
+ * once after a stall — would lurch the world forward instead of slowing it.
+ * One pass per call is the original's
  * rule. What is NOT copied is stamping `now` on a pass that was on time: TI.EXE
  * spins and so stamps the very tick it was due, but a browser is only called
  * on screen refreshes, and stamping the refresh rounds every pass up to it —

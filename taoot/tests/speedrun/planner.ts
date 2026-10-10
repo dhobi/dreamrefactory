@@ -75,11 +75,9 @@ export const playwrightPlanner: PlannerFn = async (c, method, target) => {
      * (csea2's is literally "Stand aside!") and a route cannot know in advance
      * who will stop it. It no-ops when there is nothing to answer.
      *
-     * This is belt to the braces below, and worth being honest about which of
-     * the two did the work: ESC here was ALSO fine. The reason two attempts at
-     * this looked like they achieved nothing was the mirror, not the gesture —
-     * the report said `said nothing`, which is this call finding no conversation
-     * open because there no longer was one.
+     * This is belt to the braces below, and ESC here would ALSO be fine. When
+     * the report says `said nothing`, that is this call finding no conversation
+     * open, because there no longer is one — the mirror, not the gesture.
      */
     await ACTIONS.say.run({
       ...c,

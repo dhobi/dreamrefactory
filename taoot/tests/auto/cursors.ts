@@ -16,8 +16,7 @@ import { TI_CURSORS } from "../../src/cursor-art";
 /**
  * Every name the corpus passes `cursor(...)`, with how often — the whole of it,
  * counted across every script in the tree. It is a SHORT list, and that is the
- * point: five names, and the shell used to map exactly these five onto CSS
- * keywords.
+ * point: five names, each with a CSS keyword fallback.
  */
 const CALLED = { touch: 809, arrow: 75, hand: 36, watch: 18, fist: 2 };
 

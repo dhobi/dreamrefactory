@@ -6,9 +6,9 @@
  *
  * The LISTING is the manifest (tools/manifest.ts): served live here so a dev
  * server picks up a tree that changed without a rebuild, and written into the
- * build output at build time so a deployment needs no server at all. It used to
- * be `/api/gamefiles`, which made the site look like it wanted a backend when
- * the only dynamic thing about it was a directory walk.
+ * build output at build time so a deployment needs no server at all — not an
+ * `/api/gamefiles` endpoint, which would make the site look like it wanted a
+ * backend when the only dynamic thing about it is a directory walk.
  *
  * The BYTES are Vite's job in dev, except that its transform middleware 500s on
  * extension-less paths like `/gamefiles/en/titanic1/data/bootfile` (it tries to
@@ -21,11 +21,8 @@
  *
  * ## One tree per game
  *
- * There used to be one walk producing two files — the full index, and a
- * `gamefiles-dust.json` that was the same walk filtered to keys beginning
- * `gamefiles/dust/`. Two games in one tree needed that; two games in two trees
- * do not. Each package now walks its own rip and writes its own
- * `gamefiles.json` at its own site root, and the filter is gone.
+ * Each package walks its own rip and writes its own `gamefiles.json` at its
+ * own site root, so no walk is filtered per game.
  *
  * Paths come in ABSOLUTE, resolved by the caller from its own config file's
  * location rather than from the working directory — `npm run build -w` and

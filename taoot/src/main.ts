@@ -14,11 +14,9 @@
  * the DOM and is therefore reachable from the tests; the file cache/fetch
  * logic is in files.ts.
  *
- * There is no dev harness here any more. The page used to carry a bar of
- * puzzle jumps, a row of story-state presets and a set dropdown, from when
- * every room had to be reachable without a route that could get there; the
- * game plays through now, so what they offered is the game itself, and the
- * editors and the browser suite cover what they were used for besides.
+ * There is no dev harness here: the game plays through, so puzzle jumps,
+ * story-state presets and a set dropdown would offer only the game itself, and
+ * the editors and the browser suite cover the rest.
  */
 import {
   DeferredAudioSink,
@@ -218,8 +216,7 @@ const mapCtx = minimap.getContext("2d")!;
 //
 // A class rather than the `:fullscreen` pseudo because an iPhone has no element
 // fullscreen to match: there the page pins the stage over the viewport itself,
-// which is the whole of what engine/src/web/fullscreen.ts is for. The twelve
-// lines that used to be here were a fourth copy of the same broken detection.
+// which is the whole of what engine/src/web/fullscreen.ts is for.
 installFullscreen(fsBtn, stage, { report: log, landscape: true });
 installStretch(stretchBox, stage, "taoot.picture.stretch");
 const th = new TylerHartman(stage, screen, thBox, "taoot.picture.th");
@@ -269,12 +266,12 @@ files.onWire(({ inFlight }) => {
  * A second watcher rather than a line inside the first, because the two want
  * different things from the same events and neither is the other's business: the
  * mark waits {@link BUSY_AFTER_MS} before it admits to a wait and does not care
- * WHAT was fetched, while the clock needs each fetch by name — since #369 it
- * stops only for the ones that went to the network, and a cache hit is a read
+ * WHAT was fetched, while the clock needs each fetch by name — it stops only
+ * for the ones that went to the network (#369), and a cache hit is a read
  * the original did off its CD as well.
  *
  * The subscription itself is the engine's (`watchLoads`), which is where the
- * "only what the game WAITED for" rule now lives: Dust's page needs the same
+ * "only what the game WAITED for" rule lives: Dust's page needs the same
  * rule and a second hand-written copy of it would be a second set of times
  * nobody could compare with these.
  *
@@ -358,15 +355,12 @@ function log(line: string): void {
   /*
    * A logged line does NOT open the pane.
    *
-   * It used to, for any line written while the stage was still hidden — the idea
-   * being that a boot which never finishes has nothing else to say for itself.
-   * What that actually did was override the reader's own answer: X is a setting,
-   * it is remembered, and a player who had shut the pane got it back every
-   * launch and sat through the ownership question with a column of "edition:
-   * English (gamefiles/en/)" beside the film. Reported as "the Details section
-   * is always visible, no matter what my X settings are".
+   * Not even while the stage is still hidden: that would override the reader's
+   * own answer. X is a setting, it is remembered, and a player who has shut the
+   * pane would get it back every launch and sit through the ownership question
+   * with a column of "edition: English (gamefiles/en/)" beside the film.
    *
-   * It was not buying much either. A boot with no tree at all logs nothing and
+   * It would not buy much either. A boot with no tree at all logs nothing and
    * simply leaves the boot text up (see {@link initServerBrowser}, whose comment
    * says as much: the fix for that reader is a second string in front of them,
    * not a debug column behind it). So the pane follows the reader here, exactly
@@ -422,20 +416,18 @@ function detailsWanted(): boolean {
  *
  * `cursor("touch")` names a `CURS.*` cursor resource inside the engine's own
  * executable — `tools/dumpcursors.ts` has the mechanism — and `ti.exe` carries
- * eleven of them, byte-identical across the demo and every shipped edition. This
- * page used to map the names onto CSS keywords instead, which is the right first
- * move and loses two things: the art is the 1996 artwork, and three of the eleven
- * (`goleft`, `goright`, `gostrait`) have no keyword that means what they mean.
+ * eleven of them, byte-identical across the demo and every shipped edition. CSS
+ * keywords alone lose two things: the art is the 1996 artwork, and three of the
+ * eleven (`goleft`, `goright`, `gostrait`) have no keyword that means what they
+ * mean.
  *
  * The corpus is CLOSED and small: every `cursor(...)` call in every script names
- * one of five — touch (809), arrow (75), hand (36), watch (18), fist (2). `take`,
- * `turn`, `look` and `talk` used to be mapped here and are emitted by nothing;
- * they were ours, from when the port decided cursors itself instead of asking.
+ * one of five — touch (809), arrow (75), hand (36), watch (18), fist (2).
  * The other six in the file are the engine's own, kept because the table is the
  * BUILD's rather than a list of what this game happens to use.
  *
  * Each name still carries a keyword for a browser that will not take the image
- * (see {@link CursorSheet}) — the same five mappings this comment used to be, plus
+ * (see {@link CursorSheet}) — the five mappings, plus
  * `crosshair` for `sight` and `none` for a pointer `hidecursor()` has taken away.
  */
 const cursors = new CursorSheet(TI_CURSORS);
@@ -465,8 +457,8 @@ function showCursor(name: string): void {
 /**
  * Redrawn whenever the PICTURE changes size, which a window resize is only one
  * way to do: the workbench lets the reader pick a whole-number scale for the
- * screen (taoot/src/speedrun-widths.ts) and that fires no resize event at all, so
- * the art stayed at the old scale until the window happened to move. Watching
+ * screen (taoot/src/speedrun-widths.ts) and that fires no resize event at all.
+ * Watching
  * the canvas catches both, and asks nothing of whatever changed it.
  */
 new ResizeObserver(() => showCursor(cursorShown)).observe(screen);
@@ -553,11 +545,11 @@ session.onTextDialog = (prompt, initial) =>
 // back to the boot: the logos, then the Play / Guided Tour menu, with a session
 // as fresh as a relaunch.
 //
-// It used to be a page reload, because quit() is called from inside a script (the
-// endgame's `playmovie("credits.mov"); quit()`): at that moment the interpreter is
-// still unwinding the dispatch that played the credits, and a boot re-entered
+// quit() is called from inside a script (the endgame's
+// `playmovie("credits.mov"); quit()`): at that moment the interpreter is still
+// unwinding the dispatch that played the credits, and a boot re-entered
 // underneath it would be building sets and resetting globals while the old game
-// was still talking. Navigation was the one teardown that could not half-happen.
+// was still talking. A page reload is the one teardown that cannot half-happen.
 //
 // A reload is a poor front door, though — it throws the page away to get back to
 // something the page can perfectly well show, and it takes the run with it: the
@@ -1071,7 +1063,7 @@ async function resolveEdition(): Promise<{ code: string; asked: boolean }> {
 async function initServerBrowser(): Promise<void> {
   // The manifest is a file (tools/manifest.ts), so this is the same fetch on a dev
   // server and on a static host; where there is none, there is nothing to play and
-  // the boot text stays up. It now reads as a wait rather than an explanation —
+  // the boot text stays up. It reads as a wait rather than an explanation —
   // "loading the game's files, looking in gamefiles/" — so a reader with no tree
   // is left watching a load that never finishes. What would fix it is a second
   // string this branch swaps in, not a longer one that every reader waits behind.
@@ -1117,28 +1109,23 @@ async function initServerBrowser(): Promise<void> {
     .catch(() => {});
   // Nothing to boot without game data — the boot text stays up, which is the
   // whole of the production build's story (and see the manifest fetch above for
-  // what that text no longer tells the reader).
+  // what that text does not tell the reader).
   if (!files.serverSetNames().length) return;
 
   /**
    * Straight into the game.
    *
-   * This page used to offer a row of entry points — cold boot, load a save, six
-   * curated story states, one set per room — and every one of them except the
-   * first was a shortcut for working ON the game rather than playing it. What
-   * was in front of the game was a question nobody visiting it wanted to
-   * answer, in front of the answer. The shortcuts outlived it for a while in a
-   * dev bar below the canvas; they are gone too now, because the game plays
-   * through to the credits, and a save through the in-game menu or a room
-   * through the editors is the way back to any of it.
+   * No row of entry points: anything beyond the cold boot (a save, a story
+   * state, a room) is a shortcut for working ON the game rather than playing
+   * it, and the game plays through to the credits — a save through the in-game
+   * menu or a room through the editors is the way back to any of it.
    *
    * The one thing worth asking a visitor — whether they came to play at all —
    * is asked by the front page's Play button, one navigation ago, so by the
    * time this file runs there is nothing left to decide.
    *
-   * Audio survives the loss of the click. It was `ensureAudio()` on each of
-   * those buttons that unlocked the AudioContext, but the window already arms
-   * the same call on the first pointerdown or keydown anywhere on the page
+   * Audio needs no click here: the window arms `ensureAudio()` on the first
+   * pointerdown or keydown anywhere on the page
    * (see the top of this file), and `attach()` restarts the theme that is
    * already playing — so the boot runs silently for as long as the player has
    * not touched anything, and then it does not.
@@ -1180,13 +1167,11 @@ async function initServerBrowser(): Promise<void> {
   stage.style.display = "";
   /**
    * The row under the canvas — fullscreen, the bug button, the swipe boxes, the
-   * key list — goes up with the CANVAS, and it used to go up with a ROOM.
+   * key list — goes up with the CANVAS, not with a ROOM.
    *
-   * It was raised inside the host's `showStage`, which fires on set activation,
-   * so an edition that activates no set never got it. That is the 1996 demo, all
-   * of whose screens are films and a menu stage: reported, in passing and
-   * correctly, as "the demo page doesn't have a bug report button. Not sure if
-   * that's intentional" (#299). It was not.
+   * The host's `showStage` fires on set activation, so an edition that
+   * activates no set would never get it. That is the 1996 demo, all of whose
+   * screens are films and a menu stage (#299).
    *
    * Here rather than there because none of these controls is about a room, and
    * because this is the one line every edition passes through — the language
@@ -1299,14 +1284,14 @@ const hitAt = (x: number, y: number): (() => Hit | null) => () => session.hitTes
  *
  * While the Nightdive intro is up there are two listeners for every press and
  * every click — the intro's own (it plays on its own MoviePlayer, with its own
- * frame loop) and the game's, which still forwards to the director as it always
- * did. Both used to log, so every ESC at the ownership question produced a pair
- * of lines: `IGNORED — the film carries no skip flag`, which is the answer, and
+ * frame loop) and the game's, which still forwards to the director. If both
+ * logged, every ESC at the ownership question would produce a pair of lines:
+ * `IGNORED — the film carries no skip flag`, which is the answer, and
  * `— nothing changed` from the director, which reads like a second press.
  *
  * The intro's line wins because it is the one with an answer in it (#171), so
  * the game's side goes quiet rather than the dispatch changing: what is sent to
- * the director while a film plays is exactly what was sent before.
+ * the director while a film plays is unchanged.
  */
 function noteGame(
   what: string,
@@ -1934,11 +1919,10 @@ window.addEventListener("keydown", (e) => {
   }
   const isDetailsKey =
     !focusOwnsKey(e.target, e.key) && (e.key === "x" || e.key === "X");
-  // X used to outrank a VIEWER guard here, on the argument that the pane REMEMBERS
-  // being open (taoot.details.open), so a reader who left it up gets it back on the
-  // loading screen — and behind the guard, the key that put it there could not take
-  // it down again. The guard is gone (see keyToGame) and the argument is not: X is
-  // still answered before anything asks whether there is a game to send a key to.
+  // X is answered before anything asks whether there is a game to send a key to:
+  // the pane REMEMBERS being open (taoot.details.open), so a reader who left it
+  // up gets it back on the loading screen, and behind a viewer guard the key that
+  // put it there could not take it down again.
   const v = host.viewer;
   // Typed into something on the page, not at the game (engine/src/web/keys.ts). This listens
   // on `window`, and the page's own keys are LETTERS — so without this, filtering
@@ -1948,11 +1932,10 @@ window.addEventListener("keydown", (e) => {
   // a full-screen overlay stage (the deck map) consumes all keys itself — and it
   // does NOT yield X, which is the one place the pane key has to give way. The
   // Enigma is such a stage and its keydown TYPES: ZEITEL's telegram spells
-  // `anhqsppaixwbfcxyam`, so a pane toggle up here ate both of its X's and the
-  // machine could never be made to decode — mission 1 with no way past it. The
+  // `anhqsppaixwbfcxyam`, so a pane toggle up here would eat both of its X's and
+  // the machine could never be made to decode — mission 1 with no way past it. The
   // deck map and the intro question lose the pane key while they are up, which is
-  // a shortcut deferred rather than a screen made useless (#265, and #257 which
-  // put X above this branch).
+  // a shortcut deferred rather than a screen made useless (#265, #257).
   if (!session.viewShowing && session.stageCtrl.keydownTarget()) {
     const df = overlayKey(e.key);
     if (df) {
@@ -2017,11 +2000,11 @@ window.addEventListener("keydown", (e) => {
       // and hands it to the boot's keydown, which maps the player's movement
       // bindings (`keynorth`/`keywest`/`keyeast` — A/W/D by default, rebindable
       // from the control panel) and passes the rest to the scene. Dropping them
-      // here is why those bindings did nothing at all (#14); a letter no script
-      // wants is ignored by the scripts, which is not the same as never arriving.
-      // A letter pressed while a move is on screen is QUEUED, like an arrow — the
-      // gate is inside `keyDown`, above the mapping, where the original keeps it
-      // (#207). It was in the arrow-only path, so W/A/D were dropped mid-move.
+      // here would leave those bindings doing nothing at all (#14); a letter no
+      // script wants is ignored by the scripts, which is not the same as never
+      // arriving. A letter pressed while a move is on screen is QUEUED, like an
+      // arrow — the gate is inside `keyDown`, above the mapping, where the
+      // original keeps it (#207), so W/A/D are not dropped mid-move.
       //
       // Modified presses stay the browser's — Ctrl+R has to reload, and the
       // original's own Ctrl marker only ever mattered to its movie key filter.
@@ -2042,12 +2025,10 @@ window.addEventListener("keydown", (e) => {
 /**
  * The screen, not the room.
  *
- * This used to be `if (host.viewer) { tick; render }` — so on any frame with no
- * room open there was no fade ramping, no movie advancing, no delay clock moving
- * and nothing drawn. The demo's boot is exactly that frame: it plays its logos
- * and opens a menu stage before it has a room, and the port had to open one it
- * did not want just to have something to run this loop on
- * (`GameHost.coldBoot`, now without that workaround).
+ * Not `if (host.viewer) { tick; render }` — that leaves any frame with no room
+ * open with no fade ramping, no movie advancing, no delay clock moving and
+ * nothing drawn. The demo's boot is exactly that frame: it plays its logos and
+ * opens a menu stage before it has a room.
  */
 function loop(now: number): void {
   host.director.tick(now);

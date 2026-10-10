@@ -66,9 +66,9 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   /**
    * currentstage() — the stage's OWN name, with its FILE left in `result()`.
    *
-   * It used to answer the file, and on Titanic the two are the same string: all
-   * fifteen of its stages store their own filename in the name field
-   * (`StgFile.refName`), so nothing could tell the difference. Timelapse can.
+   * Answering the file would pass on Titanic, where the two are the same string:
+   * all fifteen of its stages store their own filename in the name field
+   * (`StgFile.refName`), so nothing there can tell the difference. Timelapse can.
    * Its `p.stg` is called `"interface"`, and its BOOTFILE's space bar is
    *
    *     if currentstage () = "interface"
@@ -86,9 +86,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * `laststage = result ()`. The `"none"` sentinel when no stage is open is what
    * Dust's own `currentstage () != "none"` asks.
    *
-   * Dust used to fall back to the file too, because a v1 `.FLT` was read as having
-   * no name field. It has one, 20 bytes before v4's (#325), and three of its own
-   * tests were failing on the difference: `HOUSE.PRP`'s inventory-book handler asks
+   * Dust needs the name too: a v1 `.FLT` has a name field, 20 bytes before v4's
+   * (#325), and three of its own tests depend on the difference: `HOUSE.PRP`'s inventory-book handler asks
    * for `"scorp"` and `"yunnibox"` where the files are `SCORP.FLT` and
    * `YUNNIBOX.FLT`, and `NEW.FLT`'s asks for `"new"`. Its four other cases
    * (`"fight.flt"`, `"flute.flt"`, `"tumble.flt"`, `"sundial.flt"`) name stages
@@ -257,7 +256,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * should look like, so it cancels a movie's pending reveal — see
    * {@link GameSession.tickFade}.
    *
-   * Blocking is the part that was missing, and it is not a detail. In TI.EXE
+   * Blocking is the part that matters, and it is not a detail. In TI.EXE
    * both are a linear lerp between the named surface's palette and the black
    * one, `steps` increments, and the loop (`0x435b90` / `0x435be0`, reached
    * through `0x43e550` / `0x43e5d0`) BUSY-WAITS one 60 Hz tick per step on the
@@ -356,12 +355,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // entry does the same on arrival, and the turbine hum swells with output.
   // We track a single theme channel, so the track name is informational.
   //
-  // The getter was missing, and here that is not a missing feature but a broken
-  // one: the scripts duck the score with a READ-MODIFY-WRITE,
-  // `themevol(t, themevol(t) / 4)`, so answering nothing answered 0 — the music
-  // was set to silence and then multiplied back up from zero. See
-  // GameSession.themeVolume for the two places that bit.
-  // The track NAME is no longer purely informational: the volume is remembered
+  // The getter is not optional: the scripts duck the score with a
+  // READ-MODIFY-WRITE, `themevol(t, themevol(t) / 4)`, so answering nothing
+  // would answer 0 — the music set to silence and then multiplied back up from
+  // zero. See GameSession.themeVolume for the two places that would bite.
+  // The track NAME is not purely informational, though: the volume is remembered
   // under it, so starting that track later plays it at the level the script asked
   // for (see GameSession.volumeForTrack — Dust's saloon scores the same music at
   // 55 downstairs and 24 through the floor above it).
@@ -390,8 +388,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * the un-ramped fade, and `clut("black")` is the un-ramped `screentoblack`:
    * the all-black palette, from this instant, until something installs another.
    *
-   * That is load-bearing and it used to be a no-op here, on the reasoning that
-   * `blackscreen()` is always beside it. Not always: `transtoflat`'s `rub.stg`
+   * That is load-bearing, not a no-op on the reasoning that `blackscreen()` is
+   * always beside it. It is not always: `transtoflat`'s `rub.stg`
    * arm is `playmovie("rub.mov")` then `clut("black")` with no `blackscreen`
    * anywhere, and the black it leaves is what the stage is revealed FROM two
    * lines later. The pairing is also not redundant where it does occur — in the
@@ -599,35 +597,28 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * it is `docs/taoot/devmode-census.md` (`npx tsx taoot/tools/devcensus.ts`):
    * **324 probe calls across 211 script containers**, and all but FOUR are gated
    * on `debugging` — which is assigned once in the whole corpus, `debugging =
-   * false` in BOOTFILE, so those stay as dormant as they were when this returned
-   * 0.
-   *
-   * (This used to say 383 calls across 248 containers. That figure does not
-   * reproduce: read through the game's own file index, which resolves each
-   * basename once, it is 324/211, and even the raw dump — which holds both case
-   * spellings of most files, so nearly everything twice — only reaches 331. The
-   * generated census is the number to trust, because it is re-measured rather
-   * than remembered.)
+   * false` in BOOTFILE, so those stay as dormant as they would be if this
+   * returned 0.
    *
    * Of the four ungated ones,
    * three are `optionkey` (option-drag moves the cricket in Z, scales a smokestack
    * prop, and opens `debugger()` in PHOTO.SHP) and the fourth is the one worth
    * having: house.shp's "help" prop answers a shift-click with the game's own
    * state readout, `notedialog("Mission=" @ … @ ", Phase=" @ …)`, with Maze and
-   * Level added in the three smokestack sets. That is #8, and it was never missing
-   * — only unreachable, because this said "not held".
+   * Level added in the three smokestack sets. That is #8, and it is reachable
+   * only because this can answer "held".
    *
    * So the other two answer from the session and the session leaves them false.
-   * That is not the same as hardwiring them to 0, which is what this used to do:
+   * That is not the same as hardwiring them to 0:
    * nothing in the shipping game reaches them except those three dev tools, and
    * "option-drag rescales the artwork" is not a thing a player should be able to
    * do to their own game by accident — but it IS the thing the 1996 debug build
    * could do, and a page whose whole purpose is to be that build should be able
    * to ask for it. So the decision moves to the page: Titanic's play page sets
-   * `shiftDown` and nothing else, so `optionkey()` answers 0 there exactly as
-   * before, and only `taoot/devmode/` ever raises these two.
+   * `shiftDown` and nothing else, so `optionkey()` answers 0 there exactly as a
+   * hardwired 0 would, and only `taoot/devmode/` ever raises these two.
    *
-   * That matters more than the count suggests. Of the 383 probes, the ones behind
+   * That matters more than the count suggests. Of those probes, the ones behind
    * `debugging` are overwhelmingly `optionkey () & debugging` — the placement
    * mode, the bedsit's item grab, the coordinate readouts, `debugger()` — so with
    * these stuck at 0 the flag on its own opens almost nothing.

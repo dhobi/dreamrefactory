@@ -28,9 +28,9 @@
  * So `walkdest` is load-bearing, and what it answers about a TURN is the whole
  * bug: Dust's idles turn constantly (`mwifeidle` faces the camera every 21
  * service steps while you are within `hotdist`), a turn is a walk in this engine
- * (#124), and the port's turn record carried no destination — so `walkdest`
- * fell through to its no-record answer, `"custom"`. Click during a turn and the
- * walk home became `walktostar (me, "custom")`: no such star, no walk, no
+ * (#124), and a turn record with no destination makes `walkdest` fall through
+ * to its no-record answer, `"custom"`. Click during a turn and the walk home
+ * becomes `walktostar (me, "custom")`: no such star, no walk, no
  * arrival, no `endwalk`, no idle. Nothing in the corpus places a character
  * again (`setupactor` is only ever called from a puppet), so it is permanent —
  * which is why it reads as "she loses her spot after multiple talks".
@@ -121,7 +121,7 @@ test("a turn does not lose where the actor was going (#289)", async () => {
   call(session, "actorxyz", ["mwife", star.positionX + 240, star.positionZ + 180, 0]);
   call(session, "actorstar", ["mwife", "custom"]);
 
-  // THE FAILURE, spelled out: `walkdest` used to answer "custom" above, and that
+  // THE FAILURE, spelled out: "custom" is `walkdest`'s no-record answer, and that
   // is not a place anyone can walk to. Left in as the counterfactual because a
   // pass on the name alone cannot tell "the right name" from "any name at all".
   call(session, "walktostar", ["mwife", "custom"]);
@@ -154,10 +154,10 @@ test("a turn does not lose where the actor was going (#289)", async () => {
  * It is, because Dust's stances are MATTE plates — layer 0 is one flat colour,
  * which `PuppetView.composite` reads as "keep the scene" — so most of a Dust
  * conversation is the room behind the character, and the composite is cached.
- * The cache knew the character, the stance, the clip and the display gamma, and
- * did not know the room: every conversation opens on the same neutral pose, so a
- * second talk with the same person built the same key and came up over the room
- * the last one happened in.
+ * So the cache key needs the room as well as the character, the stance, the
+ * clip and the display gamma: every conversation opens on the same neutral
+ * pose, so without it a second talk with the same person builds the same key
+ * and comes up over the room the last one happened in.
  *
  * The assertion is the measurement: over two different rooms, the same character
  * at the same instant must not composite to the same pixels.

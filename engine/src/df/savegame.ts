@@ -163,14 +163,14 @@ const ACTOR_OWNER_OFF = 64;
  * that drops it reloads with everyone still remembering, and nobody ever walks
  * up to you again for the rest of the session.
  *
- * A DWORD at record+0x48, i.e. **8 bytes BEFORE the name**. This was +152 for a
- * long time, which is `(name + 160) - 8` — the same field one record along, so
- * every character was restored with their neighbour's count. The disassembly had
- * already been read correctly (record+0x48) and then rejected for not fitting a
- * frame based at the name; the 80-byte shift that reconciles the two is the same
- * one that puts "runtime owner at +144" and "saved owner at +64" in agreement.
+ * A DWORD at record+0x48, i.e. **8 bytes BEFORE the name**, as the disassembly
+ * says. It looks as though it does not fit a frame based at the name; the
+ * 80-byte shift that reconciles the two is the same one that puts "runtime
+ * owner at +144" and "saved owner at +64" in agreement. +152, which is
+ * `(name + 160) - 8`, is the same field one record along, and would restore
+ * every character with their neighbour's count.
  *
- * What made the old offset look right is that it produces a plausible series —
+ * +152 looks right because it produces a plausible series —
  * only it belongs to the next record: 0→1→3→5→8→13→21 over disk 1 is **Penny's**,
  * the character you report to after every errand, and Morrow's own is 0→2→3.
  */
@@ -198,8 +198,8 @@ const ACTOR_PLACEMENT = {
    *
    * Only a SCRIPT ever sets this (it is an accessor and nothing else writes it),
    * and a load runs no `openset` to set it again (#143) — so a restored actor
-   * used to keep the runtime's own `0`, and `stepDeg`'s floor of 1 turned every
-   * character at a tenth of their proper rate for the rest of the session. The
+   * left at the runtime's own `0` would, through `stepDeg`'s floor of 1, turn at
+   * a tenth of their proper rate for the rest of the session. The
    * turn is sub-second in the original and several seconds long that way, which
    * is most visible in `walktopuppet`: the conversation waits on `iswalk`, so the
    * character stands there rotating before anyone speaks.
@@ -280,8 +280,8 @@ const C1_SCENE_COUNT = 656;
  * Restoring it is what makes an absolute frame stamp in a global mean anything
  * after a load: BINL.SET's cargo crate asks `frame() - paintframe > 10000` and
  * BOOTFILE stamps `paintframe = frame()` when mission 2 opens, so a counter
- * that kept running from the *session's* start rather than the *game's* said
- * the ten minutes were up the moment the save came back (#221). Measured across
+ * that kept running from the *session's* start rather than the *game's* would
+ * say the ten minutes were up the moment the save came back (#221). Measured across
  * the shipped saves: the counter rises monotonically along each numbered series
  * (disc 1: 64 → 32469 → … → 346349) and every frame stamp in the globals sits a
  * few hundred to a few thousand frames below it.
@@ -782,23 +782,22 @@ export interface SaveIndex {
  * inventory, the open shops and the open-tracks list; container 6's own length
  * says how many tracks are open; three arrays per track follow; and the globals,
  * the string pool and the three service tables follow those. See the container
- * table in `docs/engine/formats/savegame.md`, which has said "every index here is
- * computed and none is searched for" since the map was read out of the writer.
+ * table in `docs/engine/formats/savegame.md`: "every index here is computed and
+ * none is searched for".
  *
- * It used to be six content probes — `mission`/`playerdeath`/`clock` for the
- * globals, longest-prop-grid for the inventory, longest-actor-grid for the cast,
- * an all-records-end-in-`.cst` test, the 1344/1184/1760 size triple, and a
- * descriptor/array shape check for the tracks. Three reasons they are gone
- * (#325): the reading already existed and was documented; they ran a second time
- * inside {@link applyPatch}, so a mis-lock *wrote* to the wrong container; and
- * one had already misfired — the globals blob is a grid of 32-byte variable nodes
- * and 32 divides 160, so every fifth node sits one actor stride from the last and
- * a pair of variable names 64 bytes apart decodes as an actor name/owner record.
- * Three shipped saves (ENDGAME2 09/12/13) preferred it to their real cast
- * container on record count alone, and that was patched with an exclusion list
- * rather than by reading the index. The probes were also silently
- * Titanic-specific: a Dust- or Timelapse-shaped save carries none of those three
- * variable names and read as having no globals at all.
+ * Not content probes — `mission`/`playerdeath`/`clock` for the globals,
+ * longest-prop-grid for the inventory, longest-actor-grid for the cast, an
+ * all-records-end-in-`.cst` test, a size triple, a descriptor/array shape check
+ * for the tracks — for three reasons (#325): the reading exists and is
+ * documented; probes would run a second time inside {@link applyPatch}, so a
+ * mis-lock would *write* to the wrong container; and they misfire — the globals
+ * blob is a grid of 32-byte variable nodes and 32 divides 160, so every fifth
+ * node sits one actor stride from the last and a pair of variable names 64
+ * bytes apart decodes as an actor name/owner record. Three shipped saves
+ * (ENDGAME2 09/12/13) prefer it to their real cast container on record count
+ * alone. Probes are also silently Titanic-specific: a Dust- or Timelapse-shaped
+ * save carries none of those three variable names and would read as having no
+ * globals at all.
  *
  * VALIDATION, which is what makes this a reading rather than a second
  * convention, and two-sided in both directions:
@@ -810,7 +809,7 @@ export interface SaveIndex {
  *    the tail of the map has to land on all three.
  *
  * Measured on all 654 shipped saves (109 × six editions): every one satisfies
- * both, and the map agrees with what the six probes used to return in every case.
+ * both, and the map agrees with what those content probes return in every case.
  */
 export function saveIndex(raw: RawSaveFile): SaveIndex {
   const n = raw.containers.length;
@@ -827,7 +826,7 @@ export function saveIndex(raw: RawSaveFile): SaveIndex {
     throw new Error(`save: ${trackCount} open tracks needs ${globals + 5} containers, file has ${n}`);
   }
   // each track's registered / playing / looping arrays, against the descriptor's
-  // own counts — the check the old tracks probe used to search WITH
+  // own counts
   const dv = new DataView(list.buffer, list.byteOffset, list.byteLength);
   for (let k = 0; k < trackCount; k++) {
     for (const [j, off] of TRACK_COUNTS.entries()) {
@@ -1015,16 +1014,16 @@ function walkActorGrid(d: Uint8Array): { off: number; actor: SavedActor }[] {
  * force, laid out like every other list the engine dumps:
  * `[+0/+4 heap ptrs][+8 u32][+12 name: len byte + chars]`.
  *
- * This is what a load needs and used to go without. A room's crowd is not in
+ * This is what a load needs. A room's crowd is not in
  * its own cast file: `lounge1c.set`, `smoke.set` and `deckbd2.set` each
  * `opencastfile("extra.cst")` from their `openset`, and a load runs no openset
- * (#143). So the eight members the extras are instanced from — `life1 bruce1
- * jim1 jay1 brown1 paul1 ani1 molly1` — were never loaded, `instanceSource`
- * found nothing to instance from, and every crowd record was dropped: 344 of
- * them across 39 of the 109 shipped saves, in the three most populated rooms of
- * the endgame (#186).
+ * (#143). Without this list the eight members the extras are instanced from —
+ * `life1 bruce1 jim1 jay1 brown1 paul1 ani1 molly1` — are never loaded,
+ * `instanceSource` finds nothing to instance from, and every crowd record is
+ * dropped: 344 of them across 39 of the 109 shipped saves, in the three most
+ * populated rooms of the endgame (#186).
  *
- * The file said so all along. 47 of the 109 carry a second record here and it is
+ * The file says which. 47 of the 109 carry a second record here and it is
  * `extra.cst` in every one — the same 47 that carry crowd records resolving to
  * nothing, which is what identifies the container.
  */
@@ -1481,14 +1480,14 @@ export interface SavePatch {
    * ({@link SaveGame.disk}, container 0 @256). Omitted leaves the base's.
    *
    * A save is written by patching a skeleton — a shipped save, or the last one
-   * loaded — and this field is one the patch used to leave alone, so a save
-   * inherited whichever disc that skeleton came off. It is not decoration: it
+   * loaded — and left alone, this field would make a save inherit whichever disc
+   * that skeleton came off. It is not decoration: it
    * says which CD the save's rooms are to be read from, to the original engine
    * (which asks for that disc by name) and to this port (whose load mounts it —
    * see mountSavedDisc). 93 basenames ship on both, 70 of them differing byte for
    * byte, so a mislabelled save opens the wrong act's rooms. The reachable way to
-   * write one was to load a mission-3 save and play on into mission 4: the story
-   * crosses back to disc 1 there and the skeleton still said disc 2.
+   * write one is to load a mission-3 save and play on into mission 4: the story
+   * crosses back to disc 1 there and the skeleton still says disc 2.
    *
    * Written into the field the base already has and never past it — every label
    * in the corpus is the same eight characters, and what follows the pstr in
@@ -1560,9 +1559,7 @@ export interface SavePatch {
    * 3 that carry a payload, so this only ever appends past the end.
    *
    * Omitted (`walks` undefined) or empty, the table is ZEROED — the two spell
-   * the same thing and write the same bytes: no walk is in flight. That is what
-   * this did for every caller before #191, minus the base tails, which no
-   * zeroed slot can reach anyway.
+   * the same thing and write the same bytes: no walk is in flight.
    */
   scheduler?: { loops: SavedLoop[]; crickets: SavedCricket[]; walks?: SavedWalk[] };
   /**
@@ -1599,8 +1596,8 @@ export interface SavePatch {
    * writer (0x413910), and a load reopens what it names (0x414b32): the crowd
    * is instanced from `extra.cst`, which three rooms open from their `openset`
    * and which a load, running no `openset`, gets only from here. Copying the
-   * base's list meant a save named whatever its SKELETON had open (#486: a
-   * London-flat template, so a smoking-room save during the sinking reloaded
+   * base's list would make a save name whatever its SKELETON had open (#486: a
+   * London-flat template, so a smoking-room save during the sinking would reload
    * without its crowd). See {@link openFilesPatch}.
    */
   casts?: string[];
@@ -1612,7 +1609,7 @@ export interface SavePatch {
    * sounding or not: the sinking's `insddest.sfx` is a silent bank a restored
    * loop plays out of (#199). A bank the base also had keeps its record and
    * arrays; a new one gets an empty record. {@link theme} is then written into
-   * this list, so a theme the base never had open is no longer dropped.
+   * this list, so a theme the base never had open is not dropped.
    */
   banks?: string[];
   /**
@@ -1850,8 +1847,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
    * property of the map rather than luck. Nothing after it changes container 6
    * or the count of containers before the walks table; the scheduler block truncates the tail to
    * re-emit the waypoint payloads, and every index it and the theme block use
-   * sits at or before that cut. (Six searches used to run here instead, on the
-   * copy, and a mis-lock would have WRITTEN to the wrong container — #325.)
+   * sits at or before that cut.
    */
   openFilesPatch(containers, saveIndex(raw), patch);
   const index = saveIndex(raw);
@@ -1873,8 +1869,8 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     if (num !== undefined) {
       const dv = view();
       // 32 bits, the node's full value field — see decodeVars. A word here
-      // clamped `paintframe`/`secframe`/`lastsail` to 32767 the moment a
-      // session ran past 27 minutes, which is where every frame stamp in a
+      // would clamp `paintframe`/`secframe`/`lastsail` to 32767 the moment a
+      // session runs past 27 minutes, which is where every frame stamp in a
       // real playthrough lives (#221).
       const v = Math.max(-0x80000000, Math.min(0x7fffffff, num | 0));
       // Type 2 is BOOLEAN, not a second number tag, and TI.EXE's commands
@@ -1895,7 +1891,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     const p = poolIntern(containers[gi].data, containers[gi + 1], str);
     if (p < 0) return false;
     const dv = view();
-    // the whole field, so a node that used to hold a wide number (a frame
+    // the whole field, so a node that held a wide number (a frame
     // stamp) doesn't keep its high word behind the new pool offset — a
     // string's high word is 0 in all 3380 shipped string records
     dv.setUint32(off + NODE_VALUE, p, true);
@@ -2086,8 +2082,8 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
      * the container's size. The grid also starts at offset 0 in all 109
      * shipped saves, so "the end of the last record" is just the length.
      * This is what lets a save carry the crowd (`setupgroup`'s per-room
-     * extras), which a load must place from the file now that it no longer
-     * re-runs the room's own scripts (#143).
+     * extras), which a load must place from the file since it does not
+     * re-run the room's own scripts (#143).
      */
     const append = (): number => {
       const d = containers[ai].data;
@@ -2260,8 +2256,8 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     containers[si + 2].data = walks;
     // The payloads follow the walks table, one per type-3 slot in slot order —
     // and the base's own payloads go UNCONDITIONALLY, walks passed or not:
-    // they belong to the base's moment (dropping them is the whole reason the
-    // table used to be zeroed, see {@link SavePatch.scheduler}), the zeroed
+    // they belong to the base's moment (dropping them is why an omitted table
+    // is zeroed, see {@link SavePatch.scheduler}), the zeroed
     // table references none, and one behaviour means `walks: []` and an
     // omitted `walks` produce the same bytes (#191 review).
     containers.length = si + 3;

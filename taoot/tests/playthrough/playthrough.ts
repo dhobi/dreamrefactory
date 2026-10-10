@@ -36,19 +36,15 @@ const golden = (n: string) => join(HERE, "golden", `playthrough-${n}.json`);
  * Globals that count how long the HARNESS dwelt, not what the game did — and
  * which this comparison therefore drops. The list and the measurements behind it
  * live in [masks.ts](../../../engine/src/runtime/masks.ts), because the browser suite needs the SAME list
- * and keeping a second copy here is what let the two drift apart: `lastsail` was
- * masked here and not there, so every browser segment from 13 on failed on a frame
- * stamp this file had already identified.
+ * and a second copy here would drift apart from it.
  *
  * What that comparison masks and this one does not is deliberate and stated there:
  * two hosts at one instant disagree about more than one host does over time, so
  * `hrs`/`min` are dropped there and asserted here.
  *
- * {@link isCoinFlip} is NOT dropped here, and that is a property this host earned
- * back. The Gorse/Jones encounter is `random(100) < 50`, and the draw deciding it
- * used to move whenever anything moved the clock — because the crickets drew from
- * the same stream and re-armed on the clock. They have their own stream now
- * (GameSession.ambientRng), so on ONE host the coin is a function of the seed and
+ * {@link isCoinFlip} is NOT dropped here. The Gorse/Jones encounter is
+ * `random(100) < 50`, and the crickets, which re-arm on the clock, draw from
+ * their own stream (GameSession.ambientRng), so on ONE host the coin is a function of the seed and
  * the route, which is exactly what a golden can hold. The browser comparison still
  * masks it: two hosts do not dispatch the same number of idle-driven scripts, so
  * cross-host the draw can still land elsewhere, and that is its call to make.
@@ -119,9 +115,9 @@ function assertTrace(trace: StateTrace[], file: string, n?: number): void {
  * The game the segments are played on — ONE session carried from segment to
  * segment, rather than a savegame round trip at every boundary.
  *
- * A `.ti` holds much more than it used to — the whole actor record (owner,
- * value, placement, scale), every prop's two halves, the loop/cricket tables
- * and the playing theme all round-trip since #143 — but a load is still not
+ * A `.ti` holds a lot — the whole actor record (owner, value, placement, scale),
+ * every prop's two halves, the loop/cricket tables and the playing theme all
+ * round-trip (#143) — but a load is still not
  * the run a player makes: a walk in flight is dropped (the actor stands, their
  * idle re-decides), positional sound loops beyond the theme re-arm on the next
  * movement, and the sub-minute clock starts fresh. (The original resumes the
@@ -133,9 +129,8 @@ function assertTrace(trace: StateTrace[], file: string, n?: number): void {
  * exactly where this one begins. It falls back to the checkpoint otherwise, and
  * "otherwise" is not rare: a filtered run (`-t "playthrough 13"`), a fresh
  * process, and any segment after one that threw. That fallback is what keeps a
- * late failure cheap to reproduce, which is the property the checkpoints were
- * introduced for in the first place. What is no longer on that list is a segment
- * that could ONLY load — see {@link LOADS_IN_A_FULL_RUN}.
+ * late failure cheap to reproduce, which is what the checkpoints are for. No
+ * segment can ONLY load — see {@link LOADS_IN_A_FULL_RUN}.
  */
 let live: { p: Playthrough; at: string } | null = null;
 
@@ -186,14 +181,14 @@ async function leaveAt(name: string, p: Playthrough): Promise<void> {
 }
 
 /**
- * Put the interface back the way a load used to find it.
+ * Put the interface back the way a load finds it.
  *
  * A `.ti` holds a set, a scene and a view — no flat, no parked movie — so
- * `resume()` always came back to a clear room, and a segment could finish with
- * the enigma machine open, the cufflink case up or a clip parked and never
- * notice. Carrying the game keeps all of it, and the next segment then found its
- * room covered and said so: `the "cuff 1" flat is covering ebath; close it
- * first`, `the office door did not open`. The navigator was right every time.
+ * `resume()` always comes back to a clear room. Carrying the game keeps
+ * whatever a segment left open (the enigma machine, the cufflink case, a parked
+ * clip), and the next segment then finds its room covered and says so:
+ * `the "cuff 1" flat is covering ebath; close it first`, `the office door did
+ * not open`.
  *
  * So the boundary does what a player does before walking off — closes what it
  * opened. An abort is the only thing that gets out of a parked clip without
@@ -321,10 +316,9 @@ test("playthrough 7: mission 2 phase 0, Thayer's telegram", async () => {
 /**
  * The end of segment 7 — at the wireless with Thayer's telegram to send.
  *
- * This checkpoint is the one that could not exist until actor owners were saved:
- * the Purser's errand lives in `actorowner("purs")`, and a `.ti` written without
- * it brought him back at "none" with the whole ladder reset. It is therefore also
- * the regression test for that fix — segment 8's first assertion is his rung.
+ * This checkpoint depends on actor owners being saved: the Purser's errand lives
+ * in `actorowner("purs")`, and a `.ti` written without it brings him back at
+ * "none" with the whole ladder reset. Segment 8's first assertion is his rung.
  */
 const m2gram = () =>
   checkpoint("m2gram", async () => {
@@ -638,34 +632,27 @@ const m4anti = () =>
   });
 
 /**
- * The last segment — and there used to be two more.
+ * The last segment.
  *
- * One went six decks down to the turbine room to trade Clariss's shawl
- * for the real necklace, because `worldwar1()` wants that necklace out of Vlad's
- * hands and the route had no other way to get it. The necklace SUB-PLOT is that
- * other way: it runs in mission 1 phase 4 (segments.ts `necklace`), costs none of
- * mission 4's 63-minute clock, and leaves `propowner("realneck")` = "frank" from
- * the first hour.
+ * `worldwar1()` wants the real necklace out of Vlad's hands, and the necklace
+ * SUB-PLOT gets it: it runs in mission 1 phase 4 (segments.ts `necklace`), costs
+ * none of mission 4's 63-minute clock, and leaves `propowner("realneck")` =
+ * "frank" from the first hour. So no segment trades Clariss's shawl in the
+ * turbine room, a leaf that could only be LOADED — and the whole run is one
+ * carried game from the cold boot to the credits, which is what makes every
+ * golden in here speak for a game a player could actually have played (a `.ti`
+ * round trip is lossy both ways, so a loaded segment's trace is only ever an
+ * oracle for loading).
  *
- * So the trade became redundant, and dropping it was worth more than the gestures it
- * saved: it was the ONLY segment in this file that LOADED rather than carrying,
- * because the turbine-room trip was a leaf. With it gone the whole run is one
- * carried game from the cold boot to the credits, which is what makes every golden
- * in here speak for a game a player could actually have played — a `.ti` round trip
- * is lossy both ways, so a loaded segment's trace is only ever an oracle for
- * loading.
+ * Nor does a segment carry Georgia's antidote to A deck and play blackjack for
+ * the boat pass: both errands exist only to undo segment 26 handing the painting
+ * to Zeitel, and refusing his deal keeps the painting, which is the flag the
+ * pass is for. That also keeps out the one errand whose outcome is a property of
+ * the RNG stream rather than of the play (docs/reference/route.md). Lady Georgia
+ * dies of the poison; the closing narration does not score her, and segment 26
+ * says so where it makes the choice.
  *
- * The other carried Georgia's antidote to A deck and then played blackjack for the
- * boat pass, and it went for a reason worth keeping: BOTH of those errands existed
- * only to undo segment 26 handing the painting to Zeitel. Refusing his deal keeps
- * the painting, which is the flag the pass was for — so the antidote, the table, and
- * the trade back all went with it, and with them the one part of the run whose
- * outcome was a property of the RNG stream rather than of the play
- * (docs/reference/route.md). Lady
- * Georgia dies of the poison; the closing narration does not score her, and segment
- * 26 says so where it makes the choice.
- *
- * Each retirement handed its number back, so the segments run 1..27 with no gap.
+ * The segments run 1..27 with no gap.
  */
 test("playthrough 27: mission 4, the boat deck and the end of the game", async () => {
   const p = await startFrom("m4anti", m4anti, refuseZeitelAgain);

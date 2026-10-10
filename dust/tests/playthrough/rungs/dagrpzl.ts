@@ -135,25 +135,19 @@ export const rung: Segment = {
     const flat = (): string => ask(p, "currentflat").toLowerCase();
 
     /*
-     * PORT GAP 1 is FIXED IN THE ENGINE, and the patch that used to be here is
-     * why it is worth a note rather than a deletion.
+     * PORT GAP 1 is answered IN THE ENGINE, not patched here.
      *
-     * `currentsound ()` answered "" for an idle channel, and Dust's flute room
-     * asks the question the other way round — `FLUTE.FLT/0001 mousedown`, its
-     * `evaluate ()` and `FLUTE.PRP/0001 hidestep ()` all open `while
-     * currentsound () != "none" endwhile`, which against "" is a loop with no
-     * exit. This rung monkeypatched the builtin so it could play the room, and
-     * that made the suite green on a room the BROWSER still hung in: the port gap
-     * was named correctly, then papered over at the one call site that had hit
-     * it.
+     * Dust's flute room asks about an idle channel the other way round —
+     * `FLUTE.FLT/0001 mousedown`, its `evaluate ()` and `FLUTE.PRP/0001
+     * hidestep ()` all open `while currentsound () != "none" endwhile`, which
+     * against "" is a loop with no exit. Monkeypatching the builtin here would
+     * make the suite green on a room the BROWSER still hangs in.
      *
-     * The note also said these were "the corpus's only three `!= "none"`
-     * tests". They were the only three on `currentsound`. There are six more on
-     * `currentvoice`, all in `CHECKERS.PRP`, and the one in `win ()` runs when
-     * the player loses a game of checkers — so that hung too, and nothing here
-     * covered it because no rung plays checkers.
+     * Those are the only three `!= "none"` tests on `currentsound`. There are
+     * six more on `currentvoice`, all in `CHECKERS.PRP`, and the one in `win ()`
+     * runs when the player loses a game of checkers — which no rung plays.
      *
-     * `Scheduler.currentSound` and `currentvoice` both answer "none" now.
+     * `Scheduler.currentSound` and `currentvoice` both answer "none".
      */
     /*
      * PORT GAP 2 — `propxy (name, 3)` is not the packed POINT.

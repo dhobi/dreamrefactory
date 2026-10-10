@@ -12,19 +12,18 @@
  *   1. **`propset` is what makes a prop scenery.** `HOUSE.PRP`'s dung is
  *      `propset (me, "town")`, `propvisible`, `propscale (500)`, `propdeg (random
  *      (255))` — and the position arrives later and from elsewhere
- *      (`randomloc ()` when the town opens). The port stored the set name and
- *      left the prop in the SCREEN draw list, pinned at the default anchor
+ *      (`randomloc ()` when the town opens). A prop left in the SCREEN draw
+ *      list with only its set name stored is pinned at the default anchor
  *      (256, 192) and drawn over every room in the game.
  *   2. **A star of a set that is not open is not a failure.** Dust's star names
  *      are qualified — `town.flower` is the identifier in `TOWN.SET` itself — and
  *      `INVEN.PRP`'s `initprops` places the cemetery flowers on day 2 while the
- *      player is asleep in `mayroom`. The port dropped the placement; the cast
- *      has had the answer since `ActorRuntime.settleStars`, and props now share
- *      it.
+ *      player is asleep in `mayroom`. The placement is kept for when the set
+ *      opens — props share the cast's answer, `ActorRuntime.settleStars`.
  *   3. **`openprop` is a lifecycle handler.** Six prop groups in `HOUSE.PRP`
  *      define one, and it is where the second of every paired prop is made
- *      (`propinstance ("dung1", "dung2")`). Nothing fired it, and nothing in the
- *      corpus calls it, so `dung2` did not exist for `initprops` to set up.
+ *      (`propinstance ("dung1", "dung2")`). Nothing in the corpus calls it, so
+ *      unless the engine fires it `dung2` does not exist for `initprops` to set up.
  *
  * ...and a fourth thing, from #393: **a world prop is clickable only where it is
  * drawn**. Dust draws the room in the top 264 rows of a 512x384 screen and the

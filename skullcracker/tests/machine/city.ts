@@ -1,24 +1,24 @@
 /**
- * CITY's opening, which was impassable — and the two rules that pass it.
+ * CITY's opening, and the two rules that pass it.
  *
  *   npm test -w skullcracker -- city
  *
  * Level two is a staircase of rooftops with no floor under it (`CITY`'s ground is
  * y7250 for everything east of x691, 2900 pixels below anything it draws), and
- * its first step is the one this page could not take. The file's own numbers:
+ * its first step is the hard one. The file's own numbers:
  *
  *   - a `platform` at `y4041, x1757..1904` — the metal walkway;
  *   - a 103px gap west of it, from the `y4046` platform that ends at x1654;
  *   - a wooden water tank whose roof is a `platform` at `y3920, x1873..2324`;
  *   - and an `obstacle` at `y3852..4160, x1873..1933` — the tank's west wall.
  *
- * So the step up is 121 pixels with a wall in the middle of it, and both of the
- * rules it needs are things this page had wrong:
+ * So the step up is 121 pixels with a wall in the middle of it, and it needs
+ * two rules read exactly:
  *
  * 1. **an obstacle is a point test.** `0x430146` walks the obstacle array against
  *    the object's own point and pushes it out along the smallest of the four
  *    penetrations — so clearing the wall means lifting the ANCHOR past y3852, 101
- *    pixels. Tested as a box it meant lifting all 148 rows of the sprite past it:
+ *    pixels. Tested as a box it would mean lifting all 148 rows of the sprite past it:
  *    189 pixels, which no jump in the game reaches.
  * 2. **the tuck's feet are 19 pixels higher than the standing pose's.** The
  *    engine's `y` is the cel's anchor and what lands is the cel's own collision

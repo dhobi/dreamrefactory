@@ -12,7 +12,7 @@
  * no Mac has any.
  *
  * Importing this also puts `mobile` on `<html>`, for a page's own rules that
- * differ on a phone. A phone turned on its side is not one of them any more: it
+ * differ on a phone. A phone turned on its side is not one of them: it
  * goes into fullscreen, by the button's own route (`landscape` in
  * {@link file://./fullscreen.ts}), so every game takes it and the picture options
  * that key off `.fs` (stretch, TH mode) come with it.

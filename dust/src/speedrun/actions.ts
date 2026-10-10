@@ -5,8 +5,8 @@
  * {@link GOTO} walks to a grid CELL, which is the shape this game's whole map
  * has and the shape its own record of the route is written in — every rung of
  * the golden thread names a standpoint as one (docs/dust/thread.md). It is 223
- * of the playthrough's gestures and the reason a sheet had to count `move(u,u,r)`
- * by hand until now. {@link GIVE} drops what is in your hand on somebody, which
+ * of the playthrough's gestures, which a sheet would otherwise count out as
+ * `move(u,u,r)` by hand. {@link GIVE} drops what is in your hand on somebody, which
  * lands on `offerobject ()` on a cast script — DF1's way of giving something
  * away, with no counterpart in TI.EXE.
  *
@@ -258,13 +258,11 @@ const TALKING = `!!(window.dbg.viewer && window.dbg.viewer.conversing)`;
  *
  * Which is most of the length below, and it is the half that is not `stand`'s.
  *
- * Characters here do not wait to be spoken to. The first thing this verb was
- * asked to do — the boot's cell to the thread's first standpoint, `goto(10, 10,
- * north)` in `nite` — planned correctly, walked three cells, and then died on
- * "stuck waiting for the engine to be ready for ArrowUp" with the readout saying
- * `talking to help1.pup · script busy`. Nothing was wrong with the route. A
- * conversation had opened in the middle of it, and from that moment every
- * remaining key belonged to a puppet.
+ * Characters here do not wait to be spoken to. The boot's cell to the thread's
+ * first standpoint, `goto(10, 10, north)` in `nite`, plans correctly and walks
+ * three cells, and then a conversation opens in the middle of it (`talking to
+ * help1.pup · script busy`): from that moment every remaining key belongs to a
+ * puppet, and the route is not at fault.
  *
  * So the walk clears its throat and then re-plans FROM WHERE IT ACTUALLY IS,
  * up to `tries:` times, which is also the answer to a second thing: arriving is
@@ -890,12 +888,10 @@ const TAKE_IN_HAND: Action = {
      * CARRIED ALREADY? Then the room is not where it is, and the hunt below is
      * four view turns spent proving it.
      *
-     * This comment was here without the code under it, and the cost was the
-     * whole common case: `takeInHand(jug)` for a thing in the inventory swept
-     * four views, clicked whatever it found, waited for a hand that was never
-     * going to fill, turned the ring three times, and only then opened the
-     * panel — where the jug had been the whole time. One cheap read of
-     * `propowner` skips all of it.
+     * Without it, `takeInHand(jug)` for a thing in the inventory sweeps four
+     * views, clicks whatever it finds, waits for a hand that is never going to
+     * fill, turns the ring three times, and only then opens the panel — where
+     * the jug was the whole time. One cheap read of `propowner` skips all of it.
      *
      * The room search stays for the other case, and it is the case the route
      * actually names first: the Bone lies in the street and is nobody's.
@@ -967,11 +963,11 @@ const TAKE_IN_HAND: Action = {
       const at = turn === 0 ? drawn : await drawnAt();
       const tried: string[] = [];
       /*
-       * The sweep is the FALLBACK and is now only run as one.
+       * The sweep is the FALLBACK and is only run as one.
        *
-       * Both points used to be gathered before either was clicked, so every
-       * view paid for a full grid hit-test even when `propxy` had already said
-       * where the thing was. The sweep is the expensive read in this verb; a
+       * Gathering both points before either is clicked would make every view
+       * pay for a full grid hit-test even when `propxy` has already said where
+       * the thing is. The sweep is the expensive read in this verb; a
        * lazy list means the common case never performs it.
        */
       for (const find of [
@@ -1014,7 +1010,7 @@ const TAKE_IN_HAND: Action = {
         `${item} would not go in hand. ` +
           // which halves actually ran, because "the panel refused a thing you
           // own" and "it is in neither the room nor the panel" are different
-          // faults and the message used to report an empty room search for both
+          // faults
           (owned
             ? `The player is carrying it, so the panel is the only place it could come from, and it `
             : `Round the four views of this cell it was at [${looked.trim()}], and the panel `) +
@@ -1441,11 +1437,11 @@ const MEET: Action = {
        * 4. HER ROW OR HER COLUMN IS ENOUGH — she does not have to be standing on
        *    the cell we walked to, and insisting on it is a race nobody wins.
        *
-       * This used to require her exact cell, and against a character who walks
-       * CONTINUOUSLY that is the losing condition: the Mayor's wife crossing the
-       * night street cost eight rounds of "3,8 left before we arrived; 3,3 gone
-       * by the press" and five minutes, because every round read a cell, walked
-       * to it, and found her somewhere else on arrival.
+       * Requiring her exact cell, against a character who walks CONTINUOUSLY, is
+       * the losing condition: the Mayor's wife crossing the night street costs
+       * eight rounds of "3,8 left before we arrived; 3,3 gone by the press" and
+       * five minutes that way, because every round reads a cell, walks to it,
+       * and finds her somewhere else on arrival.
        *
        * The engine asks for less. `GANG.CST/0001 walktopuppet ()` opens with `if
        * thex != 0 & they != 0 exitcode` over the cell deltas — so a click opens

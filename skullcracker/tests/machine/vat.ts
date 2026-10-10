@@ -320,8 +320,7 @@ test.skipIf(!haveRip())("vat", async () => {
    * 4. the MONKEYBAR, which is in this level and in no other either.
    *
    * One `monkeybar` record ships in the whole game — `param 65, top 1779, left
-   * 5908, right 6617` — and until now it was the last live entity record with
-   * nothing on this port's side. See `MONKEYBAR` in `src/game.ts`.
+  XX
    *
    * It is not reachable from VAT's floor at y2301: the rect is in ANCHOR space
    * and a jump lifts the anchor 137, so the only way up is the platform at

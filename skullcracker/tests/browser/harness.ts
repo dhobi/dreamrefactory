@@ -1,23 +1,22 @@
 /**
  * One browser for all of them.
  *
- * Every suite in this directory used to be its own `tsx` process with its own
- * `chromium.launch()`, and that cost twice:
+ * A suite run as its own `tsx` process with its own `chromium.launch()` costs
+ * twice:
  *
  *   - each process imports Playwright from scratch, which is about a second
  *     apiece and thirty seconds across the set;
  *   - each launch is another Chromium, and this machine has around a gigabyte
  *     free with several gigabytes held by things that are not this repo. Running
- *     suites back to back produced failures that did not reproduce alone —
- *     `woods` losing a score, `service` reporting "no position in the HUD",
- *     `arcade` throwing a TypeError, `guns` losing a pickup. Four different
- *     symptoms of one cause, and each one cost a re-run to identify.
+ *     suites back to back that way produces failures that do not reproduce
+ *     alone — `woods` losing a score, `service` reporting "no position in the
+ *     HUD", `arcade` throwing a TypeError, `guns` losing a pickup.
  *
- * So a suite no longer owns a browser. It asks for one, and what it gets depends
+ * So a suite does not own a browser. It asks for one, and what it gets depends
  * on who is asking:
  *
  *   - run on its own (`npm run test:browser:vat`), it gets a fresh Chromium and
- *     closes it at the end, exactly as before;
+ *     closes it at the end;
  *   - run under `tools/runsuites.mts`, it gets the shared one and gives back
  *     only its own contexts.
  *

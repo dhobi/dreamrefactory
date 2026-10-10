@@ -20,10 +20,9 @@ import { carriesScript } from "./script-bearing";
  * rather than a game's — so it may not import a game to find one, and the
  * default has to be discovered rather than depended on.
  *
- * It used to be the bare string `"gamefiles"`, which was right while there was
- * one rip at the repository root. Each game has its own now, and a bare literal
- * is resolved against the WORKING DIRECTORY, so the zero-argument form named a
- * path that stopped existing. These are resolved from THIS FILE instead, so the
+ * Not a bare `"gamefiles"`: each game has its own rip, and a bare literal is
+ * resolved against the WORKING DIRECTORY, so the zero-argument form would name
+ * a path that does not exist. These are resolved from THIS FILE instead, so the
  * tool answers the same from anywhere, and the two environment variables come
  * first because that is what the CI runner sets.
  */

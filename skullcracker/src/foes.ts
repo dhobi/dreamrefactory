@@ -58,13 +58,13 @@
  * The trap this table was built to avoid: **the same cel numbers mean different
  * creatures in different chapters.** Each of the four chapters registers its own
  * classes, its four books each put a walking figure at cel 1900, and a class
- * function from the wrong chapter will therefore look plausible and be wrong. An
- * earlier version of this port read `initwerea` off `0x439240` — health 25, plate
- * `13101` NALLY, award 250 — and that function belongs to the chapter of gang
- * members (`initbatboy`, `initknifeboy`, `initmaskboy`); `initwerea` is registered
- * exactly once in the whole executable, at `0x4504d1`, and its creator is
- * `0x450a50`: health **250**, plate **13001**, award **220**. The same mistake had
- * given the rat 400 health and a 440 award off `0x417ed0`.
+ * function from the wrong chapter will therefore look plausible and be wrong.
+ * `0x439240` — health 25, plate `13101` NALLY, award 250 — looks like
+ * `initwerea` and belongs to the chapter of gang members (`initbatboy`,
+ * `initknifeboy`, `initmaskboy`); `initwerea` is registered exactly once in the
+ * whole executable, at `0x4504d1`, and its creator is `0x450a50`: health
+ * **250**, plate **13001**, award **220**. Likewise `0x417ed0`'s 400 health and
+ * 440 award are not the rat's.
  *
  * The check that settles it is the registration site, not the cels: whichever
  * function calls `0x40b850` with the name owns the class, and the creator it
@@ -77,13 +77,10 @@
  * `0x4a6e88`, which is what `0x42f540` returns and what `0x450060` takes its
  * share of. Of this chapter's classes exactly four make that call — `initwerea`,
  * `initwereb`, `initwerec`, `initwered` — and the rat, the crow, the mailbox and
- * the hydrant do not. That also replaces this port's earlier rule of thumb
- * ("whatever claims the health bar"), which was right about the punks and wrong
- * about the rat.
+ * the hydrant do not. "Whatever claims the health bar" is not the rule: it is
+ * right about the punks and wrong about the rat.
  *
- * Not counting is not the same as not dying, and reading it that way was this
- * file's second mistake: the rat was briefly unkillable here because a search for
- * its hit handler used the wrong register and came back empty. The handler is at
+ * Not counting is not the same as not dying: the rat's hit handler is at
  * `0x44e3f0` and the class descriptor names it at `obj+0x12` like every other —
  * the way to enumerate them is `scdis.mts callers 0x430cc0`, which finds all eight
  * of this chapter's descriptors, not a grep.
@@ -107,8 +104,8 @@ export interface FoeAnim {
    * The per-cel LIFT, same units as {@link dx} and the same one entry per cel.
    *
    * Only the attacks carry one — the punk's flying kick is `0x477368 tag 0`,
-   * `dy -480` on the frame it leaves the ground — so it is absent everywhere the
-   * old reading looked, which is why this page had no field for it. See
+   * `dy -480` on the frame it leaves the ground — and is absent from every walk,
+   * stance and flinch. See
    * {@link file://./fights.ts}.
    */
   dy?: readonly number[];
@@ -176,8 +173,7 @@ export interface Blow {
    * The handlers test it as `cmp [blow+0x28], [self+0x28]`, two mirror flags, and
    * jump to the PLAIN flinch when they are equal (`0x44f257` for the punk,
    * `0x452ac0` for the thrower). So the turned-away one is the ordinary take and
-   * the special one is a blow to the face; this page had the branch the wrong way
-   * round and gave the face take to a back.
+   * the special one is a blow to the face.
    */
   facingAway: boolean;
   /**
@@ -1232,12 +1228,10 @@ export const FOES: Readonly<Record<string, Foe>> = {
     // `0x44e4dd` — obj+0x26, the shove weight
     shove: 8,
     /**
-     * `0x4770f0` tag 0, kind 0 — the patrol, and the correction here is that it
-     * is not `0x4774b0`.
+     * `0x4770f0` tag 0, kind 0 — the patrol, and it is not `0x4774b0`.
      *
      * `0x4774b0` is kind 1, the fighting stance: eight cels of shifting weight
-     * with **`dx` 0 on every one of them**. This page had it as the walk and
-     * gave it a stride of 75 that no frame of it carries, so the punk paced its
+     * with **`dx` 0 on every one of them**, so as a walk it would pace the punk's
      * territory on the standing cels. The thing state 0 actually installs is
      * `0x4770f0` — six cels, 1910 to 1915, each carrying 75 of its own.
      */
@@ -1586,7 +1580,7 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * The masked one — level five's commonest, nine of them. Creator `0x436280`,
    * class `0x438690`, think `0x438760`, hit `0x438f00`.
    *
-   * MALL opens a chapter this port had nothing of, and the two classes here are
+   * MALL opens a new chapter, and the two classes here are
    * built to the same pattern as each other rather than to chapter four's: a
    * divisor of seven (fast and light), a blow pinned at 100 and re-stamped every
    * frame by the think's own epilogue, no gravity call and no restitution call, a
@@ -3032,8 +3026,8 @@ export const FOES: Readonly<Record<string, Foe>> = {
    * across the cap swings round a quarter turn per hit, so what a kick does to a
    * hydrant is open it.
    *
-   * What happens when the third one's frame finishes is the thing this page had
-   * wrong. `0x44fb20`, its own frame function, does not put the water on the
+   * What happens when the third one's frame finishes is the surprise.
+   * `0x44fb20`, its own frame function, does not put the water on the
    * hydrant:
    *
    * ```

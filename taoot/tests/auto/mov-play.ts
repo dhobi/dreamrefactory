@@ -2,9 +2,9 @@
  * The movie PLAYER over a shipped film — the state machine, not the container.
  *
  * `taoot/tests/auto/mov-format.ts` proves camelsee.mov says what it says; this proves
- * the port acts on it. The two halves were separable, and that is exactly how
- * issue #172 survived: the flag was parsed and then dropped on the floor, so
- * every format assertion could pass while the gym's horses stood still.
+ * the port acts on it. The two halves are separable: a flag parsed and then
+ * dropped on the floor passes every format assertion while the gym's horses
+ * stand still (#172).
  */
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -157,15 +157,13 @@ test("camelsee.mov: a click during the gallop takes the phase-matched exit", () 
 // --- the bed, as a rule two players share -----------------------------------
 
 /**
- * The soundtrack used to be computed inside `enterSegment`, against a
- * `GameSession`, which is why the movie editor's preview could only ever be
- * silent: nothing outside a running game could ask what a film sounds like. It
- * moved to `df/mov-sound.ts` when that editor grew a "Play the film" button, and
- * these two assertions are what stops the move from being a rewrite — they are
- * the numbers the comments in that file cite, read off the shipped discs.
+ * The soundtrack is computed in `df/mov-sound.ts`, outside any `GameSession`,
+ * so the movie editor's "Play the film" preview can ask what a film sounds
+ * like. These two assertions are the numbers the comments in that file cite,
+ * read off the shipped discs.
  *
  * `seg.file.containers` is how the functions reach the bytes, so a segment is all
- * they need; the player passes the same segments it always did.
+ * they need; the player passes its own segments.
  */
 function bedOf(name: string, segIdx = 0) {
   const path = gamefiles(gamefilesRoot(), "en").resolve(name);

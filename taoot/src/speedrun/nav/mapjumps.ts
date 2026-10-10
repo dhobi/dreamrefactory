@@ -12,11 +12,10 @@
  * eight sets, every one a staircase or a stair landing. So a trip is a jump to
  * the right stairwell and a walk from there, which is what the map is for.
  *
- * (That guard cost an afternoon. Reading the jumpbaby without reading the `if`
- * above it, the harness pressed the gymnasium six times, got no answer, and I was
- * some way into diagnosing a dropped-click bug in the flat dispatch before
- * noticing the game was refusing on purpose. taoot/tools/mapjumps.ts now reads the
- * guard, and the gate test asserts none of the emitted areas carry it.)
+ * (Read the jumpbaby without the `if` above it and the gymnasium looks like a
+ * dropped click in the flat dispatch; the game is refusing on purpose.
+ * taoot/tools/mapjumps.ts reads the guard, and the gate test asserts none of
+ * the emitted areas carry it.)
  *
  * The rectangles and destinations are read out of MAP.STG by taoot/tools/mapjumps.ts,
  * not written down here; see mapjumps.gen.ts. What lives in this file is the

@@ -146,10 +146,8 @@ export interface StgFile {
    * same neighbours (`mov eax, [eax+0x20]` at `0x401107`, between the two
    * `cmp word [ebx+0x1c/0x1e]` screen checks).
    *
-   * There was no field at all before that: `MAIN_SCRIPT_LOCATION = 1`, "by
-   * convention", and `runtime/stage.ts` did not even use the constant — it
-   * hardcoded `containers[1]`. SET has an offset for this and SHP has one, so STG
-   * having none was the gap, not the format's (#325).
+   * SET has an offset for this and SHP has one; a fixed container 1 "by
+   * convention" would be a gap of ours, not the format's (#325).
    */
   mainScriptLocation: number;
   flats: StgFlat[];

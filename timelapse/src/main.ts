@@ -3,11 +3,10 @@
  *
  * *Timelapse: Ancient Civilizations* (1996) is the third and last game to ship on
  * DreamFactory, and the one CyberFlix did not make — it is GTE Interactive Media's,
- * on CyberFlix's licensed engine. This page used to be the question of whether it
- * boots at all: a 640x480 surface, a log, and nothing else. The answer turned out
- * to be yes — the real {@link GameHost}, the real `GameSession`, the game's own
- * BOOTFILE, its films, its cursors and its four discs — so the page is now a
- * game, and the log is what it opens when something goes wrong rather than what
+ * on CyberFlix's licensed engine. The page is a game — the real
+ * {@link GameHost}, the real `GameSession`, the game's own BOOTFILE, its films,
+ * its cursors and its four discs — and the log is what it opens when something
+ * goes wrong rather than what
  * it IS.
  *
  * What that took, and what is worth knowing before reading downwards:
