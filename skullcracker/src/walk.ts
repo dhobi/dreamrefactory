@@ -539,9 +539,10 @@ async function playFilm(
       // waits for the end of the chain
       onChain: (next) => void playFilm(next).then(done),
       onAction: opts.onAction,
-      onEnd: () => {
+      onEnd: (_last, chainsTo) => {
         setFilm(null);
-        done();
+        // ...and the chain's own end is the one this promise waits for
+        if (!chainsTo) done();
       },
     }));
   });

@@ -51,8 +51,13 @@ export interface FilmHost {
    * frame 1 as actionframe TWO, so which way the camera pans is which player.
    */
   onAction?(which: 1 | 2): void;
-  /** this film is over, and which frame it ended ON */
-  onEnd(lastFrame: string): void;
+  /**
+   * This film is over, which frame it ended ON, and the film it chains to when
+   * its exit is a chain — {@link onChain} follows at once with that film, so a
+   * host that would otherwise go somewhere of its own on an ending leaves that
+   * to the chain.
+   */
+  onEnd(lastFrame: string, chainsTo: string | null): void;
 }
 
 export class Film {
@@ -383,7 +388,7 @@ export class Film {
         return;
       }
       case 3: // exit and chain to another film
-        this.finish();
+        this.finish(from?.event || null);
         if (from?.event) this.host.onChain(from.event);
         return;
       case 7: // step back one
@@ -419,12 +424,20 @@ export class Film {
    * did the rest — which is why the name has to come out of here rather than the
    * exit being just an exit.
    */
-  finish(): void {
+  finish(chainsTo: string | null = null): void {
+    this.stop();
+    const last = this.seg.frames[this.pos]?.name ?? "";
+    this.host.onEnd(last, chainsTo);
+  }
+
+  /**
+   * Silence the film and say nothing: what a host does to a film it is
+   * replacing, which has not ENDED in any sense its exits would answer.
+   */
+  stop(): void {
     this.bed?.stop();
     this.bed = null;
     for (const h of this.events) h.stop();
     this.events = [];
-    const last = this.seg.frames[this.pos]?.name ?? "";
-    this.host.onEnd(last);
   }
 }

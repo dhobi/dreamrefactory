@@ -756,7 +756,11 @@ async function playMovie(name: string, isHome = false): Promise<void> {
     fail(`${name}: not in this rip`);
     return;
   }
-  film?.finish();
+  // replaced, not ended: ending it would run its onEnd, which puts up a film
+  // of its own that this one then overwrites while its music plays on
+  const outgoing = film;
+  film = null;
+  outgoing?.stop();
   prefsOpen = false;
   if (isHome) home = name;
   try {
@@ -784,7 +788,7 @@ async function playMovie(name: string, isHome = false): Promise<void> {
         prefs.character = which === 1 ? 0 : 1;
         log(`${name}: actionframe ${which} — character ${prefs.character} (0x45e369)`);
       },
-      onEnd: (lastFrame) => {
+      onEnd: (lastFrame, chainsTo) => {
         film = null;
         // still starting up: the next film of the sequence, whether this one ran
         // itself out or was skipped
@@ -846,6 +850,12 @@ async function playMovie(name: string, isHome = false): Promise<void> {
         // and there is nothing behind it: the original handed a skipped menu back
         // to its executable, and here the menu is all there is. Without this the
         // page simply went black and stayed there.
+        // ...but not a film that chains, whose next film onChain is about to
+        // play: the chooser's figures end `char.mov` that way, and going back to
+        // the menu here as well put the menu up under the pan, music and all.
+        // (The menu's own Prefs exit is a chain too, which is why this waits
+        // until EXIT_ACTIONS has had its say.)
+        if (chainsTo) return;
         if (name === home) log(`${name}: ended on "${lastFrame}" — back to the menu`);
         void playMovie(home, true);
       },

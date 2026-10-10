@@ -482,6 +482,11 @@ describe.skipIf(!have)("the menu", () => {
     // and the front end's loop has let go
     await p.frames(2);
     expect(p.loc()).not.toContain("rtpan");
+    // ...and its music with it: the figure's click ends the chooser AND chains
+    // to the pan, and the menu that ending used to put up went on looping
+    // under the level
+    expect(sounds.filter((s) => s.channel === "theme" && !s.stopped)).toEqual([]);
+    expect(p.log()).not.toContain('ended on "frame 1" — back to the menu');
   });
 
   it("opens a saved game before the chooser, and carries its numbers to the level runner", async () => {
