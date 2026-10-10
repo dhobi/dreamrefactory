@@ -70,6 +70,7 @@ skipped.
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
 | [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage) — then the [SonarQube Cloud](#sonarqube-cloud) analysis. Not a check: it gates nothing |
 | [`sonar.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/sonar.yml) | every push to master, manual | the [SonarQube Cloud](#sonarqube-cloud) analysis of master with the last nightly's coverage report, on GitHub's machine, so the Sonar badges follow each merge. Not a check |
+| [`human-controlled.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/human-controlled.yml) | every push to master, weekly, manual | the README's Human/AI badge — [human-controlled](#human-controlled). Not a check |
 | [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*`, `lunicus-v*` or `jumpraven-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
@@ -109,6 +110,24 @@ turn over, and are at most a day behind master. A run with a failing suite
 publishes nothing, and it runs everything rather than the games a change
 reaches, so a badge is always a whole run's. `gh workflow run coverage.yml`
 runs it now.
+
+## human-controlled
+
+The README's Human/AI badge asks a different question from the coverage and Sonar
+ones: not how good the code is, but whether an AI-built project is under human
+control. [`dhobi/human-controlled`](https://github.com/dhobi/human-controlled)
+reads that from the repository's own history over its last 90 days — whether a
+policy says how AI is used ([collaboration.md](../collaboration.md) is the one it
+finds), whether changes land through PRs, are small enough to review, are
+reviewed by someone other than their author, and whether the machine checks gate
+them. Its README has the checks, their weights and the verdicts.
+
+[`human-controlled.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/human-controlled.yml)
+runs it after every merge and on Monday mornings, on GitHub's machine with the
+workflow's own token, and force-pushes the one badge file, `badge.json`, to the
+`human-controlled` branch as a single commit. Its own branch rather than
+`badges`, which coverage.yml replaces whole every night. The run's summary page
+has the full report.
 
 ## SonarQube Cloud
 

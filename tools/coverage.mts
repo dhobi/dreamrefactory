@@ -22,7 +22,8 @@ import { resolve } from "node:path";
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, "coverage");
 
-/** what gets a badge: the directory measured and the name on the badge */
+/** what gets a badge: the directory measured and the name on the badge; the
+ * README's row title says it is coverage, so the badge does not */
 const BADGES = [
   { key: "engine", dir: "engine/src/", label: "engine" },
   { key: "taoot", dir: "taoot/src/", label: "Titanic" },
@@ -70,7 +71,7 @@ for (const b of BADGES) {
   const pct = total ? (100 * covered) / total : 0;
   writeFileSync(
     resolve(OUT, "badges", `coverage-${b.key}.json`),
-    JSON.stringify({ schemaVersion: 1, label: `${b.label} coverage`, message: `${Math.floor(pct)}%`, color: color(pct) }) + "\n",
+    JSON.stringify({ schemaVersion: 1, label: b.label, message: `${Math.floor(pct)}%`, color: color(pct) }) + "\n",
   );
   rows.push(`| ${b.label} | \`${b.dir}\` | ${files} | ${covered}/${total} | ${pct.toFixed(1)}% |`);
 }

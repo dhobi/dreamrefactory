@@ -2,6 +2,7 @@
 
 # dreamREfactory
 
+**Coverage** &nbsp;
 [![engine coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-engine.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
 [![Titanic coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-taoot.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
 [![Dust coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-dust.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
@@ -11,11 +12,15 @@
 [![Lunicus coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-lunicus.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
 [![Jump Raven coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fbadges%2Fcoverage-jumpraven.json)](https://www.danielhobi.ch/dreamrefactory/docs/reference/ci.html#coverage)
 
+**Code quality** &nbsp;
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=dhobi_dreamrefactory&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=dhobi_dreamrefactory)
 [![Reliability](https://sonarcloud.io/api/project_badges/measure?project=dhobi_dreamrefactory&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=dhobi_dreamrefactory)
 [![Security](https://sonarcloud.io/api/project_badges/measure?project=dhobi_dreamrefactory&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=dhobi_dreamrefactory)
 [![Maintainability](https://sonarcloud.io/api/project_badges/measure?project=dhobi_dreamrefactory&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=dhobi_dreamrefactory)
 [![Duplicated lines](https://sonarcloud.io/api/project_badges/measure?project=dhobi_dreamrefactory&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=dhobi_dreamrefactory)
+
+**Human/AI** &nbsp;
+[![human-controlled](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdhobi%2Fdreamrefactory%2Fhuman-controlled%2Fbadge.json)](docs/collaboration.md)
 
 CyberFlix built a game engine. Bill Appleton's **DreamFactory** was a CD-ROM
 authoring system, and it carried *Lunicus*, *Jump Raven* and the studio's

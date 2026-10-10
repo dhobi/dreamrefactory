@@ -1,0 +1,47 @@
+name: human-controlled
+
+# The README's Human/AI badge: is this AI-built project under human control,
+# read from the repository's own history by dhobi/human-controlled
+# (docs/reference/ci.md#human-controlled). After every merge and once a week,
+# since the score is over a window of days and moves without a merge too.
+#
+# The badge file goes to a branch of its own, one commit force-pushed. Not the
+# `badges` branch: coverage.yml force-pushes that one whole every night, which
+# would drop this file.
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "17 5 * * 1"
+      timezone: "Europe/Zurich"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+  checks: read
+
+concurrency:
+  group: human-controlled
+
+jobs:
+  badge:
+    name: human-controlled
+    runs-on: ubuntu-latest
+    steps:
+      - id: hc
+        uses: dhobi/human-controlled@main
+        with:
+          badge: ${{ runner.temp }}/badge.json
+      - name: Publish the badge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERDICT: ${{ steps.hc.outputs.verdict }}
+        run: |
+          mkdir "$RUNNER_TEMP/site" && mv "$RUNNER_TEMP/badge.json" "$RUNNER_TEMP/site/" && cd "$RUNNER_TEMP/site"
+          git init -q -b human-controlled
+          git add badge.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "human-controlled badge for ${GITHUB_SHA::7}" -m "$VERDICT"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" human-controlled
