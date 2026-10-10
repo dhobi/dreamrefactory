@@ -32,7 +32,7 @@ import type { GameSession } from "./session";
  *
  * Which shops these are is a fact about the shops, so it is applied wherever one
  * of them is opened ({@link GameSession.openShop}) and not by whoever does the
- * opening. Setting it only in {@link GameSession.loadBootResources} — the port's
+ * opening. Setting it only in {@link SessionBoot.loadBootResources} — the port's
  * stand-in for the full game's `boot()` — would hold only while the port is the
  * only thing that ever opens them. TAOOT's 1996 demo opens them itself, from its
  * menu's `dodemo()`, and its interface band would come up empty: every prop
@@ -43,7 +43,6 @@ const BOOT_UI_SHOPS = new Set(["inven.shp", "house.shp", "inven.prp", "house.prp
 
 export class SessionResources {
   constructor(private readonly session: GameSession) {}
-
 
   /**
    * Canonical name of the set being opened = the FILE basename. The
