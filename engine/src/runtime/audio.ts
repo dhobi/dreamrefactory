@@ -629,7 +629,7 @@ export class AudioLibrary {
    * (container location + identifier) and the 1-based play order over them.
    * The save's playing/looping lists must mirror these record for record —
    * TI.EXE's post-load resume walks the bank's tables, not the save's counts
-   * (see SavePatch.theme in df/savegame.ts) — so the writer takes them from
+   * (see SavePatch.theme in df/savegame-patch.ts) — so the writer takes them from
    * the bank itself rather than inventing records.
    */
   loopTable(name: string): { chunks: { index: number; name: string }[]; order: number[] } | null {

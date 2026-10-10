@@ -11,7 +11,8 @@
  * fetch a record into a stack buffer whose name field sits at buffer+0x4e), the
  * current view (propview state) 48 bytes after the name and the owner
  * (propowner) 64 after it. Offsets here are from the NAME, which is what
- * {@link import("./savegame-read").walkPropGrid} locks onto; the numeric half is at negative offsets.
+ * {@link import("./savegame-read").walkPropGrid} locks onto; the numeric half
+ * is at negative offsets.
  */
 export const PROP_STRIDE = 158;
 /** `propset` (0x4160b0 reads record+0x5e) and `propstar` (0x416490, +0x6e): the
@@ -99,8 +100,8 @@ export const PROP_FIELDS = {
  * i.e. the cases where an actor is genuinely not standing on their star.
  *
  * The offsets below are named against the NAME field, because that is what
- * {@link import("./savegame-read").walkActorGrid} locks the grid onto — a record's own base is 80 bytes
- * earlier ({@link ACTOR_RECORD_OFF}).
+ * {@link import("./savegame-read").walkActorGrid} locks the grid onto — a
+ * record's own base is 80 bytes earlier ({@link ACTOR_RECORD_OFF}).
  */
 export const ACTOR_STRIDE = 160;
 /** the name field's offset inside a record — the grid is located by it */
@@ -251,12 +252,12 @@ export const WALKS_SIZE = 16 * 110;
 
 /**
  * One 110-byte walk slot's field offsets — the record TI.EXE's mover reads
- * (0x443E7C), shared by {@link import("./savegame-read").decodeWalks} and the writer
- * in {@link import("./savegame").applyPatch} the way {@link ACTOR_PLACEMENT} and
- * PROP_FIELDS are, so an offset correction
- * is one edit and the round trip cannot fall out of step for a field the
- * 16-slot corpus happens not to exercise. See {@link import("./savegame").SavedWalk} for what each
- * field means and which mover writes it.
+ * (0x443E7C), shared by {@link import("./savegame-read").decodeWalks} and the
+ * writer in {@link import("./savegame-patch").applyPatch} the way
+ * {@link ACTOR_PLACEMENT} and PROP_FIELDS are, so an offset correction is one
+ * edit and the round trip cannot fall out of step for a field the 16-slot
+ * corpus happens not to exercise. See {@link import("./savegame").SavedWalk}
+ * for what each field means and which mover writes it.
  */
 export const WALK_SLOT = {
   active: 0x00, // u16
