@@ -15,7 +15,11 @@ own directory instead:
 | [`tools/`](https://github.com/dhobi/dreamrefactory/tree/master/tools) | any rip: the dumpers, `parse`, `scancmds`, `scandeg`, the manifest, the shared encoders and the Vite plugins |
 | [`taoot/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/tools) | *Titanic*: the `TI.EXE` mining tools, the flow map, the deck-map and developer-menu extractors, the language chooser and the intro film |
 | [`dust/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/dust/tools) | *Dust*: the v1 SET sweep, the shipped-saves thread, the flat click-regions, and its title card |
-| [`redjack/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/redjack/tools) | *RedJack*: `rjdis`, the `RedJack.exe` disassembler |
+| [`timelapse/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/timelapse/tools) | *Timelapse*: `flats` and `props`, the indexes that make a decompiled stage or shop readable by frame and by name |
+| [`skullcracker/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/skullcracker/tools) | *Skull Cracker*: `scdis`, the `SC.EXE` disassembler, and the level and record readers ([Skull Cracker](../skullcracker/README.md)) |
+| [`redjack/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/redjack/tools) | *RedJack*: `rjdis`, the `RedJack.exe` disassembler; `mksaves`, the port's seven day saves; its title card |
+| [`lunicus/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/lunicus/tools) | *Lunicus*: `ludis`, the `LUNICUS.EXE` disassembler; the menu bar and dialogs out of `LUNIRES.DLL`; its title card |
+| [`jumpraven/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/jumpraven/tools) | *Jump Raven*: `rvdis`, the `RAVEN.EXE` disassembler, `match`, which pairs its functions with `LUNICUS.EXE`'s, `shot`, a screenshot of the machine at a level, and its dialogs, menu and title card |
 | [`site/tools/`](https://github.com/dhobi/dreamrefactory/tree/master/site/tools) | the front door's artwork |
 
 The **[browser editors](../editors/README.md)** are the other half of the
@@ -27,10 +31,12 @@ tooling and live in their own section — they are not CLIs and need no
 | Tool | What it does |
 |------|--------------|
 | [`dumpset.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpset.ts) | `npm run dump -- taoot/gamefiles/en/titanic2/DATA/b59.set out/` — prints a SET's structure (scenes, views, hotspots, roads) and writes the default scene's turn ring and both map images as PNGs |
+| [`dumpmov.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpmov.ts) | `npx tsx tools/dumpmov.ts <file.mov> <out dir> [every] [--sheet]` — a MOV's frames as PNGs, one in `every`, or `--sheet` for one contact sheet six frames to a row. A close-up film is often the only legible look at a thing a room shows at forty pixels |
+| [`dumpsbk.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpsbk.ts) / [`runsheets.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runsheets.mts) | `npx tsx tools/dumpsbk.ts skullcracker/gamefiles/SKULL/DATA/GRAVE.SBK out/` — a Skull Cracker sprite book's cels, level plan and parallax backdrop as text and PNGs ([SBK](../engine/formats/sbk.md)); `runsheets.mts <out>` writes one labelled contact strip per run of consecutive cel ids in `PLAYER.SBK` |
 | [`dumpshp.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpshp.ts) | prints a SHP's groups/states with frame counts and dumps sample frames as transparent PNGs with their stored offsets |
 | [`dumpaudio.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/dumpaudio.ts) | decodes a TRK/SFX/11K bank into WAVs (music = concatenated loop chunks, plus one-shots) with waveform PNGs; `--find <name>` scans **every** bank for a named sound |
 | [`dumpscripts.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpscripts.ts) | decompiles every script container in the corpus to text under `out/scripts/`, plus an opcode-frequency table — the raw material for the [script docs](../engine/scripting-language.md) |
-| [`dumpcursors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpcursors.ts) | `npx tsx tools/dumpcursors.ts [<pe>] [--show]` — the mouse cursors out of a DreamFactory build's own `.EXE`. `cursor("touch")` is the engine composing a resource name (`"%s.%s"` over a `CURS` type tag, `tl.exe` 0x421060) and handing `CURS.TOUCH` to `LoadCursorA`, so the art is Windows cursor resources and the script's string *is* the name. `--show` prints them as ASCII; without it, a `cursor-art.ts` for the game named by `--out`/`--const` — two 1bpp planes per cursor, not PNGs, because the browser wants each one at whatever integer scale the canvas is being shown at ([`engine/src/web/cursors.ts`](../engine/architecture.md)). All three games have one: `tl.exe` 17, `ti.exe` 13, `DF.EXE` 10 (before the numeric duplicates are dropped). The set is per BUILD, which is why this is a tool rather than one table: Timelapse's includes four Titanic has never heard of and redraws `GODOWN`/`GOUP`, which are 11,031 of its 13,200 `cursor(...)` calls; Dust's v1 build has no `GODOWN`/`GOUP` at all and draws `CURS.TOUCH` differently |
+| [`dumpcursors.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/dumpcursors.ts) | `npx tsx tools/dumpcursors.ts [<pe>] [--show]` — the mouse cursors out of a DreamFactory build's own `.EXE`. `cursor("touch")` is the engine composing a resource name (`"%s.%s"` over a `CURS` type tag, `tl.exe` 0x421060) and handing `CURS.TOUCH` to `LoadCursorA`, so the art is Windows cursor resources and the script's string *is* the name. `--show` prints them as ASCII; without it, a `cursor-art.ts` for the game named by `--out`/`--const` — two 1bpp planes per cursor, not PNGs, because the browser wants each one at whatever integer scale the canvas is being shown at ([`engine/src/web/cursors.ts`](../engine/architecture.md)). Titanic, Dust, Timelapse and RedJack each have one; `tl.exe` carries 17, `ti.exe` 13 and `DF.EXE` 10 (before the numeric duplicates are dropped). The set is per BUILD, which is why this is a tool rather than one table: Timelapse's includes four Titanic has never heard of and redraws `GODOWN`/`GOUP`, which are 11,031 of its 13,200 `cursor(...)` calls; Dust's v1 build has no `GODOWN`/`GOUP` at all and draws `CURS.TOUCH` differently |
 | [`keylogo.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/keylogo.ts) | `npx tsx tools/keylogo.ts timelapse/assets/timelapse-full.png timelapse/public/timelapse-logo.png --width 900` — a page's title card out of a box render. Both full-size logos in this repository are 1990s renders on a field of pure black with no alpha channel, and a web page wants the opposite: a few hundred pixels, and a transparent ground, because the card is shown over the page's own dark and then over the picture frame's lit rail. Art composited over black carries its own coverage, so `max(r, g, b)` across a narrow window IS the alpha and the colour is left exactly as rendered; unpremultiplying cannot tell a dark colour from a thin one and would brighten every shadow inside the letters. Then crop to the ink and box-filter down in premultiplied space |
 | [`parse.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/parse.ts) | parses the whole script corpus and reports coverage — the source of the ["100% of the corpus parses"](../engine/formats/script-container.md) claim |
 | [`navdump.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/navdump.ts) | `npx tsx taoot/tools/navdump.ts taoot/gamefiles/en/titanic2/DATA/b59.set out/` — walks a set's navigation and writes a PNG per step |
@@ -76,6 +82,14 @@ candidates.
 | [`disasmcmd.mts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/disasmcmd.mts) | `npx tsx taoot/tools/disasmcmd.mts calcvectx calcdeg` — disassembles (via capstone-wasm) the `TI.EXE` handler for a named command, resolving it through the interpreter's recovered per-band jump tables and following one level of calls. It also takes a **raw address**, with an optional byte count: `disasmcmd.mts 0x4277f0:900` reads 900 bytes from there **linearly — through the `ret`s**, which is the point. A handler that answers several ways has a `ret` per answer, so stopping at the first one (what the named form does, deliberately) shows only its error path; `hittest`'s [six answers](../taoot/verification.md) needed the whole body. This is the workhorse for recovering [builtin semantics](builtins.md) one command at a time. **It reads DF.EXE too**, in the raw-address form: `TAOOT_TIEXE=dust/gamefiles/dustcd/INSTALL/ALT31/DF.EXE npx tsx taoot/tools/disasmcmd.mts 0x4135c0:140` — Dust's engine is 346 KB in the installer tree, and reading the two engines side by side shows where a SHP, a STG and a CST name their main script (#325). Only the raw form: the named form goes through TI.EXE's own jump tables |
 | [`scancmds.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/scancmds.mts) | diffs the commands the shipped scripts *actually invoke* against the registered builtins (detecting no-op bodies) and regenerates `builtins_todo.md` — the work-remaining list, in three sections: unimplemented, stubbed, and stubs nothing calls |
 
+## A Windows executable's resources
+
+| Tool | What it does |
+|------|--------------|
+| [`rtmenu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/rtmenu.ts) | `npx tsx tools/rtmenu.ts <exe-or-dll>` — every `RT_MENU` menu bar the file carries, in the MENUITEMTEMPLATE format, with Win32 ids, accelerators and first states. `lunicus/tools/menu.ts` and `jumpraven/tools/menu.ts` emit a game window's bar from it, in the shape `engine/src/web/window-bar.ts` draws |
+| [`rtdialog.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/rtdialog.ts) | `npx tsx tools/rtdialog.ts <exe-or-dll>` — every `RT_DIALOG` box (classic DLGTEMPLATE), its controls in dialog units; the games' `dialogs.ts` tools pick the boxes their EXE opens for `engine/src/web/window-dialog.ts` |
+| [`peres.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/peres.ts) | not a CLI — the PE resource tree (type, name, language) both of the above walk |
+
 ## Mining `RedJack.exe`
 
 DreamFactory 5 is settled in its own executable,
@@ -101,6 +115,16 @@ is taken to be the nearest call target at or before an address, so a function
 nothing calls is not found; `find` can fall out of step with the instructions,
 and `bytes` does not.
 
+The DreamFactory 0 games have no scripts, so their EXE is the whole game, and
+each has a disassembler of the same shape:
+[`ludis.mts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tools/ludis.mts) for `LUNICUS.EXE` and
+[`rvdis.mts`](https://github.com/dhobi/dreamrefactory/blob/master/jumpraven/tools/rvdis.mts) for `RAVEN.EXE`, which adds `map`
+(every function in a range) and `sum` (a function's callees, strings and
+globals). The two engines share most of their code, and
+[`match.mts`](https://github.com/dhobi/dreamrefactory/blob/master/jumpraven/tools/match.mts) pairs a Raven function with its
+Lunicus one by comparing instructions with every address masked, so a function
+already read in Lunicus is read in Raven too.
+
 ## The flow map, and the graphs the navigator walks
 
 | Tool | What it does |
@@ -119,6 +143,9 @@ and `bytes` does not.
 | [`mkmanifest.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/mkmanifest.ts) | `npm run manifest -w taoot` (or `npx tsx tools/mkmanifest.ts <outDir> <gamefilesDir> <publicDir>`) — writes `gamefiles.json`, the one file a static deployment needs in place of a directory listing. `npm run build` already emits it, so this is for what the build plugin cannot cover: game data uploaded *after* the build, or a host carrying fewer editions than the machine that built the pages. The manifest describes the tree it sits next to, so it has to be generated where that tree finally lives — see [hosting it as static files](../engine/runtime/host.md#hosting-it-as-static-files) |
 | [`mknightdive.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/mknightdive.ts) | `npm run mknightdive -w taoot -- heading.gif` — builds `nightdive.mov`, the intro film and the ownership question after it, out of an animated GIF — the two halves a MOV can be. The film is generated at build time rather than committed ([why](deploy.md)) |
 | [`mktaootlogo.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tools/mktaootlogo.ts) / [`mkdustlogo.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/tools/mkdustlogo.ts) / [`mklogo.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/tools/mklogo.ts) | `npm run mklogo -w site -w taoot`, `npm run mklogo -w site -w dust`, `npm run mklogo -w site` — the page-sized title cards, derived from the full-size artwork rather than checked in beside it, so a page's asset is never a mystery. `mktaootlogo` also cuts Titanic's 30px mark, the porthole alone, out of the globe artwork |
+| [`mkappicons.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/mkappicons.ts) | `npm run mkappicons` (every game) or `npx tsx tools/mkappicons.ts lunicus` — the home-screen icons each game's web-app manifest names, rendered from its mark in a browser at the sizes and shapes Android and iOS ask for |
+| [`release.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/release.mts) | `npm run release -- taoot dust`, or bare for every package whose version has no tag — cuts and pushes the release tags one push at a time and checks each started a deploy ([why](deploy.md)) |
+| [`coverage.mts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/coverage.mts) | `npm run coverage` — every automatic and machine suite under V8 coverage, then one shields.io badge per package; `-- --report` redraws the badges from the last run ([coverage](ci.md#coverage)) |
 | [`manifest.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/manifest.ts) | not a CLI — the walk behind it, used three ways: served live by the dev server, written into `dist/` by the build, and regenerated by `mkmanifest`. A map of served path → byte size — 4,172 entries and 212 KB (43 KB gzipped) for Titanic, 460 and 20 KB for Dust — because both things the pages want are in it: the keys are the listing, and the values are what the preload bar totals up |
 | [`pixelart.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/pixelart.ts) | not a CLI — the 5×8 pixel font and the rectangle/ramp/text primitives the generator draws indexed flat art with (capitals, digits, a little punctuation, and Ç; anything richer belongs in a PNG imported through [the stage editor](../editors/stages.md)) |
 | [`gif.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/gif.ts) | not a CLI — the GIF decoder `mknightdive` reads its source animation with. A decoder and nothing else: each frame already composited onto the logical screen as RGBA, plus the delay the file authored for it |
@@ -126,13 +153,15 @@ and `bytes` does not.
 
 ## Build plugins
 
-Not CLIs either, and not optional: every package's `vite.config.ts` loads
-both.
+Not CLIs either. Every package's `vite.config.ts` loads the first two; the
+others are loaded where a package needs them.
 
 | Plugin | What it does |
 |--------|--------------|
 | [`vite-gamefiles.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/vite-gamefiles.ts) | the two things a page needs from its game's `gamefiles/` — the listing and the bytes. In dev it serves the manifest live, so a tree that changed needs no rebuild; in a build it writes the manifest into the output, so a deployment needs no server |
-| [`vite-siblings.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/vite-siblings.ts) | the dev-only signpost behind a cross-package link. Three sites share one deployed directory but have three Vite **roots**, which is what makes `/src/main.ts` in a page mean the right file — and what makes `../editors/` a path Titanic's server knows nothing about. Rather than 404, it answers with the command and the port that would serve it |
+| [`vite-siblings.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/vite-siblings.ts) | the dev-only signpost behind a cross-package link. The sites share one deployed directory but each has its own Vite **root**, which is what makes `/src/main.ts` in a page mean the right file — and what makes `../editors/` a path Titanic's server knows nothing about. Rather than 404, it answers with the command and the port that would serve it |
+| [`vite-run-sheet.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/vite-run-sheet.ts) | a game's speedrun route (`tests/speedrun/run.sheet.txt`) served in dev and copied into the build for the workbench's "Copy the full run", and the [contributed sheets](tests.md#contributed-sheets) published as `speedrun/sheets.json`. Titanic and Dust load it |
+| [`vitest-machine.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/vitest-machine.ts) | the shared config behind each game's `vitest.machine.config.ts`: the [machine suites](tests.md) in `tests/machine/`, one process per file, because a game keeps its world in module state |
 
 ## The browser editors
 

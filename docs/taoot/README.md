@@ -16,7 +16,10 @@ that stands on, see [the engine](../engine/).
   clock, and the clock is on your wrist
 - [Languages & the chooser](languages.md) — six pressings, six code pages, and a
   chooser stage this port authored because the original shipped one language per
-  install
+  install, and the captions for what the game only lets you hear
+- [The low-memory game](low-memory.md) — the shorter songs and quieter ambience
+  the scripts fall back to on a machine short of memory, and how a player asks
+  for them
 - [Developer mode](devmode.md) — the 1996 debug build put back up: one edited
   line, TI.EXE's own menu bar, and what `debugging` opens
   - [The census](devmode-census.md) — every read of the flag and every modifier
@@ -32,9 +35,12 @@ that stands on, see [the engine](../engine/).
 ## The code
 
 `taoot/` in the repository. The front page, `/play/`, `/freeroam/`,
-`/collection/`, and the unlisted `/speedrun/` workbench and `/devmode/` — the six
-editions and the demo, its own tools, and the suites that play the game through
-to the end.
+`/minigames/` (Buick's blackjack, the fencing bout and the fist fight, played
+without the ship), `/collection/`, the caption editor at `/captions/`
+([captions](languages.md#captions-for-what-is-only-heard)), and the unlisted
+`/speedrun/` workbench, `/devmode/` and `/bedsit/` (a model of the London flat to
+walk in, built off the game's frames) — the six editions and the demo, its own
+tools, and the suites that play the game through to the end.
 
 Being the game the engine was recovered *from*, it also carries most of the
 project's evidence:
@@ -44,7 +50,7 @@ project's evidence:
 | `taoot/tests/auto/` | nearly all the behavioural coverage there is ([the inventory](../reference/tests.md)) |
 | `taoot/tests/playthrough/` | the game played from boot to credits in one session, 27 segments ([the route](../reference/route.md)) |
 | `taoot/tests/browser/` | the same route through a real page, diffed against the same trace |
-| `taoot/tests/speedrun/` | that route written as a sheet and driven against the clock |
+| `taoot/tests/speedrun/` | that route written as a sheet and driven against the clock ([the speedrun](../reference/tests.md#the-speedrun)); contributed sheets are in `taoot/speedrun/sheets/` |
 | `taoot/tools/` | the `TI.EXE` mining tools, the flow map, the deck-map extractor, the language chooser and the intro film ([the tools](../reference/tools.md)) |
 
 The engine underneath is game-agnostic and lives in `engine/` — where the line

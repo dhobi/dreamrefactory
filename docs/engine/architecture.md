@@ -6,19 +6,22 @@ This doc is about *this project* — how the TypeScript code is organised — as
 opposed to the game's file formats (those get their own docs). If you want to
 find where something lives in the source, start here.
 
-## Six packages, and which way they point
+## The packages, and which way they point
 
-The repository is an npm workspace of six packages, and the arrangement is one
+The repository is an npm workspace of packages, and the arrangement is one
 rule: **nothing shared knows which game it is.**
 
 | Package | What it is | Imports |
 |---|---|---|
 | `engine/` | the DreamFactory engine — containers, interpreter, runtime, the browser layer around them | nothing |
-| `site/` | the project's own web presence: the front door, the eight format editors, the chrome every page shares, the UI-language axis | `engine` |
+| `site/` | the project's own web presence: the front door, the format editors, the chrome every page shares, the UI-language axis | `engine` |
 | `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `site` |
-| `dust/` | *Dust*: two pages, one disc, its own tools and suites | `engine`, `site` |
-| `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and the boot log it started life as, now a panel the page opens over the picture | `engine`, `site` |
+| `dust/` | *Dust*: three pages, one disc, its own tools and suites | `engine`, `site` |
+| `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and a boot log in a panel the page opens over the picture | `engine`, `site` |
 | `skullcracker/` | *[Skull Cracker](../skullcracker/)*: the game on one page, `walk.html` beside it as the bench a level is opened on, and its own disassembler for `SC.EXE` | `engine`, `site` |
+| `redjack/` | *[RedJack](../redjack/)*: one page on three discs, DreamFactory 5, played to its end by its machine suites | `engine`, `site` |
+| `lunicus/` | *[Lunicus](../lunicus/)*: one page, DreamFactory 0; the game itself ported from `LUNICUS.EXE` into `src/game/` | `engine`, `site` |
+| `jumpraven/` | *[Jump Raven](../jumpraven/)*: the same kind of package, ported from `RAVEN.EXE`, with a player that wins it | `engine`, `site` |
 
 `site/tests/layering.ts` enforces this: it fails the build if `engine/` reaches
 for a game, or if any game reaches for another.
@@ -170,9 +173,10 @@ but it may mention `document`, and it is where a game shell attaches.
 
 ## Where a game's own code lives
 
-The five packages above the engine. None of them adds engine behaviour; they
-say which disc, which pages, and what the page around the canvas looks like.
-`skullcracker/` is laid out in [Skull Cracker's own docs](../skullcracker/).
+The packages above the engine. None of them adds engine behaviour; they say
+which disc, which pages, and what the page around the canvas looks like.
+`skullcracker/`, `redjack/`, `lunicus/` and `jumpraven/` are laid out in their
+own sections of these docs.
 
 ### `site/` — the shared web presence
 
@@ -210,14 +214,14 @@ Short on purpose — one volume, one edition, one copy of every name.
 |------|----------------|
 | [`main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) | the page: the boot, the films, the town, and the controls |
 | [`files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the CD as a `HostFiles`. Two things it has to get right: the BOOTFILE is at `INSTALL/ALT31/BOOTFILE` rather than in `DATA/`, and the boot's films need a room to draw through even though the boot opens none |
-| [`speedrun/actions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/speedrun/actions.ts) + [`speedrun-page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/speedrun-page.ts) | the workbench, for this disc. **Empty on purpose**: every verb a route needs so far is the engine's, because they are written against a DreamFactory session and this is one. The file is where the first thing that is not goes — the town grid, the gun, the saloon's card games |
+| [`speedrun/actions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/speedrun/actions.ts) + [`speedrun-page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/speedrun-page.ts) | the workbench, for this disc: Dust's own verbs (`goto`, `give`, `takeInHand`, `offer`, `doorAt`, `meet`, `talkOut`, `loadSave`, `blackjack`) over the engine's core ones and the menu verbs. A verb is added when a route needs it |
 | [`game.css`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/game.css) | the stage, the Start screen, the boot gauge and the log — a sheet of its own rather than the page's `<style>`, because the workbench boots the same `main.ts` and needs the same elements styled |
 | [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/saves.ts) | the store's Dust dimension (`.rtd`, its own database) and the seeding of the saves that ship beside the disc, each offered once so a save added to the tree later still arrives. The earliest of them — found by frame, not by name — is also the base a fresh save is patched into, because a save is a serialized heap and cannot be written from nothing |
 
 ### `timelapse/` — Timelapse's shell
 
-One page, four discs. The shortest of the three and the only one that carries a
-game's own **cursors**, because this is the game that navigates by them.
+One page, four discs. The shortest of the shells here, and the one whose
+**cursors** carry navigation, because this is the game that navigates by them.
 
 | File | Responsibility |
 |------|----------------|
@@ -394,14 +398,14 @@ audio playback, and saving/loading.
 
 ## Running and verifying
 
-- **Five dev servers, one per root, so they can run at once.** The two that are
-  about the whole project come first and the games follow in the order the engine
-  shipped them: 5173 the front door and the editors (`npm run dev`), 5174 this
-  documentation (`npm run docs:dev`), 5175 Titanic (`npm run dev -w taoot`), 5176
-  Dust (`npm run dev -w dust`), 5177 Timelapse (`npm run dev -w timelapse`). A link from
-  one to another 404s in dev with a page naming the server that would serve it —
-  five Vite roots cannot be one origin, and the deployed tree has no such
-  problem.
+- **One dev server per root, so they can run at once.** The two that are
+  about the whole project come first and the games follow in the order they were
+  ported: 5173 the front door and the editors (`npm run dev`), 5174 this
+  documentation (`npm run docs:dev`), then 5175 Titanic, 5176 Dust, 5177
+  Timelapse, 5178 Skull Cracker, 5179 RedJack, 5180 Lunicus and 5181 Jump Raven
+  (`npm run dev -w <package>`). A link from one to another 404s in dev with a
+  page naming the server that would serve it — separate Vite roots cannot be one
+  origin, and the deployed tree has no such problem.
 - On Titanic's server, `/play/` cold boots itself into the game with nothing in
   front of it but the boot text. The saved-games browser reaches saves from the
   in-game menu and the editors reach every `.SET` under `gamefiles/`; there are
@@ -415,8 +419,9 @@ audio playback, and saving/loading.
   and saves, and the layering rule itself. **Prefer extending `regression.ts`
   over writing throwaway tests.** The full map is **[the test
   reference](../reference/tests.md)**.
-- `npm run test:machine` — the game *played* from the boot to the ending, 27
-  segments carried as one session, asserting a recorded state trace per beat.
+- `npm run test:machine` — every game *played*, headless; Titanic's from the
+  boot to the ending, 27 segments carried as one session, asserting a recorded
+  state trace per beat.
   What that buys, and the bugs it has caught that nothing else could, is
   **[how we know it's right](../taoot/verification.md)**.
 - `tools/` has what works on any rip — the dumpers (`dumpset`, `dumpshp`,

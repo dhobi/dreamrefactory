@@ -357,7 +357,7 @@ Examples of the discipline that requires:
   standpoint by standpoint, so a green run makes no dud click and the branch never
   runs;
   [`auto/nav.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/auto/nav.ts)
-  covers it with a stub driver, and against the old behaviour it fails with the
+  covers it with a stub driver, and without the stamp check it fails with the
   exact false report (`{"ok":true,"gestures":1}`).
 
 What it has caught:

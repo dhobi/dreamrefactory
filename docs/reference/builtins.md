@@ -53,9 +53,9 @@ resolve the same single script as their siblings.
 In a DreamFactory 5 game the targets and the chains are RedJack.exe's.
 `sendtocast` finds only open casts (0x405370) and `sendtoprop` only props
 (0x42b550), so a room and a cast or prop of the same name (`ship.sett` and
-`ship.cast`, `cannon.sett` and the prop `cannon`) no longer take each other's
+`ship.cast`, `cannon.sett` and the prop `cannon`) do not take each other's
 events. `sendtoquad` finds only the room's quads (0x446190), so horn4.sett,
-which calls itself "horn", no longer takes its horn quad's click. `sendtoshop`
+which calls itself "horn", does not take its horn quad's click. `sendtoshop`
 also finds a shop by the name it gives itself (`jcombat.shop` is "combat"). The scene, set, actor, cast and prop chains end on the **post
 script**, the BOOTFILE's library: the exe names the links as it builds them
 ("Scene Script: ", "Set Script: ", "Post Script: " for `sendtoscene` at
@@ -300,11 +300,21 @@ the shipped saves carry `saveprops2 = "11111101100111110"`, dense,
 17 characters for the 17 indices the Enigma's `showX` reads, and every one of
 those `= "1"` tests fails under a space-joined reading.
 
+## Plugins — `plugins.ts`
+
+`plugin` and `pluginfx`, the bus to the native plugins a game shipped beside its
+executable, dispatched on the name in the first argument: Timelapse's `xray`
+(the light that reveals a flat beneath, armed, moved and torn down by arity and
+argument type), `camera` and `scrollflat`, and Dust's `checkmove`, Bolivar's
+checkers opponent standing in for `CHECKERS.DLL`
+([`runtime/checkers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/checkers.ts)),
+whose tie-break draws on the session's random stream so a seeded run plays the
+same game twice. Why Timelapse's plugins are what they are is in
+[`runtime/plugins.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/plugins.ts).
+
 ## Saved games — `savegame.ts`
 
 `savegame`, `opengame` — see [Saving & loading](../engine/runtime/saves.md).
-
-Back to the [reference index](README.md).
 
 ## DreamFactory 5 — `maze.ts` and `df5.ts`
 
@@ -356,3 +366,5 @@ engines answer from the hit test, which names only what is on top.
 `appenditem`, `cmdkeyitem`, `clearmenus`, `drawmenus`), which build a debug
 menu that `menuvisible (isdebugging ())` keeps hidden, and copying game files to the hard
 disk (`buildfilenames`, `countfilenames`, `indextofilename`, `copylocal`).
+
+Back to the [reference index](README.md).

@@ -26,9 +26,8 @@ reads with Titanic's own reader, and container 0 of each says version 4. What
 differs is not the format but the byte order — its rip is a **Macintosh** one,
 so every integer in it is the other way round
 ([byte order](engine/formats/README.md)). It is a beat-'em-up rather than an
-adventure and its levels are in a PowerPC binary, so what runs here is its film
-layer and its menu, not its game; see
-**[Skull Cracker](skullcracker/)**.
+adventure, with its logic compiled into the executable rather than scripted in
+the data; see **[Skull Cracker](skullcracker/)**.
 
 **And so does *Redjack: Revenge of the Brethren*** (1998, the studio's last,
 published by THQ). No source consulted attributes it to the engine, and its own
@@ -45,22 +44,21 @@ disassembly. See **[Lunicus](lunicus/)**. ***Jump Raven*** is the same
 engine, its executable a month older than Lunicus's, and was ported from its
 disassembly the same way; see **[Jump Raven](jumpraven/)**.
 
-Three of them play here — two of them CyberFlix's own and the third GTE
-Interactive Media's:
+All of them play here. The adventures the interpreter runs are CyberFlix's own
+and, for *Timelapse*, GTE Interactive Media's:
 **[Dust: A Tale of the Wired West](dust/)** (1995, DreamFactory 1),
 **[Titanic: Adventure Out of Time](taoot/)** (1996, DreamFactory 4) and
 **[Timelapse: Ancient Civilizations](timelapse/)** (1996, DreamFactory 4 on four
 discs). The first two are two years apart and different enough on disk that
 several formats have a `-v1` page of their own; the third is the same generation
-as Titanic and still nothing like it, because it ships no `.SET` file at all. A
-fourth, **[Skull Cracker](skullcracker/)**, has no script to interpret: its logic
-is in `SC.EXE`, and it plays from its films and menu through its sixteen levels
-with that logic read out of the executable. A fifth,
-**[RedJack](redjack/)** (1998, DreamFactory 5), plays from its first day to its
-end, and saves.
-A sixth, **[Lunicus](lunicus/)** (DreamFactory 0), plays from the intro to its
-queen, and saves. A seventh, **[Jump Raven](jumpraven/)** (DreamFactory 0),
-plays its three days to the copilot's ending, saves, and can play itself.
+as Titanic and still nothing like it, because it ships no `.SET` file at all.
+**[RedJack](redjack/)** (1998, DreamFactory 5) plays from its first day to its
+end, and saves. **[Skull Cracker](skullcracker/)** has no script to interpret:
+its logic is in `SC.EXE`, and it plays from its films and menu through its
+sixteen levels with that logic read out of the executable.
+**[Lunicus](lunicus/)** (DreamFactory 0) plays from the intro to its queen, and
+saves; **[Jump Raven](jumpraven/)** (DreamFactory 0) plays its three days to the
+copilot's ending, saves, and can play itself.
 
 The docs are written for a curious programmer who has **not** done
 low-level reverse engineering before. You do not need to know C++, and you
@@ -186,6 +184,9 @@ first; every format doc after it builds on it.
   into each picture.
 - **[SETT — rooms, nodes & spheres](engine/formats/sett.md)** — DreamFactory 5's
   room: points you look round from, joined by films.
+- **[SBK — Skull Cracker's sprite books](engine/formats/sbk.md)** — the one
+  format belonging to a game with no interpreter: cels, a level plan and a
+  parallax backdrop.
 
 ### Runtime — how the port plays the game
 
@@ -239,6 +240,11 @@ debugger the file layer has. Overview: **[the browser editors](editors/README.md
   dialogue, subtitles.
 - **[The cast editor](editors/casts.md)** — a character's body: poses as
   steps × directions.
+- **[The sett editor](editors/setts.md)** — DreamFactory 5 rooms: nodes,
+  spheres and the films between them.
+- **[The sprite book viewer](editors/books.md)** — Skull Cracker's `.SBK`,
+  read-only.
+- **[The maze viewer](editors/mazes.md)** — DreamFactory 0's mazes, read-only.
 
 ### Reference
 
@@ -250,9 +256,9 @@ commands](reference/builtins.md)**, **[tools](reference/tools.md)**,
 
 ### How the repository is arranged
 
-Five npm workspaces, and the split these docs follow: **`engine/`** knows about
-no particular game, **`site/`** is the shared web presence and the format
-editors, and **`taoot/`**, **`dust/`** and **`timelapse/`** are a game each.
+One npm workspace per package, and the split these docs follow: **`engine/`**
+knows about no particular game, **`site/`** is the shared web presence and the
+format editors, and every other package is a game.
 Dependencies point one way only and there is a test that says so. The map is
 **[Engine architecture](engine/architecture.md)**.
 

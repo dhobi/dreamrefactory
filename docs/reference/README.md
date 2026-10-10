@@ -6,11 +6,13 @@ Lookup material — no narrative, come here when you need a specific name.
   without stopping to define: flat, cricket, shop, stance, guard, golden.
 - **[Builtin commands](builtins.md)** — every engine command the interpreter
   registers, by family, including the deliberate no-ops and stubs.
-- **[Tools](tools.md)** — the CLI utilities under `tools/`: dumpers,
-  disassembly helpers, and the flow-map generator. (The browser editors have
+- **[Tools](tools.md)** — the CLI utilities under `tools/` and each game's
+  `tools/`: dumpers, disassemblers, the flow-map generator, and the build and
+  release helpers. (The browser editors have
   their own section: **[the browser editors](../editors/README.md)**.)
 - **[Tests](tests.md)** — which suite covers what, and the command to run each
-  one. The *argument* those suites make — what the playthrough is for and what
+  one; also the speedrun: its sheets, its in-game clock, seeds, saving on the
+  clock and contributed sheets. The *argument* those suites make — what the playthrough is for and what
   it has caught — is narrative and lives in
   **[How we know it's right](../taoot/verification.md)**.
 - **[Continuous integration](ci.md)** — which suites can run on GitHub's

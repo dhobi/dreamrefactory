@@ -35,7 +35,8 @@ source: its films in the movie editor, its sound banks (`citysoun.`,
 the puppet editor, where the player's questions are lines of their own (`q …`)
 beside the character's. A v0 file carries no version, so an editor does not
 guess it from the bytes; the source says so (`dreamFactory0` in
-`site/src/games.ts`). Its mazes have a page of their own, the
+`site/src/games.ts`). Jump Raven carries the same flag, so its files are picked
+and read the same way. Its mazes have a page of their own, the
 [maze viewer](mazes.md). The pictures in `shared/` have no editor yet
 ([DreamFactory 0's containers](../engine/formats/dreamfactory-0.md)).
 
@@ -61,7 +62,9 @@ They are the **site's** rather than a game's: an editor opens a file out of
 whichever rip you point it at, so making it belong to one game would point a
 dependency from the shared package into one of its own consumers. What they need to know about a game — which trees a rip offers, what
 to call them, which code page each one's text is in — is
-`site/src/games.ts`.
+`site/src/games.ts`. That code page is also what a decompiled script's string
+literals are shown in (`scriptToText` with the tree's encoding), so a Japanese
+puppet's answers read as Japanese rather than one byte per character.
 
 Nothing in there imports `engine/src/runtime/`; the only shared code is
 `engine/src/df/` and `engine/src/web/screen.ts`. That is the line that keeps an

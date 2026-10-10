@@ -274,127 +274,80 @@ The moves are the player's:
   afloat, finds the tilt whose stone, flown as the stone's script flies it,
   lands on the galleon where it will have sailed to, steers there, and fires.
 
-Playing it this way found several engine gaps, each fixed from RedJack.exe where
-it could be read and marked as a reading where it could not: puppets opened by a
-bare name, the stage header's main-script field, a room opened at a node it
-lacks, `actorstar` ending a walk, `endanim`, key releases, and shops closed by the
-name they give themselves.
+Playing it this way is what settled most of the engine's v5 behaviour. Each
+point below is read from RedJack.exe where the address is given, and is a
+reading where it is not:
 
-Day two found more, each read from RedJack.exe:
-- `sendtocast` and `sendtoprop` finding a room of the same name first;
-- the scene, set, actor, cast and prop chains ending on the boot's library;
-- `calcvectx`, `calcvecty`, `calcdist` and `calcdeg` in their v5 forms;
-- a set opening hidden after a stage closed with no set open;
-- a click left consumed by the last key's `exitcode`;
-- screen props drawn in a room but not clickable there.
-
-One more was a reading, that a hidden sprite hears no `endanim`. Day five
-found it wrong for actors, and the exe says otherwise (below).
-
-Day three found more:
-- `sendtoshop` reaching a shop by the name it gives itself;
-- `propis3d` as the prop's own flag in v5 (RedJack.exe 0x429d60), where the
-  port had always answered 0;
-- a v5 view's "plays once" flag (bit 0 at +0x14), which is on exactly the
-  views whose end a script answers. Only those now end with `endanim`, and the
-  jail spoon's `carrying` no longer runs round forever.
-
-Day four found more:
-- `closecastfile` by a bare name, and `closecast` fired (the dispatch
-  string `", closecast()"` is in RedJack.exe);
-- the flat's click regions and `pointinbutton` measured from the stage's
-  origin;
-- a v5 room never took the clicks queued while a script ran. It now takes
-  them at the start of a pass, as the v4 viewer does, and a press while a
-  script polls the button is queued, since RedJack's scripts flush what they
-  consume;
-- `idle ()` running behind a stage, where it fades the inventory chest in;
-- the film header's two action-frame names, which the v5 reader had left
-  empty (RedJack.exe 0x44e1ac);
-- `propdeg` showing a frame by index where no frame carries the degree, as
-  the chest and its lid seemed to need (common.shop open and close). Day six
-  found the degrees misread, and the exe says otherwise (below).
-
-Day five found more, each read from RedJack.exe:
-- a view's and a pose's play list: at 0x2e, as in v4, not the 0x1ee the
-  readers assumed, so no v5 play list had ever been read (the stepper
-  0x42d198);
-- a view or pose that borrows another's pictures: the u32 at +0x10 names it,
-  and the lift's rope goes up on its way-down pictures played backwards
-  (0x42d1a8);
-- how views and poses step (0x42c89e, 0x4069ee): step 0 on the first pass,
-  then by the clock at the step time held at +0x22e, in sixtieths of a second,
-  or one step a pass without one. A view or pose that plays once holds its
-  last step and hears `endanim` once, and any other goes round without one.
-  Actors step and hear it shown or not (0x408481), which is how Jan's men in
-  the mine finish their first pose in cover before they show themselves;
-- `pointinactor` asking the one actor's own sprite (0x406860), where the port
-  asked what was on top: the harpoon is drawn at the very point it asks
-  about;
-- `idle ()` stopping at the first harpoon: a loop fired in the pass counted as
-  a script holding the engine. A v5 room now asks what held the engine as the
-  pass began.
-
-Day six found more, each read from RedJack.exe:
-- which frame a view draws. A step of the play list names a group of frames,
-  and of those the engine draws the one whose angle is nearest the prop's
-  degree (0x42d0e0). The angle is an i32 at +0x26 of the frame record, and the
-  port read only its top half, which is 0 for the small numbers most views
-  count their frames by. So the torturer's cauldron, whose frames are its
-  nodes 5 to 8, showed the empty frame it keeps for node 8 and could not be
-  clicked; the health bars and Nick's guard poses, numbered from 1, were
-  shown one frame off; and the alley fighters' strikes, two frames to a step,
-  played at half speed (see
-  [the shop, the cast and the puppet](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet));
-- `propdeg` only stores the degree, masked to 24 bits (0x428880), and stops
-  nothing, so the day-four stand-in that showed a frame by index is gone;
-- `puppetevent`'s argument, a wait in sixtieths of a second that answers -2
-  when it runs out, where a negative one waits for good (0x42f140). Marquez's
-  `puppetevent (0)` just after an answer is a look, not a question, and waited
-  out as one his talk asked its first question twice.
-
-Day seven found more, each read from RedJack.exe:
-- `sendtoquad` finding the room of the same name first. It looks among the
-  room's quads and nowhere else (0x446570, 0x446190). horn4.sett calls
-  itself "horn", as it does the quad the horn stands on, so the click on the
-  horn reached the set's `mousedown`, which walks on, and the horn could not
-  be blown;
-- `propinstance` copies the whole prop record and renames it (0x427922), so
-  the copy stands where its template stands. The port copied the view and a
-  few flags, and the ballista's stone, placed as "brock" and flown as
-  "brock 1", flew from the world's origin. The mine carts' harpoons are
-  copies too, and now carry the rest of their template's record.
-
-Playing all seven days in one go found one more, read from RedJack.exe:
-- a cricket, the engine's positional ambient sound, is freed when the bank
-  holding its sound closes: closing a bank calls `stopcricket` for each of its
-  sounds (0x447250). The port kept every cricket until a script stopped it, as
-  TI.EXE does, so from day four the sixteen slots were full
-  (`makecricket: table full (16)`) and later rooms lost their ambience, as the
-  lock's water did. `day7.ts` now checks that no table fills.
-- `walkonpath` follows the room's authored route between two stars, a DRIV
-  named by the MARK record that pairs them ([the routes](../engine/formats/sett.md#the-routes-driv)).
-  The port walked a straight line, which ends on the same star and so failed
-  no suite, but actors such as Port Royal's soldiers and runners cut their
-  corners. `day3.ts` now checks that the soldiers walk their routes.
-
-Players' reports found three more, each read from RedJack.exe:
-- a walk faces its heading in 2^24ths of a turn, the unit of `actordeg`,
+- **Names and chains.** Puppets open by a bare name, and so do
+  `closecastfile` and the stage header's main-script field; `closecast` fires
+  (the dispatch string `", closecast()"` is in RedJack.exe). `sendtocast` and
+  `sendtoprop` find only casts and props, `sendtoquad` only the room's quads
+  (0x446570, 0x446190): horn4.sett calls itself "horn", as it does the quad the
+  horn stands on, so a lookup that tried the room first would send the click
+  on the horn to the set's `mousedown`, which walks on. `sendtoshop` also finds
+  a shop by the name it gives itself, and shops close by it. The scene, set,
+  actor, cast and prop chains end on the boot's library.
+- **Rooms and stages.** A room can be opened at a node it lacks; a set opens
+  hidden after a stage closed with no set open; a flat's click regions and
+  `pointinbutton` are measured from the stage's origin; screen props are drawn
+  in a room but not clickable there; `idle ()` runs behind a stage, where it
+  fades the inventory chest in. A v5 room takes the clicks queued while a script
+  ran at the start of a pass, as the v4 viewer does, and a press while a script
+  polls the button is queued, since RedJack's scripts flush what they consume.
+  A click is not left consumed by the last key's `exitcode`, and key releases
+  reach the scripts. A pass asks what held the engine as it began, so a loop
+  fired within the pass does not count as a script holding it (which would stop
+  `idle ()` at the first harpoon).
+- **Arithmetic.** `calcvectx`, `calcvecty`, `calcdist` and `calcdeg` have v5
+  forms. A walk faces its heading in 2^24ths of a turn, the unit of `actordeg`,
   `calcdeg` (0x41df00) and `actorturn` (the cast's `stdturn` is 1,050,000, about
-  22° a pass). The port worked walks and turns out in Titanic's 256ths, so every
-  walk faced within a degree of 0: Lyle crossed the beach to Nick at Node58
-  looking off to the side (#447). `day1.ts` now checks his facing on every pass
-  of that walk;
-- a cricket is placed against the room camera, and placed again whenever the
-  camera moves (0x41d810): volume `255 − dist · 255 / radius`, pan from its
-  bearing against the camera's heading, and stopped once the camera leaves its
-  radius. A RedJack room told the port nothing about its camera, so every
-  sound of the room played at full volume and centred, wherever it was:
-  liznite's surf, dock and fire drowned Lyle out (#447);
-- a conversation shows the arrow. RedJack.exe's puppet code sets `CURS.ARROW`
-  (0x46a150 from 0x42e6b0, 0x42eed0 and 0x431550), over the `cursor ("watch")`
-  the cast's `walkandtalk` has just asked for, which stood over every answer
-  as an hourglass (#446).
+  22° a pass); worked in Titanic's 256ths, every walk faces within a degree of 0
+  (#447), and `day1.ts` checks Lyle's facing on every pass of his walk to Nick.
+- **Views, poses and frames.** A view's and a pose's play list is at 0x2e, as in
+  v4 (the stepper 0x42d198). A view or pose can borrow another's pictures: the
+  u32 at +0x10 names it, and the lift's rope goes up on its way-down pictures
+  played backwards (0x42d1a8). Views and poses step on the first pass, then by
+  the clock at the step time held at +0x22e in sixtieths of a second, or one
+  step a pass without one (0x42c89e, 0x4069ee). A v5 view's "plays once" flag
+  (bit 0 at +0x14) is on exactly the views whose end a script answers: one that
+  plays once holds its last step and hears `endanim` once, and any other goes
+  round without one, which is what stops the jail spoon's `carrying` running
+  round forever. Actors step and hear `endanim` shown or not (0x408481), which
+  is how Jan's men in the mine finish their first pose in cover before they
+  show themselves. A step of the play list names a group of frames, and the
+  engine draws the one whose angle — an i32 at +0x26 of the frame record — is
+  nearest the prop's degree (0x42d0e0); read as its top half only, the
+  torturer's cauldron shows the empty frame it keeps for node 8, the health
+  bars and Nick's guard poses are a frame off, and the alley fighters' strikes
+  play at half speed
+  ([the shop, the cast and the puppet](../engine/formats/dreamfactory-5.md#the-shop-the-cast-and-the-puppet)).
+  `propdeg` only stores the degree, masked to 24 bits (0x428880). `propis3d` is
+  the prop's own flag (0x429d60). A film header carries two action-frame names
+  (0x44e1ac).
+- **Props and actors.** `propinstance` copies the whole prop record and renames
+  it (0x427922), so the copy stands where its template stands: the ballista's
+  stone, placed as "brock" and flown as "brock 1", and the mine carts' harpoons.
+  `pointinactor` asks the one actor's own sprite (0x406860), not what is on top:
+  the harpoon is drawn at the very point it asks about. `actorstar` ends a walk,
+  and `walkonpath` follows the room's authored route between two stars, a DRIV
+  named by the MARK record that pairs them
+  ([the routes](../engine/formats/sett.md#the-routes-driv)), so Port Royal's
+  soldiers and runners do not cut corners; `day3.ts` checks the soldiers walk
+  their routes.
+- **Conversations.** `puppetevent`'s argument is a wait in sixtieths of a second
+  that answers -2 when it runs out, and a negative one waits for good
+  (0x42f140): Marquez's `puppetevent (0)` just after an answer is a look, not a
+  question. A conversation shows the arrow: the puppet code sets `CURS.ARROW`
+  (0x46a150 from 0x42e6b0, 0x42eed0 and 0x431550) over the `cursor ("watch")`
+  the cast's `walkandtalk` has just asked for (#446).
+- **Crickets.** A cricket, the engine's positional ambient sound, is freed when
+  the bank holding its sound closes: closing a bank calls `stopcricket` for each
+  of its sounds (0x447250). TI.EXE keeps a cricket until a script stops it, and
+  RedJack under that rule fills the sixteen slots by day four
+  (`makecricket: table full (16)`); `day7.ts` checks no table fills. A cricket
+  is placed against the room camera, and again whenever the camera moves
+  (0x41d810): volume `255 − dist · 255 / radius`, pan from its bearing against
+  the camera's heading, and stopped once the camera leaves its radius (#447).
 
 ## Saved games
 

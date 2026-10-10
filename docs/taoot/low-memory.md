@@ -13,9 +13,9 @@ covers what they do, how they were measured, and the one number the play page
 changes to let a player ask for them.
 
 Reference implementation: `GameSession.lowMemory`
-([`engine/session.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/session.ts))
+([`engine/src/runtime/session.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/session.ts))
 and `heapsize`
-([`engine/builtins/helpers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/builtins/helpers.ts)).
+([`engine/src/runtime/builtins/helpers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/builtins/helpers.ts)).
 
 ## The switch is the game's, not the engine's
 

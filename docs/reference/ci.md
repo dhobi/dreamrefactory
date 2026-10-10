@@ -12,16 +12,17 @@ never be in the repository, and so no GitHub-hosted runner can ever open it.
 | **without the rip** | everything not excluded | pass or skip, ~8 s | GitHub's machines — any pull request, forks included |
 | **needs the rip** | the exclusion list below | fail without it | the self-hosted runner, same-repo branches only |
 
-The rip-reading suites are all Titanic's — `regression`, `savegame`,
-`re_builtins`, `interp`, `nav`, `text`, `audio-rates`, `sound-channels`,
-`shp-play-order`, `cst-play-order` — and `tests.yml` names them as an
+The portable job is `npm run test:portable`, which sets `NO_GAMEFILES=1`. The
+suites that fail without a rip are Titanic's, and `taoot/vitest.config.ts` drops
+them when the variable is set (`NEEDS_THE_RIP`); a package that grows one
+honours the same variable in its own config. The list is an
 **exclusion**, so a suite added later runs on GitHub's machines by default and,
 if it needs the rip, fails loudly and gets added to the list. An inclusion list
 would skip it in silence.
 
 Everything else builds its own fixtures with
 [the write path](../engine/formats/README.md#writing-one-back) instead of
-reading the game, which is why it travels — including all of `engine/tests/` and `site/tests/`, plus Dust's three, which
+reading the game, which is why it travels — including all of `engine/tests/` and `site/tests/`, plus the suites that
 [skip](tests.md#dust-s-suites-—-dust-tests) rather than fail without a disc.
 
 The rip-reading suites fail rather than skip on purpose — `text.ts` asserts that
@@ -57,7 +58,7 @@ the required status check never report, and a pull request waits on that forever
 with every job green (see the note on the `full` job's name).
 
 Each game is a step of its own ("Titanic machine suites", "Dust machine suites",
-and so on for all six), and a change that cannot reach a game shows its step as
+and so on for every game), and a change that cannot reach a game shows its step as
 skipped.
 
 ## The workflows
@@ -69,7 +70,7 @@ skipped.
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
 | [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage) — then the [SonarQube Cloud](#sonarqube-cloud) analysis. Not a check: it gates nothing |
 | [`sonar.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/sonar.yml) | every push to master, manual | the [SonarQube Cloud](#sonarqube-cloud) analysis of master with the last nightly's coverage report, on GitHub's machine, so the Sonar badges follow each merge. Not a check |
-| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*` or `lunicus-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
+| [`deploy.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/deploy.yml) | a `site-v*`, `taoot-v*`, `dust-v*`, `timelapse-v*`, `skullcracker-v*`, `redjack-v*`, `lunicus-v*` or `jumpraven-v*` tag, or manual | builds that one package and uploads it — a tag naming none of the seven is an error rather than a default. [Releasing and deploying](deploy.md) |
 
 The browser suite is off the per-PR path deliberately. Add a
 **`full-run-<game>`** label — `full-run-taoot`, `full-run-dust`,
@@ -263,8 +264,12 @@ The path it names must hold the two directories the suites resolve inside it:
 `dustcd/` (the CD) and `save/` (the `.rtd` files the playthrough is checked
 against).
 
+`tests.yml`'s `full` job and `coverage.yml` both run
+[`tools/runner/link-rips.sh`](https://github.com/dhobi/dreamrefactory/blob/master/tools/runner/link-rips.sh)
+after the checkout, which does, for each game:
+
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@v7
 - run: |                                        # AFTER the checkout
     ln -sfn "$TAOOT_GAMEFILES"        taoot/gamefiles
     ln -sfn "$DUST_GAMEFILES"         dust/gamefiles

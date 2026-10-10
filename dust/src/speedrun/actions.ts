@@ -1,47 +1,28 @@
 /**
- * Dust's own verbs — two, so far, and both earned by the route rather than
- * guessed at.
+ * Dust's own verbs, each one added because a route needed it.
  *
  * {@link GOTO} walks to a grid CELL, which is the shape this game's whole map
  * has and the shape its own record of the route is written in — every rung of
- * the golden thread names a standpoint as one (docs/dust/thread.md). It is 223
- * of the playthrough's gestures, which a sheet would otherwise count out as
- * `move(u,u,r)` by hand. {@link GIVE} drops what is in your hand on somebody, which
- * lands on `offerobject ()` on a cast script — DF1's way of giving something
- * away, with no counterpart in TI.EXE.
+ * the golden thread names a standpoint as one (docs/dust/thread.md); a sheet
+ * would otherwise count it out as `move(u,u,r)` by hand. {@link GIVE} drops what
+ * is in your hand on somebody, which lands on `offerobject ()` on a cast script —
+ * DF1's way of giving something away, with no counterpart in TI.EXE. The rest:
+ * `takeInHand` (the avatar's inventory, since a carried prop is not visible while
+ * the play panel is up), `offer` (the conversation gift: reply 55555 from
+ * `addhandbevel ()` and its picker, which is not {@link GIVE}), `doorAt`, `meet`,
+ * `talkOut`, `loadSave` (the disc's own saved games, not a checkpoint) and
+ * `blackjack` (./blackjack.ts: Jan's bet plaque is asked again on the very pass
+ * it is answered, which `say` cannot see go by).
  *
- * Everything else a route needs is
- * the engine's already ({@link CORE_ACTIONS}): the four arrows and Space, a
- * click at a named thing or a raw pixel, a held press, ESC through a film, a
- * conversation answered by bevel, the waits, and the run's own bookkeeping. All
- * of it is written against a DreamFactory session, and Dust is one — the same
- * `hittest`, the same props, the same conversation machinery, read by the same
- * engine two years earlier.
+ * Everything else a route needs is the engine's ({@link CORE_ACTIONS}): the four
+ * arrows and Space, a click at a named thing or a raw pixel, a held press, ESC
+ * through a film, a conversation answered by bevel, the waits, and the run's own
+ * bookkeeping. All of it is written against a DreamFactory session, and Dust is
+ * one — the same `hittest`, the same props, the same conversation machinery.
  *
- * So a Dust sheet works out of the box, and this file is where the things that
- * do NOT go. Still missing, from what the disc actually asks of a player:
- *
- *   - **the inventory**, which is the one that blocks most: 31 of the ladder's
- *     rungs TAKE something, and there is no verb that puts a thing in your hand.
- *     A carried prop is laid out on the inventory flat — measured in the page,
- *     `sugarcubes` sits at 130,264 in state "panel" — but `visible` is false
- *     while the play panel is up, so there is nothing on screen for a pointer to
- *     click. What opens that flat outside a conversation is the open question;
- *     the harness sidesteps it by dispatching the prop's `mousedown` at the
- *     interpreter (`clickProp`), which a verb may not do.
- *   - **the conversation gift.** `offerInTalk` is 10 more, and it is not
- *     {@link GIVE}: the plaque is reply 55555 from `addhandbevel ()`, and with
- *     `handflag = 1` the first press opens a picker that has to be worked.
- *   - **the shooting range**, and the gun generally: a light-gun aim, which is
- *     `combo`'s shape (a cycle of points until a condition) but wants naming.
- *   - **poker**, the saloon's other card game. Blackjack has its verb
- *     (./blackjack.ts, #490): Jan's bet plaque is asked again on the very pass
- *     it is answered, which `say` cannot see go by, so it is pressed there.
- *
- * None of those is guessed at here. A verb earns its place by a route needing
- * it, and a table of verbs written before any route exists is a table that will
- * be wrong in ways nobody can see yet — which is the mistake Titanic's own
- * `travel` was invented to avoid making.
+ * Not here yet: the shooting range (a light-gun aim, `combo`'s shape but wanting
+ * a name) and poker. A verb is added when a route needs it, not before: a table
+ * of verbs written ahead of any route would be wrong in ways nobody can see yet.
  */
 import type { VerbSpec } from "@dreamfactory/engine/web/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";

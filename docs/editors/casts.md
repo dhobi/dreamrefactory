@@ -20,6 +20,7 @@ comes apart into members → poses → sprites.
 | **▶ Walk the cycle** | cycles the pose's steps in the selected direction at the 50 ms service tick, looping — which is what a walk does: the scheduler advances the step every tick for as long as the walk runs |
 | a **sprite** | its stored offset, its depicted angle (direction × 32 in the engine's 0..255 space) and its refScale; export it as a transparent PNG, or replace it — one direction of one step at a time, which is the granularity the file stores |
 | the **scripts** and **palette** | every member's script (`setupactor`/`idle`/`mousedown`), decompiled on demand, and the file's own 256 colours |
+| the **sounds** | a cast's SOUN containers, each with **▶** and a WAV download; the section hides for a cast with none. RedJack's `bfight.cast` keeps the only one (0.65 s at 22050 Hz, sample for sample `bfight.trak`'s `stepleftright`), and nothing in its scripts asks for it. The file picker takes RedJack's `.cast` as well as `.cst` |
 
 ## The eight directions are positions, not camera angles
 

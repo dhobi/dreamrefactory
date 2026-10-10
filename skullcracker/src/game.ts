@@ -2,6 +2,14 @@
  * The game itself — Skull Cracker's world, stepped a tick at a time, with no
  * page, no canvas and no clock of its own. {@link file://./walk.ts} shows it;
  * a headless run (`tests/machine`) drives it directly. See {@link tick}.
+ *
+ * This file is one large module on purpose. Skull Cracker has no script to
+ * interpret: its game logic is compiled into `SC.EXE`, and this is that logic
+ * ported from the disassembly, function by function, with the module-level
+ * `let`s standing in for the executable's globals. The focus of dreamREfactory
+ * is the DreamFactory engine (`engine/`), not this port, so the file keeps the
+ * executable's shape, where every block can be checked against the address it
+ * cites. Splitting it into subsystems is not planned.
  */
 import { readSbkFile, SbkCel, SbkEntity, SbkFile, SbkRoom, LEVEL_ORDER, PLANE_Z, PLAY_PLANE_Z, arrivalIn, placementRate, readRooms } from "@dreamfactory/engine/df/sbk";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";

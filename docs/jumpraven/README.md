@@ -200,7 +200,7 @@ wreckage, and what the beacon marks ahead. `combat` pins it.
   rows run past their width, and the next rows start with bytes that are none of
   the eighteen row modes, which DreamFactory 0's decoder (`0x409557`) skips
   without drawing. A port of that loop instruction by instruction reads the
-  bytes the same way the engine's decoder now does, so the original drew the
+  bytes the same way the engine's decoder does, so the original drew the
   same, and the loop's third frame is whole again after them. `films` checks
   every frame of every film decodes.
 - **The radar is white.** `0x41885f` clears it to palette index 0 and draws the

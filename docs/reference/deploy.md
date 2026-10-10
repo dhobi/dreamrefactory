@@ -6,14 +6,14 @@ Everything is published under <https://www.danielhobi.ch/dreamrefactory/>, and
 **a release is a tag**. Nothing deploys from an ordinary push to master except
 the documentation.
 
-## Seven things in one directory
+## Every build in one directory
 
-Six builds and a doc set share that one hosting directory, and each goes out on
-its own:
+Each package's build and the doc set share that one hosting directory, and each
+goes out on its own:
 
 | tag | build | lands at |
 |---|---|---|
-| `site-v0.1.1` | `npm run build -w site` | `/dreamrefactory/` — the front door and the eight format editors |
+| `site-v0.1.1` | `npm run build -w site` | `/dreamrefactory/` — the front door and the format editors |
 | `taoot-v0.9.53` | `npm run build -w taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
 | `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's three pages (the game, `/collection/`, the unlisted `/speedrun/`) |
 | `timelapse-v0.1.0` | `npm run build -w timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
@@ -83,8 +83,8 @@ deploying a new game is two steps.
 ### Why sharing a directory is safe
 
 Because the mirror only **adds and overwrites** — see below. The site's build
-writes the root of the tree and the four games write directories inside it, so
-none of the five can remove another's files. Asset names are content-hashed, so
+writes the root of the tree and each game writes a directory inside it, so
+none of them can remove another's files. Asset names are content-hashed, so
 a superseded bundle is dead weight rather than a stale page.
 
 ### Each package holds its own version
@@ -114,8 +114,8 @@ repository:
 | `*.zip` | the offline DBGL archives the collection page links to | ~1 GB apiece |
 | `*/gamefiles.json` | the listing of a rip | see below |
 
-`nightdive.mov` is not one of them: since [#171](https://github.com/dhobi/dreamrefactory/issues/171)
-it is **generated and deployed**, and reaches the host like `lang.stg` does.
+`nightdive.mov` is not one of them: it is **generated and deployed**
+([#171](https://github.com/dhobi/dreamrefactory/issues/171)), and reaches the host like `lang.stg` does.
 The film is not in git — `taoot/assets/nightdive.gif` is, and a Vite plugin
 compiles the MOV into `taoot/public/` at build time.
 
@@ -207,7 +207,7 @@ The password never reaches a command line: the action writes the lftp script to
 against a game — a correction to a format page should be readable the day it is
 written.
 
-Unlike the five builds, the docs site cannot be path-independent: VitePress needs
+Unlike the game and site builds, the docs site cannot be path-independent: VitePress needs
 an absolute `base` for its router, so `docs/.vitepress/config.ts` names
 `/dreamrefactory/docs/` outright. It is the one place in the repository that knows
 the deployment's URL. It sits under `docs/` rather than at the root because a
