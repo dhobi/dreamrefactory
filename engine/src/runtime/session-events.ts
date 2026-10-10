@@ -217,17 +217,17 @@ export class SessionEvents {
      * initactors ())` went to ship.sett's main, which has no `initactors`, and
      * the ship's crew never came aboard. Gated on v5.
      */
-    const castFirst = cmd === "sendtocast" && this.session.isV5 ? this.session["castMainFor"](targetName) : null;
+    const castFirst = cmd === "sendtocast" && this.session.isV5 ? this.session.resourceCtrl.castMainFor(targetName) : null;
     // ...and its `sendtoprop` among the PROPS (0x42b550 finds the name in the prop
     // table): cannon.shop's "cannon" is a prop in cannon.sett, and the boot's
     // `sendtoprop ("cannon", fire ())` reached the room's main instead
     const propFirst =
-      /^sendtoprop(fx)?$/.test(cmd) && this.session.isV5 ? this.session["propScriptFor"](targetName.toLowerCase()) : null;
+      /^sendtoprop(fx)?$/.test(cmd) && this.session.isV5 ? this.session.resourceCtrl.propScriptFor(targetName.toLowerCase()) : null;
     // ...and a shop by the names `closeshopfile` knows it by, the one it gives
     // itself among them: jcombat.shop calls itself "combat", and the alley fight
     // asks `sendtoshop ("combat", moveobjects ())` every step (see openShopKey)
     const shopFirst =
-      /^sendtoshop(fx)?$/.test(cmd) && this.session.isV5 ? this.session["shopMains"].get(this.session["openShopKey"](targetName)) ?? null : null;
+      /^sendtoshop(fx)?$/.test(cmd) && this.session.isV5 ? this.session.resourceCtrl.shopMains.get(this.session.resourceCtrl.openShopKey(targetName)) ?? null : null;
     // ...and its `sendtoquad` among the room's QUADS (0x446570 → 0x446190 walks
     // the set's 80-byte quad records, the name at +0x1c): horn4.sett calls itself
     // "horn", as it does the quad the horn stands on, and the boot's
@@ -244,7 +244,7 @@ export class SessionEvents {
       (ACTOR_ADDRESSEE.test(cmd) ? this.session.castScripts.get(targetName.toLowerCase()) : null) ??
       this.session.currentBinding?.findInstance(targetName) ??
       this.session.maze?.findInstance(targetName) ??
-      this.session.findGlobalInstance(targetName);
+      this.session.resourceCtrl.findGlobalInstance(targetName);
     if (!inst && cmd === "sendtostage") inst = this.session.stageScript;
     /**
      * `sendtoboot` addresses THE BOOT, which is every one of its containers and
@@ -338,7 +338,7 @@ export class SessionEvents {
     // the boat deck, which two playthrough segments record.
     if (!inst && cmd === "sendtoactor") {
       const ai = this.session.actorRuntime.get(targetName);
-      const main = ai ? this.session["castMains"].get(ai.cast.name.toLowerCase()) : null;
+      const main = ai ? this.session.resourceCtrl.castMains.get(ai.cast.name.toLowerCase()) : null;
       if (main?.script.codes.has(handler)) inst = main;
     }
     return inst;
