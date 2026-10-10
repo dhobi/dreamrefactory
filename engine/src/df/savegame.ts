@@ -1,11 +1,11 @@
 import { BinaryReader, latin1 } from "./binary";
 // The variable list and its string pool — shared with the v1 (Dust) reader,
 // because that half of the format never changed. See `save-vars.ts`.
-import { SavedVar, freeVarSlots } from "./save-vars";
+import type { SavedVar } from "./save-vars";
 // re-exported: they were this module's own API before the split, and both are
 // part of what a caller reads a save for
-export type { SavedVar };
-export { freeVarSlots };
+export type { SavedVar } from "./save-vars";
+export { freeVarSlots } from "./save-vars";
 import { Container, HEADER_SIZE, readContainerAt } from "./container";
 import {
   PROP_FIELDS,
@@ -18,8 +18,7 @@ import {
   SOUND_STRIDE,
 } from "./savegame-layout";
 export { parseSave } from "./savegame-read";
-import type { SavePatch } from "./savegame-patch";
-export type { SavePatch };
+export type { SavePatch } from "./savegame-patch";
 export { applyPatch, globalsCapacity } from "./savegame-patch";
 
 /**
