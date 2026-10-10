@@ -24,6 +24,7 @@ import {
   SavedProp,
   SavedPropPatch,
   SavedWalk,
+  RawSaveFile,
   SaveGame,
   SavePatch,
   ThemePatch,
@@ -36,26 +37,23 @@ import { toNum } from "./interp";
 import type { GameSession } from "./session";
 
 /**
- * Produce the bytes of a save capturing the current progress, or null if no
- * base save/template is available to patch. Overwrites the script globals, the
- * current set/scene/view, every prop and actor record (both halves), the
- * scheduler's loop/cricket tables and the playing theme — everything our own
- * loader reads back, so a round-trip needs nothing from the room's scripts.
+ * The save a snapshot patches: the last one loaded, else the session's
+ * template, else null — nothing to patch, so nothing can be written.
  */
-export function snapshotSave(session: GameSession): Uint8Array | null {
-  let base = session.lastSave;
-  if (!base && session.saveTemplate) {
-    const bytes = session.saveTemplate();
-    if (bytes) {
-      try {
-        base = readSaveFile(bytes);
-      } catch (e) {
-        session.onLog(`savegame: bad template: ${(e as Error).message}`);
-      }
-    }
+export function saveBase(session: GameSession): RawSaveFile | null {
+  if (session.lastSave) return session.lastSave;
+  const bytes = session.saveTemplate?.();
+  if (!bytes) return null;
+  try {
+    return readSaveFile(bytes);
+  } catch (e) {
+    session.onLog(`savegame: bad template: ${(e as Error).message}`);
+    return null;
   }
-  if (!base) return null;
+}
 
+/** The script globals a save carries, split the way the file stores them. */
+export function scriptGlobals(session: GameSession): { numGlobals: Map<string, number>; strGlobals: Map<string, string> } {
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
   for (const [name, val] of session.interp.globals) {
@@ -66,6 +64,21 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
     if (typeof val === "number") numGlobals.set(name, val);
     else if (typeof val === "string") strGlobals.set(name, val);
   }
+  return { numGlobals, strGlobals };
+}
+
+/**
+ * Produce the bytes of a save capturing the current progress, or null if no
+ * base save/template is available to patch. Overwrites the script globals, the
+ * current set/scene/view, every prop and actor record (both halves), the
+ * scheduler's loop/cricket tables and the playing theme — everything our own
+ * loader reads back, so a round-trip needs nothing from the room's scripts.
+ */
+export function snapshotSave(session: GameSession): Uint8Array | null {
+  const base = saveBase(session);
+  if (!base) return null;
+
+  const { numGlobals, strGlobals } = scriptGlobals(session);
   const dropped: string[] = [];
   const bytes = applyPatch(base, {
     numGlobals,

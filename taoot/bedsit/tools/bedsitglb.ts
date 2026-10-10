@@ -590,7 +590,7 @@ function emit(who: string, tris: readonly number[]): void {
   const idx = Uint16Array.from(idxOut);
   const out = join(HERE, `../src/bedsit-${who}-mesh.ts`);
   writeFileSync(out, `/**
- * ${who}: an imported mesh, baked by \`taoot/tools/bedsitglb.ts\`. Do not edit —
+ * ${who}: an imported mesh, baked by \`taoot/bedsit/tools/bedsitglb.ts\`. Do not edit —
  * re-run the tool. In the room's own frame: +x is the back, y is the length
  * about 0, z is up from the floor, ${exact
     ? `at the file's own coordinates taken as metres at ${exact} units to one.`
@@ -600,6 +600,8 @@ function emit(who: string, tris: readonly number[]): void {
  * {@link BOX}. Normals are not stored: \`Builder.mesh\` averages them from the
  * triangles, which is both smaller here and smoother there.${quv ? "\n *\n * Texture coordinates ARE stored: they are the file's own, and nothing here\n * could work them out again." : ""}
  */
+
+import { indices, positions${quv ? ", texels" : ""} } from "./bedsit-mesh-decode";
 
 /** the box the vertices occupy, in the piece's own frame — what a chart laid
  *  over this mesh measures itself against */
@@ -614,24 +616,12 @@ const INDEX = "${b64(idx)}";${quv ? `
 /** and of the texture coordinates the file came with, over [0, 1] */
 const TEXCOORD = "${b64(quv)}";` : ""}
 
-function bytes(s: string): Uint16Array {
-  const bin = atob(s), n = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) n[i] = bin.charCodeAt(i);
-  return new Uint16Array(n.buffer);
-}
-
-const packed = bytes(PACKED);
-export const POSITION = new Float32Array(packed.length);
-for (let i = 0; i < packed.length; i += 3) {
-  for (let c = 0; c < 3; c++) POSITION[i + c] = BOX.lo[c] + (packed[i + c] / 65535) * (BOX.hi[c] - BOX.lo[c]);
-}
-export const INDICES = bytes(INDEX);
+export const POSITION = positions(PACKED, BOX);
+export const INDICES = indices(INDEX);
 ${quv ? `
 /** the atlas coordinates, one pair a vertex — pass to \`Builder.mesh\` and it
  *  uses these instead of box-mapping the material it is drawn in */
-const texel = bytes(TEXCOORD);
-export const UV = new Float32Array(texel.length);
-for (let i = 0; i < texel.length; i++) UV[i] = texel[i] / 65535;
+export const UV = texels(TEXCOORD);
 ` : ""}`);
   console.log(`  ${out}  ${(idx.length / 3).toLocaleString()} triangles, ${((b64(q).length + b64(idx).length) / 1024).toFixed(1)} KiB of base64`);
 }
