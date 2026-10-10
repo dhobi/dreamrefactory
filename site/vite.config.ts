@@ -49,52 +49,18 @@ export default defineConfig({
     // game's own build writes its own. The editors list every source there is
     // (site/editors/sources.ts), so a dev server for the front door has to serve
     // every rip the editors can offer.
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../taoot/gamefiles"),
-      publicDir: resolve(HERE, "../taoot/public"),
-      mount: "/taoot",
-      emit: false,
-    }),
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../dust/gamefiles"),
-      publicDir: resolve(HERE, "../dust/public"),
-      mount: "/dust",
-      emit: false,
-    }),
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../skullcracker/gamefiles"),
-      publicDir: resolve(HERE, "../skullcracker/public"),
-      mount: "/skullcracker",
-      emit: false,
-    }),
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../lunicus/gamefiles"),
-      publicDir: resolve(HERE, "../lunicus/public"),
-      mount: "/lunicus",
-      emit: false,
-    }),
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../jumpraven/gamefiles"),
-      publicDir: resolve(HERE, "../jumpraven/public"),
-      mount: "/jumpraven",
-      emit: false,
-    }),
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../redjack/gamefiles"),
-      publicDir: resolve(HERE, "../redjack/public"),
-      mount: "/redjack",
-      emit: false,
-    }),
-    gamefilesManifest({
-      gamefiles: resolve(HERE, "../timelapse/gamefiles"),
-      publicDir: resolve(HERE, "../timelapse/public"),
-      mount: "/timelapse",
-      emit: false,
-      // the same one exception that game's own build makes: half of it lives in
-      // the installer's tree, and without this the editors would be offered its
-      // films and stages with one shop file and no track banks
-      include: ["TLAPSE1/install/data"],
-    }),
+    ...["taoot", "dust", "skullcracker", "lunicus", "jumpraven", "redjack", "timelapse"].map((game) =>
+      gamefilesManifest({
+        gamefiles: resolve(HERE, `../${game}/gamefiles`),
+        publicDir: resolve(HERE, `../${game}/public`),
+        mount: `/${game}`,
+        emit: false,
+        // Timelapse: the same one exception its own build makes: half of it lives in
+        // the installer's tree, and without this the editors would be offered its
+        // films and stages with one shop file and no track banks
+        include: game === "timelapse" ? ["TLAPSE1/install/data"] : undefined,
+      }),
+    ),
     siblingSignposts([
       { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
       { path: "taoot", command: "npm run dev -w taoot", port: 5175, what: "Titanic" },

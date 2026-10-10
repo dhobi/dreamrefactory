@@ -43,12 +43,11 @@ import {
   saveTitleMatches,
 } from "../df/savegame-v1";
 import { toNum } from "./interp";
-import { readSaveFile } from "../df/savegame";
 import { readSetFileV1 } from "../df/set-v1";
 import { detectVersion } from "../df/version";
 import type { SavedActor, SavedProp } from "../df/savegame";
 import type { GameSession } from "./session";
-import { resetCast, restoreActors, restoreProps } from "./saveload";
+import { resetCast, restoreActors, restoreProps, saveBase, scriptGlobals } from "./saveload";
 
 /** the flat the game plays under — the in-game panel, not the menu you saved from */
 const PLAY_FLAT = "mainpanel";
@@ -529,27 +528,10 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
  * genuinely cannot produce a file. The caller logs it; the builtin says so.
  */
 export function snapshotSaveV1(session: GameSession): Uint8Array | null {
-  let base = session.lastSave;
-  if (!base && session.saveTemplate) {
-    const bytes = session.saveTemplate();
-    if (bytes) {
-      try {
-        base = readSaveFile(bytes);
-      } catch (e) {
-        session.onLog(`savegame: bad template: ${(e as Error).message}`);
-      }
-    }
-  }
+  const base = saveBase(session);
   if (!base) return null;
 
-  const numGlobals = new Map<string, number>();
-  const strGlobals = new Map<string, string>();
-  for (const [name, val] of session.interp.globals) {
-    // the port's own bookkeeping is not game state (see the play page's snapshot)
-    if (name.startsWith("__")) continue;
-    if (typeof val === "number") numGlobals.set(name, val);
-    else if (typeof val === "string") strGlobals.set(name, val);
-  }
+  const { numGlobals, strGlobals } = scriptGlobals(session);
 
   // where the player is, in the file's own terms: the cell under the scene the
   // viewer is standing in, and the heading it looks along

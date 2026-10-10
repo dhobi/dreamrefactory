@@ -1,5 +1,5 @@
 /**
- * packsmokes: an imported mesh, baked by `taoot/tools/bedsitglb.ts`. Do not edit —
+ * packsmokes: an imported mesh, baked by `taoot/bedsit/tools/bedsitglb.ts`. Do not edit —
  * re-run the tool. In the room's own frame: +x is the back, y is the length
  * about 0, z is up from the floor, at the file's own coordinates taken as metres at 1.549375 units to one.
  *
@@ -10,6 +10,8 @@
  * Texture coordinates ARE stored: they are the file's own, and nothing here
  * could work them out again.
  */
+
+import { indices, positions, texels } from "./bedsit-mesh-decode";
 
 /** the box the vertices occupy, in the piece's own frame — what a chart laid
  *  over this mesh measures itself against */
@@ -24,21 +26,9 @@ const INDEX = "AAABAAIAAAACAAMAAwACAAQAAwAEAAUABQAEAAYABQAGAAcABwAGAAgABwAIAAkAC
 /** and of the texture coordinates the file came with, over [0, 1] */
 const TEXCOORD = "2M71iNjO1sN1ytbDdcr1iBHG1sMRxvWIrsHWw67B9Yi7+tbDu/r1iFf21sNX9vWI9PHWw/Tx9YiQ7dbDkO31iC3p1sMt6fWIyuTWw8rk9Yhm4NbDZuD1iAPc1sMD3PWIn9fWw5/X9Yg809bDPNP1iNjO9YjYztbDdcrWw3XK9YgRxtbDEcb1iK7B1sOuwfWIu/rWw7v69YhX9tbDV/b1iPTx1sP08fWIkO3Ww5Dt9Ygt6dbDLen1iMrk1sPK5PWIZuDWw2bg9YgD3NbDA9z1iJ/X1sOf1/WIPNPWwzzT9YjYzvWI2M7Ww3XK1sN1yvWIEcbWwxHG9YiuwdbDrsH1iLv61sO7+vWIV/bWw1f29Yj08dbD9PH1iJDt1sOQ7fWILenWwy3p9YjK5NbDyuT1iGbg1sNm4PWIA9zWwwPc9Yif19bDn9f1iDzT1sM80/WI2M71iNjO1sN1ytbDdcr1iBHG1sMRxvWIrsHWw67B9Yi7+tbDu/r1iFf21sNX9vWI9PHWw/Tx9YiQ7dbDkO31iC3p1sMt6fWIyuTWw8rk9Yhm4NbDZuD1iAPc1sMD3PWIn9fWw5/X9Yg809bDPNP1iNjO9YjYztbDdcrWw3XK9YgRxtbDEcb1iK7B1sOuwfWIu/rWw7v69YhX9tbDV/b1iPTx1sP08fWIkO3Ww5Dt9Ygt6dbDLen1iMrk1sPK5PWIZuDWw2bg9YgD3NbDA9z1iJ/X1sOf1/WIPNPWwzzT9YjYzvWI2M7Ww3XK1sN1yvWIEcbWwxHG9YiuwdbDrsH1iLv61sO7+vWIV/bWw1f29Yj08dbD9PH1iJDt1sOQ7fWILenWwy3p9YjK5NbDyuT1iGbg1sNm4PWIA9zWwwPc9Yif19bDn9f1iDzT1sM80/WIqseF8pvRDvkA3mP7ZeoO+Vb0hfLa+RTp2vmZ3lb0J9Vl6p7OAN5JzJvRns6qxyfVJsKZ3ibCFOll6g75AN5j+5vRDvmqx4XyJsIU6SbCmd6qxyfVm9GezgDeScxl6p7OVvQn1dr5md7a+RTpVvSF8qrHhfKb0Q75AN5j+2XqDvlW9IXy2vkU6dr5md5W9CfVZeqezgDeScyb0Z7Oqscn1SbCmd4mwhTpZeoO+QDeY/ub0Q75qseF8ibCFOkmwpneqscn1ZvRns4A3knMZeqezlb0J9Xa+Zne2vkU6Vb0hfKqx4Xym9EO+QDeY/tl6g75VvSF8tr5FOna+ZneVvQn1WXqns4A3knMm9GezqrHJ9UmwpneJsIU6WXqDvkA3mP7m9EO+arHhfImwhTpJsKZ3qrHJ9Wb0Z7OAN5JzGXqns5W9CfV2vmZ3tr5FOlW9IXyqseF8pvRDvkA3mP7ZeoO+Vb0hfLa+RTp2vmZ3lb0J9Vl6p7OAN5JzJvRns6qxyfVJsKZ3ibCFOll6g75AN5j+5vRDvmqx4XyJsIU6SbCmd6qxyfVm9GezgDeScxl6p7OVvQn1dr5md7a+RTpVvSF8qrHhfKb0Q75AN5j+2XqDvlW9IXy2vkU6dr5md5W9CfVZeqezgDeScyb0Z7Oqscn1SbCmd4mwhTpZeoO+QDeY/ub0Q75qseF8ibCFOkmwpneqscn1ZvRns4A3knMZeqezlb0J9Xa+Zne2vkU6Vb0hfKqx4Xym9EO+QDeY/tl6g75VvSF8tr5FOna+ZneVvQn1WXqns4A3knMm9GezqrHJ9UmwpneJsIU6WXqDvkA3mP7m9EO+arHhfImwhTpJsKZ3qrHJ9Wb0Z7OAN5JzGXqns5W9CfV2vmZ3tr5FOlW9IXy";
 
-function bytes(s: string): Uint16Array {
-  const bin = atob(s), n = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) n[i] = bin.charCodeAt(i);
-  return new Uint16Array(n.buffer);
-}
-
-const packed = bytes(PACKED);
-export const POSITION = new Float32Array(packed.length);
-for (let i = 0; i < packed.length; i += 3) {
-  for (let c = 0; c < 3; c++) POSITION[i + c] = BOX.lo[c] + (packed[i + c] / 65535) * (BOX.hi[c] - BOX.lo[c]);
-}
-export const INDICES = bytes(INDEX);
+export const POSITION = positions(PACKED, BOX);
+export const INDICES = indices(INDEX);
 
 /** the atlas coordinates, one pair a vertex — pass to `Builder.mesh` and it
  *  uses these instead of box-mapping the material it is drawn in */
-const texel = bytes(TEXCOORD);
-export const UV = new Float32Array(texel.length);
-for (let i = 0; i < texel.length; i++) UV[i] = texel[i] / 65535;
+export const UV = texels(TEXCOORD);
