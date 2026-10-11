@@ -108,6 +108,8 @@ export interface MovFrame {
    * frame.
    */
   waitsForVoice: boolean;
+  /** V5 MFRM bit 4 waits for the two keyed effects slots, separately from voice. */
+  waitsForEffects?: boolean;
   /**
    * Don't reset the frame deadline to "now" (flags bit 3) — add to the one
    * already running, so a long film does not drift a frame's worth per frame.
@@ -161,12 +163,21 @@ export interface MovCue {
   target: string;
 }
 
+/** Fields used by the V5 named-sound dispatcher. */
+export interface MovSoundV5 {
+  index: number;
+  flags: number;
+  pan: number;
+}
+
 /**
  * One segment of a movie file — a self-contained film with its own header,
  * palette, frames, audio and cues. `MovFile` IS its first segment (the fields
  * below on a MovFile are segment 0's), and `MovFile.segments` the whole chain.
  */
 export interface MovSegment {
+  /** V5 MSND routing data; the index is the authored catalog position. */
+  soundOptionsV5?: Map<string, MovSoundV5>;
   /**
    * The container file this segment lives in. Every segment carries it so a
    * patch can be addressed to a SEGMENT rather than to the file plus an index:

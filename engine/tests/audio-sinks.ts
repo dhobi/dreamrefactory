@@ -106,7 +106,11 @@ function fakeContext() {
       panners.push(p);
       return p;
     },
-    createBuffer: (_ch: number, length: number, rate: number) => ({ length, rate, copyToChannel: () => {} }),
+    createBuffer: (channels: number, length: number, rate: number) => {
+      const samples: Float32Array[] = [];
+      return { channels, length, rate, samples,
+        copyToChannel: (data: Float32Array, channel: number) => { samples[channel] = data.slice(); } };
+    },
     createBufferSource: () => {
       const s: FakeSource = {
         buffer: null,
@@ -130,6 +134,18 @@ function fakeContext() {
   };
   return { ctx, sources, gains, panners, log, sink: () => new WebAudioSink(ctx as unknown as AudioContext) };
 }
+
+test("fixed stereo attenuation reaches both output channels without equal-power panning", () => {
+  const f = fakeContext();
+  const audio = { sampleRate: 22050, samples: new Float32Array([0.5, -0.5]) };
+  f.sink().play("sound", audio, { overlap: true, stereoGains: [0.00001, 1] });
+  const buffer = f.sources[0].buffer as { channels: number; samples: Float32Array[] };
+  expect(buffer.channels).toBe(2);
+  expect(buffer.samples[0][0]).toBeCloseTo(0.000005, 10);
+  expect(Array.from(buffer.samples[1])).toEqual([0.5, -0.5]);
+  expect(Array.from(audio.samples)).toEqual([0.5, -0.5]);
+  expect(f.panners).toHaveLength(0);
+});
 
 test("a play takes its channel from the last one, unless it overlaps", () => {
   const f = fakeContext();

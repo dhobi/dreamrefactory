@@ -166,6 +166,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
       record: rec,
       holdTicks,
       waitsForVoice: (frameFlags & 1) !== 0,
+      waitsForEffects: (frameFlags & 0x10) !== 0,
       holdsDeadline: (frameFlags & 8) !== 0,
       playsThroughRegions: (frameFlags & 4) !== 0,
     });
@@ -184,6 +185,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
   }
 
   const sounds = new Map<string, number>();
+  const soundOptions: NonNullable<MovSegment["soundOptionsV5"]> = new Map();
   const soundFollows = new Map<string, string>();
   const shotAt = i32(HEAD.audio);
   const st = shotAt > 0 ? file.containers[shotAt + bias]?.data : undefined;
@@ -196,6 +198,11 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
       const id = name(st, at + ONESHOT.name).toLowerCase();
       if (!id) continue;
       sounds.set(id, sv.getInt32(at + ONESHOT.loc, true) + bias);
+      soundOptions.set(id, {
+        index: i,
+        flags: sv.getUint16(at + 6, true),
+        pan: sv.getInt16(at + 4, true),
+      });
       const follow = name(st, at + ONESHOT.follow);
       if (follow) soundFollows.set(id, follow);
     }
@@ -225,6 +232,7 @@ function readSegment(file: DFContainerFile, bias: number): { segment: MovSegment
     audioChunks,
     audioLoops: audioChunks.length > 0,
     sounds,
+    soundOptionsV5: soundOptions,
     soundFollows,
     cues: [],
     dfV5: true,

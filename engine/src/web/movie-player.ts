@@ -42,6 +42,7 @@ import {
 } from "@dreamfactory/engine/df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
+import { MovieVoicesV5 } from "@dreamfactory/engine/runtime/movie-voices-v5";
 import { volumeKey } from "@dreamfactory/engine/runtime/puppet";
 import { PlayHandle } from "@dreamfactory/engine/runtime/audio";
 
@@ -143,6 +144,7 @@ export class MoviePlayer {
    * movie's own plays are stopped one by one.
    */
   private eventSounds: PlayHandle[] = [];
+  private readonly voicesV5 = new MovieVoicesV5();
   /**
    * Resolver for the blocking playmovie() promise. Set by the top-level
    * play() call and held pending across a whole chain of sub-movies
@@ -334,6 +336,7 @@ export class MoviePlayer {
     startFrame = 0,
   ): boolean {
     const seg = mov.segments[segIdx];
+    this.voicesV5.stop();
     // Frames are delta-encoded per segment: decode all in order. A v1 frame is
     // then COMPOSITED over the one before it — its 0/0xff pixels are
     // transparent (DF.EXE's movie blit keys them out; see compositeFrameV1) —
@@ -651,6 +654,9 @@ export class MoviePlayer {
     const m = this.active;
     if (!m) return;
     const loc = m.sounds.get(name.toLowerCase());
+    // V5 resolves only the current scene's MSND (RedJack 0x4503d0).
+    const optionsV5 = m.seg.soundOptionsV5?.get(name.toLowerCase());
+    if (m.seg.dfV5 && !optionsV5) return;
     const snd =
       loc !== undefined
         ? decodeAudioContainer(m.containers[loc].data, m.mov.file.order)
@@ -660,10 +666,14 @@ export class MoviePlayer {
     // must die with it (see finish). Drop finished handles as we go so a long
     // interactive movie doesn't accumulate them.
     this.eventSounds = this.eventSounds.filter((h) => !h.done);
-    const handle = this.session.audio.play("sound", snd);
-    this.eventSounds.push(handle);
-    // a sound named by a puppet line's ident is that line, voiced (#50)
-    this.session.captionMovieSound(m.fileName, name, handle);
+    const handle = optionsV5
+      ? this.voicesV5.play(this.session.audio, snd, optionsV5)
+      : this.session.audio.play("sound", snd);
+    if (handle) {
+      this.eventSounds.push(handle);
+      // a sound named by a puppet line's ident is that line, voiced (#50)
+      this.session.captionMovieSound(m.fileName, name, handle);
+    }
     // ...and the sound may carry the picture on when it ends
     // (MovSegment.soundFollows). Armed here and cleared by any sound that names
     // no frame, exactly as the original stores the lookup unconditionally: that
@@ -674,7 +684,10 @@ export class MoviePlayer {
       follow !== undefined
         ? m.frameByName.get(follow.toLowerCase())
         : undefined;
-    m.soundJump = frame === undefined ? null : { frame, sound: handle };
+    // V5 stores the follow target before arbitration, even if the sound loses.
+    m.soundJump = frame === undefined ? null : {
+      frame, sound: handle ?? { done: true, stop() {} },
+    };
   }
 
   /** move playback to a frame, firing its entry sound (faucet on/off…) */
@@ -818,10 +831,12 @@ export class MoviePlayer {
         // TAOOT leave.mov's frame 68 is the case, and it is why that film's last line
         // outlives its picture: frame 41 fires Morrow's "morrow2.83" (3.34 s) and
         // the second-to-last frame holds until he has finished saying it.
-        if (
-          m.meta[m.pos].waitsForVoice &&
-          this.eventSounds.some((h) => !h.done)
-        ) {
+        const frame = m.meta[m.pos];
+        const waitingForSound = m.seg.dfV5
+          ? (frame.waitsForVoice && this.voicesV5.busy(false)) ||
+            (frame.waitsForEffects && this.voicesV5.busy(true))
+          : frame.waitsForVoice && this.eventSounds.some((h) => !h.done);
+        if (waitingForSound) {
           return m.frames[m.pos];
         }
         m.lastTick = now;
@@ -903,6 +918,7 @@ export class MoviePlayer {
     // rest of the picture back the bed and the film end together, the way the
     // engine says they do.
     this.session.audio.halt("voice");
+    this.voicesV5.stop();
     // ...and the event sounds, but only for a clip the PLAYER was driving. A
     // frame-entry sound is often a full spoken line — TAOOT's LENIN.MOV fires Penny's
     // "penny2.29" (3.5 s) on entering its middle frame — and an interactive clip
