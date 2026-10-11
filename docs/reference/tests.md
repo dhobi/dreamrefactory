@@ -189,8 +189,11 @@ mode: the Load button lists the port's day saves (`gamefiles/save/`, written by
 lower floor; the panel's save button brings up the dialog and keeps a named
 file; and that file opens back into the same game.
 
-Four suites beside them are in `npm test`, and pin what turns the page's own
-input into an answer the machine suites hand the game ready-made:
+The suites beside them in `npm test` pin what turns the page's own input into
+an answer the machine suites hand the game ready-made:
+[`page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/page.ts) (the page itself, `src/main.ts`,
+in node: its clock, its status line in every place the game can be, which
+gesture reaches which door of `Input`, the Load button, `?drive` and `?replay`),
 [`dialogs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/dialogs.ts) (the High Score and Keys
 boxes, answered as LUNICUS.EXE's procedures answered them),
 [`menu-bar.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/menu-bar.ts) (what the bar shows and
@@ -234,7 +237,11 @@ Every gesture goes through `jumpraven/src/game/input.ts`. See
 [`jumpraven/tests/dialogs.ts`](https://github.com/dhobi/dreamrefactory/blob/master/jumpraven/tests/dialogs.ts)
 is in `npm test`: what each of RAVEN.EXE's dialog procedures hands back for its
 buttons — the high score's name, Quit, Pause — which the machine suites stand in
-for with callbacks.
+for with callbacks. So is
+[`jumpraven/tests/page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/jumpraven/tests/page.ts):
+the page itself, `src/main.ts`, in node — its clock, its status line in every
+place the game can be, which gesture reaches which door of `Input`, the Load
+button and the menu bar's Open, Memory and Exit, and `?autoplay`.
 
 ## The engine's own — `engine/tests/`
 
