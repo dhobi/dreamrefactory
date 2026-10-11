@@ -555,6 +555,7 @@ describe.skipIf(!have)("the menu", () => {
     const p = await openPage({ disc: { manifest } });
     await toMenu(p);
     await choose(p, MENU.help, () => p.loc().startsWith("HelpMac.Mov"));
+    expect(p.log()).not.toContain("HelpWin.Mov");
   });
 
   it("answers Quit with the menu, since a tab cannot quit itself", async () => {
@@ -563,6 +564,7 @@ describe.skipIf(!have)("the menu", () => {
     p.press(MENU.quit.x, MENU.quit.y);
     await p.until(() => p.log().includes("Quit — state 11"), { hush: true });
     await atMenu(p);
+    expect(p.loc()).toMatch(/^Menu\.Mov/);
   });
 
   it("plays the credits through, and the menu after them", async () => {
@@ -579,6 +581,7 @@ describe.skipIf(!have)("the menu", () => {
     p.press(MENU.demo.x, MENU.demo.y);
     await p.until(() => p.log().includes("the demo — skuldemo.dmo's recorded input"), { hush: true });
     await atMenu(p);
+    expect(p.loc()).toMatch(/^Menu\.Mov/);
   });
 
   it("comes back to itself when Escape ends the menu, rather than going black", async () => {
