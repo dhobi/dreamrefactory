@@ -12830,175 +12830,64 @@ export function travels(foe: Foe): boolean {
 }
 
 export function stepFight(e: Enemy, foe: Foe, run: number): boolean {
-  const f = level?.fights[e.kind];
+  /**
+   * Every class runs a machine of its own (`brains/`, each carrying its own
+   * bands), and `tests/brains.ts` holds every class in {@link FOES} to having
+   * one. The shared notice-face-close-swing reading that stood in for a class
+   * not yet read went when the last of them was.
+   */
   const brain = BRAINS[e.kind];
-  /**
-   * A band table is what the SHARED reading needs; a class with a machine of
-   * its own carries its own bands inside it. `initkragg` is the case that
-   * matters — it has no `fights.ts` entry at all, because its creator hands the
-   * tracker a list of its own from a global rather than per record.
-   */
-  if (!f && !brain) return false;
+  if (!brain) return false;
   if (e.state !== "gait" || e.asleep || foe.rooted) return false;
-  if (!brain && (foe.haunts || foe.preaches || foe.drives || foe.chases))
-    return false;
-  /**
-   * ...and a class whose own walk carries no stride does not close on anybody.
-   *
-   * LAB's `initarm` is the case: ten arms out of a wall, whose `0x46cf10` tag 0
-   * is seven cels of reaching and nothing else. The class HAS a script with a
-   * stride in its data, but the thing the level places does not use it, and
-   * giving it one sets ten arms crawling across the floor. If {@link Foe.gait} does not travel, neither does
-   * this — it stands where it is and swings when you are inside the last band.
-   */
-  const rooted = !travels(foe);
   /**
    * ...and a keeper with a lever still in its patch goes for the lever.
    *
    * SERVICE is the level built on it — `0x438200` finds the first unlit switch
    * inside the class's own rect and the walk to it IS the patrol's six cels — and
-   * the shared brain would otherwise take the same class over and march it at the
+   * its machine would otherwise take the same class over and march it at the
    * player instead, which leaves level six permanently dry. With nothing left to
    * throw, it fights like everything else.
    */
   if (foe.lever && leverFor(e, foe.lever.dir)) return false;
-  // `0x402f60` is one test — that the player's own state is under `0x1a` — and
-  // dying is the one this page has that reaches it. A class with a machine of
-  // its own answers it in a state instead — the punk's kind 6
-  if (!brain && p.act === "dying") {
-    e.fighting = false;
-    e.swing = false;
-    return false;
-  }
   /**
    * `0x44e5fb` — state 0, and the ONLY thing that ends the patrol is
    * `0x434200(player.point, AI+8)`: the player's own point inside the four
    * words the creator copied out of this `init` record. Not a sight line, not a
    * radius, and not the room.
-   *
-   * The engine never walks back out of state 1 on this test — it breaks off
-   * through the class's own decision budget instead (`AI+4`, seeded three at
-   * `0x450ad1`) — so leaving the rect putting it back on the patrol is this
-   * page's, and it is what keeps a level walkable: step out of somebody's patch
-   * and they go back to pacing it.
    */
   const anchor = p.y - p.feet;
   // `0x434200` is half-open: left <= x < right, top <= y < bottom
   const inside =
     p.x >= e.left && p.x < e.right && anchor >= e.top && anchor < e.bottom;
   /**
-   * ...and from here a class with a machine of its own runs the whole of it,
-   * the patrol included: state 0 is what a thing outside the rect is in, and
+   * ...and from here the class's machine runs the whole of it, the patrol
+   * included: state 0 is what a thing outside the rect is in, and
    * the rect is what moves it into state 1 — and nothing moves it back. No
    * think function installs its state-0 script again once it has left it (the
    * dog's `0x454c13`, the rat's `0x44e010`, wbooly's `0x455940` and every
    * other), so stepping out of the rect does not send a brain home: a dog
    * that has seen you keeps coming.
    */
-  if (brain) {
-    if (inside && !e.fighting) {
-      e.fighting = true;
-      e.swing = false;
-    }
-    /**
-     * ...and it thinks once an ENGINE FRAME, not once a tick.
-     *
-     * A class's think function is called from the frame dispatcher, fifteen
-     * times a second; this page ticks at sixty. Every state that ACCUMULATES is
-     * wrong by a factor of four otherwise: kragg's kind 5 steers by adding
-     * `away(dy)` to its velocity every call (`0x440ff1`), so four calls a frame
-     * would put four times the correction in and dive the boss through the
-     * floor, and every other class would spend `AI+2` beats and `AI+4` decision
-     * budgets four times too fast.
-     *
-     * Between frames the thing still plays and still moves — that is the page's
-     * job below, not the machine's.
-     */
-    if (Math.floor(e.clock) === Math.floor(e.clock - TICK_SCALE)) return false;
-    return brain(e, foe, run, BRAIN_CTX);
-  }
-  // ...and past here is the shared reading, which is band table or nothing
-  if (!f) return false;
-  if (!inside) {
-    if (!e.fighting) return false;
-    e.fighting = false;
-    e.swing = false;
-    e.anim = foe.gait;
-    e.clock = 0;
-    // and walk home: the fight may have carried it clear of its own territory,
-    // which the patrol's clamp below would otherwise snap it back through
-    if (e.x < e.left) e.facing = 1;
-    else if (e.x > e.right) e.facing = -1;
-    return false;
-  }
-  if (!e.fighting) {
+  if (inside && !e.fighting) {
     e.fighting = true;
     e.swing = false;
-    e.clock = 0;
-  }
-  // The block below is the shared reading — notice, face, close, swing — and it
-  // stands for every class whose own state machine has not been read yet
-  // an attack plays to its end before anything else is asked — `0x42afc4`'s own
-  // rule for every state in the game, `obj+0x46`, the animation-ended word
-  if (e.swing) {
-    if (e.clock < run) return false;
-    e.swing = false;
   }
   /**
-   * The tracker, and its forward distance is measured through the class's OWN
-   * FACING: `0x45efe4` takes `player.x - self.x` and `0x45eff3` negates it when
-   * `obj+0x28` is set. A negative answer means the player is behind.
-   */
-  const forward = (p.x - e.x) * e.facing;
-  /**
-   * ...and the band, which is an index into the class's own descending table:
-   * `0x45f050` walks it while the entry is still at or past the distance, so 0
-   * is beyond the first threshold and `bands.length` is inside the last.
-   * `0x45f042` answers -1 outright when the player is behind.
-   */
-  let band = -1;
-  if (forward >= 0) {
-    band = 0;
-    while (band < f.bands.length && f.bands[band] >= forward) band += 1;
-  }
-  // `0x44e73c`: turn, and that is the whole of the frame — the band dispatch is
-  // an unsigned `cmp eax, 4; ja`, and -1 falls straight through it
-  if (band < 0) {
-    e.facing = -e.facing;
-    return true;
-  }
-  /**
-   * The innermost band swings and the rest close.
+   * ...and it thinks once an ENGINE FRAME, not once a tick.
    *
-   * Which is what `initwerea`, `initdog`, `initwerec`, `initigor` and `initbat`
-   * do at their last band, read one at a time out of their band branches. It is
-   * not universal: `initvpriest` throws from its OUTERMOST band, because the
-   * thing it throws has the distance to cover, and this page does not yet tell a
-   * caster from a puncher. See {@link file://./fights.ts}.
-   */
-  /**
-   * ...and nothing starts a swing while the PLAYER is swinging.
+   * A class's think function is called from the frame dispatcher, fifteen
+   * times a second; this page ticks at sixty. Every state that ACCUMULATES is
+   * wrong by a factor of four otherwise: kragg's kind 5 steers by adding
+   * `away(dy)` to its velocity every call (`0x440ff1`), so four calls a frame
+   * would put four times the correction in and dive the boss through the
+   * floor, and every other class would spend `AI+2` beats and `AI+4` decision
+   * budgets four times too fast.
    *
-   * `out+6` of the tracker is that question — `0x45f077` looks up the player's
-   * current cel and answers 1 when its strike box is not degenerate — and the
-   * classes read it in two ways. The dog will not commit while it is set
-   * (`0x454e45`: `rand(30) < 3` AND `out+6` clear, or no bite), and the punk
-   * turns it into a decision of its own at `0x44e7a8` — a coin flip between
-   * backing off on `0x4771a0 tag 0` and stepping in on tag 1, which wants that
-   * class's own two scripts and so waits for its own brain.
-   *
-   * The half that is the same everywhere is here: while you are mid-blow it does
-   * not start one. An enemy that swung into every punch read as having no idea
-   * you were there.
+   * Between frames the thing still plays and still moves — that is the page's
+   * job below, not the machine's.
    */
-  if (band >= f.bands.length && f.attacks.length > 0 && !playerSwinging) {
-    e.anim = f.attacks[Math.floor(random() * f.attacks.length)];
-    e.swing = true;
-    e.clock = 0;
-    return false;
-  }
-  e.anim = (rooted ? undefined : f.close) ?? foe.gait;
-  return false;
+  if (Math.floor(e.clock) === Math.floor(e.clock - TICK_SCALE)) return false;
+  return brain(e, foe, run, BRAIN_CTX);
 }
 
 /**
@@ -13674,7 +13563,6 @@ export function stepEnemies(): void {
     }
     // `0x42fd80` measures the ground before anything reads it this frame
     if (lvl) measureGround(e, foe, lvl);
-    const brain = BRAINS[e.kind];
     // a dormant thing holds its one cel until the player's point is inside its
     // rect, and its think's state 0 is what it lands in the moment it is not
     if (e.state === "gait" && foe.wake && e.asleep && wakeFoe(e, foe)) continue;
@@ -13807,7 +13695,7 @@ export function stepEnemies(): void {
      * this same frame — the frame `obj+0x46` is set and the think installs
      * what follows.
      */
-    if (e.state === "flinch" && e.clock >= run && e.anim.decides && brain) {
+    if (e.state === "flinch" && e.clock >= run && e.anim.decides) {
       e.state = "gait";
       e.swing = false;
       e.script = e.anim.kind;
@@ -13849,7 +13737,7 @@ export function stepEnemies(): void {
       // script's kind into `obj+0x18`, so what the think dispatches on after
       // it is the reaction's own chain. A class whose chain goes somewhere
       // other than its gait says so with {@link FoeAnim.resume}, above
-      if (brain) install(e, e.anim);
+      install(e, e.anim);
       e.clock = 0;
     }
     /**
@@ -13922,24 +13810,6 @@ export function stepEnemies(): void {
         continue;
       }
     }
-    /**
-     * ...or it simply comes at you, which is what a bat does.
-     *
-     * `0x422f12` reads the brain's forward distance, clamps it to ±27 and writes
-     * it into `obj+0xc` — the velocity, not the territory. So a chaser leaves its
-     * rect the moment it wakes, and the rect was only ever the alarm.
-     */
-    // ...and not for a class with a machine of its own: the bat's `0x422ef0`
-    // never reads the player's x to move, and this homed it on top of that
-    if (foe.chases && !brain && !e.asleep && e.state === "gait") {
-      const dx = p.x - e.x;
-      const dy = p.y - p.feet - e.y;
-      const px = foe.chases.px;
-      e.facing = dx >= 0 ? 1 : -1;
-      e.x += Math.max(-px, Math.min(px, dx)) * TICK_SCALE;
-      if (foe.floats) e.y += Math.max(-px, Math.min(px, dy)) * TICK_SCALE;
-      continue;
-    }
     const i =
       e.state === "gait" && !e.swing
         ? loopIndex(e.anim, e.clock)
@@ -13966,13 +13836,10 @@ export function stepEnemies(): void {
      * about how a foe negotiates ground.
      */
     const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
-    // ...and a class that stands still stands still while it fights: its attack's
-    // own stride would otherwise walk it off the wall it reaches out of
-    const still = !brain && (e.fighting || e.swing) && !travels(foe);
     // it only builds speed on the frames it is actually walking. Off its feet or
     // rooted in a fight it keeps none, so nothing it could not spend is waiting
     // to be spent the moment it lands.
-    const rolling = !still && e.vx === 0 && (e.vy === 0 || foe.floats);
+    const rolling = e.vx === 0 && (e.vy === 0 || foe.floats);
     if (onFrame) {
       e.speed = rolling
         ? dragged(e.speed ?? 0, foe.drag ?? DRAG) +
@@ -14030,8 +13897,6 @@ export function stepEnemies(): void {
      * because that only runs on a thing with no velocity.
      */
     const lift = e.anim.dy?.[i] ?? 0;
-    // ...and a class with a machine of its own does not need {@link travels}
-    // to vouch for it: it installed the script that carries the lift
     /**
      * ...and it is ADDED, on every frame the cel shows, not set once.
      *
@@ -14043,7 +13908,7 @@ export function stepEnemies(): void {
      * −80 −80 over its divisor of ten against a gravity of ten, climbs about
      * ninety-six pixels, where setting its first −8 once climbed four.
      */
-    if (lift !== 0 && onFrame && (brain || travels(foe)) && !foe.floats) {
+    if (lift !== 0 && onFrame && !foe.floats) {
       // leaving the ground, it takes its walk with it...
       if (e.vy === 0 && e.vx === 0) e.vx = (step || 0) * e.facing;
       // ...and in the air the frame's own dx is pushed in with the lift
@@ -14079,7 +13944,7 @@ export function stepEnemies(): void {
      * often enough to mean what it says.
      */
     const SWEEP_PX = CLIMB_PX;
-    if (step !== 0 && !still && e.vx === 0 && (e.vy === 0 || foe.floats)) {
+    if (step !== 0 && e.vx === 0 && (e.vy === 0 || foe.floats)) {
       const total = step * e.facing;
       const parts = Math.max(1, Math.ceil(Math.abs(total) / SWEEP_PX));
       for (let part = 0; part < parts; part++) {
@@ -14105,42 +13970,18 @@ export function stepEnemies(): void {
           ground !== null &&
           ground < baseNow - CLIMB_PX &&
           reach === null;
-        // a flinch that travels is a knockdown: it goes the way it was hit and is
-        // not turned round by its own rect
         /**
-         * ...and a class with states of its own is not on a patrol.
+         * ...and nothing turns it at the edge of its rect, nor holds it there.
          *
-         * The rect is a territory for the things that walk up and down one; a boss
-         * hunts. Level eight's record is a **twenty-pixel box** at x1373, and
-         * turning it round at the edges of that pinned it there for ever — while
-         * its own state machine was asking it to close from a thousand away.
+         * The rect is the alarm, not a territory: every class runs a machine of
+         * its own, the stepper `0x42fd80` has no rect turn and clamps at no rect,
+         * and the rat's run `0x44e226` goes where it goes. Level eight's boss has
+         * a **twenty-pixel box** at x1373, and turning it round at the edges of
+         * that pinned it there for ever. The room is the only bound.
          */
-        // ...and a class in a FIGHT is not on a patrol either: its territory is
-        // where it noticed you, not where it may walk, and `0x44e580` reads no
-        // rect at all once `obj+0x18` is 1
-        // ...and a class with a state machine owns its facing: the stepper
-        // `0x42fd80` has no rect turn at all, so turning one here fought its
-        // brain, and a body already outside its rect turned every tick
-        if (
-          e.state === "gait" &&
-          !aim &&
-          !foe.drives &&
-          !brain &&
-          !e.fighting &&
-          (nx < e.left || nx > e.right)
-        ) {
-          // it reached its patrol edge: turn, and spend no more of this stride
-          // going the way it has just stopped going
-          e.facing = -e.facing;
-          break;
-        } else if (!blocked) {
+        if (!blocked) {
           const span = p.room ? roomSpan(p.room) : null;
-          // ...nor is a brain class held to its rect ±200: `0x42fd80` clamps
-          // at no rect, and the rat's run `0x44e226` goes where it goes
-          if (foe.drives || e.fighting || brain) e.x = span ? Math.max(span.lo, Math.min(span.hi, nx)) : nx;
-          // ...and never through where it already stands, so a foe walking
-          // home from a fight it followed you out of is not teleported
-          else e.x = Math.max(Math.min(e.left - 200, e.x), Math.min(Math.max(e.right + 200, e.x), nx));
+          e.x = span ? Math.max(span.lo, Math.min(span.hi, nx)) : nx;
         } else break; // it walked into a step it cannot climb: the rest is thrown away
         // ...and it is pinned HERE, not at the end of the whole stride, so it
         // meets a ledge where the ledge is and steps off it rather than over it
