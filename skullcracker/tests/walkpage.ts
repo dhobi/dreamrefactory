@@ -97,6 +97,8 @@ interface Page {
   hud: () => string;
   /** every `drawImage` the screen's context has been asked for */
   drawn: () => number;
+  /** every `fillRect` it has been asked for, as its four numbers */
+  fills: number[][];
   location: { search: string; href: string; origin: string };
   stored: Map<string, string>;
 }
@@ -107,6 +109,7 @@ async function openPage(query = "", opts: { mobile?: boolean; picker?: unknown; 
   const { document } = dom;
 
   let draws = 0;
+  const fills: number[][] = [];
   const screen = (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h });
   const ctx2d = new Proxy(
     {
@@ -114,6 +117,7 @@ async function openPage(query = "", opts: { mobile?: boolean; picker?: unknown; 
       getImageData: (_x: number, _y: number, w: number, h: number) => screen(w, h),
       measureText: (s: string) => ({ width: s.length * 6 }),
       drawImage: () => void draws++,
+      fillRect: (...r: number[]) => void fills.push(r),
     } as Record<string, unknown>,
     { get: (t, k) => (k in t ? t[k as string] : () => undefined), set: () => true },
   );
@@ -213,6 +217,7 @@ async function openPage(query = "", opts: { mobile?: boolean; picker?: unknown; 
     },
     hud: () => el("hud").textContent ?? "",
     drawn: () => draws,
+    fills,
     location,
     stored,
   };
@@ -588,5 +593,108 @@ describe.skipIf(!have)("every level", () => {
       expect(p.drawn()).toBeGreaterThan(before);
       expect(p.hud()).toMatch(/quota \d+ of \d+/);
     }
+  });
+});
+
+describe.skipIf(!have)("Boggs", () => {
+  it("draws VAT's boss whole, and names him and his machinery on the status line", async () => {
+    // beside the body, in chamber2, where tests/machine/vat.ts stands
+    const p = await openPage("?level=16&x=6100&damage=1");
+    await until(p, /· boggs \w+ cel \d+ at x\d+/);
+    const before = p.drawn();
+    p.frames(4);
+    // the machinery, the body, the arm, the jaws and the head: five at the least
+    expect(p.drawn() - before).toBeGreaterThanOrEqual(4 * 5);
+    expect(p.hud()).toMatch(/boggs \w+ cel \d+ at x\d+, y\d+, 4000\/4000hp, \+30 a frame · head \d+ tag \d+ · machine 3000\/3000@x\d+ 3000\/3000@x\d+ flags 11/);
+    expect(p.hud()).toContain("1 still to kill and Boggs still standing");
+  });
+
+  it("drops worms in front of him, and draws them", async () => {
+    const p = await openPage("?level=16&x=5950&damage=1");
+    for (let i = 0; i < 240 && !p.game.wormsHere().length; i++) p.frames();
+    expect(p.game.wormsHere().length).toBeGreaterThan(0);
+    const before = p.drawn();
+    p.frames(2);
+    expect(p.drawn()).toBeGreaterThan(before);
+  });
+
+  it("sweeps his first machine out at a player right of the body", async () => {
+    const p = await openPage("?level=16&x=6400&damage=1");
+    p.frames(2);
+    const b = p.game.hereOf((l) => l.boggs)[0];
+    // once the player has landed
+    for (let i = 0; i < 60 && b.zap.kind !== 1; i++) p.frames();
+    expect(b.zap.kind).toBe(1);
+    const before = p.drawn();
+    p.frames(4);
+    // the sweeping machine is drawn on top of the five that always are
+    expect(p.drawn() - before).toBeGreaterThan(4 * 5);
+  });
+
+  it("throws the wreck's balls, and is drawn dying", async () => {
+    const { BOGGS } = await import("../src/props");
+    const p = await openPage("?level=16&x=6100&damage=1");
+    p.frames(2);
+    const b = p.game.hereOf((l) => l.boggs)[0];
+    // the sixth machine wrecked, as tests/machine/vat.ts wrecks it
+    b.machines[BOGGS.drain.machine].hp = 1;
+    p.game.strikeMachine(b, BOGGS.drain.machine, 100);
+    let pops = 0;
+    for (let i = 0; i < 40; i++) {
+      p.frames();
+      pops = Math.max(pops, p.game.pops.length);
+    }
+    expect(pops).toBeGreaterThan(0);
+    b.hp = 0;
+    await until(p, /boggs dying cel \d+/, 10);
+  });
+});
+
+describe.skipIf(!have)("the scenery that moves", () => {
+  /**
+   * Where each level keeps its machinery, and what the status line calls it
+   * there: the opening of a level shows little of it, so "every level" above
+   * draws hardly any. Each spot is the first of its kind in the level's own
+   * lists, stood on with nothing to fight.
+   */
+  it.each([
+    ["MAZE's big guns", "?level=13&x=2167&y=6905", /biggun \w+\/\d y\d+ cel \d+/],
+    ["MAZE's fan", "?level=13&x=2062&y=7521", /fan v \w+ cel \d+ at x2200/],
+    ["BARREL's belts, chair and claws", "?level=14&x=4936&y=7828", /\d+ belts · chair \d+ cel \d+ at x3851 · claw \w+ cel \d+/],
+    ["CAVERN's bridge", "?level=10&x=5976&y=2391", /bridge \w+ cel \d+ at x5976/],
+    ["SEWER's barrels and pipe", "?level=7&x=3703&y=16603", /barrel at \d+,\d+ .*pipe at x4113/],
+    ["SEWER's lifts", "?level=7&x=7494&y=17244", /lift x7494 \w+ y\d+/],
+    ["ARCADE's sprinklers", "?level=8&x=462&y=8284", /7 sprinklers, \d+ up/],
+    ["TOWER's floors", "?level=12&x=16604&y=16420", /floor \w+ cel \d+ at x16604/],
+  ])("draws %s and names it", async (_what, query, says) => {
+    const p = await openPage(`${query}&foes=0`);
+    await until(p, says, 60);
+    const before = p.drawn();
+    p.frames(3);
+    expect(p.drawn()).toBeGreaterThan(before);
+  });
+});
+
+describe.skipIf(!have)("what a level does by itself", () => {
+  it("fires CITY's probe as the player walks into it, and draws the flypast off the player's own book", async () => {
+    // the mode-0 record, rect 2240,7930,2600,8000 — tests/machine/city.ts
+    const p = await openPage("?level=2&x=7960&y=2400&foes=0");
+    await until(p, /tag0@-?\d+,\d+ cel 2020[0-7]/, 40);
+    const before = p.drawn();
+    p.frames(2);
+    expect(p.drawn()).toBeGreaterThan(before);
+  });
+
+  it("flashes TOWER's lightning over the view, once a period", async () => {
+    const p = await openPage("?level=12&x=17814&y=14755&foes=0");
+    await until(p, /lightfx \d+\/201/, 20);
+    // the screen is cleared whole every frame; anything else filled is the flash
+    const flashes = (): number => p.fills.filter((r) => r[0] !== 0 || r[1] !== 0).length;
+    expect(flashes()).toBe(0);
+    for (let i = 0; i < 202 * 2 && !flashes(); i++) p.frames();
+    expect(flashes()).toBe(1);
+    // ...and the next frame is not flashed again
+    p.frames(3);
+    expect(flashes()).toBe(1);
   });
 });
