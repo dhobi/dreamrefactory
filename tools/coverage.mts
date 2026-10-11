@@ -25,7 +25,7 @@ const OUT = resolve(ROOT, "coverage");
 /** what gets a badge: the directory measured and the name on the badge; the
  * README's row title says it is coverage, so the badge does not */
 const BADGES = [
-  { key: "engine", dir: "engine/src/", label: "engine" },
+  { key: "engine", dir: "engine/src/", label: "Engine" },
   { key: "taoot", dir: "taoot/src/", label: "Titanic" },
   { key: "dust", dir: "dust/src/", label: "Dust" },
   { key: "timelapse", dir: "timelapse/src/", label: "Timelapse" },
