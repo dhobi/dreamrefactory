@@ -120,6 +120,9 @@ export class MoviePlayer {
     /** ms per frame; 0 = wait for clicks (click-through object movies) */
     interval: number;
     lastTick: number;
+    /** deadline is established when the selected frame is entered. */
+    deadline: number | null;
+    deadlinePending: boolean;
     /** frame indices for actionframe(1)/(2) (-1 = none); see recordAction */
     actionFrame1: number;
     actionFrame2: number;
@@ -441,6 +444,8 @@ export class MoviePlayer {
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,
+      deadline: null,
+      deadlinePending: true,
       actionFrame1: seg.actionFrame1
         ? (frameByName.get(seg.actionFrame1.toLowerCase()) ?? -1)
         : -1,
@@ -681,9 +686,22 @@ export class MoviePlayer {
   private enter(idx: number): void {
     const m = this.active!;
     m.pos = idx;
+    m.deadlinePending = true;
     this.recordAction(idx);
     const sound = m.meta[idx].sound;
     if (sound && sound !== this.clickSound) this.playSound(sound);
+  }
+
+  /** TI.EXE: 0x4455ef selects the logic;
+   * 0x446e54..0x446e8d then schedules THAT frame before the wait loop.
+   * Keep the other format families on their existing scheduler. */
+  private scheduleFrame(now: number): void {
+    const m = this.active;
+    if (!m || m.seg.dfV0 || m.seg.dfV1 || m.seg.dfV5 || !m.deadlinePending) return;
+    if (m.deadline === null || m.pos === 0 || !m.meta[m.pos].holdsDeadline)
+      m.deadline = now;
+    m.deadline += frameHoldMs(m.seg, m.pos);
+    m.deadlinePending = false;
   }
 
   /**
@@ -800,6 +818,7 @@ export class MoviePlayer {
     // deck washes and the fires loop: the last frame of the cycle carries a
     // backward `goto` nothing would ever reach if the frame stopped for its own
     // click rect. See MovFrame.playsThroughRegions.
+    this.scheduleFrame(now);
     const waits = frameWaits(m.seg, m.pos);
     if (m.interval > 0 && !waits) {
       if (!m.lastTick) m.lastTick = now;
@@ -807,7 +826,7 @@ export class MoviePlayer {
       // see mov-pace.frameHoldMs. `interval` still decides whether this movie is
       // self-paced at all (0 = a click-through close-up).
       const hold = frameHoldMs(m.seg, m.pos);
-      if (now - m.lastTick >= hold) {
+      if (m.deadline !== null ? now >= m.deadline : now - m.lastTick >= hold) {
         // ...and a frame may be authored to wait for the SPOKEN LINE as well
         // (flags bit 0). What it waits on is the original's VOICE channel, which
         // is where `voicesound()` puts a line — in this port that is the movie's
@@ -828,6 +847,7 @@ export class MoviePlayer {
         // run the region-less frame's own auto-action (step/chain/exit)
         const f = m.meta[m.pos];
         this.action(f.type, f.target, f.event);
+        this.scheduleFrame(now);
       }
     }
     return this.active ? this.active.frames[this.active.pos] : null;
