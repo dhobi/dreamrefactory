@@ -131,9 +131,10 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   // one tick is a bare `while stilldown() endwhile`, with no forceupdate; that
   // waits a tick, or it would spin the page. Judged by the game's ticks, not by
   // who else yielded a frame, so it answers the same way on every machine.
+  // Under stepped time only: normal play still waits its frame on every ask.
   r("stilldown", async () => {
     session.inputPolled();
-    if (ticksAt(session.clock.now) === stilldownTick) await session.clock.sleep(16);
+    if (!session.clock.ticked || ticksAt(session.clock.now) === stilldownTick) await session.clock.sleep(16);
     stilldownTick = ticksAt(session.clock.now);
     if (session.hasRealFrames) session.realYieldSeq++;
     return session.pointerDown ? 1 : 0;

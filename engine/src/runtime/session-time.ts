@@ -163,6 +163,7 @@ export class SessionTime {
    * first whole pass in one run's total and not in another's (#542).
    */
   private steppingSwitched(): void {
+    this.session.clock.ticked = this.nominal || this.sheet;
     if ((this.nominal || this.sheet) && this.stepAnchor === null) this.startStepping(this.realNow);
   }
 

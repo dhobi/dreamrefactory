@@ -177,6 +177,7 @@ export const TICK_MS = 50 / 3;
  * 5.6 s.
  */
 export function frameHoldMs(mov: MovSegment, frameIdx: number): number {
+  if (!mov.frames[frameIdx]) return NATIVE_FRAME_MS;
   return frameHoldTicks(mov, frameIdx) * TICK_MS;
 }
 
