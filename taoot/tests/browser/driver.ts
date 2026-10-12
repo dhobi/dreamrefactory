@@ -150,6 +150,7 @@ const AIM_ADAPTER = `(() => {
     hitTest: (x, y) => s.hitTestAt(x, y),
     propUnder: (x, y) => { const p = v.propUnder(x, y); return p ? p.group.name : null; },
     inFlat: !s.viewShowing && !!s.stageScript,
+    boxes: (n) => s.thingBoxes(n),
     hotspot: (name) => {
       const obj = v.scene.views[v.viewIdx].objects.find(
         (o) => (o.identifier || "").toLowerCase() === name.toLowerCase());

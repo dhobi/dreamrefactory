@@ -540,6 +540,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
           },
           inFlat: !s.viewShowing && !!s.stageScript,
           where: (n: string) => flatWhere(s, n),
+          boxes: (n: string) => s.thingBoxes(n),
           hotspot: (n: string) => {
             const obj = v.scene.views[v.viewIdx].objects.find(
               (o: { identifier?: string }) => (o.identifier || "").toLowerCase() === n.toLowerCase(),

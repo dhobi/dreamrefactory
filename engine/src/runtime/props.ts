@@ -926,6 +926,20 @@ export class PropRuntime {
     };
   }
 
+  /** where the props called `name` (or of the group called it) are drawn: see Session.thingBoxes */
+  boxesOf(name: string, cam: WorldCamera | null): { x: number; y: number; w: number; h: number }[] {
+    const named = (p: PropInstance) => (p.name ?? "").toLowerCase() === name || (p.group?.name ?? "").toLowerCase() === name;
+    const out: { x: number; y: number; w: number; h: number }[] = [];
+    for (const p of this.drawList(false)) {
+      if (!named(p)) continue;
+      const f = p.shop.frame(p.currentFrame(p.state()!));
+      const at = p.screenCorner(f, this.origin);
+      out.push({ x: at.x, y: at.y, w: f.width, h: f.height });
+    }
+    if (cam) for (const { p, proj } of this.worldDrawList(cam)) if (named(p)) out.push(this.worldRect(p, proj, cam));
+    return out;
+  }
+
   /** front-most visible prop whose opaque pixels cover (x, y) */
   propAt(
     x: number,
