@@ -1260,7 +1260,8 @@ export class SetViewer implements RoomLayer {
     const f = this.current;
     if (!f?.z) return null;
     const levels = this.set.zLevelCount || 24;
-    const scale = this.set.zFarMax / levels;
+    // an integer, as TI.EXE's `idiv` at 0x4077e1 leaves it (64 on every Dust set)
+    const scale = Math.trunc(this.set.zFarMax / levels);
     if (Number.isNaN(scale) || scale <= 0) return null;
     return {
       z: f.z, w: f.width, h: f.height, scale, levels,
@@ -1322,6 +1323,19 @@ export class SetViewer implements RoomLayer {
       cy: h / 2,
       clipW: w,
       clipH: h,
+      depthWindow: this.depthWindow(),
+    };
+  }
+
+  /** see WorldCamera.depthWindow: v1 sets carry a camera setback, v4 sets do not */
+  private depthWindow(): { minDepth: number; far: number; bias: number } | undefined {
+    const levels = this.set.zLevelCount;
+    if (!this.set.zFarMax || !levels) return undefined;
+    const v1 = this.set.cameraSetback !== undefined;
+    return {
+      minDepth: v1 ? 32 : Math.trunc(Math.trunc(this.set.zFarMax / levels) / 4) + 1,
+      far: this.set.zFarMax,
+      bias: this.set.spriteZBias ?? 0,
     };
   }
 

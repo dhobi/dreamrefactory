@@ -176,15 +176,8 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
      * it: read as frame 0's box, every touch was glyph 0, and the tablets could
      * not be read.
      */
-    const f = p.shop.frame(p.currentFrame(st));
-    const { x: x0, y: y0 } = p.screenCorner(f);
     const pt = toNum(point ?? 0);
-    const x = pointX(pt), y = pointY(pt);
-    if (!(x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height)) return 0;
-    let lx = x - x0;
-    const ly = y - y0;
-    if (p.flip & 1) lx = f.width - 1 - lx;
-    return f.opaque[ly * f.width + lx] ? 1 : 0;
+    return session.propRuntime.covers(p, pointX(pt), pointY(pt), session.activeCamera()) ? 1 : 0;
   });
   // trackbut(bevel, x, y) is NOT a builtin: it is a BOOTFILE library code
   // TAOOT ships (0002), and every one of its ~50 call sites is a button region's

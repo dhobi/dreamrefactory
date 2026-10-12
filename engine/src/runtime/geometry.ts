@@ -32,6 +32,22 @@ export interface WorldCamera {
    * here, {@link projectPoint} and the sprite runtimes' sizing ask it instead.
    */
   v5?: SpriteCamera;
+  /**
+   * The depths a world sprite is drawn at, at all: outside them the engines make
+   * no draw record, so the sprite is neither seen nor hit. DF.EXE draws from
+   * depth 32 (0x41e828); TI.EXE and tl.exe from past a quarter of the set's
+   * depth step (0x411242, `scale` being SCDO's zFarMax / zLevelCount, an integer
+   * there). Both stop where depth less zclip, plus the ground bias, passes the
+   * set's zFarMax (DF.EXE 0x41e834, 0x600 on every Dust set; TI.EXE 0x411262).
+   */
+  depthWindow?: { minDepth: number; far: number; bias: number };
+}
+
+/** is a sprite at `depth` with `zclip` inside the camera's {@link WorldCamera.depthWindow}? */
+export function inDepthWindow(cam: WorldCamera, depth: number, zclip: number): boolean {
+  const w = cam.depthWindow;
+  if (!w) return true;
+  return depth >= w.minDepth && Math.max(0, depth - zclip + w.bias) <= w.far;
 }
 
 /** RedJack.exe's sprite camera (engine/src/runtime/maze.ts builds it) */

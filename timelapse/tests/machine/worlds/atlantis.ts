@@ -167,11 +167,9 @@ export async function robot(h: Headless): Promise<void> {
   const rt = h.session.propRuntime;
   const pixel = (name: string): ((x: number, y: number) => boolean) => {
     const p = rt.get(name);
-    const st = p?.state();
-    if (!p?.visible || !st) return () => false;
-    const f = p.shop.frame(p.currentFrame(st));
-    const { x: x0, y: y0 } = p.screenCorner(f);
-    return (x, y) => x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height && !!f.opaque[(y - y0) * f.width + (x - x0)];
+    if (!p?.visible) return () => false;
+    // the engine's own point test (see anasazi.ts pictureOf), not a copy of it
+    return (x, y) => rt.covers(p, x, y, null);
   };
   const trap = h.session.stageCtrl.flatRegion("Z0001.196", "StasisActivate") ?? fail("no target in the ceiling");
   for (let shots = 0; h.g("gBaSolved") !== "1"; shots++) {

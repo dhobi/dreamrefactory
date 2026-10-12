@@ -138,3 +138,29 @@ export function scalerCases(seed: number, count: number): ScalerCase[] {
   }
   return cases;
 }
+
+/**
+ * Points to ask the engines' point tests about, for case `c`: 24 around the box
+ * it is drawn into (`scaled`) and 24 around its 1:1 box (`plain`), each reaching
+ * two pixels past every side so the box edges are asked about too.
+ */
+export function hitPoints(
+  c: ScalerCase,
+  seed: number,
+): { scaled: [number, number][]; plain: [number, number][] } {
+  const r = rng(seed);
+  const v = new DataView(c.sprite.buffer, c.sprite.byteOffset, c.sprite.byteLength);
+  const h = v.getInt16(0, true);
+  const w = v.getInt16(2, true);
+  const posY = v.getInt16(4, true);
+  const posX = v.getInt16(6, true);
+  const anchorX = c.flip ? w - posX : posX;
+  const around = (left: number, top: number, bw: number, bh: number): [number, number][] =>
+    Array.from({ length: 24 }, () => [left - 2 + r(bw + 4), top - 2 + r(bh + 4)]);
+  const left = c.ax - Math.trunc((anchorX * c.dw) / w);
+  const top = c.ay - Math.trunc((posY * c.dh) / h);
+  return {
+    scaled: around(left, top, c.dw, c.dh),
+    plain: around(c.ax - anchorX, c.ay - posY, w, h),
+  };
+}

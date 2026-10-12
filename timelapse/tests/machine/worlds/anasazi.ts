@@ -161,11 +161,11 @@ type Rect = { x: number; y: number; w: number; h: number };
 type Hit = (x: number, y: number) => boolean;
 function pictureOf(h: Headless, name: string): Hit {
   const p = h.session.propRuntime.get(name);
-  const st = p?.state();
-  if (!p || !st) return () => false;
-  const f = p.shop.frame(p.currentFrame(st));
-  const { x: x0, y: y0 } = p.screenCorner(f);
-  return (x, y) => x >= x0 && x < x0 + f.width && y >= y0 && y < y0 + f.height && !!f.opaque[(y - y0) * f.width + (x - x0)];
+  if (!p) return () => false;
+  // the engine's own answer, not a copy of it: TI.EXE's point test answers each
+  // column for the one before it (sprite-scaler.ts), and a copy that did not
+  // knew of a flight through the hole that the game does not
+  return (x, y) => h.session.propRuntime.covers(p, x, y, null);
 }
 
 /** `arrowflight`, flown: does it go through the hole? */

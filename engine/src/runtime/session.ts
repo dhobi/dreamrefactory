@@ -1598,8 +1598,19 @@ export class GameSession {
    * scripts load. Only what the scripts' ids MEAN hangs on it — a handful of
    * ids v5 gave new jobs (see engine/src/df/opcodes.ts); the rooms announce
    * themselves ({@link maze}).
+   *
+   * The sprite runtimes hear it too: the point tests before v5 are the engines'
+   * own (sprite-scaler.ts), and v5's are not ported from those.
    */
-  isV5 = false;
+  get isV5(): boolean {
+    return this.v5;
+  }
+  set isV5(v: boolean) {
+    this.v5 = v;
+    this.actorRuntime.v5 = v;
+    this.propRuntime.v5 = v;
+  }
+  private v5 = false;
 
   /** is this a DreamFactory 1 game? — see {@link dfVersion} */
   get isV1(): boolean {
