@@ -293,7 +293,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     session.fade.pendingReveal = false;
     // a ramp is a ramp of a named palette — see GameSession.fade.blanked
     session.fade.blanked = false;
-    if (session.hasRealFrames || session.modalMovies) await session.clock.sleep((n * 50) / 3);
+    if (session.hasRealFrames || session.modalMovies) await session.transitionCtrl.ramp((n * 50) / 3);
   };
   r("screentoblack", (_i, [, steps]) => fade(1, steps));
   /**
@@ -529,7 +529,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // and a poll on real milliseconds makes the headless oracle non-deterministic.
     return (async () => {
       const cap = session.wipe.steps * 4 + 60;
-      for (let i = 0; i < cap && session.wiping; i++) await session.nextFrame();
+      for (let i = 0; i < cap && session.wiping; i++) await session.frameWait();
       // Gave up (the host stopped ticking): never leave a reveal holding the
       // screen. But ONLY then — a wipe that finished was ended by tickWipe, and
       // a half turn that finished has SETTLED, which must survive this return:

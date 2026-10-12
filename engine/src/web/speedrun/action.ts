@@ -52,6 +52,13 @@ export interface ActionContext {
   /** a sheet line this action would like to see replace it, for `travel` */
   suggest(line: string): void;
   /**
+   * This line, as it ran, does not make a valid time — what {@link Action.voidsTime}
+   * says for a whole verb, said by a verb that only sometimes does it: `stand`
+   * when it falls through to the planner (#542). Optional: a watch's action and
+   * the workbench's previews never void.
+   */
+  voidTime?(): void;
+  /**
    * The vocabulary this run was started with — the core plus the game's.
    *
    * Here rather than imported, and that is the whole seam: `watchFor` PARSES its

@@ -21,8 +21,8 @@
  *
  * ## It does NOT home on the player, and that is the headline
  *
- * The page currently drives this class through {@link Foe.chases}, whose whole
- * reading is one instruction misread: `0x422f0e`..`0x422f26` is
+ * The page once drove this class through a `chases` field on its {@link Foe},
+ * whose whole reading was one instruction misread: `0x422f0e`..`0x422f26` is
  *
  * ```
  *   mov  ax, word ptr [esi+0xc]        ; READ the horizontal velocity
@@ -33,9 +33,9 @@
  * ```
  *
  * — a **clamp on `obj+0xc`**, the first thing the think does, every frame,
- * whatever state it is in. It never reads the player's x at all. `Foe.chases`
+ * whatever state it is in. It never reads the player's x at all. `chases`
  * took the 27 to be "the brain's reading of how far ahead the player is,
- * clamped to ±px and written straight into `obj+0xc`", and flies the thing at
+ * clamped to ±px and written straight into `obj+0xc`", and flew the thing at
  * the player on both axes at a fixed rate. Nothing in `0x422ef0` does that.
  *
  * What the class actually does is fly **flat, in the direction it faces**, and

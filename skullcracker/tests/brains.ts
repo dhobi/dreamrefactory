@@ -21,6 +21,7 @@ import { batboy, BATBOY } from "../src/brains/batboy";
 import { maskboy, MASKBOY } from "../src/brains/maskboy";
 import { ox, OX, oxReacts } from "../src/brains/ox";
 import { tube, TUBE, TUBE_BREATH, TUBE_SHARDS } from "../src/brains/tube";
+import { BRAINS } from "../src/brains";
 import { FOES } from "../src/foes";
 
 /** a context whose dice are a queue, and which writes down what it is asked */
@@ -490,5 +491,13 @@ describe("initmaskboy (0x438760)", () => {
     e.clock = 4;
     think(e, ctx({ band: 3 }, [NO_ROLLER]).k, 4);
     expect(on(e)).toEqual([MASKBOY.guard[0].kind, MASKBOY.guard[0].tag]);
+  });
+});
+
+describe("every class", () => {
+  // game.ts's stepFight hands the frame to the class's own machine and has no
+  // reading of its own to fall back on: a class without one would stand still
+  it("has a machine of its own", () => {
+    expect(Object.keys(FOES).filter((kind) => !BRAINS[kind])).toEqual([]);
   });
 });

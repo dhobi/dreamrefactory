@@ -15,7 +15,7 @@
 import type { Page } from "playwright";
 import { ACTIONS, type PlannerFn } from "../../src/speedrun/actions";
 
-export const playwrightPlanner: PlannerFn = async (c, method, target) => {
+const plan: PlannerFn = async (c, method, target) => {
   const page = c.d.page as Page | undefined;
   if (!page) throw new Error(`${method} needs a Playwright page`);
   const { browserDriver } = await import("../browser/driver");
@@ -143,4 +143,41 @@ export const playwrightPlanner: PlannerFn = async (c, method, target) => {
   })()`);
   c.say(`${lines.length} gestures, ends at ${at}`);
   c.suggest([...lines, `face ${String(at).split("/")[1]}   # pin the arrival facing`].join("\n"));
+};
+
+/**
+ * The planner, on the wall clock and off the record (#542).
+ *
+ * The Navigator waits on the page by its own polls ("has the turn settled?"),
+ * not through a sheet's holds, and under a sheet's clock the game moves only
+ * inside a hold — so every turn it made stood still until the poll gave up.
+ * It is an escape hatch whose job is to print the literal lines that replace
+ * it, not to be timed: so the clock follows real time while it works, and the
+ * run says it is not a valid time, as `load()` does.
+ */
+export const playwrightPlanner: PlannerFn = async (c, method, target) => {
+  c.voidTime?.();
+  const page = c.d.page as Page | undefined;
+  const was = page
+    ? await page.evaluate(() => {
+        const s = (window as unknown as { dbg?: { session: { nominalTime: boolean; sheetClock: boolean } } }).dbg?.session;
+        if (!s) return null;
+        const clocks = { nominalTime: s.nominalTime, sheetClock: s.sheetClock };
+        s.sheetClock = false;
+        s.nominalTime = false;
+        return clocks;
+      })
+    : null;
+  try {
+    await plan(c, method, target);
+  } finally {
+    if (page && was) {
+      await page.evaluate((w) => {
+        const s = (window as unknown as { dbg?: { session: { nominalTime: boolean; sheetClock: boolean } } }).dbg?.session;
+        if (!s) return;
+        s.nominalTime = w.nominalTime;
+        s.sheetClock = w.sheetClock;
+      }, was);
+    }
+  }
 };

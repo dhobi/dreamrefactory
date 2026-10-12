@@ -58,7 +58,8 @@ import { join } from "node:path";
 // taoot/src/speedrun/driver.ts now, because the in-page runner needs exactly the same
 // ones — see there for what each mode waits on and why KEY_SAFE is not optional.
 import {
-  HELD_YIELDS,
+  heldTurnExpr,
+  READY_TO_LOOK,
   KEY_SAFE,
   QUEUE_EMPTY,
   QUIET,
@@ -369,6 +370,7 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
         const deadline = Date.now() + budget;
         let pressed = 0;
         for (;;) {
+          await page.waitForFunction(READY_TO_LOOK, null, { timeout: budget }).catch(() => undefined);
           if (await evaluate<boolean>(`(() => !!(${until}))()`)) return pressed;
           if (Date.now() > deadline) {
             throw new Error(`stuck waiting for ${what}: ${pressed} presses of ${name} in ${budget} ms`);
@@ -467,11 +469,9 @@ export async function speedrunDriver(page: Page, opts: SpeedrunDriverOptions = {
         budget = timeout,
       ): Promise<void> => {
         const from = await pagePoint(at.x, at.y);
-        const seq = () => evaluate<number>("window.dbg.session.realYieldSeq");
         // one turn of the control's `while stilldown()` loop — see HELD_YIELDS
         const held = async (): Promise<void> => {
-          const was = await seq();
-          await tryHold(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
+          await tryHold(heldTurnExpr(), Math.min(budget, 20_000));
         };
         await page.mouse.move(from.x, from.y);
         await page.mouse.down();

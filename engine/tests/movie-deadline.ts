@@ -20,7 +20,7 @@ const PALETTE = new Uint8Array([
   255, 255, 255,
 ]);
 
-function openMovie(flags: number[], target = "", holds = [0, 0, 0, 0]): MoviePlayer {
+function openMovie(flags: number[], target = "", holds = [0, 0, 0, 0], ticked = false): MoviePlayer {
   const pixels = new Uint8Array(4).fill(1);
   const bytes = buildMovBytes({
     palette: PALETTE,
@@ -39,6 +39,7 @@ function openMovie(flags: number[], target = "", holds = [0, 0, 0, 0]): MoviePla
     new NullAudioSink(),
   );
   session.onLog = () => {};
+  session.clock.ticked = ticked;
   const player = new MoviePlayer(session, () => {});
   player.onLog = () => {};
   void player.play(FILE);
@@ -97,5 +98,14 @@ test("the selected frame uses its own longer authored hold", () => {
   player.tick(100); player.tick(200); player.tick(299);
   expect(player.framePos).toBe(1);
   player.tick(301);
+  expect(player.framePos).toBe(2);
+});
+
+test("under stepped time the running deadline is kept in ticks (#542)", () => {
+  const player = openMovie([0, 8, 8, 0], "", [0, 0, 0, 0], true);
+  player.tick(0); // frame 0: deadline tick 4
+  player.tick(100); // tick 6, late: frame 1, deadline 4 + 4 = tick 8, not 6 + 4
+  expect(player.framePos).toBe(1);
+  player.tick(134); // tick 8
   expect(player.framePos).toBe(2);
 });

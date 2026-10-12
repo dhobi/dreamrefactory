@@ -177,9 +177,25 @@ export const TICK_MS = 50 / 3;
  * 5.6 s.
  */
 export function frameHoldMs(mov: MovSegment, frameIdx: number): number {
+  if (!mov.frames[frameIdx]) return NATIVE_FRAME_MS;
+  return frameHoldTicks(mov, frameIdx) * TICK_MS;
+}
+
+/**
+ * {@link frameHoldMs} in the unit the original counts it in, ticks. TI.EXE's
+ * film loop (0x448b00) sets each frame's deadline to now + max(hold, floor)
+ * (0x44aa2b) — or, on a flags-bit-3 frame past frame 0, the running deadline +
+ * max(hold, floor) (MovFrame.holdsDeadline, MoviePlayer.scheduleFrame) — and spins on the tick clock until it passes (0x449263); it never
+ * goes through the `framerate` throttle, so a 1-tick film plays at 60 a second
+ * (the smokestack's STACKUP.MOV). A player
+ * that compares ticks rather than milliseconds holds a 1-tick frame for exactly
+ * one tick on a clock read in whole milliseconds, where `now - last >= 16.67`
+ * misses the tick that is 16 ms long (#542).
+ */
+export function frameHoldTicks(mov: MovSegment, frameIdx: number): number {
   const f = mov.frames[frameIdx];
-  if (!f) return NATIVE_FRAME_MS;
-  return Math.max(f.holdTicks, mov.minHoldTicks) * TICK_MS;
+  if (!f) return NATIVE_FRAME_MS / TICK_MS;
+  return Math.max(f.holdTicks, mov.minHoldTicks);
 }
 
 /**
