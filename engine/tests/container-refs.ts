@@ -169,6 +169,11 @@ test("every cast names a main script container that holds one", () => {
  *
  * This is what found the German `bsea2.pup` — a Macintosh build in a Windows rip,
  * whose fields `readPupFile` was reading the wrong way round.
+ *
+ * Its own timeout, because the cost is the disk: 390 puppets across every Titanic
+ * edition come to 1.57 GB, read in about a second from the page cache and parsed
+ * in a fifth of one, but cold, and with other suites reading their rips beside it,
+ * the reading alone ran past vitest's 30 seconds.
  */
 test("every puppet reads, and the stances its lines name draw something", () => {
   const files = corpus(/\.pup$/i);
@@ -201,4 +206,4 @@ test("every puppet reads, and the stances its lines name draw something", () => 
   }
   if (short.length) console.warn(`${short.length} truncated .pup skipped: ${short.join(", ")}`);
   expect(bad, `${files.length} puppets`).toEqual([]);
-});
+}, 300_000);

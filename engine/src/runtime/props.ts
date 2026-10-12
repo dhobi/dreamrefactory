@@ -4,6 +4,7 @@ import {
   WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha,
   inkPixel,
 } from "./geometry";
+import { drawScaledSprite, scaledOrigin, worldSpriteSize } from "./sprite-scaler";
 import type { DrawSignature } from "./signature";
 import { TURN } from "../df/sett";
 
@@ -899,6 +900,13 @@ export class PropRuntime {
     const st = p.state()!;
     const idx = this.worldFrameIdx(p, st.frames.length, cam);
     const f = p.shop.frame(st.frames[idx]);
+    if (!cam.v5) {
+      // DreamFactory 1 and 4 size and place it in integers (sprite-scaler.ts);
+      // a sprite that comes out 0 pixels on either axis draws nothing
+      const { dw, dh } = worldSpriteSize(p.scale, st.refScales[idx] ?? 96, f, proj.depth);
+      const o = scaledOrigin(f, proj.x, proj.y, dw, dh, !!(p.flip & 1));
+      return { f, k: dw / f.width, x: o.left, y: o.top, w: Math.max(0, dw), h: Math.max(0, dh), scaled: true as const };
+    }
     // TI.EXE world→screen: k = propscale(per-mille) × refScale / (1000 × depth).
     // refScale is the frame record's i16 @+42 (uniformly 96 across TAOOT's shipped
     // shops — the same field GANG.CST stores for actors); a hardcoded fit such as
@@ -1112,6 +1120,16 @@ export class PropRuntime {
     if (r.f.palette) paletteRGBA = r.f.palette;
     paletteRGBA = brightPalette(paletteRGBA, p.bright);
     const a = inkAlpha(p.ink);
+    if ("scaled" in r) {
+      if (r.w <= 0 || r.h <= 0) return;
+      const pal = paletteRGBA;
+      drawScaledSprite(r.f, proj.x, proj.y, r.w, r.h, !!(p.flip & 1), {
+        clip: { top: 0, left: 0, bottom: Math.min(cam.clipH, height), right: Math.min(cam.clipW, width) },
+        drawable: occ ? (x, y) => !sceneryOccludes(occ, x, y, level) : undefined,
+        plot: (x, y, c) => inkPixel(rgba, (y * width + x) * 4, pal, c * 4, a),
+      });
+      return;
+    }
     for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
       let sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
       if (p.flip & 2) sy = r.f.height - 1 - sy;

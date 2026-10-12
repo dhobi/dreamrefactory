@@ -5,6 +5,7 @@ import {
   WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
 } from "./geometry";
 import type { DrawSignature } from "./signature";
+import { drawScaledSprite, scaledOrigin, worldSpriteSize } from "./sprite-scaler";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
 // viewer.ts's import("./engine/actors").Occlusion keeps resolving.
@@ -492,6 +493,14 @@ export class ActorRuntime {
   rect(a: ActorInstance, proj: { x: number; y: number; depth: number }, cam: WorldCamera) {
     const f = this.frameFor(a, cam);
     if (!f) return null;
+    if (!cam.v5) {
+      // DreamFactory 1 and 4 size and place it in integers (sprite-scaler.ts), and
+      // a sprite that comes out 0 pixels on either axis is not drawn
+      const { dw, dh } = worldSpriteSize(a.scale * ACTOR_SCALE_CORRECTION, this.refScale(a), f, proj.depth);
+      if (dw <= 0 || dh <= 0) return null;
+      const o = scaledOrigin(f, proj.x, proj.y, dw, dh, !!(a.flip & 1));
+      return { f, k: dw / f.width, x: o.left, y: o.top, w: dw, h: dh, scaled: true as const };
+    }
     // a v5 room sizes it as it does a prop (RedJack.exe's 0x406bf0 is 0x42caa0's
     // twin), lowered by the actor record's +0x50 — its cast member's (CastMember.depthRef)
     const k = cam.v5
@@ -599,6 +608,16 @@ export class ActorRuntime {
     if (r.f.palette) paletteRGBA = r.f.palette;
     paletteRGBA = brightPalette(paletteRGBA, a.bright);
     const alpha = inkAlpha(a.ink);
+    if ("scaled" in r) {
+      const pal = paletteRGBA;
+      drawScaledSprite(r.f, proj.x, proj.y, r.w, r.h, !!(a.flip & 1), {
+        clip: { top: 0, left: 0, bottom: Math.min(cam.clipH, height), right: Math.min(cam.clipW, width) },
+        // scenery in front of the actor hides this pixel (SET Z image)
+        drawable: occ ? (x, y) => !sceneryOccludes(occ, x, y, level) : undefined,
+        plot: (x, y, c) => inkPixel(rgba, (y * width + x) * 4, pal, c * 4, alpha),
+      });
+      return;
+    }
     const maxY = Math.min(cam.clipH, height, r.y + r.h);
     const maxX = Math.min(cam.clipW, width, r.x + r.w);
     for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
