@@ -39,7 +39,43 @@ export class SessionTransitions {
      * {@link tickFade}.
      */
     blanked: false,
+    /**
+     * Scripts blocked inside a fade ramp right now (builtins/scene.ts `fade`).
+     * TI.EXE's ramp (0x435b90 / 0x435be0) blends the palette and spins on the
+     * tick clock with no pass inside it, so nothing else runs until it is over:
+     * no pass, no prop step, no walk, no other script. The deck map's `open`
+     * view stands on one frame through the 240-step fade back into the engine
+     * room, and only `close()` after it animates (#541).
+     */
+    ramping: 0,
+    /** what waits for the ramp to be over — see {@link untilRampEnds} */
+    afterRamp: [] as (() => void)[],
   };
+
+  /**
+   * Resolves once no script is blocked in a fade ramp — at once when none is.
+   * A script waiting on a frame waits on this too: in TI.EXE nothing but the
+   * ramp runs until it is done.
+   */
+  untilRampEnds(): Promise<void> {
+    if (!this.fade.ramping) return Promise.resolve();
+    return new Promise((resolve) => this.fade.afterRamp.push(resolve));
+  }
+
+  /** a script enters a blocking fade ramp of `ms` and leaves it (builtins/scene.ts) */
+  async ramp(ms: number): Promise<void> {
+    const f = this.fade;
+    f.ramping++;
+    this.session.clock.rampOnly = true;
+    try {
+      await this.session.clock.sleep(ms, true);
+    } finally {
+      if (--f.ramping === 0) {
+        this.session.clock.releaseHeld();
+        for (const w of f.afterRamp.splice(0)) w();
+      }
+    }
+  }
   /**
    * A reveal in progress: the screen the game is LEAVING, uncovered a step at a
    * time by the screen it is arriving at (`visualeffect(wipeleft|wiperight, n)`).

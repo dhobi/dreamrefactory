@@ -142,7 +142,13 @@ export class Clock {
    * count ms as they always have — normal play paces exactly as before.
    */
   ticked = false;
-  private waiters: { at: number; ticks: boolean; resolve: () => void }[] = [];
+  /**
+   * A script is blocked in a fade ramp: only the ramp's own sleep may end. TI.EXE
+   * runs nothing else until the ramp is over (builtins/scene.ts `fade`, #541) —
+   * every other sleep that came due meanwhile ends on the first advance after.
+   */
+  rampOnly = false;
+  private waiters: { at: number; ticks: boolean; ramp: boolean; resolve: () => void }[] = [];
 
   /**
    * Wake after `ms`, counted in TICKS: the deadline is the tick now plus the
@@ -153,19 +159,31 @@ export class Clock {
    * which differed between two runs of one sheet (#542). Only under stepped
    * time ({@link ticked}); otherwise the deadline is `now + ms`.
    */
-  sleep(ms: number): Promise<void> {
+  sleep(ms: number, ramp = false): Promise<void> {
     if (ms <= 0) return Promise.resolve();
     const ticks = this.ticked;
     const at = ticks ? ticksAt(this.now) + ticksFor(ms) : this.now + ms;
-    return new Promise((resolve) => this.waiters.push({ at, ticks, resolve }));
+    return new Promise((resolve) => this.waiters.push({ at, ticks, ramp, resolve }));
+  }
+
+  /** end the sleeps a ramp held back, the moment it is over */
+  releaseHeld(): void {
+    this.rampOnly = false;
+    this.wake();
   }
 
   advance(now: number): void {
     if (now <= this.now) return;
     this.now = now;
+    this.wake();
+  }
+
+  private wake(): void {
     if (!this.waiters.length) return;
+    const now = this.now;
     const tick = ticksAt(now);
-    const isDue = (w: { at: number; ticks: boolean }): boolean => w.at <= (w.ticks ? tick : now);
+    const isDue = (w: { at: number; ticks: boolean; ramp: boolean }): boolean =>
+      (!this.rampOnly || w.ramp) && w.at <= (w.ticks ? tick : now);
     const due = this.waiters.filter(isDue);
     this.waiters = this.waiters.filter((w) => !isDue(w));
     for (const w of due) w.resolve();

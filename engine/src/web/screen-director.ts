@@ -464,6 +464,7 @@ export class ScreenDirector {
     this.lockedAtPass = this.inputLocked;
     this.room?.refreshRoomGamma();
     if (!ticked) return this.untickedFrame();
+    if (this.session.fade.ramping) return this.rampFrame(now);
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
     // the census in SetViewer.advanceRoom for why that is 50 ms and not 90. Its
     // view goes round in DreamFactory 4 (PropRuntime.tick); Dust's is unchecked.
@@ -517,6 +518,24 @@ export class ScreenDirector {
    * never draws: a film whose file came while the game stood still counted its
    * first hold from one tick in the browser and from the next one headless.
    */
+  /**
+   * A frame while a script is blocked in a fade ramp (#541). TI.EXE's ramp
+   * (`screentoblack` 0x43e550 -> 0x435b90, `blacktoscreen` 0x43e5d0 -> 0x435be0)
+   * blends the palette (0x4359b0) and spins on the tick clock (0x41de90) — no
+   * pass, no message pump, nothing else. So the fade steps and the clock moves
+   * (the ramp's own sleep is on it, Clock.rampOnly), and the screen is drawn as
+   * it stands: no prop steps, no loop, walk or cricket is served, the frame
+   * counter and the game clock stand, no click is taken, and the room does not
+   * move. A pass that fell due meanwhile is not made up (clock.ts passDue).
+   */
+  private rampFrame(now: number): CachedFrame | null {
+    this.session.tickFade(now);
+    this.session.clock.advance(now);
+    this.serviceCursor();
+    if (this.movies.playing) return this.movies.currentFrame() ?? this.room?.roomFrame() ?? null;
+    return this.room?.roomFrame() ?? null;
+  }
+
   private untickedFrame(): CachedFrame | null {
     if ((this.session.isV5 || !this.room) && !this.inputLocked && this.session.events.length) {
       const e = this.session.events.take();

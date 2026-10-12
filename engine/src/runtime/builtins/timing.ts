@@ -57,6 +57,8 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     // Headless has no frame source, so it self-advances one 50 ms step —
     // which also keeps tests deterministic (one call = one service step).
     if (!session.hasRealFrames) {
+      // not while another script is blocked in a fade ramp (#541)
+      await session.transitionCtrl.untilRampEnds();
       session.tickTime(session.clock.now + ENGINE_STEP_MS);
       await session.nextFrame();
       return;

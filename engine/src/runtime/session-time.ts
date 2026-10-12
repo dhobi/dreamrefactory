@@ -100,7 +100,9 @@ export class SessionTime {
         this.stepAnchor = tick.next === real + TICK_SLACK_MS ? real : tick.next;
         this.stepTicks++;
         this.gameNow = tickMs(this.stepTicks);
-        this.releaseTickWaiters();
+        // a poll waits out a fade ramp another script is blocked in: TI.EXE runs
+        // nothing else until it is over (SessionTransitions.ramp, #541)
+        if (!this.session.fade.ramping) this.releaseTickWaiters();
         // a pause between presses is still counted in 50 ms passes: every third tick
         if (this.pausePasses === 0) this.pauseTicks = 0;
         else if (this.runningHolds() === 0 && ++this.pauseTicks >= 3) {

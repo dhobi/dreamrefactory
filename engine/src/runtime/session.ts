@@ -600,9 +600,15 @@ export class GameSession {
    * (SessionTime.nextTick, #542) — so how many ticks a poll costs does not
    * depend on which of two callbacks the browser ran first. The refresh is
    * still asked for, because a headless host runs a frame only when asked.
+   *
+   * And never during a fade ramp another script is blocked in: TI.EXE runs
+   * nothing else until it is over (SessionTransitions.ramp, #541) — a tick
+   * waiter is held by SessionTime itself, a refresh is followed by the ramp.
    */
   frameWait(): Promise<void> {
-    if (!(this.nominalTime || this.sheetClock) || !this.bootCtrl.coreLoaded) return this.nextFrame();
+    if (!(this.nominalTime || this.sheetClock) || !this.bootCtrl.coreLoaded) {
+      return this.nextFrame().then(() => this.transitionCtrl.untilRampEnds());
+    }
     const tick = this.timeCtrl.nextTick();
     void this.nextFrame();
     return tick;
