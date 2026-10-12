@@ -19,9 +19,11 @@ import type { BankChunk } from "./banks";
  * container its audio lives in. `unilib.trk`'s container 0 is 52 bytes — a name
  * and two pointers.
  *
- * A v1 bank has no tables. Container 0 carries the names INLINE, and the audio is
- * simply the containers after it, in the same order:
+ * A v1 bank has no table containers. Container 0 carries the names and the loop
+ * order INLINE, and the audio is simply the containers after it, in the same order:
  *
+ *     0x1c  i16: entries in the loop playback order
+ *     0x1e  i16[]: the order, 1-based loop numbers (see {@link sndLoopChunks})
  *     158   the bank's own name, pascal
  *     186   the name table: 24 bytes per sound, the name pascal at +0
  *           sound i lives in container i + 1
@@ -74,6 +76,11 @@ export interface SndFile {
   oneshots: number;
   loops: number;
   /**
+   * The bed's PLAYBACK ORDER: 1-based loop numbers, repeats allowed, out-of-range
+   * entries already dropped. Read from the table at 0x1c (see {@link sndLoopChunks}).
+   */
+  order: number[];
+  /**
    * What did not read the way this reader expects. One shipped bank warns:
    * `DRUGS.SND` stores a zero-length name at 158 — one sound, `mortar`, and no
    * `refName`, so nothing can ask for it by name and nothing does. Pinned in
@@ -86,6 +93,10 @@ export interface SndFile {
 const ONESHOT_COUNT_AT = 0x18;
 /** i16: how many LOOP chunks follow them (see {@link sndLoopChunks}) */
 const LOOP_COUNT_AT = 0x1a;
+/** i16: how many entries the bed's playback order holds */
+const ORDER_COUNT_AT = 0x1c;
+/** i16[]: the order itself, 1-based loop numbers, up to the bank name at 158 */
+const ORDER_AT = 0x1e;
 /** the bank's own name */
 const REF_NAME_AT = 158;
 /** the name table, and the stride between its records */
@@ -146,39 +157,41 @@ export function readSndFileFrom(file: DFContainerFile): SndFile {
   if (oneshots + loops !== count) {
     warnings.push(`${oneshots} one-shots + ${loops} loops is not the ${count} sounds the bank holds`);
   }
-  return { file, version: 1, refName, chunks, oneshots, loops, warnings };
+
+  // the bed's playback order. DF.EXE's bank loader (0x406ec8, ALT31 build) walks
+  // the i16 count at 0x1c and the i16 entries from 0x1e, skips any outside
+  // 1..loops, and links the rest into a ring of theme nodes
+  const order: number[] = [];
+  const orderCount = c0.length >= ORDER_COUNT_AT + 2 ? dv.getInt16(ORDER_COUNT_AT, true) : 0;
+  const orderMax = (REF_NAME_AT - ORDER_AT) / 2;
+  if (orderCount > orderMax) {
+    warnings.push(`a playback order of ${orderCount} does not fit the ${orderMax} slots before the name`);
+  }
+  for (let i = 0; i < Math.min(orderCount, orderMax); i++) {
+    const n = dv.getInt16(ORDER_AT + i * 2, true);
+    if (n >= 1 && n <= loops) order.push(n);
+    else warnings.push(`playback order entry ${i} is loop ${n}, outside 1..${loops}`);
+  }
+  return { file, version: 1, refName, chunks, oneshots, loops, order, warnings };
 }
 
 /**
  * The bank's LOOP BED — the music `playtheme` plays — as container locations in
  * playback order.
  *
- * A v4 bank keeps a loop ORDER table in a container of its own. A v1 bank has no
- * such container — looked for, it answers "no loop chunks" and Dust runs
- * without music — but the bank does say: the loops are the LAST
- * `i16 @ 0x1a` sounds of its name table (see the module doc's split).
+ * A v4 bank keeps a loop ORDER table in a container of its own. A v1 bank keeps
+ * one too, inline in container 0: an i16 count at 0x1c and that many i16 loop
+ * numbers from 0x1e, 1-based into the last `i16 @ 0x1a` sounds of the name table
+ * (see the module doc's split). DF.EXE's bank loader reads it at 0x406ec8 and
+ * builds the theme from it, skipping entries outside 1..loops.
  *
- * Read, not guessed by a name heuristic (#325 item 8) that takes the bed to be
- * the run at the end of the table that is one stem plus ascending numbers from
- * 1, with two rules to keep dialogue out. Such a heuristic is right about the
- * eight banks the scripts ask for music from and wrong about three of the
- * forty, in both directions — eight positive cases and no negative control:
- *
- *  - `DOORLIB.SND` and `SALGAMES.SND` store NO loops (0 either way), and the
- *    heuristic invents a bed out of `lsing1..3` — three hinge-squeak variants —
- *    and `discard1..4`, four card sounds. Harmless only because nothing asks
- *    either bank for a theme;
- *  - `MISSION.SND` stores **five**, and they are `silence wind1 wind2 chantwind1
- *    chantwind2` — a bed of two stems, which a single-stem rule cannot find. It
- *    plays the last two, so `playtheme("mission.snd")` would miss three of its
- *    five bars, and `mission.snd` IS one of the eight.
- *
- * The field agrees with the heuristic on the other 37, which is what says the two
- * measure the same thing.
+ * The order is not the loops once each. NIGHT.SND's 34 entries are mostly loop 3,
+ * with 1, 2, 4 and 5 dropped in once each. TOWN.SND's 58 are mostly loop 5, and
+ * BOUNTY.SND fills all 64 slots. Every bank with loops carries a table, and every
+ * entry on the disc is in range. A bank with no table has no theme, as in DF.EXE.
  */
 export function sndLoopChunks(snd: SndFile): number[] {
-  // a bed of one is not a bed, and a count the bank cannot hold is not a count —
-  // readSndFileFrom has already warned about the latter
-  if (snd.loops <= 1 || snd.loops > snd.chunks.length) return [];
-  return snd.chunks.slice(snd.chunks.length - snd.loops).map((c) => c.containerLoc);
+  const first = snd.chunks.length - snd.loops;
+  if (snd.loops < 1 || first < 0) return [];
+  return snd.order.map((n) => snd.chunks[first + n - 1].containerLoc);
 }

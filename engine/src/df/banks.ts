@@ -317,8 +317,8 @@ export interface AudioBank {
  * `opentrackfile("unilib.trk")` are the same builtin and should be the same code
  * path from here up.
  *
- * A v1 bank has no loop ORDER table, and the order is what a loop bed IS — but it
- * is not missing, it is spelled in the names, so `sndLoopChunks` reads it (see
+ * A v1 bank keeps its loop ORDER table inline in container 0 instead of in a
+ * container of its own, and `sndLoopChunks` reads it (see
  * {@link file://./snd.ts}). That is what gives Dust its music.
  */
 export function readAudioBank(file: DFContainerFile): AudioBank {

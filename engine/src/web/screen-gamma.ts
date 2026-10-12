@@ -55,6 +55,16 @@ export type GammaChannels = readonly [red: boolean, green: boolean, blue: boolea
 /** all three together: the F1/F2 pair, and what a brightness control moves */
 export const ALL_CHANNELS: GammaChannels = [true, true, true];
 
+/**
+ * How a curve value becomes a palette byte. Rounding is what this module has
+ * always done for TI.EXE. DF.EXE's builder (0x422060) stores the curve through
+ * `_ftol` (0x43ad40), which TRUNCATES, so Dust asks for that instead. Measured on
+ * Dust's 35 set palettes, the truncating ramp gives DF.EXE's exact byte for
+ * 21,894 of 22,098 channel values, and the rounding one for only 11,636.
+ */
+export type GammaRounding = "round" | "trunc";
+let rounding: GammaRounding = "round";
+
 const gammas: [number, number, number] = [
   DEFAULT_SCREEN_GAMMA, DEFAULT_SCREEN_GAMMA, DEFAULT_SCREEN_GAMMA,
 ];
@@ -76,8 +86,17 @@ let generation = 0;
 
 function buildRamp(g: number): Uint8Array {
   const out = new Uint8Array(256);
-  for (let c = 0; c < 256; c++) out[c] = Math.round(255 * Math.pow(c / 255, g));
+  const toByte = rounding === "trunc" ? Math.trunc : Math.round;
+  for (let c = 0; c < 256; c++) out[c] = toByte(255 * Math.pow(c / 255, g));
   return out;
+}
+
+/** Choose how the ramps turn the curve into bytes (see {@link GammaRounding}) */
+export function setScreenGammaRounding(mode: GammaRounding): void {
+  if (mode === rounding) return;
+  rounding = mode;
+  for (let i = 0; i < 3; i++) ramps[i] = buildRamp(gammas[i]);
+  generation++;
 }
 
 /** the three exponents, R/G/B — TI.EXE's 0x45b6f0 / +8 / +0x10 */

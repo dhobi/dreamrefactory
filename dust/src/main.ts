@@ -92,7 +92,11 @@ import {
   seedDustSaves,
   shippedDustSaves,
 } from "./saves";
-import { setScreenGamma } from "@dreamfactory/engine/web/screen-gamma";
+import {
+  displayPalette,
+  setScreenGamma,
+  setScreenGammaRounding,
+} from "@dreamfactory/engine/web/screen-gamma";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { DustFiles } from "./files";
 import {
@@ -147,22 +151,30 @@ const BOOT_FLAT = "mainpanel";
 const HOLD_TICKS = 3;
 
 /**
- * DreamFactory 1 sends its palette to the screen VERBATIM, and that is measured
- * rather than assumed.
+ * DreamFactory 1 runs its palette through a power curve too, like TI.EXE but with
+ * a different exponent: 0.75, not 0.65.
  *
- * TI.EXE runs every palette entry through a per-channel power curve on the way to
- * `AnimatePalette` — `pow(c / 255, 0.65) * 255` — which lifts the dark half hard
- * (32 becomes 66, 64 becomes 104) and is the reason a faithful DreamFactory 4 port
- * looks brighter than a verbatim one (see engine/src/web/screen-gamma.ts). Applying it here
- * too made Dust's night town look like dusk.
+ * TI.EXE's curve is `pow(c / 255, 0.65) * 255` (see engine/src/web/screen-gamma.ts).
+ * DF.EXE builds its own at 0x422060 (ALT31 build): three 256-entry tables of
+ * `pow(i / 255.0, g) * 255.0`, one per channel, stored through `_ftol` (0x43ad40),
+ * which truncates. The three exponents are doubles at 0x445810/18/20 and start at
+ * 0.75. The constant is in all four builds Dust ships: file offset 0x42a38 in
+ * ALT31/DF.EXE, 0x40c08 in DF386 and DF486, 0x41608 in DFPENT. An earlier search
+ * looked for TI.EXE's 0.65 and 1/255, found neither, and concluded there was no
+ * curve. DF.EXE divides by 255.0 instead of multiplying by 1/255.
  *
- * DF.EXE does not do it. The three constants that curve is built from are all in
- * TI.EXE — the exponent 0.65 appears four times, with 1/255 and 255.0 beside it —
- * and in Dust's own engine, in all three of the builds it ships (DF386, DF486,
- * DFPENT), the exponent and the 1/255 are absent entirely. So there is no curve to
- * port and 1.0 is not a preference: it is what the palette bytes on the disc mean.
+ * The palette setter (0x421f30) is the only route to the screen. It forces entry 0
+ * black and 255 white and sends every other entry through the tables, using the
+ * channel's LOW byte to blend toward the next step:
+ * `table[hi] + ((table[hi + 1] - table[hi]) * lo >> 8)`. The display stage here
+ * sees the high byte only. Over Dust's 35 set palettes the truncating ramp still
+ * matches DF.EXE on 21,894 of 22,098 channel values and is one level dark on the
+ * rest.
+ *
+ * 0x422c10 is the original's brightness control: 1.05 per step, clamped to
+ * 0.15..2.5, reset to 0.75. Nothing here exposes it.
  */
-const DF1_SCREEN_GAMMA = 1;
+const DF1_SCREEN_GAMMA = 0.75;
 
 /** one animation frame, from the browser's own beat */
 const tick = (): Promise<void> =>
@@ -625,7 +637,7 @@ let animating = false;
 const stillAt = (l: Loaded, s: V1Standpoint): Uint8Array | null => stillOf(l.set, l.frames, s);
 
 const rgbaOf = (l: Loaded): Uint8ClampedArray =>
-  paletteToRGBA(l.set.cluts[l.clut]?.raw ?? l.set.paletteRaw, 256);
+  displayPalette(paletteToRGBA(l.set.cluts[l.clut]?.raw ?? l.set.paletteRaw, 256));
 
 /**
  * Compose the screen the way the engine does: the stage's flat underneath, the
@@ -682,7 +694,7 @@ async function loadPanel(span?: { from: number; to: number }): Promise<void> {
   if (d.width !== FLAT_W || d.height !== FLAT_H) return;
   panel = {
     pixels: fb.pixels.slice(0, FLAT_W * FLAT_H),
-    rgba: paletteToRGBA(stg.paletteRaw, 256),
+    rgba: displayPalette(paletteToRGBA(stg.paletteRaw, 256)),
     regions: flat.locationClickLogic
       ? readStgRegions(
           stg.file.containers[flat.locationClickLogic]?.data ??
@@ -1642,6 +1654,7 @@ function sendGestureKey(ch: string, isEsc = false): void {
  * something on screen that says so and still shows the disc.
  */
 async function start(): Promise<void> {
+  setScreenGammaRounding("trunc");
   setScreenGamma(DF1_SCREEN_GAMMA);
   startMeter();
   await browse();
