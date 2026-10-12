@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { encodeAudioContainer, type DecodedAudio } from "../src/df/audio";
 import { writeContainerFile } from "../src/df/container";
@@ -89,8 +90,11 @@ test("overlapping handles keep their own lifetime under nominal time", () => {
 
 test("V5 pan keeps the unattenuated side at full level, including centre", () => {
   expect(moviePanV5(128)).toEqual([1, 1]);
-  expect(moviePanV5(0)).toEqual([1, 0.00001]);
-  expect(moviePanV5(255)).toEqual([0.00001, 1]);
+  // -100 dB; 10 ** -5 computed at run time is 9.999...e-6, not the literal 1e-5
+  expect(moviePanV5(0)[0]).toBe(1);
+  expect(moviePanV5(0)[1]).toBeCloseTo(1e-5, 12);
+  expect(moviePanV5(255)[0]).toBeCloseTo(1e-5, 12);
+  expect(moviePanV5(255)[1]).toBe(1);
   expect(moviePanV5(64)[1]).toBeCloseTo(10 ** (-693 / 2000), 12);
   expect(moviePanV5(192)[0]).toBeCloseTo(10 ** (-701 / 2000), 12);
 });
@@ -166,8 +170,13 @@ test("MoviePlayer waits on the effects pool when MFRM bit 4 is set", () => {
   expect(sink.calls[1].stopped).toBe(true);
 });
 
-test.skipIf(!process.env.REDJACK_INTRO)("original intro: boatwash does not displace 20w; all scenes finish", async () => {
-  const data = readFileSync(process.env.REDJACK_INTRO!);
+/** RedJack's own intro (#545, #546); skips loudly without redjack/gamefiles */
+const INTRO = fileURLToPath(new URL("../../redjack/gamefiles/RJDisk1/movies/intro.move", import.meta.url));
+const noIntro = !existsSync(INTRO);
+if (noIntro) console.warn(`no RedJack intro at ${INTRO} — skipping`);
+
+test.skipIf(noIntro)("original intro: boatwash does not displace 20w; all scenes finish", async () => {
+  const data = readFileSync(INTRO);
   const sink = new ClockSink(), session = new GameSession(() => data, sink);
   session.drawsPictures = false;
   const names: { name: string; call: number }[] = [];
@@ -189,7 +198,8 @@ test.skipIf(!process.env.REDJACK_INTRO)("original intro: boatwash does not displ
   expect(player.playing).toBe(false);
   expect(names.some((s) => s.name === "180")).toBe(true);
   const cannon = names.find((s) => s.name === "Cannon")!;
-  expect(sink.starts[cannon.call].opts?.stereoGains).toEqual([0.00001, 1]);
-  console.log(JSON.stringify({ introElapsedMs: sink.now, namedTriggers: names.length, bedStarts: sink.starts.filter((s) => s.channel === "voice").length }));
+  const gains = sink.starts[cannon.call].opts?.stereoGains;
+  expect(gains?.[0]).toBeCloseTo(1e-5, 12);
+  expect(gains?.[1]).toBe(1);
   await done;
 });

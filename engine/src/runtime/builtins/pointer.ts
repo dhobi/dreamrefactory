@@ -1,3 +1,4 @@
+import { ticksAt } from "../clock";
 import { toNum, toStr } from "../interp";
 import { packPoint, pointX, pointY } from "../point";
 import { decodeText } from "../../df/text";
@@ -11,6 +12,8 @@ import { BuiltinCtx } from "./context";
  */
 export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   const { session, r } = ctx;
+  /** the tick stilldown last answered on — see stilldown */
+  let stilldownTick = -1;
 
   r("makepoint", (_i, [x, y]) => packPoint(toNum(x ?? 0), toNum(y ?? 0)));
   r("pointx", (_i, [p]) => pointX(toNum(p ?? 0)));
@@ -119,9 +122,20 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   // (`while stilldown() { propdeg(me, ...); forceupdate() }`), so each check
   // yields one frame — letting the rAF loop advance the clock, deliver the
   // next pointermove/pointerup, and repaint before the next iteration.
+  //
+  // TI.EXE's stilldown (0x4282e0) only reads the button (0x41efc0) and waits
+  // for nothing: a drag loop is paced by its own forceupdate(), one throttled
+  // pass (0x442550). So it is answered at once when the game has moved on a
+  // tick since the last ask (#542) — waiting here as well cost every turn of
+  // the turbine's valves and the wireless tuner a second frame. Asked twice in
+  // one tick is a bare `while stilldown() endwhile`, with no forceupdate; that
+  // waits a tick, or it would spin the page. Judged by the game's ticks, not by
+  // who else yielded a frame, so it answers the same way on every machine.
+  // Under stepped time only: normal play still waits its frame on every ask.
   r("stilldown", async () => {
     session.inputPolled();
-    await session.clock.sleep(16);
+    if (!session.clock.ticked || ticksAt(session.clock.now) === stilldownTick) await session.clock.sleep(16);
+    stilldownTick = ticksAt(session.clock.now);
     if (session.hasRealFrames) session.realYieldSeq++;
     return session.pointerDown ? 1 : 0;
   });

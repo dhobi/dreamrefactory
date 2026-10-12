@@ -21,6 +21,7 @@ import {
   TICK_MS,
   bedRuntimeMs,
   frameHoldMs,
+  frameHoldTicks,
   frameWaits,
   segmentInterval,
 } from "@dreamfactory/engine/df/mov-pace";
@@ -43,6 +44,7 @@ import {
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { MovieVoicesV5 } from "@dreamfactory/engine/runtime/movie-voices-v5";
+import { ticksAt } from "@dreamfactory/engine/runtime/clock";
 import { volumeKey } from "@dreamfactory/engine/runtime/puppet";
 import { PlayHandle } from "@dreamfactory/engine/runtime/audio";
 
@@ -121,6 +123,11 @@ export class MoviePlayer {
     /** ms per frame; 0 = wait for clicks (click-through object movies) */
     interval: number;
     lastTick: number;
+    /** the current frame's deadline, set once on entering it (scheduleFrame);
+     *  ticks if `deadlineTicked`, else ms. null = none yet */
+    deadline: number | null;
+    deadlineTicked: boolean;
+    deadlinePending: boolean;
     /** frame indices for actionframe(1)/(2) (-1 = none); see recordAction */
     actionFrame1: number;
     actionFrame2: number;
@@ -209,6 +216,11 @@ export class MoviePlayer {
   get progress(): number {
     const m = this.active;
     return m?.frames.length ? Math.min(m.pos, m.frames.length - 1) / m.frames.length : -1;
+  }
+
+  /** the film's frame as it stands, without advancing it — a frame that ran no tick (#542) */
+  currentFrame(): MovieImage | null {
+    return this.active ? this.active.frames[this.active.pos] : null;
   }
 
   /** the frame to paint right now (with the movie's own palette and where on
@@ -444,6 +456,9 @@ export class MoviePlayer {
       pos: Math.min(Math.max(startFrame, 0), frames.length - 1),
       interval,
       lastTick: 0,
+      deadline: null,
+      deadlineTicked: false,
+      deadlinePending: true,
       actionFrame1: seg.actionFrame1
         ? (frameByName.get(seg.actionFrame1.toLowerCase()) ?? -1)
         : -1,
@@ -694,9 +709,44 @@ export class MoviePlayer {
   private enter(idx: number): void {
     const m = this.active!;
     m.pos = idx;
+    m.deadlinePending = true;
     this.recordAction(idx);
     const sound = m.meta[idx].sound;
     if (sound && sound !== this.clickSound) this.playSound(sound);
+  }
+
+  /**
+   * Set the deadline of the frame just entered. TI.EXE (retail) does it once per
+   * frame, before the wait loop, at 0x44aa04..0x44aa43:
+   *
+   * ```
+   * 0x44a9ff: call 0x41de90                 ; now, in ticks
+   * 0x44aa04: cmp  dword ptr [0x48c4e8], 0  ; the frame INDEX
+   * 0x44aa0d: je   0x44aa1a                 ; frame 0 -> rebase
+   * 0x44aa14: test byte ptr [eax + 6], 8    ; flags bit 3 (MovFrame.holdsDeadline)
+   * 0x44aa18: jne  0x44aa20                 ; set -> keep the running deadline
+   * 0x44aa1a: mov  [0x48c3bc], esi          ; deadline = now
+   * 0x44aa2b: ...                           ; deadline += max(hold, floor)
+   * ```
+   *
+   * The deadline is kept in the unit the clock is compared in — ticks under
+   * stepped time, ms otherwise (#542) — and rebased if that changes mid-film.
+   * Only the Titanic-era format; the other families keep their scheduler.
+   */
+  private scheduleFrame(now: number): void {
+    const m = this.active;
+    if (!m || m.seg.dfV0 || m.seg.dfV1 || m.seg.dfV5 || !m.deadlinePending) return;
+    const ticked = this.session.clock.ticked;
+    if (
+      m.deadline === null ||
+      m.deadlineTicked !== ticked ||
+      m.pos === 0 ||
+      !m.meta[m.pos].holdsDeadline
+    )
+      m.deadline = ticked ? ticksAt(now) : now;
+    m.deadline += ticked ? frameHoldTicks(m.seg, m.pos) : frameHoldMs(m.seg, m.pos);
+    m.deadlineTicked = ticked;
+    m.deadlinePending = false;
   }
 
   /**
@@ -782,7 +832,10 @@ export class MoviePlayer {
     // a backward goto) is left at tick 200 by the jump to "Name 12".
     for (let c = 0; c < m.seg.cues.length; c++) {
       const cue = m.seg.cues[c];
-      if (m.cuesFired.has(c) || now - m.segStartMs < cue.tick * TICK_MS)
+      const early = this.session.clock.ticked
+        ? ticksAt(now) - ticksAt(m.segStartMs) < cue.tick
+        : now - m.segStartMs < cue.tick * TICK_MS;
+      if (m.cuesFired.has(c) || early)
         continue;
       m.cuesFired.add(c);
       const idx = m.frameByName.get(cue.target.toLowerCase());
@@ -813,14 +866,25 @@ export class MoviePlayer {
     // deck washes and the fires loop: the last frame of the cycle carries a
     // backward `goto` nothing would ever reach if the frame stopped for its own
     // click rect. See MovFrame.playsThroughRegions.
+    this.scheduleFrame(now);
     const waits = frameWaits(m.seg, m.pos);
     if (m.interval > 0 && !waits) {
       if (!m.lastTick) m.lastTick = now;
       // The FILM's own hold, not a rate we invented: max(frame, movie floor) —
       // see mov-pace.frameHoldMs. `interval` still decides whether this movie is
       // self-paced at all (0 = a click-through close-up).
-      const hold = frameHoldMs(m.seg, m.pos);
-      if (now - m.lastTick >= hold) {
+      // Under stepped time counted in TICKS, as the original counts it: in
+      // milliseconds a 1-tick frame on a clock read in whole ms would miss every
+      // 16 ms tick (#542). Normal play keeps the milliseconds. A film with a
+      // deadline (see scheduleFrame) waits for that, in the same unit.
+      const ticked = this.session.clock.ticked;
+      const held =
+        m.deadline !== null
+          ? (ticked ? ticksAt(now) : now) >= m.deadline
+          : ticked
+            ? ticksAt(now) - ticksAt(m.lastTick) >= frameHoldTicks(m.seg, m.pos)
+            : now - m.lastTick >= frameHoldMs(m.seg, m.pos);
+      if (held) {
         // ...and a frame may be authored to wait for the SPOKEN LINE as well
         // (flags bit 0). What it waits on is the original's VOICE channel, which
         // is where `voicesound()` puts a line — in this port that is the movie's
@@ -843,6 +907,7 @@ export class MoviePlayer {
         // run the region-less frame's own auto-action (step/chain/exit)
         const f = m.meta[m.pos];
         this.action(f.type, f.target, f.event);
+        this.scheduleFrame(now);
       }
     }
     return this.active ? this.active.frames[this.active.pos] : null;

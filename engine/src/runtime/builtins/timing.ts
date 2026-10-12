@@ -57,6 +57,8 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     // Headless has no frame source, so it self-advances one 50 ms step —
     // which also keeps tests deterministic (one call = one service step).
     if (!session.hasRealFrames) {
+      // not while another script is blocked in a fade ramp (#541)
+      await session.transitionCtrl.untilRampEnds();
       session.tickTime(session.clock.now + ENGINE_STEP_MS);
       await session.nextFrame();
       return;
@@ -78,7 +80,7 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     // decides when we have waited enough.
     const deadline = ticksAt(session.clock.now) + Math.max(1, Math.round(session.frameRate));
     do {
-      await session.nextFrame();
+      await session.frameWait();
       // this handler owns the CPU (scriptBusy), so the normal per-frame loop
       // service is skipped; pump the OTHER per-frame loops here so e.g. the sky
       // keeps drifting while the wheel is being turned (not the caller's own).

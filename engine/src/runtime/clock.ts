@@ -107,6 +107,8 @@ export const RAMP_STEP_MS = ENGINE_STEP_MS / 3;
  * derive from this rather than from counting host callbacks.
  */
 export const ticksAt = (ms: number): number => Math.floor((ms * 3) / 50);
+/** how many whole ticks a span of `ms` takes, rounded up — at least one */
+export const ticksFor = (ms: number): number => Math.max(1, Math.ceil((ms * 3) / 50 - 1e-9));
 /**
  * Is a main-loop pass due, and where does the next one count from?
  *
@@ -135,19 +137,55 @@ export function passDue(last: number, now: number, period: number): { due: boole
 
 export class Clock {
   now = 0;
-  private waiters: { at: number; resolve: () => void }[] = [];
+  /**
+   * Stepped time is running (speedrun time, #542): sleeps count ticks. Off, they
+   * count ms as they always have — normal play paces exactly as before.
+   */
+  ticked = false;
+  /**
+   * A script is blocked in a fade ramp: only the ramp's own sleep may end. TI.EXE
+   * runs nothing else until the ramp is over (builtins/scene.ts `fade`, #541) —
+   * every other sleep that came due meanwhile ends on the first advance after.
+   */
+  rampOnly = false;
+  private waiters: { at: number; ticks: boolean; ramp: boolean; resolve: () => void }[] = [];
 
-  sleep(ms: number): Promise<void> {
+  /**
+   * Wake after `ms`, counted in TICKS: the deadline is the tick now plus the
+   * ticks `ms` covers, rounded up — TI.EXE's `delay()` arithmetic
+   * (`timeGetTime() * 3 / 50`, see {@link ticksAt}). Counted in ms against a
+   * clock read in whole ms, a sleep of ten ticks (166.67 ms) ended on the tenth
+   * tick or the eleventh by where the ticks fell in their 17-17-16 rhythm —
+   * which differed between two runs of one sheet (#542). Only under stepped
+   * time ({@link ticked}); otherwise the deadline is `now + ms`.
+   */
+  sleep(ms: number, ramp = false): Promise<void> {
     if (ms <= 0) return Promise.resolve();
-    return new Promise((resolve) => this.waiters.push({ at: this.now + ms, resolve }));
+    const ticks = this.ticked;
+    const at = ticks ? ticksAt(this.now) + ticksFor(ms) : this.now + ms;
+    return new Promise((resolve) => this.waiters.push({ at, ticks, ramp, resolve }));
+  }
+
+  /** end the sleeps a ramp held back, the moment it is over */
+  releaseHeld(): void {
+    this.rampOnly = false;
+    this.wake();
   }
 
   advance(now: number): void {
     if (now <= this.now) return;
     this.now = now;
+    this.wake();
+  }
+
+  private wake(): void {
     if (!this.waiters.length) return;
-    const due = this.waiters.filter((w) => w.at <= now);
-    this.waiters = this.waiters.filter((w) => w.at > now);
+    const now = this.now;
+    const tick = ticksAt(now);
+    const isDue = (w: { at: number; ticks: boolean; ramp: boolean }): boolean =>
+      (!this.rampOnly || w.ramp) && w.at <= (w.ticks ? tick : now);
+    const due = this.waiters.filter(isDue);
+    this.waiters = this.waiters.filter((w) => !isDue(w));
     for (const w of due) w.resolve();
   }
 }

@@ -478,6 +478,7 @@ export async function runSheet(
     const action = resolve(step.verb)!;
     const says: string[] = [];
     let suggestion: string | undefined;
+    let voided = false;
     const before = await d.clock();
     const paddedBefore = d.padded();
 
@@ -511,6 +512,7 @@ export async function runSheet(
         gap: Number(step.opts.gap ?? 16),
         say: (m: string) => says.push(m),
         suggest: (line: string) => (suggestion = line),
+        voidTime: () => (voided = true),
         verbs,
       };
       let over = false;
@@ -546,7 +548,7 @@ export async function runSheet(
     };
     timings.push(timing);
     hooks.onDone?.(timing);
-    if (action.voidsTime) invalid.push(`${step.source.trim()} on line ${step.line}`);
+    if (action.voidsTime || voided) invalid.push(`${step.source.trim()} on line ${step.line}`);
     splitActions++;
     if (failure) break;
   }

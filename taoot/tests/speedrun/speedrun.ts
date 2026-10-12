@@ -41,17 +41,17 @@
  * The run is measured by **in-game** time, and that is the number to quote
  * ([#508](https://github.com/dhobi/dreamrefactory/issues/508)). This runner
  * plays on a sheet's clock (`GameSession.sheetClock`, `nominalTime`): the game
- * moves only while the runner waits on it, in 50 ms passes rather than
- * milliseconds, stands still while the engine waits on a file, and ends speech
- * by the clip's length rather than the sound card's. So in-game time is the
- * same on a slow machine as on a fast one and over a slow link as over a fast
- * one. Measured on the stack-to-mission-4 leg, seed 20: 8239-8242 frames at
- * full speed, with the CPU throttled 4x, over a throttled link and with both,
- * while the wall time ran from 25.5 s to 40 s.
+ * moves only while the runner waits on it, in TI.EXE's 1/60 s ticks rather than
+ * milliseconds (#542), stands still while the engine waits on a file, and ends
+ * speech by the clip's length rather than the sound card's. So in-game time is
+ * the same on a slow machine as on a fast one and over a slow link as over a
+ * fast one. Measured on the turbine, wireless, fencing and smokestack legs,
+ * seed 360: every step the same number of ticks at full speed, with the CPU
+ * throttled 4x, over a throttled link, with both, and headless.
  *
  * What a sheet's time means for a person: the runner gives every input on the
  * first pass it could take effect, which a FRAME-PERFECT player could also do
- * — press within the same 50 ms pass, by anticipation rather than reaction. A
+ * — press within the same tick, by anticipation rather than reaction. A
  * sheet's time is therefore the floor for its route, and a human run is on the
  * same scale. (Inputs are taken one per screen refresh, for the sheet and the
  * player alike.)
@@ -164,11 +164,13 @@ const SHEET = process.env.SHEET ?? join(HERE, "run.sheet.txt");
  */
 const FROM = argv.find((a) => a.startsWith("--from="))?.split("=").slice(1).join("=") ?? process.env.FROM;
 
+// tenths rounded as whole numbers, as the sheets' CI table rounds them
+// (tests/speedrun/sheets.ts): `toFixed` on a float put 6:02.45 at 6:02.4 here
+// and 6:02.5 there
 const ms = (n: number): string => {
-  const s = n / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  return `${m}:${(s - m * 60).toFixed(1).padStart(4, "0")}`;
+  const t = Math.round(n / 100);
+  if (t < 600) return `${Math.floor(t / 10)}.${t % 10}s`;
+  return `${Math.floor(t / 600)}:${String(Math.floor((t % 600) / 10)).padStart(2, "0")}.${t % 10}`;
 };
 
 /**
@@ -357,6 +359,8 @@ function report(r: {
   where: string | null;
   errors: string[];
   seeded: number | null;
+  /** lines that keep this run off the record — a `load()`, a planner verb (#523, #542) */
+  invalid: string[];
 }): void {
   const line = "─".repeat(78);
   console.log(`\n${line}`);
@@ -472,6 +476,9 @@ function report(r: {
       `FINISHED — ${ms(r.total.game)} in-game (${ms(r.total.ms)} real, ${r.total.frames} engine frames)` +
         (r.total.loading > 0 ? ` (${ms(r.total.loading)} of loading removed)` : ""),
     );
+    // said here too, not only on the workbench: the planner verbs run only in
+    // this runner, and they move the game on the wall clock (#542)
+    if (r.invalid.length) console.log(`  NOT A VALID TIME: ${r.invalid.join(", ")} — not on the clock`);
   }
   for (const e of r.errors) console.log(`  page error: ${e}`);
   console.log(line);

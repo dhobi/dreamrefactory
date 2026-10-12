@@ -233,7 +233,7 @@ export class SetViewer implements RoomLayer {
    */
   private async walkAfterFade(pace: number): Promise<void> {
     for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) {
-      await this.session.nextFrame();
+      await this.session.frameWait();
     }
     this.walk(pace);
   }
@@ -254,7 +254,7 @@ export class SetViewer implements RoomLayer {
    */
   private async navigateAfterAnimation(dir: string): Promise<void> {
     for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.busy; i++) {
-      await this.session.nextFrame();
+      await this.session.frameWait();
     }
     if (this.busy) return; // gave up; do not stack a move onto a stuck one
     this.navigateNow(dir, FRAME_MS);
@@ -808,6 +808,17 @@ export class SetViewer implements RoomLayer {
 
   /** the view frame on the screen now, or null before the first settle */
   roomFrame(): CachedFrame | null {
+    return this.current;
+  }
+
+  /**
+   * A frame that ran no tick (#542): take a queued gesture exactly where
+   * {@link advanceRoom} would, and move nothing — no animation is advanced or
+   * started on its clock here, so nothing anchors on a frame one host draws and
+   * another does not.
+   */
+  takeInputOnly(): CachedFrame | null {
+    if (!this.animation && !this.dir.movingCamera && this.session.events.length) this.drainOneEvent();
     return this.current;
   }
 
