@@ -196,7 +196,7 @@ test("an order entry outside the loops is dropped, as DF.EXE's loader drops it",
     dv.setInt16(0x1e, 0, true);
     dv.setInt16(0x20, 6, true);
   });
-  expect(bad.order.length).toBe(32);
+  expect(bad.order).toHaveLength(32);
   expect(bad.warnings).toEqual([
     "playback order entry 0 is loop 0, outside 1..5",
     "playback order entry 1 is loop 6, outside 1..5",
