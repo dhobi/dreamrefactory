@@ -1,5 +1,5 @@
 import { PlayHandle } from "./audio";
-import { ENGINE_STEP_MS, passDue } from "./clock";
+import { ENGINE_STEP_MS, passDue, ticksAt } from "./clock";
 import { bearing, bearingV5 } from "./geometry";
 import type { GameSession } from "./session";
 
@@ -68,7 +68,7 @@ export class Scheduler {
   readonly loops: GameLoop[] = [];
   readonly crickets: Cricket[] = [];
   private readonly soundLoops = new Map<string, PlayHandle>();
-  private timeLastTick = 0;
+  private timeLastTick: number | null = null;
   // Wall-clock anchor + re-entry guard for the game clock (serviceGameClock).
   private clockLastMs = 0;
   private clockDispatching = false;
@@ -921,14 +921,31 @@ export class Scheduler {
    * microtask has run and `inflight` is empty. It is only ever true at the one
    * moment that matters.
    */
+  /** the tick the last pass ran on, under speedrun time — see {@link tickTime} */
+  private lastPassTick = -1;
+
   tickTime(now: number): void {
     this.session.clock.advance(now);
-    if (!this.timeLastTick) this.timeLastTick = now;
-    // one service pass at most, and a late one is not made up (clock.ts passDue)
-    const pass = passDue(this.timeLastTick, now, ENGINE_STEP_MS);
-    if (pass.due) {
-      this.timeLastTick = pass.next;
-      this.serviceStep();
+    if (this.session.nominalTime || this.session.sheetClock) {
+      // Under speedrun time a pass runs on every tick whose NUMBER is a multiple
+      // of three — fixed to the game's own count, not to where a rhythm last
+      // started (#542). Counted from wherever it began, the third a pass fell on
+      // came from real time — a fresh scheduler, a long gap — and a headless run
+      // and a browser served their loops a tick or two apart.
+      const tick = ticksAt(now);
+      this.timeLastTick = now;
+      if (tick % 3 === 0 && tick !== this.lastPassTick) {
+        this.lastPassTick = tick;
+        this.serviceStep();
+      }
+    } else {
+      this.timeLastTick ??= now;
+      // one service pass at most, and a late one is not made up (clock.ts passDue)
+      const pass = passDue(this.timeLastTick, now, ENGINE_STEP_MS);
+      if (pass.due) {
+        this.timeLastTick = pass.next;
+        this.serviceStep();
+      }
     }
     // last, so its dispatch cannot be in flight while this pass fires its loops.
     // By the next pass the microtask has settled and inflight is empty again.

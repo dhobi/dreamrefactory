@@ -107,6 +107,8 @@ export const RAMP_STEP_MS = ENGINE_STEP_MS / 3;
  * derive from this rather than from counting host callbacks.
  */
 export const ticksAt = (ms: number): number => Math.floor((ms * 3) / 50);
+/** how many whole ticks a span of `ms` takes, rounded up — at least one */
+export const ticksFor = (ms: number): number => Math.max(1, Math.ceil((ms * 3) / 50 - 1e-9));
 /**
  * Is a main-loop pass due, and where does the next one count from?
  *
@@ -137,17 +139,26 @@ export class Clock {
   now = 0;
   private waiters: { at: number; resolve: () => void }[] = [];
 
+  /**
+   * Wake after `ms`, counted in TICKS: the deadline is the tick now plus the
+   * ticks `ms` covers, rounded up — TI.EXE's `delay()` arithmetic
+   * (`timeGetTime() * 3 / 50`, see {@link ticksAt}). Counted in ms against a
+   * clock read in whole ms, a sleep of ten ticks (166.67 ms) ended on the tenth
+   * tick or the eleventh by where the ticks fell in their 17-17-16 rhythm —
+   * which differed between two runs of one sheet (#542).
+   */
   sleep(ms: number): Promise<void> {
     if (ms <= 0) return Promise.resolve();
-    return new Promise((resolve) => this.waiters.push({ at: this.now + ms, resolve }));
+    return new Promise((resolve) => this.waiters.push({ at: ticksAt(this.now) + ticksFor(ms), resolve }));
   }
 
   advance(now: number): void {
     if (now <= this.now) return;
     this.now = now;
     if (!this.waiters.length) return;
-    const due = this.waiters.filter((w) => w.at <= now);
-    this.waiters = this.waiters.filter((w) => w.at > now);
+    const tick = ticksAt(now);
+    const due = this.waiters.filter((w) => w.at <= tick);
+    this.waiters = this.waiters.filter((w) => w.at > tick);
     for (const w of due) w.resolve();
   }
 }

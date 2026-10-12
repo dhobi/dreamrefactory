@@ -595,6 +595,19 @@ export class GameSession {
    */
   nextFrame: () => Promise<void> = () => Promise.resolve();
   /**
+   * What a script's poll waits on between turns of its loop: the next screen
+   * refresh in play, the next TICK under speedrun time once the game has booted
+   * (SessionTime.nextTick, #542) — so how many ticks a poll costs does not
+   * depend on which of two callbacks the browser ran first. The refresh is
+   * still asked for, because a headless host runs a frame only when asked.
+   */
+  frameWait(): Promise<void> {
+    if (!(this.nominalTime || this.sheetClock) || !this.bootCtrl.coreLoaded) return this.nextFrame();
+    const tick = this.timeCtrl.nextTick();
+    void this.nextFrame();
+    return tick;
+  }
+  /**
    * True once the host wires nextFrame to real rendered frames (rAF). Only
    * then do forceupdate/stilldown bump realYieldSeq: in a browser an
    * interactive poll loop genuinely waits on the user, so the while-guard must
@@ -637,6 +650,12 @@ export class GameSession {
   readonly scheduler = new Scheduler(this);
   /** host hook: listener (camera) ground position + facing for crickets */
   listener: () => { x: number; y: number; deg: number } | null = () => null;
+  /**
+   * host hook: is there a queued gesture the engine would take on this frame?
+   * Under a sheet's clock the game does not tick while there is (SessionTime,
+   * #542). The screen director answers it.
+   */
+  inputWaiting: () => boolean = () => false;
   /**
    * Host hook: the camera the world is being drawn through right now — the
    * motion camera mid-turn, the standpoint's the rest of the time.
@@ -846,6 +865,16 @@ export class GameSession {
   private advanceFrames(now: number): void {
     const period = Math.max(1, Math.round(this.frameRate));
     const t = ticksAt(now);
+    if (this.nominalTime || this.sheetClock) {
+      // under speedrun time on the game's own tick count, for the reason
+      // Scheduler.tickTime gives: a rhythm counted from where it last started
+      // took its phase from real time (#542)
+      if (t % period === 0 && t !== this.lastFrameTick) {
+        this.lastFrameTick = t;
+        this.frameCounter += 1;
+      }
+      return;
+    }
     if (this.lastFrameTick === null) {
       this.lastFrameTick = t;
       return;

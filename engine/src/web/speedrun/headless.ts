@@ -15,7 +15,7 @@
  *   - the FRAME. A page calls `director.tick` on every animation frame; here a
  *     frame is run whenever something asks for one (the driver's wait, or a
  *     script's `forceupdate`), on a virtual 60 Hz clock. The sheet clock takes
- *     a pass of game time from that clock every 50 ms, exactly as on a page.
+ *     a tick of game time from that clock every 1/60 s, exactly as on a page.
  *   - where an INPUT goes, which is the game's page's business and so is handed
  *     in ({@link HeadlessGame.deliver}).
  */

@@ -123,6 +123,36 @@ export function clientAxis(v: number, origin: number, size: number, n: number): 
  */
 export const HELD_YIELDS = 2;
 
+/**
+ * The game is there to be looked at: booted, and not stopped for a file.
+ *
+ * What `hammer` waits for, in real time, before each look (#542). Looked at
+ * sooner, a slow link showed it nothing — the boot not begun, or a film still
+ * arriving — and it paused a pass where a runner with the files to hand had
+ * already pressed ESC at the logo: 50 ms more, on a slow link only. Before the
+ * boot nothing is game time (#508) and a load stops the clock (#509), so the
+ * wait costs no game time on either.
+ */
+export const READY_TO_LOOK = `!window.dbg || (!window.dbg.session.loadingFiles && (!window.dbg.session.sheetClock || window.dbg.session.bootCtrl.coreLoaded))`;
+
+let heldIds = 0;
+/**
+ * The condition "{@link HELD_YIELDS} more yields than when this was first asked"
+ * — with the baseline taken INSIDE the condition, on its first asking (#542).
+ *
+ * Read by the runner instead, the baseline depended on when the read landed: a
+ * headless driver read it in the same task as the press, before the drag loop's
+ * first turn had run, and a browser's read came back after it had. One host
+ * then held the button a turn longer than the other. The condition is first
+ * asked at the start of a frame (GameSession.closeSheetHolds), after the press
+ * has run as far as it can with the game standing still — the same point in
+ * either host.
+ */
+export const heldTurnExpr = (): string => {
+  const key = `__held${++heldIds}`;
+  return `((s) => { const w = window; if (w.${key} === undefined) w.${key} = s.realYieldSeq; return s.realYieldSeq >= w.${key} + ${HELD_YIELDS}; })(window.dbg.session)`;
+};
+
 /** {@link clientAxis} on both axes: the client point that lands on canvas (x, y) */
 export function clientPointFor(
   x: number,

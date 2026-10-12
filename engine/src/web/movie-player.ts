@@ -18,9 +18,8 @@ import {
   readMovFile,
 } from "@dreamfactory/engine/df/mov";
 import {
-  TICK_MS,
   bedRuntimeMs,
-  frameHoldMs,
+  frameHoldTicks,
   frameWaits,
   segmentInterval,
 } from "@dreamfactory/engine/df/mov-pace";
@@ -42,6 +41,7 @@ import {
 } from "@dreamfactory/engine/df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
+import { ticksAt } from "@dreamfactory/engine/runtime/clock";
 import { volumeKey } from "@dreamfactory/engine/runtime/puppet";
 import { PlayHandle } from "@dreamfactory/engine/runtime/audio";
 
@@ -207,6 +207,11 @@ export class MoviePlayer {
   get progress(): number {
     const m = this.active;
     return m?.frames.length ? Math.min(m.pos, m.frames.length - 1) / m.frames.length : -1;
+  }
+
+  /** the film's frame as it stands, without advancing it — a frame that ran no tick (#542) */
+  currentFrame(): MovieImage | null {
+    return this.active ? this.active.frames[this.active.pos] : null;
   }
 
   /** the frame to paint right now (with the movie's own palette and where on
@@ -769,7 +774,7 @@ export class MoviePlayer {
     // a backward goto) is left at tick 200 by the jump to "Name 12".
     for (let c = 0; c < m.seg.cues.length; c++) {
       const cue = m.seg.cues[c];
-      if (m.cuesFired.has(c) || now - m.segStartMs < cue.tick * TICK_MS)
+      if (m.cuesFired.has(c) || ticksAt(now) - ticksAt(m.segStartMs) < cue.tick)
         continue;
       m.cuesFired.add(c);
       const idx = m.frameByName.get(cue.target.toLowerCase());
@@ -806,8 +811,10 @@ export class MoviePlayer {
       // The FILM's own hold, not a rate we invented: max(frame, movie floor) —
       // see mov-pace.frameHoldMs. `interval` still decides whether this movie is
       // self-paced at all (0 = a click-through close-up).
-      const hold = frameHoldMs(m.seg, m.pos);
-      if (now - m.lastTick >= hold) {
+      // Counted in TICKS, as the original counts it: in milliseconds a 1-tick
+      // frame on a clock read in whole ms would miss every 16 ms tick (#542).
+      const hold = frameHoldTicks(m.seg, m.pos);
+      if (ticksAt(now) - ticksAt(m.lastTick) >= hold) {
         // ...and a frame may be authored to wait for the SPOKEN LINE as well
         // (flags bit 0). What it waits on is the original's VOICE channel, which
         // is where `voicesound()` puts a line — in this port that is the movie's

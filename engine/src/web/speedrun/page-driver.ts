@@ -37,7 +37,8 @@
  *     (`beginTouch`).
  */
 import {
-  HELD_YIELDS,
+  heldTurnExpr,
+  READY_TO_LOOK,
   KEY_SAFE,
   Paused,
   clientPointFor,
@@ -502,6 +503,10 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
         let pressed = 0;
         for (;;) {
           check();
+          while (!run<boolean>(READY_TO_LOOK)) {
+            check();
+            await wallWait(16);
+          }
           if (run<boolean>(goal)) return pressed;
           if (budgetClock() > deadline) {
             throw new Error(`stuck waiting for ${what}: ${pressed} presses of ${name} in ${budget} ms`);
@@ -596,8 +601,7 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
         // this waits one turn, which is the rate the dial itself steps at; see
         // HELD_YIELDS for why one turn rather than two.
         const held = async (): Promise<void> => {
-          const was = run<number>("window.dbg.session.realYieldSeq");
-          await until(`window.dbg.session.realYieldSeq >= ${was + HELD_YIELDS}`, Math.min(budget, 20_000));
+          await until(heldTurnExpr(), Math.min(budget, 20_000));
         };
         movePointer(from);
         pointer("pointerdown", from);

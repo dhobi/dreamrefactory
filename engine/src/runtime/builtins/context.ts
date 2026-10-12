@@ -176,7 +176,7 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
     yieldFrame: async () => {
       if (session.hasRealFrames) {
         session.realYieldSeq++;
-        await session.nextFrame();
+        await session.frameWait();
       }
     },
   };

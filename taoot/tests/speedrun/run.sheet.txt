@@ -26,12 +26,14 @@
 # =====================================================================
 
 # A SEEDED RUN: the game from the beginning with its dice pinned, so every run
-# of this sheet is the same course. 360 sets the bedsit bomb off before the
-# card trick's last line is over — the earliest the flat allows — and of the
-# twelve seeds in 1..1000 that do, it plays the whole sheet fastest (6:24.9
-# in-game). Re-find it after an edit: a change before a die moves every draw
-# after it. Seeded times are a category of their own (see the workbench's ?).
-reset(seed: 360)
+# of this sheet is the same course. 378 leaves the flat a tick behind the
+# fastest — the bomb before the card trick's last line is over, as the earliest
+# flats do — and of the seeds in 1..1000 whose flat is within two ticks of the
+# best, it plays the whole sheet fastest (6:02.5 in-game, on the tick-stepped
+# clock of #542). Re-find it after an edit: a change before a die moves every
+# draw after it, and the flat alone does not pick the run. Seeded times are a
+# category of their own (see the workbench's ?).
+reset(seed: 378)
 
 # The Nightdive film, English edition only. A no-op in the workbench, which
 # boots with `<meta name="skip-intro">` — and NOT optional under `npm run

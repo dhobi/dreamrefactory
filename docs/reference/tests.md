@@ -270,7 +270,7 @@ when the rip is not there.
 | [`fade-after-movie.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/fade-after-movie.ts) | a fade after a film takes down the film's last frame, not the room behind it — the lift gate that shut again for a moment ([#380](https://github.com/dhobi/dreamrefactory/issues/380)) |
 | [`checkers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/checkers.ts) | Bolivar's checkers opponent, `pluginfx("checkmove", …)`, standing in for `CHECKERS.DLL` |
 | [`audio-mute.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/audio-mute.ts) + [`audio-sinks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/audio-sinks.ts) | the listener's mute kept apart from the game's own `wavevolume`/`themevol`, and the two browser sinks and the bank library on paths the machine suites (which play into `NullAudioSink`) never take |
-| [`speedrun-clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-clock.ts) + [`load-clock-hidden.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/load-clock-hidden.ts) | the [speedrun clock](#the-clock-in-game-time): game time that counts passes, stands still while the engine waits on a file, and stops while the tab is hidden ([#375](https://github.com/dhobi/dreamrefactory/issues/375)) |
+| [`speedrun-clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-clock.ts) + [`load-clock-hidden.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/load-clock-hidden.ts) | the [speedrun clock](#the-clock-in-game-time): game time that counts ticks, stands still while the engine waits on a file, and stops while the tab is hidden ([#375](https://github.com/dhobi/dreamrefactory/issues/375)) |
 | [`speedrun-condition.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-condition.ts) + [`speedrun-sheet-header.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-sheet-header.ts) + [`reply-ids.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/reply-ids.ts) | the sheet grammar's joined conditions (`a or b`, `a and b`, `!a`); a [contributed sheet's](#contributed-sheets) header, title on line 1 and the rest optional; and the answer ids a conversation can show for `say([…])` ([#377](https://github.com/dhobi/dreamrefactory/issues/377)) |
 | [`fullscreen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/fullscreen.ts) + [`stretch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/stretch.ts) + [`tylerhartman.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/tylerhartman.ts) | the Fullscreen button on a browser with no `requestFullscreen` (an iPhone), the stretched fullscreen's remembered box and pointer maths, and [TH mode's](../engine/runtime/th-mode.md) layout on a 16:9 display |
 | [`page-url.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/page-url.ts) | `pageUrl` resolves a path against the page and refuses anything that leaves the site |
@@ -495,8 +495,26 @@ link as over a fast one. Four things in the engine make it so:
 - **Game time stands still while the engine waits on a file** it needs now — a
   room, its casts, a film, a script's file, a save (`GameSession.whileLoading`).
   The original read its disc synchronously. This is on for every page.
-- **Speedrun time** (`nominalTime`) moves game time by exactly 50 ms per pass,
-  so `delay`, fades, films and animation cost passes rather than milliseconds,
+- **Speedrun time** (`nominalTime`) moves game time by exactly one tick (1/60 s)
+  per tick, in whole milliseconds, so every third tick is a 50 ms pass. A tick
+  and not a pass, because the tick is TI.EXE's unit: a script that lowers
+  `framerate` (the turbine's valves, the fencing) runs faster than 20 passes a
+  second, a film holds its own ticks, and a fade ramps one step a tick
+  ([#542](https://github.com/dhobi/dreamrefactory/issues/542)). Five rules
+  keep a tick-stepped run the same on every machine and in either host: a
+  sleep, a clip's length and a film's cue count whole ticks, never
+  milliseconds; a script's poll goes on after the next tick, not the next
+  screen refresh (`GameSession.frameWait`); the scheduler's pass and the frame
+  counter fall on tick NUMBERS (every third tick, every `framerate`th), not on
+  a rhythm counted from wherever it last started; a frame that runs no tick
+  takes queued input and moves nothing (`ScreenDirector.untickedFrame`), so no
+  film or fade starts its clock on a frame one host draws and the other does
+  not; and the first frame after the game stood still runs no tick, so input
+  made while it stood still lands on the tick it was made on. A runner's
+  `hammer` looks only once the game has booted and no file is loading
+  (`READY_TO_LOOK`). `travel`/`hunt`/`stand`'s planner runs on the wall clock
+  and voids the time. So `delay`, fades, films and animation cost ticks rather
+  than milliseconds,
   and `voicedone`/`sounddone`/`currentsound` end a clip by its own length
   (`TimedAudio`) rather than the sound card's.
 - **A sheet's clock** (`sheetClock`): the game runs only while the runner waits

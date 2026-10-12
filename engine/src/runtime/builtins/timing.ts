@@ -78,7 +78,7 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     // decides when we have waited enough.
     const deadline = ticksAt(session.clock.now) + Math.max(1, Math.round(session.frameRate));
     do {
-      await session.nextFrame();
+      await session.frameWait();
       // this handler owns the CPU (scriptBusy), so the normal per-frame loop
       // service is skipped; pump the OTHER per-frame loops here so e.g. the sky
       // keeps drifting while the wheel is being turned (not the caller's own).

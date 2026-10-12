@@ -1,6 +1,7 @@
 import { DFContainerFile, readContainerFile } from "../df/container";
 import { decodeAudioContainer, DecodedAudio, resampleTo } from "../df/audio";
 import { AudioBank, readAudioBank, readBankTables } from "../df/banks";
+import { ticksAt, ticksFor } from "./clock";
 
 /**
  * Audio playback behind the script commands. Three channels, mirroring the
@@ -203,6 +204,7 @@ interface RecordedPlay {
  * longer decides anything.
  */
 export class TimedAudio implements AudioSink {
+  /** the tick each channel's sound ends on — Infinity for a loop */
   private endsAt: Partial<Record<AudioChannel, number>> = {};
 
   constructor(
@@ -213,7 +215,9 @@ export class TimedAudio implements AudioSink {
 
   play(channel: AudioChannel, audio: DecodedAudio, opts?: PlayOpts): PlayHandle {
     const ms = (audio.samples.length / Math.max(1, audio.sampleRate)) * 1000;
-    const end = opts?.loop ? Number.POSITIVE_INFINITY : this.now() + ms;
+    // in ticks, as Clock.sleep is and for its reason: in ms against a clock read
+    // in whole ms, a clip ended a tick apart by where the ticks fell (#542)
+    const end = opts?.loop ? Number.POSITIVE_INFINITY : ticksAt(this.now()) + ticksFor(ms);
     this.endsAt[channel] = end;
     const handle = this.inner.play(channel, audio, opts);
     let stopped = false;
@@ -221,7 +225,13 @@ export class TimedAudio implements AudioSink {
     // `currentsound()` asks the handle rather than the channel, so the handle
     // follows the same rule: under speedrun time it is over when its length of
     // game time has gone by, or when the next play on its channel replaced it
-    const over = (): boolean => this.now() >= end || this.endsAt[channel] !== end;
+    //
+    // "Replaced" compares END TICKS, as it compared end times before (#542): two
+    // loops on one channel both end at Infinity and neither replaces the other.
+    // Compared by which play it was, every loop read the other as its
+    // replacement, called itself done, and was started again every tick — the
+    // sinking's deck loop, 270 copies deep.
+    const over = (): boolean => ticksAt(this.now()) >= end || this.endsAt[channel] !== end;
     return {
       get done(): boolean {
         return stopped || (nominal() ? over() : handle.done);
@@ -235,13 +245,14 @@ export class TimedAudio implements AudioSink {
   }
 
   halt(channel: AudioChannel): void {
-    this.endsAt[channel] = 0;
+    this.endsAt[channel] = undefined;
     this.inner.halt(channel);
   }
 
   isDone(channel: AudioChannel): boolean {
     if (!this.nominal()) return this.inner.isDone(channel);
-    return this.now() >= (this.endsAt[channel] ?? 0);
+    const end = this.endsAt[channel];
+    return end === undefined || ticksAt(this.now()) >= end;
   }
 
   setChannelVolume(channel: AudioChannel, volume: number): void {

@@ -121,6 +121,8 @@ export interface RoomLayer {
   readonly roomAnimating: boolean;
   /** the view frame on the screen now, or null before the first settle */
   roomFrame(): CachedFrame | null;
+  /** take a queued gesture and move nothing — a frame that ran no tick (#542) */
+  takeInputOnly?(): CachedFrame | null;
   /** the view's own palette, dim and gamma applied */
   roomPalette(): Uint8ClampedArray;
   /** the palette the room's props colorize through */
@@ -255,6 +257,7 @@ export class ScreenDirector {
     this.puppetView = new PuppetView(session, size);
     // clut/mixclut palette dimming (the darkroom light switch, and Dust's map)
     session.onClut = (target, dim) => this.setClut(target, dim);
+    session.inputWaiting = () => this.inputDrainable;
     // Snapshot the frame that is actually on screen. captureFrame runs from a
     // script (screentoblack) during tick(), i.e. BEFORE this frame's render, so
     // the screen still holds the last presented composite — the pre-transition
@@ -451,11 +454,16 @@ export class ScreenDirector {
     // Real time in, game time out: while a host modal owns the screen the
     // reading stops moving and every delta below it is zero, which is the
     // original's own state under a blocking file dialog (GameSession.gameTime).
+    const was = this.session.gameNow;
     now = this.session.gameTime(now);
+    // under speedrun time, did this frame run a tick? (see serviceFrameLoops below)
+    const stepped = this.session.nominalTime || this.session.sheetClock;
+    const ticked = !stepped || now !== was;
     // a run's in-game time: the player's own waiting counts in real time (#508)
     this.session.countRun(this.quiescent);
     this.lockedAtPass = this.inputLocked;
     this.room?.refreshRoomGamma();
+    if (!ticked) return this.untickedFrame();
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
     // the census in SetViewer.advanceRoom for why that is 50 ms and not 90. Its
     // view goes round in DreamFactory 4 (PropRuntime.tick); Dust's is unchecked.
@@ -486,7 +494,11 @@ export class ScreenDirector {
         void this.session.track(this.click(e.x, e.y).then(() => this.session.setPointer(px, py)), `queued click ${e.x},${e.y}`);
       }
     }
-    this.session.scheduler.serviceFrameLoops(); // sky drift, fence idle
+    // sky drift, fence idle: once a frame in play, once a TICK under speedrun
+    // time — a frame is the host's and a tick the game's, and counted per frame
+    // they ran as often as the host drew, even while the game stood still, so a
+    // headless run and a browser fenced Willie 1.85 s apart (#542)
+    if (ticked) this.session.scheduler.serviceFrameLoops();
     this.serviceBootIdle();
     this.serviceCursor();
     if (this.movies.playing) {
@@ -494,6 +506,29 @@ export class ScreenDirector {
       return this.movies.tick(now) ?? this.room?.roomFrame() ?? null;
     }
     return this.room?.advanceRoom(now) ?? null;
+  }
+
+  /**
+   * A frame that ran no tick, under speedrun time (#542): the queued input is
+   * taken, as it would be, and nothing else happens — no film, fade, wipe, prop
+   * or room animation is advanced, and none STARTS its clock here. They anchor
+   * on the first frame they see, and a browser draws frames while the game
+   * stands still (a file arriving, the runner thinking) that a headless run
+   * never draws: a film whose file came while the game stood still counted its
+   * first hold from one tick in the browser and from the next one headless.
+   */
+  private untickedFrame(): CachedFrame | null {
+    if ((this.session.isV5 || !this.room) && !this.inputLocked && this.session.events.length) {
+      const e = this.session.events.take();
+      if (e?.kind === "keydown") void this.session.track(this.keyDown(e.key, e.special).then(() => {}), `queued key ${e.key}`);
+      else if (e) {
+        const { pointerX: px, pointerY: py } = this.session;
+        void this.session.track(this.click(e.x, e.y).then(() => this.session.setPointer(px, py)), `queued click ${e.x},${e.y}`);
+      }
+    }
+    this.serviceCursor();
+    if (this.movies.playing) return this.movies.currentFrame() ?? this.room?.roomFrame() ?? null;
+    return this.room ? (this.room.takeInputOnly?.() ?? this.room.roomFrame()) : null;
   }
 
   /**
@@ -1369,6 +1404,26 @@ export class ScreenDirector {
 
   /** a turn or walk is on screen, or a script is in flight — the condition a
    *  movement key is QUEUED behind rather than refused on */
+  /**
+   * A queued gesture will be taken on this frame — exactly the tests
+   * {@link tick} and SetViewer.advanceRoom pop the queue on.
+   *
+   * Under a sheet's clock the game does not tick while this holds (#542). A
+   * browser, between two of the runner's lines, keeps drawing frames while the
+   * game stands still and empties the queue in them for nothing; a headless run
+   * draws a frame only when one is asked for, and emptied it one a TICK after
+   * the clock had started — fencing's queued presses came to 1.85 s more. Not
+   * ticking until the queue is taken makes the two the same, and makes a
+   * browser's own result independent of how many spare frames a round trip
+   * happened to leave it.
+   */
+  get inputDrainable(): boolean {
+    if (!this.session.events.length) return false;
+    if (this.session.isV5 || !this.room) return !this.inputLocked;
+    if (this.movies.playing) return false;
+    return !this.movingCamera;
+  }
+
   get movingCamera(): boolean {
     return (this.room?.roomAnimating ?? false) || this.session.scriptBusy;
   }
