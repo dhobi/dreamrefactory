@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { decodeShpFrame } from "@dreamfactory/engine/df/shp";
 import {
-  drawScaledSprite, scaledOrigin, scaledSpriteCovers, spriteCovers, worldSpriteSize,
+  drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize,
 } from "@dreamfactory/engine/runtime/sprite-scaler";
 import { hitPoints, scalerCases, type ScalerCase } from "./helpers/sprite-scaler-cases";
 
@@ -139,7 +139,8 @@ test("a point is the sprite's exactly when the engines say so", () => {
     const f = decodeShpFrame(c.sprite);
     const pts = hitPoints(c, hits.seed * 1000 + i);
     const anchorX = c.flip ? f.width - f.posXraw : f.posXraw;
-    const scaled = pts.scaled.map(([x, y]) => (scaledSpriteCovers(f, c.ax, c.ay, c.dw, c.dh, c.flip, x, y) ? "1" : "0")).join("");
+    const box = scaledOrigin(f, c.ax, c.ay, c.dw, c.dh, c.flip);
+    const scaled = pts.scaled.map(([x, y]) => (scaledBoxCovers(f, box.left, box.top, c.dw, c.dh, x, y) ? "1" : "0")).join("");
     const plain = pts.plain.map(([x, y]) => (spriteCovers(f, c.ax - anchorX, c.ay - f.posYraw, x, y) ? "1" : "0")).join("");
     for (const engine of ["df", "ti", "tl"] as const) {
       if (scaled !== hits.results[i][engine].scaled) wrong.push(`${i} scaled vs ${engine}`);

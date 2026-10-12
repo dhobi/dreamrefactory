@@ -502,26 +502,11 @@ export function spriteCovers(f: ScalerFrame, left: number, top: number, x: numbe
 }
 
 /**
- * The scaled point test (DF.EXE 0x419500, TI.EXE 0x413540, tl.exe 0x43fc90): the
- * box {@link drawScaledSprite} draws into, the point mapped back by `w / dw` and
- * `h / dh` truncated. As above, a mirror moves only the box.
+ * The scaled point test (DF.EXE 0x419500, TI.EXE 0x413540, tl.exe 0x43fc90), for
+ * the box {@link drawScaledSprite} draws into ({@link scaledOrigin}: `left, top`,
+ * `dw x dh`): the point mapped back by `w / dw` and `h / dh` truncated. A mirror
+ * moves only the box, never the sample.
  */
-export function scaledSpriteCovers(
-  f: ScalerFrame,
-  ax: number,
-  ay: number,
-  dw: number,
-  dh: number,
-  flip: boolean,
-  x: number,
-  y: number,
-): boolean {
-  if (dw <= 0 || dh <= 0) return false;
-  const { left, top } = scaledOrigin(f, ax, ay, dw, dh, flip);
-  return scaledBoxCovers(f, left, top, dw, dh, x, y);
-}
-
-/** {@link scaledSpriteCovers} for a box already placed (`left, top`, `dw x dh`) */
 export function scaledBoxCovers(
   f: ScalerFrame,
   left: number,
