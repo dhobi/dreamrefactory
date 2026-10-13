@@ -2,6 +2,7 @@ import { readAudioHeader } from "./audio";
 import { DFContainerFile, readContainerFile } from "./container";
 import { versionOf } from "./version";
 import type { MovFile, MovFrame, MovSegment } from "./mov";
+import type { MovEffectV1 } from "./mov-v1-effects";
 
 /**
  * MOV files as *Dust* (DreamFactory 1) writes them.
@@ -34,9 +35,12 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  *            frame stops for a click — see {@link MovFrameV1.waitsForClick}.
  *     +0x02  i32 hold, in ticks of 50/3 ms — floored by the header's frame rate
  *            (0x404861: `max(hold, [hdr+0x26])`)
- *     +0x06  i16 NOT read by the movie loop — see below. 16 on 6255 of the
- *            disc's 6717 frames, 18 on 175 first frames and 17 on 163 last
- *            ones, which is a structural marker and not behaviour.
+ *     +0x06  i16 the TRANSITION the frame is drawn with, dispatched through
+ *            the 19-entry table at 0x405c9c (0x40589f reads it): 16 plain,
+ *            17 fade to black, 18 fade from black, 0..15 wipes, slides and
+ *            dissolves — the whole table is in mov-v1-effects.ts. Only drawn
+ *            through when the dirty rect at +0x28 is not empty (0x404dad).
+ *     +0x08  i16 the square size effect 13 dissolves in (0x405899 -> 0x449088)
  *     +0x0a  i32 first and +0x0e i32 last container of the range this frame
  *            loads, when +0x1a bit 1 says it loads one (0x406be9). Not read
  *            here: the port has the whole file in hand and has nothing to
@@ -66,6 +70,11 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  *            with the pictures — the one-shot player literally adds `|ref|` to
  *            the segment base either way (0x404d77)
  *     +0x24  i16 offset of the frame's HOTSPOT run in container 0 — see below
+ *     +0x28  i16 top, left, bottom, right: the frame's DIRTY RECT, the only
+ *            part of the picture that changed. Empty means DF.EXE neither
+ *            decodes nor blits the frame (0x404dad -> 0x405780) — on all 674
+ *            such frames on the disc the picture is the one before it, and no
+ *            frame changes a pixel outside its rect
  *     +0x30  pstr: the movie a type-3 exit chains to (the exit handler at
  *            0x4051d4 posts `record + 0x30` with the abort flag set)
  *
@@ -146,15 +155,19 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  * The port spends it through {@link MovFrame.waitsForVoice}, which is the same
  * sentence in v4's words — "hold until this movie's own sounds are done".
  *
- * ## +0x06 is not wait flags (#324)
+ * ## +0x06 is the transition, not wait flags (#324)
  *
- * The movie loop never reads +0x06: no site in .text tests a bit of it, and the
- * values do not behave like flags either — 16 almost everywhere, 18 on a first
- * frame, 17 on a last one. Deriving the click wait from it goes wrong in a way
- * that shows: "bits 1/3" amounts to "this is the first frame", so frame 0 would
- * be the only frame that ever stops for a click and every frame reached BY a
- * click would play straight on — the Mayor's letters and the hotel room's
- * blinds opening for one frame and then running off the end of the film.
+ * No site in the movie loop tests a bit of +0x06; the frame-draw function
+ * switches on the whole word (0x40589f, table at 0x405c9c). The values say the
+ * same: 16 (plain) on 6255 of the disc's 6717 frames, 18 (fade in from black)
+ * on a first frame and 17 (fade out to black) on a last one, with the wipes in
+ * between on a handful — the four PAPERs turn their pages with 8..11, SPANBLD
+ * and SPANMAR draw blinds (12), HIDEPLAT and JAILMAP open an iris (3). Deriving
+ * the click wait from it went wrong in a way that showed: "bits 1/3" amounts to
+ * "this frame fades in", so frame 0 would be the only frame that ever stops for
+ * a click and every frame reached BY a click would play straight on — the
+ * Mayor's letters and the hotel room's blinds opening for one frame and then
+ * running off the end of the film.
  *
  * A frame stops because it OWNS hotspots and is not told to play through them:
  * the count at +0x00 (0x404e5a, and 0x404e90 skipping to the action when it is
@@ -169,10 +182,12 @@ import type { MovFile, MovFrame, MovSegment } from "./mov";
  * 520 counted runs on the disc decode cleanly for exactly their count, and 372
  * of them are ones an unbounded walk over-reads.
  *
- * `waitsForVoice` still comes from +0x06 bit 0, OR-ed with the real +0x1a bit 0
- * — see {@link MovFrameV1.holdsForSound}. That one is still an accident ("this
- * is the last frame") but a load-bearing one, and untangling it is a separate
- * question from this.
+ * And it is not the voice wait either. That was read from +0x06 bit 0, which is
+ * "the code is odd" — every fade-out — and was kept OR-ed with +0x1a bit 0 as a
+ * load-bearing accident. The movie loop's only voice wait is +0x1a bit 0
+ * ({@link MovFrameV1.holdsForSound}, 0x404ab0 and 0x404ae6), so that is all
+ * `waitsForVoice` is now. A fade-out frame holds for its hold — the fade's own
+ * length — and no longer for the sound playing under it.
  *
  * ## Header fields
  *
@@ -191,14 +206,17 @@ export interface MovFrameV1 {
   picture: number;
   /** ticks of 50/3 ms this frame is held for; the segment's rate is the floor */
   holdTicks: number;
-  /** bit 0 of +0x06 — hold until the fired one-shot sound has finished */
-  waitsForVoice: boolean;
+  /**
+   * +0x06 / +0x08 / +0x28 — how the frame is drawn: the transition, the
+   * dissolve's block size and the dirty rect (see mov-v1-effects.ts)
+   */
+  effect: MovEffectV1;
   /**
    * Hold until a hotspot is clicked: this frame owns at least one (+0x00) and
    * +0x1a bit 2 does not say to play through them.
    *
-   * NOT +0x06, which is not a field the movie loop touches — see the module
-   * comment. Its bits amount to "first frame" and "last frame", so read from it
+   * NOT +0x06, which is the frame's transition — see the module comment. Its
+   * bits amount to "fades in" and "fades out", so read from it
    * only a frame 0 would ever wait: click the envelope in `maylett.mov` or the
    * hotel blinds in `hwin.mov` and the picture would show for one frame and then
    * run off the end of the film (#324).
@@ -387,27 +405,19 @@ const FRAME = {
   /** +0x00 — how many hotspot records this frame owns at {@link FRAME.hotspots} */
   count: 0x00,
   hold: 0x02,
-  waitFlags: 0x06,
+  effect: 0x06,
+  effectBlock: 0x08,
   action: 0x16,
   target: 0x18,
   flags2: 0x1a,
   picture: 0x1c,
   sound: 0x20,
   hotspots: 0x24,
+  rect: 0x28,
   chain: 0x30,
 } as const;
 /** the +0x30 pstr runs to the record's end at +0x50 */
 const CHAIN_NAME_MAX = 31;
-
-/**
- * Bits of record +0x06. NOT flags the engine reads — see the module comment;
- * they behave as "this is the last frame" and "this is the first frame".
- *
- * Only `voice` is still read, and only as one half of `waitsForVoice`. The
- * click bits are kept named rather than deleted because what they are NOT is
- * the finding: `waitsForClick` does not come from them (#324).
- */
-const WAIT = { voice: 1, click: 2, clickAlt: 8 } as const;
 
 /** bits of record +0x1a, each one an engine read (see the module comment) */
 const MORE = {
@@ -518,7 +528,6 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         );
         break;
       }
-      const waitFlags = at16(o + FRAME.waitFlags);
       const soundRef = at32(o + FRAME.sound);
       const nameLen = cs[o + FRAME.chain] ?? 0;
       let chainTo = "";
@@ -540,7 +549,16 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
       frames.push({
         picture: picLoc,
         holdTicks: at32(o + FRAME.hold),
-        waitsForVoice: (waitFlags & WAIT.voice) !== 0,
+        effect: {
+          code: at16(o + FRAME.effect),
+          block: at16(o + FRAME.effectBlock),
+          rect: {
+            top: at16(o + FRAME.rect),
+            left: at16(o + FRAME.rect + 2),
+            bottom: at16(o + FRAME.rect + 4),
+            right: at16(o + FRAME.rect + 6),
+          },
+        },
         waitsForClick:
           hotspotCount > 0 && (flags2 & MORE.playsThroughHotspots) === 0,
         hotspotCount,
@@ -805,18 +823,14 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
           holdTicks: f.holdTicks,
           /*
            * v4's "hold until this movie's own sounds are done" is DF1's +0x1a
-           * bit 0, which is the flag the engine really tests (0x404ab0 ->
-           * 0x429bd0) and the one 69 segments are timed by — DOG1.MOV waits out
-           * each growl before the next snarl, MAYOREND.MOV waits out the
-           * mayor's speech instead of ending 46 s early.
-           *
-           * OR-ed with the +0x06 reading rather than replacing it. That one is
-           * not a flag the engine reads at all (module comment), but what it
-           * amounts to — "this is the last frame" — still keeps a final line
-           * from being cut on ten films, DIEH3 and WELLGUN among them, and
-           * dropping it would trade one class of clipped sound for another.
+           * bit 0, the one flag the engine tests for it (0x404ab0 and the exit
+           * path 0x404ae6 -> 0x429bd0) and the one 69 segments are timed by —
+           * DOG1.MOV waits out each growl before the next snarl, MAYOREND.MOV
+           * waits out the mayor's speech instead of ending 46 s early. Nothing
+           * else: +0x06, once OR-ed in here, is the transition (module comment).
            */
-          waitsForVoice: f.waitsForVoice || f.holdsForSound,
+          waitsForVoice: f.holdsForSound,
+          effectV1: f.effect,
           holdsDeadline: false,
           // a hotspot run is live on every frame that carries one; only the
           // wait bit stops the picture for it (the module comment's skippable

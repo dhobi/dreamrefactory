@@ -589,8 +589,8 @@ arranged.
   ARMOPEN.MOV's opening animation is steerable mid-swing, at frame 16, where
   three of its four boxes put the diary back.
 
-  `+0x06` is not the count and not a field the movie loop touches: its bits
-  amount to "first frame" and "last frame". Reading it as the count makes only
+  `+0x06` is not the count: it is the frame's transition (next item). Reading
+  it as the count makes only
   frame 0 wait and lets every frame reached *by* a click run on to the end of
   the film (#324: the Mayor's letters, `maylett.mov`, and the hotel room's
   blinds, `hwin.mov`, each opening for a single frame and then closing). The
@@ -598,6 +598,17 @@ arranged.
   records long, so an unbounded walk makes a frame owning none answer clicks
   with the next frame's boxes. All 520 counted runs on the disc decode cleanly
   for exactly their count; an unbounded walk over-reads 372 of them.
+- **A frame is drawn through a transition.** Record `+0x06` is dispatched
+  through a 19-entry table at `0x405c9c` (`0x40589f`): 16 is the plain blit,
+  17 fades the palette to the "Black" CLUT and 18 up from it, and 0–15 are
+  wipes, slides, an iris, blinds and random dissolves, each its own routine
+  copying the frame's dirty rect (record `+0x28`) to the screen a strip a tick
+  over the frame's `max(hold, floor)`. A fade-out is not undone by the plain
+  frames after it — the screen stays black until an 18. The table, with every
+  routine's address, is in `engine/src/df/mov-v1-effects.ts`; on the disc, 18
+  opens most films, 17 closes them, the PAPERs turn their pages with 8–11 and
+  SPANBLD/SPANMAR draw blinds. An empty dirty rect means the frame is neither
+  decoded nor blitted (`0x405780`).
 - **A frame can wait for the sound it started.** Record `+0x1a` bit 0 makes the
   loop block on the sound channel before advancing (`0x404ab0` → `0x429bd0`),
   so the frame is held for `max(hold, what is left of the sound)`. Nothing in
@@ -606,6 +617,8 @@ arranged.
   growl twice and waits after each, so the dog growls twice over 2.4 s instead
   of once over 1.0 s; MAYOREND.MOV runs 61 s rather than 15 s, which is the
   difference between hearing the mayor's last speech and hearing a quarter of it.
+  This is the only voice wait: `+0x06` bit 0 (every odd transition, so every
+  fade-out) was once read as one too, and is not.
 - **Sounds are per frame and per click, not tables.** Frame record `+0x20`
   names the chunk a frame starts (negative = interleaved with the pictures),
   the hotspot its click sound; whatever nothing references is the bed.

@@ -151,9 +151,11 @@ test("a turn does not lose where the actor was going (#289)", async () => {
  * background from the previous talk is still visible for a very brief moment at
  * the beginning."
  *
- * It is, because Dust's stances are MATTE plates — layer 0 is one flat colour,
- * which `PuppetView.composite` reads as "keep the scene" — so most of a Dust
- * conversation is the room behind the character, and the composite is cached.
+ * It is, because a Dust conversation normally has `puppetgrab` on — the
+ * BOOTFILE sets it at boot — and then DF.EXE never draws the puppet's own layer
+ * 0 at all: the set's clean view stands in for it, in the set's colours 0..127
+ * (0x437165 -> 0x437380). So most of a Dust conversation is the room behind the
+ * character, and the composite is cached.
  * So the cache key needs the room as well as the character, the stance, the
  * clip and the display gamma: every conversation opens on the same neutral
  * pose, so without it a second talk with the same person builds the same key
@@ -168,6 +170,7 @@ test("a conversation composites over the room you are having it in (#289)", asyn
     return;
   }
   const session = newSession();
+  call(session, "puppetgrab", [1]); // BOOTFILE/0001's boot
   expect(await session.puppetCtrl.openPuppetFile("mwife.pup"), "mwife.pup opens").toBe(true);
   const view = new PuppetView(session);
 
@@ -217,4 +220,56 @@ test("a conversation composites over the room you are having it in (#289)", asyn
   view.composite(twice, sameRoom);
   expect(Buffer.from(twice.buffer).equals(Buffer.from(again.buffer)), "a held room repaints the same")
     .toBe(true);
+});
+
+/**
+ * `puppetgrab` decides whose background a puppet has — DF.EXE 0x4361c0 stores
+ * the flag, the loader skips layer 0 while it is set (0x435a4b), and the draw
+ * either puts the set's clean view in layer 0's place with the set's palette
+ * entries 0..127 copied over the puppet's (0x437380, the range is puppetparam 1
+ * and 2), or draws the puppet's own layer 0 (0x4372c0).
+ *
+ * The scripts clear it round the characters painted against a background of
+ * their own — `puppetgrab (false)`, `runpuppet ("dead.pup")`, `puppetgrab
+ * (true)` in GANG.CST — and those are exactly the PUPs whose layer 0 is a
+ * picture rather than one flat colour: DEAD.PUP's has 58 colours, MWIFE.PUP's
+ * one. So both halves are checked on the two of them.
+ */
+test("puppetgrab: the set's view and colours, or the puppet's own background", async () => {
+  if (!existsSync(`${CD}/PUPPETS/DEAD.PUP`)) {
+    console.warn(`no ${CD} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const W = 512, H = 384;
+  // a room in one colour, index 10, whose own palette makes it pure green
+  const palette = new Uint8ClampedArray(256 * 4);
+  for (let i = 0; i < 256; i++) palette.set([0, 255, 0, 255], i * 4);
+  const room = { pixels: new Uint8Array(W * PUPPET_ART_H).fill(10), width: W, height: PUPPET_ART_H, palette };
+  const greens = (buf: Uint8ClampedArray): number => {
+    let n = 0;
+    for (let i = 0; i < W * PUPPET_ART_H * 4; i += 4) if (buf[i] === 0 && buf[i + 1] === 255 && buf[i + 2] === 0) n++;
+    return n;
+  };
+  const shot = async (pup: string, grab: boolean, lo?: number, hi?: number) => {
+    const session = newSession();
+    call(session, "puppetgrab", [grab ? 1 : 0]);
+    if (lo !== undefined) call(session, "puppetparam", [1, lo]);
+    if (hi !== undefined) call(session, "puppetparam", [2, hi]);
+    expect(await session.puppetCtrl.openPuppetFile(pup), `${pup} opens`).toBe(true);
+    const buf = new Uint8ClampedArray(W * H * 4);
+    new PuppetView(session).composite(buf, room);
+    return greens(buf);
+  };
+  const area = W * PUPPET_ART_H;
+  // grabbed: the room shows behind the character, in the room's colour
+  expect(await shot("dead.pup", true), "the set behind dead.pup when grabbed").toBeGreaterThan(area / 4);
+  // not grabbed: the puppet's own painted background covers all of it
+  expect(await shot("dead.pup", false), "dead.pup's own painting when not").toBe(0);
+  // ...and a flat plate is drawn as what it is, not read as a matte. MWIFE's is
+  // 511 wide, so one column of the room (264 pixels) is all that is left of it.
+  expect(await shot("mwife.pup", false), "mwife's plate, ungrabbed").toBeLessThanOrEqual(PUPPET_ART_H);
+  // the room's colour reaches only the entries the range copies: index 10 is
+  // outside [64, 128), so it keeps the puppet's own colour for it
+  expect(await shot("mwife.pup", true, 64, 128), "index 10 not copied").toBe(0);
+  expect(await shot("mwife.pup", true, 0, 11), "index 10 copied").toBeGreaterThan(area / 2);
 });

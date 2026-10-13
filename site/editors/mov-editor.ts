@@ -35,6 +35,7 @@ import {
   bedRuntimeMs,
   chooseFrameInterval,
   frameHoldMs,
+  frameHoldTicks,
   frameWaits,
   framesLoop,
   isBed,
@@ -43,6 +44,7 @@ import {
 import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { movFileFromV1, readMovFileV1 } from "@dreamfactory/engine/df/mov-v1";
+import { EffectScreenV1, fadePaletteV1, type MovEffectV1 } from "@dreamfactory/engine/df/mov-v1-effects";
 import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
 import { movFileFromV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
 import { decodeFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
@@ -318,8 +320,91 @@ function paintFrame(): void {
     return;
   }
   const img = ctx.createImageData(w, h);
+  if (fxStart !== null) {
+    // a Dust frame's transition as far as it has got — the player's own
+    // EffectScreenV1, on the tick clock; what it has not drawn yet is black here
+    // (in game it is the room the film was called on)
+    const shot = fx.at(Math.floor((performance.now() - fxStart) / TICK_MS));
+    if (shot.pixels.length === w * h) {
+      indexedToRGBA(shot.pixels, w, h, fadePaletteV1(palette, shot.level), img.data);
+      if (shot.drawn)
+        for (let i = 0; i < shot.drawn.length; i++)
+          if (!shot.drawn[i]) img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 0;
+      ctx.putImageData(img, 0, 0);
+      return;
+    }
+  }
   indexedToRGBA(fb.pixels, w, h, framePalette ?? palette, img.data);
   ctx.putImageData(img, 0, 0);
+}
+
+// --- DreamFactory 1 transitions ------------------------------------------------
+
+/** record +0x06 of a Dust frame, in words — DF.EXE's table at 0x405c9c */
+const TRANSITIONS_V1 = [
+  "edges close in (horizontal)", "centre opens out (horizontal)", "four edges close in",
+  "iris open", "slide in from the top", "slide in from the bottom", "slide in from the left",
+  "slide in from the right", "wipe down", "wipe up", "wipe right", "wipe left", "blinds",
+  "dissolve", "random horizontal bands", "random vertical bands", "plain", "fade to black",
+  "fade from black",
+];
+const transitionText = (e: MovEffectV1): string =>
+  `${e.code} — ${TRANSITIONS_V1[e.code] ?? "past the table: nothing is drawn"}`;
+
+/** the transition the preview is drawing, on the player's own screen model */
+const fx = new EffectScreenV1();
+/** when the transition on the preview started (performance.now()), null = none */
+let fxStart: number | null = null;
+let fxRaf = 0;
+/** the step the film last painted, so a held frame is not repainted every tick */
+let fxPainted = -1;
+
+function stopTransition(): void {
+  cancelAnimationFrame(fxRaf);
+  fxStart = null;
+}
+
+/** put frame `idx` (decoded into `fb` already) up through its transition */
+function enterTransition(seg: MovSegment, idx: number, now: number): void {
+  const e = seg.dfV1 ? seg.frames[idx]?.effectV1 : undefined;
+  const w = decoded?.width ?? 0;
+  const h = decoded?.height ?? 0;
+  if (!e || !w || !h) {
+    fxStart = null;
+    return;
+  }
+  fx.enter(e, frameHoldTicks(seg, idx), fb.pixels.slice(0, w * h), w, h);
+  fxStart = now;
+  fxPainted = -1;
+}
+
+/** ▶ on the frame panel: the frame's transition over the frame before it */
+function previewTransition(): void {
+  const seg = segment();
+  if (!seg?.dfV1 || film) return;
+  stopTransition();
+  fx.reset();
+  fx.startSegment();
+  if (frameIdx > 0) {
+    decodeUpTo(frameIdx - 1);
+    const w = decoded?.width ?? 0;
+    const h = decoded?.height ?? 0;
+    if (w && h) fx.enter(undefined, 0, fb.pixels.slice(0, w * h), w, h);
+  }
+  decodeUpTo(frameIdx);
+  enterTransition(seg, frameIdx, performance.now());
+  const step = (): void => {
+    paintFrame();
+    drawOverlay();
+    if (fxStart !== null && fx.busy(Math.floor((performance.now() - fxStart) / TICK_MS)))
+      fxRaf = requestAnimationFrame(step);
+    else {
+      stopTransition();
+      paintFrame();
+      drawOverlay();
+    }
+  };
+  step();
 }
 
 // --- preview ----------------------------------------------------------------
@@ -480,6 +565,7 @@ function act(type: number, target: string, event: string, who: string): void {
 function goToFrame(idx: number): void {
   const seg = segment();
   if (!mov || !seg) return;
+  stopTransition();
   frameIdx = Math.max(0, Math.min(seg.frames.length - 1, idx));
   hoveredRegion = -1;
   const cost = decodeUpTo(frameIdx);
@@ -647,6 +733,8 @@ let film: Film | null = null;
 function stopFilm(): void {
   if (!film) return;
   cancelAnimationFrame(film.raf);
+  stopTransition();
+  fx.reset();
   film.bed?.stop();
   for (const v of film.voices) v.stop();
   film = null;
@@ -718,6 +806,7 @@ function filmEnter(idx: number, now: number): void {
   frameIdx = Math.max(0, Math.min(seg.frames.length - 1, idx));
   hoveredRegion = -1;
   decodeUpTo(frameIdx);
+  enterTransition(seg, frameIdx, now);
   paintFrame();
   drawOverlay();
   filmLabel();
@@ -742,6 +831,8 @@ function enterFilmSegment(idx: number, now: number, startFrame = 0): void {
   cursor = -1;
   decoded = null;
   palette = seg.dfV0 ? paletteV0(seg.paletteRaw) : paletteToRGBA(seg.paletteRaw, 256);
+  // a Dust segment's palette is "not yet set" until a frame sets it (0x404824)
+  fx.startSegment();
   film.segStart = now;
   film.cuesFired.clear();
   film.soundJump = null;
@@ -865,6 +956,15 @@ function filmClick(r: MovClickRegion): void {
 function filmStep(now: number): void {
   const seg = segment();
   if (!film || !seg) return;
+  // a wipe or fade draws a step a tick while the frame holds
+  if (fxStart !== null) {
+    const st = fx.step(Math.floor((now - fxStart) / TICK_MS));
+    if (st !== fxPainted) {
+      fxPainted = st;
+      paintFrame();
+      drawOverlay();
+    }
+  }
 
   // Cues first, and outside the pacing gate: a timed jump fires out of any wait
   // (the original polls it from both wait loops). Empty for every shipped film
@@ -1220,6 +1320,7 @@ function buildFrameList(): void {
     meta.textContent =
       [...edges].join(" ") +
       (f.sound ? ` · ♪${f.sound}` : "") +
+      (f.effectV1 && f.effectV1.code !== 16 ? ` · ⟿ ${TRANSITIONS_V1[f.effectV1.code] ?? f.effectV1.code}` : "") +
       (m.actionFrame1.toLowerCase() === f.name.toLowerCase() && f.name ? " · actionframe(1)" : "") +
       (m.actionFrame2.toLowerCase() === f.name.toLowerCase() && f.name ? " · actionframe(2)" : "");
     row.appendChild(meta);
@@ -1314,6 +1415,26 @@ function buildFrameLogic(): void {
   };
   nameLabel.appendChild(name);
   wrap.appendChild(nameLabel);
+
+  if (f.effectV1) {
+    // record +0x06: read-only, as everything of a v1 container is here
+    const fxLabel = document.createElement("label");
+    const r = f.effectV1.rect;
+    const empty = r.left >= r.right || r.top >= r.bottom;
+    fxLabel.textContent = `transition ${transitionText(f.effectV1)}`;
+    fxLabel.title =
+      `record +0x06, drawn over ${frameHoldTicks(segment()!, frameIdx)} ticks; ` +
+      (empty
+        ? "the dirty rect is empty, so nothing is drawn — only a fade runs"
+        : `dirty rect ${r.top},${r.left},${r.bottom},${r.right}`);
+    wrap.appendChild(fxLabel);
+    const play = document.createElement("button");
+    play.className = "mini";
+    play.textContent = "▶ transition";
+    play.title = "draw this frame over the one before it, as the game does";
+    play.onclick = () => previewTransition();
+    wrap.appendChild(play);
+  }
 
   if (!f.locationClickRegion) {
     const note = document.createElement("span");

@@ -341,7 +341,12 @@ export class PuppetView {
     // the display gamma is in the key because `rgba` below is post-gamma: without
     // it, moving the brightness mid-conversation would leave the character at the old one
     // until their next lip-sync frame changed the key by itself
+    // DreamFactory 1's puppetgrab: the set's view stands in for layer 0 (below)
+    const grab = this.session.isV1 && this.session.puppetGrab;
+    const grabLo = this.session.puppetParams.get(1) ?? 0;
+    const grabHi = this.session.puppetParams.get(2) ?? 128;
     const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
+      grab ? `grab${grabLo}-${grabHi}` : "own"}:${
       state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
     /**
      * ## AND THE ROOM IS PART OF THE PICTURE (#289)
@@ -378,11 +383,15 @@ export class PuppetView {
       // "background" layer that is one flat colour is a key-colour matte
       // (SMETH1: all-247 plate), not a backdrop
       const rgba = new Uint8ClampedArray(W * H * 4);
+      const pal = displayPalette(paletteToRGBA(p.pup.paletteRaw, 256));
       if (backdrop) {
         let view = backdrop.rgba;
         if (!view) {
           view = new Uint8ClampedArray(backdrop.width * backdrop.height * 4);
-          indexedToRGBA(backdrop.pixels, backdrop.width, backdrop.height, backdrop.palette, view);
+          indexedToRGBA(
+            backdrop.pixels, backdrop.width, backdrop.height,
+            grab ? grabPalette(pal, backdrop.palette, grabLo, grabHi) : backdrop.palette, view,
+          );
         }
         for (let y = 0; y < backdrop.height && y < H; y++) {
           rgba.set(view.subarray(y * backdrop.width * 4, (y + 1) * backdrop.width * 4), y * W * 4);
@@ -403,7 +412,6 @@ export class PuppetView {
           rgba[i + 3] = 255;
         }
       }
-      const pal = displayPalette(paletteToRGBA(p.pup.paletteRaw, 256));
       const stance = p.pup.stances[p.stanceIdx] ?? p.pup.stances[0];
       if (stance && state) {
         for (let l = 0; l < PUP_LAYERS.length; l++) {
@@ -413,7 +421,21 @@ export class PuppetView {
           const loc = layer.frames[Math.min(st.frame, layer.frames.length - 1)];
           try {
             const f = this.layerFrame(loc)!;
-            if (l === 0) {
+            /**
+             * Layer 0 is the puppet's background, and DreamFactory 1 says outright
+             * whether to draw it: with `puppetgrab` set the loader never reads it
+             * (DF.EXE 0x435a4b) and the draw puts the set's clean view in its place
+             * (0x437165 -> 0x437380) — the backdrop above, coloured with the set's
+             * entries [puppetparam 1, 2) over the puppet's palette. Without it the
+             * layer is drawn like any other, flat or painted. Dust's flat plates
+             * (mwife's all-166, cobb's all-223) are the grab case, and the painted
+             * ones (dead.pup, the saloon games) the scripts clear the flag for.
+             */
+            if (l === 0 && this.session.isV1) {
+              if (grab) continue;
+            } else if (l === 0) {
+              // Titanic and the others: not read out of their executables yet, so
+              // the old rule of thumb — a one-colour layer 0 is a matte
               let flat = true;
               const first = f.indexed[0];
               for (let i = 1; i < f.width * f.height; i++) {
@@ -626,4 +648,24 @@ export class PuppetView {
     if (!this.session.pointerDown) return false;
     return this.bevelAt(this.session.pointerX, this.session.pointerY) === press.index;
   }
+}
+
+/**
+ * The palette a grabbed set view is drawn through: the puppet's own, with the
+ * set's entries `[lo, hi)` copied over it — DF.EXE 0x437403, which walks the
+ * set's palette (+0x1270, 8 bytes an entry) into the puppet's (+0x3a) from
+ * puppetparam 1 up to puppetparam 2, 0 and 128 unless a script moves them.
+ * Both palettes are display RGBA, 4 bytes an entry.
+ */
+export function grabPalette(
+  puppet: Uint8ClampedArray,
+  set: Uint8ClampedArray,
+  lo: number,
+  hi: number,
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(puppet);
+  for (let i = Math.max(0, lo); i < Math.min(hi, 256); i++) {
+    out.set(set.subarray(i * 4, i * 4 + 4), i * 4);
+  }
+  return out;
 }

@@ -60,8 +60,13 @@ in the original: the deck map's `open` keeps rolling while the map flat is up,
 so `exitmap`'s `transfromflat ()` brings the room back with the map part-rolled,
 and only then does `close ()` roll it up from fully open.
 
-Dust's DF.EXE has not been checked; the port plays its states once and holds the
-last frame, as it always has.
+Dust's DF.EXE goes round the same way, with one difference: it takes the step
+in the prop's draw (0x41eab0 stores step + 1 and wraps it at the state's +0x70,
+0x41eb67), so a prop that is hidden, or a world prop outside the open set, is
+not drawn and does not move (0x41e770, 0x41e7b5). Its scripts stop a view the
+same way TAOOT's do — a `makeloop` timed to the list's length that names the
+next state (FIGHT.PRP's `drop` and `stop` after 4, HUB.SET's 10-step `fade`
+and its `idle` after 10).
 
 Those three levels are pointers, and pointers are what a block map can show.
 `CUFF.SHP` — the cufflink bag, its three props and their 46 pictures — with the

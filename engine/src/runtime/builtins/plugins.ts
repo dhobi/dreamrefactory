@@ -156,17 +156,14 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
          * Timelapse asks for, and the reason this bus is not DF4-only.
          *
          * `engine/src/runtime/checkers.ts` carries the contract, the move
-         * encoding and the rules. Two things belong here: the arguments, and the
-         * dice. The tie-break is the SESSION's rng rather than `Math.random` so
-         * a seeded run plays the same game twice — the speedrun suites lean on
-         * that, and an opponent that varies under a seed makes a route
-         * unrepeatable for no gain.
+         * encoding and the rules. The DLL has no dice: ties go to the first
+         * move in its scan order, so a seed plays the same game every time.
          */
         case "checkmove": {
           const board = toStr(rest[0] ?? "");
           const depth = toNum(rest[1] ?? 0);
           const side = toNum(rest[2] ?? 0);
-          const answer = checkMove(board, depth, side, (n) => Math.floor(session.rng() * n));
+          const answer = checkMove(board, depth, side);
           if (!board) log(`pluginfx("checkmove"): called with no board`);
           return answer;
         }

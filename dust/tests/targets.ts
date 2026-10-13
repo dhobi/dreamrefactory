@@ -172,3 +172,41 @@ test("the range's targets are placed, drawn and hit where the booth is", async (
   expect(hitAt(bx, by), "a bottle already broken cannot be hit again").toBe(null);
   expect(R.screenDrawList().map((a) => a.name), "...nor drawn").not.toContain("bottle1targ");
 });
+
+/**
+ * `actorinstance` copies the source's whole record — DF.EXE 0x411cc0 appends the
+ * 164 bytes it found with one `rep movsd` (0x411e3b), new name, serial and
+ * sprite handle aside. A copy that came up as a fresh actor lost the hitbox
+ * (+0x50/+0x52) a ball needs, and everything else a script had set.
+ */
+test("actorinstance copies the whole actor, hitbox and all", async () => {
+  if (!existsSync(`${TARGET}/TARGET.CST`)) return;
+  const session = newSession();
+  expect(await session.openCastFile("target.cst")).toBe(true);
+  const all = scripts(`${TARGET}/TARGET.CST`, "target.cst");
+  const main = all.find((s) => s.script.codes.has("initactors"))!;
+  session.interp.fallbackScripts = all;
+  session.interp.globals.set("day", 1);
+  const R = session.actorRuntime;
+  R.currentSet = "target";
+  await session.interp.runHandler(main, "initactors", [], { me: "target.cst", target: "" });
+
+  const src = R.get("towertarg")!;
+  Object.assign(src, {
+    visible: true, deg: 77, poseName: src.member.poses.at(-1)?.name ?? "stand", step: 2, scale: 900,
+    zclip: 40, speed: 12, turn: 10, dist: -3, owner: "gus", value: 5, starName: "target.tower",
+  });
+  src.hitbox = [30, 18];
+  const builtin = session.interp.builtins.get("actorinstance") as (i: unknown, a: string[]) => unknown;
+  await builtin(session.interp, ["towertarg", "towercopy"]);
+  const copy = R.get("towercopy")!;
+  expect(copy, "the copy exists").toBeTruthy();
+  expect(copy.name).toBe("towercopy");
+  const fields = (a: typeof src) => ({
+    visible: a.visible, setName: a.setName, at: [a.worldX, a.worldY, a.worldZ], worldSpace: a.worldSpace,
+    anchor: [a.anchorX, a.anchorY], dist: a.dist, deg: a.deg, hitbox: a.hitbox, pose: a.poseName, step: a.step,
+    scale: a.scale, zclip: a.zclip, speed: a.speed, turn: a.turn, owner: a.owner, value: a.value, star: a.starName,
+  });
+  expect(fields(copy)).toEqual(fields(src));
+  expect(copy.hitbox, "its own box, not the source's array").not.toBe(src.hitbox);
+});

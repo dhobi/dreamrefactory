@@ -212,8 +212,11 @@ record at all, which is one of the things a `.ti` round trip
 
 `openpuppetfile`, `closepuppetfile`, `currentpuppet`, `puppetspeak`,
 `puppetclear`, `puppetbevel`, `puppetevent`, `puppetbase`, `puppetvisible`,
-`puppetparam`, `countpuppets`, `indextopuppet`, `puppetscramble` — plus two
-stubs the corpus never exercises meaningfully (`puppetsubtitle`, `puppetgrab`).
+`puppetparam`, `countpuppets`, `indextopuppet`, `puppetscramble`, and
+`puppetgrab`, which in DreamFactory 1 puts the set's clean view and its colours
+0..127 behind a puppet in place of the puppet's own background (DF.EXE
+0x4361c0, drawn at 0x437380) — plus one stub the corpus never exercises
+meaningfully (`puppetsubtitle`).
 See [Characters](../engine/runtime/characters.md).
 
 `puppetscramble` shuffles the plaques offered **so far**, leaving any pushed
@@ -306,10 +309,10 @@ those `= "1"` tests fails under a space-joined reading.
 executable, dispatched on the name in the first argument: Timelapse's `xray`
 (the light that reveals a flat beneath, armed, moved and torn down by arity and
 argument type), `camera` and `scrollflat`, and Dust's `checkmove`, Bolivar's
-checkers opponent standing in for `CHECKERS.DLL`
-([`runtime/checkers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/checkers.ts)),
-whose tie-break draws on the session's random stream so a seeded run plays the
-same game twice. Why Timelapse's plugins are what they are is in
+checkers opponent, a port of `CHECKERS.DLL`'s own search
+([`runtime/checkers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/checkers.ts)):
+deterministic, as the DLL is, and checked move for move against the DLL's
+machine code run under an emulator. Why Timelapse's plugins are what they are is in
 [`runtime/plugins.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/plugins.ts).
 
 ## Saved games — `savegame.ts`

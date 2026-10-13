@@ -34,7 +34,7 @@
  * | +1 | the globals | `ds:0x460E18` |
  * | +2 | the string pool | `*(globals + 0x10)` at `0x41A2A5` — the same handle slot v4 uses |
  * | +3 | loops, `0x540` = 32 × 42 | `0x45F690`, stride from `0x438840` |
- * | +4 | crickets, `0x300` = 16 × 48 | `0x45FBD0`, `add esi,0x30` |
+ * | +4 | balls (v4's crickets' ids), `0x300` = 16 × 48 | `0x45FBD0`, `add esi,0x30` |
  * | +5 | walks, `0x520` = 16 × 82 | `0x45F170`, `add esi,0x52` |
  * | (var) | one waypoint payload per active walk carrying one | `0x41A41F` |
  *
@@ -90,16 +90,33 @@ const C0_PATHS = 0x100;
 const C0_PATH_COUNT = 9;
 const C0_PATH_STRIDE = 256;
 /**
- * The live loop-sound state: `{u32 bank file, u32 playing bank, u32 chunk}`,
- * three heap handles' worth of what DF.EXE calls the theme.
+ * The sound that was playing, as three words the writer asks the sound system
+ * for (`0x419e36`–`0x419e68`).
  *
- * Both bank words are handles into the open-file manifest and the second is not
- * a flag: it is the bank whose loop is SOUNDING, zero when none is. They are
- * usually the same handle and they can differ — `D2M_004.RTD` carries no loop
- * bank and a playing one (mayor.snd, the clock in the hall) — so a parse that
- * read the second as a boolean off the first lost that save's theme entirely.
+ * **+0xa00 is channel 3, the theme**: `0x429d10` writes channel 3's bank FILE
+ * handle (`[0x45e2fd]`) here when the channel is busy and 0 when it is idle
+ * (`0x409280(3)`, the channel-idle test). It fetches the record number too
+ * (`[0x45e301]`) and throws it away into a local: the theme is not resumed from
+ * a chunk, it is restarted from its bank's own loop list.
+ *
+ * **+0xa04 / +0xa08 are the effect channel's** bank file handle and 1-based
+ * record number — channel 1 or 2, whichever `0x429e10` picks: channel 2's when
+ * only channel 2 is busy (`0x429f20`, `[0x45e295]`/`[0x45e299]`), channel 1's
+ * when only channel 1 is (`0x429ea0`, `[0x45e22d]`/`[0x45e231]`), and when both
+ * are, the one whose sound record's word at +0x39 is greater. Both words are 0
+ * while neither channel is busy, and each is written only while its channel is.
+ *
+ * The loader (`0x41ae10`) gives them back the same way: at `0x41b1a0` the
+ * effect's record is replayed through `0x42a070` (the play-by-priority entry)
+ * as its bank's records are re-registered, and at `0x41b2ec` the bank whose file
+ * is the theme's has its loop list restarted (`0x429fa0`).
+ *
+ * Both are manifest handles, so they name the FILE — `NIGHT.SND` calls itself
+ * `town.snd`, as `TOWN.SND` does, and only the handle says which one sounded.
  */
 const C0_THEME = 0xa00;
+const C0_EFFECT_FILE = 0xa04;
+const C0_EFFECT_RECORD = 0xa08;
 /** the live CLUT, 256 × {i16 index, i16 rgb[3]} — v4's 0xb0c, 0x100 lower */
 const C0_CLUT = 0xa0c;
 const C0_CLUT_SIZE = 256 * 8;
@@ -221,6 +238,26 @@ const C1_FLAT_FILE = 356;
 /** the open puppet's manifest handle, and its name; 0 when none is open */
 const C1_PUPPET_HANDLE = 506;
 const C1_PUPPET_NAME = 526;
+/**
+ * Four settings a script makes and the loader takes back (all inside the window
+ * it restores), each found at its builtin's handler:
+ *
+ *  - +268 `puppetgrab` (`0x4361fd`; the boot's default is 0, `0x42e121`);
+ *  - +302 the frame interval `framerate (n)` sets — 60 Hz ticks per drawn frame,
+ *    clamped 0..60, default 3; the pacing loop spins on it (`0x434167`, setter
+ *    `0x42077d`);
+ *  - +390 `setvisible` (`0x410151`; `opensetfile` resets it to 1, `0x40ea9f`,
+ *    and a load does not run that);
+ *  - +392/+394 the PLAYER's hitbox, `actorhitbox ("player", rz, rxy)`
+ *    (`0x41314c`/`0x41315b`; `opensetfile` zeroes it).
+ *
+ * Every shipped save holds the defaults (1, 3, 1, 0/0), so these matter only to
+ * a save taken inside a scene that changed them — which a port save can be.
+ */
+const C1_PUPPET_GRAB = 268;
+const C1_FRAME_INTERVAL = 302;
+const C1_SET_VISIBLE = 390;
+const C1_PLAYER_HITBOX = 392;
 /** the block's full length, which the loader copies whole */
 const C1_SIZE = 542;
 
@@ -326,6 +363,40 @@ const ACTOR_SCALE = 44;
  */
 const ACTOR_TURN = 36;
 const ACTOR_SPEED = 40;
+/** the screen anchor, y then x — `actorxy`'s second argument lands at +20 (`0x412f7b`) */
+const ACTOR_ANCHOR_Y = 20;
+const ACTOR_ANCHOR_X = 22;
+/**
+ * The star's TILE, x >> 8 and y >> 8, copied with the star (`0x414e53`) and not
+ * kept up by a walk or `actorxyz` — so it is the cell of the star the actor was
+ * last put on, not of where it stands.
+ */
+const ACTOR_TILE_X = 32;
+const ACTOR_TILE_Y = 34;
+/** the step within the pose's play list: reset by `actorpose` (`0x4122e3`), advanced by the draw (`0x4153b5`) */
+const ACTOR_STEP = 38;
+/**
+ * `actordist`: set only for a screen actor and only to a negative layer
+ * (`0x4124ae`); a world actor's draw overwrites it with its projected depth
+ * (`0x4151d3`), and `actorxy` / `actoris3d (false)` make it −1.
+ */
+const ACTOR_DIST = 42;
+/** a serial number from the global counter at `0x45e490`, asserted on write-back (`0x414c9f`) */
+const ACTOR_SERIAL = 48;
+/** where the last draw put the actor's foot point on the screen — a cache (`0x414f3b`) */
+const ACTOR_DRAW_Y = 64;
+const ACTOR_DRAW_X = 66;
+/** `actorvalue`, a number (`0x414933`) */
+const ACTOR_VALUE = 74;
+/**
+ * `actorzclip`, subtracted from the projected depth before the far cull
+ * (`0x4149d3`, used at `0x415083`) — not a speed, though it was once taken for
+ * one beside +80 (cow 80, pig 16, Bolivar −8).
+ */
+const ACTOR_ZCLIP = 78;
+/** `actorhitbox (name, rz, rxy)`: index 1 reads +80, 2 reads +82 (`0x413182`, `0x413297`) */
+const ACTOR_HITBOX_RZ = 80;
+const ACTOR_HITBOX_RXY = 82;
 const ACTOR_NAME = 84;
 const ACTOR_SET = 100;
 const ACTOR_STAR = 116;
@@ -375,6 +446,20 @@ const PROP_Z = 30;
  */
 const PROP_DIST = 40;
 const PROP_SCALE = 42;
+/** the star's tile, as the cast record's +32/+34 (`0x41d3c9`) */
+const PROP_TILE_X = 32;
+const PROP_TILE_Y = 34;
+/** the step within the view's frames: reset by `propview` (`0x41c13a`), advanced by the draw (`0x41eb42`) */
+const PROP_STEP = 36;
+/** the serial, as the cast record's +48 (`0x41d34d`, checked at `0x41e424`) */
+const PROP_SERIAL = 46;
+/** the last draw's foot point on the screen — a cache (`0x41e6cb`) */
+const PROP_DRAW_Y = 62;
+const PROP_DRAW_X = 64;
+/** `propvalue`, a number (`0x41bbc3`) */
+const PROP_VALUE = 72;
+/** `propzclip` (`0x41bc63`), the cast record's +78 one record over */
+const PROP_ZCLIP = 76;
 const PROP_NAME = 78;
 const PROP_SET = 94;
 const PROP_STAR = 110;
@@ -387,42 +472,78 @@ const PROP_OWNER = 142;
 const FILE_LIST_STRIDE = 28;
 const FILE_LIST_NAME = 12;
 
-/** open sound banks: counts and pointers for the three arrays that follow */
+/**
+ * Open sound banks, 38 bytes each (`ds:0x460b38`): the bank's file handle at +0,
+ * the counts of its first two record arrays at +4/+6, three heap pointers, and
+ * its name at +0x16. Read by the loader at `0x41b0da`–`0x41b305`.
+ */
 const BANK_STRIDE = 38;
+const BANK_FILE = 0;
+const BANK_SOUNDS = 4;
+const BANK_CHUNKS = 6;
 const BANK_NAME = 0x16;
 
 /**
- * The walk record: 82 bytes, where v4's is 110.
+ * One sound record, 104 bytes, as `0x429a30` registers it out of the bank file
+ * and the loader copies it back. Three arrays per bank: the one-shot sounds
+ * (`[bank+0xa]`, count at +4), the theme's loop chunks (`[bank+0xe]`, count at
+ * +6), and the loop list built from those (`[bank+0x12]`, rebuilt by the loader
+ * from the bank file and never read from the save).
  *
- * Mapped by RECONSTRUCTION, which is the strongest kind of evidence this format
- * offers: the fields below predict where the walker is standing, and the cast
- * record — written by the same engine at the same instant, from a different
- * table — says whether the prediction is right. AFTERDOG has Jones 82% of the way
- * along a 626-unit walk to `town.jones2`:
+ * What a load takes back from the first two arrays is the three per-sound
+ * settings a script can change (`0x41b12d`–`0x41b190`, and `0x41b1e2`–`0x41b22f`
+ * for the chunks, volume and pan only):
  *
- *     destination     (1624, 1872)        +26 / +28
- *     delta           (-112, -616)        +8 / +12
- *     start           (1736, 2488)        destination - delta
+ *   - +0x2f `soundvol`, 0..255, registered at 0xff (`0x42a3b0` / `0x42a3c0`);
+ *   - +0x31 `soundpan`, 0..255, registered at 0x80 (`0x42a4e0` / `0x42a4f0`);
+ *   - +0x33 `soundloop`, registered at 0 (`0x42a500` / `0x42a510`).
+ *
+ * +0x41 is the record's 1-based number in its bank file, and +0x45 its name.
+ */
+const SOUND_STRIDE = 104;
+const SOUND_VOLUME = 0x2f;
+const SOUND_PAN = 0x31;
+const SOUND_LOOP = 0x33;
+const SOUND_RECORD = 0x41;
+const SOUND_NAME = 0x45;
+
+/**
+ * The walk record: 82 bytes, where v4's is 110. Built by `walktostar` at
+ * `0x439260`, served each pass by `0x4395c0`.
+ *
+ * **+26 is where the walk STARTED, and +40 is how far it has COME.** `walktostar`
+ * copies the actor's own position block into the record (`0x439459`) and sets
+ * the delta to start minus star (`0x4394a9`); the service adds the actor's speed
+ * to +40, clamps it to the distance (`0x439880`) and places the walker at
+ * `start − delta · covered / dist` (`0x439890`). AFTERDOG has Jones on his way
+ * to `town.jones2` (1736, 2488):
+ *
+ *     start           (1624, 1872)        +26 / +28
+ *     start − star    (-112, -616)        +8 / +12
  *     distance         626                +20, and hypot(112, 616) = 626.1
- *     remaining        111                +40
- *     so covered       515                626 - 111
- *     which puts him   (1643.9, 1981.2)   start + delta x 515/626
+ *     covered          111                +40
+ *     which puts him   (1643.9, 1981.2)   start − delta × 111/626
  *     the cast says    (1643, 1981)       cast record +26 / +28
  *
- * and Help, 29% along a 131-unit step in the same file, lands the same way:
- * predicted (1732.2, 3007.9), recorded (1732, 3007). Two walkers, two files, no
- * field left over.
+ * The same position falls out of reading +26 as the destination and +40 as the
+ * distance left, which is how this was once read — and a walk resumed that way
+ * walked BACK to where it started. 9 of 9 active straight walks in the shipped
+ * saves name a star at `+26 − delta`.
  *
- * `+40` being the distance REMAINING rather than the distance covered is the one
- * thing worth flagging: it is why the port converts it (`progress = dist - here`)
- * instead of passing it through.
+ * A walk on an authored route (`+36` non-zero) never writes +8..+23 at all:
+ * they hold whatever was on the stack (D1E_005's Mwife "measures" 23086). Its
+ * geometry is in the waypoint container instead — see {@link readPayload}.
  */
 const WALK_STRIDE = 82;
 const WALK_COUNT = 16;
 const WALK_ACTIVE = 0;
-/** a facing to end on, or −1 for none — v4 spells this the same way */
+/** `pausewalk` depth: true adds one, false takes one off down to 0 (`0x4399e0`) */
+const WALK_PAUSE = 2;
+/** a facing to end on, or −1 once the turn is done — v4 spells this the same way */
 const WALK_TURN_TO = 4;
-/** the three deltas, i32 each: across, into the screen, up */
+/** a turn on the spot (`turntodeg`, `0x439187`): the walk ends when the facing is reached */
+const WALK_TURN_ONLY = 6;
+/** start minus destination, i32 each: across, into the screen, up */
 const WALK_DX = 8;
 const WALK_DY = 12;
 const WALK_DZ = 16;
@@ -430,24 +551,52 @@ const WALK_DZ = 16;
 const WALK_DIST = 20;
 /** the walker's current facing */
 const WALK_DEG = 24;
-/** where they are going, in world units and then as a grid cell */
-const WALK_DEST_X = 26;
-const WALK_DEST_Y = 28;
-const WALK_DEST_Z = 30;
-/** the destination as a grid cell, beside the world units */
-const WALK_DEST_CELL_X = 32;
-const WALK_DEST_CELL_Z = 34;
-/** an authored route's waypoints, as a handle to a container of its own */
+/** where the walk started, in world units and then as a tile */
+const WALK_START_X = 26;
+const WALK_START_Y = 28;
+const WALK_START_Z = 30;
+const WALK_START_TILE_X = 32;
+const WALK_START_TILE_Y = 34;
+/** an authored route's waypoints, as the handle of a container of its own */
 const WALK_PAYLOAD = 36;
-/** how much of {@link WALK_DIST} is LEFT */
-const WALK_REMAINING = 40;
+/** how much of {@link WALK_DIST} is COVERED */
+const WALK_COVERED = 40;
+/** 1: the walker moves; 0: not in the open set, so it waits and is snapped on arrival (`0x4396f5`) */
+const WALK_MOVER = 44;
+/** the walker's slot in the cast table */
+const WALK_CAST_SLOT = 46;
 const WALK_ACTOR = 50;
 const WALK_STAR = 66;
+
+/**
+ * A route's waypoints (builder `0x410f00` → `0x411300`): {u32 count, u32 total
+ * length, 8 bytes carried over from the set and never read}, then per point
+ * {i16 x, i16 y, i16 z, i16 length from the previous point}. No current point is
+ * stored: the walker finds its leg by subtracting leg lengths from the covered
+ * distance (`0x43aa3b`). Checked on all 13 shipped payloads: the position that
+ * predicts is the cast record's to within a unit.
+ */
+const PAYLOAD_HEAD = 16;
+const PAYLOAD_POINT = 8;
+
+/**
+ * DF.EXE's ball table, 16 × 48 at `0x45fbd0` — `makeball`'s projectiles
+ * (insert `0x439cb0`, served by `0x439cf0`), not v4's crickets, whose ids
+ * these commands reuse. {u16 active, u16 pause depth, i16 vx vy vz, i16 gravity,
+ * i16 bounce, i16 frames left, i16 deg x y z, i16 tile x y, u32 prop slot,
+ * pstr name @0x20}. A cleared slot keeps its last record with `active` 0.
+ */
+const BALL_STRIDE = 0x30;
+const BALL_COUNT = 16;
+const BALL_NAME = 0x20;
+const BALL_PROP_SLOT = 0x1c;
 
 /** the loop table, byte-identical to v4's: 32 × 42 */
 const LOOP_STRIDE = 42;
 const LOOP_COUNT = 32;
 const LOOP_ACTIVE = 0;
+/** `pauseloop` depth, as the walk's (`0x43904d`) */
+const LOOP_PAUSE = 2;
 const LOOP_KIND = 4;
 const LOOP_PERIOD = 6;
 const LOOP_NAME = 10;
@@ -481,6 +630,26 @@ export interface SavedActorV1 {
   x: number;
   y: number;
   z: number;
+  /** the screen anchor `actorxy` sets */
+  anchorX: number;
+  anchorY: number;
+  /** the step within the pose */
+  step: number;
+  /** `actordist` for a screen actor; the last projected depth for a world one */
+  dist: number;
+  /** `actorvalue` */
+  value: number;
+  /** `actorzclip` */
+  zclip: number;
+  /** `actorhitbox`: [rz, rxy] */
+  hitbox: [number, number];
+  /** the tile of the star last given (x >> 8, y >> 8) */
+  tileX: number;
+  tileY: number;
+  /** read-only engine bookkeeping: the serial, and where the last draw put it */
+  serial: number;
+  drawX: number;
+  drawY: number;
 }
 
 /** one prop, as the file has them */
@@ -503,6 +672,19 @@ export interface SavedPropV1 {
   x: number;
   y: number;
   z: number;
+  /** the step within the view's frames */
+  step: number;
+  /** `propvalue` */
+  value: number;
+  /** `propzclip` */
+  zclip: number;
+  /** the tile of the star last given */
+  tileX: number;
+  tileY: number;
+  /** read-only engine bookkeeping: the serial, and where the last draw put it */
+  serial: number;
+  drawX: number;
+  drawY: number;
 }
 
 /** a walk in flight — a character caught mid-stride by the save */
@@ -526,9 +708,57 @@ export interface SavedWalkV1 {
   deg: number;
   /** true if this is a turn on the spot rather than a journey */
   turnOnly: boolean;
-  /** the walk follows an authored route whose waypoints are a container of
-   *  their own — which this port does not read, so the straight line is used */
+  /** `pausewalk` held it when the save was taken */
+  paused?: boolean;
+  /**
+   * The walker was not in the open set (+44 = 0): DF.EXE moves nothing and, once
+   * the set is open, puts the actor on the destination star and ends the walk
+   * (`0x4396f5`). Its +8..+23 are never written — stack leftovers, which is the
+   * "junk walk" seventeen shipped records carry, every one on a `walknodata` actor.
+   */
+  waiting?: boolean;
+  /** the walk follows an authored route, whose waypoints are {@link path} */
   hasPath: boolean;
+  /** the route's points with the cumulative distance to each, `dist` being the last */
+  path?: { x: number; y: number; z: number; cum: number }[];
+}
+
+/** one `makeball` slot */
+export interface SavedBallV1 {
+  /** the slot, 0..15 — the table is positional */
+  slot: number;
+  /** the prop it throws */
+  name: string;
+  /** false for a cleared slot, which keeps its last record */
+  active: boolean;
+  pause: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  gravity: number;
+  bounce: number;
+  frames: number;
+  deg: number;
+  x: number;
+  y: number;
+  z: number;
+  tx: number;
+  ty: number;
+}
+
+/** one sound record out of a bank's tables (see {@link SOUND_STRIDE}) */
+export interface SavedSoundV1 {
+  /** the bank FILE it belongs to */
+  bank: string;
+  /** "sound" for a one-shot, "chunk" for one of the theme's loop chunks */
+  kind: "sound" | "chunk";
+  name: string;
+  /** 1-based, in the bank file */
+  record: number;
+  volume: number;
+  pan: number;
+  /** `soundloop` — restored for one-shots only, as the loader does */
+  loop: boolean;
 }
 
 /** one armed `makeloop` slot */
@@ -537,6 +767,8 @@ export interface SavedLoopV1 {
   name: string;
   handler: string;
   period: number;
+  /** `pauseloop` held it */
+  paused?: boolean;
 }
 
 /** where the player is standing, in the file's own terms */
@@ -561,6 +793,11 @@ export interface SavedStandpointV1 {
   view: string;
   /** the room's camera height — the set's own `eyeHeight`, see {@link C1_EYE_HEIGHT} */
   eyeHeight: number;
+  /** the script settings at {@link C1_PUPPET_GRAB} and after */
+  puppetGrab: boolean;
+  frameInterval: number;
+  setVisible: boolean;
+  playerHitbox: [number, number];
 }
 
 /** everything this reader takes out of a `.rtd` */
@@ -574,17 +811,18 @@ export interface SaveGameV1 {
   /** the live CLUT, verbatim (256 × {i16 index, i16 rgb[3]}) */
   clut: Uint8Array;
   /**
-   * The loop sound, as {@link C0_THEME} holds it: the bank it belongs to, the
-   * bank actually sounding (null when the save was taken silent), and the chunk
-   * index within it.
-   *
-   * Null only when neither word names a file. `loopBank` and `playingBank` are
-   * FILE names out of the manifest, which matters because a bank's own track name
-   * need not be its filename — `NIGHT.SND` calls itself `town.snd`, exactly as
-   * `TOWN.SND` does — so the handle is the only thing that says which of the two
-   * was playing.
+   * The theme that was playing — channel 3's bank FILE, out of the manifest
+   * ({@link C0_THEME}) — or null when the save was taken with the theme idle.
    */
-  theme: { loopBank: string | null; playingBank: string | null; chunk: number } | null;
+  theme: { bank: string } | null;
+  /**
+   * The sound on the effect channel (1 or 2) when the save was taken: its bank
+   * file and its 1-based record number there — see {@link C0_THEME}. A load
+   * replays it from the start, as DF.EXE's does.
+   */
+  effect: { bank: string; record: number } | null;
+  /** every registered one-shot sound and loop chunk with its script settings */
+  sounds: SavedSoundV1[];
   /** the service-pass counter `frame()` answers */
   frame: number;
   standpoint: SavedStandpointV1;
@@ -603,6 +841,8 @@ export interface SaveGameV1 {
   loops: SavedLoopV1[];
   /** characters caught mid-stride */
   walks: SavedWalkV1[];
+  /** the ball table, every slot that has ever held a ball */
+  balls: SavedBallV1[];
   /** the file itself, kept so a writer can reproduce untouched containers */
   raw: RawSaveFile;
   /** where each interesting container sits — computed, never searched for */
@@ -776,6 +1016,18 @@ function readActor(d: Uint8Array, at: number): SavedActorV1 {
     x: dv.getInt16(at + ACTOR_X, true),
     y: dv.getInt16(at + ACTOR_Y, true),
     z: dv.getInt16(at + ACTOR_Z, true),
+    anchorX: dv.getInt16(at + ACTOR_ANCHOR_X, true),
+    anchorY: dv.getInt16(at + ACTOR_ANCHOR_Y, true),
+    step: dv.getInt16(at + ACTOR_STEP, true),
+    dist: dv.getInt16(at + ACTOR_DIST, true),
+    value: dv.getInt32(at + ACTOR_VALUE, true),
+    zclip: dv.getInt16(at + ACTOR_ZCLIP, true),
+    hitbox: [dv.getInt16(at + ACTOR_HITBOX_RZ, true), dv.getInt16(at + ACTOR_HITBOX_RXY, true)],
+    tileX: dv.getInt16(at + ACTOR_TILE_X, true),
+    tileY: dv.getInt16(at + ACTOR_TILE_Y, true),
+    serial: dv.getUint32(at + ACTOR_SERIAL, true),
+    drawX: dv.getInt16(at + ACTOR_DRAW_X, true),
+    drawY: dv.getInt16(at + ACTOR_DRAW_Y, true),
   };
 }
 
@@ -798,61 +1050,183 @@ function readProp(d: Uint8Array, at: number): SavedPropV1 {
     x: dv.getInt16(at + PROP_X, true),
     y: dv.getInt16(at + PROP_Y, true),
     z: dv.getInt16(at + PROP_Z, true),
+    step: dv.getInt16(at + PROP_STEP, true),
+    value: dv.getInt32(at + PROP_VALUE, true),
+    zclip: dv.getInt16(at + PROP_ZCLIP, true),
+    tileX: dv.getInt16(at + PROP_TILE_X, true),
+    tileY: dv.getInt16(at + PROP_TILE_Y, true),
+    serial: dv.getUint32(at + PROP_SERIAL, true),
+    drawX: dv.getInt16(at + PROP_DRAW_X, true),
+    drawY: dv.getInt16(at + PROP_DRAW_Y, true),
   };
 }
 
 /**
- * The walks in flight.
+ * The walks in flight, each with its route's waypoints if it has one.
  *
  * A slot whose `active` word is clear is not a walk — it is the LAST walk that
- * slot ran, left in place.
- *
- * **And the `active` word does not settle it.** Across the 56 shipped saves the
- * filter above passes 140 records, and 58 of them have nothing left to walk:
- * `progress >= dist`, or a `dist` that is NEGATIVE — five of `D2A_008`'s records
- * read −1941692191, and the same 1941xxxxxx magnitude turns up as `progress` on
- * three others, which is one junk word read into two fields. Whatever tells
- * DF.EXE those records are spent is not the flag this reader honours, and is not
- * yet known. See the note in
- * [the format doc](../../../docs/engine/formats/savegame-v1.md).
+ * slot ran, left in place. `payloads` are the containers after the walks table,
+ * one per active slot that declares one, in slot order (the writer's
+ * `0x41A41F`).
  */
-function readWalks(d: Uint8Array): SavedWalkV1[] {
+function readWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalkV1[] {
   const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
   const out: SavedWalkV1[] = [];
+  let next = 0;
   for (let i = 0; i < WALK_COUNT; i++) {
     const at = i * WALK_STRIDE;
     if (at + WALK_STRIDE > d.length) break;
     if (!dv.getUint16(at + WALK_ACTIVE, true)) continue;
+    const declares = dv.getUint32(at + WALK_PAYLOAD, true) !== 0;
+    const payload = declares ? payloads[next++] : undefined;
     const actor = pstr(d, at + WALK_ACTOR);
     if (!actor) continue;
-    const dx = dv.getInt32(at + WALK_DX, true);
-    const dy = dv.getInt32(at + WALK_DY, true);
-    const dz = dv.getInt32(at + WALK_DZ, true);
-    const dist = dv.getInt32(at + WALK_DIST, true);
-    const left = dv.getInt32(at + WALK_REMAINING, true);
-    out.push({
+    const startX = dv.getInt16(at + WALK_START_X, true);
+    const startY = dv.getInt16(at + WALK_START_Y, true);
+    const startZ = dv.getInt16(at + WALK_START_Z, true);
+    const covered = dv.getInt32(at + WALK_COVERED, true);
+    const base = {
       actor,
       star: pstr(d, at + WALK_STAR),
-      // the record holds where the walk ENDS; where it began is that minus the
-      // delta, which is what the mover wants
-      startX: dv.getInt16(at + WALK_DEST_X, true) - dx,
-      startY: dv.getInt16(at + WALK_DEST_Y, true) - dy,
-      startZ: dv.getInt16(at + WALK_DEST_Z, true) - dz,
+      turnTo: dv.getInt16(at + WALK_TURN_TO, true),
+      deg: dv.getUint16(at + WALK_DEG, true),
+      turnOnly: dv.getInt16(at + WALK_TURN_ONLY, true) !== 0,
+      paused: dv.getUint16(at + WALK_PAUSE, true) > 0,
+      waiting: dv.getInt16(at + WALK_MOVER, true) === 0,
+    };
+    const path = payload ? readPayload(payload) : null;
+    if (path) {
+      const dist = path[path.length - 1].cum;
+      const end = path[path.length - 1];
+      out.push({
+        ...base,
+        startX: path[0].x,
+        startY: path[0].y,
+        startZ: path[0].z,
+        dx: end.x - path[0].x,
+        dy: end.y - path[0].y,
+        dz: end.z - path[0].z,
+        dist,
+        progress: Math.max(0, Math.min(dist, covered)),
+        hasPath: true,
+        path,
+      });
+      continue;
+    }
+    // start minus destination, so the walk's own delta is its negation
+    const dx = -dv.getInt32(at + WALK_DX, true);
+    const dy = -dv.getInt32(at + WALK_DY, true);
+    const dz = -dv.getInt32(at + WALK_DZ, true);
+    const dist = dv.getInt32(at + WALK_DIST, true);
+    out.push({
+      ...base,
+      startX,
+      startY,
+      startZ,
       dx,
       dy,
       dz,
       dist,
-      // covered, not remaining — see WALK_STRIDE
-      progress: Math.max(0, dist - left),
-      turnTo: dv.getInt32(at + WALK_TURN_TO, true),
-      deg: dv.getUint16(at + WALK_DEG, true),
-      // A turn on the spot goes nowhere, so it is recognised by that rather than
-      // by a type field: v1's own type word reads 1 for every sample in the
-      // corpus, walkers and all, so it cannot be the thing that distinguishes
-      // them and is not guessed at.
-      turnOnly: dist <= 0 && dx === 0 && dy === 0 && dz === 0,
-      hasPath: dv.getUint32(at + WALK_PAYLOAD, true) !== 0,
+      progress: Math.max(0, covered),
+      // A turn on the spot is flagged (+6), and also goes nowhere
+      turnOnly: base.turnOnly || (dist <= 0 && dx === 0 && dy === 0 && dz === 0),
+      hasPath: declares,
     });
+  }
+  return out;
+}
+
+/** a route's waypoints, with the cumulative distance the walker paces by — or null if malformed */
+function readPayload(d: Uint8Array): { x: number; y: number; z: number; cum: number }[] | null {
+  if (d.length < PAYLOAD_HEAD) return null;
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const n = dv.getUint32(0, true);
+  if (n < 1 || PAYLOAD_HEAD + n * PAYLOAD_POINT > d.length) return null;
+  const out: { x: number; y: number; z: number; cum: number }[] = [];
+  let cum = 0;
+  for (let k = 0; k < n; k++) {
+    const at = PAYLOAD_HEAD + k * PAYLOAD_POINT;
+    if (k > 0) cum += dv.getInt16(at + 6, true);
+    out.push({ x: dv.getInt16(at, true), y: dv.getInt16(at + 2, true), z: dv.getInt16(at + 4, true), cum });
+  }
+  return out;
+}
+
+/** a route as a waypoint container, the inverse of {@link readPayload} */
+function writePayload(path: { x: number; y: number; z: number; cum: number }[]): Uint8Array {
+  const size = PAYLOAD_HEAD + path.length * PAYLOAD_POINT;
+  const d = new Uint8Array(Math.ceil(size / 32) * 32);
+  const dv = new DataView(d.buffer);
+  dv.setUint32(0, path.length, true);
+  dv.setUint32(4, path.length ? path[path.length - 1].cum : 0, true);
+  path.forEach((p, k) => {
+    const at = PAYLOAD_HEAD + k * PAYLOAD_POINT;
+    dv.setInt16(at, p.x, true);
+    dv.setInt16(at + 2, p.y, true);
+    dv.setInt16(at + 4, p.z, true);
+    dv.setInt16(at + 6, k > 0 ? p.cum - path[k - 1].cum : 0, true);
+  });
+  return d;
+}
+
+/** the ball table: every slot that names a prop, cleared or not */
+function readBalls(d: Uint8Array): SavedBallV1[] {
+  const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  const out: SavedBallV1[] = [];
+  for (let i = 0; i < BALL_COUNT && (i + 1) * BALL_STRIDE <= d.length; i++) {
+    const at = i * BALL_STRIDE;
+    const name = pstr(d, at + BALL_NAME);
+    if (!name) continue;
+    const w = (o: number) => dv.getInt16(at + o, true);
+    out.push({
+      slot: i,
+      name,
+      active: dv.getUint16(at, true) !== 0,
+      pause: dv.getUint16(at + 2, true),
+      vx: w(4),
+      vy: w(6),
+      vz: w(8),
+      gravity: w(0xa),
+      bounce: w(0xc),
+      frames: w(0xe),
+      deg: w(0x10),
+      x: w(0x12),
+      y: w(0x14),
+      z: w(0x16),
+      tx: w(0x18),
+      ty: w(0x1a),
+    });
+  }
+  return out;
+}
+
+/** the first two record arrays of bank `i`: its one-shots, then its loop chunks */
+function readBankSounds(raw: RawSaveFile, files: { handle: number; path: string }[], i: number): SavedSoundV1[] {
+  const cb = raw.containers[6].data;
+  const dvb = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
+  const at = i * BANK_STRIDE;
+  const bank = fileByHandle(files, dvb.getUint32(at + BANK_FILE, true));
+  const out: SavedSoundV1[] = [];
+  const arrays: [SavedSoundV1["kind"], number, number][] = [
+    ["sound", 7 + 3 * i, dvb.getInt16(at + BANK_SOUNDS, true)],
+    ["chunk", 8 + 3 * i, dvb.getInt16(at + BANK_CHUNKS, true)],
+  ];
+  for (const [kind, ci, count] of arrays) {
+    const d = raw.containers[ci]?.data;
+    if (!d) continue;
+    const dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+    for (let r = 0; r < count && (r + 1) * SOUND_STRIDE <= d.length; r++) {
+      const o = r * SOUND_STRIDE;
+      out.push({
+        bank,
+        kind,
+        name: pstr(d, o + SOUND_NAME, 31),
+        record: dv.getInt32(o + SOUND_RECORD, true),
+        volume: dv.getInt16(o + SOUND_VOLUME, true),
+        pan: dv.getInt16(o + SOUND_PAN, true),
+        loop: dv.getInt16(o + SOUND_LOOP, true) !== 0,
+      });
+    }
   }
   return out;
 }
@@ -869,7 +1243,13 @@ function readLoops(d: Uint8Array): SavedLoopV1[] {
     const name = pstr(d, at + LOOP_NAME);
     const handler = pstr(d, at + LOOP_HANDLER);
     if (!kind || !handler) continue;
-    out.push({ kind, name, handler, period: dv.getUint32(at + LOOP_PERIOD, true) });
+    out.push({
+      kind,
+      name,
+      handler,
+      period: dv.getUint32(at + LOOP_PERIOD, true),
+      paused: dv.getUint16(at + LOOP_PAUSE, true) > 0,
+    });
   }
   return out;
 }
@@ -896,12 +1276,11 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
   }
 
   const dv0 = new DataView(c0.buffer, c0.byteOffset, c0.byteLength);
-  const loopBank = fileByHandle(files, dv0.getUint32(C0_THEME, true));
-  const playingBank = fileByHandle(files, dv0.getUint32(C0_THEME + 4, true));
-  const theme =
-    loopBank || playingBank
-      ? { loopBank: loopBank ?? null, playingBank: playingBank ?? null, chunk: dv0.getUint32(C0_THEME + 8, true) }
-      : null;
+  const themeBank = fileByHandle(files, dv0.getUint32(C0_THEME, true));
+  const theme = themeBank ? { bank: themeBank } : null;
+  const effectBank = fileByHandle(files, dv0.getUint32(C0_EFFECT_FILE, true));
+  const effectRecord = dv0.getUint32(C0_EFFECT_RECORD, true);
+  const effect = effectBank && effectRecord ? { bank: effectBank, record: effectRecord } : null;
 
   const deg = dv1.getUint16(C1_DEG, true);
   const standpoint: SavedStandpointV1 = {
@@ -919,6 +1298,10 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
     camY: dv1.getUint16(C1_CAM_Y, true),
     view: COMPASS[deg & 0xff] ?? "",
     eyeHeight: dv1.getInt16(C1_EYE_HEIGHT, true),
+    puppetGrab: dv1.getUint16(C1_PUPPET_GRAB, true) !== 0,
+    frameInterval: dv1.getInt16(C1_FRAME_INTERVAL, true),
+    setVisible: dv1.getUint16(C1_SET_VISIBLE, true) !== 0,
+    playerHitbox: [dv1.getInt16(C1_PLAYER_HITBOX, true), dv1.getInt16(C1_PLAYER_HITBOX + 2, true)],
   };
 
   const actors: SavedActorV1[] = [];
@@ -945,10 +1328,12 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
   };
 
   const bankFiles: string[] = [];
+  const sounds: SavedSoundV1[] = [];
   const cb = raw.containers[6];
   for (let i = 0; i < index.banks; i++) {
     const name = pstr(cb.data, i * BANK_STRIDE + BANK_NAME, 12);
     if (name) bankFiles.push(name);
+    sounds.push(...readBankSounds(raw, files, i));
   }
 
   const globals = raw.containers[index.globals]?.data ?? new Uint8Array(0);
@@ -970,6 +1355,8 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
     files,
     clut: c0.subarray(C0_CLUT, C0_CLUT + C0_CLUT_SIZE),
     theme,
+    effect,
+    sounds,
     frame: dv1.getUint32(C1_FRAME, true),
     standpoint,
     puppet: fileByHandle(files, dv1.getUint32(C1_PUPPET_HANDLE, true)) || null,
@@ -982,7 +1369,11 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
     numGlobals,
     strGlobals,
     loops: readLoops(raw.containers[index.loops]?.data ?? new Uint8Array(0)),
-    walks: readWalks(raw.containers[index.walks]?.data ?? new Uint8Array(0)),
+    walks: readWalks(
+      raw.containers[index.walks]?.data ?? new Uint8Array(0),
+      raw.containers.slice(index.walks + 1).map((c) => c.data),
+    ),
+    balls: readBalls(raw.containers[index.crickets]?.data ?? new Uint8Array(0)),
     raw,
     index,
   };
@@ -1067,6 +1458,25 @@ export interface SavePatchV1 {
   loops?: SavedLoopV1[];
   /** the walks in flight — the whole table, like the loops */
   walks?: SavedWalkV1[];
+  /** the ball table — the whole of it, by slot */
+  balls?: Omit<SavedBallV1, "active">[];
+  /** the script settings in the standpoint block (see {@link C1_PUPPET_GRAB}) */
+  settings?: { puppetGrab?: boolean; frameInterval?: number; setVisible?: boolean; playerHitbox?: [number, number] };
+  /**
+   * The sound, as {@link C0_THEME} holds it. `theme` is the theme's bank FILE
+   * (null: the theme channel is idle); `effect` the sound on the effect channel,
+   * by bank file and name (null: neither effect channel is busy). Undefined
+   * keeps the base's words.
+   */
+  theme?: string | null;
+  effect?: { bank: string; name: string } | null;
+  /**
+   * Script settings per sound, by bank FILE and name — written into whichever
+   * of the base's registered records match (see {@link SOUND_STRIDE}).
+   * `kind: "chunk"` carries a theme's `themevol`, which the bank keeps on every
+   * one of its loop chunks, so its `name` is ignored and only `volume` is used.
+   */
+  sounds?: { bank: string; kind: "sound" | "chunk"; name: string; volume: number; pan: number; loop: boolean }[];
   /** called for anything the base had no room for, with why */
   onDrop?: (name: string, why: string) => void;
 }
@@ -1112,10 +1522,12 @@ function byName(d: Uint8Array, stride: number, nameOff: number): Map<string, num
  * well as by this port.
  *
  * What is written: every global (numbers inline, strings interned into the base's
- * own pool), the standpoint, the frame counter, the prop and cast records the
- * base has a name for, and the loop table. What is not: the CLUT, the open-file
- * manifest, the sound banks, the crickets and the walks — the base's own answers
- * carry, and each is reported through `onDrop` where a caller asked for
+ * own pool), the standpoint and its script settings, the frame counter, the
+ * prop and cast records the base has a name for, the theme and effect words and
+ * the per-sound settings of every bank the base has open, and the loop, ball
+ * and walk tables with each route's waypoints. What is not: the open-file
+ * manifest beyond the set's own record, and the bank list — the base's own
+ * answers carry, and each is reported through `onDrop` where a caller asked for
  * something that could not be placed.
  */
 export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array {
@@ -1223,6 +1635,14 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       put16(c1, C1_FACING + 6, s.facing);
     }
     if (patch.frame !== undefined) put32(c1, C1_FRAME, patch.frame);
+    const set = patch.settings;
+    if (set?.puppetGrab !== undefined) put16(c1, C1_PUPPET_GRAB, set.puppetGrab ? 1 : 0);
+    if (set?.frameInterval !== undefined) put16(c1, C1_FRAME_INTERVAL, set.frameInterval);
+    if (set?.setVisible !== undefined) put16(c1, C1_SET_VISIBLE, set.setVisible ? 1 : 0);
+    if (set?.playerHitbox) {
+      put16(c1, C1_PLAYER_HITBOX, set.playerHitbox[0]);
+      put16(c1, C1_PLAYER_HITBOX + 2, set.playerHitbox[1]);
+    }
   }
 
   /*
@@ -1323,6 +1743,74 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
     }
   }
 
+  // ---- the sound -----------------------------------------------------------
+  {
+    const c0 = out.containers[0]?.data;
+    const files = c0 ? readFiles(c0) : [];
+    const handleOf = (file: string): number => {
+      const want = file.toLowerCase();
+      return files.find((f) => (f.path.split(":").pop() ?? "").toLowerCase() === want)?.handle ?? 0;
+    };
+    if (c0 && patch.theme !== undefined) {
+      const h = patch.theme ? handleOf(patch.theme) : 0;
+      if (patch.theme && !h) drop(patch.theme, "the theme's bank is not in the base's open-file manifest");
+      put32(c0, C0_THEME, h);
+    }
+    // the bank tables, as (bank file, kind, name) -> record offset
+    const records = new Map<string, { data: Uint8Array; at: number }[]>();
+    const cb = out.containers[6]?.data;
+    if (cb) {
+      const dvb = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
+      for (let i = 0; i < index.banks; i++) {
+        const bank = fileByHandle(files, dvb.getUint32(i * BANK_STRIDE + BANK_FILE, true)).toLowerCase();
+        const arrays: ["sound" | "chunk", number, number][] = [
+          ["sound", 7 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_SOUNDS, true)],
+          ["chunk", 8 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_CHUNKS, true)],
+        ];
+        for (const [kind, ci, count] of arrays) {
+          const d = out.containers[ci]?.data;
+          if (!d) continue;
+          for (let r = 0; r < count && (r + 1) * SOUND_STRIDE <= d.length; r++) {
+            const name = pstr(d, r * SOUND_STRIDE + SOUND_NAME, 31).toLowerCase();
+            const key = kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${name}`;
+            const list = records.get(key) ?? [];
+            // a one-shot is one record; a theme's volume is on all of its chunks
+            if (kind === "chunk" || !list.length) list.push({ data: d, at: r * SOUND_STRIDE });
+            records.set(key, list);
+          }
+        }
+      }
+    }
+    if (c0 && patch.effect !== undefined) {
+      let file = 0;
+      let record = 0;
+      if (patch.effect) {
+        const e = patch.effect;
+        const rec = records.get(`${e.bank.toLowerCase()}|sound|${e.name.toLowerCase()}`)?.[0];
+        file = handleOf(e.bank);
+        record = rec ? new DataView(rec.data.buffer, rec.data.byteOffset).getInt32(rec.at + SOUND_RECORD, true) : 0;
+        if (!file || !record) {
+          drop(e.name, "the playing sound's bank is not one the base has open");
+          file = 0;
+          record = 0;
+        }
+      }
+      put32(c0, C0_EFFECT_FILE, file);
+      put32(c0, C0_EFFECT_RECORD, record);
+    }
+    for (const snd of patch.sounds ?? []) {
+      const bank = snd.bank.toLowerCase();
+      const key = snd.kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${snd.name.toLowerCase()}`;
+      // a bank the base never had open has no records to carry it
+      for (const rec of records.get(key) ?? []) {
+        put16(rec.data, rec.at + SOUND_VOLUME, snd.volume);
+        if (snd.kind === "chunk") continue;
+        put16(rec.data, rec.at + SOUND_PAN, snd.pan);
+        put16(rec.data, rec.at + SOUND_LOOP, snd.loop ? 1 : 0);
+      }
+    }
+  }
+
   // ---- props and cast ----------------------------------------------------
   const cp = out.containers[4]?.data;
   if (cp && patch.props) {
@@ -1347,6 +1835,11 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (p.x !== undefined) put16(cp, o + PROP_X, p.x);
       if (p.y !== undefined) put16(cp, o + PROP_Y, p.y);
       if (p.z !== undefined) put16(cp, o + PROP_Z, p.z);
+      if (p.step !== undefined) put16(cp, o + PROP_STEP, p.step);
+      if (p.value !== undefined) put32(cp, o + PROP_VALUE, p.value);
+      if (p.zclip !== undefined) put16(cp, o + PROP_ZCLIP, p.zclip);
+      if (p.tileX !== undefined) put16(cp, o + PROP_TILE_X, p.tileX);
+      if (p.tileY !== undefined) put16(cp, o + PROP_TILE_Y, p.tileY);
     }
   }
 
@@ -1372,6 +1865,18 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (a.x !== undefined) put16(ca, o + ACTOR_X, a.x);
       if (a.z !== undefined) put16(ca, o + ACTOR_Z, a.z);
       if (a.y !== undefined) put16(ca, o + ACTOR_Y, a.y);
+      if (a.anchorX !== undefined) put16(ca, o + ACTOR_ANCHOR_X, a.anchorX);
+      if (a.anchorY !== undefined) put16(ca, o + ACTOR_ANCHOR_Y, a.anchorY);
+      if (a.step !== undefined) put16(ca, o + ACTOR_STEP, a.step);
+      if (a.dist !== undefined) put16(ca, o + ACTOR_DIST, a.dist);
+      if (a.value !== undefined) put32(ca, o + ACTOR_VALUE, a.value);
+      if (a.zclip !== undefined) put16(ca, o + ACTOR_ZCLIP, a.zclip);
+      if (a.hitbox !== undefined) {
+        put16(ca, o + ACTOR_HITBOX_RZ, a.hitbox[0]);
+        put16(ca, o + ACTOR_HITBOX_RXY, a.hitbox[1]);
+      }
+      if (a.tileX !== undefined) put16(ca, o + ACTOR_TILE_X, a.tileX);
+      if (a.tileY !== undefined) put16(ca, o + ACTOR_TILE_Y, a.tileY);
     }
   }
 
@@ -1397,6 +1902,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       const at = slot * LOOP_STRIDE;
       if (at + LOOP_STRIDE > cl.length) break;
       put16(cl, at + LOOP_ACTIVE, 1);
+      put16(cl, at + LOOP_PAUSE, l.paused ? 1 : 0);
       put16(cl, at + LOOP_KIND, kind);
       put32(cl, at + LOOP_PERIOD, l.period);
       writePstrField(cl, at + LOOP_NAME, l.name);
@@ -1405,16 +1911,37 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
     }
   }
 
+  // ---- the balls ---------------------------------------------------------
+  // Positional, like the table it is: a ball's slot is the one it was made in.
+  const cbl = out.containers[index.crickets]?.data;
+  if (cbl && patch.balls) {
+    cbl.fill(0, 0, Math.min(cbl.length, BALL_COUNT * BALL_STRIDE));
+    const props = cp ? byName(cp, PROP_STRIDE, PROP_NAME) : new Map<string, number>();
+    for (const b of patch.balls) {
+      const at = b.slot * BALL_STRIDE;
+      if (b.slot < 0 || b.slot >= BALL_COUNT || at + BALL_STRIDE > cbl.length) {
+        drop(b.name, `ball slot ${b.slot} is not in the table`);
+        continue;
+      }
+      const words = [1, b.pause, b.vx, b.vy, b.vz, b.gravity, b.bounce, b.frames, b.deg, b.x, b.y, b.z, b.tx, b.ty];
+      words.forEach((v, k) => put16(cbl, at + 2 * k, v));
+      const prop = props.get(b.name.toLowerCase());
+      put32(cbl, at + BALL_PROP_SLOT, prop === undefined ? 0 : prop / PROP_STRIDE);
+      writePstrField(cbl, at + BALL_NAME, b.name);
+    }
+  }
+
   // ---- the walks ---------------------------------------------------------
   // The same wholesale rewrite the loops get, and for the same reason: the table
   // IS the live mover, so a slot the running game does not have is a walker who
-  // must not set off again on load. A walk on an authored route is written as the
-  // straight line it carries — the waypoint container is not reproduced, and the
-  // caller is told, because arriving by a different road is a smaller lie than
-  // not arriving at all.
+  // must not set off again on load. A walk on an authored route takes its
+  // waypoints with it, as a container after the table — one per declaring slot,
+  // in slot order, which is how the loader reads them back.
   const cw = out.containers[index.walks]?.data;
   if (cw && patch.walks) {
     cw.fill(0, 0, Math.min(cw.length, WALK_COUNT * WALK_STRIDE));
+    const cast = ca ? byName(ca, ACTOR_STRIDE, ACTOR_NAME) : new Map<string, number>();
+    const payloads: Uint8Array[] = [];
     let slot = 0;
     for (const w of patch.walks) {
       if (slot >= WALK_COUNT) {
@@ -1425,33 +1952,40 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (at + WALK_STRIDE > cw.length) break;
       const dv = new DataView(cw.buffer, cw.byteOffset, cw.byteLength);
       put16(cw, at + WALK_ACTIVE, 1);
-      dv.setInt32(at + WALK_TURN_TO, w.turnTo, true);
-      dv.setInt32(at + WALK_DX, w.dx, true);
-      dv.setInt32(at + WALK_DY, w.dy, true);
-      dv.setInt32(at + WALK_DZ, w.dz, true);
+      put16(cw, at + WALK_PAUSE, w.paused ? 1 : 0);
+      put16(cw, at + WALK_TURN_TO, w.turnTo);
+      put16(cw, at + WALK_TURN_ONLY, w.turnOnly ? 1 : 0);
+      // start minus destination: the record's sign, not the port's
+      dv.setInt32(at + WALK_DX, -w.dx, true);
+      dv.setInt32(at + WALK_DY, -w.dy, true);
+      dv.setInt32(at + WALK_DZ, -w.dz, true);
       dv.setInt32(at + WALK_DIST, w.dist, true);
       put16(cw, at + WALK_DEG, w.deg);
-      // the record holds the DESTINATION; the port carries the start and the delta
-      put16(cw, at + WALK_DEST_X, w.startX + w.dx);
-      put16(cw, at + WALK_DEST_Y, w.startY + w.dy);
-      put16(cw, at + WALK_DEST_Z, w.startZ + w.dz);
-      put16(cw, at + WALK_DEST_CELL_X, Math.floor((w.startX + w.dx) / 256));
-      put16(cw, at + WALK_DEST_CELL_Z, Math.floor((w.startY + w.dy) / 256));
-      // ...and how much is LEFT, not how much is done
-      dv.setInt32(at + WALK_REMAINING, Math.max(0, w.dist - w.progress), true);
-      dv.setUint32(at + WALK_PAYLOAD, 0, true); // no waypoint container is written
+      put16(cw, at + WALK_START_X, w.startX);
+      put16(cw, at + WALK_START_Y, w.startY);
+      put16(cw, at + WALK_START_Z, w.startZ);
+      put16(cw, at + WALK_START_TILE_X, w.startX >> 8);
+      put16(cw, at + WALK_START_TILE_Y, w.startY >> 8);
+      // ...and how far it has COME
+      dv.setInt32(at + WALK_COVERED, Math.max(0, w.progress), true);
+      put16(cw, at + WALK_MOVER, w.waiting ? 0 : 1);
+      const castAt = cast.get(w.actor.toLowerCase());
+      dv.setUint32(at + WALK_CAST_SLOT, castAt === undefined ? 0 : castAt / ACTOR_STRIDE, true);
       writePstrField(cw, at + WALK_ACTOR, w.actor);
       writePstrField(cw, at + WALK_STAR, w.star);
-      if (w.hasPath) drop(w.actor, "walking an authored route — written as the straight line");
+      if (w.path?.length) {
+        // any non-zero handle declares the payload; the loader allocates its own
+        dv.setUint32(at + WALK_PAYLOAD, 0x10000 + slot, true);
+        payloads.push(writePayload(w.path));
+      } else {
+        dv.setUint32(at + WALK_PAYLOAD, 0, true);
+        if (w.hasPath) drop(w.actor, "walking an authored route with no points — written as the straight line");
+      }
       slot++;
     }
-    // No slot written here references a waypoint container, so the base's own
-    // payloads go with the table that named them. DF.EXE's loader reads one
-    // container per DECLARING slot, so leaving them would be harmless to it —
-    // but it would leave the file's own count disagreeing with its own walks
-    // table, which is exactly what {@link v1Index} validates (#325), and v4's
-    // `applyPatch` re-emits the tail for the same reason.
+    // the base's payloads go with the table that named them; ours follow it
     out.containers.length = index.walks + 1;
+    for (const data of payloads) out.containers.push({ id: out.containers.length, data });
   }
 
   return writeSaveFile(out);

@@ -81,8 +81,8 @@ function angularDistance(a: number, b: number): number {
  *  what {@link SetViewer.armNavHooks} hands back for the matching disarm. */
 export interface NavHooks {
   onNavigate: (direction: string) => void;
-  onSceneJump: (scene: string) => void;
-  onViewJump: (view: string) => void;
+  onSceneJump: (scene: string) => void | Promise<void>;
+  onViewJump: (view: string) => void | Promise<void>;
   active: boolean;
 }
 
@@ -280,16 +280,76 @@ export class SetViewer implements RoomLayer {
   /** buffered currentscene("sceneNNN") teleport target, consumed by the paired
    *  currentview("viewNNN"). Reset at the start of every input gesture. */
   private pendingJumpScene: string | null = null;
-  private readonly sceneJump = (scene: string): void => {
+  private readonly sceneJump = (scene: string): void | Promise<void> => {
     this.session.navHappened = true;
+    if (this.session.isV1) return this.jumpV1(scene, null);
     this.pendingJumpScene = scene;
   };
-  private readonly viewJump = (view: string): void => {
+  private readonly viewJump = (view: string): void | Promise<void> => {
     this.session.navHappened = true;
+    if (this.session.isV1) return this.jumpV1(null, view);
     const scene = this.pendingJumpScene;
     this.pendingJumpScene = null;
     this.teleport(scene, view);
   };
+
+  /**
+   * DreamFactory 1's named jump: each setter moves on its own, and runs the
+   * scene events itself, before the script's next line.
+   *
+   * `currentscene (name)` is DF.EXE 0x40ee30: a scene it cannot find, or the
+   * scene you are already in (0x40efaa, row and column against 0x460ba0 /
+   * 0x460b9e), does nothing. Otherwise it sends `closescene ()` to the scene
+   * being left (0x40f100, which builds `"<scene>", closescene()` and runs it
+   * through sendtoscene's 0x40f610 at once), gives up if that changed the set
+   * (0x40efff), moves the camera to the new row and column with the DIRECTION
+   * kept (0x433960 with -1), and sends `openscene ()` to the scene arrived in
+   * (0x40f050, the same with 0x445490 `", openscene()"`).
+   *
+   * `currentview (dir)` is 0x410170, the same shape: facing that way already
+   * (0x410270, against 0x460ba2) does nothing, and a turn runs closescene,
+   * 0x433960(-1, -1, dir) and openscene.
+   *
+   * Nothing is buffered — `currentscene` without a `currentview` moves you, as
+   * MINE.SET's wrap-around (`currentscene ("scene e3")` then `("strait")`)
+   * needs — and nothing is left to run later: `NEW.FLT`'s demo jumps with
+   * `randomscene ()` and then opens a puppet, and TOWN.SET's openscene has
+   * already had its chance at the robbery by then.
+   */
+  private async jumpV1(sceneName: string | null, viewName: string | null): Promise<void> {
+    const targetScene = sceneName
+      ? this.set.scenes.findIndex((s) => s.sceneName.toLowerCase() === sceneName.toLowerCase())
+      : this.sceneIdx;
+    if (targetScene < 0) return;
+    const scene = this.set.scenes[targetScene];
+    // the view kept, or the one asked for, by its direction's name
+    const want = viewName ?? this.scene.views[this.viewIdx]?.viewName ?? "";
+    const v = scene.views.findIndex((vw) => vw.viewName.toLowerCase() === want.toLowerCase());
+    if (viewName !== null && v < 0) return;
+    const changed = targetScene !== this.sceneIdx || (v >= 0 && v !== this.viewIdx);
+    if (!changed) return;
+    // A jump made from inside openscene or closescene runs them again, nested,
+    // as DF.EXE's does: neither setter asks whether a scene event is running.
+    // What ends it is the "already there" test above (0x40efaa, 0x410270) —
+    // HOTUPPER.SET's Scene C4 turns you north from its openscene, and the
+    // openscene that turn runs asks again and finds you facing north — and the
+    // set check below (0x40efff). See dust/tests/machine/lifecycle-jump.ts for
+    // the Dust handlers that jump this way.
+    await this.scripts.closeScene(this.sceneIdx);
+    // closescene took you to another set: the jump is over (0x40efff)
+    if (this.session.sceneJumpDriver !== this.sceneJump) return;
+    // and if it jumped within the set, the move goes from where it left you:
+    // 0x433960 is handed -1 for whatever this setter does not name, which is
+    // the camera's position (or direction) NOW
+    const to = sceneName ? targetScene : this.sceneIdx;
+    const toScene = this.set.scenes[to];
+    const keep = viewName ?? this.scene.views[this.viewIdx]?.viewName ?? "";
+    const w = toScene.views.findIndex((vw) => vw.viewName.toLowerCase() === keep.toLowerCase());
+    this.sceneIdx = to;
+    this.viewIdx = w >= 0 ? w : Math.min(this.viewIdx, toScene.views.length - 1);
+    this.showView();
+    await this.scripts.openScene(this.sceneIdx);
+  }
 
   /**
    * Arm this viewer's nav hooks on the session for the duration of a gesture,
@@ -332,10 +392,12 @@ export class SetViewer implements RoomLayer {
    * facing south. Measured — the reads were correct, `scene g5` and `south`; it
    * was the writes that were inert.
    *
-   * Runaway jumps are held off by {@link SetScripts.inLifecycle} rather than by
-   * this gate, which is why lifting it here is safe: the fourteen Dust openscene
-   * handlers that jump — `hotupper.set`'s among them, which hangs the tab — are
-   * stopped inside {@link teleport} and always were.
+   * Runaway jumps are held off by something other than this gate, which is
+   * why lifting it here is safe: in DreamFactory 4 by {@link
+   * SetScripts.inLifecycle} inside {@link teleport}, and in DreamFactory 1 by
+   * DF.EXE's own "already there" tests ({@link jumpV1}), which end the Dust
+   * openscene handlers that jump — `hotupper.set`'s among them, which once hung
+   * the tab — one level down.
    */
   bindJumpHooks(): void {
     this.pendingJumpScene = null;
@@ -604,6 +666,7 @@ export class SetViewer implements RoomLayer {
    * has no way back (#17, #18).
    */
   async start(): Promise<void> {
+    const from = this.sceneIdx;
     await this.scripts.openSet();
     // A load restores the room rather than arriving in it, and the original fires
     // no scene entry for one — see GameSession.restoringSave. The scene is still
@@ -612,6 +675,24 @@ export class SetViewer implements RoomLayer {
       this.scripts.lastSceneIdx = this.sceneIdx;
       return;
     }
+    /**
+     * DreamFactory 1 opens a set in this order, and asks between the events
+     * whether you are still where it started. `opensetfile` (0x40e9b0) reads the
+     * set (0x40ea80), places the camera at its row, column and direction
+     * (0x433960 at 0x40ea50, which the constructor's jumpToDefault is), then
+     * 0x40f1b0 sends the events: it notes the set and the camera's CELL
+     * ([0x460bb4]/[0x460bb2], written with the bearing by the camera builder at
+     * 0x433fdb), sends `openset ()` (0x40fcd0), and stops if the set is gone or
+     * the cell moved (0x40f21b–0x40f26b); sends `<floor>, openfloor ()` (0x40f950;
+     * no Dust script handles it, so the port does not send it) and asks again
+     * (0x40f2b0–0x40f301); and last sends `"<scene>", openscene ()` (0x40f530).
+     * There is no openview. The bearing is not asked: DOCTOR2.SET's openset
+     * turns you south on day 3 (`currentview ("south")`, which runs closescene,
+     * the turn and openscene itself — SetViewer.jumpV1), and the set's own
+     * openscene then runs for the same scene a second time. A jump to another
+     * scene, or another set, from openset ends it with no second openscene.
+     */
+    if (this.session.isV1 && (this.session.sceneJumpDriver !== this.sceneJump || this.sceneIdx !== from)) return;
     await this.scripts.openScene(this.sceneIdx);
   }
 

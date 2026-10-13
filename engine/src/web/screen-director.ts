@@ -467,11 +467,30 @@ export class ScreenDirector {
     if (this.session.fade.ramping) return this.rampFrame(now);
     // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
     // the census in SetViewer.advanceRoom for why that is 50 ms and not 90. Its
-    // view goes round in DreamFactory 4 (PropRuntime.tick); Dust's is unchecked.
-    const viewsGoRound = !this.session.isV1;
-    this.session.endAnim("sendtoprop", this.session.propRuntime.tick(now, ENGINE_STEP_MS, viewsGoRound));
+    // view goes round (PropRuntime.tick): in DreamFactory 4 every prop's, and in
+    // DreamFactory 1 a drawn prop's (DF.EXE 0x41eb67; 0x41e770 skips the rest).
+    // DF.EXE's depth window (0x41e828/0x41e834) is asked of the camera the room
+    // draws with; with no set and view open there is none (0x41e790, 0x41e79e)
+    const onlyDrawn = this.session.isV1;
+    const drawCam = onlyDrawn ? (this.room?.roomCamera() ?? null) : null;
+    this.session.endAnim("sendtoprop", this.session.propRuntime.tick(now, ENGINE_STEP_MS, true, onlyDrawn, drawCam));
     this.session.tickFade(now);
     this.session.tickWipe(now);
+    // DreamFactory 1 takes the player's queued press at the HEAD of a pass,
+    // before the pass's loops run. DF.EXE's main loop (0x4115f0) pops one event
+    // of any kind each time round (0x411687, `0x426410` with mask -1 over the
+    // 16-slot queue at 0x45c070 that the window procedure's 0x4222d0 fills),
+    // and serves the timer's loops only on a pass that found none (0x411692 ->
+    // 0x411a97). A script holds the queue only while it is still running — the
+    // modal waits inside it never come back to 0x4115f0 — so a click made while
+    // one ran is taken the moment it returns.
+    //
+    // The room's own pop (SetViewer.advanceRoom) comes AFTER this pass's loops
+    // have been fired, and with them in flight `scriptBusy` was always true
+    // there: a room with a per-frame loop going (the credits' `namesup`) never
+    // took a queued click at all. Here only what is still running from an
+    // earlier pass holds it, which is the original's rule.
+    if (this.session.isV1 && this.session.events.length) this.room?.takeInputOnly?.();
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service
     // A DreamFactory 5 room has no SetViewer, which is where a v4 room pops the
     // clicks and keys made while a script ran (SetViewer.drainOneEvent). So they
@@ -693,7 +712,7 @@ export class ScreenDirector {
     // which of paint()'s five branches, and the source each of them blits
     sig.bool(!!s.puppet?.visible).bool(s.viewShowing);
     sig.ref(s.fade.snapshot).num(s.fade.level);
-    sig.str(this.movies.playingFile ?? "").num(this.movies.framePos);
+    sig.str(this.movies.playingFile ?? "").num(this.movies.framePos).num(this.movies.effectStep);
     sig.ref(this.room?.roomFrame() ?? null).ref(s.stageCtrl.flatImage());
     // DreamFactory 5's `screenbrightness`, added to the whole picture at present
     sig.num(s.screenBright[0]).num(s.screenBright[1]).num(s.screenBright[2]);
@@ -767,6 +786,29 @@ export class ScreenDirector {
    * `advanceday` reaches `datebed.mov`, with no screen statement in between, so
    * the menu's last frame is what stays up through the load.
    */
+  /**
+   * The screen a Dust film was called on, while its first transition draws
+   * over it — see {@link screenAsSeen}. Null whenever no such transition is on.
+   */
+  private filmUnder: { rgba: Uint8ClampedArray; width: number; height: number } | null = null;
+
+  /**
+   * The last composite as the player saw it: the framebuffer holds it before
+   * the fade (applyFade darkens the canvas, not the buffer), so the fade level
+   * is put on here. Black before anything was presented.
+   */
+  private screenAsSeen(): { rgba: Uint8ClampedArray; width: number; height: number } {
+    const shot = this.screen.capture() ?? {
+      rgba: new Uint8ClampedArray(this.screen.width * this.screen.height * 4),
+      width: this.screen.width,
+      height: this.screen.height,
+    };
+    const keep = 1 - Math.min(1, Math.max(0, this.session.fade.level));
+    if (keep < 1)
+      for (let k = 0; k < shot.rgba.length; k++) if ((k & 3) !== 3) shot.rgba[k] *= keep;
+    return shot;
+  }
+
   screenOwner(): "movie" | "puppet" | "faded" | "world" | "held" {
     if (this.movies.frame) return "movie";
     if (this.session.fade.pendingReveal) return "held";
@@ -869,6 +911,11 @@ export class ScreenDirector {
       return;
     }
     const movieFrame = owner === "movie" ? this.movies.frame : null;
+    if (!movieFrame?.drawn) this.filmUnder = null;
+    // a Dust film's first transition draws over the screen it was called on
+    // (df/mov-v1-effects.ts, "What a transition draws OVER"): keep that screen,
+    // as the player saw it, before anything below paints over it
+    else if (!this.filmUnder) this.filmUnder = this.screenAsSeen();
     if (movieFrame) {
       const f = movieFrame;
       // the room-view transitions are 512x264 at the top; a clip into the band is the whole screen's
@@ -900,6 +947,7 @@ export class ScreenDirector {
       if (covers || !this.paintWorldInto()) this.screen.clearFrame();
       const buf = this.screen.scratchFor(f.width * f.height * 4);
       indexedToRGBA(f.pixels, f.width, f.height, f.palette, buf);
+      if (f.drawn && this.filmUnder) underUndrawn(buf, f, this.filmUnder);
       this.screen.blitAt(buf, f.width, f.height, f.originX, f.originY);
       this.screen.frameValid = true;
       this.screen.blit(ctx);
@@ -2239,5 +2287,34 @@ export class ScreenDirector {
   /** drop the movie on screen — a load replaces the screen under it */
   abandonMovie(): void {
     this.movies.abandon();
+  }
+}
+
+/**
+ * Where a film has not drawn yet, show the screen it was called on: `buf` is
+ * the film's RGBA at its origin, `under` the whole screen.
+ */
+function underUndrawn(
+  buf: Uint8ClampedArray,
+  f: { width: number; height: number; originX: number; originY: number; drawn?: Uint8Array },
+  under: { rgba: Uint8ClampedArray; width: number; height: number },
+): void {
+  const drawn = f.drawn!;
+  for (let y = 0; y < f.height; y++) {
+    const sy = y + f.originY;
+    const inY = sy >= 0 && sy < under.height;
+    for (let x = 0; x < f.width; x++) {
+      const i = y * f.width + x;
+      if (drawn[i]) continue;
+      const o = i * 4;
+      const sx = x + f.originX;
+      if (inY && sx >= 0 && sx < under.width) {
+        const u = (sy * under.width + sx) * 4;
+        buf[o] = under.rgba[u];
+        buf[o + 1] = under.rgba[u + 1];
+        buf[o + 2] = under.rgba[u + 2];
+      } else buf[o] = buf[o + 1] = buf[o + 2] = 0;
+      buf[o + 3] = 255;
+    }
   }
 }

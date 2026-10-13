@@ -642,6 +642,15 @@ export class AudioLibrary {
     return [...(this.find(bankName)?.entry.bank.singles.keys() ?? [])];
   }
 
+  /**
+   * A sound's 1-based record number in a Dust bank: its place in the `.SND`'s
+   * name table, one-shots first (readSndFileFrom numbers each chunk's
+   * `containerLoc` so). 0 when the bank or the sound is not open.
+   */
+  soundRecordV1(bankName: string, sound: string): number {
+    return this.find(bankName)?.entry.bank.singles.get(sound.toLowerCase())?.containerLoc ?? 0;
+  }
+
   /** open banks that carry looping music (counttracks/indextotrack) */
   trackNames(): string[] {
     return [...this.banks.entries()].filter(([, b]) => b.bank.loopChunks.length).map(([k]) => k);

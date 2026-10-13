@@ -12,19 +12,25 @@
  * saloon's blackjack and poker, 2,622 lines of them, and `drawstring` reads as
  * a one-file opcode without it (#288).
  *
+ * DreamFactory 5 spells the same six in four letters — RedJack's rooms are
+ * `.sett`, its stages `.stag`, shops `.shop`, puppets `.pupp`, films `.move` and
+ * casts `.cast` — and nothing older uses those, so they join the pattern without
+ * reaching a file the three-letter names did not already mean.
+ *
  * `BOOTFILE` has no extension at all, so it is its own test rather than part of
- * the pattern.
+ * the pattern — and RedJack's is `bootfile.boot`, the same file in v5's spelling.
  */
 
-/** `.SET`/`.STG`/`.FLT`/`.PUP`/`.SHP`/`.PRP`/`.CST`/`.MOV` */
-export const SCRIPT_BEARING = /\.(SET|STG|FLT|PUP|SHP|PRP|CST|MOV)$/i;
+/** `.SET`/`.STG`/`.FLT`/`.PUP`/`.SHP`/`.PRP`/`.CST`/`.MOV`, and v5's `.SETT`/`.STAG`/`.SHOP`/`.PUPP`/`.MOVE`/`.CAST` */
+export const SCRIPT_BEARING = /\.(SET|STG|FLT|PUP|SHP|PRP|CST|MOV|SETT|STAG|SHOP|PUPP|MOVE|CAST)$/i;
 
-/** the startup routine's container, which is a file with no extension */
-export const isBootFile = (name: string): boolean => /^BOOTFILE$/i.test(name);
+/** the startup routine's container: a file with no extension, or v5's `bootfile.boot` */
+export const isBootFile = (name: string): boolean => /^BOOTFILE(\.BOOT)?$/i.test(name);
 
 /** does this filename name a container a script could be in? */
 export const carriesScript = (name: string): boolean =>
   SCRIPT_BEARING.test(name) || isBootFile(name);
 
 /** the same list as prose, for a generated report's "scope" line */
-export const SCRIPT_BEARING_NAMES = "`.SET`, `.STG`, `.FLT`, `.PUP`, `.SHP`, `.PRP`, `.CST`, `.MOV`, `BOOTFILE`";
+export const SCRIPT_BEARING_NAMES =
+  "`.SET`, `.STG`, `.FLT`, `.PUP`, `.SHP`, `.PRP`, `.CST`, `.MOV`, `BOOTFILE` (and DreamFactory 5's `.sett`, `.stag`, `.shop`, `.pupp`, `.move`, `.cast`, `bootfile.boot`)";

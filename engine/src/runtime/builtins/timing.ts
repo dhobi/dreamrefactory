@@ -27,19 +27,41 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   r("countloops", () => session.scheduler.loops.length);
   r("indextoloop", (_i, [idx]) => session.scheduler.loops[toNum(idx ?? 0) - 1]?.name ?? "");
 
-  r("makecricket", (_i, [name, x, y, radius, base, jitter]) => {
+  // DreamFactory 1 gave these six ids to its BALLS — makeball, stopball,
+  // pauseball, isball, countballs, indextoball — a projectile that moves a prop
+  // and ends in its `endball` (runtime/balls.ts). Nothing like a cricket, so a
+  // v1 game takes the other branch of every one (engine/src/df/opcodes.ts).
+  const balls = session.balls;
+  r("makecricket", (_i, [name, x, y, radius, base, jitter, frames]) => {
+    if (session.isV1) {
+      balls.make(toStr(name ?? ""), [x, y, radius, base, jitter, frames].map((v) => toNum(v ?? 0)));
+      return;
+    }
     session.scheduler.makeCricket(
       toStr(name ?? ""), toNum(x ?? 0), toNum(y ?? 0),
       toNum(radius ?? 1), toNum(base ?? 0), toNum(jitter ?? -1),
     );
   });
-  r("stopcricket", (_i, [name]) => session.scheduler.stopCricket(toStr(name ?? "all")));
-  r("pausecricket", (_i, [name, flag]) =>
-    session.scheduler.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1)),
+  r("stopcricket", (_i, [name]) =>
+    session.isV1 ? balls.stop(toStr(name ?? "all")) : session.scheduler.stopCricket(toStr(name ?? "all")),
   );
-  r("iscricket", (_i, [name]) => (session.scheduler.isCricket(toStr(name ?? "")) ? 1 : 0));
-  r("countcrickets", () => session.scheduler.crickets.length);
-  r("indextocricket", (_i, [idx]) => session.scheduler.crickets[toNum(idx ?? 0) - 1]?.name ?? "");
+  r("pausecricket", (_i, [name, flag]) => {
+    if (session.isV1) {
+      if (flag === undefined) return balls.pauseDepth(toStr(name ?? ""));
+      balls.pause(toStr(name ?? "all"), truthy(flag));
+      return;
+    }
+    session.scheduler.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1));
+  });
+  r("iscricket", (_i, [name]) =>
+    (session.isV1 ? balls.isBall(toStr(name ?? "")) : session.scheduler.isCricket(toStr(name ?? ""))) ? 1 : 0,
+  );
+  r("countcrickets", () => (session.isV1 ? balls.count() : session.scheduler.crickets.length));
+  r("indextocricket", (_i, [idx]) =>
+    session.isV1
+      ? balls.indexToBall(toNum(idx ?? 0))
+      : (session.scheduler.crickets[toNum(idx ?? 0) - 1]?.name ?? ""),
+  );
 
   r("soundloop", (_i, [name, flag]) => session.scheduler.soundLoop(toStr(name ?? ""), truthy(flag ?? 1)));
 
