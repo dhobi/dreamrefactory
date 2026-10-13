@@ -281,7 +281,7 @@ test("every vector CHECKERS.DLL answered, answered the same", () => {
   const golden = JSON.parse(readFileSync(new URL("./golden/checkers-dll.json", import.meta.url), "utf8")) as {
     vectors: { board: string; depth: number; side: number; dll: string | null }[];
   };
-  expect(golden.vectors.length).toBe(617);
+  expect(golden.vectors).toHaveLength(617);
   const wrong: string[] = [];
   for (const [i, v] of golden.vectors.entries()) {
     const want = v.dll ?? checkMove(v.board, 0, v.side);

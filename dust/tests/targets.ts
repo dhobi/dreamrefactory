@@ -179,8 +179,8 @@ test("the range's targets are placed, drawn and hit where the booth is", async (
  * sprite handle aside. A copy that came up as a fresh actor lost the hitbox
  * (+0x50/+0x52) a ball needs, and everything else a script had set.
  */
-test("actorinstance copies the whole actor, hitbox and all", async () => {
-  if (!existsSync(`${TARGET}/TARGET.CST`)) return;
+test("actorinstance copies the whole actor, hitbox and all", async (ctx) => {
+  if (!existsSync(`${TARGET}/TARGET.CST`)) ctx.skip();
   const session = newSession();
   expect(await session.openCastFile("target.cst")).toBe(true);
   const all = scripts(`${TARGET}/TARGET.CST`, "target.cst");

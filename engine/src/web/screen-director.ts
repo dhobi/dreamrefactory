@@ -915,7 +915,7 @@ export class ScreenDirector {
     // a Dust film's first transition draws over the screen it was called on
     // (df/mov-v1-effects.ts, "What a transition draws OVER"): keep that screen,
     // as the player saw it, before anything below paints over it
-    else if (!this.filmUnder) this.filmUnder = this.screenAsSeen();
+    else this.filmUnder ??= this.screenAsSeen();
     if (movieFrame) {
       const f = movieFrame;
       // the room-view transitions are 512x264 at the top; a clip into the band is the whole screen's

@@ -53,9 +53,11 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     }
     session.scheduler.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1));
   });
-  r("iscricket", (_i, [name]) =>
-    (session.isV1 ? balls.isBall(toStr(name ?? "")) : session.scheduler.isCricket(toStr(name ?? ""))) ? 1 : 0,
-  );
+  r("iscricket", (_i, [name]) => {
+    const n = toStr(name ?? "");
+    const live = session.isV1 ? balls.isBall(n) : session.scheduler.isCricket(n);
+    return live ? 1 : 0;
+  });
   r("countcrickets", () => (session.isV1 ? balls.count() : session.scheduler.crickets.length));
   r("indextocricket", (_i, [idx]) =>
     session.isV1

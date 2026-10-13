@@ -1096,8 +1096,8 @@ function readWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalkV1[] {
     };
     const path = payload ? readPayload(payload) : null;
     if (path) {
-      const dist = path[path.length - 1].cum;
-      const end = path[path.length - 1];
+      const end = path.at(-1)!;
+      const dist = end.cum;
       out.push({
         ...base,
         startX: path[0].x,
@@ -1158,7 +1158,7 @@ function writePayload(path: { x: number; y: number; z: number; cum: number }[]):
   const d = new Uint8Array(Math.ceil(size / 32) * 32);
   const dv = new DataView(d.buffer);
   dv.setUint32(0, path.length, true);
-  dv.setUint32(4, path.length ? path[path.length - 1].cum : 0, true);
+  dv.setUint32(4, path.at(-1)?.cum ?? 0, true);
   path.forEach((p, k) => {
     const at = PAYLOAD_HEAD + k * PAYLOAD_POINT;
     dv.setInt16(at, p.x, true);

@@ -123,8 +123,8 @@ test("the player's z, c1+464 (0x460bb0), is 0 in every shipped save", () => {
  * the screen when the save was taken is the one before it. `D2A_001`'s
  * tumbleweed is rolling `counter`, saved at step 6.
  */
-test("a v1 prop is restored at its saved step, and written back the same", async () => {
-  if (!existsSync(join(SAVE_DIR, "D2A_001.RTD"))) return;
+test("a v1 prop is restored at its saved step, and written back the same", async (ctx) => {
+  if (!existsSync(join(SAVE_DIR, "D2A_001.RTD"))) ctx.skip();
   const session = bareSession();
   const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, "D2A_001.RTD")));
   const saved = parseSaveV1(bytes).props.find((p) => p.name.toLowerCase() === "tumbleweed")!;
@@ -144,8 +144,8 @@ test("a v1 prop is restored at its saved step, and written back the same", async
  * `bank index << 16 | record number` (DF.EXE 0x407e50), channel 1 only when it
  * outranks channel 2 (0x429e10). The port used to answer channel 1 always.
  */
-test("the saved effect is the busier channel's by DF.EXE's priority", async () => {
-  if (!existsSync(join(SAVE_DIR, "D1E_002.RTD"))) return;
+test("the saved effect is the busier channel's by DF.EXE's priority", async (ctx) => {
+  if (!existsSync(join(SAVE_DIR, "D1E_002.RTD"))) ctx.skip();
   const session = bareSession();
   expect(await session.loadGame(new Uint8Array(readFileSync(join(SAVE_DIR, "D1E_002.RTD"))))).toBe(true);
   const lib = session.audioLib;

@@ -955,7 +955,8 @@ function soundPatch(session: GameSession): Pick<SavePatchV1, "theme" | "effect" 
     busy.push({ bank, name, priority: lib.bankNames.indexOf(bank) * 0x10000 + record });
   }
   // channel 1 only if it outranks channel 2 outright (0x429e6a)
-  const pick = busy.length === 2 ? (busy[0].priority > busy[1].priority ? busy[0] : busy[1]) : busy[0];
+  let pick = busy[0];
+  if (busy.length === 2 && busy[0].priority <= busy[1].priority) pick = busy[1];
   const effect: SavePatchV1["effect"] = pick ? { bank: pick.bank, name: pick.name } : null;
   const sounds: NonNullable<SavePatchV1["sounds"]> = [];
   for (const bank of lib.bankNames) {

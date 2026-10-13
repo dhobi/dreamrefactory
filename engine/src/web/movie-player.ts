@@ -266,7 +266,7 @@ export class MoviePlayer {
     const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
     if (!m.seg.dfV1 || this.fxFrameV1 !== f) return f;
     if (now !== undefined) {
-      if (this.fxStartV1 === null) this.fxStartV1 = now;
+      this.fxStartV1 ??= now;
       this.fxElapsedV1 = this.session.clock.ticked
         ? ticksAt(now) - ticksAt(this.fxStartV1)
         : Math.floor((now - this.fxStartV1) / TICK_MS);
