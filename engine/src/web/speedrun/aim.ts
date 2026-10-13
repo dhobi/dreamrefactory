@@ -62,6 +62,11 @@ export interface Aim {
    * lasts. A flat's button can only be hit inside its own rectangle.
    */
   where?(name: string): { x0: number; y0: number; x1: number; y1: number }[] | null;
+  /**
+   * Where the things called `name` are drawn (Session.thingBoxes), for the fine
+   * sweep a small sprite needs. Absent, there is no fine sweep.
+   */
+  boxes?(name: string): { x0: number; y0: number; x1: number; y1: number }[];
   /** the named hotspot's rectangle in the current view, or null */
   hotspot(name: string): { x0: number; y0: number; x1: number; y1: number } | null;
   /** the game's framebuffer width — `host.screen.width`, never the canvas's */
@@ -120,6 +125,18 @@ export function aimAtThing(a: Aim, name: string): { x: number; y: number } | nul
       const hit = a.hitTest(x, y);
       if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
       if (!a.inFlat && a.propUnder(x, y)?.toLowerCase() === want) return { x, y };
+    }
+  }
+  // A world sprite far off is drawn the way the engines size it, truncating, so
+  // Titanic's pocket watch on the c73 table comes out 6x3 and the grid above
+  // steps over it. Every pixel of where it is drawn, then: only on a miss, and
+  // only inside the thing's own box, so a wait for something absent stays cheap.
+  for (const r of a.boxes?.(want) ?? []) {
+    for (let y = Math.max(0, r.y0); y <= Math.min(a.height - 1, r.y1); y++) {
+      for (let x = Math.max(0, r.x0); x <= Math.min(a.width - 1, r.x1); x++) {
+        const hit = a.hitTest(x, y);
+        if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
+      }
     }
   }
   return null;

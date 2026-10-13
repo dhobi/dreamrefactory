@@ -41,3 +41,4 @@ tsconfig.tsbuildinfo
 
 # editor settings are each contributor's own
 /.vscode/
+__pycache__/

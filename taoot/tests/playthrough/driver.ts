@@ -102,6 +102,7 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     hitTest: (x, y) => session.hitTestAt(x, y),
     propUnder: (x, y) => v().propUnder(x, y)?.group.name ?? null,
     inFlat: !session.viewShowing && !!session.stageScript,
+    boxes: (name) => session.thingBoxes(name),
     hotspot: (name) => {
       const obj = v().scene.views[v().viewIdx].objects.find(
         (o) => (o.identifier ?? "").toLowerCase() === name.toLowerCase(),

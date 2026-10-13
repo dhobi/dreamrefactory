@@ -426,6 +426,24 @@ export class GameSession {
     name: "",
     type: "",
   });
+  /**
+   * Where the actors and props called `name` are drawn right now, as screen
+   * boxes (inclusive corners). For tools that have to aim at a thing: a world
+   * sprite can come out a few pixels across, small enough to slip between the
+   * points of any sweep (engine/src/web/speedrun/aim.ts).
+   */
+  thingBoxes(name: string): { x0: number; y0: number; x1: number; y1: number }[] {
+    const want = name.toLowerCase();
+    const cam = this.activeCamera();
+    const out: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    const add = (r: { x: number; y: number; w: number; h: number } | null) => {
+      if (r && r.w > 0 && r.h > 0) out.push({ x0: r.x, y0: r.y, x1: r.x + r.w - 1, y1: r.y + r.h - 1 });
+    };
+    const a = this.actorRuntime.get(want);
+    if (a) add(this.actorRuntime.spriteBox(a, cam));
+    for (const r of this.propRuntime.boxesOf(want, cam)) add(r);
+    return out;
+  }
   /** the type from the most recent hittest(), returned by result() */
   lastResult = "";
   /**
