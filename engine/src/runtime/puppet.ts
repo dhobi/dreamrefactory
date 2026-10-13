@@ -314,6 +314,14 @@ export class PuppetController {
   } | null = null;
 
   async openPuppetFile(fileName: string): Promise<boolean> {
+    // DreamFactory 1 has one conversation at a time: DF.EXE's openpuppetfile
+    // (0x435850) answers error 0x2d at 0x43585d while the open flag 0x460bd2 is
+    // set, and leaves the puppet that is up alone. Replacing it, as this did,
+    // let a scene event's `runpuppet` take over a conversation in progress.
+    if (this.puppet && this.session.isV1) {
+      this.session.onLog(`openpuppetfile: "${fileName}" refused, ${this.puppet.name} is open`);
+      return false;
+    }
     fileName = this.session.typedName(fileName, "pupp");
     const key = toStr(fileName).toLowerCase();
     await this.session.ensureFile(key);

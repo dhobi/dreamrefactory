@@ -149,6 +149,11 @@ export class SetScripts {
    * A jump made from inside the lifecycle still MOVES you; what it does not do
    * is ask for the event again. A jump from an ordinary handler is untouched,
    * which is what TAOOT's `dopurser` needs (#71).
+   *
+   * DreamFactory 1 does not ask this: DF.EXE's `currentscene`/`currentview`
+   * run the scene events again, nested, and its "already there" tests end the
+   * nesting (SetViewer.jumpV1). Scene C4's second openscene finds you facing
+   * north and does not turn again.
    */
   get inLifecycle(): boolean {
     return this.lifecycleDepth > 0;
@@ -206,6 +211,19 @@ export class SetScripts {
     await this.fireLifecycle("openset", -1);
   }
   async closeSet(): Promise<void> {
+    if (this.session.isV1) {
+      /**
+       * DF.EXE (0x40f370) closes outside in: `closeset` (0x40f3bc), then
+       * `closefloor` (0x40f444; no Dust script handles it), then the scene's
+       * `closescene` (0x40f4f3). After each one it stops if the set or the
+       * camera's cell changed under it (0x40f3db–0x40f420, 0x40f470–0x40f4b5).
+       */
+      const scene = this.lastSceneIdx;
+      await this.fireLifecycle("closeset", -1);
+      if (this.session.currentBinding !== this || this.lastSceneIdx !== scene) return;
+      if (scene >= 0) await this.closeScene(scene);
+      return;
+    }
     // leaving a set also leaves its scene
     if (this.lastSceneIdx >= 0) await this.closeScene(this.lastSceneIdx);
     await this.fireLifecycle("closeset", -1);

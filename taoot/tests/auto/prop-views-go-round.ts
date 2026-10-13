@@ -53,7 +53,7 @@ test("the gramophone's handle turns while the record plays, round and round (#47
   );
 
   // TRUNK.STG mousedown: shown, never propview'd, then forceupdate until a click
-  call(session, "propvisible", ["crank", true]);
+  call(session, "propvisible", ["crank", 1]);
   // the first pass draws step 0 and each pass after takes a step
   const shown = play(host, session, "crank", 36);
   const round = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8];
@@ -64,7 +64,7 @@ test("the deck map's open keeps rolling until a script changes its view (#485)",
   const { host, session } = await newHost();
   await host.loadServerSet("c73.set");
   const map = session.propRuntime.get("map")!;
-  call(session, "propvisible", ["map", true]);
+  call(session, "propvisible", ["map", 1]);
   call(session, "propview", ["map", "open"]);
   // house.shp's map `open ()`: makeloop ("prop", me, "domap", 5), then the map
   // flat — and nothing names another view until `close ()` after the flat
@@ -74,12 +74,23 @@ test("the deck map's open keeps rolling until a script changes its view (#485)",
   expect(groups, "open goes round").toEqual([0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1]);
 });
 
-test("Dust's views still play once and hold — DF.EXE has not been checked", async () => {
+/**
+ * DreamFactory 1 goes round too (DF.EXE's prop draw 0x41eab0 wraps the step at
+ * the view's count, 0x41eb67), but it takes the step in the draw, so a prop
+ * that is not shown stands where it was (0x41e770) — TI.EXE steps it anyway.
+ */
+test("under DreamFactory 1 a shown view goes round and a hidden one waits", async () => {
   const { host, session } = await newHost();
   await host.loadServerSet("c73.set");
   await session.openShop("trunk.shp");
   session.dfVersion = 1;
-  call(session, "propvisible", ["crank", true]);
-  const shown = play(host, session, "crank", 10);
-  expect(new Set(shown), "a view no script named stands still").toEqual(new Set([0]));
+  const crank = session.propRuntime.get("crank")!;
+  call(session, "propvisible", ["crank", 1]);
+  const round = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8];
+  expect(play(host, session, "crank", 36), "round and round").toEqual([...round, ...round]);
+  play(host, session, "crank", 5);
+  call(session, "propvisible", ["crank", 0]);
+  const held = crank.frameIdx;
+  play(host, session, "crank", 7);
+  expect(crank.frameIdx, "not drawn, not stepped").toBe(held);
 });

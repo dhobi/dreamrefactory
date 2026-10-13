@@ -55,7 +55,7 @@ content fails on Dust saves, which contain none of v4's marker strings (#325).
 
 | # | Contents | Stride |
 |---|----------|--------|
-| 0 | version string, nine resource paths, the loop-sound state, the CLUT, the open-file manifest | 260 per file record |
+| 0 | version string, nine resource paths, the theme and effect channels, the CLUT, the open-file manifest | 260 per file record |
 | 1 | the standpoint — a verbatim 542-byte dump of the engine block at `0x4609E0` | — |
 | 2 | the cast | **164** (v4: 160) |
 | 3 | open cast files | 28 |
@@ -106,10 +106,29 @@ with different strides.
 |-------:|-------|
 | 0 | the **version string** (`"dust 0.3"`), a Pascal string |
 | 0x100 + 256·i | nine resource path prefixes (`appl:`, `dust:data:`, `dust:puppets:`, …) |
-| 0xA00 | the loop sound: `{u32 bank file, u32 playing bank, u32 chunk}` |
+| 0xA00 | the **theme**: channel 3's bank file handle, 0 when the channel is idle (`0x429D10`) |
+| 0xA04 | the **effect**: the bank file handle of the sound on channel 1 or 2, 0 when neither is busy (`0x429E10`) |
+| 0xA08 | ...and that sound's 1-based record number in its bank file |
 | 0xA0C | the live CLUT, 256 × `{i16 index, i16 rgb[3]}` — v4's `0xB0C` minus `0x100` |
 | 0x120C | the open-file record count — v4's `0x130C` minus `0x100` |
 | 0x1210 + 260·k | `{u32 old heap handle, pstr path[256]}` |
+
+The three sound words are filled by the writer at `0x419E36`–`0x419E68` by
+asking the sound system, channel by channel, whether it is busy (`0x409280`).
+The theme's record number is fetched too and thrown away: a load restarts the
+theme bank's loop list from the top (`0x41B2EC` → `0x429FA0`) rather than
+resuming a chunk. The effect is replayed from the start through `0x42A070` as
+its bank's records are re-registered (`0x41B1AA`). So `D1E_001` (theme
+`night.snd`, no effect) loads with the night theme playing, and `D2M_004` (no
+theme, effect `mayor.snd` record 12) with the hall clock ticking — reading
+`+0xA04` as "the theme that is playing" had both the wrong way round.
+
+Each bank's first two record arrays (104 bytes a record: one-shots, then the
+theme's loop chunks) carry what a script can change about a sound, and the loader
+reads it back after re-registering each record (`0x41B12D`–`0x41B190`): `+0x2F`
+`soundvol` (registered 255), `+0x31` `soundpan` (128), `+0x33` `soundloop` (0,
+one-shots only). A chunk's volume is its track's `themevol`. `+0x41` is the
+record's number in the bank file and `+0x45` its name.
 
 Record 0 is always the `.rtd` itself, with the full DOS path it was written to
 (`C:\DUST\GOTBONE.RTD`) — the original's saves were plain 8.3 names anywhere on
@@ -141,7 +160,11 @@ first 244 bytes from its base unchanged.
 | Offset | Field |
 |-------:|-------|
 | 248 | the **frame counter** — what `frame()` answers (`inc DWORD ds:0x460AD8` at `0x4334AD`) |
+| 268 | `puppetgrab` (`0x4361FD`) |
+| 302 | the frame interval `framerate (n)` sets — 60 Hz ticks per drawn frame, default 3 (`0x42077D`; the pacing loop at `0x434167`) |
 | 356 | the open **flat file**, as a manifest handle (`appl:local:new.flt`) |
+| 390 | `setvisible` (`0x410151`) — `opensetfile` resets it to 1, which a load does not run |
+| 392 / 394 | the **player's** hitbox, `actorhitbox ("player", rz, rxy)` (`0x41314C`) |
 | **428 / 430** | the room's **camera**: `cameraSetback` and `eyeHeight`, copied from the set's own header (c0+0x18/0x1a) |
 | 372 | the flat's base name (`"new"`) |
 | **396** | the open **set file**, as a manifest handle (`dust:data:nite.set`) |
@@ -205,6 +228,15 @@ ecx=0x29` at `0x411E2F`, and `add edi,0xa4` in the scan at `0x4129B3`.
 | **26 / 28 / 30** | the world position: **x across, y into the screen, z up** |
 | **44** | `actorscale`, per mille |
 | **36 / 40** | `actorturn`, `actorspeed` |
+| 20 / 22 | the screen anchor, y then x (`actorxy`, `0x412F7B`) |
+| 32 / 34 | the tile of the star last given (x >> 8, y >> 8; not kept up by a walk) |
+| 38 | the step within the pose (reset by `actorpose`, `0x4122E3`; advanced by the draw) |
+| 42 | `actordist` for a screen actor; a world actor's last projected depth |
+| 48 | a serial number (counter at `0x45E490`) |
+| 52..72 | the last draw's cache: frame handle, clipped rect, foot point (y +64, x +66), size |
+| **74** | `actorvalue`, i32 (`0x414933`) |
+| **78** | `actorzclip` (`0x4149D3`) |
+| **80 / 82** | `actorhitbox`: rz, rxy (`0x413182`; the player's is in container 1) |
 | 84 | the name (Pascal string, 16-byte field) |
 | 100 / 116 / 132 / 148 | `actorset`, `actorstar`, `actorpose`, `actorowner` |
 
@@ -235,7 +267,7 @@ These fields are load-bearing in a way that is invisible in the file:
   scripts set are observable. Leroy, the dog and the horse all run at speed 3 and
   turn 7, the pig at 12 and 16, and the record reads exactly those at +40 and
   +36. +78 and +80 (32, 64, 100 and a uniform 100) look like a speed and a turn
-  rate but are an order of magnitude out.
+  rate but are `actorzclip` and the first hitbox word.
 - **the axis order.** `y` is depth, not height. Read as x/y/z with y up, every
   character lands at depth 0 — the camera's own eye — and the projection refuses
   them. In the port's boot, script-placed `dog` stands at (1620, 2748, 0) and its
@@ -254,6 +286,12 @@ Same stride as v4, and the same offsets for every string field.
 | 26 / 28 / 30 | the world position (same axes as the cast) |
 | **40** | `propdist` — the z-order |
 | 42 | `propscale`, per mille (800, 1000, 1200, 4230 across the corpus) |
+| 32 / 34 | the tile of the star last given |
+| 36 | the step within the view (reset by `propview`, `0x41C13A`) |
+| 46 | a serial number |
+| 50..70 | the last draw's cache (foot point y +62, x +64) |
+| **72** | `propvalue`, i32 (`0x41BBC3`) |
+| **76** | `propzclip` (`0x41BC63`) |
 | 78 / 94 / 110 / 126 / 142 | name, set, star, `propview`, `propowner` |
 
 The screen anchor is pinned by the game's own arithmetic rather than by analogy:
@@ -272,61 +310,80 @@ extension is read back out of the container-0 manifest, where the full path is.
 
 ### The scheduler tables
 
-`loops` is **byte-identical to v4** (32 × 42: `{u16 active, u16 kind @4, u32
-period @6, pstr name @10, pstr handler @26}`, kinds 1=actor 2=prop 3=scene
-4=flat), so the v4 decoder reads it unchanged. `crickets` (16 × 48) and `walks`
-(16 × 82) are v1's own sizes.
+`loops` is **byte-identical to v4** (32 × 42: `{u16 active, u16 pause depth @2,
+u16 kind @4, u32 period @6, pstr name @10, pstr handler @26}`, kinds 1=actor
+2=prop 3=scene 4=flat), so the v4 decoder reads it unchanged. The second and
+third tables are v1's own.
 
-Of the **cricket** table only `active @0` and the name at `+0x20` are known;
-treat everything past the name as unread. The collection beside the disc
-carries non-zero cricket tables, so the rest of the layout can be checked
-against real records.
+**The 16 × 48 table is not crickets.** Its ids are the ones v4 gives
+`makecricket`, but in DF.EXE they are `makeball`'s: a prop thrown through the
+room (insert `0x439CB0`, served by `0x439CF0`), restored into the port's ball
+runtime.
 
-The **walk** table is better served: saves with several walkers in flight are
-common in the collection.
+| Offset | Field |
+|-------:|-------|
+| 0 / 2 | `active`, pause depth (`pauseball`) |
+| 4 / 6 / 8 | velocity x, y, z |
+| 0xA / 0xC | gravity, bounce |
+| 0xE | passes left |
+| 0x10 / 0x12..0x16 | deg, then x, y, z — copied from the prop |
+| 0x18 / 0x1A | tile x, y (`>> 8`) |
+| 0x1C | the prop's slot in the prop table |
+| 0x20 | the prop's name |
+
+46 shipped saves carry slot 0, always `tumbleweed`; 30 of them have it in flight
+(`D2A_001`: v(−12, 0, −3), 120 passes left, at (1113, 1714, 15)).
+
+The **walk** table (`walktostar` `0x439260`, served by `0x4395C0`):
 
 | Offset | Field |
 |-------:|-------|
 | 0 | `active` — a clear slot holds the LAST walk it ran, not a live one |
+| 2 | pause depth (`pausewalk` adds and takes one, floor 0) |
 | 4 | a facing to end on, or −1 |
-| 8 / 12 / 16 | the three deltas, i32 each |
+| 6 | a turn on the spot (`turntodeg`) |
+| 8 / 12 / 16 | **start minus destination**, i32 each |
 | 20 | the whole distance, i32 |
 | 24 | the walker's current facing |
-| 26 / 28 / 30 | **the destination**, in world units |
-| 32 / 34 | the destination as a grid cell |
+| 26 / 28 / 30 | **where the walk started**, in world units |
+| 32 / 34 | that start as a tile |
 | 36 | an authored route's waypoints, as a container handle (0 = a straight line) |
-| **40** | how much of the distance is **LEFT** |
+| **40** | how far the walker has **COME** |
+| 44 | 1 if the walker moves; 0 while it is not in the open set |
+| 46 | its slot in the cast table |
 | 50 / 66 | the walker, and the star they are walking to |
 
-Mapped by **reconstruction**: the fields have to predict the position the *cast*
-record — a different table, written by the same engine at the same instant —
-independently reports. Jones is 82% of the way to `town.jones2`:
+`walktostar` copies the actor's own position block into +26 (`0x439459`) and sets
+the delta to start minus star (`0x4394A9`); the service adds the actor's speed to
++40, clamps it (`0x439880`) and places the walker at `start − delta ·
+covered / dist` (`0x439890`). Jones in `D2A_002`:
 
 ```
-destination   (1624, 1872)      +26 / +28
-delta         (-112, -616)      +8 / +12
-start         (1736, 2488)      destination - delta
+start         (1624, 1872)      +26 / +28
+start − star  (-112, -616)      +8 / +12  →  town.jones2 is (1736, 2488)
 distance       626              +20, and hypot(112, 616) = 626.1
-remaining      111              +40
-covered        515              626 - 111
-predicted     (1643, 1981)      start + delta x 515/626, truncated
-the cast says (1643, 1981)      cast record +26 / +28
+covered        39               +40
+predicted     (1630, 1910)      start − delta × 39/626, truncated
+the cast says (1630, 1910)      cast record +26 / +28
 ```
 
-and Help, 29% along a 131-unit step in the same file, lands the same way, with no
-field left over. The truncation is the same fix-point truncation the projection
-uses (rounding puts Jones a pixel east).
+Read the other way round — +26 as the destination and +40 as what is left — the
+same position falls out, which is how this table was first read; a walk resumed
+that way walked back to where it began.
+
+A walk on an authored route never writes +8..+23: they hold stack leftovers. Its
+geometry is the **waypoint payload**, one container after the walks table per
+declaring slot, in slot order: `{u32 count, u32 total length, 8 bytes never
+read}` then per point `{i16 x, y, z, i16 length from the previous point}`
+(builder `0x410F00` → `0x411300`). No current point is stored; the walker finds
+its leg by subtracting leg lengths from +40 (`0x43AA3B`). 13 shipped saves carry
+one, and the port reads and writes it.
 
 Restoring the walk table is not optional, because a walker is recorded in **two**
 tables and the cast record hands over the `walk` pose. An actor plays its pose
 whether or not anything is moving it, so restoring the cast without the walks
 brings a character back marching on the spot. Anyone whose walk cannot be resumed
 is stood up instead, as on the play page (#181).
-
-An authored route's waypoint container is **not** reproduced when writing: such a
-walk is written as the straight line its own record carries, and the caller is
-told. This is not rare: a good many of the shipped saves carry at least one walk
-following an authored route.
 
 ## The globals never changed
 
@@ -373,18 +430,13 @@ other to the pixel. The frame counter is what orders them.
 
 ## What is not resolved
 
-Gaps, all of them fields the port fills from the live object rather than
-guessing:
+Gaps:
 
-- the cast record beyond `+0/+18/+24/+26..30/+36/+40/+44` — 84 numeric bytes, and
-  v4's tail offsets do not transfer;
-- the prop record beyond the fields tabled above;
-- the cricket record beyond `active` and the name;
-- the layout of a walk's waypoint payload container (13 of the 56 shipped saves
-  carry one; the port resumes such a walk as a straight line), and the walk
-  record's type word — it reads 1 for every sample in the corpus, walkers
-  included, so it cannot be what distinguishes a turn from a journey; a turn is
-  recognised by going nowhere instead;
+- the cast record's handles at +2..+17, its draw cache at +52..+72 and its serial
+  at +48 are read but not modelled: the port has no such state, and a write keeps
+  the base's;
+- the "same set" flag the port once looked for does not exist: DF.EXE compares
+  the actor's set (+100) with the standpoint's (c1+482) every time;
 - **what marks a walk record spent.** The `active` word is honoured, and it is
   not enough: of the 140 records it passes across the 56 shipped saves, **58
   have nothing left to walk** — `progress >= dist`, or a `dist` that is

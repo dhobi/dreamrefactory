@@ -187,8 +187,12 @@ test.skipIf(noRip)("ARMOPEN.MOV: one wait, a straight run into Diary.mov, no ret
   // frame 19 chains out to the diary close-up — the name is on ITS OWN record
   expect(sg.frames[18].action).toBe(3);
   expect(sg.frames[18].chainTo).toBe("Diary.mov");
-  // ...and it holds for its creak first (wait flag bit 0)
-  expect(sg.frames[18].waitsForVoice).toBe(true);
+  // ...fading to black as it goes (+0x06 = 17, DF.EXE's transition table at
+  // 0x405c9c) — and NOT waiting out the creak: the movie loop's one voice wait
+  // is +0x1a bit 0 (0x404ae6 on this exit path), and this frame does not carry
+  // it. The old reading took +0x06 bit 0 for it, which is "the code is odd".
+  expect(sg.frames[18].effect.code).toBe(17);
+  expect(sg.frames[18].holdsForSound).toBe(false);
   // The put-back half is reached only by the click-away boxes, and they live on
   // frame 16 — the one moment the swing stops for a click, which is the
   // "steerable mid-swing" the format doc describes (goto 0-based 20 = frame 21).

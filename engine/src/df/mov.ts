@@ -1,3 +1,4 @@
+import type { MovEffectV1 } from "./mov-v1-effects";
 import { BinaryReader, pstrAtChecked, writeNameAt } from "./binary";
 import { readLoopChunks, readOneShotChunks } from "./banks";
 import { PC, little } from "./byte-order";
@@ -152,6 +153,12 @@ export interface MovFrame {
   /** byte offset of this 42-byte record in container 0's frame table (edit
    *  target — see {@link patchFrameName}) */
   record: number;
+  /**
+   * A DreamFactory 1 frame's transition — record +0x06, its dirty rect and
+   * block size (df/mov-v1-effects.ts). Only {@link MovSegment.dfV1} films carry
+   * it; nothing else draws through it.
+   */
+  effectV1?: MovEffectV1;
 }
 
 /** one timed jump — see the module comment's cue-table paragraph */

@@ -63,9 +63,11 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
   // after it where they are — see PuppetController.puppetScramble for the
   // original's loop, and why it draws from the SCRIPT random stream.
   r("puppetscramble", () => session.puppetCtrl.puppetScramble());
-  // remaining puppet effects are rare and unverified: puppetsubtitle (override
-  // text), puppetgrab (hold an item in-frame)
-  for (const stub of ["puppetsubtitle", "puppetgrab"]) {
-    r(stub, () => {});
-  }
+  // puppetgrab(flag): put the set's own view behind the next puppet instead of
+  // its painted background — see GameSession.puppetGrab (DF.EXE 0x4361c0)
+  r("puppetgrab", (_i, [flag]) => {
+    session.puppetGrab = truthy(flag ?? 0);
+  });
+  // remaining puppet effects are rare and unverified: puppetsubtitle (override text)
+  r("puppetsubtitle", () => {});
 }

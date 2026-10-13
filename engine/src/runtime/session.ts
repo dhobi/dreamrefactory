@@ -3,6 +3,7 @@ import { Actor, StarPathPoint } from "../df/set";
 import { sniffScript } from "../df/script";
 import { DEFAULT_ENCODING, DfEncoding } from "../df/text";
 import { parseScript } from "./parser";
+import { BallRuntime } from "./balls";
 import { Frame, Interpreter, ScriptInstance, Value } from "./interp";
 import { ActorRuntime } from "./actors";
 import type { WorldCamera } from "./geometry";
@@ -672,6 +673,8 @@ export class GameSession {
    * puppet controllers; the session carries no forwarding surface for it.
    */
   readonly scheduler = new Scheduler(this);
+  /** DreamFactory 1's ballistic props (makeball and friends) — runtime/balls.ts */
+  readonly balls = new BallRuntime(this);
   /** host hook: listener (camera) ground position + facing for crickets */
   listener: () => { x: number; y: number; deg: number } | null = () => null;
   /**
@@ -1025,6 +1028,18 @@ export class GameSession {
   readonly puppetParams = new Map<number, number>([
     [1, 0], [2, 128], [3, 250], [4, 251], [5, 888], [6, 12], [7, 1], [8, 0], [9, 2], [10, 8],
   ]);
+
+  /**
+   * `puppetgrab (flag)` — DF.EXE 0x4361c0 stores it at 0x460aec, 0 at start
+   * (0x42e121). While it is set, a DreamFactory 1 puppet's layer 0 is not its
+   * own background: the loader skips that layer (0x435a4b) and the draw puts the
+   * set's clean view there instead, with the set's palette entries
+   * [puppetparam 1, puppetparam 2) — 0..127 — copied over the puppet's
+   * (0x437165 -> 0x437380). Dust's BOOTFILE sets it at boot and clears it only
+   * round the characters painted against a background of their own. See
+   * engine/src/web/puppet-view.ts.
+   */
+  puppetGrab = false;
 
   // ---- captions: SessionCaptions (session-captions.ts) -----------------------
   readonly captionCtrl = new SessionCaptions(this);
@@ -1415,8 +1430,8 @@ export class GameSession {
    * currentscene(...)/currentview(...) to the mirrored view (HALLC.SET keydown).
    * The viewer buffers the scene and executes the jump on the paired view call.
    */
-  onSceneJump: (scene: string) => void = () => {};
-  onViewJump: (view: string) => void = () => {};
+  onSceneJump: (scene: string) => void | Promise<void> = () => {};
+  onViewJump: (view: string) => void | Promise<void> = () => {};
   /**
    * Persistent nav drivers: the viewer's real turn/walk/teleport functions,
    * always bound (unlike the on* hooks above, which are no-ops outside a
@@ -1425,8 +1440,8 @@ export class GameSession {
    * user gesture in flight. Set by the viewer's constructor.
    */
   navDriver: (direction: string) => void = () => {};
-  sceneJumpDriver: (scene: string) => void = () => {};
-  viewJumpDriver: (view: string) => void = () => {};
+  sceneJumpDriver: (scene: string) => void | Promise<void> = () => {};
+  viewJumpDriver: (view: string) => void | Promise<void> = () => {};
   /**
    * True while a user gesture (keyDown / click) is being dispatched — the window
    * in which the nav hooks above are armed. A `changeset` mid-gesture (a door
@@ -1609,6 +1624,7 @@ export class GameSession {
     this.v5 = v;
     this.actorRuntime.v5 = v;
     this.propRuntime.v5 = v;
+    this.interp.shortCircuit = v;
   }
   private v5 = false;
 

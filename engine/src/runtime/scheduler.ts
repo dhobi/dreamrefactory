@@ -393,6 +393,7 @@ export class Scheduler {
     this.crickets.length = 0;
     this.walks.clear();
     this.loopFlags.clear();
+    this.session.balls.reset();
     this.haltSounds();
   }
 
@@ -432,6 +433,16 @@ export class Scheduler {
        * for a character on a patrol, re-target them).
        */
       turnOnly?: boolean;
+      /**
+       * DreamFactory 1's WAITING walk (record +44 = 0): its walker is not in the
+       * open set, so nothing moves. DF.EXE's walk service (0x4396f5) leaves it
+       * be until the walker's set (actor +0x64) is the open one (0x43970d,
+       * against 0x460bc2) and its star is one of that set's (0x410ce0); then it
+       * puts the actor on the star and the walk ends with `endwalk`. A star the
+       * open set lacks keeps it waiting (0x43974e) — it never comes from
+       * another set's table. Only a load makes one here.
+       */
+      waiting?: boolean;
     }
   >();
 
@@ -485,6 +496,7 @@ export class Scheduler {
       dx: number; dy: number; dz: number;
       dist: number; progress: number; arriveStar?: string;
       path?: { x: number; y: number; z: number; cum: number }[];
+      waiting?: boolean;
     },
   ): boolean {
     const key = name.toLowerCase();
@@ -501,6 +513,7 @@ export class Scheduler {
       arriveStar: w.arriveStar,
       turnTo: w.turnTo,
       turnOnly: w.turnOnly,
+      waiting: w.waiting,
     });
     return true;
   }
@@ -763,7 +776,9 @@ export class Scheduler {
    * question, only the drivers.
    */
   anyoneMoving(): boolean {
-    return this.walks.size > 0;
+    // a waiting walk (DreamFactory 1) moves nobody until its room opens
+    for (const w of this.walks.values()) if (!w.waiting) return true;
+    return false;
   }
 
   pauseWalk(name: string, paused: boolean): void {
@@ -779,6 +794,26 @@ export class Scheduler {
       if (!a) {
         this.walks.delete(key);
         continue;
+      }
+      if (w.waiting) {
+        // see the record's `waiting`: the walker's set must be the open one,
+        // and the star must be in it ("custom" names no star, 0x439738)
+        if (a.setName.toLowerCase() !== this.session.actorRuntime.currentSet) continue;
+        const want = (w.arriveStar ?? "").toLowerCase();
+        const star = want && want !== "custom"
+          ? this.session.currentBinding?.set.actors.find((s) => s.identifier.toLowerCase() === want)
+          : undefined;
+        if (want && want !== "custom" && !star) continue;
+        // ...and it arrives on this pass, through the mover below
+        w.sx = star ? star.positionX : a.worldX;
+        w.sy = star ? star.positionZ : a.worldY;
+        w.sz = star ? star.positionY : a.worldZ;
+        w.dx = w.dy = w.dz = 0;
+        w.dist = 1;
+        w.progress = 0;
+        w.turnTo = undefined;
+        w.path = undefined;
+        w.waiting = false;
       }
       // A walk TURNS before it moves, and does not do both in one pass. The
       // record carries a facing target (TI.EXE walk record +8, built at
@@ -1019,6 +1054,9 @@ export class Scheduler {
 
   private serviceStep(): void {
     this.serviceWalks();
+    // DreamFactory 1's balls come between the walks and the loops, as DF.EXE's
+    // activity pass orders its three tables (0x438840). A v4 game never makes one.
+    if (this.session.isV1) this.session.balls.step();
     this.silenceAbsentCrickets();
     if (this.session.isV5) this.replaceCricketsV5();
     for (let i = this.crickets.length - 1; i >= 0; i--) {

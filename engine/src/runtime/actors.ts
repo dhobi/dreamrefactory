@@ -70,6 +70,14 @@ export class ActorInstance {
   dist = 0;
   /** facing, 0..255 like the camera */
   deg = 0;
+  /**
+   * DreamFactory 1's `actorhitbox (name, rz, rxy)` — the half-height and the
+   * half-width of the box a ball has to pass through to hit this actor (actor
+   * record +0x50/+0x52, DF.EXE setter 0x4130a0, getter 0x4131b0; read by the
+   * ball's hit test 0x43a1c0). 0 until a script sets it, and a box with either
+   * half <= 0 is never hit. See runtime/balls.ts.
+   */
+  hitbox: [number, number] = [0, 0];
   poseName = "stand";
   /**
    * How far into the current pose's PLAY SCRIPT the actor is — an index into
@@ -143,6 +151,50 @@ export class ActorInstance {
   pose(): CastPose | null {
     return this.member.poses.find((p) => p.name === this.poseName) ?? this.member.poses[0] ?? null;
   }
+}
+
+/**
+ * DreamFactory 1's `actorinstance` is a copy of the WHOLE actor record.
+ *
+ * DF.EXE 0x411cc0 fetches the source's 164-byte record (0x414b90), writes the new
+ * name into it at +0x54 (0x411da1), takes a fresh serial from the counter at
+ * 0x45e490 for +0x30 (0x431f40) and zeroes +0x34, re-opens the sprite resource
+ * for its own handle at +6 (0x432190) — and appends the rest as it stands, 0x29
+ * dwords with one `rep movsd` (0x411e3b). So the copy is where the source is,
+ * facing its way, in its set, on its star, in its pose and step, at its scale,
+ * speed, turn, layer and z-clip, with its value, its owner and its hitbox
+ * (+0x50/+0x52): everything the record holds that is not bookkeeping.
+ *
+ * The record has no field for the port's own derived state, which follows the
+ * fields it is derived from: `starPending` with the star and position. The
+ * per-frame clock (`lastTick`) starts afresh, as +0x34 does.
+ */
+export function copyActorRecord(from: ActorInstance, to: ActorInstance): void {
+  to.visible = from.visible;
+  to.setName = from.setName;
+  to.worldX = from.worldX;
+  to.worldY = from.worldY;
+  to.worldZ = from.worldZ;
+  to.worldSpace = from.worldSpace;
+  to.anchorX = from.anchorX;
+  to.anchorY = from.anchorY;
+  to.dist = from.dist;
+  to.deg = from.deg;
+  to.hitbox = [from.hitbox[0], from.hitbox[1]];
+  to.poseName = from.poseName;
+  to.step = from.step;
+  to.scale = from.scale;
+  to.zclip = from.zclip;
+  to.ink = from.ink;
+  to.flip = from.flip;
+  to.true3d = from.true3d;
+  to.bright = [from.bright[0], from.bright[1], from.bright[2]];
+  to.speed = from.speed;
+  to.turn = from.turn;
+  to.owner = from.owner;
+  to.value = from.value;
+  to.starName = from.starName;
+  to.starPending = from.starPending;
 }
 
 export class LoadedCast {
@@ -224,12 +276,13 @@ export class ActorRuntime {
   /** actorinstance(src, dst): a new actor sharing src's cast sprite (TAOOT's gang
    *  cast spawns its lifeboat crowd this way). No-op if src is unknown or dst
    *  already exists. */
-  instance(src: string, dst: string): void {
+  instance(src: string, dst: string, wholeRecord = false): void {
     const s = this.get(src);
     const key = dst.toLowerCase();
     if (!s || this.actors.has(key)) return;
     const inst = new ActorInstance(s.member, s.cast);
     inst.name = dst; // the name the script asked for — see ActorInstance.name
+    if (wholeRecord) copyActorRecord(s, inst);
     this.actors.set(key, inst);
   }
 

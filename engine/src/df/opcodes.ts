@@ -26,8 +26,8 @@
  *   | 16034 | actorhitbox     | currentcd          | 32  |
  *   | 16047 | pauseball       | pausecricket       | 18  |
  *   | 20011 | isball          | iscricket          | 0   |
- *   | 20017 | setwidth        | pointinpainting    | 0   |
- *   | 20018 | setheight       | countpaintings     | 0   |
+ *   | 20017 | setwidth        | pointinpainting    | 1   |
+ *   | 20018 | setheight       | countpaintings     | 1   |
  *   | 20021 | rowcoltoscene   | sendtopostfx       | 4   |
  *   | 20022 | scenefloor      | indextopainting    | 0   |
  *   | 20023 | scenerow        | actorexists        | 7   |
@@ -39,22 +39,29 @@
  *   | 20101 | indextoball     | indextocricket     | 0   |
  *   | 20104 | countballs      | countcrickets      | 0   |
  *
- * Most of the twelve Dust actually uses are the SAME thing renamed — a "ball" is
- * what v4 calls a cricket, a "dir" what it calls a view, `findfile` what it calls
- * `fileexists` — so the v4 name reaching the v4 implementation is right, and 654
- * of the 719 call sites were never wrong. Five were: `rowcoltoscene`,
+ * Most of the twelve Dust actually uses are the SAME thing renamed — a "dir" is
+ * what v4 calls a view, `findfile` what it calls `fileexists` — so the v4 name
+ * reaching the v4 implementation is right. The rest are not: `rowcoltoscene`,
  * `scenebuild`, `scenerow`, `scenecol` and `actorhitbox` are unrelated to the v4
- * commands sharing their ids.
+ * commands sharing their ids, and so is the ball family — DF.EXE's balls are
+ * projectiles, not v4's ambient crickets.
  *
- * Three of those five are already answered under the v4 name, by the meaning the
+ * Three of those are already answered under the v4 name, by the meaning the
  * SET decides: `scenerow`/`scenecol` are `actorexists`/`propexists` on a v1 set
  * (see BuiltinCtx.sceneCell) and `rowcoltoscene`/`scenebuild` are
  * `sendtopostfx`/`sendtoserverfx` there (registerDispatchBuiltins). Overloading
  * the v4 name rather than swapping the table is deliberate: a v1 table would have
  * to alias fifteen renames as well, and getting one of them wrong takes out
  * something like `currentdir`'s 635 calls. `actorhitbox` (32 calls, v4
- * `currentcd`) is NOT done — nothing is known about what it does beyond its
- * shape, `actorhitbox(actor, index[, value])`.
+ * `currentcd`) is answered the same way, under `currentcd` on a v1 game
+ * (builtins/helpers.ts): `actorhitbox (actor, 1|2)` reads and `actorhitbox
+ * (actor, rz, rxy)` sets the box a ball hits. `setwidth ()`/`setheight ()` (v4
+ * `pointinpainting`/`countpaintings`) answer the open set's grid size in cells
+ * under those names on a v1 game (builtins/scene.ts; DF.EXE 0x4108e0/0x410930,
+ * argument-free getters). The ball family — makeball,
+ * stopball, pauseball, isball, countballs, indextoball — is
+ * NOT a renamed cricket either: it throws a prop (runtime/balls.ts), and v1 runs
+ * it under the cricket names (builtins/timing.ts).
  */
 export const OPCODES: ReadonlyMap<number, string> = new Map([
   [1, " "],

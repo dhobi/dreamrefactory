@@ -44,64 +44,81 @@
  * through `makemove` and `makemove` removes a jumped piece per hop. An empty
  * string means he cannot move, and the script reads that as the player winning.
  *
- * **`side = 1` — the player's moves**, as ALTERNATIVES, jumps first. Empty means
- * the player has no legal move and the script gives the game to Bolivar. Only
- * the first element and only its third character are ever read (`automove`), so
- * the ordering IS the contract — everything after it is unobservable, and this
- * returns one entry per alternative rather than guessing at what the DLL packed
- * in behind.
+ * **`side = 1` — the player's move**, by the same search with the player
+ * minimising; empty means the player cannot move, and the script gives the
+ * game to Bolivar. The script only ever reads the first element's third character
+ * (`automove`: a jump is forced when it is `<= 4`), and since jumps are
+ * compulsory in the generator below, any move the DLL picks answers that the
+ * same way. What is returned is what the DLL returns, chain and all.
+ *
+ * Every element ends in a comma, the last one included (`"216,"`,
+ * `"212,432,"`): the DLL `sprintf`s each hop and appends `","` after it
+ * (0x100010e4–0x10001183, and 0x100015d0 for the hops after the first).
  *
  * ## Jumps are compulsory
  *
- * `goodloc` refuses a simple move outright while `playerjumps` is set, so the
- * rule is the game's and not a preference: when a side has a jump, only jumps
- * are legal. Bolivar plays under it too, which is what the generator below does
- * for both sides.
+ * `goodloc` refuses a simple move outright while `playerjumps` is set, and the
+ * DLL's generator agrees: it scans the board row by row for capture codes 1–4
+ * and only when there are none at all does it scan again for steps 5–8. That
+ * scan order is also the tie-break, because the search keeps the first move
+ * that strictly beats the score so far.
  *
- * ## The quirk that is kept
+ * ## A multi-jump is not searched
  *
- * A man that promotes IN THE MIDDLE of a jump chain keeps jumping, as a king,
- * and may jump backwards to do it. That is not standard checkers — a promotion
- * normally ends the move — but it is what this game does, and visibly: after
- * each hop `mousedown` writes the promotion through `makemove` and only THEN
- * asks `goodjump (endrow, endcol, …, "me")`, which consults `isking` on the
- * square the piece has just become a king on. Mirrored here so the opponent
- * plays by the same rules the player is held to.
+ * After a capture the DLL (0x100015d0) takes the FIRST direction 1–4 in which
+ * the piece can capture again and carries on; it never searches the
+ * alternatives. A man that crowns mid-jump (row 7 for Bolivar, row 0 for the
+ * player) is a king before that question is asked, so it may carry on
+ * capturing backwards — the script's own `mousedown` does the same for the
+ * player (it writes the promotion through `makemove` before `goodjump`).
  *
- * ## The search
+ * ## The search — 0x100011b0, verified move for move
  *
  * `lookahead` is 2, 3 or 4 — `win ()` turns exactly those into "wineasy",
- * "winmedium", "winhard" — and `automove` raises it by one once the player has
- * lost nine pieces (`playerdead > 8 & count < 4`), so 5 is the deepest this is
- * ever asked for. Negamax with alpha-beta over a material-and-advancement
- * evaluation, which at those depths is instant and is far more chess than a 1995
- * saloon opponent needs.
+ * "winmedium", "winhard" — and `automove` passes it straight through (and 0
+ * for the player's question). Plain minimax, no pruning
+ * (0x100013fd–0x100015a5):
+ *
+ * - no legal move, or depth 0: the position scores its evaluation, and the
+ *   "best" is the first generated move;
+ * - otherwise the score starts at −999 for Bolivar (0xfc19) and +999 for the
+ *   player (0x3e7), each child is searched at depth − 1 for the other side,
+ *   and a child replaces the best only if it is strictly `>` (Bolivar) or
+ *   strictly `<` (player).
+ *
+ * The evaluation (0x100011ff–0x10001390) is 100 × the piece value (a king is
+ * 2, so 200) with Bolivar positive, plus, for each piece and each of its four
+ * diagonal neighbours on the board: the neighbour's |value| if it is an enemy,
+ * and −1 if the square is empty and the piece is Bolivar's, +1 if it is the
+ * player's.
+ *
+ * **The one thing the DLL leaves undefined.** If at the top level no move
+ * scores strictly better than ±999 — only possible when one side is about ten
+ * men behind — the DLL never writes its best-move buffer and prints whatever
+ * that stack slot held. This returns the first legal move instead, which is
+ * deterministic and is also what the DLL itself answers at depth 0.
+ *
+ * The answer is deterministic: the DLL calls no random number generator, so
+ * the same position always gets the same move. The vectors in
+ * `engine/tests/golden/checkers-dll.json` are the DLL's own answers, run under
+ * an x86 emulator, and the test checks every one.
  */
 
 /** the board as the script keeps it: 64 cells of 0, ±1 (man), ±2 (king) */
 export type Board = Int8Array;
 
-/** one hop — the square moved from, and where to */
-interface Hop {
+/** one hop — the square moved from, and the DLL's direction code 1–8 */
+export interface Hop {
   row: number;
   col: number;
-  dRow: number;
-  dCol: number;
+  code: number;
 }
 
-/** `decodemove`, backwards: the direction code for a delta */
-function code(dRow: number, dCol: number): number {
-  if (dRow === -2 && dCol === 2) return 1;
-  if (dRow === 2 && dCol === 2) return 2;
-  if (dRow === 2 && dCol === -2) return 3;
-  if (dRow === -2 && dCol === -2) return 4;
-  if (dRow === -1 && dCol === 1) return 5;
-  if (dRow === 1 && dCol === 1) return 6;
-  if (dRow === 1 && dCol === -1) return 7;
-  return 8;
-}
+/** `decodemove`: row and column deltas by code, index 0 unused */
+const DROW = [0, -2, 2, 2, -2, -1, 1, 1, -1];
+const DCOL = [0, 2, 2, -2, -2, 1, 1, -1, -1];
 
-const hopText = (h: Hop): string => `${h.row}${h.col}${code(h.dRow, h.dCol)}`;
+const hopText = (h: Hop): string => `${h.row}${h.col}${h.code}`;
 
 /** the 64 cells, or null if this is not a board — a plugin may not throw */
 export function parseBoard(text: string): Board | null {
@@ -118,168 +135,137 @@ export function parseBoard(text: string): Board | null {
 
 export const boardText = (b: Board): string => [...b].join(" ");
 
-const at = (b: Board, row: number, col: number): number => b[row * 8 + col];
 const on = (row: number, col: number): boolean => row >= 0 && row < 8 && col >= 0 && col < 8;
-/** +1 for Bolivar, -1 for the player — the sign of their pieces AND their forward */
-const dirOf = (side: number): number => (side === 0 ? 1 : -1);
 
-/**
- * One hop applied, promotion included — `makemove`, in the same order.
- *
- * The promotion happens before anything asks whether the chain continues, which
- * is what lets a man crown mid-jump and carry on as a king (see the note above).
- */
-function apply(b: Board, h: Hop): Board {
-  const next = Int8Array.from(b);
-  const piece = at(b, h.row, h.col);
-  const row = h.row + h.dRow;
-  const col = h.col + h.dCol;
-  const king = Math.abs(piece) === 2 || row === (piece > 0 ? 7 : 0);
-  next[row * 8 + col] = (king ? 2 : 1) * Math.sign(piece);
-  next[h.row * 8 + h.col] = 0;
-  if (h.dRow === 2 || h.dRow === -2) next[(h.row + h.dRow / 2) * 8 + (h.col + h.dCol / 2)] = 0;
-  return next;
+/** one move legal for `side` (0 Bolivar, otherwise the player) — the DLL's test */
+function legal(b: Board, row: number, col: number, code: number, side: number): boolean {
+  const piece = b[row * 8 + col];
+  if (piece === 0 || piece < 0 !== (side !== 0)) return false;
+  const dr = DROW[code];
+  const r = row + dr;
+  const c = col + DCOL[code];
+  if (!on(r, c) || b[r * 8 + c] !== 0) return false;
+  // a man goes forward only: Bolivar's down the rows, the player's up
+  if (Math.abs(piece) !== 2 && (side === 0 ? dr < 0 : dr > 0)) return false;
+  if (code <= 4) return piece * b[(row + dr / 2) * 8 + (col + DCOL[code] / 2)] < 0;
+  return true;
 }
 
-/** the diagonals a piece may use — `goodmove`/`goodjump`'s four conditions */
-function ways(piece: number): [number, number][] {
-  const fwd = Math.sign(piece);
-  const out: [number, number][] = [
-    [fwd, 1],
-    [fwd, -1],
-  ];
-  if (Math.abs(piece) === 2) out.push([-fwd, 1], [-fwd, -1]);
-  return out;
-}
-
-/** every jump chain from one square, as complete chains */
-function chainsFrom(b: Board, row: number, col: number): Hop[][] {
-  const piece = at(b, row, col);
-  const out: Hop[][] = [];
-  for (const [dr, dc] of ways(piece)) {
-    const [jr, jc] = [row + dr * 2, col + dc * 2];
-    if (!on(jr, jc) || at(b, jr, jc) !== 0) continue;
-    // the piece being jumped has to be the OTHER side's — the script's own
-    // `> 0` / `< 0` tests on the middle square
-    const over = at(b, row + dr, col + dc);
-    if (over === 0 || Math.sign(over) === Math.sign(piece)) continue;
-    const hop: Hop = { row, col, dRow: dr * 2, dCol: dc * 2 };
-    const after = apply(b, hop);
-    const more = chainsFrom(after, jr, jc);
-    if (more.length) for (const rest of more) out.push([hop, ...rest]);
-    else out.push([hop]);
-  }
-  return out;
-}
-
-/**
- * Every legal move for a side, as chains — jumps only when there are jumps.
- *
- * Ordered jumps-first even though a jump excludes a step, because the caller for
- * `side = 1` needs the first element to be a jump when one exists and that is
- * the same ordering.
- */
-export function legalMoves(b: Board, side: number): Hop[][] {
-  const mine = dirOf(side);
-  const jumps: Hop[][] = [];
-  const steps: Hop[][] = [];
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 8; col++) {
-      const piece = at(b, row, col);
-      if (piece === 0 || Math.sign(piece) !== mine) continue;
-      jumps.push(...chainsFrom(b, row, col));
-      for (const [dr, dc] of ways(piece)) {
-        if (on(row + dr, col + dc) && at(b, row + dr, col + dc) === 0) {
-          steps.push([{ row, col, dRow: dr, dCol: dc }]);
+/** the candidates in the DLL's order: every capture by scan order, else every step */
+function generate(b: Board, side: number): Hop[] {
+  for (const first of [1, 5]) {
+    const out: Hop[] = [];
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        for (let code = first; code < first + 4; code++) {
+          if (legal(b, row, col, code, side)) out.push({ row, col, code });
         }
       }
     }
+    if (out.length) return out;
   }
-  return jumps.length ? jumps : steps;
+  return [];
 }
 
 /**
- * The position, from Bolivar's side.
+ * A move played out in place, with its forced continuation — 0x100015d0.
  *
- * Material with kings worth about a man and three quarters, plus a nudge for
- * advancement so a man with nothing to do walks up the board instead of shuffling
- * — which is the difference between an opponent and a stalled one at depth 2.
+ * Promotion first, then the question whether the piece can capture again, so a
+ * man crowned mid-jump carries on as a king. Returns the hops played.
  */
+function play(b: Board, first: Hop, side: number): Hop[] {
+  const hops: Hop[] = [];
+  let hop: Hop | undefined = first;
+  while (hop) {
+    hops.push(hop);
+    const row: number = hop.row;
+    const col: number = hop.col;
+    const code: number = hop.code;
+    const r: number = row + DROW[code];
+    const c: number = col + DCOL[code];
+    let piece = b[row * 8 + col];
+    b[row * 8 + col] = 0;
+    if (side === 0 ? r === 7 : r === 0) piece = side === 0 ? 2 : -2;
+    b[r * 8 + c] = piece;
+    if (code > 4) break;
+    b[((row + r) / 2) * 8 + (col + c) / 2] = 0;
+    hop = undefined;
+    for (let k = 1; k <= 4; k++) {
+      if (legal(b, r, c, k, side)) {
+        hop = { row: r, col: c, code: k };
+        break;
+      }
+    }
+  }
+  return hops;
+}
+
+/** 0x100011ff–0x10001390, from Bolivar's side */
 function evaluate(b: Board): number {
   let score = 0;
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
-      const piece = at(b, row, col);
+      const piece = b[row * 8 + col];
       if (piece === 0) continue;
-      const side = Math.sign(piece);
-      score += side * (Math.abs(piece) === 2 ? 175 : 100);
-      if (Math.abs(piece) === 1) score += side * (side > 0 ? row : 7 - row);
+      score += 100 * piece;
+      for (let k = 5; k <= 8; k++) {
+        const r = row + DROW[k];
+        const c = col + DCOL[k];
+        if (!on(r, c)) continue;
+        const n = b[r * 8 + c];
+        if (n * piece < 0) score += Math.abs(n);
+        else if (n === 0) score += piece > 0 ? -1 : 1;
+      }
     }
   }
   return score;
 }
 
-/** negamax with alpha-beta, `side` to move, in plies */
-function search(b: Board, side: number, depth: number, alpha: number, beta: number): number {
-  const moves = legalMoves(b, side);
-  // no move is a loss for whoever cannot move — the script's own rule, and
-  // scored past any material so a search never prefers being stuck
-  if (!moves.length) return side === 0 ? -100_000 : 100_000;
-  if (depth <= 0) return evaluate(b);
-  let best = side === 0 ? -Infinity : Infinity;
-  for (const chain of moves) {
-    let after = b;
-    for (const hop of chain) after = apply(after, hop);
-    const got = search(after, side === 0 ? 1 : 0, depth - 1, alpha, beta);
-    if (side === 0) {
-      best = Math.max(best, got);
-      alpha = Math.max(alpha, got);
-    } else {
-      best = Math.min(best, got);
-      beta = Math.min(beta, got);
+/** minimax, no pruning — the best move (null: none beat ±999) and its score */
+function search(b: Board, depth: number, side: number): { best: Hop | null; score: number } {
+  const moves = generate(b, side);
+  if (!moves.length || depth <= 0) return { best: moves[0] ?? null, score: evaluate(b) };
+  let score = side === 0 ? -999 : 999;
+  let best: Hop | null = null;
+  for (const move of moves) {
+    const child = Int8Array.from(b);
+    play(child, move, side);
+    const got = search(child, depth - 1, side === 0 ? 1 : 0).score;
+    if (side === 0 ? got > score : got < score) {
+      score = got;
+      best = move;
     }
-    if (beta <= alpha) break;
   }
-  return best;
+  return { best, score };
 }
 
 /**
- * `pluginfx("checkmove", board, depth, side)`.
+ * Every legal move for a side in the DLL's order, each with its forced
+ * continuation — what the search chooses between.
+ */
+export function legalMoves(b: Board, side: number): Hop[][] {
+  return generate(b, side).map((move) => play(Int8Array.from(b), move, side));
+}
+
+/**
+ * `pluginfx("checkmove", board, depth, side)` — `CHECKERS.DLL`'s answer.
  *
- * `pick` decides ties, and it is a parameter so the caller can hand in the
- * engine's own `random` — a deterministic opponent plays the same game against
- * the same play for ever, which is a worse opponent than a 1995 DLL. Defaults to
- * the first, so a test can leave it out and get one answer.
+ * `depth` is a 16-bit word in the DLL; anything below 1 is depth 0, which
+ * answers with the first legal move.
  */
 export function checkMove(
   board: string,
   depth: number,
   side: number,
-  pick: (n: number) => number = () => 0,
 ): string {
   const b = parseBoard(board);
   if (!b) return "";
-  const moves = legalMoves(b, side);
+  const s = side === 0 ? 0 : 1;
+  const moves = generate(b, s);
   if (!moves.length) return "";
-  // the PLAYER's moves: alternatives, jumps first, and only the first element's
-  // direction is ever read — so one entry each, first hop, in that order
-  if (side !== 0) return moves.map((chain) => hopText(chain[0])).join(",");
-
-  const plies = Math.max(1, Math.min(8, Math.floor(depth) || 1));
-  let best = -Infinity;
-  let bestChains: Hop[][] = [];
-  for (const chain of moves) {
-    let after = b;
-    for (const hop of chain) after = apply(after, hop);
-    const got = search(after, 1, plies - 1, -Infinity, Infinity);
-    if (got > best) {
-      best = got;
-      bestChains = [chain];
-    } else if (got === best) {
-      bestChains.push(chain);
-    }
-  }
-  const chain = bestChains[pick(bestChains.length)] ?? bestChains[0];
-  // his move is a CHAIN: `automove` plays every element through `makemove`
-  return chain.map(hopText).join(",");
+  // the undefined case (see above) is the first legal move, as at depth 0
+  const best = search(b, Math.max(0, Math.floor(depth) || 0), s).best ?? moves[0];
+  return play(b, best, s)
+    .map((h) => `${hopText(h)},`)
+    .join("");
 }

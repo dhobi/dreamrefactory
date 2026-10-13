@@ -46,16 +46,21 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       return;
     }
     const d = toStr(dir).toLowerCase();
-    if (d.startsWith("scene")) session.onSceneJump(d);
-    else session.onNavigate(d);
+    if (d.startsWith("scene")) {
+      // a DreamFactory 1 jump runs its scene events before the next line
+      // (SetViewer.jumpV1); the others' return nothing to wait on
+      const jump = session.onSceneJump(d);
+      if (jump) await jump;
+    } else session.onNavigate(d);
   });
   // currentview() reads the current view; currentview("viewNNN") SETS it — the
   // teleport's destination view (executes a buffered currentscene jump). Was
   // getter-only, so TAOOT's hall crossover currentview(...) was silently dropped
   // and the move never happened.
-  r("currentview", (_i, [view]) => {
+  r("currentview", async (_i, [view]) => {
     if (view === undefined) return session.currentViewName();
-    session.onViewJump(toStr(view).toLowerCase());
+    const jump = session.onViewJump(toStr(view).toLowerCase());
+    if (jump) await jump;
   });
   // stage layer (STG flats): the UI band / inventory / mini-game screens
   r("setvisible", (_i, [v]) => {
@@ -171,9 +176,34 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // identifiers drive the nav arrow: TAOOT's HOUSE.SHP setuparrow() scans them and
   // turns the arrow YELLOW on a "door"/"locked"/"knock" ahead (before the
   // green/red road test), so these must report the real objects, not 0.
+  //
+  // ...except in DreamFactory 1, where ids 20017/20018 are `setwidth ()` and
+  // `setheight ()`: the open set's grid size in cells, the header words at
+  // +0x26/+0x28 (V1 C0.gridWidth/gridHeight, carried as mapWidth/mapHeight).
+  // DF.EXE's value dispatch (0x42a5e0, `jmp [eax*4 + 0x42ba6c]`, base 20002)
+  // sends them to 0x4108e0 and 0x410930: pure getters that read no argument,
+  // and with no set open (word 0x460b64 = 0) fail with error 0x28 — answered 0
+  // here. Dust's cow-menu demo (`randomscene`) picks a random cell with them.
+  const setGrid = (dim: "mapWidth" | "mapHeight", cmd: string): number => {
+    const set = session.currentBinding?.set;
+    if (!set) {
+      session.onLog(`${cmd}: no set open`);
+      return 0;
+    }
+    return set[dim];
+  };
   r("countpaintings", (_i, [scene, view]) =>
-    viewByName(toStr(scene ?? ""), toStr(view ?? ""))?.objects.length ?? 0,
+    session.isV1
+      ? setGrid("mapHeight", "setheight")
+      : (viewByName(toStr(scene ?? ""), toStr(view ?? ""))?.objects.length ?? 0),
   );
+  // v4's own `pointinpainting` has no semantics here: off DreamFactory 1 it stays
+  // the unknown command it was
+  r("pointinpainting", (i, args) => {
+    if (session.isV1) return setGrid("mapWidth", "setwidth");
+    i.onUnknown("pointinpainting", args);
+    return 0;
+  });
   r("indextopainting", (_i, [scene, view, idx]) =>
     viewByName(toStr(scene ?? ""), toStr(view ?? ""))?.objects[toNum(idx ?? 0) - 1]?.identifier ?? "",
   );

@@ -253,7 +253,9 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     // no-op when `to` is already someone: the copy must not take over a live
     // actor's script, and actorinstance itself leaves an existing one alone
     if (!to || session.actorRuntime.get(to)) return;
-    session.actorRuntime.instance(from, to);
+    // DreamFactory 1 copies the source's whole record (DF.EXE 0x411cc0, see
+    // copyActorRecord); v4's copy stays a fresh actor until TI.EXE is read
+    session.actorRuntime.instance(from, to, session.isV1);
     if (session.actorRuntime.get(to)) session.instanceCastScript(from, to);
   });
   r("actordelete", (_i, [n]) => {

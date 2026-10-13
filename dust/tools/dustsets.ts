@@ -551,7 +551,7 @@ if (movs.length) {
       const stop = all.find((f) => f.waitsForClick && f.regions.length) ??
         all.find((f) => f.action === 1 || f.action === 3);
       if (stop) exits++;
-      if (stop && stop.waitsForVoice) voice++;
+      if (stop && stop.holdsForSound) voice++;
     } catch {
       movThrew++;
     }

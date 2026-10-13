@@ -15,7 +15,7 @@ import { CallExpr, CodeBlock, Expr, Script, Stmt } from "./ast";
  *   for     := "for" VAR "=" expr "to" expr ["step" expr] stmts "endfor"
  *   decl    := ("global"|"local"|"dumpglobal"|"dumplocal") NAME {"," NAME}
  *
- * Precedence (loosest to tightest): | ; & ; = != < > >= <= ; @ ; + - ; * / ;
+ * Precedence (loosest to tightest): | ; & ; = != ; < > >= <= ; @ ; + - ; * / ;
  * unary not/- ; primary. "=" is assignment only at statement start.
  */
 
@@ -69,20 +69,30 @@ const OP = {
 /** operator opcodes occupy the 8000-block (see BIN_PREC below) */
 const isOperatorOpcode = (id: number): boolean => id >= 8000 && id < 9000;
 
+/**
+ * The engines' own priority table, inverted (higher binds tighter here). DF.EXE
+ * 0x40d750 maps opcode-8001 through the byte table at 0x40d7c4 to the pass in
+ * which the reducer at 0x40d17e applies it: 0 `* /`, 1 `+ -`, 2 `@`,
+ * 3 `> < >= <=`, 4 `= !=`, 5 `&`, 6 `|`, each pass left to right. TI.EXE
+ * (0x4060c0, bytes at 0x406134) and Timelapse's tl.exe (0x41ff80, 0x41fff4)
+ * hold the identical table; RedJack's shunting yard ranks the same order by
+ * the words at 0x4b5a10. So `a = b > c` is `a = (b > c)`, and `x = 1 & y`
+ * is `(x = 1) & y`.
+ */
 const BIN_PREC: Record<number, { op: string; prec: number }> = {
   8006: { op: "|", prec: 1 },
   8005: { op: "&", prec: 2 },
   8008: { op: "=", prec: 3 },
   8009: { op: "!=", prec: 3 },
-  8010: { op: ">", prec: 3 },
-  8011: { op: "<", prec: 3 },
-  8012: { op: ">=", prec: 3 },
-  8013: { op: "<=", prec: 3 },
-  8007: { op: "@", prec: 4 },
-  8001: { op: "+", prec: 5 },
-  8002: { op: "-", prec: 5 },
-  8003: { op: "*", prec: 6 },
-  8004: { op: "/", prec: 6 },
+  8010: { op: ">", prec: 4 },
+  8011: { op: "<", prec: 4 },
+  8012: { op: ">=", prec: 4 },
+  8013: { op: "<=", prec: 4 },
+  8007: { op: "@", prec: 5 },
+  8001: { op: "+", prec: 6 },
+  8002: { op: "-", prec: 6 },
+  8003: { op: "*", prec: 7 },
+  8004: { op: "/", prec: 7 },
 };
 
 export class ParseError extends Error {}

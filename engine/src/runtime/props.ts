@@ -27,6 +27,24 @@ export interface StarPoint {
 }
 
 /**
+ * A world prop's projection when the engine draws it at that depth at all, else
+ * null — the depth tests of the world draw list, which DreamFactory 1's prop
+ * pass also steps by (PropRuntime.tick).
+ */
+export function worldDepthOk(cam: WorldCamera, p: PropInstance): { x: number; y: number; depth: number } | null {
+  const proj = projectPoint(cam, p.worldX, p.worldY, p.worldZ);
+  // as for actors: behind-the-camera is projectPoint's answer, and zclip is
+  // an occlusion bias rather than a clip plane (see occludeAt)
+  if (!proj) return null;
+  // ...and a v5 room has a far limit, which zclip does move (SettFile.far)
+  if (cam.v5 && proj.depth - Number(p.zclip) >= cam.v5.far) return null;
+  // ...and the older engines draw only inside the set's depth window
+  // (DF.EXE 0x41e828/0x41e834, TI.EXE 0x411242/0x411262)
+  if (!inDepthWindow(cam, proj.depth, Number(p.zclip))) return null;
+  return proj;
+}
+
+/**
  * A prop moving into world space, and dropping the screen-space frame pin on the
  * way, because becoming a world prop changes what a frame MEANS: it stops being a
  * selector index and becomes a choice made at draw time, from the prop's facing
@@ -703,16 +721,44 @@ export class PropRuntime {
    * forceupdate () / propview (me, "idleopen")`, or `makeloop` to an `idle`
    * handler), and a view left standing keeps playing — the gramophone's crank,
    * the Turkish bath's running water. Without it every view plays once and holds
-   * its last frame, as the port has always done for DreamFactory 1, whose DF.EXE
-   * this has not been checked against.
+   * its last frame.
+   *
+   * DreamFactory 1 goes round as well, but steps only the props it DRAWS
+   * (`onlyDrawn`). DF.EXE's prop draw 0x41eab0 shows the play-list entry at the
+   * stored step (`[view + 0x2e + step·2] − 1`, 0x41eb4f), stores step + 1 and
+   * wraps it to 0 at the view's count (+0x70, 0x41eb67); the frame compose
+   * 0x4340d0 reaches it once a frame through 0x4346b0(1) → 0x41e630(1), which
+   * hands it the live record (the 0 form, and the point tests at 0x41c3b6 and
+   * 0x41ca34, step a copy). But 0x41e760 returns before the draw for a prop
+   * that is not shown (`cmp word [esi], 0`, 0x41e770) and for a world prop
+   * outside the open set (its +0x5e against 0x460bc2, 0x41e7b5), so neither
+   * moves. Nothing else in DF.EXE writes the step but the prop's set-up
+   * (0x41d32f) and `propview` (0x41c13a), both to 0, and the engine has no
+   * end-of-view event: every Dust script that wants a view to stop times a
+   * `makeloop` to its length and names another one (FIGHT.PRP's `drop` and
+   * `stop` 4, `die` and `delloses` 12; HUB.SET's `fade`, 10 steps and a 10).
+   * Nor does it for a world prop outside the depth window: 0x41e7d0–0x41e803
+   * project the prop's point (+0x18) through 0x433c60, which answers the depth
+   * `fix14(dx·cos + dy·sin)` from the live camera (0x460bb8/0x460bba, the
+   * bearing at 0x460bb6, already pulled back by the setback [0x460b8c]); then
+   * 0x41e828 returns for a depth under 0x20 and 0x41e834 for
+   * `max(0, depth − zclip(+0x4c) − [0x460b8c] + 0x80)` over 0x600. That is
+   * {@link WorldCamera.depthWindow}, which the world draw list applies, so `cam`
+   * is the camera the room draws with (SetViewer.roomCamera — the motion
+   * frame's during a turn) and the same {@link worldDepthOk} answers both.
+   * Without one no world prop steps: 0x41e790/0x41e79e return before all of
+   * this when no set ([0x460b64]) or no view ([0x460b66], 0x410151) is open.
    *
    * Answers the props whose animation reached its last frame this tick (see
    * GameSession.endAnim).
    */
-  tick(now: number, frameMs: number, viewsGoRound = false): string[] {
+  tick(now: number, frameMs: number, viewsGoRound = false, onlyDrawn = false, cam: WorldCamera | null = null): string[] {
     const ended: string[] = [];
     for (const p of this.props.values()) {
       if (p.frameLocked) continue;
+      // DF.EXE steps a prop only in its draw (0x41e770, 0x41e7b5, 0x41e828/0x41e834)
+      if (onlyDrawn && (!p.visible || (p.worldSpace && p.setName && p.setName !== this.currentSet))) continue;
+      if (onlyDrawn && p.worldSpace && (!cam || !worldDepthOk(cam, p))) continue;
       const st = p.state();
       const goesRound = viewsGoRound && !!st && st.playsOnce === undefined && viewGoesRound(st);
       // TI.EXE steps every prop in its table, shown or not (the step is taken
@@ -863,14 +909,8 @@ export class PropRuntime {
     for (const p of this.props.values()) {
       if (!p.visible || p.hidden || !p.worldSpace || !p.state()?.frames.length || p.scale <= 0) continue;
       if (p.setName && p.setName !== this.currentSet) continue;
-      const proj = projectPoint(cam, p.worldX, p.worldY, p.worldZ);
-      // as for actors: behind-the-camera is projectPoint's answer, and zclip is
-      // an occlusion bias rather than a clip plane (see occludeAt)
+      const proj = worldDepthOk(cam, p);
       if (!proj) continue;
-      // ...and a v5 room has a far limit, which zclip does move (SettFile.far)
-      if (cam.v5 && proj.depth - Number(p.zclip) >= cam.v5.far) continue;
-      // ...and the older engines draw only inside the set's depth window
-      if (!inDepthWindow(cam, proj.depth, Number(p.zclip))) continue;
       out.push({ p, proj });
     }
     return out.sort((a, b) => b.proj.depth - a.proj.depth);

@@ -100,6 +100,78 @@ test("a Dust save is the same container a Titanic save is", () => {
 });
 
 /**
+ * The player's z in the ball hit test is 0, and the saves are why it can be
+ * nothing else.
+ *
+ * DF.EXE's player test (0x43a320) reads its z from 0x460bb0, c1+464 of the
+ * engine block savegame copies whole (0x419f21) and opengame puts back whole
+ * (0x41a6c5). Nothing else in ALT31 stores to that word, so it holds whatever
+ * the save says — and every save DF.EXE wrote says 0 (runtime/balls.ts).
+ */
+test("the player's z, c1+464 (0x460bb0), is 0 in every shipped save", () => {
+  for (const f of dustSaves()) {
+    const c1 = readSaveFile(new Uint8Array(readFileSync(join(SAVE_DIR, f)))).containers[1].data;
+    expect.soft(new DataView(c1.buffer, c1.byteOffset, c1.byteLength).getInt16(464, true), f).toBe(0);
+  }
+});
+
+/**
+ * A prop comes back where its animation was, not at the top of its view.
+ *
+ * The record's +36 is the step DF.EXE's next draw shows (0x41eb42 reads it,
+ * 0x41eb63 stores it plus one, wrapped at the view's count), so the frame on
+ * the screen when the save was taken is the one before it. `D2A_001`'s
+ * tumbleweed is rolling `counter`, saved at step 6.
+ */
+test("a v1 prop is restored at its saved step, and written back the same", async (ctx) => {
+  if (!existsSync(join(SAVE_DIR, "D2A_001.RTD"))) ctx.skip();
+  const session = bareSession();
+  const bytes = new Uint8Array(readFileSync(join(SAVE_DIR, "D2A_001.RTD")));
+  const saved = parseSaveV1(bytes).props.find((p) => p.name.toLowerCase() === "tumbleweed")!;
+  expect([saved.view, saved.step], "what the file holds").toEqual(["counter", 6]);
+  expect(await session.loadGame(bytes)).toBe(true);
+  const p = session.propRuntime.get("tumbleweed")!;
+  const st = p.state()!;
+  expect(p.frameCount(st), "a view longer than the step").toBeGreaterThan(6);
+  expect(p.frameIdx, "the step on the screen is the one before the saved one").toBe(5);
+  expect(p.animating, "and it rolls on from there").toBe(true);
+  const again = parseSaveV1(snapshotSaveV1(session)!).props.find((q) => q.name.toLowerCase() === "tumbleweed")!;
+  expect(again.step, "the writer keeps DF.EXE's next-draw step").toBe(6);
+});
+
+/**
+ * With both effect channels busy, the save names the sound of higher priority:
+ * `bank index << 16 | record number` (DF.EXE 0x407e50), channel 1 only when it
+ * outranks channel 2 (0x429e10). The port used to answer channel 1 always.
+ */
+test("the saved effect is the busier channel's by DF.EXE's priority", async (ctx) => {
+  if (!existsSync(join(SAVE_DIR, "D1E_002.RTD"))) ctx.skip();
+  const session = bareSession();
+  expect(await session.loadGame(new Uint8Array(readFileSync(join(SAVE_DIR, "D1E_002.RTD"))))).toBe(true);
+  const lib = session.audioLib;
+  const banks = lib.bankNames.filter((b) => lib.soundNames(b).length >= 2);
+  expect(banks.length, "two banks with sounds").toBeGreaterThanOrEqual(2);
+  const [early, late] = [banks[0], banks.at(-1)!];
+  const channels = (session.scheduler as unknown as { soundChannels: unknown[] }).soundChannels;
+  const play = (one: string, two: string) => {
+    channels[0] = { name: one, handle: { done: false } };
+    channels[1] = { name: two, handle: { done: false } };
+    return parseSaveV1(snapshotSaveV1(session)!).effect;
+  };
+  const record = (bank: string, name: string) => ({ bank, record: lib.soundRecordV1(bank, name) });
+  // the bank's last two records (UNILIB.SND opens with two `pageturn`s, and a
+  // name the table repeats is not the one to measure by)
+  const [a2, a1] = [...lib.soundNames(late)].sort((x, y) => lib.soundRecordV1(late, y) - lib.soundRecordV1(late, x));
+  // the later record of one bank wins, from either channel
+  expect(play(a1, a2), "channel 2's later record").toEqual(record(late, a2));
+  expect(play(a2, a1), "channel 1's later record").toEqual(record(late, a2));
+  // a later bank outranks any record of an earlier one
+  const e = [...lib.soundNames(early)].sort((x, y) => lib.soundRecordV1(early, y) - lib.soundRecordV1(early, x))[0];
+  expect(play(a1, e), "channel 1's later bank").toEqual(record(late, a1));
+  expect(play(e, a1), "channel 2's later bank").toEqual(record(late, a1));
+});
+
+/**
  * The case the container count alone cannot answer.
  *
  * `count = 7 + 3·banks + 5 + payloads`, so THREE waypoint payloads cost exactly
@@ -322,6 +394,7 @@ test("a patched Dust save reads back what was written into it", () => {
     name: "scene a2",
     handler: "apothfx",
     period: 5,
+    paused: false,
   });
   // and nothing else moved: the file is still the same shape it was
   expect
@@ -483,11 +556,15 @@ test("the shipped saves decode to the game they came from", () => {
     .soft(afterWalks.map((w) => w.actor)).toContain("Jones");
   const jones = afterWalks.find((w) => w.actor === "Jones")!;
   expect.soft(jones.star, "where to").toBe("town.jones2");
-  expect.soft([jones.startX, jones.startY], "from").toEqual([1736, 2488]);
-  expect.soft([jones.dx, jones.dy], "delta").toEqual([-112, -616]);
+  // +26 is where he SET OFF (DF.EXE's walktostar copies the actor's own block
+  // there, 0x439459) and +8 is start minus star (0x4394a9), so the walk heads
+  // AWAY from +26 — read the other way round it walked him back where he began
+  expect.soft([jones.startX, jones.startY], "from").toEqual([1624, 1872]);
+  expect.soft([jones.dx, jones.dy], "delta").toEqual([112, 616]);
+  expect.soft([jones.startX + jones.dx, jones.startY + jones.dy], "to: town.jones2").toEqual([1736, 2488]);
   expect.soft(jones.dist, "distance").toBe(626);
-  // the field holds what is LEFT, the port wants what is done
-  expect.soft(jones.progress, "covered").toBe(587);
+  // +40 is how far he has COME (the service adds his speed to it, 0x439880)
+  expect.soft(jones.progress, "covered").toBe(39);
   // and now the reconstruction: start + delta x (covered/dist) has to be where
   // the cast record says he is standing, to the pixel
   // TRUNCATED, not rounded — rounding puts him at x=1644 where the cast record
@@ -594,25 +671,87 @@ test("a load brings back the sound banks, and the theme if one was playing", asy
   expect(themePlays.length, "one looping play on the theme channel").toBe(1);
   expect(themePlays[0].seconds, "and it is the bank's whole loop").toBeGreaterThan(1);
 
-  // 2. the night town, saved with the theme stopped: no theme, but the right
-  // TWO banks — and night.snd rather than the day bank whose name the list gives.
+  // the effect channel's sound is replayed (D1E_002 caught record 6, the crowd's
+  // yeehaw), and the theme comes back at the loudness its chunks were saved at
+  expect(saloon.logs.some((l) => l.includes('"crowdyeehaw" was playing')), "the saved effect is replayed").toBe(true);
+  expect(saloon.session.themeVolume, "saloon2's chunks carry themevol 114").toBe(114);
+
+  // 2. the night town. +0xa00 is the THEME channel (DF.EXE 0x429d10 writes
+  // channel 3's bank there) and the words after it are the effect channel's —
+  // D1E_001 has the first and not the others, which a reading that took +0xa04
+  // for "the theme that is playing" turned into a silent night.
   const night = await load("D1E_001.RTD");
   expect([...night.session.audioLib.bankNames].sort(), "the night's banks").toEqual([
     "night.snd",
     "unilib.snd",
   ]);
   expect(night.session.audioLib.trackNameOf("night.snd"), "which is the bank calling itself town.snd").toBe("town.snd");
-  expect(night.session.currentThemeName, "nothing was playing, so nothing plays").toBe("none");
-  expect(night.sink.calls.filter((c) => c.channel === "theme").length, "no theme play").toBe(0);
-  expect(
-    night.logs.some((l) => l.includes("no theme playing")),
-    "and the load says why it is quiet",
-  ).toBe(true);
+  expect(night.session.currentThemeName, "the night theme plays").toBe("town.snd");
+  expect(night.session.audioLib.bankOf(night.session.currentThemeName), "out of the NIGHT bank").toBe("night.snd");
+  expect(night.sink.calls.filter((c) => c.channel === "theme" && c.loop).length, "one theme play").toBe(1);
+  // per-sound settings come back off the bank's records: the crickets were
+  // turned down and the chinchime nearly off
+  expect(night.session.scheduler.getSoundVol("cricket1"), "cricket1's soundvol").toBe(99);
+  expect(night.session.scheduler.getSoundVol("chinchime"), "chinchime's soundvol").toBe(12);
   // the room's own ambience is a restored LOOP, and it is what needs the banks
   expect(
     night.session.scheduler.loops.some((l) => l.handler === "nightfxs"),
     "NITE.SET's night chorus is running",
   ).toBe(true);
+
+  // 3. two more saves the old reading loaded silent: the day town and the
+  // third night's saloon, each with a theme and no effect
+  for (const [file, bank] of [
+    ["D2A_001.RTD", "town.snd"],
+    ["D3E_002.RTD", "saloon3.snd"],
+  ] as const) {
+    const got = await load(file);
+    expect(got.session.audioLib.bankOf(got.session.currentThemeName), `${file}'s theme`).toBe(bank);
+    expect(got.sink.calls.filter((c) => c.channel === "theme" && c.loop).length, `${file} plays it`).toBe(1);
+  }
+
+  // 4. a sound flagged to loop comes back looping: D2M_004 was saved with the
+  // hall clock on the effect channel and `soundloop` set on it, and no theme
+  const clock = await load("D2M_004.RTD");
+  expect(clock.session.currentThemeName, "no theme").toBe("none");
+  expect(clock.session.scheduler.loopFlags.has("largeclock"), "largeclock's soundloop").toBe(true);
+  expect(clock.sink.calls.some((c) => c.channel === "sound" && c.loop), "and it is sounding, looped").toBe(true);
+});
+
+/**
+ * The writer puts the sound back where the reader finds it: the theme channel's
+ * bank at +0xa00, the effect channel's bank and record at +0xa04/+0xa08, and the
+ * per-sound settings on the bank's own records.
+ */
+test("a Dust save's sound words round-trip through the writer", () => {
+  if (!existsSync(join(SAVE_DIR, "D1E_002.RTD"))) {
+    console.warn(`no ${SAVE_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const base = parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, "D1E_002.RTD"))));
+  const dropped: string[] = [];
+  const back = parseSaveV1(
+    applyPatchV1(base.raw, {
+      numGlobals: new Map(),
+      theme: null,
+      effect: { bank: "saloon2.snd", name: "crowdlaugh2" },
+      sounds: [
+        { bank: "saloon2.snd", kind: "sound", name: "crowdnoise", volume: 33, pan: 200, loop: true },
+        { bank: "saloon2.snd", kind: "chunk", name: "", volume: 55, pan: 128, loop: false },
+      ],
+      onDrop: (n, why) => dropped.push(`${n}: ${why}`),
+    }),
+  );
+  expect(dropped).toEqual([]);
+  expect(back.theme).toBeNull();
+  expect(back.effect).toEqual({ bank: "saloon2.snd", record: 2 });
+  const noise = back.sounds.find((x) => x.name === "crowdnoise")!;
+  expect([noise.volume, noise.pan, noise.loop]).toEqual([33, 200, true]);
+  expect(back.sounds.filter((x) => x.kind === "chunk" && x.bank === "saloon2.snd").every((x) => x.volume === 55)).toBe(true);
+
+  const again = parseSaveV1(applyPatchV1(back.raw, { numGlobals: new Map(), theme: "saloon2.snd", effect: null }));
+  expect(again.theme).toEqual({ bank: "saloon2.snd" });
+  expect(again.effect).toBeNull();
 });
 
 // --- the standpoint, on a game that has not been anywhere yet ---------------
@@ -965,7 +1104,9 @@ test("a save carries every global the session holds", async () => {
     }
   }
   expect(bad, `${bad.length} global(s) did not survive the round trip`).toEqual([]);
-});
+  // every shipped save loaded and saved: close to the 30 s default alone, and past it under a
+  // full parallel run
+}, 90_000);
 
 /**
  * A load drops the globals the file does not carry (#344).
@@ -1101,7 +1242,7 @@ test("every record a Dust save has no room for is reported, and the rest is writ
     "nosuchactor: the base has no cast record with that name",
     'odd: unknown loop kind "planet"',
     "l31: more than 32 loops — the table has no more slots",
-    "leroy: walking an authored route — written as the straight line",
+    "leroy: walking an authored route with no points — written as the straight line",
     "w15: more than 16 walks — the table has no more slots",
   ]);
 
@@ -1208,4 +1349,62 @@ test("a load refuses a save of another title, and one that is not a Dust save, b
   expect(await session.loadGame(new Uint8Array([1, 2, 3, 4]))).toBe(false);
   expect(logs.at(-1)).toMatch(/^opengame: not a valid Dust save/);
   expect(session.interp.globals.get("day")).toBe(99);
+});
+
+/**
+ * The parts of a save the port used to skip, read off DF.EXE's own save and load
+ * code (see the constants in engine/src/df/savegame-v1.ts) and written back.
+ */
+test("a Dust save's routes, balls, record extras and standpoint settings read and round-trip", () => {
+  if (!existsSync(join(SAVE_DIR, "D1E_005.RTD")) || !existsSync(join(SAVE_DIR, "D2A_001.RTD"))) {
+    console.warn(`no ${SAVE_DIR} — skipping (needs the Dust rip)`);
+    return;
+  }
+  const read = (f: string) => parseSaveV1(new Uint8Array(readFileSync(join(SAVE_DIR, f))));
+
+  // an authored route: D1E_005 has Mwife on a fourteen-point waypoint payload,
+  // and the point the payload puts her at is where her cast record says she is
+  const route = read("D1E_005.RTD");
+  const mwife = route.walks.find((w) => w.actor.toLowerCase() === "mwife")!;
+  expect(mwife.path?.length, "fourteen waypoints").toBe(14);
+  expect(mwife.dist, "the route's own length").toBe(2003);
+  const path = mwife.path!;
+  let leg = 1;
+  while (leg < path.length - 1 && path[leg].cum < mwife.progress) leg++;
+  const from = path[leg - 1];
+  const to = path[leg];
+  const t = (mwife.progress - from.cum) / (to.cum - from.cum);
+  const cast = route.actors.find((a) => a.name.toLowerCase() === "mwife")!;
+  expect(Math.abs(from.x + Math.trunc((to.x - from.x) * t) - cast.x), "x on the route").toBeLessThanOrEqual(1);
+  expect(Math.abs(from.y + Math.trunc((to.y - from.y) * t) - cast.y), "y on the route").toBeLessThanOrEqual(1);
+
+  // the ball table: D2A_001's tumbleweed is in flight
+  const day = read("D2A_001.RTD");
+  const weed = day.balls.find((b) => b.active)!;
+  expect(weed).toMatchObject({ slot: 0, name: "tumbleweed", vx: -12, vy: 0, vz: -3, frames: 120, gravity: 1, bounce: 1 });
+  expect([weed.x, weed.y, weed.z, weed.tx, weed.ty]).toEqual([1113, 1714, 15, 4, 6]);
+  // the record extras: every never-placed actor carries the default hitbox
+  expect(day.actors.filter((a) => a.hitbox[0] === 100 && a.hitbox[1] === 50).length).toBeGreaterThan(20);
+  // and the standpoint settings, at their defaults in every shipped save
+  expect(day.standpoint).toMatchObject({ puppetGrab: true, frameInterval: 3, setVisible: true, playerHitbox: [0, 0] });
+
+  // written back: a route with its payload, a ball, the extras and the settings
+  const dropped: string[] = [];
+  const back = parseSaveV1(
+    applyPatchV1(route.raw, {
+      numGlobals: new Map(),
+      walks: [{ ...mwife, paused: true }],
+      balls: [{ ...weed, slot: 3, frames: 7 }],
+      actors: [{ name: cast.name, value: 42, zclip: -8, hitbox: [9, 4], step: 2 }],
+      settings: { puppetGrab: false, frameInterval: 5, setVisible: false, playerHitbox: [30, 20] },
+      onDrop: (n, why) => dropped.push(`${n}: ${why}`),
+    }),
+  );
+  expect(dropped).toEqual([]);
+  const again = back.walks.find((w) => w.actor.toLowerCase() === "mwife")!;
+  expect(again.path).toEqual(mwife.path);
+  expect([again.progress, again.paused]).toEqual([mwife.progress, true]);
+  expect(back.balls.find((b) => b.active)).toMatchObject({ slot: 3, name: "tumbleweed", frames: 7, vx: -12 });
+  expect(back.actors.find((a) => a.name === cast.name)).toMatchObject({ value: 42, zclip: -8, hitbox: [9, 4], step: 2 });
+  expect(back.standpoint).toMatchObject({ puppetGrab: false, frameInterval: 5, setVisible: false, playerHitbox: [30, 20] });
 });

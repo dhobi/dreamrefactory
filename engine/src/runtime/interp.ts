@@ -145,6 +145,16 @@ export class Interpreter {
    * scripts print themselves. Nothing is watched unless something asks.
    */
   readonly watchGlobals = new Set<string>();
+  /**
+   * Do `&` and `|` skip their right side once the left has decided? Only in
+   * DreamFactory 5. DF.EXE, TI.EXE and Timelapse's tl.exe read every operand
+   * before they apply any operator (see the `bin` case of {@link evalExpr});
+   * RedJack.exe's shunting yard checks, at 0x410788, for a BOOLEAN left value
+   * that is true before `|` (0x1f46) or false before `&` (0x1f45), and then
+   * steps over the right operand unevaluated (0x4107af -> 0x410e70). The
+   * session sets it with isV5.
+   */
+  shortCircuit = false;
   /** fired when a WATCHED global's value changes; the session routes it to the log */
   onGlobalChange: (name: string, from: Value, to: Value) => void = () => {};
   readonly builtins = new Map<string, Builtin>();
@@ -498,12 +508,24 @@ export class Interpreter {
         return -toNum(v);
       }
       case "bin": {
+        // Both sides, always, before any operator applies: `&` and `|` do NOT
+        // short-circuit. The engines' evaluator reads an operand, then operator
+        // and operand pairs onto a stack until the expression ends, and only
+        // then reduces it (DF.EXE 0x40d040: operands 0x40d0ba-0x40d160, reduce
+        // 0x40d17e; TI.EXE 0x4059a3/0x405a2a/0x405aee; tl.exe 0x41f8ea).
+        // `a & b()` calls b() even when a is false, and draws its random()s.
+        // DreamFactory 5 is the exception — see {@link shortCircuit}.
         const l = await this.evalExpr(e.l, frame);
-        // short-circuit logical ops
-        if (e.op === "&") return truthy(l) && truthy(await this.evalExpr(e.r, frame)) ? 1 : 0;
-        if (e.op === "|") return truthy(l) || truthy(await this.evalExpr(e.r, frame)) ? 1 : 0;
+        if (this.shortCircuit) {
+          if (e.op === "&" && !truthy(l)) return 0;
+          if (e.op === "|" && truthy(l)) return 1;
+        }
         const r = await this.evalExpr(e.r, frame);
         switch (e.op) {
+          case "&":
+            return truthy(l) && truthy(r) ? 1 : 0;
+          case "|":
+            return truthy(l) || truthy(r) ? 1 : 0;
           case "@":
             return toStr(l) + toStr(r);
           case "+":

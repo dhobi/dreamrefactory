@@ -57,8 +57,18 @@ There are numbers and strings, and the operators have a couple of surprises:
 |----------|---------|------|
 | `+ - * /` | arithmetic | |
 | `@` | **string concatenation** | not `+` |
-| `&` `\|` | logical and / or | **short-circuit** |
+| `&` `\|` | logical and / or | **no short-circuit** before DreamFactory 5: both sides always run |
 | `=` | equality | **case-insensitive for strings** |
+
+Tightest first: `* /`, `+ -`, `@`, `> < >= <=`, `= !=`, `&`, `|`, each level
+left to right; `not` and unary `-` bind tighter than all of them. So `a = b > c`
+is `a = (b > c)`. The engines read the whole expression onto a stack before
+applying any operator, which is why `&` and `|` cannot skip their right side:
+`x & random(3)` draws a random number even when `x` is false. DF.EXE's
+evaluator is 0x40d040 and its priority table 0x40d750; TI.EXE and Timelapse's
+tl.exe agree on both points. RedJack.exe (DreamFactory 5) keeps the priorities
+but does skip the right side of `&`/`|` once a boolean left side has decided
+(0x410788), so a v5 game still short-circuits.
 
 Two rules the interpreter has to honour exactly, or real scripts misbehave:
 

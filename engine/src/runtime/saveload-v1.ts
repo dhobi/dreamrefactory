@@ -19,11 +19,10 @@
  *    grid cell and one of four facings, which is how Dust's SET addresses a
  *    standpoint in the first place. So the cell is resolved against the set's own
  *    scene table to get the name the engine wants ({@link sceneAtCell}).
- *  - **what a record holds.** v1's cast record is four bytes longer than v4's and
- *    its numeric tail is not mapped, so the fields this port does not know are
- *    filled from the LIVE object rather than guessed at — a restore then leaves
- *    them exactly as the running game had them instead of zeroing them. See
- *    {@link asV4Actor}.
+ *  - **what a record holds.** v1's cast record is four bytes longer than v4's,
+ *    and its tail is DF.EXE's own (value, zclip, hitbox, the pose step — see
+ *    df/savegame-v1.ts), so what the v4 shape has no room for is put back after
+ *    it ({@link restoreActorExtras}).
  *
  * There is no disc to mount (Dust is one CD), no cast crowd to re-instance from
  * a numbered source, and no track containers to reopen — Dust's ambience is one
@@ -47,6 +46,7 @@ import { readSetFileV1 } from "../df/set-v1";
 import { detectVersion } from "../df/version";
 import type { SavedActor, SavedProp } from "../df/savegame";
 import type { GameSession } from "./session";
+import type { PropInstance } from "./props";
 import { resetCast, restoreActors, restoreProps, saveBase, scriptGlobals } from "./saveload";
 
 /** the flat the game plays under — the in-game panel, not the menu you saved from */
@@ -97,21 +97,18 @@ function cellOfScene(session: GameSession, setFile: string, sceneName: string): 
 /**
  * A v1 cast record in the shape `restoreActors` takes.
  *
- * The two fields still unmapped in the v1 record — `value` and `zclip` — are
- * filled from the LIVE actor, so applying the record cannot change a field whose
- * offset this port has not proven. Everything else is the file's, `scale`
- * included, and that one is load-bearing: a load resets the cast first and a
- * reset actor has scale 0, which the draw list skips.
+ * Every field is the file's — `value` at +74 and `zclip` at +78 included, both
+ * found at their builtins' handlers — and `scale` is load-bearing: a load resets
+ * the cast first and a reset actor has scale 0, which the draw list skips. The
+ * fields the v4 shape has no room for (the pose step, the hitbox, a screen
+ * actor's layer and anchor) are put back by {@link restoreActorExtras}.
  */
-function asV4Actor(session: GameSession, a: SavedActorV1): SavedActor {
-  const live = session.actorRuntime.get(a.name);
+function asV4Actor(_session: GameSession, a: SavedActorV1): SavedActor {
   return {
     name: a.name,
     owner: a.owner,
-    // the live field is `string | number` (a prop or actor can be owned by a
-    // number); a v1 record holds it as a Pascal string, so keep whatever the
-    // running object has for the half this port cannot place
-    value: Number(live?.value ?? 0) || 0,
+    // `actorvalue` is a number in the record (+74, DF.EXE 0x414933)
+    value: a.value,
     placement: {
       visible: a.visible,
       set: a.set,
@@ -124,14 +121,13 @@ function asV4Actor(session: GameSession, a: SavedActorV1): SavedActor {
       speed: a.speed,
       turn: a.turn,
       scale: a.scale,
-      zclip: live?.zclip ?? 0,
+      zclip: a.zclip,
     },
   };
 }
 
 /** a v1 prop record in the shape `restoreProps` takes (see {@link asV4Actor}) */
-function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
-  const live = session.propRuntime.get(p.name);
+function asV4Prop(_session: GameSession, p: SavedPropV1): SavedProp {
   return {
     name: p.name,
     view: p.view,
@@ -150,8 +146,8 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
     deg: p.deg,
     dist: p.dist,
     scale: p.scale,
-    value: Number(live?.value ?? 0) || 0,
-    zclip: live?.zclip ?? 0,
+    value: p.value,
+    zclip: p.zclip,
   };
 }
 
@@ -162,8 +158,8 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
  * title's; true once the room has been rebuilt and entered.
  */
 /**
- * The sound: the banks the save had open, and the loop that was sounding out of
- * one of them.
+ * The sound: the banks the save had open, the theme that was sounding out of one
+ * of them, the effect that was, and every sound's script settings.
  *
  * Both halves are audible: load `D1E_002` in DUST.EXE and the saloon theme is
  * there at once, so a load that restored neither would leave the saloon silent.
@@ -187,39 +183,46 @@ function asV4Prop(session: GameSession, p: SavedPropV1): SavedProp {
  * "town.snd" for a night game, and opening a file by that name would fetch the
  * daylight bank: no owl, no night wind, and a day theme under a night sky.
  *
- * The theme record's words are handles into the open-file manifest, so they name
- * the FILE. Opening that first and then skipping any listed name the open banks
- * already answer to is what puts `D1E_001` back with exactly the two banks it
- * was saved with, `night.snd` and `unilib.snd`.
+ * The theme and effect words are handles into the open-file manifest, so they
+ * name the FILE. Opening those first and then skipping any listed name the open
+ * banks already answer to is what puts `D1E_001` back with exactly the two banks
+ * it was saved with, `night.snd` and `unilib.snd`.
  *
- * ## What is not restored, and said
+ * ## The theme is channel 3, and it starts from the top
  *
- * The third word, and it is NOT a hole in this. It is an index into the loop that
- * was sounding — not a container location of one: `D1E_002` carries 6 against
- * `saloon2.snd`, whose seven loop chunks are `newrag 1`..`newrag 7` at locations
- * 8..14, while location 6 there is a one-shot crowd yell. Nothing resumes from
- * it: DF.EXE restarts the loop from its beginning on a load (checked in the
- * original — `D1E_002` comes back with the ragtime from the top), and the port
- * plays a bank's loop chunks as one concatenation (AudioLibrary.theme) and does
- * the same. The word is recorded and unused on both sides.
+ * +0xa00 is the theme channel's bank (see C0_THEME in df/savegame-v1.ts); the
+ * two words after it are the EFFECT channel's, not the theme's. DF.EXE's loader
+ * restarts the theme bank's loop list from its beginning (`0x41b2ec` →
+ * `0x429fa0`), which is what the port's one concatenated loop does too
+ * (AudioLibrary.theme). Its loudness is the chunks' own `themevol`, saved per
+ * chunk record, and that is what the track is given back.
  *
- * What IS missing is neither of those:
+ * ## The effect is replayed
  *
- *   - a bank with NO loop chunks cannot be resumed at all. `D2M_004` is one
- *     (`mayor.snd`, the hall clock), and it loads silent with a line saying so.
- *   - `currenttheme (1)` is the name of the chunk sounding NOW, which a script
- *     reads while the loop RUNS — `if currenttheme (1) != "nightwind3"` is what
- *     gates NITE.SET's random owl and coyote — and a single concatenated buffer
- *     cannot answer it. Nothing to do with loading; its own fix.
+ * `0x41b1aa` hands the saved effect record to `0x42a070`, the play-by-priority
+ * entry, while the bank's records are re-registered — so a sound caught
+ * mid-play starts again from its beginning, and a sound flagged `soundloop`
+ * (`D2M_004`'s hall clock, `largeclock`) loops again.
+ *
+ * ## Per-sound settings
+ *
+ * The loader reads `soundvol`, `soundpan` and `soundloop` back off every
+ * one-shot record (`0x41b12d`–`0x41b190`), so a script that turned the
+ * crickets down or flagged a sound to loop is not undone by a load.
+ *
+ * What is still missing: a bank with NO loop chunks cannot be a theme, and
+ * `currenttheme (1)` — the chunk sounding NOW — cannot be answered by one
+ * concatenated buffer. Neither is about loading.
  */
 async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<void> {
   session.audio.halt("theme");
   session.currentThemeName = "none";
   session.themeStarted(null);
-  const t = save.theme;
-  // the playing bank first, then the one the loop belongs to: both are files
+  const theme = save.theme?.bank ?? null;
+  const effect = save.effect;
+  // the theme's and the effect's banks first: both are files
   const opened: string[] = [];
-  for (const file of [t?.playingBank, t?.loopBank]) {
+  for (const file of [theme, effect?.bank]) {
     if (file && !opened.includes(file.toLowerCase()) && (await session.openTrackFile(file))) {
       opened.push(file.toLowerCase());
     }
@@ -233,25 +236,55 @@ async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<v
   }
   if (opened.length) session.onLog(`opengame: sound banks restored: ${opened.join(", ")}`);
 
-  const playing = t?.playingBank;
-  if (!playing) {
-    // Not a failure and worth saying: D1E_001 is saved with the theme stopped,
-    // so the night comes back as the room's own loops and nothing else.
+  // every one-shot's script settings, and each track's own loudness
+  const trackVolume = new Map<string, number>();
+  for (const s of save.sounds) {
+    if (!s.name) continue;
+    if (s.kind === "sound") {
+      session.scheduler.setSoundVol(s.name, s.volume);
+      session.scheduler.setSoundPan(s.name, s.pan);
+      if (s.loop) session.scheduler.soundLoop(s.name, true);
+    } else if (s.bank && !trackVolume.has(s.bank.toLowerCase())) {
+      trackVolume.set(s.bank.toLowerCase(), s.volume);
+    }
+  }
+  for (const [bank, v] of trackVolume) {
+    const track = session.audioLib.trackNameOf(bank);
+    if (track && bank !== theme?.toLowerCase()) session.setThemeVolume(v, track);
+  }
+
+  if (effect) {
+    const name = save.sounds.find(
+      (s) => s.kind === "sound" && s.record === effect.record && s.bank.toLowerCase() === effect.bank.toLowerCase(),
+    )?.name;
+    if (name) {
+      session.scheduler.playSound(name, false);
+      session.onLog(`opengame: sound "${name}" was playing — started again`);
+    } else {
+      session.onLog(`opengame: saved sound record ${effect.record} of ${effect.bank} is not a registered sound`);
+    }
+  }
+
+  if (!theme) {
     session.onLog("opengame: this save was taken with no theme playing");
     return;
   }
-  const theme = session.audioLib.theme(playing);
-  if (!theme) {
-    session.onLog(`opengame: saved theme bank "${playing}" has no loop to play — the room loads silent`);
+  const music = session.audioLib.theme(theme);
+  if (!music) {
+    session.onLog(`opengame: saved theme bank "${theme}" has no loop to play — the room loads silent`);
     return;
   }
-  session.audio.play("theme", theme, { loop: true });
+  session.audio.play("theme", music, { loop: true });
   // the name a script gets back from `currenttheme (2)` and hands to `playtheme`,
   // which is the bank's INSIDE name and not the file it came out of
-  session.currentThemeName = session.audioLib.trackNameOf(playing) ?? playing;
-  session.themeStarted(session.audioLib.bankOf(playing), theme.samples.length / theme.sampleRate);
-  session.setThemeVolume(toNum(session.interp.globals.get("themevolume") ?? 255));
-  session.onLog(`opengame: theme "${session.currentThemeName}" resumed from ${playing}`);
+  session.currentThemeName = session.audioLib.trackNameOf(theme) ?? theme;
+  session.themeStarted(session.audioLib.bankOf(theme), music.samples.length / music.sampleRate);
+  const saved = trackVolume.get(theme.toLowerCase());
+  session.setThemeVolume(
+    saved ?? session.volumeForTrack(session.currentThemeName) ?? toNum(session.interp.globals.get("themevolume") ?? 255),
+    session.currentThemeName,
+  );
+  session.onLog(`opengame: theme "${session.currentThemeName}" resumed from ${theme}`);
 }
 
 export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promise<boolean> {
@@ -422,10 +455,38 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
       session,
       save.props.map((p) => asV4Prop(session, p)),
     );
+    restoreActorExtras(session, save);
+    restorePropSteps(session, save);
 
     // the scheduler table, mid-count: the idles that make the town act, the
     // scene's own timer, the star that crosses the sky
-    for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
+    for (const l of save.loops) {
+      session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
+      // `pauseloop` held it: the record keeps a depth (+2), the port a flag
+      const restored = session.scheduler.loops.at(-1);
+      if (l.paused && restored?.handler && restored.name === l.name.toLowerCase()) restored.paused = true;
+    }
+
+    // the balls in flight, slot for slot (the table at 0x45fbd0 is positional)
+    for (const b of save.balls) {
+      if (!b.active || b.slot >= session.balls.slots.length) continue;
+      session.balls.slots[b.slot] = {
+        name: b.name,
+        pause: b.pause,
+        vx: b.vx,
+        vy: b.vy,
+        vz: b.vz,
+        gravity: b.gravity,
+        bounce: b.bounce,
+        frames: b.frames,
+        deg: b.deg,
+        x: b.x,
+        y: b.y,
+        z: b.z,
+        tx: b.tx,
+        ty: b.ty,
+      };
+    }
 
     /*
      * ...and the walkers, mid-stride.
@@ -441,7 +502,9 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
      * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
      * the other half of the same rule, and the one the play page follows (#181).
      */
+    const waiting = save.walks.filter((w) => w.waiting && !w.turnOnly);
     for (const w of save.walks) {
+      if (waiting.includes(w)) continue;
       const a = session.actorRuntime.get(w.actor);
       const resumed =
         !!a &&
@@ -457,9 +520,11 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
           dist: w.dist,
           progress: w.progress,
           arriveStar: w.star || undefined,
+          paused: w.paused,
+          path: w.path,
         });
       if (resumed) {
-        const route = w.hasPath ? " on an authored route, resumed as a straight line" : "";
+        const route = w.path ? ` on an authored route of ${w.path.length} points` : "";
         session.onLog(
           w.turnOnly
             ? `opengame: ${w.actor} was saved mid-turn — resuming it`
@@ -512,6 +577,48 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
       );
     }
     await session.openSetFile(file, scene ?? "", scene ? s.view : "");
+
+    /*
+     * The walks that were WAITING (their walker not in the open set, +44 = 0)
+     * come back waiting: DF.EXE's walk service moves nothing until the walker's
+     * set is the open one and the star is in it, then puts the actor there and
+     * ends the walk (0x4396f5; see the scheduler's `waiting`). The first pass
+     * does that for a walker already at home — the `endwalk` three playthrough
+     * rungs wait on — and one in another room waits for its room, where this
+     * used to fetch the star from any set's table and place them at once.
+     */
+    for (const w of waiting) {
+      const a = session.actorRuntime.get(w.actor);
+      const kept =
+        !!a &&
+        session.scheduler.restoreWalk(w.actor, {
+          sx: a.worldX,
+          sy: a.worldY,
+          sz: a.worldZ,
+          dx: 0,
+          dy: 0,
+          dz: 0,
+          dist: 1,
+          progress: 0,
+          arriveStar: w.star || undefined,
+          paused: w.paused,
+          waiting: true,
+        });
+      if (kept) {
+        session.onLog(`opengame: ${w.actor} is waiting to arrive at "${w.star}"`);
+        continue;
+      }
+      standUp(a ?? undefined);
+      session.onLog(`opengame: ${w.actor} was waiting for "${w.star}" and is not in the cast — standing them up`);
+    }
+
+    // the script settings the standpoint block carries (C1_PUPPET_GRAB in
+    // df/savegame-v1.ts): set after the room opens, because DF.EXE's own
+    // opensetfile resets two of them and its loader never runs that
+    session.puppetGrab = s.puppetGrab;
+    session.frameRate = s.frameInterval;
+    session.balls.playerHitbox = [s.playerHitbox[0], s.playerHitbox[1]];
+    session.setVisible = s.setVisible;
   } finally {
     session.restoringSave = false;
   }
@@ -645,6 +752,11 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       x: p.worldSpace ? p.worldX : undefined,
       y: p.worldSpace ? p.worldY : undefined,
       z: p.worldSpace ? p.worldZ : undefined,
+      // `propvalue` and `propzclip` (+72, +76): numbers in the record, so a
+      // string value is the base's to keep
+      value: typeof p.value === "number" ? p.value : undefined,
+      zclip: p.zclip,
+      step: propStep(p),
     })),
     actors: [...session.actorRuntime.actors.values()].map((a) => {
       /**
@@ -675,6 +787,14 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
         x: dressed ? a.worldX : undefined,
         y: dressed ? a.worldY : undefined,
         z: dressed ? a.worldZ : undefined,
+        value: typeof a.value === "number" ? a.value : undefined,
+        zclip: dressed ? a.zclip : undefined,
+        hitbox: [a.hitbox[0], a.hitbox[1]] as [number, number],
+        step: dressed ? a.step : undefined,
+        // a screen actor's layer and anchor; a world actor's +42 is a draw cache
+        dist: dressed && !a.worldSpace ? a.dist : undefined,
+        anchorX: dressed && !a.worldSpace ? a.anchorX : undefined,
+        anchorY: dressed && !a.worldSpace ? a.anchorY : undefined,
       };
     }),
     walks: [...session.scheduler.walks].map(([actor, w]) => ({
@@ -691,8 +811,40 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       turnTo: w.turnTo ?? -1,
       deg: session.actorRuntime.get(actor)?.deg ?? 0,
       turnOnly: !!w.turnOnly,
+      paused: w.paused,
       hasPath: !!w.path,
+      path: w.path,
+      waiting: w.waiting,
     })),
+    balls: session.balls.slots.flatMap((b, slot) =>
+      b
+        ? [
+            {
+              slot,
+              name: b.name,
+              pause: b.pause,
+              vx: b.vx,
+              vy: b.vy,
+              vz: b.vz,
+              gravity: b.gravity,
+              bounce: b.bounce,
+              frames: b.frames,
+              deg: Number(b.deg) || 0,
+              x: b.x,
+              y: b.y,
+              z: b.z,
+              tx: b.tx,
+              ty: b.ty,
+            },
+          ]
+        : [],
+    ),
+    settings: {
+      puppetGrab: session.puppetGrab,
+      frameInterval: session.frameRate,
+      setVisible: session.setVisible,
+      playerHitbox: [session.balls.playerHitbox[0], session.balls.playerHitbox[1]],
+    },
     loops: session.scheduler.loops.map((l) => ({
       kind: l.kind,
       name: l.name,
@@ -700,7 +852,9 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       // the live countdown, mid-flight: the original dumps its service table
       // verbatim, so what the field holds is the ticks that are left
       period: l.count,
+      paused: l.paused,
     })),
+    ...soundPatch(session),
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
   });
   if (!standpoint) {
@@ -713,6 +867,114 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
     );
   }
   return bytes;
+}
+
+/**
+ * What a v1 cast record holds beyond the v4 shape `restoreActors` takes: the
+ * step within the pose (+38), the ball hitbox (+80/+82, `actorhitbox`), and for
+ * a SCREEN actor its layer (+42, `actordist`) and anchor (+20/+22). A world
+ * actor's +42 is only its last projected depth, which the next draw makes again.
+ */
+function restoreActorExtras(session: GameSession, save: SaveGameV1): void {
+  for (const sa of save.actors) {
+    const a = session.actorRuntime.get(sa.name);
+    if (!a) continue;
+    a.step = Math.max(0, sa.step);
+    a.hitbox = [sa.hitbox[0], sa.hitbox[1]];
+    if (!sa.is3d) {
+      a.dist = sa.dist;
+      a.anchorX = sa.anchorX;
+      a.anchorY = sa.anchorY;
+    }
+  }
+}
+
+/**
+ * Where in its view each prop's animation stood — the record's +36.
+ *
+ * DF.EXE's prop draw (0x41eab0) reads the step at +0x24, shows the play list's
+ * entry there (`[view + 0x2e + step·2] − 1`, 0x41eb4f), and stores step + 1
+ * back, wrapped to 0 at the view's step count (+0x70, 0x41eb67). So the saved
+ * step is the one the NEXT draw shows, and `propview` (0x41c13a) zeroes it.
+ *
+ * The port's `frameIdx` is the step on the screen NOW, an index into the same
+ * play list (PropInstance.frameOrder, the view's +0x2e table). So a saved step
+ * s > 0 is `frameIdx` s − 1, and the animation goes on from there; 0 is the top
+ * of the view, which is where restoreProps has already put it. A held selector
+ * (frameLocked) shows a degree, not a step, and is left alone. A step at the
+ * end of the view comes round to 0 next, as PropRuntime.tick wraps it.
+ */
+function restorePropSteps(session: GameSession, save: SaveGameV1): void {
+  for (const sp of save.props) {
+    const p = session.propRuntime.get(sp.name);
+    if (!p || p.frameLocked || sp.step <= 0) continue;
+    const st = p.state();
+    const n = st ? p.frameCount(st) : 0;
+    if (n <= 1) continue;
+    p.frameIdx = Math.min(sp.step - 1, n - 1);
+    // and on round from there, the last step included: the view wraps
+    p.animating = true;
+  }
+}
+
+/** the step a prop's next draw shows, as DF.EXE keeps it at +36 — see {@link restorePropSteps} */
+function propStep(p: PropInstance): number | undefined {
+  if (p.frameLocked) return undefined;
+  const st = p.state();
+  const n = st ? p.frameCount(st) : 0;
+  return n > 1 ? (p.frameIdx + 1) % n : 0;
+}
+
+/**
+ * The sound, the way DF.EXE's writer asks for it (see C0_THEME in
+ * df/savegame-v1.ts): the theme channel's bank, the effect channel's sound, and
+ * every open one-shot's `soundvol` / `soundpan` / `soundloop` and each open
+ * track's `themevol`.
+ *
+ * When both effect channels are busy, DF.EXE's writer (0x429e10) saves the one
+ * whose sound has the greater priority, channel 2 on a tie (`cmp [0x45e229],
+ * [0x45e291]` / `jle` at 0x429e5d). The priority is the dword at +0x39 of the
+ * sound record the channel copied (0x42a0d2), and nothing but the bank opener
+ * writes it: each record starts with its 1-based record number in the bank
+ * (0x429aff, from 0x406e7f), and every `opentrackfile` renumbers all of them
+ * as `bank index << 16 | record number` (0x407e50, called at 0x406d45). So a
+ * sound from a bank opened later wins, and within a bank the later record —
+ * which the port reads off the open-bank order and the bank's own name table.
+ */
+function soundPatch(session: GameSession): Pick<SavePatchV1, "theme" | "effect" | "sounds"> {
+  const lib = session.audioLib;
+  const theme = session.currentThemeName !== "none" ? lib.bankOf(session.currentThemeName) : null;
+  const bankOfSound = (name: string): string | null =>
+    lib.bankNames.find((b) => lib.soundNames(b).includes(name.toLowerCase())) ?? null;
+  const busy: { bank: string; name: string; priority: number }[] = [];
+  for (const channel of [1, 2]) {
+    const name = session.scheduler.currentSound(channel);
+    const bank = name !== "none" ? bankOfSound(name) : null;
+    if (!bank) continue;
+    const record = lib.soundRecordV1(bank, name);
+    busy.push({ bank, name, priority: lib.bankNames.indexOf(bank) * 0x10000 + record });
+  }
+  // channel 1 only if it outranks channel 2 outright (0x429e6a)
+  let pick = busy[0];
+  if (busy.length === 2 && busy[0].priority <= busy[1].priority) pick = busy[1];
+  const effect: SavePatchV1["effect"] = pick ? { bank: pick.bank, name: pick.name } : null;
+  const sounds: NonNullable<SavePatchV1["sounds"]> = [];
+  for (const bank of lib.bankNames) {
+    for (const name of lib.soundNames(bank)) {
+      sounds.push({
+        bank,
+        kind: "sound",
+        name,
+        volume: session.scheduler.getSoundVol(name),
+        pan: session.scheduler.getSoundPan(name),
+        loop: session.scheduler.loopFlags.has(name),
+      });
+    }
+    const track = lib.trackNameOf(bank);
+    const volume = track ? session.volumeForTrack(track) : undefined;
+    if (volume !== undefined) sounds.push({ bank, kind: "chunk", name: "", volume, pan: 128, loop: false });
+  }
+  return { theme, effect, sounds };
 }
 
 /**

@@ -52,8 +52,7 @@ The page boots off the four discs through the same `GameHost` the other two use:
 - **the x-ray light**, a `plugin("xray")` aperture dragged over a flat to reveal
   a second flat through the light's own shape.
 
-The whole game plays through, which the machine suites check (below). Saved games are not wired up yet. Nor is `actorhitbox`, which the v1 corpus asks
-for 32 times and this one never does.
+The whole game plays through, which the machine suites check (below). Saved games are not wired up yet.
 
 ## Four things that are only true here
 

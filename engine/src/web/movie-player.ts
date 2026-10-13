@@ -33,6 +33,7 @@ import {
   movFileFromV1,
   readMovFileV1,
 } from "@dreamfactory/engine/df/mov-v1";
+import { EffectScreenV1, fadePaletteV1 } from "@dreamfactory/engine/df/mov-v1-effects";
 import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
 import { decodeFrameV5, frameSizeV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
@@ -55,6 +56,12 @@ interface MovieImage {
   height: number;
   /** a v5 frame's own palette (image-v5.ts); absent, the segment's is used */
   palette?: Uint8ClampedArray;
+  /**
+   * A DreamFactory 1 film's first transition, still drawing: 1 where the film
+   * has drawn, and the rest is what was on screen before it (the room) —
+   * df/mov-v1-effects.ts, "What a transition draws OVER". Absent = all drawn.
+   */
+  drawn?: Uint8Array;
 }
 
 /** cross-movie call stack limit, matching TI.EXE */
@@ -153,6 +160,22 @@ export class MoviePlayer {
   private eventSounds: PlayHandle[] = [];
   private readonly voicesV5 = new MovieVoicesV5();
   /**
+   * What a DreamFactory 1 film has put on the screen: each frame's transition
+   * (record +0x06 — wipes, slides, fades; df/mov-v1-effects.ts) drawn over the
+   * picture before it, one step a tick, and the palette level the fades leave.
+   * Kept across segments and chained films, as the screen is; a sequence's end
+   * forgets it.
+   */
+  private readonly screenV1 = new EffectScreenV1();
+  /** when the frame on screen started its transition (tick() time), null = not yet */
+  private fxStartV1: number | null = null;
+  /** ticks of it that have passed, as of the last tick() */
+  private fxElapsedV1 = 0;
+  /** the frame {@link screenV1} is drawing — anything else is shown as it is */
+  private fxFrameV1: MovieImage | null = null;
+  /** the faded palette last built, keyed by level and gamma generation */
+  private fxPaletteV1: { key: string; palette: Uint8ClampedArray } | null = null;
+  /**
    * Resolver for the blocking playmovie() promise. Set by the top-level
    * play() call and held pending across a whole chain of sub-movies
    * (mainc -> pursopen …); only the final exit (finish) resolves it, so
@@ -220,7 +243,70 @@ export class MoviePlayer {
 
   /** the film's frame as it stands, without advancing it — a frame that ran no tick (#542) */
   currentFrame(): MovieImage | null {
-    return this.active ? this.active.frames[this.active.pos] : null;
+    return this.active ? this.shown() : null;
+  }
+
+  /**
+   * Where the transition of the frame on screen has got to — it changes
+   * whenever the picture does without {@link framePos} changing (a DreamFactory
+   * 1 wipe or fade, drawn a step a tick). 0 for every other film.
+   */
+  get effectStep(): number {
+    const m = this.active;
+    return m?.seg.dfV1 ? this.screenV1.step(this.fxElapsedV1) : 0;
+  }
+
+  /**
+   * The picture on screen: the frame, or for a DreamFactory 1 film the frame
+   * as far as its transition has drawn it. With `now`, the transition's clock
+   * is advanced to it first (a frame entered without a time starts here).
+   */
+  private shown(now?: number): MovieImage {
+    const m = this.active!;
+    const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
+    if (!m.seg.dfV1 || this.fxFrameV1 !== f) return f;
+    if (now !== undefined) {
+      this.fxStartV1 ??= now;
+      this.fxElapsedV1 = this.session.clock.ticked
+        ? ticksAt(now) - ticksAt(this.fxStartV1)
+        : Math.floor((now - this.fxStartV1) / TICK_MS);
+    }
+    // settled, the screen IS the frame: no copy reaches outside a frame's dirty
+    // rect, and an empty one repeats the picture before it (both checked over
+    // the disc by dust/tests/movie-effects.ts)
+    const busy = this.screenV1.busy(this.fxElapsedV1);
+    const { pixels, drawn } = this.screenV1.at(this.fxElapsedV1);
+    if ((!busy && !drawn) || pixels.length !== f.pixels.length) return f;
+    return drawn ? { ...f, pixels, drawn } : { ...f, pixels };
+  }
+
+  /** put a v1 frame up through its transition — see {@link screenV1} */
+  private enterEffectV1(idx: number): void {
+    const m = this.active!;
+    const f = m.frames[idx];
+    const meta = m.meta[idx];
+    this.screenV1.enter(
+      // nobody draws it: a blank film keeps the plain blit and skips the work
+      this.session.drawsPictures ? meta.effectV1 : undefined,
+      frameHoldTicks(m.seg, idx),
+      f.pixels,
+      f.width,
+      f.height,
+    );
+    this.fxFrameV1 = f;
+    this.fxStartV1 = null;
+    this.fxElapsedV1 = 0;
+  }
+
+  /** the palette a v1 film's fades have left the screen at */
+  private paletteShown(m: NonNullable<MoviePlayer["active"]>): Uint8ClampedArray {
+    if (!m.seg.dfV1) return m.palette;
+    const { level } = this.screenV1.at(this.fxElapsedV1);
+    if (level.from === "movie" && level.s === 0) return m.palette;
+    const key = `${m.segIdx}:${m.fileName}:${level.from}:${level.s}/${level.d}:${m.paletteGen}`;
+    if (this.fxPaletteV1?.key !== key)
+      this.fxPaletteV1 = { key, palette: displayPalette(fadePaletteV1(moviePalette(m.seg), level)) };
+    return this.fxPaletteV1.palette;
   }
 
   /** the frame to paint right now (with the movie's own palette and where on
@@ -234,7 +320,7 @@ export class MoviePlayer {
     | null {
     const m = this.active;
     if (!m) return null;
-    const f = m.frames[Math.min(m.pos, m.frames.length - 1)];
+    const f = this.shown();
     // A segment bakes its palette once, so a brightness change made DURING a movie
     // has to be picked up here — the original's F-keys are in the window proc and
     // work over a playing movie, and a two-minute cutscene is exactly when someone
@@ -247,7 +333,7 @@ export class MoviePlayer {
     return {
       ...f,
       // a v5 frame brings its own palette, run through the same display gamma
-      palette: f.palette ? displayPalette(f.palette) : m.palette,
+      palette: f.palette ? displayPalette(f.palette) : this.paletteShown(m),
       originX: m.seg.originX,
       originY: m.seg.originY,
     };
@@ -472,6 +558,10 @@ export class MoviePlayer {
       cuesFired: new Set(),
     };
     this.recordAction(this.active.pos);
+    if (seg.dfV1) {
+      this.screenV1.startSegment();
+      this.enterEffectV1(this.active.pos);
+    }
     let segment = "";
     if (segIdx) segment = ` segment ${segIdx + 1}/${mov.segments.length}`;
     else if (mov.segments.length > 1) segment = ` (1/${mov.segments.length} segments)`;
@@ -710,6 +800,7 @@ export class MoviePlayer {
     const m = this.active!;
     m.pos = idx;
     m.deadlinePending = true;
+    if (m.seg.dfV1) this.enterEffectV1(idx);
     this.recordAction(idx);
     const sound = m.meta[idx].sound;
     if (sound && sound !== this.clickSound) this.playSound(sound);
@@ -901,7 +992,7 @@ export class MoviePlayer {
             (frame.waitsForEffects && this.voicesV5.busy(true))
           : frame.waitsForVoice && this.eventSounds.some((h) => !h.done);
         if (waitingForSound) {
-          return m.frames[m.pos];
+          return this.shown(now);
         }
         m.lastTick = now;
         // run the region-less frame's own auto-action (step/chain/exit)
@@ -910,7 +1001,7 @@ export class MoviePlayer {
         this.scheduleFrame(now);
       }
     }
-    return this.active ? this.active.frames[this.active.pos] : null;
+    return this.active ? this.shown(now) : null;
   }
 
   /**
@@ -963,6 +1054,10 @@ export class MoviePlayer {
     }
     this.active = null;
     this.callStack = [];
+    // the sequence's screen is gone with it (a v1 film's transitions draw over it)
+    this.screenV1.reset();
+    this.fxFrameV1 = null;
+    this.fxPaletteV1 = null;
     // Hand the chain's movies back. This is the safe moment and the only one: a
     // type-5 region RETURNS to a movie played earlier in the chain (callStack),
     // so nothing may be released until the whole sequence is over — which is

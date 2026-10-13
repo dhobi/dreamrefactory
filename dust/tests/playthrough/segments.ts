@@ -1085,10 +1085,15 @@ export const segment9: Segment = {
      * covering ground beats pacing on the spot.
      */
     const clock = (): number => Number(p.session.interp.globals.get("clock") ?? 0);
+    // `triggerx ()` sets `lockevents` before `advanceday ()` gets the clock
+    // round, so a lap that finds the world locked has found the afternoon
+    // arriving, not a door that will not open
+    const locked = (): boolean => Number(p.session.interp.globals.get("lockevents") ?? 0) !== 0;
     const ends: [number, number][] = [[6, 3], [6, 12], [6, 5], [4, 11]];
     for (let lap = 0; lap < 12 && clock() < 2; lap++) {
       const [x, z] = ends[lap % ends.length];
-      await walkTo(p, set("TOWN"), { x, z, view: "south" }, () => clock() >= 2);
+      await walkTo(p, set("TOWN"), { x, z, view: "south" }, () => clock() >= 2 || locked());
+      if (locked()) await p.pump(() => !locked() || clock() >= 2, "the afternoon to arrive");
       await excuseUs(p, "anyone who stops us");
     }
     if (clock() < 2) throw new Error("the morning never ended");

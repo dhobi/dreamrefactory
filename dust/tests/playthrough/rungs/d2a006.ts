@@ -8,9 +8,12 @@ import {
  *
  *   1. `D2A_005` is saved standing outside the saloon at `TOWN` Scene G8 in the
  *      middle of the Mayor's conversation, and a v1 save does not carry an open
- *      puppet — so the rung starts by letting him open his mouth again.
- *      `GANG.CST/1097 mayoridle ()` re-arms `hasattention (6)` for as long as
- *      `mayorphase = 0`, so nothing has to click him; he comes back.
+ *      puppet — so the rung starts by clicking him again. He is caught
+ *      walking BACK to `town.marie1` (the walk record starts on the player's
+ *      cell; DF.EXE's +26 is the start, see df/savegame-v1.ts), so he arrives
+ *      outside `hotdist ()` and `GANG.CST/1097 mayoridle ()` never re-arms
+ *      `hasattention (6)`: a player who wants the rest of the conversation has
+ *      to go to him.
  *      `MAYOR.PUP/0073 twopm ()` then offers two: **"These shops seem out of a
  *      lot of items." (102)** falls into `shop ()`, and `shop ()` is a
  *      `while true` whose only exit is **"Time to go." (555)** — which is also
@@ -152,7 +155,7 @@ export const rung: Segment = {
     };
 
     // ---- 1. the Mayor, who has to be finished rather than escaped -----------
-    await p.pump(() => !!p.session.puppet, "the Mayor to start again");
+    await clickActor(p, "mayor", "the Mayor, back at his star");
     await answer(p, 102, "These shops seem out of a lot of items.");
     await answer(p, 555, "Time to go.");
     await p.pump(() => !p.session.puppet, "the Mayor to finish");

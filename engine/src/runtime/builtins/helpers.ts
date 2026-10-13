@@ -284,10 +284,38 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   //
   // Remembered on the SESSION (not in this closure) because a save carries the
   // answer — see GameSession.mountedCd.
-  r("currentcd", (_i, [name]) => {
+  //
+  // ...except in DreamFactory 1, where id 16034 is `actorhitbox (actor, index)`
+  // and `actorhitbox (actor, rz, rxy)` — the box a ball hits (runtime/balls.ts).
+  // Dust's 32 calls all have that shape, and answering them as the disc wrote
+  // the actor's name into mountedCd, which a save carries.
+  r("currentcd", (_i, [name, a, b]) => {
+    if (session.isV1) return actorHitbox(toStr(name ?? ""), a, b);
     if (name !== undefined) session.mountedCd = toStr(name);
     return session.mountedCd;
   });
+  /**
+   * DF.EXE 0x4131b0 (getter) and 0x4130a0 (setter). `"player"` is the player's
+   * own box (0x460b68/0x460b6a), any other name an actor's (record +0x50/+0x52).
+   * The getter takes 1 or 2 and answers that WORD sign-extended; any other index
+   * is error 0xe, answered 0 here. The setter stores both words.
+   */
+  const actorHitbox = (name: string, a: Value, b: Value): Value => {
+    const box = name.toLowerCase() === "player"
+      ? session.balls.playerHitbox
+      : session.actorRuntime.get(name)?.hitbox;
+    if (!box) {
+      session.onLog(`actorhitbox: no actor ${name}`);
+      return 0;
+    }
+    if (b === undefined) {
+      const i = toNum(a ?? 0);
+      return i === 1 || i === 2 ? box[i - 1] : 0;
+    }
+    box[0] = s16(toNum(a ?? 0));
+    box[1] = s16(toNum(b ?? 0));
+    return 0;
+  };
 
   // UI dialogs + quit — delegated to host hooks (browser wires alert/confirm/
   // prompt; headless defaults are safe). notedialog: modal note (OK).

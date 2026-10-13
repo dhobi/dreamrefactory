@@ -13,11 +13,12 @@
  * authority on all of it — the move encoding (`decodemove`), which side owns
  * which sign (`ismine`), which way each side's men go (`makemove`'s promotion
  * rows) and whether a jump may be declined (`goodloc`: no). What makes these
- * tests worth more than the generator they check is the last one: the chain that
+ * tests worth more than the generator they check is the referee: the chain that
  * comes back is replayed through an INDEPENDENT transcription of the script's own
  * `goodmove`/`goodjump`/`makemove`, so a move this engine thinks is legal and the
  * game does not is a failure here rather than a puzzle in a saloon.
  */
+import { readFileSync } from "node:fs";
 import { test, expect } from "vitest";
 import { checkMove, parseBoard, legalMoves } from "@dreamfactory/engine/runtime/checkers";
 
@@ -110,7 +111,7 @@ test("he takes the jump, because the script will not let a jump be declined", ()
     ". . . . . . . .",
   );
   // (3,3) over (4,4) to (5,5) is +2 +2, which `decodemove` calls 2
-  expect(checkMove(b, 3, 0)).toBe("332");
+  expect(checkMove(b, 3, 0)).toBe("332,");
 });
 
 test("a double jump comes back as a CHAIN, which is what automove plays", () => {
@@ -125,7 +126,7 @@ test("a double jump comes back as a CHAIN, which is what automove plays", () => 
     ". . . . . . . .",
   );
   // (2,2)->(4,4) over (3,3), then (4,4)->(6,6) over (5,5): two hops, one piece
-  expect(checkMove(b, 3, 0)).toBe("222,442");
+  expect(checkMove(b, 3, 0)).toBe("222,442,");
 });
 
 test("a man that crowns mid-chain keeps jumping, and may jump backwards", () => {
@@ -140,7 +141,7 @@ test("a man that crowns mid-chain keeps jumping, and may jump backwards", () => 
     ". . . . . . . .",
   );
   // (5,3) crowns landing on row 7, then the new king jumps -2 +2 back over (6,6)
-  expect(checkMove(b, 3, 0)).toBe("532,751");
+  expect(checkMove(b, 3, 0)).toBe("532,751,");
 });
 
 test("no move at all is the empty string — the script reads it as the player winning", () => {
@@ -158,7 +159,7 @@ test("no move at all is the empty string — the script reads it as the player w
   expect(checkMove(b, 3, 0)).toBe("");
 });
 
-test("the player's answer is ALTERNATIVES with jumps first — the forced-jump signal", () => {
+test("the player's answer leads with a jump when there is one — the forced-jump signal", () => {
   const b = board(
     ". . . . . . . .",
     ". . . . . . . .",
@@ -173,6 +174,7 @@ test("the player's answer is ALTERNATIVES with jumps first — the forced-jump s
   const first = answer.split(",")[0];
   // (4,4) over (3,3) to (2,2) is -2 -2, code 4 — and `automove` clears
   // `playerjumps` only when the FIRST entry's code is 5 or more
+  expect(answer).toBe("444,");
   expect(first).toBe("444");
   expect(Number(first[2])).toBeLessThanOrEqual(4);
 });
@@ -221,7 +223,7 @@ test("deeper lookahead does not make him play an illegal move", () => {
     const answer = checkMove(b, depth, 0);
     expect(answer).not.toBe("");
     let cells = parseBoard(b)!;
-    for (const hop of answer.split(",")) {
+    for (const hop of answer.split(",").filter(Boolean)) {
       expect(hop).toHaveLength(3);
       expect(legalForScript([...cells], hop, "him")).toBe(true);
       cells = Int8Array.from(applyForScript([...cells], hop, "him"));
@@ -255,12 +257,37 @@ test("every move the generator offers is one the script would allow", () => {
     for (const chain of chains) {
       let now = [...cells];
       for (const hop of chain) {
-        const text = `${hop.row}${hop.col}${
-          Object.entries(DECODE).find(([, [r, c]]) => r === hop.dRow && c === hop.dCol)![0]
-        }`;
+        const text = `${hop.row}${hop.col}${hop.code}`;
         expect(legalForScript(now, text, person), `${person} ${text} in ${chain.length} hop(s)`).toBe(true);
         now = applyForScript(now, text, person);
       }
     }
   }
+});
+
+/**
+ * The DLL itself, move for move.
+ *
+ * `golden/checkers-dll.json` is `CHECKERS.DLL`'s own answer to 617 positions —
+ * 412 random boards, 200 positions from random games played out from the start,
+ * and 5 multi-jump boards — at depths 0–5 for both sides, produced once by
+ * running the DLL's machine code (entry 0x10001000) under an x86 emulator. A
+ * `null` is the one answer the DLL leaves undefined: no move beats ±999 at the
+ * top, the best-move buffer is never written, and what it prints is stale
+ * stack. There the port answers with the first legal move, which is also the
+ * DLL's own depth-0 answer.
+ */
+test("every vector CHECKERS.DLL answered, answered the same", () => {
+  const golden = JSON.parse(readFileSync(new URL("./golden/checkers-dll.json", import.meta.url), "utf8")) as {
+    vectors: { board: string; depth: number; side: number; dll: string | null }[];
+  };
+  expect(golden.vectors).toHaveLength(617);
+  const wrong: string[] = [];
+  for (const [i, v] of golden.vectors.entries()) {
+    const want = v.dll ?? checkMove(v.board, 0, v.side);
+    const got = checkMove(v.board, v.depth, v.side);
+    if (got !== want) wrong.push(`#${i} depth ${v.depth} side ${v.side}: DLL ${JSON.stringify(want)}, ours ${JSON.stringify(got)}`);
+  }
+  expect(wrong).toEqual([]);
+  expect(golden.vectors.filter((v) => v.dll === null)).toHaveLength(6);
 });
