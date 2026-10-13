@@ -116,17 +116,19 @@ const main = async (): Promise<void> => {
     // is which target breaks — including for the two bottles that are copies.
     const shots = await page.evaluate((names: string[]) => {
       const d = (window as unknown as { dbg: { session: {
-        actorRuntime: { get: (n: string) => unknown; screenRect: (a: unknown) => { x: number; y: number; f: { width: number; opaque: Uint8Array } } | null };
+        actorRuntime: { get: (n: string) => unknown; screenRect: (a: unknown) => { x: number; y: number; f: { width: number; height: number; opaque: Uint8Array } } | null };
         interp: { builtins: Map<string, (i: unknown, a: unknown[], f: unknown, g: unknown) => unknown> };
       } } }).dbg.session;
       const out: { name: string; at: string; hit: unknown }[] = [];
       for (const n of names) {
         const r = d.actorRuntime.screenRect(d.actorRuntime.get(n))!;
-        // the first opaque pixel of the sprite, which is a pixel a player can hit
+        // a pixel whose left neighbour is opaque too: DF.EXE's point test (0x415960)
+        // answers each column for the one before it, so a run's first pixel is a miss
         let at: [number, number] | null = null;
-        for (let y = 0; y < 200 && !at; y++) {
-          for (let x = 0; x < 200 && !at; x++) {
-            if (r.f.opaque[y * r.f.width + x]) at = [r.x + x, r.y + y];
+        for (let y = 0; y < r.f.height && !at; y++) {
+          for (let x = 1; x < r.f.width && !at; x++) {
+            const i = y * r.f.width + x;
+            if (r.f.opaque[i] && r.f.opaque[i - 1]) at = [r.x + x, r.y + y];
           }
         }
         if (!at) continue;
