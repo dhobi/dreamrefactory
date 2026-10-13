@@ -23,6 +23,11 @@
  * depend on where the silhouette and the scenery edges fall, which no per-pixel
  * sampler can reproduce.
  *
+ * `flip` is the engines' mirror argument, and no DreamFactory 1 or 4 engine ever
+ * passes one for a world sprite: every builder of a draw record writes 0 there
+ * (DF.EXE 0x41ea5f actors, 0x4152cf props; TI.EXE 0x411493, 0x419013; tl.exe
+ * 0x427e63, 0x42e013). It is kept because the point tests and fixtures use it.
+ *
  * Verified against the executables themselves: engine/tests/sprite-scaler.ts
  * replays cases whose results were recorded by running each of the three routines
  * under an x86 emulator (tools/native-sprite/).
@@ -472,4 +477,45 @@ export function drawScaledSprite(
     }
     if (large) edges.advance();
   }
+}
+
+/**
+ * Is (x, y) a point of the sprite, as the engines' point tests answer it?
+ *
+ * They do not ask the drawn pixels. They map the point back to a source pixel and
+ * walk that row's runs, subtracting each run's length until what is left is
+ * `<= 0` (DF.EXE 0x415a80, TI.EXE 0x4121d0, tl.exe 0x43e940). The `<=` makes a
+ * run's end inclusive, so a column past 0 answers for the column before it.
+ */
+function sourcePoint(f: ScalerFrame, sx: number, sy: number): boolean {
+  return !!f.opaque[sy * f.width + (sx > 0 ? sx - 1 : 0)];
+}
+
+/**
+ * The unscaled point test (DF.EXE 0x415960, TI.EXE 0x4120b0, tl.exe 0x43e820): the
+ * sprite's box at `left, top`, the frame's own size. Mirroring moves the box (the
+ * caller's anchor) and never the sample.
+ */
+export function spriteCovers(f: ScalerFrame, left: number, top: number, x: number, y: number): boolean {
+  if (x < left || y < top || x >= left + f.width || y >= top + f.height) return false;
+  return sourcePoint(f, x - left, y - top);
+}
+
+/**
+ * The scaled point test (DF.EXE 0x419500, TI.EXE 0x413540, tl.exe 0x43fc90), for
+ * the box {@link drawScaledSprite} draws into ({@link scaledOrigin}: `left, top`,
+ * `dw x dh`): the point mapped back by `w / dw` and `h / dh` truncated. A mirror
+ * moves only the box, never the sample.
+ */
+export function scaledBoxCovers(
+  f: ScalerFrame,
+  left: number,
+  top: number,
+  dw: number,
+  dh: number,
+  x: number,
+  y: number,
+): boolean {
+  if (dw <= 0 || dh <= 0 || x < left || y < top || x >= left + dw || y >= top + dh) return false;
+  return sourcePoint(f, idiv((x - left) * f.width, dw), idiv((y - top) * f.height, dh));
 }

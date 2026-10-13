@@ -383,6 +383,11 @@ export async function monkey(h: Headless): Promise<void> {
         break;
       }
       if (!c || c[0] - b[0] !== b[0] - a[0] || c[1] - b[1] !== b[1] - a[1]) corners.push(b);
+      // the ball, the same way as a hole: aimed a few pixels INTO it, so the
+      // walk takes the step onto it while the button is still held. A walk let go
+      // a pixel short has to start again from rest, and a first step along one
+      // axis tests a point whose other half `walkto` has not set (its x3 / y3)
+      if (!c) corners[corners.length - 1] = [b[0] + 4 * Math.sign(b[0] - a[0]), b[1] + 4 * Math.sign(b[1] - a[1])];
     }
     // pressed on bare floor near the spider: not on it (its own prop takes the
     // click) and not in a hole (whose region does)

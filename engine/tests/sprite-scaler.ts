@@ -13,8 +13,10 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { decodeShpFrame } from "@dreamfactory/engine/df/shp";
-import { drawScaledSprite, scaledOrigin, worldSpriteSize } from "@dreamfactory/engine/runtime/sprite-scaler";
-import { scalerCases, type ScalerCase } from "./helpers/sprite-scaler-cases";
+import {
+  drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize,
+} from "@dreamfactory/engine/runtime/sprite-scaler";
+import { hitPoints, scalerCases, type ScalerCase } from "./helpers/sprite-scaler-cases";
 
 interface Golden {
   seed: number;
@@ -119,4 +121,31 @@ test("a world sprite is sized and placed in truncating integer steps", () => {
     .toEqual({ left: 200 - 33, top: 150 - 215 });
   expect(scaledOrigin({ ...f, indexed: new Uint8Array(), opaque: new Uint8Array() }, 200, 150, 69, 227, true))
     .toEqual({ left: 200 - 35, top: 150 - 215 });
+});
+
+/**
+ * The point tests, against the engines' own: for every case, 24 points around
+ * the scaled box and 24 around the 1:1 box, each answered by DF.EXE (0x419500,
+ * 0x415960), TI.EXE (0x413540, 0x4120b0) and tl.exe (0x43fc90, 0x43e820) under the
+ * emulator (record.py --hits). The three agree on every one.
+ */
+test("a point is the sprite's exactly when the engines say so", () => {
+  const hits = JSON.parse(readFileSync(new URL("./golden/sprite-hits.json", import.meta.url), "utf8")) as {
+    seed: number;
+    results: Record<"df" | "ti" | "tl", { scaled: string; plain: string }>[];
+  };
+  const wrong: string[] = [];
+  cases.forEach((c, i) => {
+    const f = decodeShpFrame(c.sprite);
+    const pts = hitPoints(c, hits.seed * 1000 + i);
+    const anchorX = c.flip ? f.width - f.posXraw : f.posXraw;
+    const box = scaledOrigin(f, c.ax, c.ay, c.dw, c.dh, c.flip);
+    const scaled = pts.scaled.map(([x, y]) => (scaledBoxCovers(f, box.left, box.top, c.dw, c.dh, x, y) ? "1" : "0")).join("");
+    const plain = pts.plain.map(([x, y]) => (spriteCovers(f, c.ax - anchorX, c.ay - f.posYraw, x, y) ? "1" : "0")).join("");
+    for (const engine of ["df", "ti", "tl"] as const) {
+      if (scaled !== hits.results[i][engine].scaled) wrong.push(`${i} scaled vs ${engine}`);
+      if (plain !== hits.results[i][engine].plain) wrong.push(`${i} 1:1 vs ${engine}`);
+    }
+  });
+  expect(wrong).toEqual([]);
 });

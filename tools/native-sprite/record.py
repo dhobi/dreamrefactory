@@ -3,6 +3,7 @@
     npx tsx tools/native-sprite/cases.mts 1 600 > /tmp/cases.json
     uv run --no-project --with unicorn --with pefile python -I \\
         tools/native-sprite/record.py /tmp/cases.json 1 > engine/tests/golden/sprite-scaler.json
+    (the same with --hits > engine/tests/golden/sprite-hits.json for the point tests)
 
 Each case runs through DF.EXE's, TI.EXE's and tl.exe's world-sprite draw (see
 native.py) and is kept as the SHA-1 of the whole canvas, 0xEE where nothing was
@@ -19,6 +20,24 @@ from native import Engine, CONFIGS, PATHS
 
 cases = json.load(open(sys.argv[1]))
 seed = int(sys.argv[2])
+if "--hits" in sys.argv:
+    # the point tests instead: one bit per point, as a string of 0s and 1s
+    results = []
+    for i, c in enumerate(cases):
+        sprite = base64.b64decode(c["sprite"])
+        row = {}
+        for k in ("df", "ti", "tl"):
+            e = Engine(PATHS[k], CONFIGS[k])
+            flip = 1 if c["flip"] else 0
+            bits = lambda hits: "".join("1" if b else "0" for b in hits)
+            row[k] = {
+                "scaled": bits(e.covers(sprite, c["ax"], c["ay"], flip, c["points"]["scaled"], (c["dw"], c["dh"]))),
+                "plain": bits(e.covers(sprite, c["ax"], c["ay"], flip, c["points"]["plain"])),
+            }
+        results.append(row)
+        print(f"{i + 1}/{len(cases)}", file=sys.stderr, end="\r")
+    json.dump({"seed": seed, "count": len(cases), "results": results}, sys.stdout, indent=0)
+    sys.exit(0)
 results = []
 for i, c in enumerate(cases):
     sprite = base64.b64decode(c["sprite"])

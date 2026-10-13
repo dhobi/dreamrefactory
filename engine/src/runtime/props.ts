@@ -2,9 +2,9 @@ import { TICKS_PER_PASS } from "./actors";
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 import {
   WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha,
-  inkPixel,
+  inkPixel, inDepthWindow,
 } from "./geometry";
-import { drawScaledSprite, scaledOrigin, worldSpriteSize } from "./sprite-scaler";
+import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 import type { DrawSignature } from "./signature";
 import { TURN } from "../df/sett";
 
@@ -869,6 +869,8 @@ export class PropRuntime {
       if (!proj) continue;
       // ...and a v5 room has a far limit, which zclip does move (SettFile.far)
       if (cam.v5 && proj.depth - Number(p.zclip) >= cam.v5.far) continue;
+      // ...and the older engines draw only inside the set's depth window
+      if (!inDepthWindow(cam, proj.depth, Number(p.zclip))) continue;
       out.push({ p, proj });
     }
     return out.sort((a, b) => b.proj.depth - a.proj.depth);
@@ -940,6 +942,54 @@ export class PropRuntime {
     return out;
   }
 
+  /** a DreamFactory 5 game: its point tests keep their own rules (Session.isV5) */
+  v5 = false;
+
+  /**
+   * Is (x, y) one of `p`'s points? Before v5 the engines' own point tests
+   * (sprite-scaler.ts): TI.EXE's `pointinprop` (0x417120) asks the 1:1 test of a
+   * screen prop and the scaled one of a world prop, by its draw record.
+   */
+  covers(p: PropInstance, x: number, y: number, cam: WorldCamera | null): boolean {
+    const st = p.state();
+    if (!st?.frames.length) return false;
+    if (p.worldSpace) {
+      if (!cam) return false;
+      const entry = this.worldDrawList(cam).find((e) => e.p === p);
+      return !!entry && this.worldPointOf(p, this.worldRect(p, entry.proj, cam), x, y);
+    }
+    const f = p.shop.frame(p.currentFrame(st));
+    const at = p.screenCorner(f, this.origin);
+    return this.screenPointOf(p, f, at.x, at.y, x, y);
+  }
+
+  /** a screen prop's point test: 1:1, the engines' own before v5 */
+  private screenPointOf(p: PropInstance, f: ShpFrame, x0: number, y0: number, x: number, y: number): boolean {
+    if (!this.v5) return spriteCovers(f, x0, y0, x, y);
+    let lx = x - x0;
+    let ly = y - y0;
+    if (lx < 0 || ly < 0 || lx >= f.width || ly >= f.height) return false;
+    if (p.flip & 1) lx = f.width - 1 - lx;
+    if (p.flip & 2) ly = f.height - 1 - ly;
+    return !!f.opaque[ly * f.width + lx];
+  }
+
+  /** a world prop's point test, in the box `worldRect` gives */
+  private worldPointOf(
+    p: PropInstance,
+    r: { f: ShpFrame; k: number; x: number; y: number; w: number; h: number },
+    x: number,
+    y: number,
+  ): boolean {
+    if ("scaled" in r) return scaledBoxCovers(r.f, r.x, r.y, r.w, r.h, x, y);
+    if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
+    let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
+    let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
+    if (p.flip & 1) sx = r.f.width - 1 - sx;
+    if (p.flip & 2) sy = r.f.height - 1 - sy;
+    return !!r.f.opaque[sy * r.f.width + sx];
+  }
+
   /** front-most visible prop whose opaque pixels cover (x, y) */
   propAt(
     x: number,
@@ -954,12 +1004,7 @@ export class PropRuntime {
       const st = p.state()!;
       const f = p.shop.frame(p.currentFrame(st));
       const at = p.screenCorner(f, this.origin);
-      let lx = x - at.x;
-      let ly = y - at.y;
-      if (lx < 0 || ly < 0 || lx >= f.width || ly >= f.height) continue;
-      if (p.flip & 1) lx = f.width - 1 - lx;
-      if (p.flip & 2) ly = f.height - 1 - ly;
-      if (f.opaque[ly * f.width + lx]) return p;
+      if (this.screenPointOf(p, f, at.x, at.y, x, y)) return p;
     }
     if (cam) {
       /*
@@ -995,13 +1040,7 @@ export class PropRuntime {
           if (occ && sceneryOccludes(occ, x, y, this.occludeAt(p, t.axial, occ))) continue;
           return p;
         }
-        const r = this.worldRect(p, proj, cam);
-        if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
-        let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
-        let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
-        if (p.flip & 1) sx = r.f.width - 1 - sx;
-        if (p.flip & 2) sy = r.f.height - 1 - sy;
-        if (!r.f.opaque[sy * r.f.width + sx]) continue;
+        if (!this.worldPointOf(p, this.worldRect(p, proj, cam), x, y)) continue;
         // a world prop is only clickable where it is actually drawn: scenery
         // nearer than the prop hides that pixel in composite() (the SET Z map),
         // so a hit there must miss too — else props are clickable THROUGH walls

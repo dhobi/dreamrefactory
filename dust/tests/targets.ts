@@ -144,12 +144,15 @@ test("the range's targets are placed, drawn and hit where the booth is", async (
   // 4. shot. `hittest` is what the range asks, and the answer has to be the
   // INSTANCE — two of these three bottles are copies of the first one's member.
   const hitAt = (x: number, y: number) => R.actorAt(x, y)?.name ?? null;
+  // a pixel whose left neighbour is opaque too: DF.EXE's point test (0x415960)
+  // answers each column for the one before it, so a run's first pixel is a miss
   const somewhereOn = (name: string) => {
     const a = R.get(name)!;
     const r = R.screenRect(a)!;
     for (let y = r.y; y < r.y + r.h; y++) {
-      for (let x = r.x; x < r.x + r.w; x++) {
-        if (r.f.opaque[(y - r.y) * r.f.width + (x - r.x)]) return [x, y] as const;
+      for (let x = r.x + 1; x < r.x + r.w; x++) {
+        const at = (y - r.y) * r.f.width + (x - r.x);
+        if (r.f.opaque[at] && r.f.opaque[at - 1]) return [x, y] as const;
       }
     }
     throw new Error(`${name} has no opaque pixel`);

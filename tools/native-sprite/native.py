@@ -87,28 +87,49 @@ class Engine:
         self.heap = spr  # the draw's buffers are scratch: reuse the space
         return bytes(self.uc.mem_read(bits, canvas_w * canvas_h))
 
+    def covers(self, sprite, ax, ay, flip, points, size=None):
+        """The point tests: scaled when `size` is (dw, dh), else 1:1. One bool per point."""
+        c = self.cfg
+        spr = self.alloc(len(sprite)); self.uc.mem_write(spr, bytes(sprite))
+        out = []
+        for x, y in points:
+            if size:
+                self.call(c["hit_scaled"], [spr, _packed(ay, ax), flip, _packed(size[1], size[0]), _packed(y, x)])
+            else:
+                self.call(c["hit_plain"], [spr, _packed(ay, ax), flip, _packed(y, x)])
+            out.append(self.uc.reg_read(UC_X86_REG_EAX) & 0xFFFF != 0)
+        self.heap = spr
+        return out
+
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 TI = os.path.join(ROOT, "taoot/gamefiles/ru/titanic1/INSTALL/BIN/TI.EXE")
 TL = os.path.join(ROOT, "timelapse/gamefiles/TLAPSE1/install/bin/tl.exe")
 DF = os.path.join(ROOT, "dust/gamefiles/dustcd/INSTALL/ALT31/DF.EXE")
+def _packed(lo, hi):
+    return (lo & 0xFFFF) | ((hi & 0xFFFF) << 16)
+
+
 CONFIGS = {
     "df": {
         "draw": 0x415B30, "init": 0x4156B0,
         "imports": {0x46244C: "lock", 0x462450: "unlock", 0x462444: "alloc"},
         "traps": [0x425FF0],
         "clip": 0x460848, "mask_handle": 0x460850, "mask_on": 0x460E10,
+        "hit_scaled": 0x419500, "hit_plain": 0x415960,
     },
     "ti": {
         "draw": 0x412280, "init": 0x411D70, "imports": {},
         "patches": {0x434C10: "lock", 0x434C40: "unlock", 0x434A70: "alloc"},
         "traps": [0x41EB90],
         "clip": 0x48A060, "mask_handle": 0x48A068, "mask_on": 0x48A054,
+        "hit_scaled": 0x413540, "hit_plain": 0x4120B0,
     },
     "tl": {
         "draw": 0x43E9F0, "init": 0x43E4E0, "imports": {},
         "patches": {0x4425B0: "lock", 0x4425E0: "unlock", 0x442410: "alloc"},
         "traps": [0x409310],
         "clip": 0x466450, "mask_handle": 0x466458, "mask_on": 0x466448,
+        "hit_scaled": 0x43FC90, "hit_plain": 0x43E820,
     },
 }
 PATHS = {"df": DF, "ti": TI, "tl": TL}

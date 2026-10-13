@@ -3,9 +3,10 @@ import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
 import {
   WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
+  inDepthWindow,
 } from "./geometry";
 import type { DrawSignature } from "./signature";
-import { drawScaledSprite, scaledOrigin, worldSpriteSize } from "./sprite-scaler";
+import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
 // viewer.ts's import("./engine/actors").Occlusion keeps resolving.
@@ -404,6 +405,34 @@ export class ActorRuntime {
     return pose?.steps[0]?.[0]?.refScale || 96;
   }
 
+  /** a DreamFactory 5 game: its point tests keep their own rules (Session.isV5) */
+  v5 = false;
+
+  /**
+   * Is (x, y) one of the opaque points of an actor drawn in rect `r`? Before v5
+   * the engines' own point tests (sprite-scaler.ts): a world sprite's maps the
+   * point back by the drawn size, a 2D one's is 1:1, and both answer for the
+   * column before. v5, and the old path's mirrored sprites, as before.
+   */
+  private pointOf(
+    a: ActorInstance,
+    r: { f: ShpFrame; x: number; y: number; w: number; h: number; k?: number },
+    x: number,
+    y: number,
+    world: boolean,
+  ): boolean {
+    if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
+    if (!this.v5) {
+      if (!world) return spriteCovers(r.f, r.x, r.y, x, y);
+      if ("scaled" in r) return scaledBoxCovers(r.f, r.x, r.y, r.w, r.h, x, y);
+    }
+    let sx = world ? Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k!)) : x - r.x;
+    let sy = world ? Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k!)) : y - r.y;
+    if (a.flip & 1) sx = r.f.width - 1 - sx;
+    if (a.flip & 2) sy = r.f.height - 1 - sy;
+    return !!r.f.opaque[sy * r.f.width + sx];
+  }
+
   /** visible actors of the current set, far to near */
   drawList(cam: WorldCamera): DrawEntry[] {
     const out: DrawEntry[] = [];
@@ -416,6 +445,8 @@ export class ActorRuntime {
       if (!proj) continue;
       // a v5 room's far limit, less the actor's zclip (SettFile.far)
       if (cam.v5 && proj.depth - Number(a.zclip) >= cam.v5.far) continue;
+      // ...and the older engines draw only inside the set's depth window
+      if (!inDepthWindow(cam, proj.depth, Number(a.zclip))) continue;
       out.push({ a, proj });
     }
     return out.sort((x, y) => y.proj.depth - x.proj.depth);
@@ -445,9 +476,9 @@ export class ActorRuntime {
    * The six reported standpoints in `stair1c1` all separate on this and
    * nothing else — distance alone predicts the wrong answer at five of them.
    *
-   * The depth window (step 4) is not ported: its two globals are screen-space
-   * constants of the original's own rasteriser and nothing in the corpus reads
-   * them. Everything the report turns on is the rectangle.
+   * The depth window (step 4) is the set's own: TI.EXE's two globals are its
+   * SCDO chunk's depth step and zFarMax (copied in at 0x4077e1), and DF.EXE's are
+   * constants (see WorldCamera.depthWindow). {@link drawList} applies it too.
    */
   onScreen(a: ActorInstance, cam: WorldCamera): boolean {
     if (!a.visible) return false;
@@ -461,6 +492,7 @@ export class ActorRuntime {
     if (a.scale <= 0) return false;
     const proj = projectPoint(cam, a.worldX, a.worldY, a.worldZ);
     if (!proj) return false; // behind the camera
+    if (!cam.v5 && !inDepthWindow(cam, proj.depth, Number(a.zclip))) return false;
     const r = this.rect(a, proj, cam);
     if (!r) return false; // no frame to draw
     return r.x < cam.clipW && r.y < cam.clipH && r.x + r.w > 0 && r.y + r.h > 0;
@@ -682,12 +714,7 @@ export class ActorRuntime {
       if (!r) return null;
       return {
         x: r.x, y: r.y, w: r.w, h: r.h,
-        covers: (x, y) => {
-          if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
-          const lx = a.flip & 1 ? r.f.width - 1 - (x - r.x) : x - r.x;
-          const ly = a.flip & 2 ? r.f.height - 1 - (y - r.y) : y - r.y;
-          return !!r.f.opaque[ly * r.f.width + lx];
-        },
+        covers: (x, y) => this.pointOf(a, r, x, y, false),
       };
     }
     if (!cam) return null;
@@ -697,14 +724,7 @@ export class ActorRuntime {
       if (!r) return null;
       return {
         x: r.x, y: r.y, w: r.w, h: r.h,
-        covers: (x, y) => {
-          if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
-          let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
-          let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
-          if (a.flip & 1) sx = r.f.width - 1 - sx;
-          if (a.flip & 2) sy = r.f.height - 1 - sy;
-          return !!r.f.opaque[sy * r.f.width + sx];
-        },
+        covers: (x, y) => this.pointOf(a, r, x, y, true),
       };
     }
     return null;
@@ -729,10 +749,7 @@ export class ActorRuntime {
       const a = screen[i];
       const r = this.screenRect(a);
       if (!r) continue;
-      if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
-      const lx = a.flip & 1 ? r.f.width - 1 - (x - r.x) : x - r.x;
-      const ly = a.flip & 2 ? r.f.height - 1 - (y - r.y) : y - r.y;
-      if (!r.f.opaque[ly * r.f.width + lx]) continue;
+      if (!this.pointOf(a, r, x, y, false)) continue;
       return a;
     }
     if (!cam) return null;
@@ -741,12 +758,7 @@ export class ActorRuntime {
       const { a, proj } = list[i];
       const r = this.rect(a, proj, cam);
       if (!r) continue;
-      if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
-      let sx = Math.min(r.f.width - 1, Math.floor((x - r.x) / r.k));
-      let sy = Math.min(r.f.height - 1, Math.floor((y - r.y) / r.k));
-      if (a.flip & 1) sx = r.f.width - 1 - sx;
-      if (a.flip & 2) sy = r.f.height - 1 - sy;
-      if (!r.f.opaque[sy * r.f.width + sx]) continue;
+      if (!this.pointOf(a, r, x, y, true)) continue;
       // a click landing on scenery that occludes the actor doesn't reach them
       if (occ && sceneryOccludes(occ, x, y, this.occludeAt(a, hiddenBy(proj), occ))) continue;
       return a;
