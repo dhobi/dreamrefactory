@@ -161,12 +161,29 @@ export function dfPassesAt(step: number, passes: number): number {
 type Rgba = Uint8ClampedArray;
 
 /**
- * Copy a `w`x`h` block from `src` at (sx, sy) into `out` at (dx, dy), both
- * `width`x`height` RGBA. Callers only ever pass blocks the original's own
+ * The pictures an effect is drawn between: `from` the screen it started on,
+ * `to` the picture it is revealing (the offscreen), `out` where this pass is
+ * drawn — all three `width`x`height` RGBA.
+ */
+export interface EffectFrames {
+  from: Rgba;
+  to: Rgba;
+  out: Rgba;
+  width: number;
+  height: number;
+}
+
+/** a corner of a block, x then y */
+type At = readonly [x: number, y: number];
+
+/**
+ * Copy a `w`x`h` block from `src` at `s` into `f.out` at `d`, both
+ * `f.width`x`f.height` RGBA. Callers only ever pass blocks the original's own
  * clipping has already sized to the screen, so this clips nothing but empty.
  */
-function copy(src: Rgba, out: Rgba, width: number, sx: number, sy: number, dx: number, dy: number, w: number, h: number): void {
+function copy(src: Rgba, f: EffectFrames, [sx, sy]: At, [dx, dy]: At, w: number, h: number): void {
   if (w <= 0 || h <= 0) return;
+  const { out, width } = f;
   for (let y = 0; y < h; y++) {
     const s = ((sy + y) * width + sx) * 4;
     out.set(src.subarray(s, s + w * 4), ((dy + y) * width + dx) * 4);
@@ -174,12 +191,13 @@ function copy(src: Rgba, out: Rgba, width: number, sx: number, sy: number, dx: n
 }
 
 /** an in-place reveal of the arriving picture, clipped to the screen as 0x43c620 clips it */
-function reveal(to: Rgba, out: Rgba, width: number, height: number, top: number, left: number, bottom: number, right: number): void {
+function reveal(f: EffectFrames, top: number, left: number, bottom: number, right: number): void {
+  const { width, height } = f;
   const t = Math.max(0, top);
   const l = Math.max(0, left);
   const b = Math.min(height, bottom);
   const r = Math.min(width, right);
-  copy(to, out, width, l, t, l, t, r - l, b - t);
+  copy(f.to, f, [l, t], [l, t], r - l, b - t);
 }
 
 /**
@@ -245,9 +263,8 @@ function dfStrips(W: number, H: number): Strips {
 }
 
 /**
- * Draw `effect` after `passes` of its `steps` passes into `out`: `from` is the
- * screen the effect started on, `to` the picture it is revealing (the
- * offscreen), all three `width`x`height` RGBA. TI.EXE's geometry, which is
+ * Draw `effect` after `passes` of its `steps` passes into `f.out` (see
+ * {@link EffectFrames}). TI.EXE's geometry, which is
  * also tl.exe's and RedJack.exe's.
  *
  * Each effect is written as the union of the rects its passes have copied so
@@ -257,79 +274,68 @@ function dfStrips(W: number, H: number): Strips {
  */
 export function composeEffect(
   effect: ExeEffect,
-  from: Rgba,
-  to: Rgba,
-  out: Rgba,
-  width: number,
-  height: number,
+  f: EffectFrames,
   steps: number,
   passes: number,
 ): void {
   const n = Math.max(0, Math.min(steps, passes));
-  draw(effect, from, to, out, width, height, n, tiStrips(width, height, steps));
+  draw(effect, f, n, tiStrips(f.width, f.height, steps));
 }
 
 /**
  * The same for DF.EXE: `effect` after `passes` of the fixed number {@link dfPlan}
  * gives it. The step count does not enter into the geometry at all.
  */
-export function composeDfEffect(
-  effect: DfEffect,
-  from: Rgba,
-  to: Rgba,
-  out: Rgba,
-  width: number,
-  height: number,
-  passes: number,
-): void {
-  const n = Math.max(0, Math.min(dfPlan(effect, 1, height).passes, passes));
-  draw(effect, from, to, out, width, height, n, dfStrips(width, height));
+export function composeDfEffect(effect: DfEffect, f: EffectFrames, passes: number): void {
+  const n = Math.max(0, Math.min(dfPlan(effect, 1, f.height).passes, passes));
+  draw(effect, f, n, dfStrips(f.width, f.height));
 }
 
-function draw(effect: ExeEffect, from: Rgba, to: Rgba, out: Rgba, W: number, H: number, n: number, g: Strips): void {
-  out.set(from.subarray(0, W * H * 4));
+function draw(effect: ExeEffect, f: EffectFrames, n: number, g: Strips): void {
+  const { from, to, width: W, height: H } = f;
+  f.out.set(from.subarray(0, W * H * 4));
   if (n === 0) return;
   switch (effect) {
     // TI 0x43be50, DF 0x435670: A = [left, left + d) stepped right by d a pass
     case "wiperight":
-      return reveal(to, out, W, H, 0, 0, H, n * g.wipeX);
+      return reveal(f, 0, 0, H, n * g.wipeX);
     // TI 0x43bef0, DF 0x435710: A = [right - d, right) stepped left
     case "wipeleft":
-      return reveal(to, out, W, H, 0, W - n * g.wipeX, H, W);
+      return reveal(f, 0, W - n * g.wipeX, H, W);
     // TI 0x43bd30, DF 0x4354f0: A = [top, top + d) stepped down
     case "wipedown":
-      return reveal(to, out, W, H, 0, 0, n * g.wipeY, W);
+      return reveal(f, 0, 0, n * g.wipeY, W);
     // TI 0x43bdc0, DF 0x4355b0: A = [bottom - d, bottom) stepped up
     case "wipeup":
-      return reveal(to, out, W, H, H - n * g.wipeY, 0, H, W);
+      return reveal(f, H - n * g.wipeY, 0, H, W);
     // TI 0x43b670, DF 0x434d80: two strips walking in from the left and right edges
     case "barndoorclose":
-      reveal(to, out, W, H, 0, 0, H, n * g.doorX);
-      return reveal(to, out, W, H, 0, W - n * g.doorX, H, W);
+      reveal(f, 0, 0, H, n * g.doorX);
+      return reveal(f, 0, W - n * g.doorX, H, W);
     // TI 0x43b750, DF 0x434e50: two strips walking out from `(left + right) >> 1`
     case "barndooropen": {
       const mid = W >> 1;
-      return reveal(to, out, W, H, 0, mid - n * g.doorX, H, mid + n * g.doorX);
+      return reveal(f, 0, mid - n * g.doorX, H, mid + n * g.doorX);
     }
     // TI 0x43b830, DF 0x434f20: four full-length strips walking in from every
     // edge — the top and bottom ones the screen's width, the side ones its height
     case "irisclose":
-      reveal(to, out, W, H, 0, 0, n * g.closeY, W);
-      reveal(to, out, W, H, H - n * g.closeY, 0, H, W);
-      reveal(to, out, W, H, 0, 0, H, n * g.closeX);
-      return reveal(to, out, W, H, 0, W - n * g.closeX, H, W);
+      reveal(f, 0, 0, n * g.closeY, W);
+      reveal(f, H - n * g.closeY, 0, H, W);
+      reveal(f, 0, 0, H, n * g.closeX);
+      return reveal(f, 0, W - n * g.closeX, H, W);
     // TI 0x43b980, DF 0x435060: ONE rect about the centre, grown by a strip on
     // every side a pass (DF.EXE clips it to the screen in place each pass,
     // 0x435103, which grows it no differently)
     case "irisopen": {
       const cy = H >> 1;
       const cx = W >> 1;
-      return reveal(to, out, W, H, cy - n * g.openY, cx - n * g.openX, cy + n * g.openY, cx + n * g.openX);
+      return reveal(f, cy - n * g.openY, cx - n * g.openX, cy + n * g.openY, cx + n * g.openX);
     }
     // TI 0x43bf90, DF 0x435450: slats `g.slat` rows apart, `g.slatRows(n)` deep
     case "venetian": {
       const rows = g.slatRows(n);
-      for (let y0 = 0; y0 < H; y0 += g.slat) reveal(to, out, W, H, y0, 0, y0 + rows, W);
+      for (let y0 = 0; y0 < H; y0 += g.slat) reveal(f, y0, 0, y0 + rows, W);
       return;
     }
     // The SCROLLS copy a growing edge of the arriving picture to the OPPOSITE
@@ -342,22 +348,22 @@ function draw(effect: ExeEffect, from: Rgba, to: Rgba, out: Rgba, W: number, H: 
     // TI 0x43ba70, DF 0x435150: the arriving picture's bottom rows to the screen's top
     case "scrolldown": {
       const off = Math.min(H, n * g.wipeY);
-      return copy(to, out, W, 0, H - off, 0, 0, W, off);
+      return copy(to, f, [0, H - off], [0, 0], W, off);
     }
     // TI 0x43bb20, DF 0x435210: its top rows to the screen's bottom
     case "scrollup": {
       const off = Math.min(H, n * g.wipeY);
-      return copy(to, out, W, 0, 0, 0, H - off, W, off);
+      return copy(to, f, [0, 0], [0, H - off], W, off);
     }
     // TI 0x43bbd0, DF 0x4352d0: its right columns to the screen's left
     case "scrollright": {
       const off = Math.min(W, n * g.wipeX);
-      return copy(to, out, W, W - off, 0, 0, 0, off, H);
+      return copy(to, f, [W - off, 0], [0, 0], off, H);
     }
     // TI 0x43bc80, DF 0x435390: its left columns to the screen's right
     case "scrolleft": {
       const off = Math.min(W, n * g.wipeX);
-      return copy(to, out, W, 0, 0, W - off, 0, off, H);
+      return copy(to, f, [0, 0], [W - off, 0], off, H);
     }
     // The vertical TURNS push: each pass block-moves the screen a strip
     // (0x43c6b0, screen to screen) and copies the arriving strip into the edge
@@ -369,15 +375,15 @@ function draw(effect: ExeEffect, from: Rgba, to: Rgba, out: Rgba, W: number, H: 
     // comes in at the top
     case "turnup": {
       const off = Math.min(H, n * g.wipeY);
-      copy(from, out, W, 0, 0, 0, off, W, H - off);
-      return copy(to, out, W, 0, H - off, 0, 0, W, off);
+      copy(from, f, [0, 0], [0, off], W, H - off);
+      return copy(to, f, [0, H - off], [0, 0], W, off);
     }
     // 0x43c2f0 `turndown`: the screen moves UP, the arriving picture's top
     // comes in at the bottom
     case "turndown": {
       const off = Math.min(H, n * g.wipeY);
-      copy(from, out, W, 0, off, 0, 0, W, H - off);
-      return copy(to, out, W, 0, 0, 0, H - off, W, off);
+      copy(from, f, [0, off], [0, 0], W, H - off);
+      return copy(to, f, [0, 0], [0, H - off], W, off);
     }
   }
 }

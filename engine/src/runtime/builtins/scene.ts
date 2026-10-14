@@ -1,7 +1,7 @@
 import { ScriptError, toNum, toStr, truthy, type Value } from "../interp";
 import { RAMP_STEP_MS, ticksAt } from "../clock";
 import { packPoint } from "../point";
-import { dfPlan, isDfEffect, isExeEffect, type DfEffect } from "../visual-effects";
+import { dfPlan, isDfEffect, isExeEffect, type DfEffect, type ExeEffect } from "../visual-effects";
 import { BuiltinCtx } from "./context";
 
 /**
@@ -605,8 +605,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
      * snapshot of the screen, 0x46ce10, and is a plain copy without it; the port
      * always has it.)
      */
-    const exe = session.isV1 ? (isDfEffect(name) ? name : null) : isExeEffect(name) ? name : null;
-    const dir = exe ? "exe" : session.isV5 && name === "turnhalfleft" ? "dissolve" : DIR[name as keyof typeof DIR];
+    let exe: ExeEffect | DfEffect | null = null;
+    if (session.isV1 ? isDfEffect(name) : isExeEffect(name)) exe = name as ExeEffect | DfEffect;
+    let dir: typeof session.wipe.dir | undefined = DIR[name as keyof typeof DIR];
+    if (exe) dir = "exe";
+    else if (session.isV5 && name === "turnhalfleft") dir = "dissolve";
     if (!dir) return;
     const from = session.captureFrame?.() ?? null;
     if (!from) return;
@@ -630,7 +633,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     session.wipe.effect = exe ?? "";
     session.wipe.settled = false;
     // the `half` pair travels half the screen (tl.exe 0x448b48); the rest all of it
-    session.wipe.span = dir === "dissolve" ? 1 : name === "turnhalfleft" || name === "turnhalfright" ? 0.5 : 1;
+    const half = dir !== "dissolve" && (name === "turnhalfleft" || name === "turnhalfright");
+    session.wipe.span = half ? 0.5 : 1;
     // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a; DF.EXE
     // 0x420370..0x42038a, RedJack.exe 0x408c0c..0x408c25)
     const clamped = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));

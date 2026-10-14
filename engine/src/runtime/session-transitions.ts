@@ -246,7 +246,8 @@ export class SessionTransitions {
     // it stays the whole milliseconds 0x4252b0 waits)
     const slow = w.stepMs || RAMP_STEP_MS;
     const ticked = !w.passMs && slow === RAMP_STEP_MS;
-    const stepMs = w.passMs ? (slow === RAMP_STEP_MS ? w.passMs : (w.passMs * slow) / RAMP_STEP_MS) : slow;
+    let stepMs = slow;
+    if (w.passMs) stepMs = slow === RAMP_STEP_MS ? w.passMs : (w.passMs * slow) / RAMP_STEP_MS;
     if (ticked && w.baseTick === null) w.baseTick = ticksAt(now);
     const due = (): boolean =>
       ticked ? w.step < Math.min(w.steps, ticksAt(now) - w.baseTick! + 1) : now - w.lastTick >= stepMs;
@@ -324,7 +325,7 @@ export class SessionTransitions {
     // steps running after the script had gone on — and a key pressed in those
     // ticks met a fade the original never has outliving its script.
     const tick = ticksAt(now);
-    if (f.lastTick === null) f.lastTick = tick - 1;
+    f.lastTick ??= tick - 1;
     while (f.queue.length && f.lastTick < tick) {
       f.lastTick++;
       const ramp = f.queue[0];

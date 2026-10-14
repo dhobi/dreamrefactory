@@ -1120,10 +1120,11 @@ export class ScreenDirector {
     // DF.EXE's fixed passes for Dust, TI.EXE's strips for the rest
     if (w.dir === "exe") {
       if (!w.effect) return;
+      const frames = { from: rgba, to: to.rgba, out: frame, width, height };
       if (w.draws === "df") {
-        composeDfEffect(w.effect as DfEffect, rgba, to.rgba, frame, width, height, dfPassesAt(w.step, w.steps - 1));
+        composeDfEffect(w.effect as DfEffect, frames, dfPassesAt(w.step, w.steps - 1));
       } else {
-        composeEffect(w.effect, rgba, to.rgba, frame, width, height, w.steps, passesAt(w.step, w.steps));
+        composeEffect(w.effect, frames, w.steps, passesAt(w.step, w.steps));
       }
       return;
     }
