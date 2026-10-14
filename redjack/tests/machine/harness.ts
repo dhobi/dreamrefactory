@@ -66,7 +66,11 @@ export interface Headless {
   session: GameSession;
   /** every line the engine logged, in order */
   logs: string[];
-  /** the handlers still running, outermost first — not counting `idle ()` */
+  /**
+   * the handlers still running, outermost first — not counting `idle ()` — and
+   * a gesture still waiting in the queue to be taken after it (RedJack.exe takes
+   * one an idle, 0x41e9b1): a click made is a script about to run
+   */
   running(): string[];
   /** the disc the game last said it is on */
   disc(): number;
@@ -87,8 +91,12 @@ export interface Headless {
   room(): string;
   /** the node the room stands at */
   node(): string;
-  /** a click as the page makes one, not awaited — a modal film would stall the pump */
-  click(x: number, y: number): () => boolean;
+  /**
+   * a click as the page makes one, not awaited — a modal film would stall the
+   * pump. The pointer is parked in the middle after it unless `stay`: a hand
+   * that stays where it clicked (a fight reads where the pointer IS, a pass later)
+   */
+  click(x: number, y: number, stay?: boolean): () => boolean;
   /** the button pressed and held at (x, y), until {@link mouseUp} */
   mouseDown(x: number, y: number): void;
   /** the button let go */
@@ -146,7 +154,9 @@ export async function headless(): Promise<Headless> {
    * them — so the engine looks idle while liznite's Node58 is still turning you
    * to face Lyle, and a route that clicks then starts the conversation a second
    * time over the first. Every handler is counted here instead, except the
-   * `idle ()` heartbeat the room runs each frame and whatever it calls.
+   * BOOTFILE's `idle ()` and what it calls itself (`hittest`, `setcursor`). What
+   * the pass inside its `forceupdate` sends — a loop, a walk's `endwalk`, the
+   * `openscene` a road ends in — is the world moving, and is counted.
    */
   const running = new Map<number, string>();
   const inIdle = new AsyncLocalStorage<boolean>();
@@ -156,7 +166,7 @@ export async function headless(): Promise<Headless> {
   const interp = session.interp;
   const runHandler = interp.runHandler.bind(interp);
   interp.runHandler = ((inst, handler, ...rest) => {
-    const idle = inIdle.getStore() || handler === "idle";
+    const idle = handler === "idle" || (!!inIdle.getStore() && !session.scheduler.inPass);
     return inIdle.run(idle, async () => {
       const id = ++serial;
       if (!idle) running.set(id, `${inst?.name ?? "?"}.${handler}`);
@@ -215,18 +225,23 @@ export async function headless(): Promise<Headless> {
     await frame(3);
     return until(() => idle() || host.director.awaitingChoice, `${what} to settle`, max);
   };
-  const click = (x: number, y: number): (() => boolean) => {
+  const click = (x: number, y: number, stay = false): (() => boolean) => {
     let done = false;
     session.setPointer(x, y);
-    void session.track(host.director.press(x, y).then(() => {
+    // done once the click has been TAKEN and run: a press made while the idle
+    // runs waits in the queue until it returns (RedJack.exe 0x41e9b1), and the
+    // press itself resolves as soon as it is queued
+    const taken = (): void => {
       host.director.release(x, y);
       done = true;
-    }), `click ${x},${y}`);
+    };
+    void session.track(host.director.press(x, y, taken), `click ${x},${y}`);
     // the press has read the pointer; now the mouse moves off, before `idle` sees it
-    queueMicrotask(park);
+    if (!stay) queueMicrotask(park);
     return () => done;
   };
   const keyUp = (name: string): void => void host.director.keyUp(name);
+  const queued = (): string[] => (session.events.length ? [`${session.events.length} queued`] : []);
   // the button held, as the page's pointerdown holds it: `stilldown ()` reads it,
   // and the fight on the dock strikes only while it is down (combat.shop think)
   const mouseDown = (x: number, y: number): void => {
@@ -243,7 +258,7 @@ export async function headless(): Promise<Headless> {
     void host.director.keyDown(name, special).then(() => (done = true));
     return () => done;
   };
-  return { host, session, logs, idle, keyUp, mouseDown, mouseUp, running: () => [...running.values()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
+  return { host, session, logs, idle, keyUp, mouseDown, mouseUp, running: () => [...running.values(), ...queued()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
 }
 
 export class SuiteFailure extends Error {}

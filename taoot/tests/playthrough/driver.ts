@@ -8,6 +8,7 @@
  */
 import { LEFTTURNS } from "@dreamfactory/engine/df/set";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
+import { Logic } from "@dreamfactory/engine/runtime/interp";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import type { SetViewer } from "@dreamfactory/engine/web/viewer";
 import type { NavDriver } from "./nav/navigator";
@@ -120,7 +121,7 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     set: () => v().set,
     setName: () => (session.currentSetFile || session.currentSetName).toLowerCase(),
     at: () => ({ sceneIdx: v().sceneIdx, viewIdx: v().viewIdx }),
-    flow: () => Object.fromEntries(session.interp.globals),
+    flow: () => Object.fromEntries([...session.interp.globals].map(([k, g]) => [k, g instanceof Logic ? g.payload : g])),
     propVisible: (name) => !!session.propRuntime.get(name)?.visible,
     propOwner: (name) => String(session.propRuntime.get(name)?.owner ?? ""),
     actorSpot: (name) => {

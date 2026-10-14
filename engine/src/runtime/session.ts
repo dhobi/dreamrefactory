@@ -12,7 +12,7 @@ import { PluginBus } from "./plugins";
 import { seededRng } from "./rng";
 import { AudioLibrary, AudioSink, TimedAudio, type PlayHandle } from "./audio";
 import type { DecodedAudio } from "../df/audio";
-import { Clock, ENGINE_STEP_MS, passDue, ticksAt } from "./clock";
+import { Clock, ENGINE_STEP_MS, ticksAt } from "./clock";
 import { EventQueue } from "./input";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
@@ -29,7 +29,7 @@ import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
-import { scriptErrorName } from "./script-errors";
+import { scriptErrorName, type EngineFault } from "./script-errors";
 import { PHOTO_H, PHOTO_W, Photo, PhotoAlbum } from "./photos";
 
 /** how a move lands on a standpoint — see {@link GameSession.pictureMode} */
@@ -316,6 +316,15 @@ export class GameSession {
    */
   onScriptErrorBox: ((code: number, detail: string) => boolean | Promise<boolean>) | null = null;
   /**
+   * host hook: tell the player the program was ended by a CPU fault, as Windows
+   * did ({@link engineFault}; the browser's box is web/error-box.ts's). Null —
+   * headless, a worker, a speedrun — and the fault is only logged and recorded
+   * in {@link fault}.
+   */
+  onFault: ((fault: EngineFault) => void | Promise<void>) | null = null;
+  /** the last fault that ended the game, for a harness to see — {@link engineFault} */
+  fault: EngineFault | null = null;
+  /**
    * The error waiting for its box — the engines' latch (TI.EXE 0x460278, flag
    * 0x4602cc): the first one raised is kept and every later one dropped until
    * it has been shown (0x40722d).
@@ -518,6 +527,8 @@ export class GameSession {
   }
   /** facing direction of the current view (radians), for arrival continuity */
   currentRotation: (() => number) | null = null;
+  /** DreamFactory 1: the bearing of the move's step on screen, null when none runs (SetViewer) */
+  movingDeg: () => number | null = () => null;
   /** facing carried across a set change; the next viewer consumes it */
   lastRotation: number | null = null;
 
@@ -609,6 +620,23 @@ export class GameSession {
     if (this.isV5 || this.isV1 || this.latchedError) return;
     this.latchedError = e;
     void Promise.resolve().then(() => this.showScriptError());
+  }
+
+  /**
+   * The CPU faulted inside the engine (script-errors.ts {@link EngineFault}):
+   * the original has no handler for it and Windows ends the program there and
+   * then. Here every script in flight is thrown away, as a load does
+   * ({@link Interpreter.abandonRunning} — the statement the fault is in ends as
+   * the builtin returns, and nothing after it runs), the host says so
+   * ({@link onFault}) and the game ends by the path `quit()` takes
+   * ({@link onQuit}). Never blocks where nobody is there to answer.
+   */
+  async engineFault(fault: EngineFault): Promise<void> {
+    this.fault = fault;
+    this.onLog(`fatal: ${fault.kind} in ${fault.where} — the original is ended by Windows here`);
+    this.interp.abandonRunning();
+    if (this.onFault) await this.onFault(fault);
+    await this.onQuit();
   }
 
   private async showScriptError(): Promise<void> {
@@ -854,9 +882,10 @@ export class GameSession {
    * and Morrow on the boat deck — accosted you inside a second and a half, i.e.
    * while you were still walking past.
    *
-   * {@link advanceFrames} is where the "per `frameRate` ticks" is enforced, and
-   * it counts TICKS OF THE CLOCK rather than calls, so the rate is the same on
-   * a browser at any refresh rate and on the pumped-clock host.
+   * It is counted where the original counts it, in the pass's frame
+   * (Scheduler.passFrame), and the pass's throttle waits out `frameRate` TICKS OF
+   * THE CLOCK rather than host calls, so the rate is the same on a browser at
+   * any refresh rate and on the pumped-clock host.
    */
   frameCounter = 0;
 
@@ -898,11 +927,8 @@ export class GameSession {
     );
   }
 
-  /** wall-clock tick stamp of the last displayed frame — TI.EXE's 0x48a6d8 */
-  private lastFrameTick: number | null = null;
+  /** the host moved the clock: the world moves in the passes the idle runs (Scheduler.tickTime) */
   tickTime(now: number): void {
-    // an engine whose frames are drawn by its passes counts them there (Scheduler.passFrame)
-    if (!this.scheduler.scriptPaced) this.advanceFrames(now);
     this.scheduler.tickTime(now);
   }
   /**
@@ -923,6 +949,18 @@ export class GameSession {
   onPassMotion: () => Promise<void> | void = () => {};
   /** host hook: the BOOTFILE's `idle ()` has returned — its `setcursor` may have moved the cursor */
   onIdle: (() => void) | null = null;
+  /**
+   * The tick the main loop last took a player's event on — a press, a release,
+   * a key going down, up or repeating (the kinds DF.EXE's window procedure posts
+   * through 0x4222d0). DF.EXE's main loop sends event 8, which runs the set's
+   * idle machine, only on a turn that took no event and once 20 ticks have
+   * passed since the last one taken (0x411698 `ebx = now + 0x14`, 0x411a97).
+   */
+  lastEventTick = 0;
+  /** a player's event has been taken now — see {@link lastEventTick} */
+  noteEvent(): void {
+    this.lastEventTick = ticksAt(this.clock.now);
+  }
 
   // ---- the game's clock: SessionTime (session-time.ts) -----------------------
   readonly timeCtrl = new SessionTime(this);
@@ -948,62 +986,6 @@ export class GameSession {
   freezeTime(...a: Parameters<SessionTime["freezeTime"]>) { return this.timeCtrl.freezeTime(...a); }
   thawTime(...a: Parameters<SessionTime["thawTime"]>) { return this.timeCtrl.thawTime(...a); }
   whileLoading<T>(load: Promise<T>): Promise<T> { return this.timeCtrl.whileLoading(load); }
-
-  /**
-   * Advance frame() the way TI.EXE does — off the CLOCK, not off how often the
-   * host happened to call us.
-   *
-   * The original increments its counter (0x489efa, all `frame()` returns) once
-   * per displayed frame at 0x439b80, and the very next thing it does is spin
-   * until real time catches up (0x43a940):
-   *
-   *     call 0x41de90            ; now = timeGetTime() * 3 / 50
-   *     mov  ecx, [0x489efe]     ; framerate  (initialised to 3 at 0x429643)
-   *     add  ecx, [0x48a6d8]     ; + last frame's stamp
-   *     cmp  eax, ecx
-   *     jl   0x43a940            ; not yet -> spin
-   *     mov  [0x48a6d8], eax     ; stamp this frame
-   *
-   * `framerate` is ADDED TO A TIMESTAMP, so a frame is every `framerate` ticks
-   * of time — 60/framerate Hz, pinned to the clock however fast the machine
-   * draws. That makes the unit a DURATION, which is why it is the same rule on
-   * every host and this function has no host special case.
-   *
-   * Counting the calls instead only agrees when the caller arrives exactly 60
-   * times a second, and neither host does:
-   *
-   *  * the browser delivers whatever rAF gives. At 38 fps every frame()-based
-   *    timer would run 37% slow; on a 120 Hz panel twice as fast.
-   *  * the pumped-clock host advances 50 ms per forceupdate — which already IS
-   *    one displayed frame at the default framerate of 3 (3 ticks = 50 ms), so
-   *    dividing by framerate again would count every frame three times. That the two
-   *    coincide is not luck: the boot's clock handler (TAOOT: calctime) fixes a
-   *    main-loop pass at 50 ms (20 passes to the pocketwatch's second), and at
-   *    framerate 3 a pass is a frame.
-   */
-  private advanceFrames(now: number): void {
-    const period = Math.max(1, Math.round(this.frameRate));
-    const t = ticksAt(now);
-    if (this.nominalTime || this.sheetClock) {
-      // under speedrun time on the game's own tick count, for the reason
-      // Scheduler.tickTime gives: a rhythm counted from where it last started
-      // took its phase from real time (#542)
-      if (t % period === 0 && t !== this.lastFrameTick) {
-        this.lastFrameTick = t;
-        this.frameCounter += 1;
-      }
-      return;
-    }
-    if (this.lastFrameTick === null) {
-      this.lastFrameTick = t;
-      return;
-    }
-    // one displayed frame at most, and a late one is not made up (passDue)
-    const pass = passDue(this.lastFrameTick, t, period);
-    if (!pass.due) return;
-    this.frameCounter += 1;
-    this.lastFrameTick = pass.next;
-  }
 
   // ---- sendto* event dispatch: SessionEvents (session-events.ts) ----------
   readonly eventCtrl = new SessionEvents(this);
@@ -1498,10 +1480,14 @@ export class GameSession {
     return this.clock.now - this.lastInputPoll <= 4 * ENGINE_STEP_MS;
   }
 
+  /** has a host ever said where the pointer is? (MazeView: a pointer never reported is off the window) */
+  pointerReported = false;
+
   /** update the cursor position scripts see (called by the viewer on move/click) */
   setPointer(x: number, y: number): void {
     this.pointerX = x;
     this.pointerY = y;
+    this.pointerReported = true;
   }
 
   /** the pointer as the engine's packed point — see runtime/point.ts */
@@ -1771,7 +1757,9 @@ export class GameSession {
    *  choreography lives in runtime/saveload.ts (and saveload-v1.ts, saveload-v5.ts).
    *  `version` is what `opengame` was given, which a v5 load compares. */
   loadGame(bytes: Uint8Array, version?: string): Promise<boolean> {
-    if (this.isV5) return loadGameV5(this, bytes, version || undefined);
+    // a load is a script's (`opengame`), and RedJack.exe sends no idle while one
+    // runs: held as a running script, wherever the host starts it from
+    if (this.isV5) return this.track(loadGameV5(this, bytes, version || undefined), "load");
     return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
   }
 
@@ -1834,7 +1822,6 @@ export class GameSession {
   get castScripts() { return this.resourceCtrl.castScripts; }
   private get shopMains() { return this.resourceCtrl.shopMains; }
   typedName(...a: Parameters<SessionResources["typedName"]>) { return this.resourceCtrl.typedName(...a); }
-  endAnim(...a: Parameters<SessionResources["endAnim"]>) { return this.resourceCtrl.endAnim(...a); }
   openSetFile(...a: Parameters<SessionResources["openSetFile"]>) { return this.resourceCtrl.openSetFile(...a); }
   loadSet(...a: Parameters<SessionResources["loadSet"]>) { return this.resourceCtrl.loadSet(...a); }
   rememberStarPaths(...a: Parameters<SessionResources["rememberStarPaths"]>) { return this.resourceCtrl.rememberStarPaths(...a); }

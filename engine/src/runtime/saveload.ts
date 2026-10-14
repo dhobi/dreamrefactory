@@ -33,7 +33,7 @@ import {
   readSaveFile,
 } from "../df/savegame";
 import { degVariantFrames, frameIndexForDegree, playSequence } from "./props";
-import { Value, toNum } from "./interp";
+import { Value, logic, logicPayload, toNum } from "./interp";
 import type { GameSession } from "./session";
 
 /**
@@ -71,7 +71,8 @@ export function scriptGlobals(session: GameSession): {
     if (typeof val === "number") numGlobals.set(name, val);
     else if (typeof val === "string") strGlobals.set(name, val);
     else {
-      numGlobals.set(name, val ? 1 : 0);
+      // the payload as it is — DF.EXE's pause getters' depth included (interp.ts Logic)
+      numGlobals.set(name, logicPayload(val) ?? 0);
       boolGlobals.add(name);
     }
   }
@@ -80,7 +81,8 @@ export function scriptGlobals(session: GameSession): {
 
 /** a saved number as the interpreter holds it: a tag-2 record is a boolean */
 export function restoredNumber(session: GameSession, bools: Set<string>, name: string, v: number): Value {
-  return bools.has(name) ? session.interp.bool(v !== 0) : v;
+  if (!bools.has(name)) return v;
+  return session.interp.classic ? logic(v) : session.interp.bool(v !== 0);
 }
 
 /**

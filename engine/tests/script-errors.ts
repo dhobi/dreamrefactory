@@ -15,9 +15,10 @@ import { expect, test } from "vitest";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
-import { ScriptError } from "@dreamfactory/engine/runtime/interp";
+import { Logic, ScriptError } from "@dreamfactory/engine/runtime/interp";
+import { faultBox } from "@dreamfactory/engine/web/error-box";
 import { engineBearing } from "@dreamfactory/engine/runtime/geometry";
-import { scriptErrorBoxText } from "@dreamfactory/engine/runtime/script-errors";
+import { engineFaultBoxText, scriptErrorBoxText } from "@dreamfactory/engine/runtime/script-errors";
 
 type Opts = { v5?: boolean; v1?: boolean };
 
@@ -240,4 +241,70 @@ test("DF.EXE shows nothing, and a headless session goes on", async () => {
   await errorOf(body("error ()"), {}, headless);
   await new Promise((r) => setTimeout(r, 0));
   expect(quits).toBe(0);
+});
+
+test("calcmod by 0 is TI.EXE's unchecked idiv: the game is ended, nothing after it runs", async () => {
+  const s = session();
+  const shown: string[] = [];
+  let quits = 0;
+  s.onFault = (f) => void shown.push(engineFaultBoxText(f, "TI.EXE"));
+  s.onQuit = () => void quits++;
+  // the statement after the fault never runs — not a script error either
+  const ran = await run(body("global after", "after = calcmod (7, 0)", "after = 5", "return (1)"), {}, s);
+  expect(ran).toBe(0);
+  expect(s.interp.globals.get("after")).not.toBe(5);
+  expect(s.fault).toEqual({ kind: "divide error", where: "calcmod(7, 0)" });
+  expect(s.scriptErrors).toHaveLength(0);
+  expect(quits).toBe(1);
+  expect(shown).toEqual([
+    "This program has performed an illegal operation and will be shut down.\n\n" +
+      "TI caused a divide error in module TI.EXE.",
+  ]);
+  // headless: no box, still the quit path
+  const headless = session();
+  let hq = 0;
+  headless.onQuit = () => void hq++;
+  await run(body("return (calcmod (1, 0))"), {}, headless);
+  expect(headless.fault?.kind).toBe("divide error");
+  expect(hq).toBe(1);
+  // nobody to show the box to (node): logged, never blocking
+  const logged: string[] = [];
+  faultBox((l) => logged.push(l), "TL.EXE")({ kind: "divide error", where: "calcmod(1, 0)" });
+  expect(logged).toEqual([
+    "fault box (not shown here): This program has performed an illegal operation and will be shut down. " +
+      "TL caused a divide error in module TL.EXE.",
+  ]);
+  // the `/` operator checks its divisor: error 0x37 (TI.EXE 0x4321d8)
+  expect(await errorOf(body("return (1 / 0)"))).toBe(0x37);
+});
+
+test("DF.EXE's pause getters answer the depth under the boolean tag, and the operators use it", async () => {
+  const twice = [
+    `makeloop ("scene", "tick", "x", 50)`,
+    `pauseloop ("scene", "tick", true)`,
+    `pauseloop ("scene", "tick", true)`,
+    "local d",
+    `d = pauseloop ("scene", "tick")`,
+  ];
+  const df = (...lines: string[]) => run(body(...twice, ...lines), { v1: true });
+  expect(await df("return (d)")).toEqual(new Logic(2));
+  // `=` compares the payloads (0x40d4fd): depth 2 is not true, and is itself
+  expect(await df("return (d = true)")).toBe(false);
+  expect(await df("return (d != true)")).toBe(true);
+  expect(await df(`return (d = pauseloop ("scene", "tick"))`)).toBe(true);
+  // `if` tests the payload against 0 (0x40354d)
+  expect(await df("if d", "return (1)", "endif", "return (0)")).toBe(1);
+  // `not` is xor 1 (0x40daf2): payload 3, still true to an `if`
+  expect(await df("return (not d)")).toEqual(new Logic(3));
+  expect(await df("if not d", "return (1)", "endif", "return (0)")).toBe(1);
+  // `&` and `|` work on the bits (0x40d3a0, 0x40d3cf)
+  expect(await df("return (d & true)")).toBe(false);
+  expect(await df("return (d | true)")).toEqual(new Logic(3));
+  expect(await df("return (type (d))")).toBe("logic");
+  expect(await errorOf(body(...twice, "return (d + 1)"), { v1: true })).toBe(0xe);
+  // one level: plain true; none: false
+  expect(await run(body(`makeloop ("scene", "t", "x", 5)`, `pauseloop ("scene", "t", true)`, `return (pauseloop ("scene", "t"))`), { v1: true })).toBe(true);
+  expect(await run(body(`return (pauseloop ("scene", "none"))`), { v1: true })).toBe(false);
+  // TI.EXE answers 0 or 1 (0x42ae87): depth 2 is true
+  expect(await run(body(...twice, "return (d = true)"))).toBe(true);
 });

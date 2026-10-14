@@ -46,18 +46,23 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       return;
     }
     const d = toStr(dir).toLowerCase();
-    if (d.startsWith("scene")) {
+    // DreamFactory 1 looks the word up in the set's scene table first
+    // (0x40ee66 -> 0x410c50) — TOWN.SET's "chicken" is a scene — and only
+    // then reads it as a direction; the others jump to a "sceneNNN"
+    const set = session.isV1 ? session.currentBinding?.set : undefined;
+    const isScene = set ? set.scenes.some((sc) => sc.sceneName.toLowerCase() === d) : d.startsWith("scene");
+    if (isScene) {
       // a DreamFactory 1 jump runs its scene events before the next line
       // (SetViewer.jumpV1); the others' return nothing to wait on
       const jump = session.onSceneJump(d);
       if (jump) await jump;
-    } else {
-      // a word that names no direction is a bad argument (TI.EXE 0x407c84)
-      if (i_.classic && !session.isV1 && d !== "left" && d !== "right" && d !== "strait") {
-        throw new ScriptError(0xa, `currentscene(${d})`);
-      }
-      await session.onNavigate(d);
+      return;
     }
+    // a word that names no direction is a bad argument (TI.EXE 0x407c84;
+    // DF.EXE 0x40ef44, which knows a fourth, "backwards")
+    const known = d === "left" || d === "right" || d === "strait" || (session.isV1 && d === "backwards");
+    if (i_.classic && !known) throw new ScriptError(0xa, `currentscene(${d})`);
+    await session.onNavigate(d);
   });
   // currentview() reads the current view; currentview("viewNNN") SETS it — the
   // teleport's destination view (executes a buffered currentscene jump). Was
@@ -389,11 +394,10 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   //
   // It is the pass rate: the frame throttle waits `framerate` ticks after every
   // pass (Scheduler.throttle). The setter clamps to 0..60 — TI.EXE 0x43e3a9,
-  // tl.exe 0x44a9ad, DF.EXE 0x42077d, all three the same.
+  // tl.exe 0x44a9ad, DF.EXE 0x42077d, RedJack.exe 0x408cae, all four the same.
   r("framerate", (_i, [n]) => {
     if (n === undefined) return session.frameRate;
-    const v = Math.trunc(toNum(n));
-    session.frameRate = session.isV5 ? toNum(n) : Math.max(0, Math.min(60, v));
+    session.frameRate = Math.max(0, Math.min(60, Math.trunc(toNum(n))));
     return 0;
   });
   // wavevolume([n]): master volume for sampled audio (SFX + speech), 0..9.
@@ -484,12 +488,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    */
   r("visualeffect", (_i, [effect, steps], _c, frame) => {
     // A PASS first, with its screen copy held back (TI.EXE 0x43df85 raises
-    // 0x489ef6, which 0x43a8f7 tests before the blit; tl.exe 0x44a585) — the
+    // 0x489ef6, which 0x43a8f7 tests before the blit; tl.exe 0x44a585;
+    // RedJack.exe 0x408c3c raises 0x4c7846 round its pass 0x408c43) — the
     // loops, walks and crickets run and the throttle is waited out — and the
-    // effect only if that pass did not fail (0x43df9e). Engines still on the
-    // host-driven service go straight to the effect, as they always have.
+    // effect only if that pass did not fail (0x43df9e, 0x408c4f).
     const sched = session.scheduler;
-    if (!sched.scriptPaced) return visualEffect(effect, steps);
     return sched.pass({ wait: sched.passWait(frame) }).then((ok) => (ok ? visualEffect(effect, steps) : undefined));
   });
   const visualEffect = (effect: Value | undefined, steps: Value | undefined): Promise<void> | void => {

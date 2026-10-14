@@ -70,6 +70,7 @@ import {
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { titleRise } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
+import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
@@ -991,6 +992,13 @@ async function runBoot(): Promise<void> {
   // know: a save is a dump of the engine's own tables, and those are v1's here
   // (engine/src/runtime/session.ts).
   host.session.dfVersion = 1;
+  // how a move lands (engine/src/web/picture-mode.ts): set before the boot
+  // opens its first set, which lands on the low-res picture as a move does
+  installPictureMode(
+    document.getElementById("pictureMode") as HTMLSelectElement | null,
+    host.session,
+    "dust.picture.landing",
+  );
   host.session.onSaveGame = async (bytes) => {
     await browseForSave(bytes as Uint8Array, defaultSaveName(host.session.currentSetFile, new Date()), {
       log: say,
@@ -1519,6 +1527,17 @@ addEventListener("pointermove", (e) => {
   }
   // and the finger's journey, which the recogniser measures for the swipe
   if (touch.owns(e)) touch.move(e);
+});
+
+/**
+ * A key's release is an event to DF.EXE's main loop as its press is (the window
+ * procedure posts it, 0x4229e5), and every event the loop takes holds the set's
+ * idle machine off — the hi-res picture waits for a quiet moment
+ * (SetViewer.idleTurn). No Dust script hears it.
+ */
+addEventListener("keyup", (e) => {
+  if (focusOwnsKey(e.target, e.key) || savesOpen()) return;
+  void playing?.director.keyUp(e.key);
 });
 
 addEventListener("pointerup", (e) => {

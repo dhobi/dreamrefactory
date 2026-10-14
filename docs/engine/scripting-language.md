@@ -96,6 +96,14 @@ Rules the interpreter has to honour exactly, or real scripts misbehave:
   true)`, `pausewalk`, `puppetgrab`…) refuses anything but a boolean
   (engine/src/runtime/value-types.ts). A save stores the tag, and a load gives
   a boolean back as one.
+- **A boolean is a tag and a 32-bit payload, and the payload need not be 0 or
+  1.** DF.EXE's `pauseloop (kind, name)`, `pauseball (name)` and
+  `pausewalk (name)` answer the pause *depth* under the boolean tag. The
+  operators then take the payload as it is: `=` compares payloads (paused twice
+  is not `= true`), `if` tests it against 0, `not` is `xor 1` (so `not` of
+  depth 2 is still true) and `&`/`|` are bitwise (depth 2 `& true` is false).
+  TI.EXE and tl.exe answer their pause getters 0 or 1. The port carries such a
+  value as a `Logic` (interp.ts); no shipped script reads these getters.
 - **A `for` variable is a local.** `to` and `step` are read once; each pass
   reads the variable back and adds the step, so the body may move it, and the
   loop ends one step past `to`. A global of the same name is shadowed, not

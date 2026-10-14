@@ -3,7 +3,7 @@ import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "@dreamfa
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { ShpFrame } from "@dreamfactory/engine/df/shp";
 import { DfVersion } from "@dreamfactory/engine/df/version";
-import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
+import { ENGINE_STEP_MS, ticksAt } from "@dreamfactory/engine/runtime/clock";
 import { Value } from "@dreamfactory/engine/runtime/interp";
 import { SetScripts } from "@dreamfactory/engine/runtime/setscripts";
 import { GameSession, MOVE_SPEED_MS } from "@dreamfactory/engine/runtime/session";
@@ -68,6 +68,10 @@ const FRAME_MS = ENGINE_STEP_MS;
 
 /** cap on ticks spent waiting for a transition fade before walking anyway */
 const MAX_FADE_WAIT_TICKS = 240;
+/** DreamFactory 1: the idle machine's turns from a landing to the hi-res still (0x4335f0) */
+const DF_SHARP_TURNS = 6;
+/** DreamFactory 1: ticks without an event before the main loop sends event 8 (0x411698) */
+const DF_QUIET_TICKS = 0x14;
 
 /** smallest absolute difference between two angles in radians */
 function angularDistance(a: number, b: number): number {
@@ -145,6 +149,25 @@ export class SetViewer implements RoomLayer {
   /** the standpoint is showing its low-res landing and is due its hi-res one */
   private sharpenNext = false;
   /**
+   * DreamFactory 1: is the standpoint's HI-RES picture the one on screen —
+   * DF.EXE's [0x45e51c] = 3? A move starts from it by drawing the departure's
+   * low-res picture first (0x433935: step 0), and from the low-res one at step 1
+   * — see {@link dfMoveFrames}.
+   */
+  private dfSharp = true;
+  /**
+   * DreamFactory 1: idle turns left before the hi-res picture replaces the
+   * low-res one a move, a jump or the set's opening left on screen (0 = none
+   * pending). DF.EXE's idle machine (0x4335f0) runs on event 8, which the main
+   * loop sends only on a turn that took no event, and only once 20 ticks have
+   * passed since it last took one (0x411698, 0x411a97 — {@link idleTurn}). It
+   * caches the next move's five frames one a turn (states 0 and 1,
+   * 0x433635..0x43374d), draws the hi-res still on the sixth (state 2,
+   * 0x433831) and then sits in state 3. A move's every step puts it back to
+   * state 0 (0x434057), and while one runs it does nothing (0x4335fc).
+   */
+  private dfSharpIn = 0;
+  /**
    * currentscene(dir) turn/walk driver. Installed on `session.onNavigate` for
    * the duration of a user gesture (keyDown / click) so scripts can drive the
    * camera from EITHER a keydown OR a mousedown handler — TAOOT's Morrow
@@ -155,8 +178,8 @@ export class SetViewer implements RoomLayer {
    */
   private readonly navigate = (dir: string): void | Promise<void> => {
     this.session.navHappened = true;
-    // TI.EXE's own order, where the pass steps the camera; what follows is
-    // DreamFactory 1's timed camera
+    // the exes' own order, where the pass steps the camera (TI.EXE's and
+    // DF.EXE's); what follows is the timed camera of a room no pass steps
     if (this.passStepped) return this.navigateAsExe(dir);
     // A move asked for while one is still running WAITS for it; it does not
     // vanish. `walk()` and `turn()` both open with `if (this.busy) return`,
@@ -198,11 +221,11 @@ export class SetViewer implements RoomLayer {
    * steps a running turn or walk once (0x439bbb -> 0x43a440, the frame index
    * at 0x48a634) and nothing else moves it, so a move lasts as many passes as
    * it has frames, at whatever rate the passes run. DF.EXE's frame does the
-   * same (0x4334c7 -> 0x433d20) but steps an interpolated camera rather than a
-   * ring, which this port does not model; Dust keeps the timed pace.
+   * same (0x4334c7 -> 0x433d20): one of a move's five steps a pass, the camera
+   * interpolated along the grid ({@link dfMoveFrames}).
    */
   get passStepped(): boolean {
-    return this.session.scheduler.scriptPaced && !this.session.isV1;
+    return this.session.scheduler.scriptPaced;
   }
 
   /**
@@ -219,6 +242,7 @@ export class SetViewer implements RoomLayer {
    *    walk (0x439e10), and the passes step it from there ({@link passMotion}).
    */
   private async navigateAsExe(dir: string): Promise<void> {
+    if (this.session.isV1) return this.navigateAsDf(dir);
     const pace = this.session.navFromScript ? FRAME_MS : this.playerPace;
     if (dir === "strait" && (this.animating || !this.availableRoads().length)) return;
     const sceneIdx = this.sceneIdx;
@@ -227,6 +251,36 @@ export class SetViewer implements RoomLayer {
     if (this.animating) return;
     // a transition fade queued by a changeset earlier in the chain still
     // draining (the port's fade outlives its script; TI.EXE's does not)
+    for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) await this.session.frameWait();
+    if (dir === "strait") this.walk(pace, true);
+    else if (dir === "left") this.turn(LEFTTURNS, pace, true);
+    else if (dir === "right") this.turn(RIGHTTURNS, pace, true);
+  }
+
+  /**
+   * `currentscene (dir)` as DF.EXE runs it (0x40ee30):
+   *
+   *  - `closescene ()` is sent to the scene being left and run to its end
+   *    (0x40ef5b -> 0x40f100) before anything else is asked — a move already
+   *    running, or one with nowhere to go, included ({@link refusedMove});
+   *  - a closescene that closed the set or opened another has the move
+   *    abandoned (0x40ef69, 0x40ef83 against the set it noted);
+   *  - then the move routine (0x4338b0) drops it if a move is running
+   *    (`[0x45e52c] >= 0`), finds no transition (0x433ae0) and does nothing, or
+   *    arms step 0 or 1 ({@link dfMoveFrames}) — and draws nothing: the passes
+   *    step it from the next one ({@link passMotion}).
+   *
+   * `"backwards"` (0x44547c, direction 4) asks for the cell behind with the
+   * same facing (0x434b7a). Its closescene is sent like any other's, but no
+   * set on the disc has a transition that goes there — every one of the 486
+   * walks in the 35 sets steps forward — so the move routine finds nothing
+   * (0x433ae0) and the camera stays.
+   */
+  private async navigateAsDf(dir: string): Promise<void> {
+    const pace = this.session.navFromScript ? FRAME_MS : this.playerPace;
+    await this.scripts.closeScene(this.sceneIdx);
+    if (this.session.navDriver !== this.navigate) return;
+    if (this.animating) return;
     for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) await this.session.frameWait();
     if (dir === "strait") this.walk(pace, true);
     else if (dir === "left") this.turn(LEFTTURNS, pace, true);
@@ -396,6 +450,15 @@ export class SetViewer implements RoomLayer {
     const w = toScene.views.findIndex((vw) => vw.viewName.toLowerCase() === keep.toLowerCase());
     this.sceneIdx = to;
     this.viewIdx = w >= 0 ? w : Math.min(this.viewIdx, toScene.views.length - 1);
+    // 0x433960 ends a move in flight (0x433ac7: the step back to -1, so its
+    // arrival never comes) and draws the new standpoint's LOW-res picture, step
+    // 0 of a transition out of it (0x433a87 -> 0x433d20); the idle machine
+    // sharpens it from state 0 (0x434057), six idle turns on
+    if (this.dfStepped) {
+      this.animation = null;
+      this.animationDone = null;
+      this.dfLanded();
+    }
     this.showView();
     await this.scripts.openScene(this.sceneIdx);
   }
@@ -625,15 +688,27 @@ export class SetViewer implements RoomLayer {
     if (!director) this.bindJumpHooks();
     this.scripts = new SetScripts(set, session);
     this.scripts.onLog = (l) => this.onLog(l);
-    session.currentSceneName = () => this.scene.sceneName.toLowerCase();
+    session.currentSceneName = () => (this.dfMovingScene() ?? this.scene).sceneName.toLowerCase();
     // currentview() returns the pseudo-view "moving" while the camera is
     // animating a turn/walk (this.animation in flight), matching TI.EXE — a
     // scripted camera pan waits it out with `while currentview()="moving":
     // forceupdate()` (the bomb window pan, BEDSIT1 gotowin). Only once the
     // motion settles does it report the arrived view name.
-    session.currentViewName = () =>
-      this.animating ? "moving" : this.scene.views[this.viewIdx].viewName.toLowerCase();
+    session.currentViewName = () => {
+      if (!this.animating) return this.scene.views[this.viewIdx].viewName.toLowerCase();
+      // DF.EXE (0x410500) names the bearing of the step last drawn: one of the
+      // four is "moving" while a move runs, anything between "turning"
+      // (0x410530 -> 0x41054d) — so a turn is "turning" from its second step
+      const deg = this.current?.cam?.deg;
+      return this.dfStepped && deg !== undefined && deg % 64 !== 0 ? "turning" : "moving";
+    };
     session.currentRotation = () => this.scene.views[this.viewIdx].rotation;
+    // DF.EXE's `currentdeg ()` (0x410740) answers [0x460baa], the bearing the
+    // camera builder wrote for the step last drawn (0x433f8b) — mid-move, the step's
+    session.movingDeg = () => {
+      const deg = this.animating && this.dfStepped ? this.current?.cam?.deg : undefined;
+      return deg ?? null;
+    };
     // Persistent nav drivers (the real turn/walk/teleport functions). armNavHooks
     // exposes these as the onNavigate/onSceneJump/onViewJump hooks only during a
     // user gesture; the scheduler arms them independently around a SCENE loop so a
@@ -675,6 +750,9 @@ export class SetViewer implements RoomLayer {
         };
       }
     }
+    // DF.EXE opens a set through the jump (0x41b3e1 -> 0x433960): the
+    // standpoint's LOW-res picture first, sharpened by the idle machine
+    if (this.dfStepped) this.dfLanded();
     this.jumpToDefault();
     if (startScene) this.jumpTo(startScene, startView);
     // auto-load sibling resources (the boot script does this in the real game)
@@ -1319,6 +1397,13 @@ export class SetViewer implements RoomLayer {
    * low-res one everywhere, which is what "always soft" means: not a soft
    * landing followed by a sharpen, but a room that stays soft (#75).
    */
+  /** the standpoint's LOW-res picture — the right ring's own, see {@link standFrame} */
+  private softStandFrame(): CachedFrame | null {
+    const fi = this.standFrameInfo();
+    if (!fi) return null;
+    return this.rings.ensure(this.scene.turns[RIGHTTURNS].frames).get(fi.frameContainerLoc) ?? this.standFrame();
+  }
+
   private standFrame(): CachedFrame | null {
     const fi = this.standFrameInfo();
     if (!fi) return null;
@@ -1329,7 +1414,7 @@ export class SetViewer implements RoomLayer {
 
   private showView(): void {
     this.warmDone = false; // a new standpoint has new neighbours to warm
-    this.current = this.standFrame();
+    this.current = this.dfStepped && !this.dfSharp ? this.softStandFrame() : this.standFrame();
     const v = this.scene.views[this.viewIdx];
     const roads = this.availableRoads();
     this.onHud(
@@ -1565,8 +1650,11 @@ export class SetViewer implements RoomLayer {
       }
     };
     // stepped by the pass: the arrival is the pass's, and runs inside it
-    // (TI.EXE 0x43a510 -> the settle, from the frame)
-    if (!departure) return arrive();
+    // (TI.EXE 0x43a510 -> the settle, from the frame). In DreamFactory 1 it is
+    // a running script like the pass's loop handlers (Scheduler.sendInPass):
+    // DF.EXE's main loop takes no event until the idle that runs it has
+    // returned (0x4115f0), so a press made meanwhile waits for it
+    if (!departure) return this.session.isV1 ? this.session.track(arrive(), label) : arrive();
     void this.session.track(departure.then(arrive), label);
   }
 
@@ -1579,11 +1667,14 @@ export class SetViewer implements RoomLayer {
     // the turn actually taken can never land on different standpoints
     const ring = turnRing(this.scene, this.viewIdx, dir);
     if (!ring) {
-      this.refusedMove("turn-closescene");
+      // `departed`: the closescene a refusal owes was sent already
+      if (!departed) this.refusedMove("turn-closescene");
       return;
     }
     const images = this.rings.ensure(this.scene.turns[dir].frames);
-    const frames = this.turnFrames(ring.frames, images);
+    const frames = this.dfStepped
+      ? this.dfMoveFrames(ring.frames, images)
+      : this.turnFrames(ring.frames, images);
     const target = ring.target;
     // departure closescene BEFORE the first frame — see departScene. TI.EXE
     // fires it for every turn command, ring wrap included (0x407cbb runs for
@@ -1591,7 +1682,7 @@ export class SetViewer implements RoomLayer {
     // `departed`: closescene was sent and run already (navigateAsExe)
     const departure = departed ? null : this.departScene("turn-closescene");
     // a turn draws its starting standpoint (0x439da9), so its first pass shows
-    // the first frame past it
+    // the first frame past it; DF.EXE draws nothing until the pass (0x4338b0)
     this.startAnimation(frames, pace, false, () => {
       // update the facing BEFORE firing openscene — a per-view event — so its
       // handlers see the new currentview() in their guards
@@ -1627,15 +1718,15 @@ export class SetViewer implements RoomLayer {
     if (departed ? this.animating : this.busy) return;
     const roads = this.availableRoads();
     if (!roads.length) {
-      this.refusedMove("walk-closescene");
+      if (!departed) this.refusedMove("walk-closescene");
       return;
     }
     const { road, register, arriveViewID } = roads[0];
     const reg = road.frameRegisters[register];
     const images = this.rings.ensure(reg.frames);
-    const frames = reg.frames
-      .map((fi) => images.get(fi.frameContainerLoc))
-      .filter((f): f is CachedFrame => !!f);
+    const frames = this.dfStepped
+      ? this.dfMoveFrames(reg.frames, images)
+      : reg.frames.map((fi) => images.get(fi.frameContainerLoc)).filter((f): f is CachedFrame => !!f);
     // Worked out before the walk starts, not in the callback below, because
     // "always transition" needs the standpoint being walked TO in order to end
     // the animation on it. Both answers are pure functions of the register, so
@@ -1662,7 +1753,7 @@ export class SetViewer implements RoomLayer {
     // frames keep their own per-frame heights so a stair road still ramps
     // continuously. Cloned, not patched — the CachedFrames are shared with the
     // ring cache.
-    if (frames.length) {
+    if (frames.length && !this.dfStepped) {
       const pinHeight = (frame: CachedFrame, stand: FrameInfo | null): CachedFrame =>
         !frame.cam || !stand || frame.cam.z === stand.posY16
           ? frame
@@ -1673,7 +1764,7 @@ export class SetViewer implements RoomLayer {
         : null;
       frames[frames.length - 1] = pinHeight(frames.at(-1)!, arrive);
     }
-    if (arrival && this.session.pictureMode === "transition") {
+    if (arrival && this.session.pictureMode === "transition" && !this.dfStepped) {
       // A road ends on an IN-MOTION frame — measured, all 722 registers in
       // gamefiles/en — so a walk has no landing standpoint of its own to soften
       // and lands sharp in the original. Appending the pair gives it the beat a
@@ -1690,8 +1781,9 @@ export class SetViewer implements RoomLayer {
     // Scene64's actorzclip(-1500) ahead of the walk out, so the stairwell
     // crowd stays drawn during the move as it does in the original.
     const departure = departed ? null : this.departScene("walk-closescene");
-    // a walk draws its first row inside the gesture (0x439e10)
-    this.startAnimation(frames, pace, true, () => {
+    // a walk draws its first row inside the gesture (0x439e10); DF.EXE's
+    // draws nothing until the pass (0x4338b0)
+    this.startAnimation(frames, pace, !this.dfStepped, () => {
       if (arrival) {
         this.sceneIdx = arrival.sceneIdx;
         this.viewIdx = arrival.viewIdx;
@@ -1919,6 +2011,91 @@ export class SetViewer implements RoomLayer {
     );
   }
 
+  /**
+   * DreamFactory 1's `currentscene ()` while a move runs: the scene of the cell
+   * the camera stands in at the step last drawn (0x410870 reads the cell
+   * 0x433fdb wrote, `pos >> 8`), so a walk is in the next scene from its third
+   * step on when it heads up the grid and its fourth when it heads down. Null
+   * when no move runs or the cell has no scene.
+   */
+  private dfMovingScene(): Scene | null {
+    const cam = this.animating && this.dfStepped ? this.current?.cam : undefined;
+    if (!cam) return null;
+    const cx = cam.x >> 8;
+    const cz = cam.y >> 8;
+    return this.set.scenes.find((sc) => sc.xAxisMap >> 8 === cx && sc.zAxisMap >> 8 === cz) ?? null;
+  }
+
+  /** a DreamFactory 1 room whose camera the pass steps — DF.EXE's 0x433d20 */
+  private get dfStepped(): boolean {
+    return this.session.isV1 && this.passStepped;
+  }
+
+  /**
+   * The pictures of a DreamFactory 1 move, as DF.EXE's step (0x433d20) draws
+   * them: a transition is five pictures, `k` = 0..4 (the slot's base + k,
+   * 0x433d20 -> 0x4344e0), each with the camera `k / 4` of the way along
+   * (set-v1-to-v4.ts), and the move runs from step 0 when the standpoint's
+   * hi-res picture is on screen and from step 1 when its low-res one is
+   * (0x433935: `[0x45e51c] = 3`) — picture 0 IS the departure's low-res one,
+   * so the move first takes the sharp picture back. The fifth is the arrival's
+   * low-res picture: a left turn's ring ends on the hi-res still instead, and
+   * the arrival is drawn soft from its twin.
+   */
+  private dfMoveFrames(ring: FrameInfo[], images: Map<number, CachedFrame>): CachedFrame[] {
+    const out: CachedFrame[] = [];
+    for (const [i, fi] of ring.entries()) {
+      const landing = i === ring.length - 1 && fi.motionInfo === 2;
+      const image = landing ? this.lowResImage(fi) : images.get(fi.frameContainerLoc);
+      if (image) out.push(image);
+    }
+    return this.dfSharp ? out : out.slice(1);
+  }
+
+  /**
+   * A DreamFactory 1 move, jump or set opening has left the LOW-res picture on
+   * screen. In the original the hi-res one comes on the sixth quiet idle turn
+   * ({@link idleTurn}); "sharp" has it at once, "transition" on the next pass
+   * whatever the player is doing, and "soft" never. A set with no hi-res
+   * stills (MINE.SET) keeps the low-res picture in every mode, as DF.EXE's
+   * machine parks in state 4 there (0x433787) — so its moves always start at
+   * step 1.
+   */
+  private dfLanded(): void {
+    const mode = this.session.pictureMode;
+    const stills = !this.set.noHiResStills;
+    this.dfSharp = stills && mode === "sharp";
+    this.dfSharpIn = 0;
+    if (!stills) return;
+    if (mode === "original") this.dfSharpIn = DF_SHARP_TURNS;
+    else if (mode === "transition") this.dfSharpIn = 1;
+  }
+
+  /** one turn of DreamFactory 1's sharpening count; the hi-res still on the last */
+  private dfSharpTurn(): void {
+    if (this.animation || this.dfSharpIn <= 0 || --this.dfSharpIn > 0) return;
+    this.dfSharp = true;
+    this.current = this.standFrame();
+  }
+
+  /**
+   * A turn of the main loop has ended — the BOOTFILE idle has returned. In
+   * DreamFactory 1 that is where DF.EXE's event 8 goes, on a turn that took no
+   * event and once {@link DF_QUIET_TICKS} have passed since one was taken
+   * (0x411a97: `tick >= ebx`, `ebx` set to `now + 0x14` at 0x411698 by every
+   * event the loop takes): the idle machine's turn (0x4335f0), which does
+   * nothing while a move runs or the set is not showing (0x433610). So input
+   * holds the sharpening off — a held arrow key repeats, and the moves it makes
+   * all start at step 1. Counted on the game's clock, so it is deterministic.
+   */
+  idleTurn(): void {
+    if (!this.dfStepped || this.session.pictureMode !== "original") return;
+    const s = this.session;
+    if (!s.viewShowing || s.events.length) return;
+    if (ticksAt(s.clock.now) < s.lastEventTick + DF_QUIET_TICKS) return;
+    this.dfSharpTurn();
+  }
+
   private startAnimation(frames: CachedFrame[], pace: number, drawnAtStart: boolean, done: () => void | Promise<void>): void {
     if (!frames.length) {
       void done();
@@ -1930,6 +2107,7 @@ export class SetViewer implements RoomLayer {
     this.animationDone = done;
     this.lastTick = 0;
     this.stepCredit = 0;
+    this.dfSharpIn = 0;
     if (this.passStepped && drawnAtStart) this.current = frames[this.animationPos++];
   }
 
@@ -1943,6 +2121,8 @@ export class SetViewer implements RoomLayer {
    */
   async passMotion(): Promise<void> {
     if (!this.passStepped) return;
+    // "transition": the soft beat is one pass, whatever the player does
+    if (this.dfStepped && this.session.pictureMode === "transition") this.dfSharpTurn();
     if (this.sharpenNext) {
       this.sharpenNext = false;
       if (!this.animation) this.current = this.standFrame();
@@ -1959,6 +2139,11 @@ export class SetViewer implements RoomLayer {
       const done = this.animationDone!;
       this.animation = null;
       this.animationDone = null;
+      // DF.EXE's fifth step lands on the arrival's LOW-res picture, the camera
+      // moves there and `openscene ()` is sent, inside the pass (0x434067 ->
+      // 0x40f050); the idle machine starts over from state 0 (0x434057), and
+      // its first turn can be this one's (idleTurn)
+      if (this.dfStepped) this.dfLanded();
       await done();
       // a low-res landing stays on screen for this pass (see standpointFrames)
       if (this.softLandings.has(landing) && !this.animation && pace > 0) {
@@ -2076,6 +2261,7 @@ export class SetViewer implements RoomLayer {
   private drainOneEvent(): void {
     const e = this.session.events.take();
     if (!e) return;
+    this.session.noteEvent();
     const over = (): void => e.taken?.();
     if (e.kind === "keydown") {
       const key = e.key;

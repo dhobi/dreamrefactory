@@ -158,6 +158,9 @@ export interface SetFile {
    *  v1's header 0x18, applied by DF.EXE's camera builder (0x433fd4);
    *  unset (0) for v4, whose cameras are the stand frames' own. */
   cameraSetback?: number;
+  /** DreamFactory 1: the header says the set has no hi-res stills (v1 header
+   *  0x3a = 0), so DF.EXE keeps the low-res picture up (0x433787) */
+  noHiResStills?: boolean;
   /**
    * Z-image depth quantization (SCDO chunk, TI.EXE 0x4078ad): the far clip
    * depth (farMax) and the number of depth levels. A frame's Z image stores

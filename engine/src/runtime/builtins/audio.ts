@@ -42,8 +42,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
    * it, and then hung with his gloat half-said. The win path has no such loop,
    * which is why losing was the case that stuck.
    */
-  r("currentvoice", async () => {
-    await ctx.yieldFrame();
+  r("currentvoice", async (_i, _a, c) => {
+    await ctx.yieldFrame(c);
     return voice && !voice.handle.done ? voice.name : "none";
   });
   r("voicesound", (_i, [n]) => playNamed(n, "voice"));
@@ -77,8 +77,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // frame — otherwise it spins synchronously and the audio can never progress
   // to "done". Mirrors stilldown; headless returns immediately (NullAudioSink
   // is always done, so the wait resolves at once and stays deterministic).
-  const audioDonePoll = (channel: "sound" | "voice") => async () => {
-    await ctx.yieldFrame();
+  const audioDonePoll = (channel: "sound" | "voice") => async (_i: unknown, _a: unknown, c: object) => {
+    await ctx.yieldFrame(c);
     // v1: both effect channels idle (0x429c00)
     // ...and DreamFactory 4's the same (TI.EXE 0x424cc0: channels 1 and 2 empty)
     if (channel === "sound" && !session.isV5) return session.scheduler.soundsDoneV1() ? 1 : 0;
@@ -93,8 +93,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // Like sounddone that empty busy-wait has no other yield, so the poll gives up
   // a real frame; headless has no frames and the tracked one-shot is already
   // done, so it resolves at once and stays deterministic.
-  r("currentsound", async (_i, [channel]) => {
-    await ctx.yieldFrame();
+  r("currentsound", async (_i, [channel], c) => {
+    await ctx.yieldFrame(c);
     // DF.EXE's takes no channel (0x407b10)
     if (session.isV1) return session.scheduler.currentSoundV1();
     return session.scheduler.currentSound(toNum(channel ?? 1));

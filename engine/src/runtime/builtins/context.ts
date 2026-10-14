@@ -2,6 +2,7 @@ import type { Actor } from "../../df/set";
 import { CELL_UNITS } from "../../df/set-v1-to-v4";
 import type { GameSession } from "../session";
 import { Builtin, Frame, Interpreter, ScriptError, Value, toNum, toStr } from "../interp";
+import { ticksAt } from "../clock";
 
 /**
  * Shared plumbing handed to every `register*Builtins` module. Only the pieces
@@ -67,7 +68,7 @@ export interface BuiltinCtx {
    * frames: the poll resolves immediately and the guard stays armed, so a
    * stuck loop still fails fast instead of hanging the run.
    */
-  yieldFrame: () => Promise<void>;
+  yieldFrame: (site?: object) => Promise<void>;
   /**
    * A prop or actor command named something that is not open. The engines look
    * the name up in their open props (TI.EXE 0x442af0) or actors (0x40c810) and
@@ -114,8 +115,28 @@ export function accessorFamily<T>(
     });
 }
 
+/**
+ * Is a poll the one a bare loop makes — the same call (its place in the
+ * script) asked again in the same tick of the clock? DreamFactory 5's polled
+ * commands wait for a frame only then (`stilldown`, `button`, `voicedone`,
+ * `currentsound`); two calls in one handler, or one a pass, answer at once.
+ */
+export class RepeatedAsk {
+  private site: object | undefined;
+  private tick = -1;
+  /** note this ask and say whether it repeats the last one */
+  repeats(site: object | undefined, tick: number): boolean {
+    const again = site !== undefined && site === this.site && tick === this.tick;
+    this.site = site;
+    this.tick = tick;
+    return again;
+  }
+}
+
 export function createBuiltinCtx(session: GameSession): BuiltinCtx {
   const interp = session.interp;
+  /** the call a polled command last answered, and when — see yieldFrame */
+  const lastAsk = new RepeatedAsk();
   return {
     session,
     interp,
@@ -192,11 +213,15 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
       session.accessorMisses.set(key, (session.accessorMisses.get(key) ?? 0) + 1);
       if (interp.classic) throw new ScriptError(0xa, `no such object: ${key}`);
     },
-    yieldFrame: async () => {
-      if (session.hasRealFrames) {
-        session.realYieldSeq++;
-        await session.frameWait();
-      }
+    yieldFrame: async (site) => {
+      if (!session.hasRealFrames) return;
+      session.realYieldSeq++;
+      // RedJack.exe's polled commands answer at once (its `button`, `voicedone`
+      // and `currentsound` read state, no wait), and its fights ask them from
+      // loops that run inside a pass: there a frame is waited only for the ask a
+      // bare poll loop makes — the same call again in the same tick
+      if (session.isV5 && !lastAsk.repeats(site, ticksAt(session.clock.now))) return;
+      await session.frameWait();
     },
   };
 }

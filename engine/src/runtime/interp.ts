@@ -17,13 +17,57 @@ import { answersBoolean, booleanArg, integerArgs } from "./value-types";
  * engines tag every value (DF.EXE: 2 boolean, 3 string, 4 integer; TI.EXE and
  * tl.exe the same), `true`/`false` are boolean literals (tokens 4021/4022 ->
  * 0x40da5d/0x40da86), and comparisons, `&`, `|` and `not` answer booleans.
- * Here a boolean is a JS boolean; DreamFactory 5 keeps 1/0 ({@link
+ * Here a boolean is a JS boolean — or, the rare boolean whose payload is
+ * neither 0 nor 1, a {@link Logic}; DreamFactory 5 keeps 1/0 ({@link
  * Interpreter.bool}). Undeclared reads are the integer 0.
  * Builtin semantics live in a registry so they can be filled in command by
  * command as they are recovered from TI.EXE / observed behavior.
  */
 
-export type Value = number | string | boolean;
+export type Value = number | string | boolean | Logic;
+
+/**
+ * A boolean-tagged value whose 32-bit payload is neither 0 (`false`) nor 1
+ * (`true`). The engines' value record is a tag and a payload, and nothing stops
+ * a payload of 2: DF.EXE's `pauseloop`, `pauseball` and `pausewalk` getters
+ * answer tag 2 with the pause DEPTH as the payload (0x42cf95, 0x42d074/0x42d079,
+ * 0x42d004). The operators then work on the payload as it is (DF.EXE 0x40d250):
+ *
+ * - `=` / `!=` compare the payloads (0x40d4fd), so depth 2 is not `true`;
+ * - `if` / `while` test it against 0 (0x40354d, 0x4039b7), so it is true there;
+ * - `not` is `xor 1` (0x40daf2): `not` depth 2 is payload 3 — true as well;
+ * - `&` / `|` are `and` / `or` (0x40d3a0, 0x40d3cf): depth 2 `& true` is false.
+ *
+ * Never made for 0 or 1 — {@link logic} gives those as JS booleans — so every
+ * value a shipped script sees is what it was before. TI.EXE and tl.exe answer
+ * their pause getters 0 or 1 (TI.EXE 0x42af86, tl.exe 0x43a6c6) and never make
+ * one.
+ */
+export class Logic {
+  constructor(readonly payload: number) {}
+  toString(): string {
+    return `logic(${this.payload})`;
+  }
+}
+
+/** a boolean-tagged value with this payload: `false`, `true`, or a {@link Logic} */
+export function logic(payload: number): boolean | Logic {
+  const p = payload | 0;
+  if (p === 0) return false;
+  if (p === 1) return true;
+  return new Logic(p);
+}
+
+/** the payload of a boolean-tagged value, or null for an integer or a string */
+export function logicPayload(v: Value): number | null {
+  if (typeof v === "boolean") return v ? 1 : 0;
+  return v instanceof Logic ? v.payload : null;
+}
+
+/** does this value carry the boolean tag? */
+export function isLogic(v: Value): v is boolean | Logic {
+  return typeof v === "boolean" || v instanceof Logic;
+}
 
 export type Signal =
   | { s: "normal" }
@@ -435,8 +479,9 @@ export class Interpreter {
    */
   condition(v: Value, what: string): boolean {
     if (!this.classic) return truthy(v);
-    if (typeof v !== "boolean") throw typeError(`${what} wants a boolean, got ${show(v)}`);
-    return v;
+    const p = logicPayload(v);
+    if (p === null) throw typeError(`${what} wants a boolean, got ${show(v)}`);
+    return p !== 0;
   }
 
   register(name: string, fn: Builtin): void {
@@ -637,7 +682,7 @@ export class Interpreter {
         const subject = await this.evalExpr(st.subject, frame);
         // the subject is an integer or a string, anything else error 0xe
         // (TI.EXE 0x444236/0x44423e, DF.EXE 0x403616)
-        if (this.classic && typeof subject === "boolean") throw typeError(`switch ${show(subject)}`);
+        if (this.classic && isLogic(subject)) throw typeError(`switch ${show(subject)}`);
         let sig: Signal = NORMAL;
         let matched = false;
         for (let i = 0; i < st.cases.length && !matched; i++) {
@@ -876,8 +921,12 @@ export class Interpreter {
    */
   private caseMatches(subject: Value, match: Value): boolean {
     if (!this.classic) return valueEq(subject, match);
+    if (isLogic(subject) || isLogic(match)) {
+      if (!isLogic(subject) || !isLogic(match)) throw typeError(`case ${show(match)} against ${show(subject)}`);
+      return false;
+    }
     if (typeof subject !== typeof match) throw typeError(`case ${show(match)} against ${show(subject)}`);
-    return typeof subject !== "boolean" && valueEq(subject, match, true);
+    return valueEq(subject, match, true);
   }
 
   async evalExpr(e: Expr, frame: Frame): Promise<Value> {
@@ -909,8 +958,9 @@ export class Interpreter {
           // `not` wants a boolean (DF.EXE 0x40dad8), unary `-` an integer
           // (0x40db9a); anything else is error 0xe
           if (e.op === "not") {
-            if (typeof v !== "boolean") throw typeError(`not ${show(v)}`);
-            return !v;
+            const p = logicPayload(v);
+            if (p === null) throw typeError(`not ${show(v)}`);
+            return logic(p ^ 1);
           }
           if (typeof v !== "number") throw typeError(`-${show(v)}`);
           return -v | 0;
@@ -998,7 +1048,7 @@ export class Interpreter {
       }
       // Dust's 20100 `scenebuild` is answered by the `sendtoserverfx` form
       return this.classic && call.id !== undefined && out !== undefined && answersBoolean(this.tableVersion(), call.id)
-        ? truthy(out)
+        ? asLogic(out)
         : out;
     }
     const builtin = this.builtins.get(folded);
@@ -1010,7 +1060,7 @@ export class Interpreter {
       // setter's `cmp word [arg], 2` (actorvisible: DF.EXE 0x412a48).
       const v = this.tableVersion();
       const b = booleanArg(v, call.id);
-      if (b >= 0 && b < args.length && typeof args[b] !== "boolean") {
+      if (b >= 0 && b < args.length && !isLogic(args[b])) {
         throw typeError(`${call.name}: argument ${b + 1} wants a boolean, got ${show(args[b])}`);
       }
       // ...and an integer argument that is not one, the same 0xe (value-types.ts
@@ -1021,7 +1071,7 @@ export class Interpreter {
         }
       }
       const out = await builtin(this, args, call, frame);
-      return out !== undefined && answersBoolean(v, call.id) ? truthy(out) : out;
+      return out !== undefined && answersBoolean(v, call.id) ? asLogic(out) : out;
     }
     if (call.id === undefined) {
       for (let p = frame.script.parent; p; p = p.parent) {
@@ -1100,13 +1150,23 @@ export class Interpreter {
 
 export function truthy(v: Value): boolean {
   if (typeof v === "boolean") return v;
+  // a builtin reading a flag reads the payload's word (DF.EXE pauseball's
+  // `test ax, ax`, 0x43a521)
+  if (v instanceof Logic) return (v.payload & 0xffff) !== 0;
   return typeof v === "number" ? v !== 0 : v.length > 0;
+}
+
+/** what a command answering the boolean tag hands back: a boolean-tagged value
+ *  stays as it is, anything else is true or false */
+function asLogic(v: Value): boolean | Logic {
+  return isLogic(v) ? v : truthy(v);
 }
 /** a value as a number; a boolean is 1/0 (the port's own reads — the engines
  *  would refuse it, see {@link classicBinary}) */
 export function toNum(v: Value): number {
   if (typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
+  if (v instanceof Logic) return v.payload;
   const n = Number.parseInt(v, 10);
   return Number.isNaN(n) ? 0 : n;
 }
@@ -1166,9 +1226,13 @@ export function classicBinary(op: string, l: Value, r: Value): Value {
       return Math.trunc(a / b) | 0;
     }
     case "&":
-    case "|":
-      if (typeof l !== "boolean" || typeof r !== "boolean") throw typeError(`${show(l)} ${op} ${show(r)}`);
-      return op === "&" ? l && r : l || r;
+    case "|": {
+      // `and` / `or` on the payloads (0x40d3a0, 0x40d3cf)
+      const a = logicPayload(l);
+      const b = logicPayload(r);
+      if (a === null || b === null) throw typeError(`${show(l)} ${op} ${show(r)}`);
+      return logic(op === "&" ? a & b : a | b);
+    }
     case "@": {
       if (typeof l !== "string" || typeof r !== "string") throw typeError(`${show(l)} @ ${show(r)}`);
       if (l.length + r.length > 255) throw new ScriptError(0x1a, "string longer than 255 characters");
@@ -1214,6 +1278,14 @@ export function classicBinary(op: string, l: Value, r: Value): Value {
  * Off `classic` (RedJack) a mixed comparison is by text, as before.
  */
 export function valueEq(a: Value, b: Value, classic = false): boolean {
+  // two booleans compare their payloads (DF.EXE 0x40d4fd)
+  const la = logicPayload(a);
+  const lb = logicPayload(b);
+  if (la !== null || lb !== null) {
+    if (la !== null && lb !== null) return la === lb;
+    if (classic) return false;
+    return toStr(a).toLowerCase() === toStr(b).toLowerCase();
+  }
   // the engines fold A-Z and nothing else (TI.EXE's table at 0x45c068, DF.EXE's
   // at 0x447478): "É" and "é" are two letters to them
   if (typeof a === "string" && typeof b === "string") {

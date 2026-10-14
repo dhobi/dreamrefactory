@@ -166,11 +166,10 @@ export class BallRuntime {
    * `pauseball (name)` as a getter — 0x43a4a0: the depth, 0 for no ball.
    *
    * DF.EXE answers it under the BOOLEAN tag with the depth as the payload
-   * (0x42d074 writes tag 2, 0x42d079 the count), and the interpreter hands a
-   * boolean back for this id (value-types.ts, 16047). A script boolean here
-   * holds true or false, so a depth of 2 reads `true` — where DF.EXE's `=`,
-   * which compares the two payloads (0x40d4fd), would find it unequal to
-   * `true`. No script in the Dust, Titanic or Timelapse corpus reads the getter.
+   * (0x42d074 writes tag 2, 0x42d079 the count) — builtins/timing.ts hands it
+   * back as such (interp.ts Logic), so a depth of 2 is unequal to `true` as
+   * DF.EXE's `=` (0x40d4fd) finds it. No script in the Dust, Titanic or
+   * Timelapse corpus reads the getter.
    */
   pauseDepth(name: string): number {
     const i = this.find(name);

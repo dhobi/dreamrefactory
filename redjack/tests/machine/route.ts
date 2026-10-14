@@ -322,6 +322,18 @@ export async function waitNear(h: Headless, who: string, hotdist: number): Promi
 }
 
 /**
+ * The hand moves off once the drop is taken, as it does after a click (the
+ * harness's `click` parks it): the BOOTFILE's `idle ()` runs between every two
+ * events and scrolls the view while the pointer rests in its margin
+ * (tracknodescroll), so a drop made near an edge — the rifle in jail2 — would
+ * turn the next room round.
+ */
+function letGo(h: Headless): void {
+  const { width, height } = h.host.director.screen;
+  h.session.setPointer(width / 2, height / 2);
+}
+
+/**
  * Use one thing on another the way the inventory wants it: press on `what`,
  * carry it with the button held — inven.shop `stdmove` follows the pointer in a
  * `while stilldown ()` loop — and let go over `onto`, which is where the item's
@@ -342,6 +354,7 @@ export async function drag(h: Headless, what: string, onto: string, ontoType?: H
   h.mouseUp(to.x, to.y);
   await h.frame(3);
   await h.until(() => h.running().length === 0, `dropping ${what} on ${onto}`, 3_000);
+  letGo(h);
 }
 
 /**
@@ -363,6 +376,7 @@ export async function rattle(h: Headless, what: string, where: { x: number; y: n
   }
   h.mouseUp(where.x, where.y);
   await h.frame(3);
+  letGo(h);
 }
 
 /** carry `what` with the button held along a straight line to (x, y), and let go there */
@@ -376,6 +390,7 @@ export async function carry(h: Headless, what: string, to: { x: number; y: numbe
   }
   h.mouseUp(to.x, to.y);
   await h.frame(3);
+  letGo(h);
 }
 
 /**
@@ -444,5 +459,15 @@ export async function upFacing(h: Headless, deg: number): Promise<void> {
     if (i === 16) fail(`${h.node()}: turning never faced ${deg} degrees`);
     await press(h, "right", `turning to ${deg} degrees`);
   }
-  await press(h, "up", `going on at ${deg} degrees`);
+  // ...again if the set's keydown dropped it: lava.sett's ignores a key while
+  // Nick is still landing from a pillar (`propview ("nick") = "jump2" &
+  // proporder ("nick", 2) < 11`), and a road ends as its last frame goes up
+  // (maze.ts walkStep), while he is in the air — a player presses again
+  const where = (): string => `${h.room()}/${h.node()}/${h.session.stageName}`;
+  const from = where();
+  const node = h.node();
+  for (let tries = 0; where() === from && !talking(h); tries++) {
+    if (tries === 3) fail(`${node}: "up" at ${deg} degrees went nowhere`);
+    await press(h, "up", `going on at ${deg} degrees`);
+  }
 }

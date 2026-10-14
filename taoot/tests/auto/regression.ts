@@ -4965,10 +4965,11 @@ test("BOMB defuse: hit-test routing, changedone, timer loop, OK win", async () =
     session.scheduler.loops.some((l) => l.kind === "flat" && l.handler === "unibomnoise") &&
     session.currentThemeName === "bomb.trk";
   const tin0 = session.propRuntime.get("tinhands")?.deg ?? 0;
-  let now = 0;
+  // ninety passes: the timer loop runs in the pass (Scheduler.pass), and
+  // the stage's film is still up here (nothing draws it out) and holds the
+  // host's idle, so the passes are run here
   for (let i = 0; i < 90; i++) {
-    session.tickTime((now += 66));
-    session.scheduler.serviceFrameLoops(); // a frame also services per-frame (period-1) loops
+    await session.scheduler.pass({ wait: "jump" });
     await drain();
   }
   const ticked = (session.propRuntime.get("tinhands")?.deg ?? 0) > tin0;

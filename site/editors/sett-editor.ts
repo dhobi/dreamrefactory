@@ -13,8 +13,9 @@
  * {@link SphereImage} through a camera the page holds: drag to look round, the
  * wheel to zoom. Its exits are the films of the roads that touch it and end
  * somewhere else (`exitsOf`); walking one plays its frames at the game's pace,
- * RedJack's `framerate (2)` (see `walkFrameMs`), and stands at the far end
- * looking the way the film ended — as `MazeRuntime.walkStep` does.
+ * a frame a pass and a pass every two ticks at RedJack's `framerate (2)`, and
+ * stands at the far end looking the way the film ended — as `MazeRuntime.walkStep`
+ * does.
  *
  * In a scene the view is a film frame: standing at a view shows the first
  * frame of the second film marked with it (`0x434550`), a turn runs round the
@@ -47,7 +48,7 @@
 import { readSettFile, exitsOf, type MazeFilm, type MazeNode, type MazeQuad, type MazeRoad, type MazeScene, type SettFile } from "@dreamfactory/engine/df/sett";
 import { patchQuad, patchStar, SETT_NAME_MAX } from "@dreamfactory/engine/df/sett-patch";
 import { FilmFrames, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
-import { inPolygon, projectQuad, walkFrameMs, type MazeCamera } from "@dreamfactory/engine/runtime/maze";
+import { inPolygon, projectQuad, type MazeCamera } from "@dreamfactory/engine/runtime/maze";
 import { t } from "@dreamfactory/site/locales";
 import { chosenSource, encodingOf, filesIn, listSources, type Source } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
@@ -68,8 +69,11 @@ const mapCtx = map.getContext("2d")!;
 /** a film frame and a sphere view are both 640 × 480 in RedJack */
 const W = 640;
 const H = 480;
-/** RedJack's BOOTFILE sets `framerate (2)`: a film frame every two ticks */
-const FRAME_MS = walkFrameMs(2);
+/**
+ * RedJack.exe puts up a film frame a pass (0x432b00), and its BOOTFILE's
+ * `framerate (2)` makes a pass two ticks of 1/60 s (the throttle, 0x433041)
+ */
+const FRAME_MS = (2 * 1000) / 60;
 const DEG = Math.PI / 180;
 
 /** the map's colours, the same ones the legend lists */

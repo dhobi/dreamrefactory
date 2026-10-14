@@ -237,6 +237,8 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
       maze.setHeading(toNum(deg));
       return;
     }
+    const moving = session.movingDeg();
+    if (moving !== null) return moving;
     const lis = session.listener();
     return lis ? lis.deg & 0xff : -1;
   });
@@ -260,14 +262,14 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // calcmod(a, b): the remainder of `idiv` — the sign of `a` (TI.EXE 0x429af0,
   // tl.exe 0x439230; DF.EXE has no calcmod, its 20082 is `cacheinfo`). TAOOT's
   // one use, the bridge wheel's getpropdeg, passes 0..255, where the sign never
-  // shows. By 0 the engines divide anyway and the CPU faults — the game dies
-  // with it; here it answers 0 and says so, the one deliberate difference.
+  // shows. By 0 the engines divide anyway (TI.EXE 0x429b4d, tl.exe 0x43928d):
+  // the CPU faults and Windows ends the game — session.engineFault.
   // DreamFactory 5 keeps the non-negative modulo it had.
   r("calcmod", (i_, [a, b]) => {
     const m = toNum(b ?? 0);
     if (m === 0) {
-      if (i_.classic) session.onLog(`calcmod(${toNum(a ?? 0)}, 0): the original faults here (idiv by zero)`);
-      return 0;
+      if (!i_.classic) return 0;
+      return session.engineFault({ kind: "divide error", where: `calcmod(${toNum(a ?? 0)}, 0)` }).then(() => 0);
     }
     if (i_.classic) return toNum(a ?? 0) % m | 0;
     return ((toNum(a ?? 0) % m) + m) % m;

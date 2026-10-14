@@ -1,4 +1,4 @@
-import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
+import { ScriptError, Value, logic, toNum, toStr, truthy } from "../interp";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
 import { RIGHTTURNS, isqrt, readFrameRegister, readStarPath } from "../../df/set";
@@ -269,8 +269,21 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     session.actorRuntime.instance(from, to, session.isV1);
     if (session.actorRuntime.get(to)) session.instanceCastScript(from, to);
   });
-  r("actordelete", (_i, [n]) => {
+  r("actordelete", async (_i, [n], _call, frame) => {
     const name = toStr(n ?? "");
+    // RedJack.exe's (0x4017f0) first sends the actor `closeactor ()` as an actor
+    // message — `"<name>", closeactor()` run through sendtoactor's chain
+    // (0x40185a, 0x40190d -> 0x404ff0) — and only then takes the actor's walk
+    // (0x4019b8 -> 0x41b810) and its actor loop (0x4019d2 -> 0x41b8e0) with it:
+    // no pass meets a walker that is not there. No shipped script answers
+    // `closeactor`, so the message runs nothing there; an actor the message
+    // cannot find is error 0xa (0x405072 -> 0x406550), and nothing is deleted.
+    if (session.isV5) {
+      if (!session.actorRuntime.get(name)) throw new ScriptError(0xa, `actordelete: no actor "${name}"`);
+      await session.sendEvent("sendtoactor", name, "closeactor", [], frame.ctx.me, frame);
+      session.scheduler.walks.delete(name.toLowerCase());
+      session.scheduler.stopLoop("actor", name);
+    }
     session.actorRuntime.remove(name);
     // a COPY's script goes with it; a cast member keeps its own, which is what
     // lets TAOOT's stokers put themselves back (see dropInstancedScript)
@@ -530,11 +543,13 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       );
       return 0;
     }
-    if (a && !session.isV1 && !session.isV5) {
+    if (a && !session.isV1) {
       // TI.EXE's walktostar (0x442f00): the record is built now when the
       // walker's set is the open one, and deferred to the first pass that it is
       // otherwise (0x442fb4 -> 0x443ac0); the builder finds the star in the open
-      // set or fails with 0xa (0x4435de)
+      // set or fails with 0xa (0x4435de). RedJack.exe's the same (0x41c440:
+      // built at 0x41c518 by 0x41cd30, which fails with 0xa at 0x41cd48 and says
+      // "walktostar"; deferred at 0x41c546 by 0x41d290, which says "defer")
       const to = toStr(starName ?? "").toLowerCase();
       const build = starWalk(a, toStr(n), to);
       if (a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
@@ -810,8 +825,8 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     const toName = toStr(to ?? "").toLowerCase();
     const fromName = toStr(from ?? "").toLowerCase();
     // deferred like walktostar's outside the walker's own set (0x443235 ->
-    // 0x443ac0, mode 3, the route's start kept at +0x5e)
-    if (!session.isV1 && !session.isV5 && a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
+    // 0x443ac0, mode 3, the route's start kept at +0x5e; RedJack.exe 0x41c959)
+    if (!session.isV1 && a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
       a.starName = WALK_DEFER;
       session.scheduler.deferWalk(toStr(n), toName, () => walkOnPath(a, toStr(n), from, to), 3, fromName);
       return 0;
@@ -821,6 +836,13 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   const walkOnPath = (a: ActorInstance, n: string, from: Value, to: Value): void => {
     const toName = toStr(to ?? "").toLowerCase();
     const fromName = toStr(from ?? "").toLowerCase();
+    // RedJack.exe builds the walk from the route alone (0x41ce80): none between
+    // the two, or none ending at the destination for "resume", is error 0xa
+    // (0x41cefc) — there is no straight line to fall back on
+    if (session.isV5) {
+      if (startPathWalk(a, n, fromName, toName)) return;
+      throw new ScriptError(0xa, `walkonpath: no route from ${fromName} to ${toName}`);
+    }
     const dest = findStar(to);
     if (!dest) {
       log(`walkonpath: star "${toStr(to ?? "")}" not found`);
@@ -845,6 +867,14 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     if (n !== undefined) session.scheduler.stopWalk(toStr(n));
   });
   r("pausewalk", (_i, [n, flag]) => {
+    // one argument is the getter (DF.EXE 0x42cfb0, TI.EXE 0x42aeb0): the walk's
+    // pause depth — DF.EXE hands the depth itself back under the boolean tag
+    // (0x42d004, interp.ts Logic), TI.EXE and tl.exe 0 or 1
+    if (n !== undefined && flag === undefined && !session.isV5) {
+      const w = session.scheduler.walks.get(toStr(n).toLowerCase());
+      const depth = w ? (w.pauseDepth ?? (w.paused ? 1 : 0)) : 0;
+      return session.isV1 ? logic(depth) : depth;
+    }
     if (n !== undefined) session.scheduler.pauseWalk(toStr(n), truthy(flag ?? 1));
   });
   r("countwalks", () => session.scheduler.walks.size);

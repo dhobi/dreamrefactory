@@ -5,9 +5,8 @@
  *
  * Two clocks meet here. A loop's or a cricket's count is in PASSES, which is
  * what the port counts too. A loop made with a negative period runs on the
- * tick clock instead, and its deadline (+6) is zeroed on load, so it fires on
- * the first pass after one (0x43da7e); the port has no tick-clock loops, so
- * every loop it writes is pass-counted.
+ * tick clock instead (Scheduler GameLoop.deadline), and its deadline (+6) is
+ * zeroed on load, so it fires on the first pass after one (0x43da7e).
  *
  * Every pause is a nesting COUNTER in the engine (+2 of each record, one up
  * per pause and one down per resume), and the table is written as it stands, so
@@ -41,8 +40,10 @@ export function encodeLoops(session: GameSession): Uint8Array {
     v.setInt16(at + 0x00, 1, true);
     v.setInt16(at + 0x02, l.paused ? Math.max(1, l.pauseDepth ?? 1) : 0, true);
     v.setInt16(at + 0x04, kind, true);
-    v.setInt32(at + 0x06, 0, true);
-    v.setInt32(at + 0x0a, Math.max(1, l.count), true);
+    // a clock loop's tick at +6 (never 0, which reads as a counted one) and no count
+    const timed = l.deadline !== undefined;
+    v.setInt32(at + 0x06, timed ? Math.max(1, l.deadline ?? 1) : 0, true);
+    v.setInt32(at + 0x0a, timed ? 0 : Math.max(1, l.count), true);
     put16(out, at + 0x0e, l.name);
     // the handler as the statement the service sends (`"<name>", <handler>`)
     writePstrAt(out, at + 0x1e, `${l.handler}()`, 127);
@@ -89,6 +90,15 @@ export function encodeCrickets(session: GameSession): Uint8Array {
     v.setInt32(at + 0x10, c.base, true);
     v.setInt32(at + 0x14, c.jitter, true);
     v.setInt32(at + 0x18, c.count, true);
+    // the camera point it last measured from, the distance and bearing it
+    // measured (0x41d870..0x41d8d1) and whether it is armed (0x41db35,
+    // 0x41db5f), as the engine keeps them in the record it writes
+    const m = c.measured;
+    v.setInt32(at + 0x1c, m?.camX ?? 0, true);
+    v.setInt32(at + 0x20, m?.camY ?? 0, true);
+    v.setInt32(at + 0x24, m?.dist ?? 0, true);
+    v.setInt32(at + 0x28, m?.bearing ?? 0, true);
+    v.setInt16(at + 0x2c, c.armed ? 1 : 0, true);
     // the volume the mixer reads is recomputed every pass; −1 is its "not yet"
     v.setInt16(at + 0x2e, -1, true);
     put16(out, at + 0x34, c.setName);
@@ -112,6 +122,15 @@ export function decodeCrickets(session: GameSession, bytes: Uint8Array): void {
       base: v.getInt32(at + 0x10, true),
       jitter: v.getInt32(at + 0x14, true),
       next: v.getInt32(at + 0x18, true),
+      armed: v.getInt16(at + 0x2c, true) !== 0,
+      // a load puts the record back as it was written, the cache with it: the
+      // first pass measures again only if the camera's point is not this one
+      measured: {
+        camX: v.getInt32(at + 0x1c, true),
+        camY: v.getInt32(at + 0x20, true),
+        dist: v.getInt32(at + 0x24, true),
+        bearing: v.getInt32(at + 0x28, true),
+      },
     });
     const c = session.scheduler.crickets.at(-1);
     const pause = v.getInt16(at + 0x02, true);

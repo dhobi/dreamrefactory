@@ -1,5 +1,5 @@
 import { PlayHandle } from "./audio";
-import { ENGINE_STEP_MS, passDue, ticksAt } from "./clock";
+import { ENGINE_STEP_MS, ticksAt } from "./clock";
 import { bearingV5, engineBearing } from "./geometry";
 import type { GameSession } from "./session";
 import { ScriptError, type ScriptInstance } from "./interp";
@@ -8,6 +8,8 @@ import { ScriptError, type ScriptInstance } from "./interp";
 const MAX_LOOPS = 32;
 const MAX_CRICKETS = 16;
 const MAX_WALKS = 16;
+/** RedJack.exe's loop table is twice TI.EXE's: 64 slots of 0x9e at 0x4c4a80 (makeloop 0x41bf8d) */
+const MAX_LOOPS_V5 = 64;
 
 /** sign-extend the low 16 bits — the walk records hold their positions in words */
 const s16 = (v: number): number => (v << 16) >> 16;
@@ -87,6 +89,14 @@ export interface GameLoop {
   paused: boolean;
   /** how many `pauseloop`s hold it ({@link pauseDepth}); absent = `paused ? 1 : 0` */
   pauseDepth?: number;
+  /**
+   * RedJack.exe's clock loop: a NEGATIVE period is a time, not a count —
+   * `makeloop` (0x41bf05) stores the tick it falls due on (now − period, the
+   * clock of 0x469f80 in sixtieths) at +6, and the pass fires it on the first
+   * pass at or after that tick, without counting (0x41c001..0x41c010). Here it
+   * is the game clock's tick, so it is the same on every host.
+   */
+  deadline?: number;
 }
 
 /**
@@ -132,6 +142,14 @@ export interface Cricket {
   armed?: boolean;
   /** a looping cricket's volume this pass, for the loudest-two choice (+0x24) */
   loudness?: number;
+  /**
+   * RedJack.exe keeps the camera point it last measured from (+0x1c, +0x20) and
+   * the distance and bearing it measured (+0x24, +0x28), and measures again
+   * only when the camera's point has moved (0x41d851..0x41d8d1) — a turn on the
+   * spot changes the pan, which is worked from the heading every pass, and not
+   * the distance.
+   */
+  measured?: { camX: number; camY: number; dist: number; bearing: number };
 }
 
 /**
@@ -152,11 +170,29 @@ export function cricketPan(camDeg: number, bearing: number): number {
  * The TI.EXE timing runtime: delay-driven loops (makeloop), positional
  * ambient one-shots (makecricket), sound-loop flags, and straight-line actor
  * walks — serviced in the pass a script runs ({@link Scheduler.pass}; the
- * BOOTFILE's idle is the heartbeat). DreamFactory 5 still runs the older
- * host-driven service ({@link Scheduler.tickTime}). Extracted from GameSession, which delegates to it;
+ * BOOTFILE's idle is the heartbeat), in every engine. Extracted from GameSession, which delegates to it;
  * cross-cutting session state (clock, audio, actors, dispatch) is reached back
  * through the session reference.
  */
+/**
+ * Where a v5 cricket pans, 0..255, from the camera's heading and the bearing to
+ * the sound, both in 2^24ths — RedJack.exe 0x41d919..0x41d9a7: the bearing
+ * turned by the camera's distance from a half turn (so the camera faces
+ * 0x800000), folded front to back into 0x400000..0xc00000, and that span
+ * stretched over 255 and turned round, `255 − trunc((rel − 0x400000) · 255 /
+ * 0x800000)` masked to a byte: dead ahead is 128, a quarter turn either way 0
+ * or 255.
+ */
+export function cricketPanV5(heading: number, bearing: number): number {
+  const lo = Math.min(heading, 0x800000);
+  const hi = Math.max(heading, 0x800000);
+  const turn = Math.min(hi - lo, lo - hi + 0x1000000);
+  let rel = (heading > 0x800000 ? bearing - turn : bearing + turn) & 0xffffff;
+  if (rel > 0xc00000) rel = 0x1800000 - rel;
+  if (rel < 0x400000) rel = 0x800000 - rel;
+  return (255 - Math.trunc(((rel - 0x400000) * 255) / 0x800000)) & 0xff;
+}
+
 /** a cricket slot as a save records it — what {@link Scheduler.restoreCricket} puts back */
 export interface CricketSlot {
   name: string;
@@ -171,6 +207,8 @@ export interface CricketSlot {
   pause?: number;
   /** in earshot when saved (+0x22) */
   armed?: boolean;
+  /** DreamFactory 5: the measurement the record carries (+0x1c..+0x28, {@link Cricket.measured}) */
+  measured?: Cricket["measured"];
 }
 
 /** which of DF.EXE's play rules a v1 sound builtin uses */
@@ -245,10 +283,6 @@ export class Scheduler {
   readonly loops: GameLoop[] = [];
   readonly crickets: Cricket[] = [];
   private readonly soundLoops = new Map<string, PlayHandle>();
-  private timeLastTick: number | null = null;
-  // Wall-clock anchor + re-entry guard for the game clock (serviceGameClock).
-  private clockLastMs = 0;
-  private clockDispatching = false;
 
   // Per-sound-name volume/pan (0..255), set by soundvol()/soundpan() just
   // before the matching singlesound()/etc. — scripts configure a sound then
@@ -272,13 +306,16 @@ export class Scheduler {
    * The volume and pan are the sound RECORD's (+4, +6), and setting either
    * re-places every mixer channel playing that record at once (TI.EXE 0x425540 /
    * 0x425640 walk channels 0..3 for it) — which is how a cricket's level follows
-   * the camera while it sounds. DreamFactory 4 only; the others are not read.
+   * the camera while it sounds. RedJack.exe's setters the same (0x471fc0,
+   * 0x4721e0: the record, then SetVolume/SetPan on each mixer channel holding
+   * it), a looping play among them. DF.EXE's are not read.
    */
   private replaceSound(name: string): void {
-    if (this.session.isV1 || this.session.isV5) return;
+    if (this.session.isV1) return;
     const key = name.toLowerCase();
     const { volume, pan } = this.soundPlace(key);
     for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.place?.(volume, pan);
+    if (this.session.isV5) this.soundLoops.get(key)?.place?.(volume, pan);
   }
 
   /** a sound record's 0..255 volume and pan in sink units ({@link panFrom255}) */
@@ -395,10 +432,14 @@ export class Scheduler {
   /** makeloop: (kind, name) identity — replaces an existing loop */
   makeLoop(kind: string, name: string, handler: string, period: number): void {
     this.stopLoop(kind, name);
-    if (this.loops.length >= MAX_LOOPS) {
+    if (this.loops.length >= this.loopSlots) {
+      // RedJack.exe's is error 0x23 (0x41bfa1); TI.EXE's table full is not read
+      if (this.session.isV5) throw new ScriptError(0x23, `loop table full (${MAX_LOOPS_V5}), ${kind}/${name} not made`);
       this.session.onLog(`makeloop: table full (${MAX_LOOPS}), dropping ${kind}/${name}`);
       return;
     }
+    // RedJack.exe: a negative period is a tick to fall due on (0x41bf05)
+    const deadline = this.session.isV5 && period < 0 ? ticksAt(this.session.clock.now) - period : undefined;
     this.insertLoop({
       kind: kind.toLowerCase(),
       name: name.toLowerCase(),
@@ -430,7 +471,13 @@ export class Scheduler {
       count: Math.max(1, period),
       period: Math.max(1, period),
       paused: false,
+      deadline,
     });
+  }
+
+  /** the loop table's size: 32 slots, RedJack.exe's 64 */
+  private get loopSlots(): number {
+    return this.session.isV5 ? MAX_LOOPS_V5 : MAX_LOOPS;
   }
 
   /**
@@ -440,8 +487,8 @@ export class Scheduler {
    * a run that never loaded (the same hazard the seeded stream exists for).
    */
   restoreLoop(kind: string, name: string, handler: string, remaining: number, pause = 0): void {
-    if (this.loops.length >= MAX_LOOPS) {
-      this.session.onLog(`loadgame: loop table full (${MAX_LOOPS}), dropping ${kind}/${name}`);
+    if (this.loops.length >= this.loopSlots) {
+      this.session.onLog(`loadgame: loop table full (${this.loopSlots}), dropping ${kind}/${name}`);
       return;
     }
     const count = Math.max(1, remaining);
@@ -462,13 +509,10 @@ export class Scheduler {
    * the engines whose table is read (TI.EXE 0x442a80, tl.exe and DF.EXE the
    * same code) — so `indextoloop` and a pass both see slot order, and a loop a
    * handler arms mid-pass lands in a slot the pass has already passed (its own
-   * was just freed) and waits for the next one. DreamFactory 5 appends.
+   * was just freed) and waits for the next one. RedJack.exe the same, in 64
+   * slots (0x41bf8d).
    */
   private insertLoop(l: GameLoop): void {
-    if (this.session.isV5) {
-      this.loops.push(l);
-      return;
-    }
     const used = new Set(this.loops.map((x) => x.slot));
     let slot = 0;
     while (used.has(slot)) slot++;
@@ -505,30 +549,6 @@ export class Scheduler {
     return this.loops.some((l) => l.kind === k && l.name === n);
   }
 
-  makeCricket(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
-    if (!this.session.isV5) {
-      this.makeCricketV4(name, x, y, radius, base, jitter);
-      return;
-    }
-    this.stopCricket(name);
-    if (this.crickets.length >= MAX_CRICKETS) {
-      this.session.onLog(`makecricket: table full (${MAX_CRICKETS}), dropping ${name}`);
-      return;
-    }
-    this.crickets.push({
-      name: name.toLowerCase(),
-      x,
-      y,
-      radius: Math.max(1, radius),
-      base,
-      jitter,
-      count: jitter >= 0 ? base + this.rand(jitter) : base,
-      paused: false,
-      setName: this.session.currentSetName,
-      handle: null,
-    });
-  }
-
   /**
    * TI.EXE's `makecricket` (0x444130; tl.exe the same code): no set open is
    * error 0x28, a sound no open bank has 0xa (0x4441c0), and a radius under 1,
@@ -537,10 +557,14 @@ export class Scheduler {
    * (0x44431b) — a draw a repeating cricket throws away, since its first pass in
    * earshot draws again. A cricket of the same name is replaced (0x442770,
    * without stopping its sound) and the new one takes the first free of the 16
-   * slots, or fails with 8 (0x44440b).
+   * slots, or fails with 8 (0x44440b). RedJack.exe's is the same (0x41d530 —
+   * the sound 0xa at 0x41d58e, the three 0xe at 0x41d66c..0x41d6a2, 8 at
+   * 0x41d7d1), in its own units.
    */
-  private makeCricketV4(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
-    if (!this.session.currentSetName) throw new ScriptError(0x28, `makecricket (${name}): no set open`);
+  makeCricket(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
+    const v5 = this.session.isV5;
+    // RedJack.exe's (0x41d530) has no set test: the cricket takes whatever set is open
+    if (!v5 && !this.session.currentSetName) throw new ScriptError(0x28, `makecricket (${name}): no set open`);
     const key = name.toLowerCase();
     if (!this.session.audioLib.sound(key)) throw new ScriptError(0xa, `makecricket: no sound "${name}"`);
     if (radius < 1 || base < 0 || jitter < -1) {
@@ -553,10 +577,13 @@ export class Scheduler {
     let slot = 0;
     while (used.has(slot)) slot++;
     if (slot >= MAX_CRICKETS) throw new ScriptError(8, `cricket table full (${MAX_CRICKETS}), ${name} not made`);
-    this.insertCricket({
-      name: key, x: s16(x), y: s16(y), radius, base, jitter, count,
+    const c: Cricket = {
+      name: key, x: this.word(x), y: this.word(y), radius, base, jitter, count,
       paused: false, setName: this.session.currentSetName, handle: null, slot, armed: false,
-    });
+    };
+    // RedJack.exe measures the camera at once and keeps it (+0x1c..+0x28, 0x41d71b)
+    if (v5) this.measureCricketV5(c);
+    this.insertCricket(c);
   }
 
   /** into the table in slot order, as a pass and `indextocricket` read it */
@@ -572,7 +599,7 @@ export class Scheduler {
    * to be leaving), the saved countdown (no `rand(jitter)` re-roll — see
    * {@link restoreLoop} for why a restore must not draw), no sounding handle.
    */
-  restoreCricket({ name, set, x, y, radius, base, jitter, next, pause, armed }: CricketSlot): void {
+  restoreCricket({ name, set, x, y, radius, base, jitter, next, pause, armed, measured }: CricketSlot): void {
     if (this.crickets.length >= MAX_CRICKETS) {
       this.session.onLog(`loadgame: cricket table full (${MAX_CRICKETS}), dropping ${name}`);
       return;
@@ -581,7 +608,7 @@ export class Scheduler {
       name: name.toLowerCase(),
       x,
       y,
-      radius: this.session.isV5 ? Math.max(1, radius) : radius,
+      radius,
       base,
       jitter,
       count: next,
@@ -590,11 +617,9 @@ export class Scheduler {
       setName: set.toLowerCase(),
       handle: null,
       armed,
+      measured,
     };
-    if (this.session.isV5) {
-      this.crickets.push(c);
-      return;
-    }
+    if (this.session.isV5 && !measured) this.measureCricketV5(c);
     const used = new Set(this.crickets.map((x) => x.slot));
     let slot = 0;
     while (used.has(slot)) slot++;
@@ -616,14 +641,14 @@ export class Scheduler {
   /**
    * `pausecricket` NESTS, as a loop's and a walk's pause do: a count at +2, one
    * up per pause and one down per resume, never below 0 (TI.EXE 0x4448d0; de
-   * 0x43d216). RedJack.exe's is not read and stays a flag.
+   * 0x43d216; RedJack.exe 0x41dd10, "all" at 0x41dd5b, a name at 0x41ddce —
+   * the first slot of that name, and `makecricket` keeps one a name, 0x41d7ba).
    */
   pauseCricket(name: string, paused: boolean): void {
     const n = name.toLowerCase();
     for (const c of this.crickets) {
       if (n !== "all" && c.name !== n) continue;
-      if (this.session.isV5) c.paused = paused;
-      else pauseDepth(c, paused);
+      pauseDepth(c, paused);
     }
   }
 
@@ -756,6 +781,9 @@ export class Scheduler {
    */
   private stopSoundRecord(key: string): void {
     for (const c of this.soundChannels) if (c?.name === key) c.handle.stop();
+    // a v5 loop is held by name as well as on its channel (playSound)
+    this.soundLoops.get(key)?.stop();
+    this.soundLoops.delete(key);
   }
 
   /**
@@ -805,15 +833,14 @@ export class Scheduler {
    * order, so `indextowalk` and the order the walkers' events arrive in are
    * slot order, not the order the walks were made in.
    *
-   * DreamFactory 5's table is not read and keeps the order of the Map.
+   * RedJack.exe's is the same: 16 slots of 0x80 at 0x4c3d40, the actor's old
+   * record removed (0x41b810) and the first free slot taken, else 7 (0x41c3fb).
    */
   readonly walks = new Map<string, WalkRecord>();
 
   /** the walk records in slot order — what a pass and `indextowalk` walk */
   walkSlots(): [string, WalkRecord][] {
-    const all = [...this.walks];
-    if (this.session.isV5) return all;
-    return all.sort((a, b) => (a[1].slot ?? 0) - (b[1].slot ?? 0));
+    return [...this.walks].sort((a, b) => (a[1].slot ?? 0) - (b[1].slot ?? 0));
   }
 
   /**
@@ -823,13 +850,11 @@ export class Scheduler {
    */
   private putWalk(key: string, rec: WalkRecord): void {
     this.walks.delete(key);
-    if (!this.session.isV5) {
-      const used = new Set([...this.walks.values()].map((w) => w.slot));
-      let slot = 0;
-      while (used.has(slot)) slot++;
-      if (slot >= MAX_WALKS) throw new ScriptError(7, `walk table full (${MAX_WALKS}), ${key} not walked`);
-      rec.slot = slot;
-    }
+    const used = new Set([...this.walks.values()].map((w) => w.slot));
+    let slot = 0;
+    while (used.has(slot)) slot++;
+    if (slot >= MAX_WALKS) throw new ScriptError(7, `walk table full (${MAX_WALKS}), ${key} not walked`);
+    rec.slot = slot;
     this.walks.set(key, rec);
   }
 
@@ -1047,16 +1072,10 @@ export class Scheduler {
   startTurn(name: string, deg: number): void {
     const a = this.session.actorRuntime.get(name);
     if (!a) return;
-    const mask = this.turnUnits - 1;
-    const target = deg & mask;
-    if (this.session.isV5) {
-      // RedJack.exe's turn record has not been read: the older rule stays
-      if ((a.deg & mask) === target) return;
-      if (this.walks.has(name.toLowerCase())) {
-        a.deg = target;
-        return;
-      }
-    }
+    // RedJack.exe's (0x41c2f0) is the same record in its units: the target
+    // `deg & 0xffffff` at +8, mode 0, the actor's facing and point at +0xc, its
+    // star at +0x50, the old record removed (0x41c3e2) — always, facing or not
+    const target = deg & (this.turnUnits - 1);
     this.putWalk(name.toLowerCase(), {
       sx: a.worldX, sy: a.worldY, sz: a.worldZ, deg: a.deg,
       dx: 0, dy: 0, dz: 0,
@@ -1092,47 +1111,41 @@ export class Scheduler {
    *   - it clamps on the target rather than overshooting it, and a target it
    *     already holds is returned as it is.
    *
-   * All in 16-bit words, `by` as given. DreamFactory 5 counts a turn in 2^24ths
-   * and has not been read: {@link stepDegV5}.
+   * All in 16-bit words, `by` as given. RedJack.exe's (0x41e300) is the same
+   * arithmetic in 32-bit dwords with a wrap of 0xffffff (pushed at 0x41b4dc),
+   * the step the actor's `actorturn` as it is — a turn of 0 never lands.
    */
   private stepDeg(cur: number, target: number, by: number): number {
-    if (this.session.isV5) return this.stepDegV5(cur, target, by);
-    const wrap = 0xff;
-    const c = s16(cur);
-    const t = s16(target);
-    const step = s16(by);
+    const wrap = this.session.isV5 ? 0xffffff : 0xff;
+    const w = this.word;
+    const c = w(cur);
+    const t = w(target);
+    const step = w(by);
     if (t > c) {
-      if (s16(c - t + wrap) > s16(t - c)) {
-        const ax = s16(c + step);
+      if (w(c - t + wrap) > w(t - c)) {
+        const ax = w(c + step);
         return Math.min(t, ax);
       }
-      let ax = s16(c - step);
+      let ax = w(c - step);
       if (ax >= 0) return ax;
-      ax = s16(ax + wrap);
+      ax = w(ax + wrap);
       return Math.max(t, ax);
     }
-    if (s16(t - c + wrap) > s16(c - t)) {
-      const ax = s16(c - step);
+    if (w(t - c + wrap) > w(c - t)) {
+      const ax = w(c - step);
       return Math.max(t, ax);
     }
-    let ax = s16(c + step);
+    let ax = w(c + step);
     if (ax < wrap) return ax;
-    ax = s16(ax - wrap);
+    ax = w(ax - wrap);
     return Math.min(t, ax);
   }
 
   /**
-   * DreamFactory 5's turn: the short way round in 2^24ths, clamped on the target,
-   * `by` floored at 1 so a cast that never ran `stdactor` cannot turn for ever.
+   * A position as a walk record holds it: TI.EXE's and DF.EXE's in 16-bit words,
+   * RedJack.exe's in dwords (its world is in 10⁻⁵ units, 0x41b5d4).
    */
-  private stepDegV5(cur: number, target: number, by: number): number {
-    const step = Math.max(1, Math.abs(Math.trunc(by)));
-    const turn = this.turnUnits;
-    const diff = (target - cur) & (turn - 1);
-    if (diff === 0) return target;
-    if (diff <= step || turn - diff <= step) return target;
-    return (cur + (diff < turn / 2 ? step : -step)) & (turn - 1);
-  }
+  private readonly word = (v: number): number => (this.session.isV5 ? v | 0 : s16(v));
 
   /**
    * A whole turn in the units a facing is held in: 256 for the older engines,
@@ -1251,6 +1264,9 @@ export class Scheduler {
   private stepWalk(key: string, w: WalkRecord): "endturn" | "endwalk" | null {
     if (w.paused) return null;
     const a = this.session.actorRuntime.get(key);
+    // RedJack.exe looks the walker up first (0x41b3a5) and a walker that is not
+    // there is error 0xa, which frees the slot and stops the pass (0x41b7c5)
+    if (!a && this.session.isV5) throw new ScriptError(0xa, `walk: no actor "${key}"`);
     if (!a) {
       this.walks.delete(key);
       return null;
@@ -1294,24 +1310,17 @@ export class Scheduler {
     //
     // The WALK POSE comes out of that dispatch rather than from here, because
     // it is the cast's to choose (`walk`, or `walklj` with the life jackets on).
+    //
+    // RedJack.exe's pass (0x41b4c4..0x41b571) is TI.EXE's: the record's facing
+    // (+0xc) stepped by `actorturn` (0x41e300), the record's facing and point
+    // put on the actor (0x41b4f5), and on landing a turn's slot freed (0x41b515)
+    // or a walk's target cleared (0x41b51c) and `endturn ()` sent (0x41b561).
     if (w.turnTo !== undefined) {
-      if (this.session.isV5) {
-        const turned = this.stepDeg(a.deg, w.turnTo, a.turn);
-        a.deg = turned;
-        if (turned !== w.turnTo) return null;
-        if (w.turnOnly) {
-          // RedJack.exe's turn has not been read: no event
-          this.walks.delete(key);
-          return null;
-        }
-        w.turnTo = undefined;
-        return "endturn";
-      }
       // TI.EXE steps the RECORD's facing (+0x0a); DF.EXE the actor's (0x439629)
       const cur = this.session.isV1 ? a.deg : (w.deg ?? a.deg);
       const turned = this.stepDeg(cur, w.turnTo, a.turn);
       w.deg = turned;
-      a.deg = turned & 0xff;
+      a.deg = turned & (this.turnUnits - 1);
       if (!w.waiting) {
         a.worldX = w.sx;
         a.worldY = w.sy;
@@ -1337,32 +1346,10 @@ export class Scheduler {
     //     if (dist <= progress) -> arrival, endwalk()
     //
     // in 16-bit words, and the facing put back to the record's every pass.
-    if (this.session.isV5) {
-      w.progress += Math.max(1, a.speed);
-      const t = Math.min(1, w.progress / w.dist);
-      if (w.path) {
-        const at = t * w.path.at(-1)!.cum;
-        let i = 1;
-        while (i < w.path.length - 1 && w.path[i].cum < at) i++;
-        const from = w.path[i - 1];
-        const to = w.path[i];
-        const leg = to.cum - from.cum;
-        const u = leg > 0 ? Math.min(1, Math.max(0, (at - from.cum) / leg)) : 1;
-        a.worldX = Math.round(from.x + (to.x - from.x) * u);
-        a.worldY = Math.round(from.y + (to.y - from.y) * u);
-        a.worldZ = Math.round(from.z + (to.z - from.z) * u);
-        a.deg = this.heading(to.x - from.x, to.y - from.y);
-      } else {
-        a.worldX = Math.round(w.sx + w.dx * t);
-        a.worldY = Math.round(w.sy + w.dy * t);
-        a.worldZ = Math.round(w.sz + w.dz * t);
-      }
-      if (t < 1) return null;
-      this.walks.delete(key);
-      // no pose: RedJack.exe has no "stand" either
-      if (w.arriveStar !== undefined) a.starName = w.arriveStar;
-      return "endwalk";
-    }
+    //
+    // RedJack.exe's movers are the same (0x41b58b straight, 0x41dfe0 the route,
+    // 0x41e1c0 the frames) in 32-bit dwords, with the start less the delta
+    // times the progress over the distance in doubles, truncated (0x45e540).
     let arrived: boolean;
     if (w.path && w.roadMode === 5) {
       // one frame of the road a pass (0x443f40: progress + 1)
@@ -1374,10 +1361,11 @@ export class Scheduler {
     } else {
       w.progress += a.speed;
       if (w.progress > w.dist) w.progress = w.dist;
-      a.worldX = s16(w.sx + Math.trunc((w.dx * w.progress) / w.dist));
-      a.worldY = s16(w.sy + Math.trunc((w.dy * w.progress) / w.dist));
-      a.worldZ = s16(w.sz + Math.trunc((w.dz * w.progress) / w.dist));
-      if (w.deg !== undefined) a.deg = w.deg & 0xff;
+      const word = this.word;
+      a.worldX = word(w.sx + Math.trunc((w.dx * w.progress) / w.dist));
+      a.worldY = word(w.sy + Math.trunc((w.dy * w.progress) / w.dist));
+      a.worldZ = word(w.sz + Math.trunc((w.dz * w.progress) / w.dist));
+      if (w.deg !== undefined) a.deg = w.deg & (this.turnUnits - 1);
       arrived = w.dist <= w.progress;
     }
     if (!arrived) return null;
@@ -1447,45 +1435,15 @@ export class Scheduler {
       const c = path[k];
       // a zero-length leg is divided by in the original as well; step over it
       const f = (d: number) => (len > 0 ? Math.trunc((d * r) / len) : 0);
-      a.worldX = s16(p.x + f(c.x - p.x));
-      a.worldY = s16(p.y + f(c.y - p.y));
-      a.worldZ = s16(p.z + f(c.z - p.z));
+      a.worldX = this.word(p.x + f(c.x - p.x));
+      a.worldY = this.word(p.y + f(c.y - p.y));
+      a.worldZ = this.word(p.z + f(c.z - p.z));
       a.deg = this.heading(c.x - p.x, c.y - p.y);
       return false;
     }
     return true; // legs shorter than the total: 0x444e4d reports and arrives
   }
 
-  /**
-   * Advance game time: resolve delay()s, then run 50 ms service steps —
-   * walks, then crickets, then due loops (TI.EXE master service order).
-   *
-   * The pocketwatch is wound LAST, and that ordering is the whole of a bug that
-   * froze every coarse timer loop in the browser.
-   *
-   * `serviceGameClock` dispatches the boot's clock handler (TAOOT: calctime)
-   * through `session.track`,
-   * which adds to `inflight` SYNCHRONOUSLY while the promise settles in a
-   * microtask. Run it first and `serviceStep` — same task, microtasks not yet
-   * drained — sees `scriptBusy` true because of the dispatch the scheduler itself
-   * started microseconds earlier, and `fireDueLoops` skips firing. Since
-   * CALCTIME_MS and ENGINE_STEP_MS are both 50, the two are phase-locked: the
-   * heartbeat poisons its own service pass, on most passes.
-   *
-   * What that looks like from outside is a game where input works and time does
-   * not (TAOOT). The inventory bag sets `lightopen` and arms `makeloop("prop",
-   * me, "doinven", 6)`; the flat opens from the LOOP, so the bag simply never
-   * opens and further clicks are ignored by design (`bagidle()` is false
-   * meanwhile). BEDSIT1's air raid never comes. And it reads as intermittent,
-   * because whether
-   * the clock dispatches on a given pass depends on phase. Measured on a run that
-   * froze: the loop was seen due 569 times and fired 0.
-   *
-   * It also hides from every obvious check. Sample `scriptBusy` from outside the
-   * tick — a test, a devtools expression — and it is false, because by then the
-   * microtask has run and `inflight` is empty. It is only ever true at the one
-   * moment that matters.
-   */
   // ---- the pass: the original's only heartbeat ----------------------------
 
   /**
@@ -1502,18 +1460,25 @@ export class Scheduler {
    *
    * DF.EXE is built the same way (pass 0x438840, callers `forceupdate`
    * 0x4207ba and `visualeffect` 0x42039f, throttle 0x434162; Dust's BOOTFILE
-   * `idle ()` opens with `forceupdate ()`), and Dust runs on it too. RedJack
-   * keeps the engine-side heartbeat below ({@link tickTime}) — see
-   * docs/engine/runtime/timing.md.
+   * `idle ()` opens with `forceupdate ()`), and so is RedJack.exe (pass
+   * 0x41b360, callers `forceupdate` 0x408ce0 and `visualeffect` 0x408c43, the
+   * throttle in its frame 0x432b00; its BOOTFILE `idle ()` ENDS with
+   * `forceupdate ()`). Every engine the port runs is paced this way — see
+   * docs/engine/runtime/timing.md. Still asked by the readers that once had a
+   * second branch.
    */
   get scriptPaced(): boolean {
-    return !this.session.isV5;
+    return true;
   }
 
   /** passes run so far — the clock a prop's frame steps on ({@link passFrame}) */
   private passCount = 0;
   /** how deep in passes we are: a loop handler's `forceupdate` runs one inside another */
   private passDepth = 0;
+  /** is a pass running — a handler started now is one the pass sends (a loop, a walk's event, an arrival) */
+  get inPass(): boolean {
+    return this.passDepth > 0;
+  }
   /**
    * The tick the last frame was stamped on — TI.EXE's 0x48a6d8, written by the
    * throttle (0x43a95a). Null before the first frame.
@@ -1537,6 +1502,13 @@ export class Scheduler {
    * A handler that fails stops the pass where it is: the slot is freed, the
    * rest of the table waits for the next pass and there is no frame
    * (0x442605/0x442621/0x44262a return before 0x4425fc). Returns false then.
+   *
+   * RedJack.exe's (0x41b360) is the same pass with its own tables — 16 walk
+   * slots (0x41b37c..0x41b718), 16 crickets (0x41b72e..0x41b75a), 64 loops
+   * (0x41b766..0x41b783) — and two more services before its frame: the
+   * `endanim ()` every actor (0x408450) and then every prop (0x42e300) whose
+   * view ended in the last frame is owed, each run to its end. See
+   * {@link passEndAnims}.
    *
    * `wait` is how the throttle waits ({@link PassWait}).
    */
@@ -1577,8 +1549,9 @@ export class Scheduler {
       try {
         ev = this.stepWalk(key, w);
       } catch (e) {
-        // a deferred walk's builder failed (0x443c64): the slot is freed and
-        // the pass stops there (0x442605)
+        // a deferred walk's builder failed (0x443c64), or RedJack.exe's walker
+        // is gone (0x41b3ad): the slot is freed and the pass stops there
+        // (0x442605, 0x41b7d6)
         this.walks.delete(key);
         this.session.onLog(`pass stopped at walk ${key}: ${(e as Error).message}`);
         return false;
@@ -1603,22 +1576,57 @@ export class Scheduler {
     // earshot register, and the two loudest of them play (0x4425c6)
     const loud: Cricket[] = [];
     for (const c of this.crickets.slice()) {
-      if (this.crickets.includes(c)) this.serviceCricketV4(c, loud);
+      if (!this.crickets.includes(c)) continue;
+      if (!this.session.isV5) this.serviceCricketV4(c, loud);
+      else if (!this.serviceCricketV5(c, loud)) return false;
     }
     if (loud.length) this.playLoudest(loud);
-    return this.passLoops();
+    if (!(await this.passLoops())) return false;
+    return this.session.isV5 ? this.passEndAnims() : true;
   }
 
-  /** the pass's loop table (TI.EXE 0x4425ce, DF.EXE 0x438894) */
+  /**
+   * The pass's loop table (TI.EXE 0x4425ce, DF.EXE 0x438894, RedJack.exe
+   * 0x41b75f → 0x41bff0 for each of its 64 slots). A RedJack clock loop
+   * ({@link GameLoop.deadline}) does not count: it fires on the first pass at
+   * or after its tick (0x41c008).
+   */
   private async passLoops(): Promise<boolean> {
     // loops, slot by slot (0x4425d3..0x4425f0)
-    for (let slot = 0; slot < MAX_LOOPS; slot++) {
+    const slots = this.loopSlots;
+    for (let slot = 0; slot < slots; slot++) {
       const l = this.loops.find((x) => x.slot === slot);
       if (!l || l.paused) continue;
-      if (--l.count > 0) continue;
+      if (l.deadline === undefined) {
+        if (--l.count > 0) continue;
+      } else if (ticksAt(this.session.clock.now) < l.deadline) continue;
       this.loops.splice(this.loops.indexOf(l), 1);
-      if (!(await this.sendInPass(() => this.fireLoop(l, true), `loop ${l.kind}/${l.name}.${l.handler}`))) {
+      if (!(await this.sendInPass(() => this.fireLoop(l), `loop ${l.kind}/${l.name}.${l.handler}`))) {
         return false;
+      }
+    }
+    return true;
+  }
+
+  /** the actors and props whose `endanim ()` the next pass owes (RedJack.exe's flag 8) */
+  private owedEndAnims: { actors: string[]; props: string[] } = { actors: [], props: [] };
+
+  /**
+   * RedJack.exe's two end-of-view services, after the loops (0x41b797,
+   * 0x41b7a1): every ACTOR whose record carries flag 8 (0x408481) has it cleared
+   * and is sent `"name", endanim ()` (0x40850d..), then every PROP the same
+   * (0x42e300), each run to its end; one that fails stops the pass (0x41b79f,
+   * 0x41b7a9). The flag is set by the frame's step (0x4069b0, flag 0xa at
+   * 0x406a70), so an ending is heard in the pass after the frame that drew it.
+   */
+  private async passEndAnims(): Promise<boolean> {
+    const owed = this.owedEndAnims;
+    this.owedEndAnims = { actors: [], props: [] };
+    const res = this.session.resourceCtrl;
+    for (const [cmd, names] of [["sendtoactor", owed.actors], ["sendtoprop", owed.props]] as const) {
+      for (const name of res.endAnimTargets(cmd, names)) {
+        const ok = await this.sendInPass(() => this.session.sendEvent(cmd, name, "endanim", [], "anim"), `endanim ${name}`);
+        if (!ok) return false;
       }
     }
     return true;
@@ -1638,10 +1646,18 @@ export class Scheduler {
     // DF.EXE's frame (0x433490) steps only the props it draws (0x41eb67), against
     // the camera the room draws with (0x41e828/0x41e834)
     const v1 = s.isV1;
-    s.endAnim("sendtoprop", s.propRuntime.tick(
-      this.passCount * ENGINE_STEP_MS, ENGINE_STEP_MS, true, v1, v1 ? s.activeCamera() : null,
-    ));
-    s.endAnim("sendtoactor", s.actorRuntime.advanceAnimation());
+    // RedJack.exe's steps go by the clock's sixtieths since a view began
+    // (0x406a03), read in the frame
+    const tick = ticksAt(s.clock.now);
+    const props = s.propRuntime.tick(
+      this.passCount * ENGINE_STEP_MS, ENGINE_STEP_MS, true, v1, v1 ? s.activeCamera() : null, tick,
+    );
+    const actors = s.actorRuntime.advanceAnimation(tick);
+    if (s.isV5) {
+      // ...and each ending is owed to the next pass (passEndAnims)
+      this.owedEndAnims.actors.push(...actors);
+      this.owedEndAnims.props.push(...props);
+    }
   }
 
   /**
@@ -1748,128 +1764,13 @@ export class Scheduler {
       });
   }
 
-  /** the tick the last pass ran on, under speedrun time — see {@link tickTime} */
-  private lastPassTick = -1;
-
+  /**
+   * The host's turn: it moves the clock, and the world moves in the BOOTFILE
+   * idle's pass ({@link serviceIdle}) — nothing else is serviced here.
+   */
   tickTime(now: number): void {
     this.session.clock.advance(now);
-    if (this.scriptPaced) {
-      // the clock is all the host moves; the world moves in the idle's pass
-      this.serviceIdle();
-      return;
-    }
-    if (this.session.nominalTime || this.session.sheetClock) {
-      // Under speedrun time a pass runs on every tick whose NUMBER is a multiple
-      // of three — fixed to the game's own count, not to where a rhythm last
-      // started (#542). Counted from wherever it began, the third a pass fell on
-      // came from real time — a fresh scheduler, a long gap — and a headless run
-      // and a browser served their loops a tick or two apart.
-      const tick = ticksAt(now);
-      this.timeLastTick = now;
-      if (tick % 3 === 0 && tick !== this.lastPassTick) {
-        this.lastPassTick = tick;
-        this.serviceStep();
-      }
-    } else {
-      this.timeLastTick ??= now;
-      // one service pass at most, and a late one is not made up (clock.ts passDue)
-      const pass = passDue(this.timeLastTick, now, ENGINE_STEP_MS);
-      if (pass.due) {
-        this.timeLastTick = pass.next;
-        this.serviceStep();
-      }
-    }
-    // last, so its dispatch cannot be in flight while this pass fires its loops.
-    // By the next pass the microtask has settled and inflight is empty again.
-    this.serviceGameClock(now);
-  }
-
-  /**
-   * Drive the game clock — the real engine's boot `idle()` ran its clock
-   * handler every event-loop pass, and TAOOT's `calctime` advances one
-   * game-second every 20 calls (BOOTFILE 0002:40). So ~20 calls per real second
-   * makes its menu-band pocketwatch's second-hand tick once per real second,
-   * and (mission 4) progresses the sinking countdown through `advancephase()`.
-   *
-   * Runs on BOTH hosts, off whatever `now` the host feeds `tickTime` — wall time
-   * in a browser, the pumped virtual clock headless. Gating it on
-   * `hasRealFrames`, for fear that an auto-advancing clock would fire the
-   * mission-4 sinkmovie/death chain mid-run, costs more than it buys: TAOOT's
-   * `calctime` is where `sinkflag` turns into `advancephase()`, so headless the
-   * sinking would never start and the mission-4 goldens would be traces of a
-   * ship that isn't sinking, with `clock` keeping the pending event name the
-   * save restored ("startdisk1") because nothing overwrites it with the
-   * BOOTFILE's `clock = hrs * 100 + min`.
-   *
-   * The fear is misplaced on its own terms. Outside mission 4 `sinkflag` is
-   * false, and calctime's not-sinking arm only winds `clockcount`/`sec` and the
-   * pocketwatch's `propdeg` — no phase, no script dispatch, nothing a test can
-   * see beyond the second hand. Inside mission 4 the chain is the level.
-   *
-   * We skip while a script is mid-flight (movie, conversation, walk) — the
-   * original idle() likewise only ran between events — and resync the anchor so
-   * a long pause (or a suspended tab) doesn't replay as a burst of ticks.
-   */
-  private serviceGameClock(now: number): void {
-    if (this.session.scriptBusy || this.clockDispatching || !this.clockLastMs) {
-      this.clockLastMs = now;
-      return;
-    }
-    /**
-     * A game whose boot has no clock handler is not asked for one.
-     *
-     * TAOOT's `calctime` is BOOTFILE's, not the engine's, and Dust keeps time a
-     * different way — its clock is `day`/`clock`/`phase`, wound by `advanceday`
-     * in `new.flt`. Dispatching regardless logged "no handler" twenty times a
-     * second and buried every other line in the boot log under it.
-     *
-     * Asked every pass rather than latched, because the boot library arrives
-     * partway through one: a game booting is a game with no handlers yet.
-     */
-    if (!this.session.hasGlobal("calctime")) {
-      this.clockLastMs = now;
-      return;
-    }
-    const CALCTIME_MS = 50; // 20 calls / real second -> 1 second-hand tick / sec
-    // once per pass, like the original's idle(); a late pass is not made up
-    const pass = passDue(this.clockLastMs, now, CALCTIME_MS);
-    if (!pass.due) return;
-    this.clockLastMs = pass.next;
-    this.clockDispatching = true;
-    // trackIdle, not track: the heartbeat must not read as a busy player script
-    // or the input queue drops what was posted while it settles (see session.ts)
-    void this.session.trackIdle(
-      (async () => {
-        try {
-          await this.session.runGlobal("calctime");
-        } finally {
-          this.clockDispatching = false;
-        }
-      })(),
-    );
-  }
-
-  private serviceStep(): void {
-    this.serviceWalks();
-    // DreamFactory 1's balls come between the walks and the loops, as DF.EXE's
-    // activity pass orders its three tables (0x438840). A v4 game never makes one.
-    if (this.session.isV1) this.session.balls.step();
-    this.silenceAbsentCrickets();
-    if (this.session.isV5) this.replaceCricketsV5();
-    for (let i = this.crickets.length - 1; i >= 0; i--) this.serviceCricket(this.crickets[i]);
-    // Coarse timer loops (period >= 2) fire on the 50 ms master service.
-    // Smooth per-frame loops (period 1) are serviced separately at the DISPLAY
-    // frame rate (serviceFrameLoops) so animation-rate loops — the bridge's
-    // sky drift, the fencer's idle/parry pose — actually run at frame rate in
-    // the browser rather than crawling at the 20 Hz service rate. (Headless has one frame per
-    // tick, so both paths fire once per tick and tests are unaffected.)
-    this.fireDueLoops((l) => l.period > 1);
-    // Last, where the master service ends: TI.EXE's pass finishes by drawing a
-    // frame (0x442550 -> 0x439b80), and the actor animation advances at the head
-    // of that draw. Deliberately NOT in serviceFrameLoops — that path runs at the
-    // browser's display rate, and a walk cycle is paced by the 50 ms pass in the
-    // original, not by how fast the host can paint.
-    this.session.endAnim("sendtoactor", this.session.actorRuntime.advanceAnimation());
+    this.serviceIdle();
   }
 
   /**
@@ -1970,176 +1871,11 @@ export class Scheduler {
     }
   }
 
-  /** one cricket slot, one pass — DreamFactory 5's service (RedJack.exe's is not read) */
-  private serviceCricket(c: Cricket): void {
-    if (c.paused) return;
-    if (c.count > 0) c.count--;
-    if (c.count > 0) return;
-    if (c.setName && c.setName !== this.session.currentSetName) return;
-    if (c.handle && !c.handle.done) return; // previous play still sounding
-    this.fireCricket(c);
-    if (c.jitter < 0) this.crickets.splice(this.crickets.indexOf(c), 1);
-    else c.count = c.base + this.rand(c.jitter);
-  }
-
-  /**
-   * Fire due period-1 (per-display-frame) loops. Called once per rendered
-   * frame from the viewer — ~60 Hz in the browser, once per tick headless.
-   */
-  serviceFrameLoops(): void {
-    this.fireDueLoops((l) => l.period <= 1);
-  }
-
-  /** the script a prop, flat or actor loop runs in */
-  private loopScript(l: GameLoop) {
-    switch (l.kind) {
-      case "prop":
-        return this.session.propScripts.get(l.name);
-      case "flat":
-        return this.session.flatScripts.get(l.name);
-      case "actor":
-        return this.session.castScripts.get(l.name);
-      default:
-        return undefined;
-    }
-  }
-
-  /**
-   * Fire period-1 loops from within a forceupdate() cooperative yield, so a
-   * long-running drag/animation loop (the bridge wheel's stilldown loop) still
-   * lets independent per-frame loops (the sky drift) advance while it runs —
-   * otherwise the drag holds scriptBusy and the sky freezes until release.
-   * Excludes the caller's OWN loop so a handler can't re-enter itself mid-swing
-   * (the fencer's attack sets its player-prop pose in a forceupdate loop and
-   * must not trip that same prop's idle/defend loop). Called only in the
-   * browser (real frames); headless forceupdate keeps its deterministic step.
-   */
-  pumpFrameLoops(exceptName: string): void {
-    const ex = String(exceptName).toLowerCase();
-    /**
-     * The caller's own loops are held back only when firing one would re-enter
-     * a handler that is already running — a loop's handler that yields a frame
-     * must not pump itself. Holding back EVERY loop of the caller's name was
-     * wider than that, and it is a game that cannot be finished: Timelapse's
-     * match (the Anasazi's `invmatch`) is struck inside its own `while
-     * stilldown()` mousedown, which arms `makeloop ("prop", me, "matchburn",
-     * 4)`; the flame reaches the twigs only while the match is held over them,
-     * and letting go docks it (`invdockloop`, the same (prop, name) key). Held
-     * back, `matchburn` never ran, and the fire could not be lit. TI.EXE's
-     * forceupdate is a service pass nested in the running script, so the
-     * match's own loop does fire while it is held.
-     */
-    const reenters = (l: GameLoop): boolean => {
-      if (l.name !== ex) return false;
-      const inst = this.loopScript(l);
-      return !inst || this.session.interp.isRunning(inst, l.handler);
-    };
-    // NOT gated on scriptBusy: the caller IS the busy script, yielding a frame
-    this.fireLoops((l) => l.period <= 1 && !reenters(l));
-    /**
-     * ...and the COARSE loops the master service has already counted down.
-     *
-     * `fireDueLoops` counts a timer loop down whether or not a script is in
-     * flight and then declines to fire it, so a loop armed during a drag sits at
-     * zero for as long as the drag lasts. Timelapse's match is what that looks
-     * like: `HandleMatch` is a `while stilldown()` loop that drags the match
-     * across the box, and striking it plays the sound and arms
-     * `makeloop("prop", "Matches", "MatchBurn()", 30 / 6)` — so the strike was
-     * audible and the flame did not start until the player let go. Reported
-     * exactly that way.
-     *
-     * Fired, not counted: `fireNow` does no decrement, so the PACE stays the
-     * engine's 50 ms service and a period-5 loop still comes round every 250 ms
-     * rather than every pumped frame. This only decides that a loop already due
-     * gets to run during the yield instead of after it — which is what the
-     * original's own pass does, since its forceupdate IS a service pass.
-     */
-    this.fireNow(
-      this.loops.filter((l) => !l.paused && l.period > 1 && l.count <= 0 && !reenters(l)),
-    );
-  }
-
-  /**
-   * Service the matching timer loops: count them down, then fire the ones that
-   * have come due.
-   *
-   * The countdown runs whether or not a script is in flight — only the FIRING
-   * waits, because the original engine is single-threaded and its service
-   * likewise never re-enters a running script. That distinction is the whole
-   * point of this method: skipping the DECREMENT while busy made every scripted
-   * delay in the game run slow, and by a lot. Measured in a browser: TAOOT
-   * BEDSIT1's air raid arms `makeloop("scene", "scene1", "gotoship", 320)` — 320 × 50 ms,
-   * so ~21 s from the sirens to the bomb — and it took 49 s. The heartbeat was
-   * fine at 15.1 steps/s; what went missing was 29 service passes a second,
-   * thrown away as "busy" and never counted. The pocketwatch is what makes them
-   * busy: serviceGameClock dispatches calctime 20 times a second through
-   * session.track, and suppressing it took the skipped passes to exactly zero.
-   *
-   * So a loop that comes due mid-script now sits at 0 and fires on the next
-   * free pass, instead of losing that tick outright.
-   */
-  private fireDueLoops(select: (l: GameLoop) => boolean): void {
-    const matched = this.loops.filter((l) => !l.paused && select(l));
-    for (const l of matched) if (l.count > 0) l.count--;
-    if (this.session.scriptBusy) return; // due loops wait at 0; they don't lose the tick
-    this.fireNow(matched.filter((l) => l.count <= 0));
-  }
-
-  /** decrement the countdown of every matching loop and fire the ones that
-   *  reach zero, script in flight or not — the forceupdate() pump (see
-   *  {@link pumpFrameLoops}), whose caller IS the busy script */
-  private fireLoops(select: (l: GameLoop) => boolean): void {
-    this.fireNow(this.loops.filter((l) => !l.paused && select(l) && --l.count <= 0));
-  }
-
-  /** fire due loops one at a time; they remove themselves first, and a
-   *  persistent one re-arms in its own handler (TI.EXE semantics, see GameLoop) */
-  private fireNow(due: GameLoop[]): void {
-    if (!due.length) return;
-    // track logs a failure itself, so nothing here waits on it
-    void this.session.track(
-      (async () => {
-        for (const l of due) {
-          // Take each loop out of the table IMMEDIATELY BEFORE running it, not
-          // the whole batch up front, and skip one that is no longer there.
-          //
-          // TI.EXE services the table slot by slot (0x442ae0 per slot): it clears
-          // the slot, runs that handler to completion, and only then looks at the
-          // next slot. So a handler that `makeloop`s over a LATER slot — makeloop
-          // removes the (kind, name) match before appending, 0x4426e0 — means that
-          // slot is simply never serviced this pass.
-          //
-          // Pre-splicing the batch inverts that, and it is a softlock in the London
-          // flat (#74). BEDSIT1 Scene3 runs `sfx` on ("scene", "scene3") every 2
-          // passes, re-arming itself at the top of its own handler, and the air
-          // raid's `gotoship` arms `gotowin` on that SAME (kind, name) via the
-          // scene's openscene. Both come due on one pass, and with the batch
-          // already spliced out:
-          //
-          //   gotoship -> openscene -> makeloop(scene, scene3, gotowin, 10)
-          //                            (finds no sfx to replace: already spliced)
-          //   sfx      -> makeloop(scene, scene3, sfx, 2)
-          //                            (replaces gotowin, which never fires)
-          //
-          // so the sirens play over a room that never turns you to the window.
-          // Serviced in table order, `gotowin` replaces the sfx entry that is still
-          // in the table and sfx is skipped, which is what the original does.
-          // Measured from the reporter's standpoint, Scene3/View22: gotowin fires
-          // 10 passes after openscene and the raid ends in bombit.
-          const i = this.loops.indexOf(l);
-          if (i < 0) continue;
-          this.loops.splice(i, 1);
-          await this.fireLoop(l);
-        }
-      })(),
-    );
-  }
-
   /**
    * Silence any cricket whose set is not the one on screen.
    *
    * A `soundloop`-flagged cricket starts once and then loops in place forever
-   * (see fireCricket) — that is how a set runs positional ambience, and nothing
+   * (see playLoudest) — that is how a set runs positional ambience, and nothing
    * in the TAOOT corpus ever stops one: `stopcricket("all")` appears exactly
    * once, in its BOOTFILE `initall`. So every path that leaves a set WITHOUT
    * initall would leave its ambience sounding, positioned in a world that is no
@@ -2172,109 +1908,95 @@ export class Scheduler {
   }
 
   /**
-   * Where a cricket sounds from the camera as it stands: its volume and pan, or
-   * null when it is out of earshot.
+   * One cricket slot, one pass, as RedJack.exe's 0x41d810 runs it — TI.EXE's
+   * service ({@link serviceCricketV4}) in DreamFactory 5's units, against the
+   * room camera (x, y at 0x4c7a44/0x4c7a48, heading at 0x4c7a38):
+   *
+   *  - paused, or the open set not its own (0x41d824): nothing at all;
+   *  - the distance and bearing are measured again only when the camera's point
+   *    has moved ({@link Cricket.measured});
+   *  - a one-shot counts down wherever the camera is and at 0 plays if in
+   *    earshot (0x41d906..0x41d9d4) and is gone either way (0x41d9d9);
+   *  - a repeating one in earshot is placed every pass; a `soundloop` one
+   *    registers its volume for the loudest two (0x41dacd..0x41dae8), any other
+   *    is armed on its first pass there (0x41db32) and after that plays at 0 and
+   *    re-arms with `base + random (jitter)` (0x41db01..0x41db22). Out of earshot
+   *    an armed one is disarmed and its sound stopped (0x41db51..0x41db73).
+   *
+   * The sound is looked up by name for every play, place or stop (0x448ff0);
+   * one no open bank has is error 0xa, which frees the slot and stops the pass
+   * (0x41b787). False then.
    */
-  private cricketPlace(c: Cricket): { volume: number; pan: number } | null {
-    if (this.session.isV5) return this.cricketPlaceV5(c);
-    const lis = this.session.listener();
-    if (!lis) return { volume: 1, pan: 0 };
-    const dx = c.x - lis.x;
-    const dy = c.y - lis.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist >= c.radius) return null;
-    // linear falloff (exact TI curve unrecovered); pan = sine of the
-    // bearing relative to the camera facing, same convention as the
-    // projection's lateral axis (positive = right of screen)
-    let pan = 0;
-    if (dist > 1) {
-      const th = ((lis.deg & 0xff) / 256) * 2 * Math.PI;
-      const lateral = dy * Math.cos(th) - dx * Math.sin(th);
-      pan = Math.max(-1, Math.min(1, lateral / dist));
+  private serviceCricketV5(c: Cricket, loud: Cricket[]): boolean {
+    if (c.paused || c.setName !== this.session.currentSetName) return true;
+    const { dist, bearing } = this.measureCricketV5(c);
+    const near = dist < c.radius;
+    if (!near && (c.jitter < 0 || !c.armed)) {
+      if (c.jitter < 0 && --c.count <= 0) this.crickets.splice(this.crickets.indexOf(c), 1);
+      return true;
     }
-    return { volume: 1 - dist / c.radius, pan };
-  }
-
-  /**
-   * DreamFactory 5's cricket, as RedJack.exe's service places one (0x41d810)
-   * against the room camera (x, y at 0x4c7a44/0x4c7a48, heading at 0x4c7a38):
-   *
-   *  - out of earshot at `radius` and beyond, by the truncated ground distance;
-   *  - volume `255 − trunc(dist · 255 / radius)`, the 0..255 that wave.c's setter
-   *    (0x471fc0) turns into DirectSound attenuation;
-   *  - pan from the bearing to the sound against the camera's heading, folded so
-   *    that a sound behind pans as the one in front of it: dead ahead is 128,
-   *    a quarter turn anticlockwise 0 (full left at 0x4721e0), clockwise 255.
-   *
-   * A v5 room sets no {@link GameSession.listener}, so without this rule every
-   * one of RedJack's sounds would play at full volume and centred wherever it
-   * was — liznite's surf, dock and fire, radii of 200,000 to 400,000 units,
-   * all at once and over Lyle (#447).
-   */
-  private cricketPlaceV5(c: Cricket): { volume: number; pan: number } | null {
-    const cam = this.session.maze?.camera();
-    if (!cam) return { volume: 1, pan: 0 };
-    const dx = c.x - cam.x;
-    const dy = c.y - cam.y;
-    const dist = Math.trunc(Math.sqrt(dx * dx + dy * dy));
-    if (dist >= c.radius) return null;
+    if (c.jitter < 0 && --c.count > 0) return true;
+    if (!this.session.audioLib.sound(c.name)) {
+      this.crickets.splice(this.crickets.indexOf(c), 1);
+      this.session.onLog(`pass stopped at cricket ${c.name}: no sound "${c.name}" (error 0xa)`);
+      return false;
+    }
+    if (!near) {
+      c.armed = false;
+      this.stopSoundRecord(c.name);
+      return true;
+    }
     const volume = 255 - Math.trunc((dist * 255) / c.radius);
-    const heading = Math.round((cam.heading * 0x1000000) / (2 * Math.PI)) & 0xffffff;
-    let rel = (bearingV5(dx, dy) - heading + 0x800000) & 0xffffff;
-    if (rel > 0xc00000) rel = 0x1800000 - rel;
-    if (rel < 0x400000) rel = 0x800000 - rel;
-    const pan = 255 - Math.trunc(((rel - 0x400000) * 255) / 0x800000);
-    return { volume: volume / 255, pan: pan < 128 ? (pan - 128) / 128 : (pan - 128) / 127 };
+    this.setSoundVol(c.name, volume);
+    this.setSoundPan(c.name, cricketPanV5(this.cameraHeadingV5(), bearing));
+    if (c.jitter < 0) {
+      this.fireCricketV4(c);
+      this.crickets.splice(this.crickets.indexOf(c), 1);
+      return true;
+    }
+    if (this.loopFlags.has(c.name)) {
+      c.armed = true;
+      c.loudness = volume;
+      loud.push(c);
+      return true;
+    }
+    if (!c.armed) {
+      c.armed = true;
+      c.count = c.base + this.rand(c.jitter);
+      return true;
+    }
+    if (--c.count > 0) return true;
+    c.count = c.base + this.rand(c.jitter);
+    this.fireCricketV4(c);
+    return true;
   }
-
-  /** the camera a v5 cricket was last placed against — 0x41d851 re-places only when it moved */
-  private cricketCamera = "";
 
   /**
-   * Re-place every playing v5 cricket when the camera has moved, and stop the
-   * ones it has left the radius of; they start again from the service once it
-   * is back in range (RedJack.exe 0x41d9e9 / 0x41db51).
+   * A v5 cricket's distance and bearing from the camera, measured again only
+   * when the camera's point is not the one it was last measured from — RedJack.exe
+   * 0x41d851..0x41d8d1, and at `makecricket` (0x41d71b): `isqrt`'s float twin
+   * truncated, and `atan2` in 2^24ths ({@link bearingV5}). With no room the last
+   * camera stands.
    */
-  private replaceCricketsV5(): void {
+  private measureCricketV5(c: Cricket): { dist: number; bearing: number } {
     const cam = this.session.maze?.camera();
-    const at = cam ? `${cam.x},${cam.y},${cam.heading}` : "";
-    if (at === this.cricketCamera) return;
-    this.cricketCamera = at;
-    for (const c of this.crickets) {
-      if (!c.handle || c.handle.done) continue;
-      const place = this.cricketPlace(c);
-      if (place) c.handle.place?.(place.volume, place.pan);
-      else c.handle.stop();
-    }
+    const m = c.measured;
+    if (m && (!cam || (m.camX === cam.x && m.camY === cam.y))) return m;
+    const camX = cam?.x ?? m?.camX ?? 0;
+    const camY = cam?.y ?? m?.camY ?? 0;
+    const dx = c.x - camX;
+    const dy = c.y - camY;
+    c.measured = { camX, camY, dist: Math.trunc(Math.sqrt(dx * dx + dy * dy)), bearing: bearingV5(dx, dy) };
+    return c.measured;
   }
 
-  private fireCricket(c: Cricket): void {
-    const audio = this.session.audioLib.sound(c.name);
-    if (!audio) return;
-    const place = this.cricketPlace(c);
-    if (!place) return; // out of earshot (counts as fired)
-    const { volume, pan } = place;
-    // a soundloop-flagged cricket starts once and keeps looping in place
-    // (handle.done stays false, so the re-fire check never triggers again) —
-    // this is how sets run positional ambience: soundloop("motor", true)
-    // + makecricket("motor", ...) on TAOOT's deckbd
-    c.handle = this.session.audio.play("sound", audio, {
-      overlap: true, volume, pan, loop: this.loopFlags.has(c.name),
-    });
-    // A cricket is an overlapping play, so it occupies sound channel 2 — and it
-    // has to SAY so, because currentsound() is the only way a script can tell
-    // whether one has finished. TAOOT's bedsit landlady is a chain of crickets
-    // sequenced entirely by that question: lady() re-arms itself every few
-    // ticks and starts the next line only `if currentsound(1) = curlady |
-    // currentsound(2) = curlady` is false. Firing without recording the name
-    // left both channels reading empty, so the gate never held and all five of
-    // her lines started 1.3 s apart over each other.
-    this.soundChannels[1] = { name: c.name, handle: c.handle };
-    // ...and is how the landlady SPEAKS, so it is captioned like any line (#50)
-    if (!this.loopFlags.has(c.name)) this.session.captionClip(c.name, c.handle);
+  /** the room camera's heading in 2^24ths, as RedJack.exe keeps it at 0x4c7a38 */
+  private cameraHeadingV5(): number {
+    const cam = this.session.maze?.camera();
+    return cam ? Math.round((cam.heading * 0x1000000) / (2 * Math.PI)) & 0xffffff : 0;
   }
 
-  private async fireLoop(l: GameLoop, strict = false): Promise<void> {
+  private async fireLoop(l: GameLoop): Promise<void> {
     const cmd =
       { actor: "sendtoactor", prop: "sendtoprop", scene: "sendtoscene", flat: "sendtoflat" }[
         l.kind
@@ -2312,7 +2034,7 @@ export class Scheduler {
         await this.session.sendEvent(cmd, target, l.handler, [], target);
       } catch (e) {
         this.session.onLog(`loop ${l.kind}/${l.name}.${l.handler}: ${(e as Error).message}`);
-        if (strict) throw e; // a pass stops on it
+        throw e; // a pass stops on it
       }
     };
     if (l.kind === "scene") await this.withNavDriversArmed(dispatch);

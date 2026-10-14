@@ -6,7 +6,10 @@
 Everything in the game that happens *without* you clicking — a faucet that
 shuts itself off, steam that hisses every few seconds, a character walking a
 patrol, the pocketwatch's second hand — runs through one small subsystem: the
-scheduler. Its behaviour is recovered from `TI.EXE`.
+scheduler. Its behaviour is recovered from `TI.EXE`, and checked against
+`tl.exe`, `DF.EXE` and `RedJack.exe`, which are built the same way
+([RedJack](#redjack-dreamfactory-5) has its own tables and a few rules of its
+own).
 
 Reference implementation:
 [`engine/src/runtime/scheduler.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts) and
@@ -52,7 +55,8 @@ clears `wonfight`.
 (`0x43e3e0`, a bare `jmp` to it) and `visualeffect` (`0x43ded0`, a pass with the
 screen copy held back before the wipe). `tl.exe` is the same code (pass
 `0x4014e0`, callers `0x44a9ea` and `0x44a58f`), and so is `DF.EXE` (`0x438840`,
-callers `0x4207ba` and `0x42039f`). Nothing else steps a walk, a cricket or a
+callers `0x4207ba` and `0x42039f`) and `RedJack.exe` (`0x41b360`, called by
+`forceupdate` `0x408ce0` and `visualeffect` `0x408c43`). Nothing else steps a walk, a cricket or a
 loop, or draws a frame: `delay` (`0x41deb0`) spins on the clock calling only the
 message pump, a film's loop (`0x449263`) and a puppet's speech (`0x440620`) only
 poll events.
@@ -72,8 +76,9 @@ So **while a handler runs — a `delay`, a film, a conversation, a drag that
 does not call `forceupdate` — nothing advances**: not a loop's count, not a
 walk, not a cricket, not a prop's frame, not `frame ()`, not the pocketwatch.
 
-The port does the same for Titanic, Timelapse and Dust (`Scheduler.pass`,
-`Scheduler.serviceIdle`; RedJack keeps the older host-driven service): the host
+The port does the same for every game it runs (`Scheduler.pass`,
+`Scheduler.serviceIdle`) — RedJack's BOOTFILE `idle ()` hit-tests the pointer
+and sends `setcursor` first and ends with its `forceupdate ()`: the host
 only moves the clock, and whenever no script holds the engine, no film is on
 screen and no queued gesture is about to be taken, it sends the BOOTFILE's
 `idle ()`, whose `forceupdate` is the pass. A pass runs, **in this order**:
@@ -198,8 +203,38 @@ abandoned (`0x407cc9`, `0x407ce6`); and only then is the move asked for
 (`0x439c10`), which drops a turn asked for while one is running — after its
 `closescene` has been sent. A direction that is none of the three is error `0xa`.
 DF.EXE's frame steps its camera a pass at a time too (`0x4334c7` → `0x433d20`),
-but as an interpolated grid move this port does not model; Dust's moves keep the
-timed pace.
+as an interpolated grid move. Its `currentscene (dir)` (`0x40ee30`) sends
+`closescene ()` first and runs it to its end — a move already running, or one
+with nowhere to go, included — and gives up if that changed the set; the move
+routine (`0x4338b0`) then drops the move while one runs and otherwise arms it,
+drawing nothing. Every transition is five pictures, and pass by pass the frame
+draws picture `k` with the camera `k/4` of the way: a quarter turn is 16 a step,
+a walk 64 units of the 256-unit cell. The fifth lands — the camera moves and
+`openscene ()` runs inside that pass (`0x434067` → `0x40f050`). Picture 0 is the
+departure's low-res view, so a move starts at step 0 (five passes) when the
+standpoint's hi-res picture is up and at step 1 (four) when its low-res one is
+(`0x433935`). Meanwhile `currentview ()` names the step's bearing (`0x410500`) —
+"moving" on one of the four, "turning" between — `currentdeg ()` the bearing
+itself (`0x410740` reads `[0x460baa]`, which the step writes), and
+`currentscene ()` the cell the camera is in (`0x410870`). A word that is a scene
+of the set is a jump, looked up before the directions (`0x410c50`, TOWN.SET's
+`"chicken"` included); `"backwards"` (direction 4) asks for the cell behind with
+the same facing, which no set on the disc has a transition to, so only its
+`closescene` is sent; any other word is error `0xa` (`0x40ef44`).
+
+The hi-res picture comes back on its own. A move, a jump and the opening of a set
+(`0x41b3e1` → `0x433960`) all leave the low-res picture up and put the set's idle
+machine (`0x4335f0`) back to its first state (`0x434057`); the machine caches the
+next move one frame a turn and draws the hi-res still on its sixth turn
+(`0x433831`). It runs on event 8, which the main loop sends only on a turn that
+took no event and only once 20 ticks have passed since it took one (`0x411698`
+sets the deadline to now + `0x14` at every event, `0x411a97` tests it) — so a
+press, a release or a key's auto-repeat holds the sharpening off, and a player
+holding an arrow walks a corridor on low-res pictures, every move four passes. The
+port counts it on the game's clock (`SetViewer.idleTurn`, `GameSession.lastEventTick`),
+so it is deterministic. MINE.SET has no hi-res stills (header `0x3a` = 0): the
+machine parks with the low-res picture up (`0x433787`) and every move there is
+four passes.
 
 ## `framerate` and `frame()`: paced by the clock, not by the display
 
@@ -310,6 +345,58 @@ walk. Meanwhile `actorstar` reports the KIND of walk running rather than a place
 `"walkonpath"` for an authored route, `"walktoxyz"` for a walk to a bare point,
 `"defer"` for the straight line to a star. The destination only appears there
 when the actor lands on it.
+
+## RedJack (DreamFactory 5)
+
+`RedJack.exe` runs the same model — no heartbeat, the BOOTFILE's `idle ()`
+sent by the main loop (event 9 at `0x41e8c3`) before it takes at most one
+event (`0x41e9b1`), a pass only inside `forceupdate` and `visualeffect`. What
+differs is in its tables and units, all checked against the exe:
+
+| | `RedJack.exe` |
+|---|---|
+| Pass | `0x41b360`: 16 walk slots of `0x80` at `0x4c3d40`, 16 crickets of `0x54` at `0x4c4540` and the loudest two (`0x41db90`), **64** loop slots of `0x9e` at `0x4c4a80`, then the owed `endanim ()`s — every actor's (`0x408450`) and then every prop's (`0x42e300`) — and the frame (`0x432b00`). A handler that fails frees its slot and stops the pass there. |
+| Clock and throttle | `0x469f80` is `timeGetTime × 0.06`, the same 1/60 s ticks; the frame waits until `stamp + framerate` ticks (`0x433041`). The default `framerate` is 3 (`0x439c03`), the BOOTFILE sets 2 (30 passes a second) and the fight stages 6 (10); the setter clamps 0..60 (`0x408cae`). |
+| Loops | 64 slots, the first free one taken (`0x41bf8d`), a full table error `0x23`. A period counts down once a pass, 1 included. A **negative period is a time**: `makeloop` stores the tick it falls due on (now − period, `0x41bf05`) and the pass fires it on the first pass at or after that tick without counting (`0x41c008`); a load zeroes it, so it fires on the first pass after one. |
+| Turns | `0x41e300` is `0x445080`'s arithmetic in dwords with a wrap of `0xffffff`, the step the actor's `actorturn` as it is — a turn of 0 never lands. `turntodeg` (`0x41c2f0`) always records, like TI.EXE's, and the turn lands with `endturn` with its slot already free (`0x41b515`, `0x41b561`). |
+| Walks | the straight mover is `start − trunc(delta · progress / dist)` in doubles over dwords (`0x41b58b`), the route mover `0x41dfe0` TI.EXE's, the progress the actor's `actorspeed` added as it is (no floor); `walktostar` and `walkonpath` outside the walker's set are deferred (`0x41d290`, `actorstar` "defer") and built on the first pass it is open; `walktoxyz` never is. A walker that is no longer there is error `0xa` (`0x41b3ad`) — `actordelete` takes the actor's walk and actor loop with it (`0x4019b8`, `0x4019d2`). |
+| Crickets | TI.EXE's service (`0x41d810`) in 2^24ths: the distance and bearing are measured from the camera's point and kept until the camera's point moves; volume `255 − trunc(dist·255/radius)`, the pan from the bearing against the camera's heading (`0x41d919`); a sound no open bank has is error `0xa` there, as in `makecricket` (`0x41d530`), which has no set test. |
+| `endanim` | a view or pose that plays once marks its record when the frame steps it to its end (`0x4069b0`, flag `0xa`), and the next pass sends `"name", endanim ()` to each, actors before props (`0x408481`, `0x42e331`). |
+| The room's film | a road or a turn puts up its next film frame once a pass, in the frame (the index at `0x4c95fc`; a road `0x434d40`, a turn `0x434b00`), and the arrival — the node or scene and its `openscene` — runs there, inside the pass. A road's first frame goes up as it starts (`0x433d78`, `0x4343b9`) and the pass that puts up its last frame arrives (`0x434dd3`), so a road of n frames is n − 1 passes. (`launchroad`'s road — an `endroad ()` to the set some frames before its end, `0x432d6a` → `0x4406d0` — is not modelled: no shipped script calls it or answers `endroad`.) |
+| `walkonpath` | the walk is built from the route alone (`0x41ce80`): none between the two stars, or none ending at the destination for `"resume"`, is error `0xa` (`0x41cefc`) — there is no straight line to fall back on. |
+| `actordelete` | sends the actor `closeactor ()` through `sendtoactor`'s chain first (`0x40190d` → `0x404ff0`; an actor it cannot find is error `0xa`, `0x406550`), and only then takes its walk and actor loop away. No shipped script answers `closeactor`. |
+| `pausecricket` | nests, a count at +2 (`0x41dd10`); a name pauses the first slot of that name, `"all"` every slot. There is no getter. A save writes the record as it stands — the camera point last measured from, the distance and bearing measured (+`0x1c`..+`0x28`) and the armed flag (+`0x2c`) — and a load puts it back, so the first pass measures again only if the camera has moved. |
+| The rest of the pass | `0x4491b0` (head of the pass) releases the sound buffers of a closed bank once none of them is sounding; `0x423230` pumps a network session (`netconnect`, `0x423cb0`), which no shipped script opens. Neither has anything a script can see. The main loop's idle also goes to two windows of the engine's own — the debugger (`0x4c7308`) and the film (`0x4c7a70`) — not to scripts. |
+
+Two port allowances keep the polled commands honest inside a pass: RedJack's
+fights ask `stilldown ()` twice and `button ()`/`currentsound ()` from a `think`
+loop that runs once a pass, and `RedJack.exe` answers them at once. So in a v5
+game they wait for a host frame only when the same call asks again in the same
+tick — a bare `while stilldown () endwhile` — and answer at once otherwise. And
+a key's release is queued like its press, so a release made while the idle
+runs is taken after the press it ends.
+
+**A declared deviation**, that wait (`RepeatedAsk` in `builtins/context.ts`):
+`RedJack.exe` spins a bare poll loop without waiting at all. The wait cannot
+change what a script sees. It happens only on the second ask from the same call
+in the same tick, so only in a loop with no pass in it — and while a script runs
+no pass, nothing in the world moves (no loop, cricket, walk or frame), so the
+answer it waits for can change only by the player or by a sound ending, which
+the original's spin would read at the same moment of game time. The loops that
+count their turns all pass inside them (the darts' `throwdart`, whose force is
+the count, runs a `visualeffect` a turn), and a pass moves the tick, so they
+never wait. Whether to wait is decided by the call and the game's tick alone,
+so it is the same on every host and in a speedrun; headless, `button`,
+`voicedone` and `currentsound` never wait, and `stilldown` sleeps a tick of the
+game clock. What it changes is how many times a bare loop asks — which the
+original's machine speed decided, and no shipped script reads.
+
+A finger has no place to rest. `RedJack.exe` reads the cursor from Windows each
+time a script asks (`mouse ()`: GetCursorPos and ScreenToClient, `0x489fdf`,
+`0x48a005`), so a mouse taken off the window reads outside it and the BOOTFILE's
+`scrollmargin` answers false. The page tells the engine the same once a tap has
+lifted and been answered, and when a mouse leaves the page: the pointer is
+(−1, −1), and a tap by an edge does not leave the view scrolling.
 
 ## The game clock
 

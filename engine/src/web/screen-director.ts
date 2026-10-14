@@ -41,7 +41,6 @@
  */
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { DfVersion } from "@dreamfactory/engine/df/version";
-import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { DrawSignature } from "@dreamfactory/engine/runtime/signature";
 import { subtitleFont, wrapText } from "./fonts";
@@ -125,6 +124,8 @@ export interface RoomLayer {
   takeInputOnly?(): CachedFrame | null;
   /** a pass's step of the camera's move, where the pass steps it (SetViewer.passMotion) */
   passMotion?(): Promise<void>;
+  /** a turn of the main loop has ended with the idle's return (SetViewer.idleTurn) */
+  idleTurn?(): void;
   /** the view's own palette, dim and gamma applied */
   roomPalette(): Uint8ClampedArray;
   /** the palette the room's props colorize through */
@@ -263,7 +264,10 @@ export class ScreenDirector {
     // the main loop's idle waits while a film owns the screen or a gesture is
     // about to be taken: the original takes one event between idles
     session.idleHeld = () => this.movies.playing || this.inputDrainable;
-    session.onIdle = () => this.pushScriptCursor();
+    session.onIdle = () => {
+      this.pushScriptCursor();
+      this.room?.idleTurn?.();
+    };
     session.onPassMotion = () => this.room?.passMotion?.();
     // Snapshot the frame that is actually on screen. captureFrame runs from a
     // script (screentoblack) during tick(), i.e. BEFORE this frame's render, so
@@ -472,21 +476,8 @@ export class ScreenDirector {
     this.room?.refreshRoomGamma();
     if (!ticked) return this.untickedFrame();
     if (this.session.fade.ramping) return this.rampFrame(now);
-    // A prop animates one frame per SERVICE PASS, not at the camera's rate — see
-    // the census in SetViewer.advanceRoom for why that is 50 ms and not 90. Its
-    // view goes round (PropRuntime.tick): in DreamFactory 4 every prop's, and in
-    // DreamFactory 1 a drawn prop's (DF.EXE 0x41eb67; 0x41e770 skips the rest).
-    // DF.EXE's depth window (0x41e828/0x41e834) is asked of the camera the room
-    // draws with; with no set and view open there is none (0x41e790, 0x41e79e)
-    //
-    // An engine whose passes are script-run steps its props in the pass's frame
-    // instead (Scheduler.passFrame), so they stand still while nothing passes.
-    const paced = this.session.scheduler.scriptPaced;
-    if (!paced) {
-      const onlyDrawn = this.session.isV1;
-      const drawCam = onlyDrawn ? (this.room?.roomCamera() ?? null) : null;
-      this.session.endAnim("sendtoprop", this.session.propRuntime.tick(now, ENGINE_STEP_MS, true, onlyDrawn, drawCam));
-    }
+    // A prop animates one frame per PASS, in the pass's frame
+    // (Scheduler.passFrame), so it stands still while nothing passes.
     this.session.tickFade(now);
     this.session.tickWipe(now);
     // DreamFactory 1 takes the player's queued press at the HEAD of a pass,
@@ -509,42 +500,49 @@ export class ScreenDirector {
     // clicks and keys made while a script ran (SetViewer.drainOneEvent). So they
     // queued and were never taken: in RedJack's fights, where a loop is always
     // running, a click on anything but the opponent went nowhere — the skeleton
-    // is beaten by clicking a vine. Popped here instead, one a pass, before the
-    // loops are served and while nothing holds the engine.
+    // is beaten by clicking a vine. Popped here instead, between two idles and
+    // while nothing holds the engine: RedJack.exe's main loop sends `idle ()`
+    // (event 9, 0x41e8c3) and only then takes at most one event (0x41e9b1).
     //
     // And a game with no room at all is the same case: Timelapse has no SET, so
     // no SetViewer ever drained its queue. A click made while a flat's loop was
     // running went nowhere — the spear's jab at Egypt's crocodile, whose
     // `animtick` is running most of the time the beast's head is turned.
-    if ((this.session.isV5 || !this.room) && this.takesQueuedInput) {
-      const e = this.session.events.take();
-      if (e?.kind === "keydown") void this.session.track(this.keyDown(e.key, e.special).then(() => {}).finally(() => e.taken?.()), `queued key ${e.key}`);
-      else if (e) {
-        // the click is where it was made, and the pointer stays where the hand
-        // is now: a replay that left it at the old point would leave it in the
-        // scroll margin, and the view would turn on its own
-        const { pointerX: px, pointerY: py } = this.session;
-        void this.session.track(this.click(e.x, e.y).then(() => this.session.setPointer(px, py)).finally(() => e.taken?.()), `queued click ${e.x},${e.y}`);
-      }
-    }
-    // sky drift, fence idle: once a frame in play, once a TICK under speedrun
-    // time — a frame is the host's and a tick the game's, and counted per frame
-    // they ran as often as the host drew, even while the game stood still, so a
-    // headless run and a browser fenced Willie 1.85 s apart (#542)
-    //
-    // Not where the passes are script-run: there a loop of period 1 counts down
-    // once a pass like every other (TI.EXE 0x442ae0 has no case for it), and
-    // the BOOTFILE's idle is sent from the scheduler (Scheduler.serviceIdle).
-    if (!paced) {
-      if (ticked) this.session.scheduler.serviceFrameLoops();
-      this.serviceBootIdle();
-    }
+    if ((this.session.isV5 || !this.room) && this.takesQueuedInput) this.takeQueued();
     this.serviceCursor();
     if (this.movies.playing) {
       // a self-paced movie may finish mid-tick; fall back to the settled room
       return this.movies.tick(now) ?? this.room?.roomFrame() ?? null;
     }
     return this.room?.advanceRoom(now) ?? null;
+  }
+
+  /**
+   * Take the oldest queued gesture and run it, as the main loop takes one event
+   * after an idle — a key, a key's release (DreamFactory 5), or a click. The
+   * click is where it was made, and the pointer stays where the hand is now: a
+   * replay that left it at the old point would leave it in the scroll margin,
+   * and the view would turn on its own. In DreamFactory 5, whose presses wait
+   * for the idle (RedJack.exe 0x41e9b1), where the hand is now is where it was
+   * when the click was taken unless it has moved since — a press held into a
+   * drag ends wherever it was let go.
+   */
+  private takeQueued(): void {
+    const e = this.session.events.take();
+    if (!e) return;
+    this.session.noteEvent();
+    if (e.kind === "keydown" && e.release) {
+      void this.session.track(this.keyUpNow(e.key).then(() => {}).finally(() => e.taken?.()), `queued key up ${e.key}`);
+    } else if (e.kind === "keydown") {
+      void this.session.track(this.keyDown(e.key, e.special).then(() => {}).finally(() => e.taken?.()), `queued key ${e.key}`);
+    } else {
+      const { pointerX: px, pointerY: py } = this.session;
+      const back = (): void => {
+        const moved = this.session.pointerX !== e.x || this.session.pointerY !== e.y;
+        if (!this.session.isV5 || !moved) this.session.setPointer(px, py);
+      };
+      void this.session.track(this.click(e.x, e.y).then(back).finally(() => e.taken?.()), `queued click ${e.x},${e.y}`);
+    }
   }
 
   /**
@@ -575,46 +573,10 @@ export class ScreenDirector {
   }
 
   private untickedFrame(): CachedFrame | null {
-    if ((this.session.isV5 || !this.room) && this.takesQueuedInput) {
-      const e = this.session.events.take();
-      if (e?.kind === "keydown") void this.session.track(this.keyDown(e.key, e.special).then(() => {}).finally(() => e.taken?.()), `queued key ${e.key}`);
-      else if (e) {
-        const { pointerX: px, pointerY: py } = this.session;
-        void this.session.track(this.click(e.x, e.y).then(() => this.session.setPointer(px, py)).finally(() => e.taken?.()), `queued click ${e.x},${e.y}`);
-      }
-    }
+    if ((this.session.isV5 || !this.room) && this.takesQueuedInput) this.takeQueued();
     this.serviceCursor();
     if (this.movies.playing) return this.movies.currentFrame() ?? this.room?.roomFrame() ?? null;
     return this.room ? (this.room.takeInputOnly?.() ?? this.room.roomFrame()) : null;
-  }
-
-  /**
-   * The BOOTFILE's `idle ()`, once a pass while nothing else runs, for a game
-   * with no room — the null event of the original's event loop.
-   *
-   * A room has its own: DreamFactory 5's maze runs the boot's idle (MazeView),
-   * and Titanic's and Dust's do nothing in theirs but set the cursor, which the
-   * director does itself. Timelapse has no room, and its idle is game logic:
-   * `EndTimer`, which counts down the endgame and plays every one of its
-   * endings, and `sendtoflat (currentflat (), idle ())` for a flat that has
-   * asked for it with `idleon` — Atlantis's robot walks at you in its flat's
-   * `Idle`, and without it stood still at the back of the room for ever.
-   * Tracked as the heartbeat is (`trackIdle`): it must not read as a script the
-   * player started, or it would hold their input off.
-   */
-  private bootIdling = false;
-  private serviceBootIdle(): void {
-    if (this.room || this.session.isV5 || this.bootIdling || this.inputLocked || this.movies.playing) return;
-    const boot = this.session.bootScripts.find((b) => b.script.codes.has("idle"));
-    if (!boot) return;
-    this.bootIdling = true;
-    void this.session.trackIdle(
-      this.session.interp
-        .runHandler(boot, "idle", [], { me: boot.name, target: "" })
-        .catch((e) => this.onLog(`script error in ${boot.name}.idle: ${(e as Error).message}`))
-        .finally(() => (this.bootIdling = false)),
-      "boot idle",
-    );
   }
 
   /**
@@ -1557,6 +1519,7 @@ export class ScreenDirector {
    * then a stage that handles its own keys, then the room.
    */
   async keyDown(keyName: string, special = false, taken?: () => void): Promise<boolean> {
+    this.session.noteEvent();
     const posted = this.session.events.posted;
     const consumed = await this.keyNow(keyName, special, taken);
     // not queued: it has been taken already
@@ -1672,7 +1635,19 @@ export class ScreenDirector {
    * film owns its keys and a release means nothing to it.
    */
   async keyUp(keyName: string): Promise<boolean> {
+    this.session.noteEvent();
     if (!this.session.isV5 || this.movies.playing) return false;
+    // an event like the press: RedJack.exe's main loop takes it after an idle
+    // (0x41e9b1), in the order it came, so a release made while the idle runs
+    // waits behind the press it ends instead of overtaking it
+    if (this.gestureWaitsForIdle || this.session.events.length) {
+      this.session.events.post({ kind: "keydown", key: keyName, special: false, release: true }, { coalesce: true });
+      return true;
+    }
+    return this.keyUpNow(keyName);
+  }
+
+  private async keyUpNow(keyName: string): Promise<boolean> {
     const router = this.session.bootScripts.find((b) => b.script.codes.has("keyup"));
     if (!router) return false;
     try {
@@ -1721,6 +1696,7 @@ export class ScreenDirector {
    * came (the event queue's drain), which is what a harness waits on.
    */
   async press(x: number, y: number, taken?: () => void): Promise<void> {
+    this.session.noteEvent();
     // publish the cursor position so scripts that hit-test themselves (stage
     // flats, draggable props) read the click via mouse()/pointx/pointy. The
     // caller (pointerdown) has already set pointerDown, so held-button drag
@@ -1775,6 +1751,7 @@ export class ScreenDirector {
    * press, that answers, and only on the row the press began on.
    */
   release(x: number, y: number): void {
+    this.session.noteEvent();
     if (!this.session.puppet?.visible) return;
     this.session.puppetCtrl.puppetRelease(this.puppetView.bevelAt(x, y));
   }
@@ -2086,13 +2063,9 @@ export class ScreenDirector {
   private serviceCursor(): void {
     if (!this.onCursor) return;
     const s = this.session;
-    // where the idle sets the world's cursor, only a change of OWNER is the
+    // the idle sets the world's cursor, so only a change of OWNER is the
     // director's to report — the idle reports the rest (pushScriptCursor)
-    let gate = `${this.movies.playingFile ?? ""}|${s.puppet?.visible ? 1 : 0}`;
-    if (!s.scheduler.scriptPaced) {
-      const locked = truthy(s.interp.globals.get("lockevents") ?? 0) ? 1 : 0;
-      gate += `|${locked}|${s.currentFlat}|${s.currentSetName}`;
-    }
+    const gate = `${this.movies.playingFile ?? ""}|${s.puppet?.visible ? 1 : 0}`;
     if (gate === this.cursorGate) return;
     this.cursorGate = gate;
     void this.hover(s.pointerX, s.pointerY)
@@ -2145,28 +2118,20 @@ export class ScreenDirector {
     if (this.session.puppet?.visible) {
       return this.puppetView.bevelAt(x, y) >= 0 ? "touch" : "";
     }
-    // Where the passes are script-run, the world's cursor is the BOOTFILE
-    // idle's to set: every fourth `idle ()` it asks `hittest` and sends
-    // `setcursor` (TAOOT BOOTFILE 0001; Timelapse every `idlecursorrate`
-    // ticks), or says `cursor ("watch")` under lockevents — and between those
-    // the pointer moves under whatever it last said. So a move answers with
-    // that, and runs no script (see pushScriptCursor).
-    if (this.session.scheduler.scriptPaced) return this.session.cursorName;
-    // frozen world: idle() answers `cursor("watch")` while lockevents is set
-    // instead of asking anything what it would like to be, and that is the whole
-    // feedback a player gets that the game is doing something rather than
-    // ignoring them. Same position as the gate in clickDispatch, and for the same
-    // reason: the puppet above it still answers.
-    if (truthy(this.session.interp.globals.get("lockevents") ?? 0)) return "watch";
-    if (this.room?.ownsHover && this.session.viewShowing) return this.session.cursorName;
-    return this.askCursor(x, y);
+    // The world's cursor is the BOOTFILE idle's to set: every fourth `idle ()`
+    // it asks `hittest` and sends `setcursor` (TAOOT BOOTFILE 0001; Timelapse
+    // every `idlecursorrate` ticks; RedJack every one), or says `cursor
+    // ("watch")` under lockevents — and between those the pointer moves under
+    // whatever it last said. So a move answers with that, and runs no script
+    // (see pushScriptCursor).
+    return this.session.cursorName;
   }
 
   /**
    * Ask the thing at (x, y) for its cursor, as an idle does: `hittest`, then
-   * `setcursor` sent to what it names (TAOOT BOOTFILE 0001 `idle ()`). What the
-   * pointer shows on a move where the passes are not script-run ({@link hover});
-   * where they are, the BOOTFILE's own idle asks.
+   * `setcursor` sent to what it names (TAOOT BOOTFILE 0001 `idle ()`). The
+   * game's own idle is what asks in play ({@link hover}); this asks the same
+   * question on demand.
    */
   async askCursor(x: number, y: number): Promise<string> {
     this.session.setPointer(x, y);

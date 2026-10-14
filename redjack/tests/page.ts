@@ -108,7 +108,12 @@ class FakeHost {
     },
     instanceFrom: (_c: unknown, name: string) => ({ name }),
     hitTestAt: () => this.hit,
-    setPointer: () => {},
+    pointerX: 0,
+    pointerY: 0,
+    setPointer: (x: number, y: number) => {
+      this.session.pointerX = x;
+      this.session.pointerY = y;
+    },
     track: (p: Promise<unknown>) => p,
   };
   director = {
@@ -162,6 +167,8 @@ interface Page {
   el: (id: string) => HTMLElement;
   fire: (type: string, props?: Record<string, unknown>) => Event;
   point: (type: string, props: Record<string, unknown>) => Event;
+  /** an event on the document itself */
+  onDocument: (type: string, props: Record<string, unknown>) => void;
   click: (id: string) => void;
   frame: () => void;
   log: () => string;
@@ -217,6 +224,11 @@ async function openPage(opts: { touch?: boolean; files?: Partial<FakeFilesState>
     el,
     fire,
     point,
+    onDocument: (type, props) => {
+      const e = new dom.Event(type);
+      Object.assign(e, props);
+      document.dispatchEvent(e);
+    },
     click: (id) => void el(id).dispatchEvent(new dom.Event("click")),
     frame: () => frames.splice(0).forEach((cb) => cb(0)),
     log: () => el("log").textContent ?? "",
@@ -473,6 +485,27 @@ describe("a finger", () => {
     p.point("pointerdown", { pointerType: "touch", pointerId: 3, clientX: 400, clientY: 400 });
     p.fire("pointermove", { pointerType: "touch", pointerId: 3, clientX: 400, clientY: 100 });
     p.fire("pointercancel", { pointerType: "touch", pointerId: 3 });
+  });
+
+  it("is gone once it lifts, so a tap by an edge does not keep the view scrolling", async () => {
+    const p = await openPage({ touch: true });
+    await enter(p);
+    const s = current.host!.session;
+    current.host!.hit = { type: "prop", name: "chest" };
+    p.point("pointerdown", { pointerType: "touch", clientX: 4, clientY: 480 });
+    expect([s.pointerX, s.pointerY]).toEqual([2, 240]);
+    p.fire("pointerup", { pointerType: "touch", clientX: 4, clientY: 480 });
+    // RedJack.exe reads a mouse off its window outside it (GetCursorPos), where
+    // the BOOTFILE's scrollmargin answers false
+    await vi.waitFor(() => expect([s.pointerX, s.pointerY]).toEqual([-1, -1]));
+    // ...and a mouse stays where it is let go, as the exe's does
+    p.point("pointerdown", { pointerType: "mouse", clientX: 4, clientY: 480 });
+    p.fire("pointerup", { pointerType: "mouse", clientX: 4, clientY: 480 });
+    await new Promise((r) => setTimeout(r, 50));
+    expect([s.pointerX, s.pointerY]).toEqual([2, 240]);
+    // until it leaves the page
+    p.onDocument("pointerout", { pointerType: "mouse", relatedTarget: null });
+    expect([s.pointerX, s.pointerY]).toEqual([-1, -1]);
   });
 
   it("walks by a flick off a node", async () => {

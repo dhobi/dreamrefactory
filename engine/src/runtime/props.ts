@@ -1,4 +1,3 @@
-import { TICKS_PER_PASS } from "./actors";
 import type { Value } from "./interp";
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 import {
@@ -445,7 +444,7 @@ export class PropInstance {
    * openstage made it visible, so the puzzle started with the case open + empty.
    */
   animating = false;
-  /** DreamFactory 5: the sixtieths of a second since the view's first pass (see PropState.frameTicks) */
+  /** DreamFactory 5: the clock's sixtieth of the view's first pass (see PropState.frameTicks) */
   passTicks = 0;
 
   constructor(
@@ -616,6 +615,21 @@ export class PropRuntime {
     return this.props.get(String(name).toLowerCase()) ?? null;
   }
 
+  /**
+   * Put the table in the order `names` gives, the props it does not name after
+   * them as they stood — a load putting each record back in its slot.
+   */
+  reorder(names: string[]): void {
+    const before = [...this.props];
+    this.props.clear();
+    for (const n of names) {
+      const key = n.toLowerCase();
+      const p = before.find(([k]) => k === key);
+      if (p && !this.props.has(key)) this.props.set(key, p[1]);
+    }
+    for (const [k, p] of before) if (!this.props.has(k)) this.props.set(k, p);
+  }
+
   /** propdelete(name): remove a prop from the set (permanent hide) */
   remove(name: string): void {
     this.props.delete(String(name).toLowerCase());
@@ -751,9 +765,12 @@ export class PropRuntime {
    * this when no set ([0x460b64]) or no view ([0x460b66], 0x410151) is open.
    *
    * Answers the props whose animation reached its last frame this tick (see
-   * GameSession.endAnim).
+   * Scheduler.passEndAnims). `ticks` is the clock in sixtieths, which a
+   * DreamFactory 5 view with a step time is stepped by.
    */
-  tick(now: number, frameMs: number, viewsGoRound = false, onlyDrawn = false, cam: WorldCamera | null = null): string[] {
+  tick(
+    now: number, frameMs: number, viewsGoRound = false, onlyDrawn = false, cam: WorldCamera | null = null, ticks = 0,
+  ): string[] {
     const ended: string[] = [];
     for (const p of this.props.values()) {
       if (p.frameLocked) continue;
@@ -780,12 +797,13 @@ export class PropRuntime {
       if (st?.playsOnce !== undefined) {
         // DreamFactory 5 steps a view as it does a pose (RedJack.exe 0x42c89e–
         // 0x42c931, ActorRuntime.advanceAnimation): step 0 on the first pass,
-        // then by the view's step time on the clock or one a pass; a view that
-        // plays once holds its last step and says so, and any other goes round
+        // then by the view's step time on the clock since that pass or one a
+        // pass; a view that plays once holds its last step and says so, and any
+        // other goes round
         const n = p.frameCount(st);
         if (!p.lastTick) {
           p.lastTick = now;
-          p.passTicks = 0;
+          p.passTicks = ticks;
           if (n <= 1) {
             p.animating = false;
             if (st.playsOnce) ended.push(p.name);
@@ -795,11 +813,8 @@ export class PropRuntime {
         if (now - p.lastTick < frameMs) continue;
         p.lastTick = now;
         const rate = st.frameTicks ?? 0;
-        let e: number;
-        if (rate > 0) {
-          p.passTicks += TICKS_PER_PASS;
-          e = Math.floor(p.passTicks / rate);
-        } else e = p.frameIdx + 1;
+        // the clock's sixtieths since the first pass over the step time (idiv)
+        const e = rate > 0 ? Math.trunc((ticks - p.passTicks) / rate) : p.frameIdx + 1;
         if (st.playsOnce && e >= n - 1) {
           p.frameIdx = Math.max(0, n - 1);
           p.animating = false;

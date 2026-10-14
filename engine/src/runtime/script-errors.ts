@@ -161,3 +161,32 @@ export function scriptErrorName(code: number, language = "en"): string {
 export function scriptErrorBoxText(code: number, language = "en"): string {
   return `${scriptErrorName(0x3c, language)}${scriptErrorName(code, language)}]`;
 }
+
+/**
+ * A fault the CPU raised inside the engine — not a script error, nothing a
+ * script can see or survive. The one a script can reach is the integer divide
+ * by zero in `calcmod (a, 0)`: TI.EXE 0x429b4d and tl.exe 0x43928d `idiv` by
+ * the second argument unchecked (the `/` operator checks, error 0x37 at TI.EXE
+ * 0x4321d8), the CPU raises #DE, and with no handler of the game's own Windows
+ * ends the program (GameSession.engineFault).
+ */
+export interface EngineFault {
+  /** what the CPU raised — Windows 9x's word for #DE is "divide error" */
+  kind: "divide error";
+  /** the builtin it happened in, e.g. `calcmod(7, 0)` */
+  where: string;
+}
+
+/**
+ * The box Windows 95 and 98 put up over a program it ends: the line every one
+ * of them carries, and the first line of its Details (without the address,
+ * which depends on the build and the segment it was loaded in). `exe` is the
+ * program's file, e.g. "TI.EXE".
+ */
+export function engineFaultBoxText(fault: EngineFault, exe: string): string {
+  const program = exe.replace(/\.exe$/i, "").toUpperCase();
+  return (
+    "This program has performed an illegal operation and will be shut down.\n\n" +
+    `${program} caused a ${fault.kind} in module ${exe.toUpperCase()}.`
+  );
+}

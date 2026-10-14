@@ -362,6 +362,8 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     reveal: document.getElementById("swipeOpts"),
   });
 
+  /** the last tap's press, answered — see {@link fingerLifted} */
+  let tapped: Promise<unknown> = Promise.resolve();
   const touch = new TouchGestures({
     coords: (e: PointerEventLike) => canvasCoords(e),
     ownedByGame: (x, y) => {
@@ -372,7 +374,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
       if (room.swallowsPress(x, y)) return;
       s.pointerDown = true;
       s.pointerButton = 1;
-      void s.track(host.director.press(x, y), `press ${x},${y}`);
+      tapped = s.track(host.director.press(x, y), `press ${x},${y}`);
     },
     release: (x, y) => {
       if (!s.pointerDown) return;
@@ -414,17 +416,53 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     if (e.pointerType !== "touch") void host.director.hover(x, y);
   });
 
+  /**
+   * Where the pointer is once nothing points. RedJack.exe asks Windows where
+   * the cursor is each time a script reads it (`mouse ()`, 0x419600 ->
+   * GetCursorPos and ScreenToClient, 0x489fdf, 0x48a005), so a mouse taken off
+   * the window reads outside it, and the BOOTFILE's `scrollmargin` answers
+   * false there (`pointx (arg) < 0`). A finger that has lifted is that pointer:
+   * left where it lifted, a tap near an edge kept the view scrolling for ever.
+   * The original had no touch; this is the port's answer for it. A mouse that
+   * leaves the page is the same case, and is told the same — inside the page
+   * the window's own `pointermove` keeps reporting it, off the canvas as on it.
+   */
+  const fingers = new Set<number>();
+  const offWindow = (): void => s.setPointer(-1, -1);
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch") fingers.add(e.pointerId);
+  });
+  // ...once the tap it made has been answered: its `mousedown` reads the
+  // pointer where the finger was, as a click's reads where the mouse is
+  const fingerLifted = (e: PointerEvent): void => {
+    if (e.pointerType !== "touch" || !fingers.delete(e.pointerId)) return;
+    const { pointerX: x, pointerY: y } = s;
+    const gone = (): void => {
+      const still = s.pointerX === x && s.pointerY === y;
+      if (!fingers.size && !s.pointerDown && still) offWindow();
+    };
+    void tapped.then(gone, gone);
+  };
+  document.addEventListener("pointerout", (e) => {
+    if (e.pointerType === "mouse" && !e.relatedTarget && !s.pointerDown) offWindow();
+  });
+
   addEventListener("pointerup", (e) => {
-    if (room.up(e)) return;
-    if (touch.up(e)) return;
-    if (!s.pointerDown) return;
-    s.pointerDown = false;
-    const { x, y } = canvasCoords(e);
-    host.director.release(x, y);
+    try {
+      if (room.up(e)) return;
+      if (touch.up(e)) return;
+      if (!s.pointerDown) return;
+      s.pointerDown = false;
+      const { x, y } = canvasCoords(e);
+      host.director.release(x, y);
+    } finally {
+      fingerLifted(e);
+    }
   });
 
   addEventListener("pointercancel", (e) => {
     if (!room.cancel(e)) touch.cancel(e);
+    fingerLifted(e);
   });
 
   // SPACE, for a machine with no space bar: RedJack's control panel. It is held

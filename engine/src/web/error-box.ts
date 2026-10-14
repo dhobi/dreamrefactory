@@ -1,4 +1,4 @@
-import { scriptErrorBoxText } from "../runtime/script-errors";
+import { engineFaultBoxText, scriptErrorBoxText, type EngineFault } from "../runtime/script-errors";
 
 /**
  * The script error box of TI.EXE and tl.exe, in a browser: `window.confirm`,
@@ -42,5 +42,22 @@ export function scriptErrorBox(
       return true;
     }
     return window.confirm(text);
+  };
+}
+
+/**
+ * The hook for `GameSession.onFault`: the box Windows put over a program a CPU
+ * fault ended (runtime/script-errors.ts engineFaultBoxText), as an alert; the
+ * session then quits. `exe` names the program, "TI.EXE" or "TL.EXE". Logged
+ * instead wherever nobody is there to read it (see above).
+ */
+export function faultBox(log: (line: string) => void, exe: string): (fault: EngineFault) => void {
+  return (fault) => {
+    const text = engineFaultBoxText(fault, exe);
+    if (nobodyToAsk() || typeof window.alert !== "function") {
+      log(`fault box (not shown here): ${text.replace(/\n+/g, " ")}`);
+      return;
+    }
+    window.alert(text);
   };
 }

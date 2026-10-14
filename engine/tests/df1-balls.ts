@@ -17,6 +17,7 @@ import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { PropInstance } from "@dreamfactory/engine/runtime/props";
 import { ActorInstance } from "@dreamfactory/engine/runtime/actors";
 import { ballHits } from "@dreamfactory/engine/runtime/balls";
+import { Logic } from "@dreamfactory/engine/runtime/interp";
 
 function session(v1 = true) {
   const s = new GameSession(() => null, new NullAudioSink());
@@ -228,7 +229,8 @@ test("stopball and pauseball: a name or all, and pausing is a depth", () => {
   call("makecricket", "b", 1, 0, 0, 0, 0, 50);
   call("pausecricket", "a", 1);
   call("pausecricket", "all", 1);
-  expect(call("pausecricket", "a")).toBe(2);
+  // DF.EXE's getter: the depth under the boolean tag (0x42d074, interp.ts Logic)
+  expect(call("pausecricket", "a")).toEqual(new Logic(2));
   pass(s);
   expect(p.worldX).toBe(0);
   call("pausecricket", "a", 0);
@@ -236,7 +238,7 @@ test("stopball and pauseball: a name or all, and pausing is a depth", () => {
   expect(p.worldX, "one level still paused").toBe(0);
   call("pausecricket", "a", 0);
   call("pausecricket", "a", 0);
-  expect(call("pausecricket", "a"), "does not go below 0").toBe(0);
+  expect(call("pausecricket", "a"), "does not go below 0").toBe(false);
   pass(s);
   expect(p.worldX).toBe(1);
   call("stopcricket", "a");

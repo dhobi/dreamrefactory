@@ -1,11 +1,11 @@
-import { ScriptError, Value, toNum, toStr } from "../interp";
+import { ScriptError, Value, isLogic, toNum, toStr } from "../interp";
 import { foldAscii } from "../caseless";
 import { BuiltinCtx } from "./context";
 import { panFrom255 } from "../scheduler";
 
 /** `type (v)`'s answer for a value's tag. */
 function typeName(v: Value | undefined): string {
-  if (typeof v === "boolean") return "logic";
+  if (v !== undefined && isLogic(v)) return "logic";
   if (typeof v === "string") return "text";
   if (typeof v === "number") return "number";
   return "unknown";

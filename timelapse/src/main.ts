@@ -30,7 +30,7 @@ import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { GestureAudio, PageLog, screenPlate, showVersion, titleRise } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
-import { scriptErrorBox } from "@dreamfactory/engine/web/error-box";
+import { faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
@@ -311,6 +311,9 @@ async function main(): Promise<void> {
   // tl.exe's script error box (0x43cfc0): Yes goes on, No is `quit()`, which on
   // this page does what the game's own quit() does here — nothing but say so
   host.session.onScriptErrorBox = scriptErrorBox((l) => say(`  ${l}`));
+  // a CPU fault tl.exe had no handler for (`calcmod (a, 0)`, 0x43928d): Windows'
+  // box, then the same quit (GameSession.engineFault)
+  host.session.onFault = faultBox((l) => say(`  ${l}`), "TL.EXE");
 
   /**
    * The plan first, because it is where most of the list comes from — and reading

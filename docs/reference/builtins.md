@@ -260,8 +260,12 @@ full-quality `.trk` path instead of
 [the low-memory `.11k` one](../engine/formats/audio.md#_11k-the-low-memory-swap-in),
 and 4 MB when the player has asked for
 [the low-memory game](../taoot/low-memory.md).
-`calcmod` is a **non-negative** modulo, recovered from `TI.EXE` — plain `%`
-breaks the compass math.
+`calcmod` is the remainder of `TI.EXE`'s `idiv` (`0x429af0`), with the sign of
+the first argument. By 0 it divides anyway (`0x429b4d`, `tl.exe` `0x43928d`):
+the CPU faults and Windows ends the game — so does the port, with Windows'
+"illegal operation" box in a browser and the quit path everywhere
+(`GameSession.engineFault`). It is the one unchecked divide a script reaches;
+`/` checks (error `0x37`).
 
 `variable(name[, val])` reads and writes a variable by **computed** name, and the
 name resolves the way one written out in full does: the running block's locals

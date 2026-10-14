@@ -22,12 +22,13 @@ import type { ClutDim, RoomLayer, ScreenDirector } from "./screen-director";
  *
  * ## Idle
  *
- * The original calls the BOOTFILE's `idle ()` whenever no event is running,
- * and `idle` hittests the pointer and sends `setcursor` to whatever is under it
- * — which is how the set main's `setcursor` gets to scroll the view while the
- * pointer rests near an edge. The port's pointer only reports when it MOVES, so
- * the view runs `idle` itself each frame it stands at a node, and the
- * director's own hover stands aside ({@link ownsHover}).
+ * The original calls the BOOTFILE's `idle ()` whenever no event is running
+ * (RedJack.exe's main loop, event 9 at 0x41e8c3), and `idle` hittests the
+ * pointer and sends `setcursor` to whatever is under it — which is how the set
+ * main's `setcursor` gets to scroll the view while the pointer rests near an
+ * edge — and ends with the `forceupdate ()` that is the pass. The scheduler
+ * sends it (Scheduler.serviceIdle), and the director's own hover stands aside
+ * ({@link ownsHover}). The pass steps the film ({@link passMotion}).
  */
 export class MazeView implements RoomLayer {
   readonly maze: MazeRuntime;
@@ -58,7 +59,13 @@ export class MazeView implements RoomLayer {
       height: this.height,
       rgba: new Uint8ClampedArray(this.rgba.buffer),
     };
-    this.pointerAtOpen = [session.pointerX, session.pointerY];
+    // A pointer the page has never reported is not over the window: the
+    // BOOTFILE's `scrollmargin` answers false off the screen (pointx < 0), where
+    // (0, 0) is in the scroll margin and the idle would turn the view round
+    if (!session.pointerReported) {
+      session.pointerX = -1;
+      session.pointerY = -1;
+    }
     this.maze = new MazeRuntime(sett, session);
     this.maze.size = { width: this.width, height: this.height };
     this.maze.onChange = () => {
@@ -223,61 +230,17 @@ export class MazeView implements RoomLayer {
     // nor one for the gamma to move
   }
 
-  advanceRoom(now: number): CachedFrame | null {
-    if (this.maze.walkStep(now)) this.dirty = true;
-    else if (
-      // between scripts, as the original's event loop calls it: a loop this
-      // pass fired and ran to its end is part of the pass, not a script holding
-      // the engine. The mine's harpoons fly on a loop every pass, and asking
-      // `inputLocked` here stopped idle — and the view's turning — at the first
-      // shot (ScreenDirector.lockedAtPass)
-      !this.maze.walk && !this.idling && !this.dir.lockedAtPass && !this.session.puppet?.visible && this.pointerInside()
-    ) {
-      void this.idle();
-    }
+  advanceRoom(_now: number): CachedFrame | null {
     return this.roomFrame();
   }
 
-  /** the pointer is the room's while it stands at a node — see {@link idle} */
+  /** a pass's step of the film on screen: a road or a turn, one frame a pass (MazeRuntime.walkStep) */
+  async passMotion(): Promise<void> {
+    if (await this.maze.walkStep()) this.dirty = true;
+  }
+
+  /** the pointer is the room's: the BOOTFILE's idle asks what is under it */
   readonly ownsHover = true;
-
-  /**
-   * One run of the BOOTFILE's `idle ()`, the way the original's event loop
-   * calls it when nothing else is running: it hittests the pointer and sends
-   * `setcursor` to what is under it (the set, near an edge — which scrolls; a
-   * quad; an actor or prop), fades the inventory chest in and out, and ends
-   * with a `forceupdate ()`.
-   */
-  private async idle(): Promise<void> {
-    const boot = this.session.bootScripts.find((b) => b.script.codes.has("idle"));
-    if (!boot) return;
-    this.idling = true;
-    try {
-      await this.session.interp.runHandler(boot, "idle", [], { me: boot.name, target: "" });
-    } catch (e) {
-      this.onLog(`script error in ${boot.name}.idle: ${(e as Error).message}`);
-    } finally {
-      this.idling = false;
-    }
-  }
-  private idling = false;
-
-  /**
-   * Is the pointer over the room — and has it been moved since the room
-   * opened? A pointer the page has never heard from sits at (0, 0), which is
-   * inside the set main's scroll margin, and idling there spun the view round.
-   */
-  private pointerInside(): boolean {
-    const { pointerX: x, pointerY: y } = this.session;
-    if (!this.pointerMoved) this.pointerMoved = x !== this.pointerAtOpen[0] || y !== this.pointerAtOpen[1];
-    // ...or over a stage that has the screen: the boot's idle runs there too,
-    // and it is what fades the inventory chest in under the pointer (boot
-    // `chest`); its scrolling asks `scrollmargin`, which is false with the room
-    // hidden, so the room behind cannot turn
-    return this.pointerMoved && (this.pointInRoomImage(x, y) || !this.session.setVisible);
-  }
-  private pointerMoved = false;
-  private readonly pointerAtOpen: [number, number];
 
   /** outline the quads over the picture (a debugging aid, as SetViewer's) */
   showHotspots = false;

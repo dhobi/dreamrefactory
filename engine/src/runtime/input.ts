@@ -49,7 +49,8 @@
 export const EVENT_CAPACITY = 32;
 
 export type QueuedEvent = (
-  | { kind: "keydown"; key: string; special: boolean }
+  /** `release`: the key coming up — DreamFactory 5 queues those too (ScreenDirector.keyUp) */
+  | { kind: "keydown"; key: string; special: boolean; release?: boolean }
   | { kind: "mousedown"; x: number; y: number }
 ) & {
   /**
@@ -63,7 +64,7 @@ export type QueuedEvent = (
 /** what a queued event coalesces against — the original compares kind + payload */
 function sameEvent(a: QueuedEvent, b: QueuedEvent): boolean {
   if (a.kind !== b.kind) return false;
-  if (a.kind === "keydown" && b.kind === "keydown") return a.key === b.key;
+  if (a.kind === "keydown" && b.kind === "keydown") return a.key === b.key && !a.release === !b.release;
   return false; // two clicks are two clicks, wherever they landed
 }
 
