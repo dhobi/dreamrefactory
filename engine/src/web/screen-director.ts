@@ -2095,8 +2095,12 @@ export class ScreenDirector {
    * The cursor the thing under the pointer asks for — `setcursor` at whatever
    * `hittest` names, in the same priority order a click takes.
    */
-  async hover(x: number, y: number): Promise<string> {
+  hover(x: number, y: number): Promise<string> {
     this.session.setPointer(x, y); // keep mouse() current as the cursor moves
+    return Promise.resolve(this.hoverName(x, y));
+  }
+
+  private hoverName(x: number, y: number): string {
     /**
      * `hidecursor()` outranks everything, and the chain is not run at all.
      *

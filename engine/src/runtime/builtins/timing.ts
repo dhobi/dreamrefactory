@@ -1,4 +1,5 @@
 import { logic, toNum, toStr, truthy } from "../interp";
+import { pauseDepthOf } from "../scheduler";
 import { BuiltinCtx } from "./context";
 
 /**
@@ -37,7 +38,7 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
       const k = toStr(kind ?? "").toLowerCase();
       const n = toStr(name).toLowerCase();
       const l = session.scheduler.loops.find((x) => x.kind === k && x.name === n);
-      return pauseAnswer(l ? (l.pauseDepth ?? (l.paused ? 1 : 0)) : 0);
+      return pauseAnswer(pauseDepthOf(l));
     }
     session.scheduler.pauseLoop(toStr(kind ?? ""), toStr(name ?? ""), truthy(flag ?? 1));
   });

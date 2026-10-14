@@ -64,7 +64,7 @@ export type QueuedEvent = (
 /** what a queued event coalesces against — the original compares kind + payload */
 function sameEvent(a: QueuedEvent, b: QueuedEvent): boolean {
   if (a.kind !== b.kind) return false;
-  if (a.kind === "keydown" && b.kind === "keydown") return a.key === b.key && !a.release === !b.release;
+  if (a.kind === "keydown" && b.kind === "keydown") return a.key === b.key && Boolean(a.release) === Boolean(b.release);
   return false; // two clicks are two clicks, wherever they landed
 }
 

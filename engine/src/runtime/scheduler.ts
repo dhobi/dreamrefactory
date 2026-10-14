@@ -113,6 +113,12 @@ export function pauseDepth(rec: { paused: boolean; pauseDepth?: number }, on: bo
   rec.paused = rec.pauseDepth > 0;
 }
 
+/** how deep a record's pause is — 0 for no record (the getters' answer) */
+export function pauseDepthOf(rec?: { paused: boolean; pauseDepth?: number }): number {
+  if (!rec) return 0;
+  return rec.pauseDepth ?? (rec.paused ? 1 : 0);
+}
+
 /**
  * A positional ambient one-shot scheduler (makecricket), bound to the set
  * that created it. Fires its sound with distance volume + bearing pan when
@@ -208,7 +214,7 @@ export interface CricketSlot {
   /** in earshot when saved (+0x22) */
   armed?: boolean;
   /** DreamFactory 5: the measurement the record carries (+0x1c..+0x28, {@link Cricket.measured}) */
-  measured?: Cricket["measured"];
+  measured?: NonNullable<Cricket["measured"]>;
 }
 
 /** which of DF.EXE's play rules a v1 sound builtin uses */

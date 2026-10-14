@@ -1,4 +1,5 @@
 import { ScriptError, Value, logic, toNum, toStr, truthy } from "../interp";
+import { pauseDepthOf } from "../scheduler";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
 import { RIGHTTURNS, isqrt, readFrameRegister, readStarPath } from "../../df/set";
@@ -872,7 +873,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     // (0x42d004, interp.ts Logic), TI.EXE and tl.exe 0 or 1
     if (n !== undefined && flag === undefined && !session.isV5) {
       const w = session.scheduler.walks.get(toStr(n).toLowerCase());
-      const depth = w ? (w.pauseDepth ?? (w.paused ? 1 : 0)) : 0;
+      const depth = pauseDepthOf(w);
       return session.isV1 ? logic(depth) : depth;
     }
     if (n !== undefined) session.scheduler.pauseWalk(toStr(n), truthy(flag ?? 1));
