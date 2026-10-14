@@ -34,22 +34,22 @@ const errorOf = async (lines: string[], opts: Opts = {}): Promise<number | null 
 
 test("a statement-only command asked for its value is error 1", async () => {
   expect(await errorOf(["x = puppetclear ()"])).toBe(1); // 12041
-  expect(await errorOf(["puppetclear ()"])).toBe(null);
+  expect(await errorOf(["puppetclear ()"])).toBeNull();
 });
 
 test("a value-only command written as a statement is error 1", async () => {
   expect(await errorOf(["random (5)"])).toBe(1); // 20001
-  expect(await errorOf(["x = random (5)"])).toBe(null);
+  expect(await errorOf(["x = random (5)"])).toBeNull();
 });
 
 test("a property command is reached both ways", async () => {
-  expect(await errorOf(["x = result ()"])).toBe(null); // 16010
+  expect(await errorOf(["x = result ()"])).toBeNull(); // 16010
 });
 
 test("DF.EXE's bands are shorter than TI.EXE's", async () => {
   // 12089 postscript: past DF.EXE's statement band (cmp eax, 0x57)
   expect(await errorOf(["postscript ()"], { v1: true })).toBe(1);
-  expect(await errorOf(["postscript ()"])).toBe(null);
+  expect(await errorOf(["postscript ()"])).toBeNull();
   // 20109 pluginexists: past DF.EXE's value band (cmp eax, 0x6a), inside TI.EXE's
   expect(await errorOf(["x = pluginexists (\"a\")"], { v1: true })).toBe(1);
   expect(await errorOf(["x = pluginexists (\"a\")"])).not.toBe(1);

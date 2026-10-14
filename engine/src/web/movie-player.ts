@@ -970,12 +970,10 @@ export class MoviePlayer {
       // 16 ms tick (#542). Normal play keeps the milliseconds. A film with a
       // deadline (see scheduleFrame) waits for that, in the same unit.
       const ticked = this.session.clock.ticked;
-      const held =
-        m.deadline !== null
-          ? (ticked ? ticksAt(now) : now) >= m.deadline
-          : ticked
-            ? ticksAt(now) - ticksAt(m.lastTick) >= frameHoldTicks(m.seg, m.pos)
-            : now - m.lastTick >= frameHoldMs(m.seg, m.pos);
+      let held: boolean;
+      if (m.deadline !== null) held = (ticked ? ticksAt(now) : now) >= m.deadline;
+      else if (ticked) held = ticksAt(now) - ticksAt(m.lastTick) >= frameHoldTicks(m.seg, m.pos);
+      else held = now - m.lastTick >= frameHoldMs(m.seg, m.pos);
       if (held) {
         // ...and a frame may be authored to wait for the SPOKEN LINE as well
         // (flags bit 0). What it waits on is the original's VOICE channel, which

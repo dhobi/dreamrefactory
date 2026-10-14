@@ -60,7 +60,7 @@ function picture(tag: number): Uint8ClampedArray {
 /** the effect after `passes` passes, read back as "which picture, which pixel of it" */
 function after(effect: ExeEffect, passes: number, steps = STEPS) {
   const out = new Uint8ClampedArray(W * H * 4);
-  composeEffect(effect, picture(OLD), picture(NEW), out, W, H, steps, passes);
+  composeEffect(effect, { from: picture(OLD), to: picture(NEW), out, width: W, height: H }, steps, passes);
   return (x: number, y: number) => {
     const o = (y * W + x) * 4;
     return { pic: out[o + 2] === NEW ? "new" : "old", x: out[o], y: out[o + 1] };
@@ -272,7 +272,7 @@ const DF_NEW = dfPicture(NEW);
 
 function dfAfter(effect: DfEffect, passes: number) {
   const out = new Uint8ClampedArray(DW * DH * 4);
-  composeDfEffect(effect, DF_OLD, DF_NEW, out, DW, DH, passes);
+  composeDfEffect(effect, { from: DF_OLD, to: DF_NEW, out, width: DW, height: DH }, passes);
   return (x: number, y: number) => {
     const o = (y * DW + x) * 4;
     return { pic: out[o + 2] === NEW ? "new" : "old", x: out[o], y: out[o + 1] };
