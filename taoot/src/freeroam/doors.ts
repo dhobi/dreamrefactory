@@ -113,17 +113,11 @@ export function doorSpot(
   );
 }
 
-/** the engine keeps `false` as 0 and `true` as 1, so a condition's literal has
- *  to be read the same way before it is compared */
-function asValue(v: string | number | boolean): string | number {
-  if (v === true) return 1;
-  if (v === false) return 0;
-  return v;
-}
-
 function holds(c: DoorCond, globals: { get(name: string): unknown }): boolean {
   const live = globals.get(c.var);
-  const want = asValue(c.value);
+  // `true`/`false` are booleans in the engine as in TI.EXE, and a boolean is
+  // equal to nothing but a boolean — an unset global (0) is not `false`
+  const want = c.value;
   // a string global and a string literal compare case-insensitively, as the
   // script's own `=` does
   const same =

@@ -51,7 +51,11 @@ Things to notice:
 
 ### Values, operators and quirks
 
-There are numbers and strings, and the operators have a couple of surprises:
+There are integers, strings and booleans — three types, and before
+DreamFactory 5 the engines keep them strictly apart. Every value carries a type
+tag (DF.EXE: 2 boolean, 3 string, 4 integer); `true` and `false` are booleans,
+and so is every answer of a comparison, `&`, `|` and `not`. The operators have a
+couple of surprises:
 
 | Operator | Meaning | Note |
 |----------|---------|------|
@@ -70,11 +74,32 @@ tl.exe agree on both points. RedJack.exe (DreamFactory 5) keeps the priorities
 but does skip the right side of `&`/`|` once a boolean left side has decided
 (0x410788), so a v5 game still short-circuits.
 
-Two rules the interpreter has to honour exactly, or real scripts misbehave:
+Rules the interpreter has to honour exactly, or real scripts misbehave:
 
-- **Mixed-type `=` compares as text.** An uninitialised global variable is
-  `0`, and scripts rely on `"uparrow" = 0` being *false*. So comparisons
-  coerce to text.
+- **A string never equals a number.** `=` and `!=` (and a `switch` case)
+  compare the two type tags before the values — DF.EXE 0x40d461/0x40d523,
+  TI.EXE and tl.exe alike — so `"5" = 5` is false and `"uparrow" = 0` too. An
+  uninitialised variable is the integer `0`: equal to `0`, not to `"0"` or `""`.
+  A boolean is a third type: `1 = true` and `0 = false` are false, and an
+  unset variable is not `false`. RedJack (v5) keeps true/false as 1/0 and still
+  compares a mixed pair as text.
+- **Every other operator refuses the wrong type.** `+ - * /` want two
+  integers, `&` `|` `not` booleans, `@` two strings (and at most 255 characters
+  of result), `< > <= >=` two integers — anything else is runtime error 0xe,
+  as is an `if`/`while` condition that is not a boolean (`if 1` is an error, not
+  true), a `for` bound that is not an integer, and a `switch` case of another
+  type than its subject. `/ 0` is error 0x37. An error unwinds the whole chain
+  of handlers to the event that started it (DF.EXE 0x40d250, 0x40353d,
+  0x404070; TI.EXE and tl.exe alike). The engine's commands answer typed values
+  too — `sounddone ()`, `iswalk ()`, `actorexists ()`, a property getter like
+  `propvisible (p)` are booleans — and a boolean setter (`propvisible (p,
+  true)`, `pausewalk`, `puppetgrab`…) refuses anything but a boolean
+  (engine/src/runtime/value-types.ts). A save stores the tag, and a load gives
+  a boolean back as one.
+- **A `for` variable is a local.** `to` and `step` are read once; each pass
+  reads the variable back and adds the step, so the body may move it, and the
+  loop ends one step past `to`. A global of the same name is shadowed, not
+  counted. `dumplocal` deletes a local the way `dumpglobal` deletes a global.
 - **`dumpglobal` looks like a declaration and is a demolition.** `global x, y`
   brings variables into scope; `dumpglobal x, y` *destroys* them — **the whole
   list**, as `DF.EXE` does and the port does. All 64 uses in the corpus are in a

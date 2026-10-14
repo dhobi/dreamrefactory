@@ -1,5 +1,6 @@
 import { Value, toNum, toStr } from "../interp";
 import { BuiltinCtx } from "./context";
+import type { SoundRule } from "../scheduler";
 
 /**
  * Sound + theme playback: the sample-audio channels (sound/voice), the
@@ -12,10 +13,10 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // sound playback
   // tracks the voice line currently playing, for currentvoice()
   let voice: { name: string; handle: { done: boolean } } | null = null;
-  const playNamed = (name: Value, channel: "sound" | "voice", overlap = false) => {
+  const playNamed = (name: Value, channel: "sound" | "voice", overlap = false, rule?: SoundRule) => {
     // the sound channel honours soundloop() flags + tracks looping handles
     if (channel === "sound") {
-      session.scheduler.playSound(toStr(name), overlap);
+      session.scheduler.playSound(toStr(name), overlap, rule);
       return;
     }
     const audio = session.audioLib.sound(toStr(name));
@@ -46,13 +47,17 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
     return voice && !voice.handle.done ? voice.name : "none";
   });
   r("voicesound", (_i, [n]) => playNamed(n, "voice"));
-  r("singlesound", (_i, [n]) => playNamed(n, "sound"));
-  r("multiplesound", (_i, [n]) => playNamed(n, "sound", true));
-  r("bothsound", (_i, [n]) => playNamed(n, "sound"));
-  r("dualsound", (_i, [n]) => playNamed(n, "sound", true));
-  // haltsound(n): stops looping sounds too — TAOOT's crank cleanup relies on it
-  // to end the gramophone hiss (an untracked loop would outlive the stage)
-  r("haltsound", () => session.scheduler.haltSounds());
+  // a clip takes one of two prioritised channels by the rule its builtin names
+  // (Scheduler.pickSoundChannelV1 / pickSoundChannelsV4); DF.EXE's `dualsound`
+  // is a call to `singlesound` (0x42a250), TI.EXE's and tl.exe's plays on every
+  // channel it outranks (0x425330) and their bothsound on both (0x425400)
+  r("singlesound", (_i, [n]) => playNamed(n, "sound", false, "single"));
+  r("multiplesound", (_i, [n]) => playNamed(n, "sound", true, "multiple"));
+  r("bothsound", (_i, [n]) => playNamed(n, "sound", false, "both"));
+  r("dualsound", (_i, [n]) => playNamed(n, "sound", true, session.isV1 ? "single" : "dual"));
+  // haltsound(n): the channel, loops on it included — TAOOT's crank cleanup
+  // relies on it to end the gramophone hiss. DreamFactory 4 reads n (1, 2, 3).
+  r("haltsound", (_i, [n]) => session.scheduler.haltSounds(n === undefined ? undefined : toNum(n)));
   r("haltvoice", () => session.audio.halt("voice"));
   // halttheme(): the music stops AND `currenttheme()` says so. Reporting the
   // stopped track as still playing is not cosmetic — the scripts read it back.
@@ -74,6 +79,9 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // is always done, so the wait resolves at once and stays deterministic).
   const audioDonePoll = (channel: "sound" | "voice") => async () => {
     await ctx.yieldFrame();
+    // v1: both effect channels idle (0x429c00)
+    // ...and DreamFactory 4's the same (TI.EXE 0x424cc0: channels 1 and 2 empty)
+    if (channel === "sound" && !session.isV5) return session.scheduler.soundsDoneV1() ? 1 : 0;
     return session.audio.isDone(channel) ? 1 : 0;
   };
   r("sounddone", audioDonePoll("sound"));
@@ -87,6 +95,8 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // done, so it resolves at once and stays deterministic.
   r("currentsound", async (_i, [channel]) => {
     await ctx.yieldFrame();
+    // DF.EXE's takes no channel (0x407b10)
+    if (session.isV1) return session.scheduler.currentSoundV1();
     return session.scheduler.currentSound(toNum(channel ?? 1));
   });
   // soundvol(name[, v]) / soundpan(name[, v]): 0..255 volume / pan for a named
@@ -127,7 +137,7 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
       log(`playtheme: no theme available${asked}`);
       return;
     }
-    session.audio.play("theme", theme, { loop: true });
+    session.playThemeAudio(theme);
     session.currentThemeName = n === undefined ? "none" : toStr(n);
     // a theme with timed words — TAOOT's radio news (#50; GameSession.themeCaptionSources)
     session.themeStarted(n === undefined ? null : session.audioLib.bankOf(toStr(n)), theme.samples.length / theme.sampleRate);
@@ -176,6 +186,7 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
     if (closing && playing && closing === playing) {
       session.audio.halt("theme");
       session.currentThemeName = "none";
+      session.themeStarted(null);
     }
   });
 }

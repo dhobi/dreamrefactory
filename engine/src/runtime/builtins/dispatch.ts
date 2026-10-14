@@ -38,6 +38,9 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
     // no such handler exists, so the branch read the handler's absence as a
     // refusal and the game quit on the player instead of offering the dialog.
     "sendtobootfx",
+    // ...and TI.EXE's value form of `sendtoset` (20091, 0x402f90), which nothing
+    // calls — sendtoset with a result pointer
+    "sendtosetfx",
     // ...and DreamFactory 5's: `sendtoscenefx` asks a node for a value (every
     // room's `gotosaver` reads a node's `specialexit` through it), and a quad —
     // a room's clickable thing — is sent to by name
@@ -106,7 +109,8 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
       // resolution + containment-chain forwarding live on the session
       // (shared with makeloop firing)
       const args = await ip.evalArgs(deferred.args, frame);
-      return session.sendEvent(cmd, targetName, deferred.name, args, frame.ctx.me, frame);
+      // sendtosetfx is sendtoset's chain; the result pointer is Frame.sendWants
+      return session.sendEvent(cmd === "sendtosetfx" ? "sendtoset" : cmd, targetName, deferred.name, args, frame.ctx.me, frame);
     });
   }
 

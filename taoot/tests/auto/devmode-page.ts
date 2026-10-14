@@ -33,11 +33,11 @@ function fakeSession() {
   return {
     globals,
     session: {
-      interp: { globals: { get: (k: string) => globals.get(k), set: (k: string, v: number | string) => void globals.set(k, v) } },
+      interp: { globals: { get: (k: string) => globals.get(k), set: (k: string, v: number | string | boolean) => void globals.set(k, v) } },
       runGlobal: async (h: string, args: (string | number)[] = []) => {
         calls.push(`${h} ${args.join(",")}`);
         // the script's own case: `if debugging → debugging = false`
-        if (h === "menuselect" && args[0] === "debug on/off") globals.set("debugging", 0);
+        if (h === "menuselect" && args[0] === "debug on/off") globals.set("debugging", false);
       },
       altDown: false,
       metaDown: false,
@@ -75,25 +75,25 @@ afterEach(() => {
 describe("the flag", () => {
   it("is raised once the game is up, and said so", async () => {
     const p = await openDevmode();
-    expect(flag()).toBe(1);
+    expect(flag()).toBe(true);
     expect(p.el("devstatus").textContent).toBe("● debugging on");
     expect(p.el("devbar").classList.contains("dim")).toBe(false);
   });
 
   it("is put back when a load takes it down, and not when the page turned it off", async () => {
     const p = await openDevmode();
-    game.globals.set("debugging", 0);
+    game.globals.set("debugging", false);
     p.frame();
-    expect(flag()).toBe(1);
+    expect(flag()).toBe(true);
     // the status is a switch, and its OFF holds
     p.click("devstatus");
-    expect(flag()).toBe(0);
+    expect(flag()).toBe(false);
     expect(p.el("devstatus").textContent).toBe("○ debugging off");
     expect(p.el("devstatus").classList.contains("off")).toBe(true);
     p.frame();
-    expect(flag()).toBe(0);
+    expect(flag()).toBe(false);
     p.click("devstatus");
-    expect(flag()).toBe(1);
+    expect(flag()).toBe(true);
   });
 });
 
@@ -107,14 +107,14 @@ describe("the menu bar", () => {
   it("turns the flag off by the script's case, and on again by the page's", async () => {
     const p = await openDevmode();
     p.on(button(p, "debug on/off"), "click");
-    await vi.waitFor(() => expect(flag()).toBe(0));
+    await vi.waitFor(() => expect(flag()).toBe(false));
     expect(calls).toContain("menuselect debug on/off");
     // the script's answer is the new intent: the frame loop leaves it down
     p.frame();
-    expect(flag()).toBe(0);
+    expect(flag()).toBe(false);
     calls.length = 0;
     p.on(button(p, "debug on/off"), "click");
-    await vi.waitFor(() => expect(flag()).toBe(1));
+    await vi.waitFor(() => expect(flag()).toBe(true));
     expect(calls).toEqual([]);
   });
 
@@ -186,10 +186,10 @@ describe("the latches", () => {
     // `setloc`, the placement mode
     place.checked = true;
     p.on(place, "change");
-    expect(game.globals.get("setloc")).toBe(1);
+    expect(game.globals.get("setloc")).toBe(true);
     place.checked = false;
     p.on(place, "change");
-    expect(game.globals.get("setloc")).toBe(0);
+    expect(game.globals.get("setloc")).toBe(false);
     // the map's areas are drawn by default, and can be put away
     expect(areas.checked).toBe(true);
     areas.checked = false;

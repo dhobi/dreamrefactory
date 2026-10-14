@@ -18,7 +18,8 @@ export async function logBridge(h: Headless): Promise<void> {
   await clickRegion(h, r.name, "the log");
   need(h, "log", "2", "the log in hand");
   await useOn(h, "invlog", 1);
-  need(h, "logbridge", "1", "the log over the chasm");
+  // `logbridge = true` (a001.stg 0712): a boolean, which is what it reads back as
+  need(h, "logbridge", "true", "the log over the chasm");
   ok(`the log over the chasm (${h.here()})`);
 }
 
@@ -123,15 +124,16 @@ export async function east(h: Headless): Promise<void> {
   await h.until(() => !h.host.director.inputLocked, "a moment to take the match", 600);
   h.mouseDown(Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2));
   await h.frame(2);
-  // a flick along the rock, 50 px above the hand: the match's loop looks at
-  // the hand every other pass and wants 50 px between two looks
+  // a flick along the rock, 50 px above the hand: the match's `while
+  // stilldown ()` looks at the hand once a pass — its forceupdate IS the pass
+  // (tl.exe 0x44a9e0) — and wants 50 px between two looks
   const rb = h.session.stageCtrl.flatRegion("a0007.101", "Rock")!;
   const ry = Math.round((rb.top + rb.bottom) / 2) + 50;
   // and two looks at the same place are a stroke that failed, so the hand
-  // swings to and fro until the match catches
+  // swings to and fro, a new place every pass, until the match catches
   for (let i = 0; i < 12 && Number(h.g("gAnimIndex")) < 40; i++) {
     h.moveTo(i % 2 ? rb.left + 84 : rb.left + 8, ry);
-    await h.frame(2);
+    await h.frame(1);
   }
   // held over the twigs until it has burnt far enough (`matchburn`, past 50)
   h.moveTo(fire[0] - 20, fire[1]);
@@ -206,7 +208,7 @@ export async function south(h: Headless): Promise<void> {
   ok(`the arrowheads (${h.here()})`);
   await goTo(h, { stage: 8, frame: 839 });
   const rt = h.session.propRuntime;
-  for (let shot = 1; h.g("wonarrow") !== "1"; shot++) {
+  for (let shot = 1; h.g("wonarrow") !== "true"; shot++) {
     if (!heads()) fail(`three arrows and none through the spire (${h.here()})`);
     // the arrow notched (a click on the bow), and the head put on it
     if (!rt.get("arrow")?.visible) {
@@ -239,7 +241,7 @@ export async function south(h: Headless): Promise<void> {
     }
     h.mouseUp(h.session.pointerX, h.session.pointerY);
     await h.settle(`shot ${shot}`);
-    if (process.env.DEBUG) console.log(`shot ${shot}: ${h.g("wonarrow") === "1" ? "through" : "missed"}`);
+    if (process.env.DEBUG) console.log(`shot ${shot}: ${h.g("wonarrow") === "true" ? "through" : "missed"}`);
   }
   await goTo(h, { stage: 35, frame: 104 });
   need(h, "gSouthRock", "1", "the buffalo");
@@ -275,7 +277,7 @@ export async function west(h: Headless): Promise<void> {
   await h.settle("the coyote");
   await goTo(h, { stage: 17, frame: 253 });
   await clickRegion(h, "Button10", "the door");
-  need(h, "handdooropen", "1", "the door by the hand prints");
+  need(h, "handdooropen", "true", "the door by the hand prints");
   await goTo(h, { stage: 34, frame: 116 });
   need(h, "gWestRock", "1", "the dripping water");
   ok(`the nine hand glyphs, the coyote, and the water (${h.here()})`);
@@ -310,7 +312,7 @@ export async function north(h: Headless): Promise<void> {
     need(h, `headf${slot + 1}`, String(slot + 1), `the feather in slot ${slot + 1}`);
   }
   await clickRegion(h, "Button11", "the stand's button");
-  need(h, "headsolved", "1", "the feathers on the stand");
+  need(h, "headsolved", "true", "the feathers on the stand");
   await h.settle("the corn");
   await goTo(h, { stage: 37, frame: 103 });
   need(h, "gNorthRock", "1", "the wind in the leaves");
@@ -352,11 +354,11 @@ export async function tablets(h: Headless): Promise<void> {
     await h.settle(`glyph ${g}`);
   }
   await clickRegion(h, "Button10", "the tablets' button");
-  need(h, "pizzadoor", "1", "the tablets' door");
+  need(h, "pizzadoor", "true", "the tablets' door");
   await h.settle("the door");
   await goTo(h, { stage: 36, frame: 112 });
   await clickRegion(h, "Button10", "the gene pod");
-  await h.until(() => h.g("haspodA") === "1", "the Anasazi gene pod", 20_000);
+  await h.until(() => h.g("haspodA") === "true", "the Anasazi gene pod", 20_000);
   await h.settle("the pod's film", 60_000);
   ok(`the tablets read, and the Anasazi gene pod (${h.here()})`);
 }
@@ -390,7 +392,7 @@ export async function corn(h: Headless): Promise<void> {
     await h.settle(`the spear into ${piece}`);
     if (Number(h.g("cornlevel")) <= before) fail(`${piece} did not leak (corn ${h.g("cornlevel")}, ${h.here()})`);
   }
-  await h.until(() => h.g("cornsolved") === "1", "the corn to grow", 3000);
+  await h.until(() => h.g("cornsolved") === "true", "the corn to grow", 3000);
   ok(`five cacti pierced, and the corn grown (${h.here()})`);
 }
 
@@ -424,7 +426,7 @@ export async function rattlesnake(h: Headless): Promise<void> {
     await h.frame(6); // held still: the next move is a new shake
   }
   h.mouseUp(x, 300);
-  await h.until(() => h.g("rattlersolved") === "1", "the snake to go", 3000);
+  await h.until(() => h.g("rattlersolved") === "true", "the snake to go", 3000);
   await h.settle("the ladder");
   ok(`left, right, left, left: the snake is a ladder (${h.here()})`);
 }
@@ -473,7 +475,7 @@ export async function drums(h: Headless): Promise<void> {
     const drum = middle(h, "a0001.362", `Drum${n}`);
     await tipDrag(h, "invdrumstick", [45, 25], [drum], `drum ${n}`);
   }
-  need(h, "drumsolved", "1", "the drums' tune");
+  need(h, "drumsolved", "true", "the drums' tune");
   ok(`1, 4, 2, 0, 3 on the drums (${h.here()})`);
 }
 
@@ -536,7 +538,7 @@ export async function kiva(h: Headless): Promise<void> {
     await propPoint(h, leaf, [0, 0, 640, 480], 120);
     await tipDrag(h, leaf, [0, 0], [middle(h, "a0001.932", spot)], `${leaf} to ${spot}`);
   }
-  await h.until(() => h.g("kivaentry") === "1", "the spiral whole", 3000);
+  await h.until(() => h.g("kivaentry") === "true", "the spiral whole", 3000);
   await h.settle("the leaves blown away", 60_000);
   await goTo(h, { stage: 20, frame: 931 });
   await clickRegion(h, "Button10", "the brown leaf");
@@ -569,7 +571,7 @@ export async function kiva(h: Headless): Promise<void> {
   }
   await goTo(h, { stage: 39, frame: 104 });
   await clickRegion(h, "Button11", "the circle");
-  await h.until(() => h.g("finalkiva") === "1", "the circle to open", 600);
+  await h.until(() => h.g("finalkiva") === "true", "the circle to open", 600);
   await h.settle("the kiva's way", 60_000);
   ok(`the leaves, the brown leaf, the kiva's seven pictures, and the circle open (${h.here()})`);
 }

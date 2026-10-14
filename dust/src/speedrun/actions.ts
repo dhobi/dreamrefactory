@@ -577,7 +577,7 @@ const GOTO: Action = {
       })()`;
       const FROZEN = `(() => {
         const v = window.dbg.session.interp.globals.get("lockevents") ?? 0;
-        return typeof v === "number" ? v !== 0 : String(v).length > 0;
+        return typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : String(v).length > 0;
       })()`;
       /**
        * ONE STEP AT A TIME, CHECKED — because the world moves while you walk.

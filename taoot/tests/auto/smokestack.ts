@@ -114,7 +114,7 @@ function sight(host: { viewer: unknown }, session: GameSession): { kind: Sight; 
 /** climb from the door to `stacklevel` 2 by the named ladder, as the scripts do */
 async function climbTo(session: GameSession, maze: number, ladder: (typeof LADDERS)[number]) {
   const g = session.interp.globals;
-  g.set("tour", 0);
+  g.set("tour", false);
   g.set("mazenumber", maze);
   // ENGINE.SET c1: mazenumber, then changeset into smstack1 — SMSTACK1's openset
   // sets stacklevel to 1, and the ladder's own keydown sets it to 2 before the move
@@ -132,7 +132,7 @@ test("smokestack: every (maze, level) shuts exactly the gaps the disc's table na
   const want: Record<string, string> = {};
   for (const maze of [1, 2, 3, 4]) {
     for (let level = 2; level <= 10; level++) {
-      g.set("tour", 0);
+      g.set("tour", false);
       g.set("mazenumber", maze);
       g.set("stacklevel", level);
       g.set("blocks", "not run");
@@ -179,6 +179,9 @@ test("smokestack: a shut gap refuses the walk and an open one takes it", async (
   const { host, session } = await newHost();
   await session.ensureBooted();
   const verdict: Record<string, string> = {};
+  // one clock for the whole test: the walk moves in the idle's passes, which
+  // wait on the host's time going forward
+  let now = 0;
   for (const maze of [1, 4]) {
     for (const view of ["view47", "view48"]) {
       await climbTo(session, maze, LADDERS[0]);
@@ -188,7 +191,7 @@ test("smokestack: a shut gap refuses the walk and an open one takes it", async (
       await host.viewer!.pressNav("uparrow");
       await session.settle();
       for (let i = 0; i < 200; i++) {
-        host.viewer!.tick(i * 16);
+        host.viewer!.tick((now += 16));
         await session.settle();
       }
       const moved = session.currentSceneName?.() !== "scene37" || session.currentViewName?.() !== view;
@@ -247,7 +250,7 @@ test("smokestack: a checkpoint loaded out of the stack leaves no crates behind (
   const { session } = await newHost();
   await session.ensureBooted();
   const g = session.interp.globals;
-  g.set("tour", 0);
+  g.set("tour", false);
   g.set("mission", 3);
   g.set("phase", 2);
   const visible = (): string =>

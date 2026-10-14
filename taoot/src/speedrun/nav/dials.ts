@@ -69,7 +69,7 @@
  */
 export interface DialDriver {
   propDeg(name: string): number;
-  flow(): Record<string, string | number | undefined>;
+  flow(): Record<string, string | number | boolean | undefined>;
   dragProp(name: string, next: (from: { x: number; y: number }) => { x: number; y: number } | null): Promise<boolean>;
 }
 

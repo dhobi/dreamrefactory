@@ -1,7 +1,8 @@
 import { TICKS_PER_PASS } from "./actors";
+import type { Value } from "./interp";
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 import {
-  WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha,
+  WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, engineBearing, brightPalette, hiddenBy, inkAlpha,
   inkPixel, inDepthWindow,
 } from "./geometry";
 import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
@@ -330,8 +331,8 @@ export class PropInstance {
    * "none"`), so a loaded game answered this question correctly and a freshly
    * booted one did not.
    */
-  owner: string | number = "none";
-  value: string | number = 0;
+  owner: Value = "none";
+  value: Value = 0;
   deg: string | number = 0;
   /** z-order (propdist): more negative = closer to the viewer */
   dist = 0;
@@ -930,7 +931,7 @@ export class PropRuntime {
     if (cam.v5 && st.steps) return v5FrameIndex(st, p.frameIdx, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0) << 16);
     if (!p.directional || nFrames < 2) return p.currentFrameIdx(st);
     if (cam.v5) return frameIndexForDegree(st, cam.v5.facing(p.worldX, p.worldY, Number(p.deg) || 0));
-    const camBearing = bearing(cam.x - p.worldX, cam.y - p.worldY);
+    const camBearing = engineBearing(cam.x - p.worldX, cam.y - p.worldY);
     // the facing to depict is the prop's orientation relative to the camera;
     // pick the frame whose stored degree matches it (the frames' degrees are
     // the depicted view angles, e.g. 0,8,…,248 for a 32-view sprite)

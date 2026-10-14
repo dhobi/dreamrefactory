@@ -140,7 +140,7 @@ test("loading it over a mission-2 game replaces the mission-2 state (#179)", asy
   expect(g.get("clock")).toBe(1309);
   // a load hands control back whatever the file said (every save is taken from
   // the CTL menu, which froze input)
-  expect(g.get("lockevents")).toBe(0);
+  expect(g.get("lockevents")).toBe(false);
 });
 
 // --- writing it back --------------------------------------------------------

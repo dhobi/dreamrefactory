@@ -68,7 +68,11 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
    * for something that will never happen without another gesture.
    */
   const settle = async (what: string): Promise<void> => {
-    await p.pump(() => v().quiescent || v().conversing, `${what} to settle`);
+    // ...and not with the player's own press still queued: a press made while a
+    // pass's handler ran waits for the idle to return, as TI.EXE's does
+    // (Scheduler.serviceIdle), and `quiescent` can read true before it is taken
+    const taken = (): boolean => v().awaitingInput || session.events.length === 0;
+    await p.pump(() => (v().quiescent && taken()) || v().conversing, `${what} to settle`);
     log?.(what);
   };
   /** exactly `n` frames, for the middle of a gesture that has no end to wait on */

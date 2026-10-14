@@ -2,10 +2,11 @@ import { CstFile, CastMember, CastPose } from "../df/cst";
 import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
 import {
-  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
+  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, engineBearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
   inDepthWindow,
 } from "./geometry";
 import type { DrawSignature } from "./signature";
+import type { Value } from "./interp";
 import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
@@ -129,8 +130,8 @@ export class ActorInstance {
    * falls through to his brush-off line and the turbine job cannot be accepted
    * at all. (Found by segment 4 walking into it; see propowner, same convention.)
    */
-  owner: string | number = "none";
-  value: string | number = 0;
+  owner: Value = "none";
+  value: Value = 0;
   /** name of the star the actor was last placed on (actorstar getter) */
   starName = "";
   /**
@@ -433,7 +434,7 @@ export class ActorRuntime {
     // one drawn front-on.
     let rel: number;
     if (cam?.v5) rel = cam.v5.facing(a.worldX, a.worldY, Number(a.deg) || 0);
-    else if (cam) rel = (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff;
+    else if (cam) rel = (a.deg - engineBearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff;
     else rel = Number(a.deg) & 0xff;
     let cf = step[0];
     let best = angleApart(cf.angle, rel);

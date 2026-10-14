@@ -9,6 +9,7 @@
  * that lands in the wrong room does not fail.
  */
 import { readFileSync } from "node:fs";
+import { ScriptError } from "@dreamfactory/engine/runtime/interp";
 import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
 import { facingFor, mergeCompass, planRoute, sceneAt } from "./nav";
 import { CD, indexDisc, type Pumped } from "./harness";
@@ -718,7 +719,14 @@ export async function clickProp(
 export function ask(p: Pumped, name: string, args: unknown[] = []): string {
   const fn = p.session.interp.builtins.get(name) as
     ((i: unknown, a: unknown[]) => unknown) | undefined;
-  return String(fn?.(p.session.interp, args) ?? "");
+  try {
+    return String(fn?.(p.session.interp, args) ?? "");
+  } catch (e) {
+    // a prop or actor that is not open is error 0xa to a SCRIPT (BuiltinCtx.miss);
+    // to the route, peeking while it waits for one to appear, it is just not there
+    if (e instanceof ScriptError && e.code === 0xa) return "";
+    throw e;
+  }
 }
 
 /**

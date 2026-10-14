@@ -9,9 +9,10 @@
  * the first pass after one (0x43da7e); the port has no tick-clock loops, so
  * every loop it writes is pass-counted.
  *
- * Every pause is a nesting COUNTER in the engine and a flag in the port; a
- * paused slot is written with a count of 1 and read back as paused when its
- * count is not 0.
+ * Every pause is a nesting COUNTER in the engine (+2 of each record, one up
+ * per pause and one down per resume), and the table is written as it stands, so
+ * the count goes in as the port holds it — a slot paused twice is a 2 — and
+ * comes back as that many pauses.
  */
 import { pstrAt, writePstrAt } from "../df/binary";
 import { TABLE } from "../df/savegame-v5";
@@ -38,7 +39,7 @@ export function encodeLoops(session: GameSession): Uint8Array {
     }
     const at = slot++ * stride;
     v.setInt16(at + 0x00, 1, true);
-    v.setInt16(at + 0x02, l.paused ? 1 : 0, true);
+    v.setInt16(at + 0x02, l.paused ? Math.max(1, l.pauseDepth ?? 1) : 0, true);
     v.setInt16(at + 0x04, kind, true);
     v.setInt32(at + 0x06, 0, true);
     v.setInt32(at + 0x0a, Math.max(1, l.count), true);
@@ -64,7 +65,11 @@ export function decodeLoops(session: GameSession, bytes: Uint8Array): void {
     // as the statement the engine stores; restoreLoop takes the name out of it
     session.scheduler.restoreLoop(kind, name, pstrAt(bytes, at + 0x1e), passes);
     const l = session.scheduler.loops.at(-1);
-    if (l && v.getInt16(at + 0x02, true)) l.paused = true;
+    const pause = v.getInt16(at + 0x02, true);
+    if (l && pause > 0) {
+      l.paused = true;
+      l.pauseDepth = pause;
+    }
   }
 }
 
@@ -77,7 +82,7 @@ export function encodeCrickets(session: GameSession): Uint8Array {
   session.scheduler.crickets.slice(0, slots).forEach((c, i) => {
     const at = i * stride;
     v.setInt16(at + 0x00, 1, true);
-    v.setInt16(at + 0x02, c.paused ? 1 : 0, true);
+    v.setInt16(at + 0x02, c.paused ? Math.max(1, c.pauseDepth ?? 1) : 0, true);
     v.setInt32(at + 0x04, c.x, true);
     v.setInt32(at + 0x08, c.y, true);
     v.setInt32(at + 0x0c, c.radius, true);
@@ -109,7 +114,11 @@ export function decodeCrickets(session: GameSession, bytes: Uint8Array): void {
       next: v.getInt32(at + 0x18, true),
     });
     const c = session.scheduler.crickets.at(-1);
-    if (c && v.getInt16(at + 0x02, true)) c.paused = true;
+    const pause = v.getInt16(at + 0x02, true);
+    if (c && pause > 0) {
+      c.paused = true;
+      c.pauseDepth = pause;
+    }
   }
 }
 
@@ -167,7 +176,7 @@ export function encodeWalks(
     else if (w.path) mode = MODE.path;
     else if (w.arriveStar === "custom") mode = MODE.xyz;
     v.setInt16(at + 0x00, 1, true);
-    v.setInt16(at + 0x02, w.paused ? 1 : 0, true);
+    v.setInt16(at + 0x02, w.paused ? Math.max(1, w.pauseDepth ?? 1) : 0, true);
     v.setInt16(at + 0x04, mode, true);
     v.setInt32(at + 0x08, w.turnTo ?? -1, true);
     v.setInt32(at + 0x0c, a.deg, true);
@@ -207,7 +216,8 @@ export function decodeWalks(
     const turnTo = v.getInt32(at + 0x08, true);
     const ok = session.scheduler.restoreWalk(name, {
       turnOnly: mode === MODE.turn,
-      paused: v.getInt16(at + 0x02, true) !== 0,
+      paused: v.getInt16(at + 0x02, true) > 0,
+      pauseDepth: Math.max(0, v.getInt16(at + 0x02, true)),
       turnTo: turnTo >= 0 ? turnTo : undefined,
       sx: v.getInt32(at + 0x18, true),
       sy: v.getInt32(at + 0x1c, true),

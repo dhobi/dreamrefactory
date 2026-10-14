@@ -13,9 +13,10 @@
  *      the sound a CLICK plays, both as bias-relative containers (negative = a
  *      chunk interleaved with the pictures). Every nonzero ref on the disc
  *      lands on an audio container — 0 misses is the whole verification.
- *   2. A chunk nothing references is the segment's BED; one that is referenced
- *      must NOT also play as a bed, which is what had ARMOPEN's door creak
- *      playing over its opening still.
+ *   2. The segment's BED is the header's playlist over the chunks after the
+ *      sound bank (0x4045bc), and a chunk a frame or click references is never
+ *      in it — which is what had ARMOPEN's door creak playing over its opening
+ *      still.
  *   3. Advance is an authored GOTO: action 2 with a 0-based target, backward
  *      for a loop (BELL.MOV's idle), self/clamped for a hold.
  *   4. A type-3 exit chains to the movie named on ITS OWN record +0x30 with the
@@ -89,6 +90,7 @@ if (noRip) console.warn(`no ${MOVIE_DIR} — skipping (needs the Dust rip)`);
 test.skipIf(noRip)("every sound a frame or a click references is an audio container", () => {
   let frameRefs = 0;
   let clickRefs = 0;
+  const unplayed: string[] = [];
   for (const name of movies()) {
     const m = read(name);
     for (const sg of m.segments) {
@@ -119,12 +121,15 @@ test.skipIf(noRip)("every sound a frame or a click references is an audio contai
             .toBe(true);
         }
       }
-      // ...and the bed is exactly what is left over
-      expect
-        .soft(sg.bed, `${name} seg@c${sg.bias}: bed`)
-        .toEqual(sg.audioChunks.filter((c) => !referenced.has(c)));
+      // ...and the bed, the header's own playlist, plays only what is left
+      // over — all of it but STEPS.MOV's stray chunk, which no bank holds
+      const leftover = sg.audioChunks.filter((c) => !referenced.has(c));
+      for (const c of sg.bed)
+        expect.soft(leftover, `${name} seg@c${sg.bias}: bed c${c}`).toContain(c);
+      for (const c of leftover) if (!sg.bed.includes(c)) unplayed.push(`${name} c${c}`);
     }
   }
+  expect(unplayed).toEqual(["STEPS.MOV c3"]);
   // the disc's own numbers, so a regression in the ref reader cannot pass as
   // "no refs found, nothing to check" — 213 frame refs (191 into the up-front
   // bank, 22 negatives at interleaved chunks) and 224 click refs (a
@@ -359,12 +364,17 @@ test.skipIf(noRip)("a movie chains by name on its way out", () => {
   expect(chains.size).toBe(8);
 });
 
-test.skipIf(noRip)("FINALEND.MOV: unreferenced chunks are the bed — the credits music plays", () => {
+test.skipIf(noRip)("FINALEND.MOV: the credits music plays, then its last chunk loops", () => {
   const v1 = read("FINALEND.MOV");
   const sg = v1.segments[0];
   expect(sg.frames.every((f) => f.sound === 0)).toBe(true);
-  expect(sg.bed).toEqual([1, 2, 3, 4]);
-  expect(movFileFromV1(v1).audioChunks).toEqual([1, 2, 3, 4]);
+  // playlist 1,2,3,4,4,4 and +0x8be = 3: the ring goes round to the 4th entry
+  expect(sg.bed).toEqual([1, 2, 3, 4, 4, 4]);
+  expect(sg.bedLoopFrom).toBe(3);
+  const mov = movFileFromV1(v1);
+  expect(mov.audioChunks).toEqual([1, 2, 3, 4, 4, 4]);
+  expect(mov.audioLoops).toBe(true);
+  expect(mov.audioLoopFrom).toBe(3);
 });
 
 test.skipIf(noRip)("index 255 is transparent: a wait frame HOLDS the picture before it", () => {
@@ -723,52 +733,53 @@ test.skipIf(noRip)("a v1 keyframe's 0xff renders white, not black", () => {
 });
 
 /**
- * A DreamFactory 1 bed plays ONCE, and all of it.
+ * A DreamFactory 1 bed is the header's PLAYLIST, and it never runs out.
  *
- * The one branch of the soundtrack rule (`df/mov-sound.ts`) that only this game
- * reaches. A v4 bed comes out of a loop table and is authored to repeat; a v1
- * "bed" is a plain run of chunks — narration, said once — and `audioLoops` is
- * false for every film on this disc. Two things follow, and both are here
- * because the film would be wrong without them:
+ * DF.EXE builds it at segment start (0x4045bc-0x4046eb): +0x1c bed chunks
+ * after the +0x1a sound bank, copied in the order of the 1-based playlist at
+ * +0x83e (+0x34 entries, repeats allowed), the last entry linked back to the
+ * 0-based entry +0x8be names; 0x429fa0 finds the ring and sets the channel
+ * looping. A later segment with no bank of its own keeps the bed (0x404551).
  *
- *   - it does not loop, so a line cannot be heard twice under a held picture;
- *   - it is not CUT to the picture. D1ND2M.MOV's first segment is 45 frames of
- *     roughly 3 s, over 12.3 s of two people talking, and the frames that carry
- *     flags bit 0 wait for them to finish (see the growl test above). Cutting the
- *     bed to `interval x frames` would have cut the conversation to a quarter.
- *
- * Checked here rather than in the editor that now plays these films, because this
- * is where the rip is and because a rule is worth pinning once.
+ * It does not pace the picture: D1ND2M.MOV's first segment is 45 frames of
+ * roughly 3 s over a bed that never ends, and the frames that carry flags bit 0
+ * wait for their own sounds instead (see the growl test above).
  */
-test.skipIf(noRip)("a v1 bed plays once, and is not cut to the picture", () => {
-  const mov = movFileFromV1(read("D1ND2M.MOV"));
-  const seg = mov.segments[0];
-  const audio = segmentAudio(seg);
-  expect(audio, "D1ND2M.MOV's first segment has a bed").toBeTruthy();
-  expect(seg.audioLoops).toBe(false);
-  expect(audio!.unique).toHaveLength(2);
-  expect(audio!.audioSec).toBeCloseTo(12.31, 1);
+test.skipIf(noRip)("a v1 bed is its playlist, looped from the header's entry", () => {
+  const intro = read("INTRO.MOV");
+  const sg = intro.segments[0];
+  // 3 sounds in the bank, then 5 bed chunks at c4..c8; the playlist names them
+  // 1,4,2,5,4,3,... and goes round to its first entry
+  const bank = 3;
+  expect(sg.bed.map((c) => c - bank)).toEqual([1, 4, 2, 5, 4, 3, 4, 5, 4, 4, 5, 4, 5, 4, 4, 5, 4, 5]);
+  expect(sg.bedLoopFrom).toBe(0);
+  // the later segments bring none, so the bed plays on under them
+  const mov = movFileFromV1(intro);
+  expect(mov.segments.slice(1, 7).map((s) => s.audioChunks.length)).toEqual([0, 0, 0, 0, 0, 0]);
 
-  const interval = segmentInterval(seg, seg.frames.length, audio!.audioSec, 0);
-  const bed = soundtrackFor(seg, audio!, interval, seg.frames.length);
-  expect(bed.loop).toBe(false);
-  // the picture is a fifth of the talking, and every second of it still plays
-  const picture = (interval * seg.frames.length) / 1000;
-  expect(picture).toBeLessThan(4);
-  expect(bed.samples.length / bed.sampleRate).toBeCloseTo(audio!.audioSec, 2);
+  // SAFEBOX.MOV's c20 and STEPS.MOV's c3 are chunks nothing names: +0x1c and
+  // +0x34 are both 0, so DF.EXE plays no bed under either film
+  const safebox = readMovFileV1(new Uint8Array(readFileSync(join(MOVIE_DIR, "../CRACK/SAFEBOX.MOV"))));
+  expect(safebox.segments[0].audioChunks).toContain(20);
+  expect(safebox.segments[0].bed).toEqual([]);
+  const steps = read("STEPS.MOV");
+  expect(steps.segments[0].audioChunks).toContain(3);
+  expect(steps.segments[0].bed).toEqual([]);
+  expect(movFileFromV1(steps).audioChunks).toEqual([]);
 
-  // and INTRO.MOV, the film that was frozen on frame 0 for a release: 44.9 s of
-  // narration under its first segment, nine more segments carrying none, which
-  // is what the inheritance rule is for
-  const intro = movFileFromV1(read("INTRO.MOV"));
-  const first = segmentAudio(intro.segments[0]);
-  expect(first!.audioSec).toBeCloseTo(44.91, 1);
-  expect(intro.segments.slice(1, 7).map((s) => segmentAudio(s))).toEqual([
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]);
+  // played whole, then round from the loop entry; FINALEND's loops its last chunk
+  const d1 = movFileFromV1(read("D1ND2M.MOV")).segments[0];
+  const audio = segmentAudio(d1)!;
+  const interval = segmentInterval(d1, d1.frames.length, audio.audioSec, 0);
+  // the picture keeps its header's rate: the bed paces nothing
+  expect(interval * d1.frames.length).toBeLessThan(4000);
+  const bed = soundtrackFor(d1, audio, interval, d1.frames.length);
+  expect(bed.loop).toBe(true);
+  expect(bed.loopStart).toBe(0);
+  expect(bed.samples.length).toBe(audio.resampled.reduce((a, c) => a + c.length, 0));
+  const fin = movFileFromV1(read("FINALEND.MOV")).segments[0];
+  const fa = segmentAudio(fin)!;
+  const fbed = soundtrackFor(fin, fa, 0, fin.frames.length);
+  const lastLen = fa.resampled[5].length / fa.rate;
+  expect(fbed.samples.length / fbed.sampleRate - fbed.loopStart!).toBeCloseTo(3 * lastLen, 3);
 });

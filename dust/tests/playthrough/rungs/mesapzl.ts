@@ -304,6 +304,13 @@ export const rung: Segment = {
         : num("standx") > 640 ? "xdown"
         : "xup";
       await walkTo(p, mine, ends[which]);
+      // With the Mask in hand the skeleton's `walkloop` turns it to the camera
+      // every second pass, and a turn's record puts its actor back on the spot
+      // the turn began from on the pass it lands (DF.EXE 0x439624 copies the
+      // record's start into the actor) — so a wrap taken between the turn and
+      // its landing is undone for the skeleton, though `standx`/`standy` keep
+      // it. Wrap when no turn is in flight, as the original would have to be.
+      await p.pump(() => Number(ask(p, "iswalk", ["skeleton"])) === 0, "the skeleton's turn to land");
       await p.press("uparrow", `wrapping the mine ${which}`);
     }
     if (!home()) {

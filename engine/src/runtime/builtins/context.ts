@@ -1,7 +1,7 @@
 import type { Actor } from "../../df/set";
 import { CELL_UNITS } from "../../df/set-v1-to-v4";
 import type { GameSession } from "../session";
-import { Builtin, Frame, Interpreter, Value, toNum, toStr } from "../interp";
+import { Builtin, Frame, Interpreter, ScriptError, Value, toNum, toStr } from "../interp";
 
 /**
  * Shared plumbing handed to every `register*Builtins` module. Only the pieces
@@ -68,6 +68,15 @@ export interface BuiltinCtx {
    * stuck loop still fails fast instead of hanging the run.
    */
   yieldFrame: () => Promise<void>;
+  /**
+   * A prop or actor command named something that is not open. The engines look
+   * the name up in their open props (TI.EXE 0x442af0) or actors (0x40c810) and
+   * answer a miss with error 0xa, "No such object" (0x442b90, 0x40c8af), before
+   * the command does anything — getter or setter. Counted on the session
+   * (GameSession.accessorMisses) and thrown before DreamFactory 5; RedJack keeps
+   * answering the command's empty value.
+   */
+  miss: (cmd: string, name: Value) => void;
 }
 
 /**
@@ -85,6 +94,8 @@ export interface BuiltinCtx {
 export function accessorFamily<T>(
   r: BuiltinCtx["r"],
   resolve: (name: Value) => T | null | undefined,
+  /** a name nothing answers to — see {@link BuiltinCtx.miss} */
+  miss: (cmd: string, name: Value) => void = () => {},
 ): (
   name: string,
   empty: Value,
@@ -94,7 +105,10 @@ export function accessorFamily<T>(
   return (name, empty, get, set) =>
     r(name, (_i, [n, v], _call, frame) => {
       const e = resolve(n);
-      if (!e) return empty;
+      if (!e) {
+        miss(name, n);
+        return empty;
+      }
       if (v === undefined) return get(e);
       set(e, v, n, frame);
     });
@@ -172,6 +186,11 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
       // a name that is no scene of this set is not a building; `isbuild` has
       // already handled "none" by the time it asks
       return !!sc?.build;
+    },
+    miss: (cmd, name) => {
+      const key = `${cmd}(${toStr(name ?? "")})`;
+      session.accessorMisses.set(key, (session.accessorMisses.get(key) ?? 0) + 1);
+      if (interp.classic) throw new ScriptError(0xa, `no such object: ${key}`);
     },
     yieldFrame: async () => {
       if (session.hasRealFrames) {

@@ -48,9 +48,17 @@
 /** TI.EXE's queue length: `cmp dword ptr [0x485a58], 0x20`. */
 export const EVENT_CAPACITY = 32;
 
-export type QueuedEvent =
+export type QueuedEvent = (
   | { kind: "keydown"; key: string; special: boolean }
-  | { kind: "mousedown"; x: number; y: number };
+  | { kind: "mousedown"; x: number; y: number }
+) & {
+  /**
+   * Told when the event is over: dispatched and its handler run, or thrown
+   * away (coalesced, flushed, overwritten). A press that had to wait its turn
+   * is how a harness knows its gesture has been taken.
+   */
+  taken?: () => void;
+};
 
 /** what a queued event coalesces against — the original compares kind + payload */
 function sameEvent(a: QueuedEvent, b: QueuedEvent): boolean {
@@ -87,11 +95,13 @@ export class EventQueue {
   post(e: QueuedEvent, { coalesce = false }: { coalesce?: boolean } = {}): void {
     this.posted++;
     if (coalesce) {
-      const before = this.q.length;
-      this.q = this.q.filter((q) => !sameEvent(q, e));
-      this.dropped += before - this.q.length;
+      const kept = this.q.filter((q) => !sameEvent(q, e));
+      for (const q of this.q) if (!kept.includes(q)) q.taken?.();
+      this.dropped += this.q.length - kept.length;
+      this.q = kept;
     }
     if (this.q.length >= EVENT_CAPACITY) {
+      for (const q of this.q.slice(EVENT_CAPACITY - 1)) q.taken?.();
       // No droppable class exists here — the original's is the auto-repeat of a
       // held key, which the port never queues as its own kind (a repeat arrives
       // as a coalescing keydown) — so this is its fallback: clamp to
@@ -125,6 +135,6 @@ export class EventQueue {
    */
   flush(): void {
     this.dropped += this.q.length;
-    this.q.length = 0;
+    for (const q of this.q.splice(0)) q.taken?.();
   }
 }

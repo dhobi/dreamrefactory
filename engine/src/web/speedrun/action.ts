@@ -486,7 +486,7 @@ export function predicate(text: string): string {
     case "locked":
       return bare(`(() => {
         const v = window.dbg.session.interp.globals.get("lockevents") ?? 0;
-        return typeof v === "number" ? v !== 0 : String(v).length > 0;
+        return typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : String(v).length > 0;
       })()`);
     /**
      * A script is sitting in an input poll loop RIGHT NOW — `while not button()`,
@@ -1471,7 +1471,7 @@ export const arrow = (name: string): ActionFn => async (c) => {
   const why = await c.d.evaluate<string[]>(`(() => {
     const s = window.dbg.session, v = window.dbg.viewer, out = [];
     const l = s.interp.globals.get("lockevents") ?? 0;
-    if (typeof l === "number" ? l !== 0 : String(l).length > 0) out.push("the world is FROZEN (lockevents)");
+    if (typeof l === "boolean" ? l : typeof l === "number" ? l !== 0 : String(l).length > 0) out.push("the world is FROZEN (lockevents)");
     // An OVERLAY STAGE is up, and an arrow key in one goes to the stage rather
     // than to the room. It is the most ordinary reason a walk does nothing and
     // it used to read as no reason at all, because a room has a flat too — the

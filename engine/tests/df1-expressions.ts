@@ -67,11 +67,11 @@ endcode
 });
 
 test("and still answers what the operators mean", async () => {
-  const { value } = await run(`code go ()
-\treturn ((1 & 0) * 1000 + (0 | 2) * 100 + (3 & 4) * 10 + (0 | 0))
-endcode
-`);
-  expect(value).toBe(110);
+  const ask = async (expr: string) => (await run(`code go ()\n\treturn (${expr})\nendcode\n`)).value;
+  expect(await ask("true & false")).toBe(false);
+  expect(await ask("false | true")).toBe(true);
+  expect(await ask("true & true")).toBe(true);
+  expect(await ask("false | false")).toBe(false);
 });
 
 test("random() on the right of a false & still draws", async () => {
@@ -99,27 +99,28 @@ endcode
 });
 
 test("a comparison binds tighter than = and !=", async () => {
-  // DF.EXE priorities: 3 for > < >= <=, 4 for = !=. So `1 = 2 > 1` is
-  // `1 = (2 > 1)` = 1; read as one level it was `(1 = 2) > 1` = 0.
+  // DF.EXE priorities: 3 for > < >= <=, 4 for = !=. So `true = 2 > 1` is
+  // `true = (2 > 1)`, true; read as one level it would be `(true = 2) > 1`, a
+  // boolean against an integer — error 0xe.
   const { value } = await run(`code go ()
-\treturn ((1 = 2 > 1) * 10 + (0 != 3 < 2))
+\treturn ((true = 2 > 1) & not (false != 3 < 2))
 endcode
 `);
-  expect(value).toBe(10);
+  expect(value).toBe(true);
 });
 
 test("the full ladder, tightest first: * / + - @ comparisons = != & |", async () => {
   const { value } = await run(`code go ()
-\treturn (2 + 3 * 4 = 14 & 1 < 2 | 0)
+\treturn (2 + 3 * 4 = 14 & 1 < 2 | false)
 endcode
 `);
-  expect(value).toBe(1);
+  expect(value).toBe(true);
   const s = await run(`code go ()
-\treturn ("a" @ 1 + 2)
+\treturn ("a" @ "b" = "ab")
 endcode
 `);
-  // + binds tighter than @
-  expect(s.value).toBe("a3");
+  // @ binds tighter than =
+  expect(s.value).toBe(true);
 });
 
 test("operators of one level still associate to the left", async () => {

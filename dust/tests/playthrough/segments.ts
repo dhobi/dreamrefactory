@@ -1693,7 +1693,6 @@ export const segment13: Segment = {
      * sort of interruption its `replies` exist for), and only then ask for
      * quiet — from a cell where he can actually give it.
      */
-    await talkOut(p, LEAVING, "the Mayor", 1);
     /*
      * ...and now stand where the save stands, which is the same cell he paces
      * (`town.marie1` is Scene G8), so the walk and the conversation have to be
@@ -1706,6 +1705,10 @@ export const segment13: Segment = {
      * later `mayoridle` accosts again. Waiting for quiet where he can reach us
      * is waiting for something that cannot happen, and it passes only when the
      * seeded stream puts him a few cells further off.
+     *
+     * (With the world advancing only in the BOOTFILE idle's passes, as DF.EXE's
+     * does, the six seconds are six seconds of passes after he is dismissed,
+     * so even one quiet window beside him is never had.)
      *
      * So: leave each conversation as it opens, walk what we can between them,
      * and stop when the standpoint is ours. `stopWhen` is how a walk hands the

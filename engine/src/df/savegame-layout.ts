@@ -276,6 +276,11 @@ export const WALK_SLOT = {
   dist: 0x26, // i32 — only the line mover writes it
   actor: 0x2e, // pstr
   star: 0x3e, // pstr — the arrival star
+  // a DEFERRED record (TI.EXE 0x443ac0): +6 = 1, built on the first pass its
+  // walker's set is open (0x443bef) from the two names it keeps
+  deferred: 0x06, // u16
+  deferredTo: 0x4e, // pstr — the destination star
+  deferredFrom: 0x5e, // pstr — a route's start (mode 3)
 } as const;
 
 /** a track-list record's name field (pstr at +0x16 of the 40-byte descriptor). */

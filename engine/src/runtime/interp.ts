@@ -1,5 +1,6 @@
 import { CallExpr, Expr, Script, Stmt } from "./ast";
-import { CaselessMap } from "./caseless";
+import { CaselessMap, foldAscii } from "./caseless";
+import { answersBoolean, booleanArg, integerArgs } from "./value-types";
 
 /**
  * DreamFactory script interpreter core.
@@ -12,12 +13,17 @@ import { CaselessMap } from "./caseless";
  * `me` = name of the object owning the running script, `target` = name of
  * the object/hotspot the event refers to.
  *
- * Values are ints or strings; true/false are 1/0. Undeclared reads are 0.
+ * Values are integers, strings and — before DreamFactory 5 — booleans. The
+ * engines tag every value (DF.EXE: 2 boolean, 3 string, 4 integer; TI.EXE and
+ * tl.exe the same), `true`/`false` are boolean literals (tokens 4021/4022 ->
+ * 0x40da5d/0x40da86), and comparisons, `&`, `|` and `not` answer booleans.
+ * Here a boolean is a JS boolean; DreamFactory 5 keeps 1/0 ({@link
+ * Interpreter.bool}). Undeclared reads are the integer 0.
  * Builtin semantics live in a registry so they can be filled in command by
  * command as they are recovered from TI.EXE / observed behavior.
  */
 
-export type Value = number | string;
+export type Value = number | string | boolean;
 
 export type Signal =
   | { s: "normal" }
@@ -31,6 +37,31 @@ export type Signal =
    * reaches the top of the chain from any depth.
    */
   | { s: "abandoned" };
+
+/**
+ * A runtime error the original engine would raise — its numbered error codes
+ * (2: a `)` was expected, 0xe: wrong type, ...). In DF.EXE every statement and
+ * call hands a nonzero code straight back to its caller (`test ax, ax; jne`
+ * after each step of 0x403340), a script call included (0x403017-0x403097),
+ * and `sendto…` returns its target's code (sendtopuppet: 0x436542 -> 0x436569),
+ * so the WHOLE chain unwinds to the event that started it; the first error is
+ * latched for the debug window (0x42f300) and the game goes on. A throw does
+ * the same here: nothing between a builtin and the dispatch's `track` catches
+ * it, and the session logs it as a script error.
+ */
+export class ScriptError extends Error {
+  /** the handler it was raised in, `script.handler` — filled in on the way out */
+  where = "";
+  /** handed to {@link Interpreter.onScriptError} already — the innermost frame
+   *  does it, as the engines latch at every call level and keep the first */
+  latched = false;
+  constructor(
+    readonly code: number,
+    message: string,
+  ) {
+    super(`error ${code}: ${message}`);
+  }
+}
 
 const NORMAL: Signal = { s: "normal" };
 const ABANDONED: Signal = { s: "abandoned" };
@@ -107,8 +138,53 @@ export class Frame {
      * {@link Interpreter.abandonRunning}.
      */
     readonly epoch = 0,
+    /**
+     * Did the caller ask this routine for a VALUE? The engines hand every call a
+     * result pointer (TI.EXE 0x443bd0's fifth argument, DF.EXE 0x402fa0's) and
+     * the handler answers to it: a call written as a statement passes none
+     * (0x444002 `push 0`), and so does every plain `sendto…` — sendtoprop is
+     * sendtopropfx with a null pointer (0x442261) — while a call in an
+     * expression and a `sendto…fx` pass one. `return` without one is error 5
+     * (0x4448c8), reaching `endcode`, `exitcode` or `passcode` WITH one is error
+     * 6 (0x44478f, 0x4447a8, 0x444911). Undefined for what the port's engine
+     * dispatches itself, where the original's pointer has not been read.
+     */
+    readonly wants?: boolean,
   ) {}
+  /**
+   * The `if`s this frame has entered and not yet left by their `endif` — the
+   * engines' per-frame counter (TI.EXE [esp+0x16] of 0x443f60, DF.EXE the same
+   * slot of 0x403340). An `if` whose `endif` was never written leaves it raised,
+   * and `endcode` answers a raised one with error 0x1d (0x44473f).
+   */
+  ifDepth = 0;
+  /**
+   * What a `sendto…` being made from this frame asks of its handler — see
+   * {@link wants}. Set by the special form for the length of its dispatch, which
+   * reaches {@link Interpreter.runHandler} through the session's chain walkers
+   * with this frame as the parent; a frame runs one statement at a time, so one
+   * field is enough.
+   */
+  sendWants?: boolean;
 }
+
+/**
+ * The handler names a script may call without defining — the engines' own
+ * events. A routine call that finds no handler anywhere is error 4 (TI.EXE
+ * 0x443d9c) unless its name is one of these (0x444f40 over the table at
+ * 0x45c790, tl.exe 0x40f320 over 0x45bba0: 27 names), which answers nothing and
+ * goes on. DF.EXE's table (0x404320 over 0x445238) has 31: the same plus Dust's
+ * ball and loop ends and its floors.
+ */
+const ENGINE_EVENTS_V4: ReadonlySet<string> = new Set([
+  "opencast", "openactor", "closecast", "closeactor", "openflat", "openstage", "closeflat", "closestage",
+  "endwalk", "endturn", "openshop", "openprop", "closeshop", "closeprop", "openpuppet", "closepuppet",
+  "menustate", "boot", "idle", "menuselect", "keydown", "keyrepeat", "mousedown", "openset", "openscene",
+  "closeset", "closescene",
+]);
+const ENGINE_EVENTS_V1: ReadonlySet<string> = new Set([
+  ...ENGINE_EVENTS_V4, "endball", "endloop", "openfloor", "closefloor",
+]);
 
 /** a script bound to its owning object */
 export class ScriptInstance {
@@ -155,6 +231,44 @@ export class Interpreter {
    * session sets it with isV5.
    */
   shortCircuit = false;
+  /**
+   * The rules DF.EXE, TI.EXE and tl.exe agree on and RedJack.exe was never
+   * checked against: values are typed — a boolean is not a number and neither
+   * is a string, `=`/`!=` answer "unequal" across types ({@link valueEq}) and
+   * every other operator, `if`, `while`, `for` and `switch` raise error 0xe
+   * ({@link ScriptError}) — a `for` variable is a local the body may move, and
+   * `dumplocal` deletes. The session clears it with isV5, so DreamFactory 5
+   * keeps what it had: 1/0 for true/false and lenient operators.
+   */
+  classic = true;
+  /**
+   * Which engine's command table the running game's IDs mean (1 = DF.EXE, 4 =
+   * TI.EXE/tl.exe) — they disagree about what some IDs answer (value-types.ts).
+   * The session points it at its own version.
+   */
+  tableVersion: () => number = () => 4;
+  /**
+   * Told of every {@link ScriptError} once, where it is raised — the engines'
+   * latch (TI.EXE 0x407220 called from the call function at 0x443ca1/0x443cb6,
+   * DF.EXE 0x42f300 from 0x403073/0x403088). The session decides what the player
+   * sees (GameSession.scriptErrorLatched).
+   */
+  onScriptError: (e: ScriptError) => void = () => {};
+  /**
+   * `keyaborts(true)` and the Escape key down — asked after every statement, as
+   * the engines do (TI.EXE 0x4446ff: the flag at 0x4608d0, then 0x436440's
+   * `GetAsyncKeyState(VK_ESCAPE)`; DF.EXE 0x403adf -> 0x430a20). True stops the
+   * chain with error 0x35. The session wires it.
+   */
+  keyAbort: () => boolean = () => false;
+  /**
+   * The loops open across EVERY frame — the engines keep `for` and `while`
+   * records on two global stacks of 20 (TI.EXE 0x48c1a8 / 0x48c1ac, DF.EXE
+   * 0x44900c / 0x449008), and the 20th that would open is error 3 (`for`
+   * 0x44449d -> 0x4444b6, `while` 0x4445fc -> 0x44488d).
+   */
+  private forOpen = 0;
+  private whileOpen = 0;
   /** fired when a WATCHED global's value changes; the session routes it to the log */
   onGlobalChange: (name: string, from: Value, to: Value) => void = () => {};
   readonly builtins = new Map<string, Builtin>();
@@ -304,6 +418,26 @@ export class Interpreter {
     console.warn(`[interp] no semantics for: ${name}(${args.map((a) => JSON.stringify(a)).join(", ")})`);
   };
 
+  /**
+   * A boolean as this engine has it: a real boolean before DreamFactory 5, 1/0
+   * in it (RedJack keeps the port's old answers).
+   */
+  bool(b: boolean): Value {
+    return this.classic ? b : b ? 1 : 0;
+  }
+
+  /**
+   * The test of an `if`/`while` condition. DF.EXE wants a boolean and answers
+   * error 0xe to anything else (`if` 0x40353d, `while` 0x4039ab and its re-test
+   * 0x403a5c; TI.EXE 0x44415d/0x4445cb/0x44467c, tl.exe 0x40e53d/0x40e9ab/
+   * 0x40ea5c) — `if 1` and `if "x"` are errors, not true.
+   */
+  condition(v: Value, what: string): boolean {
+    if (!this.classic) return truthy(v);
+    if (typeof v !== "boolean") throw typeError(`${what} wants a boolean, got ${show(v)}`);
+    return v;
+  }
+
   register(name: string, fn: Builtin): void {
     // every builtin name must be registered exactly once (see builtins/index.ts);
     // a silent overwrite once hid a wrong calcmod for months
@@ -333,16 +467,39 @@ export class Interpreter {
      * heartbeat).
      */
     parent?: Frame,
+    /**
+     * Whether a SCRIPT's call wants a value back — see {@link Frame.wants}.
+     * Absent, a `sendto…` being made from `parent` says ({@link Frame.sendWants});
+     * absent both, this is the port's own dispatch and asks nothing.
+     */
+    wants: boolean | undefined = parent?.sendWants,
   ): Promise<{ value: Value; passed: boolean; handled: boolean }> {
     const block = inst.script.codes.get(handler);
     if (!block) return { value: 0, passed: true, handled: false };
     if (this.depth >= 64) {
-      throw new Error(`dispatch cycle: ${inst.name}.${handler} at depth ${this.depth}`);
+      // The engines check their native stack instead (TI.EXE 0x443bd4 and the
+      // evaluator's 0x431e97: under 0x800 bytes left is error 0x2c, "Too much
+      // recursion"), which no port can count the same way; 64 is the port's.
+      throw this.latch(
+        new ScriptError(0x2c, `dispatch cycle: ${inst.name}.${handler} at depth ${this.depth}`),
+        `${inst.name}.${handler}`,
+      );
+    }
+    // A script's call binds its arguments to the parameters one for one (TI.EXE
+    // 0x443db0, DF.EXE 0x4030c0): one too many is error 2, a `)` where the
+    // handler expects a `,` 0x1c, and no argument at all where it wants one is
+    // the empty argument read as an expression — 0xe (0x431e60).
+    if (this.classic && wants !== undefined && args.length !== block.params.length) {
+      const code = args.length > block.params.length ? 2 : args.length === 0 ? 0xe : 0x1c;
+      throw this.latch(
+        new ScriptError(code, `${handler} takes ${block.params.length} argument(s), called with ${args.length}`),
+        `${inst.name}.${handler}`,
+      );
     }
     // The outermost handler names the event for everything under it, so a chain
     // runner does not have to declare it and a re-route (sendtoscene(…,
     // keydown(arg))) keeps the name it already had — see Frame.dispatch.
-    const frame = new Frame(inst, ctx, handler, parent?.dispatch ?? handler, this.epoch);
+    const frame = new Frame(inst, ctx, handler, parent?.dispatch ?? handler, this.epoch, wants);
     for (let i = 0; i < block.params.length; i++) {
       frame.locals.set(block.params[i], args[i] ?? 0);
     }
@@ -353,15 +510,53 @@ export class Interpreter {
     this.onHandler?.(handler);
     try {
       const sig = await this.execBlock(block.body, frame);
+      if (this.classic && sig.s !== "return" && sig.s !== "abandoned") this.endOfHandler(sig, frame);
       return {
         value: sig.s === "return" ? sig.value : 0,
         passed: sig.s === "passcode",
         handled: true,
       };
+    } catch (e) {
+      if (e instanceof ScriptError) this.latch(e, `${inst.name}.${handler}`);
+      throw e;
     } finally {
       this.liveHandlers.pop();
       this.depth--;
       this.currentEvent = prevEvent;
+    }
+  }
+
+  /**
+   * Name the handler an error was raised in — the innermost, once — and hand it
+   * to {@link onScriptError}, once.
+   */
+  private latch(e: ScriptError, where: string): ScriptError {
+    if (!e.where) {
+      e.where = where;
+      e.message += ` (in ${e.where})`;
+    }
+    if (!e.latched) {
+      e.latched = true;
+      this.onScriptError(e);
+    }
+    return e;
+  }
+
+  /**
+   * A handler leaving by anything but `return`. At `endcode` the engines check
+   * their block counters first — an `if` still open is error 0x1d (TI.EXE
+   * 0x44473f, DF.EXE 0x403b1f; the `for`, `while` and `switch` counters after it
+   * cannot be left raised by a script this parser accepts) — and then the
+   * caller: a value asked for and none given is error 6 (0x44478f). `exitcode`
+   * and `passcode` check only the caller (0x4447a8, 0x444911).
+   */
+  private endOfHandler(sig: Signal, frame: Frame): void {
+    if (sig.s === "normal" && frame.ifDepth > 0) {
+      throw new ScriptError(0x1d, "an `if` without its `endif` reached the end of the handler");
+    }
+    if (frame.wants === true) {
+      const how = sig.s === "normal" ? "the end of the handler" : sig.s;
+      throw new ScriptError(6, `${frame.handler} was called for a value and left by ${how}`);
     }
   }
 
@@ -370,6 +565,8 @@ export class Interpreter {
       if (frame.epoch !== this.epoch) return ABANDONED;
       const sig = await this.execStmt(st, frame);
       if (sig.s !== "normal") return sig;
+      // after every statement, the abort key (see keyAbort)
+      if (this.classic && this.keyAbort()) throw new ScriptError(0x35, "programmer keyboard abort (Esc under keyaborts)");
     }
     return NORMAL;
   }
@@ -403,9 +600,14 @@ export class Interpreter {
           // complaining about 37 variables it cannot store (#85), and a script
           // reading last time's value of a puzzle that has been reset.
           for (const n of st.names) this.globals.delete(n);
+        } else if (st.kind === "dumplocal" && this.classic) {
+          // the local twin of dumpglobal: DF.EXE's 0x403a87 hands the names to
+          // the same deleter (0x403e10 -> 0x4082a0) with the frame's locals
+          // where 0x403a9d hands it the globals. TI.EXE 0x4446a7 and tl.exe
+          // 0x40ea87 likewise. Nothing in the three corpora uses it.
+          for (const n of st.names) frame.locals.delete(n);
         } else {
-          // local (dumplocal too — no script in the corpus uses it, and a local
-          // dies with its frame anyway)
+          // local — a new variable is the integer 0 (DF.EXE 0x408260)
           for (const n of st.names) if (!frame.locals.has(n)) frame.locals.set(n, 0);
         }
         return NORMAL;
@@ -415,27 +617,45 @@ export class Interpreter {
           this.setElement(st.name, key, await this.evalExpr(st.value, frame), frame);
           return NORMAL;
         }
+        // The name is found before the value is read (TI.EXE 0x44401e locals,
+        // 0x444037 globals): an assignment never creates a variable, and one
+        // nobody declared is error 9 (DF.EXE 0x403434).
+        if (this.classic && !frame.locals.has(st.name) && !this.globals.has(st.name)) {
+          throw new ScriptError(9, `no such variable: ${st.name} (assigned)`);
+        }
         this.setVar(st.name, await this.evalExpr(st.value, frame), frame);
         return NORMAL;
       case "callstmt":
-        await this.evalCall(st.call, frame);
+        await this.evalCall(st.call, frame, false);
         return NORMAL;
       case "if":
-        if (truthy(await this.evalExpr(st.cond, frame))) return this.execBlock(st.body, frame);
-        if (st.else_) return this.execBlock(st.else_, frame);
-        return NORMAL;
+        return this.execIf(st, frame);
       case "switch": {
         const subject = await this.evalExpr(st.subject, frame);
-        for (let i = 0; i < st.cases.length; i++) {
-          if (valueEq(subject, await this.evalExpr(st.cases[i].match, frame))) {
+        // the subject is an integer or a string, anything else error 0xe
+        // (TI.EXE 0x444236/0x44423e, DF.EXE 0x403616)
+        if (this.classic && typeof subject === "boolean") throw typeError(`switch ${show(subject)}`);
+        let sig: Signal = NORMAL;
+        let matched = false;
+        for (let i = 0; i < st.cases.length && !matched; i++) {
+          if (this.caseMatches(subject, await this.evalExpr(st.cases[i].match, frame))) {
             // stacked labels share the next non-empty body, e.g. TAOOT's
             //   case "poop"  /  case "deckbd"  /  case "decka"  -> return 900
             let j = i;
             while (j < st.cases.length - 1 && st.cases[j].body.length === 0) j++;
-            return this.execBlock(st.cases[j].body, frame);
+            sig = await this.execBlock(st.cases[j].body, frame);
+            matched = true;
           }
         }
-        return st.default_ ? this.execBlock(st.default_, frame) : NORMAL;
+        if (!matched && st.default_) sig = await this.execBlock(st.default_, frame);
+        // No `endswitch`: a case that runs to its end goes looking for one
+        // (the next `case` scans for it, 0x4442bc -> 0x444b50) and so does a
+        // subject no case matched, and the scan meets `endcode` — error 0x1f
+        // (0x444b90; DF.EXE 0x403f50 the same).
+        if (this.classic && st.open && sig.s === "normal") {
+          throw new ScriptError(0x1f, "a `switch` without its `endswitch` ran to the end of the handler");
+        }
+        return sig;
       }
       case "while": {
         // The guard catches a synchronous infinite loop (a data bug that would
@@ -444,7 +664,15 @@ export class Interpreter {
         // for minutes waiting on the user, so a real yield resets the counter.
         let guard = 0;
         let lastYield = this.realYieldSeq();
-        while (truthy(await this.evalExpr(st.cond, frame))) {
+        let opened = false;
+        try {
+        while (this.condition(await this.evalExpr(st.cond, frame), "while")) {
+          if (!opened && this.classic) {
+            // the loop's record goes on the global while stack only once it is
+            // entered (0x4445de); the 20th is error 3
+            opened = true;
+            if (++this.whileOpen >= 20) throw new ScriptError(3, "while loops nested 20 deep");
+          }
           // here as well as in execBlock, because a body with no statements
           // never reaches that check and would spin on the condition alone
           if (frame.epoch !== this.epoch) return ABANDONED;
@@ -458,12 +686,18 @@ export class Interpreter {
             throw new Error("while loop runaway (100k iterations)");
           }
         }
+        } finally {
+          if (opened) this.whileOpen--;
+        }
         return NORMAL;
       }
       case "for": {
-        const from = toNum(await this.evalExpr(st.from, frame));
-        const to = toNum(await this.evalExpr(st.to, frame));
-        const step = st.step ? toNum(await this.evalExpr(st.step, frame)) : 1;
+        // `from`, `to` and `step` are integers or error 0xe (DF.EXE 0x403739,
+        // 0x403798, 0x4037e0)
+        const from = this.forNum(await this.evalExpr(st.from, frame), "from");
+        const to = this.forNum(await this.evalExpr(st.to, frame), "to");
+        const step = st.step ? this.forNum(await this.evalExpr(st.step, frame), "step") : 1;
+        if (this.classic) return this.classicFor(st.varName, from, to, step, st.body, frame);
         if (step === 0) throw new Error("for loop with step 0");
         for (let i = from; step > 0 ? i <= to : i >= to; i += step) {
           this.setVar(st.varName, i, frame);
@@ -480,8 +714,167 @@ export class Interpreter {
       case "passcode":
         return { s: "passcode" };
       case "return":
+        if (this.classic) {
+          // a caller that asked for nothing cannot be answered (0x4448c8)
+          if (frame.wants === false) throw new ScriptError(5, `\`return\` in ${frame.handler}, called for no value`);
+          // ...and a `return` with nothing after it reads the line break as its
+          // value, which is no operand: 0xe (0x4448dd -> 0x431e60)
+          if (!st.value && frame.wants === true) throw typeError("`return` with no value");
+        }
         return { s: "return", value: st.value ? await this.evalExpr(st.value, frame) : 0 };
+      case "bare": {
+        if (!this.classic) return NORMAL;
+        const known = frame.locals.has(st.name) || this.globals.has(st.name);
+        throw new ScriptError(known ? 0x10 : 9, known ? `expected '=' after ${st.name}` : `no such variable: ${st.name}`);
+      }
+      case "stray":
+        return this.stray(st, frame);
+      case "fault":
+        if (!this.classic) return NORMAL;
+        throw new ScriptError(st.code, st.why);
     }
+  }
+
+  /**
+   * `if`, with the engines' per-frame count of open ones ({@link Frame.ifDepth}):
+   * entering a branch raises it (TI.EXE 0x444177 true, 0x44419f the `else`) and
+   * the `endif` lowers it (0x4441db, DF.EXE 0x4035bb). Without an `endif`
+   * ({@link Stmt} `open`) nothing lowers it, and a branch that has to be skipped
+   * is skipped by a scan for one — which meets `endcode` (error 0x1d) or a later
+   * block's closer, a jump this tree cannot make (logged, and the branch is
+   * skipped as before).
+   */
+  private async execIf(st: Extract<Stmt, { t: "if" }>, frame: Frame): Promise<Signal> {
+    const open = this.classic && st.open;
+    if (this.condition(await this.evalExpr(st.cond, frame), "if")) {
+      frame.ifDepth++;
+      const sig = await this.execBlock(st.body, frame);
+      if (sig.s !== "normal") return sig;
+      if (!open) {
+        frame.ifDepth--;
+        return sig;
+      }
+      // the body ran into its `else`: lower the count and skip to the `endif`
+      // (0x4441f4 -> 0x444a90)
+      if (st.else_) {
+        frame.ifDepth--;
+        if (st.noEndif === "endcode") throw new ScriptError(0x1d, "skipping an `else` met the end of the handler");
+      }
+      return sig;
+    }
+    if (st.else_) {
+      frame.ifDepth++;
+      const sig = await this.execBlock(st.else_, frame);
+      if (sig.s === "normal" && !open) frame.ifDepth--;
+      return sig;
+    }
+    if (open && st.noEndif === "endcode") {
+      throw new ScriptError(0x1d, "skipping an `if` met the end of the handler");
+    }
+    return NORMAL;
+  }
+
+  /** a block keyword with no block to close — see the `stray` statement */
+  private stray(st: Extract<Stmt, { t: "stray" }>, frame: Frame): Signal {
+    if (!this.classic) return NORMAL;
+    switch (st.name.toLowerCase()) {
+      case "endif":
+        // a frame's open count can still take it (an `if` whose own `endif` the
+        // parse gave to an outer block), else 0x1d (0x4441cf -> 0x4447e5)
+        if (frame.ifDepth > 0) {
+          frame.ifDepth--;
+          return NORMAL;
+        }
+        throw new ScriptError(0x1d, "`endif` with no `if` open");
+      case "else":
+        throw new ScriptError(0x1d, "`else` with no `if` open"); // 0x4441e8 -> 0x4447f1
+      case "endswitch":
+      case "case":
+        throw new ScriptError(0x1f, `\`${st.name}\` with no \`switch\` open`); // 0x444809, 0x444815
+      case "endwhile":
+        throw new ScriptError(0x25, "`endwhile` with no `while` open"); // 0x444899
+      default:
+        throw new ScriptError(0x1e, "`endfor` with no `for` open"); // 0x44485d
+    }
+  }
+
+  /**
+   * `for` as DF.EXE runs it (0x4036c9, the `endfor` at 0x4038a2); TI.EXE
+   * 0x4442e9/0x4444c2 and tl.exe 0x40e6c9/0x40e944 are the same code.
+   *
+   * - `to` and `step` are read ONCE, at the `for` line, and kept in the loop
+   *   record (0x40384c); only `from` is written to the variable.
+   * - The variable is found-or-made in the frame's LOCALS (0x4081a0 on the
+   *   locals container), never in the globals, even when a global has that
+   *   name — the global is shadowed for the rest of the handler, not counted.
+   * - A loop that cannot start is skipped: `from > to` with a positive step,
+   *   `from < to` with a negative one (0x4037fb-0x403829). Step 0 enters.
+   * - Each `endfor` READS the variable back, adds the step and writes it
+   *   (0x4038ff-0x403933), so the body may move it; the loop goes on while it
+   *   is `<= to` (step >= 0) or `>= to` (step < 0). It ends one step past `to`.
+   */
+  private async classicFor(
+    name: string,
+    from: number,
+    to: number,
+    step: number,
+    body: Stmt[],
+    frame: Frame,
+  ): Promise<Signal> {
+    frame.locals.set(name, from);
+    if ((step > 0 && from > to) || (step < 0 && from < to)) return NORMAL;
+    // on the global for stack once entered (0x444467); the 20th is error 3
+    if (++this.forOpen >= 20) {
+      this.forOpen--;
+      throw new ScriptError(3, "for loops nested 20 deep");
+    }
+    try {
+      return await this.classicForBody(name, to, step, body, frame);
+    } finally {
+      this.forOpen--;
+    }
+  }
+
+  private async classicForBody(name: string, to: number, step: number, body: Stmt[], frame: Frame): Promise<Signal> {
+    let guard = 0;
+    let lastYield = this.realYieldSeq();
+    for (;;) {
+      if (frame.epoch !== this.epoch) return ABANDONED;
+      const sig = await this.execBlock(body, frame);
+      if (sig.s !== "normal") return sig;
+      // read back as an integer, or error 0xe (0x403914)
+      // a 32-bit add (0x44454d `add`)
+      const v = (this.forNum(this.getVar(name, frame), name) + step) | 0;
+      frame.locals.set(name, v);
+      if (step >= 0 ? v > to : v < to) return NORMAL;
+      // a body that holds the variable back (or a step of 0) can spin for ever,
+      // as it would in the original; the while loop's runaway guard applies
+      const y = this.realYieldSeq();
+      if (y !== lastYield) {
+        lastYield = y;
+        guard = 0;
+      } else if (++guard > 100_000) {
+        throw new Error("for loop runaway (100k iterations)");
+      }
+    }
+  }
+
+  /** a `for` bound — an integer, or error 0xe in the classic engines */
+  private forNum(v: Value, what: string): number {
+    if (this.classic && typeof v !== "number") throw typeError(`for: ${what} wants an integer, got ${show(v)}`);
+    return toNum(v);
+  }
+
+  /**
+   * One `case` against the subject. DF.EXE's 0x404070 compares the tags first
+   * and a case of another type is error 0xe (0x40412f -> 0x4041d0); integers
+   * then match by value (0x404148), strings caselessly (0x40417e), and a
+   * boolean case is never a match (0x404151 -> 0x40418f, the next case).
+   */
+  private caseMatches(subject: Value, match: Value): boolean {
+    if (!this.classic) return valueEq(subject, match);
+    if (typeof subject !== typeof match) throw typeError(`case ${show(match)} against ${show(subject)}`);
+    return typeof subject !== "boolean" && valueEq(subject, match, true);
   }
 
   async evalExpr(e: Expr, frame: Frame): Promise<Value> {
@@ -491,19 +884,34 @@ export class Interpreter {
       case "str":
         return e.v;
       case "bool":
-        return e.v ? 1 : 0;
+        return this.bool(e.v);
       case "me":
         return frame.ctx.me;
       case "target":
         return frame.ctx.target;
       case "var":
+        // locals, then globals, then error 9 — never 0 (TI.EXE 0x4327f4/0x432811,
+        // DF.EXE 0x40d8f4/0x40d913)
+        if (this.classic && !frame.locals.has(e.name) && !this.globals.has(e.name)) {
+          throw new ScriptError(9, `no such variable: ${e.name}`);
+        }
         return this.getVar(e.name, frame);
       case "index":
         return this.getVar(this.elementKey(e.name, await this.evalExpr(e.index, frame)), frame);
       case "call":
-        return (await this.evalCall(e, frame)) ?? 0;
+        return (await this.evalCall(e, frame, true)) ?? 0;
       case "un": {
         const v = await this.evalExpr(e.e, frame);
+        if (this.classic) {
+          // `not` wants a boolean (DF.EXE 0x40dad8), unary `-` an integer
+          // (0x40db9a); anything else is error 0xe
+          if (e.op === "not") {
+            if (typeof v !== "boolean") throw typeError(`not ${show(v)}`);
+            return !v;
+          }
+          if (typeof v !== "number") throw typeError(`-${show(v)}`);
+          return -v | 0;
+        }
         if (e.op === "not") return truthy(v) ? 0 : 1;
         return -toNum(v);
       }
@@ -521,6 +929,7 @@ export class Interpreter {
           if (e.op === "|" && truthy(l)) return 1;
         }
         const r = await this.evalExpr(e.r, frame);
+        if (this.classic) return classicBinary(e.op, l, r);
         switch (e.op) {
           case "&":
             return truthy(l) && truthy(r) ? 1 : 0;
@@ -537,9 +946,9 @@ export class Interpreter {
           case "/":
             return Math.trunc(toNum(l) / toNum(r));
           case "=":
-            return valueEq(l, r) ? 1 : 0;
+            return valueEq(l, r, this.classic) ? 1 : 0;
           case "!=":
-            return valueEq(l, r) ? 0 : 1;
+            return valueEq(l, r, this.classic) ? 0 : 1;
           case ">":
             return toNum(l) > toNum(r) ? 1 : 0;
           case "<":
@@ -555,12 +964,16 @@ export class Interpreter {
     }
   }
 
-  async evalCall(call: CallExpr, frame: Frame): Promise<Value | void> {
+  /**
+   * A call. `wants` is whether it was written for its value (in an expression)
+   * or as a statement, which a script routine is told — see {@link Frame.wants}.
+   */
+  async evalCall(call: CallExpr, frame: Frame, wants = true): Promise<Value | void> {
     // user code block in the same script takes precedence over builtins
     // only for names that aren't engine commands (no opcode id)
     if (call.id === undefined && frame.script.script.codes.has(call.name)) {
       const args = await this.evalArgs(call.args, frame);
-      return (await this.runHandler(frame.script, call.name, args, frame.ctx, frame)).value;
+      return (await this.runHandler(frame.script, call.name, args, frame.ctx, frame, wants)).value;
     }
     // The registries are keyed by the lowercase name the opcode table uses; a
     // script is free to spell the call any way (Timelapse's journal pickup asks
@@ -569,20 +982,61 @@ export class Interpreter {
     // unknown command — the pickup that made no sound.
     const folded = call.name.toLowerCase();
     const special = this.specialForms.get(folded);
-    if (special) return special(this, call.args, frame);
+    if (special) {
+      // a `sendto…` tells its handler whether a value is wanted: the fx forms
+      // pass a result pointer, the plain ones pass none (see Frame.wants)
+      const before = frame.sendWants;
+      frame.sendWants = /fx$/i.test(folded);
+      let out: Value | void;
+      try {
+        out = await special(this, call.args, frame);
+      } finally {
+        frame.sendWants = before;
+      }
+      // Dust's 20100 `scenebuild` is answered by the `sendtoserverfx` form
+      return this.classic && call.id !== undefined && out !== undefined && answersBoolean(this.tableVersion(), call.id)
+        ? truthy(out)
+        : out;
+    }
     const builtin = this.builtins.get(folded);
     const args = await this.evalArgs(call.args, frame);
-    if (builtin) return builtin(this, args, call, frame);
+    if (builtin) {
+      if (!this.classic || call.id === undefined) return builtin(this, args, call, frame);
+      // The engine's own commands check and answer typed values — see
+      // value-types.ts. A boolean argument that is not one is error 0xe, the
+      // setter's `cmp word [arg], 2` (actorvisible: DF.EXE 0x412a48).
+      const v = this.tableVersion();
+      const b = booleanArg(v, call.id);
+      if (b >= 0 && b < args.length && typeof args[b] !== "boolean") {
+        throw typeError(`${call.name}: argument ${b + 1} wants a boolean, got ${show(args[b])}`);
+      }
+      // ...and an integer argument that is not one, the same 0xe (value-types.ts
+      // integerArgs: a statement and an expression reach different implementations)
+      for (const i of integerArgs(v, call.id, wants)) {
+        if (i < args.length && typeof args[i] !== "number") {
+          throw typeError(`${call.name}: argument ${i + 1} wants an integer, got ${show(args[i])}`);
+        }
+      }
+      const out = await builtin(this, args, call, frame);
+      return out !== undefined && answersBoolean(v, call.id) ? truthy(out) : out;
+    }
     if (call.id === undefined) {
       for (let p = frame.script.parent; p; p = p.parent) {
         if (p.script.codes.has(call.name)) {
-          return (await this.runHandler(p, call.name, args, frame.ctx, frame)).value;
+          return (await this.runHandler(p, call.name, args, frame.ctx, frame, wants)).value;
         }
       }
       for (const inst of this.fallbackScripts) {
         if (inst.script.codes.has(call.name)) {
-          return (await this.runHandler(inst, call.name, args, frame.ctx, frame)).value;
+          return (await this.runHandler(inst, call.name, args, frame.ctx, frame, wants)).value;
         }
+      }
+      if (this.classic) {
+        // No handler anywhere: error 4, unless the name is one of the engine's
+        // own events, which a script may call without defining (ENGINE_EVENTS)
+        const events = this.tableVersion() === 1 ? ENGINE_EVENTS_V1 : ENGINE_EVENTS_V4;
+        if (events.has(foldAscii(call.name))) return 0;
+        throw new ScriptError(4, `no such handler: ${call.name}`);
       }
     }
     this.onUnknown(call.name, args);
@@ -642,20 +1096,129 @@ export class Interpreter {
 }
 
 export function truthy(v: Value): boolean {
+  if (typeof v === "boolean") return v;
   return typeof v === "number" ? v !== 0 : v.length > 0;
 }
+/** a value as a number; a boolean is 1/0 (the port's own reads — the engines
+ *  would refuse it, see {@link classicBinary}) */
 export function toNum(v: Value): number {
   if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
   const n = Number.parseInt(v, 10);
   return Number.isNaN(n) ? 0 : n;
 }
 export function toStr(v: Value): string {
   return typeof v === "string" ? v : String(v);
 }
-export function valueEq(a: Value, b: Value): boolean {
-  if (typeof a === "number" && typeof b === "number") return a === b;
-  // mixed / string comparison is by text, case-insensitive (scripts mix case
-  // freely); comparing numerically would make "uparrow" = 0 true
+
+/** the wrong-type error, 0xe, every check above raises */
+function typeError(message: string): ScriptError {
+  return new ScriptError(0xe, `wrong type: ${message}`);
+}
+
+/** a value for an error message, its type showing */
+function show(v: Value): string {
+  return typeof v === "string" ? JSON.stringify(v) : String(v);
+}
+
+/**
+ * A binary operator as DF.EXE's reducer 0x40d250 applies it (table 0x40d71c,
+ * one case per operator id 8001-8013); TI.EXE 0x4320d0 and tl.exe 0x41fa90 are
+ * the same code. Every case checks the two type tags before it looks at a value:
+ *
+ * - `+ - * /` want two integers (0x40d29a...0x40d358), and `/` by zero is error
+ *   0x37 (0x40d35f) rather than infinity.
+ * - `&` `|` want two booleans (0x40d37a, 0x40d3a9).
+ * - `@` wants two strings (both through 0x40cf60, which refuses any other tag)
+ *   and a result of at most 255 characters, else error 0x1a (0x40d426).
+ * - `=` `!=` answer "unequal" when the tags differ (0x40d461, 0x40d523), and
+ *   otherwise compare integers and booleans by value, strings caselessly.
+ * - `< > <= >=` want the same tag (0x40d5ea...) and that tag an integer.
+ *
+ * Anything refused is error 0xe. Every answer of a comparison is a boolean.
+ */
+export function classicBinary(op: string, l: Value, r: Value): Value {
+  const ints = (): [number, number] => {
+    if (typeof l !== "number" || typeof r !== "number") throw typeError(`${show(l)} ${op} ${show(r)}`);
+    return [l, r];
+  };
+  switch (op) {
+    // 32-bit registers: `add`, `sub` and `imul` wrap (TI.EXE 0x432140, 0x43217f,
+    // 0x4321ab; DF.EXE 0x40d29a...)
+    case "+": {
+      const [a, b] = ints();
+      return (a + b) | 0;
+    }
+    case "-": {
+      const [a, b] = ints();
+      return (a - b) | 0;
+    }
+    case "*": {
+      const [a, b] = ints();
+      return Math.imul(a, b);
+    }
+    case "/": {
+      const [a, b] = ints();
+      if (b === 0) throw new ScriptError(0x37, `division by zero: ${a} / 0`);
+      return Math.trunc(a / b) | 0;
+    }
+    case "&":
+    case "|":
+      if (typeof l !== "boolean" || typeof r !== "boolean") throw typeError(`${show(l)} ${op} ${show(r)}`);
+      return op === "&" ? l && r : l || r;
+    case "@": {
+      if (typeof l !== "string" || typeof r !== "string") throw typeError(`${show(l)} @ ${show(r)}`);
+      if (l.length + r.length > 255) throw new ScriptError(0x1a, "string longer than 255 characters");
+      return l + r;
+    }
+    case "=":
+      return valueEq(l, r, true);
+    case "!=":
+      return !valueEq(l, r, true);
+    case ">": {
+      const [a, b] = ints();
+      return a > b;
+    }
+    case "<": {
+      const [a, b] = ints();
+      return a < b;
+    }
+    case ">=": {
+      const [a, b] = ints();
+      return a >= b;
+    }
+    case "<=": {
+      const [a, b] = ints();
+      return a <= b;
+    }
+    default:
+      throw new Error(`unknown operator ${op}`);
+  }
+}
+/**
+ * `=` (and `!=`, and a `switch` case). Strings compare case-insensitively —
+ * DF.EXE's 0x4303c0 checks the length byte, then folds both sides through the
+ * table at 0x447478.
+ *
+ * `classic` is the engines before DreamFactory 5, and there a string is never
+ * equal to a number: DF.EXE's `=` (0x40d461) answers false when the two type
+ * tags differ, before it looks at either value, and `!=` (0x40d523) true; TI.EXE
+ * 0x4322e1/0x4323e7 and tl.exe 0x41fc91 do the same. So `"5" = 5` is false, and
+ * an unset variable — the integer 0 — equals 0 but not "0" or "" or `false`.
+ * A boolean is a third type: `1 = true` is false. `switch` (0x404070) raises a
+ * type error instead — see {@link Interpreter.caseMatches}.
+ *
+ * Off `classic` (RedJack) a mixed comparison is by text, as before.
+ */
+export function valueEq(a: Value, b: Value, classic = false): boolean {
+  // the engines fold A-Z and nothing else (TI.EXE's table at 0x45c068, DF.EXE's
+  // at 0x447478): "É" and "é" are two letters to them
+  if (typeof a === "string" && typeof b === "string") {
+    return classic ? foldAscii(a) === foldAscii(b) : a.toLowerCase() === b.toLowerCase();
+  }
+  if (typeof a === typeof b) return a === b;
+  if (classic) return false;
+  // mixed: by text; comparing numerically would make "uparrow" = 0 true
   return toStr(a).toLowerCase() === toStr(b).toLowerCase();
 }
 

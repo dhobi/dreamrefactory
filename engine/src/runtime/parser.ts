@@ -66,6 +66,9 @@ const OP = {
   SPACE: 1,
 } as const;
 
+/** block keywords that can stand at a statement's start with nothing to close */
+const STRAY: ReadonlySet<number> = new Set([OP.ENDIF, OP.ELSE, OP.ENDSWITCH, OP.CASE, OP.ENDWHILE, OP.ENDFOR]);
+
 /** operator opcodes occupy the 8000-block (see BIN_PREC below) */
 const isOperatorOpcode = (id: number): boolean => id >= 8000 && id < 9000;
 
@@ -139,17 +142,53 @@ class Parser {
     if (!this.atOp(id)) throw new ParseError(`expected ${what}, got ${JSON.stringify(this.peek())}`);
     this.pos++;
   }
-  /** consume a block closer; tolerate EOF (original scripts are sloppy) */
-  private expectCloser(id: number, what: string): void {
-    if (this.atEnd() || this.atCodeBoundary()) return;
+  /**
+   * Consume a block closer; tolerate EOF (original scripts are sloppy). Answers
+   * whether the closer was WRITTEN — a block closed by the end of its handler or
+   * by its switch's next arm is `open`, and the engines notice that when the
+   * flow gets there (see the `if` and `switch` cases of the interpreter).
+   */
+  private expectCloser(id: number, what: string): boolean {
+    if (this.atEnd() || this.atCodeBoundary()) return false;
     // a `case`/`endswitch` standing where this block's own closer should be means
     // the closer was never written — see {@link atSwitchBoundary}. Not for the
     // switch's OWN closer, which is the one thing those two cannot stand in for:
     // `endswitch` is what it is waiting for, and a `case` there is a case it has
     // not read yet.
-    if (id !== OP.ENDSWITCH && this.atSwitchBoundary()) return;
+    if (id !== OP.ENDSWITCH && this.atSwitchBoundary()) return false;
     this.expectOp(id, what);
+    return true;
   }
+  /**
+   * Where the engines' own skip over an `if` branch lands when the `endif` was
+   * never written. TI.EXE scans the TOKENS, not a tree: from `from` it counts
+   * `if`s against `endif`s and stops at the first `endif` (or, when `orElse`,
+   * `else`) at its own level — or at `endcode`, which is error 0x1d (0x444c10
+   * for a false condition, 0x444a90 for the skip from an `else`; DF.EXE 0x404010
+   * and 0x403e90 the same). It does not stop at `case`, nor at the next `code`.
+   */
+  private scanForEndif(from: number, orElse: boolean): "endcode" | "beyond" {
+    let depth = 0;
+    for (let i = from; i < this.toks.length; i++) {
+      const t = this.toks[i];
+      if (t.kind !== "op") continue;
+      if (t.id === OP.ENDCODE) return "endcode";
+      if (t.id === OP.IF) depth++;
+      else if (t.id === OP.ENDIF) {
+        if (depth === 0) return "beyond";
+        depth--;
+      } else if (orElse && t.id === OP.ELSE && depth === 0) return "beyond";
+    }
+    // the end of the container: TI.EXE's token 0 is error 0x1b (0x444aca), and
+    // no handler in the three corpora ends there — reported as the closer it lacks
+    return "endcode";
+  }
+  /**
+   * How many `switch`es enclose the statement being parsed. `case` and
+   * `endswitch` close blocks only inside one ({@link atSwitchBoundary}); outside,
+   * they are keywords with nothing to close — a `stray` statement.
+   */
+  private switchDepth = 0;
   /**
    * Is the next token the end of the handler, however deep we are inside it?
    *
@@ -198,6 +237,7 @@ class Parser {
    * lists them), so the only blocks this reaches are the ones nested inside.
    */
   private atSwitchBoundary(): boolean {
+    if (this.switchDepth === 0) return false;
     const t = this.peek();
     return t?.kind === "op" && (t.id === OP.CASE || t.id === OP.DEFAULT || t.id === OP.ENDSWITCH);
   }
@@ -338,9 +378,35 @@ class Parser {
       const t = this.peek();
       if (t?.kind === "op" && closers.includes(t.id)) break;
       stmts.push(this.parseStmt());
+      const junk = this.lineEnd();
+      if (junk) stmts.push(junk);
       this.skipBreaks();
     }
     return stmts;
+  }
+
+  /**
+   * A statement ends at its line break: after each one the engines want token 6
+   * and answer anything else with error 0x1b, "Expected return" (TI.EXE
+   * 0x4446e1 -> 0x44493e, DF.EXE 0x403ac1 -> 0x403d1e). So more on the line is a
+   * statement of its own that fails when the flow reaches it, and the rest of
+   * the line is not read. The end of the handler (`endcode`, the next `code`)
+   * and a switch's next arm end a line as well as a break does here: they are
+   * what closed a block whose own closer was never written.
+   */
+  /** a block whose header line (`if x`, `case 3`, `else`, …) must end there
+   *  too — the check runs when the flow enters the block, as it does in the engines */
+  private headed(block: () => Stmt[]): Stmt[] {
+    const junk = this.lineEnd();
+    const body = block();
+    return junk ? [junk, ...body] : body;
+  }
+
+  private lineEnd(): Stmt | null {
+    if (this.atEnd() || this.peek()?.kind === "break" || this.atCodeBoundary() || this.atSwitchBoundary()) return null;
+    const at = JSON.stringify(this.peek());
+    this.skipLine();
+    return { t: "fault", code: 0x1b, why: `more on the line: ${at}` };
   }
 
   private parseStmt(): Stmt {
@@ -423,14 +489,18 @@ class Parser {
         case OP.IF: {
           this.pos++;
           const cond = this.parseExpr();
-          const body = this.parseBlock([OP.ELSE, OP.ENDIF]);
+          const condEnd = this.pos;
+          const body = this.headed(() => this.parseBlock([OP.ELSE, OP.ENDIF]));
           let else_: Stmt[] | undefined;
+          let elseAt = -1;
           if (this.atOp(OP.ELSE)) {
-            this.pos++;
-            else_ = this.parseBlock([OP.ENDIF]);
+            elseAt = this.pos++;
+            else_ = this.headed(() => this.parseBlock([OP.ENDIF]));
           }
-          this.expectCloser(OP.ENDIF, "endif");
-          return { t: "if", cond, body, else_ };
+          if (this.expectCloser(OP.ENDIF, "endif")) return { t: "if", cond, body, else_ };
+          // no `endif`: what the engines' skip over a branch runs into instead
+          const noEndif = elseAt >= 0 ? this.scanForEndif(elseAt + 1, false) : this.scanForEndif(condEnd, true);
+          return { t: "if", cond, body, else_, open: true, noEndif };
         }
         case OP.SWITCH: {
           this.pos++;
@@ -438,26 +508,33 @@ class Parser {
           // dead statements before the first case exist in the corpus; the
           // engine jumps straight to the matching case, so parse and drop them
           const arms = [OP.CASE, OP.DEFAULT, OP.ENDSWITCH];
-          this.parseBlock(arms);
           const cases: { match: Expr; body: Stmt[] }[] = [];
           let default_: Stmt[] | undefined;
-          for (;;) {
-            if (this.atOp(OP.CASE)) {
-              this.pos++;
-              const match = this.parseExpr();
-              cases.push({ match, body: this.parseBlock(arms) });
-            } else if (this.atOp(OP.DEFAULT)) {
-              this.pos++;
-              default_ = this.parseBlock(arms);
-            } else break;
+          this.switchDepth++;
+          try {
+            this.parseBlock(arms);
+            for (;;) {
+              if (this.atOp(OP.CASE)) {
+                this.pos++;
+                const match = this.parseExpr();
+                cases.push({ match, body: this.headed(() => this.parseBlock(arms)) });
+              } else if (this.atOp(OP.DEFAULT)) {
+                this.pos++;
+                default_ = this.parseBlock(arms);
+              } else break;
+            }
+          } finally {
+            this.switchDepth--;
           }
-          this.expectCloser(OP.ENDSWITCH, "endswitch");
-          return default_ ? { t: "switch", subject, cases, default_ } : { t: "switch", subject, cases };
+          const closed = this.expectCloser(OP.ENDSWITCH, "endswitch");
+          const sw: Extract<Stmt, { t: "switch" }> = default_ ? { t: "switch", subject, cases, default_ } : { t: "switch", subject, cases };
+          if (!closed) sw.open = true;
+          return sw;
         }
         case OP.WHILE: {
           this.pos++;
           const cond = this.parseExpr();
-          const body = this.parseBlock([OP.ENDWHILE]);
+          const body = this.headed(() => this.parseBlock([OP.ENDWHILE]));
           this.expectOp(OP.ENDWHILE, "endwhile");
           return { t: "while", cond, body };
         }
@@ -474,7 +551,7 @@ class Parser {
             this.pos++;
             step = this.parseExpr();
           }
-          const body = this.parseBlock([OP.ENDFOR]);
+          const body = this.headed(() => this.parseBlock([OP.ENDFOR]));
           this.expectOp(OP.ENDFOR, "endfor");
           return { t: "for", varName: v.name, from, to, step, body };
         }
@@ -483,6 +560,13 @@ class Parser {
         // "/" at statement start: a `//` comment line — skip it
         this.skipLine();
         return { t: "noop" };
+      }
+      // a block keyword where no block of its kind is open — see the `stray`
+      // statement. (`case` and `endswitch` inside a switch end the case body
+      // before they get here: parseBlock's atSwitchBoundary.)
+      if (STRAY.has(t.id)) {
+        this.skipLine();
+        return { t: "stray", id: t.id, name: t.name };
       }
       // engine command as statement, e.g. cursor ("touch")
       const call = this.parseExpr();
@@ -512,10 +596,11 @@ class Parser {
           throw new ParseError(`bare expression statement: ${JSON.stringify(call)}`);
         return { t: "callstmt", call };
       }
-      // bare identifier line (labels/typos like `reutrn "engaged"` exist in
-      // the shipped TAOOT scripts); the engine ignored them — skip the line
+      // A bare identifier line: typos like `reutrn "engaged"` and `endocde`
+      // exist in the shipped TAOOT scripts. The engines did not ignore them —
+      // the name is looked up as a variable (see the `bare` statement).
       this.skipLine();
-      return { t: "noop" };
+      return { t: "bare", name: t.name };
     }
 
     throw new ParseError(`unexpected token at statement start: ${JSON.stringify(t)}`);

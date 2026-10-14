@@ -5,7 +5,9 @@ import { fail, ok, type Headless } from "../harness";
 import { clickRegion, drag, findProp, goTo, propPoint, regionPoint, regions } from "../nav";
 
 export const need = (h: Headless, name: string, want: string, what: string): void => {
-  if (h.g(name) !== want) fail(`${what}: ${name} is ${h.g(name) || "unset"}, not ${want} (${h.here()})`);
+  // a boolean global reads "true"/"false"; a want of "1"/"0" means the same
+  const norm = (v: string): string => (v === "true" ? "1" : v === "false" ? "0" : v);
+  if (norm(h.g(name)) !== norm(want)) fail(`${what}: ${name} is ${h.g(name) || "unset"}, not ${want} (${h.here()})`);
 };
 
 /**
@@ -30,7 +32,7 @@ export async function elevatorPanel(h: Headless): Promise<void> {
   const go = await propPoint(h, "Button5", [0, 0, 640, 480], 60);
   h.click(go.x, go.y);
   await h.settle("the panel");
-  need(h, "elevsolved", "1", "the elevator's panel");
+  need(h, "elevsolved", "true", "the elevator's panel");
   ok(`the four buildings, and 17, 6, 28, 11 on the panel (${h.here()})`);
 }
 
@@ -198,7 +200,7 @@ export async function robot(h: Headless): Promise<void> {
     if (process.env.DEBUG) console.log(`shot ${shots + 1} at state ${state}: now ${h.g("baState")} ${h.g("gBaSolved")}`);
   }
   // the tube closes on it (`BaDone`, its first picture) with the input locked
-  await h.until(() => h.session.currentFlat.toLowerCase() === "z0001.196.1" && h.g("lockevents") !== "1", "the tube to close", 6000);
+  await h.until(() => h.session.currentFlat.toLowerCase() === "z0001.196.1" && h.g("lockevents") !== "true", "the tube to close", 6000);
   await h.settle("the robot in the tube", 60_000);
   ok(`the robot driven into the tube and trapped (${h.here()})`);
 }

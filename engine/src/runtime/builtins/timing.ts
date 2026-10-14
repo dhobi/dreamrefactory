@@ -4,15 +4,17 @@ import { BuiltinCtx } from "./context";
 
 /**
  * TI.EXE timing model: delay (script suspension), makeloop/makecricket
- * scheduling, soundloop flags, and the forceupdate cooperative yield that
- * drives interactive poll loops.
+ * scheduling, soundloop flags, and `forceupdate` — one pass of the main loop.
  *
- * 1 script tick = 1/60 s; loops + crickets are serviced every 50 ms.
+ * 1 script tick = 1/60 s; loops, crickets and walks are serviced once a pass,
+ * and a pass is `framerate` ticks (Scheduler.pass).
  */
 export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   const { session, r } = ctx;
 
-  // delay(n): suspend this script n/60 s while the engine keeps ticking
+  // delay(n): suspend this script n/60 s. TI.EXE's (0x41deb0) spins on
+  // timeGetTime calling only the message pump (0x41ea20) — no pass, so while a
+  // script delays nothing else moves (Scheduler.scriptPaced)
   r("delay", async (_i, [n]) => {
     await session.clock.sleep((toNum(n ?? 0) * 50) / 3);
   });
@@ -51,6 +53,8 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
       balls.pause(toStr(name ?? "all"), truthy(flag));
       return;
     }
+    // one argument is the getter: the pause count (TI.EXE 0x444880)
+    if (flag === undefined && name !== undefined && !session.isV5) return session.scheduler.cricketPauseDepth(toStr(name));
     session.scheduler.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1));
   });
   r("iscricket", (_i, [name]) => {
@@ -65,7 +69,14 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
       : (session.scheduler.crickets[toNum(idx ?? 0) - 1]?.name ?? ""),
   );
 
-  r("soundloop", (_i, [name, flag]) => session.scheduler.soundLoop(toStr(name ?? ""), truthy(flag ?? 1)));
+  // one argument is the GETTER (DF.EXE 0x407840, TI/tl the same tag): Dust's
+  // dayfxs asks `if soundloop (fxsound)` before it flips the saw on or off, and
+  // Timelapse's ambience the same — a reading that switched the loop on
+  r("soundloop", (_i, [name, flag]) =>
+    flag === undefined
+      ? session.scheduler.isSoundLooped(toStr(name ?? ""))
+      : session.scheduler.soundLoop(toStr(name ?? ""), truthy(flag)),
+  );
 
   // forceupdate(): advance one engine step, then yield a real frame so the
   // browser renders and delivers pending input. Script poll loops (the crank
@@ -73,6 +84,23 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   // this yield to ever see the click that ends them — a synchronous tick alone
   // would spin forever. The realYieldSeq bump spares the loop from the guard.
   r("forceupdate", async (_i, _a, _c, frame) => {
+    const sched = session.scheduler;
+    if (sched.scriptPaced) {
+      // ONE PASS of the main loop, and nothing else: TI.EXE's forceupdate
+      // (0x43e3e0) is a bare `jmp 0x442550`, tl.exe's (0x44a9e0) the same.
+      // Walks, crickets and loops are serviced and their handlers run to their
+      // end inside it, then the frame waits out `framerate` ticks (Scheduler.pass).
+      //
+      // A host that moves the clock is waited on; headless nothing moves it
+      // while a script runs, so the pass jumps it — except in the BOOTFILE's
+      // own idle, which the host started and whose clock the host moves.
+      const wait = sched.passWait(frame);
+      if (wait === "jump") await session.transitionCtrl.untilRampEnds();
+      await sched.pass({ wait });
+      if (session.hasRealFrames) session.realYieldSeq++;
+      else if (wait === "jump") await session.nextFrame();
+      return;
+    }
     // With real frames, the rAF loop advances the clock with REAL time each
     // frame — self-advancing +66 here on top of that races the sim clock
     // ahead of real time (4x at 60fps), and every later clock.sleep (trackbut

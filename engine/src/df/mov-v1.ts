@@ -121,14 +121,18 @@ import type { MovEffectV1 } from "./mov-v1-effects";
  * return played the wardrobe closing between the diary and the page-reading
  * flat, which is exactly what was reported.
  *
- * ## Sounds are per frame and per click, not a bed
+ * ## Sounds are per frame and per click, and the bed is a playlist
  *
  * Record +0x20 and hotspot `sound` above, both verified against every movie on
  * the disc (0 misses across 213 frame refs and 224 click refs: every nonzero ref
- * lands on an audio container). A chunk no frame and no hotspot references is
- * the segment's BED, played once from its start — FINALEND.MOV's credits music
- * is four such chunks; 81 segments reference everything they own and have no
- * bed at all.
+ * lands on an audio container). The soundtrack BED is the header's own: +0x1c
+ * chunks after the +0x1a sound bank, played in the order of the playlist at
+ * +0x83e (+0x34 entries, 1-based, repeats allowed), the last entry linked back
+ * to the entry +0x8be names so it plays until the film stops it (0x4045bc-
+ * 0x4046eb, 0x429fa0). INTRO.MOV's is 18 entries over five chunks; FINALEND.MOV
+ * plays its four credits chunks and then loops the last. A later segment whose
+ * +0x1c is 0 keeps the bed playing (0x404551). SAFEBOX.MOV and STEPS.MOV each
+ * own a chunk nothing names, and with no bank it is never played.
  *
  * ## A frame can WAIT for the sound it started, and 152 of them do
  *
@@ -291,12 +295,24 @@ export interface MovSegmentV1 {
    */
   audioChunks: number[];
   /**
-   * The chunks nothing references — the segment's soundtrack bed, played once
-   * from its start. `audioChunks` minus every frame's and every hotspot's
-   * sound; see the module comment. 33 segments have one, 81 reference all
-   * their audio and this is empty.
+   * The segment's soundtrack BED as DF.EXE plays it: the header's playlist
+   * (+0x83e, +0x34 entries, 1-based into the bed bank of +0x1c chunks after the
+   * sound bank) turned into containers, repeats and all (0x4045bc-0x4046cf).
+   * Empty when the bank or the playlist is — SAFEBOX.MOV and STEPS.MOV own a
+   * chunk nothing names, and the engine never plays it.
    */
   bed: number[];
+  /**
+   * The 0-based {@link bed} entry the last one links back to (+0x8be): the
+   * playlist becomes a ring and the bed plays until the film stops it
+   * (0x429fa0 finds the cycle and sets the channel looping, 0x4092d0).
+   */
+  bedLoopFrom: number;
+  /**
+   * Header +0x1c, the bed bank's size. 0 on a later segment means "no new
+   * bed", and the one playing goes on (0x404551).
+   */
+  bedBank: number;
   /**
    * 0-BASED index of action frame 1, -1 = none — the same base the goto targets
    * use.
@@ -375,6 +391,12 @@ const C0 = {
    * positive sound refs point into.
    */
   soundBank: 0x1a,
+  /**
+   * i16, how many BED chunks follow that bank (0x4045bc): containers
+   * bias+bank+1 .. bias+bank+bed. 0 on a later segment keeps the bed that is
+   * playing (0x404551).
+   */
+  bedBank: 0x1c,
   /** i16 height then i16 width, before the palette */
   size: 0x22,
   /**
@@ -393,7 +415,13 @@ const C0 = {
    * last frame (0x404b9c); a mid-film exit ends the whole film.
    */
   nextSegment: 0x36,
+  /** i16, how many entries the bed playlist has (0x404638) */
+  playlistLength: 0x34,
   palette: 0x3e,
+  /** the bed playlist: i16 each, 1-based into the bed bank, may repeat (0x40467a) */
+  playlist: 0x83e,
+  /** i32, the 0-BASED playlist entry the last one links back to (0x40468c) */
+  playlistLoop: 0x8be,
   /** the frame table — DF.EXE's own base (0x40484d), 80 bytes a record */
   frames: 0x8c2,
 } as const;
@@ -581,6 +609,22 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         `segment c${bias}: no frame table at 0x${C0.frames.toString(16)}`,
       );
 
+    // the bed: the playlist over the bank after the sound bank (0x4045fc)
+    const soundBank = Math.max(0, at16(C0.soundBank));
+    const bedBank = Math.max(0, at16(C0.bedBank));
+    const length = bedBank > 0 ? Math.max(0, at16(C0.playlistLength)) : 0;
+    const bed: number[] = [];
+    for (let i = 0; i < length; i++) {
+      const entry = at16(C0.playlist + 2 * i);
+      if (entry < 1 || entry > bedBank) {
+        warnings.push(`segment c${bias}: bed entry ${i} names chunk ${entry} of ${bedBank}`);
+        continue;
+      }
+      bed.push(bias + soundBank + entry);
+    }
+    const loopAt = at32(C0.playlistLoop);
+    const bedLoopFrom = loopAt >= 0 && loopAt < bed.length ? loopAt : 0;
+
     const next = vs.getInt16(C0.nextSegment, true);
     return {
       segment: {
@@ -591,7 +635,9 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
         framerate: vs.getInt16(C0.framerate, true) || MOV_V1_HOLD_TICKS,
         frames,
         audioChunks: [],
-        bed: [],
+        bed,
+        bedLoopFrom,
+        bedBank,
         actionFrame1: vs.getInt16(C0.actionFrame1, true),
         actionFrame2: vs.getInt16(C0.actionFrame2, true),
       },
@@ -636,16 +682,6 @@ export function readMovFileV1(data: Uint8Array): MovFileV1 {
     const seg = segments.find((sg) => sg.bias === owner);
     if (seg) seg.audioChunks.push(i);
     else warnings.push(`c${i} is audio before the first segment header`);
-  }
-
-  // the BED: what a segment owns and neither a frame nor a click references
-  for (const sg of segments) {
-    const referenced = new Set<number>();
-    for (const f of sg.frames) {
-      if (f.sound) referenced.add(f.sound);
-      for (const r of f.regions) if (r.sound) referenced.add(r.sound);
-    }
-    sg.bed = sg.audioChunks.filter((c) => !referenced.has(c));
   }
 
   const first = segments[0];
@@ -848,11 +884,11 @@ export function movFileFromV1(v1: MovFileV1): MovFile {
       // only the BED plays from the segment's start — the chunks frames and
       // clicks reference fire as event sounds through `sounds` above
       audioChunks: sg.bed,
-      // NOT a loop. v4's chunks come out of a loop-ORDER table whose tail usually
-      // repeats, so `audioLoops` is true there whenever there are chunks at all; a
-      // v1 segment's bed is a plain run of containers, played once under the
-      // picture.
-      audioLoops: false,
+      // a ring, as v4's loop order is, but one that goes round to the entry
+      // the header names rather than to the top (0x40468c); played until the
+      // film stops it, and it paces nothing (mov-pace.ts segmentInterval)
+      audioLoops: sg.bed.length > 0,
+      audioLoopFrom: sg.bedLoopFrom,
       sounds,
       soundFollows: new Map(),
       cues: [],

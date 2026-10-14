@@ -1582,7 +1582,7 @@ test("a save on the catwalk reloads with Vlad where he was standing", async () =
   // a shipped save purely to give the writer a base to patch, as in a browser
   await session.loadGame(new Uint8Array(readFileSync(savePath("1", "03 - Found the Gymnasium.ti"))));
   await settle();
-  session.interp.globals.set("tour", 0);
+  session.interp.globals.set("tour", false);
   session.interp.globals.set("mission", 3);
   session.interp.globals.set("phase", 1);
 
@@ -1680,7 +1680,7 @@ test("a save at Scene109 reloads with Vlad standing there, and drawn", async () 
   const nums = new Map(parsed.numGlobals);
   nums.set("mission", 3);
   nums.set("phase", 1);
-  nums.set("tour", 0);
+  nums.set("tour", 0); // the record is a boolean (tag 2) in the base, and stays one
   const file = applyPatch(readSaveFile(baseBytes), {
     numGlobals: nums,
     strGlobals: parsed.strGlobals,
@@ -1708,7 +1708,7 @@ test("a save at Scene109 reloads with Vlad standing there, and drawn", async () 
     if (from === "engine") {
       // the case the reporter was in: loading while standing in the room whose
       // `closeset` puts Vlad down
-      session.interp.globals.set("tour", 0);
+      session.interp.globals.set("tour", false);
       session.interp.globals.set("mission", 3);
       session.interp.globals.set("phase", 1);
       await session.runGlobal("changeset", ["engine", "Scene108", "View112"]);
@@ -1975,8 +1975,10 @@ test("applyPatch writes the scheduler tables and theme, and they parse back", ()
     numGlobals: save.numGlobals,
     set: save.set, scene: save.scene, view: save.view,
     scheduler: {
-      loops: [{ kind: "actor", name: "max", handler: "maxidle", period: 7 }],
-      crickets: [{ name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5 }],
+      // the pause COUNTS at +2 of each record, as TI.EXE nests them and dumps
+      // the tables verbatim (0x442d5d, 0x4448d0), and a cricket's in-earshot flag (+0x22)
+      loops: [{ kind: "actor", name: "max", handler: "maxidle", period: 7, pause: 2 }],
+      crickets: [{ name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5, pause: 1, armed: true }],
     },
     theme: {
       track: "deckbd.trk",
@@ -1985,9 +1987,9 @@ test("applyPatch writes the scheduler tables and theme, and they parse back", ()
     },
   });
   const re = parseSave(out);
-  expect(re.loops).toEqual([{ kind: "actor", name: "max", handler: "maxidle", period: 7 }]);
+  expect(re.loops).toEqual([{ kind: "actor", name: "max", handler: "maxidle", period: 7, pause: 2 }]);
   expect(re.crickets).toEqual([
-    { name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5 },
+    { name: "motor", set: "deckbd", x: 100, y: 200, radius: 3000, base: 5, jitter: -1, next: 5, pause: 1, armed: true },
   ]);
   // the walks table is zeroed — the base's mid-walk slot (and its payload) must
   // not survive into a new save's moment
@@ -2431,7 +2433,10 @@ test("a walk saved in flight resumes and finishes, and its walker arrives", asyn
   // ...and she gets there: 2203 units left at actorspeed 30 is under 4 s, so 8
   // is room to spare without being a timeout dressed up as an assertion
   let clock = 0;
-  for (let i = 0; i < 160; i++) session.tickTime((clock += 50));
+  for (let i = 0; i < 160; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
   expect(session.scheduler.isWalk("cash")).toBe(false);
   expect([cash.worldX, cash.worldY, cash.worldZ]).toEqual([w.destX, w.destY, w.destZ]);
   expect(cash.starName).toBe("cash1"); // the arrival star, which endwalk keys off
@@ -2518,11 +2523,18 @@ test("an authored route resumes on its waypoints, not on the straight line", asy
     const a = session.actorRuntime.get(r.actor)!;
     expect(session.scheduler.isWalk(r.actor), `${r.actor} resumed`).toBe(true);
     expect([a.worldX, a.worldY], `${r.actor} starts where saved`).toEqual([rec.x, rec.y]);
+    // the idles held still: left running, Max's `hasattention (4)` accosts the
+    // player standing by him, and the conversation it opens holds every pass —
+    // inside the loop's own dispatch, as TI.EXE's does — until it is answered
+    session.scheduler.pauseLoop("actor", "all", true);
 
     // pumped until it lands, with a bound rather than a duration: `hack` has
     // 8089 units left at `actorspeed` 11, which is 735 passes — a route is as
     // long as the author drew it and no round number covers all three
-    for (let i = 0; i < 2000 && session.scheduler.isWalk(r.actor); i++) session.tickTime((clock += 50));
+    for (let i = 0; i < 2000 && session.scheduler.isWalk(r.actor); i++) {
+      session.tickTime((clock += 50));
+      await drain();
+    }
     const end = w.path![w.path!.length - 1];
     expect([a.worldX, a.worldY, a.worldZ], `${r.actor} arrives`).toEqual([end.x, end.y, end.z]);
     expect(a.starName, `${r.actor} lands on its star`).toBe(r.star);
@@ -2576,9 +2588,14 @@ test("a load restores actorturn, and a restored character turns at speed", async
   session.scheduler.startTurn("max", target);
   let clock = 0;
   let ticks = 0;
-  for (; ticks < 20 && session.scheduler.turning("max"); ticks++) session.tickTime((clock += 50));
+  for (; ticks < 20 && session.scheduler.turning("max"); ticks++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
   expect(session.scheduler.turning("max"), "the half-circle lands").toBe(false);
-  expect(ticks, "in 13 turning passes, not 128").toBe(14);
+  // the first tick runs two passes (the throttle's first stamp is free,
+  // 0x43a940), so the 13 turning passes take 12 ticks
+  expect(ticks, "in 13 turning passes, not 128").toBe(12);
   expect(max.deg).toBe(target);
 
   // and our own writer carries it back out
@@ -2717,6 +2734,24 @@ test("applyPatch appends one waypoint container per route, in slot order (#191)"
   }));
   expect(malformed.walks).toEqual([]);
   expect(dropped).toContain("walk(t0): a route with no waypoints");
+
+  // a DEFERRED record (TI.EXE 0x443ac0) is written as the engine files it —
+  // +6 = 1 and the two names it is built from — and a route waiting for its set
+  // is no route without waypoints: it has no mover yet
+  const deferred = parseSave(applyPatch(save.raw, {
+    numGlobals: save.numGlobals, set: save.set, scene: save.scene, view: save.view,
+    scheduler: {
+      loops: [], crickets: [],
+      walks: [
+        { ...turn(1), type: 1, star: "dest", deferred: { to: "dest", from: "" } },
+        { ...turn(2), type: 3, star: "start", deferred: { to: "dest", from: "start" } },
+      ],
+    },
+  }));
+  expect(deferred.walks.map((w) => [w.actor, w.type, w.star, w.deferred])).toEqual([
+    ["t1", 1, "dest", { to: "dest", from: "" }],
+    ["t2", 3, "start", { to: "dest", from: "start" }],
+  ]);
 });
 
 /**
@@ -2752,7 +2787,10 @@ test("a walk saved by our own writer resumes — the round trip is symmetric (#1
     // leak the base's slot through and pass every assertion below. Twenty
     // passes puts the walker somewhere the base does not know about, which is
     // what makes the position check bite.
-    for (let i = 0; i < 20; i++) session.tickTime((clock += 50));
+    for (let i = 0; i < 20; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
     const before = session.actorRuntime.get(c.actor)!;
     const at = [before.worldX, before.worldY, before.worldZ];
     expect(session.scheduler.isWalk(c.actor), `${c.actor} is still under way`).toBe(true);
@@ -2778,7 +2816,10 @@ test("a walk saved by our own writer resumes — the round trip is symmetric (#1
 
     // and she still gets there — the bound is `hack`'s worst case from the
     // route test above, a route being as long as the author drew it
-    for (let i = 0; i < 2000 && session.scheduler.isWalk(c.actor); i++) session.tickTime((clock += 50));
+    for (let i = 0; i < 2000 && session.scheduler.isWalk(c.actor); i++) {
+      session.tickTime((clock += 50));
+      await drain();
+    }
     expect(session.scheduler.isWalk(c.actor), `${c.actor} arrives`).toBe(false);
     expect(after.starName, `${c.actor} lands on its star`).toBe(c.star);
   }
@@ -2824,7 +2865,10 @@ test("a turn in flight survives our own save, and still lands (#191)", async () 
   const target = (max.deg + 128) & 0xff;
   session.scheduler.startTurn("max", target);
   let clock = 0;
-  for (let i = 0; i < 3; i++) session.tickTime((clock += 50));
+  for (let i = 0; i < 3; i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
   expect(session.scheduler.turning("max"), "caught mid-turn").toBe(true);
   const facing = max.deg;
   expect(facing, "and it has turned some of the way").not.toBe(target);
@@ -2859,7 +2903,10 @@ test("a turn in flight survives our own save, and still lands (#191)", async () 
   // the runtime default would take ~13 at 16, and one that zeroed it would
   // treadmill at `stepDeg`'s floor of 1 for 128. The tight bound is what makes
   // this fail if the actorturn restore (the sibling test below) ever regresses.
-  for (let i = 0; i < 20 && session.scheduler.turning("max"); i++) session.tickTime((clock += 50));
+  for (let i = 0; i < 20 && session.scheduler.turning("max"); i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
   expect(session.scheduler.turning("max"), "the turn ends").toBe(false);
   expect(re.deg, "on the target it was saved heading for").toBe(target);
 });
@@ -3154,7 +3201,9 @@ test("a load stops the script the abandoned game was running (#340)", async () =
   session.onAbandonMovie = () => { const r = release; release = null; r?.(); };
 
   session.interp.globals.set("clock", "endgame");
-  session.interp.globals.set("mission", "good");
+  // the ending begins in mission 4: its first step, putdownsinksound, says
+  // `if tour | mission != 4 error ()` — and an error() ends the arm (0x2f)
+  session.interp.globals.set("mission", 4);
   session.interp.globals.set("phase", 1);
   const ending = session.track(session.runGlobal("advanceday", []));
 
@@ -3174,7 +3223,7 @@ test("a load stops the script the abandoned game was running (#340)", async () =
     `${session.currentSetName} vs ${parseSave(bytes).set}`);
   // the branch the ending would have read is the checkpoint's, which is exactly
   // why it must not be allowed to read it
-  check("mission is the checkpoint's", session.interp.globals.get("mission") !== "good",
+  check("mission is the checkpoint's", session.interp.globals.get("mission") !== 4,
     String(session.interp.globals.get("mission")));
 });
 

@@ -80,7 +80,7 @@ function angularDistance(a: number, b: number): number {
 /** The session's camera hooks as they stood before a gesture armed its own —
  *  what {@link SetViewer.armNavHooks} hands back for the matching disarm. */
 export interface NavHooks {
-  onNavigate: (direction: string) => void;
+  onNavigate: (direction: string) => void | Promise<void>;
   onSceneJump: (scene: string) => void | Promise<void>;
   onViewJump: (view: string) => void | Promise<void>;
   active: boolean;
@@ -137,7 +137,13 @@ export class SetViewer implements RoomLayer {
   private animationPos = 0;
   /** ms per frame for the animation in flight — see {@link FRAME_MS} */
   private animationPace = FRAME_MS;
-  private animationDone: (() => void) | null = null;
+  private animationDone: (() => void | Promise<void>) | null = null;
+  /** frames a pass-stepped move owes the screen, fractional below one a pass ({@link passMotion}) */
+  private stepCredit = 0;
+  /** low-res landings a pass-stepped turn settles on, sharpened a pass later */
+  private readonly softLandings = new WeakSet<CachedFrame>();
+  /** the standpoint is showing its low-res landing and is due its hi-res one */
+  private sharpenNext = false;
   /**
    * currentscene(dir) turn/walk driver. Installed on `session.onNavigate` for
    * the duration of a user gesture (keyDown / click) so scripts can drive the
@@ -147,8 +153,11 @@ export class SetViewer implements RoomLayer {
    * calls made later from animation-arrival scripts must stay inert (the
    * original engine's default keydown owns movement).
    */
-  private readonly navigate = (dir: string): void => {
+  private readonly navigate = (dir: string): void | Promise<void> => {
     this.session.navHappened = true;
+    // TI.EXE's own order, where the pass steps the camera; what follows is
+    // DreamFactory 1's timed camera
+    if (this.passStepped) return this.navigateAsExe(dir);
     // A move asked for while one is still running WAITS for it; it does not
     // vanish. `walk()` and `turn()` both open with `if (this.busy) return`,
     // which is right for a player leaning on a key and wrong for a script,
@@ -183,6 +192,46 @@ export class SetViewer implements RoomLayer {
     }
     this.navigateNow(dir, this.playerPace);
   };
+
+  /**
+   * Does this room's camera move one frame a PASS? TI.EXE's frame (0x439b80)
+   * steps a running turn or walk once (0x439bbb -> 0x43a440, the frame index
+   * at 0x48a634) and nothing else moves it, so a move lasts as many passes as
+   * it has frames, at whatever rate the passes run. DF.EXE's frame does the
+   * same (0x4334c7 -> 0x433d20) but steps an interpolated camera rather than a
+   * ring, which this port does not model; Dust keeps the timed pace.
+   */
+  get passStepped(): boolean {
+    return this.session.scheduler.scriptPaced && !this.session.isV1;
+  }
+
+  /**
+   * `currentscene (dir)` as TI.EXE runs it (0x407b70, en build):
+   *
+   *  - `"strait"` asks for a road first, and a move already running answers
+   *    none (0x439ee0 -> -1), so it returns before anything is sent (0x407c99);
+   *  - `closescene ()` is sent to the scene being left and RUN, before the move
+   *    (0x407cbb -> 0x407e30) — a turn asked for while one is running included,
+   *    because the move routine's own bail-out comes after it (0x439c2c);
+   *  - a closescene that closed the set (0x407cc9) or moved the scene
+   *    (0x407ce6) has the move abandoned;
+   *  - then the move starts (0x439c10), drawing its first frame at once for a
+   *    walk (0x439e10), and the passes step it from there ({@link passMotion}).
+   */
+  private async navigateAsExe(dir: string): Promise<void> {
+    const pace = this.session.navFromScript ? FRAME_MS : this.playerPace;
+    if (dir === "strait" && (this.animating || !this.availableRoads().length)) return;
+    const sceneIdx = this.sceneIdx;
+    await this.scripts.closeScene(sceneIdx);
+    if (this.session.navDriver !== this.navigate || this.sceneIdx !== sceneIdx) return;
+    if (this.animating) return;
+    // a transition fade queued by a changeset earlier in the chain still
+    // draining (the port's fade outlives its script; TI.EXE's does not)
+    for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) await this.session.frameWait();
+    if (dir === "strait") this.walk(pace, true);
+    else if (dir === "left") this.turn(LEFTTURNS, pace, true);
+    else if (dir === "right") this.turn(RIGHTTURNS, pace, true);
+  }
 
   /**
    * ms per animation frame for a move the PLAYER asked for — their own setting
@@ -667,7 +716,7 @@ export class SetViewer implements RoomLayer {
    */
   async start(): Promise<void> {
     const from = this.sceneIdx;
-    await this.scripts.openSet();
+    const opened = await this.scripts.openSet();
     // A load restores the room rather than arriving in it, and the original fires
     // no scene entry for one — see GameSession.restoringSave. The scene is still
     // recorded as current, so the first turn or step re-fires it normally.
@@ -693,6 +742,13 @@ export class SetViewer implements RoomLayer {
      * scene, or another set, from openset ends it with no second openscene.
      */
     if (this.session.isV1 && (this.session.sceneJumpDriver !== this.sceneJump || this.sceneIdx !== from)) return;
+    /**
+     * TI.EXE's opening (0x407ea0, en build) asks too, and only about the set:
+     * `openset ()` (0x407eca), and an error ends it there; then, if the set was
+     * closed or another opened in its place (0x407ed7, 0x407ee6 against the set
+     * handle it noted), no `openscene ()` (0x407f45) for this one.
+     */
+    if (!this.session.isV1 && (!opened || this.session.currentBinding !== this.scripts)) return;
     await this.scripts.openScene(this.sceneIdx);
   }
 
@@ -1017,7 +1073,7 @@ export class SetViewer implements RoomLayer {
     const key = `${this.set.setName.toLowerCase()}.trk`;
     const theme = this.session.audioLib.theme(key);
     if (theme) {
-      this.session.audio.play("theme", theme, { loop: true });
+      this.session.playThemeAudio(theme);
       this.session.currentThemeName = key;
       this.session.themeStarted(key, theme.samples.length / theme.sampleRate);
     }
@@ -1245,8 +1301,15 @@ export class SetViewer implements RoomLayer {
         return both();
       default:
         // the original: a soft beat only where the ring itself ends on the
-        // low-res frame, which is the right-turn ring and nothing else
-        return fi.motionInfo === 1 ? both() : [(sharp ?? soft)!];
+        // low-res frame, which is the right-turn ring and nothing else. Where
+        // the pass steps the move, that frame IS the landing: it settles in
+        // the pass that draws it (TI.EXE 0x43a510 -> 0x43a612) and sharpens
+        // once the idle has returned (0x42a2c3 -> 0x439bd0, after the settle
+        // cleared 0x48a5a0) — see passMotion
+        if (fi.motionInfo !== 1) return [(sharp ?? soft)!];
+        if (!this.passStepped || !soft) return both();
+        this.softLandings.add(soft);
+        return [soft];
     }
   }
 
@@ -1465,7 +1528,9 @@ export class SetViewer implements RoomLayer {
    * promise so the pair cannot run out of order even then.
    */
   private departScene(label: string): Promise<void> {
-    return this.session.track(this.scripts.closeScene(this.sceneIdx), label);
+    // the same promise, not a `.then` of it: one more microtask here would move
+    // the departure against everything else in flight
+    return this.session.track(this.scripts.closeScene(this.sceneIdx) as Promise<unknown> as Promise<void>, label);
   }
 
   /**
@@ -1490,43 +1555,67 @@ export class SetViewer implements RoomLayer {
    * activateSet, keyed on navGestureActive); disarming writes the shared
    * session fields, so doing it through the old viewer is fine.
    */
-  private settleScene(departure: Promise<void>, sceneIdx: number, label: string): void {
-    void this.session.track(
-      departure.then(async () => {
-        const prev = this.armNavHooks();
-        try {
-          await this.scripts.openScene(sceneIdx);
-        } finally {
-          this.disarmNavHooks(prev);
-        }
-      }),
-      label,
-    );
+  private settleScene(departure: Promise<void> | null, sceneIdx: number, label: string): void | Promise<void> {
+    const arrive = async (): Promise<void> => {
+      const prev = this.armNavHooks();
+      try {
+        await this.scripts.openScene(sceneIdx);
+      } finally {
+        this.disarmNavHooks(prev);
+      }
+    };
+    // stepped by the pass: the arrival is the pass's, and runs inside it
+    // (TI.EXE 0x43a510 -> the settle, from the frame)
+    if (!departure) return arrive();
+    void this.session.track(departure.then(arrive), label);
   }
 
   /** dir: RIGHTTURNS or LEFTTURNS. `pace` defaults to the PLAYER's rate: every
    *  caller that omits it is standing in for a keypress (the arrow fallback in
    *  {@link pressNav}, the headless drivers, the route planner). */
-  turn(dir: number, pace = this.playerPace): void {
-    if (this.busy) return;
+  turn(dir: number, pace = this.playerPace, departed = false): void {
+    if (departed ? this.animating : this.busy) return;
     // shared with the playthrough route planner (df/set.ts) so a planned turn and
     // the turn actually taken can never land on different standpoints
     const ring = turnRing(this.scene, this.viewIdx, dir);
-    if (!ring) return;
+    if (!ring) {
+      this.refusedMove("turn-closescene");
+      return;
+    }
     const images = this.rings.ensure(this.scene.turns[dir].frames);
     const frames = this.turnFrames(ring.frames, images);
     const target = ring.target;
     // departure closescene BEFORE the first frame — see departScene. TI.EXE
     // fires it for every turn command, ring wrap included (0x407cbb runs for
     // left/right/strait alike), so no `changed` gate here or on the arrival.
-    const departure = this.departScene("turn-closescene");
-    this.startAnimation(frames, pace, () => {
+    // `departed`: closescene was sent and run already (navigateAsExe)
+    const departure = departed ? null : this.departScene("turn-closescene");
+    // a turn draws its starting standpoint (0x439da9), so its first pass shows
+    // the first frame past it
+    this.startAnimation(frames, pace, false, () => {
       // update the facing BEFORE firing openscene — a per-view event — so its
       // handlers see the new currentview() in their guards
       this.viewIdx = target;
       this.showView();
-      this.settleScene(departure, this.sceneIdx, "turn-openscene");
+      return this.settleScene(departure, this.sceneIdx, "turn-openscene");
     });
+  }
+
+  /**
+   * A move with nowhere to go still LEAVES the scene in DreamFactory 1, and
+   * never arrives back. DF.EXE's `currentscene (dir)` (0x40ee30) sends
+   * closescene first (0x40ef5b -> 0x40f100) and only then asks the move routine
+   * 0x4338b0, which finds no destination (0x433ae0) and returns — no motion, so
+   * no settle and no openscene. Every Dust move is that call, the boot's
+   * `currentscene ("strait")` included: 0x4338b0 has no other caller.
+   *
+   * TI.EXE asks first, for a walk: `"strait"` checks for a road (0x439ee0 at
+   * 0x407c99) and returns before its closescene (0x407cbb, en build), so a
+   * blocked walk in Titanic or Timelapse fires nothing — which is why this is
+   * v1 only.
+   */
+  private refusedMove(label: string): void {
+    if (this.session.isV1) void this.departScene(label);
   }
 
   availableRoads(): { road: Transition; register: number; arriveViewID: number }[] {
@@ -1534,10 +1623,13 @@ export class SetViewer implements RoomLayer {
   }
 
   /** see {@link turn} for what an omitted `pace` means */
-  walk(pace = this.playerPace): void {
-    if (this.busy) return;
+  walk(pace = this.playerPace, departed = false): void {
+    if (departed ? this.animating : this.busy) return;
     const roads = this.availableRoads();
-    if (!roads.length) return;
+    if (!roads.length) {
+      this.refusedMove("walk-closescene");
+      return;
+    }
     const { road, register, arriveViewID } = roads[0];
     const reg = road.frameRegisters[register];
     const images = this.rings.ensure(reg.frames);
@@ -1597,8 +1689,9 @@ export class SetViewer implements RoomLayer {
     // see departScene for the disassembly. This is what restores gstair2
     // Scene64's actorzclip(-1500) ahead of the walk out, so the stairwell
     // crowd stays drawn during the move as it does in the original.
-    const departure = this.departScene("walk-closescene");
-    this.startAnimation(frames, pace, () => {
+    const departure = departed ? null : this.departScene("walk-closescene");
+    // a walk draws its first row inside the gesture (0x439e10)
+    this.startAnimation(frames, pace, true, () => {
       if (arrival) {
         this.sceneIdx = arrival.sceneIdx;
         this.viewIdx = arrival.viewIdx;
@@ -1607,38 +1700,36 @@ export class SetViewer implements RoomLayer {
       // handlers see the new currentview() (gstair's deck-transition scenes
       // forward via changeset from their openscene). A walk that stays in the
       // same scene owes it too: openscene is a per-view event.
-      this.settleScene(departure, this.sceneIdx, "walk-openscene");
+      const settled = this.settleScene(departure, this.sceneIdx, "walk-openscene");
       this.showView();
+      return settled;
     });
   }
 
   /**
-   * hotspot under the given view-pixel position in the current view. When
-   * regions OVERLAP, the SMALLEST (most specific) one wins — a small control
-   * sitting inside a larger backdrop must be clickable (TAOOT C73's door-ringer
-   * is a 19×19 hotspot fully inside the 200×246 "door", so first-in-list order
-   * alone left it unreachable).
+   * The hotspot under a view-pixel position in the current view, as TI.EXE finds
+   * it (0x409910, en build): the view's paintings scanned from the LAST to the
+   * first, and the first whose rectangle holds the point wins. The rectangle is
+   * half-open — top <= y < bottom, left <= x < right (0x435410) — and taken as
+   * stored: one written backwards holds nothing.
+   *
+   * So a hotspot inside another is reached by being listed after it, which is
+   * how the shipped sets are drawn: C73's door-ringer (19x19, inside the 200x246
+   * door) comes later in its list. Of the nine overlapping pairs in the English
+   * Titanic sets one is the other way round — recept1c Scene11 View25, where the
+   * Painting (#3) lies over cufflink2 (#0) and takes the click in their overlap;
+   * the smallest-area rule this replaces gave it to the cufflink.
    */
   hitTest(x: number, y: number): { objIdx: number; obj: ObjectEntry } | null {
     if (this.busy) return null;
     const objects = this.scene.views[this.viewIdx].objects;
-    let best: { objIdx: number; obj: ObjectEntry } | null = null;
-    let bestArea = Infinity;
-    for (let o = 0; o < objects.length; o++) {
+    for (let o = objects.length - 1; o >= 0; o--) {
       const obj = objects[o];
-      const x0 = Math.min(obj.startRegionX, obj.endRegionX);
-      const x1 = Math.max(obj.startRegionX, obj.endRegionX);
-      const y0 = Math.min(obj.startRegionY, obj.endRegionY);
-      const y1 = Math.max(obj.startRegionY, obj.endRegionY);
-      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
-        const area = (x1 - x0) * (y1 - y0);
-        if (area < bestArea) {
-          bestArea = area;
-          best = { objIdx: o, obj };
-        }
+      if (y >= obj.startRegionY && y < obj.endRegionY && x >= obj.startRegionX && x < obj.endRegionX) {
+        return { objIdx: o, obj };
       }
     }
-    return best;
+    return null;
   }
 
   /** press and release at one point — the director's, delegated */
@@ -1828,9 +1919,9 @@ export class SetViewer implements RoomLayer {
     );
   }
 
-  private startAnimation(frames: CachedFrame[], pace: number, done: () => void): void {
+  private startAnimation(frames: CachedFrame[], pace: number, drawnAtStart: boolean, done: () => void | Promise<void>): void {
     if (!frames.length) {
-      done();
+      void done();
       return;
     }
     this.animation = frames;
@@ -1838,6 +1929,43 @@ export class SetViewer implements RoomLayer {
     this.animationPace = pace;
     this.animationDone = done;
     this.lastTick = 0;
+    this.stepCredit = 0;
+    if (this.passStepped && drawnAtStart) this.current = frames[this.animationPos++];
+  }
+
+  /**
+   * The pass's step of a turn or a walk (TI.EXE 0x439bbb -> 0x43a440 / 0x43a640):
+   * the next frame, and on the last one the arrival, run inside the pass — its
+   * view set and its `openscene` sent (0x43a510 / 0x43a71d). One frame a pass at
+   * the original pace; a player's own move speed (#222) spends its frames
+   * against the passes instead of the clock (`slow` one every other pass,
+   * `fast` two, `instant` all).
+   */
+  async passMotion(): Promise<void> {
+    if (!this.passStepped) return;
+    if (this.sharpenNext) {
+      this.sharpenNext = false;
+      if (!this.animation) this.current = this.standFrame();
+    }
+    if (!this.animation) return;
+    const pace = this.animationPace;
+    this.stepCredit += pace > 0 ? ENGINE_STEP_MS / pace : Infinity;
+    // `instant` draws nothing of the move, its landing included
+    while (this.animation && this.stepCredit >= 1) {
+      this.stepCredit -= 1;
+      const landing = this.animation[this.animationPos++];
+      this.current = landing;
+      if (this.animationPos < this.animation.length) continue;
+      const done = this.animationDone!;
+      this.animation = null;
+      this.animationDone = null;
+      await done();
+      // a low-res landing stays on screen for this pass (see standpointFrames)
+      if (this.softLandings.has(landing) && !this.animation && pace > 0) {
+        this.current = landing;
+        this.sharpenNext = true;
+      }
+    }
   }
 
   /**
@@ -1866,6 +1994,7 @@ export class SetViewer implements RoomLayer {
    * runs.
    */
   advanceRoom(now: number): CachedFrame | null {
+    if (this.animation && this.passStepped) return this.current;
     if (this.animation) {
       // The first frame is due NOW, not one interval from now (#352).
       //
@@ -1921,7 +2050,7 @@ export class SetViewer implements RoomLayer {
           // that reaches the screen and not the animation's last frame — see
           // {@link standpointFrames}. At `instant` that is the whole effect:
           // the ring is walked in one tick and only the arrival is ever drawn.
-          done();
+          void done();
         }
         if (!catchUp) break;
       }
@@ -1931,7 +2060,8 @@ export class SetViewer implements RoomLayer {
     // did while it was, which is where the original's main loop pops its queue.
     // One per tick — the event it dispatches may start another animation, and
     // the next tick will find that and wait again.
-    if (!this.dir.movingCamera && this.session.events.length) this.drainOneEvent();
+    // ...and not inside the BOOTFILE idle, which runs to its end first (TI.EXE en 0x431c43)
+    if (!this.dir.movingCamera && !this.session.scheduler.idleRunning && this.session.events.length) this.drainOneEvent();
     // standing still: decode one ring the player could reach from here, so the
     // move they make next doesn't wait for it (see warmNeighbourRing)
     if (!this.session.scriptBusy) this.warmNeighbourRing();
@@ -1946,15 +2076,16 @@ export class SetViewer implements RoomLayer {
   private drainOneEvent(): void {
     const e = this.session.events.take();
     if (!e) return;
+    const over = (): void => e.taken?.();
     if (e.kind === "keydown") {
       const key = e.key;
       const nav = key === "uparrow" || key === "leftarrow" || key === "rightarrow";
       void this.session.track(
-        nav ? this.pressNav(key) : this.keyDown(key, e.special).then(() => {}),
+        (nav ? this.pressNav(key) : this.keyDown(key, e.special).then(() => {})).finally(over),
       );
       return;
     }
-    void this.session.track(this.click(e.x, e.y), `queued click ${e.x},${e.y}`);
+    void this.session.track(this.click(e.x, e.y).finally(over), `queued click ${e.x},${e.y}`);
   }
 
   /**

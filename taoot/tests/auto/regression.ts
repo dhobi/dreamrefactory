@@ -49,7 +49,7 @@ import { SetViewer } from "@dreamfactory/engine/web/viewer";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadGame } from "@dreamfactory/engine/runtime/saveload";
-import { newHost, root } from "../harness";
+import { declareStoryGlobals, newHost, root } from "../harness";
 import { readBootPlan } from "@dreamfactory/engine/runtime/bootplan";
 import { EXTRA_EDITIONS } from "../../src/languages";
 
@@ -73,7 +73,25 @@ async function newSession(): Promise<{
   sink: NullAudioSink;
   viewer: () => SetViewer;
 }> {
-  return newHost();
+  const host = await newHost();
+  seedOpenedRoom(host.session);
+  return host;
+}
+
+/**
+ * What the game has done by the time a room opens, which a test that opens one
+ * directly skips: boot()'s `setpath (1)` names the disc (`mainpath @ "boil:"`),
+ * and the staircases read `savedeck`, "" until a deck plan is picked. Left unset
+ * they are the integer 0, and TI.EXE's `@` and `switch` refuse an integer where
+ * these hold strings (error 0xe, engine/src/runtime/interp.ts).
+ */
+function seedOpenedRoom(session: GameSession): void {
+  const g = session.interp.globals;
+  if (!g.has("mainpath")) g.set("mainpath", "titanic1:");
+  if (!g.has("savedeck")) g.set("savedeck", "");
+  // ...and every other global the story's scripts declare on the way, which
+  // reading undeclared would be error 9 (taoot/tests/harness.ts declareStoryGlobals)
+  declareStoryGlobals(session);
 }
 
 /**
@@ -263,12 +281,19 @@ test("viewer: moving around draws exactly the frames a full decode produces", as
   // offers itself. A lazy decoder is only wrong on the chains it gets to
   // rebuild, so the test has to make it rebuild all of them.
   const drawn: string[] = [];
-  const step = (): void => {
-    const f = v.tick((clock += 100));
-    if (f) drawn.push(hash(f.pixels, f.width * f.height));
+  // a move steps in the idle's passes (SetViewer.passMotion), which run between ticks
+  // ...and an arrival's openscene runs in the pass too: recept1c's exits change
+  // set (gstair3), and this viewer's sweep ends with its room
+  const left = (): boolean => session.currentSetName !== "recept1c" || viewer() !== v;
+  const step = async (): Promise<void> => {
+    v.tick((clock += 100));
+    await drain();
+    // the picture as the pass drew it
+    const f = v.roomFrame();
+    if (f && !left()) drawn.push(hash(f.pixels, f.width * f.height));
   };
-  const runAnim = (): void => {
-    for (let i = 0; i < 500 && v.busy; i++) step();
+  const runAnim = async (): Promise<void> => {
+    for (let i = 0; i < 500 && v.busy; i++) await step();
   };
   /**
    * The frame the CURRENT view is supposed to show, straight from the set: the
@@ -288,24 +313,28 @@ test("viewer: moving around draws exactly the frames a full decode produces", as
   const standOk: boolean[] = [];
   let walks = 0;
   for (const scene of v.set.scenes) {
+    if (left()) break;
     if (!v.jumpTo(scene.sceneName)) continue;
-    step();
+    await step();
     standOk.push(drawn[drawn.length - 1] === expectedStand());
     for (const dir of [0, 1]) {
       for (let i = 0; i < scene.views.length; i++) {
         v.turn(dir);
-        runAnim();
-        step();
+        await runAnim();
+        await step();
+        if (left()) break;
         standOk.push(drawn[drawn.length - 1] === expectedStand());
       }
     }
     if (v.availableRoads().length && walks < 6) {
       walks++;
       v.walk();
-      runAnim();
-      step();
+      await runAnim();
+      await step();
+      if (left()) break;
       standOk.push(drawn[drawn.length - 1] === expectedStand());
     }
+    if (left()) break;
   }
 
   check(
@@ -715,6 +744,8 @@ test.skipIf(noDemo)("engine: a scriptless cast member resolves on its cast main"
 test.skipIf(noDemo)("engine: a click on a handler-less actor completes instead of recursing", async () => {
   const { session } = await newHost({ edition: DEMO_EDITION });
   session.bootedByGame();
+  // the boot() this skips declares `setloc`, which the router reads (error 9 unread)
+  declareStoryGlobals(session, DEMO_EDITION);
   await session.openCastFile("gang.cst");
   // a click parked on a crowd walker: hittest answers the extra every time
   session.hitTestAt = () => ({ name: "extra", type: "actor" });
@@ -992,9 +1023,50 @@ function logs(session: GameSession): () => string[] {
 /** let suspended scripts (await points, resolved delays) continue */
 const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+/**
+ * The cursor the world shows at (x, y): the pointer put there and the BOOTFILE
+ * idle given the passes to ask — every fourth `idle ()` runs `hittest` and
+ * `setcursor` (BOOTFILE 0001), and a pointer move runs no script of its own.
+ */
+async function idleCursor(
+  v: SetViewer,
+  x: number,
+  y: number,
+  // a test that keeps its own clock passes its own tick: the host's time must
+  // not run backwards under it
+  tick: (n: number) => Promise<void> = async (n) => {
+    for (let i = 0; i < n; i++) {
+      v.tick((clock += 50));
+      await drain();
+    }
+  },
+): Promise<string> {
+  v.session.setPointer(x, y);
+  await tick(6);
+  return v.hover(x, y);
+}
+
+/**
+ * Await a gesture the way a host does: ticking while it waits its turn. The main
+ * loop takes a press only once the BOOTFILE's idle has returned (TI.EXE en
+ * 0x431c43), so one made while the idle runs is queued (ScreenDirector.press)
+ * and taken in the host's time.
+ */
+async function pumped<T>(v: SetViewer, gesture: Promise<T>, tick = (): unknown => v.tick((clock += 50))): Promise<T> {
+  let done = false;
+  void gesture.then(() => (done = true), () => (done = true));
+  await drain();
+  for (let i = 0; (!done || v.session.events.length > 0) && i < 4000; i++) {
+    tick();
+    await drain();
+  }
+  return gesture;
+}
+
 async function runAnimations(v: SetViewer): Promise<void> {
   let guard = 0;
-  while (v.busy || v.session.scriptBusy) {
+  // ...and a gesture still queued behind the idle (ScreenDirector.press)
+  while (v.busy || v.session.scriptBusy || v.session.events.length) {
     v.tick((clock += 100));
     await drain();
     if (++guard > 2000) throw new Error("animation never finished");
@@ -1011,7 +1083,7 @@ test("hotspot alignment + cursor + click (B59 door)", async () => {
   const cx = Math.floor((obj.startRegionX + obj.endRegionX) / 2);
   const cy = Math.floor((obj.startRegionY + obj.endRegionY) / 2);
   check("b59 door hotspot present", obj?.identifier === "door");
-  check("hover returns touch cursor", (await v.hover(cx, cy)) === "touch");
+  check("the idle sets the touch cursor over it", (await idleCursor(v, cx, cy)) === "touch");
 }
 );
 
@@ -1282,7 +1354,7 @@ test("doors close on navigation (boot's default closescene)", async () => {
   const door = session.propRuntime.get("door")!;
 
   // open door, then walk away to another scene in the same set
-  await v.click(cx, cy);
+  await pumped(v, v.click(cx, cy));
   sink.calls.length = 0;
   v.jumpTo("Scene14", "View19"); // View19 faces Road34 to Scene15
   v.walk();
@@ -1294,7 +1366,7 @@ test("doors close on navigation (boot's default closescene)", async () => {
 
   // open again, then just turn: view change must also close the door
   v.jumpTo("Scene14", "View18");
-  await v.click(cx, cy);
+  await pumped(v, v.click(cx, cy));
   sink.calls.length = 0;
   v.turn(0);
   await runAnimations(v);
@@ -1303,7 +1375,7 @@ test("doors close on navigation (boot's default closescene)", async () => {
 
   // open again, travel to another set: door must not survive the trip
   v.jumpTo("Scene14", "View18");
-  await v.click(cx, cy);
+  await pumped(v, v.click(cx, cy));
   await session.interp.runHandler(session.stageScript!, "gotospecial", ["hallb", "scene29", "view41"], {
     me: "main.stg",
     target: "",
@@ -2063,7 +2135,7 @@ test("grand staircase: deck flips + cross-set travel (user-reported)", async () 
   await session.openSetFile("gstair3.set");
   session.interp.globals.set("savedeck", "b");
   viewer().jumpTo("Scene13", "View33");
-  await viewer().keyDown("uparrow");
+  await pumped(viewer(), viewer().keyDown("uparrow"));
   await runAnimations(viewer());
   check(
     "gstair3 B-deck stairs flip to C deck landing",
@@ -2077,7 +2149,7 @@ test("grand staircase: deck flips + cross-set travel (user-reported)", async () 
   await session.openSetFile("gstair3.set");
   session.interp.globals.set("savedeck", "c");
   viewer().jumpTo("Scene13", "View33");
-  await viewer().keyDown("uparrow");
+  await pumped(viewer(), viewer().keyDown("uparrow"));
   await runAnimations(viewer());
   check("gstair3 C-deck stairs reach recept1c hall", state() === "recept1c Scene10/View88", state());
   // B deck, walk UP: road to Scene64, arrival openscene forwards to gstair2
@@ -2127,7 +2199,7 @@ test("2nd class staircase: landings turn 90°, and down goes down (user-reported
   viewer().jumpTo("Scene42", "View52");
   const ring: string[] = [];
   for (let i = 0; i < 4; i++) {
-    await viewer().pressNav("rightarrow");
+    await pumped(viewer(), viewer().pressNav("rightarrow"));
     await runAnimations(viewer());
     ring.push(`${where()}/${session.propRuntime.get("navarrow")?.stateName}`);
   }
@@ -2147,7 +2219,7 @@ test("2nd class staircase: landings turn 90°, and down goes down (user-reported
     ["Scene42", "View52"], ["Scene41", "View47"], ["Scene12", "View25"], ["Scene11", "View18"],
   ]) {
     viewer().jumpTo(scene, view); // face the way down (turning is asserted above)
-    await viewer().pressNav("uparrow");
+    await pumped(viewer(), viewer().pressNav("uparrow"));
     await runAnimations(viewer());
     trail.push(`${where()}@${deck()}`);
   }
@@ -2163,7 +2235,7 @@ test("2nd class staircase: landings turn 90°, and down goes down (user-reported
   // how the stairs reach F deck at all.
   session.interp.globals.set("savedeck", "e");
   viewer().jumpTo("Scene11", "View18");
-  await viewer().pressNav("uparrow");
+  await pumped(viewer(), viewer().pressNav("uparrow"));
   await runAnimations(viewer());
   check(
     "below E deck the wrap gives out and the real flight to F deck opens",
@@ -2197,18 +2269,18 @@ test("lockevents freezes the world: clicks and keys, but not a conversation", as
   // props, so this is the only order in which the flag is the only difference.
   await session.openSetFile("b59.set");
   await runAnimations(viewer());
-  session.interp.globals.set("lockevents", 1);
+  session.interp.globals.set("lockevents", true);
   const shutBefore = doorShut();
-  const cursor = await viewer().hover(...aimDoor());
-  await session.track(viewer().click(...aimDoor()));
+  const cursor = await idleCursor(viewer(), ...aimDoor());
+  await pumped(viewer(), session.track(viewer().click(...aimDoor())));
   await runAnimations(viewer());
   const clickRefused = shutBefore && doorShut();
-  await viewer().pressNav("uparrow"); // boot1's keydown gate — was already right
+  await pumped(viewer(), viewer().pressNav("uparrow")); // boot1's keydown gate — was already right
   await runAnimations(viewer());
   const stayedPut = session.currentSetName === "b59";
 
-  session.interp.globals.set("lockevents", 0);
-  await session.track(viewer().click(...aimDoor()));
+  session.interp.globals.set("lockevents", false);
+  await pumped(viewer(), session.track(viewer().click(...aimDoor())));
   await runAnimations(viewer());
   const opened = session.propRuntime.get("door")?.visible === true;
   check(
@@ -2253,6 +2325,9 @@ test("the event queue: input made mid-gesture waits its turn", async () => {
   // hallb is a straight corridor: each arrival faces the next road, so four
   // presses one engine frame apart is four rooms' worth of intent arriving while
   // the first walk is still on screen.
+  // the side of the ship the corridor is on, which entering a hall sets — HALLB's
+  // keydown asks it first and `error ()`s on anything else, ending the press (0x2f)
+  session.interp.globals.set("hallside", "star");
   await session.openSetFile("hallb.set");
   await settle();
   viewer().jumpTo("Scene31", "View50");
@@ -2304,10 +2379,13 @@ test("the event queue: input made mid-gesture waits its turn", async () => {
   // a click made while the camera moves is kept too — what it then lands on is
   // whatever is under the cursor at that point, exactly as in the original
   viewer().jumpTo("Scene31", "View50");
-  const takenBefore = session.events.taken;
   void session.track(viewer().pressNav("uparrow"));
-  viewer().tick((clock += 100));
-  await drain();
+  // the press waits for the idle to return, as the original's loop takes it
+  for (let i = 0; i < 20 && !viewer().busy; i++) {
+    viewer().tick((clock += 100));
+    await drain();
+  }
+  const takenBefore = session.events.taken;
   const midWalk = viewer().busy;
   void session.track(viewer().click(210, 266));
   const queuedIt = session.events.has("mousedown");
@@ -2729,7 +2807,7 @@ test("timing model: makeloop/makecricket/starxyz/delay/soundloop", async () => {
   sink.calls.length = 0;
   for (let i = 0; i < 380; i++) {
     v.tick((clock += 66));
-    if (i % 10 === 0) await drain();
+    await drain(); // the idle's pass each tick lets through
   }
   await session.settle();
   const knock = sink.calls.find((c) => c.channel === "sound" && c.volume < 1 && c.volume > 0);
@@ -3135,8 +3213,11 @@ test("wavevolume() and the volume keys write one value", async () => {
   await call(4);
   check(
     "the script setter drives the channels through the session",
-    session.waveVolume === 4 && Math.abs(sink.channelVolume.voice - 4 / 9) < 1e-9,
-    `vol=${session.waveVolume} voice=${sink.channelVolume.voice}`,
+    // the wave DEVICE's volume, `4 · 0xffff / 9` truncated (0x4072f6) — which
+    // every mixer channel plays through, the theme's too
+    session.waveVolume === 4 && Math.abs(sink.channelVolume.voice - 29126 / 0xffff) < 1e-12 &&
+      Math.abs(sink.channelVolume.theme - (session.themeVolume / 255) * (29126 / 0xffff)) < 1e-12,
+    `vol=${session.waveVolume} voice=${sink.channelVolume.voice} theme=${sink.channelVolume.theme}`,
   );
   const readBack = await call();
   check("and reads back what it wrote", Number(readBack) === 4, `read=${readBack}`);
@@ -3468,7 +3549,14 @@ test("actor walking: morrow strolls to his next deck star", async () => {
   const v = viewer();
   const morrow = session.actorRuntime.get("morrow")!;
   const startX = morrow.worldX;
-  // send him to morrow.2 (13045,551) through the real builtin path
+  // the session's first idle runs two passes back to back (the throttle's first
+  // stamp is free, 0x43a940), so spend it before the walk being measured
+  v.tick((clock += 50));
+  await drain();
+  // send him to morrow.2 (13045,551) through the real builtin path — with his
+  // idle stopped first, as the boot's `moveactorstar` does: the idle turns him
+  // to the camera, and a turn replaces a walk in progress (0x442ea0 -> 0x442640)
+  session.scheduler.stopLoop("actor", "morrow");
   await session.interp.builtins.get("walktostar")!(
     session.interp, ["morrow", "morrow.2"], null as never, null as never,
   );
@@ -3493,7 +3581,9 @@ test("actor walking: morrow strolls to his next deck star", async () => {
   await drain();
   check(
     "walk starts by turning on the spot, and endturn hands over the walk pose",
-    beganStanding && held && passes > 1 && morrow.poseName === "walk",
+    // he already faces morrow.2 (deg 20), so the turn phase is the one pass
+    // that lands it — standing, before the first step
+    beganStanding && held && passes >= 1 && morrow.poseName === "walk",
     `began=${beganStanding} turnPasses=${passes} stoodStill=${held} pose=${morrow.poseName} deg=${morrow.deg}`,
   );
   for (let i = 0; i < 4; i++) {
@@ -3513,6 +3603,7 @@ test("actor walking: morrow strolls to his next deck star", async () => {
     await drain();
   }
   check(
+    // the pose is GANG.CST's endwalk's `actorpose (me, "stand")`, not the engine's
     "arrival: at the star, stand pose, walk slot freed",
     morrow.worldX === 13045 && morrow.worldY === 551 &&
       morrow.poseName === "stand" && !session.scheduler.isWalk("morrow"),
@@ -3621,29 +3712,33 @@ test("actor walking: a walk turns before it moves, at actorturn per pass", async
     degs.push(morrow.deg);
   }
   // 128 units at 10 a pass: 13 passes to arrive (the last one clamps rather than
-  // overshooting), and the 14th is the first that moves him
+  // overshooting), and the 14th is the first that moves him. UPWARDS: 0x445080
+  // reckons the way round with a wrap of 0xff, so from 128 the way up to 0 is
+  // 127 against 128 down, and stepping past 0xff takes 0xff off
   check(
     "he turns 10 a pass, standing still, and only then sets off",
-    degs.slice(0, 13).join(",") === "118,108,98,88,78,68,58,48,38,28,18,8,0" && passes === 14,
+    degs.slice(0, 13).join(",") === "138,148,158,168,178,188,198,208,218,228,238,248,0" && passes === 14,
     `passes=${passes} degs=${degs.slice(0, 14).join(",")}`,
   );
 
   // the short way round, in both directions and across the wrap. Facing due east
   // (target 0) from 250 is 6 units forwards and 250 back, so it goes forwards —
   // and clamps on the target rather than overshooting to 4.
-  const turnFrom = (deg: number, tx: number, ty: number): number => {
+  const turnFrom = async (deg: number, tx: number, ty: number): Promise<number> => {
     session.scheduler.stopWalk("morrow");
     morrow.deg = deg;
     session.scheduler.startWalk("morrow", morrow.worldX + tx, morrow.worldY + ty, morrow.worldZ);
     session.tickTime((clock += 50));
+    await drain();
     return morrow.deg;
   };
-  const nearlyThere = turnFrom(250, 6000, 0); // target 0: 6 forwards -> clamps
-  const wrapsForward = turnFrom(250, 0, 6000); // target 64: 70 forwards -> 4, over the wrap
-  const goesBack = turnFrom(10, 0, -6000); // target 192: 182 forwards, 74 back -> 0
+  const nearlyThere = await turnFrom(250, 6000, 0); // target 0: 6 forwards -> clamps
+  // target 64: forwards over the wrap, 250 + 10 - 0xff = 5 (0x4450fd: the wrap is 0xff)
+  const wrapsForward = await turnFrom(250, 0, 6000);
+  const goesBack = await turnFrom(10, 0, -6000); // target 192: 182 forwards, 74 back -> 0
   check(
     "the facing takes the short way round and clamps on the target",
-    nearlyThere === 0 && wrapsForward === 4 && goesBack === 0,
+    nearlyThere === 0 && wrapsForward === 5 && goesBack === 0,
     `250->0 gave ${nearlyThere}, 250->64 gave ${wrapsForward}, 10->192 gave ${goesBack}`,
   );
 }
@@ -3730,7 +3825,10 @@ test("a walk started on an actorinstance is the instance's, not its source's (#2
   session.scheduler.startTurn("stok10", target);
   expect(session.scheduler.isWalk("stok10"), "the record is filed under the instance").toBe(true);
   expect(session.scheduler.isWalk("stok1"), "and not under its source member").toBe(false);
-  for (let i = 0; i < 20 && session.scheduler.turning("stok10"); i++) session.tickTime((clock += 50));
+  for (let i = 0; i < 20 && session.scheduler.turning("stok10"); i++) {
+    session.tickTime((clock += 50));
+    await drain();
+  }
   expect(ten.deg, "the instance turned").toBe(target);
   expect(one.deg, "the source did not").toBe(srcDeg);
   expect(session.scheduler.isWalk("stok10"), "and the turn ended").toBe(false);
@@ -3976,7 +4074,7 @@ test("deck map cosmetics: you-are-here dot, deck highlight, disable bar", async 
   const { session } = await newSession();
   await session.openSetFile("c73.set"); // C Deck = page 4
   // tour mode opens the map with jumps enabled (mapdisabled() -> false)
-  session.interp.globals.set("tour", 1);
+  session.interp.globals.set("tour", true);
   await session.transToFlat("map.stg");
   const buttons = session.propRuntime.get("buttons")!;
   const spot = session.propRuntime.get("spot")!;
@@ -4084,21 +4182,22 @@ test("wireless knob drag: held-button (stilldown) rotates a control", async () =
   // live pointer x — x>198 selects deg 4 -> owner "rx"
   session.setPointer(200, 85);
   session.pointerDown = true;
-  const drag = session.track(v.click(200, 85));
-  // pump the clock so stilldown()'s per-frame yield resolves, then release
+  // a press made while the BOOTFILE idle runs is queued and taken when it
+  // returns (ScreenDirector.press); `taken` says when the drag loop is over
   let done = false;
-  drag.then(() => (done = true));
-  for (let i = 0; i < 6 && !done; i++) {
+  void session.track(v.dir.press(200, 85, () => (done = true)));
+  // pump the clock so the press is taken and stilldown()'s per-frame yield
+  // resolves, then release
+  for (let i = 0; i < 12 && !done && breaker.deg !== 4; i++) {
     v.tick((clock += 50));
     await drain();
   }
   const draggedDeg = breaker.deg;
   session.pointerDown = false; // release ends the loop
-  for (let i = 0; i < 8 && !done; i++) {
+  for (let i = 0; i < 20 && !done; i++) {
     v.tick((clock += 50));
     await drain();
   }
-  await drag;
   check(
     "held-button drag rotates the breaker knob and commits on release",
     draggedDeg === 4 && breaker.owner === "rx",
@@ -4369,15 +4468,21 @@ test("two-character puppet: each line animates its own character's face", async 
 test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async () => {
   const { session, viewer } = await newSession();
   session.interp.globals.set("mission", 1);
-  session.interp.globals.set("tour", 1); // morrowidle idles in place (deterministic)
+  session.interp.globals.set("tour", true); // morrowidle idles in place (deterministic)
   await session.openSetFile("deckbd.set", "scene33", "view94");
   const v = viewer();
   const morrow = session.actorRuntime.get("morrow")!;
+  // his idle stopped first, as `moveactorstar` does: its turn would replace the walk;
+  // and in the room, as `setupactor` puts him — a walk for an actor in no open
+  // set waits unbuilt (0x443ac0)
+  session.scheduler.stopLoop("actor", "morrow");
+  morrow.setName = "deckbd";
+  morrow.speed ||= 30; // stdactor's, which the mover adds as it is (0x443e7c)
   session.interp.builtins.get("walkonpath")!(
     session.interp, ["morrow", "morrow.1", "morrow.2"], null as never, null as never,
   );
   // while walking, actorstar() reports the KIND of walk, never the destination
-  // (TI.EXE 0x443ac0 stamps "defer" for both walktostar and walkonpath)
+  // (no route between the two: the straight line, "defer")
   const sentinel = morrow.starName === "defer" && session.scheduler.isWalk("morrow");
   let guard = 0;
   while (session.scheduler.isWalk("morrow") && guard++ < 500) { v.tick((clock += 100)); await drain(); }
@@ -4396,6 +4501,57 @@ test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async 
   );
 }
 );
+
+// --- 35a. walkonroad / walkonframes: a route made from a camera road ---------
+// No shipped script calls either; TI.EXE builds the route from the road register
+// the standpoint frame names (0x405140 -> 0x404f90, de build), the height less
+// the set header's 0xa0a word, and walkonframes steps it a frame a pass
+// (0x443f40 -> 0x444f30). Both arrive on the road's last frame, star "custom".
+test("walkonroad / walkonframes walk an actor down a camera road", async () => {
+  const { session, viewer } = await newSession();
+  session.interp.globals.set("mission", 1);
+  session.interp.globals.set("tour", true);
+  await session.openSetFile("deckbd.set", "scene33", "view94");
+  const v = viewer();
+  const set = session.currentBinding!.set;
+  let road: { scene: string; view: string; handle: number } | null = null;
+  for (const sc of set.scenes) {
+    for (const f of sc.turns[0]?.frames ?? []) {
+      if (!road && f.viewID >= 0 && f.transitionLog > 0) {
+        road = { scene: sc.sceneName, view: sc.views[f.viewID].viewName, handle: f.transitionLog };
+      }
+    }
+  }
+  expect(road, "deckbd has a road").not.toBeNull();
+  const { readFrameRegister } = await import("@dreamfactory/engine/df/set");
+  const frames = readFrameRegister(set.file.containers[road!.handle]).frames;
+  const last = frames.at(-1)!;
+  const morrow = session.actorRuntime.get("morrow")!;
+  session.scheduler.stopLoop("actor", "morrow");
+  morrow.setName = "deckbd";
+  morrow.speed ||= 30;
+  for (const cmd of ["walkonroad", "walkonframes"]) {
+    const seen = new Set<string>();
+    session.interp.builtins.get(cmd)!(session.interp, ["morrow", road!.scene, road!.view], null as never, null as never);
+    check(`${cmd}: actorstar is the kind while walking`, morrow.starName === cmd, morrow.starName);
+    let guard = 0;
+    while (session.scheduler.isWalk("morrow") && guard++ < 2000) {
+      v.tick((clock += 50));
+      await drain();
+      seen.add(`${morrow.worldX},${morrow.worldY}`);
+    }
+    check(
+      `${cmd}: arrives on the road's last frame, star "custom"`,
+      morrow.worldX === last.posX16 && morrow.worldY === last.posZ16 &&
+        morrow.worldZ === ((last.posY16 - (set.heightDifference ?? 0)) << 16) >> 16 && morrow.starName === "custom",
+      `at ${morrow.worldX},${morrow.worldY},${morrow.worldZ} star=${morrow.starName}`,
+    );
+    if (cmd === "walkonframes") {
+      const onRoad = [...seen].every((p) => frames.some((f) => `${f.posX16},${f.posZ16}` === p) || p === seen.values().next().value);
+      check("walkonframes: every place it stood was a road frame", onRoad, [...seen].join(" "));
+    }
+  }
+});
 
 // --- 35b. walkdest() names the destination, so an interrupted patrol resumes -
 // GANG.CST's `walktopuppet` is the only caller of `walkdest` in the corpus, and
@@ -4417,7 +4573,7 @@ test("walkonpath: sentinel while moving, dest on arrival, endwalk fires", async 
 test("walkdest names the destination, so an interrupted walk can resume", async () => {
   const { session, viewer, logs } = await newHost();
   session.interp.globals.set("mission", 1);
-  session.interp.globals.set("tour", 1);
+  session.interp.globals.set("tour", true);
   await session.openSetFile("deckbd.set", "scene33", "view94");
   const v = viewer();
   const morrow = session.actorRuntime.get("morrow")!;
@@ -4485,7 +4641,7 @@ test("actor facing: sprite direction faces the camera (front, not back)", async 
 // target; the trunk main runs sendtoprop("gramdrawer", open()), and the prop's
 // open() handler shows the drawer and (via makeloop) settles it to "idle".
 test("trunk gramophone: clicking gramdrawerbut opens the drawer", async () => {
-  const { session } = await newSession();
+  const { session, viewer } = await newSession();
   await session.openSetFile("b59.set");
   await session.transToFlat("trunk.stg");
   await session.stageCtrl.gotoFlat("Trunk 2");
@@ -4493,7 +4649,10 @@ test("trunk gramophone: clicking gramdrawerbut opens the drawer", async () => {
   const before = gd.visible;
   await session.stageCtrl.stageClickAt(344, 328); // gramdrawerbut region center
   const openedView = gd.stateName;
-  for (let i = 0; i < 8; i++) { session.tickTime((clock += 66)); await drain(); } // makeloop -> idle
+  // makeloop -> idle. Through the host's frame, not the bare clock: the trunk
+  // opens on trnkopen.mov, and no pass runs while a film plays (the idle is not
+  // sent until it is over), so the film has to be played out first
+  for (let i = 0; i < 400 && !gd.stateName.startsWith("idle"); i++) { viewer().tick((clock += 66)); await drain(); }
   check(
     "trunk: gramdrawerbut opens the drawer (region->stage main->sendtoprop open())",
     !before && gd.visible && openedView.startsWith("open") && gd.stateName.startsWith("idle"),
@@ -4770,6 +4929,11 @@ test("per-deck theme selection via changeset -> setupsound", async () => {
 test("BOMB defuse: hit-test routing, changedone, timer loop, OK win", async () => {
   const { session } = await newSession();
   await session.openSetFile("b59.set");
+  // Frank has his bag by the time he reaches B59 — C73 will not let him out
+  // without it — and MAIN.STG's openflat, which the win's transfromflat runs,
+  // says so with `error ()` when he is holding something and has not (0x2f)
+  const bag = session.propRuntime.get("bag");
+  if (bag) bag.owner = "frank";
   await session.transToFlat("bomb.stg");
   await drain();
   const g = (n: string): unknown => session.interp.globals.get(n);
@@ -4886,7 +5050,7 @@ test("BLACKJACK: deal + variable() + transToFlat lifts transition-black", async 
   session.fade.level = 1;
   session.fade.snapshot = { rgba: new Uint8ClampedArray(4), width: 1, height: 1 };
   session.fade.queue.push({ to: 1, steps: 10 });
-  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("firsthand", true);
   session.interp.globals.set("mission", 1);
   await session.openSetFile("halla.set");
   // transToFlat -> openStageFile now deals the opening hand itself (the boot's
@@ -5014,7 +5178,7 @@ test("blackjack entry through Buick hides the puppet to reveal the table", async
   const { session, viewer } = await newSession();
   await session.openSetFile("smoke.set");
   await runAnimations(viewer());
-  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("firsthand", true);
   session.interp.globals.set("mission", 1);
   await session.puppetCtrl.openPuppetFile("blkjack1.pup");
   const shownDuringTalk = session.puppet?.visible === true && viewer().busy;
@@ -5054,7 +5218,7 @@ test("blackjack: a finished hand offers \"play again\"; Yes re-deals", async () 
   const { session, viewer } = await newSession();
   await session.openSetFile("smoke.set");
   await runAnimations(viewer());
-  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("firsthand", true);
   session.interp.globals.set("mission", 1);
   await session.puppetCtrl.openPuppetFile("blkjack1.pup");
   let now = 0;
@@ -5109,7 +5273,7 @@ test("blackjack: a finished hand offers \"play again\"; Yes re-deals", async () 
 test("blackjack score readout shows the right number (propdeg by degree)", async () => {
   const { session } = await newSession();
   await session.openSetFile("smoke.set");
-  session.interp.globals.set("firsthand", 1);
+  session.interp.globals.set("firsthand", true);
   session.interp.globals.set("mission", 1);
   let now = 0;
   const pump = async (until: () => boolean, max = 3000): Promise<boolean> => {
@@ -5155,10 +5319,20 @@ test("world sprites keep a camera during movement (no vanish on turn)", async ()
   const anyv = v as unknown as {
     animation: unknown;
   };
+  // the passes under way first (the very first one of a session has no
+  // throttle to wait out, so it runs two)
+  for (let i = 0; i < 4; i++) {
+    v.tick((clock += 50));
+    await drain();
+  }
   const standDeg = v.worldCamera()!.deg;
   v.turn(0); // start a right turn
-  v.tick((clock += 100)); // step into the animation
-  v.tick((clock += 100));
+  // step into the animation: it moves in the idle's passes (SetViewer.passMotion),
+  // so tick until the first of them has drawn a frame of it
+  for (let i = 0; i < 6 && anyv.animation !== null && v.roomCamera()?.deg === standDeg; i++) {
+    v.tick((clock += 50));
+    await drain();
+  }
   const animating = anyv.animation !== null;
   const midCam = v.roomCamera();
   // mid-turn: a camera exists (was null before) and it has moved off the standpoint
@@ -5877,7 +6051,7 @@ test("a turn runs boot's openscene, so the sinking clock charges for it (#127)",
       for (let i = 0; i < n; i++) { v.tick((clock += 50)); await drain(); }
     };
     const settle = async (n: number) => {
-      for (let i = 0; i < n && (v.busy || session.scriptBusy); i++) { v.tick((clock += 50)); await drain(); }
+      for (let i = 0; i < n && (v.busy || session.scriptBusy || session.events.length); i++) { v.tick((clock += 50)); await drain(); }
     };
     await settle(300);
     // the throttle is `frame() - secframe >= 20`, so the clock has to have run a
@@ -5934,7 +6108,7 @@ test("Sasha walks away down the hall (sasha.1 -> sasha.2)", async () => {
   session.interp.globals.set("neckphase", 7);
   session.interp.globals.set("mission", 1);
   session.interp.globals.set("phase", 4);
-  session.interp.globals.set("tour", 0);
+  session.interp.globals.set("tour", false);
   await session.openSetFile("halla.set", "scene52", "view62");
   const v = viewer();
   // Sasha in the doorway on sasha.1
@@ -6009,7 +6183,7 @@ test("TURNING to view62 fires openscene (per-view event) -> Sasha walks", async 
 test("a foreground prop's own mousedown wins over the flat regions beneath it (PATTY.STG doll)", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
-  g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8); g.set("debugging", 1);
+  g.set("mission", 1); g.set("tour", false); g.set("neckphase", 8); g.set("debugging", true);
   await session.openSetFile("a14.set", "scene1", "view11");
   // real necklace inside the doll (Vlad's), fake in the player's hand to swap
   await session.sendEvent("sendtoshop", "inven.shp", "giveinven", ["realneck", "vlad"], "test");
@@ -6021,7 +6195,7 @@ test("a foreground prop's own mousedown wins over the flat regions beneath it (P
   const click = async (x: number, y: number) => {
     session.setPointer(x, y);
     session.pointerDown = true;
-    await v.click(x, y);
+    await pumped(v, v.click(x, y));
     session.pointerDown = false;
     await drain();
   };
@@ -6077,7 +6251,7 @@ test("a foreground prop's own mousedown wins over the flat regions beneath it (P
 test("swapping the necklace: leaving Sasha's cabin kicks you out to HALLA alive", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
-  g.set("mission", 1); g.set("tour", 0); g.set("neckphase", 8);
+  g.set("mission", 1); g.set("tour", false); g.set("neckphase", 8);
   await session.openSetFile("a14.set", "scene2", "view21");
   await session.sendEvent("sendtoshop", "inven.shp", "addinven", ["realneck"], "test"); // real -> frank
   await session.sendEvent("sendtoshop", "inven.shp", "giveinven", ["fakeneck", "vlad"], "test"); // fake -> doll
@@ -6112,7 +6286,7 @@ test("swapping the necklace: leaving Sasha's cabin kicks you out to HALLA alive"
 test("darkroom (REDPHOTO.STG): a negative develops in the start bath and spoils in the stop bath", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
-  g.set("mission", 1); g.set("tour", 0);
+  g.set("mission", 1); g.set("tour", false);
   for (const k of ["picone", "pictwo", "picthree", "badone", "badtwo", "badthree"]) g.set(k, 0);
   await session.openSetFile("c78.set");
   await session.track(session.transToFlat("redphoto.stg")); // red-light view (whitelight off)
@@ -6218,7 +6392,7 @@ test("wavevolume drives sound+voice, themevol the theme, and playtheme picks up 
 test("CTL.STG settings panel opens over the game and the theme lever writes themevolume live", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
-  g.set("mission", 1); g.set("tour", 0);
+  g.set("mission", 1); g.set("tour", false);
   await session.openSetFile("c78.set");
   await session.track(session.transToFlat("ctl.stg"));
   const v = viewer();
@@ -6263,7 +6437,7 @@ test("shift-clicking HELP raises the game's own readout, and a plain click does 
   const { host, session } = await newHost();
   session.onNoteDialog = (m) => void notes.push(m);
   const g = session.interp.globals;
-  g.set("mission", 1); g.set("phase", 4); g.set("tour", 0);
+  g.set("mission", 1); g.set("phase", 4); g.set("tour", false);
   await host.loadServerSet("c78.set");
   await session.track(session.transToFlat("ctl.stg"));
   const v = host.viewer!;
@@ -6308,7 +6482,7 @@ test("in the smokestack the readout names the maze and the level", async () => {
   const { host, session } = await newHost();
   session.onNoteDialog = (m) => void notes.push(m);
   const g = session.interp.globals;
-  g.set("mission", 3); g.set("phase", 2); g.set("tour", 0);
+  g.set("mission", 3); g.set("phase", 2); g.set("tour", false);
   await host.loadServerSet("smstack1.set");
   g.set("mazenumber", 2); g.set("stacklevel", 3);
   await session.track(session.transToFlat("ctl.stg"));
@@ -6359,7 +6533,7 @@ test("subtitles follow puppetparam slot 7; music starts quiet with the theme lev
 test("cufflink clue pickup (CUFF.STG): examine it small->med->big and take it into the bag", async () => {
   const { session, viewer } = await newSession();
   const g = session.interp.globals;
-  g.set("mission", 2); g.set("tour", 0); g.set("cuffchair", "cufflink1");
+  g.set("mission", 2); g.set("tour", false); g.set("cuffchair", "cufflink1");
   await session.openSetFile("recept1c.set");
   // satisfy the openshop gate so the hidden cufflink appears
   const purs = session.actorRuntime.get("purs");
@@ -6397,7 +6571,7 @@ test("cufflink clue pickup (CUFF.STG): examine it small->med->big and take it in
     if (!c) return;
     session.setPointer(c[0], c[1]);
     session.pointerDown = true;
-    await v.click(c[0], c[1]);
+    await pumped(v, v.click(c[0], c[1]));
     session.pointerDown = false;
     await drain();
   };
@@ -6466,10 +6640,12 @@ test("ship's-wheel steering sim (BRIDGE.STG): drift past ±64 swings the ship of
     Number(g.get("driftpos")) !== 256 &&
     Number(P("sky1")!.anchorX) !== sky1x0; // the sky scrolled with driftpos
 
-  // calcmod: the wheel's getpropdeg maps a 0..255 angle into 0..4 frames
+  // calcmod: the wheel's getpropdeg maps a 0..255 angle into 0..4 frames. It is
+  // `idiv`'s remainder, the sign of the dividend (TI.EXE 0x429af0) — the wheel
+  // only ever passes 0..255, where that never shows
   type Bi = (i: typeof session.interp, a: (number | string)[]) => unknown;
   const calcmod = session.interp.builtins.get("calcmod")! as unknown as Bi;
-  const modOk = calcmod(session.interp, [70, 32]) === 6 && calcmod(session.interp, [-1, 32]) === 31;
+  const modOk = calcmod(session.interp, [70, 32]) === 6 && calcmod(session.interp, [-1, 32]) === -1;
 
   check(
     "bridge steering (BRIDGE.STG): opens with the tiling sky (propinstance) + wheel, turning the wheel drifts the ship off course and scrolls the sky",
@@ -6507,6 +6683,11 @@ test("endgame slideshow logic (NAREND.STG): the artifacts' owners choose the end
   const run = async (h: string): Promise<string> =>
     String((await session.interp.runHandler(inst!, h, [], { me: "narend", target: "" })).value ?? "");
   const lastWord = (s: string): string => s.split(",").pop() ?? "";
+  // opennarend's `global onehappens, twohappens, revhappens` comes first in the
+  // game, so worldwar1's undeclared assignments find the globals; without it
+  // they would be locals, and futures would compare its fresh integer 0s
+  // against `false` — never equal, a boolean being a type of its own
+  for (const n of ["onehappens", "twohappens", "revhappens"]) session.interp.globals.set(n, 0);
 
   // best ending: artifacts preserved -> all three flags false -> Prozac future
   own("painting", "frank");
@@ -6564,8 +6745,8 @@ test("endgame slideshow logic (NAREND.STG): the artifacts' owners choose the end
 test("game clock: tickTime drives calctime at 1 sec/second, and is not scriptBusy", async () => {
   const { session } = await newSession();
   const g = (n: string): number => Number(session.interp.globals.get(n) ?? 0);
-  const set = (n: string, v: number): void => void session.interp.globals.set(n, v);
-  set("sinkflag", 0);
+  const set = (n: string, v: number | boolean): void => void session.interp.globals.set(n, v);
+  set("sinkflag", false);
   set("clockcount", 0);
   set("sec", 0);
   set("min", 30);
@@ -6607,9 +6788,9 @@ test("game clock: tickTime drives calctime at 1 sec/second, and is not scriptBus
 test("canadvance: mission 4 pins hrs/min at a phase threshold until the movie takes", async () => {
   const { session } = await newSession();
   const g = (n: string): number => Number(session.interp.globals.get(n) ?? 0);
-  const set = (n: string, v: number | string): void => void session.interp.globals.set(n, v);
+  const set = (n: string, v: number | string | boolean): void => void session.interp.globals.set(n, v);
   set("mission", 4);
-  set("sinkflag", 1);
+  set("sinkflag", true);
   set("hrs", 13);
   set("min", 15);
   set("sec", 0);
@@ -6898,6 +7079,8 @@ test("actor arrival: an engine-driven arrival runs no idle", async () => {
   ];
   for (const [set, who, clicked] of CASES) {
     const { session, logs } = await newHost();
+    // the story's globals, which a room opened cold has not had declared (error 9)
+    declareStoryGlobals(session);
     session.interp.globals.set("mission", 1);
     session.interp.globals.set("maxphase", 0);
     await session.openSetFile(set);
@@ -6939,9 +7122,14 @@ test("actor arrival: an engine-driven arrival runs no idle", async () => {
     const accosts = said.filter((l) => l === `msg: ${who}`).length;
     const puppets = said.filter((l) => l.startsWith("puppet opened")).length;
     const cycles = said.filter((l) => l.includes("dispatch cycle")).length;
+    // AT MOST one: the idle turns them to the camera with `turntodeg` and only
+    // then calls `hasattention`, and a turn is always recorded (0x442de0 ->
+    // 0x443550 has no "already facing" case) and is a walk to `iswalk` until the
+    // next pass — so a `mousedown` whose first test is `iswalk (me)` (Vlad's,
+    // gang.cst 0960) refuses the accost the idle sends it, in TI.EXE as here
     check(
       `${set}: one approach, one conversation, no re-entry`,
-      accosts === 1 && puppets === 1 && cycles === 0 && !session.scheduler.isWalk(who),
+      accosts <= 1 && puppets === accosts && cycles === 0 && !session.scheduler.isWalk(who),
       `walktopuppet=${accosts} puppets=${puppets} cycles=${cycles} ` +
         `stillWalking=${session.scheduler.isWalk(who)}`,
     );
@@ -7140,11 +7328,12 @@ test("a load and a restart both arrive from nowhere", async () => {
     const v = viewer()!;
     const cursors: string[] = [];
     for (const o of v.scene.views[v.viewIdx].objects) {
-      await v.hover(
+      await idleCursor(
+        v,
         Math.floor((o.startRegionX + o.endRegionX) / 2),
         Math.floor((o.startRegionY + o.endRegionY) / 2),
+        tick,
       );
-      await drain();
       cursors.push(session.cursorName || "arrow");
     }
     check(
@@ -7414,7 +7603,7 @@ test("a click inside a click gives the camera back to the script that owns it", 
   };
   session.interp.globals.set("mission", 3);
   session.interp.globals.set("hackphase", 0);
-  session.interp.globals.set("tour", 0);
+  session.interp.globals.set("tour", false);
   await session.openSetFile("scot3.set", "scene13", "view25");
   await drain();
   await tick(20);
@@ -8142,18 +8331,28 @@ test("a settled view is drawn from the hi-res standpoint", async () => {
    * frame. `prev` is where the soft landing beat shows up: the sharp frame is the
    * animation's own last frame, so the soft one is the frame before it.
    */
-  const turnAndWatch = (dir: number): { prev: string; landed: string; settled: string } => {
+  // a move steps in the idle's passes (SetViewer.passMotion); the picture is
+  // read after each, as it was drawn
+  const pass = async (): Promise<string> => {
+    v.tick((clock += 50));
+    await drain();
+    return hash(v.roomFrame());
+  };
+  const turnAndWatch = async (dir: number): Promise<{ prev: string; landed: string; settled: string }> => {
     v.turn(dir);
     let prev = "none";
     let landed = "none";
-    for (let i = 0; i < 500 && v.busy; i++) {
-      const f = v.tick((clock += 100));
-      if (f && hash(f) !== landed) {
+    let settled = "";
+    // until the move is over and the picture has held for a pass
+    for (let i = 0; i < 500 && (v.busy || settled !== landed); i++) {
+      settled = landed;
+      const h = await pass();
+      if (h !== landed) {
         prev = landed;
-        landed = hash(f);
+        landed = h;
       }
     }
-    return { prev, landed, settled: hash(v.tick((clock += 100))) };
+    return { prev, landed, settled };
   };
 
   /** the two versions of the CURRENT standpoint, decoded straight from the set */
@@ -8174,7 +8373,7 @@ test("a settled view is drawn from the hi-res standpoint", async () => {
     return { lo: one(lo.frameContainerLoc), hi: one(hi.frameContainerLoc) };
   };
 
-  const right = turnAndWatch(RIGHTTURNS);
+  const right = await turnAndWatch(RIGHTTURNS);
   const rightPt = standpoint();
   check(
     "a right turn ends up on the hi-res standpoint",
@@ -8187,7 +8386,7 @@ test("a settled view is drawn from the hi-res standpoint", async () => {
     `the frame before the landing was ${right.prev}, wanted the low-res ${rightPt.lo}`,
   );
 
-  const left = turnAndWatch(LEFTTURNS);
+  const left = await turnAndWatch(LEFTTURNS);
   const leftPt = standpoint();
   check(
     "a left turn lands on the hi-res frame directly, with no soft beat",
@@ -8203,7 +8402,7 @@ test("a settled view is drawn from the hi-res standpoint", async () => {
     session.pictureMode = mode;
     for (const dir of [RIGHTTURNS, LEFTTURNS]) {
       const way = dir === RIGHTTURNS ? "right" : "left";
-      const got = turnAndWatch(dir);
+      const got = await turnAndWatch(dir);
       const pt = standpoint();
       const want = mode === "soft" ? pt.lo : pt.hi;
       check(
@@ -8261,15 +8460,20 @@ test("a walk lands the way the picture setting says", async () => {
     v.walk();
     let prev = "none";
     let landed = "none";
+    // a move steps in the idle's passes (SetViewer.passMotion): the picture
+    // is read after each, as it was drawn
     for (let i = 0; i < 500 && (v.busy || session.scriptBusy); i++) {
-      const f = v.tick((clock += 100));
-      if (f && hash(f) !== landed) {
-        prev = landed;
-        landed = hash(f);
-      }
+      v.tick((clock += 50));
       await drain();
+      const h = hash(v.roomFrame());
+      if (h !== landed) {
+        prev = landed;
+        landed = h;
+      }
     }
-    return { prev, landed, settled: hash(v.tick((clock += 100))) };
+    v.tick((clock += 50));
+    await drain();
+    return { prev, landed, settled: hash(v.roomFrame()) };
   };
   // stand somewhere a road leaves from — a turn is enough in bedsit1
   for (let i = 0; i < 8 && !v.availableRoads().length; i++) {
@@ -8424,13 +8628,13 @@ test("a scripted jump closes the door a turn would have closed", async () => {
   // sendtoprop("door", setupprop("gs3-purs"))
   const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
   check("View36 has the office door hotspot", spot?.identifier === "door", `got ${spot?.identifier}`);
-  await session.track(
+  await pumped(v(), session.track(
     v().press(
       Math.floor((spot.startRegionX + spot.endRegionX) / 2),
       Math.floor((spot.startRegionY + spot.endRegionY) / 2),
     ),
     "door-click",
-  );
+  ), tick);
   for (let i = 0; i < 60; i++) { tick(); await drain(); }
   const opened = session.propRuntime.get("door");
   check(
@@ -8481,7 +8685,7 @@ test("the maze's crates block the road they are drawn on, whichever way you came
   const { host, session } = await newHost();
   const g = session.interp.globals;
   let clock = 0;
-  g.set("tour", 0); g.set("mission", 3);
+  g.set("tour", false); g.set("mission", 3);
   // Set BEFORE the set opens: openset calls setupblocks(), so a maze arriving
   // later is too late. Maze 1 / level 3 walls up sections 2 and 6.
   g.set("mazenumber", 1); g.set("stacklevel", 3);
@@ -8511,19 +8715,19 @@ test("the maze's crates block the road they are drawn on, whichever way you came
     `${where()} blocked=${blocked()}`);
 
   // A TURN: view50 has no case in pathblocked at all, so nothing is blocked there
-  await session.track(v.keyDown("leftarrow"));
+  await pumped(v, session.track(v.keyDown("leftarrow")), () => v.tick((clock += 50)));
   await settle();
   check("turning away from it clears the flag", where() === "scene37/view50" && blocked() === 0,
     `${where()} blocked=${blocked()}`);
 
   // and view48 is section 1, which this maze leaves open
-  await session.track(v.keyDown("leftarrow"));
+  await pumped(v, session.track(v.keyDown("leftarrow")), () => v.tick((clock += 50)));
   await settle();
   check("and an open road reads as open", where() === "scene37/view48" && blocked() === 0,
     `${where()} blocked=${blocked()}`);
 
   // so it can be walked, and the section beyond it reads for ITSELF
-  await session.track(v.keyDown("uparrow"));
+  await pumped(v, session.track(v.keyDown("uparrow")), () => v.tick((clock += 50)));
   await settle(80);
   check("walking the open road arrives in the next section", where() === "scene63/view76",
     `arrived at ${where()}`);
@@ -8531,12 +8735,12 @@ test("the maze's crates block the road they are drawn on, whichever way you came
 
   // then turn back to a crate and confirm the road is shut
   for (let i = 0; i < 6 && where() !== "scene37/view47"; i++) {
-    await session.track(v.keyDown(i < 2 ? "leftarrow" : "uparrow"));
+    await pumped(v, session.track(v.keyDown(i < 2 ? "leftarrow" : "uparrow")), () => v.tick((clock += 50)));
     await settle(80);
   }
   check("back at the crate", where() === "scene37/view47" && blocked() === 1, `${where()} blocked=${blocked()}`);
   const before = where();
-  await session.track(v.keyDown("uparrow"));
+  await pumped(v, session.track(v.keyDown("uparrow")), () => v.tick((clock += 50)));
   await settle(80);
   check("and the crate cannot be walked through", where() === before, `walked to ${where()}`);
 }, 120_000);
@@ -8556,7 +8760,7 @@ test("a jumpTo fires no scene event; the script's own jump does", async () => {
   const { host, session } = await newHost();
   const g = session.interp.globals;
   let clock = 0;
-  g.set("tour", 0); g.set("mission", 3);
+  g.set("tour", false); g.set("mission", 3);
   g.set("mazenumber", 1); g.set("stacklevel", 3); // walls up sections 2 and 6
   await host.loadServerSet("smstack2.set");
   const v = host.viewer!;
@@ -8617,6 +8821,7 @@ test("a jumpTo fires no scene event; the script's own jump does", async () => {
 // slowly, then at about 60% of the animation jumps to the end" (#15).
 test("a prop animation reaches its last frames inside the script's budget", async () => {
   const { session, viewer } = await newHost();
+  seedOpenedRoom(session);
   let clock = 0;
   await session.openSetFile("boil.set", "scene12", "view25");
   await drain();
@@ -8626,13 +8831,13 @@ test("a prop animation reaches its last frames inside the script's budget", asyn
 
   // the chute hotspot opens boil.stg, where the doors live as props
   const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
-  await session.track(
+  await pumped(v(), session.track(
     v().press(
       Math.floor((spot.startRegionX + spot.endRegionX) / 2),
       Math.floor((spot.startRegionY + spot.endRegionY) / 2),
     ),
     "chute-click",
-  );
+  ), tick);
   for (let i = 0; i < 200; i++) { tick(); await drain(); }
   const door = session.propRuntime.get("boildoor");
   check(
@@ -8695,6 +8900,7 @@ test("a prop animation reaches its last frames inside the script's budget", asyn
 // raise for no reason (#79, the other half of what #15 reported).
 test("a prop with no state set reports its first state, not nothing", async () => {
   const { session, viewer } = await newHost();
+  seedOpenedRoom(session);
   let clock = 0;
   await session.openSetFile("boil.set", "scene12", "view25");
   await drain();
@@ -8703,13 +8909,13 @@ test("a prop with no state set reports its first state, not nothing", async () =
   for (let i = 0; i < 80; i++) { tick(); await drain(); }
 
   const spot = (v().scene.views[v().viewIdx].objects ?? [])[0];
-  await session.track(
+  await pumped(v(), session.track(
     v().press(
       Math.floor((spot.startRegionX + spot.endRegionX) / 2),
       Math.floor((spot.startRegionY + spot.endRegionY) / 2),
     ),
     "chute-click",
-  );
+  ), tick);
   for (let i = 0; i < 200; i++) { tick(); await drain(); }
 
   // what the SCRIPT sees for a prop nothing has set: the first state
@@ -8776,7 +8982,14 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
   const { session } = await newHost();
   const effect = session.interp.builtins.get("visualeffect") as unknown as (
     i: unknown, a: (string | number)[],
-  ) => void;
+  ) => Promise<void>;
+  // A pass runs first (TI.EXE 0x43df8f) and the effect after it, so a call is
+  // started and given its microtasks — the pass's own, no frame — before the
+  // effect is looked at
+  const start = async (args: (string | number)[]): Promise<void> => {
+    void effect(session.interp, args);
+    for (let i = 0; i < 50; i++) await Promise.resolve();
+  };
   // stand in for the host's composite: a wipe holds the screen it is leaving
   session.captureFrame = () => ({
     rgba: new Uint8ClampedArray(512 * 384 * 4),
@@ -8784,10 +8997,10 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
     height: 384,
   });
 
-  void effect(session.interp, ["plain", 0]);
+  await start(["plain", 0]);
   check("plain starts no wipe", !session.wiping, `dir=${session.wipe.dir}`);
 
-  void effect(session.interp, ["wipeleft", 30]);
+  await start(["wipeleft", 30]);
   check("wipeleft starts one", session.wiping && session.wipe.dir === "left", `dir=${session.wipe.dir}`);
   check("...over the steps it was given", session.wipe.steps === 30, `steps=${session.wipe.steps}`);
 
@@ -8809,15 +9022,15 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
     `30 steps = ${30 * RAMP_STEP_MS} ms`,
   );
 
-  void effect(session.interp, ["wiperight", 20]);
+  await start(["wiperight", 20]);
   check("wiperight goes the other way", session.wipe.dir === "right", `dir=${session.wipe.dir}`);
   // steps are clamped 1..1000 the way TI.EXE clamps them
   session.endWipe();
-  void effect(session.interp, ["wipeleft", 99999]);
+  await start(["wipeleft", 99999]);
   check("steps are capped at 1000", session.wipe.steps === 1000, `steps=${session.wipe.steps}`);
   // an effect the corpus never asks for keeps the instant reveal
   session.endWipe();
-  void effect(session.interp, ["venetian", 20]);
+  await start(["venetian", 20]);
   check("an unused effect stays instant", !session.wiping, `dir=${session.wipe.dir}`);
 });
 
@@ -8895,7 +9108,7 @@ test("a sendtoactor reaches the character, not the overlay prop of that name", a
   const settle = async (n = 20): Promise<void> => {
     for (let i = 0; i < n; i++) { host.viewer?.tick((clock += 50)); await drain(); }
   };
-  g.set("tour", 0); g.set("mission", 3); g.set("phase", 1);
+  g.set("tour", false); g.set("mission", 3); g.set("phase", 1);
   await session.runGlobal("changeset", ["engine", "Scene108", "View112"]);
   await settle();
   const vlad = session.actorRuntime.get("vlad");
@@ -9179,7 +9392,10 @@ test("the bound movement keys turn the camera, like the arrows they map to", asy
   // boot() is what assigns the defaults — a session that skipped it has no bindings
   await session.runGlobal("boot");
   const v0 = viewer();
-  for (let i = 0; i < 120; i++) v0.tick((clock += 50));
+  for (let i = 0; i < 120; i++) {
+    v0.tick((clock += 50));
+    await drain(); // the idle's pass each tick lets through
+  }
   check("boot() sets the default bindings",
     session.interp.globals.get("keynorth") === "w" &&
       session.interp.globals.get("keywest") === "a" &&
@@ -9288,6 +9504,10 @@ test("a new game after a bad ending starts with nothing carried (#89)", async ()
     ["painting", "zeit"], ["cufflink", "purs"], ["carkeys", "xxxfrank"],
     ["notebook", "frank"], ["fakeneck", "frank"], ["trunkkey", "frank"],
   ];
+  // ...and Frank's bag is Frank's at the end of every game: MAIN.STG's openflat
+  // calls `error ()` for an item in hand without it (0x2f, which unwinds)
+  const bag = session.propRuntime.get("bag");
+  if (bag) bag.owner = "frank";
   for (const [prop, owner] of DIRT) {
     const p = session.propRuntime.get(prop);
     if (p) p.owner = owner;
@@ -9314,6 +9534,9 @@ test("a new game after a bad ending starts with nothing carried (#89)", async ()
   g.set("mission", 4); // anything but "good" takes the play-again arm
   g.set("phase", 3);
   g.set("clock", "endgame");
+  // what boot()'s `setpath` leaves: the endgame arm builds `mainpath @
+  // "narend:"`, and an `@` on the integer 0 of an unset global is error 0xe
+  g.set("mainpath", "titanic2:");
 
   await session.runGlobal("advanceday");
   await session.settle();
@@ -9542,8 +9765,16 @@ test("walkonpath follows the SET's authored route, corners and all (#122)", asyn
   sasha.worldX = s1.positionX;
   sasha.worldY = s1.positionZ;
   sasha.worldZ = s1.positionY;
+  // ...and in the room, as her `setupactor` would have put her: a walkonpath for
+  // an actor in another set waits unbuilt until that set opens (0x443235 -> 0x443ac0)
+  sasha.setName = "halla";
+  // ...at `stdactor`'s pace: a speed of 0 is no progress at all in the mover
+  // (0x443f06 adds it as it is), and nothing here ran her setupactor
+  sasha.speed = 30;
 
-  // the script's own call (HALLA.SET 0436)
+  // the script's own calls (HALLA.SET 0436): her idle stopped first — its turns
+  // would replace the walk (0x442ea0 -> 0x442640) — then the route
+  session.scheduler.stopLoop("actor", "sasha");
   void (session.interp.builtins.get("walkonpath") as unknown as (
     i: unknown, a: unknown[], c: unknown, f: unknown,
   ) => unknown)(
@@ -9668,11 +9899,17 @@ test("turntodeg turns over time, and iswalk is true until it lands (#124)", asyn
     `(${at.x},${at.y}) -> (${zeit.worldX},${zeit.worldY})`);
   check("a turn does not put him in the walk pose", zeit.poseName !== "walk", `pose=${zeit.poseName}`);
 
-  // ...and a turn asked for the facing he already holds records nothing, which is
-  // what keeps the idles from recurring through each other
+  // ...and a turn asked for the facing he already holds is STILL a walk: there
+  // is no "already facing" shortcut in 0x442de0 -> 0x443550. It lands on the
+  // next pass, and sends endturn there (0x443d47 -> 0x443da4), not endwalk —
+  // whose handlers would re-arm the idle. endturn's gate on `iswalk` is false by
+  // then, since the slot is cleared first (0x443d4e).
   turn(zeit.deg);
-  check("a turn to the facing already held is not a walk at all",
-    !session.scheduler.isWalk("zeit"), `deg=${zeit.deg} walks=${[...session.scheduler.walks.keys()]}`);
+  check("a turn to the facing already held is a walk until the next pass",
+    session.scheduler.isWalk("zeit"), `deg=${zeit.deg} walks=${[...session.scheduler.walks.keys()]}`);
+  v.tick((clock += 50));
+  await drain();
+  check("...which lands it", !session.scheduler.isWalk("zeit"), `walks=${[...session.scheduler.walks.keys()]}`);
 }
 );
 
@@ -10267,7 +10504,7 @@ test("a press consumed while another chain is in flight stays consumed (#232)", 
   const { host, session } = await newHost();
   const g = session.interp.globals;
   let clock = 0;
-  g.set("tour", 0); g.set("mission", 3);
+  g.set("tour", false); g.set("mission", 3);
   // maze 1 / level 3 walls up sections 2 and 6; the set opens facing section 2
   g.set("mazenumber", 1); g.set("stacklevel", 3);
   await host.loadServerSet("smstack2.set");
@@ -10303,12 +10540,13 @@ test("a press consumed while another chain is in flight stays consumed (#232)", 
 
   // 3. THE REPORTER'S GESTURE. Turn to the open road (section 1) and hold the
   // key: the walk goes 1 -> 8 -> 7 and must stop at the crate in section 6.
-  for (let i = 0; i < 2; i++) { await session.track(v().keyDown("leftarrow")); await settle(); }
+  for (let i = 0; i < 2; i++) { await pumped(v(), session.track(v().keyDown("leftarrow")), () => v().tick((clock += 50))); await settle(); }
   check("facing the open road", where() === "scene37/view48" && Number(g.get("blocked")) === 0,
     `${where()} blocked=${g.get("blocked")}`);
   const visited: string[] = [where()];
   for (let i = 0; i < 400; i++) {
     void session.track(v().pressNav("uparrow"));       // the auto-repeat of a held key
+    await drain(); // ...handled as it arrives, between two of the host's frames
     v().tick((clock += 50));
     await drain();
     if (where() !== visited[visited.length - 1]) visited.push(where());
@@ -10358,23 +10596,24 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
   };
 
   /**
-   * One right turn at the current setting, ticked at the engine step — which is
-   * what the headless host runs at, so the counts below are the browser's too
-   * for any pace at or above it.
-   *
-   * Every tick here draws: the animation's clock is backdated one interval when
-   * it starts, so frame 0 is due on the first tick rather than the second (#352).
-   * That is what makes these counts the frame counts and not n+1.
+   * One tick at the engine step, and the idle's pass it lets run: a move steps
+   * in the pass (SetViewer.passMotion, TI.EXE 0x439bbb), one pass a tick at the
+   * default framerate. The picture is read after the pass, as it was drawn.
    */
-  const turnRight = (): { ticks: number; frames: number; drawn: string[]; landed: number } => {
+  const pass = async (): Promise<string> => {
+    v.tick((clock += ENGINE_STEP_MS));
+    await drain();
+    return hash(v.roomFrame());
+  };
+  /** one right turn at the current setting: the passes it took, and what they drew */
+  const turnRight = async (): Promise<{ ticks: number; frames: number; drawn: string[]; landed: number }> => {
     v.turn(RIGHTTURNS);
     const frames = anyv.animation?.length ?? 0;
     const drawn: string[] = [];
     let ticks = 0;
     while (anyv.animation && ticks < 500) {
       ticks++;
-      const f = v.tick((clock += ENGINE_STEP_MS));
-      const h = hash(f);
+      const h = await pass();
       if (h !== drawn[drawn.length - 1]) drawn.push(h);
     }
     return { ticks, frames, drawn, landed: v.viewIdx };
@@ -10382,60 +10621,58 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
 
   const from = v.viewIdx;
   session.moveSpeed = "original";
-  const orig = turnRight();
+  const orig = await turnRight();
   check("the ring is worth measuring", orig.frames >= 2 && orig.landed !== from,
     `frames=${orig.frames} ${from} -> ${orig.landed}`);
-  check("original: one frame a tick, and no tick spent on neither (#352)",
-    orig.ticks === orig.frames, `${orig.ticks} ticks for ${orig.frames} frames`);
+  // a turn starts on its standpoint (0x439da9) and each pass shows the next frame
+  check("original: one frame a pass, the arrival on the last",
+    orig.ticks === orig.frames, `${orig.ticks} passes for ${orig.frames} frames`);
 
   // back to where we started, so every speed turns the same ring
-  const backTo = (idx: number): void => {
+  const backTo = async (idx: number): Promise<void> => {
     for (let i = 0; i < 12 && v.viewIdx !== idx; i++) {
       v.turn(LEFTTURNS);
-      for (let n = 0; n < 500 && anyv.animation; n++) v.tick((clock += ENGINE_STEP_MS));
+      for (let n = 0; n < 500 && anyv.animation; n++) await pass();
     }
   };
 
-  backTo(from);
+  await backTo(from);
   session.moveSpeed = "slow";
-  const slow = turnRight();
-  // frame 0 is due at once (#352) and each one after it two ticks later, so a
-  // pace of two ticks costs 2(n-1)+1 rather than 2n — the interval is BETWEEN
-  // frames, and the last frame ends the animation on the tick that draws it
-  check("slow: 100 ms a frame is two ticks each, and the same frames",
-    slow.frames === orig.frames && slow.ticks === 2 * (orig.frames - 1) + 1 &&
-      slow.landed === orig.landed,
-    `${slow.ticks} ticks for ${slow.frames} frames -> ${slow.landed}`);
+  const slow = await turnRight();
+  check("slow: a frame every other pass, and the same frames",
+    slow.frames === orig.frames && slow.ticks === 2 * orig.frames && slow.landed === orig.landed,
+    `${slow.ticks} passes for ${slow.frames} frames -> ${slow.landed}`);
 
-  backTo(from);
+  await backTo(from);
   session.moveSpeed = "fast";
-  const fast = turnRight();
-  check("fast: 25 ms a frame is two frames a tick, and the same landing",
+  const fast = await turnRight();
+  check("fast: two frames a pass, and the same landing",
     fast.frames === orig.frames && fast.ticks === Math.ceil(orig.frames / 2) &&
       fast.landed === orig.landed,
-    `${fast.ticks} ticks for ${fast.frames} frames -> ${fast.landed}`);
+    `${fast.ticks} passes for ${fast.frames} frames -> ${fast.landed}`);
 
-  backTo(from);
+  await backTo(from);
   session.moveSpeed = "instant";
-  const now = turnRight();
-  check("instant: the whole ring on one tick, landing where the others landed",
+  const now = await turnRight();
+  check("instant: the whole ring in one pass, landing where the others landed",
     now.frames === orig.frames && now.ticks === 1 && now.landed === orig.landed,
-    `${now.ticks} ticks for ${now.frames} frames -> ${now.landed}`);
-  // and what that one tick DREW is the standpoint, not a frame of the turn:
-  // `showView` runs inside it. The settled picture is what the next tick shows.
-  const settled = hash(v.tick((clock += ENGINE_STEP_MS)));
+    `${now.ticks} passes for ${now.frames} frames -> ${now.landed}`);
+  // and what that pass DREW is the standpoint, not a frame of the turn:
+  // `showView` runs inside it
+  const settled = await pass();
   check("instant: no frame of the turn ever reaches the screen",
     now.drawn.length === 1 && now.drawn[0] === settled,
     `drew ${now.drawn.length} picture(s): ${now.drawn.join(", ")} settled=${settled}`);
 
   // 3. the script's move keeps the engine's rate, at the setting most likely to
-  // wreck it. `navDriver` is the hook the scheduler arms around a scene loop.
-  backTo(from);
+  // wreck it. `navDriver` is the hook the scheduler arms around a scene loop;
+  // it runs the departing closescene before the move starts (0x407cbb)
+  await backTo(from);
   session.moveSpeed = "instant";
   const prev = v.armNavHooks();
   session.navFromScript = true;
   try {
-    session.navDriver("right");
+    await session.navDriver("right");
   } finally {
     session.navFromScript = false;
     v.disarmNavHooks(prev);
@@ -10444,9 +10681,10 @@ test("movement speed: the player's pace is theirs, a script's is the game's (#22
   let scriptTicks = 0;
   while (anyv.animation && scriptTicks < 500) {
     scriptTicks++;
-    v.tick((clock += ENGINE_STEP_MS));
+    await pass();
   }
   check("a scripted move still spends one pass a frame, whatever the player asked for",
     scripted === orig.frames && scriptTicks === orig.frames,
-    `${scriptTicks} ticks for ${scripted} frames at moveSpeed=${session.moveSpeed}`);
+    `${scriptTicks} passes for ${scripted} frames at moveSpeed=${session.moveSpeed}`);
 });
+

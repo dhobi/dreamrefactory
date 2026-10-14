@@ -274,7 +274,7 @@ function slotAt(dir: ScreenDirector, x: number, y: number): "visible" | "hidden"
  * rather than `fireHandler` because these take arguments and answer values, and
  * `fireHandler` is the no-argument lifecycle path.
  */
-const fire = async (session: GameSession, handler: string, args: (string | number)[] = []) => {
+const fire = async (session: GameSession, handler: string, args: (string | number | boolean)[] = []) => {
   const inst = session.flatScripts.get("dark")!;
   return (await session.interp.runHandler(inst, handler, args, { me: "dark", target: "" })).value;
 };
@@ -431,11 +431,11 @@ test("prophide(\"all\") suppresses drawing without forgetting what was up", asyn
   const { session } = await scene();
   const mask = session.propRuntime.get("mask")!;
   mask.visible = true;
-  await fire(session, "hideall", [1]);
+  await fire(session, "hideall", [true]);
   expect(mask.hidden, "suppressed").toBe(true);
   expect(mask.visible, "the script's own answer is untouched").toBe(true);
 
-  await fire(session, "hideall", [0]);
+  await fire(session, "hideall", [false]);
   expect(mask.hidden, "released").toBe(false);
 
   // ...and a prop that was PUT AWAY when the blanket came down, then shown while
@@ -444,11 +444,11 @@ test("prophide(\"all\") suppresses drawing without forgetting what was up", asyn
   // own `openflatx` shows it — and the whole of the difference between a
   // broadcast over what is visible and one global latch.
   mask.visible = false;
-  await fire(session, "hideall", [1]);
+  await fire(session, "hideall", [true]);
   mask.visible = true;
   expect(mask.hidden, "shown during a hidden span, so not suppressed").toBe(false);
 
-  await fire(session, "hideall", [0]);
+  await fire(session, "hideall", [false]);
   expect(mask.visible).toBe(true);
 });
 
@@ -618,7 +618,7 @@ test("sendtoboot reaches the boot LIBRARY, not just its first container", async 
   // reached the first, so the fallback must not move them.
   session.interp.globals.set("closedby", "");
   const one = session.instanceFrom(
-    compileScript('code go ()\n\treturn (sendtoboot (keydown ("right")))\nendcode\n'),
+    compileScript('code go ()\n\treturn (sendtobootfx (keydown ("right")))\nendcode\n'),
     "go",
   )!;
   expect(
@@ -967,8 +967,9 @@ test("propinstance: each copy is addressed by its OWN name, on the group's scrip
 
   // ...including the cursor, which is the only feedback that a part is live
   session.setPointer(...at(knob));
-  expect(await dir.hover(...at(knob)), "the knob asks for its own cursor").toBe("touch");
-  expect(await dir.hover(...at(pump))).toBe("hand");
+  // (asked as the BOOTFILE's idle asks it: hittest, then setcursor)
+  expect(await dir.askCursor(...at(knob)), "the knob asks for its own cursor").toBe("touch");
+  expect(await dir.askCursor(...at(pump))).toBe("hand");
 });
 
 /**
@@ -995,7 +996,7 @@ test("hidecursor/showcursor: a depth, and the pointer comes back on a restart", 
   const knob = session.propRuntime.get("GasKnob")!;
   const f = knob.shop.frame(knob.currentFrame(knob.state()!));
   const at = [knob.anchorX - f.posXraw + (f.width >> 1), knob.anchorY - f.posYraw + (f.height >> 1)] as const;
-  expect(await dir.hover(...at), "the prop answers while the pointer is visible").toBe("touch");
+  expect(await dir.askCursor(...at), "the prop answers while the pointer is visible").toBe("touch");
 
   // hidden: the chain is not even asked, and the answer is the name of the
   // game's own blank cursor rather than a new word a shell would have to learn
@@ -1009,7 +1010,7 @@ test("hidecursor/showcursor: a depth, and the pointer comes back on a restart", 
   expect(session.cursorHidden, "one show does not undo two hides").toBe(true);
   await fire(session, "putitback");
   expect(session.cursorHidden).toBe(false);
-  expect(await dir.hover(...at), "and the prop is asked again").toBe("touch");
+  expect(await dir.askCursor(...at), "and the prop is asked again").toBe("touch");
 
   // ...and the endgame's hide, which the scripts never balance because the game
   // is over. The original winds its own counter back at two boundaries; here it

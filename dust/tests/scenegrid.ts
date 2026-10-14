@@ -78,12 +78,12 @@ test("scenebuild says which cells are built on, and the walks agree", async () =
   // record +12, and what makes it this field rather than a neighbour is that on
   // 28 of the disc's 29 sets "the flag is set" is EXACTLY "no transition touches
   // this cell": TOWN's 173 flagged cells against the 52 its 526 moves reach.
-  expect(await ask('sendtoserverfx ("Scene A1")'), "the north-west corner is built on").toBe(1);
-  expect(await ask('sendtoserverfx ("Scene G15")'), "the road the player arrives on is street").toBe(0);
-  expect(await ask('sendtoserverfx ("Scene B11")'), "...and so is the saloon's own cell").toBe(0);
+  expect(await ask('sendtoserverfx ("Scene A1")'), "the north-west corner is built on").toBe(true);
+  expect(await ask('sendtoserverfx ("Scene G15")'), "the road the player arrives on is street").toBe(false);
+  expect(await ask('sendtoserverfx ("Scene B11")'), "...and so is the saloon's own cell").toBe(false);
   // a name that is no scene of this set is not a building: `isbuild` has already
   // dealt with "none" by the time it asks
-  expect(await ask('sendtoserverfx ("nowhere")')).toBe(0);
+  expect(await ask('sendtoserverfx ("nowhere")')).toBe(false);
 });
 
 test("the hunters' own isbuild now refuses a built cell", async () => {

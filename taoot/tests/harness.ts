@@ -13,6 +13,10 @@ import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { AudioSink, NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { SetViewer } from "@dreamfactory/engine/web/viewer";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { readContainerFile } from "@dreamfactory/engine/df/container";
+import { sniffScript } from "@dreamfactory/engine/df/script";
+import { parseScript } from "@dreamfactory/engine/runtime/parser";
+import type { Stmt } from "@dreamfactory/engine/runtime/ast";
 
 export const root = gamefilesRoot();
 
@@ -124,3 +128,58 @@ export async function newHost<S extends AudioSink = NullAudioSink>(
 
 /** let suspended scripts (await points, resolved delays) continue */
 export const drain = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
+
+const storyNames = new Map<string, string[]>();
+
+/**
+ * Every global any script in the tree declares, as the integer 0 a `global`
+ * line makes, where the session has none of that name yet.
+ *
+ * A scenario test opens a room the story has not walked to, and the globals the
+ * story's scripts would have declared on the way are not there: reading one is
+ * error 9 in the engines (engine/src/runtime/interp.ts), which the game itself
+ * can never meet. NOT for a playthrough, whose trace is every global the game
+ * really made.
+ */
+export function declareStoryGlobals(session: GameSession, edition?: string): void {
+  let known = storyNames.get(edition ?? "");
+  if (!known) {
+    const names = new Set<string>();
+    const index = gamefiles(root, edition);
+    const declare = (stmts: Stmt[]): void => {
+      for (const st of stmts) {
+        if (st.t === "decl" && st.kind === "global") for (const n of st.names) names.add(n.toLowerCase());
+        for (const inner of [
+          "body" in st ? st.body : undefined,
+          "else_" in st ? st.else_ : undefined,
+          ...("cases" in st ? st.cases.map((c) => c.body) : []),
+        ]) {
+          if (inner) declare(inner);
+        }
+      }
+    };
+    for (const file of index.names(/\.(set|stg|shp|cst|pup|prp)$|^bootfile$/i)) {
+      const bytes = index.provider(file);
+      if (!bytes) continue;
+      let containers;
+      try {
+        containers = readContainerFile(bytes).containers;
+      } catch {
+        continue;
+      }
+      for (const c of containers) {
+        const tokens = sniffScript(c.data);
+        if (!tokens?.some((t) => t.kind === "op")) continue;
+        try {
+          for (const code of parseScript(tokens).codes.values()) declare(code.body);
+        } catch {
+          // not a script
+        }
+      }
+    }
+    known = [...names];
+    storyNames.set(edition ?? "", known);
+  }
+  const g = session.interp.globals;
+  for (const n of known) if (!g.has(n)) g.set(n, 0);
+}

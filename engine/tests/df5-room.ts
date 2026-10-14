@@ -139,8 +139,8 @@ test("a v5 game's propspeed is sysparam: the button of the press, and the screen
   const session = new GameSession(() => null, new NullAudioSink());
   const call = (n: number) =>
     session.interp.builtins.get("propspeed")!(session.interp, [n], {} as never, {} as never);
-  // v4: a prop's speed, and there is no prop called 7
-  expect(await call(7)).toBe(0);
+  // v4: a prop's speed, and there is no prop called 7 — "No such object" (TI.EXE 0x442b90)
+  await expect(async () => call(7)).rejects.toMatchObject({ code: 0xa });
   session.isV5 = true;
   session.pointerButton = 2;
   // the rooms' mousedown: `if propspeed (7) = 2 rightmouse (arg)`

@@ -156,7 +156,15 @@ export async function newPlaythrough(): Promise<Playthrough> {
       host.viewer?.tick(advance());
       await drain();
     }
-    await pump(() => v().quiescent, `${what} to settle`);
+    // ...and nothing the player did still waiting to be taken. A press made
+    // while a pass's handler ran is QUEUED, as TI.EXE queues it, and taken when
+    // the idle returns (Scheduler.serviceIdle); `quiescent` can read true in the
+    // gap before that, and a route that moved on would have its own press
+    // replayed under its next step.
+    await pump(
+      () => v().quiescent && (v().awaitingInput || session.events.length === 0),
+      `${what} to settle`,
+    );
   };
 
   /**

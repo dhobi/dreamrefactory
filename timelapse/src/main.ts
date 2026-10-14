@@ -30,6 +30,7 @@ import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { GestureAudio, PageLog, screenPlate, showVersion, titleRise } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
@@ -307,6 +308,9 @@ async function main(): Promise<void> {
    */
   host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
   host.session.hasRealFrames = true;
+  // tl.exe's script error box (0x43cfc0): Yes goes on, No is `quit()`, which on
+  // this page does what the game's own quit() does here — nothing but say so
+  host.session.onScriptErrorBox = scriptErrorBox((l) => say(`  ${l}`));
 
   /**
    * The plan first, because it is where most of the list comes from — and reading
@@ -594,7 +598,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     // a gesture is never a held key: the boot's `keyrepeat` sets `isrepeat` and
     // its flat scripts read it, so a stale 1 from a leant-on arrow must not make
     // this look like a repeat
-    s.interp.globals.set("isrepeat", 0);
+    s.interp.globals.set("isrepeat", false);
     void host.director.keyDown(key, special);
   };
 

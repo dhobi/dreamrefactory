@@ -353,7 +353,7 @@ describe("the game, once it runs", () => {
     expect(calls.some((c) => /^key \S+ special$/.test(c))).toBe(true);
     expect(calls).not.toContain("key r");
     // and a gesture is never a held key
-    expect(current.host!.globals.get("isrepeat")).toBe(0);
+    expect(current.host!.globals.get("isrepeat")).toBe(false);
   });
 
   it("keeps b for the log", async () => {

@@ -1363,7 +1363,7 @@ addEventListener("keydown", (e) => {
    * Dust-only, and not because it would be wrong on the play page: no TAOOT script
    * mentions `isrepeat` at all, in any of the six editions.
    */
-  host.session.interp.globals.set("isrepeat", act.repeat ? 1 : 0);
+  host.session.interp.globals.set("isrepeat", act.repeat);
   void host.session.track(host.director.keyDown(act.key, act.escape));
   e.preventDefault();
 });
@@ -1640,7 +1640,7 @@ function sendGestureKey(ch: string, isEsc = false): void {
   if (!host) return;
   // a gesture is never a held key: don't let a stale 1 from a leant-on arrow
   // make an `isrepeat` door guard swallow the swipe
-  host.session.interp.globals.set("isrepeat", 0);
+  host.session.interp.globals.set("isrepeat", false);
   void host.session.track(host.director.keyDown(ch, isEsc));
 }
 

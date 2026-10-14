@@ -235,16 +235,19 @@ endcode
 });
 
 /**
- * Only the EMPTY form. `exitcode (x)` appears nowhere in any of the three corpora
- * and would mean something this grammar has no reading for, so it stays an error
- * rather than a silently dropped expression — the same line the dead-token
- * tolerance draws.
+ * Anything else after `exitcode` is the rest of a line, and the engines never
+ * read it: `exitcode` leaves the handler (TI.EXE 0x4447a8, DF.EXE 0x403b88)
+ * before the check that a statement ends at its line break (0x4446e1, 0x403ac1)
+ * would have run. So `exitcode (x)` parses as `exitcode` and a fault statement
+ * after it — error 0x1b if ever reached, which it cannot be. `exitcode (x)`
+ * appears nowhere in the three corpora.
  */
-test("but an argument to exitcode is still a parse error", () => {
-  expect(() =>
-    handlers(`code mousedown (arg)
+test("an argument to exitcode is the rest of a line nobody reads", () => {
+  const script = parseScript(
+    assembleScript(`code mousedown (arg)
 \texitcode (1)
 endcode
 `),
-  ).toThrow();
+  );
+  expect(script.codes.get("mousedown")!.body.map((s) => s.t)).toEqual(["exitcode", "fault"]);
 });

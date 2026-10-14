@@ -136,9 +136,11 @@ test("a turn does not lose where the actor was going (#289)", async () => {
 
   let clock = 0;
   session.tickTime((clock += 50)); // the session's clock anchor
+  // a pass is the idle's, run on the clock the host moves (Scheduler.pass): let
+  // each one finish before the next tick
   for (let i = 0; i < 400 && session.scheduler.walks.has("mwife"); i++) {
     session.tickTime((clock += 50));
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
   }
   expect([wife.worldX, wife.worldY], "she gets home").toEqual([star.positionX, star.positionZ]);
   expect(wife.starName, "and knows where home is, so her idle can re-arm").toBe("mayupper.mwife");

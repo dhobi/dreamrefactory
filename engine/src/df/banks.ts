@@ -2,7 +2,7 @@ import { BinaryReader } from "./binary";
 import { ByteOrder, PC, little } from "./byte-order";
 import { DFContainerFile } from "./container";
 import { versionOf } from "./version";
-import { readSndFileFrom, sndLoopChunks } from "./snd";
+import { readSndFileFrom, sndLoopChunks, sndLoopNames } from "./snd";
 
 /**
  * Shared audio-bank chunk tables. TRK/SFX/11K banks (audio.ts) and MOV
@@ -303,6 +303,8 @@ export interface AudioBank {
   loopChunks: number[];
   /** one-shot sounds by lowercase identifier */
   singles: Map<string, BankChunk>;
+  /** a v1 bank's loop chunks by name, parallel to {@link loopChunks} */
+  loopNames?: string[];
 }
 
 /**
@@ -352,7 +354,7 @@ function readV1Bank(file: DFContainerFile): AudioBank {
   // `isaopractice.sn`, `helptheme` and `flute`, and each is some bank's refName
   // character for character. Stripping ".snd" made three of the eight unfindable,
   // among them the town theme — the one piece of music the game opens with.
-  return { trackName: snd.refName, loopChunks: sndLoopChunks(snd), singles };
+  return { trackName: snd.refName, loopChunks: sndLoopChunks(snd), singles, loopNames: sndLoopNames(snd) };
 }
 
 // --- the write half ---------------------------------------------------------

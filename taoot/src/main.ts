@@ -59,6 +59,7 @@ import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { takeBootSeed } from "@dreamfactory/engine/web/speedrun/boot-seed";
+import { scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
 import {
@@ -580,6 +581,10 @@ session.onQuit = () => {
     .then(() => host.restart({ tour: startsInTour() || undefined }))
     .catch((e) => log(`restart failed: ${(e as Error).message}`));
 };
+// TI.EXE's script error box (0x407260): OK goes on, Cancel quits as quit() does
+// — in the edition's own words (the French TI.EXE translates it). Never shown on
+// the speedrun workbench or to a browser suite (engine/src/web/error-box.ts).
+session.onScriptErrorBox = scriptErrorBox(log, () => editionCode);
 // Script poll loops (forceupdate/stilldown) yield through this so a real frame
 // renders and pending pointer events are delivered between iterations.
 // hasRealFrames also relaxes the interpreter's while-loop runaway guard for

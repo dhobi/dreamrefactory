@@ -405,7 +405,7 @@ test("ESC at Jan's first question is the Sure. bevel, as the original has it", a
   for (const n of ["fourcount", "threecount", "fivecount", "playercash"]) {
     session.interp.globals.set(n, 1);
   }
-  session.interp.globals.set("playcards", 0);
+  session.interp.globals.set("playcards", false);
 
   const boot = session.puppet!.scripts.get("boot script")!;
   expect(boot?.script.codes.has("bootblackjack"), "the boot script greets you").toBe(true);

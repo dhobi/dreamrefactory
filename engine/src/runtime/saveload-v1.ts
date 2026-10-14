@@ -47,7 +47,7 @@ import { detectVersion } from "../df/version";
 import type { SavedActor, SavedProp } from "../df/savegame";
 import type { GameSession } from "./session";
 import type { PropInstance } from "./props";
-import { resetCast, restoreActors, restoreProps, saveBase, scriptGlobals } from "./saveload";
+import { resetCast, restoreActors, restoreProps, restoredNumber, saveBase, scriptGlobals } from "./saveload";
 
 /** the flat the game plays under — the in-game panel, not the menu you saved from */
 const PLAY_FLAT = "mainpanel";
@@ -384,7 +384,7 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
     if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
     session.interp.globals.delete(name);
   }
-  for (const [k, v] of save.numGlobals) session.interp.globals.set(k, v);
+  for (const [k, v] of save.numGlobals) session.interp.globals.set(k, restoredNumber(session, save.boolGlobals, k, v));
   for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
   /*
    * The frame counter, with the globals rather than after them, because several
@@ -457,14 +457,23 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
     );
     restoreActorExtras(session, save);
     restorePropSteps(session, save);
+    // `propspeed` (+38): the tumbleweed's `kickme` divides by it, and a 0 there
+    // is error 0x37 where the original had the 11 or 12 its `initprop` gave it
+    for (const sp of save.props) {
+      const p = session.propRuntime.get(sp.name);
+      if (p && sp.speed > 0) p.speed = sp.speed;
+    }
 
     // the scheduler table, mid-count: the idles that make the town act, the
     // scene's own timer, the star that crosses the sky
     for (const l of save.loops) {
       session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
-      // `pauseloop` held it: the record keeps a depth (+2), the port a flag
+      // `pauseloop` held it, this many deep (+2, 0x43904d)
       const restored = session.scheduler.loops.at(-1);
-      if (l.paused && restored?.handler && restored.name === l.name.toLowerCase()) restored.paused = true;
+      if (l.paused && restored?.handler && restored.name === l.name.toLowerCase()) {
+        restored.paused = true;
+        restored.pauseDepth = l.pauseDepth;
+      }
     }
 
     // the balls in flight, slot for slot (the table at 0x45fbd0 is positional)
@@ -521,6 +530,7 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
           progress: w.progress,
           arriveStar: w.star || undefined,
           paused: w.paused,
+          pauseDepth: w.pauseDepth,
           path: w.path,
         });
       if (resumed) {
@@ -602,6 +612,7 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
           progress: 0,
           arriveStar: w.star || undefined,
           paused: w.paused,
+          pauseDepth: w.pauseDepth,
           waiting: true,
         });
       if (kept) {
@@ -636,7 +647,7 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
   const base = saveBase(session);
   if (!base) return null;
 
-  const { numGlobals, strGlobals } = scriptGlobals(session);
+  const { numGlobals, strGlobals, boolGlobals } = scriptGlobals(session);
 
   // where the player is, in the file's own terms: the cell under the scene the
   // viewer is standing in, and the heading it looks along
@@ -700,6 +711,7 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
   const bytes = applyPatchV1(base, {
     numGlobals,
     strGlobals,
+    boolGlobals,
     standpoint,
     openSet,
     frame: session.frameCounter,
@@ -757,6 +769,8 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       value: typeof p.value === "number" ? p.value : undefined,
       zclip: p.zclip,
       step: propStep(p),
+      // the base's own value (4 when nothing set it) for a prop no script sped
+      speed: p.speed > 0 ? p.speed : undefined,
     })),
     actors: [...session.actorRuntime.actors.values()].map((a) => {
       /**
@@ -812,6 +826,7 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       deg: session.actorRuntime.get(actor)?.deg ?? 0,
       turnOnly: !!w.turnOnly,
       paused: w.paused,
+      pauseDepth: w.pauseDepth,
       hasPath: !!w.path,
       path: w.path,
       waiting: w.waiting,
@@ -853,6 +868,7 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
       // verbatim, so what the field holds is the ticks that are left
       period: l.count,
       paused: l.paused,
+      pauseDepth: l.pauseDepth,
     })),
     ...soundPatch(session),
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
