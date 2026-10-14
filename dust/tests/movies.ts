@@ -776,7 +776,7 @@ test.skipIf(noRip)("a v1 bed is its playlist, looped from the header's entry", (
   const bed = soundtrackFor(d1, audio, interval, d1.frames.length);
   expect(bed.loop).toBe(true);
   expect(bed.loopStart).toBe(0);
-  expect(bed.samples.length).toBe(audio.resampled.reduce((a, c) => a + c.length, 0));
+  expect(bed.samples).toHaveLength(audio.resampled.reduce((a, c) => a + c.length, 0));
   const fin = movFileFromV1(read("FINALEND.MOV")).segments[0];
   const fa = segmentAudio(fin)!;
   const fbed = soundtrackFor(fin, fa, 0, fin.frames.length);

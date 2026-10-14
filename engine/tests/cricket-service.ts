@@ -121,7 +121,7 @@ test("a cricket in another set does nothing at all; a one-shot counts anywhere a
   await pass(s);
   await pass(s);
   expect(s.scheduler.crickets.length, "spent out of earshot, and gone").toBe(0);
-  expect(sink.calls.length).toBe(0);
+  expect(sink.calls).toHaveLength(0);
 });
 
 test("only the two loudest looping crickets sound", async () => {

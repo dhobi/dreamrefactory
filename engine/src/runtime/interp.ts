@@ -423,7 +423,8 @@ export class Interpreter {
    * in it (RedJack keeps the port's old answers).
    */
   bool(b: boolean): Value {
-    return this.classic ? b : b ? 1 : 0;
+    if (this.classic) return b;
+    return b ? 1 : 0;
   }
 
   /**
@@ -490,7 +491,9 @@ export class Interpreter {
     // handler expects a `,` 0x1c, and no argument at all where it wants one is
     // the empty argument read as an expression — 0xe (0x431e60).
     if (this.classic && wants !== undefined && args.length !== block.params.length) {
-      const code = args.length > block.params.length ? 2 : args.length === 0 ? 0xe : 0x1c;
+      let code = 0x1c;
+      if (args.length > block.params.length) code = 2;
+      else if (args.length === 0) code = 0xe;
       throw this.latch(
         new ScriptError(code, `${handler} takes ${block.params.length} argument(s), called with ${args.length}`),
         `${inst.name}.${handler}`,

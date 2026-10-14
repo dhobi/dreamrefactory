@@ -133,7 +133,7 @@ test("if and while want a boolean; for wants integers", async () => {
   expect(await stmtError([`for i = 1 to "3"`, "endfor"])).toBe(0xe);
   // the body moving the variable to another type is caught at the next endfor
   expect(await stmtError(["for i = 1 to 3", '\ti = "x"', "endfor"])).toBe(0xe);
-  expect(await stmtError(["if true", "\treturn (1)", "endif"])).toBe(null);
+  expect(await stmtError(["if true", "\treturn (1)", "endif"])).toBeNull();
   // a routine called for a value that reaches `endcode` is error 6 before `if`
   // sees anything (TI.EXE 0x44478f, DF.EXE 0x403b6f)
   expect(
@@ -224,14 +224,14 @@ test("the commands answer the type their executable writes", async () => {
 test("a boolean setter refuses anything else with 0xe", async () => {
   // puppetgrab: DF.EXE 0x4361c0, TI.EXE `cmp word [esp], 2` at 0x416999
   expect(await stmtError(["puppetgrab (1)"])).toBe(0xe);
-  expect(await stmtError(["puppetgrab (true)"])).toBe(null);
+  expect(await stmtError(["puppetgrab (true)"])).toBeNull();
   expect(await stmtError(['propvisible ("nothing", 0)'])).toBe(0xe);
   expect(await stmtError(['pausewalk ("all", 1)'])).toBe(0xe);
-  expect(await stmtError(['pausewalk ("all", false)'])).toBe(null);
+  expect(await stmtError(['pausewalk ("all", false)'])).toBeNull();
   // the getter has no boolean argument to check
-  expect(await stmtError(['menuvisible ()'])).toBe(null);
+  expect(await stmtError(['menuvisible ()'])).toBeNull();
   // v5 never checked
-  expect(await errorOf("code go ()\n\tpuppetgrab (1)\nendcode\n", { v5: true })).toBe(null);
+  expect(await errorOf("code go ()\n\tpuppetgrab (1)\nendcode\n", { v5: true })).toBeNull();
 });
 
 test("the compiler writes true/false as tokens 4021/4022, and they read back", () => {

@@ -2088,8 +2088,11 @@ export class ScreenDirector {
     const s = this.session;
     // where the idle sets the world's cursor, only a change of OWNER is the
     // director's to report — the idle reports the rest (pushScriptCursor)
-    const gate = `${this.movies.playingFile ?? ""}|${s.puppet?.visible ? 1 : 0}` + (s.scheduler.scriptPaced ? "" :
-      `|${truthy(s.interp.globals.get("lockevents") ?? 0) ? 1 : 0}|${s.currentFlat}|${s.currentSetName}`);
+    let gate = `${this.movies.playingFile ?? ""}|${s.puppet?.visible ? 1 : 0}`;
+    if (!s.scheduler.scriptPaced) {
+      const locked = truthy(s.interp.globals.get("lockevents") ?? 0) ? 1 : 0;
+      gate += `|${locked}|${s.currentFlat}|${s.currentSetName}`;
+    }
     if (gate === this.cursorGate) return;
     this.cursorGate = gate;
     void this.hover(s.pointerX, s.pointerY)

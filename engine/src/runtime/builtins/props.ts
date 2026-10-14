@@ -312,7 +312,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // The pinned frame overrides auto-animation until propview() changes state.
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
     // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
-    p.deg = session.isV5 ? (Math.trunc(Number(v) || 0) & 0xffffff) : typeof v === "boolean" ? toNum(v) : v;
+    if (session.isV5) p.deg = Math.trunc(Number(v) || 0) & 0xffffff;
+    else p.deg = typeof v === "boolean" ? toNum(v) : v;
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a
     // 32-view card table, a 21-view fire). Clamping it as a frame index froze

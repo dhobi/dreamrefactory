@@ -1,5 +1,4 @@
 import { CELL_UNITS } from "../df/set-v1-to-v4";
-import { Value } from "./interp";
 import { becomeWorldProp } from "./props";
 import type { GameSession } from "./session";
 

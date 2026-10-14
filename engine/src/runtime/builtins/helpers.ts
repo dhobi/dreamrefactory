@@ -37,7 +37,7 @@ export function findwordV1(str: string, delim: string, idx: number): string {
   let start = 0;
   let k = idx;
   for (let pos = 0; pos < last; pos++) {
-    if (str.substr(pos, d).toLowerCase() === sep || pos === last - 1) {
+    if (str.slice(pos, pos + d).toLowerCase() === sep || pos === last - 1) {
       if (--k <= 0) return str.slice(start, pos);
       start = pos + d;
     }

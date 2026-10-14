@@ -278,7 +278,7 @@ export class Scheduler {
     if (this.session.isV1 || this.session.isV5) return;
     const key = name.toLowerCase();
     const { volume, pan } = this.soundPlace(key);
-    for (const c of this.soundChannels) if (c && c.name === key && !c.handle.done) c.handle.place?.(volume, pan);
+    for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.place?.(volume, pan);
   }
 
   /** a sound record's 0..255 volume and pan in sink units ({@link panFrom255}) */
@@ -339,7 +339,8 @@ export class Scheduler {
     const busy1 = !!one && !one.handle.done;
     const busy2 = !!two && !two.handle.done;
     if (busy1 && busy2) return (one.priority ?? 0) > (two.priority ?? 0) ? one.name : two.name;
-    return busy2 ? two!.name : busy1 ? one!.name : "none";
+    if (busy2) return two!.name;
+    return busy1 ? one!.name : "none";
   }
 
   /** DreamFactory 1's `sounddone()`: both channels idle (0x4078a0 -> 0x429c00) */
@@ -629,7 +630,8 @@ export class Scheduler {
   /** `pausecricket (name)`, the getter: its pause count (TI.EXE 0x444880), 0 for none */
   cricketPauseDepth(name: string): number {
     const c = this.crickets.find((x) => x.name === name.toLowerCase());
-    return c ? (c.pauseDepth ?? (c.paused ? 1 : 0)) : 0;
+    if (!c) return 0;
+    return c.pauseDepth ?? (c.paused ? 1 : 0);
   }
 
   isCricket(name: string): boolean {
@@ -663,7 +665,7 @@ export class Scheduler {
     if (!this.session.isV1 && !this.session.isV5) {
       if (on) this.loopFlags.add(key);
       else this.loopFlags.delete(key);
-      for (const c of this.soundChannels) if (c && c.name === key && !c.handle.done) c.handle.setLoop?.(on);
+      for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.setLoop?.(on);
       return;
     }
     if (on) {
@@ -753,7 +755,7 @@ export class Scheduler {
    * that is not among the two loudest.
    */
   private stopSoundRecord(key: string): void {
-    for (const c of this.soundChannels) if (c && c.name === key) c.handle.stop();
+    for (const c of this.soundChannels) if (c?.name === key) c.handle.stop();
   }
 
   /**
@@ -1102,21 +1104,21 @@ export class Scheduler {
     if (t > c) {
       if (s16(c - t + wrap) > s16(t - c)) {
         const ax = s16(c + step);
-        return t >= ax ? ax : t;
+        return Math.min(t, ax);
       }
       let ax = s16(c - step);
       if (ax >= 0) return ax;
       ax = s16(ax + wrap);
-      return t <= ax ? ax : t;
+      return Math.max(t, ax);
     }
     if (s16(t - c + wrap) > s16(c - t)) {
       const ax = s16(c - step);
-      return t <= ax ? ax : t;
+      return Math.max(t, ax);
     }
     let ax = s16(c + step);
     if (ax < wrap) return ax;
     ax = s16(ax - wrap);
-    return t >= ax ? ax : t;
+    return Math.min(t, ax);
   }
 
   /**
@@ -1600,7 +1602,7 @@ export class Scheduler {
     // crickets, in slot order (0x442599..0x4425ba); the looping ones in
     // earshot register, and the two loudest of them play (0x4425c6)
     const loud: Cricket[] = [];
-    for (const c of [...this.crickets]) {
+    for (const c of this.crickets.slice()) {
       if (this.crickets.includes(c)) this.serviceCricketV4(c, loud);
     }
     if (loud.length) this.playLoudest(loud);

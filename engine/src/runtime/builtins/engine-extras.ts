@@ -3,6 +3,14 @@ import { foldAscii } from "../caseless";
 import { BuiltinCtx } from "./context";
 import { panFrom255 } from "../scheduler";
 
+/** `type (v)`'s answer for a value's tag. */
+function typeName(v: Value | undefined): string {
+  if (typeof v === "boolean") return "logic";
+  if (typeof v === "string") return "text";
+  if (typeof v === "number") return "number";
+  return "unknown";
+}
+
 /**
  * Commands TI.EXE has and no shipped script calls — registered so that a script
  * which does gets the engine's answer rather than "no semantics" (TI.EXE's
@@ -62,9 +70,7 @@ export function registerEngineExtraBuiltins(ctx: BuiltinCtx): void {
    * type(v): the tag's name — "logic", "text", "number", else "unknown"
    * (0x42a780, strings at 0x45bfd8/0x45bfe8/0x45bfe0/0x45bfcc).
    */
-  r("type", (_i, [v]) =>
-    typeof v === "boolean" ? "logic" : typeof v === "string" ? "text" : typeof v === "number" ? "number" : "unknown",
-  );
+  r("type", (_i, [v]) => typeName(v));
 
   /**
    * The network, as TI.EXE runs without one. `netconnect()` asks its plugin

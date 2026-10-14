@@ -829,13 +829,13 @@ export class AudioLibrary {
       this.loopLengths.set(key, lengths);
     }
     const total = lengths.reduce((a, b) => a + b, 0);
-    if (!(total > 0)) return names[0];
+    if (Number.isNaN(total) || total <= 0) return names[0];
     let t = ((seconds % total) + total) % total;
     for (let i = 0; i < lengths.length; i++) {
       if (t < lengths[i]) return names[i];
       t -= lengths[i];
     }
-    return names[names.length - 1];
+    return names.at(-1) ?? null;
   }
   private readonly loopLengths = new Map<string, number[]>();
 
