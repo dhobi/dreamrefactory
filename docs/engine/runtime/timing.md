@@ -32,6 +32,9 @@ long fade three times shorter than pass pacing would. Both spin on the same
 counter (`0x41de90`, `timeGetTime() × 3 / 50`) waiting for it to advance by one, so
 one step is one tick in both directions. `RAMP_STEP_MS` in `clock.ts` is that step,
 and it is written as `ENGINE_STEP_MS / 3` so the arithmetic stays exact.
+DF.EXE's reveals are the exception: each of their fixed passes is held
+`n * 50 / 3` ms from the moment it is drawn (`0x4252b0`, `timeGetTime`), with `n`
+the script's steps divided among the passes (`dfPlan` in `visual-effects.ts`).
 
 The waiting is a **busy-wait inside the command**, with no message pump and no
 service pass in it, so a fade suspends the interpreter for its whole length — a

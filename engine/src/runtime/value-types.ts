@@ -93,6 +93,34 @@ export function answersBoolean(v: number, id: number): boolean {
   return (v === 1 ? BOOL_V1 : BOOL_V4).has(id);
 }
 
+/**
+ * Does the engine's dispatch for this context reach command `id` at all?
+ *
+ * A command is run by one of two dispatchers, each a pair of jump-table bands:
+ * the statement one for a call written as a statement, the value one for a
+ * call inside an expression. An id outside the dispatcher's bands is error 1
+ * (`mov ax, 1` past the range checks) — so a statement-only command asked for
+ * its value, or a value-only one written as a statement, fails there, and so
+ * does an id the engine never had:
+ *
+ *   TI.EXE  statement 0x43c768: 12001..12110, 16001..16056   value 0x4258c8: 16001..16056, 20001..20121
+ *   tl.exe  statement 0x448d68: the same                       value 0x437888: the same
+ *   DF.EXE  statement 0x41ee68: 12001..12088, 16001..16053   value 0x42a5b8: 16001..16053, 20001..20108
+ *
+ * (16001 and 20001 are tested apart, `je` before the subtraction, and handled
+ * outside the tables.) Every slot inside a band leads to a handler of its own.
+ * Measured over every script in the TAOOT, Timelapse and Dust trees — 137k,
+ * 141k and 20k engine calls — no shipped call falls outside, so this only
+ * answers what a script the games never shipped would meet. Only ids in the
+ * command range are asked: the 24xxx effect names are values, not calls.
+ */
+export function dispatches(v: number, id: number, asValue: boolean): boolean {
+  if (id < 12000 || id >= 24000) return true;
+  const [stmt12, prop16, value20] = v === 1 ? [12088, 16053, 20108] : [12110, 16056, 20121];
+  if (id >= 16001 && id <= prop16) return true;
+  return asValue ? id >= 20001 && id <= value20 : id >= 12001 && id <= stmt12;
+}
+
 /** the argument of command `id` that must be a boolean, or -1 */
 export function booleanArg(v: number, id: number): number {
   return (v === 1 ? BOOL_ARGS_V1 : BOOL_ARGS_V4).get(id) ?? -1;

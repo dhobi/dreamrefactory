@@ -183,7 +183,10 @@ test("twenty nested whiles is error 3 (TI.EXE 0x4445fc)", async () => {
 test("TI.EXE's commands this port lacked", async () => {
   expect(await run(body(`return (type (true) @ type ("x") @ type (1))`))).toBe("logictextnumber");
   expect(await run(body("return (networkon ())"))).toBe(false);
-  expect(await errorOf(body("netourid ()"))).toBe(0x3a);
+  // asked for its value: written as a statement it is error 1 before the
+  // handler runs (20113 is past TI.EXE's statement band — value-types.ts dispatches)
+  expect(await errorOf(body("return (netourid ())"))).toBe(0x3a);
+  expect(await errorOf(body("netourid ()"))).toBe(1);
   expect(await run(body(`return (pluginexists ("xray"))`))).toBe(true);
   expect(await run(body(`global zz`, `return (indextoglobal (countglobals ()))`))).toBe("zz");
   expect(await errorOf(body("return (indextoglobal (0))"))).toBe(0xa);

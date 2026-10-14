@@ -57,6 +57,7 @@ import { PUPPET_ART_H, PuppetBackdrop, PuppetView } from "./puppet-view";
 import type { CachedFrame } from "./ring-cache";
 import { ScreenPresenter } from "./screen-presenter";
 import { PHOTO_H, PHOTO_W } from "../runtime/photos";
+import { composeDfEffect, composeDissolve, composeEffect, dfPassesAt, passesAt, type DfEffect } from "../runtime/visual-effects";
 import { DEFAULT_SCREEN, ScreenSize } from "./screen";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 
@@ -792,7 +793,7 @@ export class ScreenDirector {
 
   screenOwner(): "movie" | "puppet" | "faded" | "world" | "held" {
     if (this.movies.frame) return "movie";
-    if (this.session.fade.pendingReveal) return "held";
+    if (this.session.fade.pendingReveal || this.session.effectPassHeld) return "held";
     // a conversation close-up replaces the world display, but only while shown:
     // puppetvisible(false) keeps the puppet loaded and reveals the flat behind it
     // (the blackjack table between "play again?" prompts)
@@ -988,20 +989,6 @@ export class ScreenDirector {
   }
 
   /**
-   * A reveal in progress: put the part of the OLD screen back that the new one
-   * has not uncovered yet.
-   *
-   * The new screen is whatever was just painted, so the wipe is subtractive —
-   * only the leaving screen has to be held (`session.wipe.from`), and the arriving
-   * one needs no special handling at all. `wipeleft` uncovers from the right edge
-   * leftwards and `wiperight` from the left edge rightwards, which is the reading
-   * of the two names I could not settle from the disassembly: the effect ids are
-   * in TI.EXE's vocabulary (24012 wiperight, 24013 wipeleft) but not compared as
-   * plain immediates anywhere, and the whole corpus asks for only these two. If a
-   * side-by-side against the original shows them the other way round, the two
-   * branches here swap and nothing else moves.
-   */
-  /**
    * A TURN: both pictures move, at the same rate, in the same direction.
    *
    * The wipe below is subtractive — the arriving screen is already painted, so
@@ -1059,7 +1046,13 @@ export class ScreenDirector {
     const travel = Math.max(1, Math.round(width * w.span));
     // the original's per-pass delta over the TRAVEL, not a proportion of the whole
     const per = Math.floor(travel / Math.max(1, w.steps)) + 1;
-    const off = Math.max(0, Math.min(travel, w.step * per));
+    // ...and paced like every other effect: each pass is drawn BEFORE its wait
+    // (`push bx; inc bx; call` the pacer, TI.EXE 0x43c0fc/0x43c1d5/0x43c4d7/
+    // 0x43c5df, tl.exe 0x4486fc/0x4487d5/0x448ad7/0x448bdf), so passes 0 and 1
+    // land together and `step` shows `step + 1` of them (passesAt). The pass
+    // clamps its strip to what is left of the travel (0x43c09a, 0x43c474), so
+    // the offset is `passes * per` capped there.
+    const off = Math.max(0, Math.min(travel, passesAt(w.step, w.steps) * per));
     /**
      * Note there is no early-out at `off === 0`.
      *
@@ -1116,50 +1109,29 @@ export class ScreenDirector {
     if (w.dir === "turnleft" || w.dir === "turnright") return this.pushTurn(w.dir);
     if (!this.session.wiping) return;
     const { rgba, width, height } = w.from;
-    // a DreamFactory 5 `photodissolve`: the old screen fades into the new one,
-    // over the same steps a wipe takes
+    // Both pictures are held, so the arriving one is the offscreen the effect
+    // copies from rather than whatever the world paints this frame.
+    const to = w.to;
+    if (!to) return;
+    if (width !== this.screen.width || height !== this.screen.height) return;
+    if (to.width !== width || to.height !== height) return;
+    const frame = this.screen.frame;
+    // a reveal drawn as the game's exe draws it (runtime/visual-effects.ts):
+    // DF.EXE's fixed passes for Dust, TI.EXE's strips for the rest
+    if (w.dir === "exe") {
+      if (!w.effect) return;
+      if (w.draws === "df") {
+        composeDfEffect(w.effect as DfEffect, rgba, to.rgba, frame, width, height, dfPassesAt(w.step, w.steps - 1));
+      } else {
+        composeEffect(w.effect, rgba, to.rgba, frame, width, height, w.steps, passesAt(w.step, w.steps));
+      }
+      return;
+    }
+    // a DreamFactory 5 `photodissolve` (RedJack.exe 0x4382a0): the snapshot of
+    // the old screen blended into the new one, showing pass `passes - 1`
     if (w.dir === "dissolve") {
-      if (width !== this.screen.width || height !== this.screen.height) return;
-      const a = Math.max(0, Math.min(1, (w.steps - w.step) / w.steps));
-      const frame = this.screen.frame;
-      for (let i = 0, n = width * height * 4; i < n; i += 4) {
-        frame[i] += (rgba[i] - frame[i]) * a;
-        frame[i + 1] += (rgba[i + 1] - frame[i + 1]) * a;
-        frame[i + 2] += (rgba[i + 2] - frame[i + 2]) * a;
-      }
-      return;
+      composeDissolve(rgba, to.rgba, frame, passesAt(w.step, w.steps) - 1, w.steps);
     }
-    // how much of the old screen is still standing, in columns
-    const kept = Math.max(0, Math.min(width, Math.round((width * (w.steps - w.step)) / w.steps)));
-    if (kept <= 0) return;
-    const put = (srcX: number, cols: number): void => {
-      if (cols <= 0) return;
-      const strip = this.screen.scratchFor(cols * height * 4);
-      for (let y = 0; y < height; y++) {
-        const from = (y * width + srcX) * 4;
-        strip.set(rgba.subarray(from, from + cols * 4), y * cols * 4);
-      }
-      this.screen.blitAt(strip, cols, height, srcX, 0);
-    };
-    /**
-     * The BARN DOORS are the same subtraction split at the centre. `open`
-     * reveals the new screen middle-outwards, so what still stands of the old
-     * one is its two edges — half the kept columns against each side. `close`
-     * reveals edges-inwards, so the old screen's remainder is a centre band.
-     * Dust's map and inventory arrive through these (visualeffect
-     * barndooropen/barndoorclose, NEW.FLT).
-     */
-    if (w.dir === "open") {
-      const half = kept >> 1;
-      put(0, half);
-      put(width - (kept - half), kept - half);
-      return;
-    }
-    if (w.dir === "close") {
-      put((width - kept) >> 1, kept);
-      return;
-    }
-    put(w.dir === "left" ? 0 : width - kept, kept);
   }
 
   /**
@@ -1480,7 +1452,8 @@ export class ScreenDirector {
     if (!this.session.events.length || this.session.scheduler.idleRunning) return false;
     if (this.session.isV5 || !this.room) return !this.inputLocked;
     if (this.movies.playing) return false;
-    return !this.movingCamera;
+    // a key queued behind a fade is taken once the fade is over (see keyNow)
+    return !this.movingCamera && !this.session.fading;
   }
 
   get movingCamera(): boolean {
@@ -1574,7 +1547,13 @@ export class ScreenDirector {
     // ...and a press made while the BOOTFILE idle runs waits its turn the same
     // way: the main loop sends the idle and only then pops one event (TI.EXE en
     // 0x431c09..0x431c43), so it is taken after the idle has returned
-    if (this.movingCamera || this.gestureWaitsForIdle) {
+    // ...and so does one made while a FADE ramps. TI.EXE's fade is a loop inside
+    // the script that asked for it (0x435b90 / 0x435be0, no message pump), so the
+    // key waits in the OS queue and the main loop takes it after. The port's
+    // fade can outlive its script, which the original never does, and a key
+    // that reached the `inputLocked` refusal below in that gap was dropped — a
+    // click never was (`press` queues on `inputLocked`).
+    if (this.movingCamera || this.session.fading || this.gestureWaitsForIdle) {
       this.session.events.post({ kind: "keydown", key: keyName, special, taken }, { coalesce: true });
       return true;
     }

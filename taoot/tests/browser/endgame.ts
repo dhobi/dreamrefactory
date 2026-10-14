@@ -69,7 +69,7 @@ const SAMPLE = `(() => {
     reveal: !!s.fade.pendingReveal, busy: !!s.scriptBusy,
     // the scrapbook turns its pages with visualeffect(wipeleft, 30) — half a
     // second each, so a 500 ms sample catches one mid-turn (#12)
-    wipe: s.wipe && s.wipe.dir ? s.wipe.dir + ":" + s.wipe.step + "/" + s.wipe.steps : "",
+    wipe: s.wipe && s.wipe.dir ? (s.wipe.effect || s.wipe.dir) + ":" + s.wipe.step + "/" + s.wipe.steps : "",
     g: {
       mission: s.interp.globals.get("mission"), phase: s.interp.globals.get("phase"),
       clock: s.interp.globals.get("clock"), lockevents: s.interp.globals.get("lockevents"),

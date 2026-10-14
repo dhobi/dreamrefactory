@@ -193,6 +193,11 @@ export function pumped(host: GameHost, logs: string[]): Pumped {
   };
 
   const press = async (key: string, what = key): Promise<void> => {
+    // A key pressed while a fade is still ramping is taken when it ends (the
+    // engine queues it, as DF.EXE's fade loop leaves it in the OS queue), so
+    // a route that presses into the tail of a reveal turns a beat later than it
+    // reads. Press when the screen has arrived, as a player looking at it would.
+    await pump(() => !session.fading, `the fade before ${what}`);
     void session.track(v().keyDown(key));
     await settle(what);
   };

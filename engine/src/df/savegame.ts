@@ -375,13 +375,9 @@ export interface SavedActor {
   /**
    * Where the character was STANDING, and whether they were on screen.
    *
-   * Read, not yet restored: a load re-runs `initactors` and lets each room's own
-   * scripts place whoever they place, which is why Vlad is missing from the engine
-   * room catwalk unless you re-enter by the one scene that stands him up (#86). The
-   * record has always carried the answer — see the layout note above for how each
-   * field was mapped and checked. Restoring it needs the WRITER to serialize these
-   * from the live cast first, or a load would put back the base template's
-   * arrangement instead of the player's.
+   * Restored on load by `restoreActors` (runtime/saveload.ts), which is what
+   * keeps Vlad on the engine room catwalk after a load (#86); see the layout
+   * note above for how each field was mapped and checked.
    */
   placement: {
     /** `actorvisible` — the whole of "was this character on screen". */

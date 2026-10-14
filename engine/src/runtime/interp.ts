@@ -1,6 +1,6 @@
 import { CallExpr, Expr, Script, Stmt } from "./ast";
 import { CaselessMap, foldAscii } from "./caseless";
-import { answersBoolean, booleanArg, integerArgs } from "./value-types";
+import { answersBoolean, booleanArg, dispatches, integerArgs } from "./value-types";
 
 /**
  * DreamFactory script interpreter core.
@@ -1033,6 +1033,11 @@ export class Interpreter {
     // for `Playsound`, the camera two flats away for `playsound`). Without this
     // the capitalised one reached no builtin and no handler and was logged as an
     // unknown command — the pickup that made no sound.
+    // a call the engine's dispatcher does not reach in this context is error 1
+    // before anything is evaluated (value-types.ts dispatches)
+    if (this.classic && call.id !== undefined && !dispatches(this.tableVersion(), call.id, wants)) {
+      throw new ScriptError(1, `${call.name}: not a command ${wants ? "with a value" : "statement"}`);
+    }
     const folded = call.name.toLowerCase();
     const special = this.specialForms.get(folded);
     if (special) {
