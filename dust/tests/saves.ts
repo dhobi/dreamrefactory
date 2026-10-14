@@ -395,6 +395,7 @@ test("a patched Dust save reads back what was written into it", () => {
     handler: "apothfx",
     period: 5,
     paused: false,
+    pauseDepth: 0,
   });
   // and nothing else moved: the file is still the same shape it was
   expect

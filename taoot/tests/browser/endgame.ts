@@ -181,13 +181,13 @@ async function main(): Promise<void> {
     const dbg = (window as any).dbg;
     const s = dbg.session;
     const g = s.interp.globals;
-    g.set("tour", 0);
-    g.set("debugging", 0);
+    g.set("tour", false);
+    g.set("debugging", false);
     g.set("mission", 4);
     g.set("phase", stand.phase);
     g.set("pennyphase", 1); // setupsinksound only PLAYS the theme past this
     g.set("handitem", "");
-    g.set("sinkflag", 0);
+    g.set("sinkflag", false);
     g.set("playerdeath", "");
     g.set("neckphase", -1);
     g.set("letterphase", -1);
@@ -203,7 +203,7 @@ async function main(): Promise<void> {
     g.set("sec", 0);
     await s.ensureFile(`sink${stand.phase}.trk`);
     await s.runGlobal("setupsinksound");
-    g.set("sinkflag", 1);
+    g.set("sinkflag", true);
     await s.runGlobal("calctime");
     // the four ownerships the ending is scored on, as segment 27 arrives
     for (const n of ["painting", "notebook", "rubaiyat", "realneck"]) {

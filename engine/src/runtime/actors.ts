@@ -2,10 +2,11 @@ import { CstFile, CastMember, CastPose } from "../df/cst";
 import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
 import {
-  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, bearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
+  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, engineBearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
   inDepthWindow,
 } from "./geometry";
 import type { DrawSignature } from "./signature";
+import type { Value } from "./interp";
 import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
@@ -87,7 +88,7 @@ export class ActorInstance {
   step = 0;
   /** v5: the pose that plays once has come to its end and said `endanim` (RedJack.exe's flag bits 2 and 8) */
   endTold = false;
-  /** v5: the pose has had its first pass (flag bit 4), and the sixtieths of a second since */
+  /** v5: the pose has had its first pass (flag bit 4), and the clock's sixtieth it had it on (+0x40) */
   poseStarted = false;
   poseTicks = 0;
   /** begin the pose again — what `actorpose` does to the record (0x407483–0x40748a) */
@@ -129,8 +130,8 @@ export class ActorInstance {
    * falls through to his brush-off line and the turbine job cannot be accepted
    * at all. (Found by segment 4 walking into it; see propowner, same convention.)
    */
-  owner: string | number = "none";
-  value: string | number = 0;
+  owner: Value = "none";
+  value: Value = 0;
   /** name of the star the actor was last placed on (actorstar getter) */
   starName = "";
   /**
@@ -237,9 +238,6 @@ function angleApart(a: number, b: number): number {
   const d = (a - b) & 0xff;
   return Math.min(d, 256 - d);
 }
-
-/** the sixtieths of a second a 50 ms service pass is, on RedJack.exe's clock (0x469f80: ms × 0.06) */
-export const TICKS_PER_PASS = 3;
 
 export class ActorRuntime {
   readonly actors = new Map<string, ActorInstance>();
@@ -362,7 +360,7 @@ export class ActorRuntime {
    * frozen frame of coal.
    */
   /** answers the actors whose pose came round to its first step again (see GameSession.endAnim) */
-  advanceAnimation(): string[] {
+  advanceAnimation(ticks = 0): string[] {
     const ended: string[] = [];
     for (const a of this.actors.values()) {
       const pose = a.pose();
@@ -373,20 +371,20 @@ export class ActorRuntime {
       // mine finish their first pose hidden, and only `wake` shows them.
       if (pose?.playsOnce !== undefined) {
         // RedJack.exe 0x4069ee–0x406a81: a pose held at its end is left alone;
-        // the first pass after `actorpose` shows step 0; after that the step is
-        // the clock's sixtieths since then over the pose's step time, or one
-        // more a pass when it has none; a pose that plays once stops on its last
-        // step and is marked for `endanim`, and any other goes round
+        // the first pass after `actorpose` shows step 0 and stamps the clock
+        // (0x406a1c); after that the step is the clock's sixtieths since that
+        // stamp over the pose's step time (0x406a03..0x406a10, `idiv`), or one
+        // more a pass when it has none; a pose that plays once stops on its
+        // last step and is marked for `endanim`, and any other goes round
         if (a.endTold) continue;
         let e: number;
         const rate = pose.frameTicks ?? 0;
         if (!a.poseStarted) {
           a.poseStarted = true;
-          a.poseTicks = 0;
+          a.poseTicks = ticks;
           e = 0;
         } else if (rate > 0) {
-          a.poseTicks += TICKS_PER_PASS;
-          e = Math.floor(a.poseTicks / rate);
+          e = Math.trunc((ticks - a.poseTicks) / rate);
         } else e = a.step + 1;
         if (pose.playsOnce && e >= n - 1) {
           a.step = Math.max(0, n - 1);
@@ -433,7 +431,7 @@ export class ActorRuntime {
     // one drawn front-on.
     let rel: number;
     if (cam?.v5) rel = cam.v5.facing(a.worldX, a.worldY, Number(a.deg) || 0);
-    else if (cam) rel = (a.deg - bearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff;
+    else if (cam) rel = (a.deg - engineBearing(cam.x - a.worldX, cam.y - a.worldY)) & 0xff;
     else rel = Number(a.deg) & 0xff;
     let cf = step[0];
     let best = angleApart(cf.angle, rel);

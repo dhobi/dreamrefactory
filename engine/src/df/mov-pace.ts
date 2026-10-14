@@ -326,7 +326,7 @@ export function segmentInterval(
   // an interactive movie paces on its own clock (or on clicks); only a
   // cutscene's soundtrack sets the frame rate — and not even that when the
   // frames loop, because then the soundtrack says how LONG rather than how fast.
-  // A v1 bed (audioLoops false, the only bed that doesn't loop) paces nothing:
+  // A v1 bed paces nothing, nor does a bed that doesn't loop (v0's):
   // DreamFactory 1 films run at their header's frame rate and hold for their
   // narration with per-frame voice waits (D1ND2M.MOV: sounds fired at frames 1
   // and 21, flags bit 0 + hold 20 on the last frame). Stretching 45 frames over
@@ -334,7 +334,7 @@ export function segmentInterval(
   const interval = chooseFrameInterval(
     mov,
     frameCount,
-    hasRegions || !mov.audioLoops ? 0 : audioSec,
+    hasRegions || mov.dfV1 || !mov.audioLoops ? 0 : audioSec,
     hasRegions,
   );
   // A later segment always plays itself out: its picture is mid-film, so

@@ -85,7 +85,9 @@ for (const seg of SEGMENTS) {
     // ---- the globals the rung is about -----------------------------------
     for (const name of seg.claims) {
       const got = p.session.interp.globals.get(name);
-      const expected = want.numGlobals.get(name) ?? want.strGlobals.get(name);
+      // a boolean record (tag 2) is a boolean in the session too
+      const n = want.numGlobals.get(name);
+      const expected = n !== undefined && want.boolGlobals.has(name) ? n !== 0 : (n ?? want.strGlobals.get(name));
       expect
         .soft(typeof got === "string" ? got.toLowerCase() : got, `${name}`)
         .toBe(typeof expected === "string" ? expected.toLowerCase() : expected);

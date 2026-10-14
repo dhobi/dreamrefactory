@@ -3,7 +3,7 @@ import {
   type Actor, type FrameInfo, type FrameRegister, type Scene, type SceneView,
   type SetFile, type Transition,
 } from "./set";
-import { readSetFileV1, type SetFileV1, type V1Standpoint, type V1Transition } from "./set-v1";
+import { RUN_FRAMES, readSetFileV1, type SetFileV1, type V1Standpoint, type V1Transition } from "./set-v1";
 import { bearing } from "../runtime/geometry";
 
 /**
@@ -454,6 +454,7 @@ export function setFileFromV1(v1: SetFileV1): SetFile {
      * applying.
      */
     cameraSetback: v1.cameraSetback,
+    noHiResStills: v1.hiResStills === 0,
     spriteZBias: 128 - v1.cameraSetback,
     /**
      * Occlusion, and both numbers are measured.
@@ -578,15 +579,16 @@ function ringFor(
      * page as "correctly placed when standing, misplaced during movement", which
      * is exactly the shape of that bug.
      *
-     * Five pictures over one quarter turn means five equal steps of 64/5 = 12.8,
-     * with the fifth landing on the arrival bearing — so motion frame `i` is
-     * `(i + 1) / 5` of the way round. Even spacing rather than an eased curve
-     * because nothing in the file suggests otherwise and the run is uniform.
+     * DF.EXE's step (0x433d20) draws picture `k` of the five (k = 0..4) with the
+     * bearing `16·k` round from the departure (0x433ef7: `(k << 6) / 4`), so
+     * the first picture is the DEPARTURE standpoint — its low-res picture, which
+     * every transition's first frame is (1964 of 1964 on the disc) — and the
+     * fifth the arrival: frame `i` is `i / 4` of the way round.
      */
     const from8 = headings.get(facing) ?? 0;
     const swing = turnDelta(from8, headings.get(to) ?? 0);
     for (const [i, fr] of motion.entries()) {
-      const part = (i + 1) / (motion.length + 1);
+      const part = i / (RUN_FRAMES - 1);
       frames.push(frameAt(at0, from8 + swing * part, fr, 0, -1, -1, eyeHeight));
     }
     const viewIdx = facings.indexOf(to);
@@ -611,10 +613,11 @@ function ringFor(
  *
  * The bearing is constant — a v1 walk keeps its facing at both ends, which is the
  * measurement everything else here rests on — so what has to move is the POSITION,
- * and it has to move across the run. Both ends of the walk are cell centres and
- * the frames divide the distance evenly, the last one landing on the arrival: the
- * same `(i + 1) / n` as a turn's bearing, for the same reason and with the same
- * symptom when it is missing (see {@link ringFor}).
+ * and it has to move across the run. DF.EXE's step (0x433d20) puts picture `k`
+ * at the departure cell's centre plus `64·k` along the facing (0x433d9b:
+ * `(k << 8) / 4`, of a 256-unit cell): the first picture stands on the departure,
+ * the fifth on the arrival, frame `i` at `i / 4` — the same rule as a turn's
+ * bearing (see {@link ringFor}).
  */
 function walkRegister(
   w: V1Transition,
@@ -628,7 +631,7 @@ function walkRegister(
   const n = w.frames.length;
   const frames: FrameInfo[] = w.frames.map((fr, i) => {
     const last = i === n - 1;
-    const part = (i + 1) / n;
+    const part = n > 1 ? i / (n - 1) : 1;
     return frameAt(
       { x: from.x + (to.x - from.x) * part, z: from.z + (to.z - from.z) * part },
       heading,

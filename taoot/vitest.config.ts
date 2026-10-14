@@ -39,6 +39,8 @@ const NEEDS_THE_RIP = [
   "devmode",
   "freeroam",
   "speedrun-headless",
+  "hit-order",
+  "walks-in-passes",
 ];
 
 export default defineConfig({

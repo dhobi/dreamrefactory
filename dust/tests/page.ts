@@ -479,7 +479,7 @@ describe("the game, once it runs", () => {
     await enter(p);
     p.fire("keydown", { key: "ArrowUp", repeat: true });
     expect(calls).toContain("key uparrow");
-    expect(current.host!.globals.get("isrepeat")).toBe(1);
+    expect(current.host!.globals.get("isrepeat")).toBe(true);
     p.fire("keydown", { key: "Escape" });
     expect(calls).toContain("key . esc");
     p.fire("keydown", { key: "W" });
@@ -572,7 +572,7 @@ describe("a finger", () => {
     p.fire("pointermove", { pointerType: "touch", pointerId: 2, clientX: 500, clientY: 200 });
     p.fire("pointerup", { pointerType: "touch", pointerId: 2, clientX: 500, clientY: 200 });
     expect(calls.some((c) => /^key (uparrow|downarrow)$/.test(c))).toBe(true);
-    expect(current.host!.globals.get("isrepeat")).toBe(0);
+    expect(current.host!.globals.get("isrepeat")).toBe(false);
     p.point("pointerdown", { pointerType: "touch", pointerId: 3, clientX: 500, clientY: 700 });
     p.fire("pointercancel", { pointerType: "touch", pointerId: 3 });
   });

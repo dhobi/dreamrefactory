@@ -1,5 +1,5 @@
-import { Builtin, Value, toNum, toStr, truthy } from "../interp";
-import { bearing, bearingV5 } from "../geometry";
+import { Builtin, ScriptError, Value, toNum, toStr, truthy } from "../interp";
+import { bearingV5, engineBearing } from "../geometry";
 import { BuiltinCtx } from "./context";
 import { packPoint, pointX, pointY, s16 } from "../point";
 import { decodeText, encodeText } from "../../df/text";
@@ -15,6 +15,40 @@ import { latin1 } from "../../df/binary";
 /** what `heapsize()` answers for a player who asked for the small game: under
  *  BOOTFILE's own 6144000 threshold, and not by a hair (GameSession.lowMemory) */
 const SMALL_1996_HEAP = 4 * 1024 * 1024;
+
+/**
+ * DF.EXE's `findword` with a separator (0x42d430), and its one quirk: the scan
+ * ends a word at a separator OR at the last position a separator could start
+ * (0x42d50b: no match, but `last` reached), and the word then runs up to that
+ * position, not to the end of the string. So a final word with no separator
+ * after it loses as many characters as the separator has: `findword ("ab cd",
+ * " ", 2)` is "c", `findword ("a b c", " ", 3)` is "". Dust's scripts never
+ * trip it — every list they build or spell out ends in its separator
+ * (`mainboard`, `"1 2 5 "`, `combo`, decodemove's `"-2 2 "`), and so does the
+ * checkers DLL's answer. TI.EXE and tl.exe append the separator first (0x42b446
+ * / 0x43ab86), which is what our plain split does. An idx of 0 or less is the
+ * first word (it counts down to <= 0 at the first stop); a source shorter than
+ * the separator has no word at all.
+ */
+export function findwordV1(str: string, delim: string, idx: number): string {
+  const d = delim.length;
+  const last = str.length - d + 1;
+  const sep = delim.toLowerCase();
+  let start = 0;
+  let k = idx;
+  for (let pos = 0; pos < last; pos++) {
+    if (str.slice(pos, pos + d).toLowerCase() === sep || pos === last - 1) {
+      if (--k <= 0) return str.slice(start, pos);
+      start = pos + d;
+    }
+  }
+  return "";
+}
+
+/** floor(√n) of an unsigned 32-bit n — TI.EXE 0x436100, DF.EXE 0x430650 (exact in doubles) */
+export function isqrt32(n: number): number {
+  return Math.floor(Math.sqrt(n >>> 0));
+}
 
 export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   const { session, interp, r } = ctx;
@@ -46,6 +80,7 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     const str = toStr(s ?? "");
     const i = Number(idx) || 0;
     if (charMode(delim)) return i >= 1 && i <= str.length ? str[i - 1] : "";
+    if (session.isV1) return findwordV1(str, toStr(delim), i);
     return str.split(toStr(delim))[(i || 1) - 1] ?? "";
   });
   // putword(str, delim, idx, word): replace the idx-th (1-based) word. With an
@@ -73,6 +108,17 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     }
     const sep = toStr(delim);
     const at = Math.max(1, i || 1) - 1;
+    if (interp.classic) {
+      // DF.EXE 0x42d710 appends the separator before it counts (0x42d7bb), so
+      // "" is one empty word and "a,b," three; a word past the last one is no
+      // replacement at all and the answer is "" (0x42d823 -> 0x42d96e). TI.EXE
+      // 0x42b7a3 and tl.exe the same. The appended separator is taken off
+      // again (0x42d839) — a replaced last word keeps none.
+      const parts = str.split(sep);
+      if (at >= parts.length) return "";
+      parts[at] = w;
+      return parts.join(sep);
+    }
     const parts = str === "" ? [] : str.split(sep);
     while (parts.length <= at) parts.push("");
     parts[at] = w;
@@ -103,16 +149,30 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
    * while the winner still looked right, because all four hands were mis-scored
    * the same way and the comparison is between them.
    *
-   * The SETTER still creates a GLOBAL for a name that is neither: `variable (me,
-   * 1)` on an actor the cast has never counted must reach the same table the next
-   * `switch variable (me)` reads, and a frame-local would be gone when the loop
-   * comes round. Only a name the block declared local is written locally.
-   *
-   * Titanic is untouched either way: its only computed names are `who @ "…"`
-   * pairs in blkjack.stg, whose blocks declare thecard/x/y/cardwidth/cardcount —
-   * never a playercount or a dealertotal.
+   * Neither half creates anything before DreamFactory 5: a name that is neither
+   * a local nor a global is error 9 both ways (see the classic arm below).
+   * Dust's `variable (me, 1)` reaches the bounty globals `extra.cst`'s
+   * setupactor declares (`global bounty1, … bounty5`), and Titanic's computed
+   * names are `who @ "…"` pairs in blkjack.stg, which the stage declares (its
+   * second container: `global playertotal, playercount, …`).
+   * DreamFactory 5 keeps the port's old answers: 0 for a miss, and a setter that
+   * makes a global.
    */
-  r("variable", (_i, [name, val], _call, frame) => {
+  r("variable", (i_, [name, val], _call, frame) => {
+    // Before DreamFactory 5 the name is a string or error 0xe, and a name that is
+    // neither a local nor a global is error 9 both ways — the setter creates
+    // nothing (TI.EXE getter 0x42b2d0, setter 0x415b20: 0x431de0, then 0x449fe0 on
+    // the locals and on the globals; DF.EXE 0x42d350 / 0x420eb0 the same). Dust's
+    // crowd counter is safe: extra.cst declares its five bounty globals first.
+    if (i_.classic) {
+      if (typeof name !== "string") throw new ScriptError(0xe, `variable: the name must be a string, got ${String(name)}`);
+      const local = frame?.locals.has(name);
+      if (!local && !interp.globals.has(name)) throw new ScriptError(9, `variable: no such variable ${name}`);
+      if (val === undefined) return local ? frame!.locals.get(name)! : interp.globals.get(name)!;
+      if (local) frame!.locals.set(name, val);
+      else interp.setGlobal(name, val);
+      return 0;
+    }
     const key = toStr(name ?? "");
     if (val === undefined) return frame ? interp.getVar(key, frame) : interp.globals.get(key) ?? 0;
     if (frame?.locals.has(key)) frame.locals.set(key, val);
@@ -121,9 +181,12 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   });
 
   r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
-  r("lowmemory", () => 0); // the engine's own probe; BOOTFILE shadows it (below)
+  // No `lowmemory` here: it is no engine command (TI.EXE's table has none), and a
+  // builtin of that name answered 0 to MAP.STG's and EXTRA.CST's
+  // `if lowmemory ()` ahead of BOOTFILE's routine — an integer where the routine
+  // returns a boolean, and never the small game.
   // heapsize(): free memory in bytes. BOOTFILE defines its own lowmemory()
-  // (which shadows the builtin above) as `heapsize() < 6144000` — and every
+  // as `heapsize() < 6144000` — and every
   // TAOOT setupsound() case for a memory-heavy deck (decka/deckb/decke/deckf/cargo)
   // then loads the 11 kHz `.11k` bank instead of the full `.trk`, while still
   // calling playnewtheme("<deck>.trk"). Left at 0, heapsize() reported "low
@@ -174,6 +237,8 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
       maze.setHeading(toNum(deg));
       return;
     }
+    const moving = session.movingDeg();
+    if (moving !== null) return moving;
     const lis = session.listener();
     return lis ? lis.deg & 0xff : -1;
   });
@@ -191,13 +256,22 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     const fy = pointY(toNum(from ?? 0));
     const tx = pointX(toNum(to ?? 0));
     const ty = pointY(toNum(to ?? 0));
-    return bearing(tx - fx, ty - fy);
+    // the engines' table, not atan2 (TI.EXE 0x429e70 -> 0x43d450 -> 0x43d480)
+    return engineBearing(tx - fx, ty - fy);
   });
-  // calcmod(a, b): non-negative modulo (TAOOT's bridge wheel getpropdeg maps
-  // the 0..255 wheel angle into the sprite's 0..4 rotation frames)
-  r("calcmod", (_i, [a, b]) => {
+  // calcmod(a, b): the remainder of `idiv` — the sign of `a` (TI.EXE 0x429af0,
+  // tl.exe 0x439230; DF.EXE has no calcmod, its 20082 is `cacheinfo`). TAOOT's
+  // one use, the bridge wheel's getpropdeg, passes 0..255, where the sign never
+  // shows. By 0 the engines divide anyway (TI.EXE 0x429b4d, tl.exe 0x43928d):
+  // the CPU faults and Windows ends the game — session.engineFault.
+  // DreamFactory 5 keeps the non-negative modulo it had.
+  r("calcmod", (i_, [a, b]) => {
     const m = toNum(b ?? 0);
-    if (m === 0) return 0;
+    if (m === 0) {
+      if (!i_.classic) return 0;
+      return session.engineFault({ kind: "divide error", where: `calcmod(${toNum(a ?? 0)}, 0)` }).then(() => 0);
+    }
+    if (i_.classic) return toNum(a ?? 0) % m | 0;
     return ((toNum(a ?? 0) % m) + m) % m;
   });
   // primitives behind the cast library's distance/facing helpers (TAOOT's
@@ -234,7 +308,12 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     const ay = pointY(toNum(a ?? 0));
     const bx = pointX(toNum(b ?? 0));
     const by = pointY(toNum(b ?? 0));
-    return Math.round(Math.hypot(bx - ax, by - ay));
+    // TI.EXE 0x429f20 (DF.EXE 0x42c070 the same): the halves' differences
+    // squared and summed in 32-bit registers, then 0x436100's integer square root
+    // of that as UNSIGNED — floor, never rounded — and the low word of it
+    const dx = bx - ax;
+    const dy = by - ay;
+    return isqrt32((Math.imul(dx, dx) + Math.imul(dy, dy)) >>> 0) & 0xffff;
   });
 
   // calcvectx(angle, mag) / calcvecty(angle, mag): the (dx, dy) components of a
@@ -429,10 +508,11 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     if (v !== undefined) menuVisible = truthy(v) ? 1 : 0;
     return menuVisible;
   });
-  let keyAborts = 0;
+  // keyaborts — on the session, because the interpreter asks it after every
+  // statement (GameSession.keyAborts, interp.ts keyAbort)
   r("keyaborts", (_i, [v]) => {
-    if (v !== undefined) keyAborts = truthy(v) ? 1 : 0;
-    return keyAborts;
+    if (v !== undefined) session.keyAborts = truthy(v);
+    return session.keyAborts ? 1 : 0;
   });
   // countbevels(): number of choice bevels on the active puppet screen (a
   // conversation gates on `if countbevels() > 3`).

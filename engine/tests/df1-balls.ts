@@ -10,13 +10,14 @@
  * the three things Dust throws — the range's bullet (TARGET.FLT), a shot bird
  * falling (TARGET.CST) and the tumbleweed (HOUSE.PRP).
  */
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { PropInstance } from "@dreamfactory/engine/runtime/props";
 import { ActorInstance } from "@dreamfactory/engine/runtime/actors";
 import { ballHits } from "@dreamfactory/engine/runtime/balls";
+import { Logic } from "@dreamfactory/engine/runtime/interp";
 
 function session(v1 = true) {
   const s = new GameSession(() => null, new NullAudioSink());
@@ -216,7 +217,7 @@ endcode
   for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
   expect(sent).toEqual(["sendtoprop tumbleweed endball(frames)"]);
   expect(s.interp.globals.get("why")).toBe("frames");
-  expect(s.interp.globals.get("again"), "the slot was already empty").toBe(0);
+  expect(s.interp.globals.get("again"), "the slot was already empty").toBe(false);
   expect(call("iscricket", "tumbleweed"), "and the handler threw it again").toBe(1);
 });
 
@@ -228,7 +229,8 @@ test("stopball and pauseball: a name or all, and pausing is a depth", () => {
   call("makecricket", "b", 1, 0, 0, 0, 0, 50);
   call("pausecricket", "a", 1);
   call("pausecricket", "all", 1);
-  expect(call("pausecricket", "a")).toBe(2);
+  // DF.EXE's getter: the depth under the boolean tag (0x42d074, interp.ts Logic)
+  expect(call("pausecricket", "a")).toEqual(new Logic(2));
   pass(s);
   expect(p.worldX).toBe(0);
   call("pausecricket", "a", 0);
@@ -236,7 +238,7 @@ test("stopball and pauseball: a name or all, and pausing is a depth", () => {
   expect(p.worldX, "one level still paused").toBe(0);
   call("pausecricket", "a", 0);
   call("pausecricket", "a", 0);
-  expect(call("pausecricket", "a"), "does not go below 0").toBe(0);
+  expect(call("pausecricket", "a"), "does not go below 0").toBe(false);
   pass(s);
   expect(p.worldX).toBe(1);
   call("stopcricket", "a");
@@ -293,6 +295,9 @@ endcode
 
 test("a v4 game keeps its crickets and its CD", () => {
   const { s, call } = session(false);
+  // TI.EXE's makecricket wants a set open (0x28) and the sound (0xa)
+  s.currentSetName = "engine";
+  vi.spyOn(s.audioLib, "sound").mockImplementation(() => ({ sampleRate: 11025, samples: new Float32Array(1) }) as never);
   call("makecricket", "steam1", 10, 20, 100, 5, -1);
   expect(s.scheduler.crickets.map((c) => c.name)).toEqual(["steam1"]);
   expect(s.balls.count()).toBe(0);

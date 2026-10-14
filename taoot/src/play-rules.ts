@@ -8,7 +8,6 @@
  * Out of `main.ts`, which runs on import and owns the DOM, so each of these can
  * be held to its answer in node (taoot/tests/auto/play-rules.ts).
  */
-import { isPictureMode, type PictureMode } from "@dreamfactory/engine/runtime/session";
 import {
   ALL_CHANNELS,
   DEFAULT_SCREEN_GAMMA,
@@ -111,15 +110,8 @@ export function presetOf(gamma: number): string {
   return "";
 }
 
-/**
- * The picture mode a stored answer means: the dropdown's own key, or the older
- * checkbox's `"1"` for "always sharp", which a player who ticked it keeps — or
- * the original.
- */
-export function pictureModeOf(stored: string | null, legacySharp: string | null): PictureMode {
-  const value = stored === null && legacySharp === "1" ? "sharp" : stored;
-  return isPictureMode(value) ? value : "original";
-}
+/** the picture mode a stored answer means — shared with Dust's page */
+export { pictureModeOf } from "@dreamfactory/engine/web/picture-mode";
 
 /** the name the save dialog offers: the room, and the minute */
 export function defaultSaveName(setFile: string, d: Date): string {

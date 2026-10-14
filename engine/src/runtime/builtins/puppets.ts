@@ -1,4 +1,4 @@
-import { toNum, toStr, truthy } from "../interp";
+import { ScriptError, toNum, toStr, truthy } from "../interp";
 import { decodeText } from "../../df/text";
 import { BuiltinCtx } from "./context";
 
@@ -20,7 +20,14 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
   // so the Purser asked "Would you like something...?" — the switch's generic arm
   // — instead of "I would like to check something in..." (#53).
   r("currentpuppet", () => session.puppet?.pup.pupName || (session.puppet ? session.puppet.name : "none"));
-  r("puppetspeak", (_i, [ident]) => session.puppetCtrl.puppetSpeak(toStr(ident ?? "")));
+  // One argument. Every engine's command dispatch runs the command on the
+  // arguments it reads and only THEN wants the `)` — DF.EXE 0x41fced, TI.EXE
+  // 0x4148f7 — so JONES's `puppetspeak ("jones.33", 101)` says jones.33 and then
+  // fails with error 2, which unwinds the whole chain (see ScriptError).
+  r("puppetspeak", async (i_, args) => {
+    await session.puppetCtrl.puppetSpeak(toStr(args[0] ?? ""));
+    if (args.length > 1 && i_.classic) throw new ScriptError(2, "puppetspeak: ')' expected after its one argument");
+  });
   r("puppetclear", () => session.puppetCtrl.puppetClear());
   // the bevel caption is a script string literal, so it is localised text and
   // arrives as raw bytes — the only place a puppet's choices are written down

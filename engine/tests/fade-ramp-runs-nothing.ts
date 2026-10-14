@@ -57,10 +57,14 @@ test("a blocking fade runs nothing else: no prop step, no pass, no other script 
   const map = session.propRuntime.get("map")!;
 
   let now = 0;
-  const pass = () => dir.tick((now += 50));
-  for (let i = 0; i < 3; i++) pass();
+  // a tick of the host, and the idle's pass it lets run (Scheduler.serviceIdle)
+  const pass = async () => {
+    dir.tick((now += 50));
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  for (let i = 0; i < 3; i++) await pass();
   const before = map.frameIdx;
-  pass();
+  await pass();
   expect(map.frameIdx, "the view goes round on its own").not.toBe(before);
 
   // another script, asleep for ten ticks when the ramp starts
@@ -74,20 +78,16 @@ test("a blocking fade runs nothing else: no prop step, no pass, no other script 
   const frames = session.frameCounter;
   // 60 ticks is a second: twenty passes, had any run
   for (let i = 0; i < 19; i++) {
-    pass();
-    await Promise.resolve();
+    await pass();
     expect(map.frameIdx, `pass ${i} of the ramp`).toBe(held);
   }
   expect(session.frameCounter, "no pass counted a frame").toBe(frames);
   expect(slept, "the delay came due, and waits for the ramp").toBe(false);
-  for (let i = 0; i < 4 && !faded; i++) {
-    pass();
-    await new Promise((r) => setTimeout(r, 0));
-  }
+  for (let i = 0; i < 4 && !faded; i++) await pass();
   expect(faded, "the ramp ended").toBe(true);
   await new Promise((r) => setTimeout(r, 0));
   expect(slept, "and the delay with it").toBe(true);
-  pass();
-  pass();
+  await pass();
+  await pass();
   expect(map.frameIdx, "and the view goes round again").not.toBe(held);
 });

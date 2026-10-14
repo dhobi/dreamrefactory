@@ -2,7 +2,7 @@ import { ticksAt } from "../clock";
 import { toNum, toStr } from "../interp";
 import { packPoint, pointX, pointY } from "../point";
 import { decodeText } from "../../df/text";
-import { BuiltinCtx } from "./context";
+import { BuiltinCtx, RepeatedAsk } from "./context";
 
 /**
  * Points + live pointer + persistent text. Points pack as (x<<16)|y with
@@ -14,6 +14,7 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   const { session, r } = ctx;
   /** the tick stilldown last answered on — see stilldown */
   let stilldownTick = -1;
+  const stilldownAsk = new RepeatedAsk();
 
   r("makepoint", (_i, [x, y]) => packPoint(toNum(x ?? 0), toNum(y ?? 0)));
   r("pointx", (_i, [p]) => pointX(toNum(p ?? 0)));
@@ -79,9 +80,9 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   // Enigma result dismissal), which has no other yield — so, like stilldown,
   // the poll gives up a real frame so input can arrive. Headless returns at
   // once (button state is set directly; keeps the runaway guard live).
-  r("button", async () => {
+  r("button", async (_i, _a, c) => {
     session.inputPolled();
-    await ctx.yieldFrame();
+    await ctx.yieldFrame(c);
     return session.pointerDown ? 1 : 0;
   });
   // flushevents(): discard queued input so the press that ended a drag or a poll
@@ -131,10 +132,16 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   // one tick is a bare `while stilldown() endwhile`, with no forceupdate; that
   // waits a tick, or it would spin the page. Judged by the game's ticks, not by
   // who else yielded a frame, so it answers the same way on every machine.
-  // Under stepped time only: normal play still waits its frame on every ask.
-  r("stilldown", async () => {
+  // Under stepped time only: normal play still waits its frame on every ask —
+  // except in RedJack, whose fights ask it twice from a `think` loop once a pass
+  // (combat.shop), inside the pass: RedJack.exe's answers at once, and a wait
+  // there held every pass of a fight for a host frame more. There only the ask
+  // a bare loop makes waits, the same call again in the same tick (RepeatedAsk).
+  r("stilldown", async (_i, _a, c) => {
     session.inputPolled();
-    if (!session.clock.ticked || ticksAt(session.clock.now) === stilldownTick) await session.clock.sleep(16);
+    const tick = ticksAt(session.clock.now);
+    const wait = session.isV5 ? stilldownAsk.repeats(c, tick) : !session.clock.ticked || tick === stilldownTick;
+    if (wait) await session.clock.sleep(16);
     stilldownTick = ticksAt(session.clock.now);
     if (session.hasRealFrames) session.realYieldSeq++;
     return session.pointerDown ? 1 : 0;

@@ -1,8 +1,13 @@
-import { Value, toNum, toStr, truthy } from "../interp";
+import { ScriptError, Value, logic, toNum, toStr, truthy } from "../interp";
+import { pauseDepthOf } from "../scheduler";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
-import { isqrt, readStarPath } from "../../df/set";
+import { RIGHTTURNS, isqrt, readFrameRegister, readStarPath } from "../../df/set";
+import { foldAscii } from "../caseless";
 import type { ActorInstance } from "../actors";
+
+/** a 16-bit word, as the engines keep coordinates */
+const s16 = (v: number): number => (v << 16) >> 16;
 
 /**
  * What `actorstar` reports while a straight-line walk to a named star is running
@@ -11,6 +16,13 @@ import type { ActorInstance } from "../actors";
  * the corpus compares it; see {@link WALK_ON_PATH} for the one that is compared.
  */
 const WALK_DEFER = "defer";
+
+/**
+ * ...and what it reports once the record is BUILT, which TI.EXE does at once
+ * when the walker's set is the open one (0x4435c0 stamps it, 0x45deec) and on
+ * the first pass it is otherwise (Scheduler.deferWalk).
+ */
+const WALK_STAR = "walktostar";
 
 /**
  * What `actorstar` reports while an AUTHORED ROUTE is being walked — TI.EXE's
@@ -108,7 +120,7 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
 
   const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   /** getter/setter by arity; a missing actor answers the empty value */
-  const acc = accessorFamily(r, actor);
+  const acc = accessorFamily(r, actor, ctx.miss);
   r("opencastfile", async (_i, [n]) => ((await session.openCastFile(toStr(n ?? ""))) ? 1 : 0));
   r("closecastfile", (_i, [n]) => session.closeCastFile(toStr(n ?? "")));
   // ...or, on a v1 set, the scene's grid ROW — see BuiltinCtx.sceneCell
@@ -258,8 +270,21 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     session.actorRuntime.instance(from, to, session.isV1);
     if (session.actorRuntime.get(to)) session.instanceCastScript(from, to);
   });
-  r("actordelete", (_i, [n]) => {
+  r("actordelete", async (_i, [n], _call, frame) => {
     const name = toStr(n ?? "");
+    // RedJack.exe's (0x4017f0) first sends the actor `closeactor ()` as an actor
+    // message — `"<name>", closeactor()` run through sendtoactor's chain
+    // (0x40185a, 0x40190d -> 0x404ff0) — and only then takes the actor's walk
+    // (0x4019b8 -> 0x41b810) and its actor loop (0x4019d2 -> 0x41b8e0) with it:
+    // no pass meets a walker that is not there. No shipped script answers
+    // `closeactor`, so the message runs nothing there; an actor the message
+    // cannot find is error 0xa (0x405072 -> 0x406550), and nothing is deleted.
+    if (session.isV5) {
+      if (!session.actorRuntime.get(name)) throw new ScriptError(0xa, `actordelete: no actor "${name}"`);
+      await session.sendEvent("sendtoactor", name, "closeactor", [], frame.ctx.me, frame);
+      session.scheduler.walks.delete(name.toLowerCase());
+      session.scheduler.stopLoop("actor", name);
+    }
     session.actorRuntime.remove(name);
     // a COPY's script goes with it; a cast member keeps its own, which is what
     // lets TAOOT's stokers put themselves back (see dropInstancedScript)
@@ -519,6 +544,21 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       );
       return 0;
     }
+    if (a && !session.isV1) {
+      // TI.EXE's walktostar (0x442f00): the record is built now when the
+      // walker's set is the open one, and deferred to the first pass that it is
+      // otherwise (0x442fb4 -> 0x443ac0); the builder finds the star in the open
+      // set or fails with 0xa (0x4435de). RedJack.exe's the same (0x41c440:
+      // built at 0x41c518 by 0x41cd30, which fails with 0xa at 0x41cd48 and says
+      // "walktostar"; deferred at 0x41c546 by 0x41d290, which says "defer")
+      const to = toStr(starName ?? "").toLowerCase();
+      const build = starWalk(a, toStr(n), to);
+      if (a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
+        a.starName = WALK_DEFER;
+        session.scheduler.deferWalk(toStr(n), to, build);
+      } else build();
+      return 0;
+    }
     if (!a || !star) {
       log(`walktostar: ${toStr(n)} -> "${toStr(starName ?? "")}" not found`);
       return 0;
@@ -706,17 +746,110 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     return false;
   };
 
+  /** the builder of a `walktostar` record (TI.EXE 0x4435c0): the star found
+   *  in the open set, or error 0xa (0x4435de) */
+  const starWalk = (a: ActorInstance, n: string, to: string) => (): void => {
+    const s = findStar(to);
+    if (!s) throw new ScriptError(0xa, `walktostar: no star "${to}" for ${n}`);
+    a.starName = WALK_STAR;
+    session.scheduler.startWalk(n, s.positionX, s.positionZ, s.positionY, to);
+  };
+  // ...and a deferred record's, by its mode, for a load to file it again
+  session.deferredWalkBuilder = (n, mode, to, from) => {
+    const a = actor(n);
+    if (!a) return null;
+    if (mode === 4 || mode === 5) return () => walkOnRoad(a, n, to, from, mode);
+    return mode === 3 ? () => walkOnPath(a, n, from, to) : starWalk(a, n, to);
+  };
+
+  /**
+   * The route `walkonroad` and `walkonframes` walk: the camera ROAD that leaves
+   * `view` of `scene` in the open set, as TI.EXE builds it (de build). 0x405140
+   * finds the scene (0x4048c0) and the view's index in it, and answers the road
+   * register handle its standpoint frame carries (+0x34); none is error 0xa
+   * (0x43c22c). 0x404f90 then makes a route block of the road's frames — x, y
+   * and the height less the set header's 0xa0a word (0x40503f), each leg the
+   * integer root of its squares (0x40508a) — which the walk keeps at +0x12.
+   */
+  const roadRoute = (sceneName: string, viewName: string) => {
+    const set = session.currentBinding?.set;
+    const scene = set?.scenes.find((sc) => foldAscii(sc.sceneName) === foldAscii(sceneName));
+    const view = scene ? scene.views.findIndex((v) => foldAscii(v.viewName) === foldAscii(viewName)) : -1;
+    const stand = view >= 0 ? scene!.turns[RIGHTTURNS]?.frames.find((f) => f.viewID === view) : undefined;
+    const handle = stand?.transitionLog ?? 0;
+    const container = handle > 0 ? set!.file.containers[handle] : undefined;
+    if (!container) throw new ScriptError(0xa, `no road from ${sceneName}/${viewName}`);
+    const frames = readFrameRegister(container).frames;
+    if (frames.length < 2) throw new ScriptError(0xa, `the road from ${sceneName}/${viewName} has no length`);
+    const lift = set!.heightDifference ?? 0;
+    const path: { x: number; y: number; z: number; cum: number }[] = [];
+    let cum = 0;
+    for (const f of frames) {
+      const p = { x: f.posX16, y: f.posZ16, z: s16(f.posY16 - lift) };
+      const prev = path.at(-1);
+      if (prev) cum += isqrt((p.x - prev.x) ** 2 + (p.y - prev.y) ** 2 + (p.z - prev.z) ** 2);
+      path.push({ ...p, cum });
+    }
+    return path;
+  };
+  const walkOnRoad = (a: ActorInstance, n: string, scene: string, view: string, mode: 4 | 5): void => {
+    const path = roadRoute(scene, view);
+    // what `actorstar` reports meanwhile (0x43c2ca / 0x43c3aa)
+    a.starName = mode === 4 ? "walkonroad" : "walkonframes";
+    session.scheduler.startWalkRoad(n, path, mode);
+  };
+  /**
+   * walkonroad / walkonframes (actor, scene, view) — TI.EXE 0x43bba0 / 0x43bd00
+   * (de build): a name of 16 characters or more is error 0x1a; outside the
+   * walker's set the record is deferred like walktostar's, keeping the scene at
+   * +0x4e and the view at +0x5e (0x43c3d0, modes 4 and 5). No shipped script
+   * calls either.
+   */
+  for (const [cmd, mode] of [["walkonroad", 4], ["walkonframes", 5]] as const) {
+    r(cmd, (_i, [n, scene, view]) => {
+      const a = actor(n);
+      if (!a) return;
+      const sc = toStr(scene ?? "");
+      const vw = toStr(view ?? "");
+      if (sc.length >= 16 || vw.length >= 16) throw new ScriptError(0x1a, `${cmd}: name too long`);
+      if (a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
+        a.starName = WALK_DEFER;
+        session.scheduler.deferWalk(toStr(n), sc, () => walkOnRoad(a, toStr(n), sc, vw, mode), mode, vw);
+        return;
+      }
+      walkOnRoad(a, toStr(n), sc, vw, mode);
+    });
+  }
   r("walkonpath", (_i, [n, from, to]) => {
     const a = actor(n);
     if (!a) return 0;
     const toName = toStr(to ?? "").toLowerCase();
     const fromName = toStr(from ?? "").toLowerCase();
+    // deferred like walktostar's outside the walker's own set (0x443235 ->
+    // 0x443ac0, mode 3, the route's start kept at +0x5e; RedJack.exe 0x41c959)
+    if (!session.isV1 && a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
+      a.starName = WALK_DEFER;
+      session.scheduler.deferWalk(toStr(n), toName, () => walkOnPath(a, toStr(n), from, to), 3, fromName);
+      return 0;
+    }
+    walkOnPath(a, toStr(n), from, to);
+  });
+  const walkOnPath = (a: ActorInstance, n: string, from: Value, to: Value): void => {
+    const toName = toStr(to ?? "").toLowerCase();
+    const fromName = toStr(from ?? "").toLowerCase();
+    // RedJack.exe builds the walk from the route alone (0x41ce80): none between
+    // the two, or none ending at the destination for "resume", is error 0xa
+    // (0x41cefc) — there is no straight line to fall back on
+    if (session.isV5) {
+      if (startPathWalk(a, n, fromName, toName)) return;
+      throw new ScriptError(0xa, `walkonpath: no route from ${fromName} to ${toName}`);
+    }
     const dest = findStar(to);
     if (!dest) {
       log(`walkonpath: star "${toStr(to ?? "")}" not found`);
-      return 0;
+      return;
     }
-    if (startPathWalk(a, toStr(n), fromName, toName)) return 0;
+    if (startPathWalk(a, n, fromName, toName)) return;
     a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
     if (fromName !== "resume") {
       const start = findStar(from);
@@ -727,18 +860,27 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       }
     }
     session.scheduler.startWalk(
-      toStr(n), dest.positionX, dest.positionZ, dest.positionY, toName,
+      n, dest.positionX, dest.positionZ, dest.positionY, toName,
     );
-  });
+  };
   r("iswalk", (_i, [n]) => (n !== undefined && session.scheduler.isWalk(toStr(n)) ? 1 : 0));
   r("stopwalk", (_i, [n]) => {
     if (n !== undefined) session.scheduler.stopWalk(toStr(n));
   });
   r("pausewalk", (_i, [n, flag]) => {
+    // one argument is the getter (DF.EXE 0x42cfb0, TI.EXE 0x42aeb0): the walk's
+    // pause depth — DF.EXE hands the depth itself back under the boolean tag
+    // (0x42d004, interp.ts Logic), TI.EXE and tl.exe 0 or 1
+    if (n !== undefined && flag === undefined && !session.isV5) {
+      const w = session.scheduler.walks.get(toStr(n).toLowerCase());
+      const depth = pauseDepthOf(w);
+      return session.isV1 ? logic(depth) : depth;
+    }
     if (n !== undefined) session.scheduler.pauseWalk(toStr(n), truthy(flag ?? 1));
   });
   r("countwalks", () => session.scheduler.walks.size);
-  r("indextowalk", (_i, [idx]) => [...session.scheduler.walks.keys()][toNum(idx ?? 0) - 1] ?? "");
+  // in SLOT order (TI.EXE 0x443fd0 walks the 16 slots)
+  r("indextowalk", (_i, [idx]) => session.scheduler.walkSlots()[toNum(idx ?? 0) - 1]?.[0] ?? "");
   /**
    * walkdest(actor): where a running walk is HEADED, by name — the walk record's
    * +0x3e, the same field the arrival copies into `actorstar`. Not a position.

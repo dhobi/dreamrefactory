@@ -24,7 +24,6 @@ import {
   degToSimple,
   inPolygon,
   simpleToDeg,
-  walkFrameMs,
 } from "@dreamfactory/engine/runtime/maze";
 import { DEPTH_FAR, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
@@ -139,8 +138,8 @@ test("a v5 game's propspeed is sysparam: the button of the press, and the screen
   const session = new GameSession(() => null, new NullAudioSink());
   const call = (n: number) =>
     session.interp.builtins.get("propspeed")!(session.interp, [n], {} as never, {} as never);
-  // v4: a prop's speed, and there is no prop called 7
-  expect(await call(7)).toBe(0);
+  // v4: a prop's speed, and there is no prop called 7 — "No such object" (TI.EXE 0x442b90)
+  await expect(async () => call(7)).rejects.toMatchObject({ code: 0xa });
   session.isV5 = true;
   session.pointerButton = 2;
   // the rooms' mousedown: `if propspeed (7) = 2 rightmouse (arg)`
@@ -202,20 +201,15 @@ test("a prop's ink is its opacity in eighths, as RedJack.exe's blitter takes it"
   expect(inkAlpha(9)).toBe(255);
 });
 
-test("a walk holds each film frame for the game's framerate, as RedJack.exe's room loop does", () => {
-  // the BOOTFILE's framerate (2): two 1/60 s ticks a frame; 0 is one tick
-  expect(walkFrameMs(2)).toBeCloseTo(33.33, 2);
-  expect(walkFrameMs(6)).toBe(100);
-  expect(walkFrameMs(0)).toBeCloseTo(16.67, 2);
+test("a walk puts up the next film frame once a pass, as RedJack.exe's room frame does", async () => {
+  // 0x432b00 steps the index (0x4c95fc) once a pass, whatever the framerate
   const m = room([]);
   const frame = { picture: 0, x: 0, y: 0, z: 0, heading: 0, pitch: 0, roll: 0, fov: 0, headDeg: 0, pitchDeg: 0, rollDeg: 0, fovDeg: 0, view: -1 };
-  const walk = { film: { container: 0, to: 1, toScene: 0, frames: [frame, frame, frame] }, frame: 0, at: 0 };
+  const walk = { film: { container: 0, to: 1, toScene: 0, frames: [frame, frame, frame] }, frame: 0 };
   m.walk = walk;
-  expect(m.walkStep(33)).toBe(false);
-  expect(m.walkStep(34)).toBe(true);
+  expect(await m.walkStep()).toBe(true);
   expect(walk.frame).toBe(1);
-  expect(m.walkStep(60)).toBe(false);
-  expect(m.walkStep(68)).toBe(true);
+  expect(await m.walkStep()).toBe(true);
   expect(walk.frame).toBe(2);
 });
 
@@ -321,34 +315,34 @@ test.skipIf(missing)("a scene turns between its views on film, and its road walk
   expect(degToSimple(m.heading)).toBe(245);
   expect(m.roadAhead("scene13", "view26")).toBeGreaterThan(0);
   expect(m.roadAhead("scene13", "view27")).toBe(0);
-  const play = (): void => {
-    for (let t = 1; m.walk && t < 200; t++) m.walkStep(t * 100);
+  const play = async (): Promise<void> => {
+    for (let t = 1; m.walk && t < 200; t++) await m.walkStep();
   };
   // right is clockwise, the heading falling: 245° → 153°
   await m.move("right");
   expect(m.view).toBe("moving");
-  play();
+  await play();
   expect([m.view, degToSimple(m.heading)]).toEqual(["view29", 153]);
   // and left goes back the other way, past nothing
   await m.move("left");
-  play();
+  await play();
   expect(m.view).toBe("view26");
   // View27 has no road: "strait" does nothing there
   await m.move("left");
-  play();
+  await play();
   await m.move("left");
-  play();
+  await play();
   expect(m.view).toBe("view27");
   await m.move("strait");
   expect(m.walk).toBeNull();
   // back round to View26, whose road rows on to Scene12 and arrives facing View22
   await m.move("right");
-  play();
+  await play();
   await m.move("right");
-  play();
+  await play();
   expect(m.view).toBe("view26");
   await m.move("strait");
-  play();
+  await play();
   expect([m.sceneName, m.view]).toEqual(["Scene12", "view22"]);
   expect(m.camera()).not.toBeNull();
 });

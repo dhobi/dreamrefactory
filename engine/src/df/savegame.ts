@@ -212,6 +212,12 @@ export interface SavedLoop {
   handler: string;
   /** ticks remaining until it fires. */
   period: number;
+  /**
+   * Its `pauseloop` COUNT (+2): TI.EXE nests pauses there (0x442d5d adds one,
+   * a resume takes one off down to 0) and dumps the table verbatim, so a loop
+   * paused twice is saved as 2. Absent = 0.
+   */
+  pause?: number;
 }
 /**
  * One live `makecricket` slot from the crickets table (0x48b830, 16 × 74,
@@ -231,6 +237,10 @@ export interface SavedCricket {
   jitter: number;
   /** ticks remaining until the next fire (base + rand(jitter), mid-count). */
   next: number;
+  /** its `pausecricket` count (+2, TI.EXE 0x4448d0 nests it); absent = 0 */
+  pause?: number;
+  /** in earshot since it last came into it (+0x22, the service's re-arm flag) */
+  armed?: boolean;
 }
 
 /**
@@ -272,6 +282,8 @@ export interface SavedWalk {
    *  dropped through onDrop, not written as a shape no shipped save has). */
   hasPayload: boolean;
   paused: boolean;
+  /** ...and how deep: the `pausewalk` count at +2 (TI.EXE 0x444080 nests it) */
+  pause?: number;
   /** the facing to reach before moving; negative once the turn is done */
   turnTo: number;
   /** the walk's own copy of the actor's facing (+0x0A) */
@@ -299,6 +311,14 @@ export interface SavedWalk {
    * back rather than dropped.
    */
   path?: { x: number; y: number; z: number; cum: number }[];
+  /**
+   * A DEFERRED record (+6 = 1): a `walktostar` (type 1) or `walkonpath` (type 3)
+   * made while its walker's set was not open, waiting for it to be (TI.EXE
+   * 0x443ac0). Nothing moves until then, so the record holds no mover — only
+   * the two names it is built from, the destination (+0x4e) and a route's
+   * start (+0x5e).
+   */
+  deferred?: { to: string; from: string };
 }
 
 /**
@@ -442,6 +462,9 @@ export interface SaveGame {
   vars: SavedVar[];
   /** numeric globals to restore (type-2/4 records): name → value. */
   numGlobals: Map<string, number>;
+  /** the {@link numGlobals} whose record is a BOOLEAN (type 2): a load gives
+   *  them back as `true`/`false`, the type the scripts left them in. */
+  boolGlobals: Set<string>;
   /** string globals to restore (type-3 records, decoded via the string pool):
    * name → value. Includes hallside, savedeck, handitem, savestage1-3… */
   strGlobals: Map<string, string>;

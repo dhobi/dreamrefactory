@@ -1,5 +1,5 @@
 import { SetFile } from "../df/set";
-import { Frame, ScriptInstance, Value } from "./interp";
+import { Frame, ScriptError, ScriptInstance, Value } from "./interp";
 import type { GameSession } from "./session";
 
 /** resolves sibling game files (turk.shp etc.) by lowercase basename */
@@ -164,7 +164,7 @@ export class SetScripts {
    * set main → stage → boot scripts. Boot's defaults matter — e.g. TAOOT's
    * closescene closes any open door (sendtoprop("door", initprop())).
    */
-  private async fireLifecycle(handler: string, sceneIdx: number): Promise<void> {
+  private async fireLifecycle(handler: string, sceneIdx: number): Promise<boolean> {
     // A load fires NO lifecycle at all — not the departing room's closeset, not
     // the arriving room's openset/openscene. The original's load rebuilds the
     // room through the engine's set machinery without ever reaching the script
@@ -172,7 +172,7 @@ export class SetScripts {
     // and everything those scripts would produce comes out of the file instead
     // (#143). The scene is still recorded as current, so the first turn or step
     // re-fires openscene normally.
-    if (this.session.restoringSave) return;
+    if (this.session.restoringSave) return true;
     this.lifecycleDepth++;
     try {
     const interp = this.session.interp;
@@ -197,18 +197,24 @@ export class SetScripts {
         // reflects only this dispatch for any code that reads it downstream.
         interp.eventConsumed = false;
         const res = await interp.runHandler(inst, handler, [], { me: inst.name, target: "" });
-        if (res.handled && !res.passed) return;
+        if (res.handled && !res.passed) return true;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
+        // the engines hand an error back up the whole chain (TI.EXE 0x443c75:
+        // any code but a passed-on 4 returns at once), so no later link runs —
+        // and the caller hears it (false)
+        if (e instanceof ScriptError) return false;
       }
     }
+    return true;
     } finally {
       this.lifecycleDepth--;
     }
   }
 
-  async openSet(): Promise<void> {
-    await this.fireLifecycle("openset", -1);
+  /** `openset ()` down the chain; false when a script error ended it */
+  async openSet(): Promise<boolean> {
+    return this.fireLifecycle("openset", -1);
   }
   async closeSet(): Promise<void> {
     if (this.session.isV1) {
@@ -224,17 +230,26 @@ export class SetScripts {
       if (scene >= 0) await this.closeScene(scene);
       return;
     }
-    // leaving a set also leaves its scene
-    if (this.lastSceneIdx >= 0) await this.closeScene(this.lastSceneIdx);
+    // Leaving a set also leaves its scene, and first: TI.EXE's closing
+    // (0x407f50, en build) sends `"<scene>", closescene ()` (0x407fb9), stops on
+    // an error, stops if that closed the set or opened another (0x407fc6,
+    // 0x407fd5 against the set handle it noted), and only then `closeset ()`.
+    if (this.lastSceneIdx >= 0) {
+      if (!(await this.closeScene(this.lastSceneIdx))) return;
+      if (this.session.currentBinding !== this) return;
+    }
     await this.fireLifecycle("closeset", -1);
   }
-  async openScene(sceneIdx: number): Promise<void> {
+  /** false when a script error ended it */
+  async openScene(sceneIdx: number): Promise<boolean> {
     this.lastSceneIdx = sceneIdx;
-    await this.fireLifecycle("openscene", sceneIdx);
+    return this.fireLifecycle("openscene", sceneIdx);
   }
-  async closeScene(sceneIdx: number): Promise<void> {
-    await this.fireLifecycle("closescene", sceneIdx);
+  /** false when a script error ended it */
+  async closeScene(sceneIdx: number): Promise<boolean> {
+    const ok = await this.fireLifecycle("closescene", sceneIdx);
     this.lastSceneIdx = -1;
+    return ok;
   }
 
   /**
@@ -272,6 +287,7 @@ export class SetScripts {
         if (interp.eventConsumed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.closescene: ${(e as Error).message}`);
+        if (e instanceof ScriptError) return; // the chain ends with it (see fireLifecycle)
       }
     }
     await this.viewSettled(sceneIdx);
@@ -307,6 +323,7 @@ export class SetScripts {
         if (res.handled && !res.passed) return;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.openscene (view change): ${(e as Error).message}`);
+        if (e instanceof ScriptError) return; // the chain ends with it (see fireLifecycle)
       }
     }
     } finally {
@@ -398,6 +415,9 @@ export class SetScripts {
         if (interp.eventConsumed || (res.handled && !res.passed)) return answered(true);
       } catch (e) {
         this.onLog(`script error in ${inst.name}.${handler}: ${(e as Error).message}`);
+        // the chain ends with it (see fireLifecycle), and nothing after it in
+        // the port — no fallback — answers the click either
+        if (e instanceof ScriptError) return answered(true);
       }
     }
     return answered(false);
@@ -459,6 +479,11 @@ export class SetScripts {
         if (interp.eventConsumed) break;
       } catch (e) {
         this.onLog(`script error in ${inst.name}.keydown: ${(e as Error).message}`);
+        if (e instanceof ScriptError) {
+          // the press ends with it, default move and all (see fireLifecycle)
+          this.session.onSetKey?.({ ...where, consumed: true });
+          return true;
+        }
       }
     }
     this.session.onSetKey?.({ ...where, consumed: interp.eventConsumed });

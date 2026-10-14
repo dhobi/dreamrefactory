@@ -265,6 +265,13 @@ export interface MovSegment {
   /** the segment has a bed of its own — `audioChunks.length > 0`, kept for
    *  the call sites that read as prose */
   audioLoops: boolean;
+  /**
+   * The index into {@link audioChunks} a looping bed goes round to when it
+   * reaches the end; 0 or absent = from the top. Only a DreamFactory 1 film
+   * says otherwise: its header names the playlist entry the last one links
+   * back to (DF.EXE 0x40468c), FINALEND.MOV's being its last sound.
+   */
+  audioLoopFrom?: number;
   /** named one-shot chunks (frame-entry and region-click event sounds,
    *  FAUCET.MOV's "Brook Babbling." among them), lowercase */
   sounds: Map<string, number>;

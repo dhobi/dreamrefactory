@@ -92,6 +92,7 @@ function fakeContext() {
   const sources: FakeSource[] = [];
   const gains: { gain: { value: number } }[] = [];
   const panners: { pan: { value: number } }[] = [];
+  const mergers: unknown[] = [];
   const log: string[] = [];
   const ctx = {
     destination: {},
@@ -105,6 +106,12 @@ function fakeContext() {
       const p = { pan: { value: 0 }, connect: () => {} };
       panners.push(p);
       return p;
+    },
+    createChannelSplitter: () => ({ connect: () => {} }),
+    createChannelMerger: () => {
+      const m = { connect: () => {} };
+      mergers.push(m);
+      return m;
     },
     createBuffer: (channels: number, length: number, rate: number) => {
       const samples: Float32Array[] = [];
@@ -132,7 +139,7 @@ function fakeContext() {
     resume: () => (log.push("resume"), Promise.resolve()),
     close: () => (log.push("close"), Promise.resolve()),
   };
-  return { ctx, sources, gains, panners, log, sink: () => new WebAudioSink(ctx as unknown as AudioContext) };
+  return { ctx, sources, gains, panners, mergers, log, sink: () => new WebAudioSink(ctx as unknown as AudioContext) };
 }
 
 test("fixed stereo attenuation reaches both output channels without equal-power panning", () => {
@@ -166,23 +173,26 @@ test("a play takes its channel from the last one, unless it overlaps", () => {
   expect(sink.isDone("theme")).toBe(true);
 });
 
-test("a placed play gets its own gain and panner, clamped, and moves with place()", () => {
+test("a placed play gets its own gain and a BALANCE, clamped, and moves with place()", () => {
+  // TI.EXE's mixer pans by scaling each half (0x424b90): the far ear falls off
+  // linearly, the near one stays full — one gain per ear, no StereoPannerNode
   const f = fakeContext();
   const sink = f.sink();
   const channelGains = f.gains.length;
   const h = sink.play("sound", tone(10), { volume: 2, pan: -3, loop: true });
   expect(f.sources[0].loop).toBe(true);
-  const gain = f.gains[channelGains];
+  const [gain, left, right] = f.gains.slice(channelGains);
   expect(gain.gain.value).toBe(1);
-  expect(f.panners[0].pan.value).toBe(-1);
+  expect([left.gain.value, right.gain.value], "full left").toEqual([1, 0]);
   h.place?.(-1, 0.5);
   expect(gain.gain.value).toBe(0);
-  expect(f.panners[0].pan.value).toBe(0.5);
+  expect([left.gain.value, right.gain.value], "half right").toEqual([0.5, 1]);
+  expect(f.panners, "no equal-power panner").toHaveLength(0);
 
-  // an unplaced play builds neither
+  // an unplaced play builds none of it
   sink.play("voice", tone(10));
-  expect(f.gains).toHaveLength(channelGains + 1);
-  expect(f.panners).toHaveLength(1);
+  expect(f.gains).toHaveLength(channelGains + 3);
+  expect(f.mergers).toHaveLength(1);
 });
 
 test("a stopped handle is done, and a stop on a source already stopped is swallowed", () => {

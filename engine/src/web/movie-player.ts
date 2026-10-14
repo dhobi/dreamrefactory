@@ -501,11 +501,12 @@ export class MoviePlayer {
       const bedHandle = this.session.audio.play(
         "voice",
         { sampleRate: bed.sampleRate, samples: bed.samples },
-        bed.loop ? { loop: true } : undefined,
+        bed.loop ? { loop: true, loopStart: bed.loopStart } : undefined,
       );
       // a bed that speaks puppet lines is captioned chunk by chunk (#50): a
-      // looping bed is its distinct chunks, a run is the authored order
-      const played = bed.loop ? audio.unique : audio.resampled;
+      // looping bed is its distinct chunks, a run (or a v1 playlist) the
+      // authored order
+      const played = bed.loop && !seg.dfV1 ? audio.unique : audio.resampled;
       this.session.captionMovieBed(fileName, played.map((c) => c.length / audio.rate), bed.loop, bedHandle);
     }
     const frameByName = new Map<string, number>();

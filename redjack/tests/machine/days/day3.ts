@@ -85,6 +85,17 @@ export async function playDay3(h: Headless): Promise<void> {
   // to his desk (walktodesk), where he drinks himself asleep: drunk.move, jail2
   await clickOn(h, "lid", "prop");
   await h.until(() => h.session.stageName !== "jail.stag" && h.running().length === 0, "the tray to close", 3_000);
+  // the tray shut arms the constable's `checkforrock` (jail.stag closestage),
+  // which takes the rum in a talk of its own (const2b.pupp takerum) and sends
+  // him pacing between his two stars. A walker can carry the point `face`
+  // found into the boot's scroll margin before the click lands, where the boot
+  // scrolls instead of asking him (boot mousedown: `actordist >= 0 &
+  // scrollmargin`), so the route waits for him to stand, as a player would
+  await h.until(
+    () => !props.get("rum")?.visible && !h.session.scheduler.isWalk("constable") && h.idle(),
+    "the constable to take the rum and stand",
+    3_000,
+  );
   await clickOn(h, "constable", "actor");
   await converse(h, ["Let me out.", "I'm hungry.", "I'm thirsty."], "the constable and the rum");
   await h.until(() => h.room() === "jail2" && h.idle(), "the constable to drink", 5_000);

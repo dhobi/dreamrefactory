@@ -26,7 +26,7 @@
 import { MAP_JUMPS, MAP_PAGE_BUTTONS } from "./mapjumps.gen";
 /** the script globals a guard is evaluated against — the shipgraph's own type,
  *  restated here so this module carries no dependency on the test tree */
-type FlowState = Record<string, string | number | undefined>;
+type FlowState = Record<string, string | number | boolean | undefined>;
 
 /** one red area on one deck plan */
 export interface MapJump {

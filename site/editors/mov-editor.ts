@@ -850,7 +850,7 @@ function enterFilmSegment(idx: number, now: number, startFrame = 0): void {
     // the same bed the GAME will play, inherited segments included — an editor
     // that previews a shorter one previews a film the game does not play
     const bed = soundtrackFor(seg, audio, film.interval, seg.frames.length, bedRuntimeMs(m, segIdx));
-    film.bed = playPcm(bed.samples, bed.sampleRate, bed.loop);
+    film.bed = playPcm(bed.samples, bed.sampleRate, bed.loop, bed.loopStart);
   }
   log(
     t("movies.filmSegment", {
@@ -1622,7 +1622,7 @@ interface Voice {
 }
 
 /** hand PCM to the browser and keep hold of the handle */
-function playPcm(samples: Float32Array, rate: number, loop = false): Voice | null {
+function playPcm(samples: Float32Array, rate: number, loop = false, loopStart = 0): Voice | null {
   if (!samples.length) return null;
   audioCtx ??= new AudioContext();
   const ctx = audioCtx;
@@ -1631,6 +1631,11 @@ function playPcm(samples: Float32Array, rate: number, loop = false): Voice | nul
   const src = ctx.createBufferSource();
   src.buffer = buf;
   src.loop = loop;
+  // a v1 bed goes round to its playlist's loop entry (df/mov-sound.ts)
+  if (loop && loopStart > 0 && loopStart < buf.duration) {
+    src.loopStart = loopStart;
+    src.loopEnd = buf.duration;
+  }
   src.connect(ctx.destination);
   const voice: Voice = {
     done: false,

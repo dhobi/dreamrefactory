@@ -5,7 +5,11 @@
  *    (0x41deb0) spins until `timeGetTime() >= start + n × 50/3` ms, and the
  *    tick counter it and the movie loop read (0x41de90) is
  *    `timeGetTime() × 3 / 50` — the same 16.667 ms unit.
- *  * the SERVICE PASS, 50 ms, below — what loops, crickets and walks advance on.
+ *  * the SERVICE PASS — what loops, crickets and walks advance on. It is not a
+ *    fixed period: a pass runs only when a script asks for one (`forceupdate`,
+ *    `visualeffect`; the BOOTFILE's `idle ()` is the heartbeat), and its frame
+ *    throttle then waits `framerate` ticks — 50 ms at the default of 3
+ *    (Scheduler.pass).
  *
  * The paced screen ramps — a `visualeffect` reveal and a `screentoblack` /
  * `blacktoscreen` fade — are on the SCRIPT TICK, not the service pass; see
@@ -16,7 +20,14 @@
  */
 
 /**
- * The engine's master heartbeat: one service step every 50 ms (20 Hz).
+ * The length of a pass at the DEFAULT framerate of 3: 50 ms (20 Hz).
+ *
+ * Not a heartbeat of its own. TI.EXE has none: its pass (0x442550) runs only
+ * inside `forceupdate` and `visualeffect`, and its throttle waits `framerate`
+ * ticks after each one, so a pass is 3 ticks only while `framerate` is 3 (the
+ * fight sets 5, the fence 2, the bridge wheel 0 — Scheduler.throttle). What
+ * follows is how the default was established; the port's headless pump steps
+ * and a prop's frame clock (Scheduler.passFrame) still count in it.
  *
  * This was 66 ms for a long time, on the strength of a comment claiming TI.EXE
  * was "observed" to use it and citing nothing. 50 ms is what the game's own
@@ -164,6 +175,17 @@ export class Clock {
     const ticks = this.ticked;
     const at = ticks ? ticksAt(this.now) + ticksFor(ms) : this.now + ms;
     return new Promise((resolve) => this.waiters.push({ at, ticks, ramp, resolve }));
+  }
+
+  /**
+   * Wake once the TICK count — `ticksAt(now)` — has reached `tick`, whatever
+   * {@link ticked} says. This is the frame throttle's own wait: TI.EXE's
+   * 0x43a940 spins on the tick (0x41de90) until `tick >= lastFrame + framerate`,
+   * so the pass rate is a count of ticks on every host (Scheduler.pass).
+   */
+  untilTick(tick: number): Promise<void> {
+    if (ticksAt(this.now) >= tick) return Promise.resolve();
+    return new Promise((resolve) => this.waiters.push({ at: tick, ticks: true, ramp: false, resolve }));
   }
 
   /** end the sleeps a ramp held back, the moment it is over */

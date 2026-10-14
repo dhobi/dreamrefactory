@@ -215,7 +215,7 @@ test("scene/view enumeration reflects the loaded set (B59.SET)", () => {
   }
 });
 
-test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyaborts", () => {
+test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyaborts", async () => {
   const session = new GameSession(() => null, new NullAudioSink());
   expect(callBuiltin(session, "machinetype")).toBe("win");
 
@@ -237,17 +237,24 @@ test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyabort
   session.clock.now = 4200;
   expect(Number(callBuiltin(session, "tick")), "4200 ms is 252 sixtieths").toBe(252);
   expect(Number(callBuiltin(session, "frame"))).toBe(0);
-  // frame() counts DISPLAYED frames, and framerate() is ticks per displayed
-  // frame (default 3) — so one frame every 3/60 s = 50 ms of the CLOCK, which
-  // is TI.EXE's own rule: 0x43a940 holds a frame until
-  // `now >= lastFrame + framerate` ticks. 4300 establishes the baseline stamp,
-  // and a host calling every 50 ms gets a frame each time.
-  session.tickTime(4300);
-  for (let i = 1; i <= 10; i++) session.tickTime(4300 + i * 50);
-  expect(Number(callBuiltin(session, "frame"))).toBe(10);
-  session.frameRate = 1; // unthrottled: one frame per tick, 16.67 ms apart
-  for (let i = 1; i <= 12; i++) session.tickTime(4800 + (i * 50) / 3);
-  expect(Number(callBuiltin(session, "frame"))).toBe(22);
+  // frame() counts DISPLAYED frames — one a pass (0x439b80 bumps 0x489efa) —
+  // and framerate() is ticks per pass (default 3): the throttle (0x43a940)
+  // holds each pass until `now >= lastFrame + framerate` ticks. So one frame
+  // every 3/60 s = 50 ms of the CLOCK. A host tick lets the idle's pass through
+  // (Scheduler.serviceIdle), which runs on the microtasks after it.
+  const at = async (s: GameSession, ms: number) => {
+    s.tickTime(ms);
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  // the first tick: the first pass has no stamp to wait on and the next one's
+  // work follows at once, so count from after it
+  await at(session, 4300);
+  const f0 = Number(callBuiltin(session, "frame"));
+  for (let i = 1; i <= 10; i++) await at(session, 4300 + i * 50);
+  expect(Number(callBuiltin(session, "frame")) - f0).toBe(10);
+  session.frameRate = 1; // one frame per tick, 16.67 ms apart
+  for (let i = 1; i <= 12; i++) await at(session, 4800 + (i * 50) / 3);
+  expect(Number(callBuiltin(session, "frame")) - f0).toBe(22);
 
   // and the property that matters: gang.cst's hasattention(seconds) waits
   // `(seconds * 60) / framerate()` frames, so FOUR SECONDS of clock must be
@@ -256,32 +263,34 @@ test("misc scalar builtins: machinetype/tick/frame/setparam/menuvisible/keyabort
   const timed = new GameSession(() => null, new NullAudioSink());
   timed.frameRate = 3;
   const threshold = (4 * 60) / timed.frameRate; // 80 displayed frames
-  timed.tickTime(0); // baseline
-  for (let ms = 50; ms <= 4000 - 50; ms += 50) timed.tickTime(ms);
-  expect(timed.frameCounter).toBeLessThan(threshold);
-  timed.tickTime(4000);
-  expect(timed.frameCounter).toBe(threshold);
+  await at(timed, 0); // baseline
+  const t0 = timed.frameCounter;
+  for (let ms = 50; ms <= 4000 - 50; ms += 50) await at(timed, ms);
+  expect(timed.frameCounter - t0).toBeLessThan(threshold);
+  await at(timed, 4000);
+  expect(timed.frameCounter - t0).toBe(threshold);
 
   // A host calling FASTER than twenty a second changes nothing — 400 calls over
   // four seconds are still 80 frames, which is what keeps a 120 Hz screen from
   // running the game twice as fast.
   const fast = new GameSession(() => null, new NullAudioSink());
   fast.frameRate = 3;
-  fast.tickTime(0);
-  for (let ms = 10; ms <= 4000; ms += 10) fast.tickTime(ms);
-  expect(fast.frameCounter, "400 calls over four seconds").toBe(threshold);
+  await at(fast, 0);
+  const q0 = fast.frameCounter;
+  for (let ms = 10; ms <= 4000; ms += 10) await at(fast, ms);
+  expect(fast.frameCounter - q0, "400 calls over four seconds").toBe(threshold);
 
   // A host calling SLOWER gets one frame per call and no more: TI.EXE stamps
   // `now` after a late pass (0x43a95a) and never makes the lost frames up, so a
   // machine that manages ten passes a second runs the game at half speed.
-  // Replaying them (up to 64 at once) would lurch instead of slowing.
   const slow = new GameSession(() => null, new NullAudioSink());
   slow.frameRate = 3;
-  slow.tickTime(0);
-  for (let ms = 100; ms <= 4000; ms += 100) slow.tickTime(ms);
-  expect(slow.frameCounter, "40 calls over four seconds").toBe(40);
-  slow.tickTime(60_000); // a backgrounded tab, back after a minute
-  expect(slow.frameCounter, "a minute away is one frame, not a burst").toBe(41);
+  await at(slow, 0);
+  const w0 = slow.frameCounter;
+  for (let ms = 100; ms <= 4000; ms += 100) await at(slow, ms);
+  expect(slow.frameCounter - w0, "40 calls over four seconds").toBe(40);
+  await at(slow, 60_000); // a backgrounded tab, back after a minute
+  expect(slow.frameCounter - w0, "a minute away is one frame, not a burst").toBe(41);
 
   // setparam / menuvisible / keyaborts round-trip
   expect(Number(callBuiltin(session, "setparam", 3))).toBe(0); // default
@@ -393,6 +402,9 @@ test("soundvol/soundpan feed the play, and looping sounds show in currentsound",
   const session = new GameSession(() => null, sink);
   const fake = { sampleRate: 8000, samples: new Float32Array(8000) };
   (session.audioLib as unknown as { sound: () => typeof fake }).sound = () => fake;
+  // a record's priority is its place in its bank, from 1 (TI.EXE 0x414ff6): a
+  // sound of priority 0 outranks no channel and is never played (0x425150)
+  (session.audioLib as unknown as { soundPriorityV4: () => number }).soundPriorityV4 = () => 1;
 
   // configure then play (the windgust pattern): mapped gain/pan reach the sink
   callBuiltin(session, "soundpan", "windgust0", 0); // 0 -> full left

@@ -33,7 +33,7 @@ import {
   readSaveFile,
 } from "../df/savegame";
 import { degVariantFrames, frameIndexForDegree, playSequence } from "./props";
-import { toNum } from "./interp";
+import { Value, logic, logicPayload, toNum } from "./interp";
 import type { GameSession } from "./session";
 
 /**
@@ -53,9 +53,16 @@ export function saveBase(session: GameSession): RawSaveFile | null {
 }
 
 /** The script globals a save carries, split the way the file stores them. */
-export function scriptGlobals(session: GameSession): { numGlobals: Map<string, number>; strGlobals: Map<string, string> } {
+export function scriptGlobals(session: GameSession): {
+  numGlobals: Map<string, number>;
+  strGlobals: Map<string, string>;
+  boolGlobals: Set<string>;
+} {
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
+  // a boolean is stored as its 0/1 with the boolean tag (2), as the engines
+  // write it — see SavePatch.boolGlobals
+  const boolGlobals = new Set<string>();
   for (const [name, val] of session.interp.globals) {
     // the port's own bookkeeping is not game state: `__propsinit` is a
     // once-guard on TAOOT's inven.shp initprops, and a save that carried it would tell
@@ -63,8 +70,19 @@ export function scriptGlobals(session: GameSession): { numGlobals: Map<string, n
     if (name.startsWith("__")) continue;
     if (typeof val === "number") numGlobals.set(name, val);
     else if (typeof val === "string") strGlobals.set(name, val);
+    else {
+      // the payload as it is — DF.EXE's pause getters' depth included (interp.ts Logic)
+      numGlobals.set(name, logicPayload(val) ?? 0);
+      boolGlobals.add(name);
+    }
   }
-  return { numGlobals, strGlobals };
+  return { numGlobals, strGlobals, boolGlobals };
+}
+
+/** a saved number as the interpreter holds it: a tag-2 record is a boolean */
+export function restoredNumber(session: GameSession, bools: Set<string>, name: string, v: number): Value {
+  if (!bools.has(name)) return v;
+  return session.interp.classic ? logic(v) : session.interp.bool(v !== 0);
 }
 
 /**
@@ -78,11 +96,12 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
   const base = saveBase(session);
   if (!base) return null;
 
-  const { numGlobals, strGlobals } = scriptGlobals(session);
+  const { numGlobals, strGlobals, boolGlobals } = scriptGlobals(session);
   const dropped: string[] = [];
   const bytes = applyPatch(base, {
     numGlobals,
     strGlobals,
+    boolGlobals,
     set: session.currentSetFile,
     scene: session.currentSceneName(),
     view: session.currentViewName(),
@@ -109,6 +128,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
         // the live countdown, mid-flight — the original dumps its service
         // table verbatim, so the remaining ticks are what the field holds
         period: l.count,
+        pause: l.paused ? Math.max(1, l.pauseDepth ?? 1) : 0,
       })),
       crickets: session.scheduler.crickets.map((c) => ({
         name: c.name,
@@ -119,6 +139,8 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
         base: c.base,
         jitter: c.jitter,
         next: c.count,
+        pause: c.paused ? Math.max(1, c.pauseDepth ?? 1) : 0,
+        armed: !!c.armed,
       })),
       walks: walkSnapshot(session),
     },
@@ -220,21 +242,41 @@ function themeSnapshot(session: GameSession): ThemePatch | null {
  */
 function walkSnapshot(session: GameSession): SavedWalk[] {
   const out: SavedWalk[] = [];
-  for (const [name, w] of session.scheduler.walks) {
+  for (const [name, w] of session.scheduler.walkSlots()) {
     const a = session.actorRuntime.get(name);
+    if (w.deferred) {
+      // a record still waiting for its actor's set, as TI.EXE files it
+      // (0x443ac0): the mode, the actor's facing and place, and the names it
+      // is built from — +0x3e is the destination for a walktostar and the
+      // route's start for a walkonpath
+      const to = w.arriveStar ?? "";
+      const from = w.deferredFrom ?? "";
+      const mode = w.deferredMode ?? 1;
+      out.push({
+        actor: name, type: mode, hasPayload: false,
+        paused: w.paused, pause: w.paused ? Math.max(1, w.pauseDepth ?? 1) : 0,
+        turnTo: 0, deg: w.deg ?? a?.deg ?? 0,
+        startX: w.sx, startY: w.sy, startZ: w.sz, destX: w.sx, destY: w.sy, destZ: w.sz,
+        progress: 0, dist: 0,
+        star: mode === 3 ? from : to,
+        deferred: { to, from },
+      });
+      continue;
+    }
     const path = w.path?.map((p) => ({ ...p }));
     let type = 1;
     if (w.turnOnly) type = 0;
-    else if (path && path.length > 1) type = 3;
+    else if (path && path.length > 1) type = w.roadMode ?? 3;
     out.push({
       actor: name,
       type,
-      hasPayload: type === 3,
+      hasPayload: type >= 3,
       paused: w.paused,
+      pause: w.paused ? Math.max(1, w.pauseDepth ?? 1) : 0,
       turnTo: w.turnTo ?? -1,
       // the walk's own copy of the facing, which the record carries at +0x0a;
       // the actor's is the live one and the walk is stepping it
-      deg: a?.deg ?? 0,
+      deg: w.deg ?? a?.deg ?? 0,
       startX: w.sx, startY: w.sy, startZ: w.sz,
       destX: w.sx + w.dx, destY: w.sy + w.dy, destZ: w.sz + w.dz,
       progress: Math.round(w.progress),
@@ -502,7 +544,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // script globals: numbers (mission/phase/counters/puzzles) and strings
   // (hallside, savedeck, handitem, fusebox, savestage/saveflat stack, …) both
   // restore from the variable records — see decodeVars for the format.
-  for (const [k, v] of save.numGlobals) session.interp.globals.set(k, v);
+  for (const [k, v] of save.numGlobals) session.interp.globals.set(k, restoredNumber(session, save.boolGlobals, k, v));
   for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
   // `clock` rides those two maps with everything else. hallside decodes from
   // its record alone (the 4 shipped saves without one never entered a hall —
@@ -524,7 +566,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // returns you to interactive control, so drop it here. Left set, boot's
   // keydown handler exitcodes on every key: you can rotate (the host calls
   // viewer.turn() directly) but ArrowUp is swallowed and you cannot walk.
-  session.interp.globals.set("lockevents", 0);
+  session.interp.globals.set("lockevents", false); // a boolean — `lockevents = true`
 
   // drop the previous room's timed state; the file's tables are restored below.
   session.scheduler.reset();
@@ -595,8 +637,6 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // loaded room stays hidden behind the empty main.stg band (a white screen).
   session.stageCtrl.resetOverlayStack();
   await session.stageCtrl.closeStageFile();
-  await session.stageCtrl.openStageFile("main.stg");
-  session.setVisible = true;
 
   // The rebuild proper, with the script runners muted (restoringSave gates
   // SetScripts.fireLifecycle): the whole point of #143 is that nothing below
@@ -671,10 +711,23 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // x/y = the band anchor, dist = −6/−5/−5/−4), the nav arrow's lit deg (#4).
     restoreProps(session, save.inventory);
 
+    // The music, from the file's track state — the track whose playing/looping
+    // arrays are non-empty is the live theme (measured: exactly one track in
+    // every shipped save; `savetheme`, the global, lags the file by up to a
+    // whole act in 91 of 109 and is NOT it). No setupsound re-score, no
+    // "currentset = none" guard games: the room comes back sounding as saved.
+    // Before the loop table: a loop's handler plays out of these banks
+    // (BOOTFILE `playcrickets` draws `random (countsounds ("insddest.sfx"))`,
+    // and random(0) is error 0xa — TI.EXE 0x42a93b). The original restores
+    // in one call with nothing run between; here the banks load across awaits,
+    // so a load that failed after the loops and before the banks left a live
+    // loop over a bank that was never opened.
+    await restoreTheme(session, save);
+
     // The scheduler tables, mid-count, which would otherwise need the arriving
     // room's openset: the idles that make characters act, the scene timers, the
     // room's positional ambience.
-    for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
+    for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period, l.pause);
     for (const c of save.crickets) session.scheduler.restoreCricket(c);
     // A walk in flight comes back mid-stride, because the original's does: load
     // save 17 in TI.EXE and Daisy finishes crossing the Grand Staircase to the
@@ -692,7 +745,17 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // (#181) — so a drop that left the pose alone would leave them treadmilling.
     for (const w of save.walks) {
       const a = session.actorRuntime.get(w.actor);
-      const usable = w.type === 0 || w.type === 1 || (w.type === 3 && !!w.path);
+      if (w.deferred) {
+        // filed again as it was: built on the first pass its walker's set is open
+        const build = a ? session.deferredWalkBuilder(w.actor, w.type, w.deferred.to, w.deferred.from) : null;
+        if (build) {
+          session.scheduler.deferWalk(w.actor, w.deferred.to, build, w.type, w.deferred.from);
+          const rec = session.scheduler.walks.get(w.actor);
+          if (rec && w.paused) Object.assign(rec, { paused: true, pauseDepth: Math.max(1, w.pause ?? 1) });
+          continue;
+        }
+      }
+      const usable = w.type === 0 || w.type === 1 || (w.type >= 3 && w.type <= 5 && !!w.path);
       const resumed =
         !!a &&
         usable &&
@@ -700,13 +763,16 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
           // type 0 is a `turntodeg`: a facing target and no mover at all
           turnOnly: w.type === 0,
           paused: w.paused,
+          pauseDepth: w.pause,
           turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
+          deg: w.deg,
           sx: w.startX, sy: w.startY, sz: w.startZ,
           dx: w.destX - w.startX, dy: w.destY - w.startY, dz: w.destZ - w.startZ,
           dist: w.dist,
           progress: w.progress,
           arriveStar: w.star || undefined,
           path: w.path,
+          roadMode: w.type === 4 || w.type === 5 ? w.type : undefined,
         });
       if (resumed) {
         session.onLog(
@@ -724,12 +790,13 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
       session.onLog(`loadgame: ${w.actor} was saved mid-walk — standing them at their saved position`);
     }
 
-    // The music, from the file's track state — the track whose playing/looping
-    // arrays are non-empty is the live theme (measured: exactly one track in
-    // every shipped save; `savetheme`, the global, lags the file by up to a
-    // whole act in 91 of 109 and is NOT it). No setupsound re-score, no
-    // "currentset = none" guard games: the room comes back sounding as saved.
-    await restoreTheme(session, save);
+    // The in-game stage comes back once the file's state is in, so that its
+    // flat's `openflat` reads the game it is opening into. MAIN.STG's "main 1"
+    // asks `if handitem != ""` and then `if propowner ("bag") != "frank"
+    // error ()` — opened before the props were restored, it read the bag of the
+    // game being LEFT, and error() is an error (0x2f) that unwinds the load.
+    await session.stageCtrl.openStageFile("main.stg");
+    session.setVisible = true;
 
     // The arrival, through the engine's set machinery alone.
     await session.openSetFile(`${save.set}.set`, save.scene, save.view);
@@ -959,7 +1026,7 @@ async function restoreTheme(session: GameSession, save: SaveGame): Promise<void>
     session.onLog(`loadgame: saved theme "${t.track}" is not available — the room loads silent`);
     return;
   }
-  session.audio.play("theme", theme, { loop: true });
+  session.playThemeAudio(theme);
   session.currentThemeName = t.track;
   session.themeStarted(session.audioLib.bankOf(t.track), theme.samples.length / theme.sampleRate);
   session.setThemeVolume(toNum(session.interp.globals.get("themevolume") ?? 255));

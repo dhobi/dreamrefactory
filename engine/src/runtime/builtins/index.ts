@@ -14,6 +14,7 @@ import { registerCoreBuiltins } from "./core";
 import { registerPluginBuiltins } from "./plugins";
 import { registerMazeBuiltins } from "./maze";
 import { registerDf5Builtins } from "./df5";
+import { registerEngineExtraBuiltins } from "./engine-extras";
 
 /**
  * Register every builtin — the language core plus all game families — on the
@@ -50,4 +51,5 @@ export function registerGameBuiltins(session: GameSession): void {
   registerPluginBuiltins(ctx);
   registerMazeBuiltins(ctx);
   registerDf5Builtins(ctx);
+  registerEngineExtraBuiltins(ctx);
 }

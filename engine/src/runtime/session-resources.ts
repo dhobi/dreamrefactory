@@ -81,17 +81,18 @@ export class SessionResources {
    * explosion's `endanim` hides the dinghy and counts it sunk (cannon.cast), and
    * a second telling counted the same wreck again. The older engines have no
    * such event, and their scripts never answer it.
+   *
+   * Which of `names` hear it; the pass sends it, each to its end
+   * (Scheduler.passEndAnims).
    */
-  endAnim(cmd: "sendtoactor" | "sendtoprop", names: string[]): void {
-    if (!this.session.isV5) return;
-    for (const name of names) {
-      const key = name.toLowerCase();
+  endAnimTargets(cmd: "sendtoactor" | "sendtoprop", names: string[]): string[] {
+    if (!this.session.isV5) return [];
+    return names.map((n) => n.toLowerCase()).filter((key) => {
       // an actor hears it hidden or not (RedJack.exe 0x408481 asks only the flag)
-      if (cmd === "sendtoprop" && !this.session.propRuntime.get(key)?.visible) continue;
+      if (cmd === "sendtoprop" && !this.session.propRuntime.get(key)?.visible) return false;
       const inst = cmd === "sendtoactor" ? this.castScripts.get(key) : this.propScripts.get(key);
-      if (!inst?.script.codes.has("endanim")) continue;
-      void this.session.track(this.session.sendEvent(cmd, key, "endanim", [], "anim"), `endanim ${key}`);
-    }
+      return !!inst?.script.codes.has("endanim");
+    });
   }
 
   /** engine primitive behind boot's changeset(): switch to another set */

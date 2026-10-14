@@ -1,4 +1,4 @@
-import { Value, toNum, toStr, truthy } from "../interp";
+import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import {
   becomeWorldProp, degVariantFrames, frameIndexForDegree, isDegreeSelector, playSequence,
   type PropInstance,
@@ -18,7 +18,7 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
   /** getter/setter by arity; a missing prop answers the empty value */
-  const acc = accessorFamily(r, prop);
+  const acc = accessorFamily(r, prop, ctx.miss);
   // ...or, on a v1 set, the scene's grid COLUMN — see BuiltinCtx.sceneCell
   r("propexists", (_i, [n]) => sceneCell(n)?.[0] ?? (prop(n) ? 1 : 0));
   // propis3d(name): whether a prop is a 3D world object rather than a 2D sprite.
@@ -312,7 +312,8 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // The pinned frame overrides auto-animation until propview() changes state.
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
     // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
-    p.deg = session.isV5 ? (Math.trunc(Number(v) || 0) & 0xffffff) : v;
+    if (session.isV5) p.deg = Math.trunc(Number(v) || 0) & 0xffffff;
+    else p.deg = typeof v === "string" ? v : toNum(v);
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a
     // 32-view card table, a 21-view fire). Clamping it as a frame index froze
@@ -467,7 +468,13 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     session.lastResult = e ? e[1].shop.name : "";
     return e ? e[0] : "";
   });
-  r("error", (_i, args) => log(`script error(): ${args.map(String).join(", ")}`));
+  // error(): the scripts' own assertion — it answers error 0x2f, "Runtime user
+  // error", and nothing else (TI.EXE 0x4155c0, DF.EXE 0x420930), which unwinds
+  // the chain like any other (interp.ts ScriptError)
+  r("error", (i_, args) => {
+    if (!i_.classic) return log(`script error(): ${args.map(String).join(", ")}`);
+    throw new ScriptError(0x2f, "error() — runtime user error");
+  });
   acc("propvalue", 0, (p) => p.value, (p, v) => {
     p.value = v;
   });

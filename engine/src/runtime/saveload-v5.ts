@@ -417,4 +417,8 @@ function restorePropsV5(session: GameSession, save: SaveGameV5, file: (h: number
     const st = p.state();
     p.frameIdx = st && p.degVariants ? frameIndexForDegree(st, r.deg) : 0;
   }
+  // the table as the file has it: RedJack.exe reads the records back slot by
+  // slot, so a `propinstance` copy sits where it was made — not after every
+  // reopened shop's props, which would read back in another order
+  session.propRuntime.reorder(save.props.map((r) => r.name));
 }

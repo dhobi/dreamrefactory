@@ -434,6 +434,7 @@ export class PuppetController {
     const line = p.pup.dialogue.get(asked) ?? this.linesByText(p).get(asked.trim());
     if (!line) {
       this.session.onLog(`puppetspeak: no line "${ident}" in ${p.name}`);
+      if (!this.session.isV5) await this.holdUnknownLine(p, toStr(ident));
       return;
     }
     // queued BEFORE the skip test, exactly as 0x43f866 queues ahead of 0x43f887:
@@ -442,6 +443,27 @@ export class PuppetController {
     if (p.voiceQueue.length < 3) p.voiceQueue.push(line);
     if (p.interrupted) return; // ESC already ended this speech run — see `interrupted`
     await this.playLine(p, line);
+  }
+
+  /**
+   * A line the puppet's table does not have is not skipped: the engines print
+   * the string ITSELF as the subtitle and hold the script on it, with no voice
+   * and nothing queued for a repeat.
+   *
+   * DF.EXE's puppetspeak (0x4360a0): the table lookup 0x437490 answers < 0, the
+   * text goes to the subtitle band (0x43611b -> 0x438190) and 0x4252b0 waits
+   * `length / 2 + 60` ticks of 60 Hz (0x436123-0x436133, the length byte
+   * halved). TI.EXE (0x416820, 0x416897-0x4168dc) and tl.exe (0x44be17) wait
+   * `length * puppetparam(9)` ticks, at least 60 — TAOOT's boot sets slot 9
+   * to 1. Neither wait looks at the puppet's ESC filter, so neither does this.
+   */
+  private async holdUnknownLine(p: NonNullable<PuppetController["puppet"]>, text: string): Promise<void> {
+    const ticks = this.session.isV1
+      ? (text.length >> 1) + 60
+      : Math.max(text.length * (this.session.puppetParams.get(9) ?? 2), 60);
+    p.subtitle = text;
+    await this.session.clock.sleep((ticks * 1000) / 60);
+    if (this.puppet === p && p.subtitle === text) p.subtitle = "";
   }
 
   /**

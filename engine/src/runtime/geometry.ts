@@ -153,13 +153,68 @@ export function sceneryOccludes(occ: Occlusion, x: number, y: number, level: num
 }
 
 /**
- * The engine's 0..255 bearing for a delta vector — `round(atan2(dy,dx) ·
- * 256/2π) & 0xff`. Sprites pick their directional frame from the bearing to
- * the camera; walk starts face the bearing to the target.
+ * A 0..255 bearing for a delta vector — `round(atan2(dy,dx) · 256/2π) & 0xff`.
+ * NOT the engines' answer, which is {@link engineBearing}'s table; kept for the
+ * walk starts in scheduler.ts (`heading`), which should move to engineBearing
+ * when that file is next open, and the port's own reading of Dust's set data
+ * (df/set-v1-to-v4.ts headingsFrom).
  */
 export function bearing(dx: number, dy: number): number {
   return Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
 }
+
+/**
+ * `floor(atan(i / 512) · 128/π)` for i in 0..511 — the engines' octant table
+ * (TI.EXE 0x45c260, tl.exe 0x45b040, DF.EXE 0x447680, the same 513 bytes with a
+ * 0 at 512 that no index reaches). Computed: JavaScript's atan reproduces every
+ * byte of it.
+ */
+const OCTANT = (() => {
+  const t = new Uint8Array(513);
+  for (let i = 0; i < 512; i++) t[i] = Math.floor((Math.atan(i / 512) * 128) / Math.PI);
+  return t;
+})();
+
+/**
+ * The engines' own 0..255 bearing for a delta vector — what `calcdeg` answers
+ * and what picks a sprite's facing frame: TI.EXE 0x43d480 (called through
+ * 0x43d450, which subtracts the two points' 16-bit halves), DF.EXE 0x43a790, and
+ * tl.exe's copy beside its table. No trigonometry at run time: the axes and the
+ * two diagonals are constants (0, 0x40, 0x80, 0xc0; 0x20, 0x60, 0xa0, 0xe0), and
+ * inside an octant the smaller component over the larger, `(min << 9) / max`
+ * truncated, indexes {@link OCTANT}. All of it in 16-bit words.
+ *
+ * {@link bearing}'s rounded atan2 differs by one in about half of all directions.
+ */
+export function engineBearing(dx: number, dy: number): number {
+  let a = s16(dy);
+  let b = s16(dx);
+  if (a === 0) return b < 0 ? 0x80 : 0;
+  if (b === 0) return a < 0 ? 0xc0 : 0x40;
+  // signed 16-bit negation: -32768 stays itself, as `neg dx` leaves it
+  const neg = (v: number) => s16(-v);
+  const look = (lo: number, hi: number) => OCTANT[Math.trunc((lo << 9) / hi)];
+  if (a < 0) {
+    a = neg(a);
+    if (b < 0) {
+      b = neg(b);
+      if (b === a) return 0xa0;
+      return b < a ? (0xc0 - look(b, a)) & 0xff : (look(a, b) + 0x80) & 0xff;
+    }
+    if (b === a) return 0xe0;
+    return b < a ? (look(b, a) + 0xc0) & 0xff : (0x100 - look(a, b)) & 0xff;
+  }
+  if (b < 0) {
+    b = neg(b);
+    if (b === a) return 0x60;
+    return b < a ? (look(b, a) + 0x40) & 0xff : (0x80 - look(a, b)) & 0xff;
+  }
+  if (b === a) return 0x20;
+  return b < a ? (0x40 - look(b, a)) & 0xff : look(a, b) & 0xff;
+}
+
+/** sign-extend the low 16 bits (point.ts has the same; geometry keeps no import of it) */
+const s16 = (v: number): number => (v << 16) >> 16;
 
 /**
  * DreamFactory 5's bearing, in 2^24ths of a turn rather than 256ths — RedJack.exe

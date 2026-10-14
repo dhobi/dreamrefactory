@@ -158,6 +158,9 @@ export interface SetFile {
    *  v1's header 0x18, applied by DF.EXE's camera builder (0x433fd4);
    *  unset (0) for v4, whose cameras are the stand frames' own. */
   cameraSetback?: number;
+  /** DreamFactory 1: the header says the set has no hi-res stills (v1 header
+   *  0x3a = 0), so DF.EXE keeps the low-res picture up (0x433787) */
+  noHiResStills?: boolean;
   /**
    * Z-image depth quantization (SCDO chunk, TI.EXE 0x4078ad): the far clip
    * depth (farMax) and the number of depth levels. A frame's Z image stores
@@ -168,6 +171,13 @@ export interface SetFile {
    */
   zFarMax: number;
   zLevelCount: number;
+  /**
+   * The header word at 0xa0a (dfet's "heightDifference"): what TI.EXE takes off
+   * a camera road's height to put an actor on it — `opensetfile` keeps it at
+   * 0x46094c and `walkonroad`'s route builder subtracts it from every frame
+   * (0x40503f, de build). A v4 set only.
+   */
+  heightDifference?: number;
   mapLight: number;
   mapDark: number;
   mapWidth: number;
@@ -258,7 +268,7 @@ export function turnRing(scene: Scene, viewIdx: number, dir: number): { target: 
  *  5 i32); the seek below pins the stride against future field drift */
 const FRAME_INFO_SIZE = 60;
 
-function readFrameRegister(c: Container): FrameRegister {
+export function readFrameRegister(c: Container): FrameRegister {
   const r = new BinaryReader(c.data);
   r.skip(4); // unknownInt
   const frameCount = r.i32();
@@ -675,7 +685,7 @@ export const C0 = {
   // 0x8f2: secondaryRefName, pstr(255) — unread
   zLevelCount: 0x9fa, // i16 (see SetFile.zFarMax docblock)
   zFarMax: 0xa08, // i16 — dfet's "setDimensionsY_2"
-  // 0xa0a: heightDifference, i32 — unread
+  heightDifference: 0xa0a, // i16 as TI.EXE reads it (0x4022b7, de) — dfet's i32
   defaultSceneName: 0xa0e, // pstr(15)
   defaultViewName: 0xa1e, // pstr
 } as const;
@@ -722,6 +732,7 @@ export function readSetFile(data: Uint8Array): SetFile {
   const zLevelCount = r.i16();
   r.seek(C0.zFarMax);
   const zFarMax = r.i16();
+  const heightDifference = r.i16();
 
   const paletteRaw = c0.subarray(C0.palette, C0.palette + 256 * 8);
   r.seek(C0.defaultSceneName);
@@ -746,6 +757,7 @@ export function readSetFile(data: Uint8Array): SetFile {
     viewPortHeight,
     zFarMax,
     zLevelCount,
+    heightDifference,
     mapLight,
     mapDark,
     mapWidth,

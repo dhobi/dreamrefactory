@@ -74,7 +74,9 @@ async function run(
   for (let t = 0; t < ms; t += STEP) {
     sink.now += STEP;
     viewer.tick(sink.now);
-    if (t % (STEP * 10) === 0) await drain();
+    // every tick: the BOOTFILE idle's pass it lets through runs on the
+    // microtasks after it (Scheduler.serviceIdle)
+    await drain();
   }
 }
 

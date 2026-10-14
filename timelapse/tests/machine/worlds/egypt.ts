@@ -7,7 +7,9 @@ import { clickProp, clickRegion, drag, extent, goTo, propPoint, regionPoint } fr
 import { travel } from "./easter";
 
 export const need = (h: Headless, name: string, want: string, what: string): void => {
-  if (h.g(name) !== want) fail(`${what}: ${name} is ${h.g(name) || "unset"}, not ${want} (${h.here()})`);
+  // a boolean global reads "true"/"false"; a want of "1"/"0" means the same
+  const norm = (v: string): string => (v === "true" ? "1" : v === "false" ? "0" : v);
+  if (norm(h.g(name)) !== norm(want)) fail(`${what}: ${name} is ${h.g(name) || "unset"}, not ${want} (${h.here()})`);
 };
 
 /**
@@ -221,7 +223,7 @@ export async function pod(h: Headless): Promise<void> {
   h.click(p.x, p.y);
   await h.until(() => h.g("gEgyptPod") === "1", "the gene pod", 20_000);
   await h.settle("the gene pod's film");
-  need(h, "haspodE", "1", "Egypt's gene pod");
+  need(h, "haspodE", "true", "Egypt's gene pod");
   ok(`Egypt's gene pod (${h.here()})`);
 }
 

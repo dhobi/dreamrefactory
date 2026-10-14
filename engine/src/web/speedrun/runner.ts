@@ -255,7 +255,7 @@ export const WHERE = `(() => {
     // (No backticks in here — this whole thing is a template literal.)
     (() => {
       const l = s.interp.globals.get("lockevents") ?? 0;
-      return (typeof l === "number" ? l !== 0 : String(l).length > 0) ? "WORLD FROZEN (lockevents)" : "";
+      return (typeof l === "boolean" ? l : typeof l === "number" ? l !== 0 : String(l).length > 0) ? "WORLD FROZEN (lockevents)" : "";
     })(),
     "clickable here: " + (view ? view.objects.map((o) => o.identifier).filter(Boolean).join(", ") || "nothing" : "?"),
     // Who is in the room, and who is merely LOADED. "gave up hunting for max"

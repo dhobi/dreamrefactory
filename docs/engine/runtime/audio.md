@@ -54,13 +54,27 @@ the music never fight over one output:
 | `voice` | `voicesound`, `haltvoice`, `voicedone` |
 | `theme` | `playtheme` / `playnewtheme` (looped), `halttheme`, `currenttheme` |
 
-Within the `sound` channel the engine tracks **two slots**, matching
-`TI.EXE`: non-overlapping plays (`singlesound`, `bothsound`) occupy slot 1,
-overlapping and looped ones (`multiplesound`, `dualsound`, `soundloop`ed
-sounds) slot 2 — `currentsound(n)` reads them, and the wireless's tuning
-static can hiss over a voice line because they sit in different slots.
+Within the `sound` channel the engine keeps **two sound channels with
+priorities**, as `TI.EXE`'s mixer does (channels 1 and 2 of four; 0 is the
+voice and 3 the theme). A sound's priority is its record's: its 1-based place
+in its bank's sound table with the bank's place in the open list in the high
+word (`0x414ff6`, renumbered by `0x44dfb0`), and a finished channel's is 0. Each
+play builtin is a rule for which channel a clip takes:
 
-**A cricket occupies slot 2 as well, and is recorded there.** `currentsound()` is
+| Builtin | Rule (`TI.EXE`) |
+|---------|-----------------|
+| `singlesound` | the lower channel (channel 2 on a tie), only if the clip outranks it and the other channel is not playing the same clip (`0x425150`) |
+| `multiplesound` | the lower channel if the clip is at least its rank; the other channel instead if that one holds the same clip (`0x425240`) |
+| `dualsound` | every channel the clip outranks (`0x425330`) |
+| `bothsound` | both channels (`0x425400`) |
+
+`tl.exe` is the same code (`0x433850`…`0x433b30`, priority at `+0x39`); `DF.EXE`
+has the first two rules, its `dualsound` is `singlesound` and its `bothsound`
+the lower channel. `currentsound(n)` reads channel `n`, `sounddone()` is both
+channels idle, `haltsound(n)` stops channel 1, 2, or both for 3. `soundloop`ed
+sounds loop on the channel they took.
+
+**A cricket plays on these channels too, and is recorded there.** `currentsound()` is
 the only way a script can ask whether a sound has finished, and the slots are
 written by the play path alone, so a cricket fired straight at the sink would read
 as silence. The bedsit landlady depends on it: her five lines are separate crickets
@@ -83,9 +97,10 @@ one. The same rule on `voice`: skipping a `puppetspeak` with a click silences
 the line then and there, rather than leaving it for the next line's play to cut
 — what follows a line is often a movie or a pause, not another line.
 
-Per-sound trims are set *before* the play: `soundvol(name, 0..255)` and
-`soundpan(name, 0..255)` stash a volume/pan for that name (defaults 255 /
-128-centre) which the next play of it picks up; `soundloop(name)` flags it to
+Per-sound trims belong to the sound's RECORD: `soundvol(name, 0..255)` and
+`soundpan(name, 0..255)` set its volume/pan (defaults 255 / 128-centre), which
+the next play picks up and a channel already playing it follows at once
+(`0x425540`/`0x425640`); `soundloop(name)` flags it to
 loop. Positional ambient sound — the **crickets** — computes its own volume
 and pan from world position every heartbeat: see
 **[Timing](timing.md#crickets-sound-with-a-position)**.
@@ -95,7 +110,9 @@ and pan from world position every heartbeat: see
 The channel model is an interface (`AudioSink`) with two implementations:
 
 - **`WebAudioSink`** — real playback: one `GainNode` per channel (the master
-  volumes below), per-play gain and a `StereoPanner` for crickets. Browsers
+  volumes below), per-play gain and a linear left/right balance (`TI.EXE`'s
+  `0x424b90`: the far ear `p/128` or `(255 − p)/127`, full in both at the
+  centre — two gains into a merger, not an equal-power `StereoPanner`). Browsers
   only allow audio after a user gesture, so the sink is created lazily on the
   first pointer/key event and pending channel volumes are replayed onto it.
 - **`NullAudioSink`** — headless runs and tests: records every play (duration
@@ -112,7 +129,7 @@ Three controls, all reachable from the game's own CTL.STG settings screen:
 
 | Control | Range | Applies to |
 |---------|-------|-----------|
-| `wavevolume(n)` | 0–9 | `sound` + `voice` channel master gain |
+| `wavevolume(n)` | 0–9 | the wave device's volume, `n·0xffff/9` (`0x4072f6`): `sound` + `voice` master gain, and in DreamFactory 4 the `theme` too — every mixer channel plays through that one device |
 | `themevol(track[, v])` | 0–255 | `theme` channel master gain |
 | `themevolume` global | 0–255 | what the theme lever reads/writes; set entry calls `themevol` from it |
 

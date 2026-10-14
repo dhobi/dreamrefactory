@@ -260,9 +260,23 @@ test("a film is fetched before it is played, so the FIRST play works", async () 
  * Reported as a memory of the sand clock: "when for example a character is
  * approaching you".
  */
-test("the cursor is re-asked when the screen's owner changes, not just on a move", async () => {
+test("the world's cursor is the idle's to set: lockevents shows the watch with no move at all", async () => {
   const { session, dir } = newDirector();
   await session.stageCtrl.openStageFile("test.stg");
+  // TAOOT's BOOTFILE idle, cut to the cursor: forceupdate, then the watch while
+  // the world is frozen and an answer of its own otherwise (BOOTFILE 0001)
+  const idle = `code idle ()
+\tglobal lockevents
+\tforceupdate ()
+\tif lockevents
+\t\tcursor ("watch")
+\t\texitcode
+\tendif
+\tcursor ("arrow")
+endcode
+`;
+  session.bootScripts = [session.instanceFrom(compileScript(idle), "bootfile")!];
+  session.interp.globals.set("lockevents", false);
   const seen: string[] = [];
   dir.onCursor = (name) => seen.push(name);
   session.setPointer(10, 10);
@@ -272,28 +286,29 @@ test("the cursor is re-asked when the screen's owner changes, not just on a move
     for (let i = 0; i < n; i++) {
       dir.tick((now += 50));
       await session.settle();
-      // the re-ask is not tracked as a script dispatch (a cursor is cosmetic and
-      // must never be something `settle` waits on), so yield the loop for it
       await new Promise((r) => setTimeout(r, 0));
     }
   };
 
-  // the first pass establishes the gate and answers once for it
+  // the first idle sets it, and the shell hears it
   await frames(2);
+  expect(seen.at(-1), "the idle's answer").toBe("arrow");
   const settled = seen.length;
-  expect(settled, "one answer for the state it found").toBeGreaterThan(0);
 
-  // nothing changes: no more asking, however long it runs
+  // nothing changes: the shell is not told again, however long it runs
   await frames(10);
-  expect(seen.length, "a still screen is not re-asked sixty times a second").toBe(settled);
+  expect(seen.length, "a still screen is not re-told twenty times a second").toBe(settled);
+
+  // a pointer move runs no script: it answers what the idle last said
+  expect(await dir.hover(20, 20)).toBe("arrow");
 
   // the world freezes, and the pointer hears about it without moving
-  session.interp.globals.set("lockevents", 1);
+  session.interp.globals.set("lockevents", true);
   await frames(2);
   expect(seen.at(-1), "the hourglass, with no mouse move at all").toBe("watch");
 
   // ...and it comes back off again
-  session.interp.globals.set("lockevents", 0);
+  session.interp.globals.set("lockevents", false);
   await frames(2);
-  expect(seen.at(-1), "and the world answers for itself again").not.toBe("watch");
+  expect(seen.at(-1), "and the world answers for itself again").toBe("arrow");
 });

@@ -1,7 +1,8 @@
 import type { Actor } from "../../df/set";
 import { CELL_UNITS } from "../../df/set-v1-to-v4";
 import type { GameSession } from "../session";
-import { Builtin, Frame, Interpreter, Value, toNum, toStr } from "../interp";
+import { Builtin, Frame, Interpreter, ScriptError, Value, toNum, toStr } from "../interp";
+import { ticksAt } from "../clock";
 
 /**
  * Shared plumbing handed to every `register*Builtins` module. Only the pieces
@@ -67,7 +68,16 @@ export interface BuiltinCtx {
    * frames: the poll resolves immediately and the guard stays armed, so a
    * stuck loop still fails fast instead of hanging the run.
    */
-  yieldFrame: () => Promise<void>;
+  yieldFrame: (site?: object) => Promise<void>;
+  /**
+   * A prop or actor command named something that is not open. The engines look
+   * the name up in their open props (TI.EXE 0x442af0) or actors (0x40c810) and
+   * answer a miss with error 0xa, "No such object" (0x442b90, 0x40c8af), before
+   * the command does anything — getter or setter. Counted on the session
+   * (GameSession.accessorMisses) and thrown before DreamFactory 5; RedJack keeps
+   * answering the command's empty value.
+   */
+  miss: (cmd: string, name: Value) => void;
 }
 
 /**
@@ -85,6 +95,8 @@ export interface BuiltinCtx {
 export function accessorFamily<T>(
   r: BuiltinCtx["r"],
   resolve: (name: Value) => T | null | undefined,
+  /** a name nothing answers to — see {@link BuiltinCtx.miss} */
+  miss: (cmd: string, name: Value) => void = () => {},
 ): (
   name: string,
   empty: Value,
@@ -94,14 +106,37 @@ export function accessorFamily<T>(
   return (name, empty, get, set) =>
     r(name, (_i, [n, v], _call, frame) => {
       const e = resolve(n);
-      if (!e) return empty;
+      if (!e) {
+        miss(name, n);
+        return empty;
+      }
       if (v === undefined) return get(e);
       set(e, v, n, frame);
     });
 }
 
+/**
+ * Is a poll the one a bare loop makes — the same call (its place in the
+ * script) asked again in the same tick of the clock? DreamFactory 5's polled
+ * commands wait for a frame only then (`stilldown`, `button`, `voicedone`,
+ * `currentsound`); two calls in one handler, or one a pass, answer at once.
+ */
+export class RepeatedAsk {
+  private site: object | undefined;
+  private tick = -1;
+  /** note this ask and say whether it repeats the last one */
+  repeats(site: object | undefined, tick: number): boolean {
+    const again = site !== undefined && site === this.site && tick === this.tick;
+    this.site = site;
+    this.tick = tick;
+    return again;
+  }
+}
+
 export function createBuiltinCtx(session: GameSession): BuiltinCtx {
   const interp = session.interp;
+  /** the call a polled command last answered, and when — see yieldFrame */
+  const lastAsk = new RepeatedAsk();
   return {
     session,
     interp,
@@ -173,11 +208,20 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
       // already handled "none" by the time it asks
       return !!sc?.build;
     },
-    yieldFrame: async () => {
-      if (session.hasRealFrames) {
-        session.realYieldSeq++;
-        await session.frameWait();
-      }
+    miss: (cmd, name) => {
+      const key = `${cmd}(${toStr(name ?? "")})`;
+      session.accessorMisses.set(key, (session.accessorMisses.get(key) ?? 0) + 1);
+      if (interp.classic) throw new ScriptError(0xa, `no such object: ${key}`);
+    },
+    yieldFrame: async (site) => {
+      if (!session.hasRealFrames) return;
+      session.realYieldSeq++;
+      // RedJack.exe's polled commands answer at once (its `button`, `voicedone`
+      // and `currentsound` read state, no wait), and its fights ask them from
+      // loops that run inside a pass: there a frame is waited only for the ask a
+      // bare poll loop makes — the same call again in the same tick
+      if (session.isV5 && !lastAsk.repeats(site, ticksAt(session.clock.now))) return;
+      await session.frameWait();
     },
   };
 }

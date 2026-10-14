@@ -93,6 +93,9 @@ test.skipIf(!have)("win(\"him\") returns — losing does not hang on the voice w
   // only `counter`, and 0 is the arm that speaks two lines rather than one
   session.interp.globals.set("counter", 0);
   session.interp.globals.set("lookahead", 3);
+  // CHECKERS.FLT declares it (`global … gameover`) before a game is played, and
+  // `win` assigns it undeclared — error 9 without it (DF.EXE 0x403434)
+  session.interp.globals.set("gameover", false);
 
   await within(
     5000,
@@ -108,6 +111,7 @@ test.skipIf(!have)('win("me") returns too — the arm that never had the wait', 
   session.onLog = () => {};
   session.interp.globals.set("counter", 0);
   session.interp.globals.set("lookahead", 4);
+  session.interp.globals.set("gameover", false);
   await within(
     5000,
     session.interp.runHandler(inst!, "win", ["me"], { me: "flat 0", target: "" }).then(() => {}),

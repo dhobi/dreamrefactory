@@ -62,6 +62,8 @@ export interface FilmSound {
   samples: Float32Array;
   /** play round again until `untilMs` (a looping bed) */
   loop: boolean;
+  /** where it goes round to, in seconds (a v1 bed's playlist loop entry) */
+  loopStart?: number;
 }
 
 /** why the video ends where it does */
@@ -165,7 +167,7 @@ export function filmTimeline(mov: MovFile): FilmTimeline {
       // none inherits it (MoviePlayer.enterSegment)
       if (bed) bed.untilMs = t;
       const s = soundtrackFor(seg, audio, interval, n, bedRuntimeMs(mov, segIdx));
-      bed = { atMs: t, untilMs: Infinity, sampleRate: s.sampleRate, samples: s.samples, loop: s.loop };
+      bed = { atMs: t, untilMs: Infinity, sampleRate: s.sampleRate, samples: s.samples, loop: s.loop, loopStart: s.loopStart };
       sounds.push(bed);
     }
 
@@ -264,10 +266,11 @@ export function mixFilmSound(tl: FilmTimeline, rate: number): Float32Array {
     const from = Math.round((s.atMs / 1000) * rate);
     const to = Math.min(out.length, Math.round((s.untilMs / 1000) * rate));
     let k = 0;
+    const round = Math.min(pcm.length - 1, Math.round((s.loopStart ?? 0) * rate));
     for (let o = from; o < to; o++) {
       if (k >= pcm.length) {
         if (!s.loop) break;
-        k = 0;
+        k = round;
       }
       out[o] += pcm[k];
       k++;

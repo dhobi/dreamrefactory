@@ -1,5 +1,4 @@
 import { CELL_UNITS } from "../df/set-v1-to-v4";
-import { Value } from "./interp";
 import { becomeWorldProp } from "./props";
 import type { GameSession } from "./session";
 
@@ -43,7 +42,7 @@ export interface Ball {
   /** +0x0e: passes left; the ball ends with "frames" when it goes negative */
   frames: number;
   /** +0x10: the prop's propdeg when the ball was made, written back every pass */
-  deg: Value;
+  deg: string | number;
   x: number;
   y: number;
   z: number;
@@ -163,7 +162,15 @@ export class BallRuntime {
     if (i >= 0) bump(this.slots[i]!);
   }
 
-  /** `pauseball (name)` as a getter — 0x43a4a0: the depth, 0 for no ball */
+  /**
+   * `pauseball (name)` as a getter — 0x43a4a0: the depth, 0 for no ball.
+   *
+   * DF.EXE answers it under the BOOLEAN tag with the depth as the payload
+   * (0x42d074 writes tag 2, 0x42d079 the count) — builtins/timing.ts hands it
+   * back as such (interp.ts Logic), so a depth of 2 is unequal to `true` as
+   * DF.EXE's `=` (0x40d4fd) finds it. No script in the Dust, Titanic or
+   * Timelapse corpus reads the getter.
+   */
   pauseDepth(name: string): number {
     const i = this.find(name);
     return i >= 0 ? this.slots[i]!.pause : 0;

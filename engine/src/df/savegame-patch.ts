@@ -190,6 +190,13 @@ function encodeWalkPath(path: NonNullable<SavedWalk["path"]>): Uint8Array {
 export interface SavePatch {
   /** numeric globals to write into the globals-container records, by name. */
   numGlobals: Map<string, number>;
+  /**
+   * Which {@link numGlobals} are BOOLEANS, written with tag 2 (every other
+   * number with tag 4). Absent, a record the base wrote as a boolean stays one
+   * while its value is 0/1 — the guess the port had to make before its
+   * interpreter told the two apart.
+   */
+  boolGlobals?: Set<string>;
   /** string globals to write, by name. Each value must already exist in the
    * base save's string pool (they're stored as pool offsets and the pool's
    * allocator watermark lives in engine state we don't rewrite); a value not
@@ -576,13 +583,13 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       // check: propvisible's argument fetch is `cmp word [esp], 2` and a 4
       // there is the DosBox scripting error "Bad argument type." (found by
       // bisecting a port save down to exactly ten 02->04 tag bytes). The
-      // port's interpreter carries booleans as 0/1 numbers, so the
-      // boolean-ness survives only in the base record's tag: a tag-2 record
-      // stays tag 2 while the value is still boolean-shaped, and a real
-      // number retypes it, the way an assignment in the original would.
-      const keepBool = dv.getUint16(off + NODE_TYPE, true) === DFVALUE_BOOLEAN && (v === 0 || v === 1);
+      // interpreter's own type says which (SavePatch.boolGlobals); without it,
+      // a tag-2 record stays tag 2 while its value is still boolean-shaped.
+      const isBool = patch.boolGlobals
+        ? patch.boolGlobals.has(name)
+        : dv.getUint16(off + NODE_TYPE, true) === DFVALUE_BOOLEAN && (v === 0 || v === 1);
       dv.setInt32(off + NODE_VALUE, v, true);
-      if (!keepBool) dv.setUint16(off + NODE_TYPE, DFVALUE_NUMBER_WRITTEN, true);
+      dv.setUint16(off + NODE_TYPE, isBool ? DFVALUE_BOOLEAN : DFVALUE_NUMBER_WRITTEN, true);
       return true;
     }
     const str = patch.strGlobals?.get(name);
@@ -869,7 +876,8 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         continue;
       }
       const s = i * 42;
-      ldv.setUint16(s, 1, true); // active; +2 stays 0 (not mid-service)
+      ldv.setUint16(s, 1, true); // active
+      ldv.setUint16(s + 2, Math.max(0, l.pause ?? 0), true); // the pauseloop count
       ldv.setUint16(s + 4, kind, true);
       ldv.setUint32(s + 6, Math.max(1, l.period | 0), true);
       writePstrField(loops, s + 10, l.name);
@@ -885,6 +893,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       }
       const s = i * 74;
       cdv.setUint16(s, 1, true);
+      cdv.setUint16(s + 2, Math.max(0, c.pause ?? 0), true); // the pausecricket count
       cdv.setInt16(s + 4, clampI16(c.x), true);
       cdv.setInt16(s + 6, clampI16(c.y), true);
       cdv.setUint32(s + 8, Math.max(0, c.radius | 0), true);
@@ -894,6 +903,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       // +0x18.. (listener position, distance, pan) are the service pass's own
       // working state, recomputed when the cricket next fires; pan centred.
       cdv.setUint16(s + 0x20, 128, true);
+      cdv.setUint16(s + 0x22, c.armed ? 1 : 0, true);
       writePstrField(crickets, s + 0x2a, c.set);
       writePstrField(crickets, s + 0x3a, c.name);
     }
@@ -911,7 +921,7 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
         patch.onDrop?.(`walk(${w.actor})`, "the walks table holds 16 slots");
         continue;
       }
-      if (w.actor.length > 15 || w.star.length > 15) {
+      if (w.actor.length > 15 || w.star.length > 15 || (w.deferred && (w.deferred.to.length > 15 || w.deferred.from.length > 15))) {
         patch.onDrop?.(`walk(${w.actor})`, "actor or arrival star not representable");
         continue;
       }
@@ -920,14 +930,17 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       // across the corpus) and neither loader is specified for. The caller's
       // hasPayload is not consulted: it is the DECODER's report, and this is
       // the one place the rule is enforced (#191 review).
-      const path = w.type === 3 ? w.path : undefined;
-      if (w.type === 3 && (!path || path.length < 2)) {
+      // modes 3-5 all move on a route block (walkonpath, walkonroad, walkonframes)
+      const routed = w.type >= 3 && w.type <= 5 && !w.deferred;
+      const path = routed ? w.path : undefined;
+      if (routed && (!path || path.length < 2)) {
         patch.onDrop?.(`walk(${w.actor})`, "a route with no waypoints");
         continue;
       }
       const s = slot++ * 110;
       wdv.setUint16(s + WALK_SLOT.active, 1, true);
-      wdv.setUint16(s + WALK_SLOT.paused, w.paused ? 1 : 0, true);
+      // the pausewalk COUNT, as the table holds it (0x444080 nests)
+      wdv.setUint16(s + WALK_SLOT.paused, w.pause ?? (w.paused ? 1 : 0), true);
       wdv.setInt16(s + WALK_SLOT.type, w.type, true);
       // the facing TARGET, and -1 once the turn is done — which is what all
       // three shipped routes carry, and what the loader reads back as "no turn"
@@ -946,6 +959,12 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       wdv.setInt32(s + WALK_SLOT.dist, w.dist | 0, true);
       writePstrField(walks, s + WALK_SLOT.actor, w.actor);
       writePstrField(walks, s + WALK_SLOT.star, w.star);
+      if (w.deferred) {
+        // 0x443ac0: the flag, and the names it is built from
+        wdv.setUint16(s + WALK_SLOT.deferred, 1, true);
+        writePstrField(walks, s + WALK_SLOT.deferredTo, w.deferred.to);
+        writePstrField(walks, s + WALK_SLOT.deferredFrom, w.deferred.from);
+      }
       // a route's waypoints go in a container of their own, and +0x12 says so
       if (path) {
         wdv.setUint32(s + WALK_SLOT.payload, WALK_PATH_HANDLE, true);

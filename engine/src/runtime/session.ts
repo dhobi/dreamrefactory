@@ -4,14 +4,15 @@ import { sniffScript } from "../df/script";
 import { DEFAULT_ENCODING, DfEncoding } from "../df/text";
 import { parseScript } from "./parser";
 import { BallRuntime } from "./balls";
-import { Frame, Interpreter, ScriptInstance, Value } from "./interp";
+import { Frame, Interpreter, ScriptError, ScriptInstance, Value } from "./interp";
 import { ActorRuntime } from "./actors";
 import type { WorldCamera } from "./geometry";
 import { PropRuntime, type PropInstance } from "./props";
 import { PluginBus } from "./plugins";
 import { seededRng } from "./rng";
-import { AudioLibrary, AudioSink, TimedAudio } from "./audio";
-import { Clock, ENGINE_STEP_MS, passDue, ticksAt } from "./clock";
+import { AudioLibrary, AudioSink, TimedAudio, type PlayHandle } from "./audio";
+import type { DecodedAudio } from "../df/audio";
+import { Clock, ENGINE_STEP_MS, ticksAt } from "./clock";
 import { EventQueue } from "./input";
 import { Scheduler } from "./scheduler";
 import { PuppetController } from "./puppet";
@@ -28,6 +29,7 @@ import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
+import { scriptErrorName, type EngineFault } from "./script-errors";
 import { PHOTO_H, PHOTO_W, Photo, PhotoAlbum } from "./photos";
 
 /** how a move lands on a standpoint — see {@link GameSession.pictureMode} */
@@ -305,6 +307,38 @@ export class GameSession {
     initial;
   onQuit: () => void | Promise<void> = () => this.onLog("quit()");
   /**
+   * host hook: put a script error in front of the player, as TI.EXE and tl.exe
+   * do — the box is runtime/script-errors.ts's, and the answer is the player's:
+   * true goes on ("Yes"), false quits ("No", the flag `quit()` raises, so
+   * {@link onQuit}). Null — headless, a worker, a speedrun — and nothing is
+   * asked: the error is logged and the game goes on, which is the answer that
+   * cannot end a run. See {@link scriptErrorLatched}.
+   */
+  onScriptErrorBox: ((code: number, detail: string) => boolean | Promise<boolean>) | null = null;
+  /**
+   * host hook: tell the player the program was ended by a CPU fault, as Windows
+   * did ({@link engineFault}; the browser's box is web/error-box.ts's). Null —
+   * headless, a worker, a speedrun — and the fault is only logged and recorded
+   * in {@link fault}.
+   */
+  onFault: ((fault: EngineFault) => void | Promise<void>) | null = null;
+  /** the last fault that ended the game, for a harness to see — {@link engineFault} */
+  fault: EngineFault | null = null;
+  /**
+   * The error waiting for its box — the engines' latch (TI.EXE 0x460278, flag
+   * 0x4602cc): the first one raised is kept and every later one dropped until
+   * it has been shown (0x40722d).
+   */
+  private latchedError: ScriptError | null = null;
+  /**
+   * Whether `keyaborts(true)` is in force (TI.EXE 0x4608d0, DF.EXE 0x460ad6) —
+   * BOOTFILE sets it to `debugging` — and whether Escape is down now, which the
+   * page reports. Both together stop a script after its statement (interp.ts
+   * keyAbort).
+   */
+  keyAborts = false;
+  escapeDown = false;
+  /**
    * host hook: make a game file available before the (synchronous) provider
    * reads it — the browser fetches on demand and returns null on the first
    * miss, so on-demand loaders (puppets, casts, movies) await this first.
@@ -493,6 +527,8 @@ export class GameSession {
   }
   /** facing direction of the current view (radians), for arrival continuity */
   currentRotation: (() => number) | null = null;
+  /** DreamFactory 1: the bearing of the move's step on screen, null when none runs (SetViewer) */
+  movingDeg: () => number | null = () => null;
   /** facing carried across a set change; the next viewer consumes it */
   lastRotation: number | null = null;
 
@@ -549,9 +585,74 @@ export class GameSession {
       }
     };
     this.interp.realYieldSeq = () => this.realYieldSeq;
+    // which command table the IDs mean — Dust's and Titanic's disagree about
+    // what some of them answer (value-types.ts)
+    this.interp.tableVersion = () => (this.isV1 ? 1 : 4);
     // a watched global reads on the pane like the scripts' own message() lines
     this.interp.onGlobalChange = (name, from, to) =>
       this.onLog(`glob: ${name} = ${JSON.stringify(to)} (was ${JSON.stringify(from)})`);
+    this.interp.onScriptError = (e) => this.scriptErrorLatched(e);
+    this.interp.keyAbort = () => this.keyAborts && this.escapeDown;
+  }
+
+  /** every script error the engines would have latched, in order, for tests and
+   *  the details pane: `code`, the engines' name for it, and where */
+  readonly scriptErrors: { code: number; name: string; where: string; message: string }[] = [];
+  /** prop/actor commands that named nothing open, by `cmd(name)` — see BuiltinCtx.miss */
+  readonly accessorMisses = new Map<string, number>();
+
+  /**
+   * A script error the engines would latch (interp.ts onScriptError) — what the
+   * player sees of it is the engine's:
+   *
+   *  - TI.EXE and tl.exe show the first one in a Yes/No box on the next pass of
+   *    their loop and quit on "No" (runtime/script-errors.ts);
+   *  - DF.EXE latches it and clears it unseen (0x42f340), so Dust only logs;
+   *  - DreamFactory 5 was never checked against this and keeps logging.
+   *
+   * The chain unwinds either way — that is the throw itself. The box waits for
+   * the current turn to finish, as the original's waits for its loop.
+   */
+  scriptErrorLatched(e: ScriptError): void {
+    const name = scriptErrorName(e.code);
+    this.scriptErrors.push({ code: e.code, name, where: e.where, message: e.message });
+    this.onLog(`script error 0x${e.code.toString(16)} "${name}": ${e.message}`);
+    if (this.isV5 || this.isV1 || this.latchedError) return;
+    this.latchedError = e;
+    void Promise.resolve().then(() => this.showScriptError());
+  }
+
+  /**
+   * The CPU faulted inside the engine (script-errors.ts {@link EngineFault}):
+   * the original has no handler for it and Windows ends the program there and
+   * then. Here every script in flight is thrown away, as a load does
+   * ({@link Interpreter.abandonRunning} — the statement the fault is in ends as
+   * the builtin returns, and nothing after it runs), the host says so
+   * ({@link onFault}) and the game ends by the path `quit()` takes
+   * ({@link onQuit}). Never blocks where nobody is there to answer.
+   */
+  async engineFault(fault: EngineFault): Promise<void> {
+    this.fault = fault;
+    this.onLog(`fatal: ${fault.kind} in ${fault.where} — the original is ended by Windows here`);
+    this.interp.abandonRunning();
+    if (this.onFault) await this.onFault(fault);
+    await this.onQuit();
+  }
+
+  private async showScriptError(): Promise<void> {
+    const e = this.latchedError;
+    if (!e) return;
+    let goOn = true;
+    try {
+      if (this.onScriptErrorBox) goOn = await this.onScriptErrorBox(e.code, e.message);
+      else this.onLog(`script error box not shown (no host): answered "Yes" to go on`);
+    } finally {
+      this.latchedError = null;
+    }
+    if (!goOn) {
+      this.onLog(`script error box: "No" — quitting, as quit() does`);
+      await this.onQuit();
+    }
   }
 
   /**
@@ -781,9 +882,10 @@ export class GameSession {
    * and Morrow on the boat deck — accosted you inside a second and a half, i.e.
    * while you were still walking past.
    *
-   * {@link advanceFrames} is where the "per `frameRate` ticks" is enforced, and
-   * it counts TICKS OF THE CLOCK rather than calls, so the rate is the same on
-   * a browser at any refresh rate and on the pumped-clock host.
+   * It is counted where the original counts it, in the pass's frame
+   * (Scheduler.passFrame), and the pass's throttle waits out `frameRate` TICKS OF
+   * THE CLOCK rather than host calls, so the rate is the same on a browser at
+   * any refresh rate and on the pumped-clock host.
    */
   frameCounter = 0;
 
@@ -825,11 +927,39 @@ export class GameSession {
     );
   }
 
-  /** wall-clock tick stamp of the last displayed frame — TI.EXE's 0x48a6d8 */
-  private lastFrameTick: number | null = null;
+  /** the host moved the clock: the world moves in the passes the idle runs (Scheduler.tickTime) */
   tickTime(now: number): void {
-    this.advanceFrames(now);
     this.scheduler.tickTime(now);
+  }
+  /**
+   * Host hook: the engine's own loop is stopped for something that is not a
+   * script — a film playing without a script blocked in it, a gesture about to
+   * be taken — so the BOOTFILE's `idle ()` is not sent (Scheduler.serviceIdle).
+   * The screen director answers it.
+   */
+  idleHeld: () => boolean = () => false;
+  /**
+   * The builder a deferred walk record names — `walktostar` (mode 1) or
+   * `walkonpath` (mode 3) — for a load that files the record again (TI.EXE
+   * keeps the names at +0x4e/+0x5e and builds from them, 0x443c1c). Set by the
+   * actor builtins; null for an actor that is not there.
+   */
+  deferredWalkBuilder: (actor: string, mode: number, to: string, from: string) => (() => void) | null = () => null;
+  /** host hook: a pass's step of the room camera's move (Scheduler.pass) */
+  onPassMotion: () => Promise<void> | void = () => {};
+  /** host hook: the BOOTFILE's `idle ()` has returned — its `setcursor` may have moved the cursor */
+  onIdle: (() => void) | null = null;
+  /**
+   * The tick the main loop last took a player's event on — a press, a release,
+   * a key going down, up or repeating (the kinds DF.EXE's window procedure posts
+   * through 0x4222d0). DF.EXE's main loop sends event 8, which runs the set's
+   * idle machine, only on a turn that took no event and once 20 ticks have
+   * passed since the last one taken (0x411698 `ebx = now + 0x14`, 0x411a97).
+   */
+  lastEventTick = 0;
+  /** a player's event has been taken now — see {@link lastEventTick} */
+  noteEvent(): void {
+    this.lastEventTick = ticksAt(this.clock.now);
   }
 
   // ---- the game's clock: SessionTime (session-time.ts) -----------------------
@@ -856,62 +986,6 @@ export class GameSession {
   freezeTime(...a: Parameters<SessionTime["freezeTime"]>) { return this.timeCtrl.freezeTime(...a); }
   thawTime(...a: Parameters<SessionTime["thawTime"]>) { return this.timeCtrl.thawTime(...a); }
   whileLoading<T>(load: Promise<T>): Promise<T> { return this.timeCtrl.whileLoading(load); }
-
-  /**
-   * Advance frame() the way TI.EXE does — off the CLOCK, not off how often the
-   * host happened to call us.
-   *
-   * The original increments its counter (0x489efa, all `frame()` returns) once
-   * per displayed frame at 0x439b80, and the very next thing it does is spin
-   * until real time catches up (0x43a940):
-   *
-   *     call 0x41de90            ; now = timeGetTime() * 3 / 50
-   *     mov  ecx, [0x489efe]     ; framerate  (initialised to 3 at 0x429643)
-   *     add  ecx, [0x48a6d8]     ; + last frame's stamp
-   *     cmp  eax, ecx
-   *     jl   0x43a940            ; not yet -> spin
-   *     mov  [0x48a6d8], eax     ; stamp this frame
-   *
-   * `framerate` is ADDED TO A TIMESTAMP, so a frame is every `framerate` ticks
-   * of time — 60/framerate Hz, pinned to the clock however fast the machine
-   * draws. That makes the unit a DURATION, which is why it is the same rule on
-   * every host and this function has no host special case.
-   *
-   * Counting the calls instead only agrees when the caller arrives exactly 60
-   * times a second, and neither host does:
-   *
-   *  * the browser delivers whatever rAF gives. At 38 fps every frame()-based
-   *    timer would run 37% slow; on a 120 Hz panel twice as fast.
-   *  * the pumped-clock host advances 50 ms per forceupdate — which already IS
-   *    one displayed frame at the default framerate of 3 (3 ticks = 50 ms), so
-   *    dividing by framerate again would count every frame three times. That the two
-   *    coincide is not luck: the boot's clock handler (TAOOT: calctime) fixes a
-   *    main-loop pass at 50 ms (20 passes to the pocketwatch's second), and at
-   *    framerate 3 a pass is a frame.
-   */
-  private advanceFrames(now: number): void {
-    const period = Math.max(1, Math.round(this.frameRate));
-    const t = ticksAt(now);
-    if (this.nominalTime || this.sheetClock) {
-      // under speedrun time on the game's own tick count, for the reason
-      // Scheduler.tickTime gives: a rhythm counted from where it last started
-      // took its phase from real time (#542)
-      if (t % period === 0 && t !== this.lastFrameTick) {
-        this.lastFrameTick = t;
-        this.frameCounter += 1;
-      }
-      return;
-    }
-    if (this.lastFrameTick === null) {
-      this.lastFrameTick = t;
-      return;
-    }
-    // one displayed frame at most, and a late one is not made up (passDue)
-    const pass = passDue(this.lastFrameTick, t, period);
-    if (!pass.due) return;
-    this.frameCounter += 1;
-    this.lastFrameTick = pass.next;
-  }
 
   // ---- sendto* event dispatch: SessionEvents (session-events.ts) ----------
   readonly eventCtrl = new SessionEvents(this);
@@ -1059,7 +1133,22 @@ export class GameSession {
   get movieBedSources() { return this.captionCtrl.movieBedSources; }
   get soundWords() { return this.captionCtrl.soundWords; }
   subtitlesOn(...a: Parameters<SessionCaptions["subtitlesOn"]>) { return this.captionCtrl.subtitlesOn(...a); }
-  themeStarted(...a: Parameters<SessionCaptions["themeStarted"]>) { return this.captionCtrl.themeStarted(...a); }
+  /**
+   * The theme channel's play, which `themepan` moves: TI.EXE's setter
+   * (0x4273a0, de build) pans every chunk of the track that is playing or
+   * looping (0x426660), and nothing that starts later.
+   */
+  themeHandle: PlayHandle | null = null;
+  /** start a theme on the theme channel, placed so that it can be panned */
+  playThemeAudio(theme: DecodedAudio): void {
+    this.themeHandle = this.audio.play("theme", theme, { loop: true, volume: 1, pan: 0 });
+  }
+  themeStarted(...a: Parameters<SessionCaptions["themeStarted"]>) {
+    this.themeSince = a[0] ? { bank: a[0].toLowerCase(), at: this.clock.now } : null;
+    return this.captionCtrl.themeStarted(...a);
+  }
+  /** the bank the theme is playing from and when it started — `currenttheme(1)` on v1 */
+  themeSince: { bank: string; at: number } | null = null;
   movieCaption(...a: Parameters<SessionCaptions["movieCaption"]>) { return this.captionCtrl.movieCaption(...a); }
   prepareMovieCaptions(...a: Parameters<SessionCaptions["prepareMovieCaptions"]>) { return this.captionCtrl.prepareMovieCaptions(...a); }
   captionMovieBed(...a: Parameters<SessionCaptions["captionMovieBed"]>) { return this.captionCtrl.captionMovieBed(...a); }
@@ -1069,8 +1158,8 @@ export class GameSession {
   /**
    * wave (sampled-audio) master volume, 0..9 — the CTL.STG settings dial reads
    * back wavevolume() and writes it live. Drives the sound + voice channels'
-   * master gain. Music is separate (global themevolume + themevol). Default 9
-   * (full) matches the sink's unity channel gain.
+   * master gain, and in DreamFactory 4 the music's too ({@link deviceGain}).
+   * Default 9 (full) matches the sink's unity channel gain.
    */
   waveVolume = 9;
   /**
@@ -1085,10 +1174,23 @@ export class GameSession {
    */
   setWaveVolume(n: number): number {
     this.waveVolume = Math.max(0, Math.min(9, Math.round(n)));
-    const g = this.waveVolume / 9;
+    const g = this.deviceGain();
     this.audio.setChannelVolume("sound", g);
     this.audio.setChannelVolume("voice", g);
+    if (!this.isV1 && !this.isV5) this.audio.setChannelVolume("theme", (this.themeVolume / 255) * g);
     return this.waveVolume;
+  }
+  /**
+   * What `wavevolume` does to the sound coming out. TI.EXE's (0x4072f6) is the
+   * wave DEVICE's volume, `n · 0xffff / 9` truncated on both channels
+   * (waveOutSetVolume on the one handle at 0x460538) — and every mixer channel
+   * plays into that one device, the theme's (0x489810) as much as the effects'
+   * and the voice's, so in DreamFactory 4 it scales the music too. tl.exe the
+   * same. The other engines' are not read and scale the effects and voices.
+   */
+  private deviceGain(): number {
+    if (this.isV1 || this.isV5) return this.waveVolume / 9;
+    return Math.trunc((this.waveVolume * 0xffff) / 9) / 0xffff;
   }
   /**
    * Theme (music) loudness as the scripts see it, 0..255 — what `themevol(track)`
@@ -1140,7 +1242,9 @@ export class GameSession {
   setThemeVolume(v: number, track?: string): void {
     this.themeVolume = Math.max(0, Math.min(255, Math.round(v)));
     if (track) this.trackVolume.set(track.toLowerCase(), this.themeVolume);
-    this.audio.setChannelVolume("theme", this.themeVolume / 255);
+    // through the wave device in DreamFactory 4 (see deviceGain)
+    const device = this.isV1 || this.isV5 ? 1 : this.deviceGain();
+    this.audio.setChannelVolume("theme", (this.themeVolume / 255) * device);
   }
   /** What a script last asked THIS track to play at, or undefined if it never
    *  said — see {@link trackVolume}. */
@@ -1376,10 +1480,14 @@ export class GameSession {
     return this.clock.now - this.lastInputPoll <= 4 * ENGINE_STEP_MS;
   }
 
+  /** has a host ever said where the pointer is? (MazeView: a pointer never reported is off the window) */
+  pointerReported = false;
+
   /** update the cursor position scripts see (called by the viewer on move/click) */
   setPointer(x: number, y: number): void {
     this.pointerX = x;
     this.pointerY = y;
+    this.pointerReported = true;
   }
 
   /** the pointer as the engine's packed point — see runtime/point.ts */
@@ -1422,7 +1530,7 @@ export class GameSession {
   transFromFlat() { return this.runGlobal("transfromflat"); }
   /** host hook: default directional navigation from boot's keydown — the
    * currentscene("strait"/"left"/"right") setter (walk/turn). */
-  onNavigate: (direction: string) => void = () => {};
+  onNavigate: (direction: string) => void | Promise<void> = () => {};
   /**
    * host hook: the currentscene("sceneNNN")/currentview("viewNNN") teleport
    * setters. Unlike a direction, these name a specific scene+view to cut to —
@@ -1439,7 +1547,7 @@ export class GameSession {
    * pan (BEDSIT1 gotowin turning to face the bomb) drives the camera without a
    * user gesture in flight. Set by the viewer's constructor.
    */
-  navDriver: (direction: string) => void = () => {};
+  navDriver: (direction: string) => void | Promise<void> = () => {};
   sceneJumpDriver: (scene: string) => void | Promise<void> = () => {};
   viewJumpDriver: (view: string) => void | Promise<void> = () => {};
   /**
@@ -1625,6 +1733,10 @@ export class GameSession {
     this.actorRuntime.v5 = v;
     this.propRuntime.v5 = v;
     this.interp.shortCircuit = v;
+    this.interp.classic = !v;
+    // DreamFactory 5 keeps true/false as 1/0 — so does anything set before the
+    // BOOTFILE said which engine this is (the host's `tour` default)
+    if (v) for (const [k, g] of this.interp.globals) if (typeof g === "boolean") this.interp.globals.set(k, g ? 1 : 0);
   }
   private v5 = false;
 
@@ -1645,7 +1757,9 @@ export class GameSession {
    *  choreography lives in runtime/saveload.ts (and saveload-v1.ts, saveload-v5.ts).
    *  `version` is what `opengame` was given, which a v5 load compares. */
   loadGame(bytes: Uint8Array, version?: string): Promise<boolean> {
-    if (this.isV5) return loadGameV5(this, bytes, version || undefined);
+    // a load is a script's (`opengame`), and RedJack.exe sends no idle while one
+    // runs: held as a running script, wherever the host starts it from
+    if (this.isV5) return this.track(loadGameV5(this, bytes, version || undefined), "load");
     return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
   }
 
@@ -1662,8 +1776,15 @@ export class GameSession {
   async runGlobal(handler: string, args: Value[] = []): Promise<Value> {
     for (const inst of this.interp.fallbackScripts) {
       if (inst.script.codes.has(handler)) {
-        return (await this.interp.runHandler(inst, handler, args, { me: inst.name, target: "" }))
-          .value;
+        try {
+          return (await this.interp.runHandler(inst, handler, args, { me: inst.name, target: "" })).value;
+        } catch (e) {
+          // the top of a chain: the original latches the error for its debug
+          // window and the game goes on (interp.ts ScriptError)
+          if (!(e instanceof ScriptError)) throw e;
+          this.onLog(`script error: ${e.message}`);
+          return 0;
+        }
       }
     }
     this.onLog(`runGlobal: no handler "${handler}"`);
@@ -1701,7 +1822,6 @@ export class GameSession {
   get castScripts() { return this.resourceCtrl.castScripts; }
   private get shopMains() { return this.resourceCtrl.shopMains; }
   typedName(...a: Parameters<SessionResources["typedName"]>) { return this.resourceCtrl.typedName(...a); }
-  endAnim(...a: Parameters<SessionResources["endAnim"]>) { return this.resourceCtrl.endAnim(...a); }
   openSetFile(...a: Parameters<SessionResources["openSetFile"]>) { return this.resourceCtrl.openSetFile(...a); }
   loadSet(...a: Parameters<SessionResources["loadSet"]>) { return this.resourceCtrl.loadSet(...a); }
   rememberStarPaths(...a: Parameters<SessionResources["rememberStarPaths"]>) { return this.resourceCtrl.rememberStarPaths(...a); }

@@ -195,3 +195,14 @@ export function sndLoopChunks(snd: SndFile): number[] {
   if (snd.loops < 1 || first < 0) return [];
   return snd.order.map((n) => snd.chunks[first + n - 1].containerLoc);
 }
+
+/**
+ * The same order by NAME — the loop record's own, which DF.EXE copies into the
+ * record it plays (+0x45, from the name table at 0x406eae) and `currenttheme`
+ * answers with (0x429d2e).
+ */
+export function sndLoopNames(snd: SndFile): string[] {
+  const first = snd.chunks.length - snd.loops;
+  if (snd.loops < 1 || first < 0) return [];
+  return snd.order.map((n) => snd.chunks[first + n - 1].identifier);
+}

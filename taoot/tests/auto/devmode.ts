@@ -307,7 +307,7 @@ test("...but the lounge itself is a real room you can walk into", async () => {
  * nothing for the same reason: by the time the dust settles it has been cleared
  * again. The set is the answer.
  */
-async function pressArea(area: DebugArea, flag: number): Promise<string> {
+async function pressArea(area: DebugArea, flag: boolean): Promise<string> {
   const { host, session } = await newHost();
   await host.loadServerSet("c78.set");
   const g = session.interp.globals;
@@ -315,7 +315,7 @@ async function pressArea(area: DebugArea, flag: number): Promise<string> {
   const call = (n: string, ...args: unknown[]): unknown =>
     i.builtins.get(n)!(i, args, { t: "call", name: n, args: [] }, null);
   g.set("mission", 2);
-  g.set("tour", 0);
+  g.set("tour", false);
   g.set("debugging", flag);
   // the map is dead without the pair, whatever the flag says — `mapdisabled()`
   // checks both owners, and this is real content, not a workaround
@@ -339,15 +339,15 @@ async function pressArea(area: DebugArea, flag: number): Promise<string> {
 test("the gymnasium is refused with the flag down and reached with it up", async () => {
   const areas = debugAreas((await newHost()).session.files("map.stg")!);
   const gym = areas.find((a) => a.to === "gym")!;
-  expect(await pressArea(gym, 0), "a player presses it and nothing happens").toBe("c78");
-  expect(await pressArea(gym, 1), "developer mode presses it and goes there").toBe("gym");
+  expect(await pressArea(gym, false), "a player presses it and nothing happens").toBe("c78");
+  expect(await pressArea(gym, true), "developer mode presses it and goes there").toBe("gym");
 }, 60_000);
 
 test("...and the lounge is refused either way, by its own dead line", async () => {
   const areas = debugAreas((await newHost()).session.files("map.stg")!);
   const lounge = areas.find((a) => a.to === "lounge1c")!;
-  expect(await pressArea(lounge, 0)).toBe("c78");
-  expect(await pressArea(lounge, 1), "the flag is not what stops this one").toBe("c78");
+  expect(await pressArea(lounge, false)).toBe("c78");
+  expect(await pressArea(lounge, true), "the flag is not what stops this one").toBe("c78");
 }, 60_000);
 
 // --- the overlay's table ----------------------------------------------------
@@ -451,10 +451,10 @@ test("a shipped save carries the flag as 0, so opening one takes developer mode 
   const { host, session } = await newHost();
   await host.loadServerSet("c78.set");
   const g = session.interp.globals;
-  g.set("debugging", 1);
+  g.set("debugging", true);
   expect(await session.loadGame(bytes)).toBe(true);
   await drain();
-  expect(g.get("debugging"), "the load puts it back the way the file has it").toBe(0);
+  expect(g.get("debugging"), "the load puts it back the way the file has it, a boolean").toBe(false);
 }, 60_000);
 
 // --- the console -----------------------------------------------------------

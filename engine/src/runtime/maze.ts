@@ -56,8 +56,6 @@ import type { GameSession } from "./session";
 export interface MazeWalk {
   film: MazeFilm;
   frame: number;
-  /** clock time the frame went up */
-  at: number;
   /** a turn wraps round its film and stops at the first view it reaches */
   turn?: boolean;
 }
@@ -80,16 +78,6 @@ export interface MazeCamera {
   roll: number;
   fov: number;
 }
-
-/**
- * How long a road film's frame is held, in milliseconds, at a `framerate` of
- * `ticks`. RedJack.exe draws one film frame per pass of its room loop
- * (0x432b00 steps `0x4c95fc` by one), and the pass ends (0x433041) by spinning
- * on the clock until the last frame's time plus `framerate`'s ticks (1/60 s,
- * set at 0x408c80 and clamped to 0..60). RedJack's BOOTFILE sets 2, so a walk
- * runs at 30 frames a second. 0 is "as fast as it draws", which here is one tick.
- */
-export const walkFrameMs = (ticks: number): number => (Math.max(1, Math.round(ticks)) * 1000) / 60;
 
 const mask = (x: number): number => ((Math.round(x) % TURN) + TURN) % TURN;
 /** a masked angle as a signed one, in (−½, ½] of a turn */
@@ -406,7 +394,7 @@ export class MazeRuntime {
       const road = sc.views[i]?.road;
       if (!road?.frames.length) return;
       await this.fire(this.nodeScript(), "closescene");
-      this.walk = { film: road, frame: 0, at: this.session.clock.now };
+      this.walk = { film: road, frame: 0 };
       this.onChange();
       return;
     }
@@ -414,7 +402,7 @@ export class MazeRuntime {
     const film = sc.films[dir === "right" ? 0 : 1];
     const frame = film ? film.frames.findIndex((f) => f.view === i) : -1;
     if (!film || frame < 0) return;
-    this.walk = { film, frame, at: this.session.clock.now, turn: true };
+    this.walk = { film, frame, turn: true };
     this.onChange();
   }
 
@@ -427,7 +415,7 @@ export class MazeRuntime {
     const film = this.exits(scene)[i - 1];
     if (!film || this.walk) return;
     await this.fire(this.nodeScript(), "closescene");
-    this.walk = { film, frame: 0, at: this.session.clock.now };
+    this.walk = { film, frame: 0 };
     this.onChange();
   }
 
@@ -436,32 +424,43 @@ export class MazeRuntime {
   }
 
   /**
-   * Advance a walk by the clock; true when the frame on screen changed.
+   * One pass's step of a walk or a turn; true when the frame on screen changed.
    *
-   * A frame is held for the game's `framerate`; see {@link walkFrameMs}.
+   * RedJack.exe's frame (0x432b00) puts up the film's next frame once a pass
+   * (the index at 0x4c95fc; a road 0x434d40, a turn 0x434b00) — so a road,
+   * whose first frame went up as it started, lasts one pass fewer than it has
+   * frames, at whatever `framerate` the passes run — and the arrival, the node
+   * or scene entered and its `openscene`, runs in the pass that puts up the
+   * last frame (0x434dd3).
+   *
+   * `launchroad`'s road (0x441af0 → 0x439620) is stepped differently — the
+   * frame before the index, an `endroad ()` to the set a few frames before the
+   * end (0x432d6a → 0x4406d0), the arrival after the next-to-last frame — and
+   * is not here: no shipped script calls `launchroad` or has an `endroad`.
    */
-  walkStep(now: number): boolean {
+  async walkStep(): Promise<boolean> {
     const w = this.walk;
-    if (!w || now - w.at < walkFrameMs(this.session.frameRate)) return false;
+    if (!w) return false;
     if (w.turn) {
       // round and round the film until a frame marked with a view (0x434b00)
       w.frame = (w.frame + 1) % w.film.frames.length;
-      w.at = now;
       const f = w.film.frames[w.frame];
       this.lookAs(f);
       if (f.view >= 0 && this.scene) {
         this.walk = null;
         this.standAt(this.scene, f.view, { film: w.film, frame: w.frame });
-        void this.fire(this.nodeScript(), "openscene");
+        this.onChange();
+        await this.fire(this.nodeScript(), "openscene");
+        return true;
       }
       this.onChange();
       return true;
     }
-    if (w.frame + 1 < w.film.frames.length) {
-      w.frame++;
-      w.at = now;
-      return true;
-    }
+    // a road's first frame went up as it started (0x433d78, 0x4343b9); each
+    // pass puts up the next, and the one that puts up the last frame arrives
+    // (0x434d94: the index on, 0x434dd3: `index >= count - 1`, 0x434df0 draws it)
+    w.frame = Math.min(w.frame + 1, w.film.frames.length - 1);
+    if (w.frame < w.film.frames.length - 1) return true;
     const last = w.film.frames[w.frame];
     const to = this.sett.nodes.find((n) => n.node === w.film.to);
     const toScene = w.film.toScene ? this.sett.scenes.find((s) => s.scen === w.film.toScene) : undefined;
@@ -471,7 +470,7 @@ export class MazeRuntime {
     if (to) {
       this.scene = null;
       this.shot = null;
-      void this.enterNode(to.name);
+      await this.enterNode(to.name);
     } else if (toScene) {
       // into a scene: at the view nearest the way the film ended. From a scene
       // its last frame stays up (0x434d40); from a node the view's own picture
@@ -480,7 +479,7 @@ export class MazeRuntime {
       this.scene = toScene;
       this.standAt(toScene, this.viewIndex(toScene, ""), fromScene ? { film: w.film, frame: w.frame } : undefined);
       this.onChange();
-      void this.fire(this.nodeScript(), "openscene");
+      await this.fire(this.nodeScript(), "openscene");
     } else this.onChange();
     return true;
   }

@@ -4,7 +4,7 @@
  * tables and the playing theme — and `parseSave`, which puts them together.
  */
 import { BinaryReader, pstrAtChecked } from "./binary";
-import { DFVALUE_STRING, decodeVars, pstrField } from "./save-vars";
+import { DFVALUE_BOOLEAN, DFVALUE_STRING, decodeVars, pstrField } from "./save-vars";
 import { readSaveFile, saveIndex } from "./savegame";
 import type {
   RawSaveFile,
@@ -249,6 +249,7 @@ function decodeLoops(d: Uint8Array): SavedLoop[] {
       name: name.toLowerCase(),
       handler: handler.toLowerCase(),
       period: dv.getUint32(s + 6, true),
+      pause: dv.getUint16(s + 2, true),
     });
   }
   return out;
@@ -271,6 +272,8 @@ function decodeCrickets(d: Uint8Array): SavedCricket[] {
       base: dv.getUint32(s + 0x0c, true),
       jitter: dv.getInt32(s + 0x10, true),
       next: dv.getUint32(s + 0x14, true),
+      pause: dv.getUint16(s + 2, true),
+      armed: dv.getUint16(s + 0x22, true) !== 0,
     });
   }
   return out;
@@ -334,6 +337,7 @@ function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
       type,
       hasPayload: dv.getUint32(s + WALK_SLOT.payload, true) !== 0,
       paused: dv.getUint16(s + WALK_SLOT.paused, true) !== 0,
+      pause: dv.getUint16(s + WALK_SLOT.paused, true),
       turnTo: dv.getInt16(s + WALK_SLOT.turnTo, true),
       deg: dv.getInt16(s + WALK_SLOT.deg, true),
       startX, startY, startZ,
@@ -346,6 +350,9 @@ function decodeWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalk[] {
       dist,
       star: pstrField(d, s + WALK_SLOT.star) ?? "",
       path,
+      deferred: dv.getUint16(s + WALK_SLOT.deferred, true) === 1
+        ? { to: pstrField(d, s + WALK_SLOT.deferredTo) ?? "", from: pstrField(d, s + WALK_SLOT.deferredFrom) ?? "" }
+        : undefined,
     });
   }
   return out;
@@ -479,10 +486,14 @@ export function parseSave(bytes: Uint8Array): SaveGame {
   // lookup walks the list from the head. See docs/engine/formats/savegame.md.
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
+  const boolGlobals = new Set<string>();
   for (const v of vars) {
     if (v.type === DFVALUE_STRING) {
       if (v.str !== null && !strGlobals.has(v.name)) strGlobals.set(v.name, v.str);
-    } else if (!numGlobals.has(v.name)) numGlobals.set(v.name, v.num);
+    } else if (!numGlobals.has(v.name)) {
+      numGlobals.set(v.name, v.num);
+      if (v.type === DFVALUE_BOOLEAN) boolGlobals.add(v.name);
+    }
   }
 
   // hallside ("port"/"star") decodes from its variable record, and only from it.
@@ -507,7 +518,7 @@ export function parseSave(bytes: Uint8Array): SaveGame {
 
   return {
     title, disk, set, scene, view, stage, frame, clock, hallside, savedeck,
-    vars, numGlobals, strGlobals, inventory, actors, castFiles, trackFiles,
+    vars, numGlobals, strGlobals, boolGlobals, inventory, actors, castFiles, trackFiles,
     loops, crickets, walks, theme, raw, index,
   };
 }

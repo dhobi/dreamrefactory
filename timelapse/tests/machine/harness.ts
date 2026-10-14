@@ -238,8 +238,10 @@ export async function headless(): Promise<Headless> {
     session.setPointer(x, y);
     session.pointerDown = true;
     letGo = { x, y, passes: 6 };
+    // `taken`: dealt with — dispatched now, or queued behind the idle and its
+    // turn come (ScreenDirector.press)
     void session.track(
-      host.director.press(x, y).then(() => {
+      host.director.press(x, y, () => {
         // the hand moves off once the click is dealt with: a script reads
         // `mouse ()` in its mousedown (the stone face's eyes, left or right)
         if (!session.pointerDown) park();
@@ -263,8 +265,9 @@ export async function headless(): Promise<Headless> {
   };
   const key = (name: string, special = false): (() => boolean) => {
     let done = false;
-    session.interp.globals.set("isrepeat", 0);
-    void host.director.keyDown(name, special).then(() => (done = true));
+    session.interp.globals.set("isrepeat", false);
+    // `taken`: dispatched, now or once its turn behind the idle came
+    void host.director.keyDown(name, special, () => (done = true));
     return () => done;
   };
   const evalLine = async (src: string): Promise<unknown> => {

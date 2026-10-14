@@ -8,6 +8,7 @@
  */
 import { LEFTTURNS } from "@dreamfactory/engine/df/set";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
+import { Logic } from "@dreamfactory/engine/runtime/interp";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import type { SetViewer } from "@dreamfactory/engine/web/viewer";
 import type { NavDriver } from "./nav/navigator";
@@ -68,7 +69,11 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
    * for something that will never happen without another gesture.
    */
   const settle = async (what: string): Promise<void> => {
-    await p.pump(() => v().quiescent || v().conversing, `${what} to settle`);
+    // ...and not with the player's own press still queued: a press made while a
+    // pass's handler ran waits for the idle to return, as TI.EXE's does
+    // (Scheduler.serviceIdle), and `quiescent` can read true before it is taken
+    const taken = (): boolean => v().awaitingInput || session.events.length === 0;
+    await p.pump(() => (v().quiescent && taken()) || v().conversing, `${what} to settle`);
     log?.(what);
   };
   /** exactly `n` frames, for the middle of a gesture that has no end to wait on */
@@ -116,7 +121,7 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
     set: () => v().set,
     setName: () => (session.currentSetFile || session.currentSetName).toLowerCase(),
     at: () => ({ sceneIdx: v().sceneIdx, viewIdx: v().viewIdx }),
-    flow: () => Object.fromEntries(session.interp.globals),
+    flow: () => Object.fromEntries([...session.interp.globals].map(([k, g]) => [k, g instanceof Logic ? g.payload : g])),
     propVisible: (name) => !!session.propRuntime.get(name)?.visible,
     propOwner: (name) => String(session.propRuntime.get(name)?.owner ?? ""),
     actorSpot: (name) => {

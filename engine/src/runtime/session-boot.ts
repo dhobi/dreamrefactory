@@ -1,6 +1,7 @@
 import { readContainerFile } from "../df/container";
 import { versionOf } from "../df/version";
 import { Value } from "./interp";
+import type { Stmt } from "./ast";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "./bootplan";
 import type { GameSession } from "./session";
 
@@ -44,6 +45,7 @@ export class SessionBoot {
   async ensureBooted(): Promise<void> {
     if (this.coreLoaded) return;
     this.loadBootLibrary();
+    this.seedFromBoot();
     await this.loadBootResources();
     await this.initInventoryProps();
     this.syncThemeLever();
@@ -273,11 +275,84 @@ export class SessionBoot {
       ["handitem", ""], ["savestage1", ""], ["savestage2", ""], ["savestage3", ""],
       ["saveflat1", ""], ["saveflat2", ""], ["saveflat3", ""],
       ["jumpset", ""], ["playerdeath", ""], ["loopsound", ""], ["seldir", "north"],
+      // what the first changeset() leaves — `oldset = currentset ()` while no
+      // room is open — for a room the port opens without one: setupsound's
+      // `themetype (oldset)` is a switch over set names, and the integer 0 an
+      // unset global would be is error 0xe there (TI.EXE's switch, interp.ts)
+      ["oldset", "none"], ["newset", "none"],
       ["twocount", 1], ["threecount", 1], ["fourcount", 1], ["fivecount", 1],
       ["themevolume", 24], // the port's quiet-music default — see docblock
     ] as [string, Value][]) {
       this.session.interp.globals.set(k, v);
     }
+  }
+
+  /**
+   * The variables `boot()` initialises, for a session the port boots in its
+   * stead (the other half of {@link seedBootGlobals}).
+   *
+   * A value is typed before DreamFactory 5 (interp.ts), and a global nobody
+   * assigned is the INTEGER 0 — which `if not sinkflag` refuses with error 0xe
+   * in TI.EXE as it does here, and a `switch arg` meets as a `case keynorth` of
+   * the wrong type. The game never sees one: TAOOT's `boot()` begins `setloc =
+   * false`, `debugging = false`, `lockevents = false`, `keynorth = "w"`,
+   * `sinkflag = false` … and picks `tour` and `optionquit` in an if/else. A
+   * session that opens a room without running that boot has to start from the
+   * same place: every literal `boot()` assigns outside any branch, and `false`
+   * for a boolean only a branch decides (no option key held, no guided tour).
+   * Only names nothing has set yet, so the port's own seeds stand.
+   */
+  private seedFromBoot(): void {
+    if (this.session.isV5) return;
+    const boot = this.session.bootScripts.find((b) => b.script.codes.has("boot"))?.script.codes.get("boot");
+    if (!boot) return;
+    const seeds = new Map<string, Value>();
+    const walk = (stmts: Stmt[], top: boolean): void => {
+      for (const st of stmts) {
+        if (st.t === "assign" && !st.index && (st.value.t === "bool" || st.value.t === "int" || st.value.t === "str")) {
+          const v = st.value.t === "bool" ? this.session.interp.bool(st.value.v) : st.value.v;
+          if (top) seeds.set(st.name, v);
+          else if (st.value.t === "bool" && !seeds.has(st.name)) seeds.set(st.name, this.session.interp.bool(false));
+        } else if (st.t === "if") {
+          walk(st.body, false);
+          walk(st.else_ ?? [], false);
+        } else if (st.t === "while" || st.t === "for") walk(st.body, false);
+        else if (st.t === "switch") for (const c of st.cases) walk(c.body, false);
+      }
+    };
+    walk(boot.body, true);
+    for (const [name, v] of seeds) if (!this.session.interp.globals.has(name)) this.session.interp.globals.set(name, v);
+  }
+
+  /**
+   * Every global the boot library DECLARES, made as the integer 0 a `global`
+   * line makes (DF.EXE 0x408260) where nothing has made it yet.
+   *
+   * In the game they exist because the boot and the day machine ran their
+   * `global` lines before the room that reads them opened, and reading one that
+   * does not exist is error 9 in the engines (interp.ts). A session that opens a
+   * room with none of that history — a test jumping to a scene — finds
+   * `pennyphase`, `maxphase` or `clock` missing where the game never could.
+   * Not part of any boot: a real session declares them when its scripts do, and
+   * a save carries what was live.
+   */
+  declareLibraryGlobals(): void {
+    const declare = (stmts: Stmt[]): void => {
+      for (const st of stmts) {
+        if (st.t === "decl" && st.kind === "global") {
+          for (const n of st.names) if (!this.session.interp.globals.has(n)) this.session.interp.globals.set(n, 0);
+        }
+        for (const inner of [
+          "body" in st ? st.body : undefined,
+          "else_" in st ? st.else_ : undefined,
+          "default_" in st ? st.default_ : undefined,
+          ...("cases" in st ? st.cases.map((c) => c.body) : []),
+        ]) {
+          if (inner) declare(inner);
+        }
+      }
+    };
+    for (const inst of this.session.bootScripts) for (const code of inst.script.codes.values()) declare(code.body);
   }
 
   /** run the inventory shop's initprops once, seeding its prop states

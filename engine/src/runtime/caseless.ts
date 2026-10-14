@@ -39,15 +39,26 @@
  */
 export class CaselessMap<V> extends Map<string, V> {
   override get(k: string): V | undefined {
-    return super.get(k.toLowerCase());
+    return super.get(foldAscii(k));
   }
   override set(k: string, v: V): this {
-    return super.set(k.toLowerCase(), v);
+    return super.set(foldAscii(k), v);
   }
   override has(k: string): boolean {
-    return super.has(k.toLowerCase());
+    return super.has(foldAscii(k));
   }
   override delete(k: string): boolean {
-    return super.delete(k.toLowerCase());
+    return super.delete(foldAscii(k));
   }
+}
+
+/**
+ * Lower case the way the engines fold it: A-Z to a-z and no other character.
+ * TI.EXE compares names and strings through the 256-byte table at 0x45c068 and
+ * DF.EXE through 0x447478, and both move exactly those 26 bytes. A script's
+ * strings are the tree's own code page read as bytes (df/text.ts), so
+ * `toLowerCase` would also fold À to à, Ä to ä — letters the engines keep apart.
+ */
+export function foldAscii(s: string): string {
+  return /[A-Z]/.test(s) ? s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) | 0x20)) : s;
 }

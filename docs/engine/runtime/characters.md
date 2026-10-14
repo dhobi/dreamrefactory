@@ -51,7 +51,7 @@ their back at the wrong moments; the regression tests pin this down.
 *When* it changes is the pose's own **[play
 script](../formats/pup-cst.md#the-play-script-says-how-long-a-picture-is-held)**,
 and the engine's part is three instructions: every actor moves one step along it
-per 50 ms service pass, wrapping at the script's length. Every actor, not only
+per service pass (50 ms at the default framerate), wrapping at the script's length. Every actor, not only
 the ones walking — that is how the stoker shovels. A `stand` lists one step and
 so never changes; a `walk` lists twenty for ten pictures, which is what makes a
 stride take a second.

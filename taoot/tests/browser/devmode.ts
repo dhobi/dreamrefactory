@@ -130,7 +130,7 @@ const main = async (): Promise<void> => {
     );
 
   check("nothing is outlined while the map is shut", (await boxes()).length === 0);
-  await page.evaluate(() => (window as any).dbg.session.interp.globals.set("debugging", 1));
+  await page.evaluate(() => (window as any).dbg.session.interp.globals.set("debugging", true));
   await page.evaluate(() => (window as any).dbg.session.transToFlat("map.stg"));
   await page.waitForFunction(() => document.querySelectorAll("#devmap .devarea").length > 0, null, { timeout: 30_000 });
   const plan = await boxes();
@@ -300,7 +300,7 @@ const main = async (): Promise<void> => {
   check("...and back on again", Number(await readFlag(page)) === 1, String(await readFlag(page)));
   // a load, faked at the one line that matters: the loader writes the file's own
   // value over the global, and nothing else about a load is this page's business
-  await page.evaluate(() => (window as any).dbg.session.interp.globals.set("debugging", 0));
+  await page.evaluate(() => (window as any).dbg.session.interp.globals.set("debugging", false));
   await page.waitForFunction(
     () => Number((window as any).dbg.session.interp.globals.get("debugging")) === 1,
     null,

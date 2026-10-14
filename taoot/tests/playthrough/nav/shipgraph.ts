@@ -237,7 +237,7 @@ const SINKING_WORLD = new Set([
 ]);
 
 /** the globals a trip's guard can depend on, read off the live session */
-export type FlowState = Record<string, string | number | undefined>;
+export type FlowState = Record<string, string | number | boolean | undefined>;
 
 /**
  * The ways out of a room the navigator can actually take.

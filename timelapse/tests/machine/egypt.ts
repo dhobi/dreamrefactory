@@ -18,7 +18,7 @@ test.skipIf(!haveRip())("egypt", async () => {
   await playEaster(h);
   const t0 = h.session.clock.now;
   await playEgypt(h);
-  if (h.g("haspodE") !== "1") fail("left Egypt without its gene pod");
+  if (h.g("haspodE") !== "true") fail("left Egypt without its gene pod");
   const errors = h.logs.filter((l) => /script error|cannot parse/i.test(l));
   if (errors.length) fail(`${errors.length} script error(s), first: ${errors[0]}`);
   ok(`no script error; ${Math.round((h.session.clock.now - t0) / 60_000)} game minutes in Egypt`);

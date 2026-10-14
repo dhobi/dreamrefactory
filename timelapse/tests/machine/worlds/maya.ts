@@ -7,7 +7,9 @@ import { clickProp, clickRegion, drag, extent, goTo, propPoint, regionPoint, reg
 import { travel } from "./easter";
 
 export const need = (h: Headless, name: string, want: string, what: string): void => {
-  if (h.g(name) !== want) fail(`${what}: ${name} is ${h.g(name) || "unset"}, not ${want} (${h.here()})`);
+  // a boolean global reads "true"/"false"; a want of "1"/"0" means the same
+  const norm = (v: string): string => (v === "true" ? "1" : v === "false" ? "0" : v);
+  if (norm(h.g(name)) !== norm(want)) fail(`${what}: ${name} is ${h.g(name) || "unset"}, not ${want} (${h.here()})`);
 };
 
 /**
@@ -30,7 +32,7 @@ export async function chameleon(h: Headless): Promise<void> {
   const [x0, y0, x1, y1] = extent(h, "invamulet");
   await drag(h, { x: Math.round((x0 + x1) / 2), y: Math.round((y0 + y1) / 2) }, { x: 325, y: 337 }, 12, "the carving to the platform");
   need(h, "amulet", "0", "the carving on the platform");
-  for (let round = 0; h.g("chameleon") !== "1"; round++) {
+  for (let round = 0; h.g("chameleon") !== "true"; round++) {
     if (round > 10) fail(`ten rounds and the chameleon stays (${h.here()})`);
     const empty = (): boolean => !h.g("lizstring") || h.g("lizstring") === "0";
     if (empty()) {
@@ -41,7 +43,7 @@ export async function chameleon(h: Headless): Promise<void> {
     if (empty()) continue;
     const colours = h.g("lizstring").split(",").map(Number);
     for (const v of colours) {
-      if (h.g("chameleon") === "1") break;
+      if (h.g("chameleon") === "true") break;
       const b = await propPoint(h, `button${v - 1}`, [0, 0, 640, 480], 120);
       h.click(b.x, b.y);
       await h.settle(`colour ${v}`);
@@ -69,7 +71,7 @@ export async function counting(h: Headless): Promise<void> {
   const l = await propPoint(h, "lever", [0, 0, 640, 480], 600);
   h.click(l.x, l.y);
   await h.settle("the handle");
-  need(h, "leverpulled", "1", "the Castillo's handle");
+  need(h, "leverpulled", "true", "the Castillo's handle");
   ok(`13 + 8, 12 + 1, 20 + 2, 14 + 9, and the handle (${h.here()})`);
 }
 
@@ -209,13 +211,13 @@ export async function skull(h: Headless): Promise<void> {
     await drag(h, from, { x: at[0], y: at[1] }, 16, `bone ${bone}`);
     // set: still up on the wall where it snapped (an end bone closes its joint
     // and is not listed), unless it was the last and the skeleton is whole
-    if (h.g("skelsolved") !== "1") {
+    if (h.g("skelsolved") !== "true") {
       const up = Number(await h.eval(`return (propvisible ("wall${bone}"))`));
       const x = Number(await h.eval(`return (propxy ("wall${bone}", 1))`));
       if (!up || Math.abs(x - at[0]) > 2) fail(`bone ${bone} did not set at ${at.join(", ")} (joints ${h.g("gConnectlist")})`);
     }
   }
-  need(h, "skelsolved", "1", "the skeleton");
+  need(h, "skelsolved", "true", "the skeleton");
   // its jaw opens (`openskull`) on the green gem (`getgem`), which goes into
   // the hole on the wall behind (frame 800, x 291…356, y 213…273, `gemdrop`)
   await clickRegion(h, "Button10", "the skull's jaw");
@@ -351,7 +353,7 @@ async function spiderPath(h: Headless): Promise<[number, number][]> {
 
 export async function monkey(h: Headless): Promise<void> {
   await goTo(h, { stage: 20, frame: 518 });
-  if (h.g("spideractive") !== "1") await clickRegion(h, "Button10", "the monkey head");
+  if (h.g("spideractive") !== "true") await clickRegion(h, "Button10", "the monkey head");
   await h.frame(60);
   await goTo(h, { stage: 20, frame: 556 });
   // read off the props themselves, every pass: a script call a pass each is too slow
@@ -467,13 +469,13 @@ export async function jaguar(h: Headless): Promise<void> {
   for (let n = 1; n <= 4; n++) {
     const name = `icon ${n}`;
     for (let i = 0; i < 24; i++) {
-      if (Number(await h.eval(`return (propdeg ("${name}"))`)) === WANT[n - 1] || h.g("boxopen") === "1") break;
+      if (Number(await h.eval(`return (propdeg ("${name}"))`)) === WANT[n - 1] || h.g("boxopen") === "true") break;
       const at = await propPoint(h, name, [0, 0, 640, 480], 60);
       h.click(at.x, at.y);
       await h.settle(`glyph ${n}`);
     }
   }
-  need(h, "boxopen", "1", "the mural's box");
+  need(h, "boxopen", "true", "the mural's box");
   await clickRegion(h, "Button12", "the golden jaguar head");
   need(h, "jaghead", "2", "the jaguar head in hand");
   await goTo(h, { stage: 21, frame: 353 });
@@ -603,7 +605,7 @@ export async function salamander(h: Headless): Promise<void> {
   }
   await h.until(() => h.g("curinvprop") === "invlizard", "the golden salamander", 600);
   await goTo(h, { stage: 31, frame: 251 });
-  if (h.g("draweropen") !== "1") await clickRegion(h, "Button11", "the hatch");
+  if (h.g("draweropen") !== "true") await clickRegion(h, "Button11", "the hatch");
   await h.until(() => h.session.currentFlat.toLowerCase() === "m0011.251.71", "the hatch open", 3000);
   const [a0, b0, a1, b1] = extent(h, "invlizard");
   await drag(h, { x: Math.round((a0 + a1) / 2), y: Math.round((b0 + b1) / 2) }, { x: 325, y: 360 }, 14, "the salamander to the hatch");
@@ -626,7 +628,7 @@ const PODIUM_RISE: Record<number, number> = { 0: 180, 1: 110, 2: 70, 3: 34, 4: -
 export async function mayaPod(h: Headless): Promise<void> {
   await goTo(h, { stage: 38, frame: 229 });
   await clickRegion(h, "PodM", "the gene pod");
-  await h.until(() => h.g("haspodM") === "1", "the Maya's gene pod", 20_000);
+  await h.until(() => h.g("haspodM") === "true", "the Maya's gene pod", 20_000);
   await h.settle("the pod's film", 60_000);
   await h.until(() => regions(h).some((r) => r.name === "Button10"), "the podium's compartment", 6000);
   await clickRegion(h, "Button10", "the axe");
@@ -771,7 +773,7 @@ function slideTo(board: Board, tiles: number[], cells: number[]): number[] | nul
 }
 
 export async function slider(h: Headless): Promise<void> {
-  for (let shuffle = 0; h.g("slidersolved") !== "1"; shuffle++) {
+  for (let shuffle = 0; h.g("slidersolved") !== "true"; shuffle++) {
     if (shuffle > 8) fail(`eight shuffles and the Sun temple's stones never came out (${h.here()})`);
     if (shuffle) {
       await goTo(h, (s) => s.stage !== 24 || s.frame !== 556);
@@ -799,7 +801,7 @@ export async function slider(h: Headless): Promise<void> {
       }
       if (stuck) break;
     }
-    if (process.env.DEBUG) console.log(`shuffle ${shuffle + 1}: ${h.g("slidersolved") === "1" ? "solved" : "stuck"}`);
+    if (process.env.DEBUG) console.log(`shuffle ${shuffle + 1}: ${h.g("slidersolved") === "true" ? "solved" : "stuck"}`);
   }
   ok(`the Sun temple's stones in their four pairs (${h.here()})`);
 }

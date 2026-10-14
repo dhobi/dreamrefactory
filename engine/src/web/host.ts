@@ -29,6 +29,7 @@ import { ScreenDirector } from "./screen-director";
 import { ScreenSize } from "./screen";
 import { AudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
+import { truthy } from "@dreamfactory/engine/runtime/interp";
 import { FileProvider } from "@dreamfactory/engine/runtime/setscripts";
 import { BootPlan, EMPTY_BOOT_PLAN, readBootPlan } from "@dreamfactory/engine/runtime/bootplan";
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
@@ -295,6 +296,21 @@ export class GameHost {
     if (opts.propAnchor) this.session.propRuntime.defaultAnchor = { ...opts.propAnchor };
     this.director.onLog = (l) => this.ui.log(l);
     this.session.onLog = (l) => this.ui.log(l);
+    // Escape held, for `keyaborts` (interp.ts keyAbort): the engines ask
+    // GetAsyncKeyState after every statement (TI.EXE 0x436440), the state of
+    // the key NOW rather than a press in the queue
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      const session = this.session;
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") session.escapeDown = true;
+      });
+      window.addEventListener("keyup", (e) => {
+        if (e.key === "Escape") session.escapeDown = false;
+      });
+      window.addEventListener("blur", () => {
+        session.escapeDown = false;
+      });
+    }
     /**
      * Somewhere for the player's photographs to live. Null in a headless run,
      * where the album works for the length of the process — see
@@ -799,7 +815,9 @@ export class GameHost {
 
   async coldBoot(opts: ColdBootOptions = {}): Promise<void> {
     const session = this.session;
-    session.interp.globals.set("tour", 0); // safe default; boot() sets it from the menu
+    // safe default; boot() sets it from the menu. A boolean, as the scripts
+    // write it (`tour = true`) and test it (`if not tour`)
+    session.interp.globals.set("tour", session.interp.bool(false));
     // paint the screen black up front so the movie host's openset doesn't flash
     session.fade.queue.length = 0;
     session.fade.snapshot = null;
@@ -945,8 +963,8 @@ export class GameHost {
     session.currentSetFile = "";
     this.startAtHalfMix();
     // finish what boot()'s closing sendtostage(advanceday()) couldn't reach
-    const tour = opts.tour ?? Number(session.interp.globals.get("tour")) !== 0;
-    if (opts.tour !== undefined) session.interp.globals.set("tour", tour ? 1 : 0);
+    const tour = opts.tour ?? truthy(session.interp.globals.get("tour") ?? 0);
+    if (opts.tour !== undefined) session.interp.globals.set("tour", session.interp.bool(tour));
     try {
       // the advance plays one more — `opentour.mov`, 367 frames — and it is part
       // of the same preamble, so the suppression covers it too

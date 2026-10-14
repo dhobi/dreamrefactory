@@ -52,7 +52,7 @@ interface Dbg {
   /** the live SetViewer, or null until the boot has activated a set */
   viewer: unknown;
   session: {
-    interp: { globals: { get(k: string): unknown; set(k: string, v: number | string): void } };
+    interp: { globals: { get(k: string): unknown; set(k: string, v: number | string | boolean): void } };
     runGlobal(handler: string, args?: (string | number)[]): Promise<unknown>;
     altDown: boolean;
     metaDown: boolean;
@@ -117,7 +117,7 @@ const developerMode = async (): Promise<void> => {
   // session; a reload puts it back the way the disc has it, and Options ▸ Debug
   // On/Off takes it down from inside the game, which is the one path that is
   // supposed to.
-  session.interp.globals.set("debugging", 1);
+  session.interp.globals.set("debugging", true);
 
   // ---- the menu bar ----
   const bar = document.createElement("div");
@@ -157,7 +157,7 @@ const developerMode = async (): Promise<void> => {
     "Developer mode — the `debugging` global. Click to switch it, or use Options \u25b8 Debug On/Off (Ctrl+D).";
   status.addEventListener("click", () => {
     wanted = !wanted;
-    session.interp.globals.set("debugging", wanted ? 1 : 0);
+    session.interp.globals.set("debugging", wanted);
     sayState();
   });
 
@@ -183,7 +183,7 @@ const developerMode = async (): Promise<void> => {
   const holdFlag = (): void => {
     requestAnimationFrame(holdFlag);
     if (!wanted || debugging(session)) return;
-    session.interp.globals.set("debugging", 1);
+    session.interp.globals.set("debugging", true);
     sayState();
   };
   requestAnimationFrame(holdFlag);
@@ -208,7 +208,7 @@ const developerMode = async (): Promise<void> => {
      */
     if (name === "debug on/off" && !debugging(session)) {
       wanted = true;
-      session.interp.globals.set("debugging", 1);
+      session.interp.globals.set("debugging", true);
       sayState();
       return;
     }
@@ -330,7 +330,7 @@ const developerMode = async (): Promise<void> => {
     latch(
       "place",
       "Raise `setloc`: clicking an actor or prop MOVES it instead of using it — option-drag to slide, option+shift to raise, shift to turn. Nobody can be talked to while this is on, and nothing is saved.",
-      (on) => session.interp.globals.set("setloc", on ? 1 : 0),
+      (on) => session.interp.globals.set("setloc", on),
     ),
   );
 

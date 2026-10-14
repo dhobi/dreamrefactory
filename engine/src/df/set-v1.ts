@@ -125,6 +125,14 @@ const C0 = {
   defaultCellX: 0x30, // i16
   defaultCellZ: 0x32, // i16
   defaultFacing: 0x34, // i16
+  /**
+   * i16 does the set carry hi-res stills? DF.EXE's idle machine reads it before
+   * it draws one (0x433772, `[header + 0x3a]`) and, at 0, parks in state 4 with
+   * the low-res picture up for good (0x433787). 0 in MINE.SET alone, which is
+   * also the only set on the disc with no hi-res still in any slot; 1 or 2 in
+   * the other 34.
+   */
+  hiResStills: 0x3a, // i16
   /** the first of {@link CLUT_COUNT} palette blocks */
   palette: 0x50,
   /**
@@ -329,6 +337,8 @@ export interface SetFileV1 {
   eyeHeight: number;
   /** how far the camera stands behind its cell anchor — see {@link C0.cameraSetback} */
   cameraSetback: number;
+  /** non-zero when the set has hi-res stills — see {@link C0.hiResStills} */
+  hiResStills: number;
   /** the standpoint the set opens on — see {@link C0.defaultCellX} */
   defaultCellX: number;
   defaultCellZ: number;
@@ -502,6 +512,7 @@ export function readSetFileV1(data: Uint8Array): SetFileV1 {
     viewPortHeight: v.getInt16(C0.viewPortHeight, true),
     eyeHeight: v.getInt16(C0.eyeHeight, true),
     cameraSetback: v.getInt16(C0.cameraSetback, true),
+    hiResStills: v.getInt16(C0.hiResStills, true),
     defaultCellX,
     defaultCellZ,
     defaultFacing,

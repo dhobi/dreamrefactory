@@ -443,10 +443,9 @@ Each node's `+20..+27` is a serialized `DFValue`:
   string 1100+14). Corpus measurements alone cannot tell the two apart, since
   both carry an inline 16-bit value; loading a port-written save in the real
   engine and bisecting the dialog down to ten `02→04` tag bytes does. The port's
-  writer therefore **preserves a tag-2 record's tag** while the value stays 0/1
-  (its interpreter carries booleans as numbers, so the tag is the only witness),
-  and lets a non-boolean value retype the record the way an assignment in the
-  original would.
+  interpreter keeps booleans as a type of their own, so its writer tags every
+  global by what it holds — tag 2 for a boolean, 4 for an integer — and a load
+  gives a tag-2 record back as `true`/`false`.
 - **type 4 → number**, stored inline as the signed i32 at `+26`.
 - **type 3 → string**: `+26` (unsigned) is the **byte offset of the string in
   the string-pool container** that follows the globals container. The pool is a
@@ -755,9 +754,9 @@ walks table plus its per-walk payload — a character mid-`walkto` is the only
 | Offset | Type | Field |
 |-------:|------|-------|
 | +0 | u16 | active — the slot is free if 0 |
-| +2 | u16 | busy — in-service reentrancy flag; 0 in every shipped record |
+| +2 | u16 | **pause count** — `pauseloop` adds one and a resume takes one off, never below 0 (`0x442d5d`); paused while above 0. 0 in every shipped record |
 | +4 | u16 | **kind**: 1 = actor, 2 = prop, 3 = scene, 4 = flat (`0x4449f0`) |
-| +6 | u32 | period — ticks remaining, mid-count, on the engine's 50 ms service step |
+| +6 | u32 | period — ticks remaining, mid-count, in passes (one count per service pass) |
 | +10 | pstr16 | name — the actor/prop/scene the loop belongs to |
 | +26 | pstr16 | handler script |
 
@@ -772,7 +771,7 @@ a load would otherwise have to rebuild by re-running the arriving room's
 
 | Offset | Type | Field |
 |-------:|------|-------|
-| +0 / +2 | u16 | active / busy |
+| +0 / +2 | u16 | active / **pause count** (`pausecricket` nests, `0x4448d0`) |
 | +4 / +6 | i16 | x / y |
 | +8 | u32 | radius |
 | +0xc | u32 | base period |
@@ -781,6 +780,8 @@ a load would otherwise have to rebuild by re-running the arriving room's
 | +0x18 / +0x1a | i16 | listener x / y at make-time |
 | +0x1c | u32 | distance to the listener |
 | +0x20 | u16 | pan / angle (`0x444b70(dx, dy)`) |
+| +0x22 | u16 | in earshot since it last came into it — the service's re-arm flag (`0x44466a`), cleared on leaving the radius |
+| +0x24 / +0x26 | i16 / ptr | a looping cricket's volume this pass, and its sound, for the two-loudest choice (`0x4446d0`) |
 | +0x2a | pstr16 | the **set** it was made in (the global at `0x489f94`) |
 | +0x3a | pstr16 | cricket / sound name |
 
@@ -794,8 +795,12 @@ a centred pan.
 
 ### The walk record's payload
 
-A walk record is 110 bytes (+4 type, +0xa deg, +0xc/+0xe/+0x10 xyz, +0x16
-progress, +0x2e actor). **`+0x12` is a handle to the walk's waypoint path**, and
+A walk record is 110 bytes (+2 its `pausewalk` **count**, `0x444080`; +4 type, +0xa deg, +0xc/+0xe/+0x10 xyz, +0x16
+progress, +0x2e actor). A **deferred** record — a `walktostar`/`walkonpath` made while its walker's set was
+not open (`0x443ac0`, en build) — has +6 = 1, the actor's facing and place at +0xa..+0x11, no mover, and
+the two names it is built from on the first pass that set is open: the destination at +0x4e and a route's
+start at +0x5e (+0x3e holds the destination for a `walktostar`, the start for a `walkonpath`). The port
+writes and reads it the same way. **`+0x12` is a handle to the walk's waypoint path**, and
 only type-3 walks have one. Each active slot with a non-null handle appends
 **one payload container** after the walks table:
 

@@ -104,7 +104,7 @@ const globals = (o: Record<string, unknown>) => ({
 });
 
 /** what `advancetour()` leaves behind: no story at all */
-const TOUR = { tour: 1, mission: -1, phase: -1, neckphase: -1, letterphase: -1 };
+const TOUR = { tour: true, mission: -1, phase: -1, neckphase: -1, letterphase: -1 };
 
 describe("the tour is still a mode, and still shuts these doors", () => {
   /**
@@ -344,7 +344,7 @@ describe("a door is worth opening only where it goes somewhere", () => {
     // ...and it IS a way through at mission 4 outside a tour, which is the half
     // that proves the condition is read rather than the door written off
     expect(
-      openWays(spot!, globals({ tour: 0, mission: 4, savedeck: "gstair2" })).map((l) => l.to),
+      openWays(spot!, globals({ tour: false, mission: 4, savedeck: "gstair2" })).map((l) => l.to),
     ).toEqual(["lounge1c"]);
   });
 
@@ -490,12 +490,12 @@ describe("a refused door, opened", () => {
     sceneName: string,
     viewName: string,
     paint: string,
-    state: Record<string, string | number> = {},
+    state: Record<string, string | number | boolean> = {},
   ): Promise<Knocker> => {
     const { host, session, viewer } = await newHost();
     await host.loadServerSet(file);
     const g = session.interp.globals;
-    for (const [k, v] of Object.entries({ ...TOUR, ...state })) g.set(k, v as number);
+    for (const [k, v] of Object.entries({ ...TOUR, ...state })) g.set(k, v);
     const v = viewer();
     const sceneIdx = v.set.scenes.findIndex(
       (x) => x.sceneName.toLowerCase() === sceneName,

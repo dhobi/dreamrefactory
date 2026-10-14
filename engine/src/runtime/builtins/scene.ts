@@ -1,4 +1,4 @@
-import { toNum, toStr, truthy } from "../interp";
+import { ScriptError, toNum, toStr, truthy, type Value } from "../interp";
 import { packPoint } from "../point";
 import { BuiltinCtx } from "./context";
 
@@ -34,7 +34,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // SCENE NAME ("sceneNNN") teleports to that scene — paired with the following
   // currentview("viewNNN") it's how TAOOT's halls cross to the other side of the ship
   // (HALLC/HALLA keydown toggle hallside then cut to the mirrored view).
-  r("currentscene", async (_i, [dir]) => {
+  r("currentscene", async (i_, [dir]) => {
     if (dir === undefined) return session.currentSceneName();
     // a DreamFactory 5 room: a direction turns or walks a scene's views, a
     // name goes to another node or scene (engine/src/runtime/maze.ts)
@@ -46,12 +46,23 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       return;
     }
     const d = toStr(dir).toLowerCase();
-    if (d.startsWith("scene")) {
+    // DreamFactory 1 looks the word up in the set's scene table first
+    // (0x40ee66 -> 0x410c50) — TOWN.SET's "chicken" is a scene — and only
+    // then reads it as a direction; the others jump to a "sceneNNN"
+    const set = session.isV1 ? session.currentBinding?.set : undefined;
+    const isScene = set ? set.scenes.some((sc) => sc.sceneName.toLowerCase() === d) : d.startsWith("scene");
+    if (isScene) {
       // a DreamFactory 1 jump runs its scene events before the next line
       // (SetViewer.jumpV1); the others' return nothing to wait on
       const jump = session.onSceneJump(d);
       if (jump) await jump;
-    } else session.onNavigate(d);
+      return;
+    }
+    // a word that names no direction is a bad argument (TI.EXE 0x407c84;
+    // DF.EXE 0x40ef44, which knows a fourth, "backwards")
+    const known = d === "left" || d === "right" || d === "strait" || (session.isV1 && d === "backwards");
+    if (i_.classic && !known) throw new ScriptError(0xa, `currentscene(${d})`);
+    await session.onNavigate(d);
   });
   // currentview() reads the current view; currentview("viewNNN") SETS it — the
   // teleport's destination view (executes a buffered currentscene jump). Was
@@ -358,15 +369,35 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   r("blackscreen", blackNow);
   // currenttheme([layer]): the looping theme currently playing (the layer arg
   // selects a mix channel in TI.EXE; we track a single theme, so it's ignored).
-  r("currenttheme", () => session.currentThemeName);
+  //
+  // DreamFactory 1 asks it two questions (0x407b50): `currenttheme(2)` is the
+  // playing bank's own name (+0x16, copied from its header +0x9e at 0x406dc8,
+  // via 0x407df0) — what CREDITS.FLT saves to `playtheme` again on the way
+  // out — and anything else the loop CHUNK playing (0x429d10: the record's
+  // +0x45), which TOWN.SET and NITE.SET test against "daymusic5" and
+  // "nightwind3" to let their dog barks and owls in. "none" when no theme plays.
+  r("currenttheme", (_i, [n]) => {
+    if (!session.isV1) return session.currentThemeName;
+    const playing = session.currentThemeName;
+    if (playing === "none") return "none";
+    if (toNum(n ?? 0) === 2) return session.audioLib.trackNameOf(playing) ?? playing;
+    const since = session.themeSince;
+    const bank = session.audioLib.bankOf(playing);
+    if (!since || !bank || since.bank !== bank) return "none";
+    return session.audioLib.themeChunkAt(bank, (session.clock.now - since.at) / 1000) ?? "none";
+  });
   // framerate([n]): getter/setter for the engine's target frame cadence. Drag
   // loops save it, drop to a slow rate to pace the rotate (TAOOT's turbine valves:
   // `rate = framerate(); framerate(2); …; framerate(rate)`), then restore. Our
   // poll loops pace on real rAF frames via forceupdate(), so this only needs to
   // round-trip a value — store it so the save/restore reads back consistently.
+  //
+  // It is the pass rate: the frame throttle waits `framerate` ticks after every
+  // pass (Scheduler.throttle). The setter clamps to 0..60 — TI.EXE 0x43e3a9,
+  // tl.exe 0x44a9ad, DF.EXE 0x42077d, RedJack.exe 0x408cae, all four the same.
   r("framerate", (_i, [n]) => {
     if (n === undefined) return session.frameRate;
-    session.frameRate = toNum(n);
+    session.frameRate = Math.max(0, Math.min(60, Math.trunc(toNum(n))));
     return 0;
   });
   // wavevolume([n]): master volume for sampled audio (SFX + speech), 0..9.
@@ -455,7 +486,16 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * fade that then does the revealing. Lifting the black there would cancel the
    * fade-in on every overlay the game opens.
    */
-  r("visualeffect", (_i, [effect, steps]) => {
+  r("visualeffect", (_i, [effect, steps], _c, frame) => {
+    // A PASS first, with its screen copy held back (TI.EXE 0x43df85 raises
+    // 0x489ef6, which 0x43a8f7 tests before the blit; tl.exe 0x44a585;
+    // RedJack.exe 0x408c3c raises 0x4c7846 round its pass 0x408c43) — the
+    // loops, walks and crickets run and the throttle is waited out — and the
+    // effect only if that pass did not fail (0x43df9e, 0x408c4f).
+    const sched = session.scheduler;
+    return sched.pass({ wait: sched.passWait(frame) }).then((ok) => (ok ? visualEffect(effect, steps) : undefined));
+  });
+  const visualEffect = (effect: Value | undefined, steps: Value | undefined): Promise<void> | void => {
     const name = toStr(effect ?? "plain").toLowerCase();
     if (name === "plain") {
       // NOT a no-op: `plain` is a full-screen redraw (tl.exe 0x448630 blits the
@@ -570,7 +610,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       // turn's mid-picture jump (see GameSession.wipe.settled).
       if (session.wiping) session.endWipe();
     })();
-  });
+  };
 
   /**
    * `hidecursor()` / `showcursor()` — the pointer goes away where the game draws

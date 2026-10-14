@@ -1,18 +1,20 @@
-import { toNum, toStr, truthy } from "../interp";
-import { ENGINE_STEP_MS, ticksAt } from "../clock";
+import { logic, toNum, toStr, truthy } from "../interp";
+import { pauseDepthOf } from "../scheduler";
 import { BuiltinCtx } from "./context";
 
 /**
  * TI.EXE timing model: delay (script suspension), makeloop/makecricket
- * scheduling, soundloop flags, and the forceupdate cooperative yield that
- * drives interactive poll loops.
+ * scheduling, soundloop flags, and `forceupdate` — one pass of the main loop.
  *
- * 1 script tick = 1/60 s; loops + crickets are serviced every 50 ms.
+ * 1 script tick = 1/60 s; loops, crickets and walks are serviced once a pass,
+ * and a pass is `framerate` ticks (Scheduler.pass).
  */
 export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   const { session, r } = ctx;
 
-  // delay(n): suspend this script n/60 s while the engine keeps ticking
+  // delay(n): suspend this script n/60 s. TI.EXE's (0x41deb0) spins on
+  // timeGetTime calling only the message pump (0x41ea20) — no pass, so while a
+  // script delays nothing else moves (Scheduler.pass); RedJack.exe the same (0x469ee0)
   r("delay", async (_i, [n]) => {
     await session.clock.sleep((toNum(n ?? 0) * 50) / 3);
   });
@@ -20,9 +22,26 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     session.scheduler.makeLoop(toStr(kind ?? ""), toStr(name ?? ""), toStr(handler ?? ""), toNum(period ?? 1));
   });
   r("stoploop", (_i, [kind, name]) => session.scheduler.stopLoop(toStr(kind ?? ""), toStr(name ?? "")));
-  r("pauseloop", (_i, [kind, name, flag]) =>
-    session.scheduler.pauseLoop(toStr(kind ?? ""), toStr(name ?? ""), truthy(flag ?? 1)),
-  );
+  /**
+   * The pause getters — `pauseloop (kind, name)`, `pausecricket (name)` /
+   * `pauseball (name)`, `pausewalk (name)` — answer the boolean tag. DF.EXE puts
+   * the pause DEPTH in its payload (0x42cf95, 0x42d074, 0x42d004), which a
+   * {@link logic} keeps (interp.ts Logic: depth 2 is not `= true`); TI.EXE and
+   * tl.exe answer 0 or 1 (TI.EXE 0x42ae87, 0x42af86, 0x42af06), which the
+   * interpreter makes of a plain depth.
+   */
+  const pauseAnswer = (depth: number) => (session.isV1 ? logic(depth) : depth);
+  r("pauseloop", (_i, [kind, name, flag]) => {
+    // two arguments: the getter (DF.EXE 0x42cf20 → 0x438fa0, TI.EXE 0x42ae10):
+    // the first loop of that kind and name, 0 for none
+    if (flag === undefined && name !== undefined && !session.isV5) {
+      const k = toStr(kind ?? "").toLowerCase();
+      const n = toStr(name).toLowerCase();
+      const l = session.scheduler.loops.find((x) => x.kind === k && x.name === n);
+      return pauseAnswer(pauseDepthOf(l));
+    }
+    session.scheduler.pauseLoop(toStr(kind ?? ""), toStr(name ?? ""), truthy(flag ?? 1));
+  });
   r("isloop", (_i, [kind, name]) => (session.scheduler.isLoop(toStr(kind ?? ""), toStr(name ?? "")) ? 1 : 0));
   r("countloops", () => session.scheduler.loops.length);
   r("indextoloop", (_i, [idx]) => session.scheduler.loops[toNum(idx ?? 0) - 1]?.name ?? "");
@@ -47,10 +66,14 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   );
   r("pausecricket", (_i, [name, flag]) => {
     if (session.isV1) {
-      if (flag === undefined) return balls.pauseDepth(toStr(name ?? ""));
+      if (flag === undefined) return pauseAnswer(balls.pauseDepth(toStr(name ?? "")));
       balls.pause(toStr(name ?? "all"), truthy(flag));
       return;
     }
+    // one argument is the getter: the pause count (TI.EXE 0x444880). RedJack.exe
+    // has none — its pausecricket (0x409210) reads a name and a number and nests
+    // the count (Scheduler.pauseCricket)
+    if (flag === undefined && name !== undefined && !session.isV5) return session.scheduler.cricketPauseDepth(toStr(name));
     session.scheduler.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1));
   });
   r("iscricket", (_i, [name]) => {
@@ -65,7 +88,14 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
       : (session.scheduler.crickets[toNum(idx ?? 0) - 1]?.name ?? ""),
   );
 
-  r("soundloop", (_i, [name, flag]) => session.scheduler.soundLoop(toStr(name ?? ""), truthy(flag ?? 1)));
+  // one argument is the GETTER (DF.EXE 0x407840, TI/tl the same tag): Dust's
+  // dayfxs asks `if soundloop (fxsound)` before it flips the saw on or off, and
+  // Timelapse's ambience the same — a reading that switched the loop on
+  r("soundloop", (_i, [name, flag]) =>
+    flag === undefined
+      ? session.scheduler.isSoundLooped(toStr(name ?? ""))
+      : session.scheduler.soundLoop(toStr(name ?? ""), truthy(flag)),
+  );
 
   // forceupdate(): advance one engine step, then yield a real frame so the
   // browser renders and delivers pending input. Script poll loops (the crank
@@ -73,42 +103,20 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   // this yield to ever see the click that ends them — a synchronous tick alone
   // would spin forever. The realYieldSeq bump spares the loop from the guard.
   r("forceupdate", async (_i, _a, _c, frame) => {
-    // With real frames, the rAF loop advances the clock with REAL time each
-    // frame — self-advancing +66 here on top of that races the sim clock
-    // ahead of real time (4x at 60fps), and every later clock.sleep (trackbut
-    // after a long crank play) stalls until real time catches back up. So in
-    // the browser forceupdate only waits real frames; the tick does the rest.
-    // Headless has no frame source, so it self-advances one 50 ms step —
-    // which also keeps tests deterministic (one call = one service step).
-    if (!session.hasRealFrames) {
-      // not while another script is blocked in a fade ramp (#541)
-      await session.transitionCtrl.untilRampEnds();
-      session.tickTime(session.clock.now + ENGINE_STEP_MS);
-      await session.nextFrame();
-      return;
-    }
-    session.realYieldSeq++;
-    // Honour framerate(n): the stage/animation asks for n ticks per displayed
-    // frame, so a `for … forceupdate()` animation loop (the fencing lunge/parry,
-    // gramophone crank) should hold each frame that long. Locking every
-    // forceupdate to a single 60 Hz rAF made those loops run ~n× too fast (the
-    // fencing attack blurred past in ~100 ms).
+    // ONE PASS of the main loop, and nothing else: TI.EXE's forceupdate
+    // (0x43e3e0) is a bare `jmp 0x442550`, tl.exe's (0x44a9e0) the same, and
+    // RedJack.exe's (0x408ce0) a call of its pass 0x41b360. Walks, crickets and
+    // loops are serviced and their handlers run to their end inside it, then
+    // the frame waits out `framerate` ticks (Scheduler.pass).
     //
-    // Hold for n TICKS OF REAL TIME rather than n rAF callbacks — TI.EXE's own
-    // frame throttle (0x43a940) spins on `timeGetTime` until
-    // `now >= lastFrame + framerate`, so the hold is a duration, not a count of
-    // draws. Counting draws ties every animation in the game to the display:
-    // identical at exactly 60 Hz, half as long on a 120 Hz panel, and stretched
-    // on a machine that cannot keep up. `nextFrame` is still what we wait ON —
-    // it is the only thing that renders and delivers input — but the clock
-    // decides when we have waited enough.
-    const deadline = ticksAt(session.clock.now) + Math.max(1, Math.round(session.frameRate));
-    do {
-      await session.frameWait();
-      // this handler owns the CPU (scriptBusy), so the normal per-frame loop
-      // service is skipped; pump the OTHER per-frame loops here so e.g. the sky
-      // keeps drifting while the wheel is being turned (not the caller's own).
-      session.scheduler.pumpFrameLoops(frame?.ctx?.me ?? "");
-    } while (ticksAt(session.clock.now) < deadline);
+    // A host that moves the clock is waited on; headless nothing moves it
+    // while a script runs, so the pass jumps it — except in the BOOTFILE's
+    // own idle, which the host started and whose clock the host moves.
+    const sched = session.scheduler;
+    const wait = sched.passWait(frame);
+    if (wait === "jump") await session.transitionCtrl.untilRampEnds();
+    await sched.pass({ wait });
+    if (session.hasRealFrames) session.realYieldSeq++;
+    else if (wait === "jump") await session.nextFrame();
   });
 }

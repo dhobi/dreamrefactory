@@ -82,6 +82,11 @@ import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
 import { installColumnWidths, installPictureScale } from "./widths";
 import { byCodeUnit } from "../../order";
+import { markUnattended } from "../error-box";
+
+// A run is timed by a sheet, not watched by a person: the game's script error
+// box must never stop one (engine/src/web/error-box.ts)
+markUnattended();
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 

@@ -32,11 +32,13 @@ function call(session: GameSession, name: string, args: (string | number | boole
 }
 
 /** the frame drawn on each of `passes` service passes, through the host's own frame loop */
-function play(host: GameHost, session: GameSession, prop: string, passes: number): number[] {
+async function play(host: GameHost, session: GameSession, prop: string, passes: number): Promise<number[]> {
   const p = session.propRuntime.get(prop)!;
   const shown: number[] = [];
   for (let i = 0; i < passes; i++) {
     host.director.tick((clock += ENGINE_STEP_MS));
+    // the BOOTFILE idle's pass, let through by that tick (Scheduler.serviceIdle)
+    await new Promise((r) => setImmediate(r));
     shown.push(p.currentFrameIdx(p.state()!));
   }
   return shown;
@@ -54,10 +56,13 @@ test("the gramophone's handle turns while the record plays, round and round (#47
 
   // TRUNK.STG mousedown: shown, never propview'd, then forceupdate until a click
   call(session, "propvisible", ["crank", 1]);
-  // the first pass draws step 0 and each pass after takes a step
-  const shown = play(host, session, "crank", 36);
+  // the first pass draws step 0 and each pass after takes a step — and the
+  // first sample is already a step on: the idle's first pass has no stamp to
+  // wait on, so the next pass's work follows it at once (0x43a940; a pass works
+  // first and waits after, Scheduler.pass)
+  const shown = await play(host, session, "crank", 36);
   const round = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8];
-  expect(shown, "two turns of the handle, the second from the top").toEqual([...round, ...round]);
+  expect(shown, "two turns of the handle, the second from the top").toEqual([...round, ...round, ...round].slice(1, 37));
 });
 
 test("the deck map's open keeps rolling until a script changes its view (#485)", async () => {
@@ -68,10 +73,11 @@ test("the deck map's open keeps rolling until a script changes its view (#485)",
   call(session, "propview", ["map", "open"]);
   // house.shp's map `open ()`: makeloop ("prop", me, "domap", 5), then the map
   // flat — and nothing names another view until `close ()` after the flat
-  const shown = play(host, session, "map", 14);
+  const shown = await play(host, session, "map", 14);
   const groups = shown.map((i) => map.state()!.groups![i]);
   // six steps (groups 0..5, shut to fully open), then round again
-  expect(groups, "open goes round").toEqual([0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1]);
+  // (a step on from the start, as the crank above)
+  expect(groups, "open goes round").toEqual([1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2]);
 });
 
 /**
@@ -87,10 +93,11 @@ test("under DreamFactory 1 a shown view goes round and a hidden one waits", asyn
   const crank = session.propRuntime.get("crank")!;
   call(session, "propvisible", ["crank", 1]);
   const round = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8];
-  expect(play(host, session, "crank", 36), "round and round").toEqual([...round, ...round]);
-  play(host, session, "crank", 5);
+  // DF.EXE's pass is the idle's too (0x438840), so a step on from the start as above
+  expect(await play(host, session, "crank", 36), "round and round").toEqual([...round, ...round, ...round].slice(1, 37));
+  await play(host, session, "crank", 5);
   call(session, "propvisible", ["crank", 0]);
   const held = crank.frameIdx;
-  play(host, session, "crank", 7);
+  await play(host, session, "crank", 7);
   expect(crank.frameIdx, "not drawn, not stepped").toBe(held);
 });

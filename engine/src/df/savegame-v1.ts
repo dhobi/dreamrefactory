@@ -451,6 +451,12 @@ const PROP_TILE_X = 32;
 const PROP_TILE_Y = 34;
 /** the step within the view's frames: reset by `propview` (`0x41c13a`), advanced by the draw (`0x41eb42`) */
 const PROP_STEP = 36;
+/**
+ * `propspeed` (getter 0x41c690 reads +38, setter 0x41c490 writes it clamped to
+ * 1..256). 4 in every record no script touched across the 56 shipped RTDs, and
+ * 11 or 12 on the tumbleweeds, whose `initprop` sets `random (2) + 10`.
+ */
+const PROP_SPEED = 38;
 /** the serial, as the cast record's +48 (`0x41d34d`, checked at `0x41e424`) */
 const PROP_SERIAL = 46;
 /** the last draw's foot point on the screen — a cache (`0x41e6cb`) */
@@ -674,6 +680,8 @@ export interface SavedPropV1 {
   z: number;
   /** the step within the view's frames */
   step: number;
+  /** `propspeed` */
+  speed: number;
   /** `propvalue` */
   value: number;
   /** `propzclip` */
@@ -710,6 +718,8 @@ export interface SavedWalkV1 {
   turnOnly: boolean;
   /** `pausewalk` held it when the save was taken */
   paused?: boolean;
+  /** ...this many deep (+2); absent = `paused ? 1 : 0` */
+  pauseDepth?: number;
   /**
    * The walker was not in the open set (+44 = 0): DF.EXE moves nothing and, once
    * the set is open, puts the actor on the destination star and ends the walk
@@ -769,6 +779,8 @@ export interface SavedLoopV1 {
   period: number;
   /** `pauseloop` held it */
   paused?: boolean;
+  /** ...this many deep (+2); absent = `paused ? 1 : 0` */
+  pauseDepth?: number;
 }
 
 /** where the player is standing, in the file's own terms */
@@ -838,6 +850,8 @@ export interface SaveGameV1 {
   vars: SavedVar[];
   numGlobals: Map<string, number>;
   strGlobals: Map<string, string>;
+  /** the {@link numGlobals} whose record is a BOOLEAN (type 2) */
+  boolGlobals: Set<string>;
   loops: SavedLoopV1[];
   /** characters caught mid-stride */
   walks: SavedWalkV1[];
@@ -983,10 +997,15 @@ function withExtension(files: { path: string }[], base: string, fallback: string
   const low = base.toLowerCase();
   for (const f of files) {
     const name = f.path.split(":").pop()?.toLowerCase() ?? "";
+    // the list keeps the name the SCRIPT opened the file by, and HUB.SET's
+    // openset says `openshopfile ("hub.prp")` where every other room says
+    // `"house"` — so a name can already be the file's whole name (D4MINES.RTD,
+    // MSKPZL.RTD, ENDPZL.RTD: "hub.prp", read as "hub.prp.prp" before)
+    if (name === low) return name;
     const dot = name.lastIndexOf(".");
     if (dot > 0 && name.slice(0, dot) === low) return name;
   }
-  return `${low}.${fallback}`;
+  return low.endsWith(`.${fallback}`) ? low : `${low}.${fallback}`;
 }
 
 /** the file name a manifest handle refers to, or "" */
@@ -1051,6 +1070,7 @@ function readProp(d: Uint8Array, at: number): SavedPropV1 {
     y: dv.getInt16(at + PROP_Y, true),
     z: dv.getInt16(at + PROP_Z, true),
     step: dv.getInt16(at + PROP_STEP, true),
+    speed: dv.getInt16(at + PROP_SPEED, true),
     value: dv.getInt32(at + PROP_VALUE, true),
     zclip: dv.getInt16(at + PROP_ZCLIP, true),
     tileX: dv.getInt16(at + PROP_TILE_X, true),
@@ -1092,6 +1112,7 @@ function readWalks(d: Uint8Array, payloads: Uint8Array[]): SavedWalkV1[] {
       deg: dv.getUint16(at + WALK_DEG, true),
       turnOnly: dv.getInt16(at + WALK_TURN_ONLY, true) !== 0,
       paused: dv.getUint16(at + WALK_PAUSE, true) > 0,
+      pauseDepth: dv.getUint16(at + WALK_PAUSE, true),
       waiting: dv.getInt16(at + WALK_MOVER, true) === 0,
     };
     const path = payload ? readPayload(payload) : null;
@@ -1249,6 +1270,7 @@ function readLoops(d: Uint8Array): SavedLoopV1[] {
       handler,
       period: dv.getUint32(at + LOOP_PERIOD, true),
       paused: dv.getUint16(at + LOOP_PAUSE, true) > 0,
+      pauseDepth: dv.getUint16(at + LOOP_PAUSE, true),
     });
   }
   return out;
@@ -1341,11 +1363,14 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
   const vars = decodeVars(globals, pool);
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
+  const boolGlobals = new Set<string>();
   for (const v of vars) {
     if (v.type === DFVALUE_STRING) {
       if (v.str !== null) strGlobals.set(v.name, v.str);
     } else {
       numGlobals.set(v.name, v.num);
+      if (v.type === DFVALUE_BOOLEAN) boolGlobals.add(v.name);
+      else boolGlobals.delete(v.name);
     }
   }
 
@@ -1368,6 +1393,7 @@ export function parseSaveV1(bytes: Uint8Array): SaveGameV1 {
     vars,
     numGlobals,
     strGlobals,
+    boolGlobals,
     loops: readLoops(raw.containers[index.loops]?.data ?? new Uint8Array(0)),
     walks: readWalks(
       raw.containers[index.walks]?.data ?? new Uint8Array(0),
@@ -1404,6 +1430,8 @@ export function saveTitleMatches(title: string, want: string): boolean {
 /** what a snapshot asks to be written into a base save */
 export interface SavePatchV1 {
   numGlobals: Map<string, number>;
+  /** which {@link numGlobals} are BOOLEANS (tag 2) — see SavePatch.boolGlobals */
+  boolGlobals?: Set<string>;
   strGlobals?: Map<string, string>;
   /** where the player is: the set's base name and the grid cell they stand on */
   standpoint?: {
@@ -1590,10 +1618,13 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       for (const slot of at) {
         // Keep a boolean a boolean: the two tags are distinct runtime types and
         // DF.EXE's boolean-taking commands check for exactly 2 (see DFVALUE_BOOLEAN
-        // in save-vars.ts). A 0/1 in a slot the base wrote as boolean stays one.
+        // in save-vars.ts). The interpreter says which (boolGlobals); without
+        // it, a 0/1 in a slot the base wrote as boolean stays one.
         const was = gv.getUint16(slot + NODE_TYPE, true);
-        const tag =
-          was === DFVALUE_BOOLEAN && (value === 0 || value === 1) ? DFVALUE_BOOLEAN : DFVALUE_NUMBER_WRITTEN;
+        const isBool = patch.boolGlobals
+          ? patch.boolGlobals.has(name)
+          : was === DFVALUE_BOOLEAN && (value === 0 || value === 1);
+        const tag = isBool ? DFVALUE_BOOLEAN : DFVALUE_NUMBER_WRITTEN;
         gv.setUint16(slot + NODE_TYPE, tag, true);
         gv.setInt32(slot + NODE_VALUE, value | 0, true);
       }
@@ -1836,6 +1867,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (p.y !== undefined) put16(cp, o + PROP_Y, p.y);
       if (p.z !== undefined) put16(cp, o + PROP_Z, p.z);
       if (p.step !== undefined) put16(cp, o + PROP_STEP, p.step);
+      if (p.speed !== undefined) put16(cp, o + PROP_SPEED, p.speed);
       if (p.value !== undefined) put32(cp, o + PROP_VALUE, p.value);
       if (p.zclip !== undefined) put16(cp, o + PROP_ZCLIP, p.zclip);
       if (p.tileX !== undefined) put16(cp, o + PROP_TILE_X, p.tileX);
@@ -1902,7 +1934,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       const at = slot * LOOP_STRIDE;
       if (at + LOOP_STRIDE > cl.length) break;
       put16(cl, at + LOOP_ACTIVE, 1);
-      put16(cl, at + LOOP_PAUSE, l.paused ? 1 : 0);
+      put16(cl, at + LOOP_PAUSE, l.paused ? Math.max(1, l.pauseDepth ?? 1) : 0);
       put16(cl, at + LOOP_KIND, kind);
       put32(cl, at + LOOP_PERIOD, l.period);
       writePstrField(cl, at + LOOP_NAME, l.name);
@@ -1952,7 +1984,7 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (at + WALK_STRIDE > cw.length) break;
       const dv = new DataView(cw.buffer, cw.byteOffset, cw.byteLength);
       put16(cw, at + WALK_ACTIVE, 1);
-      put16(cw, at + WALK_PAUSE, w.paused ? 1 : 0);
+      put16(cw, at + WALK_PAUSE, w.paused ? Math.max(1, w.pauseDepth ?? 1) : 0);
       put16(cw, at + WALK_TURN_TO, w.turnTo);
       put16(cw, at + WALK_TURN_ONLY, w.turnOnly ? 1 : 0);
       // start minus destination: the record's sign, not the port's

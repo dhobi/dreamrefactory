@@ -76,8 +76,6 @@ const STANDS = [
 ];
 /** the `centerx` a bottle thrown at x hits, ±50 about it (sdoenemy2.shop bottle `done`) */
 const LANE: Record<number, number> = { 150: 0, 410: -100, 650: -199 };
-/** where Lyle's `Epos` sends a bottle (sdoenemy2.shop selectstrike) */
-const EPOS_X: Record<number, number> = { 1: 150, 2: 410, 3: 650 };
 
 /**
  * The school of dodging: Lyle shuffles to one of three places and throws a
@@ -86,9 +84,8 @@ const EPOS_X: Record<number, number> = { 1: 150, 2: 410, 3: 650 };
  * seven (`endclass`). Holding an arrow leans him to that side (0 or -199);
  * letting go brings him back to -100.
  *
- * So each frame the player rules out every lane a bottle in the air is falling
- * down, and the one Lyle is moving to, and stands in what is left — the middle
- * if he can.
+ * So each frame the player rules out every lane a bottle is about to land in,
+ * and stands in what is left — the middle if he can ({@link dodger}).
  */
 export async function schoolOfDodging(h: Headless): Promise<void> {
   if (!fighting(h, "sdocombat.stag")) fail(`the school of dodging is not up (stage ${h.session.stageName})`);
@@ -106,11 +103,14 @@ export async function schoolOfDodging(h: Headless): Promise<void> {
 }
 
 /**
- * One frame of dodging, and the key held for it: every lane a bottle in the air
- * is falling down is ruled out, and the one Lyle is moving to, and Nick stands
- * in what is left — the middle if he can. The school of dodging and the second
- * half of the real fight (enemy2.shop, the same bottles and the same `centerx`)
- * both play it.
+ * One frame of dodging, and the key held for it: a bottle lands 20 passes after
+ * it is thrown (`makeloop (…, "done", 20)` beside its `propview (…, "animated")`,
+ * enemy2.shop and sdoenemy2.shop), so every lane a bottle will land in within
+ * the next few passes is ruled out, and Nick stands in what is left — the
+ * middle if he can. A lean takes two passes. The school of dodging and the
+ * second half of the real fight (enemy2.shop, the same bottles and the same
+ * `centerx`) both play it; in the fight Lyle throws faster than a bottle falls,
+ * so a lane whose bottle is still high is not one to run from yet.
  */
 function dodger(h: Headless): { step(): void; stop(): void } {
   const props = h.session.propRuntime;
@@ -121,15 +121,24 @@ function dodger(h: Headless): { step(): void; stop(): void } {
     if (key) h.key(key);
     held = key;
   };
+  /** the pass each bottle in the air was first seen thrown on */
+  const thrown = new Map<string, number>();
+  const FLIGHT = 20;
+  const SOON = 6;
   return {
     step() {
+      const now = h.session.frameCounter;
       const danger = new Set<number>();
       for (const n of [1, 2, 3, 11, 12, 13]) {
         const b = props.get(`bottle${n}`);
-        if (b?.visible && b.stateName === "animated") danger.add(LANE[Math.round(b.anchorX)]);
+        if (!b?.visible || b.stateName !== "animated") {
+          thrown.delete(`bottle${n}`);
+          continue;
+        }
+        const at = thrown.get(b.name) ?? now;
+        thrown.set(b.name, at);
+        if (at + FLIGHT - now <= SOON) danger.add(LANE[Math.round(b.anchorX)]);
       }
-      const epos = Number(h.session.interp.globals.get("epos") ?? 0);
-      if (EPOS_X[epos] !== undefined) danger.add(LANE[EPOS_X[epos]]);
       const stand = STANDS.find((s) => ![...danger].some((lane) => Math.abs(s.cx - lane) < 50)) ?? STANDS[0];
       hold(stand.key);
     },
@@ -181,7 +190,9 @@ export async function schoolOfStriking(h: Headless): Promise<void> {
       const strength = Number(props.get("nick strength")?.deg ?? 0);
       if (open && strength >= 6 && !nick.startsWith("strike")) {
         const s = STRIKES[next++ % STRIKES.length];
-        pending = h.click(s.x, s.y);
+        // the hand stays on the strike: `think` takes its kind from where the
+        // pointer is when it next runs, a pass after the click is taken
+        pending = h.click(s.x, s.y, true);
         wait = 10;
       }
       return false;

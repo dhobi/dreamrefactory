@@ -64,10 +64,9 @@ export interface SegmentAudio {
  *
  * `audioLoops` does not gate this (`!hasRegions || seg.audioLoops`). For a v4
  * movie that gate is a no-op: df/mov.ts sets `audioLoops = audioChunks.length >
- * 0`, so the two conditions are the same condition. It stops being one for
- * DreamFactory 1, whose chunks are a plain run played once rather than a loop
- * order (df/mov-v1.ts) — and 45 of Dust's 136 films with sound are interactive,
- * so that gate would keep them silent. What `audioLoops` decides is whether the bed REPEATS while an interactive
+ * 0`, so the two conditions are the same condition. It stops being one for a
+ * DreamFactory 0 film, whose chunks are a plain run played once (df/mov-v0.ts).
+ * What `audioLoops` decides is whether the bed REPEATS while an interactive
  * frame waits, which is the question it should be asked ({@link soundtrackFor}).
  *
  * The loop table is an `order` sequence over a handful of chunk records, and
@@ -112,6 +111,8 @@ export interface Soundtrack {
   samples: Float32Array;
   /** play it round again if the picture outlives it */
   loop: boolean;
+  /** where a loop goes round to, in seconds; 0 or absent = the start */
+  loopStart?: number;
 }
 
 /**
@@ -134,6 +135,14 @@ export function soundtrackFor(
   onScreenMs = 0,
 ): Soundtrack {
   const { rate, resampled, unique, audioSec } = audio;
+  if (seg.dfV1) {
+    // DreamFactory 1: the whole playlist, then round and round from the entry
+    // its header names until the film stops it (DF.EXE 0x40468c, 0x429fa0) —
+    // no runtime to cut it to, interactive or not
+    const from = Math.min(seg.audioLoopFrom ?? 0, resampled.length - 1);
+    const loopStart = resampled.slice(0, from).reduce((a, c) => a + c.length, 0) / rate;
+    return { sampleRate: rate, samples: concat(resampled), loop: true, loopStart };
+  }
   const hasRegions = seg.frames.some((f) => f.regions.length > 0);
   if (hasRegions && seg.audioLoops) {
     // Interactive AND a loop bed: the movie sits on a frame for as long as
@@ -142,9 +151,6 @@ export function soundtrackFor(
     // chunks are played (see AudioLibrary.theme), so the menu keeps its
     // music however long the player leaves it up.
     //
-    // A v1 close-up is interactive too and is NOT a loop: it says a line over
-    // a held picture and the line is meant to finish. It takes the branch
-    // below, which plays the run once.
     return { sampleRate: rate, samples: concat(unique), loop: true };
   }
   // Cutscene: concatenate the (resampled) chunks only up to the movie's
@@ -169,7 +175,7 @@ export function soundtrackFor(
   // actually holds, so a bed with nothing spare is simply unchanged.
   // ...and never below the material there actually is. The prediction is
   // `interval x frames`, which assumes the film runs itself out — and a film
-  // that STOPS to wait for a click does not: a v1 close-up is three frames
+  // that STOPS to wait for a click does not: a close-up is three frames
   // and a two-second line, so the prediction would have cut the line to a
   // fifth of a second. For a v4 bed this floor is unreachable by
   // construction (a paced segment's interval is derived FROM audioSec, so

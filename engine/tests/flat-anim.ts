@@ -105,8 +105,9 @@ function pumper(session: GameSession): (n: number) => Promise<void> {
     for (let i = 0; i < n; i++) {
       now += 50;
       session.scheduler.tickTime(now);
-      session.scheduler.serviceFrameLoops();
       await session.settle();
+      // the idle's pass waits out its throttle on the clock just moved
+      await new Promise((r) => setTimeout(r, 0));
     }
   };
 }
@@ -157,14 +158,18 @@ test("a flat loop whose handler is the boot's walks the whole run", async () => 
     target: "",
   });
 
-  // seeded with where it starts: the first pump already fires the armed loop, so
-  // sampling only after it would miss the flat the run began on
+  // every flat the run goes to, as it goes: the first idle runs two passes
+  // back to back (the throttle's first stamp is free, as 0x43a940's is), so a
+  // sample per pump would not see every cel
   const seen: string[] = [session.currentFlat];
-  const pump = pumper(session);
-  for (let i = 0; i < 20; i++) {
-    await pump(1);
+  const go = session.stageCtrl.gotoFlat.bind(session.stageCtrl);
+  session.stageCtrl.gotoFlat = async (...a: Parameters<typeof go>) => {
+    const r = await go(...a);
     if (seen[seen.length - 1] !== session.currentFlat) seen.push(session.currentFlat);
-  }
+    return r;
+  };
+  const pump = pumper(session);
+  for (let i = 0; i < 20; i++) await pump(1);
   // every cel, in order — the assertion that the loop kept re-arming from a flat
   // that could not answer for it
   expect(seen).toEqual(["shot", "shot.1", "shot.2", "shot.3"]);
@@ -347,22 +352,20 @@ endcode
 });
 
 /**
- * A coarse loop armed DURING a drag fires while the drag is still running.
+ * A loop armed DURING a drag fires while the drag is still running — in the
+ * drag's own `forceupdate`, and only there.
  *
- * `fireDueLoops` counts a timer loop down whether or not a script is in flight
- * and then declines to fire it, so a loop armed inside a `while stilldown()`
- * handler sits at zero until the player lets go. Timelapse's match is the
- * worked example, and it was reported as one: `HandleMatch` drags the match
- * across the box, and striking it plays the sound and arms `makeloop("prop",
- * "Matches", "MatchBurn()", 30 / 6)` — so the strike was audible and the flame
- * did not start until the button came up.
+ * Timelapse's match is the worked example: `HandleMatch` drags the match across
+ * the box in a `while stilldown()` loop, and striking it arms `makeloop("prop",
+ * "Matches", "MatchBurn()", 30 / 6)` — reported as a strike that was audible
+ * and a flame that did not start until the button came up.
  *
- * `forceupdate()` is the drag's own yield, and in the original it IS a service
- * pass, so a due loop runs there. The pump fires without counting down, which is
- * what keeps the PACE the engine's: a period-5 loop still comes round every five
- * 50 ms steps rather than every pumped frame.
+ * `forceupdate ()` IS the pass (tl.exe 0x44a9e0 is a bare `jmp 0x4014e0`), and
+ * the pass is the only thing that counts a loop down. So a script that holds
+ * the engine without one stops the loop dead — it neither counts nor fires —
+ * and a drag that yields counts it down once a yield and fires it on the fifth.
  */
-test("a timer loop due mid-drag fires on the forceupdate pump, at its own pace", async () => {
+test("a loop armed mid-drag counts down in the drag's own passes and fires there", async () => {
   const session = await scene();
   await session.stageCtrl.gotoFlat("shot");
   session.interp.globals.set("burns", 0);
@@ -375,10 +378,7 @@ test("a timer loop due mid-drag fires on the forceupdate pump, at its own pace",
   session.propScripts.set("matches", inst);
   session.scheduler.makeLoop("prop", "matches", "MatchBurn()", 5);
 
-  // hold the world the way a `while stilldown()` handler does. Not `settle()`
-  // anywhere below for the same reason the drag is the problem: nothing can
-  // settle while it is held, so the pump's own dispatch is awaited by yielding
-  // the event loop a few times instead.
+  // hold the world the way a `while stilldown()` handler does
   let release = () => {};
   session.track(new Promise<void>((r) => (release = r)), "the drag");
   expect(session.scriptBusy, "a script is in flight").toBe(true);
@@ -387,29 +387,24 @@ test("a timer loop due mid-drag fires on the forceupdate pump, at its own pace",
   };
 
   let now = 0;
-  const steps = async (n: number) => {
-    for (let i = 0; i < n; i++) {
-      now += 50;
-      session.scheduler.tickTime(now);
-      await yieldTurns();
-    }
+  for (let i = 0; i < 6; i++) {
+    session.scheduler.tickTime((now += 50));
+    await yieldTurns();
+  }
+  expect(session.interp.globals.get("burns"), "the host's ticks run no pass while a script holds the engine").toBe(0);
+  expect(session.scheduler.loops[0].count, "...and count nothing down").toBe(5);
+
+  // the drag's own yields: a pass each
+  const passes = async (n: number) => {
+    for (let i = 0; i < n; i++) await session.scheduler.pass({ wait: "jump" });
   };
-
-  await steps(6); // more than the five 50 ms steps the loop asked for
-  expect(session.interp.globals.get("burns"), "the service will not fire it while busy").toBe(0);
-
-  session.scheduler.pumpFrameLoops("the drag");
-  await yieldTurns();
-  expect(session.interp.globals.get("burns"), "the drag's own yield does").toBe(1);
-
-  // ...and not again until the service has counted the re-armed loop down: the
-  // pump is a permission to run, not a tick of its own
-  session.scheduler.pumpFrameLoops("the drag");
-  await yieldTurns();
-  expect(session.interp.globals.get("burns"), "no free extra firing").toBe(1);
-  await steps(5);
-  session.scheduler.pumpFrameLoops("the drag");
-  await yieldTurns();
+  await passes(4);
+  expect(session.interp.globals.get("burns"), "four passes of five").toBe(0);
+  await passes(1);
+  expect(session.interp.globals.get("burns"), "the fifth fires it, inside the drag").toBe(1);
+  await passes(4);
+  expect(session.interp.globals.get("burns"), "re-armed for five more").toBe(1);
+  await passes(1);
   expect(session.interp.globals.get("burns"), "and round it comes again").toBe(2);
 
   release();

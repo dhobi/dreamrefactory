@@ -1034,7 +1034,16 @@ export async function necklace(s: Story): Promise<void> {
       const spot = await nav.faceStandpoint([stand], [scene]);
       expect(spot.ok, `${room}: ${spot.reason}`).toBe(true);
     }
-    const her = await nav.accost("ga");
+    // She PATROLS A deck, and where she is when you arrive is the pass count
+    // since she set off — which no pass during a film, a fade or a handler
+    // moves (Scheduler.pass). A sweep that finds her out of reach (`realdist
+    // (me) < hotdist ()`, gang.cst) waits for her to come round and sweeps again.
+    let her = await nav.accost("ga");
+    for (let tries = 0; tries < 3 && !her.ok; tries++) {
+      let n = 0;
+      await s.waitFor(() => n++ >= 200, "Georgia to come round on her patrol");
+      her = await nav.accost("ga");
+    }
     expect(her.ok, her.reason).toBe(true);
     const said = await nav.talk({ say: [...say], maxTurns: 60 });
     expect(said.ok, said.reason).toBe(true);

@@ -185,21 +185,34 @@ test("the picture is picked by depicted angle, not by slot", () => {
 
 // --- and where the advance comes from ---------------------------------------
 
-test("the animation advances once per 50 ms service pass, not per frame", () => {
+test("the animation advances once per pass, and a pass is `framerate` ticks, not a frame", async () => {
   const session = new GameSession(() => null, new NullAudioSink());
   session.onLog = () => {};
   session.actorRuntime.addCast("gang.cst", cast("gang.cst"));
   const a = session.actorRuntime.get("morrow")!;
   a.poseName = "walk";
-  // from 1 s, because the scheduler reads a stamp of 0 as "not started"
-  session.tickTime(1000); // the first tick only sets the anchor
-  for (let ms = 1050; ms <= 2000; ms += 50) session.tickTime(ms);
+  // a host's tick, and the idle's pass it lets through (Scheduler.serviceIdle)
+  const at = async (ms: number) => {
+    session.tickTime(ms);
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  // the very first pass has no stamp to wait on (0x43a940 against a stamp of
+  // 0), so the idle goes straight round into the next one: where it starts
+  await at(1000);
+  const s0 = a.step;
+  for (let ms = 1050; ms <= 2000; ms += 50) await at(ms);
   // twenty passes in a second: one whole cycle, back where it started
-  expect(a.step).toBe(0);
-  for (let ms = 2050; ms <= 2500; ms += 50) session.tickTime(ms);
-  expect(a.step).toBe(10);
-  // and one call that comes half a second late is ONE pass, as in TI.EXE
-  // (clock.ts passDue): the walk steps once, it does not leap ten
-  session.tickTime(3000);
-  expect(a.step).toBe(11);
+  expect(a.step).toBe(s0);
+  for (let ms = 2050; ms <= 2500; ms += 50) await at(ms);
+  expect(a.step).toBe((s0 + 10) % 20);
+  // and one call that comes half a second late is ONE pass, as in TI.EXE:
+  // the throttle stamps the late tick and does not make the rest up
+  await at(3000);
+  expect(a.step).toBe((s0 + 11) % 20);
+  // framerate (5) is twelve passes a second
+  session.frameRate = 5;
+  const s1 = a.step;
+  for (let ms = 3050; ms <= 4000; ms += 50) await at(ms);
+  expect((a.step - s1 + 20) % 20, "twelve passes, give or take the one in flight").toBeGreaterThanOrEqual(11);
+  expect((a.step - s1 + 20) % 20).toBeLessThanOrEqual(13);
 });

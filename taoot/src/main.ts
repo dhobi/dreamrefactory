@@ -24,7 +24,6 @@ import {
 } from "@dreamfactory/engine/runtime/audio";
 import {
   isMoveSpeed,
-  isPictureMode,
   MOVE_SPEED_MS,
 } from "@dreamfactory/engine/runtime/session";
 import {
@@ -36,12 +35,12 @@ import {
   gateOf,
   isSpecialKey,
   overlayKey,
-  pictureModeOf,
   presetOf,
   whereLine,
 } from "./play-rules";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
+import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { replyIds } from "@dreamfactory/engine/web/puppet-view";
@@ -59,6 +58,7 @@ import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { takeBootSeed } from "@dreamfactory/engine/web/speedrun/boot-seed";
+import { faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
 import {
@@ -580,6 +580,13 @@ session.onQuit = () => {
     .then(() => host.restart({ tour: startsInTour() || undefined }))
     .catch((e) => log(`restart failed: ${(e as Error).message}`));
 };
+// TI.EXE's script error box (0x407260): OK goes on, Cancel quits as quit() does
+// — in the edition's own words (the French TI.EXE translates it). Never shown on
+// the speedrun workbench or to a browser suite (engine/src/web/error-box.ts).
+session.onScriptErrorBox = scriptErrorBox(log, () => editionCode);
+// A CPU fault TI.EXE had no handler for — `calcmod (a, 0)`'s idiv — ended the
+// program: Windows' box, then the quit path above (GameSession.engineFault)
+session.onFault = faultBox(log, "TI.EXE");
 // Script poll loops (forceupdate/stilldown) yield through this so a real frame
 // renders and pending pointer events are delivered between iterations.
 // hasRealFrames also relaxes the interpreter's while-loop runaway guard for
@@ -1605,29 +1612,7 @@ const MOVEMENT_KEY = "taoot.move.speed";
 const LOW_MEMORY_KEY = "taoot.sound.lowmemory";
 
 function bindPictureMode(): void {
-  if (!pictureModeSel) return;
-  let mode = pictureModeOf(null, null);
-  try {
-    mode = pictureModeOf(
-      window.localStorage.getItem(PICTURE_MODE_KEY),
-      window.localStorage.getItem(SHARP_LANDING_KEY),
-    );
-  } catch {
-    /* storage can be denied; the game then starts on the original every launch */
-  }
-  session.pictureMode = mode;
-  pictureModeSel.value = mode;
-  pictureModeSel.addEventListener("change", () => {
-    const picked = pictureModeSel.value;
-    if (!isPictureMode(picked)) return;
-    session.pictureMode = picked;
-    pictureModeSel.blur(); // give the arrow keys back to the game (see above)
-    try {
-      window.localStorage.setItem(PICTURE_MODE_KEY, picked);
-    } catch {
-      /* not remembering is survivable — the setting still holds for this tab */
-    }
-  });
+  installPictureMode(pictureModeSel, session, PICTURE_MODE_KEY, SHARP_LANDING_KEY);
 }
 
 /** the brightness row: three of the presets in src/play-rules.ts, one tap each */

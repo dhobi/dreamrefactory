@@ -14,10 +14,16 @@ export type AudioChannel = "sound" | "voice" | "theme";
 
 export interface PlayOpts {
   loop?: boolean;
+  /** where a loop goes round to, in seconds (a DreamFactory 1 film's bed) */
+  loopStart?: number;
   overlap?: boolean;
   /** 0..1 (crickets attenuate with distance) */
   volume?: number;
-  /** -1 (left) .. 1 (right) — positional ambient sounds */
+  /**
+   * -1 (left) .. 1 (right) — a BALANCE, as TI.EXE's mixer pans (0x424b90): the
+   * far ear falls off linearly to the side and the centre is full in both, not
+   * an equal-power pan. See `panFrom255` in scheduler.ts for the 0..255 scale.
+   */
   pan?: number;
   /** Fixed left/right attenuation for a mono source (DirectSound-style balance). */
   stereoGains?: readonly [number, number];
@@ -34,6 +40,13 @@ export interface PlayHandle {
    * the water instead of keeping the level it started at.
    */
   place?(volume: number, pan: number): void;
+  /**
+   * Loop a sound that is already playing, or stop looping it: off, it plays
+   * out the time round it is in and ends. TI.EXE's `soundloop` flips the loop
+   * flag of every channel playing the sound (0x425740 -> 0x401d40), and
+   * nothing else — an AudioBufferSourceNode's `loop` is writable while it plays.
+   */
+  setLoop?(on: boolean): void;
 }
 
 export interface AudioSink {
@@ -133,6 +146,10 @@ export class DeferredAudioSink implements AudioSink {
         h.opts = { ...h.opts, volume, pan };
         h.real?.place?.(volume, pan);
       },
+      setLoop(on) {
+        h.opts = { ...h.opts, loop: on };
+        h.real?.setLoop?.(on);
+      },
     };
   }
 
@@ -219,7 +236,9 @@ export class TimedAudio implements AudioSink {
     const ms = (audio.samples.length / Math.max(1, audio.sampleRate)) * 1000;
     // in ticks, as Clock.sleep is and for its reason: in ms against a clock read
     // in whole ms, a clip ended a tick apart by where the ticks fell (#542)
-    const end = opts?.loop ? Number.POSITIVE_INFINITY : ticksAt(this.now()) + ticksFor(ms);
+    const start = ticksAt(this.now());
+    const length = Math.max(1, ticksFor(ms));
+    let end = opts?.loop ? Number.POSITIVE_INFINITY : start + length;
     // An overlapping play (a soundloop, a cricket, a V5 film effect) does not
     // take the channel, as WebAudioSink does not make it the channel's play
     if (!opts?.overlap) this.endsAt[channel] = end;
@@ -247,6 +266,13 @@ export class TimedAudio implements AudioSink {
         handle.stop();
       },
       place: handle.place ? (volume: number, pan: number) => handle.place?.(volume, pan) : undefined,
+      setLoop: (on: boolean): void => {
+        // off: over at the end of the time round it is in; on: never over
+        const was = end;
+        end = on ? Number.POSITIVE_INFINITY : start + Math.max(1, Math.ceil((ticksAt(this.now()) - start) / length)) * length;
+        if (!opts?.overlap && this.endsAt[channel] === was) this.endsAt[channel] = end;
+        handle.setLoop?.(on);
+      },
     };
   }
 
@@ -311,12 +337,15 @@ export class NullAudioSink implements AudioSink {
     this.calls.push(call);
     return {
       get done() {
-        return !opts?.loop || call.stopped || call.displaced;
+        return !call.loop || call.stopped || call.displaced;
       },
       stop: () => (call.stopped = true),
       place: (volume, pan) => {
         call.volume = volume;
         call.pan = pan;
+      },
+      setLoop: (on) => {
+        call.loop = on;
       },
     };
   }
@@ -473,11 +502,24 @@ export class WebAudioSink implements AudioSink {
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
     src.loop = !!opts?.loop;
+    if (opts?.loop && opts.loopStart && opts.loopStart < buffer.duration) {
+      src.loopStart = opts.loopStart;
+      src.loopEnd = buffer.duration;
+    }
     let head: AudioNode = src;
     // a play given a place at all gets both nodes, so it can be moved later
     const placed = opts?.volume !== undefined || opts?.pan !== undefined;
     let gain: GainNode | null = null;
-    let panner: StereoPannerNode | null = null;
+    // the balance (PlayOpts.pan): one gain per ear into a stereo merger, as
+    // TI.EXE's mixer scales the left and right halves (0x424b90) — a
+    // StereoPannerNode's equal-power law is not what any of the engines does
+    let ears: [GainNode, GainNode] | null = null;
+    const setEars = (pan: number) => {
+      const p = Math.max(-1, Math.min(1, pan));
+      if (!ears) return;
+      ears[0].gain.value = p > 0 ? 1 - p : 1;
+      ears[1].gain.value = p < 0 ? 1 + p : 1;
+    };
     if (placed || (opts?.volume !== undefined && opts.volume < 1)) {
       gain = this.ctx.createGain();
       gain.gain.value = Math.max(0, Math.min(1, opts?.volume ?? 1));
@@ -485,10 +527,17 @@ export class WebAudioSink implements AudioSink {
       head = gain;
     }
     if (placed || opts?.pan) {
-      panner = this.ctx.createStereoPanner();
-      panner.pan.value = Math.max(-1, Math.min(1, opts?.pan ?? 0));
-      head.connect(panner);
-      head = panner;
+      const merger = this.ctx.createChannelMerger(2);
+      ears = [this.ctx.createGain(), this.ctx.createGain()];
+      // a stereo source's ears are its own channels; a mono one feeds both
+      const split = this.ctx.createChannelSplitter(2);
+      head.connect(split);
+      split.connect(ears[0], 0);
+      split.connect(ears[1], channels > 1 ? 1 : 0);
+      ears[0].connect(merger, 0, 0);
+      ears[1].connect(merger, 0, 1);
+      setEars(opts?.pan ?? 0);
+      head = merger;
     }
     head.connect(this.gains[channel]);
     const entry = { src, done: false };
@@ -516,7 +565,10 @@ export class WebAudioSink implements AudioSink {
       },
       place: (volume, pan) => {
         if (gain) gain.gain.value = Math.max(0, Math.min(1, volume));
-        if (panner) panner.pan.value = Math.max(-1, Math.min(1, pan));
+        setEars(pan);
+      },
+      setLoop: (on) => {
+        src.loop = on;
       },
     };
   }
@@ -631,6 +683,7 @@ export class AudioLibrary {
       if (k.startsWith(`${bankKey}|`)) this.cache.delete(k);
     }
     this.cache.delete(`theme:${trackName}`);
+    this.loopLengths.delete(`lengths:${bankKey}`);
   }
 
   get bankNames(): string[] {
@@ -649,6 +702,45 @@ export class AudioLibrary {
    */
   soundRecordV1(bankName: string, sound: string): number {
     return this.find(bankName)?.entry.bank.singles.get(sound.toLowerCase())?.containerLoc ?? 0;
+  }
+
+  /**
+   * A DreamFactory 1 sound's channel PRIORITY, the dword at +0x39 of its
+   * record: `bank index << 16 | record number`, renumbered at every
+   * `opentrackfile` (0x407e50) — a bank opened later outranks, and within a
+   * bank the later record. 0 when no open bank has the sound. The bank is the
+   * first that has it, as {@link sound} finds it.
+   */
+  soundPriorityV1(identifier: string): number {
+    const key = identifier.toLowerCase().replace(/\.wav$/, "");
+    let i = 0;
+    for (const { bank } of this.banks.values()) {
+      const ref = bank.singles.get(key);
+      if (ref) return (i << 16) | ref.containerLoc;
+      i++;
+    }
+    return 0;
+  }
+
+  /**
+   * A DreamFactory 4 sound's channel priority, the record's +0 (TI.EXE; tl.exe
+   * +0x39): its 1-based place among its file's sound records, set as the file is
+   * read (TI.EXE 0x414ff6), with the file's place in the open list in the high
+   * word, renumbered whenever the list changes (0x44dfb0; tl.exe 0x4148b3). 0
+   * when no open bank has the sound.
+   */
+  soundPriorityV4(identifier: string): number {
+    const key = identifier.toLowerCase().replace(/\.wav$/, "");
+    let i = 0;
+    for (const { bank } of this.banks.values()) {
+      let r = 0;
+      for (const name of bank.singles.keys()) {
+        r++;
+        if (name === key) return (i << 16) | r;
+      }
+      i++;
+    }
+    return 0;
   }
 
   /** open banks that carry looping music (counttracks/indextotrack) */
@@ -716,6 +808,36 @@ export class AudioLibrary {
     this.cache.delete(`theme:${hit.entry.bank.trackName}`);
     return true;
   }
+
+  /**
+   * The NAME of the loop chunk a v1 theme is on, `seconds` into it — the
+   * order goes round to its start (DF.EXE links the last record to the first,
+   * 0x406f1f) — or null when the bank has no named loops. What DF.EXE's
+   * `currenttheme(1)` answers (0x429d2e: the playing record's +0x45).
+   */
+  themeChunkAt(bankName: string, seconds: number): string | null {
+    const hit = this.find(bankName);
+    const names = hit?.entry.bank.loopNames;
+    if (!hit || !names?.length) return null;
+    const key = `lengths:${hit.key}`;
+    let lengths = this.loopLengths.get(key);
+    if (!lengths) {
+      lengths = hit.entry.bank.loopChunks.map((loc) => {
+        const a = decodeAudioContainer(hit.entry.file.containers[loc].data);
+        return a.samples.length / a.sampleRate;
+      });
+      this.loopLengths.set(key, lengths);
+    }
+    const total = lengths.reduce((a, b) => a + b, 0);
+    if (Number.isNaN(total) || total <= 0) return names[0];
+    let t = ((seconds % total) + total) % total;
+    for (let i = 0; i < lengths.length; i++) {
+      if (t < lengths[i]) return names[i];
+      t -= lengths[i];
+    }
+    return names.at(-1) ?? null;
+  }
+  private readonly loopLengths = new Map<string, number[]>();
 
   /** concatenated loop-chunk music of a bank (for playtheme) */
   theme(bankName?: string): DecodedAudio | null {

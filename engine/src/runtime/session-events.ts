@@ -59,11 +59,17 @@ export class SessionEvents {
       );
       return 0;
     }
-    // EXPERIMENT: `target` is the ADDRESSEE where the addressee is
-    // a THING — a prop, an actor, a scene, a flat. Where it is a FILE (a shop, a
-    // cast, the stage, a puppet, the boot) there is no thing being addressed and
-    // `target` stays the caller's context.
-    const OBJECT_ADDRESSEE = /^sendto(prop|actor|scene|flat)(fx)?$/;
+    // `target` is the ADDRESSEE where the addressee is named — a prop, an actor,
+    // a scene, a flat, and a cast or shop FILE too. TI.EXE's sendtocast
+    // (0x40bee0) and sendtoshop (0x4426a0) copy the name their lookup found
+    // (0x40c960 / 0x442c50) into both the `me` (+0x1e) and the `target` (+0x3e,
+    // what the operand reader hands out at 0x432a52) of the chain record, and
+    // gang.cst's runpuppet is written for it: `if target != "gang.cst"` guards
+    // its `actorvalue (target, …)` against the `sendtocast ("gang.cst",
+    // runpuppet (…))` calls of HALLD.SET's knock and inven.shp's notebook, which
+    // the caller's name ("knock", "notebook") would turn into error 0xa. The
+    // stage, a puppet and the boot, addressed by no name, keep the caller's.
+    const OBJECT_ADDRESSEE = /^sendto(prop|actor|scene|flat|cast|shop)(fx)?$/;
     const evTarget = OBJECT_ADDRESSEE.test(cmd) ? targetName || callerName : callerName;
     // A KEY event's chain ends at the boot library, because that is where the
     // default movement lives: TAOOT's boot holds two keydown handlers and they are
