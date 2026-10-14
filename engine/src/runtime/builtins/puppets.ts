@@ -75,6 +75,8 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
   r("puppetgrab", (_i, [flag]) => {
     session.puppetGrab = truthy(flag ?? 0);
   });
-  // remaining puppet effects are rare and unverified: puppetsubtitle (override text)
-  r("puppetsubtitle", () => {});
+  // the argument is localised text like a bevel caption, so it arrives as raw bytes
+  r("puppetsubtitle", (_i, [text]) =>
+    session.puppetCtrl.puppetSubtitle(decodeText(toStr(text ?? ""), session.textEncoding())),
+  );
 }

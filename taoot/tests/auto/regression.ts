@@ -42,7 +42,7 @@ import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { EventQueue, EVENT_CAPACITY } from "@dreamfactory/engine/runtime/input";
 import { PUPPET_ART_H } from "@dreamfactory/engine/web/puppet-view";
 import { SCREEN_W } from "@dreamfactory/engine/web/screen";
-import { ScriptInstance, type Value } from "@dreamfactory/engine/runtime/interp";
+import { ScriptError, ScriptInstance, type Value } from "@dreamfactory/engine/runtime/interp";
 import { DeferredAudioSink, NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { projectPoint } from "@dreamfactory/engine/runtime/props";
 import { SetViewer } from "@dreamfactory/engine/web/viewer";
@@ -801,6 +801,64 @@ test.skipIf(noDemo)("engine: puppetspeak finds a line named by its subtitle", as
   check("an ident still wins, and is unaffected", (await say("dpen.03")) === byIdent, `wanted=${JSON.stringify(byIdent)}`);
 }
 );
+
+// --- 0e1. puppetsubtitle, and what the subtitles switch does not hide --------
+// TI.EXE tests puppetparam 7 only in the spoken-line gate (0x440810). The band
+// routine itself (0x441ef0) does not, so `puppetsubtitle` (0x43f940) and a line
+// the table lacks (0x43f81e) print with the switch off; a spoken line does not.
+test("engine: puppetsubtitle prints past the subtitles switch", async () => {
+  const { session } = await newSession();
+  check("a puppet opens", await session.puppetCtrl.openPuppetFile("penny1.pup"));
+  session.puppetParams.set(7, 0);
+  void session.interp.builtins.get("puppetsubtitle")!(
+    session.interp, ["Hello"] as never, { me: "", target: "" } as never, undefined as never,
+  );
+  check("the text is up", session.puppet?.subtitle === "Hello", JSON.stringify(session.puppet?.subtitle));
+  check("and shown with subtitles off", session.puppetCtrl.subtitleShown());
+  session.puppetCtrl.puppetClear();
+  check("puppetclear takes it down", !session.puppetCtrl.subtitleShown());
+  const line = [...(session.puppet?.pup.dialogue.values() ?? [])].find((l) => subtitled(l));
+  if (!line) return;
+  void session.puppetCtrl.puppetSpeak(line.ident);
+  await drain();
+  check("a spoken line posts its text", session.puppet?.subtitle === line.text, line.ident);
+  check("but the switch hides it", !session.puppetCtrl.subtitleShown());
+  session.puppet!.speakSkip?.();
+  await drain();
+  session.puppetParams.set(7, 1);
+});
+
+// --- 0e1b. the script-editor commands still check their arguments ----------
+// TI.EXE's editor is compiled out (0x42b490 returns at once), but each *script
+// handler looks up what it was handed first and fails as the exe does.
+test("engine: the *script commands fail like TI.EXE's", async () => {
+  const { session } = await newSession();
+  await session.openSetFile("c73.set");
+  const code = async (name: string, args: unknown[] = []): Promise<number> => {
+    try {
+      await session.interp.builtins.get(name)!(
+        session.interp, args as never, { me: "", target: "" } as never, undefined as never,
+      );
+      return 0;
+    } catch (e) {
+      return e instanceof ScriptError ? e.code : -1;
+    }
+  };
+  const scene = session.currentBinding!.set.scenes[0].sceneName;
+  check("bootscript checks nothing", (await code("bootscript")) === 0);
+  check("setscript with a set open", (await code("setscript")) === 0);
+  check("scenescript finds a scene", (await code("scenescript", [scene])) === 0);
+  check("scenescript misses with 0xa", (await code("scenescript", ["nosuch"])) === 0xa);
+  check("the boot's stage is open", session.stageOpen, session.stageName);
+  check("stagescript with a stage open", (await code("stagescript")) === 0);
+  check("flatscript finds the current flat", (await code("flatscript", [session.currentFlat])) === 0, session.currentFlat);
+  check("flatscript misses with 0xa", (await code("flatscript", ["nosuch"])) === 0xa);
+  check("puppetscript with no puppet is 0x2d", (await code("puppetscript", ["before"])) === 0x2d);
+  check("propscript misses with 0xa", (await code("propscript", ["nosuch"])) === 0xa);
+  check("actorscript misses with 0xa", (await code("actorscript", ["nosuch"])) === 0xa);
+  check("castscript misses with 0xa", (await code("castscript", ["nosuch.cst"])) === 0xa);
+  check("shopscript misses with 0xa", (await code("shopscript", ["nosuch.shp"])) === 0xa);
+});
 
 // --- 0e2. a handler that never closes its switch ---------------------------
 // User-reported (#177): "Smethells is supposed to intercept you and tell you the
@@ -1971,7 +2029,8 @@ test("movie end: the reveal waits for the script, and a fade cancels it", async 
   v.tick((clock += 250));
   check(
     "the room fades in from black rather than snapping in",
-    session.fade.level < 1 && session.fade.level > 0.9,
+    // 250 ms after the call, 16 of the 60 steps (one on the call's own tick)
+    session.fade.level < 1 && session.fade.level > 0,
     `level=${session.fade.level}`,
   );
   session.fade.queue.length = 0;
@@ -9002,37 +9061,49 @@ test("visualeffect wipes over its step count, and plain does not", async () => {
   check("plain starts no wipe", !session.wiping, `dir=${session.wipe.dir}`);
 
   await start(["wipeleft", 30]);
-  check("wipeleft starts one", session.wiping && session.wipe.dir === "left", `dir=${session.wipe.dir}`);
+  check(
+    "wipeleft starts one",
+    session.wiping && session.wipe.dir === "exe" && session.wipe.effect === "wipeleft",
+    `dir=${session.wipe.dir} effect=${session.wipe.effect}`,
+  );
   check("...over the steps it was given", session.wipe.steps === 30, `steps=${session.wipe.steps}`);
 
   // One step per 60 Hz tick — TI.EXE's own wipe clock, not the 50 ms service
-  // pass: 0x41de90 returns (ms * 3) / 50 and the pacer waits for tick i. So the
-  // scrapbook's 30 steps take half a second.
-  let clock = 0;
-  for (let i = 0; i < 29; i++) session.tickWipe((clock += RAMP_STEP_MS));
+  // pass: 0x41de90 returns (ms * 3) / 50 and the pacer (0x43c600) waits for
+  // `timeBase + i` after drawing pass i. So passes 0 and 1 are up on the tick
+  // the effect starts on, and the scrapbook's 30 steps are over 29 ticks later:
+  // just under half a second.
+  const base = session.clock.now;
+  session.tickWipe(base);
+  check("the tick it starts on shows two passes", session.wipe.step === 1, `step=${session.wipe.step}`);
+  for (let i = 1; i < 29; i++) session.tickWipe(base + i * RAMP_STEP_MS);
   check(
-    "29 ticks in, the reveal is not finished",
+    "28 ticks in, the reveal is not finished",
     session.wiping && session.wipe.step === 29,
     `step=${session.wipe.step} of ${session.wipe.steps}`,
   );
-  session.tickWipe((clock += RAMP_STEP_MS));
-  check("the 30th ends it", !session.wiping, `step=${session.wipe.step} dir=${session.wipe.dir}`);
-  check(
-    "...half a second after it started, as in the original",
-    Math.round(30 * RAMP_STEP_MS) === 500,
-    `30 steps = ${30 * RAMP_STEP_MS} ms`,
-  );
+  session.tickWipe(base + 29 * RAMP_STEP_MS);
+  check("the 29th ends it", !session.wiping, `step=${session.wipe.step} dir=${session.wipe.dir}`);
 
   await start(["wiperight", 20]);
-  check("wiperight goes the other way", session.wipe.dir === "right", `dir=${session.wipe.dir}`);
+  check("wiperight goes the other way", session.wipe.effect === "wiperight", `effect=${session.wipe.effect}`);
   // steps are clamped 1..1000 the way TI.EXE clamps them
   session.endWipe();
   await start(["wipeleft", 99999]);
   check("steps are capped at 1000", session.wipe.steps === 1000, `steps=${session.wipe.steps}`);
-  // an effect the corpus never asks for keeps the instant reveal
+  // an effect the corpus never asks for is still TI.EXE's (0x43bf90), not an
+  // instant reveal — engine/tests/visual-effects.ts pins its geometry
   session.endWipe();
   await start(["venetian", 20]);
-  check("an unused effect stays instant", !session.wiping, `dir=${session.wipe.dir}`);
+  check(
+    "an unused effect is ported too",
+    session.wiping && session.wipe.dir === "exe" && session.wipe.effect === "venetian",
+    `dir=${session.wipe.dir} effect=${session.wipe.effect}`,
+  );
+  session.endWipe();
+  // ...and nodraw (24019) is the dispatcher's bare ret (0x43b615): no reveal
+  await start(["nodraw", 0]);
+  check("nodraw starts nothing", !session.wiping, `dir=${session.wipe.dir}`);
 });
 
 // --- 95. a degree selector shows the frame its degree names ------------------
@@ -9208,21 +9279,24 @@ test("a fade takes one script tick a step, not one service pass", async () => {
     width: 512,
     height: 384,
   });
-  let clock = 0;
+  // Timed on the session's own clock, where the builtin anchors the ramp: step 1
+  // is drawn on the tick it is asked on (0x435b90), so the last of n lands n-1
+  // ticks later, and the script's own wait (n ticks) ends one tick after that.
   const run = (steps: number): number => {
     session.fade.queue.length = 0;
-    session.fade.lastTick = 0;
+    session.fade.lastTick = null;
     session.fade.level = 1;
+    const started = session.clock.now;
+    let clock = started;
     void cmd("blacktoscreen")(session.interp, ["set", steps]);
-    const started = clock;
     for (let i = 0; i < steps * 4 && session.fading; i++) session.tickFade((clock += RAMP_STEP_MS));
     return clock - started;
   };
   // the ordinary fade the whole game uses
   const ten = run(10);
   check(
-    "a 10-step fade is 10 ticks, a sixth of a second",
-    Math.round(ten) === Math.round(10 * RAMP_STEP_MS) && Math.round(ten) === 167,
+    "a 10-step fade is on screen 9 ticks after the call, a sixth of a second with the script's last wait",
+    Math.round(ten) === Math.round(9 * RAMP_STEP_MS) && Math.round(ten) === 150,
     `${Math.round(ten)} ms (the service pass would be ${10 * 50} ms)`,
   );
   // and restorescreen's slow one, the reported case

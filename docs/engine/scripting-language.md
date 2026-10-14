@@ -96,6 +96,14 @@ Rules the interpreter has to honour exactly, or real scripts misbehave:
   true)`, `pausewalk`, `puppetgrab`…) refuses anything but a boolean
   (engine/src/runtime/value-types.ts). A save stores the tag, and a load gives
   a boolean back as one.
+- **A command is a statement, a value, or both, and asking the other way is
+  error 1.** The engine runs a statement and a value through two dispatchers,
+  each with its own id bands: 12xxx commands are statements only, 20xxx values
+  only, and the 16xxx properties both. So `x = puppetclear ()` and a bare
+  `random (5)` are both error 1, as is an id past the engine's bands — DF.EXE's
+  are shorter than TI.EXE's, which is why Dust has no `postscript`
+  (`dispatches` in engine/src/runtime/value-types.ts). No shipped script in
+  the three trees does either.
 - **A boolean is a tag and a 32-bit payload, and the payload need not be 0 or
   1.** DF.EXE's `pauseloop (kind, name)`, `pauseball (name)` and
   `pausewalk (name)` answer the pause *depth* under the boolean tag. The

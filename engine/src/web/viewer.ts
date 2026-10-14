@@ -66,7 +66,39 @@ import { overlayFont } from "./fonts";
  */
 const FRAME_MS = ENGINE_STEP_MS;
 
-/** cap on ticks spent waiting for a transition fade before walking anyway */
+/**
+ * Cap on ticks a move waits for a transition fade before going anyway
+ * ({@link SetViewer.navigateAsExe}).
+ *
+ * Waits on the ENGINE's frame, never on real milliseconds, and that is the
+ * whole point of the line. `session.fading` clears in `tickFade`, which steps
+ * the ramp on the game clock one `ENGINE_STEP_MS` at a time — so polling it
+ * with `setTimeout(r, 0)` asked a question about game time on a wall clock,
+ * and the two hosts each answered wrong in their own direction:
+ *
+ * - Headless the pump drives one engine step per `setImmediate`, and an
+ *   arbitrary, LOAD-DEPENDENT number of those fit inside the ~1 ms a
+ *   `setTimeout(0)` actually takes. So the walk landed a different number of
+ *   steps after the fade on every run, which is the whole of why the oracle
+ *   was not deterministic: TAOOT's `gstair3` staircase exit arrives at
+ *   recept1c and walks in from here, and five frames of slack there moves the
+ *   frame stamp Max's `hasattention(4)` is measured from. Measured: two identical runs
+ *   diverged first at `attentionspan` 15388 vs 15393 in segment 10 and every
+ *   segment after it inherited the drift, and the run that lost the race
+ *   failed with `gave up hunting for max in recept1c` — his puppet holding the
+ *   dispatch while the navigator paced on the spot. With this on `nextFrame`
+ *   the pump's own drain and this loop interleave FIFO in the check phase, one
+ *   iteration per engine step, and 27 segments come out bit-identical.
+ * - A browser was never measured to break here, and had no margin to spare.
+ *   `MAX_FADE_WAIT_TICKS` is named in ticks and was being spent in clamped
+ *   timeouts: 240 of them is roughly a second, against a `fading` that holds
+ *   for the whole queue — the TAOOT corpus fades in 10 steps (500 ms) almost
+ *   everywhere, but `blacktoscreen("set", 60)` is 3 s and one `screentoblack`
+ *   is 120, and a to-black/to-screen pair is two ramps deep. Any of those runs
+ *   the cap out while `fading` is still true, and `walk()` is gated on exactly
+ *   that, so the walk would go missing rather than come late. On rAF the cap
+ *   means what its name says.
+ */
 const MAX_FADE_WAIT_TICKS = 240;
 /** DreamFactory 1: the idle machine's turns from a landing to the hi-res still (0x4335f0) */
 const DF_SHARP_TURNS = 6;
@@ -178,42 +210,8 @@ export class SetViewer implements RoomLayer {
    */
   private readonly navigate = (dir: string): void | Promise<void> => {
     this.session.navHappened = true;
-    // the exes' own order, where the pass steps the camera (TI.EXE's and
-    // DF.EXE's); what follows is the timed camera of a room no pass steps
-    if (this.passStepped) return this.navigateAsExe(dir);
-    // A move asked for while one is still running WAITS for it; it does not
-    // vanish. `walk()` and `turn()` both open with `if (this.busy) return`,
-    // which is right for a player leaning on a key and wrong for a script,
-    // because a script is not repeating itself — every call it makes is a step
-    // it means to take.
-    //
-    // BEDSIT1's air raid is where that shows. Its `gotowin` walks you to the
-    // window and then turns you to face it:
-    //
-    //     currentscene ("strait")
-    //     for count = 1 to 10
-    //         forceupdate ()
-    //     endfor
-    //     currentscene ("right")
-    //
-    // Ten passes is the budget the game allows the road, and the roads it walks
-    // are 6 and 7 frames. The turn came while the road was still moving, and was
-    // dropped. The arrival view is right either way: from Scene2 you land on
-    // View36 and one step RIGHT is View31, from Scene3 you land on View37 and one
-    // step LEFT is View31, and View31 is the window. Dropping the turn is what
-    // left you watching the bombing from the bed or the chair (#40).
-    //
-    // Waiting is half of it; the other half is the RATE the waited-for road
-    // runs at — see {@link FRAME_MS}. Both are needed: at 90 ms the 7-frame road
-    // spends 15 of its 10 passes, so the deferred turn still lands after `bombit`
-    // has played bedex.mov.
-    if (this.session.navFromScript) {
-      // A player's move is untouched: it still drops when one is already
-      // running, which is what keeps a held key from stacking up turns.
-      void this.session.track(this.navigateAfterAnimation(dir), `navigate:${dir}`);
-      return;
-    }
-    this.navigateNow(dir, this.playerPace);
+    // the exes' own order: closescene run, then the move (see navigateAsExe)
+    return this.navigateAsExe(dir);
   };
 
   /**
@@ -299,85 +297,6 @@ export class SetViewer implements RoomLayer {
    */
   private get playerPace(): number {
     return MOVE_SPEED_MS[this.session.moveSpeed];
-  }
-
-  /**
-   * Let the transition fade finish (the render/tick loop drains it), then walk.
-   * Tracked so busy/settle waits for it; capped so a stuck fade can't hang.
-   *
-   * Waits on the ENGINE's frame, never on real milliseconds, and that is the
-   * whole point of the line. `session.fading` clears in `tickFade`, which steps
-   * the ramp on the game clock one `ENGINE_STEP_MS` at a time — so polling it
-   * with `setTimeout(r, 0)` asked a question about game time on a wall clock,
-   * and the two hosts each answered wrong in their own direction:
-   *
-   * - Headless the pump drives one engine step per `setImmediate`, and an
-   *   arbitrary, LOAD-DEPENDENT number of those fit inside the ~1 ms a
-   *   `setTimeout(0)` actually takes. So the walk landed a different number of
-   *   steps after the fade on every run, which is the whole of why the oracle
-   *   was not deterministic: TAOOT's `gstair3` staircase exit arrives at
-   *   recept1c and walks in from here, and five frames of slack there moves the
-   *   frame stamp Max's `hasattention(4)` is measured from. Measured: two identical runs
-   *   diverged first at `attentionspan` 15388 vs 15393 in segment 10 and every
-   *   segment after it inherited the drift, and the run that lost the race
-   *   failed with `gave up hunting for max in recept1c` — his puppet holding the
-   *   dispatch while the navigator paced on the spot. With this on `nextFrame`
-   *   the pump's own drain and this loop interleave FIFO in the check phase, one
-   *   iteration per engine step, and 27 segments come out bit-identical.
-   * - A browser was never measured to break here, and had no margin to spare.
-   *   `MAX_FADE_WAIT_TICKS` is named in ticks and was being spent in clamped
-   *   timeouts: 240 of them is roughly a second, against a `fading` that holds
-   *   for the whole queue — the TAOOT corpus fades in 10 steps (500 ms) almost
-   *   everywhere, but `blacktoscreen("set", 60)` is 3 s and one `screentoblack`
-   *   is 120, and a to-black/to-screen pair is two ramps deep. Any of those runs
-   *   the cap out while `fading` is still true, and `walk()` is gated on exactly
-   *   that, so the walk would go missing rather than come late. On rAF the cap
-   *   means what its name says.
-   */
-  private async walkAfterFade(pace: number): Promise<void> {
-    for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.session.fading; i++) {
-      await this.session.frameWait();
-    }
-    this.walk(pace);
-  }
-
-  /**
-   * Let whatever is running finish, then make this move — see {@link navigate}
-   * for why a scripted move waits instead of being dropped.
-   *
-   * Waits on {@link busy}, not just the animation: a road arrival queues its own
-   * fade, and `turn()` is gated on the same flag, so waiting for the frames
-   * alone left the turn arriving one step too early and dropped all over again
-   * (measured: Scene2 stopped on View36 while Scene3 reached View31).
-   *
-   * Waits on the ENGINE's frame for the same reason {@link walkAfterFade} does:
-   * a wall-clock poll answers a question about game time and makes the headless
-   * oracle non-deterministic. Capped by the same tick budget, so an animation
-   * that never ends cannot hang the script that asked.
-   */
-  private async navigateAfterAnimation(dir: string): Promise<void> {
-    for (let i = 0; i < MAX_FADE_WAIT_TICKS && this.busy; i++) {
-      await this.session.frameWait();
-    }
-    if (this.busy) return; // gave up; do not stack a move onto a stuck one
-    this.navigateNow(dir, FRAME_MS);
-  }
-
-  /** Perform the move — what {@link navigate} runs once it has decided nothing
-   *  is in the way. `pace` is the ms per animation frame ({@link FRAME_MS}); it
-   *  stays a parameter because a transition's walk sets its own. */
-  private navigateNow(dir: string, pace: number): void {
-    if (dir === "strait") {
-      // A changeset earlier in this keydown chain (a door to another set) queues
-      // a blacktoscreen fade that is still draining now — screentoblack/
-      // blacktoscreen are non-blocking here, unlike TI.EXE's synchronous fade
-      // loop. walk() is gated by session.fading, so wait the fade out first;
-      // then walk into the arrived-in room (TAOOT: gstair3's staircase exit
-      // lands at recept1c's arrival scene, then walks into the reception hall).
-      if (this.session.fading) void this.session.track(this.walkAfterFade(pace), "walkAfterFade");
-      else this.walk(pace);
-    } else if (dir === "left") this.turn(LEFTTURNS, pace);
-    else if (dir === "right") this.turn(RIGHTTURNS, pace);
   }
 
   /** buffered currentscene("sceneNNN") teleport target, consumed by the paired
@@ -948,30 +867,11 @@ export class SetViewer implements RoomLayer {
    * lives in {@link keyDown} now, so the movement LETTERS queue the same way.
    */
   async pressNav(key: "uparrow" | "leftarrow" | "rightarrow"): Promise<void> {
-    // NOTE (measured, and left alone deliberately): a press made while a FADE is
-    // ramping — and nothing else is — is DROPPED. The queue in `keyDown` asks
-    // `movingCamera` (a camera move or a script in flight) and the refusal just
-    // below it asks `inputLocked`, and the two differ by exactly
-    // `session.fading`: a press in that gap misses the queue, is refused, and
-    // then finds `walk()` gated on the same fade. Nothing anywhere says so.
-    //
-    // It is a real infidelity — TI.EXE's fade is a synchronous loop INSIDE the
-    // handler, so the press waits in the OS buffer and the main loop pops it
-    // after; ours is deferred to the tick loop and outlives the script that
-    // started it, a state the original never has. But both fixes for it move the
-    // headless ORACLE, because the routes press during fades constantly and all
-    // 29 goldens are recorded with the press dropped: queueing it broke 4 of the
-    // 32 headless tests, and waiting it out inside the gesture broke 11. Whoever
-    // takes this on should re-record the goldens deliberately rather than as a
-    // side effect.
-    //
-    // What it cost meanwhile, so the shape is on record: segment 23 presses up
-    // at TAOOT ENGINE.SET's View120 while the fight's closing fade is still ramping (level
-    // 0.4 of 1, ~1.5 s of real time) and NO keydown handler runs at all —
-    // `engine.keydown`, the only way into the smokestack, never sees the key. The
-    // browser suite reported "pressing up at View120 did not take us into the
-    // stack" 120 s later. The tell was accidental: adding 1.5 s of
-    // instrumentation before the press made it land.
+    // A press made while a FADE ramps is QUEUED and taken once the fade is over
+    // (ScreenDirector.keyNow / inputDrainable), as TI.EXE's synchronous fade loop
+    // leaves it in the OS queue. It used to be dropped: segment 23 pressed up at
+    // TAOOT ENGINE.SET's View120 while the fight's closing fade was ramping and no
+    // keydown handler ran at all, so the smokestack was never entered.
     if (await this.keyDown(key)) return;
     if (key === "uparrow") this.walk();
     else this.turn(key === "leftarrow" ? LEFTTURNS : RIGHTTURNS);
@@ -1602,14 +1502,13 @@ export class SetViewer implements RoomLayer {
    * arrival view for exactly one frame; and the nav arrow carried the departed
    * view's colour through every move.
    *
-   * Fired, not awaited — the interpreter is async and a synchronous host loop
-   * must still see the animation start this tick. In a real host the chain
-   * resolves in the microtasks before the next paint, which is all this
-   * needs. Two divergences from TI.EXE, both accepted: it CANCELS the move if
-   * a closescene handler jumps the scene (0x407ce6) — no shipped closescene
-   * navigates, so the cancel is not modelled — and a closescene that waits on
-   * frames (HALLA's jay-walk spin) overlaps the animation here instead of
-   * holding it. {@link settleScene} chains the arrival openscene on this
+   * A script's `currentscene (dir)` does not come through here: it takes
+   * {@link navigateAsExe}, which runs closescene to its end before the first
+   * frame, so HALLA's jay-walk spin holds the move, and drops the move when
+   * the handler closed the set (0x407cc9) or moved the scene (0x407ce6). What
+   * is left here is the engine default for a room with no boot (the dev set
+   * picker), where closescene is fired, not awaited, and overlaps the
+   * animation. {@link settleScene} chains the arrival openscene on this
    * promise so the pair cannot run out of order even then.
    */
   private departScene(label: string): Promise<void> {

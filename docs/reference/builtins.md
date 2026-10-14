@@ -80,11 +80,10 @@ open/close (`openshopfile`, `closeshopfile`, `fileexists`), movies
 count/index enumeration pairs for scenes, views, flats, shops, buttons and
 paintings.
 
-Three groups are **deliberately inert**, each for a recovered reason:
+These groups are **deliberately inert**, each for a recovered reason:
 
 | Group | Names | Why |
 |-------|-------|-----|
-| Visual transitions (21) | `plain`, `nodraw`, `barndoorclose`/`open`, `irisclose`/`open`, `scrolldown`/`up`/`right`/`left` (sic: `scrolleft`), `venetian`, `wipedown`/`up`/`right`/`left`, `turnright`/`left`/`up`/`down`, `turnhalfleft`/`right` | behave as instant — visual polish for later; the fades that gate logic (`screentoblack`…) are real, and they [block the script](../engine/runtime/timing.md) for their `steps` ticks the way the original's do |
 | Debugger family (14) | `propscript`, `buttonscript`, `scenescript`, `flatscript`, `stagescript`, `bootscript`, `postscript`, `setscript`, `paintingscript`, `puppetscript`, `castscript`, `actorscript`, `shopscript`, `serverscript` | opened the in-engine script editor; in every shipping build of `TI.EXE` the editor flag is clear and they no-op |
 | Modifier keys (3) | `shiftkey`, `optionkey`, `commandkey` | always 0, keeping `if debugging & shiftkey()` debug branches dormant |
 
@@ -97,12 +96,19 @@ BOOTFILE script with no opcode id, which a builtin of the same name would
 shadow. `openstagefile` is the primitive the shipped
 handler calls; the overlay sequence around it is the game's
 ([Stage & UI](../engine/runtime/stage-ui.md)).
-`visualeffect` is not a no-op: every effect but `plain` is a *reveal*. The ones
-the scripts ask for — the wipes (`wipeleft`, `wiperight`, `barndooropen`,
-`barndoorclose`) and Timelapse's four turns — are animated over `steps` engine
-passes, and the script waits for them; the rest (`venetian`, the irises, the
-scrolls) reveal instantly. Either way a reveal also **ends the transition-black
-the script put up**, which one stage in the game relies on.
+`visualeffect` is not a no-op: every effect but `plain` and `nodraw` is a
+*reveal*, drawn pass by pass while the script waits for it. Every one of them —
+the wipes, barn doors, irises, scrolls, `venetian` and the turns, including
+those no shipped script asks for — is drawn as the game's own exe draws it
+(`engine/src/runtime/visual-effects.ts` has the geometry and the addresses).
+TI.EXE, `tl.exe` and RedJack.exe draw `steps` passes a 60 Hz tick apart;
+DF.EXE (Dust) draws a fixed number of passes per effect — 8 for the barn
+doors, 15 for the wipes and scrolls — and `steps` only sets how long each one
+is held, and it has no turns or `nodraw` (error 0xe). RedJack's 24020 is
+`photodissolve`, a blend of the two pictures, and it has no 24021. A reveal
+also **ends the transition-black the script put up**, which one stage in the
+game relies on; `nodraw` is the dispatcher's bare `ret` and leaves the screen,
+black included, as it was.
 
 ## Props — `props.ts`
 

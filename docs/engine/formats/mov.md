@@ -336,7 +336,7 @@ smallest close-up. The other bits seen in the corpus:
 | Bit | Meaning | Set by |
 |----:|---------|--------|
 | 0 | ESC / Ctrl+Q aborts this movie | all 218 |
-| 2 | an alternate frame blit (`0x438900` rather than `0x438850`) | `BOMBHELP`, `AFTWASH`, `PORTWASH`, `STARWASH` — the port does not distinguish the two paths |
+| 2 | keep shown frames cached: the loop (`0x44928a`) releases a frame through `0x438850`, which leaves it in the cache, instead of `0x438900`, which frees it once its last lock drops (`0x438b80`) | `BOMBHELP`, `AFTWASH`, `PORTWASH`, `STARWASH` — a memory policy only; the port's buffers are the browser's |
 | 3 | *any* key aborts | none — and because the loop **flushes the pending events at movie start** unless this bit is set, a key pressed *before* a movie began can never skip it |
 
 ### Where the rule lives

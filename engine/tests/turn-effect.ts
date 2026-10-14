@@ -148,16 +148,26 @@ async function turnAt(
   s.dir.render(s.ctx);
 }
 
+/**
+ * The first step of a 4-step full turn shows TWO passes of 640/4+1 = 161
+ * columns, 322 in all.
+ *
+ * These two tests used to expect ONE pass (161 columns) here, from a mapping
+ * of `step * per`. Both exes draw a pass and only then wait for its tick
+ * (TI.EXE 0x43c0fc pushes the pass number before `inc bx` and calls the pacer
+ * 0x43c600; tl.exe 0x4486fc / 0x448c00 the same), so passes 0 and 1 land on the
+ * same tick and the first frame of a turn is already two strips in — the
+ * pacing every other effect has (runtime/visual-effects.ts `passesAt`).
+ */
 test("a full turn slides both pictures, and the arriving one enters at an edge", async () => {
   const s = await scene();
-  // a quarter of the way through a full turn: 160 columns of the new picture
   await turnAt(s, "turnright", 1, 1, 4);
-  // the leaving picture still holds the left three quarters...
+  // the leaving picture, pushed left, holds 640 - 322 = 318 columns...
   expect(slotAt(s.dir, 10), "the leaving picture is still there").toBe(1);
-  expect(slotAt(s.dir, 460)).toBe(1);
-  // ...and the arriving one has the right quarter, sourced from its LEFT edge,
-  // which is the plain field rather than the marked right quarter
-  expect(slotAt(s.dir, 500), "the arriving picture entered at the right").toBe(2);
+  expect(slotAt(s.dir, 317)).toBe(1);
+  // ...and the arriving one the right 322, sourced from its LEFT edge — columns
+  // 0..321, the plain field rather than the marked right quarter
+  expect(slotAt(s.dir, 318), "the arriving picture entered at the right").toBe(2);
   expect(slotAt(s.dir, 630)).toBe(2);
 });
 
@@ -165,10 +175,13 @@ test("...and the mirror enters at the other edge, from its other end", async () 
   const s = await scene();
   await turnAt(s, "turnleft", 1, 1, 4);
   // a left turn slides the picture right, so the new one arrives at the LEFT —
-  // and is consumed backwards, so what shows is its MARKED right quarter
-  expect(slotAt(s.dir, 10), "the arriving picture's far end came in first").toBe(3);
-  expect(slotAt(s.dir, 150)).toBe(3);
-  expect(slotAt(s.dir, 300), "the leaving picture, pushed right").toBe(1);
+  // and is consumed backwards: its columns 318..639 fill screen 0..321, so the
+  // MARKED right quarter (480..639) is the 160 columns nearest the leaving side
+  expect(slotAt(s.dir, 10), "the field before its marker").toBe(2);
+  expect(slotAt(s.dir, 161)).toBe(2);
+  expect(slotAt(s.dir, 162), "the arriving picture's far end came in first").toBe(3);
+  expect(slotAt(s.dir, 321)).toBe(3);
+  expect(slotAt(s.dir, 322), "the leaving picture, pushed right").toBe(1);
   expect(slotAt(s.dir, 630)).toBe(1);
 });
 

@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { gamefilePath } from "../../tools/gamefiles";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
-import { Value } from "@dreamfactory/engine/runtime/interp";
+import { ScriptError, Value } from "@dreamfactory/engine/runtime/interp";
 import { bearing } from "@dreamfactory/engine/runtime/geometry";
 import { readSetFile } from "@dreamfactory/engine/df/set";
 
@@ -60,21 +60,46 @@ test("angle wraps mod 256 and magnitude scales linearly", () => {
   expect(v.y(64, 250)).toBe(250);
 });
 
-test("the *script debugger family is registered as inert no-ops", () => {
+test("the *script editor family fails as TI.EXE's does with nothing open", () => {
   const session = new GameSession(() => null, new NullAudioSink());
-  const family = [
-    "propscript", "buttonscript", "scenescript", "flatscript", "stagescript",
-    "bootscript", "postscript", "setscript", "paintingscript", "puppetscript",
-    "castscript", "actorscript", "shopscript", "serverscript",
-  ];
-  // registered (so calls never fall through to onUnknown) and side-effect-free
+  // no set, stage or puppet open: each handler's first check (see scene.ts)
+  const family: Record<string, number> = {
+    bootscript: 0, postscript: 0, serverscript: 0,
+    setscript: 0x28, scenescript: 0x28, paintingscript: 0xb,
+    stagescript: 0xb, flatscript: 0xb, buttonscript: 0xb, puppetscript: 0x2d,
+    propscript: 0xa, castscript: 0xa, actorscript: 0xa, shopscript: 0xa,
+  };
   let unknown = 0;
   session.interp.onUnknown = () => unknown++;
-  for (const name of family) {
-    expect.soft(session.interp.builtins.has(name), `${name} registered`).toBe(true);
-    callBuiltin(session, name, "me"); // must not throw
+  for (const [name, want] of Object.entries(family)) {
+    let got = 0;
+    try {
+      callBuiltin(session, name, "me");
+    } catch (e) {
+      got = e instanceof ScriptError ? e.code : -1;
+    }
+    expect.soft(got, name).toBe(want);
   }
   expect(unknown).toBe(0);
+});
+
+test("the *script family's DF.EXE and RedJack.exe differences", () => {
+  const code = (session: GameSession, name: string, ...args: unknown[]): number => {
+    try {
+      callBuiltin(session, name, ...(args as never[]));
+      return 0;
+    } catch (e) {
+      return e instanceof ScriptError ? e.code : -1;
+    }
+  };
+  const dust = new GameSession(() => null, new NullAudioSink());
+  dust.dfVersion = 1;
+  // 12037 is floorscript (n), and wants a set first (0x410000)
+  expect(code(dust, "paintingscript", 3)).toBe(0x28);
+  const rj = new GameSession(() => null, new NullAudioSink());
+  rj.isV5 = true;
+  expect(code(rj, "postscript")).toBe(0);
+  expect(code(rj, "paintingscript", "s", "v", "p")).toBe(0x28); // 0x4425b6
 });
 
 test("fileexists reports availability via the provider (case-insensitive)", async () => {

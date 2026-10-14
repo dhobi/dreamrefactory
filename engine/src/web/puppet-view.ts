@@ -332,7 +332,7 @@ export class PuppetView {
     const H = this.artH;
     // while a subtitle shows, the layers are clipped 40 px shorter still — the
     // caption bar is cut out of the picture, not added below it (0x440981)
-    const showingSubtitle = !!p.subtitle && this.session.subtitlesOn();
+    const showingSubtitle = this.session.puppetCtrl.subtitleShown();
     const clipY = showingSubtitle ? this.subtitleTop : H;
     // layer state for this instant: animLogic playback while a line is
     // spoken (~30 records/s: lip sync, blinks, gestures), else the held
@@ -555,7 +555,7 @@ export class PuppetView {
       return;
     }
     sig.bool(true).bool(p.visible).str(p.name).num(p.stanceIdx);
-    sig.bool(this.session.subtitlesOn()).str(p.subtitle ?? "");
+    sig.bool(this.session.puppetCtrl.subtitleShown()).str(p.subtitle ?? "");
     const state = this.session.puppetCtrl.puppetFrame();
     sig.num(state ? state.layers.length : -1);
     if (state) for (const l of state.layers) sig.num(l.frame).num(l.x).num(l.y);
@@ -585,7 +585,7 @@ export class PuppetView {
     ctx.font = subtitleFont(this.param(PARAM.textSize, 12));
     // the caption bar: FillRect over the bottom 40 px of the picture, then at
     // most two lines of it (0x441ef0)
-    if (p.subtitle && this.session.subtitlesOn()) {
+    if (this.session.puppetCtrl.subtitleShown()) {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, this.subtitleTop, this.W, SUBTITLE_H);
       ctx.fillStyle = clutColor(pal, SUBTITLE_COLOR);

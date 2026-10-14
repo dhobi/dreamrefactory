@@ -1,5 +1,7 @@
 import { ScriptError, toNum, toStr, truthy, type Value } from "../interp";
+import { RAMP_STEP_MS, ticksAt } from "../clock";
 import { packPoint } from "../point";
+import { dfPlan, isDfEffect, isExeEffect, type DfEffect } from "../visual-effects";
 import { BuiltinCtx } from "./context";
 
 /**
@@ -279,7 +281,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     return session.files(key) ? 1 : 0;
   });
 
-  // screen transitions: visual polish for later — behave as instant for now
+  // the effect names `visualeffect` takes — each evaluates to itself, and what
+  // it draws is `visualeffect`'s business (below)
   for (const t of [
     "plain", "nodraw", "barndoorclose", "barndooropen", "irisclose", "irisopen",
     "scrolldown", "scrollup", "scrollright", "scrolleft", "venetian",
@@ -330,6 +333,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     if (to === 1 && !session.fade.snapshot) {
       session.fade.snapshot = session.captureFrame?.() ?? null;
     }
+    // step 1 is drawn on the tick it is asked on (0x435b90) — see tickFade
+    if (!session.fade.queue.length) session.fade.lastTick = ticksAt(session.clock.now) - 1;
     session.fade.queue.push({ to, steps: n });
     session.fade.pendingReveal = false;
     // a ramp is a ramp of a named palette — see GameSession.fade.blanked
@@ -467,12 +472,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   /**
    * visualeffect(effect, steps): how the NEXT screen arrives.
    *
-   * Every effect but `plain` is a reveal — the new screen is wiped, irised or
-   * scrolled in over the old one. This port animates the wipes, barn doors and
-   * the four turns over `steps` engine passes, and reveals `venetian`, the irises
-   * and the scrolls instantly. Either way a reveal also ENDS the
-   * transition-black the script put up to hide the change; an effect treated as
-   * a no-op would leave nothing ending it.
+   * Every effect but `plain` and `nodraw` is a reveal — the new screen is wiped,
+   * irised, scrolled or pushed in over the old one, one strip per 60 Hz tick
+   * over `steps` passes. A reveal also ENDS the transition-black the script put
+   * up to hide the change; an effect treated as a no-op would leave nothing
+   * ending it.
    *
    * TAOOT's blackjack is where that shows. HOUSE fades the dealer out with
    * `screentoblack("puppet")` and then `transtoflat("blkjack.stg")`, which is the
@@ -487,14 +491,42 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * fade-in on every overlay the game opens.
    */
   r("visualeffect", (_i, [effect, steps], _c, frame) => {
+    // DF.EXE and RedJack.exe check the id's band BEFORE anything else, and an id
+    // outside it is error 0xe with no pass and no effect: DF.EXE's band is
+    // 24001..24014 (0x4202fa..0x42030a -> 0x4203cd), so the turns and `nodraw`
+    // are not effects there at all, and RedJack.exe's is 24001..24020
+    // (0x408ba2..0x408bb6 -> 0x408c6f), so `turnhalfright` (24021) is not one.
+    const id = toStr(effect ?? "").toLowerCase();
+    if (session.isV1 ? NOT_DF.has(id) : session.isV5 && id === "turnhalfright") {
+      throw new ScriptError(0xe, `visualeffect: ${id} is not an effect here`);
+    }
     // A PASS first, with its screen copy held back (TI.EXE 0x43df85 raises
     // 0x489ef6, which 0x43a8f7 tests before the blit; tl.exe 0x44a585;
     // RedJack.exe 0x408c3c raises 0x4c7846 round its pass 0x408c43) — the
     // loops, walks and crickets run and the throttle is waited out — and the
     // effect only if that pass did not fail (0x43df9e, 0x408c4f).
     const sched = session.scheduler;
-    return sched.pass({ wait: sched.passWait(frame) }).then((ok) => (ok ? visualEffect(effect, steps) : undefined));
+    session.effectPassHeld = true;
+    return sched.pass({ wait: sched.passWait(frame) }).then(
+      (ok) => {
+        // the effect reads the held screen as the picture it leaves, and draws
+        // from there on (GameSession.effectPassHeld)
+        try {
+          return ok ? visualEffect(effect, steps) : undefined;
+        } finally {
+          session.effectPassHeld = false;
+        }
+      },
+      (e: unknown) => {
+        session.effectPassHeld = false;
+        throw e;
+      },
+    );
   });
+  /** TI.EXE's effect names DF.EXE's command table does not have (see the band check above) */
+  const NOT_DF: ReadonlySet<string> = new Set([
+    "turnright", "turnleft", "turnup", "turndown", "nodraw", "turnhalfleft", "turnhalfright",
+  ]);
   const visualEffect = (effect: Value | undefined, steps: Value | undefined): Promise<void> | void => {
     const name = toStr(effect ?? "plain").toLowerCase();
     if (name === "plain") {
@@ -505,6 +537,14 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       session.repaintNow?.();
       return;
     }
+    // `nodraw` (24019) is no reveal at all: the jump table sends it to the
+    // dispatcher's bare `ret` (TI.EXE 0x43b615; RedJack.exe's slot 18 is its
+    // epilogue, 0x436a09), so the pass ran with its screen copy held back
+    // (0x489ef6) and nothing is copied after it — the screen keeps what it had,
+    // black included. The glowstick's x-ray asks for it every drag step
+    // (plugins.ts) and draws the picture itself. So it must not lift the
+    // transition-black the way a reveal does. (DF.EXE has no 24019.)
+    if (name === "nodraw") return;
     session.fade.queue.length = 0;
     session.fade.snapshot = null;
     session.fade.pendingReveal = false;
@@ -527,13 +567,17 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // …) ask for `visualeffect(plain, 0)` instead, so honouring the difference is
     // what makes the flips land on the page turns and nowhere else (#12).
     //
-    // The wipes the two corpora use are animated: TAOOT asks for wipeleft and
-    // wiperight (9 reveals), Dust adds barndooropen and barndoorclose — its map
-    // and inventory screens arrive middle-outwards (4 opens, 3 closes, reported
-    // from play as "the map and the menu have an opening animation in the real
-    // game"). `venetian`, the irises and the scrolls are named in TI.EXE's
-    // vocabulary but no script in either game asks for one, so those keep the
-    // old instant reveal rather than guessing at geometry.
+    // TAOOT asks for wipeleft and wiperight (9 reveals), Dust adds barndooropen
+    // and barndoorclose — its map and inventory screens arrive middle-outwards
+    // (4 opens, 3 closes, reported from play as "the map and the menu have an
+    // opening animation in the real game"). `venetian`, the irises, the scrolls,
+    // wipeup/wipedown and turnup/turndown are in the vocabulary although no
+    // shipped script asks for them, and they are ported all the same, read off
+    // each exe's functions rather than guessed (runtime/visual-effects.ts has
+    // the addresses). TI.EXE, tl.exe and RedJack.exe draw them alike, strip for
+    // strip; DF.EXE has its own plan for its thirteen — a fixed number of passes
+    // with `steps` only setting how long each is held — so a Dust reveal is
+    // DF.EXE's (`draws: "df"`).
     /**
      * ...and the TURNS, which are not wipes at all.
      *
@@ -545,8 +589,6 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
      * ScreenDirector.pushTurn, off `tl.exe`.
      */
     const DIR = {
-      wipeleft: "left", wiperight: "right",
-      barndooropen: "open", barndoorclose: "close",
       turnleft: "turnleft", turnhalfleft: "turnleft",
       turnright: "turnright", turnhalfright: "turnright",
     } as const;
@@ -556,37 +598,58 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
      * has no 24021. It is how RedJack brings up its control panel and crosses
      * into a new day, and read as the first leg of a Timelapse turn it held the
      * screen on a half-pushed picture waiting for a second leg that never came.
+     *
+     * RedJack.exe's turnleft/turnright/turnup/turndown (0x4379a0, 0x4376a0,
+     * 0x437ca0, 0x437fa0) push exactly as TI.EXE's do, pass for pass, so v5
+     * takes TI.EXE's turns too. (Each first checks there is memory for a
+     * snapshot of the screen, 0x46ce10, and is a plain copy without it; the port
+     * always has it.)
      */
-    const dir = session.isV5 && name === "turnhalfleft" ? "dissolve" : DIR[name as keyof typeof DIR];
+    const exe = session.isV1 ? (isDfEffect(name) ? name : null) : isExeEffect(name) ? name : null;
+    const dir = exe ? "exe" : session.isV5 && name === "turnhalfleft" ? "dissolve" : DIR[name as keyof typeof DIR];
     if (!dir) return;
     const from = session.captureFrame?.() ?? null;
     if (!from) return;
     /**
-     * A turn also captures the picture it is ARRIVING at, here, once. The
+     * A reveal also captures the picture it is ARRIVING at, here, once. The
      * script has already done `gotoflat`, so the current flat is the one the
-     * turn is turning to; painting it now and holding the capture is the
+     * effect is arriving at; painting it now and holding the capture is the
      * port's copy of the original's offscreen surface, which `gotoflat` drew
      * and the modal effect then consumed unchanged. Left to the live frame
      * instead, an animating destination swapped the entering strips mid-ramp
      * (i0001.103's water reached frame 3 before the turn was over), and the
-     * between-legs composite drifted with it. See GameSession.wipe.to.
+     * between-legs composite drifted with it. Every effect is modal the same
+     * way in all three exes. See GameSession.wipe.to.
      */
-    let to: { rgba: Uint8ClampedArray; width: number; height: number } | null = null;
-    if (dir === "turnleft" || dir === "turnright") {
-      session.repaintNow?.();
-      to = session.captureFrame?.() ?? null;
-      if (!to) return;
-    }
+    session.repaintNow?.();
+    const to = session.captureFrame?.() ?? null;
+    if (!to) return;
     session.wipe.from = from;
     session.wipe.to = to;
     session.wipe.dir = dir;
+    session.wipe.effect = exe ?? "";
     session.wipe.settled = false;
     // the `half` pair travels half the screen (tl.exe 0x448b48); the rest all of it
-    session.wipe.span = name === "turnhalfleft" || name === "turnhalfright" ? 0.5 : 1;
-    // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a)
-    session.wipe.steps = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
+    session.wipe.span = dir === "dissolve" ? 1 : name === "turnhalfleft" || name === "turnhalfright" ? 0.5 : 1;
+    // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a; DF.EXE
+    // 0x420370..0x42038a, RedJack.exe 0x408c0c..0x408c25)
+    const clamped = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
+    if (session.isV1 && exe) {
+      // DF.EXE: its fixed passes, each held its own length, and one more step
+      // for the hold after the last pass (see dfPlan)
+      const plan = dfPlan(exe as DfEffect, clamped, to.height);
+      session.wipe.draws = "df";
+      session.wipe.passMs = plan.passMs;
+      session.wipe.steps = plan.passes + 1;
+    } else {
+      session.wipe.draws = "ti";
+      session.wipe.passMs = 0;
+      session.wipe.steps = clamped;
+    }
     session.wipe.step = 0;
     session.wipe.lastTick = 0;
+    // the pacer's `timeBase`: the tick the effect begins on (see tickWipe)
+    session.wipe.baseTick = ticksAt(session.clock.now);
     // The script WAITS for the reveal, as it does in the original: visualeffect
     // performs the whole effect inside the command (0x43b480 off the back of a
     // service pass) and its pacer spins until each strip's tick is due, so the
@@ -598,7 +661,9 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // reasons walkAfterFade is: a host that stops ticking must not hang a script,
     // and a poll on real milliseconds makes the headless oracle non-deterministic.
     return (async () => {
-      const cap = session.wipe.steps * 4 + 60;
+      // (a DF.EXE ramp's steps are its holds, which can be many ticks long)
+      const ticks = Math.ceil((session.wipe.steps * (session.wipe.passMs || RAMP_STEP_MS)) / RAMP_STEP_MS);
+      const cap = ticks * 4 + 60;
       for (let i = 0; i < cap && session.wiping; i++) await session.frameWait();
       // Gave up (the host stopped ticking): never leave a reveal holding the
       // screen. But ONLY then — a wipe that finished was ended by tickWipe, and
@@ -642,21 +707,118 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     r(noop, () => {});
   }
 
-  // The *script family opens the in-engine script editor/debugger on a named
-  // object (its script), e.g. `propscript(me)`, `buttonscript(currentflat(),
-  // me)`, `scenescript(currentscene())`. In TI.EXE each handler first tests a
-  // global "editor available" flag (0x489f2c / 0x489fd8) and, when it's clear —
-  // as in every shipping build — returns an error and does nothing. Scripts
-  // only ever reach them behind `if debugging & shiftkey()` (or a hidden debug
-  // menu), and our shiftkey() is already 0, so these never fire in normal play;
-  // register them as no-ops so the debug branches stay inert instead of logging
-  // as unknown. (serverscript is the same, for the cut networking debugger.)
-  for (const dbg of [
-    "propscript", "buttonscript", "scenescript", "flatscript", "stagescript",
-    "bootscript", "postscript", "setscript", "paintingscript", "puppetscript",
-    "castscript", "actorscript", "shopscript", "serverscript",
-  ]) {
-    r(dbg, () => {});
+  // The *script family opened the in-engine script editor on a named object
+  // (`propscript(me)`, `buttonscript(currentflat(), me)`). The shipped TI.EXE
+  // has the editor compiled out — every handler ends in 0x42b490, which only
+  // copies a string and returns — but each still checks what it was handed
+  // first, and that is ported here, reachable or not (every call in the TAOOT
+  // tree sits behind `if debugging`, which nothing sets true):
+  //
+  //   bootscript, postscript, serverscript  nothing to check      0x42a880/8b0/8e0
+  //   setscript ()               a set open, else 0x28          0x4086e0
+  //   scenescript (scene)        set 0x28, scene 0xa            0x408750 -> 0x409e50
+  //   paintingscript (s, v, p)   set 0xb, scene, view, painting 0xa  0x409330
+  //   stagescript ()             a stage open, else 0xb         0x446250
+  //   flatscript (flat)          stage 0xb, flat 0xa            0x4462c0 -> 0x447440
+  //   buttonscript (flat, btn)   stage 0xb, flat, button 0xa    0x446380 -> 0x447530
+  //   puppetscript (script)      a puppet open 0x2d, script 0xa 0x43fd80 -> 0x440470
+  //   propscript (prop)          prop 0xa                       0x417d90 -> 0x418870
+  //   castscript (file)          cast file 0xa                  0x40fdf0 -> 0x410e50
+  //   actorscript (actor)        actor 0xa                      0x40fd40 -> 0x410d00
+  //   shopscript (file)          shop file 0xa                  0x417e40 -> 0x4189d0
+  //
+  // tl.exe's fourteen are the same (0x42cd90, 0x40cc10, 0x435180 …). The other
+  // two engines differ in three places, and only there:
+  //
+  //  - id 12037 is DF.EXE's `floorscript (n)` (its own name table says so):
+  //    a set open, else 0x28; an integer 0..31, else 0xe (0x410000-0x410062).
+  //    RedJack.exe's `paintingscript` wants a set open too, else 0x28 (0x4425b6).
+  //  - DF.EXE has no 12089 or 12091 — its statement band stops at 12088
+  //    (`cmp eax, 0x57`, 0x41ee7a) — so `postscript` and `serverscript` are
+  //    error 1 there (0x41ee97), as any id past the band is: the interpreter
+  //    raises it before the call reaches a builtin (value-types.ts dispatches).
+  //  - DF.EXE's scenescript, after the stub, re-stores the scene (0x428450,
+  //    0x4114c0, an alert 0x1521 if that fails): the script the compiled-out
+  //    editor could not change. Not modelled; nothing it stores is new.
+  //
+  // RedJack.exe: 0x42b2e0 propscript, 0x441000 scenescript, 0x404d80
+  // actorscript, 0x404e10 castscript, 0x42b370 shopscript, 0x42fa50
+  // puppetscript, 0x4144d0/0x414530/0x414690 stage/flat/buttonscript — the
+  // same tests and codes, its editor 0x43beb0 compiled out the same way.
+  const lc = (v: Value | undefined): string => toStr(v ?? "").toLowerCase();
+  const has = (keys: Iterable<string>, name: Value | undefined): boolean => {
+    const n = lc(name);
+    for (const k of keys) if (k.toLowerCase() === n) return true;
+    return false;
+  };
+  const miss = (cmd: string, what: string, name: Value | undefined): never => {
+    throw new ScriptError(0xa, `${cmd}: no ${what} "${toStr(name ?? "")}"`);
+  };
+  const needSet = (cmd: string, code: number): void => {
+    if (!session.currentBinding) throw new ScriptError(code, `${cmd}: no set open`);
+  };
+  const needStage = (cmd: string): void => {
+    if (!session.stageOpen) throw new ScriptError(0xb, `${cmd}: no stage open`);
+  };
+  const needFlat = (cmd: string, flat: Value | undefined): void => {
+    if (!has(session.flatNames, flat)) miss(cmd, "flat", flat);
+  };
+  const editorChecks: Record<string, (args: Value[]) => void> = {
+    bootscript: () => {},
+    // in DF.EXE these two are error 1 before they get here (value-types.ts dispatches)
+    postscript: () => {},
+    serverscript: () => {},
+    setscript: () => needSet("setscript", 0x28),
+    scenescript: ([scene]) => {
+      needSet("scenescript", 0x28);
+      if (!sceneByName(toStr(scene ?? ""))) miss("scenescript", "scene", scene);
+    },
+    paintingscript: ([scene, view, painting]) => {
+      if (session.isV1) {
+        // DF.EXE's floorscript (n)
+        needSet("floorscript", 0x28);
+        if (typeof scene !== "number" || scene < 0 || scene >= 32) {
+          throw new ScriptError(0xe, `floorscript: floor ${toStr(scene ?? "")} is not 0..31`);
+        }
+        return;
+      }
+      needSet("paintingscript", session.isV5 ? 0x28 : 0xb);
+      if (!sceneByName(toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
+      const v = viewByName(toStr(scene ?? ""), toStr(view ?? ""));
+      if (!v) miss("paintingscript", "view", view);
+      if (!v!.objects.some((o) => o.identifier.toLowerCase() === lc(painting))) miss("paintingscript", "painting", painting);
+    },
+    stagescript: () => needStage("stagescript"),
+    flatscript: ([flat]) => {
+      needStage("flatscript");
+      needFlat("flatscript", flat);
+    },
+    buttonscript: ([flat, button]) => {
+      needStage("buttonscript");
+      needFlat("buttonscript", flat);
+      if (!has(session.stageCtrl.flatButtonNames(toStr(flat ?? "")), button)) miss("buttonscript", "button", button);
+    },
+    puppetscript: ([script]) => {
+      if (!session.puppet) throw new ScriptError(0x2d, "puppetscript: no puppet open");
+      if (!has(session.puppet.scripts.keys(), script)) miss("puppetscript", "puppet script", script);
+    },
+    propscript: ([prop]) => {
+      if (!session.propRuntime.get(toStr(prop ?? ""))) miss("propscript", "prop", prop);
+    },
+    castscript: ([file]) => {
+      if (!has(session.actorRuntime.casts.keys(), file)) miss("castscript", "cast file", file);
+    },
+    actorscript: ([actor]) => {
+      if (!session.actorRuntime.get(toStr(actor ?? ""))) miss("actorscript", "actor", actor);
+    },
+    shopscript: ([file]) => {
+      if (!has(session.propRuntime.shops.keys(), file)) miss("shopscript", "shop file", file);
+    },
+  };
+  for (const [cmd, check] of Object.entries(editorChecks)) {
+    r(cmd, (_i, args) => {
+      check(args);
+    });
   }
 
   /*

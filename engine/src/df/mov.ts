@@ -227,9 +227,13 @@ export interface MovSegment {
    * Header flag word (container-0 +0x18) — per-movie playback options.
    *
    * Bit 0 ({@link keySkips}) is the one that matters: it lets ESC abort the
-   * movie. Bit 2 selects an alternate frame blit (TI.EXE 0x438900 instead of
-   * 0x438850); only bombhelp/aftwash/portwash/starwash set it and we don't
-   * distinguish the two paths. Bit 3 ({@link FLAG_ANY_INPUT_ABORTS}) lets any
+   * movie. Bit 2 keeps a shown frame in the frame cache: the movie loop
+   * (TI.EXE 0x44928a, 0x44a997) releases each frame through 0x438850 when it is
+   * set and through 0x438900 when it is clear, and the two differ only once the
+   * frame's last lock drops — 0x438900 then frees its buffer on the spot
+   * (0x438b80), 0x438850 leaves it cached. Only bombhelp/aftwash/portwash/
+   * starwash set it. It is a memory policy with nothing to see or hear, and the
+   * port's buffers are the browser's, so nothing here reads it. Bit 3 ({@link FLAG_ANY_INPUT_ABORTS}) lets any
    * key or click abort the movie (tested at TI.EXE 0x44a13f, which peeks the
    * event queue for a keydown or a mousedown and breaks the frame wait), and it
    * is also what spares a movie the flush it otherwise does on its way out

@@ -561,6 +561,18 @@ export class GameSession {
    * being there.
    */
   repaintNow: (() => void) | null = null;
+  /**
+   * `visualeffect`'s pass is running, with its screen copy held back — TI.EXE
+   * raises 0x489ef6 round it (0x43df85), and the frame's blit tests it
+   * (0x43a8f7); tl.exe 0x44a585; RedJack.exe 0x4c7846 (0x408c3c). The screen
+   * keeps the picture it had, so the effect starts from the screen the player
+   * was looking at. A host whose pass waits on real frames presents those
+   * frames meanwhile, and without this the new flat reached the screen during
+   * the pass, the effect captured it as the LEAVING picture, and every wipe
+   * ran from the new page to the new page — no wipe to see (ScreenDirector.
+   * screenOwner answers "held" while it is up).
+   */
+  effectPassHeld = false;
 
   /** host hook: snapshot the currently displayed frame for fade-outs */
   captureFrame: (() => { rgba: Uint8ClampedArray; width: number; height: number } | null) | null =

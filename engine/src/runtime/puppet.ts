@@ -242,6 +242,20 @@ export class PuppetController {
      */
     visible: boolean;
     subtitle: string;
+    /**
+     * The subtitle was drawn straight by the band routine rather than through
+     * the spoken-line gate, so the subtitles switch (puppetparam 7, read only
+     * inside that gate) does not hide it: a line the table lacks
+     * ({@link PuppetController.holdUnknownLine}) and `puppetsubtitle`. All four
+     * engines are built so — the band routine, its three callers, and the one
+     * test of slot 7:
+     *
+     *   TI.EXE       0x441ef0  callers 0x43f81e 0x43f985 0x4406ea  gate 0x440810 (0x48a018)
+     *   tl.exe       0x44e500  callers 0x44be1e 0x44bf85 0x44ccea  gate 0x44ce10 (0x46640c)
+     *   DF.EXE       0x438190  callers 0x43611b 0x436255 0x436e8f  gate 0x436fb0 (0x460ae8)
+     *   RedJack.exe  0x431c30  callers 0x42f538 0x42f694 0x43070a  gate 0x43059a (0x4c79ea)
+     */
+    subtitleUngated: boolean;
     bevels: { text: string; id: number }[];
     /**
      * The bevel the player clicked, still framed on screen.
@@ -362,6 +376,7 @@ export class PuppetController {
       stanceIdx: stance,
       visible: true,
       subtitle: "",
+      subtitleUngated: false,
       bevels: [],
       chosen: null,
       press: null,
@@ -434,7 +449,7 @@ export class PuppetController {
     const line = p.pup.dialogue.get(asked) ?? this.linesByText(p).get(asked.trim());
     if (!line) {
       this.session.onLog(`puppetspeak: no line "${ident}" in ${p.name}`);
-      if (!this.session.isV5) await this.holdUnknownLine(p, toStr(ident));
+      await this.holdUnknownLine(p, toStr(ident));
       return;
     }
     // queued BEFORE the skip test, exactly as 0x43f866 queues ahead of 0x43f887:
@@ -453,15 +468,20 @@ export class PuppetController {
    * DF.EXE's puppetspeak (0x4360a0): the table lookup 0x437490 answers < 0, the
    * text goes to the subtitle band (0x43611b -> 0x438190) and 0x4252b0 waits
    * `length / 2 + 60` ticks of 60 Hz (0x436123-0x436133, the length byte
-   * halved). TI.EXE (0x416820, 0x416897-0x4168dc) and tl.exe (0x44be17) wait
-   * `length * puppetparam(9)` ticks, at least 60 — TAOOT's boot sets slot 9
-   * to 1. Neither wait looks at the puppet's ESC filter, so neither does this.
+   * halved). TI.EXE (0x416820, 0x416897-0x4168dc), tl.exe (0x44be17) and
+   * RedJack.exe (0x42f529 -> 0x42f538, the wait 0x42f53d-0x42f579, slot 9 at
+   * 0x4c79ee) wait `length * puppetparam(9)` ticks, at least 60 — TAOOT's boot
+   * sets slot 9 to 1. None of the waits looks at the puppet's ESC filter, so
+   * neither does this.
    */
   private async holdUnknownLine(p: NonNullable<PuppetController["puppet"]>, text: string): Promise<void> {
     const ticks = this.session.isV1
       ? (text.length >> 1) + 60
       : Math.max(text.length * (this.session.puppetParams.get(9) ?? 2), 60);
     p.subtitle = text;
+    // drawn by the band routine alone, past the subtitles switch — see
+    // `subtitleUngated`
+    p.subtitleUngated = true;
     await this.session.clock.sleep((ticks * 1000) / 60);
     if (this.puppet === p && p.subtitle === text) p.subtitle = "";
   }
@@ -479,6 +499,7 @@ export class PuppetController {
     // the player has asked to read every line that is heard (#50)
     if (this.session.everyLineSubtitled) p.subtitle = heardSubtitle(line);
     else p.subtitle = subtitled(line) ? line.text : "";
+    p.subtitleUngated = false;
     // the line's stance first, before a single frame of it is drawn: the layer
     // tables the animLogic records index are the ones it was animated against
     // (0x4406c7, before the playback loop). In a two-character puppet this is
@@ -563,6 +584,28 @@ export class PuppetController {
     this.puppet.chosen = null;
     this.puppet.press = null;
     this.puppet.subtitle = "";
+  }
+
+  /** is the caption bar up — the subtitles switch hides only gated text */
+  subtitleShown(): boolean {
+    const p = this.puppet;
+    return !!p?.subtitle && (p.subtitleUngated || this.session.subtitlesOn());
+  }
+
+  /**
+   * puppetsubtitle(text): print `text` in the subtitle band now — TI.EXE
+   * 0x43f940 reads one argument as a string (0x405980, 0x4058d0) and hands it
+   * to the band routine 0x441ef0, the same draw a spoken line ends in. No
+   * voice, no wait, nothing queued, and no subtitles-switch test (that lives in
+   * 0x440810, which this skips). Nothing takes it down either: it stays until
+   * the band is drawn over — the next line, or `puppetclear`. No shipped
+   * TAOOT script calls it. tl.exe (0x44bf40), DF.EXE (0x436210) and
+   * RedJack.exe (0x42f660) have the same handler.
+   */
+  puppetSubtitle(text: string): void {
+    if (!this.puppet) return;
+    this.puppet.subtitle = text;
+    this.puppet.subtitleUngated = true;
   }
 
   /**

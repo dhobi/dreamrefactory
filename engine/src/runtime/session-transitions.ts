@@ -1,5 +1,6 @@
 import { RAMP_STEP_MS, ticksAt } from "./clock";
 import type { GameSession } from "./session";
+import type { ExeEffect } from "./visual-effects";
 
 /**
  * The screen's fade to and from black and its wipes, turns and dissolves,
@@ -17,7 +18,13 @@ export class SessionTransitions {
    */
   fade = {
     level: 0,
-    lastTick: 0,
+    /**
+     * The last tick a step was taken on, or null before the ramp has a start.
+     * The fade builtin sets it to the tick BEFORE the one it was asked on
+     * (builtins/scene.ts), so step 1 is that tick's however late the host's
+     * next frame arrives — see {@link tickFade}.
+     */
+    lastTick: null as number | null,
     queue: [] as { to: number; steps: number }[],
     snapshot: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
     /**
@@ -77,26 +84,40 @@ export class SessionTransitions {
     }
   }
   /**
-   * A reveal in progress: the screen the game is LEAVING, uncovered a step at a
-   * time by the screen it is arriving at (`visualeffect(wipeleft|wiperight, n)`).
+   * A reveal in progress: the screen the game is LEAVING (`from`), replaced a
+   * pass at a time by the screen it is arriving at (`to`) —
+   * `visualeffect(wipeleft, n)` and the rest.
    *
    * Held on the session for the same reason the fade is — a transition outlives
    * the viewer that started it — and stepped on the game clock by
    * {@link tickWipe}, so a slow host takes the same number of passes as a fast
    * one rather than the same number of milliseconds.
-   *
-   * `from` is the old screen. The new one is whatever the viewer paints this
-   * frame, so nothing has to be captured twice or held in sync.
    */
   wipe = {
     /**
-     * `left`/`right` are WIPES — the arriving screen is uncovered and the leaving
-     * one stands still — and `open`/`close` the barn doors. `turnleft`/
-     * `turnright` are a PUSH: both pictures move, and they are a different effect
-     * in the original too rather than a variation on the wipes (see
-     * ScreenDirector.pushTurn for the evidence).
+     * `exe` is a reveal drawn pass for pass as the game's own exe draws it —
+     * {@link effect} says which, {@link draws} whose geometry, and
+     * runtime/visual-effects.ts has both. `turnleft`/`turnright` are a PUSH:
+     * both pictures move, and they are a different effect in the original too
+     * rather than a variation on the wipes (see ScreenDirector.pushTurn for the
+     * evidence). `dissolve` is RedJack's `photodissolve`.
      */
-    dir: "" as "" | "left" | "right" | "open" | "close" | "turnleft" | "turnright" | "dissolve",
+    dir: "" as "" | "turnleft" | "turnright" | "dissolve" | "exe",
+    /** which effect a `dir === "exe"` reveal is drawing */
+    effect: "" as "" | ExeEffect,
+    /**
+     * Whose geometry an `exe` reveal is: TI.EXE's (also tl.exe's and
+     * RedJack.exe's — `steps` passes, a 60 Hz tick each) or DF.EXE's (a fixed
+     * number of passes held {@link passMs} each, `steps` + 1 of them being the
+     * ramp — see `dfPlan`).
+     */
+    draws: "ti" as "ti" | "df",
+    /**
+     * How long one ramp step lasts, when it is not one 60 Hz tick: DF.EXE holds
+     * each pass `n * 50 / 3` ms (0x4252b0). 0 is the tick. A shell's slow-down
+     * ({@link stepMs}) scales it the same way.
+     */
+    passMs: 0,
     /**
      * How far a turn travels, as a fraction of the screen: 1, or 0.5 for the
      * `half` pair. That is what "half" names, and it is in the binary rather than
@@ -162,15 +183,26 @@ export class SessionTransitions {
      * arriving side is one picture for the whole ramp, exactly as the
      * original's offscreen is.
      *
-     * Only turns carry it. A wipe's arriving side really is the live world —
-     * that is what "the new screen is whatever the viewer paints" means — and
-     * changing that would be inventing behaviour, not porting it.
+     * Every reveal carries it: the stability above is not a turn's — EVERY
+     * effect function runs inside the command, between a pass that drew the
+     * offscreen and the next one, so each strip it copies comes from that one
+     * picture (TI.EXE 0x43b480 is called from 0x43dfab after the pass at
+     * 0x43df8f, DF.EXE 0x434c20 from 0x4203bb after 0x42039f, RedJack.exe
+     * 0x436500 from 0x408c5e after 0x408c43, and nothing else draws until it
+     * returns).
      */
     to: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
     /** steps already revealed, of `steps` */
     step: 0,
     steps: 0,
     lastTick: 0,
+    /**
+     * The tick the effect started on — TI.EXE's `timeBase`, read once before
+     * the first pass. Set by the builtin as it starts the effect, so the
+     * passes are counted from the call rather than from the host's next frame;
+     * null until then ({@link tickWipe}).
+     */
+    baseTick: null as number | null,
     from: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
   };
 
@@ -192,20 +224,35 @@ export class SessionTransitions {
    * `(ms * 3) / 50`, i.e. ms/16.67, and the wipe's pacer (0x43c600) spins until
    * that counter reaches `timeBase + i` for strip i. So a step is one 60 Hz tick
    * and the scrapbook's `visualeffect(wipeleft, 30)` takes half a second, not the
-   * 1.5 s a 50 ms step would give it.
+   * 1.5 s a 50 ms step would give it. (DF.EXE's reveals step on their own hold,
+   * {@link wipe.passMs}, instead.)
    *
-   * Left on the accumulator below rather than moved to {@link ticksAt} with the
-   * fade: driven from whole-ms clock readings a 30-strip wipe lands in 501 ms
-   * against the counter's own 484, so the rounding {@link tickFade} had to escape
-   * costs this one about a third of one strip. Not worth a re-record.
+   * Counted in ticks from the effect's own base, as the pacer does: the
+   * function reads the tick once (`timeBase`), draws pass i and spins until the
+   * tick reaches `timeBase + i`, so passes 0 and 1 are up on the base tick and
+   * the effect is over on `timeBase + steps - 1` ({@link passesAt}). The base is
+   * the tick the builtin started it on ({@link wipe.baseTick}), not the host's
+   * next frame. An accumulator of 16.67 ms steps over whole-ms clock readings
+   * ran a 30-strip wipe in 501 ms against the counter's 484.
+   *
+   * A DF.EXE hold ({@link wipe.passMs}) is milliseconds measured from after each
+   * draw (0x4252b0), and a shell's slow-down ({@link wipe.stepMs}) is a rate of
+   * its own; both stay on the accumulator.
    */
   tickWipe(now: number): void {
     const w = this.wipe;
     if (!this.wiping) return;
-    const stepMs = w.stepMs || RAMP_STEP_MS;
-    if (!w.lastTick) w.lastTick = now - stepMs;
-    while (this.wiping && now - w.lastTick >= stepMs) {
-      w.lastTick += stepMs;
+    // (a DF.EXE hold scaled by the shell's slow-down only when there is one, so
+    // it stays the whole milliseconds 0x4252b0 waits)
+    const slow = w.stepMs || RAMP_STEP_MS;
+    const ticked = !w.passMs && slow === RAMP_STEP_MS;
+    const stepMs = w.passMs ? (slow === RAMP_STEP_MS ? w.passMs : (w.passMs * slow) / RAMP_STEP_MS) : slow;
+    if (ticked && w.baseTick === null) w.baseTick = ticksAt(now);
+    const due = (): boolean =>
+      ticked ? w.step < Math.min(w.steps, ticksAt(now) - w.baseTick! + 1) : now - w.lastTick >= stepMs;
+    if (!ticked && !w.lastTick) w.lastTick = now - stepMs;
+    while (this.wiping && due()) {
+      if (!ticked) w.lastTick += stepMs;
       // A HALF turn SETTLES: the composite stays on screen — half arriving
       // picture, half leaving one — for the second leg to capture, and it can,
       // because both halves are held pictures (`to`/`from`) that no world
@@ -224,10 +271,14 @@ export class SessionTransitions {
 
   endWipe(): void {
     this.wipe.dir = "";
+    this.wipe.effect = "";
+    this.wipe.draws = "ti";
+    this.wipe.passMs = 0;
     this.wipe.from = null;
     this.wipe.step = 0;
     this.wipe.steps = 0;
     this.wipe.lastTick = 0;
+    this.wipe.baseTick = null;
     this.wipe.span = 1;
     this.wipe.settled = false;
     this.wipe.to = null;
@@ -242,7 +293,7 @@ export class SessionTransitions {
   tickFade(now: number): void {
     const f = this.fade;
     if (!f.queue.length) {
-      f.lastTick = 0;
+      f.lastTick = null;
       // A movie has ended and the script that played it has finished talking
       // (no dispatch left in flight): whatever black it left behind is nobody's
       // any more, so lift it. Deferring to here — rather than revealing the
@@ -264,8 +315,16 @@ export class SessionTransitions {
     // 16.666… ms step: a step is 1/60 s exactly and the sum of thirds is not, so
     // `now - lastTick >= step` fell a hair short about one call in five and lost
     // that step — a 10-step fade took 12 ticks.
+    //
+    // And anchored where the script asked, not where the host's next frame
+    // fell: TI.EXE's loop draws step 1 inside the call and waits a tick per
+    // step from THAT tick (0x435b90: `di = 1`, blend, `inc ebx`, spin), so the
+    // last step is drawn a tick before the script's sleep ends. Started from
+    // the first frame instead, a frame arriving k ticks late left the last k
+    // steps running after the script had gone on — and a key pressed in those
+    // ticks met a fade the original never has outliving its script.
     const tick = ticksAt(now);
-    if (!f.lastTick) f.lastTick = tick - 1;
+    if (f.lastTick === null) f.lastTick = tick - 1;
     while (f.queue.length && f.lastTick < tick) {
       f.lastTick++;
       const ramp = f.queue[0];
