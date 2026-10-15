@@ -1,3 +1,4 @@
+import { ScriptDebugger } from "./debugger";
 import { RawSaveFile } from "../df/savegame";
 import { Actor, StarPathPoint } from "../df/set";
 import { sniffScript } from "../df/script";
@@ -1654,6 +1655,25 @@ export class GameSession {
    * `lowmemory()` is re-read per `openset`, so a change lands in the next room.
    */
   lowMemory = false;
+  /**
+   * The heap zone, in bytes: the word at +0xc of TI.EXE's heap descriptor
+   * (0x433af0). `heapsize()` answers it (0x4289f0) and the F12 About box prints
+   * it as "Heap zone is %ldK" (0x41b920). Plenty in a browser; for a player who
+   * asked for the small game, under BOOTFILE's own 6144000 threshold and not by
+   * a hair ({@link lowMemory}).
+   */
+  /**
+   * TI.EXE's and tl.exe's script debugger: a window opened when the session
+   * begins and never shown (runtime/debugger.ts). DreamFactory 4 only: DF.EXE
+   * and RedJack.exe have none.
+   */
+  readonly debugChannel = new ScriptDebugger();
+  get hasDebugChannel(): boolean {
+    return !this.isV1 && !this.isV5;
+  }
+  get heapZoneBytes(): number {
+    return this.lowMemory ? 4 * 1024 * 1024 : 64 * 1024 * 1024;
+  }
   /**
    * Set by the nav hooks when any navigation (walk/turn/teleport) happens during
    * a gesture. Session-scoped (not per-viewer) so it survives a mid-gesture set

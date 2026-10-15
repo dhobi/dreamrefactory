@@ -17,6 +17,13 @@
  * shown the loop takes no other event (the `cmp [0x4602cc], 0` in front of every
  * case of 0x406270).
  *
+ * Those TI.EXE addresses are the French and German builds' (June and April
+ * 1997). In the October 1996 exe the port follows (the en and ru trees), the
+ * latch is 0x42afc0, the scene channel's message 9 (0x42a2d7) shows the box
+ * through 0x42b000, and 0x4211a0 puts it up. That one wraps the text at 40
+ * characters (0x41a000, runtime/about-box.ts) before its MessageBox (0x4211f4).
+ * tl.exe's box (0x40b930) wraps the same way (0x4047a0).
+ *
  * DF.EXE has the same strings and never shows them: its pass (0x42eb73 ->
  * 0x42f340) only clears the latch. Dust's errors end their chain in silence.
  *

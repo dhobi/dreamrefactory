@@ -30,7 +30,7 @@ import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { GestureAudio, PageLog, screenPlate, showVersion, titleRise } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
-import { faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
+import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
@@ -205,6 +205,8 @@ const meter = new NetMeter();
 let meterTimer = 0;
 /** what is still to come, once the list is known */
 let bytesLeft: (() => number) | null = null;
+/** F12's About box, once there is a session to report on */
+let showAbout: () => void = () => {};
 /** the last thing the LOADER said, to fall back to when the wire goes quiet */
 let idleCaption = "";
 /** is the caption currently a rate, and therefore mine to replace? */
@@ -314,6 +316,15 @@ async function main(): Promise<void> {
   // a CPU fault tl.exe had no handler for (`calcmod (a, 0)`, 0x43928d): Windows'
   // box, then the same quit (GameSession.engineFault)
   host.session.onFault = faultBox((l) => say(`  ${l}`), "TL.EXE");
+  // F12: tl.exe's About box, with tl.exe's build stamp. The port has no
+  // allocator to ask for its largest free block, so the whole zone counts as free.
+  const about = aboutBox((l) => say(`  ${l}`));
+  showAbout = () =>
+    about({
+      compiled: "Sep 12 1996 at 21:32:48",
+      heapZoneBytes: host.session.heapZoneBytes,
+      heapFreeBytes: host.session.heapZoneBytes,
+    });
 
   /**
    * The plan first, because it is where most of the list comes from — and reading
@@ -724,6 +735,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     if (!act) return;
     e.preventDefault();
     if ("log" in act) showLog(logEl.hidden);
+    else if ("about" in act) showAbout();
     else sendKey(act.key, act.special);
   });
 }

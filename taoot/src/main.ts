@@ -29,6 +29,7 @@ import {
 import {
   BRIGHTNESS_PRESETS,
   GAMMA_KEYS,
+  TI_EXE_COMPILED,
   canvasPoint,
   defaultSaveName,
   gammaFor,
@@ -58,7 +59,7 @@ import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { takeBootSeed } from "@dreamfactory/engine/web/speedrun/boot-seed";
-import { faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
+import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
 import {
@@ -587,6 +588,7 @@ session.onScriptErrorBox = scriptErrorBox(log, () => editionCode);
 // A CPU fault TI.EXE had no handler for — `calcmod (a, 0)`'s idiv — ended the
 // program: Windows' box, then the quit path above (GameSession.engineFault)
 session.onFault = faultBox(log, "TI.EXE");
+const showAbout = aboutBox(log);
 // Script poll loops (forceupdate/stilldown) yield through this so a real frame
 // renders and pending pointer events are delivered between iterations.
 // hasRealFrames also relaxes the interpreter's while-loop runaway guard for
@@ -1900,6 +1902,18 @@ window.addEventListener("keydown", (e) => {
     onScreenGammaShown?.();
     // F1 is the browser's help key and F3 its find; the game had them first
     e.preventDefault();
+    return;
+  }
+  // F12 is the About box, from the same window-proc table as the gamma keys
+  // (0x41ae39) and so just as unconditional; the key goes no further. It is also
+  // most browsers' developer-tools key, which preventDefault holds off where the
+  // browser lets a page do that.
+  const compiled = TI_EXE_COMPILED[editionCode];
+  if (e.key === "F12" && compiled && !focusOwnsKey(e.target, e.key)) {
+    e.preventDefault();
+    // The port has no allocator to ask for its largest free block, so the
+    // whole zone counts as free.
+    showAbout({ compiled, heapZoneBytes: session.heapZoneBytes, heapFreeBytes: session.heapZoneBytes });
     return;
   }
   const isDetailsKey =
