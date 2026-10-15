@@ -29,6 +29,10 @@ describe("keys", () => {
     expect(key("b")).toEqual({ log: true });
   });
 
+  it("takes F12 for tl.exe's About box, not the game", () => {
+    expect(key("F12")).toEqual({ about: true });
+  });
+
   it("leaves the browser's shortcuts and a focused control's keys alone", () => {
     expect(key("r", { ctrlKey: true })).toBeNull();
     expect(key("c", { metaKey: true })).toBeNull();

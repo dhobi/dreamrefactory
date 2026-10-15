@@ -1,4 +1,5 @@
 import { engineFaultBoxText, scriptErrorBoxText, type EngineFault } from "../runtime/script-errors";
+import { aboutBoxText, wordWrapText, type AboutBoxFacts } from "../runtime/about-box";
 
 /**
  * The script error box of TI.EXE and tl.exe, in a browser: `window.confirm`,
@@ -36,12 +37,30 @@ export function scriptErrorBox(
   language: () => string = () => "en",
 ): (code: number, detail: string) => boolean {
   return (code, detail) => {
-    const text = scriptErrorBoxText(code, language());
+    // wrapped as the box wraps it (TI.EXE 0x4211a0, tl.exe 0x40b930: 0x41a000 /
+    // 0x4047a0 before the MessageBox)
+    const text = wordWrapText(scriptErrorBoxText(code, language()));
     if (nobodyToAsk()) {
-      log(`script error box (not shown here): ${text} — answered "Yes" (${detail})`);
+      log(`script error box (not shown here): ${text.replace(/\n/g, " ")} — answered "Yes" (${detail})`);
       return true;
     }
     return window.confirm(text);
+  };
+}
+
+/**
+ * TI.EXE's F12 About box (runtime/about-box.ts), as an alert: the original's
+ * MessageBox has an OK button only. The text is wrapped the way the exe wraps it
+ * (0x41a000). Logged instead wherever nobody is there to read it (see above).
+ */
+export function aboutBox(log: (line: string) => void): (facts: AboutBoxFacts) => void {
+  return (facts) => {
+    const text = wordWrapText(aboutBoxText(facts));
+    if (nobodyToAsk() || typeof window.alert !== "function") {
+      log(`About box (not shown here): ${text.replace(/\n+/g, " ")}`);
+      return;
+    }
+    window.alert(text);
   };
 }
 

@@ -12,10 +12,6 @@ import { latin1 } from "../../df/binary";
  * primitives (cameraxyz/playerxyz/calcdeg/calcdist) the cast library builds on.
  */
 
-/** what `heapsize()` answers for a player who asked for the small game: under
- *  BOOTFILE's own 6144000 threshold, and not by a hair (GameSession.lowMemory) */
-const SMALL_1996_HEAP = 4 * 1024 * 1024;
-
 /**
  * DF.EXE's `findword` with a separator (0x42d430), and its one quirk: the scan
  * ends a word at a separator OR at the last position a separator could start
@@ -197,7 +193,7 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   // and the crowdless boat deck a 1996 machine got — and then the number has to
   // be the LIE that produces it, because the branch belongs to the game's
   // scripts and not to us (GameSession.lowMemory).
-  r("heapsize", () => (session.lowMemory ? SMALL_1996_HEAP : 64 * 1024 * 1024));
+  r("heapsize", () => session.heapZoneBytes);
   // stageparam(idx[, val]): per-stage scratch parameters, getter/setter by arity
   const stageParams = new Map<number, Value>();
   r("stageparam", (_i, [idx, val]) => {

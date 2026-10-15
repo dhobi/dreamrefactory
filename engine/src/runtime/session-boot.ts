@@ -50,6 +50,7 @@ export class SessionBoot {
     await this.initInventoryProps();
     this.syncThemeLever();
     this.coreLoaded = this.session.bootScripts.length > 0;
+    this.openDebugChannel();
   }
 
   /**
@@ -138,6 +139,7 @@ export class SessionBoot {
     await this.putDownStandIn();
     this.loadBootLibrary();
     this.coreLoaded = this.session.bootScripts.length > 0;
+    this.openDebugChannel();
     return this.coreLoaded;
   }
 
@@ -231,6 +233,23 @@ export class SessionBoot {
     this.session.stageCtrl.resetOverlayStack();
     this.session.setVisible = true;
     this.coreLoaded = false;
+    // EndGameSession (0x432270): the Debug window is closed (message 4) and its
+    // resources freed; the next BeginGameSession opens it again
+    const dbg = this.session.debugChannel;
+    if (dbg.open) {
+      dbg.message(4);
+      dbg.shutdown();
+    }
+  }
+
+  /**
+   * BeginGameSession (0x432170) opens the script debugger's window, hidden, on
+   * the 640 × 480 scene. Once per session: both boot paths come here.
+   */
+  private openDebugChannel(): void {
+    const dbg = this.session.debugChannel;
+    if (!this.coreLoaded || dbg.open || !this.session.hasDebugChannel) return;
+    dbg.init({ top: 0, left: 0, bottom: 480, right: 640 });
   }
 
   /** parse the BOOTFILE containers into script instances (idempotent) */

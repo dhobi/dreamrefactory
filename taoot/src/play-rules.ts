@@ -79,6 +79,21 @@ export const GAMMA_KEYS: Record<string, { up: boolean; ch: GammaChannels } | "re
 };
 
 /**
+ * Each edition's TI.EXE build stamp, which its F12 About box prints after
+ * "Compiled" (engine/src/runtime/about-box.ts). The en and ru trees ship the same
+ * October 1996 exe; the translations were built later. The demo's exe is a
+ * later engine with no About box of this kind, so it has no entry.
+ */
+export const TI_EXE_COMPILED: Readonly<Record<string, string>> = {
+  en: "Oct  7 1996 at 08:42:02",
+  ru: "Oct  7 1996 at 08:42:02",
+  nl: "Mar 10 1997 at 15:49:19",
+  de: "Apr  8 1997 at 16:10:29",
+  fr: "Jun  6 1997 at 17:18:53",
+  ja: "Mar 18 1998 at 11:37:21",
+};
+
+/**
  * The brightness presets — the touch half of the original's F1/F2.
  *
  * Three of them, not a slider. This shipped as a slider first and a slider is the

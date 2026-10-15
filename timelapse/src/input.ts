@@ -44,8 +44,8 @@ export function screenPoint(
   };
 }
 
-/** what a keystroke on the page is: the log's, the game's, or nobody's */
-export type KeyAction = { log: true } | { key: string; special: boolean };
+/** what a keystroke on the page is: the log's, the About box's, the game's, or nobody's */
+export type KeyAction = { log: true } | { about: true } | { key: string; special: boolean };
 
 const ARROW_KEYS: Record<string, string> = {
   ArrowUp: "uparrow",
@@ -80,5 +80,10 @@ export function keyAction(e: { key: string; metaKey: boolean; ctrlKey: boolean; 
    * from the game here.
    */
   if (e.key === "b") return { log: true };
+  /**
+   * F12 is tl.exe's About box (engine/src/runtime/about-box.ts): the window
+   * proc's F12 arm (0x4055db) calls 0x4060c0, and the key goes no further.
+   */
+  if (e.key === "F12") return { about: true };
   return { key: ARROW_KEYS[e.key] ?? e.key.toLowerCase(), special: false };
 }
