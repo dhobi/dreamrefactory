@@ -16,7 +16,7 @@
  * stage editor, which is where proper Cyrillic and CJK come from.
  */
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
-import { TITANIC } from "@dreamfactory/site/games";
+import { TITANIC } from "@dreamfactory/chrome/games";
 export interface GameLanguage {
   /** the directory under `gamefiles/`, and the region name inside lang.stg */
   code: string;
@@ -46,7 +46,7 @@ export interface GameLanguage {
  *
  * Everything else about an edition — that it exists, what it is called in DOM
  * chrome, which code page its bytes are in — is `TITANIC` in
- * `site/src/games.ts`, because the editors need the same answers and asking one
+ * `chrome/src/games.ts`, because the editors need the same answers and asking one
  * game for them pointed a dependency the wrong way.
  */
 const CHOOSER_LABELS: Record<string, string> = {
@@ -94,7 +94,7 @@ export const LANG_FLAT = { choose: "choose", wait: "wait" } as const;
  * The site asks two separate questions and keeps them separate:
  *
  *  - **the UI language** — the words on the page. The dropdown in the top bar
- *    (site/src/lang-menu.ts), `?lang=`, {@link UI_LANG_STORAGE_KEY}. One of the six
+ *    (chrome/src/lang-menu.ts), `?lang=`, {@link UI_LANG_STORAGE_KEY}. One of the six
  *    {@link LANGUAGES}, whatever an install happens to carry.
  *  - **the edition** — the CONTENT: which `gamefiles/` tree the game boots from,
  *    which files an editor lists, which pressing's box the collection turns. The

@@ -44,13 +44,13 @@
  * into the markup a second time — they are the same word the page's own language
  * menu shows for those codes.
  */
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installPlayMenu } from "@dreamfactory/site/play-menu";
-import { installVersion } from "@dreamfactory/site/version";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { installVersion } from "@dreamfactory/chrome/version";
 import { chosenEdition, installEditionPicker, markEdition, rememberEdition } from "./editions";
-import { installI18n } from "@dreamfactory/site/locales";
+import { installI18n } from "@dreamfactory/chrome/locales";
 import { showBooklet } from "./booklet";
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 
 void installI18n();
 void installLanguageMenu();
@@ -63,7 +63,7 @@ type Edition = "en" | "de" | "fr" | "nl" | "ja";
 const EDITIONS: readonly Edition[] = ["en", "de", "fr", "nl", "ja"];
 
 /** the release's own name, in its own language — the game's own title, so it
-    is never run through the catalogue (see site/src/locales/en.ts's `collection`
+    is never run through the catalogue (see chrome/src/locales/en.ts's `collection`
     doc comment for the rest of what that rule covers here) */
 const RELEASE_TITLE: Record<Edition, string> = {
   en: "Titanic: Adventure out of time",

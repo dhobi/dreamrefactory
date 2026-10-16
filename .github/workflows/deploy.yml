@@ -26,7 +26,7 @@ name: Deploy
 # Every namespace carries its target's name, and a tag naming none of them is an
 # ERROR rather than a default: the old default-to-TAOOT would take a mis-typed tag
 # and ship a build under it. Each tag is checked against its own package.json,
-# because the pages read their numbers from there (site/src/version.ts) and a site
+# because the pages read their numbers from there (chrome/src/version.ts) and a site
 # announcing a version nobody tagged is worse than a failed deploy.
 #
 # An ordinary push to master deploys no build. Uploading is add-and-overwrite

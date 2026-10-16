@@ -1,0 +1,13 @@
+{
+  "name": "@dreamfactory/chrome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The chrome every page shares, the front door, the editors and the games alike: where a page sits in the deployed tree, the top bar and its menus, the version, the games list, editions, the bug report and the words in every language. Structure only; every colour comes from the palette the page supplies.",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts",
+    "./locales": "./src/locales/index.ts",
+    "./locales/*": "./src/locales/*.ts",
+    "./chrome.css": "./src/chrome.css"
+  }
+}

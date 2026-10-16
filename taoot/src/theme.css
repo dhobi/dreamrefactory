@@ -1,7 +1,7 @@
 /*
  * Titanic's palette, and the roles it fills.
  *
- * The STRUCTURE this dresses is site/src/chrome.css — the topbar, the pickers,
+ * The STRUCTURE this dresses is chrome/src/chrome.css — the topbar, the pickers,
  * the controls and the panels that every page in the project shares. This file
  * is the half that says what colour any of it is, and it is the half that is
  * about one game: a page belonging to Dust, or to the project's own front door,
@@ -32,7 +32,7 @@
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED, so the rules below reach these
    values regardless of order. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 
 /* ---- palette: sampled from globe.png ---------------------------------- */
 
@@ -110,7 +110,7 @@
   /*
    * Everything above is Titanic's: abyss, hull, ice, brass, sampled out of the
    * logo. Everything below is a ROLE — what a colour is for — and the chrome in
-   * site/src/chrome.css uses nothing else. That is the whole contract: a palette
+   * chrome/src/chrome.css uses nothing else. That is the whole contract: a palette
    * supplies these names, the structure consumes them, and a page in a different
    * world (Dust, or the project's own front door) supplies its own values without
    * touching a single rule.

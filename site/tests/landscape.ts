@@ -16,7 +16,7 @@
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { GAMES } from "@dreamfactory/site/games";
+import { GAMES } from "@dreamfactory/chrome/games";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 

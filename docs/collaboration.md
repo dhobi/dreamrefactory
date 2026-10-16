@@ -44,7 +44,7 @@ decoded field by field — that would otherwise never get done. The machine
 proposes; the proposal says what it rests on and what it would cost.
 
 **Players join in.** The **Report bug** button on every game page
-(`site/src/bug-report.ts`) opens a GitHub issue that already says where the
+(`chrome/src/bug-report.ts`) opens a GitHub issue that already says where the
 player was standing, what the engine had just logged, and has a screenshot to
 paste. Most issues start there. Contributors send pull requests too. One from
 a fork runs only the suites that need no game files, and no SonarQube scan:

@@ -104,10 +104,10 @@ import {
   DeferredAudioSink,
   WebAudioSink,
 } from "@dreamfactory/engine/runtime/audio";
-import { siteUrl } from "@dreamfactory/site/site";
-import { VERSION } from "@dreamfactory/site/version";
-import { installBugReport } from "@dreamfactory/site/bug-report";
-import { DUST } from "@dreamfactory/site/games";
+import { siteUrl } from "@dreamfactory/chrome/site";
+import { VERSION } from "@dreamfactory/chrome/version";
+import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { DUST } from "@dreamfactory/chrome/games";
 import { byCodeUnit } from "@dreamfactory/engine/order";
 
 /**

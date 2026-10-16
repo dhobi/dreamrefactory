@@ -16,7 +16,7 @@
  *     icon.src = `/${mark}`;      // → https://www.danielhobi.ch/mark-taoot.png
  *     icon.src = siteUrl(mark);   // → …/dreamrefactory/mark-taoot.png
  *
- * `site/src/site.ts` exists for exactly this and says so at length. This probe
+ * `chrome/src/site.ts` exists for exactly this and says so at length. This probe
  * is the check that the class of mistake cannot come back: it
  * serves `dist/site` under a `/dreamrefactory/` prefix, the way the host does, and
  * fails on any request the page makes that does not answer 200 — not just the

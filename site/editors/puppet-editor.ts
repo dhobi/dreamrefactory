@@ -26,7 +26,7 @@ import {
   wirePngImport,
 } from "./editor-kit";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { t, formatNumber } from "@dreamfactory/site/locales";
+import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
@@ -42,7 +42,7 @@ import {
   readAnimLogic,
   readPupFile,
 } from "@dreamfactory/engine/df/pup";
-import type { GameScreen } from "@dreamfactory/site/games";
+import type { GameScreen } from "@dreamfactory/chrome/games";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 

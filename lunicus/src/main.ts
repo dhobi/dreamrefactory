@@ -18,8 +18,8 @@
  */
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { $, GESTURE_KEYS, V0Page } from "@dreamfactory/engine/web/v0-page";
-import { installBugReport } from "@dreamfactory/site/bug-report";
-import { VERSION } from "@dreamfactory/site/version";
+import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { VERSION } from "@dreamfactory/chrome/version";
 import { TICKS_PER_SECOND, VIEW_H, VIEW_W } from "./game/data";
 import { TouchGestures } from "@dreamfactory/engine/web/touch";
 import { Lunicus } from "./game/game";

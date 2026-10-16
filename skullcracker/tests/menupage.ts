@@ -90,8 +90,8 @@ vi.mock("@dreamfactory/engine/web/fullscreen", () => ({ installFullscreen: () =>
 vi.mock("@dreamfactory/engine/web/stretch", () => ({ installStretch: () => void calls.push("stretch") }));
 // the store's URLs, rooted where the fetch stub below can find them
 vi.mock("@dreamfactory/engine/web/page-url", () => ({ pageUrl: (p: string) => `/site/${p}` }));
-vi.mock("@dreamfactory/site/version", () => ({ VERSION: "test", installVersion: () => {} }));
-vi.mock("@dreamfactory/site/bug-report", () => ({
+vi.mock("@dreamfactory/chrome/version", () => ({ VERSION: "test", installVersion: () => {} }));
+vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 // the level runner is walkpage.ts's; here it is only where Begin ends up

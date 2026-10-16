@@ -16,13 +16,13 @@
  * against themselves and says nothing about any game.
  */
 import { test, expect } from "vitest";
-import { UI_LANGUAGES, DEFAULT_UI_LANGUAGE } from "@dreamfactory/site/ui-languages";
+import { UI_LANGUAGES, DEFAULT_UI_LANGUAGE } from "@dreamfactory/chrome/ui-languages";
 import { LANGUAGES, DEFAULT_LANGUAGE } from "../../src/languages";
 
 test("the chrome is written in exactly the languages the game ships in", () => {
   expect(
     UI_LANGUAGES.map((l) => l.code).sort(),
-    "site/src/ui-languages.ts and taoot/src/languages.ts disagree",
+    "chrome/src/ui-languages.ts and taoot/src/languages.ts disagree",
   ).toEqual(LANGUAGES.map((l) => l.code).sort());
 });
 

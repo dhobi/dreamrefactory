@@ -295,11 +295,11 @@ vi.mock("@dreamfactory/engine/web/tylerhartman", () => ({
     frame() {}
   },
 }));
-vi.mock("@dreamfactory/site/locales", () => ({ installI18n: async () => {}, t: (k: string) => k }));
-vi.mock("@dreamfactory/site/lang-menu", () => ({ installLanguageMenu: () => {} }));
-vi.mock("@dreamfactory/site/play-menu", () => ({ installPlayMenu: async () => {} }));
-vi.mock("@dreamfactory/site/version", () => ({ VERSION: "0.0.0-test", installVersion: () => {} }));
-vi.mock("@dreamfactory/site/bug-report", () => ({
+vi.mock("@dreamfactory/chrome/locales", () => ({ installI18n: async () => {}, t: (k: string) => k }));
+vi.mock("@dreamfactory/chrome/lang-menu", () => ({ installLanguageMenu: () => {} }));
+vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => {} }));
+vi.mock("@dreamfactory/chrome/version", () => ({ VERSION: "0.0.0-test", installVersion: () => {} }));
+vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_b: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 

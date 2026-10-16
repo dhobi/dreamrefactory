@@ -30,7 +30,7 @@ import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { GAMES } from "@dreamfactory/site/games";
+import { GAMES } from "@dreamfactory/chrome/games";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const html = readFileSync(`${ROOT}/site/index.html`, "utf8");
@@ -76,7 +76,7 @@ test("every door credits the studio the registry names", () => {
   expect(
     wrong,
     wrong.length
-      ? `The front page and site/src/games.ts disagree about who made a game:\n  ${wrong.join("\n  ")}`
+      ? `The front page and chrome/src/games.ts disagree about who made a game:\n  ${wrong.join("\n  ")}`
       : undefined,
   ).toEqual([]);
 });

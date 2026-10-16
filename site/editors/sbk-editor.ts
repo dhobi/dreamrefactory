@@ -60,7 +60,7 @@ import {
   readRooms,
   readSbkFile,
 } from "@dreamfactory/engine/df/sbk";
-import { t } from "@dreamfactory/site/locales";
+import { t } from "@dreamfactory/chrome/locales";
 import { byExtension, chosenSource, filesIn, listSources } from "./sources";
 import { installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 

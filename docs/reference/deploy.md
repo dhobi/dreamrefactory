@@ -93,8 +93,8 @@ a superseded bundle is dead weight rather than a stale page.
 |---|---|
 | `taoot/package.json`, `dust/package.json`, `timelapse/package.json`, `skullcracker/package.json`, `redjack/package.json`, `lunicus/package.json`, `jumpraven/package.json`, `site/package.json` | the sources of truth — semver |
 | each package's `vite.config.ts` | substitutes its own for `__APP_VERSION__` at build time |
-| [`site/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
-| [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |
+| [`chrome/src/version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/version.ts) | exports `VERSION`, and draws it in the top bar beside the wordmark |
+| [`chrome/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/bug-report.ts) | puts it in the issue body, so a report names the build it came from |
 
 A page belongs to exactly one package and reads exactly one number. Node does no substitution, so a test or
 a tool that imports `version.ts` reads `0.0.0-dev` rather than throwing.

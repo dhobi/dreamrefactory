@@ -16,7 +16,7 @@ let stateList: Record<string, (...a: never[]) => unknown> | null = null;
 vi.mock("@dreamfactory/engine/web/speedrun/workbench", () => ({ startWorkbench: (o: Record<string, unknown>) => void (workbench = o) }));
 vi.mock("@dreamfactory/engine/web/state-list", () => ({ installStateList: (o: typeof stateList) => void (stateList = o) }));
 vi.mock("@dreamfactory/engine/runtime/trace", () => ({ snapshotState: (_s: unknown, v: unknown, how: string) => ({ viewer: v, how }) }));
-vi.mock("@dreamfactory/site/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
+vi.mock("@dreamfactory/chrome/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
 
 afterEach(() => vi.unstubAllGlobals());
 

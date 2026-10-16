@@ -8,7 +8,7 @@
  *  - **the UI language** — this file. The dropdown in the top bar
  *    ([lang-menu.ts](lang-menu.ts)), `?lang=`, {@link UI_LANG_STORAGE_KEY}. It is a
  *    fact about how much of the CHROME has been translated, which is a fact about
- *    `site/src/locales/` and about nothing else.
+ *    `chrome/src/locales/` and about nothing else.
  *  - **the edition** — the CONTENT: which `gamefiles/` tree a game boots from,
  *    which files an editor lists, which pressing's box the collection turns. That
  *    is one game's business and lives in `taoot/src/editions.ts` over that game's
@@ -37,7 +37,7 @@ export interface UiLanguage {
 /**
  * The six, English first.
  *
- * This is a statement about `site/src/locales/`: one entry per catalogue that
+ * This is a statement about `chrome/src/locales/`: one entry per catalogue that
  * exists, plus English, which is inline in the markup rather than a catalogue.
  */
 export const UI_LANGUAGES: readonly UiLanguage[] = [

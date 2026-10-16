@@ -2,21 +2,21 @@
  * The front page has no game on it and nothing to run — but it has the same
  * top bar as the nine pages that do, so it gets the same language picker. A
  * choice made here is written to storage and carried into /play/, which means
- * you can pick a language before the game asks (site/src/lang-menu.ts).
+ * you can pick a language before the game asks (chrome/src/lang-menu.ts).
  *
  * The other language is the page's own: which of the six the chrome is written
- * in, a separate setting for a separate question (site/src/locales/index.ts).
+ * in, a separate setting for a separate question (chrome/src/locales/index.ts).
  *
  * And one thing that is not on the page at all: the Konami code opens the
  * speedrun workbench (taoot/src/konami.ts), which is built and deployed but unlisted
  * and staying that way.
  */
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installPlayMenu } from "@dreamfactory/site/play-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { installI18n } from "@dreamfactory/site/locales";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { installVersion } from "@dreamfactory/chrome/version";
+import { installI18n } from "@dreamfactory/chrome/locales";
 import { installKonami } from "./konami";
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 
 void installI18n();
 void installLanguageMenu();

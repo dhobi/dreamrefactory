@@ -26,8 +26,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodePNG, encodePNG } from "../../tools/png";
-import { keyCheckerboard } from "../../redjack/tools/mkredjacklogo";
-import { keyJumpRaven } from "../../jumpraven/tools/mkjumpravenlogo";
+import { keyCheckerboard, keyWhiteGround } from "../../tools/ground-key";
 import { ResizeOptions, resizeLogo } from "../../tools/logo-resize";
 
 const at = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
@@ -93,7 +92,7 @@ const JOBS: Job[] = [
     src: at("../../redjack/assets/redjack-full.png"),
     out: at("../public/card-redjack.png"),
     // the artwork has a transparency checkerboard painted into it, and
-    // redjack/tools/mkredjacklogo.ts says how it comes out
+    // tools/ground-key.ts says how it comes out
     key: keyCheckerboard,
     opts: { width: 480, trim: "alpha", trimThreshold: 8 },
   },
@@ -109,8 +108,8 @@ const JOBS: Job[] = [
     src: at("../../jumpraven/assets/jumpraven-full.png"),
     out: at("../public/card-jumpraven.png"),
     // a flat white ground, keyed as RedJack's checkerboard is, with the patch
-    // the band shuts in found as well (jumpraven/tools/mkjumpravenlogo.ts)
-    key: keyJumpRaven,
+    // the band shuts in found as well (tools/ground-key.ts)
+    key: keyWhiteGround,
     opts: { width: 480, trim: "alpha", trimThreshold: 8 },
   },
 ];

@@ -8,7 +8,7 @@
  * that is the project's own tooling and sits at `/dreamrefactory/editors/`.
  *
  * A SOURCE is one rip of one game, in one edition: "Dust", "Titanic · English",
- * "Titanic · 日本語". Every game in the registry (`site/src/games.ts`) contributes
+ * "Titanic · 日本語". Every game in the registry (`chrome/src/games.ts`) contributes
  * however many it actually has on disk, and a game with one disc contributes one.
  * The row at the top of each editor picks between them, and belongs to neither
  * game.
@@ -27,9 +27,9 @@
  */
 import { DfEncoding } from "@dreamfactory/engine/df/text";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { uiLanguage } from "@dreamfactory/site/locales";
-import { siteUrl } from "@dreamfactory/site/site";
-import { GAMES, GameEditions, GameScreen, NEUTRAL, editionOfUrl } from "@dreamfactory/site/games";
+import { uiLanguage } from "@dreamfactory/chrome/locales";
+import { siteUrl } from "@dreamfactory/chrome/site";
+import { GAMES, GameEditions, GameScreen, NEUTRAL, editionOfUrl } from "@dreamfactory/chrome/games";
 
 /** one rip, in one edition, ready to list files from */
 export interface Source {

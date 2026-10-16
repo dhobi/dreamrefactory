@@ -39,7 +39,7 @@ volume and one edition need much less:
 | [`taoot/src/files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/files.ts) | `FileStore` — game files by lowercase basename, lazy dev-server fetching, six editions and two CDs |
 | [`taoot/src/log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts) | the lines behind X, bounded — and the tail a bug report carries |
 | [`engine/src/web/debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/debug-panel.ts) | what state the game is in, as a list that patches rather than redraws — kept in the engine, because every game's page shows one |
-| [`site/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard. Shared, because both games carry it |
+| [`chrome/src/bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/bug-report.ts) | the Report bug button: a prefilled GitHub issue, and the screen on the clipboard. Shared, because both games carry it |
 | [`dust/src/main.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/main.ts) / [`dust/src/files.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/files.ts) | the same two jobs for [Dust](../../dust/README.md), against one disc |
 
 ## The split, and why it is where it is
@@ -133,14 +133,14 @@ asked for — the scene/view readout and the script log.
 ### Reporting a bug, and the one thing a URL cannot carry
 
 **Report bug** opens `github.com/dhobi/dreamrefactory/issues/new` with `title` and
-`body` prefilled ([`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts)):
+`body` prefilled ([`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/bug-report.ts)):
 the game, the room, the edition, the page URL, the browser, the window size and
 the last eight lines the engine logged — the three questions every report about
 this port otherwise has to be asked. The title names **the game and then the
 room** — `[Dust] Bug in nite scene g15`, `[Timelapse] Bug in flat i0001.100.6` —
 because that is what makes an issue list readable when one repository takes
 reports about every game, and because `[Dust]` in the search box is then a
-filter. The game comes from the page's own registry entry (`site/src/games.ts`),
+filter. The game comes from the page's own registry entry (`chrome/src/games.ts`),
 so it has one spelling.
 
 The picture cannot go that way. GitHub has no query parameter for an attachment,

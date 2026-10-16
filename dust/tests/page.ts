@@ -181,11 +181,11 @@ vi.mock("@dreamfactory/engine/web/save-browser", () => ({
   browseForLoad: async () => (calls.push("load"), null),
   savesOpen: () => dialogUp,
 }));
-vi.mock("@dreamfactory/site/bug-report", () => ({
+vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 // the page's URLs, rooted where the fetch stub below can find them
-vi.mock("@dreamfactory/site/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
+vi.mock("@dreamfactory/chrome/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
 
 /* ----------------------------------------------------------------- the page */
 

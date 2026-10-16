@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "engine",
+    "chrome",
     "site",
     "taoot",
     "dust",

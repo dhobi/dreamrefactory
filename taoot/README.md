@@ -99,7 +99,7 @@ Nor does a build name a host root: every URL is relative to the page that asks
 for it, so `dist/` runs from a subdirectory (`example.com/taoot/`) as readily as
 from a domain root. Vite rewrites what it emits; the URLs built in TypeScript
 resolve against the `<meta name="site-root">` each page carries
-([site/src/site.ts](../site/src/site.ts)).
+([chrome/src/site.ts](../chrome/src/site.ts)).
 Loading a set pulls its siblings (`.shp`, `.trk`, `.sfx`, `.11k`, `unilib.trk`)
 over HTTP, and anything scripts ask for later
 (`openshopfile("blkjack.shp")`) is fetched on demand in the background.

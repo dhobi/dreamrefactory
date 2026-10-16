@@ -28,7 +28,7 @@
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { GAMES, UNLISTED } from "@dreamfactory/site/games";
+import { GAMES, UNLISTED } from "@dreamfactory/chrome/games";
 
 /** every game with a lane: the listed ones and the unlisted ones that deploy anyway */
 const DEPLOYED = [...GAMES, ...UNLISTED];

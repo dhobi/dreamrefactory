@@ -77,7 +77,7 @@ export interface BugReportPage {
    * Supplied by the page rather than derived from anything here: the file name of
    * a screenshot is the only other per-game string this module has, and reading a
    * display name out of `dust-bug.png` would be a guess dressed as a fact. Pages
-   * pass their registry entry's own `short` (site/src/games.ts), so the name has
+   * pass their registry entry's own `short` (chrome/src/games.ts), so the name has
    * one spelling in the project.
    */
   game: string;

@@ -125,8 +125,11 @@ Each top-level directory is a thing rather than a kind of file.
   ported from `RAVEN.EXE`; its machine suites play it through, once with the
   game set up and once by `src/player.ts`, which wins it with no shortcuts and
   is what the page's `?autoplay` plays
-- **`site/`** — the project's own web presence: the front door, the format
-  editors, the chrome every page shares, and the UI-language axis
+- **`chrome/`** — what every page shares, the front door, the editors and the
+  games alike: the top bar and its menus, the version, the registry of games,
+  editions, the bug report, and the words in every language
+- **`site/`** — the project's own web presence: the front door and the format
+  editors
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as
   an argument. A tool that knows which game it is looking at lives in that game's
   `tools/` instead
@@ -136,21 +139,22 @@ Dependencies point one way only, and there is a test that says so
 (`site/tests/layering.ts`):
 
     engine        ←  nothing
-    site          ←  engine
-    taoot         ←  engine, site
-    dust          ←  engine, site
-    timelapse     ←  engine, site
-    skullcracker  ←  engine, site
-    redjack       ←  engine, site
-    lunicus       ←  engine, site
-    jumpraven     ←  engine, site
+    chrome        ←  engine
+    site          ←  engine, chrome
+    taoot         ←  engine, chrome
+    dust          ←  engine, chrome
+    timelapse     ←  engine, chrome
+    skullcracker  ←  engine, chrome
+    redjack       ←  engine, chrome
+    lunicus       ←  engine, chrome
+    jumpraven     ←  engine, chrome
 
 Nothing shared imports a game. The palettes — Titanic's abyss-and-brass,
 Dust's dusk-and-ember, Timelapse's glass-and-chrome, Skull Cracker's
 gore-and-bone, RedJack's wood-and-brass, Lunicus's navy, chrome and fire, Jump Raven's
 night, bronze and sunset, the
 project's black-and-green — are implementations of one role contract in
-`site/src/chrome.css`, which is structure and not a single colour.
+`chrome/src/chrome.css`, which is structure and not a single colour.
 
 ## Where it goes
 

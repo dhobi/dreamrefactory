@@ -8,7 +8,7 @@
  * statue's broken crown on the left, and New York under water against a sky
  * that burns from violet down to gold.
  *
- * The eighth implementation of the contract in site/src/chrome.css, with the
+ * The eighth implementation of the contract in chrome/src/chrome.css, with the
  * same role names and top bar as the others. This file used to wear the
  * project's black-and-green, with a note that the game had no artwork to
  * sample; the artwork arrived.
@@ -56,7 +56,7 @@
 
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 /* the saved-games dialog, drawn in this palette's roles */
 @import "@dreamfactory/engine/web/save-browser.css";
 

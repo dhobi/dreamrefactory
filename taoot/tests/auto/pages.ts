@@ -19,10 +19,10 @@ const calls: string[] = [];
 let unlock: (() => void) | null = null;
 let workbench: Record<string, unknown> | null = null;
 
-vi.mock("@dreamfactory/site/locales", () => ({ installI18n: async () => void calls.push("i18n") }));
-vi.mock("@dreamfactory/site/lang-menu", () => ({ installLanguageMenu: async () => void calls.push("langMenu") }));
-vi.mock("@dreamfactory/site/play-menu", () => ({ installPlayMenu: async () => void calls.push("playMenu") }));
-vi.mock("@dreamfactory/site/version", () => ({ installVersion: () => void calls.push("version") }));
+vi.mock("@dreamfactory/chrome/locales", () => ({ installI18n: async () => void calls.push("i18n") }));
+vi.mock("@dreamfactory/chrome/lang-menu", () => ({ installLanguageMenu: async () => void calls.push("langMenu") }));
+vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => void calls.push("playMenu") }));
+vi.mock("@dreamfactory/chrome/version", () => ({ installVersion: () => void calls.push("version") }));
 vi.mock("../../src/konami", () => ({ installKonami: (fn: () => void) => void (unlock = fn) }));
 vi.mock("@dreamfactory/engine/web/speedrun/workbench", () => ({
   startWorkbench: (opts: Record<string, unknown>) => void (workbench = opts),

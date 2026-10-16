@@ -24,11 +24,11 @@ import { readContainerFile, type DFContainerFile } from "@dreamfactory/engine/df
 import { readAudioBank } from "@dreamfactory/engine/df/banks";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { decodeAudioContainer, type DecodedAudio } from "@dreamfactory/engine/df/audio";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installPlayMenu } from "@dreamfactory/site/play-menu";
-import { installVersion } from "@dreamfactory/site/version";
-import { installI18n } from "@dreamfactory/site/locales";
-import { siteUrl } from "@dreamfactory/site/site";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { installVersion } from "@dreamfactory/chrome/version";
+import { installI18n } from "@dreamfactory/chrome/locales";
+import { siteUrl } from "@dreamfactory/chrome/site";
 import { gamefileManifest, editionsIn, chosenEdition, inChosenEdition, installEditionPicker } from "./editions";
 import { CAPTION_FILES, formatCaptions, VOICES_OF, type CaptionFile, type Clip, type TrackLine } from "./captions";
 import { AudioLibrary } from "@dreamfactory/engine/runtime/audio";
@@ -475,7 +475,7 @@ async function copy(): Promise<void> {
 const ISSUE_URL = "https://github.com/dhobi/dreamrefactory/issues/new";
 /**
  * The longest link GitHub is sent. The whole issue travels in the URL, and a
- * long enough one is answered with 414 and no issue (site/src/bug-report.ts);
+ * long enough one is answered with 414 and no issue (chrome/src/bug-report.ts);
  * what counts is the ENCODED length, which for Japanese is nine bytes a
  * character, so it is measured rather than estimated from the text.
  */

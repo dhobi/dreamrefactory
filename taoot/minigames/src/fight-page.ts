@@ -43,7 +43,7 @@
  * conversation to borrow, and the page says who won and goes back to the door.
  */
 import { bootMinigame } from "./minigame-boot";
-import { t } from "@dreamfactory/site/locales";
+import { t } from "@dreamfactory/chrome/locales";
 
 /** the last powers seen while the bout was live — see the note above */
 let lastVlad = 0;

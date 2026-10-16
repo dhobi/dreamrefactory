@@ -276,7 +276,7 @@
 
 /* The boot text says "starting" — in the reader's language or not at all.
    The pages carry their English inline, and a catalogue arrives over a
-   dynamic import a beat later (site/src/locales/index.ts), so a German reader was
+   dynamic import a beat later (chrome/src/locales/index.ts), so a German reader was
    reading "Starting" for ~200 ms first. Hidden, not undrawn: it keeps its
    space, so nothing moves when the words arrive. `body.spoken` is set by
    main.ts's boot() the moment installI18n has had its say, which for an

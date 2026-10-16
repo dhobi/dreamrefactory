@@ -32,7 +32,7 @@ import {
   wireFileOpen,
   wirePngImport,
 } from "./editor-kit";
-import { t, formatNumber } from "@dreamfactory/site/locales";
+import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import { FrameInfo, LEFTTURNS, RIGHTTURNS, SetFile, readSetFile, turnRing } from "@dreamfactory/engine/df/set";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
@@ -79,7 +79,7 @@ const dirtyEl = $("dirty");
 let readOnlyV1 = false;
 
 // Hard-coded English, like every string this repo builds in TypeScript rather
-// than in markup (site/src/locales/en.ts says why) — and unlike the rest of this
+// than in markup (chrome/src/locales/en.ts says why) — and unlike the rest of this
 // page's chrome it has no catalogue key yet.
 const V1_READ_ONLY = "DreamFactory 1 container: shown through the v1 conversion, read-only. Export needs a v1 write path.";
 

@@ -36,7 +36,7 @@ export default defineConfig({
       provider: "v8",
       // every file of these, loaded or not, so an untested one counts as 0
       include: ["engine/src/**/*.ts", "*/src/**/*.ts"],
-      exclude: ["engine/src/web/**", "site/**", "**/*.d.ts"],
+      exclude: ["engine/src/web/**", "chrome/**", "site/**", "**/*.d.ts"],
       reporter: ["json-summary", "text-summary", "lcovonly"],
       reportsDirectory: "coverage/vitest",
       reportOnFailure: true,

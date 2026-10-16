@@ -17,7 +17,7 @@
  * taoot/src/languages.ts.
  *
  * Switching is a RELOAD, and a cheap one: the catalogue is fetched per language
- * (site/src/locales/index.ts), the pages carry their English inline, and a reload is
+ * (chrome/src/locales/index.ts), the pages carry their English inline, and a reload is
  * how a language reaches the strings the TypeScript built before `installI18n`
  * ran. It says so in `?lang=` as well as in storage so that the reloaded page
  * cannot disagree with itself, and so a link can carry it.
@@ -27,7 +27,7 @@
  * it asks is which EDITION to boot.
  */
 import { UI_LANG_STORAGE_KEY } from "./ui-languages";
-import { uiLanguage, uiLanguageOptions } from "@dreamfactory/site/locales";
+import { uiLanguage, uiLanguageOptions } from "@dreamfactory/chrome/locales";
 
 /** remember the choice, put it in the URL, and start the page over */
 function switchTo(code: string): void {
@@ -72,7 +72,7 @@ export function installLanguageMenu(): string {
   named.textContent = options.find((o) => o.code === code)?.name ?? code;
   summary.append(named);
   // Hard-coded English, like every string this repo builds in TypeScript rather
-  // than in markup (site/src/locales/en.ts says why); unlike most of those it is
+  // than in markup (chrome/src/locales/en.ts says why); unlike most of those it is
   // chrome on all eleven pages, so it is worth a catalogue key as soon as the
   // entries stop racing installI18n.
   summary.title = "Language — the words on this page";

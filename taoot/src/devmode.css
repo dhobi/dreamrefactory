@@ -684,7 +684,7 @@ body.spoken #booting {
 }
 
 /* ---- the title strip's nav ----
-   It carries `topnav` so site/src/play-menu.ts finds it and folds the three ways
+   It carries `topnav` so chrome/src/play-menu.ts finds it and folds the three ways
    into the same dropdown every other Titanic page has. The shared chrome styles
    that class for a site bar, so the terminal register is restored here: mono,
    smaller, and no auto margin (the strip is already a flex row that puts this at

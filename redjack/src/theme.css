@@ -10,7 +10,7 @@
  * through, where Skull Cracker is hot and Timelapse is cold, and the one of the
  * five that is MADE of something — paper, wood, metal — rather than lit.
  *
- * The SIXTH implementation of the contract in site/src/chrome.css: the same
+ * The SIXTH implementation of the contract in chrome/src/chrome.css: the same
  * role names and the same top bar as the other five. This file used to be one
  * `@import` of the project's black-and-green and a paragraph saying the game had
  * no artwork to sample; the artwork arrived, so the paragraph became a palette
@@ -61,7 +61,7 @@
 
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 /* the saved-games dialog, drawn in this palette's roles */
 @import "@dreamfactory/engine/web/save-browser.css";
 

@@ -52,7 +52,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 /** the shared stylesheet every page's own `<style>` is layered on top of */
-const CHROME = join(ROOT, "site/src/chrome.css");
+const CHROME = join(ROOT, "chrome/src/chrome.css");
 
 /**
  * Top-level rules, as selector text to the properties it sets.
@@ -256,7 +256,7 @@ test("no page's CSS is missing a brace", () => {
     const html = readFileSync(join(ROOT, page), "utf8");
     check(page, ownCss(page, html));
   }
-  check("site/src/chrome.css", readFileSync(CHROME, "utf8"));
+  check("chrome/src/chrome.css", readFileSync(CHROME, "utf8"));
   expect(
     unbalanced,
     unbalanced.length
@@ -270,7 +270,7 @@ test("no page's CSS is missing a brace", () => {
 /**
  * The SHARED sheets name no game's palette.
  *
- * `site/src/chrome.css` has always said this about itself — "a `var(--abyss-700)`
+ * `chrome/src/chrome.css` has always said this about itself — "a `var(--abyss-700)`
  * or a raw `#hex` appearing below is a leak, and means a role is missing rather
  * than that an exception was needed" — and it is now true of a second shared
  * sheet: the speedrun panel, which both games' workbenches link.
@@ -289,7 +289,7 @@ test("a shared stylesheet names roles, never a game's palette", () => {
   /** every palette a game's theme declares, by prefix */
   const PALETTES = /var\(--(abyss|hull|ice|brass|frost|dusk|ember|bone|leather|wood)[a-z0-9-]*/g;
   const SHARED = [
-    "site/src/chrome.css",
+    "chrome/src/chrome.css",
     "engine/src/web/speedrun/panel.css",
     "engine/src/web/save-browser.css",
   ];

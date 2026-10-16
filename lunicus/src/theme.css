@@ -7,7 +7,7 @@
  * of the base's crew in their navy uniforms. The one card of the six that is
  * LIT from inside the picture: everything in it catches the fire's light.
  *
- * The seventh implementation of the contract in site/src/chrome.css, with the
+ * The seventh implementation of the contract in chrome/src/chrome.css, with the
  * same role names and top bar as the others. This file used to be one `@import`
  * of the project's black-and-green, plus a note that the game had no artwork to
  * sample; the artwork arrived.
@@ -52,7 +52,7 @@
 
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 /* the saved-games dialog, drawn in this palette's roles */
 @import "@dreamfactory/engine/web/save-browser.css";
 /* the game window's menu bar, on the frame over the picture (src/menu.ts) — in

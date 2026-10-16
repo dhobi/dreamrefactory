@@ -6,7 +6,7 @@
  * lit green, all on black. Nothing below is invented; the three scales are that
  * image's three materials.
  *
- * The SECOND implementation of the contract in site/src/chrome.css, and the
+ * The SECOND implementation of the contract in chrome/src/chrome.css, and the
  * reason that split was worth doing: the same 39 role names and the same topbar,
  * pickers, controls and panels as Titanic's pages, wearing none of Titanic's
  * colours.
@@ -49,7 +49,7 @@
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED, so the rules it holds reach these
    values regardless of order. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 
 /* ---- the void ---------------------------------------------------------- */
 

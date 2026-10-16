@@ -36,7 +36,7 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { FrameBuffer, decodeFrame, indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
 import { cellV0, ownsFilmV0, readMazeV0, type MazeTransitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
-import { t } from "@dreamfactory/site/locales";
+import { t } from "@dreamfactory/chrome/locales";
 import { chosenSource, filesIn, listSources, type Source } from "./sources";
 import { fetchBytes, installEditorPage, serverNote, wireFileOpen } from "./editor-kit";
 

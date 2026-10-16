@@ -51,8 +51,8 @@ import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
-import { installBugReport } from "@dreamfactory/site/bug-report";
-import { VERSION, installVersion } from "@dreamfactory/site/version";
+import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { VERSION, installVersion } from "@dreamfactory/chrome/version";
 import { SkullFiles } from "./files";
 import { SkullSave, readSkl, SKL } from "./savegame";
 // puts `mobile` on <html>, which index.html's fullscreen frame rule reads
@@ -1048,7 +1048,7 @@ if (BUG_REPORTS) {
     shotName: "skullcracker.png",
     version: VERSION,
     // bracketed into the issue title, so one repository's issue list stays
-    // scannable across four games (site/src/bug-report.ts says why the page
+    // scannable across four games (chrome/src/bug-report.ts says why the page
     // supplies it rather than this being derived)
     game: "Skull Cracker",
     note: (how) => {

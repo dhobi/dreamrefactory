@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title data-i18n="play.docTitle">Play — Titanic - Adventure Out Of Time RE</title>
-    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <!-- where the site root is from this page, for URLs built in TS (chrome/src/site.ts) -->
     <meta name="site-root" content="../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
     <!-- Installed to a home screen, this page opens with no address bar — the
@@ -57,7 +57,7 @@
     </header>
 
     <!-- Which copy of the game is being played, above everything that plays it:
-         site/src/lang-menu.ts's installEditionPicker appends one button per tree the
+         chrome/src/lang-menu.ts's installEditionPicker appends one button per tree the
          manifest offers (and hides the row when there is nothing to choose). It
          sits outside #booting and #stage so it survives both — the boot text
          goes, the authored language chooser comes and goes, the game runs, and
@@ -118,7 +118,7 @@
             ><input type="checkbox" id="thBox" /> <span>TH mode</span></label>
           <!-- opens a prefilled GitHub issue and puts the screen on the
                clipboard, which is the only way an image reaches one
-               (site/src/bug-report.ts) -->
+               (chrome/src/bug-report.ts) -->
           <button id="bugBtn" title="Report something the port gets wrong" data-i18n="play.reportBug" data-i18n-attr="title:play.reportBugTitle">🪲 Report a bug</button>
           <!-- what became of the screenshot, said where the button is rather
                than in the details pane, which is shut -->

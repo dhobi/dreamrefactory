@@ -144,7 +144,7 @@ test("shipped saves are picked from one language tree", () => {
   // unfiltered (a single-language dump) takes what it finds
   expect(shippedSaves(MANIFEST)).toHaveLength(2);
   // and the URL is the manifest path, encoded, hung off wherever the site is
-  // served from (site/src/site.ts) — which under a test runner, with no document to
+  // served from (chrome/src/site.ts) — which under a test runner, with no document to
   // read a site root from, is the host root this has always asserted
   expect(shippedSaves(MANIFEST, "en")[0].url).toBe("/gamefiles/en/save/1/01%20-%20The%20Bedsit.ti");
 });

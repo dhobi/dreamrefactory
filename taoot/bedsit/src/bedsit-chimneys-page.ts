@@ -19,7 +19,7 @@
  * nothing here writes to the repository — the paste is deliberate, and is the
  * only way a change reaches the room.
  */
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 import { CHIMNEYS, Chimney, PLUME_RISE, WIND } from "./bedsit-chimneys";
 
 const SAVE = "bedsit-chimneys";

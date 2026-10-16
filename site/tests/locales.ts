@@ -1,9 +1,9 @@
 /**
- * The page text (site/src/locales/), and the contract that makes it safe to keep
+ * The page text (chrome/src/locales/), and the contract that makes it safe to keep
  * English in two places at once.
  *
  * The eleven pages carry their English inline so that an English reader needs no
- * JavaScript and `git diff` still shows the sentence that changed; site/src/locales/en.ts
+ * JavaScript and `git diff` still shows the sentence that changed; chrome/src/locales/en.ts
  * carries the same English so that a translator has a list to work from and the
  * five translations have a shape to be checked against. Two copies of a string
  * is normally a bug waiting to happen, and the only thing that makes it not one
@@ -25,9 +25,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
-import en, { Value } from "../src/locales/en";
-import { applyTranslations, t } from "../src/locales";
-import { UI_LANGUAGES, DEFAULT_UI_LANGUAGE } from "../src/ui-languages";
+import en, { Value } from "@dreamfactory/chrome/locales/en";
+import { applyTranslations, t } from "@dreamfactory/chrome/locales";
+import { UI_LANGUAGES, DEFAULT_UI_LANGUAGE } from "@dreamfactory/chrome/ui-languages";
 
 // the repository root: the pages this reads belong to two different packages
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -60,7 +60,7 @@ const PAGES = [
 /**
  * The tags a translated sentence may contain. Everything on this list is
  * typography or a link — nothing that can run, load or lay out. `innerHTML` is
- * how these values reach the page (site/src/locales/index.ts), so this list is the
+ * how these values reach the page (chrome/src/locales/index.ts), so this list is the
  * whole of what stops a locale file from being an injection point.
  */
 const ALLOWED_TAGS = new Set(["b", "i", "em", "strong", "code", "span", "a", "br"]);
@@ -104,7 +104,7 @@ const STRINGS = new Map([...CATALOGUE].filter((e): e is [string, string] => type
 const CODE_KEYS = new Set<string>();
 // `taoot/minigames/src` as well: those pages build strings too — the fight
 // says who won through `t()`, and each game names itself by a catalogue key
-for (const dir of ["taoot/src", "taoot/minigames/src", "site/src", "site/editors"]) {
+for (const dir of ["taoot/src", "taoot/minigames/src", "chrome/src", "site/src", "site/editors"]) {
   const walk = (d: string): void => {
     for (const e of readdirSync(join(ROOT, d), { withFileTypes: true })) {
       if (e.isDirectory()) walk(`${d}/${e.name}`);
@@ -353,9 +353,9 @@ test("applyTranslations writes all three kinds of marked node", () => {
 
 // --- the translations, when they arrive -------------------------------------
 
-const LOCALES = join(ROOT, "site/src/locales");
+const LOCALES = join(ROOT, "chrome/src/locales");
 
-/** the `site/src/locales/<code>/` directories, which is what a translation IS */
+/** the `chrome/src/locales/<code>/` directories, which is what a translation IS */
 const translationDirs = (): string[] =>
   readdirSync(LOCALES, { withFileTypes: true })
     .filter((e) => e.isDirectory())
