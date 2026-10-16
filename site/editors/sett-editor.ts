@@ -465,7 +465,7 @@ function show(coarse = false): void {
     blank = !film.frames.render(s.frame, rgba, W, H);
     if (blank) rgba.fill(0xff000000);
   } else if (node) {
-    sphere(node.sphere).render(rgba, W, H, heading, pitch, fov, coarse);
+    sphere(node.sphere).render(rgba, W, H, { heading, pitch, fov }, coarse);
     clearTimeout(fineTimer);
     if (coarse) fineTimer = window.setTimeout(() => show(), 150);
   } else rgba.fill(0xff000000);

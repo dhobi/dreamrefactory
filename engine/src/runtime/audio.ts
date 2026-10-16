@@ -647,6 +647,13 @@ export class AudioLibrary {
     return this.find(name)?.entry.bank.trackName.toLowerCase() ?? null;
   }
 
+  /** whether an open bank calls itself this, by its track name alone (DreamFactory 5's `themeexists`) */
+  hasTrackName(name: string): boolean {
+    const want = name.toLowerCase();
+    for (const { bank } of this.banks.values()) if (bank.trackName.toLowerCase() === want) return true;
+    return false;
+  }
+
   /**
    * Told the one-shot names of every bank as it closes. DreamFactory 5 frees
    * each cricket playing one of them there (RedJack.exe 0x447250 calls
@@ -778,6 +785,20 @@ export class AudioLibrary {
    * left — and out of a name-only cache they would still be decoded, talking
    * over debris.mov and the closing narration.
    */
+  /**
+   * A one-shot's chunk as it is stored, header and all, by its exact name in any
+   * open bank — what DreamFactory 5's `soundexists` and `soundticks` read
+   * (RedJack.exe 0x448700, 0x448440).
+   */
+  soundChunk(identifier: string): Uint8Array | null {
+    const key = identifier.toLowerCase();
+    for (const { file, bank } of this.banks.values()) {
+      const ref = bank.singles.get(key);
+      if (ref) return file.containers[ref.containerLoc]?.data ?? null;
+    }
+    return null;
+  }
+
   sound(identifier: string): DecodedAudio | null {
     const key = identifier.toLowerCase().replace(/\.wav$/, "");
     for (const [bankKey, { file, bank }] of this.banks) {

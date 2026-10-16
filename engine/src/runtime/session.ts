@@ -1,4 +1,5 @@
 import { ScriptDebugger } from "./debugger";
+import { Lights } from "./shading";
 import { RawSaveFile } from "../df/savegame";
 import { Actor, StarPathPoint } from "../df/set";
 import { sniffScript } from "../df/script";
@@ -25,6 +26,7 @@ import { SessionCaptions } from "./session-captions";
 import { SessionTime } from "./session-time";
 import { SessionTransitions } from "./session-transitions";
 import { FileProvider } from "./setscripts";
+import { Df5Disk } from "./df5-disk";
 import { loadGame, snapshotSave } from "./saveload";
 import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
@@ -425,6 +427,14 @@ export class GameSession {
    * carries them (savegame-v5.md, the manifest's `+0x218`).
    */
   readonly pathSlots: string[] = new Array(9).fill("");
+  /**
+   * What a DreamFactory 5 game's file, folder, volume and registry commands
+   * reach (builtins/df5-files.ts): the discs as the host's manifest lists them
+   * (`df5Disk.setTree`), a writable stand-in hard disk and the registry key. A
+   * host persists it through `snapshot`/`restore`/`onChange`; with no tree the
+   * discs are empty and every listing is.
+   */
+  readonly df5Disk = new Df5Disk();
 
   /**
    * Host hook: a movie sequence has fully ended and these are the files it
@@ -587,6 +597,8 @@ export class GameSession {
     audio: AudioSink,
   ) {
     this.audio = new TimedAudio(audio, () => this.gameNow, () => this.nominalTime);
+    this.propRuntime.lights = this.actorRuntime.lights = this.lights;
+    this.actorRuntime.origin = this.propRuntime.origin;
     registerGameBuiltins(this); // core + game families, see builtins/index.ts
     // a transcript's words arrive with their bank, however it was opened (#50)
     this.audioLib.onBankOpened = (bank, sounds) => {
@@ -1455,10 +1467,22 @@ export class GameSession {
    * a crate open until it is. The page that runs the game keeps it.
    */
   spaceDown = false;
+  /**
+   * DreamFactory 5's `key (name)`: the keys held NOW, by their Windows
+   * virtual-key codes (VK_SHIFT 0x10, 'A' 0x41…), as `GetAsyncKeyState` sees
+   * them. The page that runs the game keeps it, as it keeps {@link spaceDown}.
+   */
+  readonly keysDown = new Set<number>();
   /** DreamFactory 5's `screenbrightness`: added to every channel of the screen, -255..255 */
   screenBright: [number, number, number] = [0, 0, 0];
   /** DreamFactory 5's `screencontrast`: a gamma per channel, -128..128, 0 as painted */
   screenContrast: [number, number, number] = [0, 0, 0];
+  /**
+   * DreamFactory 5's other shading records — the stage's, the set's, the
+   * movie's and the puppet's (`stagebrightness`, `setcontrast`…), which a
+   * sprite is drawn under once `proplitby` puts it there (runtime/shading.ts)
+   */
+  readonly lights = new Lights();
   /**
    * DreamFactory 5's `stageorigin`: where the open stage's top-left is drawn.
    * A fight moves it to shake the screen; props with `propsnap` go with it.

@@ -394,9 +394,10 @@ cp redjack/gamefiles/save/day*.save /srv/redjack/gamefiles/save/
 
 ## What does not work yet
 
-- **Copying to the hard disk.** `buildfilenames` and `copylocal` copy game
-  files off the disc. The port reads the discs directly, so they are left
-  unknown.
+- **Copying to the hard disk is a stand-in.** The boot's `buildfilenames` and
+  `copylocal` loops list and copy the day's local folder as RedJack.exe does,
+  onto a stand-in hard disk in the session. A copy is kept as the name of what
+  it copies, and its PROGRESS dialog is not drawn.
 - **Sprite size is not checked against the original.** The formula is read out
   of RedJack.exe (`0x4358d0`), but no screenshot of the running game has been
   measured against the port's. See
@@ -409,8 +410,9 @@ kind of script, the editors each behind `if isdebugging ()`. A few lines earlier
 `menuvisible (isdebugging ())` and `keyaborts (isdebugging ())` switch the bar
 and the keyboard abort off, since `isdebugging ()` is 0 in the shipped
 RedJack.exe (`0x41a6f0`). It is Titanic's [developer mode](../taoot/devmode.md)
-with the flag moved out of the scripts and into the executable. The port builds
-no menu either.
+with the flag moved out of the scripts and into the executable. The port keeps
+the menus as data, so the scripts' counts and names read back as they built
+them, and draws no bar.
 
 A few script calls go to handlers that no script on the discs defines
 (`mousemove`, `trackobjects`, `predream`), so the original had nothing to run

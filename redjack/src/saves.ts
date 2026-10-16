@@ -10,6 +10,7 @@
  */
 import { isSaveV5 } from "@dreamfactory/engine/df/savegame-v5";
 import { SaveKind, getMeta, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
+import type { Df5Disk, Df5DiskSnapshot } from "@dreamfactory/engine/runtime/df5-disk";
 
 const DAYS = "days";
 
@@ -54,4 +55,20 @@ export async function seedRedJackSaves(urlOf: (name: string) => string | null): 
   }
   if (stored) await setMeta(SEEDED, [...seen]);
   return stored;
+}
+
+const DISK = "df5Disk";
+
+/**
+ * What the scripts write to the stand-in hard disk and the registry
+ * (engine/src/runtime/df5-disk.ts), kept beside the saved games in the same
+ * store: put back now, and written again each time it changes.
+ */
+export async function keepDf5Disk(disk: Df5Disk): Promise<void> {
+  try {
+    disk.restore(await getMeta<Df5DiskSnapshot>(DISK));
+  } catch {
+    /* no store (a private window): the disk starts empty and stays in memory */
+  }
+  disk.onChange = () => void setMeta(DISK, disk.snapshot()).catch(() => {});
 }

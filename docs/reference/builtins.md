@@ -370,14 +370,37 @@ engines answer from the hit test, which names only what is on top.
 | `themeorder` | the order a theme's loops play in, 1-based into its bank's loop records; if the theme is playing, it restarts in the new order |
 | `calcpoint` | a room point's screen point, or (32000, 32000) behind the camera |
 | `calcrgb` | one colour, 0x00RRGGBB |
+| `calcand`, `calcor`, `calcleft`, `calcright`, `calcset`, `calcclear` | the bits of integers: and, or, shift left, shift right keeping the sign, and one bit set or cleared. Anything but an integer is error 0xe |
+| `stringtoascii`, `asciitostring` | named the other way round from what they do: `stringtoascii (65)` is `"A"` and `asciitostring ("A")` is 65 |
+| `stagewidth`, `stageheight` | the open stage's screen size, 0 with no stage open |
+| `norepeat`, `serial` | `norepeat (n)` is a random 1..n that is never the one it answered last time for that n; `serial (n)` counts 1..n round from a random start. Each fills a table of 256 random draws on its first call |
+| `hasmem` | whether that much memory can be had: always yes |
+| `countpermanents`, `indextopermanent` | the `permanent` globals, as `countglobals` and `indextoglobal` are the globals |
+| `createmenu`, `appenditem`, `changeitem`, `checkitem`, `grayitem`, `cmdkeyitem`, `countmenus`, `countitems`, `indextomenu`, `indextoitem`, `drawmenus`, `clearmenus` | the menus kept as data, up to 64, their names matched in any case and cut to 127 characters: built, renamed, checked, grayed and given command keys, then counted and indexed back. No menu bar is drawn (RedJack's is a debug menu that `menuvisible (isdebugging ())` hides) |
+| `key` | whether a key is held now, named as RedJack.exe's virtual-key table names it or by its one character (a US layout) |
+| `profilestart`, `profilestop` | ten stopwatches in milliseconds |
+| `countquads`, `indextoquad` | the room's quads, by count and index |
+| `themeexists` | whether an open track file has that track name |
+| `scenewarm`, `roadwarm`, `launchroad` | the room's cache warm-ups, which only check their names here; `launchroad` checks its arguments, and its road playback is not modelled |
+| `propcontrast`, `actorcontrast`, `proplitby`, `actorlitby` | a sprite's own gamma per channel, and which group's record it is drawn under: default, screen, stage, set, movie or puppet |
+| `stagebrightness`, `stagecontrast`, `setbrightness`, `setcontrast`, `moviebrightness`, `moviecontrast`, `puppetbrightness`, `puppetcontrast` | the groups' records. The stage's also lights the flat, the movie's the movie frames and the puppet's the puppet; the set's lights only the sprites under it. The puppet's value forms read the movie's record, as RedJack.exe's do |
+| `cameraroll`, `proproll`, `actorpitch`, `actorroll`, `actorisfacer`, `actorsnap` | angles in 2^24ths of a turn. The camera's roll and a true-3D prop's roll are drawn; an actor's pitch, roll and facer are kept but not drawn, since actors are still drawn square to the screen. A snapped actor moves with `stageorigin` |
+| `actorsound`, `propsound` | the current pose's or view's own sound, at a volume and pan 0..255 |
+| `soundexists`, `soundticks` | whether a one-shot of that name is open, and its length in sixtieths of a second |
+| `countpuppetsounds`, `indextopuppetsoundname`, `indextopuppetsubtitle` | the open puppet's lines: how many, and the n-th line's sound name or subtitle |
+| `actorseek`, `propseek` | a preload: checks the name and does nothing more |
+| `setcolor`, `setdepth`, `stagecolor` | the room's colour (0x00RRGGBB) or depth at a screen point, and the stage's colour there |
+| `buildfilenames`, `countfilenames`, `indextofilename`, `countfoldernames`, `indextofoldername` | a folder's files and its folders, listed afresh: names starting with a dot left out, a missing folder empty. The search is `folder @ "*.*"`, so a path not ending in `:` lists the names in its parent that start with its last part |
+| `copylocal` | `name` found through path slots 1..8 and copied to `folder @ name`: true if copied or already there. With the cache flag, only from the `currentcd ()` disc, into 32 copies that make room by deleting the oldest and go when the game quits. A copy is kept as the name of what it copies |
+| `deletefile` | a file deleted: not there is 0x2a, a folder 0x31, and a file on a CD stays without an error |
+| `volumename`, `filename`, `diskspace` | a path's volume (before its first `:`), its last name (after its last `:`, `/` or `\`), and the volume's free bytes: none on a CD, a stand-in 1 GiB on the hard disk less what the scripts wrote |
+| `opentextfile`, `savetextfile`, `cleantextfile`, `addtextstring`, `counttextstrings`, `indextotextstring` | one text buffer of CR-ended lines: read from a file (CR LF and LF become CR; a file that will not open changes nothing), written back with CR LF (nothing on a CD), emptied, a line replaced or appended, counted and read (255 bytes at most). An empty path is the Open or Save dialog, answered as cancelled |
+| `registrystring`, `registrynumber` | values under `HKEY_CURRENT_USER\Software\RedJack`, empty to start, "" or 0 when not there; kept with the saved games in the browser |
 | `spacebar` | whether the space bar is held down now |
 | `doublebuffer`, `singlebuffer` | the control panel's 16- or 32-bit switch. The canvas is true-colour either way, so a switch always works and `sysparam (10)` answers the depth asked for |
 | `flatwarm`, `castwarm`, `flushcache`, `reboot` | no-ops: loading ahead of need, dropping what was loaded, and a restart only reached behind `isdebugging ()` |
 | `isdebugging` | 0, as in the shipped game |
 
-**Still unknown in v5:** the menu-building commands (`createmenu`,
-`appenditem`, `cmdkeyitem`, `clearmenus`, `drawmenus`), which build a debug
-menu that `menuvisible (isdebugging ())` keeps hidden, and copying game files to the hard
-disk (`buildfilenames`, `countfilenames`, `indextofilename`, `copylocal`).
+**Still unknown in v5:** the other movie players and the network.
 
 Back to the [reference index](README.md).

@@ -98,6 +98,12 @@ export interface CastPose {
   playsOnce?: boolean;
   /** DreamFactory 5 only: the pose's step time, as a view's (PropState.frameTicks; `actorpose` 0x4074a4) */
   frameTicks?: number;
+  /**
+   * DreamFactory 5 only: the container location of the pose's sound, its u32 at
+   * 0x0c when that names a `SOUN` — what `actorsound` plays (RedJack.exe
+   * 0x40840b), as a view's is `propsound`'s (PropState.sound)
+   */
+  sound?: number;
   /** byte offset of this 32-byte record in the member's logic container —
    *  where the pose name is stored (edit target, see {@link patchPoseName}) */
   record: number;
@@ -196,6 +202,15 @@ export const POSE_NAME_FIELD = 15;
 const C0_V5 = { mainScript: 0x24, memberCount: 0x38, memberTable: 0x3c } as const;
 const POSE_V5 = { play: 0x2e, playCount: 0x230, maxPlay: (0x230 - 0x2e) / 2, frameCount: 0x232, frames: 0x236 } as const;
 
+/** a v5 pose's sound (CastPose.sound), when its 0x0c names a SOUN */
+function poseSound(own: Uint8Array, containers: { data: Uint8Array }[]): { sound?: number } {
+  if (own.length < 0x10) return {};
+  const loc = new DataView(own.buffer, own.byteOffset, own.byteLength).getUint32(0x0c, true);
+  const d = loc ? containers[loc]?.data : undefined;
+  const soun = !!d && d.length > 8 && d[2] === 5 && String.fromCharCode(d[7], d[6], d[5], d[4]) === "SOUN";
+  return soun ? { sound: loc } : {};
+}
+
 export function readCstFile(data: Uint8Array): CstFile {
   const file = readContainerFile(data);
   const c0 = file.containers[0].data;
@@ -273,6 +288,7 @@ export function readCstFile(data: Uint8Array): CstFile {
         record,
         ...(v5 && own.length >= 0x18 ? { playsOnce: (new DataView(own.buffer, own.byteOffset, own.byteLength).getUint32(0x14, true) & 1) === 1 } : {}),
         ...(v5 && own.length >= 0x230 ? { frameTicks: new DataView(own.buffer, own.byteOffset, own.byteLength).getInt16(0x22e, true) } : {}),
+        ...(v5 ? poseSound(own, file.containers) : {}),
       });
     }
     const member: CastMember = { name: name.toLowerCase(), logicLocation, scriptLocation, poses };

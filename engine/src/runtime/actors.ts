@@ -2,10 +2,11 @@ import { CstFile, CastMember, CastPose } from "../df/cst";
 import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
 import {
-  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, engineBearing, brightPalette, hiddenBy, inkAlpha, inkPixel,
+  WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, engineBearing, hiddenBy, inkAlpha, inkPixel,
   inDepthWindow,
 } from "./geometry";
 import type { DrawSignature } from "./signature";
+import { Lights, shadedPalette } from "./shading";
 import type { Value } from "./interp";
 import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 
@@ -108,6 +109,20 @@ export class ActorInstance {
   true3d = false;
   /** `actorbrightness`: added to each colour channel, -255..255 */
   bright: [number, number, number] = [0, 0, 0];
+  /** `actorcontrast`, `actorlitby` and the group it is drawn under, as a prop's (PropInstance.contrast) */
+  contrast: [number, number, number] = [0, 0, 0];
+  litby = 0;
+  lightGroup = 1;
+  /**
+   * `actorpitch`, `actorroll`, `actorisfacer` and `actorsnap`, kept for the
+   * script: an actor is drawn as the sprite square to the screen it always was,
+   * true-3D or not (see {@link true3d}). The angles in 2²⁴ths of a turn
+   * (actor +0x1e, +0x22); a facer until told otherwise, as a prop is
+   */
+  pitch = 0;
+  roll = 0;
+  facer = true;
+  snap = false;
   speed = 0;
   /**
    * `actorturn` — degrees of facing per service pass while turning. 16, not 0:
@@ -190,6 +205,13 @@ export function copyActorRecord(from: ActorInstance, to: ActorInstance): void {
   to.flip = from.flip;
   to.true3d = from.true3d;
   to.bright = [from.bright[0], from.bright[1], from.bright[2]];
+  to.contrast = [from.contrast[0], from.contrast[1], from.contrast[2]];
+  to.litby = from.litby;
+  to.lightGroup = from.lightGroup;
+  to.pitch = from.pitch;
+  to.roll = from.roll;
+  to.facer = from.facer;
+  to.snap = from.snap;
   to.speed = from.speed;
   to.turn = from.turn;
   to.owner = from.owner;
@@ -244,6 +266,14 @@ export class ActorRuntime {
   readonly casts = new Map<string, LoadedCast>();
   /** the set currently displayed — actors only draw in their own set */
   currentSet = "";
+  /** DreamFactory 5's group records an actor can be lit by (`actorlitby`; GameSession.lights) */
+  lights: Lights | null = null;
+  /** DreamFactory 5's `stageorigin`, which `actorsnap` actors are drawn from — the props' own (GameSession.stageOrigin) */
+  origin: { readonly x: number; readonly y: number } = { x: 0, y: 0 };
+  /** the palette an actor is drawn through: its own record under its group's (runtime/shading.ts) */
+  private shade(a: ActorInstance, pal: Uint8ClampedArray): Uint8ClampedArray {
+    return shadedPalette(pal, a, this.lights?.group(a.lightGroup) ?? null);
+  }
 
   addCast(name: string, cst: CstFile): LoadedCast {
     const cast = new LoadedCast(name.toLowerCase(), cst);
@@ -615,7 +645,10 @@ export class ActorRuntime {
     if (!f) return null;
     const ax = a.flip & 1 ? f.width - f.posXraw : f.posXraw;
     const ay = a.flip & 2 ? f.height - f.posYraw : f.posYraw;
-    return { f, x: a.anchorX - ax, y: a.anchorY - ay, w: f.width, h: f.height };
+    // `actorsnap`: moved with the stage's `stageorigin`, as a snapped prop is (0x407098)
+    const sx = a.snap ? this.origin.x : 0;
+    const sy = a.snap ? this.origin.y : 0;
+    return { f, x: a.anchorX - ax + sx, y: a.anchorY - ay + sy, w: f.width, h: f.height };
   }
 
   /** visible 2D actors, far to near — `dist` descending, so low draws last */
@@ -637,7 +670,7 @@ export class ActorRuntime {
       const r = this.screenRect(a);
       if (!r) continue;
       // a v5 sprite colours through its own palette (df/shp.ts)
-      const pal32 = brightPalette(r.f.palette ?? paletteRGBA, a.bright);
+      const pal32 = this.shade(a, r.f.palette ?? paletteRGBA);
       const alpha = inkAlpha(a.ink);
       for (let y = 0; y < r.f.height; y++) {
         const ty = r.y + y;
@@ -689,7 +722,7 @@ export class ActorRuntime {
     const level = occ ? this.occludeAt(a, hiddenBy(proj), occ) : 0;
     // a v5 sprite colours through its own palette (df/shp.ts)
     if (r.f.palette) paletteRGBA = r.f.palette;
-    paletteRGBA = brightPalette(paletteRGBA, a.bright);
+    paletteRGBA = this.shade(a, paletteRGBA);
     const alpha = inkAlpha(a.ink);
     if ("scaled" in r) {
       const pal = paletteRGBA;
@@ -730,6 +763,7 @@ export class ActorRuntime {
    * since it is the same camera the props are projected through.
    */
   drawSignature(sig: DrawSignature): void {
+    sig.str(this.lights?.key() ?? "").num(this.origin.x).num(this.origin.y);
     sig.num(this.actors.size).str(this.currentSet);
     for (const a of this.actors.values()) {
       sig.bool(a.visible);
@@ -740,6 +774,7 @@ export class ActorRuntime {
       // the 2D half: where it is painted, and where in the screen order
       sig.bool(a.worldSpace).num(a.anchorX).num(a.anchorY).num(a.dist);
       sig.num(a.flip).num(a.bright[0]).num(a.bright[1]).num(a.bright[2]);
+      sig.num(a.contrast[0]).num(a.contrast[1]).num(a.contrast[2]).num(a.lightGroup).bool(a.snap);
     }
   }
 

@@ -176,6 +176,61 @@ test("v5's own commands answer as RedJack.exe's handlers do, and stay unknown to
   expect(await call("spacebar")).toBe(1);
 });
 
+test("v5's arithmetic, character, stage-size, counter and permanent commands, as RedJack.exe answers them", async () => {
+  const session = new GameSession(() => null, new NullAudioSink());
+  const unknown: string[] = [];
+  session.interp.onUnknown = (name) => unknown.push(name);
+  const call = (name: string, ...args: (number | string)[]) =>
+    session.interp.builtins.get(name)!(session.interp, args, {} as never, {} as never);
+  const fails = (name: string, ...args: (number | string)[]) => expect(async () => call(name, ...args)).rejects;
+  expect(await call("calcand", 6, 3)).toBe(0);
+  expect(unknown).toEqual(["calcand"]);
+  session.isV5 = true;
+
+  // 0x417a00…0x417ec0: the bits, and only of integers
+  expect(await call("calcand", 6, 3)).toBe(2);
+  expect(await call("calcor", 6, 3)).toBe(7);
+  expect(await call("calcleft", 1, 4)).toBe(16);
+  expect(await call("calcright", -16, 2)).toBe(-4);
+  expect(await call("calcset", 4, 0)).toBe(5);
+  expect(await call("calcclear", 7, 1)).toBe(5);
+  await fails("calcand", "6", 3).toMatchObject({ code: 0xe });
+
+  // 20181 makes a character, 20182 reads one, whatever their names say
+  expect(await call("stringtoascii", 65)).toBe("A");
+  expect(await call("asciitostring", "A")).toBe(65);
+  await fails("stringtoascii", 256).toMatchObject({ code: 0xa });
+  await fails("asciitostring", "AB").toMatchObject({ code: 0xa });
+  await fails("asciitostring", 65).toMatchObject({ code: 0xe });
+
+  // no stage open: 0
+  expect(await call("stagewidth")).toBe(0);
+  expect(await call("stageheight")).toBe(0);
+
+  // serial counts round from where its first draw put it; norepeat never says
+  // the same twice running
+  const s: number[] = [];
+  for (let k = 0; k < 4; k++) s.push((await call("serial", 3)) as number);
+  expect(s.map((v, k) => ((v - s[0] - k) % 3 + 3) % 3)).toEqual([0, 0, 0, 0]);
+  expect(s.every((v) => v >= 1 && v <= 3)).toBe(true);
+  let last = await call("norepeat", 2);
+  for (let k = 0; k < 20; k++) {
+    const next = await call("norepeat", 2);
+    expect(next).not.toBe(last);
+    last = next;
+  }
+  await fails("norepeat", 1).toMatchObject({ code: 0xa });
+  await fails("serial", 257).toMatchObject({ code: 0xa });
+
+  expect(await call("hasmem", 1 << 20)).toBe(1);
+
+  // permanents in the order declared
+  session.interp.permanents.add("numgames");
+  expect(await call("countpermanents")).toBe(1);
+  expect(await call("indextopermanent", 1)).toBe("numgames");
+  await fails("indextopermanent", 2).toMatchObject({ code: 0xa });
+});
+
 test("the disc a day is on is the one its files come from: resetpaths's path, as Titanic's setpath", async () => {
   const session = new GameSession(() => null, new NullAudioSink());
   const discs: number[] = [];
@@ -270,7 +325,7 @@ test.skipIf(missing)("a sphere drawn at a road film's first camera is that film'
       const fr = f.frames[0];
       if (Math.hypot(fr.x - n.x, fr.y - n.y) > 200) continue; // only a film that starts ON the node
       const out = new Uint32Array(W * H);
-      sphere.render(out, W, H, fr.heading, fr.pitch, fr.fov);
+      sphere.render(out, W, H, fr);
       const d = s.file.containers[fr.picture].data;
       const fb = new FrameBuffer();
       decodeFrameV5(d, fb);
@@ -370,7 +425,7 @@ test.skipIf(missing)("a prop put on a star stands on the scenery the sphere's de
   // foot is on the dock, in the same units, through the same camera
   const cam = m.camera()!;
   const depth = new Uint32Array(640 * 480);
-  new SphereImage(sett.file, m.node.sphere, true).render(depth, 640, 480, cam.heading, cam.pitch, cam.fov);
+  new SphereImage(sett.file, m.node.sphere, true).render(depth, 640, 480, cam);
   expect(Math.abs(depth[at.y * 640 + at.x] - at.depth) / at.depth).toBeLessThan(0.03);
 });
 
@@ -391,7 +446,7 @@ test.skipIf(missing)("a film's picture carries the depths a sphere has, so sprit
       const map = depthV5(s.file.containers[fr.picture].data)!;
       expect(map).not.toBeNull();
       const out = new Uint32Array(640 * 480);
-      sphere.render(out, 640, 480, fr.heading, fr.pitch, fr.fov);
+      sphere.render(out, 640, 480, fr);
       let rel = 0;
       let k = 0;
       for (let i = 0; i < out.length; i += 13) {

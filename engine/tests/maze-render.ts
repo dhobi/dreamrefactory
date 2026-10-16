@@ -108,7 +108,7 @@ function nested(): DFContainerFile {
  */
 function look(img: SphereImage, lon: number, lat: number): number {
   const out = new Uint32Array(1);
-  img.render(out, 1, 1, P - lon, P / 2 - lat, P / 3);
+  img.render(out, 1, 1, { heading: P - lon, pitch: P / 2 - lat, fov: P / 3 });
   return out[0];
 }
 
@@ -157,8 +157,8 @@ test("a coarse render samples every other pixel and doubles it, odd edges includ
   const img = new SphereImage(nested(), 1);
   const fine = new Uint32Array(5 * 3);
   const coarse = new Uint32Array(5 * 3);
-  img.render(fine, 5, 3, P / 2, 0, P / 3);
-  img.render(coarse, 5, 3, P / 2, 0, P / 3, true);
+  img.render(fine, 5, 3, { heading: P / 2, pitch: 0, fov: P / 3 });
+  img.render(coarse, 5, 3, { heading: P / 2, pitch: 0, fov: P / 3 }, true);
   // facing away from the small patches: the root's blue either way, and no
   // pixel left unwritten
   expect([...fine].every((p) => p === word(BLUE))).toBe(true);

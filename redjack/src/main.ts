@@ -34,12 +34,12 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { REDJACK } from "@dreamfactory/site/games";
 import { VERSION } from "@dreamfactory/site/version";
 import { RedJackFiles } from "./files";
-import { REDJACK_SAVES, seedRedJackSaves } from "./saves";
+import { REDJACK_SAVES, keepDf5Disk, seedRedJackSaves } from "./saves";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { RJ_CURSORS } from "./cursor-art";
 import { bindRoomTouch } from "./room-touch";
-import { SWIPE_ARROWS, arrowUp, defaultSaveName, keyAction, screenPoint, whereLine } from "./input";
+import { SWIPE_ARROWS, arrowUp, defaultSaveName, heldKeys, keyAction, screenPoint, whereLine } from "./input";
 
 const SCREEN = REDJACK.screen;
 
@@ -240,6 +240,10 @@ async function main(): Promise<void> {
     await browseForSave(bytes as Uint8Array, defaultSaveName(host.session.currentSetFile, new Date()), { log: (l) => say(`  ${l}`) });
   };
   host.session.onLoadGame = () => browseForLoad({ log: (l) => say(`  ${l}`) });
+  // the discs as folders for the file commands, and what the scripts wrote to
+  // the hard disk on an earlier visit
+  host.session.df5Disk.setTree(files.tree);
+  await keepDf5Disk(host.session.df5Disk);
   void seedRedJackSaves((name) => files.serverUrl(name)).then((n) => {
     if (n) say(`listed ${n} of the port's day saves in the saved games`);
   });
@@ -479,13 +483,20 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
   // `spacebar ()` is the key as it is now, so it is kept here as it goes down and up
   addEventListener("keyup", (e) => {
     if (e.key === " ") s.spaceDown = false;
+    for (const vk of heldKeys(e.code)) s.keysDown.delete(vk);
     // the arrows come up too: the fight lessons lean on the key held, and stop on its release
     const arrow = arrowUp(e);
     if (arrow) void host.director.keyUp(arrow);
   });
-  addEventListener("blur", () => (s.spaceDown = false));
+  addEventListener("blur", () => {
+    s.spaceDown = false;
+    s.keysDown.clear();
+  });
 
   addEventListener("keydown", (e) => {
+    // `key (name)` asks whether a key is held, wherever the focus is, as
+    // GetAsyncKeyState does
+    for (const vk of heldKeys(e.code)) s.keysDown.add(vk);
     // the saved-games dialog holds the keys while it is up, as the original's did
     if (savesOpen()) return;
     if (e.key === " " && !focusOwnsKey(e.target, e.key)) s.spaceDown = true;

@@ -109,9 +109,9 @@ export interface PropState {
    * DreamFactory 5 only: the container location of this view's sound, from the
    * view's u32 at 0x0c — absent when that is 0 or does not name a `SOUN`.
    * Measured from Disney's Villains Revenge (`Title/v105/v105a.shop`), where
-   * each SOUN sits right after the VIEW that names it; no executable we have
-   * says when the game plays it, so the engine never does. RedJack's shops
-   * hold no SOUN and 0 in every view's 0x0c.
+   * each SOUN sits right after the VIEW that names it. It plays when a script
+   * asks `propsound` (RedJack.exe 0x42dff0) and at no other time. RedJack's
+   * shops hold no SOUN and 0 in every view's 0x0c.
    */
   sound?: number;
 }

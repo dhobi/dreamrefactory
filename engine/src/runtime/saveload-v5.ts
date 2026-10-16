@@ -100,8 +100,8 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
     is3d: a.worldSpace,
     true3d: a.true3d,
     deg: a.deg,
-    pitch: 0,
-    roll: 0,
+    pitch: a.pitch,
+    roll: a.roll,
     x: a.worldX,
     y: a.worldY,
     z: a.worldZ,
@@ -134,7 +134,7 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
     true3d: p.true3d,
     deg: toNum(p.deg),
     pitch: p.pitch,
-    roll: 0,
+    roll: p.roll,
     // a screen prop's place is its anchor, a world prop's its point
     x: p.worldSpace ? p.worldX : p.anchorX,
     y: p.worldSpace ? p.worldY : p.anchorY,
@@ -194,7 +194,7 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
       view: maze?.view ?? "",
       deg: maze?.heading ?? 0,
       pitch: maze?.pitch ?? 0,
-      roll: 0,
+      roll: maze?.roll ?? 0,
       fov: maze?.fov ?? 0,
       stageOpen: !!stageFile,
       stageHandle: handle(stageFile),
@@ -299,6 +299,7 @@ export async function loadGameV5(session: GameSession, bytes: Uint8Array, versio
       if (maze) {
         maze.setHeading(save.runt.deg);
         maze.setPitch(save.runt.pitch);
+        maze.setRoll(save.runt.roll);
         if (save.runt.fov) maze.setFov(save.runt.fov);
       }
     }
@@ -350,6 +351,8 @@ function restoreActorsV5(session: GameSession, save: SaveGameV5, file: (h: numbe
     a.worldSpace = r.is3d;
     a.true3d = r.true3d;
     a.deg = r.deg;
+    a.pitch = r.pitch;
+    a.roll = r.roll;
     a.worldX = r.x;
     a.worldY = r.y;
     a.worldZ = r.z;
@@ -391,6 +394,7 @@ function restorePropsV5(session: GameSession, save: SaveGameV5, file: (h: number
     p.true3d = r.true3d;
     p.deg = r.deg;
     p.pitch = r.pitch;
+    p.roll = r.roll;
     if (r.is3d) {
       p.worldX = r.x;
       p.worldY = r.y;

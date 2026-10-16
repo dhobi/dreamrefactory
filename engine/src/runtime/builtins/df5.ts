@@ -1,8 +1,22 @@
-import { Builtin, Value, toNum, toStr, truthy } from "../interp";
+import { Builtin, ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { packPoint } from "../point";
 import type { ActorInstance } from "../actors";
 import type { PropInstance } from "../props";
 import { BuiltinCtx } from "./context";
+
+/**
+ * Register a command that answers only in a v5 game; in any other it stays the
+ * unknown command it always was.
+ */
+export function v5Registrar({ session, interp }: BuiltinCtx): (name: string, fn: Builtin) => void {
+  return (name, fn) => {
+    interp.register(name, (i, args, call, frame) => {
+      if (session.isV5) return fn(i, args, call, frame);
+      i.onUnknown(name, args);
+      return 0;
+    });
+  };
+}
 
 /**
  * DreamFactory 5's commands outside the room ({@link file://./maze.ts} has the
@@ -15,13 +29,7 @@ import { BuiltinCtx } from "./context";
  */
 export function registerDf5Builtins(ctx: BuiltinCtx): void {
   const { session, interp } = ctx;
-  const r5 = (name: string, fn: Builtin): void => {
-    interp.register(name, (i, args, call, frame) => {
-      if (session.isV5) return fn(i, args, call, frame);
-      i.onUnknown(name, args);
-      return 0;
-    });
-  };
+  const r5 = v5Registrar(ctx);
   const prop = (n: Value): PropInstance | null => session.propRuntime.get(toStr(n ?? ""));
   const actor = (n: Value): ActorInstance | null => session.actorRuntime.get(toStr(n ?? ""));
   /** a getter/setter pair, as every 16xxx command is: one argument reads, two write */
@@ -41,6 +49,104 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   r5("calcrgb", (_i, [red, green, blue]) =>
     ((toNum(red ?? 0) & 0xff) << 16) | ((toNum(green ?? 0) & 0xff) << 8) | (toNum(blue ?? 0) & 0xff),
   );
+
+  /** an integer argument, or the wrong-type error every handler below answers
+   *  for anything else (`cmp word [arg], 4` -> 0xe) */
+  const int = (cmd: string, v: Value | undefined): number => {
+    if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
+    return v | 0;
+  };
+  // calcand (a, b), calcor (a, b): the bits of two integers (0x417a00, 0x417b70)
+  r5("calcand", (_i, [a, b]) => int("calcand", a) & int("calcand", b));
+  r5("calcor", (_i, [a, b]) => int("calcor", a) | int("calcor", b));
+  // calcleft (v, n), calcright (v, n): v shifted n places (0x417c40 `shl`,
+  // 0x417d10 `sar`, so calcright keeps the sign); the CPU takes n's low five bits,
+  // as JavaScript's shifts do
+  r5("calcleft", (_i, [v, n]) => int("calcleft", v) << int("calcleft", n));
+  r5("calcright", (_i, [v, n]) => int("calcright", v) >> int("calcright", n));
+  // calcset (v, bit), calcclear (v, bit): v with bit `1 << bit` set or cleared
+  // (0x417de0, 0x417ec0)
+  r5("calcset", (_i, [v, bit]) => int("calcset", v) | (1 << int("calcset", bit)));
+  r5("calcclear", (_i, [v, bit]) => int("calcclear", v) & ~(1 << int("calcclear", bit)));
+
+  /**
+   * stringtoascii (code) and asciitostring (s) are named the other way round from
+   * what they do, in RedJack.exe's own table: 20181 (0x417660) makes a code
+   * 0..255 into the one-character string, 20182 (0x4175f0) a one-character
+   * string into its code. Out of range, or a string of any other length, is
+   * error 0xa; the other type is 0xe (0x410560 wants a string).
+   */
+  r5("stringtoascii", (_i, [code]) => {
+    const c = int("stringtoascii", code);
+    if (c < 0 || c > 255) throw new ScriptError(0xa, `stringtoascii (${c})`);
+    return String.fromCharCode(c);
+  });
+  r5("asciitostring", (_i, [s]) => {
+    if (typeof s !== "string") throw new ScriptError(0xe, `asciitostring: ${String(s)} is not a string`);
+    if (s.length !== 1) throw new ScriptError(0xa, `asciitostring (${JSON.stringify(s)})`);
+    return s.charCodeAt(0) & 0xff;
+  });
+
+  // stagewidth (), stageheight (): the open stage's screen size, which Flat.c's
+  // open copies out of its container 0 (0x412da1, 0x412dab); 0 with no stage open
+  // (0x4155e0, 0x415630)
+  r5("stagewidth", () => session.stageCtrl.stageFile?.screen.width ?? 0);
+  r5("stageheight", () => session.stageCtrl.stageFile?.screen.height ?? 0);
+
+  /**
+   * norepeat (n) and serial (n): two tables of 256, each filled on its command's
+   * first call with `random (1)`, `random (2)` … `random (256)` (0x419297,
+   * 0x4191b7 — 256 draws from the stream before the first answer).
+   *
+   * norepeat (n), n in 2..256, is a random 1..n that is never the one it
+   * answered last time for the same n (0x419325): `random (n - 1)`, one more
+   * when it reaches the last. serial (n), n in 1..256, counts 1..n round from
+   * wherever its first `random (n)` put it (0x419240). Any other n is error 0xa.
+   */
+  const draw = (n: number): number => (n > 0 ? Math.trunc(session.rng() * n) + 1 : 0);
+  const table = (): number[] => Array.from({ length: 256 }, (_, k) => draw(k + 1));
+  let lastPick: number[] | null = null;
+  let counters: number[] | null = null;
+  r5("norepeat", (_i, [n]) => {
+    lastPick ??= table();
+    const m = int("norepeat", n) - 1;
+    if (m < 1 || m >= 256) throw new ScriptError(0xa, `norepeat (${m + 1})`);
+    let pick = draw(m);
+    if (pick >= lastPick[m]) pick++;
+    lastPick[m] = pick;
+    return pick;
+  });
+  r5("serial", (_i, [n]) => {
+    counters ??= table();
+    const m = int("serial", n) - 1;
+    if (m < 0 || m >= 256) throw new ScriptError(0xa, `serial (${m + 1})`);
+    const value = counters[m];
+    counters[m] = value + 1 > m + 1 ? 1 : value + 1;
+    return value;
+  });
+
+  // hasmem (bytes): whether that much can be had on top of a 200K reserve
+  // (0x419dd0 -> 0x46ce10). A page always has it
+  r5("hasmem", (i, [bytes]) => {
+    int("hasmem", bytes);
+    return i.bool(true);
+  });
+
+  /**
+   * countpermanents () and indextopermanent (n): the `permanent` table, as
+   * countglobals and indextoglobal are the globals' — its count (0x418fd0) and
+   * the name of the n-th (0x418f60 -> 0x449790), n in 1..count or error 0xa.
+   * The name is folded to lower case, as every global's is here (indextoglobal
+   * answers the same way).
+   */
+  r5("countpermanents", () => interp.permanents.size);
+  r5("indextopermanent", (_i, [n]) => {
+    const k = int("indextopermanent", n);
+    const names = [...interp.permanents];
+    if (k < 1 || k > names.length) throw new ScriptError(0xa, `indextopermanent (${k}): ${names.length} permanents`);
+    return names[k - 1];
+  });
+
   // calcpoint (x, y, z): where a point of the room is on the screen (0x4177f0 puts
   // it through the camera, 0x435740); behind the camera it is (32000, 32000). The
   // mine's `pointinactor (thename, calcpoint (hx, hy, hz))` is a hit by a thrown thing
@@ -115,6 +221,12 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
    * `propbrightness (…, 10, 10, 10)`; the big fight turns the screen red when Nick
    * is hit and back with `screenbrightness (0, 0, 0)`.
    */
+  // (p, k) reads channel k, 1..3 or error 0xa (0x42c210, 0x4062d0)
+  const channel = (cmd: string, k: Value | undefined): number => {
+    const c = int(cmd, k);
+    if (c < 1 || c > 3) throw new ScriptError(0xa, `${cmd}: channel ${c}`);
+    return c - 1;
+  };
   const level = (v: Value | undefined): number => Math.max(-255, Math.min(255, Math.trunc(toNum(v ?? 0))));
   const bright = (e: { bright: [number, number, number] }, [red, green, blue]: Value[]): void => {
     e.bright = [level(red), level(green), level(blue)];
@@ -122,13 +234,13 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   r5("propbrightness", (_i, [n, ...rgb]) => {
     const p = prop(n);
     if (!p) return 0;
-    if (!rgb.length) return p.bright[0];
+    if (rgb.length < 3) return p.bright[channel("propbrightness", rgb[0])];
     bright(p, rgb);
   });
   r5("actorbrightness", (_i, [n, ...rgb]) => {
     const a = actor(n);
     if (!a) return 0;
-    if (!rgb.length) return a.bright[0];
+    if (rgb.length < 3) return a.bright[channel("actorbrightness", rgb[0])];
     bright(a, rgb);
   });
   r5("screenbrightness", (_i, rgb) => {

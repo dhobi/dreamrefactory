@@ -60,6 +60,7 @@ import { PHOTO_H, PHOTO_W } from "../runtime/photos";
 import { composeDfEffect, composeDissolve, composeEffect, dfPassesAt, passesAt, type DfEffect } from "../runtime/visual-effects";
 import { DEFAULT_SCREEN, ScreenSize } from "./screen";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
+import { groupPalette } from "@dreamfactory/engine/runtime/shading";
 
 
 /** a mixclut(target,"black",lo,hi,amt) request: darken palette entries lo..hi */
@@ -699,6 +700,8 @@ export class ScreenDirector {
     // DreamFactory 5's `screenbrightness`, added to the whole picture at present
     sig.num(s.screenBright[0]).num(s.screenBright[1]).num(s.screenBright[2]);
     sig.num(s.screenContrast[0]).num(s.screenContrast[1]).num(s.screenContrast[2]);
+    // ...and the stage's, the set's, the movie's and the puppet's (runtime/shading.ts)
+    sig.str(s.lights.key());
     // the xray aperture — a drag moves nothing else on the screen, so without
     // this the reveal would be painted once and then hold while the light moved
     const xr = s.plugins.xray;
@@ -823,7 +826,7 @@ export class ScreenDirector {
     if (flat) {
       const flatPal = this.flatPalette(flat.palette);
       const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
-      indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
+      indexedToRGBA(flat.pixels, flat.width, flat.height, this.stageLit(flatPal), fbuf);
       this.screen.blitTop(fbuf, flat.width, flat.height);
       this.compositeWorld(this.screen.frame, flatPal, null);
     }
@@ -865,7 +868,7 @@ export class ScreenDirector {
       pixels: flat.pixels,
       width: flat.width,
       height: flat.height,
-      palette: this.flatPalette(flat.palette),
+      palette: this.stageLit(this.flatPalette(flat.palette)),
     };
   }
 
@@ -928,7 +931,7 @@ export class ScreenDirector {
       // there is no screen to show, black.
       if (covers || !this.paintWorldInto()) this.screen.clearFrame();
       const buf = this.screen.scratchFor(f.width * f.height * 4);
-      indexedToRGBA(f.pixels, f.width, f.height, f.palette, buf);
+      indexedToRGBA(f.pixels, f.width, f.height, this.session.isV5 ? groupPalette(f.palette, this.session.lights.movie) : f.palette, buf);
       if (f.drawn && this.filmUnder) underUndrawn(buf, f, this.filmUnder);
       this.screen.blitAt(buf, f.width, f.height, f.originX, f.originY);
       this.screen.frameValid = true;
@@ -1281,7 +1284,7 @@ export class ScreenDirector {
       this.screen.clearFrame();
       const flatPal = this.flatPalette(flat.palette);
       const fbuf = this.screen.scratchFor(flat.width * flat.height * 4);
-      indexedToRGBA(flat.pixels, flat.width, flat.height, flatPal, fbuf);
+      indexedToRGBA(flat.pixels, flat.width, flat.height, this.stageLit(flatPal), fbuf);
       // a v5 fight moves its stage about (`stageorigin`); everywhere else it is 0,0
       const at = this.session.stageOrigin;
       this.screen.blitAt(fbuf, flat.width, flat.height, at.x, at.y);
@@ -2310,6 +2313,15 @@ export class ScreenDirector {
     gen: number;
     out: Uint8ClampedArray;
   } | null = null;
+  /**
+   * DreamFactory 5's `stagebrightness` and `stagecontrast`: the stage's flat is
+   * drawn through the stage's record (0x41658d hands its slot to the blitter),
+   * and only the flat — the props over it are lit by their own (`proplitby`)
+   */
+  private stageLit(pal: Uint8ClampedArray): Uint8ClampedArray {
+    return this.session.isV5 ? groupPalette(pal, this.session.lights.stage) : pal;
+  }
+
   private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
     const gen = screenGammaGeneration();
     const hit = this.flatPal;
