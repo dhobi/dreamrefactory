@@ -349,11 +349,20 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
    * straight through and once a queued one has been taken. Deliberately NOT
    * "the engine is idle": a click that opens a conversation leaves it busy for the
    * length of the conversation, and the caller has bevels to press.
+   *
+   * A conversation that opens with the press still queued ends the wait too, as
+   * it ends the headless twin's settle: a cast idle runs in the passes, and one
+   * that finds you inside `hotdist()` can open its conversation in the pass that
+   * would have taken the press — which then waits out the whole conversation.
    */
   const clickAt = async (x: number, y: number): Promise<void> => {
     const pt = await pagePoint(x, y);
     await page.mouse.click(pt.x, pt.y);
-    await waitInPage("dbg.session.events.length === 0", "the press to be taken", 30_000);
+    await waitInPage(
+      "dbg.session.events.length === 0 || !!(dbg.viewer && dbg.viewer.conversing)",
+      "the press to be taken",
+      30_000,
+    );
   };
 
   /**
@@ -447,8 +456,13 @@ export async function browserDriver(page: Page, opts: BrowserDriverOptions = {})
     // first plaque plays every opening line (and here they play in real time),
     // while waiting for a puppet parked on a QUESTION to go quiet waits for
     // something only another gesture can cause.
+    //
+    // Nor while a set is half open: a climb's `openscene` → `changeset` runs off
+    // the walk, which is no dispatch `quiescent` counts, and between its
+    // closesetfile and the arriving set there is no room — only the last flat's
+    // name, which reads as a flat covering the room.
     await waitInPage(
-      "dbg.viewer && (dbg.viewer.quiescent || dbg.viewer.conversing)",
+      "dbg.viewer && (dbg.viewer.quiescent || dbg.viewer.conversing) && !dbg.session.setOpening",
       `${what} to settle`,
     );
     await sync();

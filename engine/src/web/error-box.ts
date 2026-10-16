@@ -41,7 +41,7 @@ export function scriptErrorBox(
     // 0x4047a0 before the MessageBox)
     const text = wordWrapText(scriptErrorBoxText(code, language()));
     if (nobodyToAsk()) {
-      log(`script error box (not shown here): ${text.replace(/\n/g, " ")} — answered "Yes" (${detail})`);
+      log(`script error box (not shown here): ${text.replaceAll("\n", " ")} — answered "Yes" (${detail})`);
       return true;
     }
     return window.confirm(text);

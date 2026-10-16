@@ -593,7 +593,12 @@ export class Navigator {
     return who ? `${who} is talking to you` : "a conversation is open";
   }
 
-  async faceStandpoint(views: string[], scenes: string[] = []): Promise<NavResult> {
+  /**
+   * `arrived`, when given, ends the walk the moment it holds — for a trip whose
+   * gesture IS the walk ({@link walkTo}), where getting there can happen on any
+   * step and walking on would take the stairs again.
+   */
+  async faceStandpoint(views: string[], scenes: string[] = [], arrived?: () => boolean): Promise<NavResult> {
     const goal = atStandpoint(views, scenes);
     const startedIn = this.d.setName();
     // don't walk off the room by accident: every exit standpoint except the one
@@ -618,6 +623,7 @@ export class Navigator {
       return { ok: false, reason: `the "${flat}" flat is covering ${startedIn}; close it first`, gestures: this.count };
     }
     for (let i = 0; i <= MAX_GESTURES_PER_ROOM; i++) {
+      if (arrived?.()) return { ok: true, gestures: this.count };
       if (this.d.setName() !== startedIn) {
         return { ok: false, reason: `left ${startedIn} for ${this.d.setName()} while looking for ${views.join("|")}`, gestures: this.count };
       }
@@ -1003,13 +1009,15 @@ export class Navigator {
    *
    * `savedeck` is part of "where", because two of the four flights land in the
    * same set they left: gstair3 is B deck and C deck both, and a climb from C
-   * arrives in gstair3 with `savedeck = "b"`.
+   * arrives in gstair3 with `savedeck = "b"`. Nothing about that climb changes the
+   * set, so the walk is handed `arrived` to stop on: walking on to view68 from the
+   * B deck landing takes the next flight to gstair2 as well.
    */
   private async walkTo(trip: ShipTrip): Promise<NavResult> {
     const arrived = (): boolean =>
       this.d.setName() === trip.to &&
       (!trip.sets.savedeck || String(this.d.flow().savedeck ?? "") === String(trip.sets.savedeck));
-    const walked = await this.faceStandpoint(trip.stand, trip.standScene);
+    const walked = await this.faceStandpoint(trip.stand, trip.standScene, arrived);
     this.count++;
     if (arrived()) {
       this.say(`climbed to ${trip.to}${trip.sets.savedeck ? ` (deck ${trip.sets.savedeck})` : ""}`);
