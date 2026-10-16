@@ -15,11 +15,11 @@
 import { startWorkbench } from "@dreamfactory/engine/web/speedrun/workbench";
 import { warmupList, type WarmFile } from "@dreamfactory/engine/web/cache-warmup";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import { ACTIONS } from "./speedrun/actions";
-import { gamefileManifest, gamefileSizes } from "./editions";
-import { editionOfUrl, NEUTRAL } from "./files";
-import { loadTemplates, saveTemplateFor } from "./save-seed";
-import { calculateInWorker } from "./speedrun/calc";
+import { ACTIONS } from "./actions";
+import { gamefileManifest, gamefileSizes } from "../editions";
+import { editionOfUrl, NEUTRAL } from "../files";
+import { loadTemplates, saveTemplateFor } from "../save-seed";
+import { calculateInWorker } from "./calc";
 import type { CalcProgress, CalcResult } from "@dreamfactory/engine/web/speedrun/calculate";
 
 /**

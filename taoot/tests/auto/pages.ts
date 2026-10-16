@@ -1,6 +1,6 @@
 /**
  * The three small pages, in node: the front page's door to the speedrun
- * (`src/home.ts`), the speedrun workbench's own half (`src/speedrun-page.ts`),
+ * (`src/home.ts`), the speedrun workbench's own half (`src/speedrun/page.ts`),
  * and the guided tour's doors (`src/freeroam-page.ts`).
  *
  *   npx vitest run --project taoot taoot/tests/auto/pages.ts
@@ -111,7 +111,7 @@ describe("the front page", () => {
 describe("the speedrun workbench", () => {
   it("hands over this game's actions and sheet, and warms one edition with the neutral files", async () => {
     page('<html><head><meta name="edition" content="DE"></head><body></body></html>');
-    await import("../../src/speedrun-page");
+    await import("../../src/speedrun/page");
     expect(workbench!.game).toBe("taoot");
     expect(workbench!.warmWhat).toBe("every file of the DE edition");
     expect(String(workbench!.fixtureSheet)).toMatch(/speedrun\/run\.sheet\.txt$/);
@@ -125,7 +125,7 @@ describe("the speedrun workbench", () => {
 
   it("warms English on a page that names no edition", async () => {
     page("<html><head></head><body></body></html>");
-    await import("../../src/speedrun-page");
+    await import("../../src/speedrun/page");
     expect(workbench!.warmWhat).toBe("every file of the EN edition");
   });
 });

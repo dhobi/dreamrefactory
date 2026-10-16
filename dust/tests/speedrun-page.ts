@@ -1,5 +1,5 @@
 /**
- * The speedrun workbench's page (`src/speedrun-page.ts`): what it hands the
+ * The speedrun workbench's page (`src/speedrun/page.ts`): what it hands the
  * shared workbench and the state list, read in node with both stood in for.
  *
  *   npx vitest run --project dust dust/tests/speedrun-page.ts
@@ -22,7 +22,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 it("starts the workbench in Dust's own key space, with Dust's actions and route", async () => {
   vi.stubGlobal("window", {});
-  await import("../src/speedrun-page");
+  await import("../src/speedrun/page");
   const { ACTIONS } = await import("../src/speedrun/actions");
   expect(workbench!.game).toBe("dust");
   expect(workbench!.actions).toBe(ACTIONS);

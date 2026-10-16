@@ -22,7 +22,7 @@
  * and Dust's is `#log` in a different place, the copy dump carries a version and
  * an edition that only one game has, and whether X does anything depends on
  * whether the pane is the page. They stay with the page that owns them
- * (taoot/src/main.ts, dust/src/speedrun-page.ts).
+ * (taoot/src/main.ts, dust/src/speedrun/page.ts).
  *
  * ## Why it polls
  *

@@ -2100,8 +2100,8 @@ sheetEl.addEventListener("input", () => {
  * Open the workbench for one game.
  *
  * The page's whole job, and the only export: a game's speedrun entry point is
- * this call and its own action table (`taoot/src/speedrun-page.ts`,
- * `dust/src/speedrun-page.ts`).
+ * this call and its own action table (`taoot/src/speedrun/page.ts`,
+ * `dust/src/speedrun/page.ts`).
  *
  * ## The order below is load-bearing
  *

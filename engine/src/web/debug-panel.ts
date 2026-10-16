@@ -27,7 +27,7 @@ import type { StateTrace } from "@dreamfactory/engine/runtime/trace";
  * better answer than picking six ourselves — and no answer at all for a second
  * game, whose author reached for different ones.
  *
- * Hence a parameter (taoot/src/main.ts, dust/src/speedrun-page.ts). A game with
+ * Hence a parameter (taoot/src/main.ts, dust/src/speedrun/page.ts). A game with
  * nothing to name passes none and gets the full list under it, which is the
  * larger half of this pane anyway.
  */
