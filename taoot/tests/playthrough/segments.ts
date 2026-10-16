@@ -3416,8 +3416,15 @@ export async function segment26(s: Story): Promise<void> {
   // you at, against a lounge `hotdist()` of 3500. So the click has to be walked
   // for, which is what `accost` is: a hunt judged on whether he answered rather
   // than on whether the click landed on him.
+  //
+  // Where he answers is a route fact, so the route walks there rather than
+  // sweeping the room: from the middle of the lounge (Scene45/View49) his idle
+  // opens the conversation itself. Swept, it took fifteen dud clicks to arrive
+  // at the same standpoint.
   const lounge = await travelPast(s, "lounge1c");
   expect(lounge.ok, lounge.reason).toBe(true);
+  const middle = await nav.faceStandpoint(["view49"], ["scene45"]);
+  if (!d.conversing()) expect(middle.ok, middle.reason).toBe(true);
   const found = await nav.accost("zeit");
   expect(found.ok, found.reason).toBe(true);
 
