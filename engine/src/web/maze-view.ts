@@ -134,9 +134,7 @@ export class MazeView implements RoomLayer {
       this.film = null;
       const cam = m.camera();
       if (!cam || !m.node) return;
-      this.sphere(m.node.sphere).render(
-        this.rgba, this.width, this.height, cam.heading, cam.pitch, cam.fov, m.detail < 16, cam.roll,
-      );
+      this.sphere(m.node.sphere).render(this.rgba, this.width, this.height, cam, m.detail < 16);
     }
     // a new object each time: the director's "is this already on screen?" is by
     // identity, and a close-up's backdrop cache keys on `pixels`
@@ -216,7 +214,7 @@ export class MazeView implements RoomLayer {
       }
       // the film's map is its own; a sphere renders into a buffer of the view's size
       const z = this.depth?.key.startsWith("film:") === false ? (this.depth.occ.z as Uint32Array) : new Uint32Array(this.width * this.height);
-      s.render(z, this.width, this.height, cam.heading, cam.pitch, cam.fov, false, cam.roll);
+      s.render(z, this.width, this.height, cam);
       this.depth = { key, occ: { z, w: this.width, h: this.height, scale: 1, levels: DEPTH_FAR } };
     }
     return this.depth.occ;

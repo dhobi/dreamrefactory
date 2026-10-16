@@ -235,9 +235,9 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
    */
   r5("opentextfile", async (_i, [path]) => {
     const p = str("opentextfile", path);
-    if (p === "") return 0;
+    if (p === "") return;
     const bytes = await readFile(p);
-    if (!bytes) return 0;
+    if (!bytes) return;
     let out = "";
     for (let k = 0; k < bytes.length; k++) {
       const b = bytes[k];
@@ -246,7 +246,6 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
       } else out += String.fromCharCode(b);
     }
     text = out;
-    return 0;
   });
   /**
    * savetextfile (path) (0x40afa0): the file deleted and made again (0x48df20,
@@ -256,10 +255,9 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
    */
   r5("savetextfile", (_i, [path]) => {
     const p = str("savetextfile", path);
-    if (p === "") return 0;
-    const bytes = toBytes(text.replace(/\r/g, "\r\n"));
+    if (p === "") return;
+    const bytes = toBytes(text.replaceAll("\r", "\r\n"));
     disk().write(p, { bytes, copyOf: null, size: bytes.length, transient: false });
-    return 0;
   });
   // cleantextfile (): the buffer emptied (0x40b080)
   r5("cleantextfile", () => {

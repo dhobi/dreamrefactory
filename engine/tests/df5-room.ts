@@ -325,7 +325,7 @@ test.skipIf(missing)("a sphere drawn at a road film's first camera is that film'
       const fr = f.frames[0];
       if (Math.hypot(fr.x - n.x, fr.y - n.y) > 200) continue; // only a film that starts ON the node
       const out = new Uint32Array(W * H);
-      sphere.render(out, W, H, fr.heading, fr.pitch, fr.fov);
+      sphere.render(out, W, H, fr);
       const d = s.file.containers[fr.picture].data;
       const fb = new FrameBuffer();
       decodeFrameV5(d, fb);
@@ -425,7 +425,7 @@ test.skipIf(missing)("a prop put on a star stands on the scenery the sphere's de
   // foot is on the dock, in the same units, through the same camera
   const cam = m.camera()!;
   const depth = new Uint32Array(640 * 480);
-  new SphereImage(sett.file, m.node.sphere, true).render(depth, 640, 480, cam.heading, cam.pitch, cam.fov);
+  new SphereImage(sett.file, m.node.sphere, true).render(depth, 640, 480, cam);
   expect(Math.abs(depth[at.y * 640 + at.x] - at.depth) / at.depth).toBeLessThan(0.03);
 });
 
@@ -446,7 +446,7 @@ test.skipIf(missing)("a film's picture carries the depths a sphere has, so sprit
       const map = depthV5(s.file.containers[fr.picture].data)!;
       expect(map).not.toBeNull();
       const out = new Uint32Array(640 * 480);
-      sphere.render(out, 640, 480, fr.heading, fr.pitch, fr.fov);
+      sphere.render(out, 640, 480, fr);
       let rel = 0;
       let k = 0;
       for (let i = 0; i < out.length; i += 13) {

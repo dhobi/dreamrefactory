@@ -90,7 +90,7 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
       const e = find(cmd, n);
       if (name === undefined) return LIT_BY[e.litby];
       const want = str(cmd, name).toLowerCase();
-      const k = LIT_BY.findIndex((l) => l === want);
+      const k = (LIT_BY as readonly string[]).indexOf(want);
       if (k < 0) throw new ScriptError(0xa, `${cmd}: no light "${want}"`);
       if (k === e.litby) return;
       e.litby = k;
@@ -333,7 +333,7 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
       s = new SphereImage(file, m.node.sphere, depth);
       cache.set(m.node.sphere, s);
     }
-    const v = s.at(x, y, width, height, cam.heading, cam.pitch, cam.fov, cam.roll);
+    const v = s.at(x, y, width, height, cam);
     return depth ? v : rgbOf(v);
   };
   /** a little-endian RGBA word as the engine's 0x00RRGGBB */

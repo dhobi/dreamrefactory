@@ -115,7 +115,10 @@ export class Df5Disk {
       for (let k = 0; k < parts.length; k++) {
         const dir = lower(parts.slice(0, k).join("/"));
         let m = this.discDirs.get(dir);
-        if (!m) this.discDirs.set(dir, (m = new Map()));
+        if (!m) {
+          m = new Map();
+          this.discDirs.set(dir, m);
+        }
         const name = parts[k];
         if (!m.has(lower(name))) m.set(lower(name), { name, dir: k < parts.length - 1 });
       }
@@ -135,7 +138,7 @@ export class Df5Disk {
    * separator at all relative to the current directory.
    */
   locate(path: string): Located {
-    const win = path.replace(/:/g, "\\");
+    const win = path.replaceAll(":", "\\");
     const split = (s: string): string[] => s.split(/[\\/]/).filter(Boolean);
     if (path.length > 2 && path.startsWith("::")) return { disc: false, parts: split(win) };
     const cut = win.indexOf("\\");
@@ -225,7 +228,7 @@ export class Df5Disk {
    */
   list(path: string): Listed[] | null {
     const at = this.locate(path + "*.*");
-    const last = at.parts.length ? at.parts[at.parts.length - 1] : "*.*";
+    const last = at.parts.at(-1) ?? "*.*";
     const prefix = lower(last.endsWith("*.*") ? last.slice(0, -3) : last);
     const dirParts = at.parts.slice(0, -1);
     const out: Listed[] = [];

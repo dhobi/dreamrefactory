@@ -29,6 +29,14 @@ interface Tile {
   scale: number;
 }
 
+/** where a sphere is looked at from: radians, and the field of view across */
+export interface SphereLook {
+  readonly heading: number;
+  readonly pitch: number;
+  readonly fov: number;
+  readonly roll?: number;
+}
+
 /** the depth of a pixel no depth map covers: nothing there to hide a sprite */
 export const DEPTH_FAR = 0x7fffffff;
 
@@ -127,7 +135,7 @@ export class SphereImage {
    * word, or a distance on a depth sphere. DreamFactory 5's `setcolor` and
    * `setdepth` ask it at a node (RedJack.exe 0x439387, 0x4392b0 -> 0x4973a0).
    */
-  at(x: number, y: number, width: number, height: number, heading: number, pitch: number, fov: number, roll = 0): number {
+  at(x: number, y: number, width: number, height: number, { heading, pitch, fov, roll = 0 }: SphereLook): number {
     const f = width / (2 * Math.tan(fov / 2));
     const px = x + 0.5 - width / 2;
     const py = y + 0.5 - height / 2;
@@ -148,7 +156,8 @@ export class SphereImage {
 
   /**
    * Draw the view into `out` (one RGBA word per pixel), looking along
-   * `heading` with `pitch` up and a horizontal field of view of `fov`.
+   * `heading` with `pitch` up, `roll` about the line of sight and a horizontal
+   * field of view of `fov`.
    *
    * Everything but the heading is per-pixel trigonometry, so it is kept
    * between frames; turning — the common case — only adds to a longitude.
@@ -157,16 +166,7 @@ export class SphereImage {
    * 8, 0)`, against `(24, 16, 2)` at rest): a pitch change costs a new set of
    * rays, and a quarter of them keep a scroll smooth.
    */
-  render(
-    out: Uint32Array,
-    width: number,
-    height: number,
-    heading: number,
-    pitch: number,
-    fov: number,
-    coarse = false,
-    roll = 0,
-  ): void {
+  render(out: Uint32Array, width: number, height: number, { heading, pitch, fov, roll = 0 }: SphereLook, coarse = false): void {
     const step = coarse ? 2 : 1;
     const gw = Math.ceil(width / step);
     const gh = Math.ceil(height / step);
