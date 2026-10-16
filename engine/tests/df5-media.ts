@@ -56,7 +56,7 @@ test("the movie players check what RedJack.exe checks, then find no player", asy
   // playsmacker's player is `xor ax, ax` (0x48c6d0): nothing to hand on
   const before = logs.length;
   await call("playsmacker", "intro.smk");
-  expect(logs.length).toBe(before);
+  expect(logs).toHaveLength(before);
 
   // playdvd (file, player, ...): both expressions, then both strings, then the file
   await fails("playdvd", "intro.mpg").toMatchObject({ code: 0x1c });

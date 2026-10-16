@@ -374,9 +374,7 @@ export function cardTexel(c: Card, v5: SpriteCamera, sx: number, sy: number): { 
 export function paintCard(
   c: Card,
   v5: SpriteCamera,
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number,
+  { rgba, width, height }: { rgba: Uint8ClampedArray; width: number; height: number },
   pal: Uint8ClampedArray,
   alpha: number,
   hidden?: (x: number, y: number, axial: number) => boolean,
@@ -1296,7 +1294,7 @@ export class PropRuntime {
       const c = this.cardOf(p, cam, cam.v5);
       if (!c) return;
       const hidden = occ ? (x: number, y: number, axial: number) => sceneryOccludes(occ, x, y, this.occludeAt(p, axial, occ)) : undefined;
-      paintCard(c, cam.v5, rgba, width, height, this.shade(p, c.f.palette ?? paletteRGBA), inkAlpha(p.ink), hidden);
+      paintCard(c, cam.v5, { rgba, width, height }, this.shade(p, c.f.palette ?? paletteRGBA), inkAlpha(p.ink), hidden);
       return;
     }
     const r = this.worldRect(p, proj, cam);

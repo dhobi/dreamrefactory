@@ -743,7 +743,7 @@ export class ActorRuntime {
     const c = this.card(a, cam);
     if (c) {
       const hidden = occ ? (x: number, y: number, axial: number) => sceneryOccludes(occ, x, y, this.occludeAt(a, axial, occ)) : undefined;
-      paintCard(c, cam.v5!, rgba, width, height, this.shade(a, c.f.palette ?? paletteRGBA), inkAlpha(a.ink), hidden);
+      paintCard(c, cam.v5!, { rgba, width, height }, this.shade(a, c.f.palette ?? paletteRGBA), inkAlpha(a.ink), hidden);
       return;
     }
     const r = this.rect(a, proj, cam);

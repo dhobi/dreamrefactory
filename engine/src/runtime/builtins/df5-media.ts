@@ -141,11 +141,7 @@ export function registerDf5MediaBuiltins(ctx: BuiltinCtx): void {
     const t = timing("playdvd", rest);
     const path = find("playdvd", name);
     const key = asked.toLowerCase();
-    const tried =
-      key === "auto" ? `DirectShow's DVD graph, then MCI ${MCI_DVD.join(", ")}`
-        : key === "dshow" ? "DirectShow's DVD graph (CLSID_DvdGraphBuilder)"
-          : key === "mci" ? `MCI ${MCI_DVD.join(", ")}`
-            : `MCI "${asked}"`;
+    const tried = dvdPlayers(key, asked);
     outside("playdvd", tried, path, t);
     throw new ScriptError(0x2a, `playdvd: ${tried} would not open ${path}`);
   });
@@ -163,4 +159,14 @@ interface Timing {
   width: number;
   height: number;
   mode: number;
+}
+
+/** which players playdvd tries for the name it was given (0x409b5b, 0x48bd20) */
+function dvdPlayers(key: string, asked: string): string {
+  switch (key) {
+    case "auto": return `DirectShow's DVD graph, then MCI ${MCI_DVD.join(", ")}`;
+    case "dshow": return "DirectShow's DVD graph (CLSID_DvdGraphBuilder)";
+    case "mci": return `MCI ${MCI_DVD.join(", ")}`;
+    default: return `MCI "${asked}"`;
+  }
 }
