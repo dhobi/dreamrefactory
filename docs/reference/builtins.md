@@ -370,6 +370,12 @@ engines answer from the hit test, which names only what is on top.
 | `themeorder` | the order a theme's loops play in, 1-based into its bank's loop records; if the theme is playing, it restarts in the new order |
 | `calcpoint` | a room point's screen point, or (32000, 32000) behind the camera |
 | `calcrgb` | one colour, 0x00RRGGBB |
+| `calcand`, `calcor`, `calcleft`, `calcright`, `calcset`, `calcclear` | the bits of integers: and, or, shift left, shift right keeping the sign, and one bit set or cleared. Anything but an integer is error 0xe |
+| `stringtoascii`, `asciitostring` | named the other way round from what they do: `stringtoascii (65)` is `"A"` and `asciitostring ("A")` is 65 |
+| `stagewidth`, `stageheight` | the open stage's screen size, 0 with no stage open |
+| `norepeat`, `serial` | `norepeat (n)` is a random 1..n that is never the one it answered last time for that n; `serial (n)` counts 1..n round from a random start. Each fills a table of 256 random draws on its first call |
+| `hasmem` | whether that much memory can be had: always yes |
+| `countpermanents`, `indextopermanent` | the `permanent` globals, as `countglobals` and `indextoglobal` are the globals |
 | `spacebar` | whether the space bar is held down now |
 | `doublebuffer`, `singlebuffer` | the control panel's 16- or 32-bit switch. The canvas is true-colour either way, so a switch always works and `sysparam (10)` answers the depth asked for |
 | `flatwarm`, `castwarm`, `flushcache`, `reboot` | no-ops: loading ahead of need, dropping what was loaded, and a restart only reached behind `isdebugging ()` |
