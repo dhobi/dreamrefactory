@@ -184,6 +184,8 @@ export interface MazeRoad {
   b: number;
   road: number;
   films: MazeFilm[];
+  /** the record's two films one by one, +20 then +24 — `launchroad`'s forward and back (0x441cce) */
+  ends: [MazeFilm | null, MazeFilm | null];
 }
 
 export interface MazeQuad {
@@ -320,17 +322,14 @@ export function readSettFile(data: Uint8Array): SettFile {
     } else if (kind === 0) {
       const road = pv.getInt32(r + 16, true);
       if (tagOf(c(road) ?? new Uint8Array()) !== "ROAD") continue;
-      const films: MazeFilm[] = [];
-      for (const at of [20, 24]) {
-        const film = readFilm(file, pv.getInt32(r + at, true));
-        if (film) films.push(film);
-      }
+      const ends = [20, 24].map((at) => readFilm(file, pv.getInt32(r + at, true))) as MazeRoad["ends"];
       roads.push({
         name: pstrAt(mapr, r + 32),
         a: pv.getInt32(r + 8, true),
         b: pv.getInt32(r + 12, true),
         road,
-        films,
+        films: ends.filter((f): f is MazeFilm => !!f),
+        ends,
       });
     }
   }

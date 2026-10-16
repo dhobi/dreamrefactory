@@ -41,6 +41,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // a DreamFactory 5 room: a direction turns or walks a scene's views, a
     // name goes to another node or scene (engine/src/runtime/maze.ts)
     if (session.maze) {
+      // a launched road is dropped first, whatever the argument (0x43fff9)
+      session.maze.dropRoad();
       const d = toStr(dir);
       const low = d.toLowerCase();
       if (low === "left" || low === "right" || low === "strait") await session.maze.move(low);

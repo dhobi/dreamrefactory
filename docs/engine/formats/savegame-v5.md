@@ -304,9 +304,9 @@ field from it:
 | 0x8e | i32 | `actorvalue` | `0x405e0f` | kept |
 | 0x92 | i32 | `actorzclip` | `0x405e7f` | kept |
 | 0x98 / 0x9a / 0x9c | i16 | `actorsnap`, `actorink`, `actorflip` | `0x403dd8`, `0x404008`, `0x403e58` | kept |
-| 0x9e | 12 bytes | colour-table parameters: `actorcontrast` at `+0xa2`, `actorbrightness` at `+0xa8` | `0x40645d`, `0x406365` | rebuilt into `+0xaa` |
+| 0x9e | 12 bytes | colour-table parameters: `actorcontrast` as three i16 gammas, 128 − contrast (`+0x9e` red … `+0xa2` blue), then `actorbrightness` as three i16 (`+0xa4` … `+0xa8`) | `0x40645d`, `0x406365` | rebuilt into `+0xaa` |
 | 0xaa | u32 | the actor's colour table | | rebuilt (`0x43de97`) |
-| 0xae | i16 | `actorlitby`, whose table becomes the parent | `0x406518`, `0x43de7f` | kept |
+| 0xae | i16 | `actorlitby`, whose table becomes the parent; for 0, `default`, there is none, not even the screen's (`0x40a750` answers −1) | `0x406518`, `0x43de7f` | kept |
 | 0xb0 | i16 | `actorisfacer` | `0x4039b8` | kept |
 | 0xb2 | pstr[16] | **name** | `0x40658a` | kept |
 | 0xc2 | pstr[16] | `actorset` | `0x401c9f` | kept |
@@ -337,7 +337,7 @@ bytes later.
 | 0x8a | i32 | `propvalue` | `0x42839f` |
 | 0x8e | i32 | `propzclip` | `0x42840f` |
 | 0x94 / 0x96 / 0x98 | i16 | `propsnap`, `propink`, `propflip` | `0x42a348`, `0x42a578`, `0x42a3c8` |
-| 0x9a | 12 bytes | colour-table parameters: `propcontrast` at `+0x9e`, `propbrightness` at `+0xa4` | `0x42c39d`, `0x42c2a5` |
+| 0x9a | 12 bytes | colour-table parameters: `propcontrast` as three i16 gammas, 128 − contrast (`+0x9a` red … `+0x9e` blue), then `propbrightness` as three i16 (`+0xa0` … `+0xa4`) | `0x42c39d`, `0x42c2a5` |
 | 0xa6 | u32 | the colour table, rebuilt (`0x43e090`) | |
 | 0xaa | i16 | `proplitby` | `0x42c458` |
 | 0xac | i16 | `propisfacer` | `0x429f28` |

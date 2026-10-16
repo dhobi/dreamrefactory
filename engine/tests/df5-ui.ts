@@ -152,7 +152,7 @@ test("v5's stopwatches, room warm-ups, quads and themes", async () => {
     sett: {
       nodes: [{ name: "node1" }],
       scenes: [{ name: "Boat" }],
-      roads: [{ name: "road1" }],
+      roads: [{ name: "road1", ends: [null, null] }],
       quads: [{ name: "chest" }, { name: "door" }],
     },
   } as never;

@@ -363,7 +363,7 @@ engines answer from the hit test, which names only what is on top.
 | Commands | What they do |
 |---|---|
 | `proporder`, `actororder` | where a sprite is in its animation: 1 the length of the order it plays, 2 the step it is on, 3 the picture at that step, 7 how many pictures the view has |
-| `propistrue3d`, `propisfacer`, `proppitch`, `actoristrue3d` | a prop drawn as a flat picture set in the room ([pictures that stand in the room](../engine/runtime/rooms-v5.md#pictures-that-stand-in-the-room)) |
+| `propistrue3d`, `propisfacer`, `proppitch`, `actoristrue3d` | a prop or an actor drawn as a flat picture set in the room ([pictures that stand in the room](../engine/runtime/rooms-v5.md#pictures-that-stand-in-the-room)) |
 | `actorflip` | `propflip`'s twin: 1 mirrors across, 2 upside down. `propflip` itself now works on screen props as well |
 | `propbrightness`, `actorbrightness`, `screenbrightness`, `screencontrast` | [colour](../engine/runtime/rooms-v5.md#colour): a number added to each channel, and a gamma |
 | `stageflat`, `stageorigin`, `propsnap` | [the fights' stage](../engine/runtime/rooms-v5.md#the-fights-stage): v5's `gotoflat`/`currentflat`, where the stage is drawn, and the props that move with it |
@@ -381,10 +381,11 @@ engines answer from the hit test, which names only what is on top.
 | `profilestart`, `profilestop` | ten stopwatches in milliseconds |
 | `countquads`, `indextoquad` | the room's quads, by count and index |
 | `themeexists` | whether an open track file has that track name |
-| `scenewarm`, `roadwarm`, `launchroad` | the room's cache warm-ups, which only check their names here; `launchroad` checks its arguments, and its road playback is not modelled |
-| `propcontrast`, `actorcontrast`, `proplitby`, `actorlitby` | a sprite's own gamma per channel, and which group's record it is drawn under: default, screen, stage, set, movie or puppet |
+| `scenewarm`, `roadwarm` | the room's cache warm-ups, which only check their names here |
+| `launchroad` | plays a road's film, forward or back, in RedJack.exe's road mode: one frame a pass, `endroad ()` to the current scene n frames before the end (n held to 4..64), then the view stands where it started. A second `launchroad` queues its film, and `currentscene` drops the road ([roads launched by a script](../engine/runtime/rooms-v5.md#roads-launched-by-a-script)) |
+| `propcontrast`, `actorcontrast`, `proplitby`, `actorlitby` | a sprite's own gamma per channel, and which group's record it is drawn under: default, screen, stage, set, movie or puppet. Saved with the game; after a load, a sprite whose litby is default is lit by nothing, not even the screen |
 | `stagebrightness`, `stagecontrast`, `setbrightness`, `setcontrast`, `moviebrightness`, `moviecontrast`, `puppetbrightness`, `puppetcontrast` | the groups' records. The stage's also lights the flat, the movie's the movie frames and the puppet's the puppet; the set's lights only the sprites under it. The puppet's value forms read the movie's record, as RedJack.exe's do |
-| `cameraroll`, `proproll`, `actorpitch`, `actorroll`, `actorisfacer`, `actorsnap` | angles in 2^24ths of a turn. The camera's roll and a true-3D prop's roll are drawn; an actor's pitch, roll and facer are kept but not drawn, since actors are still drawn square to the screen. A snapped actor moves with `stageorigin` |
+| `cameraroll`, `proproll`, `actorpitch`, `actorroll`, `actorisfacer`, `actorsnap` | angles in 2^24ths of a turn. The camera's roll, and a true-3D prop's or actor's pitch, roll and facer, are drawn. A snapped actor moves with `stageorigin` |
 | `actorsound`, `propsound` | the current pose's or view's own sound, at a volume and pan 0..255 |
 | `soundexists`, `soundticks` | whether a one-shot of that name is open, and its length in sixtieths of a second |
 | `countpuppetsounds`, `indextopuppetsoundname`, `indextopuppetsubtitle` | the open puppet's lines: how many, and the n-th line's sound name or subtitle |
@@ -396,11 +397,14 @@ engines answer from the hit test, which names only what is on top.
 | `volumename`, `filename`, `diskspace` | a path's volume (before its first `:`), its last name (after its last `:`, `/` or `\`), and the volume's free bytes: none on a CD, a stand-in 1 GiB on the hard disk less what the scripts wrote |
 | `opentextfile`, `savetextfile`, `cleantextfile`, `addtextstring`, `counttextstrings`, `indextotextstring` | one text buffer of CR-ended lines: read from a file (CR LF and LF become CR; a file that will not open changes nothing), written back with CR LF (nothing on a CD), emptied, a line replaced or appended, counted and read (255 bytes at most). An empty path is the Open or Save dialog, answered as cancelled |
 | `registrystring`, `registrynumber` | values under `HKEY_CURRENT_USER\Software\RedJack`, empty to start, "" or 0 when not there; kept with the saved games in the browser |
+| `playqt` | nothing: not even its arguments are read |
+| `plaympeg`, `playactivemovie`, `playsmacker` | a file found through path slots 1..8 (0x6b if none), then optional from/to in milliseconds, position, size and mode. RedJack.exe hands the file to MCI's "MpegVideo", to DirectShow, or to nothing at all (Smacker's player is empty). There is no such player here, and the exe's players answer 0 when they fail, so each returns with no error |
+| `playdvd` | a file and a player ("auto", "dshow", "mci", any MCI device type, "" for "dvdvideo"), then the same integers. No DVD player here, so error 0x2a, as RedJack.exe gives when none opens |
+| `netcatchup`, `netsync`, `netclientlatency`, `netrandom`, `nettick` | error 0x40, not connected: there is never a peer |
+| `netidtostring`, `stringtonetid` | a net id's four bytes as "a.b.c.d", lowest first, and back. The text needs four numbers split by `,.-:`; fewer crash RedJack.exe |
 | `spacebar` | whether the space bar is held down now |
 | `doublebuffer`, `singlebuffer` | the control panel's 16- or 32-bit switch. The canvas is true-colour either way, so a switch always works and `sysparam (10)` answers the depth asked for |
 | `flatwarm`, `castwarm`, `flushcache`, `reboot` | no-ops: loading ahead of need, dropping what was loaded, and a restart only reached behind `isdebugging ()` |
 | `isdebugging` | 0, as in the shipped game |
-
-**Still unknown in v5:** the other movie players and the network.
 
 Back to the [reference index](README.md).

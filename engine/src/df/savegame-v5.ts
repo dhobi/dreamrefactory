@@ -60,6 +60,21 @@ export interface SaveFileRef {
   path: string;
 }
 
+/**
+ * A shading record's twelve bytes as RedJack.exe keeps them: the gamma per
+ * channel, m = 128 − contrast held to 0..256 (0x40a870), then the brightness
+ * per channel, held to −255..255 (0x40a7f0). Each is followed in the engine by
+ * the id of the colour table built from it, which means nothing in another
+ * process; the loader builds every table again (0x46efe0).
+ */
+export interface SaveShadeV5 {
+  gamma: [number, number, number];
+  bright: [number, number, number];
+}
+
+/** the record of a picture nobody lit: contrast 0, so gamma 128, and no brightness */
+export const plainSaveShade = (): SaveShadeV5 => ({ gamma: [128, 128, 128], bright: [0, 0, 0] });
+
 /** container 1, the fields the page names (docs: "Container 1: the runtime block") */
 export interface SaveRuntV5 {
   frame: number;
@@ -83,6 +98,16 @@ export interface SaveRuntV5 {
   stageName: string;
   /** the flat on show, an index into the stage's flats (+0x90, what `stageflat` answers) */
   flat: number;
+  /**
+   * The five group records `litby` names (+0x2e, +0xc0, +0x144, +0x4c, +0x20c),
+   * which RUNT carries whole and the loader builds the tables from — the
+   * puppet's from the SET's record (0x43d571).
+   */
+  screen: SaveShadeV5;
+  stage: SaveShadeV5;
+  set: SaveShadeV5;
+  movie: SaveShadeV5;
+  puppet: SaveShadeV5;
 }
 
 /** an open cast or shop: the file, and the name its header gives it */
@@ -113,8 +138,9 @@ export interface SaveActorV5 {
   snap: boolean;
   ink: number;
   flip: number;
-  contrast: number;
-  brightness: number;
+  /** `…contrast` and `…brightness`: the sprite's own record (actor +0x9e, prop +0x9a) */
+  shade: SaveShadeV5;
+  /** `…litby`, its LIT_BY index, which the loader hangs the rebuilt record under (0x43e085) */
   litby: number;
   facer: boolean;
   set: string;
@@ -149,8 +175,9 @@ export interface SavePropV5 {
   snap: boolean;
   ink: number;
   flip: number;
-  contrast: number;
-  brightness: number;
+  /** `…contrast` and `…brightness`: the sprite's own record (actor +0x9e, prop +0x9a) */
+  shade: SaveShadeV5;
+  /** `…litby`, its LIT_BY index, which the loader hangs the rebuilt record under (0x43e085) */
   litby: number;
   facer: boolean;
   set: string;
@@ -256,7 +283,33 @@ const put256 = (d: Uint8Array, off: number, s: string): void => writePstrAt(d, o
 
 // ---- the records -------------------------------------------------------------
 
-function writeActor(a: SaveActorV5): Uint8Array {
+/** a shading record at `off`, then its table id (any non-zero number: the loader rebuilds it) */
+function putShade(v: DataView, off: number, s: SaveShadeV5, table: number): void {
+  for (let k = 0; k < 3; k++) {
+    v.setInt16(off + k * 2, s.gamma[k], true);
+    v.setInt16(off + 6 + k * 2, s.bright[k], true);
+  }
+  v.setUint32(off + 12, table, true);
+}
+
+/**
+ * A shading record back. Twelve zero bytes are read as a plain record, not as
+ * gamma 0 (a contrast of 128 on every channel, which turns a picture white):
+ * that is what the port's saves held before it wrote these fields, and the day
+ * saves seeded into every player's list are such saves. RedJack.exe would read
+ * them as they are; a save of its own holds zeros only for a picture a script
+ * had whited out with no brightness, which the port then shows as painted.
+ */
+function getShade(v: DataView, off: number): SaveShadeV5 {
+  const s: SaveShadeV5 = { gamma: [0, 0, 0], bright: [0, 0, 0] };
+  for (let k = 0; k < 3; k++) {
+    s.gamma[k] = v.getInt16(off + k * 2, true);
+    s.bright[k] = v.getInt16(off + 6 + k * 2, true);
+  }
+  return s.gamma.every((m) => m === 0) && s.bright.every((b) => b === 0) ? plainSaveShade() : s;
+}
+
+function writeActor(a: SaveActorV5, table: number): Uint8Array {
   const d = new Uint8Array(STRIDE.actor);
   const v = new DataView(d.buffer);
   v.setInt16(0x00, a.visible ? 1 : 0, true);
@@ -278,8 +331,7 @@ function writeActor(a: SaveActorV5): Uint8Array {
   v.setInt16(0x98, a.snap ? 1 : 0, true);
   v.setInt16(0x9a, a.ink, true);
   v.setInt16(0x9c, a.flip, true);
-  v.setInt16(0xa2, a.contrast, true);
-  v.setInt16(0xa8, a.brightness, true);
+  putShade(v, 0x9e, a.shade, table);
   v.setInt16(0xae, a.litby, true);
   v.setInt16(0xb0, a.facer ? 1 : 0, true);
   put16(d, 0xb2, a.name);
@@ -312,8 +364,7 @@ function readActor(d: Uint8Array): SaveActorV5 {
     snap: v.getInt16(0x98, true) !== 0,
     ink: v.getInt16(0x9a, true),
     flip: v.getInt16(0x9c, true),
-    contrast: v.getInt16(0xa2, true),
-    brightness: v.getInt16(0xa8, true),
+    shade: getShade(v, 0x9e),
     litby: v.getInt16(0xae, true),
     facer: v.getInt16(0xb0, true) !== 0,
     name: str16(d, 0xb2),
@@ -324,7 +375,7 @@ function readActor(d: Uint8Array): SaveActorV5 {
   };
 }
 
-function writeProp(p: SavePropV5): Uint8Array {
+function writeProp(p: SavePropV5, table: number): Uint8Array {
   const d = new Uint8Array(STRIDE.prop);
   const v = new DataView(d.buffer);
   v.setInt16(0x00, p.shown, true);
@@ -344,8 +395,7 @@ function writeProp(p: SavePropV5): Uint8Array {
   v.setInt16(0x94, p.snap ? 1 : 0, true);
   v.setInt16(0x96, p.ink, true);
   v.setInt16(0x98, p.flip, true);
-  v.setInt16(0x9e, p.contrast, true);
-  v.setInt16(0xa4, p.brightness, true);
+  putShade(v, 0x9a, p.shade, table);
   v.setInt16(0xaa, p.litby, true);
   v.setInt16(0xac, p.facer ? 1 : 0, true);
   put16(d, 0xae, p.name);
@@ -376,8 +426,7 @@ function readProp(d: Uint8Array): SavePropV5 {
     snap: v.getInt16(0x94, true) !== 0,
     ink: v.getInt16(0x96, true),
     flip: v.getInt16(0x98, true),
-    contrast: v.getInt16(0x9e, true),
-    brightness: v.getInt16(0xa4, true),
+    shade: getShade(v, 0x9a),
     litby: v.getInt16(0xaa, true),
     facer: v.getInt16(0xac, true) !== 0,
     name: str16(d, 0xae),
@@ -490,6 +539,9 @@ function writeManifest(s: SaveGameV5): Uint8Array {
   return d;
 }
 
+/** RUNT's group records, in the order the loader rebuilds their tables (0x43d523..0x43d58e) */
+const GROUPS = [["screen", 0x2e], ["movie", 0x4c], ["stage", 0xc0], ["set", 0x144], ["puppet", 0x20c]] as const;
+
 function writeRunt(r: SaveRuntV5, counts: number[]): Uint8Array {
   const { d, v } = block(TAG.RUNT, RUNT_SIZE);
   v.setUint32(0x42, r.frame >>> 0, true);
@@ -517,6 +569,8 @@ function writeRunt(r: SaveRuntV5, counts: number[]): Uint8Array {
   v.setInt32(0x24c, r.pitch, true);
   v.setInt32(0x250, r.roll, true);
   v.setInt32(0x260, r.fov, true);
+  // the group records, their tables numbered in the order the loader builds them (0x43d523..0x43d58e)
+  GROUPS.forEach(([key, off], i) => putShade(v, off, r[key], i));
   return d;
 }
 
@@ -540,6 +594,11 @@ function readRunt(d: Uint8Array): { runt: SaveRuntV5; counts: number[] } {
       pitch: v.getInt32(0x24c, true),
       roll: v.getInt32(0x250, true),
       fov: v.getInt32(0x260, true),
+      screen: getShade(v, 0x2e),
+      movie: getShade(v, 0x4c),
+      stage: getShade(v, 0xc0),
+      set: getShade(v, 0x144),
+      puppet: getShade(v, 0x20c),
     },
     counts: [0x60, 0x68, 0x70, 0x78, 0x80].map((off) => v.getUint32(off, true)),
   };
@@ -588,9 +647,9 @@ export function writeSaveV5(s: SaveGameV5): Uint8Array {
   const out: Uint8Array[] = [
     writeManifest(s),
     writeRunt(s.runt, counts),
-    table(TAG.ACT, s.actors.map(writeActor), STRIDE.actor),
+    table(TAG.ACT, s.actors.map((a, i) => writeActor(a, GROUPS.length + i)), STRIDE.actor),
     table(TAG.CAS, s.casts.map(writeFileTableRecord), STRIDE.cast),
-    table(TAG.PRO, s.props.map(writeProp), STRIDE.prop),
+    table(TAG.PRO, s.props.map((p, i) => writeProp(p, GROUPS.length + s.actors.length + i)), STRIDE.prop),
     table(TAG.SHP, s.shops.map(writeFileTableRecord), STRIDE.shop),
     table(TAG.TRA, s.tracks.map(writeTrack), STRIDE.track),
   ];

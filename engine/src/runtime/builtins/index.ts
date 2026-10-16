@@ -17,6 +17,8 @@ import { registerDf5Builtins } from "./df5";
 import { registerDf5LookBuiltins } from "./df5-look";
 import { registerDf5UiBuiltins } from "./df5-ui";
 import { registerDf5FilesBuiltins } from "./df5-files";
+import { registerDf5MediaBuiltins } from "./df5-media";
+import { registerDf5NetBuiltins } from "./df5-net";
 import { registerEngineExtraBuiltins } from "./engine-extras";
 
 /**
@@ -57,5 +59,7 @@ export function registerGameBuiltins(session: GameSession): void {
   registerDf5UiBuiltins(ctx);
   registerDf5LookBuiltins(ctx);
   registerDf5FilesBuiltins(ctx);
+  registerDf5MediaBuiltins(ctx);
+  registerDf5NetBuiltins(ctx);
   registerEngineExtraBuiltins(ctx);
 }

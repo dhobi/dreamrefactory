@@ -54,28 +54,111 @@ export function isPlain(s: Shade): boolean {
   return !s.bright[0] && !s.bright[1] && !s.bright[2] && !s.contrast[0] && !s.contrast[1] && !s.contrast[2];
 }
 
+/**
+ * Where a sprite hangs in the tree when it is under NO record, not even the
+ * screen's: what a load leaves a sprite whose `litby` is "default" (0x43e085:
+ * 0x40a750 answers parent −1 for 0, and 0x46efe0 makes the rebuilt record a
+ * root). Every other way a sprite is made puts it under the screen.
+ */
+export const LIT_NONE = 0;
+
 /** the records of the four groups below the screen (0x4c78c8, 0x4c794c, 0x4c7854, 0x4c7a14) */
 export class Lights {
   readonly stage = plainShade();
   readonly set = plainShade();
   readonly movie = plainShade();
   readonly puppet = plainShade();
+  /**
+   * The table the puppet is drawn through when it is not its own record. A load
+   * reads the puppet's parameters back (+0x20c) but builds its table from the
+   * SET's (0x43d571..0x43d58e), and so it stays until a `puppetbrightness` or
+   * `puppetcontrast` rebuilds it from the puppet's own (0x40a9cb -> 0x46f0b0).
+   * Null is "the puppet's own".
+   */
+  puppetTable: Shade | null = null;
+  /** the screen's record, which the presenter applies; the session hands it in */
+  screenOf: () => Shade = plainShade;
 
-  /** a group's record by its {@link LIT_BY} index; the screen's is the presenter's, so null */
+  /** a group's record by its {@link LIT_BY} index, as pictures are drawn through it; the screen's is the presenter's, so null */
   group(k: number): Shade | null {
     switch (k) {
       case LIT_STAGE: return this.stage;
       case LIT_SET: return this.set;
       case LIT_MOVIE: return this.movie;
-      case LIT_PUPPET: return this.puppet;
+      case LIT_PUPPET: return this.puppetTable ?? this.puppet;
     }
     return null;
   }
 
+  /**
+   * The palette a sprite is drawn through: its own record under the group it
+   * hangs from ({@link shadedPalette}). A sprite under {@link LIT_NONE} is drawn
+   * as if the screen's record were not over it, which the port — applying the
+   * screen to the whole frame as it is presented — can only do by handing the
+   * presenter levels its curve takes back to the sprite's own
+   * ({@link unscreenPalette}).
+   */
+  spritePalette(pal: Uint8ClampedArray, own: Shade, k: number): Uint8ClampedArray {
+    const lit = shadedPalette(pal, own, this.group(k));
+    if (k !== LIT_NONE) return lit;
+    const screen = this.screenOf();
+    return isPlain(screen) ? lit : unscreenPalette(lit, screen);
+  }
+
   /** every number a picture drawn through these records depends on */
   key(): string {
-    return [this.stage, this.set, this.movie, this.puppet].map((s) => `${s.bright}/${s.contrast}`).join(";");
+    const t = this.puppetTable;
+    return [this.stage, this.set, this.movie, this.puppet].map((s) => `${s.bright}/${s.contrast}`).join(";") +
+      (t ? `;${t.bright}/${t.contrast}` : "");
   }
+}
+
+/** one channel's levels through the screen's record, as ScreenPresenter.blit presents them */
+function screenCurve(contrast: number, add: number): Uint8ClampedArray {
+  const e = exponent(gammaOf(contrast));
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * Math.pow(v / 255, e)) + add;
+  return lut;
+}
+
+const unscreened = new WeakMap<Uint8ClampedArray, Map<string, Uint8ClampedArray>>();
+
+/**
+ * A palette the presenter's screen curve takes back as near to `pal` as it can:
+ * each level replaced by the one whose screen-lit level is closest. Exact where
+ * the curve reaches the level; where it cannot (a brightened screen has no level
+ * below its brightness), the nearest it has. The port's approximation of a
+ * sprite under no record (see {@link LIT_NONE}).
+ */
+export function unscreenPalette(pal: Uint8ClampedArray, screen: Shade): Uint8ClampedArray {
+  let byKey = unscreened.get(pal);
+  if (!byKey) {
+    byKey = new Map();
+    unscreened.set(pal, byKey);
+  }
+  const key = `${screen.bright},${screen.contrast}`;
+  let out = byKey.get(key);
+  if (!out) {
+    const inverse = [0, 1, 2].map((k) => {
+      const lut = screenCurve(screen.contrast[k], screen.bright[k]);
+      const inv = new Uint8ClampedArray(256);
+      for (let t = 0; t < 256; t++) {
+        let best = 0;
+        for (let x = 1; x < 256; x++) if (Math.abs(lut[x] - t) < Math.abs(lut[best] - t)) best = x;
+        inv[t] = best;
+      }
+      return inv;
+    });
+    out = new Uint8ClampedArray(pal.length);
+    for (let i = 0; i < pal.length; i += 4) {
+      out[i] = inverse[0][pal[i]];
+      out[i + 1] = inverse[1][pal[i + 1]];
+      out[i + 2] = inverse[2][pal[i + 2]];
+      out[i + 3] = pal[i + 3];
+    }
+    byKey.set(key, out);
+  }
+  return out;
 }
 
 /** a contrast as the gamma 0x40a870 keeps */

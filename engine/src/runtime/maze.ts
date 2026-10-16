@@ -58,7 +58,26 @@ export interface MazeWalk {
   frame: number;
   /** a turn wraps round its film and stops at the first view it reaches */
   turn?: boolean;
+  /** `launchroad`'s road, which the frame loop plays in a mode of its own ({@link MazeRuntime.launchRoad}) */
+  road?: MazeRoadMode;
+  /** the road mode's frame on screen, which a switch to the queued film leaves up until the next pass */
+  shown?: MazeFilmFrame;
 }
+
+/** RedJack.exe's road mode (0x4c95cc set): the film is the walk's, at 0x4c8f18 */
+export interface MazeRoadMode {
+  /** the next frame to put up (0x4c95fc) */
+  index: number;
+  /** `launchroad`'s n, 4..64: how many frames ahead are loaded, and how early `endroad` comes (0x4c95f0) */
+  n: number;
+  /** the index at which the film gives way to {@link next} (0x4c95f4) — {@link ROAD_NO_END} until a second launchroad */
+  end: number;
+  /** the film a second launchroad queued (0x4c99d0) */
+  next: MazeFilm;
+}
+
+/** 0x4c95f4 while one road plays alone (0x4396be, 0x432e0e): 900000, an index no film reaches */
+export const ROAD_NO_END = 0xdbba0;
 
 /** a film frame held on screen: where a scene's view shows */
 export interface MazeShot {
@@ -326,6 +345,8 @@ export class MazeRuntime {
       this.onLog(`${this.sett.name}: no node or scene "${name}"`);
       return false;
     }
+    // standing somewhere ends a launched road (0x4450f2 → 0x434550, which clears the mode at 0x434567)
+    if (this.walk?.road) this.walk = null;
     this.node = n ?? null;
     this.scene = sc ?? null;
     this.shot = null;
@@ -413,6 +434,52 @@ export class MazeRuntime {
   }
 
   /**
+   * `launchroad (road, forward, n)`'s film, handed to 0x439620 — which starts
+   * RedJack.exe's road mode, the frame loop's own way of playing a road (0x432c55
+   * → 0x432c62, ahead of the walks and turns at 0x434b00):
+   *
+   * - n is held to 4..64 (0x439625). It is how many of the film's frames
+   *   0x439450 loads ahead into the picture cache at each pass, and how many
+   *   frames before the end the set hears `endroad` ({@link walkStep}).
+   * - Nothing is on screen yet: the film is the view's (`currentview ()` is
+   *   "moving", 0x4356d0), the index 0 (0x43966d), and the end of the window
+   *   900000 (0x4396be) — the first pass puts up frame 0.
+   * - With a road already playing (0x43963d), the film is queued instead
+   *   (0x439653): the one on screen plays n more frames from where it is
+   *   (0x439659, end = index + n) and then the queued film starts at its frame 0
+   *   (0x432dec). A walk or turn that is not a launched road is replaced.
+   *
+   * The 3D renderer a set may have running (0x4c8f44) is shut first
+   * (0x439685); the port draws no Rave scene, so there is none to shut.
+   */
+  launchRoad(film: MazeFilm, n: number): void {
+    const ahead = Math.max(4, Math.min(64, n));
+    const r = this.walk?.road;
+    if (r) {
+      r.n = ahead;
+      r.next = film;
+      r.end = r.index + ahead;
+      return;
+    }
+    this.walk = { film, frame: -1, road: { index: 0, n: ahead, end: ROAD_NO_END, next: film } };
+    this.onChange();
+  }
+
+  /**
+   * `currentscene (…)`'s first step (0x43fff9 → 0x4396e0): a launched road's
+   * film and index are dropped (the view "not moving", 0x4396ff) — though the
+   * road mode itself stays on, and RedJack.exe's next pass would read the film
+   * it no longer has (Rave.c's assertion at 0x432c84) unless the currentscene
+   * went on to stand somewhere (0x434550 clears the mode, 0x434567). The port
+   * ends the road there and then, where the camera stands.
+   */
+  dropRoad(): void {
+    if (!this.walk?.road) return;
+    this.walk = null;
+    this.onChange();
+  }
+
+  /**
    * `launchexit (scene, i)`: walk exit `i`'s road. The view is "moving" until
    * its film has played; then the camera stands at the far node looking the way
    * the film ended, and that node's `openscene` runs.
@@ -426,6 +493,7 @@ export class MazeRuntime {
   }
 
   walkFrame(): MazeFilmFrame | null {
+    if (this.walk?.road) return this.walk.shown ?? null;
     return this.walk ? (this.walk.film.frames[this.walk.frame] ?? null) : null;
   }
 
@@ -439,14 +507,12 @@ export class MazeRuntime {
    * or scene entered and its `openscene`, runs in the pass that puts up the
    * last frame (0x434dd3).
    *
-   * `launchroad`'s road (0x441af0 → 0x439620) is stepped differently — the
-   * frame before the index, an `endroad ()` to the set a few frames before the
-   * end (0x432d6a → 0x4406d0), the arrival after the next-to-last frame — and
-   * is not here: no shipped script calls `launchroad` or has an `endroad`.
+   * `launchroad`'s road is stepped by {@link roadStep}.
    */
   async walkStep(): Promise<boolean> {
     const w = this.walk;
     if (!w) return false;
+    if (w.road) return this.roadStep(w, w.road);
     if (w.turn) {
       // round and round the film until a frame marked with a view (0x434b00)
       w.frame = (w.frame + 1) % w.film.frames.length;
@@ -487,6 +553,64 @@ export class MazeRuntime {
       this.onChange();
       await this.fire(this.nodeScript(), "openscene");
     } else this.onChange();
+    return true;
+  }
+
+  /**
+   * One pass of the road mode (RedJack.exe's frame, 0x432c55 .. 0x432e33):
+   *
+   * - the frame AT the index goes up and the index moves on (0x432cb9): the
+   *   first pass shows frame 0. The camera takes that frame's point and angles
+   *   (0x435490);
+   * - in the pass whose new index is the film's length less n, the current
+   *   scene hears `endroad ()` — `sendtoscene (currentscene (), endroad ())`,
+   *   built as text and sent down the scene's chain (0x4406d0, "Scene Message:"
+   *   0x440ab0). If that leaves the room, or ends the road, the pass ends there
+   *   (0x432d78 .. 0x432d9e);
+   * - in the pass whose new index reaches the film's last frame — so the
+   *   next-to-last frame is the last one shown, and the last never is
+   *   (0x432cf9) — the road mode ends: the view stands again at the current
+   *   scene and view, which the road never changed (0x434550 with 0x4c7910 and
+   *   0x4c7920). At a node the camera keeps the angles of the frame it last
+   *   showed (0x4386c0 sets only the point); in a scene it stands on the view's
+   *   own frame. No `openscene` or `closescene` is sent on either side;
+   * - in the pass whose new index reaches the window a second launchroad set
+   *   (end − 1), the queued film takes over at index 0 (0x432dec), and it
+   *   plays alone (end 900000).
+   *
+   * An endroad pass is never also an arrival or a switch (0x432d15). Between
+   * passes the view is "moving", so a click finds no quad ({@link quadAt}),
+   * and a launchexit or a scene's move waits for it, as for any walk.
+   */
+  private async roadStep(w: MazeWalk, r: MazeRoadMode): Promise<boolean> {
+    const count = w.film.frames.length;
+    const shown = r.index++;
+    let endroad = r.index === count - r.n;
+    let done: 0 | 1 | 2 = r.index >= count - 1 ? 1 : 0;
+    if (r.index >= r.end - 1) done = 2;
+    if (done) endroad = false;
+    // an index past the film is Rave.c's assertion (0x432cc8); the port holds it on the last
+    w.frame = Math.min(shown, count - 1);
+    const f = w.film.frames[w.frame];
+    w.shown = f;
+    if (f) this.lookAs(f);
+    if (endroad) {
+      this.onChange();
+      await this.session.sendEvent("sendtoscene", this.sceneName, "endroad", [], this.sceneName);
+      if (this.session.maze !== this || this.walk !== w) return true;
+    }
+    if (done === 1) {
+      this.walk = null;
+      if (this.scene) this.standAt(this.scene, this.viewIndex(this.scene, this.sceneView));
+      this.onChange();
+      return true;
+    }
+    if (done === 2) {
+      w.film = r.next;
+      r.index = 0;
+      r.end = ROAD_NO_END;
+    }
+    this.onChange();
     return true;
   }
 
