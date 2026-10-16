@@ -107,7 +107,7 @@ const cel = (loc: number): ShpFrame => {
  *
  * - **the anchor is subtracted, not added.** A placement stores where its cel's
  *   ANCHOR goes, so the top-left is `p - anchor` — `0x4026d0`, and what
- *   `skullcracker/src/walk.ts` and the books editor have always done. This tool
+ *   `skullcracker/src/page/walk.ts` and the books editor have always done. This tool
  *   added it, which is 2x the anchor out: invisible on a cel anchored near its
  *   own corner and 748px out on CITY's sky tiles (anchor 374,265). It is why a
  *   whole rooftop run looked as though nothing were drawn under its platforms.
