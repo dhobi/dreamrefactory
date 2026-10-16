@@ -6,7 +6,7 @@ import { Film } from "../film";
 import { DEATH_FILMS, PIT_DEPTH } from "../mission";
 import { random } from "../random";
 import { p, ui, levelIndex, DIFFICULTY, level } from "./state";
-import { nobodyNear, camVx, camVy, view, setCamVx, setCamVy } from "./camera";
+import { nobodyNear, view, setCamVx, setCamVy } from "./camera";
 import { dropAt, roomAt } from "./rooms";
 import { inv } from "./arsenal";
 import { stats, actOf } from "./blows";

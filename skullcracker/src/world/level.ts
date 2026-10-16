@@ -18,14 +18,14 @@ import { random, seedRandom } from "../random";
 import { ui, files, p, level, scaled, levelIndex, mission, startTicks, sound, aliveNow, CHARACTER, type Solids, setLevel, setLevelIndex, setStartTicks } from "./state";
 import { setInput } from "./keys";
 import { playerBox } from "./cels";
-import { levelClock, backdropFrames, flashColour, flypasts, startCamera, iface, setLevelClock, setBackdropFrames, setFlashColour, setFlypasts, setIface } from "./camera";
+import { startCamera, setLevelClock, setBackdropFrames, setFlashColour, setFlypasts, setIface } from "./camera";
 import { pickStart, planksIn, spawnIn, elevatorsIn, roll, crowsIn, dropAt, roomAt, solids } from "./rooms";
-import { flares, bolts, streams, inv, gunsIn, setFlares, setBolts, setStreams } from "./arsenal";
-import { stats, bossDown, gobs, pops, sparks, setGobs, setPops, setSparks } from "./blows";
-import { deathRed, advancing, spawnIndex, setDeathRed, setAdvancing, setSpawnIndex } from "./death";
+import { inv, gunsIn, setFlares, setBolts, setStreams } from "./arsenal";
+import { stats, bossDown, setGobs, setPops, setSparks } from "./blows";
+import { deathRed, advancing, setDeathRed, setAdvancing, setSpawnIndex } from "./death";
 import { ibeamsIn, crushesIn, switchesIn, nestsIn, doorsIn, elevsIn, shacksIn, barrelsIn, placed, pickupsIn, wormBounds, boundsAgainst, headAndArm, filedIn } from "./fixtures";
-import { drips, roaches, columns, raised, feathers, clockFor, setDrips, setRoaches, setColumns, setRaised, setFeathers } from "./scenery";
-import { casts, skates, rollers, cans, heads, flames, setCasts, setSkates, setRollers, setCans, setHeads, setFlames } from "./casts";
+import { clockFor, setDrips, setRoaches, setColumns, setRaised, setFeathers } from "./scenery";
+import { setCasts, setSkates, setRollers, setCans, setHeads, setFlames } from "./casts";
 
 export async function loadLevel(index: number): Promise<void> {
   // a level loaded in the middle of the red is a level with its own palette

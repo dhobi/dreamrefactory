@@ -13,7 +13,7 @@ import { level, p, type Level, sound } from "./state";
 import { dropKeys } from "./keys";
 import { roundAway, DIVISOR, DRAG, dragged } from "./motion";
 import { celRec, celOf, foeAnchor } from "./cels";
-import { flashColour, shake, setFlashColour } from "./camera";
+import { shake, setFlashColour } from "./camera";
 import { roll, spawnedHere, roomSpan, everyAnim } from "./rooms";
 import { shutStreams, inv } from "./arsenal";
 import { stats, pops, knockback, strikeOf } from "./blows";

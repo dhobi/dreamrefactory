@@ -11,7 +11,7 @@ import { Crow, crowCel, ibeamCel, crushCel, BUSH, HAND, SURGE, CLAW, FITTING, BO
 import { BOLT, FLARE } from "../guns";
 import { random } from "../random";
 import { level, player, p, foesHurt, damageOn, sound, HURT, levelIndex } from "./state";
-import { hanging, roomHolds, knockedOff, setKnockedOff } from "./motion";
+import { hanging, roomHolds, setKnockedOff } from "./motion";
 import { celRec, celOf, foeAnchor } from "./cels";
 import { spawnedHere, hereOf, roomSpan } from "./rooms";
 import { inv, dropGun, bolts, boltCel, flares, setBolts } from "./arsenal";

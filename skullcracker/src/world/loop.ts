@@ -853,8 +853,10 @@ export function tick(): void {
   // ...and only from a STANDSTILL, now that the same key is the run. Otherwise
   // every sprint past a doorway ends in the next room, which is the trap this
   // door already had once, arrived at from the other direction.
-  if (upPressed && p.onGround && dir === 0 && takeDoor())
-    setJumpPressed(false), setUpPressed(false);
+  if (upPressed && p.onGround && dir === 0 && takeDoor()) {
+    setJumpPressed(false);
+    setUpPressed(false);
+  }
   const wasClimbing = p.climbing;
   p.climbing = ladder !== undefined;
   const wasHanging = p.bar !== undefined;

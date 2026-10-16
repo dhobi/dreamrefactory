@@ -11,7 +11,7 @@ import { level, sound, p, damageOn, player, scaled } from "./state";
 import { dropKeys } from "./keys";
 import { roundAway, DIVISOR, dragged } from "./motion";
 import { celRec, lastCel } from "./cels";
-import { levelClock, flashColour, setLevelClock, setFlashColour } from "./camera";
+import { levelClock, setLevelClock, setFlashColour } from "./camera";
 import { hereOf, roll } from "./rooms";
 import { inv, shutStreams, loadRounds, dropGun, streams, spawnBolt } from "./arsenal";
 import { bleed, ownPoint, pops, bossDown } from "./blows";

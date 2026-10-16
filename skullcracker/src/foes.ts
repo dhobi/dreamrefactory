@@ -86,7 +86,6 @@
  * of this chapter's descriptors, not a grep.
  */
 
-import type { Enemy } from "./brains/kit";
 import type { Foe, FoeAnim, FoeState } from "./brains/foe";
 import { FOE_SFX } from "./sound";
 import { random } from "./random";

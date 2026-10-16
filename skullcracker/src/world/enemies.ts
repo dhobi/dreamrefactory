@@ -12,7 +12,7 @@ import { Sprinkler } from "../props";
 import { p, level, type Level, CHARACTER, scaled, sound, damageOn } from "./state";
 import { foeGravity, CLIMB_PX, landingWindow, dragged, DRAG, roundAway, STICK_PX } from "./motion";
 import { foeAnchor, footOf, celRec, celOf, baseOf } from "./cels";
-import { shake, flashColour, setFlashColour } from "./camera";
+import { shake, setFlashColour } from "./camera";
 import { groundAt, spawnedHere, roll, hereOf, corpseFrames, foeSurfaceUnder, roomSpan } from "./rooms";
 import { dropBlaster } from "./arsenal";
 import { anchorX, spray, bleed, ownPoint, stats, strikeBox, pops, floaterInRegion, killFoe } from "./blows";
