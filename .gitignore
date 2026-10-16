@@ -42,3 +42,7 @@ tsconfig.tsbuildinfo
 # editor settings are each contributor's own
 /.vscode/
 __pycache__/
+
+# the architecture map's data, read out of the code by tools/archmap.mts before
+# every docs:dev and docs:build, so that the map is always the code it ships with
+docs/.vitepress/theme/archmap/data.json
