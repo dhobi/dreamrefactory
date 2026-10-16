@@ -51,6 +51,9 @@ export class SessionResources {
    */
   currentSetFile = "";
 
+  /** `opensetfile`s in progress ({@link GameSession.setOpening}) */
+  opening = 0;
+
   /**
    * The file a DreamFactory 5 script means by a bare name. RedJack.exe's typed
    * open (0x43c840, behind opencastfile, openstagefile, openshopfile,
@@ -109,7 +112,12 @@ export class SessionResources {
     // `setvisible (true)` has no set to act on — and without this the ship
     // opened hidden, and no key reached it.
     if (this.session.isV5) this.session.setVisible = true;
-    await this.session.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
+    this.opening++;
+    try {
+      await this.session.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
+    } finally {
+      this.opening--;
+    }
   }
 
   /**

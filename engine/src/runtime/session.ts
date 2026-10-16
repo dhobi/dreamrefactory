@@ -870,6 +870,12 @@ export class GameSession {
     return this.inflight.size > 0;
   }
 
+  /** an `opensetfile` is between naming the set and the set being up — the
+   *  window in a `changeset` where there is no room on the screen */
+  get setOpening(): boolean {
+    return this.resourceCtrl.opening > 0;
+  }
+
   /** wait until all in-flight script dispatches finish (tests, shutdown) */
   async settle(maxRounds = 1000): Promise<void> {
     for (let i = 0; i < maxRounds && (this.inflight.size || this.idleInflight.size); i++) {
