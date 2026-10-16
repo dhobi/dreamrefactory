@@ -29,8 +29,18 @@
  * `obj+0x1a` scales the blow this thing would land. **Nothing hits the player
  * back**, so it is carried as read and spends nothing.
  */
-import type { Foe, FoeAnim } from "../foes";
-import type { SoundWay } from "../sound";
+import type { Foe, FoeAnim } from "./foe";
+
+/**
+ * Which of the engine's three one-shot calls a sound goes through — the same
+ * `(bank, index, point)`, the same `0x40efb0` placing, and a different tail:
+ *
+ * - `"mix"`, `0x40ef30` → `0x427b20` — the common one;
+ * - `"lead"`, `0x40f090` → `0x427d20` — channel 0, whatever it held;
+ * - `"renew"`, `0x40f110` → `0x427c20` — channels 1 and 2, restarting a
+ *   sound that is already playing rather than refusing it.
+ */
+export type SoundWay = "mix" | "lead" | "renew";
 
 /**
  * `gait`, `flinch` and `dead` are the kind's own animations; `burst` is the one

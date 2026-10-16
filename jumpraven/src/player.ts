@@ -29,7 +29,7 @@ import { UP } from "./game/flight";
 import { cell, PRICES, worth } from "./game/mart";
 import { portrait } from "./game/pilots";
 import { SCORE_BUTTONS } from "./game/data";
-import { AMMO_FULL, KINDS } from "./game/records";
+import { AMMO_FULL, KINDS } from "./game/core/records";
 
 /** where each screen's CONTINUE is, for the screens with nothing to choose */
 const CONTINUE = { x: 8 + 50, y: 329 + 16 };

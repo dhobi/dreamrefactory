@@ -26,10 +26,10 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import { trackPress } from "@dreamfactory/engine/v0/film";
-import { AMMO_FULL } from "./records";
-import type { Co, Machine } from "./machine";
-import type { Comms } from "./comms";
-import { REPAIR } from "./comms";
+import { AMMO_FULL } from "./core/records";
+import type { Co, Machine } from "./core/machine";
+import type { Comms } from "./core/comms";
+import { REPAIR } from "./core/comms";
 import type { HudApi } from "./combat/api";
 import { readPictures } from "./combat/world";
 import { DoubleClick, anchored, inRect } from "./screens";

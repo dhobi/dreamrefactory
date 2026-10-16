@@ -92,7 +92,7 @@
  * `0x42475f`) and animated by the page's own {@link Foe.flinch}/{@link Foe.death}
  * path; what they do besides is {@link wraithReacts} and {@link wraithGate}.
  */
-import type { Foe } from "../foes";
+import type { Foe } from "./foe";
 import {
   install,
   type Brain,

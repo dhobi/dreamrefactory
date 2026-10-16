@@ -5,7 +5,7 @@
  */
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import type { Machine } from "./machine";
+import type { Machine } from "./core/machine";
 
 /** a picture's rect when drawn at its anchor (0x408e77 at the origin) */
 export const anchored = (f: FrameV0): Rect => [-f.anchorY, -f.anchorX, -f.anchorY + f.height, -f.anchorX + f.width];

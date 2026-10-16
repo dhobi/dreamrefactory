@@ -6,7 +6,7 @@
  * ## The screen (0x410614, 0x410c29)
  *
  * `mart`'s pictures (SHARED\MART, 31 of them): 0 the left panel with the VIDEO
- * box the dealer's head plays in (src/game/comms.ts), 1 to 4 the BUY, SELL,
+ * box the dealer's head plays in (src/game/core/comms.ts), 1 to 4 the BUY, SELL,
  * INFO and CONTINUE buttons at their anchors on it, 5 the right panel — drawn
  * 122 in, so its last 18 columns are past the window's edge, as in the EXE —
  * then the 24 weapons' icons, 6 + 6 × tier + kind, and 30 SORRY! OUT OF
@@ -33,11 +33,11 @@ import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { playFilm, trackPress } from "@dreamfactory/engine/v0/film";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import { Comms, DEALER } from "./comms";
+import { Comms, DEALER } from "./core/comms";
 import { SCREEN_H, SCREEN_W } from "./data";
-import type { Co, Machine } from "./machine";
+import type { Co, Machine } from "./core/machine";
 import { DoubleClick, anchored, inRect } from "./screens";
-import { AMMO_FULL, KINDS, type Records } from "./records";
+import { AMMO_FULL, KINDS, type Records } from "./core/records";
 
 /** the right panel's left edge in the window (0x41067c) */
 const PANEL_LEFT = 0x7a;

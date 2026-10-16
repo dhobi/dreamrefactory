@@ -873,7 +873,7 @@ against a walk on 1910…1915 that carries none. Only the attacks ever leave the
 floor, which is what the `dy` field is for.
 
 `src/fights.ts` is the table — the bands, the walk and the attacks for the
-twenty-six classes that have them — and `stepFight` in `src/walk.ts` is the
+twenty-six classes that have them — and `stepFight` in `src/page/walk.ts` is the
 machine.
 
 ### It takes nothing

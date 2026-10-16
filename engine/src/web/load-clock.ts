@@ -92,7 +92,7 @@
  * hands the total out on `window.dbg`, which is how a Playwright driver, in
  * another process entirely, reads a number measured in the page
  * (taoot/tests/speedrun/driver.ts). The in-page workbench imports the same
- * singleton directly (taoot/src/speedrun-page.ts).
+ * singleton directly (taoot/src/speedrun/page.ts).
  *
  * ## What it does NOT try to be
  *

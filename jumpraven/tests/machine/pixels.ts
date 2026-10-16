@@ -8,7 +8,7 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { BitmapFont } from "@dreamfactory/engine/v0/font";
 import { SCREEN_W, Screen, type Rect } from "@dreamfactory/engine/v0/screen";
-import type { Machine } from "../../src/game/machine";
+import type { Machine } from "../../src/game/core/machine";
 
 /** a file of the rip's pictures, found as the game finds it (the day's folder, then SHARED) */
 export function pictures(m: Machine, name: string, day: number): FrameV0[] {

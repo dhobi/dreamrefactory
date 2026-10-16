@@ -57,7 +57,7 @@ import {
   type Enemy,
   type Reaction,
 } from "./kit";
-import type { Foe } from "../foes";
+import type { Foe } from "./foe";
 
 /**
  * The hit-reaction states, and what the executable does in them that the page's

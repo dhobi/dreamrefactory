@@ -495,7 +495,7 @@ describe("initmaskboy (0x438760)", () => {
 });
 
 describe("every class", () => {
-  // game.ts's stepFight hands the frame to the class's own machine and has no
+  // world/enemies.ts's stepFight hands the frame to the class's own machine and has no
   // reading of its own to fall back on: a class without one would stand still
   it("has a machine of its own", () => {
     expect(Object.keys(FOES).filter((kind) => !BRAINS[kind])).toEqual([]);

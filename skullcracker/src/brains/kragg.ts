@@ -111,7 +111,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
-import type { Foe } from "../foes";
+import type { Foe } from "./foe";
 
 /**
  * The states a brain is never called during, and what the page does for each.

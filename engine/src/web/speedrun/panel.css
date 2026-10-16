@@ -785,7 +785,7 @@ body.sr-resizing * {
 /* ---- the checkpoints, as a timeline ----
    They are milestones on a route and they are drawn as one now: a line
    running left to right through a node per checkpoint, in the order the
-   RUN reaches them (taoot/src/speedrun-page.ts savedPoints — the sheet's own
+   RUN reaches them (taoot/src/speedrun/page.ts savedPoints — the sheet's own
    `save()` order, not the alphabet). Nothing about what they DO changed;
    this is the same chip with a wrapper around it.
 
@@ -1005,7 +1005,7 @@ body.sr-resizing * {
    it is the one column that is not part of the run: it says what the wire
    cost, and a reader tuning a route should be able to look past it. The
    column is only there at all when something was removed (LOAD_SHOWN_MS in
-   taoot/src/speedrun-page.ts). */
+   taoot/src/speedrun/page.ts). */
 #srsplits .load { color: var(--accent); }
 #srsplits td.load { opacity: 0.55; }
 #srsplits tbody tr:first-child td { padding-top: 0.25rem; }
@@ -1022,7 +1022,7 @@ body.sr-resizing * {
 }
 #srsplits tr.total td { box-shadow: inset 0 1px 0 var(--border-strong); padding-top: 0.3rem; opacity: 1; }
 /* The legend. Generated from the action table at load (see
-   taoot/src/speedrun-page.ts) rather than written out here, so it cannot drift
+   taoot/src/speedrun/page.ts) rather than written out here, so it cannot drift
    from what the parser actually accepts. English only and on purpose:
    this is a workbench, not part of the translated site. */
 /* The legend is a modal now (the save browser's own .modal / .modal-box

@@ -2,7 +2,7 @@
  * The EDITION axis: which copy of a game a page is showing.
  *
  * One of two axes, and the one that is about CONTENT — see
- * [ui-languages.ts](ui-languages.ts) for the other, which is about the words on
+ * [ui-languages.ts](locales/ui-languages.ts) for the other, which is about the words on
  * the page and shares nothing with this but a coincidence of authorship. An
  * edition is a `gamefiles/` tree: for Titanic, the six translations of the full
  * game and the cuts of it that are not translations.

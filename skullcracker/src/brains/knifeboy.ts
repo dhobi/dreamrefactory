@@ -117,7 +117,7 @@ import {
   type Enemy,
 } from "./kit";
 import { ahead, turn } from "./batboy";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 
 /**
  * The four states that are deliberately elsewhere, and what they carry.

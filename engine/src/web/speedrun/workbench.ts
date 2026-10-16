@@ -81,7 +81,7 @@ import { installColumnOrder } from "./columns";
 import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
 import { installColumnWidths, installPictureScale } from "./widths";
-import { byCodeUnit } from "../../order";
+import { byCodeUnit } from "../../runtime/order";
 import { markUnattended } from "../error-box";
 
 // A run is timed by a sheet, not watched by a person: the game's script error
@@ -2100,8 +2100,8 @@ sheetEl.addEventListener("input", () => {
  * Open the workbench for one game.
  *
  * The page's whole job, and the only export: a game's speedrun entry point is
- * this call and its own action table (`taoot/src/speedrun-page.ts`,
- * `dust/src/speedrun-page.ts`).
+ * this call and its own action table (`taoot/src/speedrun/page.ts`,
+ * `dust/src/speedrun/page.ts`).
  *
  * ## The order below is load-bearing
  *

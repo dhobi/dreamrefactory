@@ -26,7 +26,7 @@
  * control's other half: it runs before any tree has been read and what
  * it asks is which EDITION to boot.
  */
-import { UI_LANG_STORAGE_KEY } from "./ui-languages";
+import { UI_LANG_STORAGE_KEY } from "./locales/ui-languages";
 import { uiLanguage, uiLanguageOptions } from "@dreamfactory/chrome/locales";
 
 /** remember the choice, put it in the URL, and start the page over */

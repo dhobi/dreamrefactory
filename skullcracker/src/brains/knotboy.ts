@@ -81,7 +81,7 @@
  * did would freeze the thing mid-stride.
  */
 import { install, rewind, type Brain, type BrainCtx, type Enemy } from "./kit";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 import { ahead, turn } from "./batboy";
 
 /**

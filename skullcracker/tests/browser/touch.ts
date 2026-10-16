@@ -200,7 +200,7 @@ console.log(`after tapping Begin: ${after}`);
 if (!after.trim()) fail("nothing is playing after Begin — the page went blank");
 // Begin does not begin: `menu.mov`'s "frame 2" is frame index 168, and
 // `0x45df7c` sets `[0x46b208] = -1`, which `0x40312c` plays as `char.mov` — the
-// chooser between the two Skull Crackers. See `src/main.ts`'s EXIT_ACTIONS.
+// chooser between the two Skull Crackers. See `src/page/main.ts`'s EXIT_ACTIONS.
 if (!/char\.mov/i.test(after)) fail(`tapping Begin did not reach the chooser (0x45df7c): "${after}"`);
 
 const err = (await page.textContent("#err")) ?? "";

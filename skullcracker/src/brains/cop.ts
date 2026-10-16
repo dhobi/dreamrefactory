@@ -122,7 +122,7 @@ import {
   type Enemy,
   type Reaction,
 } from "./kit";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 
 /**
  * The three states this file deliberately leaves alone, and what they do that

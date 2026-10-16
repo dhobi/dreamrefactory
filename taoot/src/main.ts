@@ -277,7 +277,7 @@ files.onWire(({ inFlight }) => {
  * nobody could compare with these.
  *
  * Wired here because this is where the store is made. Nothing on the play page
- * reads the total; the workbench does (taoot/src/speedrun-page.ts), and so does
+ * reads the total; the workbench does (taoot/src/speedrun/page.ts), and so does
  * the Playwright runner, through the handle below.
  */
 watchLoads(files);

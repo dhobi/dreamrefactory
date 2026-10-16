@@ -1,9 +1,9 @@
 /**
- * The game, headless — `src/game.ts` stood up on the rip read from disk, with
+ * The game, headless — `src/world/index.ts` stood up on the rip read from disk, with
  * no page, no canvas and no clock. A test names what a URL would (`?level=3&x=…`)
  * and then steps engine frames as fast as the CPU goes.
  *
- * One game per process: `game.ts` keeps its world in module state, as the page
+ * One game per process: `src/world/` keeps its world in module state, as the page
  * does, so a suite that wants a fresh level calls {@link Headless.load} again.
  */
 import { existsSync } from "node:fs";
@@ -13,7 +13,7 @@ import { buildManifest } from "../../../tools/manifest";
 
 const PKG = resolve(import.meta.dirname, "../..");
 
-export type Game = typeof import("../../src/game");
+export type Game = typeof import("../../src/world");
 
 export interface Headless {
   game: Game;
@@ -43,7 +43,7 @@ let booted: Game | null = null;
 export async function headless(query = ""): Promise<Headless> {
   (globalThis as { SC_QUERY?: string }).SC_QUERY = query.startsWith("?") ? query : `?${query}`;
   const fresh = !booted;
-  const game = booted ?? (booted = await import("../../src/game"));
+  const game = booted ?? (booted = await import("../../src/world"));
   if (!fresh) game.setQuery(query.startsWith("?") ? query : `?${query}`);
   const { SkullFiles } = await import("../../src/files");
   const gamefiles = join(PKG, "gamefiles");
@@ -156,7 +156,7 @@ export function recordSound(game: Game): SoundCall[] {
 /**
  * A `localStorage` for node, kept in a Map — what the page's own stores (the
  * preferences, the high-score board) read and write. Install it BEFORE
- * {@link headless}: `PREFS` is read once, as `game.ts` is imported. Calling it
+ * {@link headless}: `PREFS` is read once, as `src/world/` is imported. Calling it
  * again hands back the same store.
  */
 export function memoryStorage(): Map<string, string> {

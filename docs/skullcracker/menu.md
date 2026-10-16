@@ -84,7 +84,7 @@ already 3 — `0x4031b2`, the level runner. So the whole front end is
 **menu → chooser → level one**, and this port follows it without leaving the
 page: `begin()` puts the two words the front end settled into the query string
 with `replaceState`, stops the film loop, hands the canvas over and imports the
-level runner (`handOver` in `src/main.ts`).
+level runner (`handOver` in `src/page/main.ts`).
 
 Prefs needs BOTH of its films. The menu's stub is a type-3 chain naming
 `prefs.mov`; `0x45e093` sets `[0x46b208] = 2`, which is what the shell loop reads

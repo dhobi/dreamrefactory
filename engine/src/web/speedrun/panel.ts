@@ -49,7 +49,7 @@ const PANEL = `
      the picture being timed. -->
 <section id="srtimer">
   <h2>Timer</h2>
-  <!-- The stopwatch: seconds since Play, counting (taoot/src/speedrun-page.ts).
+  <!-- The stopwatch: seconds since Play, counting (taoot/src/speedrun/page.ts).
        Above the splits because it is what the splits are readings OF — while
        a leg with no split in it runs, this is the only thing on the page
        that moves. It keeps its last reading when the run stops.
@@ -87,7 +87,7 @@ const PANEL = `
   <h2>Speedrun sheet</h2>
   <!-- The user's own sheets, then a chip per checkpoint \`save()\` has
        written. Both built at load and repainted as things change
-       (taoot/src/speedrun-page.ts) — a save that has just run gets its chip
+       (taoot/src/speedrun/page.ts) — a save that has just run gets its chip
        without a reload. -->
   <div id="srsheets" hidden></div>
   <div id="srparts" hidden></div>
@@ -186,7 +186,7 @@ split(boot)"></textarea>
  *
  * Must run BEFORE anything queries the ids inside — the workbench page's own
  * module reads them at import time, so it calls this first (see
- * `taoot/src/speedrun-page.ts`).
+ * `taoot/src/speedrun/page.ts`).
  *
  * `createContextualFragment` and not `insertAdjacentHTML`, because the markup is
  * two siblings rather than one root and a fragment is the thing that can carry

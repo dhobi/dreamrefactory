@@ -68,6 +68,7 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { readBankTables, type BankTables } from "@dreamfactory/engine/df/banks";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import type { SkullFiles } from "./files";
+import type { SoundWay } from "./brains/kit";
 
 /** the camera-relative rule `0x40efb0` computes, in its own numbers */
 export const REACH = {
@@ -527,16 +528,7 @@ export class Mixer {
   }
 }
 
-/**
- * Which of the engine's three one-shot calls a sound goes through — the same
- * `(bank, index, point)`, the same `0x40efb0` placing, and a different tail:
- *
- * - `"mix"`, `0x40ef30` → `0x427b20` — the common one;
- * - `"lead"`, `0x40f090` → `0x427d20` — channel 0, whatever it held;
- * - `"renew"`, `0x40f110` → `0x427c20` — channels 1 and 2, restarting a
- *   sound that is already playing rather than refusing it.
- */
-export type SoundWay = "mix" | "lead" | "renew";
+export type { SoundWay } from "./brains/kit";
 
 /** `0x40ea80`'s third argument, which is the high word of every record's priority */
 export const BANK_RANK = { theme: 0, chapter: 1, own: 2 } as const;

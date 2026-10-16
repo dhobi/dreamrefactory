@@ -515,7 +515,7 @@ const ACTIONS_0: PlayerActions = {
   dyingStruck: { cels: [952, 922, 951, 921, 900, 901, 902, 903], dx: [0, 0, 0, 0, 0, 0, 0, 0], hold: 2, from: "0x4721a0 tag 3, from 0x42f3d4" },
   /**
    * `0x470c40` tags 18..22 — the scepter taking a lightning strike, cel 3325
-   * for fifteen frames (`0x42f3af`); what it does is `stepStruck` in game.ts.
+   * for fifteen frames (`0x42f3af`); what it does is `stepStruck` in world/machines.ts.
    * One frame more than the tags, so the knockdown the last one installs goes
    * on before the page would end this.
    */

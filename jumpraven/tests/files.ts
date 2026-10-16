@@ -1,5 +1,5 @@
 /**
- * How the game names the rip's files and waits for them (src/game/machine.ts),
+ * How the game names the rip's files and waits for them (src/game/core/machine.ts),
  * on a made-up file store rather than the rip.
  *
  *   npx vitest run jumpraven/tests/files.ts
@@ -16,7 +16,7 @@
  *   - a file the rip does not have is an error, not a wait for ever
  */
 import { expect, test } from "vitest";
-import { Machine, dosName, type GameFiles } from "../src/game/machine";
+import { Machine, dosName, type GameFiles } from "../src/game/core/machine";
 
 /** a store of the given paths, each arriving `late` asks after it was first wanted */
 function store(paths: string[], late = 0) {

@@ -1,5 +1,5 @@
 /**
- * The touch pad's fingers, `padPress` / `padLift` / `padLiftAll` in `src/game.ts`.
+ * The touch pad's fingers, `padPress` / `padLift` / `padLiftAll` in `src/world/keys.ts`.
  *
  *   npx vitest run skullcracker/tests/pad.ts
  *
@@ -18,7 +18,7 @@
  * No rip: none of this touches a level.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import * as game from "../src/game";
+import * as game from "../src/world";
 
 /** a pad button as far as the game looks at one: its action and its class list */
 function button(act: keyof typeof game.held) {

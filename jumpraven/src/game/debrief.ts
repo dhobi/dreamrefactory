@@ -22,8 +22,8 @@
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { trackPress } from "@dreamfactory/engine/v0/film";
-import type { Co, Machine } from "./machine";
-import type { Records, Tally } from "./records";
+import type { Co, Machine } from "./core/machine";
+import type { Records, Tally } from "./core/records";
 import { anchored, inRect } from "./screens";
 
 const INK = 0x19;

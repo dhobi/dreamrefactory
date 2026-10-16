@@ -54,7 +54,7 @@ import {
 import { jumpTo, pageButton, jumpableSets } from "./nav/mapjumps";
 import { BLACKJACK } from "./blackjack";
 import { PANEL } from "./menu";
-import { byCodeUnit } from "@dreamfactory/engine/order";
+import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
 /* ------------------------------------------------------------------ *
  * The planner escape hatch

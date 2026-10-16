@@ -112,7 +112,7 @@ export interface Mission {
    *
    * `1` is the stage whose allowance is stored as zero — everything — and `0` is
    * the two whose allowance is the census. No count is needed to meet those two:
-   * their end test asks for the boss instead, see `waitsFor` in game.ts.
+   * their end test asks for the boss instead, see `waitsFor` in world/level.ts.
    */
   kill: number;
   /** the `.data` address the share was read from, or what stands in its place */

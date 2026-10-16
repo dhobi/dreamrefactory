@@ -178,7 +178,7 @@ export interface PyroApi {
   x41d6de(k: number, out: Obj): number;
 }
 
-/** the comms box (src/game/comms.ts) as the flight's modules ask it */
+/** the comms box (src/game/core/comms.ts) as the flight's modules ask it */
 export interface CommsApi {
   /** 0x4142b9: a line asked for — `who` 0 the pilot … 4 the enemy */
   ask(who: number, line: number): void;

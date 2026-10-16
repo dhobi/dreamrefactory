@@ -9,8 +9,9 @@ lookup material.
 
 ## The game has no page in it
 
-`skullcracker/src/game.ts` is the whole game — the world's state, `tick()`, the
-level loader, every class's machine — and it touches no DOM. `src/walk.ts` is
+`skullcracker/src/world/index.ts` is the whole game — the world's state, `tick()`, the
+level loader, every class's machine, split by subsystem under `src/world/` and
+re-exported from it — and it touches no DOM. `src/page/walk.ts` is
 the page around it: the canvas, the drawing, the HUD, the keys, the films. The
 two meet in a few places only:
 

@@ -586,7 +586,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
    * The engine's own load lever cannot reach this:
    * `opengame` is the CTL panel's, and you cannot open the CTL panel with a
    * conversation up. The workbench's checkpoint chips call the host's load
-   * directly and at any moment (taoot/src/speedrun-page.ts), so they can.
+   * directly and at any moment (taoot/src/speedrun/page.ts), so they can.
    *
    * `closePuppetFile` answers the script's pending `puppetevent` with -1 — the
    * same "nothing was chosen" a plaque's ESC gives — so the conversation script

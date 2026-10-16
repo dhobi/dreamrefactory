@@ -282,7 +282,7 @@ export const CRAFT = {
   opens: [0x1d, 0x16] as const,
   /**
    * The stage-end tally — `0x40ffe0`, which `0x41074d` calls as the screen's
-   * last cel runs out. See {@link stepTally} in game.ts.
+   * last cel runs out. See {@link stepTally} in world/level.ts.
    */
   tally: {
     /** `0x41004b` — score additions a dial step, each a frame */

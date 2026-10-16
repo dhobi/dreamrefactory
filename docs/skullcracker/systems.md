@@ -375,7 +375,7 @@ thing hit this frame moves this frame on the velocity the hit traded it
 next frame's thinks.
 
 This page moves things every tick, four to the frame, and runs each class's
-think and move together. `hitPass` in `game.ts` keeps the disc's order the only
+think and move together. `hitPass` in `src/world/loop.ts` keeps the disc's order the only
 way that shape allows: it runs on the frame tick after every think and after the
 player's cel for the frame is chosen, with everything put back where it stood
 when the frame tick began, and whatever the pass itself moves is kept. The body

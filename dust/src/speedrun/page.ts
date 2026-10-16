@@ -27,7 +27,7 @@ import { siteUrl } from "@dreamfactory/chrome/site";
 import { snapshotState } from "@dreamfactory/engine/runtime/trace";
 import type { GameHost } from "@dreamfactory/engine/web/host";
 import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
-import { ACTIONS } from "./speedrun/actions";
+import { ACTIONS } from "./actions";
 
 /**
  * The two variables worth naming before the rest.

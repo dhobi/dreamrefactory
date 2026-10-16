@@ -16,7 +16,7 @@
  *      i.e. the manifest indexed a rip and the opening film came down;
  *   2. Start begins the CYBERFLIX LOGO, not the menu. The start sequence is a
  *      string table in the game's executable (`cyber.Mov`, `imain.Mov`,
- *      `Menu.Mov` — see BOOT_SEQUENCE in src/main.ts), and this is the check
+ *      `Menu.Mov` — see BOOT_SEQUENCE in src/page/main.ts), and this is the check
  *      that the page follows it rather than jumping to the end of it;
  *   3. the canvas is not blank. A page whose byte order is wrong does not
  *      throw: it decodes a palette of 256 near-blacks and paints a black
@@ -359,7 +359,7 @@ if (!/char=1/.test(url)) {
 // ...and the page it reached is wearing that player.
 //
 // Read, not WAITED FOR: the level's status line is the bench's, and on this page
-// it is created hidden (`handOver` in src/main.ts — a paragraph of coordinates
+// it is created hidden (`handOver` in src/page/main.ts — a paragraph of coordinates
 // under the picture of a game somebody is playing is the bench leaking onto the
 // front door). `waitFor` wants it visible and would sit out its ninety seconds;
 // `textContent` reads an element that is merely attached, which is all this has

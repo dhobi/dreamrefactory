@@ -1,11 +1,11 @@
 /**
- * The level runner (`src/walk.ts`), in node: the real `walk.html` parsed by
+ * The level runner (`src/page/walk.ts`), in node: the real `walk.html` parsed by
  * linkedom, a canvas context that records rather than paints, the frame clock
  * stepped by hand, and the file store reading the rip off this machine's disk.
  *
  *   npx vitest run --project skullcracker skullcracker/tests/walkpage.ts
  *
- * The machine suites drive `game.ts` and never load this page; the browser
+ * The machine suites drive `src/world/` and never load this page; the browser
  * suites load it but need a dev server and a browser. What is pinned here is the
  * page between the two: which key, tap and pad press reaches which game call,
  * the chooser, the pause panel and its save, a film owning the keyboard and the
@@ -82,7 +82,7 @@ const HTML = readFileSync(join(PKG, "walk.html"), "utf8");
 /** one engine frame, in the page's milliseconds */
 const FRAME = 1000 / 15;
 
-type Game = typeof import("../src/game");
+type Game = typeof import("../src/world");
 
 interface Page {
   document: Document;
@@ -201,8 +201,8 @@ async function openPage(query = "", opts: { mobile?: boolean; picker?: unknown; 
     target.dispatchEvent(e);
     return e;
   };
-  await import("../src/walk");
-  const game = await import("../src/game");
+  await import("../src/page/walk");
+  const game = await import("../src/world");
   return {
     document: document as unknown as Document,
     game,

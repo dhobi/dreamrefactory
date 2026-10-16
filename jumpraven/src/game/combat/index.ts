@@ -12,8 +12,8 @@
 
  */
 import { readContainerFile } from "@dreamfactory/engine/df/container";
-import type { Co, Machine } from "../machine";
-import type { Comms } from "../comms";
+import type { Co, Machine } from "../core/machine";
+import type { Comms } from "../core/comms";
 import type { Module } from "./world";
 import { World, readPictures } from "./world";
 import { Hud, type HudState } from "./hud";

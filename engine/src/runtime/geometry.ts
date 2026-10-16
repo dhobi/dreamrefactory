@@ -152,16 +152,9 @@ export function sceneryOccludes(occ: Occlusion, x: number, y: number, level: num
   return occ.z[y * occ.w + x] < level;
 }
 
-/**
- * A 0..255 bearing for a delta vector — `round(atan2(dy,dx) · 256/2π) & 0xff`.
- * NOT the engines' answer, which is {@link engineBearing}'s table; kept for the
- * walk starts in scheduler.ts (`heading`), which should move to engineBearing
- * when that file is next open, and the port's own reading of Dust's set data
- * (df/set-v1-to-v4.ts headingsFrom).
- */
-export function bearing(dx: number, dy: number): number {
-  return Math.round((Math.atan2(dy, dx) * 256) / (2 * Math.PI)) & 0xff;
-}
+// the port's rounded 0..255 bearing lives with the file readers that need it
+// (df/angle.ts), so that df/ imports nothing from here
+export { bearing } from "../df/angle";
 
 /**
  * `floor(atan(i / 512) · 128/π)` for i in 0..511 — the engines' octant table

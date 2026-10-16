@@ -1,5 +1,5 @@
 /**
- * The floating barrels, `initbarrel` — `barrelFrame` in `src/game.ts`, the
+ * The floating barrels, `initbarrel` — `barrelFrame` in `src/world/scenery.ts`, the
  * class think `0x43fc30`, one engine frame at a time.
  *
  *   npx vitest run skullcracker/tests/barrels.ts
@@ -24,7 +24,7 @@
  * node, frame by frame, with no level and no rip.
  */
 import { describe, expect, it } from "vitest";
-import * as game from "../src/game";
+import * as game from "../src/world";
 import { BARREL, type Barrel } from "../src/props";
 
 /** a barrel at (0, 100) in a 100x200 rect, already bobbing */

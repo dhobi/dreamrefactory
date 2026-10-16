@@ -46,7 +46,7 @@
  * has no entry for one and nothing installs the one script that holds flinch
  * cels. The one thing its hit handler does besides count is {@link weredGate}.
  */
-import type { Foe } from "../foes";
+import type { Foe } from "./foe";
 import {
   install,
   rewind,

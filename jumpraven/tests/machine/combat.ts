@@ -8,7 +8,7 @@
  *   npm test -w jumpraven -- combat
  */
 import { test } from "vitest";
-import { AMMO_FULL } from "../../src/game/records";
+import { AMMO_FULL } from "../../src/game/core/records";
 import { KIND } from "../../src/game/combat/world";
 import { fail, ok, pass, start, haveRip } from "./harness";
 

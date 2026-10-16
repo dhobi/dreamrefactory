@@ -120,7 +120,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 
 /**
  * State 4 and the hit handler — the page plays them, and {@link batReacts}

@@ -12,7 +12,7 @@
  *
  *   run by day1.ts, day2.ts and day3.ts
  */
-import { AMMO_FULL } from "../../src/game/records";
+import { AMMO_FULL } from "../../src/game/core/records";
 import { fail, ok, start } from "./harness";
 
 /** a day's flight, LEVEL 3, 5 or 7, flown to the next level */
