@@ -19,6 +19,7 @@ import { PUP_LAYERS } from "@dreamfactory/engine/df/pup";
 import { subtitleFont, wrapText } from "./fonts";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
+import { groupPalette } from "@dreamfactory/engine/runtime/shading";
 import { displayChannel, displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import type { DrawSignature } from "@dreamfactory/engine/runtime/signature";
@@ -317,6 +318,15 @@ export class PuppetView {
   }
 
   /**
+   * DreamFactory 5's `puppetbrightness` and `puppetcontrast`: the stance's
+   * layers and the answer band are drawn through the puppet's record (0x430ad7,
+   * 0x430d3d hand its slot to the blitter); the backdrop is not the puppet's
+   */
+  private puppetLit(pal: Uint8ClampedArray): Uint8ClampedArray {
+    return this.session.isV5 ? groupPalette(pal, this.session.lights.puppet) : pal;
+  }
+
+  /**
    * Composite the puppet's pixels into `dest`, a full this.W×this.H RGBA
    * framebuffer owned by the caller (see engine/src/web/screen.ts).
    *
@@ -347,7 +357,7 @@ export class PuppetView {
     const grabHi = this.session.puppetParams.get(2) ?? 128;
     const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
       grab ? `grab${grabLo}-${grabHi}` : "own"}:${
-      state ? state.layers.map((l) => l.frame).join(",") : "-"}`;
+      state ? state.layers.map((l) => l.frame).join(",") : "-"}:${this.session.lights.puppet.bright}/${this.session.lights.puppet.contrast}`;
     /**
      * ## AND THE ROOM IS PART OF THE PICTURE (#289)
      *
@@ -450,7 +460,7 @@ export class PuppetView {
             const dx = st.x - f.posXraw;
             const dy = st.y - f.posYraw;
             // a v5 sprite colours through its own palette (df/shp.ts)
-            const lp = f.palette ? displayPalette(f.palette) : pal;
+            const lp = this.puppetLit(f.palette ? displayPalette(f.palette) : pal);
             for (let yy = 0; yy < f.height; yy++) {
               const ty = dy + yy;
               if (ty < 0 || ty >= clipY) continue;
@@ -511,7 +521,7 @@ export class PuppetView {
       }
     }
     const f = this.band.frame;
-    const pal = displayPalette(f.palette ?? paletteToRGBA(p.pup.paletteRaw, 256));
+    const pal = this.puppetLit(displayPalette(f.palette ?? paletteToRGBA(p.pup.paletteRaw, 256)));
     const dx = this.bandAnchorX - f.posXraw;
     const dy = this.bandAnchorY - f.posYraw;
     for (let yy = 0; yy < f.height; yy++) {

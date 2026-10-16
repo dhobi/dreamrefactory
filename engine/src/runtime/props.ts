@@ -1,12 +1,13 @@
 import type { Value } from "./interp";
 import { ShpFile, PropGroup, PropState, ShpFrame, decodeShpFrame } from "../df/shp";
 import {
-  WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, engineBearing, brightPalette, hiddenBy, inkAlpha,
+  WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, engineBearing, hiddenBy, inkAlpha,
   inkPixel, inDepthWindow,
 } from "./geometry";
 import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 import type { DrawSignature } from "./signature";
 import { TURN } from "../df/sett";
+import { Lights, shadedPalette } from "./shading";
 
 // Projection/camera types live in the neutral ./geometry module; re-exported
 // here so existing consumers keep resolving them from "./props" (viewer.ts's
@@ -375,6 +376,14 @@ export class PropInstance {
   snap = false;
   /** `propbrightness`: added to each colour channel, -255..255 */
   bright: [number, number, number] = [0, 0, 0];
+  /** `propcontrast`: a gamma per channel, -128..128, 0 as painted (runtime/shading.ts) */
+  contrast: [number, number, number] = [0, 0, 0];
+  /** `proplitby`: the name it was last given, as its index in LIT_BY (prop +0xaa) */
+  litby = 0;
+  /** ...and the group whose record it is drawn under: the screen's until a litby moves it (0x427767) */
+  lightGroup = 1;
+  /** `proproll`: a true-3D picture's turn about its own face, in 2²⁴ths of a turn (prop +0x22) */
+  roll = 0;
   /** placed with propxyz: drawn via world→screen projection */
   worldSpace = false;
   /** name of the star the prop was placed on (propstar getter) */
@@ -713,6 +722,10 @@ export class PropRuntime {
       p.pitch = s.pitch;
       p.snap = s.snap;
       p.bright = [...s.bright];
+      p.contrast = [...s.contrast];
+      p.litby = s.litby;
+      p.lightGroup = s.lightGroup;
+      p.roll = s.roll;
       p.starName = s.starName;
       p.worldX = s.worldX;
       p.worldY = s.worldY;
@@ -880,6 +893,12 @@ export class PropRuntime {
   currentSet = "";
   /** DreamFactory 5's `stageorigin`, which `propsnap` props are drawn from (GameSession.stageOrigin) */
   readonly origin = { x: 0, y: 0 };
+  /** DreamFactory 5's group records a prop can be lit by (`proplitby`; GameSession.lights) */
+  lights: Lights | null = null;
+  /** the palette a prop is drawn through: its own record under its group's (runtime/shading.ts) */
+  private shade(p: PropInstance, pal: Uint8ClampedArray): Uint8ClampedArray {
+    return shadedPalette(pal, p, this.lights?.group(p.lightGroup) ?? null);
+  }
 
   /**
    * Everything {@link composite} would read out of these props, hashed — the
@@ -901,6 +920,7 @@ export class PropRuntime {
    */
   drawSignature(sig: DrawSignature): void {
     sig.num(this.props.size).str(this.currentSet).num(this.origin.x).num(this.origin.y);
+    sig.str(this.lights?.key() ?? "");
     for (const p of this.props.values()) {
       sig.bool(p.visible).bool(p.hidden);
       if (!p.visible) continue;
@@ -911,11 +931,12 @@ export class PropRuntime {
       if (p.frameOrder) for (const i of p.frameOrder) sig.num(i);
       sig.num(p.anchorX).num(p.anchorY).num(p.dist).num(p.ink);
       sig.num(p.flip).bool(p.snap).num(p.bright[0]).num(p.bright[1]).num(p.bright[2]);
+      sig.num(p.contrast[0]).num(p.contrast[1]).num(p.contrast[2]).num(p.lightGroup);
       sig.bool(p.worldSpace).bool(p.directional).any(p.deg);
       if (!p.worldSpace) continue;
       sig.str(p.setName);
       sig.num(p.worldX).num(p.worldY).num(p.worldZ).num(p.scale).num(p.zclip).num(p.flip);
-      sig.bool(p.true3d).bool(p.facer).num(p.pitch);
+      sig.bool(p.true3d).bool(p.facer).num(p.pitch).num(p.roll);
     }
   }
 
@@ -1148,8 +1169,17 @@ export class PropRuntime {
     const k = p.scale / 1000;
     const [sH, cH, sP, cP] = [Math.sin(h), Math.cos(h), Math.sin(pitch), Math.cos(pitch)];
     const n: [number, number, number] = [cH * cP, sH * cP, sP];
-    const r: [number, number, number] = [-sH * k, cH * k, 0];
-    const d: [number, number, number] = [cH * sP * k, sH * sP * k, -cP * k];
+    let r: [number, number, number] = [-sH * k, cH * k, 0];
+    let d: [number, number, number] = [cH * sP * k, sH * sP * k, -cP * k];
+    // `proproll` turns the picture about its own face. Which way round is not
+    // read off 0x456540's matrix either; taken as clockwise as you face it
+    if (p.roll) {
+      const [sR, cR] = [Math.sin(turn(p.roll)), Math.cos(turn(p.roll))];
+      [r, d] = [
+        [r[0] * cR + d[0] * sR, r[1] * cR + d[1] * sR, r[2] * cR + d[2] * sR],
+        [d[0] * cR - r[0] * sR, d[1] * cR - r[1] * sR, d[2] * cR - r[2] * sR],
+      ];
+    }
     const o: [number, number, number] = [
       p.worldX - r[0] * f.posXraw - d[0] * f.posYraw,
       p.worldY - r[1] * f.posXraw - d[1] * f.posYraw,
@@ -1206,7 +1236,7 @@ export class PropRuntime {
     if (p.true3d && cam.v5) {
       const c = this.cardOf(p, cam, cam.v5);
       if (!c) return;
-      const pal = brightPalette(c.f.palette ?? paletteRGBA, p.bright);
+      const pal = this.shade(p, c.f.palette ?? paletteRGBA);
       const alpha = inkAlpha(p.ink);
       for (let ty = c.box.y0; ty < Math.min(c.box.y1, height); ty++) {
         for (let tx = c.box.x0; tx < Math.min(c.box.x1, width); tx++) {
@@ -1227,7 +1257,7 @@ export class PropRuntime {
     const maxX = Math.min(cam.clipW, width, r.x + r.w);
     // a v5 sprite colours through its own palette (df/shp.ts)
     if (r.f.palette) paletteRGBA = r.f.palette;
-    paletteRGBA = brightPalette(paletteRGBA, p.bright);
+    paletteRGBA = this.shade(p, paletteRGBA);
     const a = inkAlpha(p.ink);
     if ("scaled" in r) {
       if (r.w <= 0 || r.h <= 0) return;
@@ -1273,7 +1303,7 @@ export class PropRuntime {
       const f = p.shop.frame(p.currentFrame(st));
       const { x: dx, y: dy } = p.screenCorner(f, this.origin);
       // a v5 sprite colours through its own palette (df/shp.ts)
-      const pal32 = brightPalette(f.palette ?? paletteRGBA, p.bright);
+      const pal32 = this.shade(p, f.palette ?? paletteRGBA);
       const a = inkAlpha(p.ink);
       for (let y = 0; y < f.height; y++) {
         const ty = dy + y;

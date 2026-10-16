@@ -115,6 +115,8 @@ export class MazeRuntime {
   shot: MazeShot | null = null;
   heading = 0;
   pitch = 0;
+  /** `cameraroll`: the camera's turn about the way it looks, in 2²⁴ths of a turn (0x438cf0) */
+  roll = 0;
   fov = TURN / 4;
   walk: MazeWalk | null = null;
   /**
@@ -207,7 +209,7 @@ export class MazeRuntime {
       z: this.node.z,
       heading: turnToRad(this.heading),
       pitch: turnToRad(this.pitch),
-      roll: 0,
+      roll: turnToRad(this.roll),
       fov: turnToRad(this.fov),
     };
   }
@@ -218,6 +220,10 @@ export class MazeRuntime {
   }
   setPitch(v: number): void {
     this.pitch = mask(v);
+    this.onChange();
+  }
+  setRoll(v: number): void {
+    this.roll = mask(v);
     this.onChange();
   }
   setFov(v: number): void {

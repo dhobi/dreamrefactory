@@ -76,3 +76,33 @@ export function defaultSaveName(roomFile: string, d: Date): string {
   const pad = (n: number): string => String(n).padStart(2, "0");
   return `${room} - ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
 }
+
+/** a key's physical place, `KeyboardEvent.code`, as the Windows virtual keys it holds down */
+const CODE_VKS: Record<string, number[]> = {
+  Backspace: [0x08], Tab: [0x09], Enter: [0x0d], NumpadEnter: [0x0d], Escape: [0x1b], Space: [0x20],
+  ShiftLeft: [0x10, 0xa0], ShiftRight: [0x10, 0xa1], ControlLeft: [0x11, 0xa2], ControlRight: [0x11, 0xa3],
+  AltLeft: [0x12, 0xa4], AltRight: [0x12, 0xa5], Pause: [0x13], CapsLock: [0x14],
+  PageUp: [0x21], PageDown: [0x22], End: [0x23], Home: [0x24],
+  ArrowLeft: [0x25], ArrowUp: [0x26], ArrowRight: [0x27], ArrowDown: [0x28],
+  PrintScreen: [0x2c], Insert: [0x2d], Delete: [0x2e], Help: [0x2f],
+  MetaLeft: [0x5b], MetaRight: [0x5c], ContextMenu: [0x5d],
+  NumpadMultiply: [0x6a], NumpadAdd: [0x6b], NumpadSubtract: [0x6d], NumpadDecimal: [0x6e], NumpadDivide: [0x6f],
+  NumLock: [0x90], ScrollLock: [0x91],
+  Semicolon: [0xba], Equal: [0xbb], Comma: [0xbc], Minus: [0xbd], Period: [0xbe], Slash: [0xbf], Backquote: [0xc0],
+  BracketLeft: [0xdb], Backslash: [0xdc], BracketRight: [0xdd], Quote: [0xde], IntlBackslash: [0xe2],
+};
+
+/**
+ * The virtual-key codes a key going down holds, for v5's `key (name)`, which
+ * asks Windows' `GetAsyncKeyState` (RedJack.exe 0x488be0): letters and digits
+ * are their characters, F1 is 0x70, the numeric pad 0x60 up, and a shift key
+ * holds VK_SHIFT and its own side's code both.
+ */
+export function heldKeys(code: string): number[] {
+  const m = /^(?:Key([A-Z])|Digit(\d)|Numpad(\d)|F(\d{1,2}))$/.exec(code);
+  if (m?.[1]) return [m[1].charCodeAt(0)];
+  if (m?.[2]) return [0x30 + Number(m[2])];
+  if (m?.[3]) return [0x60 + Number(m[3])];
+  if (m?.[4] && Number(m[4]) >= 1 && Number(m[4]) <= 24) return [0x6f + Number(m[4])];
+  return CODE_VKS[code] ?? [];
+}

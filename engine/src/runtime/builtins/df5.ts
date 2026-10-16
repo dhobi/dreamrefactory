@@ -5,6 +5,20 @@ import type { PropInstance } from "../props";
 import { BuiltinCtx } from "./context";
 
 /**
+ * Register a command that answers only in a v5 game; in any other it stays the
+ * unknown command it always was.
+ */
+export function v5Registrar({ session, interp }: BuiltinCtx): (name: string, fn: Builtin) => void {
+  return (name, fn) => {
+    interp.register(name, (i, args, call, frame) => {
+      if (session.isV5) return fn(i, args, call, frame);
+      i.onUnknown(name, args);
+      return 0;
+    });
+  };
+}
+
+/**
  * DreamFactory 5's commands outside the room ({@link file://./maze.ts} has the
  * room's): what RedJack's scripts ask that no earlier game did, each read out of
  * `RedJack.exe`. `redjack/tools/rjdis.mts cmd NAME` prints a command's handlers.
@@ -15,13 +29,7 @@ import { BuiltinCtx } from "./context";
  */
 export function registerDf5Builtins(ctx: BuiltinCtx): void {
   const { session, interp } = ctx;
-  const r5 = (name: string, fn: Builtin): void => {
-    interp.register(name, (i, args, call, frame) => {
-      if (session.isV5) return fn(i, args, call, frame);
-      i.onUnknown(name, args);
-      return 0;
-    });
-  };
+  const r5 = v5Registrar(ctx);
   const prop = (n: Value): PropInstance | null => session.propRuntime.get(toStr(n ?? ""));
   const actor = (n: Value): ActorInstance | null => session.actorRuntime.get(toStr(n ?? ""));
   /** a getter/setter pair, as every 16xxx command is: one argument reads, two write */
@@ -213,6 +221,12 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
    * `propbrightness (…, 10, 10, 10)`; the big fight turns the screen red when Nick
    * is hit and back with `screenbrightness (0, 0, 0)`.
    */
+  // (p, k) reads channel k, 1..3 or error 0xa (0x42c210, 0x4062d0)
+  const channel = (cmd: string, k: Value | undefined): number => {
+    const c = int(cmd, k);
+    if (c < 1 || c > 3) throw new ScriptError(0xa, `${cmd}: channel ${c}`);
+    return c - 1;
+  };
   const level = (v: Value | undefined): number => Math.max(-255, Math.min(255, Math.trunc(toNum(v ?? 0))));
   const bright = (e: { bright: [number, number, number] }, [red, green, blue]: Value[]): void => {
     e.bright = [level(red), level(green), level(blue)];
@@ -220,13 +234,13 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   r5("propbrightness", (_i, [n, ...rgb]) => {
     const p = prop(n);
     if (!p) return 0;
-    if (!rgb.length) return p.bright[0];
+    if (rgb.length < 3) return p.bright[channel("propbrightness", rgb[0])];
     bright(p, rgb);
   });
   r5("actorbrightness", (_i, [n, ...rgb]) => {
     const a = actor(n);
     if (!a) return 0;
-    if (!rgb.length) return a.bright[0];
+    if (rgb.length < 3) return a.bright[channel("actorbrightness", rgb[0])];
     bright(a, rgb);
   });
   r5("screenbrightness", (_i, rgb) => {

@@ -135,7 +135,7 @@ export class MazeView implements RoomLayer {
       const cam = m.camera();
       if (!cam || !m.node) return;
       this.sphere(m.node.sphere).render(
-        this.rgba, this.width, this.height, cam.heading, cam.pitch, cam.fov, m.detail < 16,
+        this.rgba, this.width, this.height, cam.heading, cam.pitch, cam.fov, m.detail < 16, cam.roll,
       );
     }
     // a new object each time: the director's "is this already on screen?" is by
@@ -206,7 +206,7 @@ export class MazeView implements RoomLayer {
       return this.depth.occ;
     }
     if (!m.node || !cam) return null;
-    const key = `${m.node.sphere}:${cam.heading}:${cam.pitch}:${cam.fov}`;
+    const key = `${m.node.sphere}:${cam.heading}:${cam.pitch}:${cam.fov}:${cam.roll}`;
     if (this.depth?.key !== key) {
       let s = this.depthSpheres.get(m.node.sphere);
       if (!s) {
@@ -216,7 +216,7 @@ export class MazeView implements RoomLayer {
       }
       // the film's map is its own; a sphere renders into a buffer of the view's size
       const z = this.depth?.key.startsWith("film:") === false ? (this.depth.occ.z as Uint32Array) : new Uint32Array(this.width * this.height);
-      s.render(z, this.width, this.height, cam.heading, cam.pitch, cam.fov);
+      s.render(z, this.width, this.height, cam.heading, cam.pitch, cam.fov, false, cam.roll);
       this.depth = { key, occ: { z, w: this.width, h: this.height, scale: 1, levels: DEPTH_FAR } };
     }
     return this.depth.occ;

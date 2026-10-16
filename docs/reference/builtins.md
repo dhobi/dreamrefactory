@@ -376,14 +376,27 @@ engines answer from the hit test, which names only what is on top.
 | `norepeat`, `serial` | `norepeat (n)` is a random 1..n that is never the one it answered last time for that n; `serial (n)` counts 1..n round from a random start. Each fills a table of 256 random draws on its first call |
 | `hasmem` | whether that much memory can be had: always yes |
 | `countpermanents`, `indextopermanent` | the `permanent` globals, as `countglobals` and `indextoglobal` are the globals |
+| `createmenu`, `appenditem`, `changeitem`, `checkitem`, `grayitem`, `cmdkeyitem`, `countmenus`, `countitems`, `indextomenu`, `indextoitem`, `drawmenus`, `clearmenus` | the menus kept as data, up to 64, their names matched in any case and cut to 127 characters: built, renamed, checked, grayed and given command keys, then counted and indexed back. No menu bar is drawn (RedJack's is a debug menu that `menuvisible (isdebugging ())` hides) |
+| `key` | whether a key is held now, named as RedJack.exe's virtual-key table names it or by its one character (a US layout) |
+| `profilestart`, `profilestop` | ten stopwatches in milliseconds |
+| `countquads`, `indextoquad` | the room's quads, by count and index |
+| `themeexists` | whether an open track file has that track name |
+| `scenewarm`, `roadwarm`, `launchroad` | the room's cache warm-ups, which only check their names here; `launchroad` checks its arguments, and its road playback is not modelled |
+| `propcontrast`, `actorcontrast`, `proplitby`, `actorlitby` | a sprite's own gamma per channel, and which group's record it is drawn under: default, screen, stage, set, movie or puppet |
+| `stagebrightness`, `stagecontrast`, `setbrightness`, `setcontrast`, `moviebrightness`, `moviecontrast`, `puppetbrightness`, `puppetcontrast` | the groups' records. The stage's also lights the flat, the movie's the movie frames and the puppet's the puppet; the set's lights only the sprites under it. The puppet's value forms read the movie's record, as RedJack.exe's do |
+| `cameraroll`, `proproll`, `actorpitch`, `actorroll`, `actorisfacer`, `actorsnap` | angles in 2^24ths of a turn. The camera's roll and a true-3D prop's roll are drawn; an actor's pitch, roll and facer are kept but not drawn, since actors are still drawn square to the screen. A snapped actor moves with `stageorigin` |
+| `actorsound`, `propsound` | the current pose's or view's own sound, at a volume and pan 0..255 |
+| `soundexists`, `soundticks` | whether a one-shot of that name is open, and its length in sixtieths of a second |
+| `countpuppetsounds`, `indextopuppetsoundname`, `indextopuppetsubtitle` | the open puppet's lines: how many, and the n-th line's sound name or subtitle |
+| `actorseek`, `propseek` | a preload: checks the name and does nothing more |
+| `setcolor`, `setdepth`, `stagecolor` | the room's colour (0x00RRGGBB) or depth at a screen point, and the stage's colour there |
 | `spacebar` | whether the space bar is held down now |
 | `doublebuffer`, `singlebuffer` | the control panel's 16- or 32-bit switch. The canvas is true-colour either way, so a switch always works and `sysparam (10)` answers the depth asked for |
 | `flatwarm`, `castwarm`, `flushcache`, `reboot` | no-ops: loading ahead of need, dropping what was loaded, and a restart only reached behind `isdebugging ()` |
 | `isdebugging` | 0, as in the shipped game |
 
-**Still unknown in v5:** the menu-building commands (`createmenu`,
-`appenditem`, `cmdkeyitem`, `clearmenus`, `drawmenus`), which build a debug
-menu that `menuvisible (isdebugging ())` keeps hidden, and copying game files to the hard
-disk (`buildfilenames`, `countfilenames`, `indextofilename`, `copylocal`).
+**Still unknown in v5:** copying game files to the hard disk
+(`buildfilenames`, `countfilenames`, `indextofilename`, `copylocal`), and the
+other commands that reach Windows, the other movie players and the network.
 
 Back to the [reference index](README.md).

@@ -409,8 +409,9 @@ kind of script, the editors each behind `if isdebugging ()`. A few lines earlier
 `menuvisible (isdebugging ())` and `keyaborts (isdebugging ())` switch the bar
 and the keyboard abort off, since `isdebugging ()` is 0 in the shipped
 RedJack.exe (`0x41a6f0`). It is Titanic's [developer mode](../taoot/devmode.md)
-with the flag moved out of the scripts and into the executable. The port builds
-no menu either.
+with the flag moved out of the scripts and into the executable. The port keeps
+the menus as data, so the scripts' counts and names read back as they built
+them, and draws no bar.
 
 A few script calls go to handlers that no script on the discs defines
 (`mousemove`, `trackobjects`, `predream`), so the original had nothing to run

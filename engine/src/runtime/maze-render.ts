@@ -123,6 +123,30 @@ export class SphereImage {
   private rays: { key: string; lon: Float32Array; lat: Float32Array } | null = null;
 
   /**
+   * The one pixel (x, y) of the view {@link render} would draw — a palette
+   * word, or a distance on a depth sphere. DreamFactory 5's `setcolor` and
+   * `setdepth` ask it at a node (RedJack.exe 0x439387, 0x4392b0 -> 0x4973a0).
+   */
+  at(x: number, y: number, width: number, height: number, heading: number, pitch: number, fov: number, roll = 0): number {
+    const f = width / (2 * Math.tan(fov / 2));
+    const px = x + 0.5 - width / 2;
+    const py = y + 0.5 - height / 2;
+    const dx = px * Math.cos(roll) - py * Math.sin(roll);
+    const dy = px * Math.sin(roll) + py * Math.cos(roll);
+    const ry = dy * Math.cos(pitch) - f * Math.sin(pitch);
+    const rz = f * Math.cos(pitch) + dy * Math.sin(pitch);
+    let lon = (Math.PI - heading + Math.atan2(dx, rz)) % TAU;
+    if (lon < 0) lon += TAU;
+    const lat = Math.PI / 2 + Math.atan2(ry, Math.hypot(dx, rz));
+    const { cells, cell, cellsX, cellsY } = this;
+    const t = cells[Math.min(cellsY - 1, Math.max(0, (lat / cell) | 0)) * cellsX + Math.min(cellsX - 1, (lon / cell) | 0)];
+    if (!t) return this.none;
+    const tx = Math.min(255, ((lon - t.lon0) / t.scale) | 0);
+    const ty = Math.min(255, Math.max(0, ((lat - t.lat0) / t.scale) | 0));
+    return t.palette[t.pixels[ty * 256 + tx]];
+  }
+
+  /**
    * Draw the view into `out` (one RGBA word per pixel), looking along
    * `heading` with `pitch` up and a horizontal field of view of `fov`.
    *
@@ -141,11 +165,12 @@ export class SphereImage {
     pitch: number,
     fov: number,
     coarse = false,
+    roll = 0,
   ): void {
     const step = coarse ? 2 : 1;
     const gw = Math.ceil(width / step);
     const gh = Math.ceil(height / step);
-    const key = `${width}x${height}/${step}:${pitch}:${fov}`;
+    const key = `${width}x${height}/${step}:${pitch}:${fov}:${roll}`;
     if (this.rays?.key !== key) {
       const n = gw * gh;
       const lon = new Float32Array(n);
@@ -153,10 +178,15 @@ export class SphereImage {
       const f = width / (2 * Math.tan(fov / 2));
       const c = Math.cos(pitch);
       const s = Math.sin(pitch);
+      const [sR, cR] = [Math.sin(roll), Math.cos(roll)];
       for (let gy = 0, i = 0; gy < gh; gy++) {
-        const dy = gy * step + step / 2 - height / 2;
+        const py = gy * step + step / 2 - height / 2;
         for (let gx = 0; gx < gw; gx++, i++) {
-          const dx = gx * step + step / 2 - width / 2;
+          const px = gx * step + step / 2 - width / 2;
+          // `cameraroll` turns the screen about its centre first: the sprite
+          // camera's roll (MazeRuntime.spriteCamera) read backwards
+          const dx = roll ? px * cR - py * sR : px;
+          const dy = roll ? px * sR + py * cR : py;
           // undo the camera's pitch (0x4a9210 with −pitch)
           const ry = dy * c - f * s;
           const rz = f * c + dy * s;

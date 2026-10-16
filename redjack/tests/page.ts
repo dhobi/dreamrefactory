@@ -98,6 +98,7 @@ class FakeHost {
     pointerDown: false,
     pointerButton: 0,
     spaceDown: false,
+    keysDown: new Set<number>(),
     onSaveGame: null as ((b: Uint8Array) => Promise<void>) | null,
     onLoadGame: null as (() => Promise<unknown>) | null,
     propRuntime: { shops: new Map() },
@@ -388,6 +389,14 @@ describe("the game, once it runs", () => {
     p.fire("keydown", { key: " " });
     p.fire("blur");
     expect(current.host!.session.spaceDown).toBe(false);
+    // and every key held, by its virtual-key code, for `key (name)`
+    p.fire("keydown", { key: "Shift", code: "ShiftLeft" });
+    expect([...current.host!.session.keysDown].sort()).toEqual([0x10, 0xa0]);
+    p.fire("keyup", { key: "Shift", code: "ShiftLeft" });
+    expect(current.host!.session.keysDown.size).toBe(0);
+    p.fire("keydown", { key: "q", code: "KeyQ" });
+    p.fire("blur");
+    expect(current.host!.session.keysDown.size).toBe(0);
     expect(current.host!.globals.get("isrepeat")).toBe(0);
   });
 

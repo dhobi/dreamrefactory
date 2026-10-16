@@ -14,6 +14,8 @@ import { registerCoreBuiltins } from "./core";
 import { registerPluginBuiltins } from "./plugins";
 import { registerMazeBuiltins } from "./maze";
 import { registerDf5Builtins } from "./df5";
+import { registerDf5LookBuiltins } from "./df5-look";
+import { registerDf5UiBuiltins } from "./df5-ui";
 import { registerEngineExtraBuiltins } from "./engine-extras";
 
 /**
@@ -51,5 +53,7 @@ export function registerGameBuiltins(session: GameSession): void {
   registerPluginBuiltins(ctx);
   registerMazeBuiltins(ctx);
   registerDf5Builtins(ctx);
+  registerDf5UiBuiltins(ctx);
+  registerDf5LookBuiltins(ctx);
   registerEngineExtraBuiltins(ctx);
 }
