@@ -36,6 +36,7 @@ class FakeFiles {
   loads: string[] = [];
   misses = filesState.misses;
   size = filesState.size;
+  tree = new Map<string, number>();
   private got = new Set<string>();
   static async open(): Promise<FakeFiles> {
     if (filesState.open) return filesState.open();
@@ -116,6 +117,7 @@ class FakeHost {
       this.session.pointerY = y;
     },
     track: (p: Promise<unknown>) => p,
+    df5Disk: { setTree: (_t: unknown) => {} },
   };
   director = {
     tick: () => {},
@@ -147,7 +149,11 @@ const current: { host?: FakeHost; files?: FakeFiles } = {};
 
 vi.mock("@dreamfactory/engine/web/host", () => ({ GameHost: FakeHost }));
 vi.mock("../src/files", () => ({ RedJackFiles: FakeFiles }));
-vi.mock("../src/saves", () => ({ REDJACK_SAVES: { name: "redjack" }, seedRedJackSaves: async () => 7 }));
+vi.mock("../src/saves", () => ({
+  REDJACK_SAVES: { name: "redjack" },
+  seedRedJackSaves: async () => 7,
+  keepDf5Disk: async () => {},
+}));
 vi.mock("@dreamfactory/engine/web/save-store", () => ({ useSaveKind: () => void calls.push("useSaveKind") }));
 vi.mock("@dreamfactory/engine/web/save-browser", () => ({
   browseForSave: async (_b: Uint8Array, name: string) => void calls.push(`save as ${name}`),

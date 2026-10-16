@@ -394,9 +394,10 @@ cp redjack/gamefiles/save/day*.save /srv/redjack/gamefiles/save/
 
 ## What does not work yet
 
-- **Copying to the hard disk.** `buildfilenames` and `copylocal` copy game
-  files off the disc. The port reads the discs directly, so they are left
-  unknown.
+- **Copying to the hard disk is a stand-in.** The boot's `buildfilenames` and
+  `copylocal` loops list and copy the day's local folder as RedJack.exe does,
+  onto a stand-in hard disk in the session. A copy is kept as the name of what
+  it copies, and its PROGRESS dialog is not drawn.
 - **Sprite size is not checked against the original.** The formula is read out
   of RedJack.exe (`0x4358d0`), but no screenshot of the running game has been
   measured against the port's. See

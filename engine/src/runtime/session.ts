@@ -26,6 +26,7 @@ import { SessionCaptions } from "./session-captions";
 import { SessionTime } from "./session-time";
 import { SessionTransitions } from "./session-transitions";
 import { FileProvider } from "./setscripts";
+import { Df5Disk } from "./df5-disk";
 import { loadGame, snapshotSave } from "./saveload";
 import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
@@ -426,6 +427,14 @@ export class GameSession {
    * carries them (savegame-v5.md, the manifest's `+0x218`).
    */
   readonly pathSlots: string[] = new Array(9).fill("");
+  /**
+   * What a DreamFactory 5 game's file, folder, volume and registry commands
+   * reach (builtins/df5-files.ts): the discs as the host's manifest lists them
+   * (`df5Disk.setTree`), a writable stand-in hard disk and the registry key. A
+   * host persists it through `snapshot`/`restore`/`onChange`; with no tree the
+   * discs are empty and every listing is.
+   */
+  readonly df5Disk = new Df5Disk();
 
   /**
    * Host hook: a movie sequence has fully ended and these are the files it

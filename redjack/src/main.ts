@@ -34,7 +34,7 @@ import { installBugReport } from "@dreamfactory/site/bug-report";
 import { REDJACK } from "@dreamfactory/site/games";
 import { VERSION } from "@dreamfactory/site/version";
 import { RedJackFiles } from "./files";
-import { REDJACK_SAVES, seedRedJackSaves } from "./saves";
+import { REDJACK_SAVES, keepDf5Disk, seedRedJackSaves } from "./saves";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { RJ_CURSORS } from "./cursor-art";
@@ -240,6 +240,10 @@ async function main(): Promise<void> {
     await browseForSave(bytes as Uint8Array, defaultSaveName(host.session.currentSetFile, new Date()), { log: (l) => say(`  ${l}`) });
   };
   host.session.onLoadGame = () => browseForLoad({ log: (l) => say(`  ${l}`) });
+  // the discs as folders for the file commands, and what the scripts wrote to
+  // the hard disk on an earlier visit
+  host.session.df5Disk.setTree(files.tree);
+  await keepDf5Disk(host.session.df5Disk);
   void seedRedJackSaves((name) => files.serverUrl(name)).then((n) => {
     if (n) say(`listed ${n} of the port's day saves in the saved games`);
   });

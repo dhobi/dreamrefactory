@@ -390,13 +390,17 @@ engines answer from the hit test, which names only what is on top.
 | `countpuppetsounds`, `indextopuppetsoundname`, `indextopuppetsubtitle` | the open puppet's lines: how many, and the n-th line's sound name or subtitle |
 | `actorseek`, `propseek` | a preload: checks the name and does nothing more |
 | `setcolor`, `setdepth`, `stagecolor` | the room's colour (0x00RRGGBB) or depth at a screen point, and the stage's colour there |
+| `buildfilenames`, `countfilenames`, `indextofilename`, `countfoldernames`, `indextofoldername` | a folder's files and its folders, listed afresh: names starting with a dot left out, a missing folder empty. The search is `folder @ "*.*"`, so a path not ending in `:` lists the names in its parent that start with its last part |
+| `copylocal` | `name` found through path slots 1..8 and copied to `folder @ name`: true if copied or already there. With the cache flag, only from the `currentcd ()` disc, into 32 copies that make room by deleting the oldest and go when the game quits. A copy is kept as the name of what it copies |
+| `deletefile` | a file deleted: not there is 0x2a, a folder 0x31, and a file on a CD stays without an error |
+| `volumename`, `filename`, `diskspace` | a path's volume (before its first `:`), its last name (after its last `:`, `/` or `\`), and the volume's free bytes: none on a CD, a stand-in 1 GiB on the hard disk less what the scripts wrote |
+| `opentextfile`, `savetextfile`, `cleantextfile`, `addtextstring`, `counttextstrings`, `indextotextstring` | one text buffer of CR-ended lines: read from a file (CR LF and LF become CR; a file that will not open changes nothing), written back with CR LF (nothing on a CD), emptied, a line replaced or appended, counted and read (255 bytes at most). An empty path is the Open or Save dialog, answered as cancelled |
+| `registrystring`, `registrynumber` | values under `HKEY_CURRENT_USER\Software\RedJack`, empty to start, "" or 0 when not there; kept with the saved games in the browser |
 | `spacebar` | whether the space bar is held down now |
 | `doublebuffer`, `singlebuffer` | the control panel's 16- or 32-bit switch. The canvas is true-colour either way, so a switch always works and `sysparam (10)` answers the depth asked for |
 | `flatwarm`, `castwarm`, `flushcache`, `reboot` | no-ops: loading ahead of need, dropping what was loaded, and a restart only reached behind `isdebugging ()` |
 | `isdebugging` | 0, as in the shipped game |
 
-**Still unknown in v5:** copying game files to the hard disk
-(`buildfilenames`, `countfilenames`, `indextofilename`, `copylocal`), and the
-other commands that reach Windows, the other movie players and the network.
+**Still unknown in v5:** the other movie players and the network.
 
 Back to the [reference index](README.md).

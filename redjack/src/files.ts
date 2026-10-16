@@ -49,6 +49,12 @@ export class RedJackFiles implements HostFiles {
   /** a name more than one disc carries → each disc's copy (1-based) */
   private readonly copies = new Map<string, Map<number, { url: string; size: number }>>();
   private disc = 1;
+  /**
+   * The discs as folders: each file's path under the root, `RJDisk1/local
+   * 1/bar.trak`, and its size — what `buildfilenames` and the other file
+   * commands list and look up (engine/src/runtime/df5-disk.ts)
+   */
+  readonly tree = new Map<string, number>();
   /** every name the engine asked for and did not have, in order */
   readonly misses: string[] = [];
   /** every name that arrived, in the order it did */
@@ -69,6 +75,7 @@ export class RedJackFiles implements HostFiles {
       if (!path.startsWith(root)) continue;
       const base = path.split("/").pop()!.toLowerCase();
       const disc = Number(/\/RJDisk(\d)\//i.exec(path)?.[1] ?? 0);
+      if (disc) store.tree.set(path.slice(root.length), manifest[path]);
       const copy = { url: url(path), size: manifest[path] };
       if (store.urls.has(base)) {
         // a second disc's copy: kept, and served when that disc is mounted
