@@ -89,7 +89,7 @@ import {
   type Reaction,
 } from "./kit";
 import { ahead, gangCorpse, turn } from "./batboy";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 
 /**
  * Everything `0x438760` does that is deliberately not in this file, with the

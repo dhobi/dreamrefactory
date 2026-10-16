@@ -17,7 +17,7 @@
  *   - `ladder` is the rect (732, 9632, 1223, 9779) with `param 35`, so the climb
  *     is fourteen rungs of 35px and tops out with the ANCHOR at 732, which puts
  *     the feet at 828 — the rect is in anchor space and a climb cel's anchor is at
- *     the hands, 96px above its own boots (see LADDER in src/game.ts);
+ *     the hands, 96px above its own boots (see LADDER in src/world/motion.ts);
  *   - `platform` (854, 9272, 901, 9700) is the roof beside the ladder's top,
  *     (980, 8768, 1016, 9273) the next one west, (895, 8251, 929, 8699) the one
  *     across the gap, and (1033, 7752, 1080, 8183) the last;

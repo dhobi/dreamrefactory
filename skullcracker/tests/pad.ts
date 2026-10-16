@@ -1,5 +1,5 @@
 /**
- * The touch pad's fingers, `padPress` / `padLift` / `padLiftAll` in `src/game.ts`.
+ * The touch pad's fingers, `padPress` / `padLift` / `padLiftAll` in `src/world/keys.ts`.
  *
  *   npx vitest run skullcracker/tests/pad.ts
  *

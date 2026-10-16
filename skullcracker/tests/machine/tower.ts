@@ -174,7 +174,7 @@ test.skipIf(!haveRip())("tower", async () => {
    *
    * The goal rect runs x17461..17746 and the bishop's own rect 17130..18075, so
    * a chase goes in and out of it — and the craft opens on the player coming
-   * BACK into the rect (`leftGoal` in `src/game.ts`), which ends the level in
+   * BACK into the rect (`leftGoal` in `src/world/level.ts`), which ends the level in
    * the middle of the fight. So the fight starts east of it and never steps west
    * of {@link EAST_OF_GOAL}; the bishop comes to the player anyway.
    *

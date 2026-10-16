@@ -125,7 +125,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
-import type { Foe } from "../foes";
+import type { Foe } from "./foe";
 
 /**
  * The hit reactions, kinds 3 and 7, and the handler that installs them. The

@@ -88,7 +88,7 @@
  * faces. The think function writes the pair as one dword, which is why both
  * halves come back at once.
  */
-import type { Foe } from "../foes";
+import type { Foe } from "./foe";
 import { install, type Brain, type Enemy, type Hitter } from "./kit";
 
 /**

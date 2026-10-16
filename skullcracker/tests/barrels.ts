@@ -1,5 +1,5 @@
 /**
- * The floating barrels, `initbarrel` — `barrelFrame` in `src/game.ts`, the
+ * The floating barrels, `initbarrel` — `barrelFrame` in `src/world/scenery.ts`, the
  * class think `0x43fc30`, one engine frame at a time.
  *
  *   npx vitest run skullcracker/tests/barrels.ts

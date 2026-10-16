@@ -122,3 +122,21 @@ export const GATES: Readonly<Record<string, Gate>> = {
   initwraith: wraithGate,
   initarm: armGate,
 };
+
+/**
+ * The shots, globs and throws that some of these classes let go of, by the name
+ * their own module gives them — the game spawns them as casts and bolts, and
+ * takes them from here rather than from each brain's file.
+ */
+export { COP_SLUG } from "./cop";
+export { EYEBALL_GLOBS } from "./eyeball";
+export { GHENGIS_BLAST } from "./ghengis";
+export { HARDCORE_THROW, HARDCORE_THROW_LOW } from "./hardcore";
+export { IGOR_THROW } from "./igor";
+export { KNIFEBOY_KNIFE, KNIFEBOY_LOB } from "./knifeboy";
+export { KRAGG_SHOT_AIR, KRAGG_SHOT_GROUND } from "./kragg";
+export { PUKE_GOB } from "./puke";
+export { SKEL_BONE } from "./skel";
+export { TUBE_BREATH, TUBE_SHARDS } from "./tube";
+export { VPRIEST_BOLT } from "./vpriest";
+export { WBOOLY_HIGH, WBOOLY_LOW } from "./wbooly";

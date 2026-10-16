@@ -78,7 +78,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 
 /**
  * The three states a brain is never in and what each does that this file

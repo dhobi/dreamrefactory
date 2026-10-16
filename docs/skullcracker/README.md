@@ -419,8 +419,10 @@ a level with no class anywhere.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tools/records.mts` — how much of the sixteen books is on the
   page, counted rather than remembered
-- `skullcracker/src/game.ts` — **the game itself**, headless: the world, `tick()`
-  and the level loader, with no page in it; `src/walk.ts` is the page around it
+- `skullcracker/src/game.ts` — **the game itself**, headless: the door to
+  `src/world/`, one module a subsystem — the world's state, `tick()`
+  (`world/loop.ts`) and the level loader (`world/level.ts`), with no page in it;
+  `src/walk.ts` is the page around it
 - `skullcracker/src/random.ts` — `SC.EXE`'s own dice, reseeded as each level starts
 - `skullcracker/vitest.machine.config.ts` — **every machine suite**, a process each:
   `npm test -w skullcracker`, or name the ones you want — see
@@ -435,6 +437,7 @@ a level with no class anywhere.
 - `engine/src/df/sbk.ts` — the sprite book reader, and `engine/tests/sbk.ts`
 - `skullcracker/src/props.ts` — the level's machinery: the plank, the lift, the crow, the press, the lever, the goop, the door and the scenery that moves
 - `skullcracker/src/foes.ts` — what each `init*` name is, and the numbers behind it
+- `skullcracker/src/brains/foe.ts` — the shape of that record (`Foe`, `FoeAnim`), where the brains can reach it: `src` imports `brains`, never the other way
 - `skullcracker/tests/machine/city.ts` — CITY's opening
 - `skullcracker/tests/machine/lift.ts` — CITY's five lifts, and the ride to its goal
 - `skullcracker/tests/machine/woods.ts` — WOODS' population, its two steps and its goal

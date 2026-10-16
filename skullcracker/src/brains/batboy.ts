@@ -123,7 +123,7 @@ import {
   type Reaction,
   TICK_SCALE,
 } from "./kit";
-import type { FoeAnim } from "../foes";
+import type { FoeAnim } from "./foe";
 
 /**
  * The hit reactions, 9 and 10, and the one thing each does that the page's own

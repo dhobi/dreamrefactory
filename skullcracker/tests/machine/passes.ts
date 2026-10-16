@@ -1,5 +1,5 @@
 /**
- * Who is drawn in front of whom — `enemyPasses` and `enemyLayer` in `src/game.ts`.
+ * Who is drawn in front of whom — `enemyPasses` and `enemyLayer` in `src/world/enemies.ts`.
  *
  *   npm test -w skullcracker -- passes
  *
