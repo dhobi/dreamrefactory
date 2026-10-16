@@ -1,5 +1,5 @@
 /**
- * The front-end page (`src/main.ts`, `index.html`), in node: the real
+ * The front-end page (`src/page/main.ts`, `index.html`), in node: the real
  * `index.html` parsed by linkedom, a recording 2D context and audio sink
  * standing in for the browser's, the animation frames driven by hand, and
  * `fetch` answered off the disc on this machine.
@@ -95,7 +95,7 @@ vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 // the level runner is walkpage.ts's; here it is only where Begin ends up
-vi.mock("../src/walk", () => {
+vi.mock("../src/page/walk", () => {
   calls.push("walk");
   return {};
 });
@@ -262,7 +262,7 @@ async function openPage(
     picker: () => document.querySelector('input[type="file"]') as HTMLInputElement | null,
     Event: dom.Event as unknown as typeof Event,
   };
-  await import("../src/main");
+  await import("../src/page/main");
   await settle();
   return page;
 }

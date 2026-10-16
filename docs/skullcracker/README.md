@@ -301,7 +301,7 @@ question of, and all three are answered:
   answers `1` for `exitfarm`, `2` for `exitroom`, **`3` for `monkeybar`**, `4`
   for `ladder` and `5` for `initswitch`. Answering 3 installs `0x472048`, whose
   KIND is the state: hanging is state 8 and `0x42b410` is its handler. One
-  record ships, VAT's, and `MONKEYBAR` in `src/walk.ts` has the rest.
+  record ships, VAT's, and `MONKEYBAR` in `src/page/walk.ts` has the rest.
 
 ### What a probe is, and the word that was hiding in the constructor
 
@@ -419,10 +419,10 @@ a level with no class anywhere.
 - `engine/tests/byte-order.ts` — detection (needs no rip) and the menu (needs one)
 - `skullcracker/tools/records.mts` — how much of the sixteen books is on the
   page, counted rather than remembered
-- `skullcracker/src/game.ts` — **the game itself**, headless: the door to
+- `skullcracker/src/world/index.ts` — **the game itself**, headless: the door to
   `src/world/`, one module a subsystem — the world's state, `tick()`
   (`world/loop.ts`) and the level loader (`world/level.ts`), with no page in it;
-  `src/walk.ts` is the page around it
+  `src/page/walk.ts` is the page around it
 - `skullcracker/src/random.ts` — `SC.EXE`'s own dice, reseeded as each level starts
 - `skullcracker/vitest.machine.config.ts` — **every machine suite**, a process each:
   `npm test -w skullcracker`, or name the ones you want — see
@@ -465,7 +465,7 @@ a level with no class anywhere.
 - `tools/dumpsbk.ts` — a sprite book's cels, level plan and backdrop, as PNGs
 - `site/editors/books.html` — the same, in a browser, at `/editors/books.html`
 
-The film loop in `skullcracker/src/main.ts` is a second implementation of the MOV
+The film loop in `skullcracker/src/page/main.ts` is a second implementation of the MOV
 frame state machine, and says so: the engine's own `MoviePlayer` needs a
 `GameSession`, which is exactly the thing a game with no BOOTFILE cannot produce.
 Everything that is not the state machine — the readers, the pacing, the

@@ -18,7 +18,7 @@
  * asserted here, on the level as it stands up.
  */
 import { test } from "vitest";
-import { ENEMY_PASSES, enemyLayer } from "../../src/game";
+import { ENEMY_PASSES, enemyLayer } from "../../src/world";
 import type { Enemy } from "../../src/brains/kit";
 import { fail, headless, ok, pass, haveRip } from "./harness";
 

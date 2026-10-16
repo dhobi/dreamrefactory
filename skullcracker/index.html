@@ -76,7 +76,7 @@
            the title card has to be centred in while booting */
         --stage-h: calc(100vh - var(--bar));
         /* The picture is 512x384 art drawn on a 1024x768 canvas (PLATE in
-           src/main.ts). The WIDTH is the min of the three things that can limit
+           src/page/main.ts). The WIDTH is the min of the three things that can limit
            it — the art's doubled size, the room across, the room down converted
            through 4:3 — and the height follows, because a definite width plus a
            max-height would squash rather than fit. */
@@ -329,7 +329,7 @@
          A finished progress bar is a statement about the past; once the disc is
          read the only thing the page wants said is "press this". So #boot is a
          grid with both children in the same cell, and `.ready` — set by
-         src/main.ts the moment the opening is in hand — cross-fades one out and
+         src/page/main.ts the moment the opening is in hand — cross-fades one out and
          the other in. Sharing the cell is what keeps the button from jumping:
          stacking them and hiding the gauge would move the Start button up by the
          gauge's height at the exact moment it is asking to be clicked.
@@ -1233,7 +1233,7 @@
       </div>
       <div id="frame">
         <!-- 1024x768, which is the game's own 512x384 doubled: see PLATE in
-             src/main.ts, and --pic-w in the styles -->
+             src/page/main.ts, and --pic-w in the styles -->
         <canvas id="screen" width="1024" height="768"></canvas>
         <div id="netbusy" hidden aria-hidden="true"><span></span></div>
       </div>
@@ -1268,7 +1268,7 @@
         </button>
         <span id="bugNote" class="note"></span>
         <!-- The hint names the two things a PLAYER does. The page's own account
-             of itself is still a keystroke away (`b`, in src/main.ts) and still
+             of itself is still a keystroke away (`b`, in src/page/main.ts) and still
              opens by itself when something goes wrong; it is simply not a
              control on the page any more, because neither it nor the film
              position under the picture was ever addressed to a reader. -->
@@ -1303,6 +1303,6 @@
         ></a
       >
     </footer>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/page/main.ts"></script>
   </body>
 </html>

@@ -24,7 +24,7 @@
  * node, frame by frame, with no level and no rip.
  */
 import { describe, expect, it } from "vitest";
-import * as game from "../src/game";
+import * as game from "../src/world";
 import { BARREL, type Barrel } from "../src/props";
 
 /** a barrel at (0, 100) in a 100x200 rect, already bobbing */

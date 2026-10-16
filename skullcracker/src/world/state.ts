@@ -577,7 +577,7 @@ export let foesOff = QUERY.get("foes") === "0";
  * difficulty is therefore always zero. Three instructions say otherwise:
  * `0x45d788`, `0x45d79b` and `0x45d7ae` store **1, 0 and -1**, and they are the
  * three little boxes the prefs panel draws at `0x4791d8`, `0x4791e0` and
- * `0x4791e8` (see `src/main.ts`). What the number does:
+ * `0x4791e8` (see `src/page/main.ts`). What the number does:
  *
  * ```
  *   448ac2  max health = trunc(d * 600) + 0x4b0      1800 / 1200 / 600

@@ -12,7 +12,7 @@
       "skullcracker/index.html plays the game's films and claims nothing more".
       That is no longer the split. The front door plays the whole game and hands
       this same runner its canvas when the chooser is answered (`handOver` in
-      src/main.ts), so what lives here is not a lesser version of the game but
+      src/page/main.ts), so what lives here is not a lesser version of the game but
       the workbench for it: `?level=`, `?x=`, `?damage=`, `[` and `]`, and a
       status line naming every number the page is working from. Thirty-odd
       browser suites drive this page for exactly that reason.
@@ -20,7 +20,7 @@
       What it shows is the disc's own data — the backdrop, the parallax depths,
       the rasterised ground, the rooms and the doors between them, the platforms
       and ladders, the player's cels — driven by a handful of numbers the disc
-      does NOT contain, each one named in src/walk.ts's INVENTED table. That
+      does NOT contain, each one named in src/page/walk.ts's INVENTED table. That
       table is shorter than it was: the walk, the run, the jump's lift and the
       fall have all since been found in SC.EXE and taken out of it.
     -->
@@ -41,7 +41,7 @@
       }
       /*
         The picture gets a block of its own, because the touch pad the runner
-        builds over it (src/pad.css, src/walk.ts) is positioned against the
+        builds over it (src/pad.css, src/page/walk.ts) is positioned against the
         PICTURE and not against the page: a control that drifts off the canvas
         when the window is resized is worse than no control. The width that used
         to be the canvas's is the stage's, and the canvas fills it.
@@ -174,6 +174,6 @@
         <a href="./">back to the films</a></span
       >
     </div>
-    <script type="module" src="/src/walk.ts"></script>
+    <script type="module" src="/src/page/walk.ts"></script>
   </body>
 </html>

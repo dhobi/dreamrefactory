@@ -45,28 +45,28 @@
  * five cars 45 of its 73 platforms are reachable and the goal is not one of them,
  * and with them all 73 are. Each owns its landing and carries the record upward,
  * which is the same mechanism a falling plank uses to take its floor down —
- * `0x42fcb9`, and {@link file://./props.ts} has both.
+ * `0x42fcb9`, and {@link file://../props.ts} has both.
  */
 import { SbkEntity, LEVEL_ORDER, PLAY_PLANE_Z } from "@dreamfactory/engine/df/sbk";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
-import "./pad.css";
+import "../pad.css";
 import { MOBILE } from "@dreamfactory/engine/web/mobile";
-import { SkullFiles } from "./files";
-import { writeSkl } from "./savegame";
-import { Film } from "./film";
-import { FOES, loopIndex } from "./foes";
-import { type Enemy } from "./brains/kit";
-import { CRAFT, GOB_CELS, SPARK, SPRAY, VANISH } from "./effects";
-import { REACH, Sounds } from "./sound";
-import { ELEVATOR, Plank, crowCel, elevatorCel, ibeamCel, crushCel, plankCel, PICKUP, shackCel, PIPE, ROACH, doorCel, switchCel, dripCel, HAND, LIGHTFX, BOGGS, SKATEBOARD } from "./props";
-import { MISSIONS } from "./mission";
-import { FLARE, GUN_CODES, STREAMS, WEAPONS, type Gun } from "./guns";
-import { keyName } from "./prefs";
-import { NAME_PROMPT, loadBoards, offerScore, saveBoards } from "./scores";
-import { CEL, paintHud } from "./hud";
+import { SkullFiles } from "../files";
+import { writeSkl } from "../savegame";
+import { Film } from "../film";
+import { FOES, loopIndex } from "../foes";
+import { type Enemy } from "../brains/kit";
+import { CRAFT, GOB_CELS, SPARK, SPRAY, VANISH } from "../effects";
+import { REACH, Sounds } from "../sound";
+import { ELEVATOR, Plank, crowCel, elevatorCel, ibeamCel, crushCel, plankCel, PICKUP, shackCel, PIPE, ROACH, doorCel, switchCel, dripCel, HAND, LIGHTFX, BOGGS, SKATEBOARD } from "../props";
+import { MISSIONS } from "../mission";
+import { FLARE, GUN_CODES, STREAMS, WEAPONS, type Gun } from "../guns";
+import { keyName } from "../prefs";
+import { NAME_PROMPT, loadBoards, offerScore, saveBoards } from "../scores";
+import { CEL, paintHud } from "../hud";
 import {
   BLOW_CODES,
   CHARACTER,
@@ -213,8 +213,8 @@ import {
   waitsFor,
   wakeAudio,
   wormsHere,
-} from "./game";
-import type { Cheat } from "./cheats";
+} from "../world";
+import type { Cheat } from "../cheats";
 
 
 /**
@@ -240,7 +240,7 @@ let lastTick = 0;
  *
  * The cels, the strides, the flinches, the deaths, the health, the awards and
  * whether a thing counts towards the quota are all in {@link FOES}, read out of
- * `SC.EXE` a class at a time — {@link file://./foes.ts} has the shape of a
+ * `SC.EXE` a class at a time — {@link file://../foes.ts} has the shape of a
  * creature and the four objects in the executable it takes to describe one.
  *
  * What is NOT there is behaviour. `SC.EXE` gives each spawned enemy a 54-byte AI
@@ -415,7 +415,7 @@ async function openPause(): Promise<void> {
  * `showSaveFilePicker` IS that dialog and is what the original asks for, so it
  * is tried first; a browser without it gets an ordinary download, which is the
  * nearest a page can come to choosing a path. The bytes are the same either way
- * and {@link file://./savegame.ts} is where they are laid out.
+ * and {@link file://../savegame.ts} is where they are laid out.
  *
  * The filename is this page's own and nothing else in it is: the disc's default
  * comes from the Windows dialog, which a browser has no equivalent of.
@@ -631,7 +631,7 @@ addEventListener("keydown", (e) => {
   else if (e.key === "]") void loadLevel((levelIndex + 1) % 16);
   else if (e.shiftKey && e.key === "N") cycleSpawn();
   // ...and action 11, the other unbound designer's key: `0x402d22` toggles
-  // `0x46b1a8`, which is WHICH PLAYER — see {@link file://./players.ts}. The
+  // `0x46b1a8`, which is WHICH PLAYER — see {@link file://../players.ts}. The
   // level is reloaded under it because the two of them are different sizes and
   // the pose on screen belongs to the one who is leaving
   else if (e.shiftKey && e.key === "C") {
@@ -1588,7 +1588,7 @@ function loop(now: number): void {
     if (near.mode) foe += ` mode ${near.mode}`;
     // ...and, for every class with a machine of its own, the state IS the kind
     // of the script it is playing — `obj+0x18` and `obj+0x44`, straight out of
-    // {@link file://./brains/kit.ts}. A probe reads this rather than `mode`:
+    // {@link file://../brains/kit.ts}. A probe reads this rather than `mode`:
     // it is the disc's own numbering rather than a name this page invented
     if (near.script !== undefined) foe += ` kind ${near.script} tag ${near.tag ?? 0}`;
     // ...and of the twenty-six that share one — {@link stepFight}

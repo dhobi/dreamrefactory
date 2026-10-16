@@ -53,11 +53,11 @@ import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { VERSION, installVersion } from "@dreamfactory/chrome/version";
-import { SkullFiles } from "./files";
-import { SkullSave, readSkl, SKL } from "./savegame";
+import { SkullFiles } from "../files";
+import { SkullSave, readSkl, SKL } from "../savegame";
 // puts `mobile` on <html>, which index.html's fullscreen frame rule reads
 import "@dreamfactory/engine/web/mobile";
-import { Film } from "./film";
+import { Film } from "../film";
 import {
   DOSSIER,
   DOSSIERS,
@@ -73,8 +73,8 @@ import {
   loadPrefs,
   savePrefs,
   volumeAt,
-} from "./prefs";
-import { BOARD, ScoreBoards, boardKey, loadBoards } from "./scores";
+} from "../prefs";
+import { BOARD, ScoreBoards, boardKey, loadBoards } from "../scores";
 
 /**
  * The game's start sequence, and it is not a guess — it is a string table in the
@@ -105,7 +105,7 @@ const BOOT_SEQUENCE: readonly string[] = ["cyber.Mov", "imain.Mov", "Menu.Mov"];
  * The film the sequence ends on, and the one everything returns to.
  *
  * `Install Folder/Local/menu.mov`, not the CD's older copy of the same name —
- * see {@link file://./files.ts}, which is where that is decided. The binary
+ * see {@link file://../files.ts}, which is where that is decided. The binary
  * sitting in that same `Install Folder` is the reason to prefer it: the shipped
  * game ran from there.
  */
@@ -146,7 +146,7 @@ const BOOT_MOVIE = BOOT_SEQUENCE.at(-1)!;
  *
  * **Begin does not begin.** It plays `char.mov`, which is the CHARACTER CHOOSER
  * — there are two Skull Crackers and `0x46b1a8` says which (see
- * {@link file://./players.ts}). The game starts after it: `0x403154` finds
+ * {@link file://../players.ts}). The game starts after it: `0x403154` finds
  * `[0x46b208] == 3`, drops out of the menu, and the shell's `[0x4abdfe]` is
  * already 3 — `0x4031b2`, the level runner. So Begin -> chooser -> level one,
  * and this page follows that whole chain into `walk.html`.
@@ -170,7 +170,7 @@ const EXIT_ACTIONS: Record<
    * to `0x40d430` and `0x40d400` — the score and the lives — restores
    * `[0x4abdfe]`, `[0x4abdfc]`, the weapon and its rounds, and sets `[0x47913c]`
    * so the chapter's entry function does not zero the inventory it just filled.
-   * {@link file://./savegame.ts} lays the record out.
+   * {@link file://../savegame.ts} lays the record out.
    *
    * The last thing it does is `[0x46b208] = -1`, which is the value BEGIN sets:
    * a loaded game goes through the character chooser like a new one, because the
@@ -231,12 +231,12 @@ const EXIT_ACTIONS: Record<
  * the executable and neither is in a film, so they travel to `walk.html` in its
  * query string, which is that page's own way of being told anything. The three
  * the panel settles that have no query string — the eight bindings, the volume
- * and the music switch — travel in {@link file://./prefs.ts}'s store instead.
+ * and the music switch — travel in {@link file://../prefs.ts}'s store instead.
  *
  * The preferences panel, and all fourteen of its controls are live.
  *
  * The rects, the roles, the colours and the binding rule are
- * {@link file://./prefs.ts}, read out of `.data` and out of `0x45d5a0`'s modal
+ * {@link file://../prefs.ts}, read out of `.data` and out of `0x45d5a0`'s modal
  * loop rather than measured off the picture. What is left here is the drawing
  * and the clicking, because those are this page's.
  *
@@ -258,7 +258,7 @@ let prefsBox = 0;
  * film is showing. 0xa7 is 167 and `"frame 2"` is index 168, so that range is
  * exactly `menu.mov`'s attract loop and stops where the button stubs begin.
  *
- * The rows are {@link file://./scores.ts}; this is the drawing.
+ * The rows are {@link file://../scores.ts}; this is the drawing.
  */
 const boards: ScoreBoards = loadBoards();
 /** true once the prefs film has finished opening its panel and the panel is live */
@@ -625,7 +625,7 @@ function begin(): void {
  * there without a navigation. What follows is the swap: stop this page's loop,
  * clear its chrome off the stage, give the canvas the level runner's own
  * 512x384 (the front end's films are twice that), put the two elements it looks
- * up by id on the page, and only then import it — `src/walk.ts` reads the DOM
+ * up by id on the page, and only then import it — `src/page/walk.ts` reads the DOM
  * and the search string as it loads, so both have to be true first.
  */
 async function handOver(query: string): Promise<void> {
