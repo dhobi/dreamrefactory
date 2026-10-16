@@ -32,7 +32,7 @@ import {
   wireFileOpen,
   wirePngImport,
 } from "./editor-kit";
-import { t, formatNumber } from "@dreamfactory/site/locales";
+import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import {
   FLAT_NAME_FIELD,
   REGION_NAME_FIELD,

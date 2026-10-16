@@ -131,7 +131,7 @@ const current: { host?: FakeHost; files?: FakeFiles } = {};
 
 vi.mock("@dreamfactory/engine/web/host", () => ({ GameHost: FakeHost }));
 vi.mock("../src/files", () => ({ TimelapseFiles: FakeFiles }));
-vi.mock("@dreamfactory/site/bug-report", () => ({
+vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 

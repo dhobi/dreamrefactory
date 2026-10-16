@@ -23,7 +23,7 @@
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { parseSaveV1 } from "@dreamfactory/engine/df/savegame-v1";
 import { SaveEntry, SaveKind, getMeta, listSaves, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 
 /** Dust's saves: its own IndexedDB database, its own extension. */
 export const DUST_SAVES: SaveKind = {

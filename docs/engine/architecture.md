@@ -14,17 +14,18 @@ rule: **nothing shared knows which game it is.**
 | Package | What it is | Imports |
 |---|---|---|
 | `engine/` | the DreamFactory engine — containers, interpreter, runtime, the browser layer around them | nothing |
-| `site/` | the project's own web presence: the front door, the format editors, the chrome every page shares, the UI-language axis | `engine` |
-| `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `site` |
-| `dust/` | *Dust*: three pages, one disc, its own tools and suites | `engine`, `site` |
-| `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and a boot log in a panel the page opens over the picture | `engine`, `site` |
-| `skullcracker/` | *[Skull Cracker](../skullcracker/)*: the game on one page, `walk.html` beside it as the bench a level is opened on, and its own disassembler for `SC.EXE` | `engine`, `site` |
-| `redjack/` | *[RedJack](../redjack/)*: one page on three discs, DreamFactory 5, played to its end by its machine suites | `engine`, `site` |
-| `lunicus/` | *[Lunicus](../lunicus/)*: one page, DreamFactory 0; the game itself ported from `LUNICUS.EXE` into `src/game/` | `engine`, `site` |
-| `jumpraven/` | *[Jump Raven](../jumpraven/)*: the same kind of package, ported from `RAVEN.EXE`, with a player that wins it | `engine`, `site` |
+| `chrome/` | what every page shares, the front door, the editors and the games alike: the top bar and its menus, the version, the registry of games, editions, the bug report, the UI-language axis | `engine` |
+| `site/` | the project's own web presence: the front door and the format editors | `engine`, `chrome` |
+| `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `chrome` |
+| `dust/` | *Dust*: three pages, one disc, its own tools and suites | `engine`, `chrome` |
+| `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and a boot log in a panel the page opens over the picture | `engine`, `chrome` |
+| `skullcracker/` | *[Skull Cracker](../skullcracker/)*: the game on one page, `walk.html` beside it as the bench a level is opened on, and its own disassembler for `SC.EXE` | `engine`, `chrome` |
+| `redjack/` | *[RedJack](../redjack/)*: one page on three discs, DreamFactory 5, played to its end by its machine suites | `engine`, `chrome` |
+| `lunicus/` | *[Lunicus](../lunicus/)*: one page, DreamFactory 0; the game itself ported from `LUNICUS.EXE` into `src/game/` | `engine`, `chrome` |
+| `jumpraven/` | *[Jump Raven](../jumpraven/)*: the same kind of package, ported from `RAVEN.EXE`, with a player that wins it | `engine`, `chrome` |
 
-`site/tests/layering.ts` enforces this: it fails the build if `engine/` reaches
-for a game, or if any game reaches for another.
+`site/tests/layering.ts` enforces this: it fails the build if `engine/` or `chrome/`
+reaches for a game, or if any game reaches for another.
 
 Everything below `## Where a game's own code lives` is a game shell. Everything
 above it is the engine, where most of the code is.
@@ -183,11 +184,11 @@ own sections of these docs.
 | File | Responsibility |
 |------|----------------|
 | [`editors/`](https://github.com/dhobi/dreamrefactory/tree/master/site/editors) | the eight format editors and the page that lists them — see [the browser editors](../editors/README.md) |
-| [`front.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/front.ts) / [`games.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/games.ts) | the front door, and the registry of which games exist and what it takes to read one's data — here rather than in a game, because the editors need it and a shared package must not depend on a consumer |
-| [`chrome.css`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/chrome.css) | the topbar, pickers, titles, controls and panels every page shares. Not one colour in it: every value is a **role**, and the four palettes — Titanic's abyss-and-brass, Dust's dusk-and-ember, Timelapse's glass-and-chrome, the project's black-and-green — are four implementations of that one contract |
-| [`editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/editions.ts) | the **edition** axis: which `gamefiles/` tree a page is showing. Remembered per game and carried across the play page, the editors and the collection |
-| [`ui-languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/ui-languages.ts) / [`lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/lang-menu.ts) / [`locales/`](https://github.com/dhobi/dreamrefactory/tree/master/site/src/locales) | the **UI-language** axis, which is a different question: what language the words on the page are in. Pages carry their English inline, so nothing is fetched for an English reader |
-| [`site.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/site.ts) / [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/version.ts) / [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/bug-report.ts) | where the site's root is from a page at any depth, the version in the top bar, and the Report-bug button that prefills a GitHub issue with the game, the build number and the screen |
+| [`front.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/front.ts) / [`games.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/games.ts) | the front door, and the registry of which games exist and what it takes to read one's data — here rather than in a game, because the editors need it and a shared package must not depend on a consumer |
+| [`chrome.css`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/chrome.css) | the topbar, pickers, titles, controls and panels every page shares. Not one colour in it: every value is a **role**, and the four palettes — Titanic's abyss-and-brass, Dust's dusk-and-ember, Timelapse's glass-and-chrome, the project's black-and-green — are four implementations of that one contract |
+| [`editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/editions.ts) | the **edition** axis: which `gamefiles/` tree a page is showing. Remembered per game and carried across the play page, the editors and the collection |
+| [`ui-languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/ui-languages.ts) / [`lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/lang-menu.ts) / [`locales/`](https://github.com/dhobi/dreamrefactory/tree/master/chrome/src/locales) | the **UI-language** axis, which is a different question: what language the words on the page are in. Pages carry their English inline, so nothing is fetched for an English reader |
+| [`site.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/site.ts) / [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/version.ts) / [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/bug-report.ts) | where the site's root is from a page at any depth, the version in the top bar, and the Report-bug button that prefills a GitHub issue with the game, the build number and the screen |
 
 ### `taoot/` — Titanic's shell
 

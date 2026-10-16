@@ -11,7 +11,7 @@
  * ## Which language
  *
  * The page's language is its OWN axis, asked by the dropdown in the top bar
- * (site/src/lang-menu.ts) and by nothing else. What a page's CONTENT is read from — the
+ * (chrome/src/lang-menu.ts) and by nothing else. What a page's CONTENT is read from — the
  * `gamefiles/` tree the game boots, the files an editor lists, the box the
  * collection turns — is the EDITION, `?edition=`, taoot/src/editions.ts. The two were
  * one setting once, with `?lang=` naming a tree and being consulted for the

@@ -16,11 +16,11 @@ import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import type { ShpFrame } from "@dreamfactory/engine/df/shp";
 import type { DfEncoding } from "@dreamfactory/engine/df/text";
-import type { GameScreen } from "@dreamfactory/site/games";
-import { installGamesMenu } from "@dreamfactory/site/games-menu";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { formatNumber, installI18n, t } from "@dreamfactory/site/locales";
-import { installVersion } from "@dreamfactory/site/version";
+import type { GameScreen } from "@dreamfactory/chrome/games";
+import { installGamesMenu } from "@dreamfactory/chrome/games-menu";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { formatNumber, installI18n, t } from "@dreamfactory/chrome/locales";
+import { installVersion } from "@dreamfactory/chrome/version";
 import { installSourcePicker, type Source, type SourceFile } from "./sources";
 
 /** the page's status line */

@@ -26,7 +26,7 @@
          edition's data, so there is no picker here and the game's own language
          chooser never opens (taoot/src/main.ts pinnedEdition). -->
     <meta name="edition" content="en" />
-    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <!-- where the site root is from this page, for URLs built in TS (chrome/src/site.ts) -->
     <meta name="site-root" content="../" />
     <link rel="icon" type="image/png" href="/taoot-mark.png" />
     <link rel="stylesheet" href="/src/theme.css" />
@@ -288,7 +288,7 @@
 
       /* The boot text says "starting" — in the reader's language or not at all.
          The pages carry their English inline, and a catalogue arrives over a
-         dynamic import a beat later (site/src/locales/index.ts), so a German reader was
+         dynamic import a beat later (chrome/src/locales/index.ts), so a German reader was
          reading "Starting" for ~200 ms first. Hidden, not undrawn: it keeps its
          space, so nothing moves when the words arrive. `body.spoken` is set by
          main.ts's boot() the moment installI18n has had its say, which for an
@@ -367,7 +367,7 @@
 
              Untranslated, deliberately, and it is the one slot where that is
              already the rule — the brand is this port's name for itself and
-             stays put in all six languages (site/src/locales/en.ts). It holds
+             stays put in all six languages (chrome/src/locales/en.ts). It holds
              here for a second reason too: the panel under it has no translated
              word in it at all (the verbs, the legend, the splits table), and
              this page is outside the set the topbar rule is tested over

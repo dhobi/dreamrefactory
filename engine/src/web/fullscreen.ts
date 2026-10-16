@@ -51,7 +51,7 @@
  * that turned it on is under the picture, which the picture is now covering. So
  * this hangs a small ✕ in the corner of the stage, shown only while the page is
  * doing the filling ({@link FAUX_CLASS} on the body; the chip and the scroll
- * lock are styled in `site/src/chrome.css`). Without it a phone player is shut
+ * lock are styled in `chrome/src/chrome.css`). Without it a phone player is shut
  * in — which is worse than a button that does nothing.
  *
  * It is `position: fixed`, so it is out of flow on every page that takes it: the

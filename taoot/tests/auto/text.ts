@@ -18,7 +18,7 @@ import { DEFAULT_ENCODING, decodeText, encodeText, sniffEncoding } from "@dreamf
 import { LANGUAGES, encodingOf } from "../../src/languages";
 import { readPupFile } from "@dreamfactory/engine/df/pup";
 import { scriptToText, sniffScript, type Token } from "@dreamfactory/engine/df/script";
-import { TITANIC } from "@dreamfactory/site/games";
+import { TITANIC } from "@dreamfactory/chrome/games";
 import { encodingOf as editorEncodingOf } from "../../../site/editors/sources";
 import { wrapText } from "@dreamfactory/engine/web/fonts";
 import { gamefilesRoot } from "../../tools/gamefiles";

@@ -7,10 +7,10 @@
  * the front page, and for the same reason — a page with nothing to run still has
  * the same top bar as the ones that do.
  */
-import { installI18n } from "@dreamfactory/site/locales";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installPlayMenu } from "@dreamfactory/site/play-menu";
-import { installVersion } from "@dreamfactory/site/version";
+import { installI18n } from "@dreamfactory/chrome/locales";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { installVersion } from "@dreamfactory/chrome/version";
 
 void installI18n();
 void installLanguageMenu();

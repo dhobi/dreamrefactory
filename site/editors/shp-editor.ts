@@ -33,7 +33,7 @@ import {
   wireFileOpen,
   wirePngImport,
 } from "./editor-kit";
-import { t, formatNumber } from "@dreamfactory/site/locales";
+import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import {
   GROUP_NAME_FIELD,
   PropState,
@@ -50,7 +50,7 @@ import {
   patchStateIdentifier,
   readShpFile,
 } from "@dreamfactory/engine/df/shp";
-import type { GameScreen } from "@dreamfactory/site/games";
+import type { GameScreen } from "@dreamfactory/chrome/games";
 import { DecodedAudio, decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import { play as playSound, stopPlayback as stopSound } from "./playback";
 

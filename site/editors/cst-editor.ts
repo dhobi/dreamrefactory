@@ -34,7 +34,7 @@ import {
   wirePngImport,
 } from "./editor-kit";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { t, formatNumber } from "@dreamfactory/site/locales";
+import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { decodeAudioContainer, type DecodedAudio } from "@dreamfactory/engine/df/audio";
 import { wavBlob } from "./wav";
@@ -48,7 +48,7 @@ import {
   readCstFile,
 } from "@dreamfactory/engine/df/cst";
 import { ShpFrame, decodeShpFrame, encodeShpFrame, patchFrameAnchor } from "@dreamfactory/engine/df/shp";
-import type { GameScreen } from "@dreamfactory/site/games";
+import type { GameScreen } from "@dreamfactory/chrome/games";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 

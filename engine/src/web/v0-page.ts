@@ -122,7 +122,7 @@ export class V0Page {
     this.logEl.hidden = !this.logEl.hidden;
   };
 
-  /** what the site's bug report (`@dreamfactory/site/bug-report`) asks of the page */
+  /** what the site's bug report (`@dreamfactory/chrome/bug-report`) asks of the page */
   get bugReport() {
     const bugNote = $("bugNote");
     const { name, slug, rip, version } = this.opts;

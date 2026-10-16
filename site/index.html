@@ -10,7 +10,7 @@
       name="description"
       content="A browser reimplementation of CyberFlix's DreamFactory engine, the CD-ROM authoring system behind Lunicus, Jump Raven, Dust and Titanic. Three of the games built on it are playable here: CyberFlix's own Titanic: Adventure Out of Time (1996) and Dust: A Tale of the Wired West (1995), and GTE Interactive Media's Timelapse: Ancient Civilizations (1996)."
     />
-    <!-- where the site root is from this page, for URLs built in TS (site/src/site.ts) -->
+    <!-- where the site root is from this page, for URLs built in TS (chrome/src/site.ts) -->
     <meta name="site-root" content="./" />
     <link rel="icon" type="image/svg+xml" href="/globe-mark.svg" />
     <link rel="stylesheet" href="/src/theme.css" />
@@ -25,7 +25,7 @@
        * not (site/src/theme.css).
        *
        * The chrome — topbar, brand, panels, the rule under the title — is
-       * site/src/chrome.css, the same file the game pages and the editors use.
+       * chrome/src/chrome.css, the same file the game pages and the editors use.
        * Only the hero and the door grid below are this page's own.
        */
       #front {
@@ -401,7 +401,7 @@
            data-font          Cookie       public/cookie.woff2, below
 
          THIS PAGE ONLY, which is why it is here rather than in
-         site/src/chrome.css. The eight editors share that stylesheet and are
+         chrome/src/chrome.css. The eight editors share that stylesheet and are
          tools rather than a shop window; an ask under a SET editor is an ask of
          somebody already doing the work.
          ------------------------------------------------------------------ */

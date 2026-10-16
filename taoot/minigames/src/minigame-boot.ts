@@ -40,12 +40,12 @@ import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { TI_CURSORS } from "../../src/cursor-art";
 import { FileStore } from "../../src/files";
 import { editionsIn, gamefileManifest } from "../../src/editions";
-import { siteUrl } from "@dreamfactory/site/site";
-import { installI18n, t, uiLanguage } from "@dreamfactory/site/locales";
-import type { Key } from "@dreamfactory/site/locales/en";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installPlayMenu } from "@dreamfactory/site/play-menu";
-import { installVersion } from "@dreamfactory/site/version";
+import { siteUrl } from "@dreamfactory/chrome/site";
+import { installI18n, t, uiLanguage } from "@dreamfactory/chrome/locales";
+import type { Key } from "@dreamfactory/chrome/locales/en";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { installVersion } from "@dreamfactory/chrome/version";
 
 /** Titanic's screen, which both of these stages are drawn for */
 const SCREEN = { width: 512, height: 384 };

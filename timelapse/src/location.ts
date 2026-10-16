@@ -68,7 +68,7 @@ export interface Place {
  * The same line a bug report carries, so an issue says where it was opened —
  * and the FLAT leads it.
  *
- * A bug report's title is the first segment of this (site/src/bug-report.ts),
+ * A bug report's title is the first segment of this (chrome/src/bug-report.ts),
  * and led by the world it read "Bug in world I" on every report this game will
  * ever produce. The flat name is the one identifier that is unique and compact:
  * `i0001.100.6` is world I, region 001, frame 100, variant 6 — which is both

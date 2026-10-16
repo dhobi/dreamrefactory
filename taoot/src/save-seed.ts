@@ -15,7 +15,7 @@
 import { SaveEntry, deleteSave, displayName, getMeta, listSaves, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
 import { globalsCapacity } from "@dreamfactory/engine/df/savegame";
 import { NEUTRAL, editionOfUrl } from "./files";
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 
 const SEEDED = "seeded";
 /** which language's shipped saves are in the store — see {@link seedSaves} */

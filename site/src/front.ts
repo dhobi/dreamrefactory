@@ -10,13 +10,13 @@
  *
  * Its language menu works because the catalogues and the UI-language axis live
  * in this shared package rather than in Titanic's, and the page's own sentences
- * are in them (`front` in site/src/locales/), so the front door is read in the same six
+ * are in them (`front` in chrome/src/locales/), so the front door is read in the same six
  * languages as everything behind it.
  */
-import { installI18n } from "./locales";
-import { installGamesMenu } from "./games-menu";
-import { installLanguageMenu } from "./lang-menu";
-import { installVersion } from "./version";
+import { installI18n } from "@dreamfactory/chrome/locales";
+import { installGamesMenu } from "@dreamfactory/chrome/games-menu";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installVersion } from "@dreamfactory/chrome/version";
 
 installGamesMenu();
 installLanguageMenu();

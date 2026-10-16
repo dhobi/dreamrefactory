@@ -2003,7 +2003,7 @@ async function start(): Promise<void> {
    * slash is a path off the HOST's root, so it worked everywhere it was tested
    * and nowhere it was deployed, and silently, because a missing sheet just
    * means no button. `siteUrl` is what prevents that, and it is the game's to
-   * call (site/src/site.ts).
+   * call (chrome/src/site.ts).
    */
   try {
     if (!host.fixtureSheet) throw new Error("this game publishes no sheet");

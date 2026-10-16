@@ -75,9 +75,9 @@ import {
   LANG_STAGE,
   editionName,
 } from "./languages";
-import { installLanguageMenu } from "@dreamfactory/site/lang-menu";
-import { installPlayMenu } from "@dreamfactory/site/play-menu";
-import { VERSION, installVersion } from "@dreamfactory/site/version";
+import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { VERSION, installVersion } from "@dreamfactory/chrome/version";
 import {
   editionsIn,
   gamefileManifest,
@@ -85,8 +85,8 @@ import {
   installEditionPicker,
   markEdition,
 } from "./editions";
-import { installI18n, t } from "@dreamfactory/site/locales";
-import { installBugReport } from "@dreamfactory/site/bug-report";
+import { installI18n, t } from "@dreamfactory/chrome/locales";
+import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { stateDump } from "@dreamfactory/engine/web/debug-panel";
 import { SPINE } from "./state-spine";
@@ -99,8 +99,8 @@ import {
   TouchGestures,
   bindSwipeInvert,
 } from "@dreamfactory/engine/web/touch";
-import { siteUrl, sitePath } from "@dreamfactory/site/site";
-import { TITANIC } from "@dreamfactory/site/games";
+import { siteUrl, sitePath } from "@dreamfactory/chrome/site";
+import { TITANIC } from "@dreamfactory/chrome/games";
 import {
   resetScreenGamma,
   screenGamma,
@@ -154,7 +154,7 @@ const hud = document.getElementById("hud") as HTMLDivElement;
  * each use below says so rather than trusting the markup it happens to be in.
  */
 const help = document.getElementById("help");
-/** which copy of the game is being played, as buttons (site/src/lang-menu.ts).
+/** which copy of the game is being played, as buttons (chrome/src/lang-menu.ts).
  *  Absent on /speedrun/: a route is timed against one edition, English. */
 const editionPicker = document.getElementById("editionPicker");
 const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
@@ -283,7 +283,7 @@ files.onWire(({ inFlight }) => {
 watchLoads(files);
 
 /**
- * The Report bug button (site/src/bug-report.ts): a GitHub issue with the room, the
+ * The Report bug button (chrome/src/bug-report.ts): a GitHub issue with the room, the
  * edition, the browser and the tail of the log already in it, and the screen on
  * the clipboard to paste — GitHub takes no image over a URL.
  *

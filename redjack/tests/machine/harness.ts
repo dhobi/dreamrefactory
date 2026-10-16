@@ -25,7 +25,7 @@ import { GameHost, type HostFiles } from "@dreamfactory/engine/web/host";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
-import { REDJACK } from "../../../site/src/games";
+import { REDJACK } from "../../../chrome/src/games";
 
 const RIP = resolve(import.meta.dirname, "../../gamefiles");
 const DISCS = [1, 2, 3];

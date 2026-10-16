@@ -27,7 +27,7 @@ import {
   serverRow,
   wireFileOpen,
 } from "./editor-kit";
-import { t, formatNumber } from "@dreamfactory/site/locales";
+import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import {
   NATIVE_FRAME_MS,
@@ -63,7 +63,7 @@ import {
   patchRegionRect,
   readMovFile,
 } from "@dreamfactory/engine/df/mov";
-import type { GameScreen } from "@dreamfactory/site/games";
+import type { GameScreen } from "@dreamfactory/chrome/games";
 import type { FilmEnding } from "@dreamfactory/engine/df/mov-film";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -122,7 +122,7 @@ let fileName = "movie.mov";
 let readOnly: string | null = null;
 
 // Hard-coded English, like every string this repo builds in TypeScript rather
-// than in markup (site/src/locales/en.ts says why).
+// than in markup (chrome/src/locales/en.ts says why).
 const V0_READ_ONLY =
   "DreamFactory 0 film (Lunicus): shown through the v0 reader, read-only. Nothing writes a v0 film.";
 const V1_READ_ONLY =

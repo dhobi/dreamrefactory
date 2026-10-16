@@ -6,7 +6,7 @@
  * of the street. Warm where Titanic is cold and the project's front door is
  * neither.
  *
- * The THIRD implementation of the contract in site/src/chrome.css, which is the
+ * The THIRD implementation of the contract in chrome/src/chrome.css, which is the
  * point of that split: the same 39 role names and the same top bar as the other
  * two, wearing nothing either of them wears.
  *
@@ -25,7 +25,7 @@
 
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 
 /* ---- dusk: the ground ------------------------------------------------- */
 

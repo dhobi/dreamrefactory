@@ -30,7 +30,7 @@ import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
-import { TIMELAPSE } from "../../../site/src/games";
+import { TIMELAPSE } from "../../../chrome/src/games";
 
 const RIP = resolve(import.meta.dirname, "../../gamefiles");
 const INSTALLED = join(RIP, "TLAPSE1/install/data");

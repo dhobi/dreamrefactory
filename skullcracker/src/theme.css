@@ -8,7 +8,7 @@
  * where Timelapse is cold and Dust is warm, and the only one of the four that
  * is loud.
  *
- * The FIFTH implementation of the contract in site/src/chrome.css, which is what
+ * The FIFTH implementation of the contract in chrome/src/chrome.css, which is what
  * that split is for: the same 39 role names and the same top bar as the other
  * four, wearing nothing any of them wear. This file used to be one `@import` and
  * a paragraph explaining that the game had no artwork to sample; the artwork
@@ -60,7 +60,7 @@
 
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
-@import "@dreamfactory/site/chrome.css";
+@import "@dreamfactory/chrome/chrome.css";
 
 /* ---- void: the ground -------------------------------------------------- */
 

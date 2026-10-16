@@ -29,7 +29,7 @@
  *     CSS has loaded. When they match `--bg` the launch is seamless; when they
  *     do not, the app flashes a colour the game never uses.
  *
- * So the manifests are held to `site/src/games.ts` for their names and to each
+ * So the manifests are held to `chrome/src/games.ts` for their names and to each
  * game's own `theme.css` for their colours, and the pages that link them are
  * held to the manifests. The icons themselves are built by
  * `tools/mkappicons.ts`; what is checked here is that what shipped is what was

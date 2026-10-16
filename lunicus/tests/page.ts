@@ -177,7 +177,7 @@ vi.mock("@dreamfactory/engine/web/save-browser", () => ({
   savesOpen: () => world.savesOpen,
 }));
 vi.mock("@dreamfactory/engine/web/window-dialog", () => ({ windowDialogOpen: () => false }));
-vi.mock("@dreamfactory/site/bug-report", () => ({ installBugReport: () => {} }));
+vi.mock("@dreamfactory/chrome/bug-report", () => ({ installBugReport: () => {} }));
 
 /* ----------------------------------------------------------------- the page */
 

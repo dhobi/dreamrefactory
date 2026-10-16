@@ -9,7 +9,7 @@
  *
  * This file exists so the page can reach it. Vite resolves a bare package
  * specifier in a CSS `@import` — the same trick every game's `theme.css` uses to
- * pull in `site/src/chrome.css` — and does not resolve one in a `<link href>`.
+ * pull in `chrome/src/chrome.css` — and does not resolve one in a `<link href>`.
  *
  * Anything Titanic wants the panel to look like that the engine does not do goes
  * BELOW the import, where it wins on order. There is nothing there today, which

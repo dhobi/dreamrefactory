@@ -80,7 +80,7 @@ export default defineConfig({
    *
    * The two kinds it never sees are handled by hand: `<a href>` between pages is
    * written relative in the HTML, and URLs built in TypeScript go through
-   * `siteUrl` (site/src/site.ts), which resolves them against this game's root
+   * `siteUrl` (chrome/src/site.ts), which resolves them against this game's root
    * rather than the host's.
    */
   base: "./",

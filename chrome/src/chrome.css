@@ -154,7 +154,7 @@ kbd,
 
 /* The port's version, beside the wordmark. An identifier for a bug report, not
    a control — so it takes the mute colour and no accent, and sits at the size
-   of the wordmark's second line. Drawn by site/src/version.ts. */
+   of the wordmark's second line. Drawn by chrome/src/version.ts. */
 .version {
   align-self: center;
   padding: 0.1rem 0.4rem;
@@ -196,7 +196,7 @@ kbd,
 
 /* ---- the nav's dropdowns ------------------------------------------------
    Two of them now, and they share everything but where they sit: the LANGUAGE
-   picker (site/src/lang-menu.ts) and the GAMES menu (site/src/games-menu.ts).
+   picker (chrome/src/lang-menu.ts) and the GAMES menu (chrome/src/games-menu.ts).
 
    A <details> rather than a <select>: the language list has to carry endonyms in
    six scripts, and a native menu on a phone renders those in the OS font at the
@@ -321,7 +321,7 @@ kbd,
    in front of the reader rather than behind a summary. The collection page
    picks which pressing's box art to turn with it; the play page picks which
    copy of the game to boot. Both build the buttons in TypeScript
-   (taoot/src/collection.ts, site/src/lang-menu.ts) into a container the page supplies with
+   (taoot/src/collection.ts, chrome/src/lang-menu.ts) into a container the page supplies with
    its label, so only the label is markup.
 
    Layout-neutral on purpose — where the control sits is the page's business, and
@@ -704,7 +704,7 @@ body.fs-faux .fsexit:focus-visible {
    same rule prises プレイ apart into three drifting glyphs, and there are no
    capitals for `text-transform` to reach in the first place.
 
-   Selected off `<html lang>`, which site/src/locales/index.ts sets from the reader's
+   Selected off `<html lang>`, which chrome/src/locales/index.ts sets from the reader's
    choice — so this is dead weight on the other five languages, and Cyrillic
    keeps the tracking, which it wants as much as Latin does.
 

@@ -21,7 +21,7 @@ import { wavBlob } from "./wav";
 import { context, play, stopPlayback } from "./playback";
 import { byExtension, chosenSource, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
 import { download, exportContainerFile, installEditorPage, LazyFill, serverNote, serverRow, wireFileOpen } from "./editor-kit";
-import { t as tr } from "@dreamfactory/site/locales";
+import { t as tr } from "@dreamfactory/chrome/locales";
 import {
   DecodedAudio,
   V0_SAMPLE_RATE,
@@ -147,7 +147,7 @@ function tablesOf(file: DFContainerFile, v0: boolean, snd: SndFile | null): Bank
 }
 
 // Hard-coded English, like every string this repo builds in TypeScript rather
-// than in markup (site/src/locales/en.ts says why).
+// than in markup (chrome/src/locales/en.ts says why).
 const V1_READ_ONLY =
   "DreamFactory 1 bank (.snd): shown through the v1 reader, read-only. Export needs a v1 write path.";
 const V0_READ_ONLY =

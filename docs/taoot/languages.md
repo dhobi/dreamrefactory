@@ -230,7 +230,7 @@ in there. Player-made saves are untouched.
 |----------|---------|
 | skip the screen | `?edition=de` — a link carries it, and it is remembered |
 | change your mind | the **Edition** row on the play page, the editors and the collection ([`taoot/src/editions.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/editions.ts)) — one choice, carried between all three. Switching is a reload on the two that have read data: a live session is holding boot scripts, shops and sound banks from the edition being left |
-| a different page language | the 🌐 dropdown in the top bar, which is that and nothing else ([`site/src/lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/lang-menu.ts)) |
+| a different page language | the 🌐 dropdown in the top bar, which is that and nothing else ([`chrome/src/lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/lang-menu.ts)) |
 | pin it for tests | `TAOOT_LANG` (Node), which the browser suites pass through as `?edition=` |
 | rebuild the stage | `npm run mklang -w taoot` — then, if you like, restyle it in [the stage editor](../editors/stages.md) |
 
@@ -239,7 +239,7 @@ in there. Player-made saves are untouched.
 Everything above is about the **game's** text, which CyberFlix already translated
 six ways and which this port only has to decode. The port's own chrome — the top
 bar, the front page, the boot notice, the editors' furniture — is a separate
-problem with a separate answer in [`site/src/locales/`](https://github.com/dhobi/dreamrefactory/blob/master/site/src/locales/en.ts),
+problem with a separate answer in [`chrome/src/locales/`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/locales/en.ts),
 and, deliberately, a **separate setting**.
 
 Separate because which editions an install carries is a fact about the reader's
@@ -257,7 +257,7 @@ storage key:
 | control | the 🌐 dropdown in the top bar, on every page | the button row on Play, the Editors and the Collection |
 | parameter / storage | `?lang=` / `taoot.lang` | `?edition=` / `taoot.edition` |
 | the list | the six the site is translated into, always | the editions that page can actually offer |
-| module | `site/src/lang-menu.ts` | `taoot/src/editions.ts` |
+| module | `chrome/src/lang-menu.ts` | `taoot/src/editions.ts` |
 
 Neither writes the other's key. The page's language resolves as `?lang=`, then
 `taoot.lang`, then the browser's own preference, then English (`?uilang=` and
@@ -275,7 +275,7 @@ demo) is reached from the row or from `?edition=`.
 
 The English lives **twice**: inline in the ten HTML files, so that an English
 reader needs no JavaScript and a `git diff` still shows the sentence that changed,
-and again in `site/src/locales/en.ts`, so that a translator has a list and the
+and again in `chrome/src/locales/en.ts`, so that a translator has a list and the
 translations have a shape. Two copies of a string is normally a bug waiting to
 happen; what makes it safe here is `site/tests/locales.ts`, which parses the
 markup and fails if the two ever disagree by so much as a word. It also refuses a

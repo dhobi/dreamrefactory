@@ -12,7 +12,7 @@
  *
  * No engine session, no GPU library. The page is the model, a bake and a shader.
  */
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 import {
   buildRoom, ceilingAt, chartOf, doorPiece, EYE_HEIGHT, MaterialId, Part, PENDANT, pendantFitting,
   pendantPiece, ROOM, STANDPOINTS, SurfaceId, UNITS_PER_METRE, WINDOW, WINDOWS,

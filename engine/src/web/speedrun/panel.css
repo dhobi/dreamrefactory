@@ -1,7 +1,7 @@
 /**
  * The speedrun workbench's panel, as structure.
  *
- * The same bargain `site/src/chrome.css` makes for the topbar, one layer down:
+ * The same bargain `chrome/src/chrome.css` makes for the topbar, one layer down:
  * this is the workbench's furniture — the two sections, the drag handles, the
  * resize grips, the editor's painted overlay, the controls row, the sheet and
  * checkpoint chips, the clock, the splits table and the legend — and every
@@ -26,7 +26,7 @@
  * ## The colours are ROLES
  *
  * Not one game's palette appears below, which is the rule
- * `site/src/chrome.css` keeps one layer up and for the same reason: `--accent`,
+ * `chrome/src/chrome.css` keeps one layer up and for the same reason: `--accent`,
  * `--accent-line`, `--accent-hover`, `--border-strong`, `--state-border`,
  * `--mark`, `--rule-mid`, `--text`, `--panel` — and each game's theme is one
  * implementation of that contract. Titanic's ice and brass, Dust's dusk and

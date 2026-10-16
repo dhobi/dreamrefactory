@@ -46,7 +46,7 @@
  * turn that has been silently reduced to a jump.
  */
 
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 
 /** how many pages were scanned — the same 32 the old site's `manualDE` listed */
 const PAGE_COUNT = 32;

@@ -49,7 +49,7 @@ import { readSettFile, exitsOf, type MazeFilm, type MazeNode, type MazeQuad, typ
 import { patchQuad, patchStar, SETT_NAME_MAX } from "@dreamfactory/engine/df/sett-patch";
 import { FilmFrames, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
 import { inPolygon, projectQuad, type MazeCamera } from "@dreamfactory/engine/runtime/maze";
-import { t } from "@dreamfactory/site/locales";
+import { t } from "@dreamfactory/chrome/locales";
 import { chosenSource, encodingOf, filesIn, listSources, type Source } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import { appendScripts, installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";

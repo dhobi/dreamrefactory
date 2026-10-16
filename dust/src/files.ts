@@ -1,6 +1,6 @@
 import type { WireEvent } from "@dreamfactory/engine/web/host";
 import { RipFiles } from "@dreamfactory/engine/web/rip-files";
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 
 /**
  * The Dust CD as a `HostFiles` (a {@link RipFiles}) — what lets the real engine boot off it.

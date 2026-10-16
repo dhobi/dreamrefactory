@@ -184,7 +184,7 @@ vi.mock("@dreamfactory/engine/web/window-dialog", () => ({
   openWindowDialog: (_f: unknown, spec: NonNullable<typeof memoryDialog>["spec"], hooks: NonNullable<typeof memoryDialog>["hooks"]) =>
     void (memoryDialog = { spec, hooks }),
 }));
-vi.mock("@dreamfactory/site/bug-report", () => ({ installBugReport: () => {} }));
+vi.mock("@dreamfactory/chrome/bug-report", () => ({ installBugReport: () => {} }));
 
 /* ----------------------------------------------------------------- the page */
 

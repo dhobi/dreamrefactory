@@ -24,11 +24,11 @@ let marked: string[] = [];
 let startEdition = "en";
 const preloaded: string[] = [];
 
-vi.mock("@dreamfactory/site/lang-menu", () => ({ installLanguageMenu: async () => {} }));
-vi.mock("@dreamfactory/site/play-menu", () => ({ installPlayMenu: async () => {} }));
-vi.mock("@dreamfactory/site/version", () => ({ installVersion: () => {} }));
-vi.mock("@dreamfactory/site/locales", () => ({ installI18n: async () => {} }));
-vi.mock("@dreamfactory/site/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
+vi.mock("@dreamfactory/chrome/lang-menu", () => ({ installLanguageMenu: async () => {} }));
+vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => {} }));
+vi.mock("@dreamfactory/chrome/version", () => ({ installVersion: () => {} }));
+vi.mock("@dreamfactory/chrome/locales", () => ({ installI18n: async () => {} }));
+vi.mock("@dreamfactory/chrome/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
 vi.mock("../../src/editions", () => ({
   chosenEdition: () => startEdition,
   installEditionPicker: async (_el: unknown, o: { onPick: (c: string) => void }) => void (picked = o.onPick),

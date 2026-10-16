@@ -23,7 +23,7 @@
  */
 import { DfEncoding } from "@dreamfactory/engine/df/text";
 import type { WireEvent } from "@dreamfactory/engine/web/host";
-import { NEUTRAL, TITANIC, editionOfUrl as editionOfUrlIn } from "@dreamfactory/site/games";
+import { NEUTRAL, TITANIC, editionOfUrl as editionOfUrlIn } from "@dreamfactory/chrome/games";
 import { encodingOf, isEditionCode } from "./languages";
 import { byCodeUnit } from "@dreamfactory/engine/order";
 

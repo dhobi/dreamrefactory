@@ -160,7 +160,7 @@ vi.mock("@dreamfactory/engine/web/save-browser", () => ({
   browseForLoad: async () => (calls.push("load"), null),
   savesOpen: () => dialogUp,
 }));
-vi.mock("@dreamfactory/site/bug-report", () => ({
+vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 

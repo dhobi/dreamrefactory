@@ -23,7 +23,7 @@
  */
 import { startWorkbench } from "@dreamfactory/engine/web/speedrun/workbench";
 import { installStateList } from "@dreamfactory/engine/web/state-list";
-import { siteUrl } from "@dreamfactory/site/site";
+import { siteUrl } from "@dreamfactory/chrome/site";
 import { snapshotState } from "@dreamfactory/engine/runtime/trace";
 import type { GameHost } from "@dreamfactory/engine/web/host";
 import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";

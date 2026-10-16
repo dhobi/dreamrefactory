@@ -66,7 +66,7 @@ type Html = string;
  * `other` is the only one every language uses, so it is the only one required —
  * Japanese writes nothing else, English adds `one`, Russian adds `few` and
  * `many`. Which form a given count reads is `Intl.PluralRules`' business, not
- * ours (site/src/locales/index.ts); ours is only to supply the forms, and the test
+ * ours (chrome/src/locales/index.ts); ours is only to supply the forms, and the test
  * holds each language to exactly the set that `Intl.PluralRules` reports for it.
  */
 export type Plural = {
@@ -97,7 +97,7 @@ export const en = {
      * The two ways into the game that a reader can take in their own edition,
      * which is why these two are translated and the other two in that dropdown
      * are not: developer mode and the speedrun workbench open pages that are
-     * English by construction (site/src/play-menu.ts says why), and a menu that
+     * English by construction (chrome/src/play-menu.ts says why), and a menu that
      * translated the way in but not the page would promise what it cannot keep.
      *
      * `navOriginal` has no markup to match — the menu RENAMES the first link,
