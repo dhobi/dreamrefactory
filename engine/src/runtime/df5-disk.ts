@@ -1,4 +1,4 @@
-import { byCodeUnit } from "../order";
+import { byCodeUnit } from "./order";
 
 /**
  * The machine a DreamFactory 5 game's file commands reach, as a stand-in for

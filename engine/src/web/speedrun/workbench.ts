@@ -81,7 +81,7 @@ import { installColumnOrder } from "./columns";
 import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
 import { installColumnWidths, installPictureScale } from "./widths";
-import { byCodeUnit } from "../../order";
+import { byCodeUnit } from "../../runtime/order";
 import { markUnattended } from "../error-box";
 
 // A run is timed by a sheet, not watched by a person: the game's script error

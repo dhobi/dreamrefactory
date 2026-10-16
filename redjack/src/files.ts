@@ -1,6 +1,6 @@
 import type { HostFiles } from "@dreamfactory/engine/web/host";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
-import { byCodeUnit } from "@dreamfactory/engine/order";
+import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
 /**
  * The three RedJack CDs as one {@link HostFiles}.

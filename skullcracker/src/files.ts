@@ -54,7 +54,7 @@
  */
 
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
-import { byCodeUnit } from "@dreamfactory/engine/order";
+import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
 /** this page's own URL for a served path, so it runs from any directory */
 const url = (path: string): string => pageUrl(path);

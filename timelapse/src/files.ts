@@ -1,6 +1,6 @@
 import { RipFiles } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
-import { byCodeUnit } from "@dreamfactory/engine/order";
+import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
 /**
  * The four Timelapse CDs as one `HostFiles` (a {@link RipFiles}) — what lets the real engine
