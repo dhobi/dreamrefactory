@@ -9,6 +9,7 @@ import type { DrawSignature } from "./signature";
 import { Lights, shadedPalette } from "./shading";
 import type { Value } from "./interp";
 import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
+import { Card, cardOf, cardTexel, paintCard } from "./props";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
 // viewer.ts's import("./engine/actors").Occlusion keeps resolving.
@@ -105,7 +106,11 @@ export class ActorInstance {
   ink = 8;
   /** DreamFactory 5's `actorflip`: bit 1 mirrors the picture across, bit 2 turns it upside down */
   flip = 0;
-  /** `actoristrue3d` — kept for the script; an actor always faces the camera, so it draws as before */
+  /**
+   * `actoristrue3d` (actor +0x14, off at creation — 0x401520): drawn as a flat
+   * picture standing in the room, a prop's card ({@link ActorRuntime.card}),
+   * instead of a sprite square to the screen
+   */
   true3d = false;
   /** `actorbrightness`: added to each colour channel, -255..255 */
   bright: [number, number, number] = [0, 0, 0];
@@ -114,10 +119,10 @@ export class ActorInstance {
   litby = 0;
   lightGroup = 1;
   /**
-   * `actorpitch`, `actorroll`, `actorisfacer` and `actorsnap`, kept for the
-   * script: an actor is drawn as the sprite square to the screen it always was,
-   * true-3D or not (see {@link true3d}). The angles in 2²⁴ths of a turn
-   * (actor +0x1e, +0x22); a facer until told otherwise, as a prop is
+   * `actorpitch`, `actorroll` and `actorisfacer`: how a {@link true3d} actor's
+   * card stands, as a prop's does — the angles in 2²⁴ths of a turn (actor
+   * +0x1e, +0x22), and a facer (+0xb0) until told otherwise (0x40152a). They do
+   * nothing to a sprite. `actorsnap`: a screen actor moves with the stage's origin
    */
   pitch = 0;
   roll = 0;
@@ -272,7 +277,7 @@ export class ActorRuntime {
   origin: { readonly x: number; readonly y: number } = { x: 0, y: 0 };
   /** the palette an actor is drawn through: its own record under its group's (runtime/shading.ts) */
   private shade(a: ActorInstance, pal: Uint8ClampedArray): Uint8ClampedArray {
-    return shadedPalette(pal, a, this.lights?.group(a.lightGroup) ?? null);
+    return this.lights ? this.lights.spritePalette(pal, a, a.lightGroup) : shadedPalette(pal, a);
   }
 
   addCast(name: string, cst: CstFile): LoadedCast {
@@ -574,6 +579,9 @@ export class ActorRuntime {
     const proj = projectPoint(cam, a.worldX, a.worldY, a.worldZ);
     if (!proj) return false; // behind the camera
     if (!cam.v5 && !inDepthWindow(cam, proj.depth, Number(a.zclip))) return false;
+    // a card's screen box is what 0x45b700 hands back (0x406dfc)
+    const c = this.card(a, cam);
+    if (c) return c.box.x1 > c.box.x0 && c.box.y1 > c.box.y0;
     const r = this.rect(a, proj, cam);
     if (!r) return false; // no frame to draw
     return r.x < cam.clipW && r.y < cam.clipH && r.x + r.w > 0 && r.y + r.h > 0;
@@ -600,6 +608,21 @@ export class ActorRuntime {
    */
   private occludeAt(a: ActorInstance, depth: number, occ: Occlusion): number {
     return depthLevel(depth - Number(a.zclip) + (occ.groundBias ?? 0), occ);
+  }
+
+  /**
+   * A true-3D actor's card in a DreamFactory 5 room, or null for a sprite.
+   * RedJack.exe's actor pass (0x406bf0) is the prop pass (0x42caa0) over the
+   * actor's record: the frame is the one the sprite would show (0x407230, from
+   * the actor's facing less the bearing to the camera), and from +0x14 on
+   * (0x406d2b) the pose goes to the 3D renderer as a prop's does — see
+   * {@link cardOf}. A facer card is square to the camera but not the sprite: it
+   * stands upright in the room and is sized by its own depth at every pixel.
+   */
+  card(a: ActorInstance, cam: WorldCamera): Card | null {
+    if (!a.true3d || !cam.v5) return null;
+    const f = this.frameFor(a, cam);
+    return f ? cardOf(f, a, cam, cam.v5) : null;
   }
 
   /** screen rect of an actor sprite (same depth scaling as world props) */
@@ -717,6 +740,12 @@ export class ActorRuntime {
     cam: WorldCamera,
     occ: Occlusion | null = null,
   ): void {
+    const c = this.card(a, cam);
+    if (c) {
+      const hidden = occ ? (x: number, y: number, axial: number) => sceneryOccludes(occ, x, y, this.occludeAt(a, axial, occ)) : undefined;
+      paintCard(c, cam.v5!, rgba, width, height, this.shade(a, c.f.palette ?? paletteRGBA), inkAlpha(a.ink), hidden);
+      return;
+    }
     const r = this.rect(a, proj, cam);
     if (!r) return;
     const level = occ ? this.occludeAt(a, hiddenBy(proj), occ) : 0;
@@ -775,6 +804,7 @@ export class ActorRuntime {
       sig.bool(a.worldSpace).num(a.anchorX).num(a.anchorY).num(a.dist);
       sig.num(a.flip).num(a.bright[0]).num(a.bright[1]).num(a.bright[2]);
       sig.num(a.contrast[0]).num(a.contrast[1]).num(a.contrast[2]).num(a.lightGroup).bool(a.snap);
+      sig.bool(a.true3d).bool(a.facer).num(a.pitch).num(a.roll);
     }
   }
 
@@ -806,6 +836,17 @@ export class ActorRuntime {
     if (!cam) return null;
     for (const { a: d, proj } of this.drawList(cam)) {
       if (d !== a) continue;
+      const c = this.card(a, cam);
+      if (c) {
+        const { x0, y0, x1, y1 } = c.box;
+        return {
+          x: x0, y: y0, w: x1 - x0, h: y1 - y0,
+          covers: (x, y) => {
+            const t = cardTexel(c, cam.v5!, x, y);
+            return !!t && !!c.f.opaque[t.i];
+          },
+        };
+      }
       const r = this.rect(a, proj, cam);
       if (!r) return null;
       return {
@@ -842,6 +883,14 @@ export class ActorRuntime {
     const list = this.drawList(cam);
     for (let i = list.length - 1; i >= 0; i--) {
       const { a, proj } = list[i];
+      const c = this.card(a, cam);
+      if (c) {
+        // a card is hit at its own pixel, hidden at that pixel's depth
+        const t = cardTexel(c, cam.v5!, x, y);
+        if (!t || !c.f.opaque[t.i]) continue;
+        if (occ && sceneryOccludes(occ, x, y, this.occludeAt(a, t.axial, occ))) continue;
+        return a;
+      }
       const r = this.rect(a, proj, cam);
       if (!r) continue;
       if (!this.pointOf(a, r, x, y, true)) continue;

@@ -19,7 +19,7 @@ import { PUP_LAYERS } from "@dreamfactory/engine/df/pup";
 import { subtitleFont, wrapText } from "./fonts";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
-import { groupPalette } from "@dreamfactory/engine/runtime/shading";
+import { LIT_PUPPET, groupPalette } from "@dreamfactory/engine/runtime/shading";
 import { displayChannel, displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import type { DrawSignature } from "@dreamfactory/engine/runtime/signature";
@@ -323,7 +323,7 @@ export class PuppetView {
    * 0x430d3d hand its slot to the blitter); the backdrop is not the puppet's
    */
   private puppetLit(pal: Uint8ClampedArray): Uint8ClampedArray {
-    return this.session.isV5 ? groupPalette(pal, this.session.lights.puppet) : pal;
+    return this.session.isV5 ? groupPalette(pal, this.session.lights.group(LIT_PUPPET)!) : pal;
   }
 
   /**
@@ -357,7 +357,7 @@ export class PuppetView {
     const grabHi = this.session.puppetParams.get(2) ?? 128;
     const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
       grab ? `grab${grabLo}-${grabHi}` : "own"}:${
-      state ? state.layers.map((l) => l.frame).join(",") : "-"}:${this.session.lights.puppet.bright}/${this.session.lights.puppet.contrast}`;
+      state ? state.layers.map((l) => l.frame).join(",") : "-"}:${this.session.lights.key()}`;
     /**
      * ## AND THE ROOM IS PART OF THE PICTURE (#289)
      *

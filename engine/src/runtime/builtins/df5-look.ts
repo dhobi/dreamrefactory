@@ -118,11 +118,14 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
       const cmd = `${name}brightness`;
       if (args.length < 3) return read().bright[channel(cmd, args[0])];
       rec().bright = rgb(cmd, args).map(level) as [number, number, number];
+      // rebuilt from the puppet's own record, whatever a load built it from (Lights.puppetTable)
+      if (name === "puppet") session.lights.puppetTable = null;
     });
     r5(`${name}contrast`, (_i, args) => {
       const cmd = `${name}contrast`;
       if (args.length < 3) return read().contrast[channel(cmd, args[0])];
       rec().contrast = rgb(cmd, args).map(contrast) as [number, number, number];
+      if (name === "puppet") session.lights.puppetTable = null;
     });
   }
 
@@ -155,8 +158,7 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
   // (0x4022a0, 0x4023b0, held to 24 bits), and actorisfacer, actorsnap (a, on)
   // of propisfacer and propsnap (0x403860, 0x403b70, which want a boolean).
   // A snapped screen actor moves with the stage's origin (0x407098). The angles
-  // and the facer are kept for the script and the save: an actor is drawn as
-  // the sprite it always was, true-3D or not (ActorInstance.true3d)
+  // and the facer pose a true-3D actor's card as a prop's (ActorRuntime.card)
   r5("actorpitch", (_i, [n, v]) => {
     const a = actor("actorpitch", n);
     if (v === undefined) return a.pitch;

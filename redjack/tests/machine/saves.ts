@@ -16,6 +16,19 @@ test.skipIf(!haveRip())("saves", async () => {
   await h.until(() => h.room() === "liznite" && h.owner() === "world", "the first room", 60_000);
   await h.settle("the first room");
 
+  // two props lit before the save: one by the stage, one by the stage and then
+  // by "default", which in play keeps it under the stage (0x42c16b)
+  const call = (name: string, ...args: (number | string)[]) =>
+    h.session.interp.builtins.get(name)!(h.session.interp, args, {} as never, {} as never);
+  const [lit, unlit] = [...h.session.propRuntime.props.values()];
+  await call("propbrightness", lit.name, 10, 20, 30);
+  await call("propcontrast", lit.name, 5, 0, -5);
+  await call("proplitby", lit.name, "stage");
+  await call("proplitby", unlit.name, "stage");
+  await call("proplitby", unlit.name, "default");
+  await call("stagebrightness", 0, 0, 40);
+  await call("screenbrightness", 3, 3, 3);
+
   const first = h.session.snapshotSave("2");
   if (!first) fail("no save written in liznite");
   const a = readSaveV5(first);
@@ -26,6 +39,13 @@ test.skipIf(!haveRip())("saves", async () => {
   if (dropped.length) console.log(dropped.join("\n"));
   if (h.room() !== "liznite" || h.node().toLowerCase() !== a.runt.scene.toLowerCase()) fail(`the load arrived in ${h.room()} at ${h.node()}`);
   ok(`loaded: back in ${h.room()} at ${h.node()}`);
+
+  // the lighting came back, and "default" left the second prop under nothing,
+  // not even the screen (0x43e085 -> 0x40a750)
+  const [lit2, unlit2] = [h.session.propRuntime.get(lit.name)!, h.session.propRuntime.get(unlit.name)!];
+  const got = JSON.stringify([lit2.bright, lit2.contrast, lit2.lightGroup, unlit2.litby, unlit2.lightGroup, h.session.lights.stage.bright, h.session.screenBright]);
+  if (got !== JSON.stringify([[10, 20, 30], [5, 0, -5], 2, 0, 0, [0, 0, 40], [3, 3, 3]])) fail(`the lighting after the load: ${got}`);
+  ok("the props' and the groups' lighting came back, and a \"default\" prop hangs under nothing");
 
   const b = readSaveV5(h.session.snapshotSave("2")!);
   const lost = a.props.filter((p) => !b.props.some((q) => q.name === p.name)).map((p) => p.name);

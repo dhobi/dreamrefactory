@@ -598,6 +598,7 @@ export class GameSession {
   ) {
     this.audio = new TimedAudio(audio, () => this.gameNow, () => this.nominalTime);
     this.propRuntime.lights = this.actorRuntime.lights = this.lights;
+    this.lights.screenOf = () => ({ bright: this.screenBright, contrast: this.screenContrast });
     this.actorRuntime.origin = this.propRuntime.origin;
     registerGameBuiltins(this); // core + game families, see builtins/index.ts
     // a transcript's words arrive with their bank, however it was opened (#50)

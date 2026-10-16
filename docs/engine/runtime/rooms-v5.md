@@ -112,29 +112,58 @@ same place.
 
 `propistrue3d (p, true)` stops a prop being a sprite square to the screen: it
 becomes a flat picture set in the room (`0x42caa0` hands it to the 3D renderer,
-`0x456540`).
+`0x456540`). `actoristrue3d (a, true)` does the same for an actor: its pass
+(`0x406bf0`) is the props' code instruction for instruction.
 
-- **Where it is.** The frame's hot spot sits on the prop's point, and one pixel
-  of the frame is scale / 1000 of a room unit.
-- **Which way it faces.** A **facer** turns to the camera. Every prop is a facer
-  until told otherwise (`0x427783`), so only `propisfacer (p, false)` changes
-  what you see: then `propdeg` turns the picture and `proppitch` tilts it.
+- **Where it is.** The frame's hot spot sits on the sprite's point, and one
+  pixel of the frame is scale / 1000 of a room unit.
+- **Which way it faces.** A **facer** turns to the camera: its heading is the
+  bearing from the camera to the picture (`0x41df00`). Every prop and actor is a
+  facer until told otherwise (`0x427783`). A non-facer's `propdeg` is the
+  heading of a camera that sees it square, `proppitch` tilts it and `proproll`
+  turns it about its own face (a positive roll turns its right toward up).
 - **Flip.** `propflip` turns the picture half round: bit 1 on the heading, bit 2
   on the pitch.
 
 This is how Cartagena's plank lies flat across the gap in the hold, and how the
 lock's chain hangs straight from its hook. The port draws such a card by
-following each screen pixel's ray to the picture's plane (`PropRuntime.cardOf`
-and `cardTexel`), so what hides it is the depth of the card at that pixel, not
-at its point.
+following each screen pixel's ray to the picture's plane (`cardOf`,
+`cardTexel` and `paintCard` in `runtime/props.ts`, shared by props and actors),
+so what hides it is the depth of the card at that pixel, not at its point.
 
-**One part is taken on trust.** Which way the picture's right and down run for
-a given heading is not followed through RedJack.exe's matrix. It is taken to be
-the camera's own convention, which puts a facer square and unmirrored in front
-of you: the one case that can be checked by eye.
+The picture's axes are read off `0x456540`'s matrix (H the heading, P the
+pitch, R the roll; right and down scaled by scale / 1000):
 
-`actoristrue3d` is kept too. No script calls `actorisfacer`, so every actor
-stays a facer, which draws as the sprite it already was.
+```
+right  = (cR sH + sP cH sR,  sR sP sH − cR cH,     cP sR)
+down   = (sR sH − sP cR cH,  −(cR sP sH + cH sR),  −cR cP)
+normal = (cP cH,             cP sH,                −sP)
+```
+
+Before this was read, the port drew every non-facer half a turn round, so
+mirrored, and turned a roll the wrong way.
+
+Actors start with `actoristrue3d` off (`0x401520`), and the only script that
+turns it on is the BOOTFILE's debug `changemethod`, so in play an actor is the
+sprite it always was.
+
+## Roads launched by a script
+
+`launchroad (road, forward, n)` (`0x441af0`) plays a road's film, forward
+(record +20) or back (+24), in RedJack.exe's road mode (`0x439620`), with n
+held to 4..64:
+
+- **Each pass** shows the frame at the index and then moves it on, so pass k
+  shows frame k − 1, and the camera takes that frame (`0x435490`).
+- **n frames before the end** the current scene gets `endroad ()` (`0x4406d0`).
+  If its handler leaves the room or ends the road, the pass stops there.
+- **At the end** the road arrives (`0x434550`) at the scene and view it started
+  from, with no open or close events: the next-to-last frame is the last one
+  shown, and at a node the camera keeps that frame's angles.
+- **A second `launchroad`** while one plays queues its film to take over n
+  frames on. `currentscene` drops the road, and entering a scene ends it.
+
+`MazeRuntime.launchRoad` and `roadStep` are the port's.
 
 ## What hides a sprite
 

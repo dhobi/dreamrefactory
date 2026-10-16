@@ -203,9 +203,9 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   acc5("propistrue3d", prop, (p) => (p.true3d ? 1 : 0), (p, v) => { p.true3d = truthy(v); });
   acc5("propisfacer", prop, (p) => (p.facer ? 1 : 0), (p, v) => { p.facer = truthy(v); });
   acc5("proppitch", prop, (p) => p.pitch, (p, v) => { p.pitch = toNum(v); });
-  // actoristrue3d (a, on): the same card for an actor. No script turns an actor's
-  // facer off (`actorisfacer`, 0x403860, is never called), and a facer draws as
-  // the sprite it already was
+  // actoristrue3d (a, on): the same card for an actor (0x406bf0 is 0x42caa0's
+  // twin; ActorRuntime.card). Only the BOOTFILE's debugging `changemethod` turns
+  // it on, for every prop and actor at once
   acc5("actoristrue3d", actor, (a) => (a.true3d ? 1 : 0), (a, v) => { a.true3d = truthy(v); });
   // propsnap (p, on): the screen prop moves with the stage when a fight scrolls it
   // (`stageorigin`); 0x42cf2f adds the origin to its anchor (0x416420)

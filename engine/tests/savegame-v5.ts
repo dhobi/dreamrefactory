@@ -8,7 +8,7 @@
  * redjack/tests/machine/saves.ts.
  */
 import { test, expect } from "vitest";
-import { TABLE, isSaveV5, readSaveV5, saveVersionMatches, writeSaveV5, type SaveGameV5 } from "@dreamfactory/engine/df/savegame-v5";
+import { TABLE, isSaveV5, plainSaveShade, readSaveV5, saveVersionMatches, writeSaveV5, type SaveGameV5 } from "@dreamfactory/engine/df/savegame-v5";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 
@@ -33,16 +33,18 @@ function sample(): SaveGameV5 {
     runt: {
       frame: 12345, framerate: 3, setOpen: true, setVisible: true, setHandle: 1, setName: "rjbeach", scene: "Scene14", view: "node",
       deg: 8_388_608, pitch: -200_000, roll: 0, fov: 4_194_304, stageOpen: false, stageHandle: 0, stageName: "", flat: 0,
+      screen: { gamma: [128, 128, 128], bright: [40, 0, 0] }, stage: { gamma: [100, 128, 156], bright: [0, -10, 0] },
+      set: plainSaveShade(), movie: plainSaveShade(), puppet: { gamma: [0, 256, 128], bright: [255, -255, 1] },
     },
     actors: [{
       name: "anne", visible: true, castHandle: 2, member: 7, is3d: true, true3d: false, deg: 100, pitch: 0, roll: 0,
       x: 1, y: -2, z: 3, turn: 16, speed: 900, scale: 54000, value: 5, zclip: 75000, snap: false, ink: 8, flip: 0,
-      contrast: 0, brightness: 0, litby: 0, facer: false, set: "rjbeach", star: "anne", pose: "stand", owner: "none",
+      shade: { gamma: [118, 128, 138], bright: [5, 6, 7] }, litby: 2, facer: false, set: "rjbeach", star: "anne", pose: "stand", owner: "none",
     }],
     casts: [{ handle: 2, name: "rjbeach" }],
     props: [{
       name: "torch", shown: -1, shopHandle: 3, member: 40, is3d: false, true3d: false, deg: 0, pitch: 0, roll: 0,
-      x: 320, y: 240, z: -5, scale: 0, value: 0, zclip: 0, snap: true, ink: 8, flip: 1, contrast: 0, brightness: 0,
+      x: 320, y: 240, z: -5, scale: 0, value: 0, zclip: 0, snap: true, ink: 8, flip: 1, shade: plainSaveShade(),
       litby: 0, facer: true, set: "", star: "", view: "lit", owner: "nick",
     }],
     shops: [{ handle: 3, name: "rjbeach" }],
@@ -102,4 +104,62 @@ test("opengame refuses another version's save, or a file that is not one, before
   expect(await session.loadGame(bytes.slice(0, 100), "2")).toBe(false);
   expect(logs.at(-1)).toBe("opengame: This is not a valid saved game file.");
   expect(session.interp.globals.get("day")).toBe(1);
+});
+
+test("the shading records sit where RedJack.exe keeps them", () => {
+  const s = sample();
+  const bytes = writeSaveV5(s);
+  const read = readSaveV5(bytes);
+  expect(read.actors[0].shade).toEqual({ gamma: [118, 128, 138], bright: [5, 6, 7] });
+  expect(read.runt.puppet).toEqual({ gamma: [0, 256, 128], bright: [255, -255, 1] });
+  // container i's data is at its position-table entry + 8
+  const v = new DataView(bytes.buffer);
+  const at = (i: number) => v.getUint32(1024 + i * 4, true) + 8;
+  // RUNT: the screen's gamma then brightness at +0x2e (0x4c7836), the stage's at +0xc0 (0x4c78c8)
+  expect(v.getInt16(at(1) + 0x2e + 6, true)).toBe(40);
+  expect([0, 2, 4].map((k) => v.getInt16(at(1) + 0xc0 + k, true))).toEqual([100, 128, 156]);
+  // an actor's record at +0x9e (blue gamma +0xa2, the value form at 0x40645d), litby at +0xae
+  const actor = at(2) + 0x20;
+  expect([0x9e, 0xa0, 0xa2, 0xa4, 0xa6, 0xa8].map((o) => v.getInt16(actor + o, true))).toEqual([118, 128, 138, 5, 6, 7]);
+  expect(v.getInt16(actor + 0xae, true)).toBe(2);
+  // a prop's at +0x9a (blue gamma +0x9e, 0x42c39d), its table id at +0xa6, litby at +0xaa
+  const prop = at(4) + 0x20;
+  expect([0x9a, 0x9c, 0x9e, 0xa0].map((o) => v.getInt16(prop + o, true))).toEqual([128, 128, 128, 0]);
+  expect(v.getUint32(prop + 0xa6, true)).not.toBe(0);
+});
+
+test("a save from before the port wrote the shading reads as plain, not as whited out", () => {
+  const bytes = writeSaveV5(sample());
+  const v = new DataView(bytes.buffer);
+  const actor = v.getUint32(1024 + 2 * 4, true) + 8 + 0x20;
+  for (let o = 0x9e; o < 0xaa; o += 2) v.setInt16(actor + o, 0, true);
+  expect(readSaveV5(bytes).actors[0].shade).toEqual(plainSaveShade());
+});
+
+test("the group records come back from a save, and the puppet's table from the set's", async () => {
+  const from = new GameSession(() => null, new NullAudioSink());
+  from.isV5 = true;
+  from.screenBright = [10, 0, -10];
+  from.screenContrast = [0, 20, 0];
+  from.lights.stage.bright = [1, 2, 3];
+  from.lights.set.contrast = [30, 30, 30];
+  from.lights.movie.bright = [7, 7, 7];
+  from.lights.puppet.bright = [9, 9, 9];
+  const bytes = from.snapshotSave("2")!;
+
+  const to = new GameSession(() => null, new NullAudioSink());
+  to.isV5 = true;
+  expect(await to.loadGame(bytes, "2")).toBe(true);
+  expect([to.screenBright, to.screenContrast]).toEqual([[10, 0, -10], [0, 20, 0]]);
+  expect(to.lights.stage.bright).toEqual([1, 2, 3]);
+  expect(to.lights.set.contrast).toEqual([30, 30, 30]);
+  expect(to.lights.movie.bright).toEqual([7, 7, 7]);
+  // the puppet's record is its own, but it is drawn through the set's (0x43d571)
+  expect(to.lights.puppet.bright).toEqual([9, 9, 9]);
+  expect(to.lights.group(5)).toEqual({ bright: [0, 0, 0], contrast: [30, 30, 30] });
+  const call = (name: string, ...args: number[]) => to.interp.builtins.get(name)!(to.interp, args, {} as never, {} as never);
+  await call("puppetcontrast", 0, 0, 0);
+  expect(to.lights.group(5)).toEqual({ bright: [9, 9, 9], contrast: [0, 0, 0] });
+  // and the save written from the loaded game says the same
+  expect(readSaveV5(to.snapshotSave("2")!).runt.stage).toEqual(readSaveV5(bytes).runt.stage);
 });

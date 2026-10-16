@@ -244,17 +244,151 @@ export function viewGoesRound(st: PropState): boolean {
 }
 
 /**
- * A true-3D prop's picture as a plane in the room — see {@link PropRuntime.cardOf}.
- * `o` is the frame's top-left corner, `r` one frame pixel to the right and `d`
- * one down, all in room units; `n` is the side it faces.
+ * A true-3D picture as a plane in the room — a prop's or an actor's, see
+ * {@link cardOf}. `o` is the frame's top-left corner, `r` one frame pixel to
+ * the right and `d` one down, all in room units; `n` is the plane's normal.
  */
-interface Card {
+export interface Card {
   f: ShpFrame;
   o: [number, number, number];
   r: [number, number, number];
   d: [number, number, number];
   n: [number, number, number];
   box: { x0: number; y0: number; x1: number; y1: number };
+}
+
+/**
+ * What a true-3D picture is posed by: a prop's or an actor's record, which
+ * RedJack.exe lays out alike — the heading, pitch and roll and then the point
+ * (prop and actor +0x1a.., copied whole into the draw record at +0x36 by
+ * 0x42cbfa and 0x406d4a), the scale, the flip bits and the facer flag.
+ */
+export interface CardPose {
+  worldX: number;
+  worldY: number;
+  worldZ: number;
+  deg: Value;
+  pitch: number;
+  roll: number;
+  facer: boolean;
+  flip: number;
+  scale: number;
+}
+
+/** an angle as RedJack.exe moves one half round: `(a + 0x800000)`, its magnitude held to 24 bits and its sign kept (0x42cc3b) */
+const halfRound = (a: number): number => {
+  const v = (a + TURN / 2) | 0;
+  return v < 0 ? -(-v & (TURN - 1)) : v & (TURN - 1);
+};
+
+/**
+ * A true-3D picture (`propistrue3d`, `actoristrue3d`) as the plane RedJack.exe
+ * draws it. The prop pass (0x42caa0) and the actor pass (0x406bf0) are the same
+ * code over their own records: each hands the 3D renderer (0x456540) the pose —
+ * heading, pitch, roll and point — the scale, the frame's size and hot spot, and
+ * reads the corners back from 0x45b700, which measures the frame's rectangle
+ * from the hot spot. So one frame pixel is scale/1000 room units, as big as the
+ * sprite it would otherwise be.
+ *
+ * A facer (prop +0xac, actor +0xb0; 0x42cbfc, 0x406d4c) takes for its heading
+ * the bearing from the CAMERA to the picture (0x41df00 with the camera first),
+ * the way the camera looks at it; the others keep their `propdeg`/`actordeg`.
+ * `propflip`/`actorflip` turn the plane half round rather than mirroring the
+ * picture: bit 1 the heading, bit 2 the pitch (0x42cc3b, 0x42cc5c).
+ *
+ * 0x456540's matrix, in floats from the three angles (sin 0x45e670, cos
+ * 0x45e5c0), has the picture's right, its down and its normal as columns in
+ * room axes — the first two times scale/1000 (0x4566b4 .. 0x4567f9):
+ *
+ *   right  = (cR sH + sP cH sR,  sR sP sH − cR cH,     cP sR) × k
+ *   down   = (sR sH − sP cR cH,  −(cR sP sH + cH sR),  −cR cP) × k
+ *   normal = (cP cH,             cP sH,                 −sP)
+ *
+ * — so a heading H shows the picture square to a camera looking along H, and
+ * a facer is square to you whatever the camera does. A roll turns right toward
+ * up (with R a quarter, right is the unrolled up). A picture that is neither a
+ * facer nor turned is seen square from a camera with heading 0.
+ */
+export function cardOf(f: ShpFrame, at: CardPose, cam: WorldCamera, v5: SpriteCamera): Card {
+  let hd: number;
+  if (at.facer) {
+    const eye = v5.ray(cam.cx, cam.cy);
+    // 0x41df00: atan2 of the y and x differences in 2²⁴ths, truncated and masked
+    hd = Math.trunc((Math.atan2(at.worldY - eye.y, at.worldX - eye.x) * TURN) / (2 * Math.PI)) & (TURN - 1);
+  } else hd = Math.trunc(Number(at.deg)) || 0;
+  let pd = at.pitch;
+  if (at.flip & 1) hd = halfRound(hd);
+  if (at.flip & 2) pd = halfRound(pd);
+  const rad = (v: number): number => (v / TURN) * 2 * Math.PI;
+  const [sH, cH] = [Math.sin(rad(hd)), Math.cos(rad(hd))];
+  const [sP, cP] = [Math.sin(rad(pd)), Math.cos(rad(pd))];
+  const [sR, cR] = [Math.sin(rad(at.roll)), Math.cos(rad(at.roll))];
+  const k = at.scale / 1000;
+  const r: [number, number, number] = [(cR * sH + sP * cH * sR) * k, (sR * sP * sH - cR * cH) * k, cP * sR * k];
+  const d: [number, number, number] = [(sR * sH - sP * cR * cH) * k, -(cR * sP * sH + cH * sR) * k, -cR * cP * k];
+  const n: [number, number, number] = [cP * cH, cP * sH, -sP];
+  const o: [number, number, number] = [
+    at.worldX - r[0] * f.posXraw - d[0] * f.posYraw,
+    at.worldY - r[1] * f.posXraw - d[1] * f.posYraw,
+    at.worldZ - r[2] * f.posXraw - d[2] * f.posYraw,
+  ];
+  // on the screen: round its four corners, or all of it if one is behind you
+  let box = { x0: 0, y0: 0, x1: cam.clipW, y1: cam.clipH };
+  const corners = [[0, 0], [f.width, 0], [0, f.height], [f.width, f.height]].map(([u, v]) =>
+    v5.project(o[0] + r[0] * u + d[0] * v, o[1] + r[1] * u + d[1] * v, o[2] + r[2] * u + d[2] * v),
+  );
+  if (corners.every(Boolean)) {
+    const xs = corners.map((c) => c!.x);
+    const ys = corners.map((c) => c!.y);
+    box = {
+      x0: Math.max(0, Math.min(...xs) - 1),
+      y0: Math.max(0, Math.min(...ys) - 1),
+      x1: Math.min(cam.clipW, Math.max(...xs) + 2),
+      y1: Math.min(cam.clipH, Math.max(...ys) + 2),
+    };
+  }
+  return { f, o, r, d, n, box };
+}
+
+/** the picture's pixel a screen point sees on a card, and its depth along the view */
+export function cardTexel(c: Card, v5: SpriteCamera, sx: number, sy: number): { i: number; axial: number } | null {
+  const ray = v5.ray(sx + 0.5, sy + 0.5);
+  const dir = [ray.dx, ray.dy, ray.dz];
+  const facing = dot3(dir, c.n);
+  if (Math.abs(facing) < 1e-9) return null;
+  const t = dot3([c.o[0] - ray.x, c.o[1] - ray.y, c.o[2] - ray.z], c.n) / facing;
+  if (t <= 0) return null;
+  const q = [ray.x + t * dir[0] - c.o[0], ray.y + t * dir[1] - c.o[1], ray.z + t * dir[2] - c.o[2]];
+  const u = Math.floor(dot3(q, c.r) / dot3(c.r, c.r));
+  const v = Math.floor(dot3(q, c.d) / dot3(c.d, c.d));
+  if (u < 0 || v < 0 || u >= c.f.width || v >= c.f.height) return null;
+  // the ray is one unit deep per unit along it, so how far along is how deep
+  return { i: v * c.f.width + u, axial: t };
+}
+
+/**
+ * Paint a card's opaque pixels through `pal` at opacity `alpha`; `hidden` says
+ * which are behind the scenery — each at its own depth, so a card seen edge-on
+ * runs into it.
+ */
+export function paintCard(
+  c: Card,
+  v5: SpriteCamera,
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  pal: Uint8ClampedArray,
+  alpha: number,
+  hidden?: (x: number, y: number, axial: number) => boolean,
+): void {
+  for (let ty = c.box.y0; ty < Math.min(c.box.y1, height); ty++) {
+    for (let tx = c.box.x0; tx < Math.min(c.box.x1, width); tx++) {
+      const t = cardTexel(c, v5, tx, ty);
+      if (!t || !c.f.opaque[t.i]) continue;
+      if (hidden?.(tx, ty, t.axial)) continue;
+      inkPixel(rgba, (ty * width + tx) * 4, pal, c.f.indexed[t.i] * 4, alpha);
+    }
+  }
 }
 const NO_ORIGIN: Readonly<{ x: number; y: number }> = { x: 0, y: 0 };
 const dot3 = (a: readonly number[], b: readonly number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -359,12 +493,12 @@ export class PropInstance {
    * it upside down — the prop record's +0x98, which RedJack.exe's placement
    * (`0x42caa0`) reads to mirror the frame's hot spot with it — for a room prop
    * and for a screen one alike (0x42ce81). A true-3D prop turns half round
-   * instead ({@link PropRuntime.cardOf}).
+   * instead ({@link cardOf}).
    */
   flip = 0;
   /**
    * DreamFactory 5's `propistrue3d`: drawn as a flat picture standing in the
-   * room ({@link PropRuntime.cardOf}), turned by `deg` and tilted by
+   * room ({@link cardOf}), turned by `deg` and tilted by
    * {@link pitch}, instead of a sprite square to the screen.
    */
   true3d = false;
@@ -380,7 +514,7 @@ export class PropInstance {
   contrast: [number, number, number] = [0, 0, 0];
   /** `proplitby`: the name it was last given, as its index in LIT_BY (prop +0xaa) */
   litby = 0;
-  /** ...and the group whose record it is drawn under: the screen's until a litby moves it (0x427767) */
+  /** ...and the group whose record it is drawn under: the screen's until a litby moves it (0x427767), none (LIT_NONE) after a load if it was "default" */
   lightGroup = 1;
   /** `proproll`: a true-3D picture's turn about its own face, in 2²⁴ths of a turn (prop +0x22) */
   roll = 0;
@@ -897,7 +1031,7 @@ export class PropRuntime {
   lights: Lights | null = null;
   /** the palette a prop is drawn through: its own record under its group's (runtime/shading.ts) */
   private shade(p: PropInstance, pal: Uint8ClampedArray): Uint8ClampedArray {
-    return shadedPalette(pal, p, this.lights?.group(p.lightGroup) ?? null);
+    return this.lights ? this.lights.spritePalette(pal, p, p.lightGroup) : shadedPalette(pal, p);
   }
 
   /**
@@ -1112,7 +1246,7 @@ export class PropRuntime {
         const { p, proj } = world[i];
         if (p.true3d && cam.v5) {
           const c = this.cardOf(p, cam, cam.v5);
-          const t = c && this.cardTexel(c, cam.v5, x, y);
+          const t = c && cardTexel(c, cam.v5, x, y);
           if (!t || !c!.f.opaque[t.i]) continue;
           if (occ && sceneryOccludes(occ, x, y, this.occludeAt(p, t.axial, occ))) continue;
           return p;
@@ -1137,86 +1271,11 @@ export class PropRuntime {
     return depthLevel(depth - Number(p.zclip) + (occ.groundBias ?? 0), occ);
   }
 
-  /**
-   * A true-3D prop (DreamFactory 5's `propistrue3d`) as the plane RedJack.exe
-   * draws it: 0x42caa0 hands the 3D renderer (0x456540) the prop's pose —
-   * heading, pitch and roll, then its point — its `propscale` over 1000, and the
-   * frame's size and hot spot, and the renderer's corners are the frame's
-   * rectangle measured from the hot spot (0x45b700). So one frame pixel is
-   * scale/1000 room units, as big as the sprite it would otherwise be.
-   *
-   * A facer (0x42cbfc) takes the bearing from the prop to the camera for its
-   * heading; the others keep their `propdeg`. `propflip` turns the plane half
-   * round rather than mirroring the picture (0x42cc3b, 0x42cc5c): bit 1 on the
-   * heading, bit 2 on the pitch.
-   *
-   * Which way the picture's right and down run, for a given heading, is not read
-   * off the renderer's matrix (0x456540 builds it from the three angles in floats
-   * and it has not been followed through); it is taken to be the camera's own
-   * convention (MazeRuntime.spriteCamera), which puts a facer's picture square
-   * and unmirrored in front of you — the one case that can be checked by eye.
-   */
+  /** a true-3D prop's card: its frame as {@link cardOf} stands it in the room */
   private cardOf(p: PropInstance, cam: WorldCamera, v5: SpriteCamera): Card | null {
     const st = p.state();
     if (!st) return null;
-    const f = p.shop.frame(st.frames[this.worldFrameIdx(p, st.frames.length, cam)]);
-    const eye = v5.ray(cam.cx, cam.cy);
-    const turn = (v: number): number => (v * 2 * Math.PI) / TURN;
-    let h = p.facer ? Math.atan2(eye.y - p.worldY, eye.x - p.worldX) : turn(Number(p.deg) || 0);
-    let pitch = turn(p.pitch);
-    if (p.flip & 1) h += Math.PI;
-    if (p.flip & 2) pitch += Math.PI;
-    const k = p.scale / 1000;
-    const [sH, cH, sP, cP] = [Math.sin(h), Math.cos(h), Math.sin(pitch), Math.cos(pitch)];
-    const n: [number, number, number] = [cH * cP, sH * cP, sP];
-    let r: [number, number, number] = [-sH * k, cH * k, 0];
-    let d: [number, number, number] = [cH * sP * k, sH * sP * k, -cP * k];
-    // `proproll` turns the picture about its own face. Which way round is not
-    // read off 0x456540's matrix either; taken as clockwise as you face it
-    if (p.roll) {
-      const [sR, cR] = [Math.sin(turn(p.roll)), Math.cos(turn(p.roll))];
-      [r, d] = [
-        [r[0] * cR + d[0] * sR, r[1] * cR + d[1] * sR, r[2] * cR + d[2] * sR],
-        [d[0] * cR - r[0] * sR, d[1] * cR - r[1] * sR, d[2] * cR - r[2] * sR],
-      ];
-    }
-    const o: [number, number, number] = [
-      p.worldX - r[0] * f.posXraw - d[0] * f.posYraw,
-      p.worldY - r[1] * f.posXraw - d[1] * f.posYraw,
-      p.worldZ - r[2] * f.posXraw - d[2] * f.posYraw,
-    ];
-    // on the screen: round its four corners, or all of it if one is behind you
-    let box = { x0: 0, y0: 0, x1: cam.clipW, y1: cam.clipH };
-    const corners = [[0, 0], [f.width, 0], [0, f.height], [f.width, f.height]].map(([u, v]) =>
-      v5.project(o[0] + r[0] * u + d[0] * v, o[1] + r[1] * u + d[1] * v, o[2] + r[2] * u + d[2] * v),
-    );
-    if (corners.every(Boolean)) {
-      const xs = corners.map((c) => c!.x);
-      const ys = corners.map((c) => c!.y);
-      box = {
-        x0: Math.max(0, Math.min(...xs) - 1),
-        y0: Math.max(0, Math.min(...ys) - 1),
-        x1: Math.min(cam.clipW, Math.max(...xs) + 2),
-        y1: Math.min(cam.clipH, Math.max(...ys) + 2),
-      };
-    }
-    return { f, o, r, d, n, box };
-  }
-
-  /** the picture's pixel a screen point sees on a card, and its depth along the view */
-  private cardTexel(c: Card, v5: SpriteCamera, sx: number, sy: number): { i: number; axial: number } | null {
-    const ray = v5.ray(sx + 0.5, sy + 0.5);
-    const dir = [ray.dx, ray.dy, ray.dz];
-    const facing = dot3(dir, c.n);
-    if (Math.abs(facing) < 1e-9) return null;
-    const t = dot3([c.o[0] - ray.x, c.o[1] - ray.y, c.o[2] - ray.z], c.n) / facing;
-    if (t <= 0) return null;
-    const q = [ray.x + t * dir[0] - c.o[0], ray.y + t * dir[1] - c.o[1], ray.z + t * dir[2] - c.o[2]];
-    const u = Math.floor(dot3(q, c.r) / dot3(c.r, c.r));
-    const v = Math.floor(dot3(q, c.d) / dot3(c.d, c.d));
-    if (u < 0 || v < 0 || u >= c.f.width || v >= c.f.height) return null;
-    // the ray is one unit deep per unit along it, so how far along is how deep
-    return { i: v * c.f.width + u, axial: t };
+    return cardOf(p.shop.frame(st.frames[this.worldFrameIdx(p, st.frames.length, cam)]), p, cam, v5);
   }
 
   /**
@@ -1236,17 +1295,8 @@ export class PropRuntime {
     if (p.true3d && cam.v5) {
       const c = this.cardOf(p, cam, cam.v5);
       if (!c) return;
-      const pal = this.shade(p, c.f.palette ?? paletteRGBA);
-      const alpha = inkAlpha(p.ink);
-      for (let ty = c.box.y0; ty < Math.min(c.box.y1, height); ty++) {
-        for (let tx = c.box.x0; tx < Math.min(c.box.x1, width); tx++) {
-          const t = this.cardTexel(c, cam.v5, tx, ty);
-          if (!t || !c.f.opaque[t.i]) continue;
-          // each pixel at its own depth: a card seen edge-on runs into the scenery
-          if (occ && sceneryOccludes(occ, tx, ty, this.occludeAt(p, t.axial, occ))) continue;
-          inkPixel(rgba, (ty * width + tx) * 4, pal, c.f.indexed[t.i] * 4, alpha);
-        }
-      }
+      const hidden = occ ? (x: number, y: number, axial: number) => sceneryOccludes(occ, x, y, this.occludeAt(p, axial, occ)) : undefined;
+      paintCard(c, cam.v5, rgba, width, height, this.shade(p, c.f.palette ?? paletteRGBA), inkAlpha(p.ink), hidden);
       return;
     }
     const r = this.worldRect(p, proj, cam);

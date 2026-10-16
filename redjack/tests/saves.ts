@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { TABLE, writeSaveV5 } from "@dreamfactory/engine/df/savegame-v5";
+import { TABLE, plainSaveShade, writeSaveV5 } from "@dreamfactory/engine/df/savegame-v5";
 
 const store = vi.hoisted(() => ({
   saves: new Map<string, { path: string; folder: string; name: string; bytes: Uint8Array; builtin: boolean }>(),
@@ -49,6 +49,7 @@ const SAVE = writeSaveV5({
   runt: {
     frame: 1, framerate: 3, setOpen: true, setVisible: true, setHandle: 1, setName: "liznite", scene: "Scene1", view: "node",
     deg: 0, pitch: 0, roll: 0, fov: 4_194_304, stageOpen: false, stageHandle: 0, stageName: "", flat: 0,
+    screen: plainSaveShade(), stage: plainSaveShade(), set: plainSaveShade(), movie: plainSaveShade(), puppet: plainSaveShade(),
   },
   actors: [],
   casts: [],

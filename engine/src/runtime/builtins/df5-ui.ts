@@ -288,20 +288,23 @@ export function registerDf5UiBuiltins(ctx: BuiltinCtx): void {
   });
   /**
    * launchroad (road, forward, n) (0x441af0): the road by name (kind 0, else
-   * 0xa), a boolean (0xe), an integer above 0 (0xe, 0xa); it warms the room's
-   * films as roadwarm does and hands the road's film one way or the other
-   * (`forward` picks the record's +0x20, else +0x24) and n, clamped to 4..64,
-   * to 0x439620, which starts the frame loop's own road mode (mode 3 at
-   * 0x4c8f40). That mode is not modelled — see MazeRuntime.walkStep — so past
-   * the checks the port logs the call and plays nothing. No RedJack script
-   * calls it.
+   * 0xa), a boolean (0xe), an integer above 0 (0xe, 0xa); it warms every
+   * road's films as roadwarm does (0x441bd2 .. 0x441cbb) and hands the road's
+   * film one way or the other — `forward` picks the record's +20, else its +24
+   * (0x441cce) — and n to 0x439620, which plays it in the frame loop's road mode
+   * (MazeRuntime.launchRoad, roadStep). A road record with no film that way
+   * round would hand 0x439620 nothing to play; the port logs it and plays
+   * nothing. No RedJack script calls it.
    */
   r5("launchroad", (_i, [name, forward, n]) => {
     const m = room("launchroad");
     const road = roadNamed("launchroad", m, str("launchroad", name));
-    bool("launchroad", forward);
-    if (int("launchroad", n) <= 0) throw new ScriptError(0xa, `launchroad: ${String(n)}`);
-    session.onLog(`launchroad ${road.name}: the road mode is not modelled`);
+    const fwd = bool("launchroad", forward);
+    const ahead = int("launchroad", n);
+    if (ahead <= 0) throw new ScriptError(0xa, `launchroad: ${String(n)}`);
+    const film = road.ends[fwd ? 0 : 1];
+    if (!film?.frames.length) session.onLog(`launchroad ${road.name}: no film ${fwd ? "forward" : "back"}`);
+    else m.launchRoad(film, ahead);
     return 0;
   });
   /**

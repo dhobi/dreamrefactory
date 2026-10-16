@@ -30,6 +30,7 @@ import {
   SaveGameV5,
   SaveGlobalV5,
   SavePropV5,
+  SaveShadeV5,
   SaveTrackV5,
   TABLE,
   readSaveV5,
@@ -39,6 +40,7 @@ import {
 import { decodeCrickets, decodeLoops, decodeWalks, encodeCrickets, encodeLoops, encodeWalks } from "./saveload-v5-tables";
 import { toNum } from "./interp";
 import { frameIndexForDegree } from "./props";
+import { LIT_BY, contrastOf, gammaOf } from "./shading";
 import type { GameSession } from "./session";
 
 /**
@@ -113,9 +115,8 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
     snap: false,
     ink: a.ink,
     flip: a.flip,
-    contrast: 0,
-    brightness: 0,
-    litby: 0,
+    shade: shadeOut(a),
+    litby: a.litby,
     facer: false,
     set: a.setName,
     star: a.starName,
@@ -145,9 +146,8 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
     snap: p.snap,
     ink: p.ink,
     flip: p.flip,
-    contrast: 0,
-    brightness: 0,
-    litby: 0,
+    shade: shadeOut(p),
+    litby: p.litby,
     facer: p.facer,
     set: p.setName,
     star: p.starName,
@@ -200,6 +200,11 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
       stageHandle: handle(stageFile),
       stageName: stageFile.replace(/\.stag$/, ""),
       flat: Math.max(0, session.stageCtrl.stageFile?.flats.findIndex((f) => f.name.toLowerCase() === session.currentFlat.toLowerCase()) ?? 0),
+      screen: shadeOut({ bright: session.screenBright, contrast: session.screenContrast }),
+      stage: shadeOut(session.lights.stage),
+      set: shadeOut(session.lights.set),
+      movie: shadeOut(session.lights.movie),
+      puppet: shadeOut(session.lights.puppet),
     },
     actors,
     casts,
@@ -214,6 +219,50 @@ export function snapshotSaveV5(session: GameSession, version = REDJACK_SAVE_VERS
     copies: new Uint8Array(TABLE.copies.slots * TABLE.copies.stride),
   };
   return writeSaveV5(save);
+}
+
+/** a record as the engine keeps it: the gamma 128 − contrast (0x40a870), then the brightness */
+function shadeOut(s: { bright: readonly number[]; contrast: readonly number[] }): SaveShadeV5 {
+  return {
+    gamma: [gammaOf(s.contrast[0]), gammaOf(s.contrast[1]), gammaOf(s.contrast[2])],
+    bright: [s.bright[0], s.bright[1], s.bright[2]],
+  };
+}
+
+const contrastIn = (s: SaveShadeV5): [number, number, number] =>
+  [contrastOf(s.gamma[0]), contrastOf(s.gamma[1]), contrastOf(s.gamma[2])];
+
+/**
+ * A sprite's record back, and where the resume hangs it: under the group its
+ * `litby` names (0x43de7f, 0x43e085 -> 0x40a750 -> 0x46efe0), the screen's for
+ * "screen" — and for "default" under NOTHING, not even the screen, where in play
+ * "default" never moved it off the screen or the group it was under
+ * (runtime/shading.ts, LIT_NONE).
+ */
+function shadeIn(e: { bright: number[]; contrast: number[]; litby: number; lightGroup: number }, s: SaveShadeV5, litby: number): void {
+  e.bright = [s.bright[0], s.bright[1], s.bright[2]];
+  e.contrast = contrastIn(s);
+  e.litby = litby >= 0 && litby < LIT_BY.length ? litby : 0;
+  e.lightGroup = e.litby;
+}
+
+/**
+ * The group records, out of RUNT (0x43d474 reads it whole), and their tables
+ * built again (0x43d519..0x43d58e): the screen's first, the movie's, the
+ * stage's and the set's under it — and the puppet's from the SET's record, so a
+ * sprite or a puppet lit by the puppet is drawn through the set's lights until
+ * a `puppet…` statement rebuilds the table from the puppet's own.
+ */
+function restoreLightsV5(session: GameSession, save: SaveGameV5): void {
+  const r = save.runt;
+  session.screenBright = [r.screen.bright[0], r.screen.bright[1], r.screen.bright[2]];
+  session.screenContrast = contrastIn(r.screen);
+  const L = session.lights;
+  for (const name of ["stage", "set", "movie", "puppet"] as const) {
+    L[name].bright = [r[name].bright[0], r[name].bright[1], r[name].bright[2]];
+    L[name].contrast = contrastIn(r[name]);
+  }
+  L.puppetTable = { bright: [L.set.bright[0], L.set.bright[1], L.set.bright[2]], contrast: [L.set.contrast[0], L.set.contrast[1], L.set.contrast[2]] };
 }
 
 // ---- reading -------------------------------------------------------------------
@@ -278,6 +327,7 @@ export async function loadGameV5(session: GameSession, bytes: Uint8Array, versio
   // path slots 1–8 are installed (0x43c7f0); slot 0 stays the running game's
   for (let i = 1; i < 9; i++) session.pathSlots[i] = save.paths[i] ?? "";
   if (save.disc) session.mountedCd = save.disc;
+  restoreLightsV5(session, save);
 
   // ---- the rebuild, with every script muted ----------------------------------
   session.restoringSave = true;
@@ -363,6 +413,7 @@ function restoreActorsV5(session: GameSession, save: SaveGameV5, file: (h: numbe
     a.zclip = r.zclip;
     a.ink = r.ink;
     a.flip = r.flip;
+    shadeIn(a, r.shade, r.litby);
     a.setName = r.set;
     a.starName = r.star;
     a.poseName = r.pose || "stand";
@@ -410,6 +461,7 @@ function restorePropsV5(session: GameSession, save: SaveGameV5, file: (h: number
     p.snap = r.snap;
     p.ink = r.ink;
     p.flip = r.flip;
+    shadeIn(p, r.shade, r.litby);
     p.facer = r.facer;
     p.setName = r.set;
     p.starName = r.star;
