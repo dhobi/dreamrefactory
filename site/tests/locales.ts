@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import en, { Value } from "@dreamfactory/chrome/locales/en";
 import { applyTranslations, t } from "@dreamfactory/chrome/locales";
-import { UI_LANGUAGES, DEFAULT_UI_LANGUAGE } from "@dreamfactory/chrome/ui-languages";
+import { UI_LANGUAGES, DEFAULT_UI_LANGUAGE } from "@dreamfactory/chrome/locales/ui-languages";
 
 // the repository root: the pages this reads belong to two different packages
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));

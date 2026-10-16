@@ -21,9 +21,9 @@ import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { playFilm, trackPress } from "@dreamfactory/engine/v0/film";
 import { talk, type TalkLook, type TalkState } from "@dreamfactory/engine/v0/talk";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import type { Co, Machine } from "./machine";
+import type { Co, Machine } from "./core/machine";
 import { DoubleClick, anchored, inRect } from "./screens";
-import type { Records } from "./records";
+import type { Records } from "./core/records";
 
 /** the six, in the EXE's order (`[0x43b300]`), and their files' names */
 export const PILOTS = ["lark", "cheese", "chablis", "dogstar", "nikki", "thrash"] as const;

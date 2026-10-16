@@ -9,7 +9,7 @@
  *   npm test -w jumpraven -- back
  */
 import { test } from "vitest";
-import { newTally } from "../../src/game/records";
+import { newTally } from "../../src/game/core/records";
 import { fail, ok, pass, start, haveRip } from "./harness";
 
 test.skipIf(!haveRip())("back", async () => {

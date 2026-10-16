@@ -52,7 +52,7 @@ import {
   DEFAULT_UI_LANGUAGE,
   UI_LANG_STORAGE_KEY,
   isUiLanguage,
-} from "../ui-languages";
+} from "./ui-languages";
 import en, { Catalogue, Key, Value } from "./en";
 
 /**

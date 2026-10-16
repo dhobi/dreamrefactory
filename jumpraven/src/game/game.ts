@@ -29,9 +29,9 @@ import {
   PUPPET_MENU, PUPPET_SCORES, RIGHT_PANEL, SCORES_INK, SCORE_BUTTONS, SIDE_PANELS, TALK_INK, TALK_PRESSED, TRAINING,
   dayOf, isFlying, type ScoreButton,
 } from "./data";
-import { Machine, type Co, type GameFiles, type Speaker } from "./machine";
+import { Machine, type Co, type GameFiles, type Speaker } from "./core/machine";
 import { KEY_ACTIONS, bindKeys, defaultKeys, keyFor, qualifies, readSco, sortPlaces, writeSco, type Sco } from "./sco";
-import { Comms, DEALER, ENEMY, FUEL, PILOT, REPAIR } from "./comms";
+import { Comms, DEALER, ENEMY, FUEL, PILOT, REPAIR } from "./core/comms";
 import { Mart, type MartState } from "./mart";
 import { PILOTS, Pilots, type PilotsState } from "./pilots";
 import { DEFAULT_BAND, Music } from "./music";
@@ -45,7 +45,7 @@ import { Rbay } from "./rbay";
 import type { Copilot } from "./combat/copilot";
 import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
 import { readMazeV0 } from "@dreamfactory/engine/df/maze-v0";
-import { AMMO_FULL, newRecords, startGame, type Records } from "./records";
+import { AMMO_FULL, newRecords, startGame, type Records } from "./core/records";
 import { inRect } from "./screens";
 import { readRvn, writeRvn, type SavedGame } from "./rvn";
 
@@ -951,7 +951,7 @@ export class JumpRaven {
     return null;
   }
 
-  /** File ▸ New (0x4222fb(1)): the records afresh (src/game/records.ts), and level 2 */
+  /** File ▸ New (0x4222fb(1)): the records afresh (src/game/core/records.ts), and level 2 */
   private *play(): Co<number> {
     startGame(this.records);
     this.hudState = newHudState();

@@ -20,7 +20,7 @@ import { beforeEach, expect, test } from "vitest";
 import { parseHTML } from "linkedom";
 import { JumpRaven } from "../src/game/game";
 import { Input } from "../src/game/input";
-import type { GameFiles } from "../src/game/machine";
+import type { GameFiles } from "../src/game/core/machine";
 import { installMenu } from "../src/menu";
 
 /** no rip: the menu never reads one, and the game is never ticked */

@@ -139,7 +139,7 @@ export interface GameEditions {
  * *Titanic: Adventure Out of Time* — six translations and one cut that is not a
  * translation.
  *
- * Stated outright rather than derived from `chrome/src/ui-languages.ts`, even though the
+ * Stated outright rather than derived from `chrome/src/locales/ui-languages.ts`, even though the
  * six codes and endonyms are the same strings. The game shipped in six languages
  * in 1996; the chrome is written in six because somebody translated it. Deriving
  * one from the other would turn a coincidence into a constraint and make the

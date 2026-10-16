@@ -25,7 +25,7 @@
 import { test } from "vitest";
 import { SCREEN_W } from "@dreamfactory/engine/v0/screen";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import { AMMO_FULL } from "../../src/game/records";
+import { AMMO_FULL } from "../../src/game/core/records";
 import { BOMBS, DEFENSIVE, LASERS, MISSILES, ROCKETS, SHELLS, type Pyro } from "../../src/game/combat/pyro";
 import { UNMASKED, VIEW_H, VIEW_W, World } from "../../src/game/combat/world";
 import { VIEW_LEFT, VIEW_TOP } from "../../src/game/flight";

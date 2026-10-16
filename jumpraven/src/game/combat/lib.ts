@@ -2,7 +2,7 @@
  * RAVEN.EXE's shared library helpers the actors call (0x426124 … 0x429314),
  * each by its address — the ones world.ts does not already hold.
  */
-import type { Chatter } from "../comms";
+import type { Chatter } from "../core/comms";
 import { dist, cosMul, sinMul, abs, newObj, CENTRE_X, CENTRE_Y, FOCAL, type Obj, type Pt, type World } from "./world";
 
 /** 0x427b47: `o` is in a block — never above 500 up */
@@ -262,7 +262,7 @@ export function waysToward(w: World, angle: number, dx: number, dy: number): [nu
 }
 
 /**
- * What the comms box's chatter in flight (0x413c6d(1), src/game/comms.ts)
+ * What the comms box's chatter in flight (0x413c6d(1), src/game/core/comms.ts)
  * reads of the world, each by the EXE's call
  */
 export function chatterOf(w: World): Chatter {

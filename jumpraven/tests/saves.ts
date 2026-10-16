@@ -13,7 +13,7 @@
 import { expect, test } from "vitest";
 import { JUMPRAVEN_SAVES } from "../src/saves";
 import { RVN_SIZE, writeRvn, type SavedGame } from "../src/game/rvn";
-import { newRecords, startGame } from "../src/game/records";
+import { newRecords, startGame } from "../src/game/core/records";
 
 /** a game as the HUD's SAVE writes it: day two's flight on Advanced */
 const game = (change: (s: SavedGame) => void = () => {}): Uint8Array => {

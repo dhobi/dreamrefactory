@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { JumpRaven, type JumpRavenOptions } from "../../src/game/game";
 import { Input } from "../../src/game/input";
-import type { GameFiles } from "../../src/game/machine";
+import type { GameFiles } from "../../src/game/core/machine";
 
 export const RIP = resolve(import.meta.dirname, "../../gamefiles/RAVEN");
 export const haveRip = (): boolean => existsSync(join(RIP, "RAVEN/RAVEN.EXE"));

@@ -6,13 +6,13 @@
  * (Mac type `RSAV`, creator `RAVE`). File ▸ Open (0x4222fb(2)) reads the same
  * 0x94 bytes into `0x439ee8` (0x421487) and 0x421199 puts them back.
  *
- * A game is what it holds between its levels (src/game/records.ts), the
+ * A game is what it holds between its levels (src/game/core/records.ts), the
  * difficulty, the pilot, the band and the level — nothing of the flight: a
  * save made in a flight opens at that flight's start. Little-endian words,
  * but for the score and the weapons' shots and hits, which are dwords; the
  * kills are words, cut from the EXE's dwords.
  */
-import { KINDS, type Records } from "./records";
+import { KINDS, type Records } from "./core/records";
 
 export const RVN_SIZE = 0x94;
 

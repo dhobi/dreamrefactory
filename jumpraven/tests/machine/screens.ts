@@ -31,7 +31,7 @@ import { BANDS, DEFAULT_BAND, bandRect } from "../../src/game/music";
 import { OWN, PRICES, cell, worth } from "../../src/game/mart";
 import { PILOTS, portrait } from "../../src/game/pilots";
 import { anchored } from "../../src/game/screens";
-import { AMMO_FULL, newTally } from "../../src/game/records";
+import { AMMO_FULL, newTally } from "../../src/game/core/records";
 import { readPictures } from "../../src/game/combat/world";
 import type { Hud } from "../../src/game/combat/hud";
 import { fail, haveRip, ok, pass, start } from "./harness";

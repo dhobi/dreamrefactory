@@ -53,8 +53,8 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { BitmapFont } from "@dreamfactory/engine/v0/font";
 import { SCREEN_H, SCREEN_W, type Rect } from "@dreamfactory/engine/v0/screen";
-import { AMMO_FULL } from "../records";
-import { PILOT, REPAIR, type Chatter, type Comms } from "../comms";
+import { AMMO_FULL } from "../core/records";
+import { PILOT, REPAIR, type Chatter, type Comms } from "../core/comms";
 import type { HudApi } from "./api";
 import { chatterOf, turnToward } from "./lib";
 import { World, abs, dist, inside, newObj, setObj, type Obj } from "./world";

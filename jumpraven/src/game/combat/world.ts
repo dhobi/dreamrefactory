@@ -38,8 +38,8 @@ import { readBankV0 } from "@dreamfactory/engine/df/banks";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import type { Machine } from "../machine";
-import type { Records } from "../records";
+import type { Machine } from "../core/machine";
+import type { Records } from "../core/records";
 import type { BikeApi, BossApi, CommsApi, CopilotApi, CopterApi, FuelApi, HudApi, JeepApi, PyroApi, TankApi, WeapApi } from "./api";
 
 /** the view: 256 across, 310 down (`[0x43b2d4]`) */

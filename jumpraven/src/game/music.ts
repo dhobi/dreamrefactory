@@ -13,7 +13,7 @@ import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { playFilm, trackPress } from "@dreamfactory/engine/v0/film";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
-import type { Co, Machine } from "./machine";
+import type { Co, Machine } from "./core/machine";
 import { DoubleClick, anchored, inRect } from "./screens";
 
 /** the bands' films (0x414d75) */

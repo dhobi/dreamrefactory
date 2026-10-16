@@ -19,7 +19,7 @@
  *   npm test -w jumpraven -- press
  */
 import { test } from "vitest";
-import { AMMO_FULL } from "../../src/game/records";
+import { AMMO_FULL } from "../../src/game/core/records";
 import { BOMBS, DEFENSIVE, LASERS, MISSILES, ROCKETS, type Pyro } from "../../src/game/combat/pyro";
 import { VIEW_H, VIEW_W } from "../../src/game/combat/world";
 import { VIEW_LEFT, VIEW_TOP } from "../../src/game/flight";

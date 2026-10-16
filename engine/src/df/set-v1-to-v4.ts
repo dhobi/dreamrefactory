@@ -4,7 +4,7 @@ import {
   type SetFile, type Transition,
 } from "./set";
 import { RUN_FRAMES, readSetFileV1, type SetFileV1, type V1Standpoint, type V1Transition } from "./set-v1";
-import { bearing } from "../runtime/geometry";
+import { bearing } from "./angle";
 
 /**
  * A Dust set in the shape the SetViewer already knows.
