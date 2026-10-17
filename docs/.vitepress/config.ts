@@ -146,6 +146,7 @@ export default withMermaid(
             { text: "Overview", link: "/engine/" },
             { text: "How a DreamFactory game works", link: "/engine/how-a-game-works" },
             { text: "Engine architecture", link: "/engine/architecture" },
+            { text: "Architecture map", link: "/engine/architecture-map" },
             { text: "The scripting language", link: "/engine/scripting-language" },
           ],
         },

@@ -11,7 +11,8 @@ name: Deploy docs
 #
 # It does NOT release on a tag, unlike the three builds in deploy.yml. Docs are
 # not versioned against a game: a correction to a format page should be readable
-# the day it is written, so any push that touches them publishes them.
+# the day it is written, so any push that touches them publishes them — and that
+# includes the code, which the architecture map is generated from.
 #
 # Unlike the games, the docs site cannot be path-independent — VitePress needs an
 # absolute `base` for its router, so docs/.vitepress/config.ts names
@@ -25,6 +26,10 @@ on:
     branches: [master]
     paths:
       - "docs/**"
+      # the architecture map is read out of the code at build time, so a move,
+      # a new folder or a new class in any workspace changes a docs page too
+      - "*/src/**"
+      - "tools/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs.yml"

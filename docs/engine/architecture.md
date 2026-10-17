@@ -24,6 +24,9 @@ rule: **nothing shared knows which game it is.**
 | `lunicus/` | *[Lunicus](../lunicus/)*: one page, DreamFactory 0; the game itself ported from `LUNICUS.EXE` into `src/game/` | `engine`, `chrome` |
 | `jumpraven/` | *[Jump Raven](../jumpraven/)*: the same kind of package, ported from `RAVEN.EXE`, with a player that wins it | `engine`, `chrome` |
 
+The [architecture map](architecture-map.md) draws the same packages from the
+code, and goes down from them to the folders, the files and the classes.
+
 `site/tests/layering.ts` enforces this: it fails the build if `engine/` or `chrome/`
 reaches for a game, or if any game reaches for another.
 
