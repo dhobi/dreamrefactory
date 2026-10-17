@@ -116,11 +116,8 @@ const existing = new Set(
 
 const wanted = (asked.length ? asked : [...TARGETS])
   .map((target) => ({ target, tag: `${target}-v${version(target)}` }))
-  .filter(({ tag }) => {
-    // with no arguments this is the whole point: release what has no tag yet
-    if (existing.has(tag) && !asked.length) return false;
-    return true;
-  });
+  // with no arguments this is the whole point: release what has no tag yet
+  .filter(({ tag }) => asked.length > 0 || !existing.has(tag));
 
 for (const { tag } of wanted) {
   if (existing.has(tag)) refuse(`${tag} is already on the remote — bump the version first`);

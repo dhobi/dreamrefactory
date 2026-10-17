@@ -226,7 +226,7 @@ export const rung: Segment = {
     asked = await answer(p, 101, "Yes.");
     asked = await answer(p, 101, "Three nights in advance?", asked);
     asked = await answer(p, 101, "I'll take the room for three nights.", asked);
-    asked = await answer(p, 101, "I'm ready to check in now.", asked);
+    await answer(p, 101, "I'm ready to check in now.", asked);
     await talkOut(p, LEAVING, "Fear", 2);
     if (num("phase") !== 5) throw new Error(`phase ${num("phase")}, not 5`);
     if (num("playercash") !== 772) throw new Error(`$${num("playercash")}, not $772`);

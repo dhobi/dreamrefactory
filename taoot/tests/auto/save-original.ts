@@ -20,7 +20,6 @@
  */
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
 import { parseSave } from "@dreamfactory/engine/df/savegame-read";
 import { applyPatch } from "@dreamfactory/engine/df/savegame-patch";

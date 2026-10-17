@@ -51,6 +51,40 @@ jobs:
         run: npm run test:portable
 
   # ---------------------------------------------------------------------------
+  # The repository's lint (eslint.config.js): SonarJS's rules, the ones SonarCloud
+  # gates on, run before the scan does. A pull request lints the files it
+  # changes, so code it does not touch never blocks it; a push to master lints
+  # everything. Fails on errors only — the complexity and nesting warnings are
+  # printed, not enforced.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Lint the changed files (a pull request) or all of them (master)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE" ]; then
+            git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- '*.ts' '*.mts' '*.js' '*.mjs' > changed.txt
+            if [ ! -s changed.txt ]; then echo "no script changed"; exit 0; fi
+            xargs npx eslint --quiet --no-warn-ignored < changed.txt
+          else
+            npx eslint --quiet .
+          fi
+
+  # ---------------------------------------------------------------------------
   # SonarQube Cloud's look at a pull request: the scan alone, on GitHub's
   # machines, without coverage — coverage is measured once a night by
   # coverage.yml, which also scans

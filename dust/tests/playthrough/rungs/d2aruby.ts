@@ -5,7 +5,6 @@ import {
   converse,
   offerInTalk,
   talkOut,
-  hold,
   openDoor,
   room,
   set,

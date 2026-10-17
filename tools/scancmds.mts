@@ -26,16 +26,16 @@ const opId = (name: string) => [...OPCODES].find(([, n]) => n === name)?.[0] ?? 
 const registered = new Set<string>();
 const noop = new Set<string>();
 function collect(src: string) {
-  for (const m of src.matchAll(/\br\(\s*"([a-zA-Z0-9_]+)"\s*,\s*([^\n]*)/g)) {
+  for (const m of src.matchAll(/\br\(\s*"(\w+)"\s*,\s*([^\n]*)/g)) {
     registered.add(m[1]);
     if (/=>\s*(\{\s*\}|0|-?\d+)\s*\)\s*;\s*(\/\/.*)?$/.test(m[2])) noop.add(m[1]);
   }
-  for (const m of src.matchAll(/registerSpecial\(\s*"([a-zA-Z0-9_]+)"/g)) registered.add(m[1]);
+  for (const m of src.matchAll(/registerSpecial\(\s*"(\w+)"/g)) registered.add(m[1]);
   for (const m of src.matchAll(/for \(const (\w+) of \[([\s\S]*?)\]\)\s*\{([\s\S]*?)\n\s*\}/g)) {
     const [, v, arr, body] = m;
     if (!new RegExp(`\\br\\(\\s*${v}\\b|registerSpecial\\(\\s*${v}\\b`).test(body)) continue;
     const isNoop = /=>\s*\{\s*\}|=>\s*0\b|=>\s*t\b|=>\s*\w+\s*\)/.test(body);
-    for (const [, n] of arr.matchAll(/"([a-zA-Z0-9_]+)"/g)) {
+    for (const [, n] of arr.matchAll(/"(\w+)"/g)) {
       registered.add(n);
       if (isNoop) noop.add(n);
     }

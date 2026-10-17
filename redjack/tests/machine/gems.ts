@@ -74,7 +74,6 @@ export function solveGems(): Move[] {
   const key = (s: State): string => `${((s.n - 1) % 8) + 1},${((s.a - 1) % 8) + 1},${s.gems.join("")},${s.nh},${s.ah}`;
   const start: State = { n: 1, a: 1, gems: START, nh: "", ah: "" };
   const seen = new Map<string, { from: string; move: Move } | null>([[key(start), null]]);
-  const states = new Map<string, State>([[key(start), start]]);
   const queue = [start];
   while (queue.length) {
     const s = queue.shift()!;
@@ -89,7 +88,6 @@ export function solveGems(): Move[] {
       const k = key(t);
       if (seen.has(k)) continue;
       seen.set(k, { from: key(s), move: m });
-      states.set(k, t);
       queue.push(t);
     }
   }

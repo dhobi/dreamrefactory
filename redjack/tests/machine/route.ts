@@ -137,7 +137,7 @@ export function findOnScreen(
     const cx = hits.reduce((a, p) => a + p.x, 0) / hits.length;
     const cy = hits.reduce((a, p) => a + p.y, 0) / hits.length;
     const d = (p: { x: number; y: number }): number => (p.x - cx) ** 2 + (p.y - cy) ** 2;
-    return hits.reduce((a, b) => (d(b) < d(a) ? b : a));
+    return hits.reduce((a, b) => (d(b) < d(a) ? b : a), hits[0]);
   }
   return null;
 }

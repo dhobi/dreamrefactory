@@ -256,7 +256,6 @@ function globeField(): Float32Array {
  * border) are left alone, so this is safe to call over anything.
  */
 function dimRect(c: Canvas, x: number, y: number, w: number, h: number, keep: number): void {
-  const span = RAMP_TO - RAMP_FROM;
   for (let yy = y; yy < y + h; yy++) {
     if (yy < 0 || yy >= c.height) continue;
     for (let xx = x; xx < x + w; xx++) {

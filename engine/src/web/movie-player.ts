@@ -1040,7 +1040,8 @@ export class MoviePlayer {
     // it. So the click that dismissed a close-up dies with the close-up instead
     // of reaching the room behind it. No TAOOT movie sets the bit, but read it
     // rather than assume it — the same as keySkips (MovFile.flags).
-    if (this.active && !(this.active.seg.flags & FLAG_ANY_INPUT_ABORTS)) {
+    const anyInputAborts = this.active ? (this.active.seg.flags & FLAG_ANY_INPUT_ABORTS) !== 0 : false;
+    if (this.active && !anyInputAborts) {
       this.session.events.flush();
     }
     this.active = null;

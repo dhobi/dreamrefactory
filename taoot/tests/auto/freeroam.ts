@@ -22,7 +22,7 @@ import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { readSetFile } from "@dreamfactory/engine/df/set";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { sniffScript, scriptToText } from "@dreamfactory/engine/df/script";
-import { newHost, drain, root } from "../harness";
+import { newHost, drain } from "../harness";
 import { DOOR_SPOTS } from "../../src/freeroam/doors.gen";
 import {
   doorSpot,

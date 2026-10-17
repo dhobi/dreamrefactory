@@ -359,7 +359,7 @@ export function turn(e: Enemy): void {
  * of the arc with its last airborne foot still kept ({@link Enemy.lastBase},
  * which only a landing clears).
  */
-export const gangCorpse: Reaction = (e, _foe, run) => {
+export const gangCorpse: Reaction = (e, _foe, run, _k) => {
   if (e.state === "flinch") {
     if (e.clock >= run && (e.vy !== 0 || e.lastBase !== undefined)) e.clock = run - 1;
     return;

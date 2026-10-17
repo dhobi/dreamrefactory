@@ -559,7 +559,7 @@ function goal(s: string): { x: string; z: string; view: string } | null {
 /** `const town = set("TOWN")` — which set a variable stands for */
 function setVars(src: string): Map<string, string> {
   const out = new Map<string, string>();
-  for (const m of src.matchAll(/\b(?:const|let)\s+([A-Za-z_][\w]*)\s*=\s*set2?\(\s*["'`]([^"'`]+)/g)) {
+  for (const m of src.matchAll(/\b(?:const|let)\s+([A-Za-z_]\w*)\s*=\s*set2?\(\s*["'`]([^"'`]+)/g)) {
     out.set(m[1], m[2].toLowerCase().replace(/\.set$/, ""));
   }
   return out;
@@ -967,7 +967,7 @@ export function transcribe(raw: string, inherited?: Map<string, string>): string
         const inline = /set2?\(\s*["'`]([^"'`]+)/.exec(from);
         const room =
           (inline ? inline[1].toLowerCase().replace(/\.set$/, "") : "") ||
-          sets.get((/set:\s*([A-Za-z_][\w]*)/.exec(from) ?? [])[1] ?? "") ||
+          sets.get((/set:\s*([A-Za-z_]\w*)/.exec(from) ?? [])[1] ?? "") ||
           "";
         if (g) {
           out.push(
@@ -1180,7 +1180,7 @@ function coalesce(lines: string[]): string[] {
     run = null;
   };
   for (const line of lines) {
-    const m = /^say\(\[(\d+)\], then: stop, patience: 20000\)(?:   # (.*))?$/.exec(line);
+    const m = /^say\(\[(\d+)\], then: stop, patience: 20000\)(?: {3}# (.*))?$/.exec(line);
     if (m) {
       /*
        * REPEATS GATHER TOO, and Gus is why it is worth saying so.

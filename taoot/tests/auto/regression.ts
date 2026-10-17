@@ -5,7 +5,7 @@
  *   TAOOT_GAMEFILES=/path/to/gamefiles npx vitest run   # override data dir
  */
 import { test, expect } from "vitest";
-import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
+import { gamefiles } from "../../tools/gamefiles";
 import { readSetFile, readStarPath, RIGHTTURNS, LEFTTURNS } from "@dreamfactory/engine/df/set";
 import { ENGINE_STEP_MS, RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { readShpFile } from "@dreamfactory/engine/df/shp";
@@ -2013,7 +2013,7 @@ test("movie end: the reveal waits for the script, and a fade cancels it", async 
   // the boot's shape: black, a cutscene over it, and a script still running
   call("blackscreen");
   let release = (): void => {};
-  const busy = session.track(new Promise<void>((r) => (release = r)));
+  void session.track(new Promise<void>((r) => (release = r)));
   v.playMovie("datebed.mov");
   settle();
   v.tick((clock += 250));

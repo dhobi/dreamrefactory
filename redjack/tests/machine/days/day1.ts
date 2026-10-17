@@ -129,7 +129,6 @@ export async function playDay1(h: Headless): Promise<void> {
   // the sword comes with the pistol (inven.shop addinven)
   const owns = (what: string): boolean => h.session.propRuntime.get(what)?.owner === "nick";
   await h.until(() => owns("sword") && owns("pistol") && h.running().length === 0, "the sword and pistol into the inventory", 2_000);
-  const dir = h.host.director as any;
   // the lid closes the trunk and the stage (trunk.stag closechest)
   await clickOn(h, "lid");
   // and Patch, of RedJack's crew, is waiting in the cave (patch1.pupp incave)

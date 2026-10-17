@@ -41,6 +41,7 @@ test("a v0 frame: skip, literal, repeat, and a copy from earlier in the STREAM",
   // bytes before the offset: header 8, row0's length 2 + 5, row1's length 2,
   // the repeat 2, the kind-00 flag 1, the offset byte 1 → the stream position
   // after the offset is 21, and the 5 sits at 8 + 2 + 1 = 11
+  // eslint-disable-next-line sonarjs/no-identical-expressions -- two 2-bit fields that happen to agree
   const row1 = [(2 << 2) | 2, 9, (3 << 2) | 0, 21 - 11, (1 << 2) | 3, 4];
   const f = decodeFrameV0(frame(2, 6, 1, 3, [row0, row1]));
   expect([f.width, f.height, f.anchorY, f.anchorX]).toEqual([6, 2, 1, 3]);

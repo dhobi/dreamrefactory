@@ -59,7 +59,7 @@ export class CityBot {
 
   /** fire at whatever is in view that this ammo can reach; answers whether it did */
   fight(): boolean {
-    const { c, g, m } = this;
+    const { c, g } = this;
     const w = c.world;
     if (w.maze.byte(w.pose) !== 0 && !c.building) {
       // a click in a weapon's mode would go through the door: face away first

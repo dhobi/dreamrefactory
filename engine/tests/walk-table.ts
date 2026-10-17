@@ -71,7 +71,7 @@ test("a turn steps with a wrap of 0xff, and lands with endturn — a turntodeg's
 
 test("turntodeg always records, and cancels a walk in progress without endwalk", async () => {
   const s = bare();
-  const zeit = actor(s, "zeit", { deg: 0 });
+  actor(s, "zeit", { deg: 0 });
   castScript(s, "zeit", 'code endwalk ()\n\tglobal ended\n\tended = 1\nendcode\n');
   s.interp.globals.set("ended", 0);
   s.scheduler.startTurn("zeit", 0);

@@ -430,7 +430,7 @@ test("a Dust reveal is DF.EXE's: its passes, its holds, the script waiting them 
   for (let i = 0; i < 6; i++) session.tickWipe((now += 33));
   expect(session.wipe.step).toBe(8);
   expect(session.wiping).toBe(true);
-  session.tickWipe((now += 33));
+  session.tickWipe(now + 33);
   expect(session.wiping).toBe(false);
 });
 

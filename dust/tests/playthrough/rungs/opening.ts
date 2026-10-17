@@ -226,7 +226,7 @@ export const rung: Segment = {
         y: on.reduce((a, q) => a + q.y, 0) / on.length,
       };
       return on.reduce((best, q) =>
-        (q.x - mid.x) ** 2 + (q.y - mid.y) ** 2 < (best.x - mid.x) ** 2 + (best.y - mid.y) ** 2 ? q : best);
+        (q.x - mid.x) ** 2 + (q.y - mid.y) ** 2 < (best.x - mid.x) ** 2 + (best.y - mid.y) ** 2 ? q : best, on[0]);
     };
 
     // ---- 1. the conversation the boot leaves open --------------------------

@@ -53,7 +53,7 @@ for (const f of readdirSync(SRC).filter((n) => n.endsWith(".ts"))) {
   code += strip(readFileSync(`${SRC}/${f}`, "utf8"));
 }
 const placed = new Set<string>(OTHERWISE);
-for (const m of code.matchAll(/"([A-Za-z][A-Za-z0-9_]*)"/g)) placed.add(m[1]);
+for (const m of code.matchAll(/"([A-Za-z]\w*)"/g)) placed.add(m[1]);
 // the creatures and the guns, whose names are keys and fields rather than literals
 for (const k of Object.keys(FOES)) placed.add(k);
 for (const c of Object.values(GUN_CODES)) if (c.name) placed.add(c.name);

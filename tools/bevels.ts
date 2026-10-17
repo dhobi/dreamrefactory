@@ -79,7 +79,7 @@ interface ChoiceSet {
 
 const BEVEL = /puppetbevel\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(-?\d+)\s*\)/;
 const EVENT = /puppetevent\s*\(/;
-const CODE = /^\s*code\s+([A-Za-z0-9_]+)/;
+const CODE = /^\s*code\s+(\w+)/;
 
 /**
  * Walk a decompiled puppet and pull out its choice sets.

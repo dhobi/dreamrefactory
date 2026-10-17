@@ -128,7 +128,7 @@ test("every nightly is on Swiss time and off the hour", () => {
   // too, so its workflow is held to the same.
   for (const file of ["browser.yml", "coverage.yml"]) {
     const text = readFileSync(join(ROOT, ".github/workflows", file), "utf8");
-    const crons = [...text.matchAll(/^(\s*)- cron: "([^"]+)".*\n\1  timezone: "([^"]+)"/gm)];
+    const crons = [...text.matchAll(/^(\s*)- cron: "([^"]+)".*\n\1 {2}timezone: "([^"]+)"/gm)];
     const all = [...text.matchAll(/^\s*- cron: "([^"]+)"/gm)];
     expect(all.length, `${file} has nightlies`).toBeGreaterThan(0);
     expect(crons.length, `every cron in ${file} names its timezone`).toBe(all.length);
