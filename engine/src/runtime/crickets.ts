@@ -105,7 +105,9 @@ export abstract class Crickets {
   /** one cricket slot, one pass; false when it stops the pass */
   protected abstract service(c: Cricket, loud: Cricket[]): boolean;
   /** what a cricket keeps of the camera when it is made or put back: nothing, before DreamFactory 5 */
-  protected measure(_c: Cricket): void {}
+  protected measure(_c: Cricket): void {
+    // TI.EXE's crickets keep nothing: the distance is worked out again every pass
+  }
 
   protected get sounds(): SoundChannels {
     return this.soundsNow();
