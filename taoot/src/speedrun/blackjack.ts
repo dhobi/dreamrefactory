@@ -32,9 +32,9 @@
  *     the table's `mousedown`); the load gives them back, as it would a player.
  *
  * The strategy is the one #487 proposed, shared with Dust's table
- * (engine/src/web/speedrun/blackjack.ts).
+ * (speedrun/src/blackjack.ts).
  */
-import { cardValue, hitOrStay } from "@dreamfactory/engine/web/speedrun/blackjack";
+import { cardValue, hitOrStay } from "@dreamfactory/speedrun/blackjack";
 import {
   clickThing,
   converse,
@@ -43,7 +43,7 @@ import {
   predicate,
   type Action,
   type ActionContext,
-} from "@dreamfactory/engine/web/speedrun/action";
+} from "@dreamfactory/speedrun/action";
 import { PANEL } from "./menu";
 
 /** what each bet is called in the game, and its bevel on Buick's bet plaque */

@@ -190,7 +190,7 @@ function asCondition(js: string): string | null {
  * pressed ArrowLeft 3675 times in its sixty seconds.
  *
  * So anything that is not a bare atom is parenthesised first, which the grammar
- * takes (`!(choosing or puppet)`, engine/tests/speedrun-condition.ts). And a
+ * takes (`!(choosing or puppet)`, speedrun/tests/condition.ts). And a
  * negation already there comes off rather than doubling, because `!!x` is a
  * sheet reader's puzzle and this is the one place that can spare them it.
  */

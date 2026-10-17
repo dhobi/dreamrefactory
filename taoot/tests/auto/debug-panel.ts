@@ -25,6 +25,8 @@ import {
   stateView,
 } from "@dreamfactory/engine/web/debug-panel";
 import { SPINE } from "../../src/state-spine";
+import { workbenchHtml } from "../../../speedrun/vite";
+import { WORKBENCH } from "../../speedrun/workbench";
 
 const GOLDEN = join(dirname(fileURLToPath(import.meta.url)), "../playthrough/golden");
 
@@ -141,7 +143,11 @@ test("the workbench's Details column is the page's; the play page's is the playe
       .document;
 
   const play = page("play/index.html");
-  const bench = page("speedrun/index.html");
+  // the workbench is made out of the play page (speedrun/vite.ts), so this is
+  // also the check that the making keeps the pane and opens it
+  const bench = parseHTML(
+    workbenchHtml(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../..", WORKBENCH.play), "utf8"), WORKBENCH),
+  ).document;
 
   // the workbench says the pane is part of it, and is therefore up already
   expect(bench.querySelector('meta[name="details-always"]')).toBeTruthy();

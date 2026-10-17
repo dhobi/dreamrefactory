@@ -23,8 +23,8 @@
  */
 import { expect, test } from "vitest";
 import { VERBS, resolve } from "../../src/speedrun/actions";
-import type { ActionContext } from "@dreamfactory/engine/web/speedrun/action";
-import type { SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
+import type { ActionContext } from "@dreamfactory/speedrun/action";
+import type { SpeedrunDriver } from "@dreamfactory/speedrun/driver";
 
 type Point = { x: number; y: number };
 

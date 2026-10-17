@@ -3,7 +3,7 @@
  *
  * The row's three movable columns ship with a share each: the sheet asks for
  * 26rem, the Timer 22rem, the X pane 20rem, and whatever the window has left
- * over after the canvas is split between them (speedrun/index.html, #srlayout).
+ * over after the canvas is split between them (#srlayout, the row speedrun/vite.ts builds).
  * Those shares are a guess at what a reader wants, and they are wrong as often
  * as they are right — a long `wait(js: ...)` line wants the sheet wider, a
  * 161-row state list wants the pane wider, and the two people wanting those are
@@ -306,7 +306,7 @@ const DEFAULT_SCALE = "2";
  * layout, where turning the screen down to 1x is precisely what earns them the
  * row. A control that only appears once you no longer need it is not a control.
  *
- * So it is the page's own three-way segment (speedrun/index.html, #srscale), and
+ * So it is the page's own three-way segment (#srscale, speedrun/vite.ts), and
  * all this does is put the answer on `<html>` where the stylesheet can see it:
  * the canvas reads it for its width, and the three thresholds that decide
  * whether the row is on read it too.

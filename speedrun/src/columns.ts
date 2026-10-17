@@ -2,7 +2,7 @@
  * What order the workbench's panels come in — the reader's answer, not ours.
  *
  * The page's row is four columns: the canvas, the Timer, the Speedrun sheet and
- * the X pane (speedrun/index.html, #srlayout). The canvas keeps the head of it,
+ * the X pane (#srlayout, the row speedrun/vite.ts builds). The canvas keeps the head of it,
  * because it is the thing being watched and nothing is read while it is off
  * screen. The other three are a genuine preference: the sheet is what a route is
  * written in, the Timer is what it reads out as, and the X pane is what you look

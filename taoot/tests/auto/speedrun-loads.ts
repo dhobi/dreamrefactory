@@ -41,10 +41,10 @@
 import { test, expect, beforeEach, afterEach, vi } from "vitest";
 import { CACHE_GRACE_MS, LoadClock, unionMs, type Served } from "@dreamfactory/engine/web/load-clock";
 import { FileStore } from "../../src/files";
-import { parseSheet } from "@dreamfactory/engine/web/speedrun/sheet";
+import { parseSheet } from "@dreamfactory/speedrun/sheet";
 import { ACTIONS, VERBS } from "../../src/speedrun/actions";
-import { runSheet } from "@dreamfactory/engine/web/speedrun/runner";
-import type { Clock, SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
+import { runSheet } from "@dreamfactory/speedrun/runner";
+import type { Clock, SpeedrunDriver } from "@dreamfactory/speedrun/driver";
 
 /* ------------------------------------------------------------------ *
  * 1. The clock's arithmetic

@@ -1,7 +1,7 @@
 /**
  * The Konami code, and the one door it opens.
  *
- * The speedrun workbench (speedrun/index.html) is reached by its mark in
+ * The speedrun workbench (/speedrun/, made from the play page by speedrun/vite.ts) is reached by its mark in
  * Titanic's top bar, and it carries `noindex` so it stays out of search. The
  * front page is the one place with no bar of that kind, and typing a URL from
  * memory is a poor way to reach a page you use often.

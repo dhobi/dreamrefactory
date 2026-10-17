@@ -58,7 +58,7 @@ import { FileStore } from "./files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
-import { takeBootSeed } from "@dreamfactory/engine/web/speedrun/boot-seed";
+import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
@@ -526,7 +526,7 @@ const host = new GameHost(files, audioSink, {
 host.director.onCursor = showCursor;
 const session = host.session;
 // A workbench `reset(seed: N)` reloaded us: the dice are pinned before the boot
-// draws its first one (engine/src/web/speedrun/boot-seed.ts)
+// draws its first one (speedrun/src/boot-seed.ts)
 const bootSeed = takeBootSeed("taoot");
 if (bootSeed !== null) session.seedRandom(bootSeed);
 // the lines the original voices and never prints (engine/src/runtime/puppet.ts heardSubtitle)
@@ -792,7 +792,7 @@ const skipsIntro = (): boolean =>
  * atmosphere — and it was taken back out, because a run is read by its sound as
  * much as by its picture and the music is part of knowing where you are.
  *
- * Kept because it is one line to say again (in `speedrun/index.html`'s head)
+ * Kept because it is one line to say again (in the workbench's `meta`, taoot/speedrun/workbench.ts)
  * and because the question it answers is a real one for any page that runs the
  * game on a loop. It only ever touched the THEME mix: SFX and voice were left
  * alone, since `skipLines` and `wait(talking)` are about those.

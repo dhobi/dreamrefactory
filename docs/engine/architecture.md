@@ -15,9 +15,10 @@ rule: **nothing shared knows which game it is.**
 |---|---|---|
 | `engine/` | the DreamFactory engine — containers, interpreter, runtime, the browser layer around them | nothing |
 | `chrome/` | what every page shares, the front door, the editors and the games alike: the top bar and its menus, the version, the registry of games, editions, the bug report, the UI-language axis | `engine` |
+| `speedrun/` | the speedrun workbench any game can carry: the sheet language, the run loop, the drivers, the aim sweep, the panel and the verbs that name no game | `engine` |
 | `site/` | the project's own web presence: the front door and the format editors | `engine`, `chrome` |
-| `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `chrome` |
-| `dust/` | *Dust*: three pages, one disc, its own tools and suites | `engine`, `chrome` |
+| `taoot/` | *Titanic*: four pages, six editions and the demo, its own tools, the suites that play it to the end | `engine`, `chrome`, `speedrun` |
+| `dust/` | *Dust*: three pages, one disc, its own tools and suites | `engine`, `chrome`, `speedrun` |
 | `timelapse/` | *[Timelapse](../timelapse/)*: one page and four discs — its own palette, its own title card, and a boot log in a panel the page opens over the picture | `engine`, `chrome` |
 | `skullcracker/` | *[Skull Cracker](../skullcracker/)*: the game on one page, `walk.html` beside it as the bench a level is opened on, and its own disassembler for `SC.EXE` | `engine`, `chrome` |
 | `redjack/` | *[RedJack](../redjack/)*: one page on three discs, DreamFactory 5, played to its end by its machine suites | `engine`, `chrome` |
@@ -27,8 +28,8 @@ rule: **nothing shared knows which game it is.**
 The [architecture map](architecture-map.md) draws the same packages from the
 code, and goes down from them to the folders, the files and the classes.
 
-`site/tests/layering.ts` enforces this: it fails the build if `engine/` or `chrome/`
-reaches for a game, or if any game reaches for another.
+`site/tests/layering.ts` enforces this: it fails the build if `engine/`, `chrome/` or
+`speedrun/` reaches for a game, or if any game reaches for another.
 
 Everything below `## Where a game's own code lives` is a game shell. Everything
 above it is the engine, where most of the code is.
@@ -170,7 +171,6 @@ but it may mention `document`, and it is where a game shell attaches.
 | [`save-browser.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-browser.ts) / [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts) | the saved-games UI and its IndexedDB "file system" — parameterised on a `SaveKind`, so Titanic's `.ti` and Dust's `.rtd` get a database each off one implementation |
 | [`window-bar.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-bar.ts) | a game window's **menu bar**, on the game's own frame: inside the element that holds the canvas, as wide as the picture and scaled with it, and in fullscreen over its top edge until the pointer reaches it. The classic grey Windows look, whatever the page's theme, because it is the game's window and not the page. The menus are data in a Win32 resource's own spelling (`&Open...\tCtrl+O`), which [`tools/rtmenu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/rtmenu.ts) reads out of an executable; Alt, F10, the arrows and the Ctrl accelerators work as they do on Windows, and while a menu is open the game hears no key. Lunicus has it (`lunicus/src/menu.ts`) |
 | [`window-dialog.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/window-dialog.ts) | a game window's **dialog box**, the menu bar's companion on the same frame: a Win32 dialog template, which [`tools/rtdialog.ts`](https://github.com/dhobi/dreamrefactory/blob/master/tools/rtdialog.ts) reads out of an executable, drawn with every control where the template put it, in dialog units scaled with the picture. It is modal the way DialogBox was: a layer over the frame takes the pointer, and `windowDialogOpen()` tells the page to give the game no key. A button is a command to the page's procedure, Enter the default button, Esc IDCANCEL. Lunicus has it (`lunicus/src/dialogs.ts`) |
-| [`speedrun/`](https://github.com/dhobi/dreamrefactory/tree/master/engine/src/web/speedrun) | the **speedrun workbench**, whole: the sheet grammar, the run loop, both drivers (Playwright's contract and the in-page one), the aim sweep, the panel's markup and stylesheet, and the verbs that name no game. A game supplies its own verbs and five facts about itself (`workbench.ts`, `Workbench`); Titanic and Dust each get a `/speedrun/` page out of it. Which table a verb belongs in is argued in [`action.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/speedrun/action.ts) |
 | [`debug-panel.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/debug-panel.ts) / [`state-list.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/state-list.ts) | the **state pane** behind X — a DreamFactory game's plot lives entirely in script globals, so a snapshot of the globals table IS the game state, and this renders the same snapshot the playthrough goldens hold. A list that patches rather than redraws (it polls; the engine has no "a global changed" event), filtered by [`masks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/masks.ts). The SPINE — the handful of variables shown above the rest — is the game's to name: Titanic's six come from a readout the original carries, Dust's two are what its own suites set |
 | [`load-clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/load-clock.ts) | the **load remover**: how long the page has spent waiting on the NETWORK, so a run's clock can decline to count it. Fed each fetch by whichever store a game has (`HostFiles.onWire`), and only the ones somebody was waiting for |
 | [`cache-warmup.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/cache-warmup.ts) | pulls a game's files through the browser cache before a timed run, so the fiftieth run of a leg costs what the second one did. WHICH files is the game's answer, not this module's |
@@ -193,6 +193,27 @@ own sections of these docs.
 | [`ui-languages.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/locales/ui-languages.ts) / [`lang-menu.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/lang-menu.ts) / [`locales/`](https://github.com/dhobi/dreamrefactory/tree/master/chrome/src/locales) | the **UI-language** axis, which is a different question: what language the words on the page are in. Pages carry their English inline, so nothing is fetched for an English reader |
 | [`site.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/site.ts) / [`version.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/version.ts) / [`bug-report.ts`](https://github.com/dhobi/dreamrefactory/blob/master/chrome/src/bug-report.ts) | where the site's root is from a page at any depth, the version in the top bar, and the Report-bug button that prefills a GitHub issue with the game, the build number and the screen |
 
+### `speedrun/` — the speedrun workbench
+
+A page feature built on the engine rather than part of it, so a package of its
+own, which any game can carry. The **speedrun workbench**, whole: the sheet grammar, the run loop, both drivers (Playwright's contract and the in-page one), the aim sweep, the panel's markup and stylesheet, and the verbs that name no game. A game supplies its own verbs and five facts about itself (`workbench.ts`, `Workbench`); Titanic and Dust each get a `/speedrun/` page out of it. Which table a verb belongs in is argued in [`action.ts`](https://github.com/dhobi/dreamrefactory/blob/master/speedrun/src/action.ts).
+
+The workbench page is not a file in any game. `speedrun/vite.ts` makes it out of
+the game's own play page, in dev on every request and in a build as the
+`speedrun` entry: it moves the nodes that are the game into a row beside the
+panel, drops what only a player needs (the settings strip, the title card), opens
+the Details column and adds the workbench's own controls. So a game that wants a
+`/speedrun/` page brings four things:
+
+| File | What it says |
+|------|--------------|
+| `<game>/speedrun/workbench.ts` | which of the play page's nodes are the game, which it has no use for, and the `<meta>` switches its `main.ts` reads |
+| `<game>/src/speedrun/page.ts` | one `startWorkbench` call: the game's key space, its verbs, and what it can warm or calculate |
+| `<game>/src/speedrun/actions.ts` | its own verbs, over the ones that name no game |
+| `<game>/src/speedrun.css` | the panel's stylesheet, imported, plus anything its own chrome has to be told |
+
+and one line in its `vite.config.ts`: `...speedrunPage({ root: HERE, ...WORKBENCH })`.
+
 ### `taoot/` — Titanic's shell
 
 Four pages: the front page, `/play/`, `/collection/`, and the unlisted
@@ -207,7 +228,7 @@ Four pages: the front page, `/play/`, `/collection/`, and the unlisted
 | [`save-seed.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/save-seed.ts) | the one-time seeding of the shipped `.ti` saves into the store |
 | [`nightdive.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/nightdive.ts) | the intro film before the boot — a real MOV built by `mknightdive.ts` and played by the engine's own `MoviePlayer`, buttons and all |
 | [`state-spine.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/state-spine.ts) / [`log-buffer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/log-buffer.ts) | the six variables the game's own debug readout names (a SCRIPT in TI.EXE, on the save panel's HELP button — so they are its author's choice, not this port's), and the bounded log a bug report carries the tail of. The pane that shows them is the engine's |
-| [`speedrun/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/src/speedrun) + [`speedrun/page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/speedrun/page.ts) | what is Titanic's about the workbench: this ship's own verbs (the coal lever, the wireless, the map's jumps, the smokestack, the inventory band) and the navigation its routes are written against. The workbench itself is the engine's; this names the disc. Deployed but unlisted — [`konami.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/konami.ts) is the door |
+| [`speedrun/`](https://github.com/dhobi/dreamrefactory/tree/master/taoot/src/speedrun) + [`speedrun/page.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/speedrun/page.ts) | what is Titanic's about the workbench: this ship's own verbs (the coal lever, the wireless, the map's jumps, the smokestack, the inventory band) and the navigation its routes are written against. The workbench itself is the [speedrun workspace](#the-speedrun-workbench); this names the disc. Deployed but unlisted — [`konami.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/src/konami.ts) is the door |
 
 ### `dust/` — Dust's shell
 

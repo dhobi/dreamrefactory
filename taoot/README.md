@@ -301,7 +301,7 @@ the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
 clean game far more often than it is opened to play one.
 
 It shares the parser, the action table and the run loop with the CLI — all three
-are the engine's (`engine/src/web/speedrun/`), with this ship's own verbs
+are the speedrun workspace's (`speedrun/src/`), with this ship's own verbs
 layered over them (`taoot/src/speedrun/actions.ts`) — so a sheet cannot mean one
 thing there and another here. Dust has the same workbench off the same modules,
 with verbs of its own in `dust/src/speedrun/` (`goto` a grid cell, `give`,
@@ -336,7 +336,7 @@ a leg is worked on and the whole thing still times under
 
 The workbench plays the **music**: a run is read by its sound as much as by its
 picture, and the theme is part of knowing where you are. Adding `<meta
-name="mute-theme">` to `speedrun/index.html`'s head (applied as the cold boot's
+name="mute-theme">` to the workbench's head (`meta` in `taoot/speedrun/workbench.ts`) (applied as the cold boot's
 theme mix) turns it off, for when the same twenty seconds of a room play over and
 over while a route is tuned.
 
@@ -407,7 +407,7 @@ the original reloads the same way — but a game reached by loading is not the g
 a player would be standing in. Route with it, time with the full sheet: a run
 that used `load()` still finishes, but its headline says NOT A VALID TIME and
 names the line (verbs declare it with `voidsTime`,
-`engine/src/web/speedrun/action.ts`). A route that needs a save and a load uses
+`speedrun/src/action.ts`). A route that needs a save and a load uses
 `menuSave()`/`menuLoad()` instead, which go the way a player has to — the life
 preserver, the control panel's levers, the fades both ways — and are on the
 clock ([#523](https://github.com/dhobi/dreamrefactory/issues/523)); `menuLoad()`

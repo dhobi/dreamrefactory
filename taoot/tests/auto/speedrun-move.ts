@@ -17,9 +17,9 @@
  * twenty-one presses and no way to pause between two of them.
  */
 import { test, expect } from "vitest";
-import { parseSheet, describeSheet } from "@dreamfactory/engine/web/speedrun/sheet";
+import { parseSheet, describeSheet } from "@dreamfactory/speedrun/sheet";
 import { VERBS, resolve } from "../../src/speedrun/actions";
-import { pointerAt, stepsFrom } from "@dreamfactory/engine/web/speedrun/runner";
+import { pointerAt, stepsFrom } from "@dreamfactory/speedrun/runner";
 
 const parse = (text: string) => parseSheet(text, { verbs: VERBS });
 /** the verbs a sheet's actions turn out to be, in order */

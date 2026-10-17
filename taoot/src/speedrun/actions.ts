@@ -30,11 +30,11 @@
  * bottoms out in a Playwright mouse or key event at the canvas. Where a verb
  * needs to know something — where `cards` is, which plaque is bevel 3 — it asks
  * the engine the same question the browser suite asks, through the same
- * `engine/src/web/speedrun/aim.ts` sweep, and never moves the game by writing to it.
+ * `speedrun/src/aim.ts` sweep, and never moves the game by writing to it.
  */
-import type { VerbSpec } from "@dreamfactory/engine/web/speedrun/sheet";
-import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
-import { QUIET } from "@dreamfactory/engine/web/speedrun/driver";
+import type { VerbSpec } from "@dreamfactory/speedrun/sheet";
+import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
+import { QUIET } from "@dreamfactory/speedrun/driver";
 import {
   arrow,
   clickThing,
@@ -50,7 +50,7 @@ import {
   type Action,
   type ActionContext,
   type ActionTable,
-} from "@dreamfactory/engine/web/speedrun/action";
+} from "@dreamfactory/speedrun/action";
 import { jumpTo, pageButton, jumpableSets } from "./nav/mapjumps";
 import { BLACKJACK } from "./blackjack";
 import { PANEL } from "./menu";
@@ -1157,4 +1157,4 @@ export const interruptible = (verb: string): boolean => !!resolve(verb)?.interru
  * whole language in one import, and "what may appear on a line of a Titanic
  * sheet" is a question this module is the right one to answer.
  */
-export { CONDITIONS, UNIVERSAL_HELP } from "@dreamfactory/engine/web/speedrun/action";
+export { CONDITIONS, UNIVERSAL_HELP } from "@dreamfactory/speedrun/action";

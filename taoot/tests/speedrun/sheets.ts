@@ -12,7 +12,7 @@
  * on trust: it is played here, headless on the sheet clock, exactly as the
  * workbench's Calculate button plays it, and a sheet that does not reach its
  * last line fails the suite at the line it stopped on. Its first line must be
- * its title (engine/src/web/speedrun/sheet-header.ts).
+ * its title (speedrun/src/sheet-header.ts).
  *
  * A seeded sheet (`reset(seed: N)`) is one run. An unseeded one is played on
  * three seeds and must finish on each: its time depends on the dice, and a
@@ -24,9 +24,9 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
-import { parseSheet, SheetError, type Step } from "@dreamfactory/engine/web/speedrun/sheet";
-import { readSheetHeader, sheetSeed } from "@dreamfactory/engine/web/speedrun/sheet-header";
-import { runSheet } from "@dreamfactory/engine/web/speedrun/runner";
+import { parseSheet, SheetError, type Step } from "@dreamfactory/speedrun/sheet";
+import { readSheetHeader, sheetSeed } from "@dreamfactory/speedrun/sheet-header";
+import { runSheet } from "@dreamfactory/speedrun/runner";
 import { ACTIONS, VERBS } from "../../src/speedrun/actions";
 import { headlessRun } from "./headless";
 

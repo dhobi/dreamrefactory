@@ -58,7 +58,7 @@ export interface StateListOptions {
    *
    * One namespace per game, because `localStorage` is per origin and the
    * deployed site serves every game from one — the same reason the workbench's
-   * own keys carry a game (`web/speedrun/panel-keys.ts`).
+   * own keys carry a game (`speedrun/src/panel-keys.ts`).
    */
   storageKey: string;
   /**

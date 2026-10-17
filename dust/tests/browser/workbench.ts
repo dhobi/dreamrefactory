@@ -145,7 +145,7 @@ const main = async (): Promise<void> => {
   //
   // At a WIDE viewport, because the row is what the grips live in: below the
   // break the columns stack and there is no edge between them to drag
-  // (engine/src/web/speedrun/panel.css, `@container style(--row: 1)`).
+  // (speedrun/src/panel.css, `@container style(--row: 1)`).
   await page.setViewportSize({ width: 2000, height: 1200 });
   await page.waitForTimeout(400);
   const layout = await page.evaluate(() => {
@@ -169,7 +169,7 @@ const main = async (): Promise<void> => {
   // ---- the help sheet is a POPUP, and starts closed ----------------------
   //
   // It is `#srlegend`, and its presentation is the panel's own
-  // (engine/src/web/speedrun/panel.css) rather than a `.modal` class the page
+  // (speedrun/src/panel.css) rather than a `.modal` class the page
   // might define — Dust's page styles `#saveModal` directly and has no such
   // class, so the legend rendered inline and permanently open until those rules
   // were written by id. Which is a thing no screenshot of a working page shows.
@@ -256,7 +256,7 @@ const main = async (): Promise<void> => {
   );
 
   // …under DUST's key space and nobody else's, which is the whole reason the
-  // namespace exists (engine/src/web/speedrun/panel-keys.ts)
+  // namespace exists (speedrun/src/panel-keys.ts)
   const foreign = await page.evaluate(() =>
     Object.keys(localStorage).filter((k) => k.includes("speedrun") && !k.startsWith("dust:")),
   );

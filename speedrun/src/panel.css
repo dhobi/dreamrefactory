@@ -19,7 +19,7 @@
  *
  * The page around it. The canvas and its frame, the boot's progress bar, the
  * save dialog and the X pane are the play page's, and each game dresses its own
- * (taoot/speedrun/index.html) — this sheet styles the panel and stops at its
+ * (speedrun/vite.ts makes the workbench page out of it) — this sheet styles the panel and stops at its
  * edge. The one exception is `#inputs`, which is the workbench's own readout and
  * happens to be drawn beside the picture rather than inside the panel.
  *
@@ -1179,9 +1179,50 @@ body.sr-resizing * {
 
 /* The picture-size segments, under the screen and set in from it: the
    canvas already carries a lit rim, and a control butted against it would
-   read as part of the frame. */
+   read as part of the frame.
+
+   Three segments rather than radios: one tap-sized target each, and a radio
+   group is still one arrow-key stop. Styled here, by id, so every game's
+   workbench has them and not only the one whose play page styles a `.seg`.
+   The chosen one is a hairline in the accent, not a filled block: nothing
+   beside the canvas should be brighter than the canvas. */
 #srscale {
   margin-top: 0.9rem;
+  display: inline-flex;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+#srscale label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 0.75rem;
+  border-left: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-mute);
+  cursor: pointer;
+}
+#srscale label:first-child {
+  border-left: 0;
+}
+#srscale input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+#srscale label:hover {
+  color: var(--text);
+}
+#srscale label:has(input:checked) {
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent-line);
+}
+#srscale label:has(input:focus-visible) {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 /* The mute switch, on the same line of thought as the segments above it and set

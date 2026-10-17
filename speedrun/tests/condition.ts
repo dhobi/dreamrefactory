@@ -1,7 +1,7 @@
 /**
- * Joined conditions — `a or b`, `a and b`, `!a` (engine/src/web/speedrun/action.ts).
+ * Joined conditions — `a or b`, `a and b`, `!a` (speedrun/src/action.ts).
  *
- *   npx vitest run engine/tests/speedrun-condition.ts
+ *   npx vitest run speedrun/tests/condition.ts
  *
  * The grammar could say one condition at a time, and the routes being written
  * down do not stop on one. Every rung that clicks a character until they answer
@@ -16,7 +16,7 @@
  * rather than scanned for a joining word it is entitled to contain.
  */
 import { test, expect } from "vitest";
-import { condition, predicate } from "@dreamfactory/engine/web/speedrun/action";
+import { condition, predicate } from "@dreamfactory/speedrun/action";
 
 /** true/false against a hand-made `window.dbg` — the expressions are strings */
 const run = (expr: string, dbg: unknown): unknown => new Function("window", `return (${expr});`)({ dbg });

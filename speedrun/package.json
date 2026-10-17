@@ -1,0 +1,12 @@
+{
+  "name": "@dreamfactory/speedrun",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The speedrun workbench, for any game: the sheet language and its parser, the run loop, the drivers that play a sheet in the page or headless, the aim sweep, the panel and the verbs that name no game. A game brings its own verbs and a few facts about itself.",
+  "type": "module",
+  "//css": "A stylesheet is not TypeScript, so it needs its own pattern or the wildcard below appends `.ts` to it. The longer suffix wins in Node's own resolution, so this is consulted first for a .css request and never for anything else.",
+  "exports": {
+    "./*.css": "./src/*.css",
+    "./*": "./src/*.ts"
+  }
+}

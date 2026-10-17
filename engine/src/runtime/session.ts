@@ -476,7 +476,7 @@ export class GameSession {
    * Where the actors and props called `name` are drawn right now, as screen
    * boxes (inclusive corners). For tools that have to aim at a thing: a world
    * sprite can come out a few pixels across, small enough to slip between the
-   * points of any sweep (engine/src/web/speedrun/aim.ts).
+   * points of any sweep (speedrun/src/aim.ts).
    */
   thingBoxes(name: string): { x0: number; y0: number; x1: number; y1: number }[] {
     const want = name.toLowerCase();

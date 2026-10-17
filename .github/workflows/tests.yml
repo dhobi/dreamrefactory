@@ -135,7 +135,7 @@ jobs:
       #
       # Conservative by construction. ONLY a change confined to game packages —
       # or to prose, which reaches nothing — narrows anything; touch `engine/`,
-      # `chrome/`, `site/`, `tools/`, a root config or a workflow and every game runs,
+      # `chrome/`, `speedrun/`, `site/`, `tools/`, a root config or a workflow and every game runs,
       # because everything depends on those.
       #
       # It decides rather than SKIPS, and that is not a style choice: a required
@@ -175,7 +175,7 @@ jobs:
             # A file at the root, or under something that is not a package, or
             # under one every game depends on, is a change this cannot reason
             # about — so it runs all of them.
-            if [ "$d" = "$f" ] || [ ! -f "$d/package.json" ] || [ "$d" = engine ] || [ "$d" = chrome ] || [ "$d" = site ]; then
+            if [ "$d" = "$f" ] || [ ! -f "$d/package.json" ] || [ "$d" = engine ] || [ "$d" = chrome ] || [ "$d" = speedrun ] || [ "$d" = site ]; then
               echo "  -> '$f' is not confined to a game package; running every game"
               all=1
               break

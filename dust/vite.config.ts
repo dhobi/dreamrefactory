@@ -17,20 +17,11 @@ import { join, resolve } from "node:path";
 import { defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
 import { siblingSignposts } from "../tools/vite-siblings";
-import { runSheet } from "../tools/vite-run-sheet";
+import { speedrunPage } from "../speedrun/vite";
+import { WORKBENCH } from "./speedrun/workbench";
 
 /** this file's own directory, not the working directory */
 const HERE = fileURLToPath(new URL(".", import.meta.url));
-
-/**
- * Dust's route — the fixture the headless runner drives, and what the panel's
- * "Copy the full run" button starts you from.
- *
- * The same path Titanic uses under its own package, through the same shared
- * plugin (`tools/vite-run-sheet.ts`), so the two games' routes are found the
- * same way and neither config knows anything the other does not.
- */
-const SHEET_SRC = join(HERE, "tests/speedrun/run.sheet.txt");
 
 /** Dust's version — its own number, because it releases on its own tag */
 const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8"))
@@ -50,7 +41,9 @@ export default defineConfig({
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
-    runSheet(SHEET_SRC),
+    // the speedrun workbench: the play page with a sheet to drive it, made from
+    // index.html by speedrun/vite.ts. Unlisted, but built
+    ...speedrunPage({ root: HERE, ...WORKBENCH }),
     gamefilesManifest({
       gamefiles: join(HERE, "gamefiles"),
       publicDir: join(HERE, "public"),
@@ -123,11 +116,6 @@ export default defineConfig({
         // port of it. Its download sits beside the rip on the host and is
         // not in this repository.
         collection: join(HERE, "collection/index.html"),
-        // The speedrun workbench: this game's page plus a sheet to drive it
-        // with. Unlisted — nothing links to it and it carries `noindex` — but
-        // built, because a tool that only exists on a dev server is a tool
-        // nobody uses. Titanic's says the same thing about its own.
-        speedrun: join(HERE, "speedrun/index.html"),
       },
     },
   },

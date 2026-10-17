@@ -12,7 +12,7 @@ import { Logic } from "@dreamfactory/engine/runtime/interp";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import type { SetViewer } from "@dreamfactory/engine/web/viewer";
 import type { NavDriver } from "./nav/navigator";
-import { type Aim, aimAtHotspot, aimAtThing } from "@dreamfactory/engine/web/speedrun/aim";
+import { type Aim, aimAtHotspot, aimAtThing } from "@dreamfactory/speedrun/aim";
 
 /**
  * The pumping half of the harness (play.ts), which this driver needs for the
@@ -100,7 +100,7 @@ export function headlessDriver(host: GameHost, p: Pumped, log?: (m: string) => v
       await ticks(1, `${what}: waiting for the cast to be still`);
     }
   };
-  /** the engine's answers to the aiming questions (engine/src/web/speedrun/aim.ts) */
+  /** the engine's answers to the aiming questions (speedrun/src/aim.ts) */
   const aim = (): Aim => ({
     width: host.screen.width,
     height: host.screen.height,

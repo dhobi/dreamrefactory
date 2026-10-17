@@ -45,9 +45,10 @@
  */
 import { test, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { workbenchHtml, type WorkbenchPage } from "../../speedrun/vite";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -144,7 +145,7 @@ function ownCss(page: string, html: string): string {
       return ""; // a link to something that is not there is somebody else's test
     }
   };
-  /** `@dreamfactory/engine/web/speedrun/panel.css` → `engine/src/web/speedrun/panel.css` */
+  /** `@dreamfactory/speedrun/panel.css` → `speedrun/src/panel.css` */
   const imported = (css: string): string[] =>
     [...css.matchAll(/@import\s+["']@dreamfactory\/([a-z]+)\/([A-Za-z0-9_./-]+\.css)["']/g)]
       .filter(([, , rest]) => !rest.endsWith("chrome.css"))
@@ -161,8 +162,21 @@ function ownCss(page: string, html: string): string {
   return [...inline, ...linked].join("\n");
 }
 
+/**
+ * The speedrun workbenches, which are not files: each is made out of its game's
+ * play page by speedrun/vite.ts, so it is made here the same way and checked
+ * with the pages on disk. It is the page that links the workbench panel.
+ */
+const WORKBENCHES: [string, string][] = await Promise.all(
+  globSync("*/speedrun/workbench.ts", { cwd: ROOT }).map(async (f): Promise<[string, string]> => {
+    const pkg = f.split("/")[0];
+    const { WORKBENCH } = (await import(join(ROOT, f))) as { WORKBENCH: WorkbenchPage };
+    return [`${pkg}/speedrun/index.html`, workbenchHtml(readFileSync(join(ROOT, pkg, WORKBENCH.play), "utf8"), WORKBENCH)];
+  }),
+);
+
 /** the pages that layer CSS of their own over the shared chrome */
-function pagesLayeringChrome(): string[] {
+function pagesLayeringChrome(): [page: string, html: string][] {
   // `--others --exclude-standard` as well as the index, because a page that has
   // just been written is exactly the one worth checking and `ls-files` alone does
   // not see it. This test passed locally on a new page and failed in CI on the
@@ -175,12 +189,13 @@ function pagesLayeringChrome(): string[] {
     .trim()
     .split("\n")
     .filter(Boolean);
-  return tracked.filter((f) => {
-    const html = readFileSync(join(ROOT, f), "utf8");
-    // a page with no shared stylesheet has nothing to collide with, and a page
-    // with no CSS of its own has nothing to collide
-    return /<link[^>]+theme\.css/.test(html) && !!ownCss(f, html).trim();
-  });
+  const pages: [string, string][] = [
+    ...tracked.map((f): [string, string] => [f, readFileSync(join(ROOT, f), "utf8")]),
+    ...WORKBENCHES,
+  ];
+  // a page with no shared stylesheet has nothing to collide with, and a page
+  // with no CSS of its own has nothing to collide
+  return pages.filter(([f, html]) => /<link[^>]+theme\.css/.test(html) && !!ownCss(f, html).trim());
 }
 
 test("the shared chrome is in the tree the pages layer on", () => {
@@ -192,8 +207,7 @@ test("no page and the chrome set the same property on the same selector", () => 
   const chrome = rulesIn(readFileSync(CHROME, "utf8"));
   const decided: string[] = [];
 
-  for (const page of pagesLayeringChrome()) {
-    const html = readFileSync(join(ROOT, page), "utf8");
+  for (const [page, html] of pagesLayeringChrome()) {
     for (const [selector, declarations] of rulesIn(ownCss(page, html))) {
       const shared = chrome.get(selector);
       if (!shared) continue;
@@ -252,8 +266,7 @@ test("no page's CSS is missing a brace", () => {
     const close = (bare.match(/\}/g) ?? []).length;
     if (open !== close) unbalanced.push(`${name}: ${open} { against ${close} }`);
   };
-  for (const page of pagesLayeringChrome()) {
-    const html = readFileSync(join(ROOT, page), "utf8");
+  for (const [page, html] of pagesLayeringChrome()) {
     check(page, ownCss(page, html));
   }
   check("chrome/src/chrome.css", readFileSync(CHROME, "utf8"));
@@ -290,7 +303,7 @@ test("a shared stylesheet names roles, never a game's palette", () => {
   const PALETTES = /var\(--(abyss|hull|ice|brass|frost|dusk|ember|bone|leather|wood)[a-z0-9-]*/g;
   const SHARED = [
     "chrome/src/chrome.css",
-    "engine/src/web/speedrun/panel.css",
+    "speedrun/src/panel.css",
     "engine/src/web/save-browser.css",
   ];
   const leaks: string[] = [];

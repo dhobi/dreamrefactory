@@ -18,7 +18,7 @@
  * somebody who wanted to work on a route.
  *
  * That was the gap when the panel's game-neutral half moved to
- * `engine/src/web/speedrun/` (the play page has probes, the CLI runner has
+ * `speedrun/src/` (the play page has probes, the CLI runner has
  * `npm run speedrun`, and the thing between them had neither).
  *
  * ## What it asserts, and why not less
@@ -129,7 +129,7 @@ const main = async (): Promise<void> => {
   check(!!room, `the game booted — ${room}`);
 
   // the framebuffer, which is where the aim sweep takes its bounds from
-  // (engine/src/web/speedrun/aim.ts) and is NOT the canvas's size
+  // (speedrun/src/aim.ts) and is NOT the canvas's size
   const screen = await page.evaluate(
     () =>
       (window as unknown as { dbg: { host: { screen: { width: number; height: number } } } }).dbg.host.screen,
@@ -192,7 +192,7 @@ const main = async (): Promise<void> => {
   //
   // At a WIDE viewport, because the row is what the grips live in: below the
   // break the columns stack and there is no edge between them to drag
-  // (engine/src/web/speedrun/panel.css, `@container style(--row: 1)`).
+  // (speedrun/src/panel.css, `@container style(--row: 1)`).
   await page.setViewportSize({ width: 2000, height: 1200 });
   await page.waitForTimeout(400);
   const layout = await page.evaluate(() => {
@@ -216,7 +216,7 @@ const main = async (): Promise<void> => {
   // ---- the help sheet is a POPUP, and starts closed ----------------------
   //
   // It is `#srlegend`, and its presentation is the panel's own
-  // (engine/src/web/speedrun/panel.css) rather than a `.modal` class the page
+  // (speedrun/src/panel.css) rather than a `.modal` class the page
   // might define — Dust's page styles `#saveModal` directly and has no such
   // class, so the legend rendered inline and permanently open until those rules
   // were written by id. Which is a thing no screenshot of a working page shows.
@@ -285,7 +285,7 @@ const main = async (): Promise<void> => {
   check(dialog === "none" || dialog === "absent", `the saved-games dialog is shut (${dialog})`);
 
   // the panel's remembered answers are namespaced to THIS game
-  // (engine/src/web/speedrun/panel-keys.ts): every game on the deployed site
+  // (speedrun/src/panel-keys.ts): every game on the deployed site
   // shares one origin, so a bare key would be one setting for all of them
   const foreign = await page.evaluate(() =>
     Object.keys(localStorage).filter((k) => k.includes("speedrun") && !k.startsWith("taoot:")),

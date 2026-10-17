@@ -1,8 +1,8 @@
 /**
- * Dust's workbench sheet: the engine's panel, and what this game's own chrome
+ * Dust's workbench sheet: the shared panel, and what this game's own chrome
  * has to be told to stop doing.
  *
- * The panel is `engine/src/web/speedrun/panel.css` — the same structure, the
+ * The panel is `speedrun/src/panel.css` — the same structure, the
  * same palette, the same picture-size control and the same row Titanic's
  * workbench draws, because a workbench is a tool and a sheet is the same program
  * on either disc. Imported rather than linked for the reason `theme.css` imports
@@ -25,7 +25,7 @@
  * `site/tests/cascade.ts` and `dust/tests/browser/built-layout.ts` were both
  * written for.
  */
-@import "@dreamfactory/engine/web/speedrun/panel.css";
+@import "@dreamfactory/speedrun/panel.css";
 
 /**
  * The page is a document again, not a grid pinned to the window.

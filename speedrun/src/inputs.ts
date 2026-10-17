@@ -5,7 +5,7 @@
  * you cannot see while watching a run is the run itself: the picture moves and
  * nothing says whether that was an arrow, a click, or the engine doing something
  * on its own. This is that missing half — a keyboard and a mouse in the corner
- * of the screen (which corner is speedrun/index.html's `#inputs`), each key
+ * of the screen (which corner is `#inputs`, built by panel.ts), each key
  * lighting as it is pressed.
  *
  * ## It watches, and it is not in the way
@@ -59,7 +59,7 @@
  * a row that never lights. Anything pressed anyway still shows: it goes to the
  * spare, labelled, which is the other half of why the spare is there.
  */
-import { focusOwnsKey } from "../keys";
+import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 
 export interface InputMonitorOptions {
   /** the window the game is in — where `main.ts` listens for keys */
