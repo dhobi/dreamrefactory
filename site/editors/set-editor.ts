@@ -34,8 +34,7 @@ import {
 } from "./editor-kit";
 import { t, formatNumber } from "@dreamfactory/chrome/locales";
 import { FrameInfo, LEFTTURNS, RIGHTTURNS, SetFile, readSetFile, turnRing } from "@dreamfactory/engine/df/set";
-import { detectVersion } from "@dreamfactory/engine/df/version";
-import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
+import { openSetFile } from "@dreamfactory/engine/df/set-any";
 import {
   OBJECT_ID_FIELD,
   SCENE_NAME_FIELD,
@@ -133,8 +132,9 @@ function loadSet(bytes: Uint8Array, name: string): void {
   let parsed: SetFile;
   try {
     // either engine's SET, in the shape this page draws (see readOnlyV1)
-    readOnlyV1 = detectVersion(bytes) === 1;
-    parsed = readOnlyV1 ? readSetFileAsV4(bytes) : readSetFile(bytes);
+    const opened = openSetFile(bytes);
+    readOnlyV1 = opened.version === 1;
+    parsed = opened.set;
   } catch (e) {
     log(t("common.notReadable", { ext: ".set", message: (e as Error).message }));
     return;

@@ -1,18 +1,14 @@
 import { PlayHandle } from "./audio";
 import { ENGINE_STEP_MS, ticksAt } from "./clock";
 import { bearingV5, engineBearing } from "./geometry";
+import { s16, schedulerRules, type SchedulerRules } from "./scheduler-rules";
 import type { GameSession } from "./session";
 import { ScriptError, type ScriptInstance } from "./interp";
 
-/** TI.EXE's fixed table sizes for scheduled loops, crickets and walks */
-const MAX_LOOPS = 32;
+/** TI.EXE's fixed table sizes for crickets and walks (the loops' are a {@link SchedulerRules}) */
 const MAX_CRICKETS = 16;
 const MAX_WALKS = 16;
-/** RedJack.exe's loop table is twice TI.EXE's: 64 slots of 0x9e at 0x4c4a80 (makeloop 0x41bf8d) */
-const MAX_LOOPS_V5 = 64;
 
-/** sign-extend the low 16 bits — the walk records hold their positions in words */
-const s16 = (v: number): number => (v << 16) >> 16;
 
 /**
  * One walk record (TI.EXE's 0x6e-byte slot at 0x48b150, DF.EXE's 0x52 at
@@ -317,11 +313,11 @@ export class Scheduler {
    * it), a looping play among them. DF.EXE's are not read.
    */
   private replaceSound(name: string): void {
-    if (this.session.isV1) return;
+    if (!this.rules.replacesPlayingSounds) return;
     const key = name.toLowerCase();
     const { volume, pan } = this.soundPlace(key);
     for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.place?.(volume, pan);
-    if (this.session.isV5) this.soundLoops.get(key)?.place?.(volume, pan);
+    this.soundLoops.get(key)?.place?.(volume, pan);
   }
 
   /** a sound record's 0..255 volume and pan in sink units ({@link panFrom255}) */
@@ -329,9 +325,9 @@ export class Scheduler {
     return {
       volume: Math.max(0, Math.min(1, this.getSoundVol(key) / 255)),
       // DF.EXE's and RedJack.exe's pan scales are not read: they keep 128 a side
-      pan: this.session.isV1 || this.session.isV5
-        ? Math.max(-1, Math.min(1, (this.getSoundPan(key) - 128) / 128))
-        : panFrom255(this.getSoundPan(key)),
+      pan: this.rules.balancePan
+        ? panFrom255(this.getSoundPan(key))
+        : Math.max(-1, Math.min(1, (this.getSoundPan(key) - 128) / 128)),
     };
   }
   getSoundPan(name: string): number {
@@ -440,12 +436,12 @@ export class Scheduler {
     this.stopLoop(kind, name);
     if (this.loops.length >= this.loopSlots) {
       // RedJack.exe's is error 0x23 (0x41bfa1); TI.EXE's table full is not read
-      if (this.session.isV5) throw new ScriptError(0x23, `loop table full (${MAX_LOOPS_V5}), ${kind}/${name} not made`);
-      this.session.onLog(`makeloop: table full (${MAX_LOOPS}), dropping ${kind}/${name}`);
+      if (this.rules.loopTableFullThrows) throw new ScriptError(0x23, `loop table full (${this.loopSlots}), ${kind}/${name} not made`);
+      this.session.onLog(`makeloop: table full (${this.loopSlots}), dropping ${kind}/${name}`);
       return;
     }
     // RedJack.exe: a negative period is a tick to fall due on (0x41bf05)
-    const deadline = this.session.isV5 && period < 0 ? ticksAt(this.session.clock.now) - period : undefined;
+    const deadline = this.rules.negativePeriodIsDeadline && period < 0 ? ticksAt(this.session.clock.now) - period : undefined;
     this.insertLoop({
       kind: kind.toLowerCase(),
       name: name.toLowerCase(),
@@ -483,7 +479,12 @@ export class Scheduler {
 
   /** the loop table's size: 32 slots, RedJack.exe's 64 */
   private get loopSlots(): number {
-    return this.session.isV5 ? MAX_LOOPS_V5 : MAX_LOOPS;
+    return this.rules.loopSlots;
+  }
+
+  /** where this session's engine parts ways with the others (scheduler-rules.ts) */
+  private get rules(): SchedulerRules {
+    return schedulerRules(this.session);
   }
 
   /**
@@ -568,9 +569,9 @@ export class Scheduler {
    * 0x41d7d1), in its own units.
    */
   makeCricket(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
-    const v5 = this.session.isV5;
+    const rules = this.rules;
     // RedJack.exe's (0x41d530) has no set test: the cricket takes whatever set is open
-    if (!v5 && !this.session.currentSetName) throw new ScriptError(0x28, `makecricket (${name}): no set open`);
+    if (rules.cricketNeedsSet && !this.session.currentSetName) throw new ScriptError(0x28, `makecricket (${name}): no set open`);
     const key = name.toLowerCase();
     if (!this.session.audioLib.sound(key)) throw new ScriptError(0xa, `makecricket: no sound "${name}"`);
     if (radius < 1 || base < 0 || jitter < -1) {
@@ -588,7 +589,7 @@ export class Scheduler {
       paused: false, setName: this.session.currentSetName, handle: null, slot, armed: false,
     };
     // RedJack.exe measures the camera at once and keeps it (+0x1c..+0x28, 0x41d71b)
-    if (v5) this.measureCricketV5(c);
+    if (rules.cricketsMeasured) this.measureCricketV5(c);
     this.insertCricket(c);
   }
 
@@ -625,7 +626,7 @@ export class Scheduler {
       armed,
       measured,
     };
-    if (this.session.isV5 && !measured) this.measureCricketV5(c);
+    if (this.rules.cricketsMeasured && !measured) this.measureCricketV5(c);
     const used = new Set(this.crickets.map((x) => x.slot));
     let slot = 0;
     while (used.has(slot)) slot++;
@@ -693,7 +694,7 @@ export class Scheduler {
     // the sound's flag and then the loop flag of every channel playing it
     // (0x401d40), and does nothing else — off, the sound plays out the time
     // round it is in; on, one already playing goes on round
-    if (!this.session.isV1 && !this.session.isV5) {
+    if (this.rules.loopFlagOnChannels) {
       if (on) this.loopFlags.add(key);
       else this.loopFlags.delete(key);
       for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.setLoop?.(on);
@@ -725,7 +726,8 @@ export class Scheduler {
       return;
     }
     const { volume, pan } = this.soundPlace(key);
-    if (this.session.isV1) {
+    const channels = this.rules.soundChannels;
+    if (channels === "v1") {
       const slot = pickSoundChannelV1(
         rule === "dual" ? "single" : rule,
         this.session.audioLib.soundPriorityV1(key),
@@ -742,7 +744,7 @@ export class Scheduler {
       else this.session.captionClip(key, handle); // #50
       return;
     }
-    if (!this.session.isV5) {
+    if (channels === "v4") {
       // TI.EXE 0x425150 / 0x425240 / 0x425330 / 0x425400 (singlesound,
       // multiplesound, dualsound, bothsound; tl.exe 0x433850..0x433b30), the
       // priority the record's (+0, tl.exe +0x39), a finished channel's zeroed
@@ -799,7 +801,7 @@ export class Scheduler {
    * (0x4072f0).
    */
   haltSounds(which?: number): void {
-    if (!this.session.isV1 && !this.session.isV5 && which !== undefined) {
+    if (this.rules.haltSoundTakesChannels && which !== undefined) {
       if (which !== 1 && which !== 2 && which !== 3) throw new ScriptError(0xe, `haltsound (${which})`);
       if (which & 1) this.soundChannels[0]?.handle.stop();
       if (which & 2) this.soundChannels[1]?.handle.stop();
@@ -1122,8 +1124,7 @@ export class Scheduler {
    * the step the actor's `actorturn` as it is — a turn of 0 never lands.
    */
   private stepDeg(cur: number, target: number, by: number): number {
-    const wrap = this.session.isV5 ? 0xffffff : 0xff;
-    const w = this.word;
+    const { turnWrap: wrap, word: w } = this.rules;
     const c = w(cur);
     const t = w(target);
     const step = w(by);
@@ -1151,7 +1152,7 @@ export class Scheduler {
    * A position as a walk record holds it: TI.EXE's and DF.EXE's in 16-bit words,
    * RedJack.exe's in dwords (its world is in 10⁻⁵ units, 0x41b5d4).
    */
-  private readonly word = (v: number): number => (this.session.isV5 ? v | 0 : s16(v));
+  private readonly word = (v: number): number => this.rules.word(v);
 
   /**
    * A whole turn in the units a facing is held in: 256 for the older engines,
@@ -1159,7 +1160,7 @@ export class Scheduler {
    * count in 2^24ths (RedJack's `stdturn` is 1,050,000 a pass, about 22°) (#447).
    */
   private get turnUnits(): number {
-    return this.session.isV5 ? 0x1000000 : 0x100;
+    return this.rules.turnUnits;
   }
 
   /**
@@ -1168,7 +1169,7 @@ export class Scheduler {
    * DF.EXE 0x43a760) — {@link engineBearing} — or DreamFactory 5's.
    */
   private heading(dx: number, dy: number): number {
-    return this.session.isV5 ? bearingV5(dx, dy) : engineBearing(dx, dy);
+    return this.rules.heading(dx, dy);
   }
 
   /**
@@ -1179,7 +1180,7 @@ export class Scheduler {
    */
   stopWalk(name: string): void {
     const key = name.toLowerCase();
-    if (key === "all" && !this.session.isV5) {
+    if (key === "all" && this.rules.stopWalkAll) {
       this.walks.clear();
       return;
     }
@@ -1272,7 +1273,7 @@ export class Scheduler {
     const a = this.session.actorRuntime.get(key);
     // RedJack.exe looks the walker up first (0x41b3a5) and a walker that is not
     // there is error 0xa, which frees the slot and stops the pass (0x41b7c5)
-    if (!a && this.session.isV5) throw new ScriptError(0xa, `walk: no actor "${key}"`);
+    if (!a && this.rules.missingWalkerThrows) throw new ScriptError(0xa, `walk: no actor "${key}"`);
     if (!a) {
       this.walks.delete(key);
       return null;
@@ -1323,7 +1324,7 @@ export class Scheduler {
     // or a walk's target cleared (0x41b51c) and `endturn ()` sent (0x41b561).
     if (w.turnTo !== undefined) {
       // TI.EXE steps the RECORD's facing (+0x0a); DF.EXE the actor's (0x439629)
-      const cur = this.session.isV1 ? a.deg : (w.deg ?? a.deg);
+      const cur = this.rules.turnStepsActor ? a.deg : (w.deg ?? a.deg);
       const turned = this.stepDeg(cur, w.turnTo, a.turn);
       w.deg = turned;
       a.deg = turned & (this.turnUnits - 1);
@@ -1573,7 +1574,8 @@ export class Scheduler {
       }
     }
     // DF.EXE's pass has the balls where the others have crickets (0x438870)
-    if (this.session.isV1) {
+    const rules = this.rules;
+    if (!rules.crickets) {
       this.session.balls.step();
       return this.passLoops();
     }
@@ -1583,12 +1585,12 @@ export class Scheduler {
     const loud: Cricket[] = [];
     for (const c of this.crickets.slice()) {
       if (!this.crickets.includes(c)) continue;
-      if (!this.session.isV5) this.serviceCricketV4(c, loud);
+      if (!rules.cricketsMeasured) this.serviceCricketV4(c, loud);
       else if (!this.serviceCricketV5(c, loud)) return false;
     }
     if (loud.length) this.playLoudest(loud);
     if (!(await this.passLoops())) return false;
-    return this.session.isV5 ? this.passEndAnims() : true;
+    return rules.endAnimsOwed ? this.passEndAnims() : true;
   }
 
   /**
@@ -1651,7 +1653,8 @@ export class Scheduler {
     this.passCount += 1;
     // DF.EXE's frame (0x433490) steps only the props it draws (0x41eb67), against
     // the camera the room draws with (0x41e828/0x41e834)
-    const v1 = s.isV1;
+    const rules = this.rules;
+    const v1 = rules.propsByCamera;
     // RedJack.exe's steps go by the clock's sixtieths since a view began
     // (0x406a03), read in the frame
     const tick = ticksAt(s.clock.now);
@@ -1659,7 +1662,7 @@ export class Scheduler {
       this.passCount * ENGINE_STEP_MS, ENGINE_STEP_MS, true, v1, v1 ? s.activeCamera() : null, tick,
     );
     const actors = s.actorRuntime.advanceAnimation(tick);
-    if (s.isV5) {
+    if (rules.endAnimsOwed) {
       // ...and each ending is owed to the next pass (passEndAnims)
       this.owedEndAnims.actors.push(...actors);
       this.owedEndAnims.props.push(...props);

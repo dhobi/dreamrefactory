@@ -1,0 +1,144 @@
+import { bearingV5, engineBearing } from "./geometry";
+
+/**
+ * Where the scheduler's three engines part ways, side by side: DF.EXE (Dust,
+ * DreamFactory 1), TI.EXE (Titanic, 4) and RedJack.exe (RedJack, 5). The
+ * scheduler asks {@link schedulerRules} once per use and reads the answer off
+ * here instead of asking the session which engine it is; the code that carries
+ * each rule out, and the addresses it was read at, stay in scheduler.ts.
+ */
+export interface SchedulerRules {
+  readonly engine: 1 | 4 | 5;
+
+  // ---- loops (makeloop) ----
+  /** the loop table's slots: TI.EXE's 32, RedJack.exe's 64 (0x4c4a80) */
+  readonly loopSlots: number;
+  /** a full table is error 0x23 (RedJack.exe 0x41bfa1), not a loop dropped with a log line */
+  readonly loopTableFullThrows: boolean;
+  /** a negative period is a tick to fall due on (RedJack.exe 0x41bf05) */
+  readonly negativePeriodIsDeadline: boolean;
+
+  // ---- sounds ----
+  /**
+   * How a play builtin picks its channel: DF.EXE's two channels by priority
+   * (`pickSoundChannelV1`), TI.EXE's two by priority (`pickSoundChannelsV4`), or
+   * RedJack.exe's channel by overlap, with a looping sound held by name.
+   */
+  readonly soundChannels: "v1" | "v4" | "v5";
+  /**
+   * A sound's loop flag is the channels' (TI.EXE 0x425740: `soundloop` flags
+   * every channel playing it and nothing else), not a looping play the scheduler
+   * holds by name and stops when the flag goes off.
+   */
+  readonly loopFlagOnChannels: boolean;
+  /** setting a record's volume or pan re-places the channels playing it (TI.EXE 0x425540, RedJack.exe 0x471fc0; DF.EXE's not read) */
+  readonly replacesPlayingSounds: boolean;
+  /** a pan is TI.EXE's balance (0x424b90, `panFrom255`), else 128 a side, linear (DF.EXE's and RedJack.exe's scales not read) */
+  readonly balancePan: boolean;
+  /** `haltsound` takes the channels as 1, 2 or 3 (TI.EXE 0x44d0d0); the others halt both */
+  readonly haltSoundTakesChannels: boolean;
+
+  // ---- crickets ----
+  /** the pass services crickets; DF.EXE's has the balls in their place (0x438870) */
+  readonly crickets: boolean;
+  /** `makecricket` wants a set open (TI.EXE error 0x28); RedJack.exe's takes whatever is (0x41d530) */
+  readonly cricketNeedsSet: boolean;
+  /** a cricket measures the camera when made and keeps it (RedJack.exe 0x41d71b), serviced by its own rule */
+  readonly cricketsMeasured: boolean;
+
+  // ---- walks and turns ----
+  /** `stopwalk ("all")` clears every walk; RedJack.exe has no such name */
+  readonly stopWalkAll: boolean;
+  /** a walker that is not there is error 0xa (RedJack.exe 0x41b3a5), not a slot quietly freed */
+  readonly missingWalkerThrows: boolean;
+  /** a turn steps the ACTOR's facing (DF.EXE 0x439629), not the walk record's */
+  readonly turnStepsActor: boolean;
+  /** a whole turn: 256 for the older engines, 2^24 for DreamFactory 5 (#447) */
+  readonly turnUnits: number;
+  /** the wrap a turn steps across: 0xff, RedJack.exe's 0xffffff (0x41b4dc) */
+  readonly turnWrap: number;
+  /** a position as a walk record holds it: 16-bit words, RedJack.exe's dwords (0x41b5d4) */
+  readonly word: (v: number) => number;
+  /** the facing of a delta vector in {@link turnUnits}: the engines' table bearing, or DreamFactory 5's */
+  readonly heading: (dx: number, dy: number) => number;
+
+  // ---- the pass and the frame ----
+  /** the frame steps only the props it draws, against the room's camera (DF.EXE 0x41eb67) */
+  readonly propsByCamera: boolean;
+  /** an animation's ending is sent on the next pass (RedJack.exe), not when it ends */
+  readonly endAnimsOwed: boolean;
+}
+
+/** sign-extend the low 16 bits — the walk records hold their positions in words */
+export const s16 = (v: number): number => (v << 16) >> 16;
+
+/** Titanic: the scheduler as TI.EXE runs it, the one the others are told apart from */
+const V4: SchedulerRules = {
+  engine: 4,
+  loopSlots: 32,
+  loopTableFullThrows: false,
+  negativePeriodIsDeadline: false,
+  soundChannels: "v4",
+  loopFlagOnChannels: true,
+  replacesPlayingSounds: true,
+  balancePan: true,
+  haltSoundTakesChannels: true,
+  crickets: true,
+  cricketNeedsSet: true,
+  cricketsMeasured: false,
+  stopWalkAll: true,
+  missingWalkerThrows: false,
+  turnStepsActor: false,
+  turnUnits: 0x100,
+  turnWrap: 0xff,
+  word: s16,
+  heading: engineBearing,
+  propsByCamera: false,
+  endAnimsOwed: false,
+};
+
+/** Dust */
+const V1: SchedulerRules = {
+  ...V4,
+  engine: 1,
+  soundChannels: "v1",
+  loopFlagOnChannels: false,
+  replacesPlayingSounds: false,
+  balancePan: false,
+  haltSoundTakesChannels: false,
+  crickets: false,
+  turnStepsActor: true,
+  propsByCamera: true,
+};
+
+/** RedJack */
+const V5: SchedulerRules = {
+  ...V4,
+  engine: 5,
+  loopSlots: 64,
+  loopTableFullThrows: true,
+  negativePeriodIsDeadline: true,
+  soundChannels: "v5",
+  loopFlagOnChannels: false,
+  balancePan: false,
+  haltSoundTakesChannels: false,
+  cricketNeedsSet: false,
+  cricketsMeasured: true,
+  stopWalkAll: false,
+  missingWalkerThrows: true,
+  turnUnits: 0x1000000,
+  turnWrap: 0xffffff,
+  word: (v) => v | 0,
+  heading: bearingV5,
+  endAnimsOwed: true,
+};
+
+/**
+ * The rules for the engine a session is running. Asked each time rather than
+ * kept, because a session learns which it is as it boots: v5 from the BOOTFILE,
+ * v1 from the set it opens.
+ */
+export function schedulerRules(engine: { readonly isV1: boolean; readonly isV5: boolean }): SchedulerRules {
+  if (engine.isV5) return V5;
+  return engine.isV1 ? V1 : V4;
+}

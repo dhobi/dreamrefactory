@@ -1,6 +1,7 @@
 import { detectVersion } from "./version";
 import { readSetFile, type SetFile } from "./set";
 import { readSetFileV1, type SetFileV1 } from "./set-v1";
+import { readSetFileAsV4 } from "./set-v1-to-v4";
 
 /**
  * Open a SET without knowing which engine wrote it.
@@ -28,4 +29,21 @@ export function readAnySetFile(data: Uint8Array): AnySetFile {
   throw new Error(
     `SET container 0 reports version ${version}; this port reads 1 (Dust) and 4 (Titanic)`,
   );
+}
+
+/** a SET in the one shape the runtime drives, and which engine wrote it */
+export interface SetAsV4 {
+  version: 1 | 4;
+  set: SetFile;
+}
+
+/**
+ * Open a SET in the v4 shape, whichever engine wrote it: the one place that
+ * chooses, for the session, the host and the set editor. A v1 set is turned into
+ * a v4-shaped one ({@link file://./set-v1-to-v4.ts}); `version` says which it was,
+ * which the editor needs because it can only write a v4 one back. Anything but a
+ * v1 set goes to the v4 reader, which says what it found when it is not one.
+ */
+export function openSetFile(data: Uint8Array): SetAsV4 {
+  return detectVersion(data) === 1 ? { version: 1, set: readSetFileAsV4(data) } : { version: 4, set: readSetFile(data) };
 }

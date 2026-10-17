@@ -17,9 +17,8 @@
  * passes its side in as {@link HostFiles} (a file source), {@link HostUi} (five
  * notifications) and an {@link AudioSink}. Tests pass node equivalents.
  */
-import { readSetFile, SetFile } from "@dreamfactory/engine/df/set";
-import { detectVersion } from "@dreamfactory/engine/df/version";
-import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
+import type { SetFile } from "@dreamfactory/engine/df/set";
+import { openSetFile } from "@dreamfactory/engine/df/set-any";
 import { parseSave } from "@dreamfactory/engine/df/savegame-read";
 import { SetViewer } from "./viewer";
 import { MazeView } from "./maze-view";
@@ -447,11 +446,8 @@ export class GameHost {
   /** parse + cache a .SET; false (and a report) if it isn't one */
   private parseInto(name: string, data: Uint8Array, fail: (m: string) => void): boolean {
     try {
-      // same routing as GameSession.loadSet: a v1 set becomes a v4-shaped one
-      this.loadedSets.set(
-        name,
-        detectVersion(data) === 1 ? readSetFileAsV4(data) : readSetFile(data),
-      );
+      // a v1 set becomes a v4-shaped one, as for GameSession.loadSet
+      this.loadedSets.set(name, openSetFile(data).set);
       return true;
     } catch (e) {
       fail(`cannot parse ${name}: ${(e as Error).message}`);
