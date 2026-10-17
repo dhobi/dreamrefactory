@@ -207,11 +207,7 @@ export class SessionBoot {
     this.session.themeStarted(null);
     this.session.captions = [];
     this.session.puppetCtrl.closePuppetFile();
-    this.session.fade.queue.length = 0;
-    this.session.fade.snapshot = null;
-    this.session.fade.pendingReveal = false;
-    this.session.fade.blanked = false;
-    this.session.fade.level = 1;
+    this.session.fade.reset(1);
     // and the pointer comes BACK. The endgame's `hidecursor()` has no matching
     // `showcursor()` — the game is over — so a restart in the same page would
     // otherwise begin with an invisible cursor. See cursorDepth: the original

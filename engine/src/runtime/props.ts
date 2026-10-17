@@ -4,7 +4,8 @@ import {
   WorldCamera, Occlusion, SpriteCamera, projectPoint, depthLevel, sceneryOccludes, engineBearing, hiddenBy, inkAlpha,
   inkPixel, inDepthWindow,
 } from "./geometry";
-import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
+import { scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
+import { drawWorldSprite, ViewBuffer } from "./sprite-blit";
 import type { DrawSignature } from "./signature";
 import { TURN } from "../df/sett";
 import { Lights, shadedPalette } from "./shading";
@@ -1283,10 +1284,7 @@ export class PropRuntime {
    */
   compositeWorldOne(
     { p, proj }: { p: PropInstance; proj: { x: number; y: number; depth: number } },
-    rgba: Uint8ClampedArray,
-    width: number,
-    height: number,
-    paletteRGBA: Uint8ClampedArray,
+    view: ViewBuffer,
     cam: WorldCamera,
     occ: Occlusion | null = null,
   ): void {
@@ -1294,41 +1292,21 @@ export class PropRuntime {
       const c = this.cardOf(p, cam, cam.v5);
       if (!c) return;
       const hidden = occ ? (x: number, y: number, axial: number) => sceneryOccludes(occ, x, y, this.occludeAt(p, axial, occ)) : undefined;
-      paintCard(c, cam.v5, { rgba, width, height }, this.shade(p, c.f.palette ?? paletteRGBA), inkAlpha(p.ink), hidden);
+      paintCard(c, cam.v5, view, this.shade(p, c.f.palette ?? view.palette), inkAlpha(p.ink), hidden);
       return;
     }
-    const r = this.worldRect(p, proj, cam);
-    // scenery nearer than the prop hides it, same SET Z image as actors —
-    // without this the smoke table / plants drew over pillars in front
-    const level = occ ? this.occludeAt(p, hiddenBy(proj), occ) : 0;
-    const maxY = Math.min(cam.clipH, height, r.y + r.h);
-    const maxX = Math.min(cam.clipW, width, r.x + r.w);
-    // a v5 sprite colours through its own palette (df/shp.ts)
-    if (r.f.palette) paletteRGBA = r.f.palette;
-    paletteRGBA = this.shade(p, paletteRGBA);
-    const a = inkAlpha(p.ink);
-    if ("scaled" in r) {
-      if (r.w <= 0 || r.h <= 0) return;
-      const pal = paletteRGBA;
-      drawScaledSprite(r.f, proj.x, proj.y, r.w, r.h, !!(p.flip & 1), {
-        clip: { top: 0, left: 0, bottom: Math.min(cam.clipH, height), right: Math.min(cam.clipW, width) },
-        drawable: occ ? (x, y) => !sceneryOccludes(occ, x, y, level) : undefined,
-        plot: (x, y, c) => inkPixel(rgba, (y * width + x) * 4, pal, c * 4, a),
-      });
-      return;
-    }
-    for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
-      let sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
-      if (p.flip & 2) sy = r.f.height - 1 - sy;
-      for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
-        let sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
-        if (p.flip & 1) sx = r.f.width - 1 - sx;
-        const s = sy * r.f.width + sx;
-        if (!r.f.opaque[s]) continue;
-        if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
-        inkPixel(rgba, (ty * width + tx) * 4, paletteRGBA, r.f.indexed[s] * 4, a);
-      }
-    }
+    const rect = this.worldRect(p, proj, cam);
+    drawWorldSprite(view, cam, occ, {
+      rect,
+      at: proj,
+      flip: p.flip,
+      // a v5 sprite colours through its own palette (df/shp.ts)
+      palette: this.shade(p, rect.f.palette ?? view.palette),
+      alpha: inkAlpha(p.ink),
+      // scenery nearer than the prop hides it, same SET Z image as actors —
+      // without this the smoke table / plants drew over pillars in front
+      level: occ ? this.occludeAt(p, hiddenBy(proj), occ) : 0,
+    });
   }
 
   composite(
@@ -1342,8 +1320,9 @@ export class PropRuntime {
   ): void {
     // world-space props first (they belong to the scene), far to near
     if (cam) {
+      const view = { rgba, width, height, palette: paletteRGBA };
       for (const entry of this.worldDrawList(cam)) {
-        this.compositeWorldOne(entry, rgba, width, height, paletteRGBA, cam, occ);
+        this.compositeWorldOne(entry, view, cam, occ);
       }
     }
     for (const p of this.drawList(persistentScreenOnly)) {

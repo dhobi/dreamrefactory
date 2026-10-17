@@ -1,4 +1,4 @@
-import { logic, toNum, toStr, truthy } from "../interp";
+import { toNum, toStr, truthy } from "../interp";
 import { pauseDepthOf } from "../pause";
 import { BuiltinCtx } from "./context";
 
@@ -24,21 +24,18 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   r("stoploop", (_i, [kind, name]) => session.scheduler.stopLoop(toStr(kind ?? ""), toStr(name ?? "")));
   /**
    * The pause getters — `pauseloop (kind, name)`, `pausecricket (name)` /
-   * `pauseball (name)`, `pausewalk (name)` — answer the boolean tag. DF.EXE puts
-   * the pause DEPTH in its payload (0x42cf95, 0x42d074, 0x42d004), which a
-   * {@link logic} keeps (interp.ts Logic: depth 2 is not `= true`); TI.EXE and
-   * tl.exe answer 0 or 1 (TI.EXE 0x42ae87, 0x42af86, 0x42af06), which the
-   * interpreter makes of a plain depth.
+   * `pauseball (name)`, `pausewalk (name)` — answer the boolean tag; how each
+   * engine says a depth is its rule (SchedulerRules.pauseAnswer).
    */
-  const pauseAnswer = (depth: number) => (session.isV1 ? logic(depth) : depth);
   r("pauseloop", (_i, [kind, name, flag]) => {
     // two arguments: the getter (DF.EXE 0x42cf20 → 0x438fa0, TI.EXE 0x42ae10):
     // the first loop of that kind and name, 0 for none
-    if (flag === undefined && name !== undefined && !session.isV5) {
+    const rules = session.scheduler.rules;
+    if (flag === undefined && name !== undefined && rules.pauseGetters) {
       const k = toStr(kind ?? "").toLowerCase();
       const n = toStr(name).toLowerCase();
       const l = session.scheduler.loops.find((x) => x.kind === k && x.name === n);
-      return pauseAnswer(pauseDepthOf(l));
+      return rules.pauseAnswer(pauseDepthOf(l));
     }
     session.scheduler.pauseLoop(toStr(kind ?? ""), toStr(name ?? ""), truthy(flag ?? 1));
   });
@@ -46,47 +43,16 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   r("countloops", () => session.scheduler.loops.length);
   r("indextoloop", (_i, [idx]) => session.scheduler.loops[toNum(idx ?? 0) - 1]?.name ?? "");
 
-  // DreamFactory 1 gave these six ids to its BALLS — makeball, stopball,
-  // pauseball, isball, countballs, indextoball — a projectile that moves a prop
-  // and ends in its `endball` (runtime/balls.ts). Nothing like a cricket, so a
-  // v1 game takes the other branch of every one (engine/src/df/opcodes.ts).
-  const balls = session.balls;
-  r("makecricket", (_i, [name, x, y, radius, base, jitter, frames]) => {
-    if (session.isV1) {
-      balls.make(toStr(name ?? ""), [x, y, radius, base, jitter, frames].map((v) => toNum(v ?? 0)));
-      return;
-    }
-    session.scheduler.crickets.make(
-      toStr(name ?? ""), toNum(x ?? 0), toNum(y ?? 0),
-      toNum(radius ?? 1), toNum(base ?? 0), toNum(jitter ?? -1),
-    );
-  });
-  r("stopcricket", (_i, [name]) =>
-    session.isV1 ? balls.stop(toStr(name ?? "all")) : session.scheduler.crickets.stop(toStr(name ?? "all")),
-  );
-  r("pausecricket", (_i, [name, flag]) => {
-    if (session.isV1) {
-      if (flag === undefined) return pauseAnswer(balls.pauseDepth(toStr(name ?? "")));
-      balls.pause(toStr(name ?? "all"), truthy(flag));
-      return;
-    }
-    // one argument is the getter: the pause count (TI.EXE 0x444880). RedJack.exe
-    // has none — its pausecricket (0x409210) reads a name and a number and nests
-    // the count (Crickets.pause)
-    if (flag === undefined && name !== undefined && !session.isV5) return session.scheduler.crickets.depth(toStr(name));
-    session.scheduler.crickets.pause(toStr(name ?? "all"), truthy(flag ?? 1));
-  });
-  r("iscricket", (_i, [name]) => {
-    const n = toStr(name ?? "");
-    const live = session.isV1 ? balls.isBall(n) : session.scheduler.crickets.has(n);
-    return live ? 1 : 0;
-  });
-  r("countcrickets", () => (session.isV1 ? balls.count() : session.scheduler.crickets.table.length));
-  r("indextocricket", (_i, [idx]) =>
-    session.isV1
-      ? balls.indexToBall(toNum(idx ?? 0))
-      : (session.scheduler.crickets.table[toNum(idx ?? 0) - 1]?.name ?? ""),
-  );
+  // The cricket opcodes; DreamFactory 1 gave these six ids to its BALLS, a
+  // projectile that moves a prop and ends in its `endball` (runtime/balls.ts),
+  // and the engine's crickets say which answers them (Crickets.opcodes).
+  const crickets = () => session.scheduler.crickets.opcodes;
+  r("makecricket", (_i, [name, ...args]) => crickets().makeCricket(toStr(name ?? ""), args));
+  r("stopcricket", (_i, [name]) => crickets().stopCricket(toStr(name ?? "all")));
+  r("pausecricket", (_i, [name, flag]) => crickets().pauseCricket(name, flag));
+  r("iscricket", (_i, [name]) => (crickets().isCricket(toStr(name ?? "")) ? 1 : 0));
+  r("countcrickets", () => crickets().countCrickets());
+  r("indextocricket", (_i, [idx]) => crickets().indexToCricket(toNum(idx ?? 0)));
 
   // one argument is the GETTER (DF.EXE 0x407840, TI/tl the same tag): Dust's
   // dayfxs asks `if soundloop (fxsound)` before it flips the saw on or off, and

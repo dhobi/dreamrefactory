@@ -367,10 +367,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   });
   /** the screen is black from this instant — no ramp, nothing left running */
   const blackNow = (): void => {
-    session.fade.queue.length = 0;
-    session.fade.snapshot = null;
-    session.fade.level = 1;
-    session.fade.pendingReveal = false;
+    session.fade.cut(1);
     session.fade.blanked = true;
   };
   r("blackscreen", blackNow);
@@ -547,10 +544,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     // (plugins.ts) and draws the picture itself. So it must not lift the
     // transition-black the way a reveal does. (DF.EXE has no 24019.)
     if (name === "nodraw") return;
-    session.fade.queue.length = 0;
-    session.fade.snapshot = null;
-    session.fade.pendingReveal = false;
-    session.fade.level = 0;
+    session.fade.cut(0);
     // A WIPE is animated, over `steps` engine passes (see GameSession.wipe).
     //
     // The screen being left is captured HERE, which is late enough to be right:

@@ -134,10 +134,7 @@ export function registerPluginBuiltins(ctx: BuiltinCtx): void {
      * photograph to show — `if pictotal < 1` answers "You haven't taken any
      * pictures yet" and stays where it is.
      */
-    session.fade.queue.length = 0;
-    session.fade.snapshot = null;
-    session.fade.level = 0;
-    session.fade.pendingReveal = false;
+    session.fade.cut(0);
     return CAMERA_OK;
   };
 

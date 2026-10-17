@@ -1,4 +1,4 @@
-import { ScriptError, Value, logic, toNum, toStr, truthy } from "../interp";
+import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { pauseDepthOf } from "../pause";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
@@ -869,12 +869,10 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   });
   r("pausewalk", (_i, [n, flag]) => {
     // one argument is the getter (DF.EXE 0x42cfb0, TI.EXE 0x42aeb0): the walk's
-    // pause depth — DF.EXE hands the depth itself back under the boolean tag
-    // (0x42d004, interp.ts Logic), TI.EXE and tl.exe 0 or 1
-    if (n !== undefined && flag === undefined && !session.isV5) {
-      const w = session.scheduler.walks.get(toStr(n).toLowerCase());
-      const depth = pauseDepthOf(w);
-      return session.isV1 ? logic(depth) : depth;
+    // pause depth, as the engine says one (SchedulerRules.pauseAnswer)
+    const rules = session.scheduler.rules;
+    if (n !== undefined && flag === undefined && rules.pauseGetters) {
+      return rules.pauseAnswer(pauseDepthOf(session.scheduler.walks.get(toStr(n).toLowerCase())));
     }
     if (n !== undefined) session.scheduler.pauseWalk(toStr(n), truthy(flag ?? 1));
   });

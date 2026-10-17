@@ -1,4 +1,5 @@
 import { bearingV5, engineBearing } from "./geometry";
+import { logic, type Logic } from "./interp";
 
 /**
  * Where the scheduler's three engines part ways, side by side: DF.EXE (Dust,
@@ -36,6 +37,17 @@ export interface SchedulerRules {
   /** the facing of a delta vector in {@link turnUnits}: the engines' table bearing, or DreamFactory 5's */
   readonly heading: (dx: number, dy: number) => number;
 
+  // ---- pauses ----
+  /** `pauseloop (kind, name)` and `pausecricket (name)` read a pause back; RedJack.exe's take a flag every time */
+  readonly pauseGetters: boolean;
+  /**
+   * What a pause getter answers for a depth: DF.EXE the depth under the boolean
+   * tag (0x42cf95, 0x42d074, 0x42d004), a {@link logic} that keeps it, so depth
+   * 2 is not `= true`; TI.EXE and tl.exe 0 or 1 (0x42ae87, 0x42af86, 0x42af06),
+   * which the interpreter makes of a plain depth.
+   */
+  readonly pauseAnswer: (depth: number) => number | boolean | Logic;
+
   // ---- the pass and the frame ----
   /** the frame steps only the props it draws, against the room's camera (DF.EXE 0x41eb67) */
   readonly propsByCamera: boolean;
@@ -59,6 +71,8 @@ const V4: SchedulerRules = {
   turnWrap: 0xff,
   word: s16,
   heading: engineBearing,
+  pauseGetters: true,
+  pauseAnswer: (depth) => depth,
   propsByCamera: false,
   endAnimsOwed: false,
 };
@@ -68,6 +82,7 @@ const V1: SchedulerRules = {
   ...V4,
   engine: 1,
   turnStepsActor: true,
+  pauseAnswer: logic,
   propsByCamera: true,
 };
 
@@ -84,6 +99,7 @@ const V5: SchedulerRules = {
   turnWrap: 0xffffff,
   word: (v) => v | 0,
   heading: bearingV5,
+  pauseGetters: false,
   endAnimsOwed: true,
 };
 

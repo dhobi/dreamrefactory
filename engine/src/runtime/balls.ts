@@ -1,5 +1,7 @@
 import { CELL_UNITS } from "../df/set-v1-to-v4";
 import { becomeWorldProp } from "./props";
+import type { CricketOpcodes } from "./crickets";
+import { logic, toNum, toStr, truthy, type Logic, type Value } from "./interp";
 import type { GameSession } from "./session";
 
 /**
@@ -82,7 +84,7 @@ export function ballHits(
   return true;
 }
 
-export class BallRuntime {
+export class BallRuntime implements CricketOpcodes {
   constructor(private readonly session: GameSession) {}
 
   readonly slots: (Ball | null)[] = new Array<Ball | null>(BALL_SLOTS).fill(null);
@@ -194,6 +196,30 @@ export class BallRuntime {
       if (--k <= 0) return b.name;
     }
     return "none";
+  }
+
+  // ---- the cricket opcodes, which are these in DF.EXE (Crickets.opcodes) ----
+
+  makeCricket(name: string, args: readonly (Value | undefined)[]): void {
+    this.make(name, args.slice(0, 6).map((v) => toNum(v ?? 0)));
+  }
+  stopCricket(name: string): void {
+    this.stop(name);
+  }
+  /** `pauseball (name)` with no flag is the getter, its depth under the boolean tag (see {@link pauseDepth}) */
+  pauseCricket(name: Value | undefined, flag: Value | undefined): boolean | Logic | undefined {
+    if (flag === undefined) return logic(this.pauseDepth(toStr(name ?? "")));
+    this.pause(toStr(name ?? "all"), truthy(flag));
+    return undefined;
+  }
+  isCricket(name: string): boolean {
+    return this.isBall(name);
+  }
+  countCrickets(): number {
+    return this.count();
+  }
+  indexToCricket(n: number): string {
+    return this.indexToBall(n);
   }
 
   /**

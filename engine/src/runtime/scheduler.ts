@@ -248,7 +248,7 @@ export class Scheduler {
   }
 
   /** where this session's engine parts ways with the others (scheduler-rules.ts) */
-  private get rules(): SchedulerRules {
+  get rules(): SchedulerRules {
     return schedulerRules(this.session);
   }
 
