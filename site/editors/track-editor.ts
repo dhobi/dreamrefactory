@@ -30,8 +30,8 @@ import {
   encodeAudioContainer,
   readAudioHeader,
 } from "@dreamfactory/engine/df/audio";
+import type { BankChunk } from "@dreamfactory/engine/df/bank-chunk";
 import {
-  BankChunk,
   BankTables,
   CHUNK_ID_FIELD,
   LOOP_ORDER_MAX,

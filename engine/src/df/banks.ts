@@ -2,6 +2,7 @@ import { BinaryReader } from "./binary";
 import { ByteOrder, PC, little } from "./byte-order";
 import { DFContainerFile } from "./container";
 import { versionOf } from "./version";
+import type { BankChunk } from "./bank-chunk";
 import { readSndFileFrom, sndLoopChunks, sndLoopNames } from "./snd";
 
 /**
@@ -14,23 +15,6 @@ import { readSndFileFrom, sndLoopChunks, sndLoopNames } from "./snd";
  * a bank through. Every patch is copy-on-write on one container and touches
  * only its own field.
  */
-export interface BankChunk {
-  identifier: string;
-  containerLoc: number;
-  /**
-   * Offset of this record's identifier field (its Pascal length byte) inside
-   * the table container it was read from — the anchor
-   * {@link patchChunkIdentifier} renames it at.
-   */
-  idOffset: number;
-  /**
-   * The record's SECOND name field, read only when the caller asks for one —
-   * a MOV one-shot record carries the frame its sound carries the picture on to
-   * (see MovSegment.soundFollows). "" when absent or not asked for.
-   */
-  follow: string;
-}
-
 /** identifier field width of a chunk record — the same 15 in TRK and in MOV */
 export const CHUNK_ID_FIELD = 15;
 /** the loop table's play-order field is a fixed 260 bytes: 130 i16 slots */

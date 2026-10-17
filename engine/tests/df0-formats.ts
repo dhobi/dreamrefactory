@@ -22,8 +22,8 @@ import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { cellV0, ownsFilmV0, readMazeV0, transitionV0 } from "@dreamfactory/engine/df/maze-v0";
 import { movFileFromV0, nextFrameV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
-import { readAnimLogic } from "@dreamfactory/engine/df/pup";
-import { TALK_BACKDROP, TALK_FIRST_FRAME, isEmptySlotV0, pupFileFromV0, readPuppetTrackV0, readTalkFileV0 } from "@dreamfactory/engine/df/talk-v0";
+import { pupFileFromV0, readAnimLogic } from "@dreamfactory/engine/df/pup";
+import { TALK_BACKDROP, TALK_FIRST_FRAME, isEmptySlotV0, readPuppetTrackV0, readTalkFileV0 } from "@dreamfactory/engine/df/talk-v0";
 import { SAVE_V0_SIZE, isSaveV0, readSaveV0, writeSaveV0 } from "@dreamfactory/engine/df/savegame-v0";
 
 const u16 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff];

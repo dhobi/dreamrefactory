@@ -8,7 +8,6 @@
  * animations without importing anything from the game above them: `src` imports
  * `brains`, and nothing in `brains` imports `src`.
  */
-import type { Enemy } from "./kit";
 
 /** one animation, as its script in `.data` carries it */
 export interface FoeAnim {
@@ -344,8 +343,11 @@ export interface Foe {
    * state 9, the flying form; from there the grounded branch at `0x441ef0`
    * takes the blow off the bar and answers 0 on every way out (`0x441f82`,
    * `0x441fb5`, `0x442004`, `0x442024`).
+   *
+   * The test sees only the object's script state, the one thing such a handler
+   * reads (kit.ts's `Enemy.script`).
    */
-  noExchange?: boolean | ((e: Enemy) => boolean);
+  noExchange?: boolean | ((e: { readonly script?: number }) => boolean);
   /**
    * Does its creator take the record's `param` as the object's FACING.
    *
@@ -480,7 +482,7 @@ export interface Foe {
    * `obj+0x10` as its class init leaves it — added to the cel's drawn extent
    * to find where it meets the floor (`0x42fdd7`). The allocator's 0; the rat
    * −13 (`0x44dfa0`), the four gang members −6 (`0x437a95`, `0x4386d5`,
-   * `0x4391b5`, `0x439c15`). A state that changes it sets {@link Enemy.floor}.
+   * `0x4391b5`, `0x439c15`). A state that changes it sets kit.ts's `Enemy.floor`.
    */
   floor?: number;
   /**

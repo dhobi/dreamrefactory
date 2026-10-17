@@ -23,39 +23,13 @@
  * but WHETHER the map may be used at all is a script, and that script is the
  * whole reason a route can't simply always jump.
  */
+import type { MapJump, MapPageButton } from "./mapjump";
 import { MAP_JUMPS, MAP_PAGE_BUTTONS } from "./mapjumps.gen";
 /** the script globals a guard is evaluated against — the shipgraph's own type,
  *  restated here so this module carries no dependency on the test tree */
 type FlowState = Record<string, string | number | boolean | undefined>;
 
-/** one red area on one deck plan */
-export interface MapJump {
-  /** the set it takes you to, lowercase */
-  to: string;
-  /** which deck plan it is on (1 = boat deck, 2 = A … 8 = G) */
-  page: number;
-  /** the deck letter the page stores in `savedeck` — right for the stair you land on */
-  deck: string;
-  /**
-   * The flat click-region to press, by name.
-   *
-   * A name and not a coordinate on purpose: a flat region resolves through the
-   * engine's own hittest as `{name, type: "button"}` (SetViewer's session
-   * .hitTestAt), so aiming at it goes through the rule the rest of the harness
-   * keeps — only ever click a point the engine agrees IS the thing (speedrun/src/aim.ts).
-   * The names are the artists' own ("Button22"), unique within a plan.
-   */
-  region: string;
-  /** the scene and view `changeset` is called with */
-  arrive: [string, string];
-}
-
-/** a page-turn button — the same region name on every plan */
-export interface MapPageButton {
-  page: number;
-  region: string;
-}
-
+export type { MapJump, MapPageButton } from "./mapjump";
 export { MAP_JUMPS, MAP_PAGE_BUTTONS };
 export { MAP_EXIT_REGION } from "./mapjumps.gen";
 
