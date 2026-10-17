@@ -145,10 +145,13 @@ function sayWhatThisIs(document: Doc, page: WorkbenchPage): void {
   document.title = `Speedrun - ${document.title}`;
 
   // the top bar names the PAGE here: which of the game's pages this is
+  // a fresh span rather than new words in the old one, so no catalogue key the
+  // play page's tagline carried puts its words back over these
   const tagline = document.querySelector(".topbar .brand-text > span");
   if (tagline) {
-    tagline.textContent = "Speedrun workbench";
-    tagline.removeAttribute("data-i18n");
+    const span = document.createElement("span");
+    span.textContent = "Speedrun workbench";
+    tagline.replaceWith(span);
   }
   for (const cls of (page.bodyClass ?? "").split(/\s+/).filter(Boolean)) document.body.classList.add(cls);
 }
@@ -276,7 +279,7 @@ function workbench(root: string, page: WorkbenchPage): Plugin {
     config(config) {
       const input = config.build?.rollupOptions?.input ?? {};
       if (typeof input !== "object" || Array.isArray(input)) {
-        throw new Error("speedrun page: give rollupOptions.input as an object of named entries");
+        throw new TypeError("speedrun page: give rollupOptions.input as an object of named entries");
       }
       return { build: { rollupOptions: { input: { ...input, speedrun: id } } } };
     },

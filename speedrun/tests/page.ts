@@ -16,7 +16,7 @@ import { workbenchHtml, type WorkbenchPage } from "../vite";
 const PLAY = `<!doctype html>
 <html><head><title>Game RE</title><meta name="site-root" content="./" /><link rel="stylesheet" href="/src/theme.css" /></head>
 <body class="deep">
-  <header class="topbar"><a class="brand" href="./"><span class="brand-text"><b>Game</b><span>The tagline</span></span></a>
+  <header class="topbar"><a class="brand" href="./"><span class="brand-text"><b>Game</b><span data-i18n="site.tagline">The tagline</span></span></a>
     <nav class="topnav"><a href="./collection/">Collection</a><a href="../">dreamREfactory</a><a href="https://example.org/">Out</a></nav></header>
   <div id="stage"><div id="title">card</div><canvas id="screen"></canvas><pre id="log" hidden></pre></div>
   <div id="under"><button id="fsBtn">Fullscreen</button></div>
@@ -79,6 +79,8 @@ test("the head says what this page is, and the game's entry runs after its main"
   expect(meta("autostart")).toBe("1");
   expect(doc.title).toBe("Speedrun - Game RE");
   expect(doc.querySelector(".topbar .brand-text > span")!.textContent).toBe("Speedrun workbench");
+  // and no catalogue puts the play page's tagline back over it
+  expect(doc.querySelector(".topbar .brand-text > span")!.hasAttribute("data-i18n")).toBe(false);
   expect(doc.querySelector('link[href="/src/speedrun.css"]')).toBeTruthy();
   const scripts = [...doc.querySelectorAll("script[src]")].map((s) => s.getAttribute("src"));
   expect(scripts).toEqual(["/src/main.ts", "/src/speedrun/page.ts"]);

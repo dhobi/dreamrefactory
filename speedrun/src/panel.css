@@ -1179,16 +1179,15 @@ body.sr-resizing * {
 
 /* The picture-size segments, under the screen and set in from it: the
    canvas already carries a lit rim, and a control butted against it would
-   read as part of the frame. */
-#srscale {
-  margin-top: 0.9rem;
-}
-/* Three segments rather than radios: one tap-sized target each, and a radio
+   read as part of the frame.
+
+   Three segments rather than radios: one tap-sized target each, and a radio
    group is still one arrow-key stop. Styled here, by id, so every game's
    workbench has them and not only the one whose play page styles a `.seg`.
    The chosen one is a hairline in the accent, not a filled block: nothing
    beside the canvas should be brighter than the canvas. */
 #srscale {
+  margin-top: 0.9rem;
   display: inline-flex;
   padding: 0;
   border: 1px solid var(--border);
