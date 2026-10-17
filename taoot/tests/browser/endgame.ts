@@ -54,11 +54,11 @@ const SAMPLE = `(() => {
     banks: s.audioLib.bankNames,
     soundLoops: [...(sch.soundBoard?.namedLoops?.keys() ?? [])],
     loops: sch.loops.map((l) => l.kind + "/" + l.name + ":" + l.handler),
-    crickets: sch.crickets.map((c) => c.name),
+    crickets: sch.crickets.table.map((c) => c.name),
     // the ones actually SOUNDING — a soundloop-flagged cricket loops forever, so
     // the table entry surviving is fine and a live handle after the set is gone
     // is the boat deck's crowd talking over the ending
-    sounding: sch.crickets.filter((c) => c.handle && !c.handle.done).map((c) => c.name),
+    sounding: sch.crickets.table.filter((c) => c.handle && !c.handle.done).map((c) => c.name),
     movie: v ? (v.movieFile || "") : "(no viewer)",
     moviePos: v && v.movies ? v.movies.framePos : -1,
     // the boot menu parks here — sampled rather than waited on, so the restart's

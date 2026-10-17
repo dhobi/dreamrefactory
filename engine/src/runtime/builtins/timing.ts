@@ -1,5 +1,5 @@
 import { logic, toNum, toStr, truthy } from "../interp";
-import { pauseDepthOf } from "../scheduler";
+import { pauseDepthOf } from "../pause";
 import { BuiltinCtx } from "./context";
 
 /**
@@ -56,13 +56,13 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
       balls.make(toStr(name ?? ""), [x, y, radius, base, jitter, frames].map((v) => toNum(v ?? 0)));
       return;
     }
-    session.scheduler.makeCricket(
+    session.scheduler.crickets.make(
       toStr(name ?? ""), toNum(x ?? 0), toNum(y ?? 0),
       toNum(radius ?? 1), toNum(base ?? 0), toNum(jitter ?? -1),
     );
   });
   r("stopcricket", (_i, [name]) =>
-    session.isV1 ? balls.stop(toStr(name ?? "all")) : session.scheduler.stopCricket(toStr(name ?? "all")),
+    session.isV1 ? balls.stop(toStr(name ?? "all")) : session.scheduler.crickets.stop(toStr(name ?? "all")),
   );
   r("pausecricket", (_i, [name, flag]) => {
     if (session.isV1) {
@@ -72,20 +72,20 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     }
     // one argument is the getter: the pause count (TI.EXE 0x444880). RedJack.exe
     // has none — its pausecricket (0x409210) reads a name and a number and nests
-    // the count (Scheduler.pauseCricket)
-    if (flag === undefined && name !== undefined && !session.isV5) return session.scheduler.cricketPauseDepth(toStr(name));
-    session.scheduler.pauseCricket(toStr(name ?? "all"), truthy(flag ?? 1));
+    // the count (Crickets.pause)
+    if (flag === undefined && name !== undefined && !session.isV5) return session.scheduler.crickets.depth(toStr(name));
+    session.scheduler.crickets.pause(toStr(name ?? "all"), truthy(flag ?? 1));
   });
   r("iscricket", (_i, [name]) => {
     const n = toStr(name ?? "");
-    const live = session.isV1 ? balls.isBall(n) : session.scheduler.isCricket(n);
+    const live = session.isV1 ? balls.isBall(n) : session.scheduler.crickets.has(n);
     return live ? 1 : 0;
   });
-  r("countcrickets", () => (session.isV1 ? balls.count() : session.scheduler.crickets.length));
+  r("countcrickets", () => (session.isV1 ? balls.count() : session.scheduler.crickets.table.length));
   r("indextocricket", (_i, [idx]) =>
     session.isV1
       ? balls.indexToBall(toNum(idx ?? 0))
-      : (session.scheduler.crickets[toNum(idx ?? 0) - 1]?.name ?? ""),
+      : (session.scheduler.crickets.table[toNum(idx ?? 0) - 1]?.name ?? ""),
   );
 
   // one argument is the GETTER (DF.EXE 0x407840, TI/tl the same tag): Dust's

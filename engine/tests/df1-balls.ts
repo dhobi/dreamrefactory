@@ -299,7 +299,7 @@ test("a v4 game keeps its crickets and its CD", () => {
   s.currentSetName = "engine";
   vi.spyOn(s.audioLib, "sound").mockImplementation(() => ({ sampleRate: 11025, samples: new Float32Array(1) }) as never);
   call("makecricket", "steam1", 10, 20, 100, 5, -1);
-  expect(s.scheduler.crickets.map((c) => c.name)).toEqual(["steam1"]);
+  expect(s.scheduler.crickets.table.map((c) => c.name)).toEqual(["steam1"]);
   expect(s.balls.count()).toBe(0);
   call("currentcd", "Titanic1");
   expect(s.mountedCd).toBe("Titanic1");

@@ -7,7 +7,7 @@ import { bearingV5, engineBearing } from "./geometry";
  * here instead of asking the session which engine it is; the code that carries
  * each rule out, and the addresses it was read at, stay in scheduler.ts. The
  * sound effects, where the engines differ in what they DO rather than in a
- * number, are classes of their own (sound-channels.ts and its -v1, -v4, -v5).
+ * number, are classes of their own (sound-channels.ts and its -v1, -v4, -v5), and so are the crickets (crickets.ts).
  */
 export interface SchedulerRules {
   readonly engine: 1 | 4 | 5;
@@ -19,14 +19,6 @@ export interface SchedulerRules {
   readonly loopTableFullThrows: boolean;
   /** a negative period is a tick to fall due on (RedJack.exe 0x41bf05) */
   readonly negativePeriodIsDeadline: boolean;
-
-  // ---- crickets ----
-  /** the pass services crickets; DF.EXE's has the balls in their place (0x438870) */
-  readonly crickets: boolean;
-  /** `makecricket` wants a set open (TI.EXE error 0x28); RedJack.exe's takes whatever is (0x41d530) */
-  readonly cricketNeedsSet: boolean;
-  /** a cricket measures the camera when made and keeps it (RedJack.exe 0x41d71b), serviced by its own rule */
-  readonly cricketsMeasured: boolean;
 
   // ---- walks and turns ----
   /** `stopwalk ("all")` clears every walk; RedJack.exe has no such name */
@@ -60,9 +52,6 @@ const V4: SchedulerRules = {
   loopSlots: 32,
   loopTableFullThrows: false,
   negativePeriodIsDeadline: false,
-  crickets: true,
-  cricketNeedsSet: true,
-  cricketsMeasured: false,
   stopWalkAll: true,
   missingWalkerThrows: false,
   turnStepsActor: false,
@@ -78,7 +67,6 @@ const V4: SchedulerRules = {
 const V1: SchedulerRules = {
   ...V4,
   engine: 1,
-  crickets: false,
   turnStepsActor: true,
   propsByCamera: true,
 };
@@ -90,8 +78,6 @@ const V5: SchedulerRules = {
   loopSlots: 64,
   loopTableFullThrows: true,
   negativePeriodIsDeadline: true,
-  cricketNeedsSet: false,
-  cricketsMeasured: true,
   stopWalkAll: false,
   missingWalkerThrows: true,
   turnUnits: 0x1000000,

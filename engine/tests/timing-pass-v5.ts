@@ -37,7 +37,7 @@ import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { ActorInstance } from "@dreamfactory/engine/runtime/actors";
 import { ScriptError } from "@dreamfactory/engine/runtime/interp";
 import { ticksAt } from "@dreamfactory/engine/runtime/clock";
-import { cricketPanV5 } from "@dreamfactory/engine/runtime/scheduler";
+import { cricketPanV5 } from "@dreamfactory/engine/runtime/crickets-v5";
 import { decodeCrickets, encodeCrickets } from "@dreamfactory/engine/runtime/saveload-v5-tables";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 
@@ -239,8 +239,8 @@ const errorOf = async (p: Promise<unknown>): Promise<number> => {
 
 test("pausecricket nests, as a count at +2 (0x41dd10), and a save writes the record's measurement", async () => {
   const s = bare();
-  s.scheduler.restoreCricket({ name: "surf", set: "liznite", x: 100, y: 0, radius: 5000, base: 10, jitter: 5, next: 3 });
-  const c = s.scheduler.crickets[0];
+  s.scheduler.crickets.restore({ name: "surf", set: "liznite", x: 100, y: 0, radius: 5000, base: 10, jitter: 5, next: 3 });
+  const c = s.scheduler.crickets.table[0];
   await run(s, `\tpausecricket ("all", true)\n\tpausecricket ("surf", true)\n\tpausecricket ("all", false)`);
   expect(c.paused, "two pauses and one resume: still held").toBe(true);
   expect(c.pauseDepth).toBe(1);
@@ -258,8 +258,8 @@ test("pausecricket nests, as a count at +2 (0x41dd10), and a save writes the rec
   expect(v.getInt16(0x2c, true)).toBe(1);
   const t = bare();
   decodeCrickets(t, bytes);
-  expect(t.scheduler.crickets[0].measured).toEqual(c.measured);
-  expect(t.scheduler.crickets[0].armed).toBe(true);
+  expect(t.scheduler.crickets.table[0].measured).toEqual(c.measured);
+  expect(t.scheduler.crickets.table[0].armed).toBe(true);
 });
 
 test("walkonpath with no route is error 0xa (0x41cefc): there is no straight line", async () => {

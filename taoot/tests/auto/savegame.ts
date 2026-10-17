@@ -2238,7 +2238,7 @@ test("a load reopens every bank the save had open, not just the theme's (#199)",
     expect.soft(save.trackFiles, path).toContain(save.theme?.track ?? "");
     for (const t of save.trackFiles) if (t.endsWith(".sfx")) expect.soft(t, path).not.toBe(save.theme?.track);
     expect.soft(await session.loadGame(bytes), path).toBe(true);
-    for (const c of session.scheduler.crickets) {
+    for (const c of session.scheduler.crickets.table) {
       checked++;
       if (!session.audioLib.sound(c.name)) themeOnly++;
       check(`${path}: cricket "${c.name}"`, !!session.audioLib.sound(c.name), "no bank holds it");

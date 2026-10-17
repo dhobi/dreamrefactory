@@ -273,7 +273,7 @@ export class GameSession {
     this.setNameNow = name;
     // optional: this setter is declared above the `scheduler` field, so a set
     // name assigned during construction would arrive before it exists
-    this.scheduler?.silenceAbsentCrickets();
+    this.scheduler?.crickets.silenceAbsent();
   }
   /**
    * Vertical world→screen projection bias set by the `camerahi` script command

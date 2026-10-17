@@ -1,5 +1,5 @@
 import { ScriptError, Value, logic, toNum, toStr, truthy } from "../interp";
-import { pauseDepthOf } from "../scheduler";
+import { pauseDepthOf } from "../pause";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { packPoint } from "../point";
 import { RIGHTTURNS, isqrt, readFrameRegister, readStarPath } from "../../df/set";

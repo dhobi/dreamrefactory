@@ -1,16 +1,19 @@
-import { PlayHandle } from "./audio";
 import { ENGINE_STEP_MS, ticksAt } from "./clock";
-import { bearingV5, engineBearing } from "./geometry";
-import { s16, schedulerRules, type SchedulerRules } from "./scheduler-rules";
+import { engineBearing } from "./geometry";
+import { schedulerRules, type SchedulerRules } from "./scheduler-rules";
 import { SoundBoard, type SoundChannels } from "./sound-channels";
+import type { Cricket, Crickets } from "./crickets";
+import { CricketsV1 } from "./crickets-v1";
+import { CricketsV4 } from "./crickets-v4";
+import { CricketsV5 } from "./crickets-v5";
+import { pauseDepth } from "./pause";
 import { SoundChannelsV1 } from "./sound-channels-v1";
 import { SoundChannelsV4 } from "./sound-channels-v4";
 import { SoundChannelsV5 } from "./sound-channels-v5";
 import type { GameSession } from "./session";
 import { ScriptError, type ScriptInstance } from "./interp";
 
-/** TI.EXE's fixed table sizes for crickets and walks (the loops' are a {@link SchedulerRules}) */
-const MAX_CRICKETS = 16;
+/** TI.EXE's fixed table size for walks (the loops' are a {@link SchedulerRules}, the crickets' crickets.ts's) */
 const MAX_WALKS = 16;
 
 
@@ -100,79 +103,6 @@ export interface GameLoop {
 }
 
 /**
- * Pausing NESTS, in every engine: a loop or walk record keeps a depth at +2, a
- * pause adds one and a resume takes one off, never below 0, and the record is
- * held while it is above 0 — DF.EXE `pauseloop` 0x43904d/0x4390aa, `pausewalk`
- * 0x439a16/0x439a6b; TI.EXE 0x43b66d (loops), 0x43c9c6 (walks); tl.exe
- * 0x401cdd, 0x403036; RedJack.exe 0x41c2c3 (loops), 0x41d50e (walks). Sets
- * `paused` to match, which is what everything else reads.
- */
-export function pauseDepth(rec: { paused: boolean; pauseDepth?: number }, on: boolean): void {
-  const depth = rec.pauseDepth ?? (rec.paused ? 1 : 0);
-  rec.pauseDepth = on ? depth + 1 : Math.max(0, depth - 1);
-  rec.paused = rec.pauseDepth > 0;
-}
-
-/** how deep a record's pause is — 0 for no record (the getters' answer) */
-export function pauseDepthOf(rec?: { paused: boolean; pauseDepth?: number }): number {
-  if (!rec) return 0;
-  return rec.pauseDepth ?? (rec.paused ? 1 : 0);
-}
-
-/**
- * A positional ambient one-shot scheduler (makecricket), bound to the set
- * that created it. Fires its sound with distance volume + bearing pan when
- * the countdown ends AND the previous play finished; re-arms with
- * base + random(jitter), or disappears when jitter < 0.
- */
-export interface Cricket {
-  name: string;
-  x: number;
-  y: number;
-  radius: number;
-  base: number;
-  jitter: number;
-  count: number;
-  paused: boolean;
-  setName: string;
-  handle: PlayHandle | null;
-  /** how many `pausecricket`s hold it ({@link pauseDepth}) */
-  pauseDepth?: number;
-  /** which of the 16 slots (TI.EXE 0x48b830, 0x4a apart); unset in DreamFactory 5 */
-  slot?: number;
-  /**
-   * In earshot since it last came into it (TI.EXE +0x22): the first pass in
-   * range sets it and re-arms the count; leaving the radius clears it and
-   * stops the sound.
-   */
-  armed?: boolean;
-  /** a looping cricket's volume this pass, for the loudest-two choice (+0x24) */
-  loudness?: number;
-  /**
-   * RedJack.exe keeps the camera point it last measured from (+0x1c, +0x20) and
-   * the distance and bearing it measured (+0x24, +0x28), and measures again
-   * only when the camera's point has moved (0x41d851..0x41d8d1) — a turn on the
-   * spot changes the pan, which is worked from the heading every pass, and not
-   * the distance.
-   */
-  measured?: { camX: number; camY: number; dist: number; bearing: number };
-}
-
-/**
- * Where a cricket pans, 0..255, from the camera's facing and the bearing to the
- * sound — TI.EXE 0x444790: the bearing turned so the camera faces 0x80, folded
- * front-to-back into 0x40..0xc0, and that quarter-to-quarter span stretched
- * linearly over 0..255 — 128 dead ahead or behind, 0 and 255 a quarter turn
- * either side. Linear in the ANGLE, not its sine.
- */
-export function cricketPan(camDeg: number, bearing: number): number {
-  let rel = (bearing - camDeg + 0x80) & 0xff;
-  if (rel > 0xc0) rel = 0x180 - rel;
-  if (rel < 0x40) rel = 0x80 - rel;
-  return Math.max(0, Math.min(0xff, 2 * rel - 0x80));
-}
-
-/**
  * The TI.EXE timing runtime: delay-driven loops (makeloop), positional
  * ambient one-shots (makecricket), sound-loop flags, and straight-line actor
  * walks — serviced in the pass a script runs ({@link Scheduler.pass}; the
@@ -180,43 +110,6 @@ export function cricketPan(camDeg: number, bearing: number): number {
  * cross-cutting session state (clock, audio, actors, dispatch) is reached back
  * through the session reference.
  */
-/**
- * Where a v5 cricket pans, 0..255, from the camera's heading and the bearing to
- * the sound, both in 2^24ths — RedJack.exe 0x41d919..0x41d9a7: the bearing
- * turned by the camera's distance from a half turn (so the camera faces
- * 0x800000), folded front to back into 0x400000..0xc00000, and that span
- * stretched over 255 and turned round, `255 − trunc((rel − 0x400000) · 255 /
- * 0x800000)` masked to a byte: dead ahead is 128, a quarter turn either way 0
- * or 255.
- */
-export function cricketPanV5(heading: number, bearing: number): number {
-  const lo = Math.min(heading, 0x800000);
-  const hi = Math.max(heading, 0x800000);
-  const turn = Math.min(hi - lo, lo - hi + 0x1000000);
-  let rel = (heading > 0x800000 ? bearing - turn : bearing + turn) & 0xffffff;
-  if (rel > 0xc00000) rel = 0x1800000 - rel;
-  if (rel < 0x400000) rel = 0x800000 - rel;
-  return (255 - Math.trunc(((rel - 0x400000) * 255) / 0x800000)) & 0xff;
-}
-
-/** a cricket slot as a save records it — what {@link Scheduler.restoreCricket} puts back */
-export interface CricketSlot {
-  name: string;
-  set: string;
-  x: number;
-  y: number;
-  radius: number;
-  base: number;
-  jitter: number;
-  next: number;
-  /** its `pausecricket` count (+2), when the save says */
-  pause?: number;
-  /** in earshot when saved (+0x22) */
-  armed?: boolean;
-  /** DreamFactory 5: the measurement the record carries (+0x1c..+0x28, {@link Cricket.measured}) */
-  measured?: NonNullable<Cricket["measured"]>;
-}
-
 /**
  * How a pass's throttle waits out its ticks: on the clock the host moves
  * (`clock` — the BOOTFILE's idle, which the host itself started), asking the
@@ -233,10 +126,23 @@ export class Scheduler {
       4: new SoundChannelsV4(this.soundBoard, session),
       5: new SoundChannelsV5(this.soundBoard, session),
     };
+    const sounds = (): SoundChannels => this.sounds;
+    const rand = (n: number): number => this.rand(n);
+    this.cricketsByEngine = {
+      1: new CricketsV1(this.cricketTable, session, sounds, rand),
+      4: new CricketsV4(this.cricketTable, session, sounds, rand),
+      5: new CricketsV5(this.cricketTable, session, sounds, rand),
+    };
   }
 
   readonly loops: GameLoop[] = [];
-  readonly crickets: Cricket[] = [];
+  /** the 16 cricket slots, kept across a change of engine */
+  private readonly cricketTable: Cricket[] = [];
+  private readonly cricketsByEngine: Record<1 | 4 | 5, Crickets>;
+  /** the cricket table and its builtins, as this session's engine runs them (crickets.ts) */
+  get crickets(): Crickets {
+    return this.cricketsByEngine[this.rules.engine];
+  }
 
   /** the sound effects' channels, loop flags, volumes and pans, kept across a change of engine */
   private readonly soundBoard = new SoundBoard();
@@ -416,129 +322,13 @@ export class Scheduler {
   }
 
   /**
-   * TI.EXE's `makecricket` (0x444130; tl.exe the same code): no set open is
-   * error 0x28, a sound no open bank has 0xa (0x4441c0), and a radius under 1,
-   * a base under 0 or a jitter under −1 are 0xe (0x44428c..0x4442bd). The count
-   * is `base` for a one-shot (jitter < 0) and `base + random (jitter)` otherwise
-   * (0x44431b) — a draw a repeating cricket throws away, since its first pass in
-   * earshot draws again. A cricket of the same name is replaced (0x442770,
-   * without stopping its sound) and the new one takes the first free of the 16
-   * slots, or fails with 8 (0x44440b). RedJack.exe's is the same (0x41d530 —
-   * the sound 0xa at 0x41d58e, the three 0xe at 0x41d66c..0x41d6a2, 8 at
-   * 0x41d7d1), in its own units.
-   */
-  makeCricket(name: string, x: number, y: number, radius: number, base: number, jitter: number): void {
-    const rules = this.rules;
-    // RedJack.exe's (0x41d530) has no set test: the cricket takes whatever set is open
-    if (rules.cricketNeedsSet && !this.session.currentSetName) throw new ScriptError(0x28, `makecricket (${name}): no set open`);
-    const key = name.toLowerCase();
-    if (!this.session.audioLib.sound(key)) throw new ScriptError(0xa, `makecricket: no sound "${name}"`);
-    if (radius < 1 || base < 0 || jitter < -1) {
-      throw new ScriptError(0xe, `makecricket (${name}, radius ${radius}, base ${base}, jitter ${jitter})`);
-    }
-    const count = jitter < 0 ? base : base + this.rand(jitter);
-    const old = this.crickets.findIndex((c) => c.name === key);
-    if (old >= 0) this.crickets.splice(old, 1);
-    const used = new Set(this.crickets.map((c) => c.slot));
-    let slot = 0;
-    while (used.has(slot)) slot++;
-    if (slot >= MAX_CRICKETS) throw new ScriptError(8, `cricket table full (${MAX_CRICKETS}), ${name} not made`);
-    const c: Cricket = {
-      name: key, x: this.word(x), y: this.word(y), radius, base, jitter, count,
-      paused: false, setName: this.session.currentSetName, handle: null, slot, armed: false,
-    };
-    // RedJack.exe measures the camera at once and keeps it (+0x1c..+0x28, 0x41d71b)
-    if (rules.cricketsMeasured) this.measureCricketV5(c);
-    this.insertCricket(c);
-  }
-
-  /** into the table in slot order, as a pass and `indextocricket` read it */
-  private insertCricket(c: Cricket): void {
-    const at = this.crickets.findIndex((x) => (x.slot ?? 0) > (c.slot ?? 0));
-    if (at < 0) this.crickets.push(c);
-    else this.crickets.splice(at, 0, c);
-  }
-
-  /**
-   * Put a cricket slot back exactly as a save recorded it: the saved set (a
-   * cricket is per-room ambience and must NOT adopt the room the load happens
-   * to be leaving), the saved countdown (no `rand(jitter)` re-roll — see
-   * {@link restoreLoop} for why a restore must not draw), no sounding handle.
-   */
-  restoreCricket({ name, set, x, y, radius, base, jitter, next, pause, armed, measured }: CricketSlot): void {
-    if (this.crickets.length >= MAX_CRICKETS) {
-      this.session.onLog(`loadgame: cricket table full (${MAX_CRICKETS}), dropping ${name}`);
-      return;
-    }
-    const c: Cricket = {
-      name: name.toLowerCase(),
-      x,
-      y,
-      radius,
-      base,
-      jitter,
-      count: next,
-      paused: (pause ?? 0) > 0,
-      pauseDepth: pause,
-      setName: set.toLowerCase(),
-      handle: null,
-      armed,
-      measured,
-    };
-    if (this.rules.cricketsMeasured && !measured) this.measureCricketV5(c);
-    const used = new Set(this.crickets.map((x) => x.slot));
-    let slot = 0;
-    while (used.has(slot)) slot++;
-    c.slot = slot;
-    this.insertCricket(c);
-  }
-
-  stopCricket(name: string): void {
-    const n = name.toLowerCase();
-    for (let i = this.crickets.length - 1; i >= 0; i--) {
-      const c = this.crickets[i];
-      if (n === "all" || c.name === n) {
-        c.handle?.stop();
-        this.crickets.splice(i, 1);
-      }
-    }
-  }
-
-  /**
-   * `pausecricket` NESTS, as a loop's and a walk's pause do: a count at +2, one
-   * up per pause and one down per resume, never below 0 (TI.EXE 0x4448d0; de
-   * 0x43d216; RedJack.exe 0x41dd10, "all" at 0x41dd5b, a name at 0x41ddce —
-   * the first slot of that name, and `makecricket` keeps one a name, 0x41d7ba).
-   */
-  pauseCricket(name: string, paused: boolean): void {
-    const n = name.toLowerCase();
-    for (const c of this.crickets) {
-      if (n !== "all" && c.name !== n) continue;
-      pauseDepth(c, paused);
-    }
-  }
-
-  /** `pausecricket (name)`, the getter: its pause count (TI.EXE 0x444880), 0 for none */
-  cricketPauseDepth(name: string): number {
-    const c = this.crickets.find((x) => x.name === name.toLowerCase());
-    if (!c) return 0;
-    return c.pauseDepth ?? (c.paused ? 1 : 0);
-  }
-
-  isCricket(name: string): boolean {
-    const n = name.toLowerCase();
-    return this.crickets.some((c) => c.name === n);
-  }
-
-  /**
    * Tear down all timed state — loops, crickets, walks, sound loops and their
    * flags — and silence sounds. Used when loading a saved game before the new
    * room's scripts rebuild everything from scratch.
    */
   reset(): void {
     this.loops.length = 0;
-    for (const c of this.crickets) c.handle?.stop();
-    this.crickets.length = 0;
+    this.crickets.reset();
     this.walks.clear();
     this.sounds.loopFlags.clear();
     this.session.balls.reset();
@@ -1288,24 +1078,10 @@ export class Scheduler {
         return false;
       }
     }
-    // DF.EXE's pass has the balls where the others have crickets (0x438870)
-    const rules = this.rules;
-    if (!rules.crickets) {
-      this.session.balls.step();
-      return this.passLoops();
-    }
-    this.silenceAbsentCrickets();
-    // crickets, in slot order (0x442599..0x4425ba); the looping ones in
-    // earshot register, and the two loudest of them play (0x4425c6)
-    const loud: Cricket[] = [];
-    for (const c of this.crickets.slice()) {
-      if (!this.crickets.includes(c)) continue;
-      if (!rules.cricketsMeasured) this.serviceCricketV4(c, loud);
-      else if (!this.serviceCricketV5(c, loud)) return false;
-    }
-    if (loud.length) this.playLoudest(loud);
+    // the crickets — DF.EXE's balls in their place (0x438870)
+    if (!this.crickets.pass()) return false;
     if (!(await this.passLoops())) return false;
-    return rules.endAnimsOwed ? this.passEndAnims() : true;
+    return this.rules.endAnimsOwed ? this.passEndAnims() : true;
   }
 
   /**
@@ -1495,227 +1271,6 @@ export class Scheduler {
   tickTime(now: number): void {
     this.session.clock.advance(now);
     this.serviceIdle();
-  }
-
-  /**
-   * One cricket slot, one pass, as TI.EXE's 0x444430 (tl.exe 0x4033b0) runs it:
-   *
-   *  - paused, no set open, or the set not the cricket's: nothing at all — not
-   *    even the countdown;
-   *  - the distance `isqrt (dx² + dy²)` to the camera and the table bearing to
-   *    it; in earshot below the radius, at volume `255 − trunc (dist·255 /
-   *    radius)` and the pan of {@link cricketPan} — both written to the SOUND
-   *    RECORD every pass in earshot (0x425540, 0x425640), so a sound already
-   *    playing follows the camera;
-   *  - a one-shot (jitter < 0) counts down wherever the camera is, and at 0
-   *    plays if in earshot and is gone either way;
-   *  - a repeating one counts only in earshot. Its first pass there re-arms
-   *    with `base + random (jitter)` and plays nothing (0x44466a); after that
-   *    it plays at 0 and re-arms — whether or not its last shot is still
-   *    sounding (0x44463f). Leaving earshot stops its sound and disarms it;
-   *  - a `soundloop` one in earshot neither counts nor plays: it registers its
-   *    volume, and the pass plays the two loudest ({@link playLoudest}).
-   *
-   * A play is `multiplesound`'s (0x425240).
-   */
-  private serviceCricketV4(c: Cricket, loud: Cricket[]): void {
-    if (c.paused) return;
-    const set = this.session.currentSetName;
-    if (!set || c.setName !== set) return;
-    const lis = this.session.listener();
-    const dx = c.x - s16(lis?.x ?? c.x);
-    const dy = c.y - s16(lis?.y ?? c.y);
-    const dist = Math.floor(Math.sqrt(dx * dx + dy * dy)) & 0xffff;
-    const near = dist < c.radius;
-    const place = () => {
-      this.sounds.setVolume(c.name, 255 - Math.trunc((dist * 255) / c.radius));
-      this.sounds.setPan(c.name, cricketPan(lis?.deg ?? 0, engineBearing(dx, dy)));
-    };
-    if (c.jitter < 0) {
-      if (--c.count > 0) return;
-      if (near) {
-        place();
-        this.fireCricketV4(c);
-      }
-      this.crickets.splice(this.crickets.indexOf(c), 1);
-      return;
-    }
-    if (!near) {
-      if (c.armed) {
-        c.armed = false;
-        this.sounds.stopRecord(c.name);
-      }
-      return;
-    }
-    place();
-    if (this.sounds.isLooped(c.name)) {
-      c.armed = true;
-      c.loudness = 255 - Math.trunc((dist * 255) / c.radius);
-      loud.push(c);
-      return;
-    }
-    if (!c.armed) {
-      c.armed = true;
-      c.count = c.base + this.rand(c.jitter);
-      return;
-    }
-    if (--c.count > 0) return;
-    c.count = c.base + this.rand(c.jitter);
-    this.fireCricketV4(c);
-  }
-
-  /** a cricket's shot: `multiplesound` on the sound record it has just placed */
-  private fireCricketV4(c: Cricket): void {
-    this.sounds.play(c.name, true, "multiple");
-    // the channel it took, so a set left behind can silence it (silenceAbsentCrickets);
-    // the play itself is published on that channel, which is how the bedsit
-    // landlady's five crickets wait on one another (`currentsound`), and captioned (#50)
-    c.handle = this.sounds.liveHandle(c.name);
-  }
-
-  /**
-   * The looping crickets in earshot this pass (TI.EXE 0x4446d0): the loudest
-   * (the first of equals, in slot order) and the next loudest get
-   * `singlesound`'s play (0x425150 — a sound already sounding is not started
-   * again), and with three or more every other one is stopped.
-   */
-  private playLoudest(loud: Cricket[]): void {
-    const pick = (from: Cricket[]): Cricket | undefined =>
-      from.reduce<Cricket | undefined>((m, c) => (!m || (c.loudness ?? -1) > (m.loudness ?? -1) ? c : m), undefined);
-    const first = pick(loud)!;
-    const rest = loud.filter((c) => c !== first);
-    const second = rest.length ? pick(rest) : undefined;
-    if (loud.length > 2) for (const c of rest) if (c !== second) this.sounds.stopRecord(c.name);
-    for (const c of [first, second]) {
-      if (!c) continue;
-      this.sounds.play(c.name, false, "single");
-      c.handle = this.sounds.liveHandle(c.name) ?? c.handle;
-    }
-  }
-
-  /**
-   * Silence any cricket whose set is not the one on screen.
-   *
-   * A `soundloop`-flagged cricket starts once and then loops in place forever
-   * (see playLoudest) — that is how a set runs positional ambience, and nothing
-   * in the TAOOT corpus ever stops one: `stopcricket("all")` appears exactly
-   * once, in its BOOTFILE `initall`. So every path that leaves a set WITHOUT
-   * initall would leave its ambience sounding, positioned in a world that is no
-   * longer on screen.
-   *
-   * TAOOT's `advanceday` endgame arm is that path: it calls `closesetfile()` and
-   * goes straight into the flats, so the boat deck's five `party` crowd loops
-   * (EXTRA.CST `crowdcrickets`, one per lifeboat star) would talk through
-   * leave.mov, debris.mov, the closing narration and prozac.mov. Measured in
-   * taoot/tests/browser/endgame.ts without this: `crickets=[party1..party5]` on
-   * every sample from the deck to the credits, with `cricket.sfx` already closed —
-   * not re-firing, simply never stopped. The re-fire guard below skips them; this
-   * stops their audio too.
-   *
-   * The handle is dropped as well as stopped, so coming back to the set starts
-   * the ambience again rather than being blocked by a play that is still "not
-   * done". Re-arming is unaffected: a cricket in another set never reaches the
-   * loop body, and the loop ambients all have `jitter 0`, which draws no RNG.
-   *
-   * Called from the service pass AND from `session.currentSetName`'s setter — the
-   * setter is what makes it immediate, which the endgame needs: it closes the set
-   * and starts a movie in the same script, and game time stops for the movie.
-   */
-  silenceAbsentCrickets(): void {
-    for (const c of this.crickets) {
-      if (!c.handle || !c.setName || c.setName === this.session.currentSetName) continue;
-      c.handle.stop();
-      c.handle = null;
-    }
-  }
-
-  /**
-   * One cricket slot, one pass, as RedJack.exe's 0x41d810 runs it — TI.EXE's
-   * service ({@link serviceCricketV4}) in DreamFactory 5's units, against the
-   * room camera (x, y at 0x4c7a44/0x4c7a48, heading at 0x4c7a38):
-   *
-   *  - paused, or the open set not its own (0x41d824): nothing at all;
-   *  - the distance and bearing are measured again only when the camera's point
-   *    has moved ({@link Cricket.measured});
-   *  - a one-shot counts down wherever the camera is and at 0 plays if in
-   *    earshot (0x41d906..0x41d9d4) and is gone either way (0x41d9d9);
-   *  - a repeating one in earshot is placed every pass; a `soundloop` one
-   *    registers its volume for the loudest two (0x41dacd..0x41dae8), any other
-   *    is armed on its first pass there (0x41db32) and after that plays at 0 and
-   *    re-arms with `base + random (jitter)` (0x41db01..0x41db22). Out of earshot
-   *    an armed one is disarmed and its sound stopped (0x41db51..0x41db73).
-   *
-   * The sound is looked up by name for every play, place or stop (0x448ff0);
-   * one no open bank has is error 0xa, which frees the slot and stops the pass
-   * (0x41b787). False then.
-   */
-  private serviceCricketV5(c: Cricket, loud: Cricket[]): boolean {
-    if (c.paused || c.setName !== this.session.currentSetName) return true;
-    const { dist, bearing } = this.measureCricketV5(c);
-    const near = dist < c.radius;
-    if (!near && (c.jitter < 0 || !c.armed)) {
-      if (c.jitter < 0 && --c.count <= 0) this.crickets.splice(this.crickets.indexOf(c), 1);
-      return true;
-    }
-    if (c.jitter < 0 && --c.count > 0) return true;
-    if (!this.session.audioLib.sound(c.name)) {
-      this.crickets.splice(this.crickets.indexOf(c), 1);
-      this.session.onLog(`pass stopped at cricket ${c.name}: no sound "${c.name}" (error 0xa)`);
-      return false;
-    }
-    if (!near) {
-      c.armed = false;
-      this.sounds.stopRecord(c.name);
-      return true;
-    }
-    const volume = 255 - Math.trunc((dist * 255) / c.radius);
-    this.sounds.setVolume(c.name, volume);
-    this.sounds.setPan(c.name, cricketPanV5(this.cameraHeadingV5(), bearing));
-    if (c.jitter < 0) {
-      this.fireCricketV4(c);
-      this.crickets.splice(this.crickets.indexOf(c), 1);
-      return true;
-    }
-    if (this.sounds.isLooped(c.name)) {
-      c.armed = true;
-      c.loudness = volume;
-      loud.push(c);
-      return true;
-    }
-    if (!c.armed) {
-      c.armed = true;
-      c.count = c.base + this.rand(c.jitter);
-      return true;
-    }
-    if (--c.count > 0) return true;
-    c.count = c.base + this.rand(c.jitter);
-    this.fireCricketV4(c);
-    return true;
-  }
-
-  /**
-   * A v5 cricket's distance and bearing from the camera, measured again only
-   * when the camera's point is not the one it was last measured from — RedJack.exe
-   * 0x41d851..0x41d8d1, and at `makecricket` (0x41d71b): `isqrt`'s float twin
-   * truncated, and `atan2` in 2^24ths ({@link bearingV5}). With no room the last
-   * camera stands.
-   */
-  private measureCricketV5(c: Cricket): { dist: number; bearing: number } {
-    const cam = this.session.maze?.camera();
-    const m = c.measured;
-    if (m && (!cam || (m.camX === cam.x && m.camY === cam.y))) return m;
-    const camX = cam?.x ?? m?.camX ?? 0;
-    const camY = cam?.y ?? m?.camY ?? 0;
-    const dx = c.x - camX;
-    const dy = c.y - camY;
-    c.measured = { camX, camY, dist: Math.trunc(Math.sqrt(dx * dx + dy * dy)), bearing: bearingV5(dx, dy) };
-    return c.measured;
-  }
-
-  /** the room camera's heading in 2^24ths, as RedJack.exe keeps it at 0x4c7a38 */
-  private cameraHeadingV5(): number {
-    const cam = this.session.maze?.camera();
-    return cam ? Math.round((cam.heading * 0x1000000) / (2 * Math.PI)) & 0xffffff : 0;
   }
 
   private async fireLoop(l: GameLoop): Promise<void> {

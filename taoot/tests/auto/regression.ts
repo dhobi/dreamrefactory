@@ -2875,7 +2875,7 @@ test("timing model: makeloop/makecricket/starxyz/delay/soundloop", async () => {
     !!knock,
     knock ? `vol=${knock.volume.toFixed(2)} pan=${knock.pan.toFixed(2)}` : `${sink.calls.length} calls`,
   );
-  check("one-shot cricket removed after firing", session.scheduler.crickets.length === 0);
+  check("one-shot cricket removed after firing", session.scheduler.crickets.table.length === 0);
   check("knock loop re-armed itself", session.scheduler.isLoop("scene", "scene49"));
 
   // delay(n) = n/60 s of game time; the script stays suspended (busy) while
@@ -2948,8 +2948,8 @@ test("actors: GANG.CST loads, DECKBD openset places Morrow", async () => {
   check(
     "deckbd ambient: soundloop-flagged crickets loop; both registered",
     sink.calls.filter((c) => c.loop).length >= 1 &&
-      session.scheduler.isCricket("motor") && session.scheduler.isCricket("machine"),
-    `${sink.calls.filter((c) => c.loop).length} loops, motor=${session.scheduler.isCricket("motor")} machine=${session.scheduler.isCricket("machine")}`,
+      session.scheduler.crickets.has("motor") && session.scheduler.crickets.has("machine"),
+    `${sink.calls.filter((c) => c.loop).length} loops, motor=${session.scheduler.crickets.has("motor")} machine=${session.scheduler.crickets.has("machine")}`,
   );
   // find the view where morrow projects LARGEST while fully on screen — the
   // conversational view you actually approach him in (not a distant/empty one)
