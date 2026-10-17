@@ -26,12 +26,11 @@ import {
   SavedWalk,
   RawSaveFile,
   SaveGame,
-  SavePatch,
   ThemePatch,
-  applyPatch,
-  parseSave,
   readSaveFile,
 } from "../df/savegame";
+import { applyPatch, type SavePatch } from "../df/savegame-patch";
+import { parseSave } from "../df/savegame-read";
 import { degVariantFrames, frameIndexForDegree, playSequence } from "./props";
 import { Value, logic, logicPayload, toNum } from "./interp";
 import type { GameSession } from "./session";

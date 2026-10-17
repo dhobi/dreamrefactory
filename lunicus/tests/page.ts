@@ -130,8 +130,8 @@ vi.mock("@dreamfactory/engine/web/v0-page", async (orig) => ({
   ...(await orig<typeof import("@dreamfactory/engine/web/v0-page")>()),
   V0Page: FakePage,
 }));
-vi.mock("../src/game/game", () => ({ Lunicus: FakeGame }));
-vi.mock("../src/game/input", () => ({
+vi.mock("../src/lunicus", () => ({ Lunicus: FakeGame }));
+vi.mock("../src/input", () => ({
   Input: class {
     down = (x: number, y: number): void => void calls.push(`down ${x},${y}`);
     up = (x: number, y: number): void => void calls.push(`up ${x},${y}`);

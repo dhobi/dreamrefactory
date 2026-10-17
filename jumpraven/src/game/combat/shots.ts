@@ -18,10 +18,28 @@
  * and the pilot says so (line 0xc); one hit in 16 of theirs and the bombs'
  * he cheers (line 0xd).
  */
+import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Shot } from "./api";
+import { BOMBS, DEFENSIVE, LASERS, MISSILES, PIC, ROCKETS, SHELLS } from "./arms";
 import { meets, inBlock, tooFar } from "./lib";
-import { BOMBS, DEFENSIVE, LASERS, MISSILES, PIC, ROCKETS, SHELLS, type Pyro } from "./pyro";
-import { copyObj, cosMul, dist, sinMul, type Obj } from "./world";
+import { copyObj, cosMul, dist, sinMul, type Obj, type World } from "./world";
+
+/** what the shots need of the pyro (pyro.ts's Pyro) that fires them */
+export interface Launcher {
+  readonly w: World;
+  readonly shots: Shot[];
+  /** a run of rockets and missiles into the ground without a hit */
+  misses: number;
+  /** the defensives up */
+  decoys: number;
+  pic(i: number): FrameV0 | undefined;
+  hits(who: number, kind: number): void;
+  pilotSays(n: number): void;
+  taunt(kind: number): void;
+  fan(o: Obj, angle: number, who: number): void;
+  fire1(o: Obj, who: number): void;
+  napalm(o: Obj, who: number): void;
+}
 
 /** a step, and its cell */
 function step(s: Shot): void {
@@ -33,7 +51,7 @@ function step(s: Shot): void {
 }
 
 /** 0x41a3de: every shot a frame */
-export function moveShots(p: Pyro): void {
+export function moveShots(p: Launcher): void {
   const w = p.w;
   for (const s of p.shots) {
     if (!s.on) continue;
@@ -122,7 +140,7 @@ export function moveShots(p: Pyro): void {
 }
 
 /** 0x41a9de: a bomb — falling, bouncing off the blocks, and what it does on the ground */
-function moveBomb(p: Pyro, s: Shot): void {
+function moveBomb(p: Launcher, s: Shot): void {
   const w = p.w;
   if (s.met) {
     s.met++;
@@ -186,7 +204,7 @@ function moveBomb(p: Pyro, s: Shot): void {
 }
 
 /** 0x41ac8b: a defensive — falling for 17 frames, then open and drifting to a stop */
-function moveDecoy(p: Pyro, s: Shot): void {
+function moveDecoy(p: Launcher, s: Shot): void {
   const w = p.w;
   if (tooFar(w, s.o) || s.o.z <= 0x28) {
     s.on = 0;
@@ -243,7 +261,7 @@ const far = (depth: number): number => (depth - 0x40) >> 7;
  * the point's, or the homing target's, while it is 0x140 away or more; a
  * shot that has come as near as it drops its aim
  */
-function drawMark(p: Pyro, s: Shot, depth: number): void {
+function drawMark(p: Launcher, s: Shot, depth: number): void {
   const w = p.w;
   let at: Obj;
   let pic: number;
@@ -262,7 +280,7 @@ function drawMark(p: Pyro, s: Shot, depth: number): void {
 }
 
 /** 0x41ae38: a laser's beam from where it was to where it is, and a spark where it struck */
-function drawLaser(p: Pyro, from: Obj, s: Shot): void {
+function drawLaser(p: Launcher, from: Obj, s: Shot): void {
   const w = p.w;
   const a = w.project(s.o);
   if (a.depth < 0x40) return;
@@ -277,7 +295,7 @@ function drawLaser(p: Pyro, from: Obj, s: Shot): void {
 }
 
 /** 0x41afe9: a shell, a tracer, or the spark where it struck */
-function drawShell(p: Pyro, s: Shot): void {
+function drawShell(p: Launcher, s: Shot): void {
   const w = p.w;
   const a = w.project(s.o);
   if (a.depth < 0x40) return;
@@ -289,7 +307,7 @@ function drawShell(p: Pyro, s: Shot): void {
 }
 
 /** 0x41b172: a rocket, or its blast */
-function drawRocket(p: Pyro, s: Shot): void {
+function drawRocket(p: Launcher, s: Shot): void {
   const w = p.w;
   const a = w.project(s.o);
   if (a.depth < 0x40) return;
@@ -301,7 +319,7 @@ function drawRocket(p: Pyro, s: Shot): void {
 }
 
 /** 0x41b2d4: a missile, or its blast */
-function drawMissile(p: Pyro, s: Shot): void {
+function drawMissile(p: Launcher, s: Shot): void {
   const w = p.w;
   const a = w.project(s.o);
   if (a.depth < 0x40) return;
@@ -313,7 +331,7 @@ function drawMissile(p: Pyro, s: Shot): void {
 }
 
 /** 0x41b436: a bomb, or its blast (a tier-1 or tier-3 one's a spark) */
-function drawBomb(p: Pyro, s: Shot): void {
+function drawBomb(p: Launcher, s: Shot): void {
   const w = p.w;
   const a = w.project(s.o);
   if (a.depth < 0x40) return;
@@ -325,7 +343,7 @@ function drawBomb(p: Pyro, s: Shot): void {
 }
 
 /** 0x41b51a: a defensive, closed (spinning through 8) or open (its tier's frames, the last few over and over) */
-function drawDecoy(p: Pyro, s: Shot, open: boolean): void {
+function drawDecoy(p: Launcher, s: Shot, open: boolean): void {
   const w = p.w;
   const a = w.project(s.o);
   if (a.depth < 0x40) return;

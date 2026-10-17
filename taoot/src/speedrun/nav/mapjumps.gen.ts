@@ -3,7 +3,7 @@
  * 15 more are gated on `debugging` and do nothing in a shipped game — left out.
  * Regenerate: npx tsx taoot/tools/mapjumps.ts
  */
-import type { MapJump, MapPageButton } from "./mapjumps";
+import type { MapJump, MapPageButton } from "./mapjump";
 
 /** the deck each page is, as its own jumpbaby passes it to jumppapa: 1=bd 2=a 3=b 4=c 5=d 6=e 7=f 8=g */
 export const MAP_JUMPS: MapJump[] = [

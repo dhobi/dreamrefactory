@@ -3,7 +3,7 @@ import { little } from "./byte-order";
 import { DFContainerFile, readContainerFile } from "./container";
 import { DEFAULT_ENCODING, DfEncoding, decodeText, encodeText } from "./text";
 import { versionOf } from "./version";
-import { readPuppetTrackV0 } from "./talk-v0";
+import { readPuppetTrackV0, readTalkFileV0 } from "./talk-v0";
 
 /**
  * PUP ("puppet") files — the conversation close-ups. One file per
@@ -206,7 +206,7 @@ export interface PupFile {
   /** what the subtitles were decoded with, and what an edit re-encodes to */
   encoding: DfEncoding;
   /**
-   * A DreamFactory 0 talk file (Lunicus; `pupFileFromV0` in talk-v0.ts), which
+   * A DreamFactory 0 talk file (Lunicus; {@link pupFileFromV0}), which
    * only the format editors read as a PupFile: its palette is the Macintosh way
    * round (`paletteV0`), its pictures are v0 pictures (image-v0.ts), its sounds
    * v0 sounds, and a line's animation is a v0 puppet track.
@@ -455,3 +455,56 @@ export function patchDialogueText(pup: PupFile, ident: string, text: string): bo
 
 /** the dialogue record's subtitle field, in bytes after the length byte */
 const TEXT_FIELD = 255;
+
+/**
+ * A talk file as the {@link PupFile} the puppet editor reads, so it can show a
+ * Lunicus conversation without a player of its own — the bridge the movie
+ * editor has in `movFileFromV0`. It is a picture of the file, not a way back
+ * into one.
+ *
+ * One stance, the eight layers of container 3, each at no anchor of its own
+ * (a v0 track places every picture itself). The lines are the character's, by
+ * name; the player's questions follow them as lines of their own, `q ` and the
+ * question's name, with a voice and no face — so both sides of a talk can be
+ * heard. A line's animation is its puppet track, which `readAnimLogic` reads through {@link readPuppetTrackV0} for a file with
+ * `dfV0` set.
+ */
+export function pupFileFromV0(data: Uint8Array): PupFile {
+  const t = readTalkFileV0(data);
+  const file = readContainerFile(data);
+  const dialogue = new Map<string, PupDialogue>();
+  t.lines.forEach((l, i) => {
+    dialogue.set(l.name.toLowerCase(), {
+      ident: l.name,
+      stance: 0,
+      text: l.subtitle,
+      raw: l.subtitle,
+      audioLocation: l.wave,
+      animLogicLocation: l.track,
+      record: 0x844 + i * 0x138,
+    });
+  });
+  t.questions.forEach((q, i) => {
+    dialogue.set(`q ${q.name}`.toLowerCase(), {
+      ident: `q ${q.name}`,
+      stance: 0,
+      text: q.text,
+      raw: q.text,
+      audioLocation: q.wave,
+      animLogicLocation: 0,
+      record: 4 + i * 0x128,
+    });
+  });
+  return {
+    file,
+    paletteRaw: file.containers[0].data.slice(0x22, 0x822),
+    dialogue,
+    scripts: [],
+    stances: [{ location: 3, layers: t.layers.map((frames) => ({ frames, anchorY: 0, anchorX: 0 })) }],
+    bandLocation: -1,
+    pupName: "",
+    idleTimers: t.idleMin.map((minTicks, k) => ({ minTicks, maxTicks: t.idleMax[k] })),
+    encoding: DEFAULT_ENCODING,
+    dfV0: true,
+  };
+}

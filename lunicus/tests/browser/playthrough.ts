@@ -16,7 +16,7 @@
  * handed the same gestures at the same ticks. The page's clock is the driver's
  * (it ticks only when told), every file the run read is fetched before the
  * first tick, and a gesture goes in as a genuine Playwright mouse or keyboard
- * event on the canvas, through the page's own listeners and `game/input.ts` —
+ * event on the canvas, through the page's own listeners and `src/input.ts` —
  * the door the machine route's gestures went through too. The two runs are then
  * the same run, and the route's checkpoints (one for each `ok`) say so as the
  * replay passes them; the first that differs names the tick where they parted.
@@ -29,7 +29,7 @@ import { chromium } from "playwright";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { SCREEN_H, SCREEN_W } from "../../src/game/data";
-import type { Gesture } from "../../src/game/input";
+import type { Gesture } from "../../src/input";
 import { headless, type Checkpoint, type Recording } from "../machine/harness";
 import { playDay1 } from "../machine/days/day1";
 import { playCityDay } from "../machine/days/city-day";

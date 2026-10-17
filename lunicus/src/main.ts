@@ -22,8 +22,8 @@ import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { VERSION } from "@dreamfactory/chrome/version";
 import { TICKS_PER_SECOND, VIEW_H, VIEW_W } from "./game/data";
 import { TouchGestures } from "@dreamfactory/engine/web/touch";
-import { Lunicus } from "./game/game";
-import { Input, type Recording } from "./game/input";
+import { Lunicus } from "./lunicus";
+import { Input, type Recording } from "./input";
 import { browseForLoad, savesOpen } from "@dreamfactory/engine/web/save-browser";
 import { windowDialogOpen } from "@dreamfactory/engine/web/window-dialog";
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
@@ -155,7 +155,7 @@ function frame(now: number): void {
  * Input
  * ------------------------------------------------------------------------- */
 
-/** the one door the page's hands and the machine tests' share (game/input.ts) */
+/** the one door the page's hands and the machine tests' share (input.ts) */
 const input = new Input(game);
 /**
  * A finger (engine/src/web/touch.ts): a double tap is Esc — on a phone the

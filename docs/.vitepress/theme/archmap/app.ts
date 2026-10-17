@@ -197,7 +197,7 @@ export function mount(root, D, dagre) {
     const inC = new Map();
     for (const f of own) {
       for (const t of files[f].i.filter((x) => files[x])) {
-        if (ownSet.has(t)) edges.push({ from: `file:${f}`, to: `file:${t}` });
+        if (ownSet.has(t)) edges.push({ from: `file:${f}`, to: `file:${t}`, kind: files[f].t?.includes(t) ? "type" : undefined });
         else bump(outC, files[t].c);
       }
       for (const u of usersOf(f).filter((x) => !ownSet.has(x))) bump(inC, files[u].c);
@@ -289,7 +289,7 @@ export function mount(root, D, dagre) {
   function drawEdge(e, d, parent) {
     const ge = el("g", { class: e.ext ? "edge ext" : "edge", "data-a": e.from, "data-b": e.to }, parent);
     const sw = e.w ? Math.min(5, 1 + Math.log10(e.w + 1) * 1.6) : 1.3;
-    el("path", { d: edgePath(d.points), "stroke-width": sw, "marker-end": e.kind === "extends" ? "url(#am-tri)" : "url(#am-arr)", "stroke-dasharray": e.kind === "uses" ? "5 4" : "" }, ge);
+    el("path", { d: edgePath(d.points), "stroke-width": sw, "marker-end": e.kind === "extends" ? "url(#am-tri)" : "url(#am-arr)", "stroke-dasharray": e.kind === "uses" || e.kind === "type" ? "5 4" : "" }, ge);
     if (e.label && d.x !== undefined) svgText(ge, { x: d.x, y: d.y + 4, "text-anchor": "middle" }, e.label);
   }
   function drawNode(n, p, parent) {
@@ -521,7 +521,9 @@ export function mount(root, D, dagre) {
     const by = usersOf(p);
     const more = when(by.length > 60, `<li class="hint">and ${by.length - 60} more</li>`);
     const imported = section("Imported by", [...by.slice(0, 60).map(fileItem), more].filter(Boolean));
-    return section("Imports", files[p].i.map(fileItem)) + imported;
+    const types = new Set(files[p].t ?? []);
+    const item = (x) => (types.has(x) ? fileItem(x).replace("</li>", `${count("types only")}</li>`) : fileItem(x));
+    return section("Imports", files[p].i.map(item)) + imported;
   }
   const fnItem = (s) => `<li><code>${esc(s.n)}</code>${count(s.k)}${when(s.d, note(s.d))}</li>`;
   function overviewSystem() {
@@ -547,7 +549,7 @@ export function mount(root, D, dagre) {
     const c = comps[view.id];
     const how = view.tab === "classes"
       ? "Classes and exported interfaces in this folder. A solid arrow with an open head is extends; a dashed arrow means a field or constructor parameter of that type. Dashed boxes live elsewhere."
-      : "Files and the imports between them. The folder's imports from elsewhere are drawn once per other folder, from the box marked (this folder). Switch to Classes for the class diagram.";
+      : "Files and the imports between them; a dashed arrow imports types only, which are gone once compiled. The folder's imports from elsewhere are drawn once per other folder, from the box marked (this folder). Switch to Classes for the class diagram.";
     return eyebrow("Level 4 · Component") + heading(view.id) + para(compDesc(view.id))
       + facts([["files", fmt(c.f.length)], ["lines", fmt(c.l)]]) + hint(how);
   }

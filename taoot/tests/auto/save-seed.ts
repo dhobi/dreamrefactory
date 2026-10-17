@@ -35,8 +35,8 @@ vi.mock("@dreamfactory/engine/web/save-store", async (actual) => ({
   setMeta: async (k: string, v: unknown) => void meta.set(k, v),
 }));
 
-vi.mock("@dreamfactory/engine/df/savegame", async (actual) => ({
-  ...(await actual<typeof import("@dreamfactory/engine/df/savegame")>()),
+vi.mock("@dreamfactory/engine/df/savegame-patch", async (actual) => ({
+  ...(await actual<typeof import("@dreamfactory/engine/df/savegame-patch")>()),
   globalsCapacity: (bytes: Uint8Array) => {
     rankings++;
     return { records: bytes[0], free: 0 };

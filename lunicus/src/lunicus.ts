@@ -17,19 +17,19 @@
  * game has: 3 and 4, which nothing reaches and only a hand-made `.LUN` can
  * name. The machine stops there and says so.
  */
-import { Base, readBank, readPanel, type Progress } from "./base";
-import { Panel, newHud, type Hud } from "./panel";
-import { City, DIFFICULTY, placeOf } from "./city/city";
+import { Base, readBank, readPanel, type Progress } from "./game/base";
+import { Panel, newHud, type Hud } from "./game/panel";
+import { City, DIFFICULTY, placeOf } from "./game/city/city";
 import { readSaveV0, writeSaveV0, type SaveGameV0 } from "@dreamfactory/engine/df/savegame-v0";
-import type { MazeView } from "./maze";
-import { NEW_GAME_LEVEL, dayOf, floorOf } from "./data";
+import type { MazeView } from "./game/maze";
+import { NEW_GAME_LEVEL, dayOf, floorOf } from "./game/data";
 import { ESCAPE, playFilm } from "@dreamfactory/engine/v0/film";
 import { readFon, textWidth } from "@dreamfactory/engine/v0/font";
-import { Machine, type Co, type GameFiles, type Speaker } from "./machine";
+import { Machine, type Co, type GameFiles, type Speaker } from "./game/machine";
 import { readContainerFile } from "@dreamfactory/engine/df/container";
 import { decodeFrameV0, type FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { readClutV0 as readClut } from "@dreamfactory/engine/df/clut-v0";
-import { ACTIONS, bindKeys, defaultTable, enter, keyFor, qualifies, readSco, writeSco } from "./sco";
+import { ACTIONS, bindKeys, defaultTable, enter, keyFor, qualifies, readSco, writeSco } from "./game/sco";
 
 /** the plate's top: under the title's 264 rows (0x417249) */
 const PLATE_TOP = 0x108;

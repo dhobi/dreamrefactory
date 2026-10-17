@@ -37,8 +37,6 @@
 
 import { readContainerFile } from "./container";
 import { paletteV0 } from "./mov-v0";
-import type { PupDialogue, PupFile } from "./pup";
-import { DEFAULT_ENCODING } from "./text";
 
 export interface TrackLayerV0 {
   /** an index into the layer's list of pictures in container 3 (LUNICUS.EXE 0x415b9e) */
@@ -188,60 +186,5 @@ export function readTalkFileV0(data: Uint8Array): TalkFileV0 {
     menus,
     layers,
     containers: c,
-  };
-}
-
-
-/**
- * A talk file as the {@link PupFile} the puppet editor reads, so it can show a
- * Lunicus conversation without a player of its own — the bridge the movie
- * editor has in `movFileFromV0`. It is a picture of the file, not a way back
- * into one.
- *
- * One stance, the eight layers of container 3, each at no anchor of its own
- * (a v0 track places every picture itself). The lines are the character's, by
- * name; the player's questions follow them as lines of their own, `q ` and the
- * question's name, with a voice and no face — so both sides of a talk can be
- * heard. A line's animation is its puppet track, which {@link file://./pup.ts}'s
- * `readAnimLogic` reads through {@link readPuppetTrackV0} for a file with
- * `dfV0` set.
- */
-export function pupFileFromV0(data: Uint8Array): PupFile {
-  const t = readTalkFileV0(data);
-  const file = readContainerFile(data);
-  const dialogue = new Map<string, PupDialogue>();
-  t.lines.forEach((l, i) => {
-    dialogue.set(l.name.toLowerCase(), {
-      ident: l.name,
-      stance: 0,
-      text: l.subtitle,
-      raw: l.subtitle,
-      audioLocation: l.wave,
-      animLogicLocation: l.track,
-      record: 0x844 + i * 0x138,
-    });
-  });
-  t.questions.forEach((q, i) => {
-    dialogue.set(`q ${q.name}`.toLowerCase(), {
-      ident: `q ${q.name}`,
-      stance: 0,
-      text: q.text,
-      raw: q.text,
-      audioLocation: q.wave,
-      animLogicLocation: 0,
-      record: 4 + i * 0x128,
-    });
-  });
-  return {
-    file,
-    paletteRaw: file.containers[0].data.slice(0x22, 0x822),
-    dialogue,
-    scripts: [],
-    stances: [{ location: 3, layers: t.layers.map((frames) => ({ frames, anchorY: 0, anchorX: 0 })) }],
-    bandLocation: -1,
-    pupName: "",
-    idleTimers: t.idleMin.map((minTicks, k) => ({ minTicks, maxTicks: t.idleMax[k] })),
-    encoding: DEFAULT_ENCODING,
-    dfV0: true,
   };
 }

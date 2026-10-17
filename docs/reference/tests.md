@@ -167,7 +167,7 @@ on a duration.
 walks the base and the city by the maze's own transitions (a breadth-first search over
 them, pressed as arrow keys), clicks a crew member's figure where the camera
 draws it, and answers a talk's menus. Every gesture goes through
-`lunicus/src/game/input.ts`, the door the page's own mouse and keyboard
+`lunicus/src/input.ts`, the door the page's own mouse and keyboard
 listeners use, and `RECORD=<path>` on `day6.ts` keeps them, with the tick each
 came before, the files read and a checkpoint at each `ok`.
 

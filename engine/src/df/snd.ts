@@ -1,6 +1,6 @@
 import { DFContainerFile, readContainerFile } from "./container";
 import { versionOf } from "./version";
-import type { BankChunk } from "./banks";
+import type { BankChunk } from "./bank-chunk";
 
 /**
  * SND files — Dust's sound banks, which DreamFactory 1 spells `.SND` and

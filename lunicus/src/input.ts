@@ -7,7 +7,7 @@
  */
 import { ESCAPE_KEY } from "@dreamfactory/engine/web/keys";
 import { ESCAPE } from "@dreamfactory/engine/v0/film";
-import type { Lunicus } from "./game";
+import type { Lunicus } from "./lunicus";
 
 /** one gesture, as a recording keeps it: the tick it came before, and what it was */
 export type Gesture =

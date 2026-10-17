@@ -31,7 +31,6 @@ import { DEFAULT_ENCODING, DfEncoding } from "@dreamfactory/engine/df/text";
 import { decodeAudioContainer, decodeAudioV0 } from "@dreamfactory/engine/df/audio";
 import { decodeFigureV0, decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { paletteV0 } from "@dreamfactory/engine/df/mov-v0";
-import { pupFileFromV0 } from "@dreamfactory/engine/df/talk-v0";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { decodeShpFrame, encodeShpFrame, patchFrameAnchor, ShpFrame } from "@dreamfactory/engine/df/shp";
 import {
@@ -40,6 +39,7 @@ import {
   PupFile,
   patchDialogueText,
   readAnimLogic,
+  pupFileFromV0,
   readPupFile,
 } from "@dreamfactory/engine/df/pup";
 import type { GameScreen } from "@dreamfactory/chrome/games";

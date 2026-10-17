@@ -103,7 +103,7 @@ as the CPU goes, waiting on the game's state and never on a duration.
   walks the station by the maze's own transitions, clicks a crew member's
   figure where the camera draws it, answers a talk's menus, and clicks through
   a film that waits. Every gesture goes through
-  [`src/game/input.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/src/game/input.ts),
+  [`src/input.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/src/input.ts),
   the door the page's own mouse and keyboard use.
 - [`tests/machine/city-bot.ts`](https://github.com/dhobi/dreamrefactory/blob/master/lunicus/tests/machine/city-bot.ts)
   plays the combat levels as a player does. It aims what the screen shows,

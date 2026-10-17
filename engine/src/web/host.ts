@@ -20,7 +20,7 @@
 import { readSetFile, SetFile } from "@dreamfactory/engine/df/set";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { readSetFileAsV4 } from "@dreamfactory/engine/df/set-v1-to-v4";
-import { parseSave } from "@dreamfactory/engine/df/savegame";
+import { parseSave } from "@dreamfactory/engine/df/savegame-read";
 import { SetViewer } from "./viewer";
 import { MazeView } from "./maze-view";
 import { isSett, readSettFile, SettFile } from "@dreamfactory/engine/df/sett";

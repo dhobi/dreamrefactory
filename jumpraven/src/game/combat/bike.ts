@@ -55,7 +55,7 @@ import { countUp, drawPyro, findAt, nthUp, pickNearest, shiftFleet, tumble, wide
 import { aimAt, downTheLine, meets, tooFar, turnToward, type EnemyShot } from "./lib";
 import { KIND, abs, copyObj, cosMul, dist, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
 
-/** `pyro`'s pictures the bikes draw (0x4379d0 + 4·index; src/game/combat/pyro.ts PIC) */
+/** `pyro`'s pictures the bikes draw (0x4379d0 + 4·index; src/game/combat/arms.ts PIC) */
 const SHELL = 0x08;
 const BLAST = 0xc0;
 const CHIP = 0xe0;

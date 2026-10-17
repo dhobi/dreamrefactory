@@ -10,12 +10,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { FORWARD, LEFT, RIGHT } from "../../src/game/data";
-import { Lunicus, type LunicusOptions } from "../../src/game/game";
+import { Lunicus, type LunicusOptions } from "../../src/lunicus";
 import type { GameFiles } from "../../src/game/machine";
 import { drawnAt } from "../../src/game/crew";
 import { moved, type Pose } from "../../src/game/maze";
 import type { TalkState } from "@dreamfactory/engine/v0/talk";
-import { Input, type Checkpoint, type Gesture, type Recording } from "../../src/game/input";
+import { Input, type Checkpoint, type Gesture, type Recording } from "../../src/input";
 
 export type { Checkpoint, Recording };
 
@@ -64,7 +64,7 @@ export const checkpointOf = (game: Lunicus, what: string): Checkpoint => ({
 export interface Headless {
   game: Lunicus;
   logs: string[];
-  /** the player's hands: the page's own door (src/game/input.ts) */
+  /** the player's hands: the page's own door (src/input.ts) */
   input: Input;
   /** the run so far as a recording, if the harness was asked to keep one */
   recording(): Recording;

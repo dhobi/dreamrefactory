@@ -63,7 +63,7 @@ import { cellToCell, countUp, drawPyro, findAt, nthUp, occupiedBy, pickNearest, 
 import { aimAt, callShell, meets, tooFar, type EnemyShot } from "./lib";
 import { KIND, copyObj, cosMul, newObj, readPictures, setObj, sinMul, type Obj, type Pt, type World } from "./world";
 
-/** `pyro`'s pictures the copters draw (0x4379d0 + 4·index; src/game/combat/pyro.ts PIC) */
+/** `pyro`'s pictures the copters draw (0x4379d0 + 4·index; src/game/combat/arms.ts PIC) */
 const SHELL = 0x08;
 const BLAST = 0xc0;
 const BLAST2 = 0xd0;

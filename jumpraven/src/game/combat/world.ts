@@ -40,7 +40,25 @@ import { decodeFrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { Rect } from "@dreamfactory/engine/v0/screen";
 import type { Machine } from "../core/machine";
 import type { Records } from "../core/records";
-import type { BikeApi, BossApi, CommsApi, CopilotApi, CopterApi, FuelApi, HudApi, JeepApi, PyroApi, TankApi, WeapApi } from "./api";
+import type {
+  BikeApi,
+  BossApi,
+  CommsApi,
+  CopilotApi,
+  CopterApi,
+  FuelApi,
+  Hittable,
+  HudApi,
+  JeepApi,
+  Module,
+  Obj,
+  PyroApi,
+  TankApi,
+  Targets,
+  WeapApi,
+} from "./api";
+
+export type { Enemy, Hittable, Module, Obj, Pt, Targets } from "./api";
 
 /** the view: 256 across, 310 down (`[0x43b2d4]`) */
 export const VIEW_W = 0x100;
@@ -82,19 +100,6 @@ export function readPictures(data: Uint8Array): (FrameV0 | undefined)[] {
   });
 }
 
-/** a thing in the world, the EXE's 0x18 bytes */
-export interface Obj {
-  /** +0x00 heading, 0 to 255, 0 east, 0x40 south */
-  angle: number;
-  /** +0x04, +0x08, +0x0c */
-  x: number;
-  y: number;
-  z: number;
-  /** +0x10, +0x14: its cell, as it was last set (not always x >> 8) */
-  cellX: number;
-  cellY: number;
-}
-
 export const newObj = (): Obj => ({ angle: 0, x: 0, y: 0, z: 0, cellX: 0, cellY: 0 });
 export const copyObj = (o: Obj): Obj => ({ ...o });
 /** `movsd` ×6: one object's six fields over another's */
@@ -105,12 +110,6 @@ export function setObj(to: Obj, from: Obj): void {
   to.z = from.z;
   to.cellX = from.cellX;
   to.cellY = from.cellY;
-}
-
-/** a point in the view, the Macintosh's {v, h} */
-export interface Pt {
-  y: number;
-  x: number;
 }
 
 /**
@@ -136,39 +135,6 @@ export interface DrawItem {
   y2: number;
   x2: number;
 }
-
-/**
- * Each enemy module's part of the world's lists: the order is the EXE's in
- * each list, which the World keeps (0x40c517 the frame, 0x40c184 a wrap,
- * 0x40c545 / 0x40c5d5 the targets, 0x41b70b a shot's hits).
- */
-export interface Module {
-  /** once per flight, after its pictures are read (0x40c4b5's list) */
-  reset(): void;
-  /** a frame: move, fire, and add its pictures to the draw list (0x40c517's list) */
-  frame(): void;
-  /** the whole world moved by (dx, dy) when the craft wrapped (0x40c184's list) */
-  shift(dx: number, dy: number): void;
-}
-
-export interface Targets {
-  /** how many are there to aim at (0x40c545's list) */
-  count(): number;
-  /** the k-th of them, 0 the first: its object, the kind ({@link KIND}), its +0x64-style flag and whether it is dying (0x40c5d5's list) */
-  nth(k: number): { obj: Obj; kind: number; flag: number; dying: number };
-}
-
-export interface Hittable {
-  /**
-   * A shot moving from `a` to `b`, doing `dmg`, `r` wider either side than
-   * the thing's own reach: true if it hits one of these, which takes the
-   * damage (0x41b70b's list, each module's hit test; the EXE's argument order
-   * — the damage third, the reach fourth: 0x40dc1f adds its 4th to its box)
-   */
-  hit(a: Obj, b: Obj, dmg: number, r: number): boolean;
-}
-
-export type Enemy = Module & Targets & Hittable;
 
 /**
  * The difficulty's numbers (0x421f0a, by `[0x439fb0]` 1 to 4): named by

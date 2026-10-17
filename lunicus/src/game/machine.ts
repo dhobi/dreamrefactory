@@ -56,7 +56,7 @@ export class Machine extends MachineV0 {
   sco: Sco = defaultSco();
   /**
    * Settings ▸ Keys (0x418b50), for a level to wait on between one thing and
-   * the next; the game (game.ts) puts its dialog here
+   * the next; the game (src/lunicus.ts) puts its dialog here
    */
   keysDialog: () => Co = function* () {};
 

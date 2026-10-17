@@ -18,7 +18,7 @@
  * No rip: nothing here ticks a game.
  */
 import { test, expect } from "vitest";
-import { Lunicus } from "../src/game/game";
+import { Lunicus } from "../src/lunicus";
 import { ACTIONS, SCO_SIZE, actionOf, bindKeys, defaultSco, keyFor, writeSco } from "../src/game/sco";
 
 test("the Keys dialog shows a digit when an action has no letter, and nothing when it has no key", () => {
