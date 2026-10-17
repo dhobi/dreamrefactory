@@ -17,6 +17,8 @@
  * static, 0x83 listbox, 0x84 scrollbar and 0x85 combobox. Positions and sizes
  * are dialog units, which the dialog's font turns into pixels.
  */
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readResources } from "./peres";
 
@@ -108,6 +110,85 @@ function parseDialog(bytes: Uint8Array, what: string): Omit<RawDialog, "name"> {
     });
   }
   return { style, x, y, w, h, title, font, controls };
+}
+
+/** where a game's generated dialogs come from, and what to call them in its header */
+export interface DialogSource {
+  /** the executable whose dialogs they are, e.g. "LUNICUS.EXE" */
+  exe: string;
+  /** the resource DLL, from the repository root */
+  dll: string;
+  /** the tool that regenerates them, from the repository root */
+  tool: string;
+  /** the resources to emit, each under the constant name it is exported as */
+  want: Record<string, string>;
+}
+
+const BS_DEFPUSHBUTTON = 1;
+const BS_AUTOCHECKBOX = 3;
+const BS_AUTORADIOBUTTON = 9;
+const SS_CENTER = 1;
+
+/** what the page draws a button of this style as: a radio, a check box, or a push button */
+function controlKind(c: RawControl): string {
+  if (c.cls !== "button") return c.cls;
+  const style = c.style & 0xf;
+  if (style === BS_AUTORADIOBUTTON) return "radio";
+  return style === BS_AUTOCHECKBOX ? "check" : c.cls;
+}
+
+function controlEntry(c: RawControl): string {
+  if (c.cls !== "button" && c.cls !== "edit" && c.cls !== "static") throw new Error(`a ${c.cls} control, which the dialog does not draw`);
+  const flags = [
+    c.cls === "button" && (c.style & 0xf) === BS_DEFPUSHBUTTON && "default: true",
+    c.cls === "static" && (c.style & 0xf) === SS_CENTER && "center: true",
+  ].filter(Boolean);
+  const tail = flags.map((f) => ", " + f).join("");
+  return `    { id: ${c.id}, kind: "${controlKind(c)}", text: ${JSON.stringify(c.text)}, x: ${c.x}, y: ${c.y}, w: ${c.w}, h: ${c.h}${tail} },`;
+}
+
+/** "a", "a and b", "a, b and c" */
+const listed = (names: string[]): string =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+/**
+ * A DreamFactory 0 game's dialogs as a TypeScript module, in the shape
+ * `engine/src/web/window-dialog.ts` draws, in dialog units of the system font.
+ * Written to `out`; used by lunicus/ and jumpraven/tools/dialogs.ts.
+ */
+export function writeDialogModule({ exe, dll, tool, want }: DialogSource, root: string, out: string): void {
+  const path = join(root, dll);
+  const dialogs = readDialogs(path).filter((d) => d.name in want);
+  if (dialogs.length !== Object.keys(want).length) throw new Error(`${path}: expected ${Object.keys(want).join(", ")}`);
+  for (const d of dialogs) if (d.font) throw new Error(`${d.name} has a font of its own; the page draws the system font's units`);
+  writeFileSync(
+    out,
+    `/**
+ * ${exe}'s dialogs — GENERATED, do not edit.
+ *
+ * Regenerate with \`npx tsx ${tool}\`: the RT_DIALOG resources
+ * ${listed(dialogs.map((d) => d.name))} of ${dll}, in dialog units of the
+ * system font (no DS_SETFONT). Each id is the control's Win32 id; what the
+ * buttons do is src/dialogs.ts.
+ */
+import type { WindowDialogTemplate } from "@dreamfactory/engine/web/window-dialog";
+${dialogs
+  .map(
+    (d) => `
+/** ${d.name}, "${d.title}" */
+export const ${want[d.name]}: WindowDialogTemplate = {
+  title: ${JSON.stringify(d.title)},
+  w: ${d.w},
+  h: ${d.h},
+  controls: [
+${d.controls.map(controlEntry).join("\n")}
+  ],
+};`,
+  )
+  .join("\n")}
+`,
+  );
+  console.log(`${out}: ${dialogs.map((d) => d.name).join(", ")} from ${path}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

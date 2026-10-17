@@ -13,7 +13,9 @@
 import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import {
+  $,
   download,
+  EditLog,
   exportContainerFile,
   fillSwatches,
   installEditorPage,
@@ -44,7 +46,6 @@ import {
 } from "@dreamfactory/engine/df/pup";
 import type { GameScreen } from "@dreamfactory/chrome/games";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -59,7 +60,7 @@ let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** decoded frames by container location (one pup open at a time) */
 const frameCache = new Map<number, ShpFrame>();
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 /** which stance the layer browser is showing (the stance select) */
 let stanceIdx = 0;
 let selected: { layer: number; idx: number; loc: number } | null = null;
@@ -69,15 +70,6 @@ let playing: { stop: () => void } | null = null;
 function log(text: string): void {
   statusEl.textContent = text;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = t("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 // --- loading ----------------------------------------------------------------
 
@@ -140,7 +132,7 @@ function loadPup(bytes: Uint8Array, name: string, v0 = false): void {
   // a v0 palette is the Macintosh way round, entry 0 white (mov-v0.ts)
   palette = pup.dfV0 ? paletteV0(pup.paletteRaw) : paletteToRGBA(pup.paletteRaw, 256);
   frameCache.clear();
-  edits.length = 0;
+  edits.clear();
   // a v5 file reads but cannot be written yet (sources.ts), and a v0 one never
   readOnly = v0 || isV5File(bytes);
   let status = "";
@@ -210,10 +202,10 @@ async function initServerPups(): Promise<void> {
 const serverListed = initServerPups();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stopPlayback();
   pup = null;
-  edits.length = 0;
+  edits.clear();
   editor.style.display = "none";
   landing.style.display = "block";
 });
@@ -538,7 +530,7 @@ function showFramePanel(): void {
 function patchFrameOffset(loc: number, y: number, x: number): void {
   if (!patchFrameAnchor(pup!.file, loc, y, x)) return;
   frameCache.delete(loc);
-  markEdit(`offset @${loc} → ${y},${x}`);
+  edits.mark(`offset @${loc} → ${y},${x}`);
   renderPreview();
   showFramePanel();
 }
@@ -589,7 +581,7 @@ async function importPng(file: File, loc: number): Promise<void> {
   const oldC = pup.file.containers[loc];
   pup.file.containers[loc] = { id: oldC.id, data: encodeShpFrame(frame) };
   frameCache.delete(loc);
-  markEdit(t("puppets.artEdit", { loc, file: file.name }));
+  edits.mark(t("puppets.artEdit", { loc, file: file.name }));
   log(t("puppets.artReplaced", { loc, file: file.name, w: img.width, h: img.height }));
   buildLayers();
   renderPreview();
@@ -616,7 +608,7 @@ function buildDialogue(): void {
       if (input.value === line.text) return;
       patchDialogueText(pup!, key, input.value);
       input.classList.add("edited");
-      markEdit(`text ${line.ident}`);
+      edits.mark(`text ${line.ident}`);
       buildLineSelect();
     });
     row.appendChild(input);
@@ -668,7 +660,7 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   // sanity: the export must read back as a puppet
-  exportContainerFile(pup.file, (bytes) => readPupFile(bytes, encoding), fileName, edits, log);
+  exportContainerFile(pup.file, (bytes) => readPupFile(bytes, encoding), fileName, edits.notes, log);
 });
 
 void installEditorPage();

@@ -1,11 +1,11 @@
 /**
- * The loading page's network meter (`src/meter.ts`): a rate over a rolling
+ * The loading pages' network meter (`chrome/src/net-meter.ts`): a rate over a rolling
  * window, and the caption it writes under the gauge.
  *
  *   npx vitest run --project dust dust/tests/meter.ts
  */
 import { describe, expect, it } from "vitest";
-import { NetMeter, fmtLeft, fmtRate, fmtSize } from "../src/meter";
+import { NetMeter, fmtLeft, fmtRate, fmtSize } from "@dreamfactory/chrome/net-meter";
 
 const MB = 1024 * 1024;
 

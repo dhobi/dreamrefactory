@@ -26,7 +26,8 @@ import { installSourcePicker, type Source, type SourceFile } from "./sources";
 /** the page's status line */
 export type Log = (text: string) => void;
 
-const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+/** an element of the page by id, as the type the caller knows it is */
+export const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 // --- opening ----------------------------------------------------------------
 
@@ -42,8 +43,8 @@ export function wireFileOpen(
     if (f) void open(f);
   },
 ): void {
-  const fileInput = byId<HTMLInputElement>("fileInput");
-  byId("openBtn").addEventListener("click", () => fileInput.click());
+  const fileInput = $<HTMLInputElement>("fileInput");
+  $("openBtn").addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
     if (fileInput.files?.[0]) void open(fileInput.files[0]);
     fileInput.value = "";
@@ -237,8 +238,8 @@ export class LazyFill {
 
 /** the PNG Import button and its hidden file input */
 export function wirePngImport(take: (file: File) => void): void {
-  const pngInput = byId<HTMLInputElement>("pngInput");
-  byId("pngImportBtn").addEventListener("click", () => pngInput.click());
+  const pngInput = $<HTMLInputElement>("pngInput");
+  $("pngImportBtn").addEventListener("click", () => pngInput.click());
   pngInput.addEventListener("change", () => {
     const file = pngInput.files?.[0];
     pngInput.value = "";
@@ -341,6 +342,37 @@ export function download(blob: Blob, name: string): void {
 }
 
 /**
+ * What an editor page has changed and not exported: the count in the dirty
+ * line, the browser's leave warning while there is any, and the question before
+ * a file is swapped out from under them.
+ */
+export class EditLog {
+  /** each edit's note, in order — what an export lists */
+  readonly notes: string[] = [];
+
+  constructor(private readonly dirtyEl: HTMLElement) {
+    window.addEventListener("beforeunload", (e) => {
+      if (this.notes.length) e.preventDefault();
+    });
+  }
+
+  mark(note: string): void {
+    this.notes.push(note);
+    this.dirtyEl.textContent = t("counts.unexportedEdits", { n: this.notes.length });
+  }
+
+  /** a file opened afresh: nothing unexported */
+  clear(): void {
+    this.notes.length = 0;
+  }
+
+  /** may the edits be thrown away? At once when there are none, else the reader is asked */
+  mayDiscard(): boolean {
+    return !this.notes.length || confirm(t("counts.discardEdits", { n: this.notes.length }));
+  }
+}
+
+/**
  * Repack a container file and save it — but only once `readBack` has read the
  * export back as what it claims to be, so a broken repack is a message and not
  * a download.
@@ -383,5 +415,5 @@ export function installEditorPage(): Promise<Source | null> {
   installGamesMenu();
   void installLanguageMenu();
   installVersion();
-  return installSourcePicker(byId("editionPicker"));
+  return installSourcePicker($("editionPicker"));
 }

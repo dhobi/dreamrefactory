@@ -18,9 +18,10 @@
  * type 'LSCO', creator 'STAR'). The rip's file is the defaults to the byte, but
  * for leftovers after the empty names.
  */
+import { KEY_TABLE, bindFirstCharacters, letterOrDigitFor, readPlace, writePlace, type Place } from "@dreamfactory/engine/v0/sco";
 
 export const SCO_SIZE = 0x410;
-const TABLE = 0x100;
+const TABLE = KEY_TABLE;
 const PLACE = 0x1c;
 const DIFFICULTY = PLACE * 7;
 /** the name's longest (0x4189f8) */
@@ -36,10 +37,7 @@ export const ACTIONS = ["Forward", "Left", "Right", "Navigate", "Bullets", "Gren
  */
 const ARROWS: Record<string, number> = { ArrowLeft: 0x1c, ArrowRight: 0x1d, ArrowUp: 0x1e, ArrowDown: 0x1f };
 
-export interface Place {
-  score: number;
-  name: string;
-}
+export type { Place };
 
 export interface Sco {
   keys: Uint8Array;
@@ -70,32 +68,16 @@ export function defaultSco(): Sco {
 
 export function readSco(bytes: Uint8Array): Sco {
   if (bytes.length !== SCO_SIZE) throw new Error(`lunicus.sco is ${bytes.length} bytes, not ${SCO_SIZE}`);
-  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const keys = bytes.slice(0, TABLE);
   fixArrows(keys);
-  const scores = [0, 1, 2, 3].map((d) =>
-    Array.from({ length: 7 }, (_, i) => {
-      const at = TABLE + d * DIFFICULTY + i * PLACE;
-      const n = Math.min(bytes[at + 4], NAME_MAX);
-      return { score: v.getInt32(at, true), name: String.fromCharCode(...bytes.subarray(at + 5, at + 5 + n)) };
-    }),
-  );
+  const scores = [0, 1, 2, 3].map((d) => Array.from({ length: 7 }, (_, i) => readPlace(bytes, TABLE + d * DIFFICULTY + i * PLACE, NAME_MAX)));
   return { keys, scores };
 }
 
 export function writeSco(s: Sco): Uint8Array {
   const out = new Uint8Array(SCO_SIZE);
-  const v = new DataView(out.buffer);
   out.set(s.keys.subarray(0, TABLE));
-  s.scores.forEach((places, d) =>
-    places.forEach((p, i) => {
-      const at = TABLE + d * DIFFICULTY + i * PLACE;
-      v.setInt32(at, p.score, true);
-      const name = p.name.slice(0, NAME_MAX);
-      out[at + 4] = name.length;
-      for (let k = 0; k < name.length; k++) out[at + 5 + k] = name.charCodeAt(k) & 0xff;
-    }),
-  );
+  s.scores.forEach((places, d) => places.forEach((p, i) => writePlace(out, TABLE + d * DIFFICULTY + i * PLACE, p, NAME_MAX)));
   return out;
 }
 
@@ -116,9 +98,7 @@ export function actionOf(keys: Uint8Array, key: string): number {
  * the first digit, bound to it; "" for none.
  */
 export function keyFor(keys: Uint8Array, action: number): string {
-  for (let c = 0x41; c <= 0x5a; c++) if (keys[c] === action) return String.fromCharCode(c);
-  for (let c = 0x30; c <= 0x39; c++) if (keys[c] === action) return String.fromCharCode(c);
-  return "";
+  return letterOrDigitFor(keys, action);
 }
 
 /**
@@ -127,13 +107,7 @@ export function keyFor(keys: Uint8Array, action: number): string {
  * {@link ACTIONS} order.
  */
 export function bindKeys(fields: readonly string[]): Uint8Array {
-  const t = new Uint8Array(TABLE);
-  fields.forEach((f, i) => {
-    let c = f.length ? f.charCodeAt(0) & 0xff : 0;
-    if (c >= 0x61 && c <= 0x7a) c -= 0x20;
-    t[c] = i + 1;
-    if (c >= 0x41) t[c | 0x20] = i + 1;
-  });
+  const t = bindFirstCharacters(fields);
   fixArrows(t);
   return t;
 }

@@ -13,7 +13,6 @@ const GH = "https://github.com/dhobi/dreamrefactory/blob/master/";
 const NS = "http://www.w3.org/2000/svg";
 const KIND_COLOR = { engine: "--c-engine", game: "--c-game", site: "--c-site", tools: "--c-tools", ext: "--c-ext", person: "--c-ext", docs: "--c-docs" };
 const SYM_COLOR = { class: "--c-engine", interface: "--c-site", enum: "--c-tools", type: "--c-tools", function: "--c-game" };
-const GAMES = ["taoot", "dust", "timelapse", "redjack", "skullcracker", "lunicus", "jumpraven"];
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 const HOW = "<p class=\"hint\">Tap or click a box for its notes, then tap it again or press Open to go one level down. Drag to pan; pinch, scroll or use the buttons to zoom. The breadcrumb goes back up.</p>";
 
@@ -167,7 +166,8 @@ export function mount(root, D, dagre) {
       const [a, b] = k.split("|");
       return { from: `cont:${a}`, to: `cont:${b}`, label: plural(v, "import"), w: v };
     });
-    for (const g of GAMES) edges.push({ from: `cont:${g}`, to: "ext:gamefiles", ext: true });
+    // every game reads its rip; the notes say which containers are games
+    for (const [g, c] of Object.entries(CONTAINERS)) if (c.kind === "game") edges.push({ from: `cont:${g}`, to: "ext:gamefiles", ext: true });
     return { nodes, edges, rank: "TB", levelName: "Containers: the workspaces", levelNo: 2 };
   }
   function viewContainer(id) {

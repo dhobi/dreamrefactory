@@ -62,9 +62,8 @@ import {
 } from "@dreamfactory/engine/df/sbk";
 import { t } from "@dreamfactory/chrome/locales";
 import { byExtension, chosenSource, filesIn, listSources } from "./sources";
-import { installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
+import { $, installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");

@@ -38,9 +38,8 @@ import { readClutV0 } from "@dreamfactory/engine/df/clut-v0";
 import { cellV0, ownsFilmV0, readMazeV0, type MazeTransitionV0, type MazeV0, type PoseV0 } from "@dreamfactory/engine/df/maze-v0";
 import { t } from "@dreamfactory/chrome/locales";
 import { chosenSource, filesIn, listSources, type Source } from "./sources";
-import { fetchBytes, installEditorPage, serverNote, wireFileOpen } from "./editor-kit";
+import { $, fetchBytes, installEditorPage, serverNote, wireFileOpen } from "./editor-kit";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");

@@ -15,93 +15,18 @@
  * Modelled on `taoot/tools/disasmcmd.mts`, which does the same job against
  * TI.EXE for the interpreter's builtins.
  */
-import { readFileSync } from "node:fs";
-import { Capstone, Const, loadCapstone } from "capstone-wasm";
+import { X86Exe } from "../../tools/x86dis";
 
 const EXE = "skullcracker/gamefiles/SKULL/INSTALL/BIN/SC.EXE";
-const data = new Uint8Array(readFileSync(EXE));
-const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
-
-// ---- the PE, enough of it to turn a VA into a file offset ------------------
-const pe = dv.getUint32(0x3c, true);
-const nsec = dv.getUint16(pe + 6, true);
-const optsz = dv.getUint16(pe + 20, true);
-const imageBase = dv.getUint32(pe + 24 + 28, true);
-interface Sec { name: string; va: number; vsize: number; raw: number; rsize: number }
-const secs: Sec[] = [];
-for (let i = 0; i < nsec; i++) {
-  const o = pe + 24 + optsz + i * 40;
-  secs.push({
-    name: new TextDecoder().decode(data.subarray(o, o + 8)).replace(/\0+$/, ""),
-    vsize: dv.getUint32(o + 8, true),
-    va: dv.getUint32(o + 12, true),
-    rsize: dv.getUint32(o + 16, true),
-    raw: dv.getUint32(o + 20, true),
-  });
-}
-const text = secs.find((s) => s.name === ".text")!;
-
-/** virtual address -> file offset, or -1 outside every section */
-function fileOff(va: number): number {
-  const rva = va - imageBase;
-  for (const s of secs) if (rva >= s.va && rva < s.va + Math.max(s.vsize, s.rsize)) return s.raw + (rva - s.va);
-  return -1;
-}
-const vaOf = (off: number, s: Sec): number => imageBase + s.va + (off - s.raw);
-
-await loadCapstone();
-const cs = new Capstone(Const.CS_ARCH_X86, Const.CS_MODE_32);
-cs.setOption(Const.CS_OPT_SYNTAX, Const.CS_OPT_SYNTAX_INTEL);
-
-/**
- * Every address that is the target of a `call rel32`, computed by bytes.
- *
- * This is the real function-entry oracle. `int3`-run detection is not — MSVC
- * pads with fewer than three, and a jump table before a function leaves
- * no padding at all — so a boundary is better taken as "the greatest call target
- * at or before this address". A function that nothing calls (a jump-table case,
- * a tail) is invisible to this, which is a known and stated limit rather than a
- * silent misread.
- */
-const CALL_TARGETS: number[] = (() => {
-  const set = new Set<number>();
-  for (let o = text.raw; o < text.raw + text.rsize - 5; o++) {
-    if (data[o] !== 0xe8) continue;
-    const t = vaOf(o, text) + 5 + dv.getInt32(o + 1, true);
-    if (t >= imageBase + text.va && t < imageBase + text.va + text.vsize) set.add(t);
-  }
-  return [...set].sort((a, b) => a - b);
-})();
-
-/** the call target at or before `va` — a function entry, by the oracle above */
-function entryBefore(va: number): number {
-  let lo = 0, hi = CALL_TARGETS.length - 1, best = -1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (CALL_TARGETS[mid] <= va) { best = CALL_TARGETS[mid]; lo = mid + 1; }
-    else hi = mid - 1;
-  }
-  return best;
-}
-
-function show(va: number, bytes: number, indent = ""): void {
-  const off = fileOff(va);
-  if (off < 0) return console.log(`${indent}(VA ${va.toString(16)} is in no section)`);
-  for (const i of cs.disasm(data.subarray(off, off + bytes), { address: va })) {
-    console.log(`${indent}${Number(i.address).toString(16)}  ${i.mnemonic.padEnd(8)} ${i.opStr}`);
-  }
-}
-
-/** every `call rel32` in .text whose target is `to` */
-function callSites(to: number): number[] {
-  const out: number[] = [];
-  for (let off = text.raw; off < text.raw + text.rsize - 5; off++) {
-    if (data[off] !== 0xe8) continue;
-    const va = vaOf(off, text);
-    if (va + 5 + dv.getInt32(off + 1, true) === to) out.push(va);
-  }
-  return out;
-}
+// the PE, the call-target oracle and capstone are tools/x86dis.ts's
+const exe = await X86Exe.open(EXE);
+const { data, dv, imageBase, secs, text, cs } = exe;
+const CALL_TARGETS = exe.callTargets;
+const fileOff = (va: number): number => exe.fileOff(va);
+const vaOf = (off: number, s = text): number => exe.vaOf(off, s);
+const entryBefore = (va: number): number => exe.entryBefore(va);
+const callSites = (to: number): number[] => exe.callSites(to);
+const show = (va: number, bytes: number, indent = ""): void => exe.show(va, bytes, indent);
 
 const [, , mode, arg] = process.argv;
 

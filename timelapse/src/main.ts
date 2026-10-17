@@ -42,7 +42,7 @@ import { TL_CURSORS } from "./cursor-art";
 import { TimelapseFiles } from "./files";
 import { isNavRegion, keyAction, screenPoint } from "./input";
 import { bugLine, exitsHtml, whereHtml } from "./location";
-import { NetMeter, fmtSize } from "./meter";
+import { NetMeter, fmtSize } from "@dreamfactory/chrome/net-meter";
 
 /**
  * This game's screen, and it is NOT the engine's default.
@@ -199,7 +199,7 @@ function progress(f: number, label?: string): void {
   }
 }
 
-/** the network meter (src/meter.ts), read on a timer while the prefetch runs */
+/** the network meter (chrome/src/net-meter.ts), read on a timer while the prefetch runs */
 const TICK_MS = 250;
 const meter = new NetMeter();
 let meterTimer = 0;

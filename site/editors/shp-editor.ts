@@ -18,9 +18,11 @@ import { paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
+  $,
   appendScripts,
   artSizes,
   drawScreenBands,
+  EditLog,
   exportContainerFile,
   fillSwatches,
   installEditorPage,
@@ -54,7 +56,6 @@ import type { GameScreen } from "@dreamfactory/chrome/games";
 import { DecodedAudio, decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import { play as playSound, stopPlayback as stopSound } from "./playback";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -94,7 +95,7 @@ const frameCache = new Map<number, ShpFrame>();
 /** decoded view sounds by container location (PropState.sound); null = undecodable */
 const soundCache = new Map<number, DecodedAudio | null>();
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 let groupIdx = 0;
 let stateIdx = 0;
 let frameIdx = 0;
@@ -106,15 +107,6 @@ let playing: { stop: () => void } | null = null;
 function log(text: string): void {
   statusEl.textContent = text;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = t("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 const group = () => shp!.groups[groupIdx];
 const state = (): PropState | undefined => group()?.states[stateIdx];
@@ -143,7 +135,7 @@ function loadShp(bytes: Uint8Array, name: string): void {
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   frameCache.clear();
   soundCache.clear();
-  edits.length = 0;
+  edits.clear();
   // a v5 file reads but cannot be written yet (sources.ts)
   readOnly = isV5File(bytes);
   dirtyEl.textContent = readOnly ? V5_READ_ONLY : "";
@@ -202,10 +194,10 @@ async function initServerShops(): Promise<void> {
 const serverListed = initServerShops();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stopPlayback();
   shp = null;
-  edits.length = 0;
+  edits.clear();
   frameCache.clear();
   editor.style.display = "none";
   landing.style.display = "block";
@@ -435,7 +427,7 @@ function buildShopFields(): void {
     const stored = patchShopRefName(s, name.value);
     name.value = stored;
     name.classList.add("edited");
-    markEdit(t("shops.shopNameEdit", { name: stored }));
+    edits.mark(t("shops.shopNameEdit", { name: stored }));
     log(t("shops.shopNameNow", { name: stored }));
   };
   $("shopInfo").innerHTML =
@@ -474,7 +466,7 @@ function buildStates(): void {
     const stored = patchGroupName(shp!, groupIdx, nameInput.value);
     nameInput.value = stored;
     nameInput.classList.add("edited");
-    markEdit(`prop ${groupIdx} name → ${stored}`);
+    edits.mark(`prop ${groupIdx} name → ${stored}`);
     buildGroupSelect();
     renderPreview();
   };
@@ -510,7 +502,7 @@ function buildStates(): void {
       const stored = patchStateIdentifier(shp!, groupIdx, i, id.value);
       id.value = stored;
       id.classList.add("edited");
-      markEdit(`state ${groupIdx}/${i} → ${stored}`);
+      edits.mark(`state ${groupIdx}/${i} → ${stored}`);
       renderPreview();
     };
     row.appendChild(id);
@@ -647,7 +639,7 @@ function buildFramePanel(): void {
     if (y === f.posYraw && x === f.posXraw) return;
     if (!patchFrameAnchor(shp!.file, loc, y, x)) return;
     frameCache.delete(loc);
-    markEdit(t("shops.offsetEdit", { loc, y, x }));
+    edits.mark(t("shops.offsetEdit", { loc, y, x }));
     log(
       t("shops.offsetMoved", { loc, x, y }),
     );
@@ -665,7 +657,7 @@ function buildFramePanel(): void {
     if (!patchFrameDegree(shp!, groupIdx, stateIdx, frameIdx, value)) return;
     deg.value = String(st.degrees[frameIdx]);
     deg.classList.add("edited");
-    markEdit(`deg ${st.identifier}/${frameIdx} → ${st.degrees[frameIdx]}`);
+    edits.mark(`deg ${st.identifier}/${frameIdx} → ${st.degrees[frameIdx]}`);
     buildStates();
     buildFrames();
     renderPreview();
@@ -727,7 +719,7 @@ async function importPng(file: File, loc: number): Promise<void> {
   const data = encodeShpFrame(frame);
   shp.file.containers[loc] = { id: container.id, data };
   frameCache.delete(loc);
-  markEdit(t("shops.artEdit", { loc, file: file.name }));
+  edits.mark(t("shops.artEdit", { loc, file: file.name }));
   log(
     t("shops.artReplaced", {
       loc,
@@ -750,7 +742,7 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   // sanity: the export must read back as a shop
-  exportContainerFile(shp.file, readShpFile, fileName, edits, log);
+  exportContainerFile(shp.file, readShpFile, fileName, edits.notes, log);
 });
 
 void installEditorPage();

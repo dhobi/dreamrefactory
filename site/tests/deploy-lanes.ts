@@ -26,6 +26,7 @@
  * same four places anyway.
  */
 import { test, expect } from "vitest";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { GAMES, UNLISTED } from "@dreamfactory/chrome/games";
@@ -113,9 +114,10 @@ test("the release tool pushes one tag per push", () => {
 });
 
 test("the release tool releases exactly what the workflow can release", () => {
-  const listed = [...(/const TARGETS = \[([^\]]*)\]/.exec(release)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map(
-    (m) => m[1],
-  );
+  // asked of the tool itself: its list is made from the games registry, so
+  // what it refuses an unknown target with is the list
+  const refused = spawnSync(process.execPath, ["--import", "tsx", "tools/release.mts", "no-such-target"], { cwd: ROOT, encoding: "utf8" });
+  const listed = (/one of: (.*)/.exec(refused.stderr)?.[1] ?? "").split(", ");
   expect(new Set(listed)).toEqual(new Set(["site", ...DEPLOYED.map((g) => g.dir)]));
 });
 
