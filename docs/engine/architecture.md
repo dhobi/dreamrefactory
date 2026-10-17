@@ -198,6 +198,22 @@ own sections of these docs.
 A page feature built on the engine rather than part of it, so a package of its
 own, which any game can carry. The **speedrun workbench**, whole: the sheet grammar, the run loop, both drivers (Playwright's contract and the in-page one), the aim sweep, the panel's markup and stylesheet, and the verbs that name no game. A game supplies its own verbs and five facts about itself (`workbench.ts`, `Workbench`); Titanic and Dust each get a `/speedrun/` page out of it. Which table a verb belongs in is argued in [`action.ts`](https://github.com/dhobi/dreamrefactory/blob/master/speedrun/src/action.ts).
 
+The workbench page is not a file in any game. `speedrun/vite.ts` makes it out of
+the game's own play page, in dev on every request and in a build as the
+`speedrun` entry: it moves the nodes that are the game into a row beside the
+panel, drops what only a player needs (the settings strip, the title card), opens
+the Details column and adds the workbench's own controls. So a game that wants a
+`/speedrun/` page brings four things:
+
+| File | What it says |
+|------|--------------|
+| `<game>/speedrun/workbench.ts` | which of the play page's nodes are the game, which it has no use for, and the `<meta>` switches its `main.ts` reads |
+| `<game>/src/speedrun/page.ts` | one `startWorkbench` call: the game's key space, its verbs, and what it can warm or calculate |
+| `<game>/src/speedrun/actions.ts` | its own verbs, over the ones that name no game |
+| `<game>/src/speedrun.css` | the panel's stylesheet, imported, plus anything its own chrome has to be told |
+
+and one line in its `vite.config.ts`: `...speedrunPage({ root: HERE, ...WORKBENCH })`.
+
 ### `taoot/` — Titanic's shell
 
 Four pages: the front page, `/play/`, `/collection/`, and the unlisted

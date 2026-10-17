@@ -648,7 +648,7 @@ Sheets come in by pull request as plain sheet files in
 [`taoot/speedrun/sheets/`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/speedrun/sheets/README.md): line 1 is
 `# title: …`, and `author` and `notes` may follow in the comments
 before the first action (`speedrun/src/sheet-header.ts`). The
-workbench lists them under **Contributed sheets…** (the `run-sheet` plugin
+workbench lists them under **Contributed sheets…** (the workbench's Vite plugin, `speedrun/vite.ts`,
 publishes the folder as `speedrun/sheets.json`), in place of the "Copy the full
 run" button.
 

@@ -8,7 +8,7 @@
  * five are below — everything else about a run is the same on any DreamFactory
  * disc, which is why the panel moved and this file is what was left.
  *
- * `speedrun/index.html` loads it by name, and it must be the module that runs
+ * The workbench page (speedrun/vite.ts) loads it by name, and it must be the module that runs
  * LAST of the two the page loads: `main.ts` boots the game, this opens the
  * workbench over it.
  */
@@ -95,8 +95,8 @@ startWorkbench({
   warmup,
   warmWhat: `every file of the ${warmEdition().toUpperCase()} edition`,
   /**
-   * The repository's own sheet, published beside this page by the `run-sheet`
-   * plugin (vite.config.ts) — middleware in dev, an emitted asset in a build, at
+   * The repository's own sheet, published beside this page by the speedrun
+   * plugin (speedrun/vite.ts) — middleware in dev, an emitted asset in a build, at
    * the same path either way.
    *
    * Resolved HERE, through `siteUrl`, and handed over whole: where a page sits in

@@ -336,7 +336,7 @@ a leg is worked on and the whole thing still times under
 
 The workbench plays the **music**: a run is read by its sound as much as by its
 picture, and the theme is part of knowing where you are. Adding `<meta
-name="mute-theme">` to `speedrun/index.html`'s head (applied as the cold boot's
+name="mute-theme">` to the workbench's head (`meta` in `taoot/speedrun/workbench.ts`) (applied as the cold boot's
 theme mix) turns it off, for when the same twenty seconds of a room play over and
 over while a route is tuned.
 

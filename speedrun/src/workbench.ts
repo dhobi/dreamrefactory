@@ -527,8 +527,8 @@ function renderLegend(): void {
  * reason: the arrows and Space belong to the game unless something is genuinely
  * being typed into.
  */
-// Both sections, because the panel is two now (#srpanel and #srtimer in
-// speedrun/index.html): a control that lands in the timer's column has to lose
+// Both sections, because the panel is two now (#srpanel and #srtimer, built
+// by panel.ts): a control that lands in the timer's column has to lose
 // focus for the same reason one in the sheet's does.
 for (const section of ["srpanel", "srtimer"]) {
   $<HTMLElement>(section).addEventListener("click", (e) => {
@@ -1993,7 +1993,7 @@ let contributed: (SheetHeader & { text: string })[] = [];
 
 async function start(): Promise<void> {
   /*
-   * Published beside this page by the `run-sheet` plugin (vite.config.ts) — in
+   * Published beside this page by the speedrun plugin (speedrun/vite.ts) — in
    * dev as middleware, in a build as an emitted asset, at the same path either
    * way.
    *

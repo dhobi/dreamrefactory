@@ -15,7 +15,8 @@ import { join, resolve } from "node:path";
 import { Plugin, defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
 import { siblingSignposts } from "../tools/vite-siblings";
-import { runSheet } from "../tools/vite-run-sheet";
+import { speedrunPage } from "../speedrun/vite";
+import { WORKBENCH } from "./speedrun/workbench";
 // RELATIVE, like everything a Vite config reaches: the config is bundled and run
 // under Node, where a bare specifier is left external for a loader that can
 // follow neither the engine's extensionless imports nor a .ts file at all.
@@ -27,17 +28,6 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 
 /** the port's version, from the package that holds this game and nothing else */
 const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")).version as string;
-
-/**
- * Titanic's route — the fixture the headless runner drives, and what a first
- * visit to the workbench starts from.
- *
- * The plugin is `tools/vite-run-sheet.ts`, shared with Dust: the two games differ
- * only in where the fixture sits.
- */
-const SHEET_SRC = join(HERE, "tests/speedrun/run.sheet.txt");
-/** the sheets contributed by pull request, each checked by tests/auto/speedrun-sheets.ts */
-const SHEETS_DIR = join(HERE, "speedrun/sheets");
 
 /**
  * `nightdive.mov` from its GIF, when the GIF is the newer of the two.
@@ -97,7 +87,9 @@ export default defineConfig({
   plugins: [
     nightdiveMovie(),
     gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") }),
-    runSheet(SHEET_SRC, SHEETS_DIR),
+    // the speedrun workbench, made from play/index.html by speedrun/vite.ts:
+    // reached by its mark (🏃‍➡️) in the top bar, carrying `noindex`, and built
+    ...speedrunPage({ root: HERE, ...WORKBENCH }),
     siblingSignposts([
       { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
       { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
@@ -154,11 +146,6 @@ export default defineConfig({
         // answer a tour with a knock opened anyway. The play page with the
         // story turned off, and LISTED — it is a way to play rather than a tool.
         freeroam: join(HERE, "freeroam/index.html"),
-        // The speedrun workbench: the play page plus a sheet to drive it with.
-        // Reached by its mark (🏃‍➡️) in the top bar and carrying `noindex`, and
-        // built, because a tool that only exists on a dev server is a tool
-        // nobody uses.
-        speedrun: join(HERE, "speedrun/index.html"),
         // Developer mode: the debug build put back up — `debugging` raised after
         // the boot, `optionkey()`/`commandkey()` answering for real, and
         // TI.EXE's own menu bar read out of its RT_MENU resource. Reached by its

@@ -792,7 +792,7 @@ const skipsIntro = (): boolean =>
  * atmosphere — and it was taken back out, because a run is read by its sound as
  * much as by its picture and the music is part of knowing where you are.
  *
- * Kept because it is one line to say again (in `speedrun/index.html`'s head)
+ * Kept because it is one line to say again (in the workbench's `meta`, taoot/speedrun/workbench.ts)
  * and because the question it answers is a real one for any page that runs the
  * game on a loop. It only ever touched the THEME mix: SFX and voice were left
  * alone, since `skipLines` and `wait(talking)` are about those.

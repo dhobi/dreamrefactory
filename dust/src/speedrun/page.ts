@@ -16,8 +16,8 @@
  *     there is nothing to choose and little to prefetch; when a route exists and
  *     the download is what it is fighting, the list goes here.
  *   - ~~**No sheet to copy.**~~ There is one now — `tests/speedrun/run.sheet.txt`,
- *     published beside this page by the shared `run-sheet` plugin
- *     (tools/vite-run-sheet.ts) exactly as Titanic's is, so the panel offers
+ *     published beside this page by the shared speedrun plugin
+ *     (speedrun/vite.ts) exactly as Titanic's is, so the panel offers
  *     "copy the full run" here too. It was written against the golden thread
  *     (docs/dust/thread.md), which is the route this game actually has.
  */
@@ -84,8 +84,8 @@ startWorkbench({
   game: "dust",
   actions: ACTIONS,
   /**
-   * The repository's own route, published beside this page by the `run-sheet`
-   * plugin (vite.config.ts) — middleware in dev, an emitted asset in a build, at
+   * The repository's own route, published beside this page by the speedrun
+   * plugin (speedrun/vite.ts) — middleware in dev, an emitted asset in a build, at
    * the same path either way.
    *
    * Resolved HERE, through `siteUrl`, and handed over whole: where a page sits in
