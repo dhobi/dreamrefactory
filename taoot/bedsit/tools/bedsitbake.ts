@@ -13,8 +13,8 @@
  *
  * So the painter stays exactly where it is and stays the source of truth; this
  * runs it once, offline, and writes what it produced. It is the same move
- * {@link file://./bedsitmats.ts} already made for the four materials that used
- * to be cut out of the rip at load.
+ * already made for the four materials that used to be cut out of the rip at
+ * load.
  *
  * **The rug is deliberately NOT baked.** It is the cheapest chart to paint —
  * 355 ms against the fireplace wall's 1,795 — and the most expensive to

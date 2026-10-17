@@ -143,9 +143,9 @@ export const MATERIALS: Readonly<Record<string, { scene?: string; deg?: number; 
    * back in `Scene2/View12`, and were what this was cut from until `bedobit.mov`
    * turned up: its close-up of the book on the armchair fills a third of a
    * 512x384 frame with the same cloth, lit and in focus, where the SET frame
-   * gave 80x40. `file` is that patch, de-lit the same way and baked by
-   * `taoot/tools/bedsitobit.ts`; the frame coordinates stay as the fallback and
-   * as the record of where the colour was measured.
+   * gave 80x40. `file` is that patch, de-lit the same way and cut once from the
+   * film; the frame coordinates stay as the fallback and as the record of where
+   * the colour was measured.
    */
   moquette: { scene: "Scene2", deg: 14, x0: 70, y0: 210, x1: 150, y1: 250, keep: 1.4, scale: 240, tone: [0.44, 0.40, 0.20], file: "bedsit/moquette.png" },
   /** the bed's khaki blanket: the flat of it Scene2/View15 sees over the foot,
@@ -271,8 +271,8 @@ export const MATERIALS: Readonly<Record<string, { scene?: string; deg?: number; 
    *
    * `bedcards.mov` frame 6 is the reference for both: the film holds the two of
    * them up filling the screen, which is the only look at these covers that
-   * resolves anything. {@link file://../tools/bedsitcards.ts} cuts them out of
-   * it; {@link file://../tools/bedsitmags.ts} trims what comes back.
+   * resolves anything. They were cut out of it once;
+   * {@link file://../tools/bedsitmags.ts} trims what comes back.
    *
    * ONE KNOWN DEPARTURE from the frames. BRAVE NEW WORLD's masthead band is
    * OLIVE in the game — the band under the lettering measures rgb 67,69,41,
@@ -378,8 +378,8 @@ export const MATERIALS: Readonly<Record<string, { scene?: string; deg?: number; 
    *
    * At sixty pixels the officer's cap, uniform and medal ribbons are real and
    * his face is a dozen pixels: what is hanging here is a reconstruction from
-   * a silhouette, the same bargain `bedsitpics.ts draw` already makes for the
-   * marine picture over the mantel.
+   * a silhouette, the same bargain the redrawn marine picture over the mantel
+   * makes.
    *
    * They are PHOTOGRAPHS and not framed pictures. Three of the four arrived
    * with gilt or stained moulding drawn round them and a drop shadow under it,
@@ -1163,7 +1163,7 @@ export const DESK_PROPS = {
    *
    * PLACED BY EYE against `bedcards.mov`, which is worth saying plainly because
    * nothing else here is. Every other prop on this desk was measured through a
-   * SET frame with `bedsitlook pick`, which turns a pixel into a place exactly;
+   * SET frame, which turns a pixel into a place exactly;
    * this card is legible in no SET frame at all. Fitting the film's own camera
    * from props whose places are already known was tried and does not work: they
    * all lie strung along the desk within 200 units of one another in x, so the
@@ -2490,8 +2490,8 @@ function settee(b: Builder, S: Settee): void {
  * The cover of the book, laid over it straight down.
  *
  * The book is its own island in the armchair's mesh, so it is its own part and
- * can wear its own texture — `bedsit-futility.png`, rectified off `bedobit.mov`
- * by `taoot/tools/bedsitobit.ts`. The chart is a plan view of the book's own
+ * can wear its own texture — `bedsit-futility.png`, rectified once off
+ * `bedobit.mov`. The chart is a plan view of the book's own
  * box, in the chair's untransformed frame, which is the frame `Builder.mesh`
  * asks a chart in: the yaw is applied after the texture coordinates are taken.
  *
@@ -2513,7 +2513,7 @@ function settee(b: Builder, S: Settee): void {
  * which is 194 by 155 by 25: a small hardback, which is what an 1898 novella is.
  *
  * The 300 by 240 is not a round number chosen for its roundness. The rectified
- * cover `taoot/tools/bedsitobit.ts` cuts is 320 by 400 pixels, and the chart
+ * cover off `bedobit.mov` is 320 by 400 pixels, and the chart
  * lays that over the block's y across its x — so 240 by 300 is 0.8, the
  * picture's own ratio, and the cover goes on without being stretched either
  * way.

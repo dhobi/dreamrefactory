@@ -6,8 +6,8 @@
  *   npm run test:browser:board -w taoot
  *   HEADED=1 …                              # watch it
  *
- * It needs no rip: `/bedsit/` with no `gamefiles/` is plaster and three lamps,
- * and the board is painted rather than measured, so it is the same board.
+ * It needs no rip: `/bedsit/` reads none of the game's files, and the board is
+ * painted rather than measured.
  *
  * ## Why this suite exists
  *

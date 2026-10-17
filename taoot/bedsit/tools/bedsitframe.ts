@@ -5,8 +5,8 @@
  *       [--box x0,y0,x1,y1] [--inner x0,y0,x1,y1] [--flip] [--mono]
  *       [--into plate.jpg --window x0,y0,x1,y1]
  *
- * {@link file://./bedsitpics.ts} `draw` rebuilds the three big pictures from
- * their own bakes. This is the other way in: a picture that arrives whole —
+ * The three big pictures were rebuilt from their own bakes off the game's
+ * frames, once. This is the other way in: a picture that arrives whole —
  * found, photographed or generated — and has to be made to fit a rectangle that
  * was measured off the plaster years before it existed.
  *
@@ -34,7 +34,7 @@
  * plate already in `public/` and `--window` the rectangle inside its frame, and
  * the supplied picture is fitted to THAT rather than to the wall's rectangle.
  * Everything outside the window survives untouched, which is the point: the
- * three big pictures were drawn by `bedsitpics.ts`, frames and all, and a better
+ * three big pictures were drawn whole, frames and all, and a better
  * photograph of what one of them depicts should replace the depiction and not
  * the frame someone drew round it.
  *
@@ -56,9 +56,8 @@ import { PICTURES } from "../src/bedsit-room";
 
 /**
  * The one picture hung this way so far, and the numbers it wanted. The source is
- * {@link file://./bedsitframe-portrait.webp}, kept here for the same reason
- * `bedsitpics.ts` keeps its Churchill photograph: the plate in `public/` cannot
- * be rebuilt from itself.
+ * {@link file://./bedsitframe-portrait.webp}, kept here because the plate in
+ * `public/` cannot be rebuilt from itself.
  *
  *   npx tsx taoot/bedsit/tools/bedsitframe.ts \
  *     taoot/bedsit/tools/bedsitframe-portrait.webp portrait \
@@ -120,8 +119,8 @@ import { PICTURES } from "../src/bedsit-room";
  * the three frames read as one wall.
  *
  * The two big ones on the other walls were replaced later, and neither wanted a
- * frame from the tool. The painting over the mantel already had one, drawn by
- * `bedsitpics.ts` — and that board grains with `Math.random`, so re-running it
+ * frame from the tool. The painting over the mantel already had one, drawn when
+ * it was rebuilt — and that board grains with `Math.random`, so re-running it
  * would not give the same frame back. It is kept as
  * {@link file://./bedsitframe-painting-frame.jpg} and written into:
  *

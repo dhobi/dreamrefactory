@@ -3,12 +3,13 @@
  *
  * A small WebGL viewer and nothing else: the room's triangles, a first-person
  * camera whose optics are the game's own — the SET renders at 512×264 with a
- * focal length of 256, which is 90° across and 54.7° up and down — and, if the
- * rip is there, the surfaces painted by projecting BEDSIT1's own frames back
- * onto the model they were rendered from ({@link file://./bedsit-skin.ts}).
+ * focal length of 256, which is 90° across and 54.7° up and down — and surfaces
+ * that are drawn ({@link file://./bedsit-paint.ts}) or supplied as files.
  *
- * With no rip it is plaster and three lamps, which is still the room's shape.
- * With one it is the room.
+ * It reads none of the game's files. The room was measured against BEDSIT1 and
+ * some of its pictures and materials cut out of the game once, early on; what
+ * came of that is the model's numbers and the files in `public/bedsit/`, and the
+ * page needs neither the rip nor the engine.
  *
  * No engine session, no GPU library. The page is the model, a bake and a shader.
  */
@@ -2365,8 +2366,7 @@ function drawSmoke(proj: Float32Array, look: Float32Array, seconds: number): voi
  * the palette's dither and toned as the monochrome print it is, the painting
  * repainted from its own composition — and they hang here as albedo, lit by the
  * room's lamp like the plaster is, rather than as the frames' own dim pixels.
- * See {@link file://../tools/bedsitpics.ts}. If a file is missing, the surface
- * falls back to the projection, which is what it wore before.
+ * If a file is missing, the surface is painted instead.
  */
 const PICTURE_FILES: Readonly<Record<string, string>> = {
   poster: "bedsit/poster.jpg",
@@ -2382,10 +2382,7 @@ const PICTURE_FILES: Readonly<Record<string, string>> = {
    * everything around it — the subtitle reads as a smear and the author's name
    * as three marks. The supplied plate says the same words at 400 by 500 and
    * carries the embossing the film only implies.
-   *
-   * `taoot/bedsit/tools/bedsitobit.ts` STILL WRITES THIS PATH. Re-run it and
-   * the supplied plate is gone without a word; what it makes is worth keeping
-   * as the record of what the game actually holds, so take a copy first.
+
    */
   futility: "bedsit/futility.png",
   /** and the rug, which is neither a picture nor a wall but is laid the same
@@ -2404,8 +2401,8 @@ const PICTURE_FILES: Readonly<Record<string, string>> = {
    * feature below the nose that three views agree is there and none of them
    * resolves. So this plate is a likeness of that description and not of the
    * picture — it goes on the wall because a wall wants a picture, and the
-   * plates under `bedsitcut.ts` are what to look at if the question is what
-   * the game actually put there.
+   * game's own frames are what to look at if the question is what it actually
+   * put there.
    */
   portrait: "bedsit/portrait.jpg",
   /**
@@ -2530,7 +2527,7 @@ async function materialFiles(): Promise<void> {
     const rgba = new Uint8Array(cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height).data.buffer);
     // Usually already de-lit by the tool, so an albedo like a toned swatch. The
     // exception is a swatch cut straight out of a frame with the room's own lamp
-    // still on it — `bedsitmats.ts` writes one of those — which wants the
+    // still on it — four of the materials are — which wants the
     // frames' exposure instead, exactly as it did when the page cut it itself.
     const skin: Skin = { texture: upload(cv.width, cv.height, rgba, true, true), scale: [1, 1], fromFrames: spec.fromFrames === true };
     for (const part of parts) if (part.surface === `mat:${name}`) part.tiled = skin;
@@ -2575,7 +2572,7 @@ async function toothPhoto(): Promise<void> {
 /**
  * THE RIP IS NOT READ. BEDSIT1.SET is four megabytes for four material
  * swatches: every picture on these walls is a supplied file, and nine of the
- * thirteen materials are drawn. Those four are cut once by `bedsitmats.ts` and
+ * thirteen materials are drawn. Those four were cut out of it once and are
  * served as 16 kB of PNG each, so the room is the same room off none of the rip
  * at all.
  */

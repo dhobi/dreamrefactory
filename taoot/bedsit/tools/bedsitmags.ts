@@ -22,13 +22,12 @@
  * and put PEEK on BRAVE NEW WORLD, silently and plausibly, which is exactly the
  * kind of mistake that survives a look at the room.
  *
- * The desk's magazines are photographic covers, and {@link file://./bedsitcards.ts}
- * cuts them out of the film that shows them flat — two hundred pixels across,
+ * The desk's magazines are photographic covers, cut once out of the film that
+ * shows them flat (`bedcards.mov`) — two hundred pixels across,
  * dithered into a 256-colour palette, and with the left margin of BRAVE NEW
  * WORLD lost off the edge of its own close-up. That is a reference, not a
  * texture. What goes on the desk is that reference enlarged and re-set
- * somewhere else and handed back, exactly as the wall pictures were in
- * {@link file://./bedsitpics.ts}.
+ * somewhere else and handed back, exactly as the wall pictures were.
  *
  * What comes back is a PRODUCT SHOT: the cover sitting on a flat grey ground
  * with a soft drop shadow under it, because that is what an image generator
