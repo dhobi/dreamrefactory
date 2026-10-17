@@ -12,7 +12,8 @@
  *   - a COMPONENT per folder that holds source (the six locales folders count
  *     as one, chrome/src/locales);
  *   - a FILE's size, its first doc comment, and the files it imports, resolved
- *     through `@dreamfactory/<pkg>/…` and relative paths;
+ *     through `@dreamfactory/<pkg>/…` and relative paths, and which of those
+ *     imports bring in types only;
  *   - a file's top-level SYMBOLS: classes with their public members, what they
  *     extend, and which other classes their fields and constructor parameters
  *     hold; interfaces, enums, exported functions and types.
@@ -63,6 +64,8 @@ export interface MapFile {
   d: string;
   /** the files it imports */
   i: string[];
+  /** those of them it imports types from and nothing else, which never run as an import */
+  t?: string[];
   s: MapSymbol[];
 }
 export interface ArchModel {
@@ -202,6 +205,34 @@ function commitOf(root: string): string {
   }
 }
 
+/** `import type …`, `export type …`, or a list of names that are all `type` ones: gone once compiled */
+function typeOnly(st: ts.ImportDeclaration | ts.ExportDeclaration): boolean {
+  if (ts.isExportDeclaration(st)) {
+    const c = st.exportClause;
+    return st.isTypeOnly || (!!c && ts.isNamedExports(c) && c.elements.length > 0 && c.elements.every((e) => e.isTypeOnly));
+  }
+  const c = st.importClause;
+  if (!c) return false;
+  if (c.isTypeOnly) return true;
+  const b = c.namedBindings;
+  return !c.name && !!b && ts.isNamedImports(b) && b.elements.length > 0 && b.elements.every((e) => e.isTypeOnly);
+}
+
+/** the repository files a file imports, sorted, and those of them it takes types from and nothing else */
+function importsOf(sf: ts.SourceFile, self: string, resolveSpec: (spec: string) => string | null): { imports: string[]; types: string[] } {
+  const all = new Set<string>();
+  const values = new Set<string>();
+  for (const st of sf.statements) {
+    if (!(ts.isImportDeclaration(st) || ts.isExportDeclaration(st)) || !st.moduleSpecifier || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+    const t = resolveSpec(st.moduleSpecifier.text);
+    if (!t || t === self) continue;
+    all.add(t);
+    if (!typeOnly(st)) values.add(t);
+  }
+  const imports = [...all].sort();
+  return { imports, types: imports.filter((t) => !values.has(t)) };
+}
+
 export function buildModel(root: string = ROOT): ArchModel {
   const abs = sources(root);
   const rel = (p: string): string => relative(root, p).split(sep).join("/");
@@ -216,19 +247,13 @@ export function buildModel(root: string = ROOT): ArchModel {
     return [`${target}.ts`, `${target}.mts`, `${target}/index.ts`].find((c) => known.has(c)) ?? null;
   };
 
-  const raw = new Map<string, { lines: number; doc: string; imports: string[]; symbols: RawSymbol[] }>();
+  const raw = new Map<string, { lines: number; doc: string; imports: string[]; types: string[]; symbols: RawSymbol[] }>();
   for (const p of abs) {
     const r = rel(p);
     const text = readFileSync(p, "utf8");
     const sf = ts.createSourceFile(p, text, ts.ScriptTarget.Latest, true);
-    const imports = new Set<string>();
-    for (const st of sf.statements) {
-      if ((ts.isImportDeclaration(st) || ts.isExportDeclaration(st)) && st.moduleSpecifier && ts.isStringLiteral(st.moduleSpecifier)) {
-        const t = resolveImport(r, st.moduleSpecifier.text);
-        if (t && t !== r) imports.add(t);
-      }
-    }
-    raw.set(r, { lines: text.split("\n").length, doc: fileDoc(text), imports: [...imports].sort(), symbols: symbolsOf(sf) });
+    const { imports, types } = importsOf(sf, r, (spec) => resolveImport(r, spec));
+    raw.set(r, { lines: text.split("\n").length, doc: fileDoc(text), imports, types, symbols: symbolsOf(sf) });
   }
 
   // a name used in a file is the symbol of that name in the file itself, else in
@@ -264,6 +289,7 @@ export function buildModel(root: string = ROOT): ArchModel {
       return o;
     });
     model.files[p] = { c, l: f.lines, d: f.doc, i: f.imports, s };
+    if (f.types.length) model.files[p].t = f.types;
     const comp = (model.components[c] ??= { k: p.split("/")[0], f: [], l: 0 });
     comp.f.push(p);
     comp.l += f.lines;

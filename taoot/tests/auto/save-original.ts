@@ -21,7 +21,9 @@
 import { test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { applyPatch, parseSave, readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
+import { readSaveFile, writeSaveFile } from "@dreamfactory/engine/df/savegame";
+import { parseSave } from "@dreamfactory/engine/df/savegame-read";
+import { applyPatch } from "@dreamfactory/engine/df/savegame-patch";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { loadGame } from "@dreamfactory/engine/runtime/saveload";

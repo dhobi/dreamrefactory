@@ -17,9 +17,6 @@ import {
   TRACK_COUNTS,
   SOUND_STRIDE,
 } from "./savegame-layout";
-export { parseSave } from "./savegame-read";
-export type { SavePatch } from "./savegame-patch";
-export { applyPatch, globalsCapacity } from "./savegame-patch";
 
 /**
  * Titanic `.ti` save-game files.

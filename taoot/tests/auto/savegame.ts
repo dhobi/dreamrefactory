@@ -10,13 +10,12 @@ import { basename, join } from "node:path";
 import {
   readSaveFile,
   writeSaveFile,
-  parseSave,
-  applyPatch,
-  globalsCapacity,
   saveIndex,
   type RawSaveFile,
   type SavedWalk,
 } from "@dreamfactory/engine/df/savegame";
+import { parseSave } from "@dreamfactory/engine/df/savegame-read";
+import { applyPatch, globalsCapacity } from "@dreamfactory/engine/df/savegame-patch";
 import { readShpFile } from "@dreamfactory/engine/df/shp";
 import { readSetFile } from "@dreamfactory/engine/df/set";
 import { readBankTables } from "@dreamfactory/engine/df/banks";

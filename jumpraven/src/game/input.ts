@@ -2,7 +2,7 @@
  * The player's hands on the machine: a press, a drag, a release and a key, in
  * screen pixels, the way the page's mouse and keyboard hand them in. The page
  * and the machine tests go through this one door (Lunicus's shape,
- * `lunicus/src/game/input.ts`).
+ * `lunicus/src/input.ts`).
  */
 import { ESCAPE_KEY } from "@dreamfactory/engine/web/keys";
 import { ESCAPE } from "@dreamfactory/engine/v0/film";

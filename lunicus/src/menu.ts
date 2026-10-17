@@ -3,7 +3,7 @@
  *
  * The menus are LUNIRES.DLL's resource (src/menu.gen.ts); the bar is the
  * engine's (engine/src/web/window-bar.ts). What each command does is the EXE's
- * (Lunicus.command in game/game.ts, which cites it) — this only puts the bar up
+ * (Lunicus.command in lunicus.ts, which cites it) — this only puts the bar up
  * when the EXE's window had it, keeps its marks, and does the two commands a
  * page has to do itself.
  *
@@ -17,8 +17,8 @@
  * a page; New is a click on the title as well (0x417126), Theme is on the bar.
  */
 import { attachWindowBar } from "@dreamfactory/engine/web/window-bar";
-import type { Lunicus } from "./game/game";
-import type { Input } from "./game/input";
+import type { Lunicus } from "./lunicus";
+import type { Input } from "./input";
 import { MENUS } from "./menu.gen";
 
 export interface MenuDeps {

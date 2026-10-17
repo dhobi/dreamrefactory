@@ -13,7 +13,7 @@
  */
 
 import { SaveEntry, deleteSave, displayName, getMeta, listSaves, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
-import { globalsCapacity } from "@dreamfactory/engine/df/savegame";
+import { globalsCapacity } from "@dreamfactory/engine/df/savegame-patch";
 import { NEUTRAL, editionOfUrl } from "./files";
 import { siteUrl } from "@dreamfactory/chrome/site";
 

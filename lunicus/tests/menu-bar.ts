@@ -23,8 +23,8 @@
  */
 import { test, expect, beforeEach, vi } from "vitest";
 import type { WindowBarOptions } from "@dreamfactory/engine/web/window-bar";
-import { Lunicus } from "../src/game/game";
-import { Input } from "../src/game/input";
+import { Lunicus } from "../src/lunicus";
+import { Input } from "../src/input";
 
 /** what the twin bar was told */
 const bar = vi.hoisted(() => ({

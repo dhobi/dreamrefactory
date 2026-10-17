@@ -17,7 +17,7 @@ import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gamefilePath, gamefiles, gamefilesRoot } from "../../tools/gamefiles";
-import { parseSave } from "@dreamfactory/engine/df/savegame";
+import { parseSave } from "@dreamfactory/engine/df/savegame-read";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { Value } from "@dreamfactory/engine/runtime/interp";
