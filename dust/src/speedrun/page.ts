@@ -1,7 +1,7 @@
 /**
  * Dust's speedrun workbench — this page's entry point.
  *
- * The workbench is the engine's (`engine/src/web/speedrun/workbench.ts`) and so
+ * The workbench is the speedrun workspace's (`speedrun/src/workbench.ts`) and so
  * is every verb it can run today (`./speedrun/actions.ts` says why there are no
  * Dust ones yet), which is what makes this file four lines of substance.
  *
@@ -21,7 +21,7 @@
  *     "copy the full run" here too. It was written against the golden thread
  *     (docs/dust/thread.md), which is the route this game actually has.
  */
-import { startWorkbench } from "@dreamfactory/engine/web/speedrun/workbench";
+import { startWorkbench } from "@dreamfactory/speedrun/workbench";
 import { installStateList } from "@dreamfactory/engine/web/state-list";
 import { siteUrl } from "@dreamfactory/chrome/site";
 import { snapshotState } from "@dreamfactory/engine/runtime/trace";

@@ -1146,7 +1146,7 @@ export const CORE_ACTIONS: ActionTable = {
       // the action is a sheet line like any other, so it is PARSED like one —
       // which is what makes `watchFor` take every verb rather than a list of
       // the ones somebody remembered to allow
-      const { parseSheet } = await import("@dreamfactory/engine/web/speedrun/sheet");
+      const { parseSheet } = await import("./sheet");
       const parsed = parseSheet(body, { verbs: c.verbs });
       if (parsed.length !== 1) {
         throw new Error(`watchFor's action must be exactly one line, got ${parsed.length}: ${body}`);

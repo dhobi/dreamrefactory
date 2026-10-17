@@ -125,7 +125,7 @@ const WALL_CLOCK = /\b(setTimeout|setInterval|Date\.now|performance\.now|new Dat
  * ## What this walk does not reach
  *
  * The harness's game-neutral half — the parser, the run loop, the two drivers,
- * the aim sweep and the panel — is `engine/src/web/speedrun/`, and SRC below
+ * the aim sweep and the panel — is `speedrun/src/`, and SRC below
  * is this package's `src/` alone. So the rule does not cover those files, and
  * several of them read the wall clock for the reasons above. That is a GAP in
  * the rule's coverage and not a decision about them: the engine has no

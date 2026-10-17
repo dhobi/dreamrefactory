@@ -65,7 +65,7 @@ export default defineConfig({
   publicDir: join(HERE, "public"),
   /**
    * The workbench's Calculate worker (src/speedrun/calc-worker.ts) is an ES
-   * module: it reaches the engine's speedrun code, which loads one module on
+   * module: it reaches the speedrun workspace's code, which loads one module on
    * demand, and the default `iife` worker cannot be split (#509).
    */
   worker: { format: "es" },

@@ -20,9 +20,9 @@ import { chromium } from "playwright";
 import { speedrunDriver } from "./driver";
 import { playUrl } from "../browser/driver";
 import { DEFAULT_LANGUAGE } from "../../src/languages";
-import { parseSheet } from "@dreamfactory/engine/web/speedrun/sheet";
+import { parseSheet } from "@dreamfactory/speedrun/sheet";
 import { ACTIONS, VERBS } from "../../src/speedrun/actions";
-import { runSheet } from "@dreamfactory/engine/web/speedrun/runner";
+import { runSheet } from "@dreamfactory/speedrun/runner";
 
 const CHECKPOINT = "m4p0 stairtop";
 const MAX_PRESSES = 400;

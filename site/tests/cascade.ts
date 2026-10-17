@@ -144,7 +144,7 @@ function ownCss(page: string, html: string): string {
       return ""; // a link to something that is not there is somebody else's test
     }
   };
-  /** `@dreamfactory/engine/web/speedrun/panel.css` → `engine/src/web/speedrun/panel.css` */
+  /** `@dreamfactory/speedrun/panel.css` → `speedrun/src/panel.css` */
   const imported = (css: string): string[] =>
     [...css.matchAll(/@import\s+["']@dreamfactory\/([a-z]+)\/([A-Za-z0-9_./-]+\.css)["']/g)]
       .filter(([, , rest]) => !rest.endsWith("chrome.css"))
@@ -290,7 +290,7 @@ test("a shared stylesheet names roles, never a game's palette", () => {
   const PALETTES = /var\(--(abyss|hull|ice|brass|frost|dusk|ember|bone|leather|wood)[a-z0-9-]*/g;
   const SHARED = [
     "chrome/src/chrome.css",
-    "engine/src/web/speedrun/panel.css",
+    "speedrun/src/panel.css",
     "engine/src/web/save-browser.css",
   ];
   const leaks: string[] = [];

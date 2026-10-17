@@ -32,6 +32,7 @@ export const CONTAINERS: Record<string, ContainerNote> = {
   lunicus: { name: "lunicus", kind: "game", title: "Lunicus (1994)", desc: "DreamFactory 0. The whole game machine-played: the moon base, the cities and their vehicles and weapons, on the shared v0 machine." },
   jumpraven: { name: "jumpraven", kind: "game", title: "Jump Raven (1994)", desc: "DreamFactory 0. The story, the Mart, the copilots and the flying, with every enemy class of the combat ported from RAVEN.EXE." },
   chrome: { name: "chrome", kind: "site", title: "Shared page chrome", desc: "What every page shares, the front page, the editors and the games alike: the top bar and its menus, the version, the registry of games, editions, the bug report, and every word in English and five translations. Structure only; each page brings its own palette." },
+  speedrun: { name: "speedrun", kind: "site", title: "Speedrun workbench", desc: "The /speedrun/ page any game can carry: the sheet language, the run loop, the drivers that play a sheet in the page or headless, the aim sweep and the panel. A game brings its own verbs and a few facts about itself." },
   site: { name: "site", kind: "site", title: "Front page and editors", desc: "The front page with its own palette, and the browser editors and inspectors for each file format." },
   tools: { name: "tools", kind: "tools", title: "Repository tools", desc: "Command-line tools shared by the games: format dumpers, executable and resource readers, the manifest and release scripts, the speedrun sheet runner." },
 };
@@ -50,8 +51,8 @@ export const COMPONENTS: Record<string, string> = {
   "engine/src/runtime/builtins": "The script commands, registered by family. Each answers as the original engine's handler does; the DreamFactory 5 ones are gated on v5.",
   "engine/src/v0": "DreamFactory 0, shared by Lunicus and Jump Raven: the 1/60 s tick machine, the screen, films and conversations.",
   "engine/src/web": "The browser side of the engine: the game host, screen director and presenter, the set viewer, the movie player, puppets, rooms and input.",
-  "engine/src/web/speedrun": "Speedrun sheets: verbs, the sheet parser, the drivers that play a sheet in the page or headless, and the workbench under the game.",
   "chrome/src": "The top bar and its menus (games, language, play), the version, the games registry, editions, the bug report and where a page sits in the deployed tree.",
+  "speedrun/src": "The speedrun workbench: the sheet language and its parser, verbs that name no game, the run loop, the drivers that play a sheet in the page or headless, the aim sweep and the panel.",
   "chrome/src/locales": "Every word the pages say, in English and five translations.",
   "site/src": "The front page and its palette.",
   "site/editors": "The browser editors and inspectors, one per file format: sets, setts, casts, shops, stages, movies, puppets, tracks, books.",

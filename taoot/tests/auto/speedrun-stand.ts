@@ -24,8 +24,8 @@
  */
 import { afterEach, expect, test } from "vitest";
 import { VERBS, resolve, setPlanner } from "../../src/speedrun/actions";
-import { WORLD, type ActionContext } from "@dreamfactory/engine/web/speedrun/action";
-import type { SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
+import { WORLD, type ActionContext } from "@dreamfactory/speedrun/action";
+import type { SpeedrunDriver } from "@dreamfactory/speedrun/driver";
 
 /** a scene: its name, and its views as `[name, global view id]` in turn order */
 type Scene = { name: string; views: [string, number][] };

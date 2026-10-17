@@ -12,9 +12,9 @@ import { defineConfig } from "vitest/config";
  * the games a change reaches), and coverage wants all of them, since a
  * playthrough is where most of a game's code runs.
  *
- * `engine/src/web/` is left out: it is the browser shell (the page, the
- * speedrun workbench, the maze view), which a node suite can mostly not reach,
- * and the badge is for the engine's formats and runtime.
+ * `engine/src/web/` and `speedrun/` are left out: they are the browser shell
+ * (the page, the maze view) and the speedrun workbench, which a node suite can
+ * mostly not reach, and the badge is for the engine's formats and runtime.
  */
 export default defineConfig({
   test: {
@@ -36,7 +36,7 @@ export default defineConfig({
       provider: "v8",
       // every file of these, loaded or not, so an untested one counts as 0
       include: ["engine/src/**/*.ts", "*/src/**/*.ts"],
-      exclude: ["engine/src/web/**", "chrome/**", "site/**", "**/*.d.ts"],
+      exclude: ["engine/src/web/**", "speedrun/**", "chrome/**", "site/**", "**/*.d.ts"],
       reporter: ["json-summary", "text-summary", "lcovonly"],
       reportsDirectory: "coverage/vitest",
       reportOnFailure: true,

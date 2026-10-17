@@ -1,10 +1,10 @@
 /**
- * A contributed sheet's header (engine/src/web/speedrun/sheet-header.ts): the
+ * A contributed sheet's header (speedrun/src/sheet-header.ts): the
  * title on line 1, everything else optional.
  */
 import { expect, test } from "vitest";
-import { readSheetHeader, sheetSeed } from "../src/web/speedrun/sheet-header";
-import type { Step } from "../src/web/speedrun/sheet";
+import { readSheetHeader, sheetSeed } from "../src/sheet-header";
+import type { Step } from "../src/sheet";
 
 test("the title on line 1 is all a sheet needs", () => {
   expect(readSheetHeader("# title: Any% — seed 360\nreset(seed: 360)\n")).toEqual({

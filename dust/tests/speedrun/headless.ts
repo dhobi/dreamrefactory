@@ -1,6 +1,6 @@
 /**
  * A Dust sheet played with no page (the engine's headless driver,
- * engine/src/web/speedrun/headless.ts), for the verbs that need the real game
+ * speedrun/src/headless.ts), for the verbs that need the real game
  * under them: `blackjack` (tests/speedrun/blackjack.ts).
  *
  * The page's input handlers (src/main.ts) with the page taken out: a mouse
@@ -12,7 +12,7 @@
  * and loads it, as `loadSave` would on the page.
  */
 import type { GameHost } from "@dreamfactory/engine/web/host";
-import { headlessRun as runHeadless, type HeadlessRun, type InputEvent } from "@dreamfactory/engine/web/speedrun/headless";
+import { headlessRun as runHeadless, type HeadlessRun, type InputEvent } from "@dreamfactory/speedrun/headless";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import { keyAction } from "../../src/input";
 import { dustHost } from "../playthrough/harness";

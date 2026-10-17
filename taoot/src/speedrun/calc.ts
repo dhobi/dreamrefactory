@@ -2,7 +2,7 @@
  * The page's half of Calculate (#509): start calc-worker.ts, pass it what the
  * play page knows, relay its progress, and hand back its answer.
  */
-import type { CalcProgress, CalcResult } from "@dreamfactory/engine/web/speedrun/calculate";
+import type { CalcProgress, CalcResult } from "@dreamfactory/speedrun/calculate";
 
 export interface CalcRequest {
   text: string;

@@ -1,6 +1,6 @@
 /**
  * The workbench's Calculate button, off the page (#509): Titanic's game files
- * over the network, played headless (engine/src/web/speedrun/calculate.ts) in a
+ * over the network, played headless (speedrun/src/calculate.ts) in a
  * Web Worker, so the page beside it stays responsive while a CPU core runs the
  * sheet flat out.
  *
@@ -12,7 +12,7 @@
  */
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
-import { calculateSheet } from "@dreamfactory/engine/web/speedrun/calculate";
+import { calculateSheet } from "@dreamfactory/speedrun/calculate";
 import { FileStore } from "../files";
 import { ACTIONS } from "./actions";
 import { deliverInput } from "./input";

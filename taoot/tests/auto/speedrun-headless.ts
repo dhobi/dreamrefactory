@@ -12,8 +12,8 @@
 import { expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseSheet } from "@dreamfactory/engine/web/speedrun/sheet";
-import { runSheet } from "@dreamfactory/engine/web/speedrun/runner";
+import { parseSheet } from "@dreamfactory/speedrun/sheet";
+import { runSheet } from "@dreamfactory/speedrun/runner";
 import { ACTIONS, VERBS } from "../../src/speedrun/actions";
 import { headlessRun } from "../speedrun/headless";
 

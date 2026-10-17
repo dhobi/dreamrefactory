@@ -31,7 +31,7 @@ import { gamefiles, gamefilesRoot } from "../../tools/gamefiles";
 import { DEFAULT_LANGUAGE } from "../../src/languages";
 import type { NavDriver } from "../playthrough/nav/navigator";
 import type { Standpoint } from "../playthrough/nav/setpath";
-import { aimSource } from "@dreamfactory/engine/web/speedrun/aim";
+import { aimSource } from "@dreamfactory/speedrun/aim";
 
 /** what a route may ask about, sampled page-side in one round trip */
 interface Mirror {

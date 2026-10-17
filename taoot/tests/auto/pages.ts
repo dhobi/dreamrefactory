@@ -6,7 +6,7 @@
  *   npx vitest run --project taoot taoot/tests/auto/pages.ts
  *
  * Each is the glue between a page and something tested on its own — the code
- * (konami.ts), the workbench (engine/src/web/speedrun/), the door table
+ * (konami.ts), the workbench (speedrun/src/), the door table
  * (freeroam/doors.ts) — so what is pinned is the glue: the front page opens the
  * door once the mark has finished its turn; the workbench is handed this game's
  * actions, its sheet, and a warm-up list of one edition and the neutral files;
@@ -24,7 +24,7 @@ vi.mock("@dreamfactory/chrome/lang-menu", () => ({ installLanguageMenu: async ()
 vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => void calls.push("playMenu") }));
 vi.mock("@dreamfactory/chrome/version", () => ({ installVersion: () => void calls.push("version") }));
 vi.mock("../../src/konami", () => ({ installKonami: (fn: () => void) => void (unlock = fn) }));
-vi.mock("@dreamfactory/engine/web/speedrun/workbench", () => ({
+vi.mock("@dreamfactory/speedrun/workbench", () => ({
   startWorkbench: (opts: Record<string, unknown>) => void (workbench = opts),
 }));
 vi.mock("../../src/editions", () => ({

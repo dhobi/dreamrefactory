@@ -1,14 +1,14 @@
 /**
  * Aiming at a thing too small for the sweep grid.
  *
- *   npx vitest run engine/tests/aim-small.ts
+ *   npx vitest run speedrun/tests/aim-small.ts
  *
  * The engines size a far world sprite by truncating (sprite-scaler.ts), so
  * Titanic's pocket watch on the c73 table is drawn 6x3 and the 4-pixel grid can
  * step right over it. The aim then sweeps every pixel of the thing's own box.
  */
 import { expect, test } from "vitest";
-import { AIM_STEP, aimAtThing, type Aim } from "@dreamfactory/engine/web/speedrun/aim";
+import { AIM_STEP, aimAtThing, type Aim } from "@dreamfactory/speedrun/aim";
 
 /** a screen with one thing on it: `watch`, a row of pixels at y = 172 */
 const screen = (boxes?: Aim["boxes"]): Aim & { asked: number } => {

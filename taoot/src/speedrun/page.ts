@@ -2,7 +2,7 @@
  * Titanic's speedrun workbench — this page's entry point, and what it tells the
  * panel about this game.
  *
- * The workbench itself is the engine's (`engine/src/web/speedrun/workbench.ts`):
+ * The workbench itself is the speedrun workspace's (`speedrun/src/workbench.ts`):
  * the sheet, the pointer, the clock, the splits, the checkpoints and the whole
  * argument for how they behave. It named this game only in five places, and the
  * five are below — everything else about a run is the same on any DreamFactory
@@ -12,7 +12,7 @@
  * LAST of the two the page loads: `main.ts` boots the game, this opens the
  * workbench over it.
  */
-import { startWorkbench } from "@dreamfactory/engine/web/speedrun/workbench";
+import { startWorkbench } from "@dreamfactory/speedrun/workbench";
 import { warmupList, type WarmFile } from "@dreamfactory/engine/web/cache-warmup";
 import { siteUrl } from "@dreamfactory/chrome/site";
 import { ACTIONS } from "./actions";
@@ -20,7 +20,7 @@ import { gamefileManifest, gamefileSizes } from "../editions";
 import { editionOfUrl, NEUTRAL } from "../files";
 import { loadTemplates, saveTemplateFor } from "../save-seed";
 import { calculateInWorker } from "./calc";
-import type { CalcProgress, CalcResult } from "@dreamfactory/engine/web/speedrun/calculate";
+import type { CalcProgress, CalcResult } from "@dreamfactory/speedrun/calculate";
 
 /**
  * Calculate (#509): the sheet, played headless in a worker. The worker is handed

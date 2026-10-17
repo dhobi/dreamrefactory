@@ -19,9 +19,9 @@
  *   - where an INPUT goes, which is the game's page's business and so is handed
  *     in ({@link HeadlessGame.deliver}).
  */
-import type { GameHost } from "../host";
-import type { GameSession } from "../../runtime/session";
-import { snapshotState } from "../../runtime/trace";
+import type { GameHost } from "@dreamfactory/engine/web/host";
+import type { GameSession } from "@dreamfactory/engine/runtime/session";
+import { snapshotState } from "@dreamfactory/engine/runtime/trace";
 import type { SpeedrunDriver } from "./driver";
 import { pageDriver, saveKeys } from "./page-driver";
 

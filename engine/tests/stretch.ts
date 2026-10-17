@@ -7,14 +7,13 @@
  * What the stretch LOOKS like is the pages' CSS and is checked in a browser.
  * What can be held here is the part with a right answer: that the box and the
  * stage agree, that the answer outlives the tab and is per game, that a page
- * with no box still gets it — and that a click on a picture stretched out of
- * 4:3 still lands on the screen pixel under it, which is the claim that let this
- * be a CSS change and not an engine one.
+ * with no box still gets it. That a click on a picture stretched out of 4:3
+ * still lands on the screen pixel under it is the speedrun driver's claim, and
+ * is held beside it (speedrun/tests/stretch-click.ts).
  */
 import { test, expect, beforeEach } from "vitest";
 import { parseHTML } from "linkedom";
 import { STRETCH_CLASS, installStretch } from "@dreamfactory/engine/web/stretch";
-import { clientPointFor } from "@dreamfactory/engine/web/speedrun/driver";
 
 /** a Storage that can also refuse, the way a private window's may */
 function storage(): Storage & { deny: boolean } {
@@ -99,25 +98,4 @@ test("storage that refuses costs the memory, not the setting", () => {
   box.checked = true;
   expect(() => change()).not.toThrow();
   expect(stage.classList.contains(STRETCH_CLASS)).toBe(true);
-});
-
-test("a click on a picture stretched out of 4:3 lands on the pixel under it", () => {
-  // 512x384 filling a 1920x1080 display: 3.75x across, 2.8125x down
-  const canvas = { width: 512, height: 384 };
-  const rect = { left: 0, top: 0, width: 1920, height: 1080 };
-  // the shells' own conversion, per axis (taoot/src/main.ts canvasCoords)
-  const toScreen = (cx: number, cy: number) => ({
-    x: Math.floor(((cx - rect.left) / rect.width) * canvas.width),
-    y: Math.floor(((cy - rect.top) / rect.height) * canvas.height),
-  });
-  for (const [x, y] of [
-    [0, 0],
-    [511, 383],
-    [256, 192],
-    [100, 300],
-    [450, 20],
-  ]) {
-    const at = clientPointFor(x, y, rect, canvas);
-    expect(toScreen(at.x, at.y)).toEqual({ x, y });
-  }
 });

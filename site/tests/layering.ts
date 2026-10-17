@@ -11,8 +11,10 @@
  *     chrome   ← engine. What every page shares: the top bar and its menus, the
  *                UI-language axis, the edition MECHANISM, and the registry of
  *                which games exist.
+ *     speedrun ← engine. The speedrun workbench any game can carry: the sheet
+ *                language, the run loop, the drivers and the panel.
  *     site     ← engine, chrome. The front door and the editors.
- *     the games ← engine, chrome
+ *     the games ← engine, chrome, speedrun
  *
  * Nothing enforces this except this file. It is worth a test because breaking it
  * is a one-line accident with no symptom: an editor needs an edition list, the
@@ -70,14 +72,15 @@ function packagesImportedBy(pkg: string): Set<string> {
 const ALLOWED: Record<string, string[]> = {
   engine: [],
   chrome: ["engine"],
+  speedrun: ["engine"],
   site: ["engine", "chrome"],
-  taoot: ["engine", "chrome"],
-  dust: ["engine", "chrome"],
-  timelapse: ["engine", "chrome"],
-  skullcracker: ["engine", "chrome"],
-  redjack: ["engine", "chrome"],
-  lunicus: ["engine", "chrome"],
-  jumpraven: ["engine", "chrome"],
+  taoot: ["engine", "chrome", "speedrun"],
+  dust: ["engine", "chrome", "speedrun"],
+  timelapse: ["engine", "chrome", "speedrun"],
+  skullcracker: ["engine", "chrome", "speedrun"],
+  redjack: ["engine", "chrome", "speedrun"],
+  lunicus: ["engine", "chrome", "speedrun"],
+  jumpraven: ["engine", "chrome", "speedrun"],
 };
 
 for (const [pkg, allowed] of Object.entries(ALLOWED)) {

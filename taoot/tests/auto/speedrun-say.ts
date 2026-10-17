@@ -25,9 +25,9 @@
  */
 import { test, expect } from "vitest";
 import { VERBS, resolve } from "../../src/speedrun/actions";
-import type { ActionContext } from "@dreamfactory/engine/web/speedrun/action";
-import type { SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
-import type { Step } from "@dreamfactory/engine/web/speedrun/sheet";
+import type { ActionContext } from "@dreamfactory/speedrun/action";
+import type { SpeedrunDriver } from "@dreamfactory/speedrun/driver";
+import type { Step } from "@dreamfactory/speedrun/sheet";
 
 /** one beat of a scripted conversation, in the order the puppet reaches them */
 type Beat =

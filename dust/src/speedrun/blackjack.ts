@@ -15,7 +15,7 @@
  *     first card face down.
  *
  * Never `dealerdowncard`, `dealertotal` or `cardstring` (the deck in order).
- * The strategy is #487's (engine/src/web/speedrun/blackjack.ts).
+ * The strategy is #487's (speedrun/src/blackjack.ts).
  *
  * WHAT THE GAME DOES ITSELF, from SALGAMES.FLT and JAN.PUP:
  *
@@ -40,7 +40,7 @@
  *     the load does not re-seed — DF.EXE's never did — so a retry is dealt new
  *     cards.
  */
-import { cardValue, hitOrStay } from "@dreamfactory/engine/web/speedrun/blackjack";
+import { cardValue, hitOrStay } from "@dreamfactory/speedrun/blackjack";
 import {
   clickThing,
   converse,
@@ -49,7 +49,7 @@ import {
   TALK_STATE,
   type Action,
   type ActionContext,
-} from "@dreamfactory/engine/web/speedrun/action";
+} from "@dreamfactory/speedrun/action";
 import { PANEL } from "./menu";
 
 /** hands the verb plays before it gives up (`max:`) */

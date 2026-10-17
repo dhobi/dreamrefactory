@@ -26,7 +26,7 @@
     <link rel="icon" type="image/svg+xml" href="/dust-mark.svg" />
     <!-- The three sheets, in the order they layer: the shared chrome in this
          game's colours, this game's own stage, and the workbench panel on top
-         (which is the engine's — engine/src/web/speedrun/panel.css — and pulls the
+         (which is the speedrun workspace's — speedrun/src/panel.css — and pulls the
          stage back into a column on the way past). Where two of them describe the
          same element the later one has to win by SPECIFICITY and not by order:
          the build turns each into a bundle and decides the order itself, which is
@@ -63,7 +63,7 @@
     <!-- The row: the game, and the panels that drive it. Two columns where
          Titanic's workbench has three — there is no X pane here, because the
          state pane is the play page's markup and this game has none of it. The
-         column code tolerates that (engine/src/web/speedrun/columns.ts skips a
+         column code tolerates that (speedrun/src/columns.ts skips a
          section it cannot find), which is worth knowing before somebody adds a
          third and expects to have to teach it. -->
     <div id="srlayout">
@@ -126,7 +126,7 @@
 
         <!-- How big the picture is drawn, in whole multiples of the game's own
              512x384 framebuffer — the same control Titanic's workbench carries,
-             driven by the same module (engine/src/web/speedrun/widths.ts) and
+             driven by the same module (speedrun/src/widths.ts) and
              styled by the same sheet. It is `data-px` on the document element
              when pressed, which is what the row's own break reads: how much
              window the columns need is mostly a question of how much of it the
@@ -155,7 +155,7 @@
              (engine/src/runtime/audio.ts), so this leaves no mark on the state a
              route is timed against and a script turning the theme up while it is
              on changes only what unticking restores. Wired by
-             engine/src/web/speedrun/mute.ts, remembered per game. -->
+             speedrun/src/mute.ts, remembered per game. -->
         <label class="srtoggle" id="srmutebox" title="Silence the game — a listener's switch, outside the run: it does not touch the game's own volume settings and does not change how long anything takes">
           <input type="checkbox" id="srmute" />
           <span>Mute</span>
@@ -164,7 +164,7 @@
       <!-- /#srgame -->
 
       <!-- The Timer and the sheet, built by the engine
-           (engine/src/web/speedrun/panel.ts). The slot is this page's, so the
+           (speedrun/src/panel.ts). The slot is this page's, so the
            order of the columns stays where a reader of this page can see it. -->
       <div id="srpanelslot"></div>
 

@@ -21,7 +21,7 @@
  * `talkOut` never spends the same reply twice on the same plaque.
  *
  * Two engine verbs are stood in for: `say` and `accost`. Both are the engine's
- * (engine/src/web/speedrun/actions-core.ts), both drive a conversation through
+ * (speedrun/src/actions-core.ts), both drive a conversation through
  * a dozen readings this fake has no reason to model, and what is under test
  * here is which reply Dust's verbs ASK for and when — so those two are spies
  * that answer the way a conversation would.
@@ -29,10 +29,10 @@
 import { test, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseSheet } from "@dreamfactory/engine/web/speedrun/sheet";
-import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
-import type { ActionContext } from "@dreamfactory/engine/web/speedrun/action";
-import type { HoldOptions, Point, SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
+import { parseSheet } from "@dreamfactory/speedrun/sheet";
+import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
+import type { ActionContext } from "@dreamfactory/speedrun/action";
+import type { HoldOptions, Point, SpeedrunDriver } from "@dreamfactory/speedrun/driver";
 import { DUST_ACTIONS, VERBS, resolve } from "../src/speedrun/actions";
 
 /* ------------------------------------------------------------------ *

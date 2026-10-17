@@ -21,8 +21,8 @@ import {
   type ActionTable,
   type Watch,
 } from "./action";
-import type { Step } from "@dreamfactory/engine/web/speedrun/sheet";
-import type { Clock, SpeedrunDriver, WaitMode } from "@dreamfactory/engine/web/speedrun/driver";
+import type { Step } from "./sheet";
+import type { Clock, SpeedrunDriver, WaitMode } from "./driver";
 
 /**
  * How often a standing watch is polled while a step runs (#255).

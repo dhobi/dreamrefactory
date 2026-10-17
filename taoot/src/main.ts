@@ -58,7 +58,7 @@ import { FileStore } from "./files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
-import { takeBootSeed } from "@dreamfactory/engine/web/speedrun/boot-seed";
+import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { seededRng } from "@dreamfactory/engine/runtime/rng";
 import { LangChooser, chooserOrder, preselectedEdition } from "./lang-chooser";
@@ -526,7 +526,7 @@ const host = new GameHost(files, audioSink, {
 host.director.onCursor = showCursor;
 const session = host.session;
 // A workbench `reset(seed: N)` reloaded us: the dice are pinned before the boot
-// draws its first one (engine/src/web/speedrun/boot-seed.ts)
+// draws its first one (speedrun/src/boot-seed.ts)
 const bootSeed = takeBootSeed("taoot");
 if (bootSeed !== null) session.seedRandom(bootSeed);
 // the lines the original voices and never prints (engine/src/runtime/puppet.ts heardSubtitle)

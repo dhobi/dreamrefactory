@@ -29,7 +29,7 @@ const SHEETS_URL = "/speedrun/sheets.json";
  * The contributed sheets (`<game>/speedrun/sheets/*.sheet.txt`), as
  * `[{ file, text }]` in file order. The text whole: a sheet is a few dozen KB,
  * and the page reads each one's header (its first line is its title) itself,
- * with the same code the CI check uses — engine/src/web/speedrun/sheet-header.ts.
+ * with the same code the CI check uses — speedrun/src/sheet-header.ts.
  */
 function contributed(dir: string): string {
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".sheet.txt")).sort() : [];

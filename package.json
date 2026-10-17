@@ -4,6 +4,7 @@
   "workspaces": [
     "engine",
     "chrome",
+    "speedrun",
     "site",
     "taoot",
     "dust",

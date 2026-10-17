@@ -24,8 +24,8 @@
  * a name) and poker. A verb is added when a route needs it, not before: a table
  * of verbs written ahead of any route would be wrong in ways nobody can see yet.
  */
-import type { VerbSpec } from "@dreamfactory/engine/web/speedrun/sheet";
-import { CORE_ACTIONS } from "@dreamfactory/engine/web/speedrun/actions-core";
+import type { VerbSpec } from "@dreamfactory/speedrun/sheet";
+import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
 import {
   composeActions,
   menuVerbs,
@@ -34,7 +34,7 @@ import {
   verbsOf,
   type Action,
   type ActionTable,
-} from "@dreamfactory/engine/web/speedrun/action";
+} from "@dreamfactory/speedrun/action";
 import { BLACKJACK } from "./blackjack";
 import { PANEL } from "./menu";
 
@@ -1627,7 +1627,7 @@ export const DUST_ACTIONS: ActionTable = {
  * matters: a name in {@link DUST_ACTIONS} wins, so a disc-specific gesture can
  * replace a core one without the core table knowing. Composed once and exported,
  * because the workbench and the parser must be handed the SAME table
- * (`engine/src/web/speedrun/runner.ts`, `runSheet`) — otherwise a sheet means one
+ * (`speedrun/src/runner.ts`, `runSheet`) — otherwise a sheet means one
  * thing in the page and another to the runner.
  */
 export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, menuVerbs(PANEL), DUST_ACTIONS);

@@ -301,7 +301,7 @@ the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
 clean game far more often than it is opened to play one.
 
 It shares the parser, the action table and the run loop with the CLI — all three
-are the engine's (`engine/src/web/speedrun/`), with this ship's own verbs
+are the speedrun workspace's (`speedrun/src/`), with this ship's own verbs
 layered over them (`taoot/src/speedrun/actions.ts`) — so a sheet cannot mean one
 thing there and another here. Dust has the same workbench off the same modules,
 with verbs of its own in `dust/src/speedrun/` (`goto` a grid cell, `give`,
@@ -407,7 +407,7 @@ the original reloads the same way — but a game reached by loading is not the g
 a player would be standing in. Route with it, time with the full sheet: a run
 that used `load()` still finishes, but its headline says NOT A VALID TIME and
 names the line (verbs declare it with `voidsTime`,
-`engine/src/web/speedrun/action.ts`). A route that needs a save and a load uses
+`speedrun/src/action.ts`). A route that needs a save and a load uses
 `menuSave()`/`menuLoad()` instead, which go the way a player has to — the life
 preserver, the control panel's levers, the fades both ways — and are on the
 clock ([#523](https://github.com/dhobi/dreamrefactory/issues/523)); `menuLoad()`

@@ -37,8 +37,8 @@
          directly: a bare package specifier is a thing Vite resolves in CSS and
          a `<link href>` into another workspace package is not. -->
     <link rel="stylesheet" href="/src/saves.css" />
-    <!-- The workbench panel, which is the engine's
-         (engine/src/web/speedrun/panel.css) because the modules that drive it are.
+    <!-- The workbench panel, which is the speedrun workspace's
+         (speedrun/src/panel.css) because the modules that drive it are.
          Through a sheet of this game's rather than linked directly: a bare
          package specifier is a thing Vite resolves in CSS and a `<link href>`
          into another workspace package is not. -->
@@ -350,7 +350,7 @@
          The play page's dialog, duplicated here as the rest of that page is.
          The workbench's own panel — the legend behind the ? button — used to
          borrow these same class rules and does not any more: its presentation
-         is `#srlegend` in engine/src/web/speedrun/panel.css, by id, because a
+         is `#srlegend` in speedrun/src/panel.css, by id, because a
          panel that depended on the page happening to define a `.modal` class
          renders inline and permanently open on the page that does not (Dust's
     </style>
@@ -479,7 +479,7 @@
            (engine/src/runtime/audio.ts), so this leaves no mark on the state a
            route is timed against and a script turning the theme up while it is
            on changes only what unticking restores. Wired by
-           engine/src/web/speedrun/mute.ts, remembered per game. -->
+           speedrun/src/mute.ts, remembered per game. -->
       <label class="srtoggle" id="srmutebox" title="Silence the game — a listener's switch, outside the run: it does not touch the game's own volume settings and does not change how long anything takes">
         <input type="checkbox" id="srmute" />
         <span>Mute</span>
@@ -498,7 +498,7 @@
 
 
     <!-- The two panels go here: the Timer and the sheet, built by the engine
-         (engine/src/web/speedrun/panel.ts) because the modules that drive them are.
+         (speedrun/src/panel.ts) because the modules that drive them are.
          The SLOT is the page's, though, and that is the point of it — what order
          the columns start in and what else shares the row are facts about this
          page, and they stay where a reader of this page can see them: the game

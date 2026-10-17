@@ -274,7 +274,7 @@ when the rip is not there.
 | [`checkers.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/checkers.ts) | Bolivar's checkers opponent, `pluginfx("checkmove", …)`: the script's own rules as referee, and `golden/checkers-dll.json`, `CHECKERS.DLL`'s answers run under an emulator, matched move for move |
 | [`audio-mute.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/audio-mute.ts) + [`audio-sinks.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/audio-sinks.ts) | the listener's mute kept apart from the game's own `wavevolume`/`themevol`, and the two browser sinks and the bank library on paths the machine suites (which play into `NullAudioSink`) never take |
 | [`speedrun-clock.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-clock.ts) + [`load-clock-hidden.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/load-clock-hidden.ts) | the [speedrun clock](#the-clock-in-game-time): game time that counts ticks, stands still while the engine waits on a file, and stops while the tab is hidden ([#375](https://github.com/dhobi/dreamrefactory/issues/375)) |
-| [`speedrun-condition.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-condition.ts) + [`speedrun-sheet-header.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/speedrun-sheet-header.ts) + [`reply-ids.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/reply-ids.ts) | the sheet grammar's joined conditions (`a or b`, `a and b`, `!a`); a [contributed sheet's](#contributed-sheets) header, title on line 1 and the rest optional; and the answer ids a conversation can show for `say([…])` ([#377](https://github.com/dhobi/dreamrefactory/issues/377)) |
+| [`speedrun/tests/condition.ts`](https://github.com/dhobi/dreamrefactory/blob/master/speedrun/tests/condition.ts) + [`speedrun/tests/sheet-header.ts`](https://github.com/dhobi/dreamrefactory/blob/master/speedrun/tests/sheet-header.ts) + [`reply-ids.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/reply-ids.ts) | the sheet grammar's joined conditions (`a or b`, `a and b`, `!a`); a [contributed sheet's](#contributed-sheets) header, title on line 1 and the rest optional; and the answer ids a conversation can show for `say([…])` ([#377](https://github.com/dhobi/dreamrefactory/issues/377)) |
 | [`fullscreen.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/fullscreen.ts) + [`stretch.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/stretch.ts) + [`tylerhartman.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/tylerhartman.ts) | the Fullscreen button on a browser with no `requestFullscreen` (an iPhone), the stretched fullscreen's remembered box and pointer maths, and [TH mode's](../engine/runtime/th-mode.md) layout on a 16:9 display |
 | [`page-url.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/tests/page-url.ts) | `pageUrl` resolves a path against the page and refuses anything that leaves the site |
 
@@ -470,7 +470,7 @@ SHEET=taoot/tests/speedrun/any.sheet npm run speedrun -w taoot
 
 The same sheet language runs in the browser, on the unlisted `/speedrun/`
 workbench, over one sheet parser and one action table. What is where:
-`engine/src/web/speedrun/` holds the half that names no game — the parser, the
+`speedrun/src/` holds the half that names no game — the parser, the
 in-page driver, the aim sweep and the panel's own modules —
 `taoot/src/speedrun/` holds Titanic's verbs and its routes' navigation, and
 `taoot/tests/speedrun/` the Playwright driver that is the clock of record.
@@ -484,7 +484,7 @@ panel — is `DUST_ACTIONS` in `dust/src/speedrun/actions.ts`, laid over the cor
 table so a name there wins. What each game supplies is five facts about itself:
 its key namespace, its action table, and optionally a Warm list, what that
 button should say, and a sheet to copy (`Workbench` in
-`engine/src/web/speedrun/workbench.ts`).
+`speedrun/src/workbench.ts`).
 
 ### The clock: in-game time
 
@@ -627,7 +627,7 @@ menuSave(m1p2)   menuLoad(m1p2)    # the game's own menu, on the clock: for a ru
 useful while a route is being written, and it is also why a time that used
 `load()` (or Dust's `loadSave()`) is not a time. Such a run still finishes, but
 its headline says NOT A VALID TIME and names the line. Verbs say so with
-`voidsTime` (`engine/src/web/speedrun/action.ts`).
+`voidsTime` (`speedrun/src/action.ts`).
 
 `menuSave()` and `menuLoad()` go the way a player has to: Titanic's life
 preserver, the control panel's save or open lever and the OK lever, with the
@@ -647,7 +647,7 @@ and loads the same way. Each game names its menu in `src/speedrun/menu.ts`;
 Sheets come in by pull request as plain sheet files in
 [`taoot/speedrun/sheets/`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/speedrun/sheets/README.md): line 1 is
 `# title: …`, and `author` and `notes` may follow in the comments
-before the first action (`engine/src/web/speedrun/sheet-header.ts`). The
+before the first action (`speedrun/src/sheet-header.ts`). The
 workbench lists them under **Contributed sheets…** (the `run-sheet` plugin
 publishes the folder as `speedrun/sheets.json`), in place of the "Copy the full
 run" button.
@@ -715,7 +715,7 @@ the original too, as with `menuSave()`/`menuLoad()` (see above).
 `taoot/tests/speedrun/blackjack.ts`, a machine suite, plays both from the
 shipped save "In the Smoking Room" (`en/save/ENDGAME1`) on seeds that between them win, lose, draw and load;
 `taoot/tests/auto/speedrun-blackjack.ts` pins the hit-or-stay table, which Dust's
-table plays too (`engine/src/web/speedrun/blackjack.ts`).
+table plays too (`speedrun/src/blackjack.ts`).
 
 ### Blackjack for cash, in Dust
 

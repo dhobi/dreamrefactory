@@ -4,7 +4,7 @@
  *
  *   npx vitest run --project dust dust/tests/speedrun-page.ts
  *
- * The workbench itself is the engine's and has its own suites; what is Dust's
+ * The workbench itself is the speedrun workspace's and has its own suites; what is Dust's
  * here is the wiring — this game's key space, its own actions, the route the
  * build publishes beside the page, and a state pane that waits for a game.
  */
@@ -13,7 +13,7 @@ import { afterEach, expect, it, vi } from "vitest";
 let workbench: Record<string, unknown> | null = null;
 let stateList: Record<string, (...a: never[]) => unknown> | null = null;
 
-vi.mock("@dreamfactory/engine/web/speedrun/workbench", () => ({ startWorkbench: (o: Record<string, unknown>) => void (workbench = o) }));
+vi.mock("@dreamfactory/speedrun/workbench", () => ({ startWorkbench: (o: Record<string, unknown>) => void (workbench = o) }));
 vi.mock("@dreamfactory/engine/web/state-list", () => ({ installStateList: (o: typeof stateList) => void (stateList = o) }));
 vi.mock("@dreamfactory/engine/runtime/trace", () => ({ snapshotState: (_s: unknown, v: unknown, how: string) => ({ viewer: v, how }) }));
 vi.mock("@dreamfactory/chrome/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));

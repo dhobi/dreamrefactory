@@ -28,8 +28,8 @@ import { expect, test } from "vitest";
 import { VERBS, resolve } from "../../src/speedrun/actions";
 import { COAL_LEVER, TURBINE_DIALS, degtonum } from "../../src/speedrun/nav/dials";
 import { RX_BANDS, TX_BAND, WIRELESS_MAIN, WIRELESS_PANELS } from "../../src/speedrun/nav/wireless";
-import type { ActionContext } from "@dreamfactory/engine/web/speedrun/action";
-import type { SpeedrunDriver } from "@dreamfactory/engine/web/speedrun/driver";
+import type { ActionContext } from "@dreamfactory/speedrun/action";
+import type { SpeedrunDriver } from "@dreamfactory/speedrun/driver";
 
 type Point = { x: number; y: number };
 

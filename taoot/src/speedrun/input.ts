@@ -1,13 +1,13 @@
 /**
  * Where a pointer or key event goes on Titanic's page, for a sheet played with
- * no page at all (#509, engine/src/web/speedrun/headless.ts).
+ * no page at all (#509, speedrun/src/headless.ts).
  *
  * The play page's own handlers (taoot/src/main.ts) with the page taken out: the
  * touch recogniser, the input log, the gamma and pane keys. Keep the two in step
  * — a press routed differently here is a different game.
  */
 import type { GameHost } from "@dreamfactory/engine/web/host";
-import type { InputEvent } from "@dreamfactory/engine/web/speedrun/headless";
+import type { InputEvent } from "@dreamfactory/speedrun/headless";
 import { overlayKey } from "../play-rules";
 
 /**

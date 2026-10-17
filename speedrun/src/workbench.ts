@@ -68,9 +68,9 @@ import {
   verbsOf,
   type ActionTable,
 } from "./action";
-import { loadClock } from "../load-clock";
-import { replyIds } from "../puppet-view";
-import { formatBytes, formatEta, formatRate, warmCache, type WarmFile } from "../cache-warmup";
+import { loadClock } from "@dreamfactory/engine/web/load-clock";
+import { replyIds } from "@dreamfactory/engine/web/puppet-view";
+import { formatBytes, formatEta, formatRate, warmCache, type WarmFile } from "@dreamfactory/engine/web/cache-warmup";
 import { attachEditor } from "./editor";
 import type { CalcProgress, CalcResult } from "./calculate";
 import { keepBootSeed } from "./boot-seed";
@@ -81,8 +81,8 @@ import { installColumnOrder } from "./columns";
 import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
 import { installColumnWidths, installPictureScale } from "./widths";
-import { byCodeUnit } from "../../runtime/order";
-import { markUnattended } from "../error-box";
+import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
+import { markUnattended } from "@dreamfactory/engine/web/error-box";
 
 // A run is timed by a sheet, not watched by a person: the game's script error
 // box must never stop one (engine/src/web/error-box.ts)
@@ -204,7 +204,7 @@ const interruptible = (verb: string): boolean => interruptibleIn(host.actions, v
  *
  * Everything after this line reads an element by id, at import time, and every
  * one of those ids is inside the markup this call creates
- * (engine/src/web/speedrun/panel.ts). So the order of these two statements is
+ * (panel.ts). So the order of these two statements is
  * load-bearing, which is why the build is a statement here rather than something
  * `main.ts` or a `DOMContentLoaded` does: there is no arrangement in which it can
  * be late.

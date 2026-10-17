@@ -1,7 +1,7 @@
 /**
  * The node side of a headless sheet (#509): Titanic's game files off disk
  * (tests/harness.ts) under the engine's headless driver
- * (engine/src/web/speedrun/headless.ts).
+ * (speedrun/src/headless.ts).
  *
  *   npm run speedrun -w taoot -- --headless
  *
@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
-import { headlessRun as runHeadless, type HeadlessRun } from "@dreamfactory/engine/web/speedrun/headless";
+import { headlessRun as runHeadless, type HeadlessRun } from "@dreamfactory/speedrun/headless";
 import { deliverInput } from "../../src/speedrun/input";
 import { newHost } from "../harness";
 import { shippedSaveTemplate } from "../playthrough/play";
