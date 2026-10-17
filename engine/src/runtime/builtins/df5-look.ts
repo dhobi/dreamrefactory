@@ -8,7 +8,7 @@ import { pointX, pointY } from "../point";
 import type { PropInstance } from "../props";
 import { LIT_BY, LIT_MOVIE, Shade, contrastOf, gammaOf } from "../shading";
 import type { PlayHandle } from "../audio";
-import { panFrom255 } from "../scheduler";
+import { panFrom255 } from "../sound-channels";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
 

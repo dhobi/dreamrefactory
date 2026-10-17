@@ -147,7 +147,7 @@ export const rung: Segment = {
      * six more on `currentvoice`, all in `CHECKERS.PRP`, and the one in `win ()`
      * runs when the player loses a game of checkers — which no rung plays.
      *
-     * `Scheduler.currentSound` and `currentvoice` both answer "none".
+     * `SoundChannels.current` and `currentvoice` both answer "none".
      */
     /*
      * PORT GAP 2 — `propxy (name, 3)` is not the packed POINT.

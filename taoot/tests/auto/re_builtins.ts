@@ -434,19 +434,19 @@ test("soundvol/soundpan feed the play, and looping sounds show in currentsound",
   // configure then play (the windgust pattern): mapped gain/pan reach the sink
   callBuiltin(session, "soundpan", "windgust0", 0); // 0 -> full left
   callBuiltin(session, "soundvol", "windgust0", 128); // 128/255
-  session.scheduler.playSound("windgust0", false);
+  session.scheduler.sounds.play("windgust0", false);
   const call = sink.calls.at(-1)!;
   expect(call.pan).toBeCloseTo(-1, 5);
   expect(call.volume).toBeCloseTo(128 / 255, 5);
 
   // a looping sound reports via currentsound(2) until halted
-  session.scheduler.soundLoop("wloop", true);
-  session.scheduler.playSound("wloop", true);
-  expect(session.scheduler.currentSound(2)).toBe("wloop");
-  session.scheduler.haltSounds();
+  session.scheduler.sounds.setLoop("wloop", true);
+  session.scheduler.sounds.play("wloop", true);
+  expect(session.scheduler.sounds.onChannel(2)).toBe("wloop");
+  session.scheduler.sounds.halt();
   // "none" and not "" — the engine's word for an idle channel, which Dust's
   // `while currentsound () != "none"` loops are written against
-  expect(session.scheduler.currentSound(2)).toBe("none");
+  expect(session.scheduler.sounds.onChannel(2)).toBe("none");
 });
 
 test("path stores/returns slots and gates the CD-copy check correctly", () => {

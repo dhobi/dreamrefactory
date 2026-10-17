@@ -241,9 +241,9 @@ async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<v
   for (const s of save.sounds) {
     if (!s.name) continue;
     if (s.kind === "sound") {
-      session.scheduler.setSoundVol(s.name, s.volume);
-      session.scheduler.setSoundPan(s.name, s.pan);
-      if (s.loop) session.scheduler.soundLoop(s.name, true);
+      session.scheduler.sounds.setVolume(s.name, s.volume);
+      session.scheduler.sounds.setPan(s.name, s.pan);
+      if (s.loop) session.scheduler.sounds.setLoop(s.name, true);
     } else if (s.bank && !trackVolume.has(s.bank.toLowerCase())) {
       trackVolume.set(s.bank.toLowerCase(), s.volume);
     }
@@ -258,7 +258,7 @@ async function restoreThemeV1(session: GameSession, save: SaveGameV1): Promise<v
       (s) => s.kind === "sound" && s.record === effect.record && s.bank.toLowerCase() === effect.bank.toLowerCase(),
     )?.name;
     if (name) {
-      session.scheduler.playSound(name, false);
+      session.scheduler.sounds.play(name, false);
       session.onLog(`opengame: sound "${name}" was playing — started again`);
     } else {
       session.onLog(`opengame: saved sound record ${effect.record} of ${effect.bank} is not a registered sound`);
@@ -964,7 +964,7 @@ function soundPatch(session: GameSession): Pick<SavePatchV1, "theme" | "effect" 
     lib.bankNames.find((b) => lib.soundNames(b).includes(name.toLowerCase())) ?? null;
   const busy: { bank: string; name: string; priority: number }[] = [];
   for (const channel of [1, 2]) {
-    const name = session.scheduler.currentSound(channel);
+    const name = session.scheduler.sounds.onChannel(channel);
     const bank = name !== "none" ? bankOfSound(name) : null;
     if (!bank) continue;
     const record = lib.soundRecordV1(bank, name);
@@ -981,9 +981,9 @@ function soundPatch(session: GameSession): Pick<SavePatchV1, "theme" | "effect" 
         bank,
         kind: "sound",
         name,
-        volume: session.scheduler.getSoundVol(name),
-        pan: session.scheduler.getSoundPan(name),
-        loop: session.scheduler.loopFlags.has(name),
+        volume: session.scheduler.sounds.getVolume(name),
+        pan: session.scheduler.sounds.getPan(name),
+        loop: session.scheduler.sounds.loopFlags.has(name),
       });
     }
     const track = lib.trackNameOf(bank);

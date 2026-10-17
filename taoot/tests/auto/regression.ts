@@ -144,9 +144,9 @@ test("host: set activation — theme, scheduler, and boot resources", async () =
   );
 
   // 2. the flat arms a scene loop (the woman in the window) and a sound loop
-  const armed = session.scheduler.loops.length > 0 || session.scheduler.loopFlags.size > 0;
+  const armed = session.scheduler.loops.length > 0 || session.scheduler.sounds.loopFlags.size > 0;
   check("the flat arms its scheduled work", armed,
-    `loops=${session.scheduler.loops.length} soundLoops=${[...session.scheduler.loopFlags]}`);
+    `loops=${session.scheduler.loops.length} soundLoops=${[...session.scheduler.sounds.loopFlags]}`);
 
   // 3. an UNSCRIPTED swap (the set picker, a dev jump) has no closeset to stop
   // it, so activation must — else the flat's loop keeps firing at a scene that
@@ -154,8 +154,8 @@ test("host: set activation — theme, scheduler, and boot resources", async () =
   await host.loadServerSet("turk.set");
   check(
     "a bare swap leaves nothing of the old room running",
-    session.scheduler.loops.length === 0 && session.scheduler.loopFlags.size === 0,
-    `loops=${JSON.stringify(session.scheduler.loops)} soundLoops=${[...session.scheduler.loopFlags]}`,
+    session.scheduler.loops.length === 0 && session.scheduler.sounds.loopFlags.size === 0,
+    `loops=${JSON.stringify(session.scheduler.loops)} soundLoops=${[...session.scheduler.sounds.loopFlags]}`,
   );
 
   // 4. ...while the boot's session-scoped resources survive it. house.shp's
@@ -2875,7 +2875,7 @@ test("timing model: makeloop/makecricket/starxyz/delay/soundloop", async () => {
     !!knock,
     knock ? `vol=${knock.volume.toFixed(2)} pan=${knock.pan.toFixed(2)}` : `${sink.calls.length} calls`,
   );
-  check("one-shot cricket removed after firing", session.scheduler.crickets.length === 0);
+  check("one-shot cricket removed after firing", session.scheduler.crickets.table.length === 0);
   check("knock loop re-armed itself", session.scheduler.isLoop("scene", "scene49"));
 
   // delay(n) = n/60 s of game time; the script stays suspended (busy) while
@@ -2901,19 +2901,19 @@ test("timing model: makeloop/makecricket/starxyz/delay/soundloop", async () => {
   // makecricket); playing a flagged sound twice doesn't stack; haltsound
   // stops the tracked loop (the gramophone hiss must not outlive the crank)
   sink.calls.length = 0;
-  session.scheduler.soundLoop("doorlocked", true);
+  session.scheduler.sounds.setLoop("doorlocked", true);
   check("soundloop alone plays nothing (it only flags)", sink.calls.length === 0, `${sink.calls.length} plays`);
-  session.scheduler.playSound("doorlocked", false);
-  session.scheduler.playSound("doorlocked", false); // already looping: no second start
+  session.scheduler.sounds.play("doorlocked", false);
+  session.scheduler.sounds.play("doorlocked", false); // already looping: no second start
   const loops = sink.calls.filter((c) => c.loop);
   check("flagged sound plays as ONE tracked loop", loops.length === 1 && sink.calls.length === 1, `${loops.length} loop starts of ${sink.calls.length} plays`);
-  session.scheduler.haltSounds();
+  session.scheduler.sounds.halt();
   sink.calls.length = 0;
-  session.scheduler.playSound("doorlocked", false); // flag persists: loops again after halt
+  session.scheduler.sounds.play("doorlocked", false); // flag persists: loops again after halt
   check("haltsound stops the loop; flag persists for the next play", sink.calls.filter((c) => c.loop).length === 1, `${sink.calls.length} plays`);
-  session.scheduler.soundLoop("doorlocked", false);
+  session.scheduler.sounds.setLoop("doorlocked", false);
   sink.calls.length = 0;
-  session.scheduler.playSound("doorlocked", false);
+  session.scheduler.sounds.play("doorlocked", false);
   check("soundloop(off) unflags: plays one-shot again", sink.calls.length === 1 && !sink.calls[0].loop, `loop=${sink.calls[0]?.loop}`);
 }
 );
@@ -2948,8 +2948,8 @@ test("actors: GANG.CST loads, DECKBD openset places Morrow", async () => {
   check(
     "deckbd ambient: soundloop-flagged crickets loop; both registered",
     sink.calls.filter((c) => c.loop).length >= 1 &&
-      session.scheduler.isCricket("motor") && session.scheduler.isCricket("machine"),
-    `${sink.calls.filter((c) => c.loop).length} loops, motor=${session.scheduler.isCricket("motor")} machine=${session.scheduler.isCricket("machine")}`,
+      session.scheduler.crickets.has("motor") && session.scheduler.crickets.has("machine"),
+    `${sink.calls.filter((c) => c.loop).length} loops, motor=${session.scheduler.crickets.has("motor")} machine=${session.scheduler.crickets.has("machine")}`,
   );
   // find the view where morrow projects LARGEST while fully on screen — the
   // conversational view you actually approach him in (not a distant/empty one)
@@ -7996,9 +7996,9 @@ test("transcripts caption their clips and the radio, each named, and cash.mov an
   const live = { done: false };
   session.captions = [];
   session.captionClip("door1", live);
-  session.scheduler.playSound("oldcar", true);
+  session.scheduler.sounds.play("oldcar", true);
   check("a clip's caption stays up over a sound effect", shown() === "Landlady: Sneaking out, are ya? I want me money!", shown());
-  session.scheduler.playSound("door1", true);
+  session.scheduler.sounds.play("door1", true);
   check("the sound channel captions a clip with words",
     session.captions.some((c) => c.text === "Sneaking out, are ya? I want me money!" && c.handle !== live));
 

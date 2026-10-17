@@ -49,7 +49,6 @@ import {
   readContainerFile,
   type DFContainerFile,
 } from "@dreamfactory/engine/df/container";
-import { readSetFile } from "@dreamfactory/engine/df/set";
 import { readAnySetFile } from "@dreamfactory/engine/df/set-any";
 import type { SetFileV1 } from "@dreamfactory/engine/df/set-v1";
 import { readShpFile } from "@dreamfactory/engine/df/shp";
@@ -58,11 +57,11 @@ import { readCstFile } from "@dreamfactory/engine/df/cst";
 import { readSndFile } from "@dreamfactory/engine/df/snd";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { v1Index } from "@dreamfactory/engine/df/savegame-v1";
-import { readMovFileV1, movFileFromV1 } from "@dreamfactory/engine/df/mov-v1";
 import { readStgFile, readStgRegions } from "@dreamfactory/engine/df/stg";
 import { readAudioHeader } from "@dreamfactory/engine/df/audio";
 import { readBankTables } from "@dreamfactory/engine/df/banks";
-import { readMovFile, type MovFile } from "@dreamfactory/engine/df/mov";
+import type { MovFile } from "@dreamfactory/engine/df/mov";
+import { openMovFile } from "@dreamfactory/engine/df/mov-any";
 import { sniffScript } from "@dreamfactory/engine/df/script";
 import { FrameBuffer, decodeFrame } from "@dreamfactory/engine/df/image";
 import {
@@ -362,12 +361,7 @@ function annotateStg(data: Uint8Array): { roles: Roles; note: string } {
 function annotateMov(data: Uint8Array): { roles: Roles; note: string } {
   // A Dust film is the same idea in a different envelope, and mov-v1 reshapes it
   // into the v4 record — so one walk maps both, and the labels stay true.
-  let mov: MovFile;
-  try {
-    mov = readMovFile(data);
-  } catch {
-    mov = movFileFromV1(readMovFileV1(data));
-  }
+  const mov: MovFile = openMovFile(data).mov;
   const roles: Roles = new Map();
 
   mov.segments.forEach((seg, s) => {

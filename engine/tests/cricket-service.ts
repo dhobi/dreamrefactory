@@ -23,7 +23,9 @@ import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import type { DecodedAudio } from "@dreamfactory/engine/df/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { ScriptError } from "@dreamfactory/engine/runtime/interp";
-import { cricketPan, panFrom255, pickSoundChannelsV4 } from "@dreamfactory/engine/runtime/scheduler";
+import { cricketPan } from "@dreamfactory/engine/runtime/crickets";
+import { panFrom255 } from "@dreamfactory/engine/runtime/sound-channels";
+import { pickSoundChannelsV4 } from "@dreamfactory/engine/runtime/sound-channels-v4";
 
 const SOUNDS = ["steam", "hiss", "motor1", "motor2", "motor3", "knock"];
 
@@ -54,7 +56,7 @@ const code = (f: () => void): number | null => {
 
 test("makecricket's errors: 0x28, 0xa, 0xe, and 8 for a full table", () => {
   const { s } = bare();
-  const make = (name: string, r: number, b: number, j: number) => () => s.scheduler.makeCricket(name, 0, 0, r, b, j);
+  const make = (name: string, r: number, b: number, j: number) => () => s.scheduler.crickets.make(name, 0, 0, r, b, j);
   expect(code(make("nosuch", 100, 5, 0))).toBe(0xa);
   expect(code(make("steam", 0, 5, 0)), "radius < 1").toBe(0xe);
   expect(code(make("steam", 100, -1, 0)), "base < 0").toBe(0xe);
@@ -63,21 +65,21 @@ test("makecricket's errors: 0x28, 0xa, 0xe, and 8 for a full table", () => {
   s.currentSetName = "";
   expect(code(make("steam", 100, 5, 0)), "no set open").toBe(0x28);
   s.currentSetName = "engine";
-  s.scheduler.stopCricket("all");
-  for (let i = 0; i < 16; i++) s.scheduler.makeCricket(SOUNDS[i % SOUNDS.length], 0, 0, 100, 5, 0);
-  expect(s.scheduler.crickets.length, "a name made again replaces itself").toBe(SOUNDS.length);
-  const sch = s.scheduler as unknown as { crickets: { name: string; slot?: number }[] };
-  const one = sch.crickets[0];
-  sch.crickets.length = 0;
-  for (let i = 0; i < 16; i++) sch.crickets.push({ ...one, name: `x${i}`, slot: i });
+  s.scheduler.crickets.stop("all");
+  for (let i = 0; i < 16; i++) s.scheduler.crickets.make(SOUNDS[i % SOUNDS.length], 0, 0, 100, 5, 0);
+  expect(s.scheduler.crickets.table.length, "a name made again replaces itself").toBe(SOUNDS.length);
+  const table = s.scheduler.crickets.table;
+  const one = table[0];
+  table.length = 0;
+  for (let i = 0; i < 16; i++) table.push({ ...one, name: `x${i}`, slot: i });
   expect(code(make("knock", 100, 5, 0))).toBe(8);
 });
 
 test("a repeating cricket: no count out of earshot, a silent re-arm coming in, plays at 0 regardless, stops leaving", async () => {
   const { s, sink, cam } = await bare();
   const plays = () => sink.calls.length;
-  s.scheduler.makeCricket("steam", 1000, 0, 200, 3, 0); // base 3, no jitter: count 3
-  const c = s.scheduler.crickets[0];
+  s.scheduler.crickets.make("steam", 1000, 0, 200, 3, 0); // base 3, no jitter: count 3
+  const c = s.scheduler.crickets.table[0];
   for (let i = 0; i < 5; i++) await pass(s);
   expect(c.count, "out of earshot: the count stands").toBe(3);
   expect(plays()).toBe(0);
@@ -85,7 +87,7 @@ test("a repeating cricket: no count out of earshot, a silent re-arm coming in, p
   await pass(s);
   expect(c.armed, "the first pass in earshot arms it").toBe(true);
   expect(plays(), "...and plays nothing").toBe(0);
-  expect(s.scheduler.getSoundVol("steam"), "255 − trunc (50·255/200)").toBe(255 - 63);
+  expect(s.scheduler.sounds.getVolume("steam"), "255 − trunc (50·255/200)").toBe(255 - 63);
   await pass(s);
   await pass(s);
   expect(plays()).toBe(0);
@@ -93,13 +95,13 @@ test("a repeating cricket: no count out of earshot, a silent re-arm coming in, p
   expect(plays(), "plays at 0").toBe(1);
   expect(c.count, "and re-arms").toBe(3);
   // a looping play is still sounding when the next comes due: it plays anyway
-  s.scheduler.soundLoop("steam", true);
-  s.scheduler.soundLoop("steam", false);
+  s.scheduler.sounds.setLoop("steam", true);
+  s.scheduler.sounds.setLoop("steam", false);
   for (let i = 0; i < 3; i++) await pass(s);
   expect(plays(), "no 'previous shot still sounding' test").toBe(2);
   // walk away: its sound stops, the count stands, and it disarms
-  s.scheduler.soundLoop("steam", true);
-  s.scheduler.makeCricket("steam", 1000, 0, 200, 1, 0);
+  s.scheduler.sounds.setLoop("steam", true);
+  s.scheduler.crickets.make("steam", 1000, 0, 200, 1, 0);
   await pass(s); // arm
   await pass(s); // play, looping
   const playing = sink.calls.at(-1)!;
@@ -107,49 +109,49 @@ test("a repeating cricket: no count out of earshot, a silent re-arm coming in, p
   cam.x = 0;
   await pass(s);
   expect(playing.stopped, "leaving earshot stops it").toBe(true);
-  expect(s.scheduler.crickets[0].armed).toBe(false);
+  expect(s.scheduler.crickets.table[0].armed).toBe(false);
 });
 
 test("a cricket in another set does nothing at all; a one-shot counts anywhere and plays only in earshot", async () => {
   const { s, sink, cam } = await bare();
-  s.scheduler.makeCricket("knock", 0, 0, 100, 2, -1);
+  s.scheduler.crickets.make("knock", 0, 0, 100, 2, -1);
   s.currentSetName = "deck";
   for (let i = 0; i < 4; i++) await pass(s);
-  expect(s.scheduler.crickets[0].count, "another set: not even the countdown").toBe(2);
+  expect(s.scheduler.crickets.table[0].count, "another set: not even the countdown").toBe(2);
   s.currentSetName = "engine";
   cam.x = 500; // out of earshot
   await pass(s);
   await pass(s);
-  expect(s.scheduler.crickets.length, "spent out of earshot, and gone").toBe(0);
+  expect(s.scheduler.crickets.table.length, "spent out of earshot, and gone").toBe(0);
   expect(sink.calls).toHaveLength(0);
 });
 
 test("only the two loudest looping crickets sound", async () => {
   const { s, sink, cam } = await bare();
-  for (const n of ["motor1", "motor2", "motor3"]) s.scheduler.soundLoop(n, true);
-  s.scheduler.makeCricket("motor1", 100, 0, 1000, 0, 0); // loudest
-  s.scheduler.makeCricket("motor2", 300, 0, 1000, 0, 0);
-  s.scheduler.makeCricket("motor3", 200, 0, 1000, 0, 0); // second
+  for (const n of ["motor1", "motor2", "motor3"]) s.scheduler.sounds.setLoop(n, true);
+  s.scheduler.crickets.make("motor1", 100, 0, 1000, 0, 0); // loudest
+  s.scheduler.crickets.make("motor2", 300, 0, 1000, 0, 0);
+  s.scheduler.crickets.make("motor3", 200, 0, 1000, 0, 0); // second
   cam.x = 0;
   await pass(s);
   const live = sink.calls.filter((c) => !c.stopped).length;
   expect(live).toBe(2);
-  expect(s.scheduler.currentSound(1) === "motor1" || s.scheduler.currentSound(2) === "motor1").toBe(true);
-  expect(s.scheduler.currentSound(1) === "motor3" || s.scheduler.currentSound(2) === "motor3").toBe(true);
+  expect(s.scheduler.sounds.onChannel(1) === "motor1" || s.scheduler.sounds.onChannel(2) === "motor1").toBe(true);
+  expect(s.scheduler.sounds.onChannel(1) === "motor3" || s.scheduler.sounds.onChannel(2) === "motor3").toBe(true);
   await pass(s);
   expect(sink.calls.length, "a sound already sounding is not started again").toBe(2);
 });
 
 test("pausecricket nests", async () => {
   const { s } = await bare();
-  s.scheduler.makeCricket("steam", 0, 0, 200, 3, 0);
-  s.scheduler.pauseCricket("steam", true);
-  s.scheduler.pauseCricket("all", true);
-  s.scheduler.pauseCricket("steam", false);
-  expect(s.scheduler.crickets[0].paused).toBe(true);
-  expect(s.scheduler.cricketPauseDepth("steam")).toBe(1);
-  s.scheduler.pauseCricket("all", false);
-  expect(s.scheduler.crickets[0].paused).toBe(false);
+  s.scheduler.crickets.make("steam", 0, 0, 200, 3, 0);
+  s.scheduler.crickets.pause("steam", true);
+  s.scheduler.crickets.pause("all", true);
+  s.scheduler.crickets.pause("steam", false);
+  expect(s.scheduler.crickets.table[0].paused).toBe(true);
+  expect(s.scheduler.crickets.depth("steam")).toBe(1);
+  s.scheduler.crickets.pause("all", false);
+  expect(s.scheduler.crickets.table[0].paused).toBe(false);
 });
 
 test("the pan: linear in the angle, folded front to back; the balance law", () => {

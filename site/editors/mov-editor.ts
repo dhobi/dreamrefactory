@@ -42,10 +42,8 @@ import {
   segmentInterval,
 } from "@dreamfactory/engine/df/mov-pace";
 import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
-import { detectVersion } from "@dreamfactory/engine/df/version";
-import { movFileFromV1, readMovFileV1 } from "@dreamfactory/engine/df/mov-v1";
+import { openMovFile } from "@dreamfactory/engine/df/mov-any";
 import { EffectScreenV1, fadePaletteV1, type MovEffectV1 } from "@dreamfactory/engine/df/mov-v1-effects";
-import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
 import { movFileFromV0, paletteV0, readMovFileV0 } from "@dreamfactory/engine/df/mov-v0";
 import { decodeFrameV5, isV5Frame, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import {
@@ -177,21 +175,15 @@ function loadMov(bytes: Uint8Array, name: string, v0 = false): void {
   stopPlayback();
   let parsed: MovFile;
   try {
-    // the same line the movie player uses (engine/src/web/movie-player.ts)
-    const v1 = !v0 && detectVersion(bytes) === 1;
-    const v5 = !v0 && !v1 && isMovV5(bytes);
+    // the movie player's own routing (engine/src/df/mov-any.ts); a v0 film has
+    // no tag to be told by, so the page says when it holds one
     if (v0) {
       readOnly = V0_READ_ONLY;
       parsed = movFileFromV0(readMovFileV0(bytes));
-    } else if (v1) {
-      readOnly = V1_READ_ONLY;
-      parsed = movFileFromV1(readMovFileV1(bytes));
-    } else if (v5) {
-      readOnly = V5_READ_ONLY;
-      parsed = readMovFileV5(bytes);
     } else {
-      readOnly = null;
-      parsed = readMovFile(bytes);
+      const opened = openMovFile(bytes);
+      readOnly = { 1: V1_READ_ONLY, 4: null, 5: V5_READ_ONLY }[opened.version];
+      parsed = opened.mov;
     }
     // a button that refuses when pressed is worse than one that says so first
     ($("exportBtn") as HTMLButtonElement).disabled = readOnly !== null;

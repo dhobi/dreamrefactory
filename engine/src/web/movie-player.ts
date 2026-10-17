@@ -15,8 +15,8 @@ import {
   MovFile,
   MovFrame,
   MovSegment,
-  readMovFile,
 } from "@dreamfactory/engine/df/mov";
+import { openMovFile } from "@dreamfactory/engine/df/mov-any";
 import {
   TICK_MS,
   bedRuntimeMs,
@@ -27,14 +27,10 @@ import {
 } from "@dreamfactory/engine/df/mov-pace";
 import { segmentAudio, soundtrackFor } from "@dreamfactory/engine/df/mov-sound";
 import { Container } from "@dreamfactory/engine/df/container";
-import { detectVersion } from "@dreamfactory/engine/df/version";
 import {
   compositeFrameV1,
-  movFileFromV1,
-  readMovFileV1,
 } from "@dreamfactory/engine/df/mov-v1";
 import { EffectScreenV1, fadePaletteV1 } from "@dreamfactory/engine/df/mov-v1-effects";
-import { isMovV5, readMovFileV5 } from "@dreamfactory/engine/df/mov-v5";
 import { decodeFrameV5, frameSizeV5, paletteV5 } from "@dreamfactory/engine/df/image-v5";
 import { decodeAudioContainer } from "@dreamfactory/engine/df/audio";
 import {
@@ -403,13 +399,9 @@ export class MoviePlayer {
     }
     let mov;
     try {
-      // Dust's movies are DreamFactory 1 and its container 0 is not v4's with the
-      // fields moved (engine/src/df/mov-v1.ts). Routed here rather than inside
-      // readMovFile because the two produce the same MovFile and nothing below
-      // this line has to care which engine wrote the film.
-      if (detectVersion(data) === 1) mov = movFileFromV1(readMovFileV1(data));
-      else if (isMovV5(data)) mov = readMovFileV5(data);
-      else mov = readMovFile(data);
+      // whichever engine wrote the film, the same MovFile, so nothing below this
+      // line has to care (engine/src/df/mov-any.ts)
+      mov = openMovFile(data).mov;
     } catch (e) {
       this.onLog(`playmovie: ${fileName}: ${(e as Error).message}`);
       return false;

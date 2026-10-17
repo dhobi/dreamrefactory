@@ -1,6 +1,5 @@
-import { SetFile, readSetFile, readStarPath } from "../df/set";
-import { detectVersion } from "../df/version";
-import { readSetFileAsV4 } from "../df/set-v1-to-v4";
+import { SetFile, readStarPath } from "../df/set";
+import { openSetFile } from "../df/set-any";
 import { readShpFile } from "../df/shp";
 import { readCstFile } from "../df/cst";
 import { ScriptInstance, toStr } from "./interp";
@@ -134,7 +133,7 @@ export class SessionResources {
     const data = this.session.files(fileName.toLowerCase());
     if (!data) return null;
     try {
-      return detectVersion(data) === 1 ? readSetFileAsV4(data) : readSetFile(data);
+      return openSetFile(data).set;
     } catch (e) {
       this.session.onLog(`${fileName}: ${(e as Error).message}`);
       return null;

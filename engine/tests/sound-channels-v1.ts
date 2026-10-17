@@ -25,7 +25,7 @@ import { expect, test, vi } from "vitest";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import type { DecodedAudio } from "@dreamfactory/engine/df/audio";
 import type { AudioChannel, AudioSink, PlayHandle, PlayOpts } from "@dreamfactory/engine/runtime/audio";
-import { pickSoundChannelV1 } from "@dreamfactory/engine/runtime/scheduler";
+import { pickSoundChannelV1 } from "@dreamfactory/engine/runtime/sound-channels-v1";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 
 test("the rules, as DF.EXE branches them", () => {
@@ -107,13 +107,13 @@ test("singlesound never restarts a clip and only displaces a lower one", async (
   await play(s, "singlesound", "low"); // channel 1 is idle (0): low outranks it
   await play(s, "singlesound", "low"); // now channel 1 holds it: not again
   expect(sink.plays.map((p) => p.name)).toEqual(["mid", "low"]);
-  expect(s.scheduler.currentSound(1)).toBe("low");
-  expect(s.scheduler.currentSound(2)).toBe("mid");
+  expect(s.scheduler.sounds.onChannel(1)).toBe("low");
+  expect(s.scheduler.sounds.onChannel(2)).toBe("mid");
   // high replaces the LOWER channel (1, low) and leaves mid playing
   await play(s, "singlesound", "high");
   expect(sink.plays.find((p) => p.name === "low")!.stopped).toBe(true);
   expect(sink.plays.find((p) => p.name === "mid")!.stopped).toBe(false);
-  expect(s.scheduler.currentSound(1)).toBe("high");
+  expect(s.scheduler.sounds.onChannel(1)).toBe("high");
   // both busy: currentsound() answers the higher priority, whatever it is asked
   expect(await call(s, 'currentsound (2)')).toBe("high");
   expect(await call(s, "sounddone ()")).toBe(false);
@@ -138,8 +138,8 @@ test("multiplesound restarts a clip in place; bothsound always plays", async () 
     ["mid", true],
     ["mid", false],
   ]);
-  expect(s.scheduler.currentSound(1)).toBe("none");
-  expect(s.scheduler.currentSound(2)).toBe("mid");
+  expect(s.scheduler.sounds.onChannel(1)).toBe("none");
+  expect(s.scheduler.sounds.onChannel(2)).toBe("mid");
   await play(s, "bothsound", "low"); // channel 1 (idle, lower)
   await play(s, "bothsound", "low"); // and again, over itself
   expect(sink.plays.filter((p) => p.name === "low").map((p) => p.stopped)).toEqual([true, false]);

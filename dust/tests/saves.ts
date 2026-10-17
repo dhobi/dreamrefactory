@@ -152,7 +152,7 @@ test("the saved effect is the busier channel's by DF.EXE's priority", async (ctx
   const banks = lib.bankNames.filter((b) => lib.soundNames(b).length >= 2);
   expect(banks.length, "two banks with sounds").toBeGreaterThanOrEqual(2);
   const [early, late] = [banks[0], banks.at(-1)!];
-  const channels = (session.scheduler as unknown as { soundChannels: unknown[] }).soundChannels;
+  const channels = (session.scheduler as unknown as { soundBoard: { channels: unknown[] } }).soundBoard.channels;
   const play = (one: string, two: string) => {
     channels[0] = { name: one, handle: { done: false } };
     channels[1] = { name: two, handle: { done: false } };
@@ -692,8 +692,8 @@ test("a load brings back the sound banks, and the theme if one was playing", asy
   expect(night.sink.calls.filter((c) => c.channel === "theme" && c.loop).length, "one theme play").toBe(1);
   // per-sound settings come back off the bank's records: the crickets were
   // turned down and the chinchime nearly off
-  expect(night.session.scheduler.getSoundVol("cricket1"), "cricket1's soundvol").toBe(99);
-  expect(night.session.scheduler.getSoundVol("chinchime"), "chinchime's soundvol").toBe(12);
+  expect(night.session.scheduler.sounds.getVolume("cricket1"), "cricket1's soundvol").toBe(99);
+  expect(night.session.scheduler.sounds.getVolume("chinchime"), "chinchime's soundvol").toBe(12);
   // the room's own ambience is a restored LOOP, and it is what needs the banks
   expect(
     night.session.scheduler.loops.some((l) => l.handler === "nightfxs"),
@@ -715,7 +715,7 @@ test("a load brings back the sound banks, and the theme if one was playing", asy
   // hall clock on the effect channel and `soundloop` set on it, and no theme
   const clock = await load("D2M_004.RTD");
   expect(clock.session.currentThemeName, "no theme").toBe("none");
-  expect(clock.session.scheduler.loopFlags.has("largeclock"), "largeclock's soundloop").toBe(true);
+  expect(clock.session.scheduler.sounds.loopFlags.has("largeclock"), "largeclock's soundloop").toBe(true);
   expect(clock.sink.calls.some((c) => c.channel === "sound" && c.loop), "and it is sounding, looped").toBe(true);
 });
 

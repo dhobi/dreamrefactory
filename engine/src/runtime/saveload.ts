@@ -129,7 +129,7 @@ export function snapshotSave(session: GameSession): Uint8Array | null {
         period: l.count,
         pause: l.paused ? Math.max(1, l.pauseDepth ?? 1) : 0,
       })),
-      crickets: session.scheduler.crickets.map((c) => ({
+      crickets: session.scheduler.crickets.table.map((c) => ({
         name: c.name,
         set: c.setName,
         x: c.x,
@@ -727,7 +727,7 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
     // room's openset: the idles that make characters act, the scene timers, the
     // room's positional ambience.
     for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period, l.pause);
-    for (const c of save.crickets) session.scheduler.restoreCricket(c);
+    for (const c of save.crickets) session.scheduler.crickets.restore(c);
     // A walk in flight comes back mid-stride, because the original's does: load
     // save 17 in TI.EXE and Daisy finishes crossing the Grand Staircase to the
     // middle of the room. (User-reported, against a build that stood her still.)

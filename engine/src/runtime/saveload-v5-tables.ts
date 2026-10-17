@@ -80,7 +80,7 @@ export function encodeCrickets(session: GameSession): Uint8Array {
   const { slots, stride } = TABLE.crickets;
   const out = new Uint8Array(slots * stride);
   const v = new DataView(out.buffer);
-  session.scheduler.crickets.slice(0, slots).forEach((c, i) => {
+  session.scheduler.crickets.table.slice(0, slots).forEach((c, i) => {
     const at = i * stride;
     v.setInt16(at + 0x00, 1, true);
     v.setInt16(at + 0x02, c.paused ? Math.max(1, c.pauseDepth ?? 1) : 0, true);
@@ -113,7 +113,7 @@ export function decodeCrickets(session: GameSession, bytes: Uint8Array): void {
   for (let i = 0; i < slots && (i + 1) * stride <= bytes.length; i++) {
     const at = i * stride;
     if (!v.getInt16(at, true)) continue;
-    session.scheduler.restoreCricket({
+    session.scheduler.crickets.restore({
       name: pstrAt(bytes, at + 0x44),
       set: pstrAt(bytes, at + 0x34),
       x: v.getInt32(at + 0x04, true),
@@ -132,7 +132,7 @@ export function decodeCrickets(session: GameSession, bytes: Uint8Array): void {
         bearing: v.getInt32(at + 0x28, true),
       },
     });
-    const c = session.scheduler.crickets.at(-1);
+    const c = session.scheduler.crickets.table.at(-1);
     const pause = v.getInt16(at + 0x02, true);
     if (c && pause > 0) {
       c.paused = true;
