@@ -93,8 +93,8 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
   // Timelapse's ambience the same — a reading that switched the loop on
   r("soundloop", (_i, [name, flag]) =>
     flag === undefined
-      ? session.scheduler.isSoundLooped(toStr(name ?? ""))
-      : session.scheduler.soundLoop(toStr(name ?? ""), truthy(flag)),
+      ? session.scheduler.sounds.isLooped(toStr(name ?? ""))
+      : session.scheduler.sounds.setLoop(toStr(name ?? ""), truthy(flag)),
   );
 
   // forceupdate(): advance one engine step, then yield a real frame so the

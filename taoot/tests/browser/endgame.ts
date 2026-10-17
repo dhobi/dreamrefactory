@@ -52,7 +52,7 @@ const SAMPLE = `(() => {
     stage: String(s.stageName), flat: String(s.currentFlat),
     theme: String(s.currentThemeName || ""),
     banks: s.audioLib.bankNames,
-    soundLoops: [...(sch.soundLoops ? sch.soundLoops.keys() : [])],
+    soundLoops: [...(sch.soundBoard?.namedLoops?.keys() ?? [])],
     loops: sch.loops.map((l) => l.kind + "/" + l.name + ":" + l.handler),
     crickets: sch.crickets.map((c) => c.name),
     // the ones actually SOUNDING — a soundloop-flagged cricket loops forever, so

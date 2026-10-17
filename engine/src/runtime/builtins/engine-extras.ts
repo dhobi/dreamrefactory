@@ -1,7 +1,7 @@
 import { ScriptError, Value, isLogic, toNum, toStr } from "../interp";
 import { foldAscii } from "../caseless";
 import { BuiltinCtx } from "./context";
-import { panFrom255 } from "../scheduler";
+import { panFrom255 } from "../sound-channels";
 
 /** `type (v)`'s answer for a value's tag. */
 function typeName(v: Value | undefined): string {

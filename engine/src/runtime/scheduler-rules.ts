@@ -5,7 +5,9 @@ import { bearingV5, engineBearing } from "./geometry";
  * DreamFactory 1), TI.EXE (Titanic, 4) and RedJack.exe (RedJack, 5). The
  * scheduler asks {@link schedulerRules} once per use and reads the answer off
  * here instead of asking the session which engine it is; the code that carries
- * each rule out, and the addresses it was read at, stay in scheduler.ts.
+ * each rule out, and the addresses it was read at, stay in scheduler.ts. The
+ * sound effects, where the engines differ in what they DO rather than in a
+ * number, are classes of their own (sound-channels.ts and its -v1, -v4, -v5).
  */
 export interface SchedulerRules {
   readonly engine: 1 | 4 | 5;
@@ -17,26 +19,6 @@ export interface SchedulerRules {
   readonly loopTableFullThrows: boolean;
   /** a negative period is a tick to fall due on (RedJack.exe 0x41bf05) */
   readonly negativePeriodIsDeadline: boolean;
-
-  // ---- sounds ----
-  /**
-   * How a play builtin picks its channel: DF.EXE's two channels by priority
-   * (`pickSoundChannelV1`), TI.EXE's two by priority (`pickSoundChannelsV4`), or
-   * RedJack.exe's channel by overlap, with a looping sound held by name.
-   */
-  readonly soundChannels: "v1" | "v4" | "v5";
-  /**
-   * A sound's loop flag is the channels' (TI.EXE 0x425740: `soundloop` flags
-   * every channel playing it and nothing else), not a looping play the scheduler
-   * holds by name and stops when the flag goes off.
-   */
-  readonly loopFlagOnChannels: boolean;
-  /** setting a record's volume or pan re-places the channels playing it (TI.EXE 0x425540, RedJack.exe 0x471fc0; DF.EXE's not read) */
-  readonly replacesPlayingSounds: boolean;
-  /** a pan is TI.EXE's balance (0x424b90, `panFrom255`), else 128 a side, linear (DF.EXE's and RedJack.exe's scales not read) */
-  readonly balancePan: boolean;
-  /** `haltsound` takes the channels as 1, 2 or 3 (TI.EXE 0x44d0d0); the others halt both */
-  readonly haltSoundTakesChannels: boolean;
 
   // ---- crickets ----
   /** the pass services crickets; DF.EXE's has the balls in their place (0x438870) */
@@ -78,11 +60,6 @@ const V4: SchedulerRules = {
   loopSlots: 32,
   loopTableFullThrows: false,
   negativePeriodIsDeadline: false,
-  soundChannels: "v4",
-  loopFlagOnChannels: true,
-  replacesPlayingSounds: true,
-  balancePan: true,
-  haltSoundTakesChannels: true,
   crickets: true,
   cricketNeedsSet: true,
   cricketsMeasured: false,
@@ -101,11 +78,6 @@ const V4: SchedulerRules = {
 const V1: SchedulerRules = {
   ...V4,
   engine: 1,
-  soundChannels: "v1",
-  loopFlagOnChannels: false,
-  replacesPlayingSounds: false,
-  balancePan: false,
-  haltSoundTakesChannels: false,
   crickets: false,
   turnStepsActor: true,
   propsByCamera: true,
@@ -118,10 +90,6 @@ const V5: SchedulerRules = {
   loopSlots: 64,
   loopTableFullThrows: true,
   negativePeriodIsDeadline: true,
-  soundChannels: "v5",
-  loopFlagOnChannels: false,
-  balancePan: false,
-  haltSoundTakesChannels: false,
   cricketNeedsSet: false,
   cricketsMeasured: true,
   stopWalkAll: false,

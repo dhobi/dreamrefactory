@@ -2,6 +2,10 @@ import { PlayHandle } from "./audio";
 import { ENGINE_STEP_MS, ticksAt } from "./clock";
 import { bearingV5, engineBearing } from "./geometry";
 import { s16, schedulerRules, type SchedulerRules } from "./scheduler-rules";
+import { SoundBoard, type SoundChannels } from "./sound-channels";
+import { SoundChannelsV1 } from "./sound-channels-v1";
+import { SoundChannelsV4 } from "./sound-channels-v4";
+import { SoundChannelsV5 } from "./sound-channels-v5";
 import type { GameSession } from "./session";
 import { ScriptError, type ScriptInstance } from "./interp";
 
@@ -213,63 +217,6 @@ export interface CricketSlot {
   measured?: NonNullable<Cricket["measured"]>;
 }
 
-/** which of DF.EXE's play rules a v1 sound builtin uses */
-export type SoundRuleV1 = "single" | "multiple" | "both";
-/** ...and DreamFactory 4's, whose `dualsound` is a rule of its own */
-export type SoundRule = SoundRuleV1 | "dual";
-
-/**
- * A 0..255 pan as the sink's -1..1: TI.EXE's balance (0x424b90) is linear on
- * each side of the centre, 128 wide on the left and 127 on the right — below
- * 128 the right ear gets p/128, above it the left gets (255 − p)/127, and 128
- * is full in both. The sink's law ({@link PlayOpts.pan}) is the same balance in
- * these units.
- */
-export function panFrom255(p: number): number {
-  if (p < 128) return Math.max(-1, (p - 128) / 128);
-  if (p > 128) return Math.min(1, (p - 128) / 127);
-  return 0;
-}
-
-/**
- * DreamFactory 4's two sound-effect channels: which a clip of priority `p`
- * plays on, in order. `single` and `multiple` are DreamFactory 1's rules
- * (TI.EXE 0x425150 and 0x425240 are DF.EXE's 0x42a070 and 0x42a160 to the
- * branch); `dual` (0x425330) plays on EVERY channel the clip outranks and
- * `both` (0x425400) on both. tl.exe the same (0x433850..0x433b30).
- */
-export function pickSoundChannelsV4(rule: SoundRule, p: number, p1: number, p2: number): number[] {
-  if (rule === "both") return [0, 1];
-  if (rule === "dual") return [...(p > p1 ? [0] : []), ...(p > p2 ? [1] : [])];
-  const slot = pickSoundChannelV1(rule, p, p1, p2);
-  return slot < 0 ? [] : [slot];
-}
-
-/**
- * DreamFactory 1's two sound-effect channels: which one a clip of priority `p`
- * takes, 0 or 1, or -1 for none. `p1`/`p2` are the channels' priorities, 0
- * when idle. Every rule works on the LOWER channel (channel 2 on a tie):
- *
- *   single   (`singlesound`, 0x42a070; `dualsound` is a call to it, 0x42a250)
- *            only a clip that outranks it, and never one whose priority the
- *            other channel holds — a clip playing is not started again
- *   multiple (`multiplesound`, 0x42a160) a clip at least its rank; one whose
- *            priority the other channel holds restarts THAT channel
- *   both     (`bothsound`, 0x42a260) always
- *
- * A priority is `bank << 16 | record` (`AudioLibrary.soundPriorityV1`),
- * so "the same priority" is "the same clip".
- */
-export function pickSoundChannelV1(rule: SoundRuleV1, p: number, p1: number, p2: number): number {
-  const lower = p1 < p2 ? 0 : 1;
-  const low = lower === 0 ? p1 : p2;
-  const high = lower === 0 ? p2 : p1;
-  if (rule === "both") return lower;
-  if (rule === "single") return p > low && p !== high ? lower : -1;
-  if (p < low) return -1;
-  return p === high ? 1 - lower : lower;
-}
-
 /**
  * How a pass's throttle waits out its ticks: on the clock the host moves
  * (`clock` — the BOOTFILE's idle, which the host itself started), asking the
@@ -280,111 +227,23 @@ export function pickSoundChannelV1(rule: SoundRuleV1, p: number, p1: number, p2:
 export type PassWait = "clock" | "frames" | "jump";
 
 export class Scheduler {
-  constructor(private readonly session: GameSession) {}
+  constructor(private readonly session: GameSession) {
+    this.soundsByEngine = {
+      1: new SoundChannelsV1(this.soundBoard, session),
+      4: new SoundChannelsV4(this.soundBoard, session),
+      5: new SoundChannelsV5(this.soundBoard, session),
+    };
+  }
 
   readonly loops: GameLoop[] = [];
   readonly crickets: Cricket[] = [];
-  private readonly soundLoops = new Map<string, PlayHandle>();
 
-  // Per-sound-name volume/pan (0..255), set by soundvol()/soundpan() just
-  // before the matching singlesound()/etc. — scripts configure a sound then
-  // play it (e.g. windgust: `soundpan(n,..); soundvol(n,..); singlesound(n)`).
-  // Applied to the play's gain/pan below; unset names play at full/centre.
-  private readonly soundVol = new Map<string, number>();
-  private readonly soundPan = new Map<string, number>();
-  setSoundVol(name: string, v: number): void {
-    this.soundVol.set(name.toLowerCase(), v);
-    this.replaceSound(name);
-  }
-  getSoundVol(name: string): number {
-    return this.soundVol.get(name.toLowerCase()) ?? 255;
-  }
-  setSoundPan(name: string, v: number): void {
-    this.soundPan.set(name.toLowerCase(), v);
-    this.replaceSound(name);
-  }
-
-  /**
-   * The volume and pan are the sound RECORD's (+4, +6), and setting either
-   * re-places every mixer channel playing that record at once (TI.EXE 0x425540 /
-   * 0x425640 walk channels 0..3 for it) — which is how a cricket's level follows
-   * the camera while it sounds. RedJack.exe's setters the same (0x471fc0,
-   * 0x4721e0: the record, then SetVolume/SetPan on each mixer channel holding
-   * it), a looping play among them. DF.EXE's are not read.
-   */
-  private replaceSound(name: string): void {
-    if (!this.rules.replacesPlayingSounds) return;
-    const key = name.toLowerCase();
-    const { volume, pan } = this.soundPlace(key);
-    for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.place?.(volume, pan);
-    this.soundLoops.get(key)?.place?.(volume, pan);
-  }
-
-  /** a sound record's 0..255 volume and pan in sink units ({@link panFrom255}) */
-  private soundPlace(key: string): { volume: number; pan: number } {
-    return {
-      volume: Math.max(0, Math.min(1, this.getSoundVol(key) / 255)),
-      // DF.EXE's and RedJack.exe's pan scales are not read: they keep 128 a side
-      pan: this.rules.balancePan
-        ? panFrom255(this.getSoundPan(key))
-        : Math.max(-1, Math.min(1, (this.getSoundPan(key) - 128) / 128)),
-    };
-  }
-  getSoundPan(name: string): number {
-    return this.soundPan.get(name.toLowerCase()) ?? 128;
-  }
-
-  // currentsound(1|2): the name playing on each sound channel. The engine has
-  // two SFX channels; scripts always test both (`currentsound(1)=x |
-  // currentsound(2)=x`) to ask "is x still playing?". We collapse to two slots:
-  // non-overlap plays (singlesound/bothsound) land on channel 1, overlapping
-  // ones (multiplesound/dualsound and looped sounds) on channel 2. A slot reads
-  // back as its name only while its handle is live.
-  private soundChannels: ({ name: string; handle: PlayHandle; priority?: number } | null)[] = [null, null];
-  /**
-   * IDLE IS `"none"`, not the empty string, and that is the engine's word rather
-   * than a convenience.
-   *
-   * Every script that compares this against a NAME works either way, which is
-   * why it read `""` for years. Dust asks it the other way round in three places
-   * — `FLUTE.FLT/0001 mousedown`, its `evaluate ()`, and `FLUTE.PRP/0001
-   * hidestep ()` all open `while currentsound () != "none" endwhile` — and
-   * against `""` that is a loop with no exit: the first note press never
-   * returned, measured as the pump running out at 40,000 steps.
-   *
-   * The convention was already half here: `halttheme ()` writes
-   * `currentThemeName = "none"` and the session initialises it that way, so the
-   * sibling getter for themes has always answered with this word. Nothing in
-   * either corpus compares a sound or voice name to `""`, and nothing is named
-   * "none".
-   *
-   * It was known and worked around in ONE PLACE — a rung of Dust's playthrough
-   * monkeypatched the builtin so the flute room could be played — which meant the
-   * suite was green on a room the browser hung in. Fixed here so both get it.
-   */
-  currentSound(channel: number): string {
-    const slot = this.soundChannels[channel - 1];
-    return slot && !slot.handle.done ? slot.name : "none";
-  }
-
-  /**
-   * DreamFactory 1's `currentsound()`, which takes no channel (0x407b10 ->
-   * 0x429e10): channel 2's sound when only it is busy, channel 1's when only
-   * it is, and with both busy the one whose priority is greater — channel 2 on
-   * a tie (`jle` at 0x429e6a).
-   */
-  currentSoundV1(): string {
-    const [one, two] = this.soundChannels;
-    const busy1 = !!one && !one.handle.done;
-    const busy2 = !!two && !two.handle.done;
-    if (busy1 && busy2) return (one.priority ?? 0) > (two.priority ?? 0) ? one.name : two.name;
-    if (busy2) return two!.name;
-    return busy1 ? one!.name : "none";
-  }
-
-  /** DreamFactory 1's `sounddone()`: both channels idle (0x4078a0 -> 0x429c00) */
-  soundsDoneV1(): boolean {
-    return this.soundChannels.every((c) => !c || c.handle.done);
+  /** the sound effects' channels, loop flags, volumes and pans, kept across a change of engine */
+  private readonly soundBoard = new SoundBoard();
+  private readonly soundsByEngine: Record<1 | 4 | 5, SoundChannels>;
+  /** the sound effect builtins, as this session's engine plays them (sound-channels.ts) */
+  get sounds(): SoundChannels {
+    return this.soundsByEngine[this.rules.engine];
   }
 
   /**
@@ -671,150 +530,6 @@ export class Scheduler {
     return this.crickets.some((c) => c.name === n);
   }
 
-  /** sound names flagged by soundloop(name, true): they LOOP when played */
-  readonly loopFlags = new Set<string>();
-
-  /**
-   * soundloop(name, on/off): flag a sound as looping — it does NOT start
-   * anything itself. Every call in the TAOOT corpus pairs the flag with a play
-   * that follows (`soundloop("hissloop", true); singlesound("hissloop")`, or a
-   * makecricket for positional ambience). Off ends a loop that is sounding at
-   * the end of its time round in DreamFactory 4 (its BOMB stage stops its tick
-   * with soundloop(off) alone), and at once in the others.
-   */
-  /** `soundloop (name)`, the getter: is the sound flagged to loop? (DF.EXE
-   *  0x407840 -> 0x42a500, a boolean) */
-  isSoundLooped(name: string): boolean {
-    return this.loopFlags.has(name.toLowerCase());
-  }
-
-  soundLoop(name: string, on: boolean): void {
-    const key = name.toLowerCase();
-    // DreamFactory 4's loops live on the channels: TI.EXE (0x425740, en) sets
-    // the sound's flag and then the loop flag of every channel playing it
-    // (0x401d40), and does nothing else — off, the sound plays out the time
-    // round it is in; on, one already playing goes on round
-    if (this.rules.loopFlagOnChannels) {
-      if (on) this.loopFlags.add(key);
-      else this.loopFlags.delete(key);
-      for (const c of this.soundChannels) if (c?.name === key && !c.handle.done) c.handle.setLoop?.(on);
-      return;
-    }
-    if (on) {
-      this.loopFlags.add(key);
-      return;
-    }
-    this.loopFlags.delete(key);
-    this.soundLoops.get(key)?.stop();
-    this.soundLoops.delete(key);
-  }
-
-  /**
-   * Play a named sound on the sound channels, honouring the loop flag.
-   *
-   * DreamFactory 1 and 4 have two sound-effect channels with priorities, and
-   * each play builtin is a rule for which of them a clip takes
-   * ({@link pickSoundChannelV1}, {@link pickSoundChannelsV4}); the clip on a
-   * channel it takes is replaced, the other plays on. A flagged sound loops on
-   * its channel, so `haltsound` and `soundloop (off)` stop it there.
-   */
-  playSound(name: string, overlap: boolean, rule: SoundRule = overlap ? "multiple" : "single"): void {
-    const key = name.toLowerCase();
-    const audio = this.session.audioLib.sound(key);
-    if (!audio) {
-      this.session.onLog(`sound not found: ${name} (banks: ${this.session.audioLib.bankNames.join(", ") || "none"})`);
-      return;
-    }
-    const { volume, pan } = this.soundPlace(key);
-    const channels = this.rules.soundChannels;
-    if (channels === "v1") {
-      const slot = pickSoundChannelV1(
-        rule === "dual" ? "single" : rule,
-        this.session.audioLib.soundPriorityV1(key),
-        this.channelPriority(0),
-        this.channelPriority(1),
-      );
-      if (slot < 0) return;
-      // the channel's clip is replaced (0x408fd0); the other plays on
-      this.soundChannels[slot]?.handle.stop();
-      const loop = this.loopFlags.has(key);
-      const handle = this.session.audio.play("sound", audio, { loop, overlap: true, volume, pan });
-      this.soundChannels[slot] = { name: key, handle, priority: this.session.audioLib.soundPriorityV1(key) };
-      if (loop) this.soundLoops.set(key, handle);
-      else this.session.captionClip(key, handle); // #50
-      return;
-    }
-    if (channels === "v4") {
-      // TI.EXE 0x425150 / 0x425240 / 0x425330 / 0x425400 (singlesound,
-      // multiplesound, dualsound, bothsound; tl.exe 0x433850..0x433b30), the
-      // priority the record's (+0, tl.exe +0x39), a finished channel's zeroed
-      // first (0x424c90)
-      const p = this.session.audioLib.soundPriorityV4(key);
-      const loop = this.loopFlags.has(key);
-      for (const slot of pickSoundChannelsV4(rule, p, this.channelPriority(0), this.channelPriority(1))) {
-        this.soundChannels[slot]?.handle.stop();
-        const handle = this.session.audio.play("sound", audio, { loop, overlap: true, volume, pan });
-        this.soundChannels[slot] = { name: key, handle, priority: p };
-        if (!loop) this.session.captionClip(key, handle); // #50
-      }
-      return;
-    }
-    if (this.loopFlags.has(key)) {
-      const existing = this.soundLoops.get(key);
-      if (existing && !existing.done) return;
-      const handle = this.session.audio.play("sound", audio, { loop: true, overlap: true, volume, pan });
-      this.soundLoops.set(key, handle);
-      this.soundChannels[1] = { name: key, handle };
-      return;
-    }
-    const handle = this.session.audio.play("sound", audio, { overlap, volume, pan });
-    this.soundChannels[overlap ? 1 : 0] = { name: key, handle };
-    this.session.captionClip(key, handle); // #50
-  }
-
-  /**
-   * A sound channel's priority as the play rules read it: 0 once its clip
-   * is over (DF.EXE 0x429ba0, TI.EXE 0x424c90 zero a finished channel's before
-   * every play).
-   */
-  private channelPriority(slot: number): number {
-    const c = this.soundChannels[slot];
-    return c && !c.handle.done ? (c.priority ?? 0) : 0;
-  }
-
-  /**
-   * Stop a sound record wherever it plays (TI.EXE 0x4257e0: every mixer channel
-   * holding it) — a cricket walked out of earshot, or one of the looping ones
-   * that is not among the two loudest.
-   */
-  private stopSoundRecord(key: string): void {
-    for (const c of this.soundChannels) if (c?.name === key) c.handle.stop();
-    // a v5 loop is held by name as well as on its channel (playSound)
-    this.soundLoops.get(key)?.stop();
-    this.soundLoops.delete(key);
-  }
-
-  /**
-   * `haltsound`. DreamFactory 4's takes the channels as a number — 1, 2, or 3
-   * for both, anything else error 0xe (TI.EXE 0x44d0d0 -> 0x424d80, which stops
-   * the mixer channel and with it a loop playing there). DF.EXE's halts both
-   * (0x4072f0).
-   */
-  haltSounds(which?: number): void {
-    if (this.rules.haltSoundTakesChannels && which !== undefined) {
-      if (which !== 1 && which !== 2 && which !== 3) throw new ScriptError(0xe, `haltsound (${which})`);
-      if (which & 1) this.soundChannels[0]?.handle.stop();
-      if (which & 2) this.soundChannels[1]?.handle.stop();
-      return;
-    }
-    this.session.audio.halt("sound");
-    // a channel's clip is an overlapping play the sink does not hold: stop both
-    // channels by hand (0x4072f0 halts channels 1 and 2)
-    for (const c of this.soundChannels) c?.handle.stop();
-    for (const h of this.soundLoops.values()) h.stop();
-    this.soundLoops.clear();
-  }
-
   /**
    * Tear down all timed state — loops, crickets, walks, sound loops and their
    * flags — and silence sounds. Used when loading a saved game before the new
@@ -825,9 +540,9 @@ export class Scheduler {
     for (const c of this.crickets) c.handle?.stop();
     this.crickets.length = 0;
     this.walks.clear();
-    this.loopFlags.clear();
+    this.sounds.loopFlags.clear();
     this.session.balls.reset();
-    this.haltSounds();
+    this.sounds.halt();
   }
 
   // ---- actor walking (walktostar/walktoxyz/walkonpath/turntodeg) ----------
@@ -1813,8 +1528,8 @@ export class Scheduler {
     const dist = Math.floor(Math.sqrt(dx * dx + dy * dy)) & 0xffff;
     const near = dist < c.radius;
     const place = () => {
-      this.setSoundVol(c.name, 255 - Math.trunc((dist * 255) / c.radius));
-      this.setSoundPan(c.name, cricketPan(lis?.deg ?? 0, engineBearing(dx, dy)));
+      this.sounds.setVolume(c.name, 255 - Math.trunc((dist * 255) / c.radius));
+      this.sounds.setPan(c.name, cricketPan(lis?.deg ?? 0, engineBearing(dx, dy)));
     };
     if (c.jitter < 0) {
       if (--c.count > 0) return;
@@ -1828,12 +1543,12 @@ export class Scheduler {
     if (!near) {
       if (c.armed) {
         c.armed = false;
-        this.stopSoundRecord(c.name);
+        this.sounds.stopRecord(c.name);
       }
       return;
     }
     place();
-    if (this.loopFlags.has(c.name)) {
+    if (this.sounds.isLooped(c.name)) {
       c.armed = true;
       c.loudness = 255 - Math.trunc((dist * 255) / c.radius);
       loud.push(c);
@@ -1851,12 +1566,11 @@ export class Scheduler {
 
   /** a cricket's shot: `multiplesound` on the sound record it has just placed */
   private fireCricketV4(c: Cricket): void {
-    this.playSound(c.name, true, "multiple");
-    const ch = this.soundChannels.find((x) => x?.name === c.name && !x.handle.done);
+    this.sounds.play(c.name, true, "multiple");
     // the channel it took, so a set left behind can silence it (silenceAbsentCrickets);
     // the play itself is published on that channel, which is how the bedsit
     // landlady's five crickets wait on one another (`currentsound`), and captioned (#50)
-    c.handle = ch?.handle ?? null;
+    c.handle = this.sounds.liveHandle(c.name);
   }
 
   /**
@@ -1871,12 +1585,11 @@ export class Scheduler {
     const first = pick(loud)!;
     const rest = loud.filter((c) => c !== first);
     const second = rest.length ? pick(rest) : undefined;
-    if (loud.length > 2) for (const c of rest) if (c !== second) this.stopSoundRecord(c.name);
+    if (loud.length > 2) for (const c of rest) if (c !== second) this.sounds.stopRecord(c.name);
     for (const c of [first, second]) {
       if (!c) continue;
-      this.playSound(c.name, false, "single");
-      const ch = this.soundChannels.find((x) => x?.name === c.name && !x.handle.done);
-      if (ch) c.handle = ch.handle;
+      this.sounds.play(c.name, false, "single");
+      c.handle = this.sounds.liveHandle(c.name) ?? c.handle;
     }
   }
 
@@ -1952,18 +1665,18 @@ export class Scheduler {
     }
     if (!near) {
       c.armed = false;
-      this.stopSoundRecord(c.name);
+      this.sounds.stopRecord(c.name);
       return true;
     }
     const volume = 255 - Math.trunc((dist * 255) / c.radius);
-    this.setSoundVol(c.name, volume);
-    this.setSoundPan(c.name, cricketPanV5(this.cameraHeadingV5(), bearing));
+    this.sounds.setVolume(c.name, volume);
+    this.sounds.setPan(c.name, cricketPanV5(this.cameraHeadingV5(), bearing));
     if (c.jitter < 0) {
       this.fireCricketV4(c);
       this.crickets.splice(this.crickets.indexOf(c), 1);
       return true;
     }
-    if (this.loopFlags.has(c.name)) {
+    if (this.sounds.isLooped(c.name)) {
       c.armed = true;
       c.loudness = volume;
       loud.push(c);

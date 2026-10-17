@@ -23,7 +23,9 @@ import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import type { DecodedAudio } from "@dreamfactory/engine/df/audio";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { ScriptError } from "@dreamfactory/engine/runtime/interp";
-import { cricketPan, panFrom255, pickSoundChannelsV4 } from "@dreamfactory/engine/runtime/scheduler";
+import { cricketPan } from "@dreamfactory/engine/runtime/scheduler";
+import { panFrom255 } from "@dreamfactory/engine/runtime/sound-channels";
+import { pickSoundChannelsV4 } from "@dreamfactory/engine/runtime/sound-channels-v4";
 
 const SOUNDS = ["steam", "hiss", "motor1", "motor2", "motor3", "knock"];
 
@@ -85,7 +87,7 @@ test("a repeating cricket: no count out of earshot, a silent re-arm coming in, p
   await pass(s);
   expect(c.armed, "the first pass in earshot arms it").toBe(true);
   expect(plays(), "...and plays nothing").toBe(0);
-  expect(s.scheduler.getSoundVol("steam"), "255 − trunc (50·255/200)").toBe(255 - 63);
+  expect(s.scheduler.sounds.getVolume("steam"), "255 − trunc (50·255/200)").toBe(255 - 63);
   await pass(s);
   await pass(s);
   expect(plays()).toBe(0);
@@ -93,12 +95,12 @@ test("a repeating cricket: no count out of earshot, a silent re-arm coming in, p
   expect(plays(), "plays at 0").toBe(1);
   expect(c.count, "and re-arms").toBe(3);
   // a looping play is still sounding when the next comes due: it plays anyway
-  s.scheduler.soundLoop("steam", true);
-  s.scheduler.soundLoop("steam", false);
+  s.scheduler.sounds.setLoop("steam", true);
+  s.scheduler.sounds.setLoop("steam", false);
   for (let i = 0; i < 3; i++) await pass(s);
   expect(plays(), "no 'previous shot still sounding' test").toBe(2);
   // walk away: its sound stops, the count stands, and it disarms
-  s.scheduler.soundLoop("steam", true);
+  s.scheduler.sounds.setLoop("steam", true);
   s.scheduler.makeCricket("steam", 1000, 0, 200, 1, 0);
   await pass(s); // arm
   await pass(s); // play, looping
@@ -126,7 +128,7 @@ test("a cricket in another set does nothing at all; a one-shot counts anywhere a
 
 test("only the two loudest looping crickets sound", async () => {
   const { s, sink, cam } = await bare();
-  for (const n of ["motor1", "motor2", "motor3"]) s.scheduler.soundLoop(n, true);
+  for (const n of ["motor1", "motor2", "motor3"]) s.scheduler.sounds.setLoop(n, true);
   s.scheduler.makeCricket("motor1", 100, 0, 1000, 0, 0); // loudest
   s.scheduler.makeCricket("motor2", 300, 0, 1000, 0, 0);
   s.scheduler.makeCricket("motor3", 200, 0, 1000, 0, 0); // second
@@ -134,8 +136,8 @@ test("only the two loudest looping crickets sound", async () => {
   await pass(s);
   const live = sink.calls.filter((c) => !c.stopped).length;
   expect(live).toBe(2);
-  expect(s.scheduler.currentSound(1) === "motor1" || s.scheduler.currentSound(2) === "motor1").toBe(true);
-  expect(s.scheduler.currentSound(1) === "motor3" || s.scheduler.currentSound(2) === "motor3").toBe(true);
+  expect(s.scheduler.sounds.onChannel(1) === "motor1" || s.scheduler.sounds.onChannel(2) === "motor1").toBe(true);
+  expect(s.scheduler.sounds.onChannel(1) === "motor3" || s.scheduler.sounds.onChannel(2) === "motor3").toBe(true);
   await pass(s);
   expect(sink.calls.length, "a sound already sounding is not started again").toBe(2);
 });

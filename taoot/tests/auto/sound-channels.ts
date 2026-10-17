@@ -87,7 +87,7 @@ test("a cricket is visible to currentsound while it plays", async () => {
   // citycricket is bedsit's positional ambience — the first cricket to fire
   await run(host.viewer!, sink, 5_000);
   // an idle channel answers "none", which is truthy — so the filter has to name it
-  const playing = [session.scheduler.currentSound(1), session.scheduler.currentSound(2)].filter(
+  const playing = [session.scheduler.sounds.onChannel(1), session.scheduler.sounds.onChannel(2)].filter(
     (n) => n && n !== "none",
   );
   expect(playing.length, "a fired cricket occupies a sound channel").toBeGreaterThan(0);
