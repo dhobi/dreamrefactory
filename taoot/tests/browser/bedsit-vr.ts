@@ -6,9 +6,7 @@
  *   npm run test:browser:vr -w taoot
  *   HEADED=1 …                              # watch it
  *
- * It needs no rip: `/bedsit/` is a model of a room, and with no `gamefiles/` it
- * is plaster and three lamps, which is still a room and still two eyes' worth
- * of it.
+ * It needs no rip: `/bedsit/` reads none of the game's files.
  *
  * ## Why this suite exists
  *

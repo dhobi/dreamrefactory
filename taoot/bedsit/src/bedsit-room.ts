@@ -13,8 +13,8 @@
  * floor, the coved ceiling, the two dormer windows and the door — in the SET's
  * own world units, and a mesh builder that turns it into triangles.
  *
- * **Every number below was measured, not eyeballed**, by
- * `taoot/tools/bedsitfit.ts`; run it to print them again from the file. The room
+ * **Every number below was measured, not eyeballed**, off BEDSIT1.SET's own
+ * frames and Z images by a fitting tool that has since been retired. The room
  * is furnished in the game and empty here: no bed, no counter, no fireplace, no
  * posters. Those are the next pass.
  *
@@ -188,7 +188,7 @@ export const WINDOW = {
    * is a prism, not a funnel.
    *
    * It was a funnel once — the room face 110 wider each side and its head 110
-   * higher — because the aperture map `bedsitfit.ts` draws on the wall plane
+   * higher — because the aperture map drawn on the wall plane
    * finds the two openings 1,080 and 1,120 wide, while the DAYLIGHT cast on the
    * glass plane is 870 and 950, and the difference had to go somewhere. It goes
    * into the border: 1,080 is 870 plus 105 of frame each side. The two
@@ -296,8 +296,7 @@ export const PICTURES = {
    * camera that sees that corner. Each
    * corner of each was read off a bake of the wall AROUND it — a chart
    * deliberately larger than the picture, at four units a texel, with a grid
-   * over it — by finding the row and the column where the plaster stops. See
-   * {@link file://../tools/bedsitwall.ts}.
+   * over it — by finding the row and the column where the plaster stops.
    *
    * That is a better measurement than picking corners in a frame: a picture in
    * this corner is forty pixels of a 512-wide frame, so a pick is a hundred

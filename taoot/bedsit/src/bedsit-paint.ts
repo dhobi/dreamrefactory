@@ -1,8 +1,8 @@
 /**
  * The bedsit painted — what the room is made of, with nothing in it.
  *
- * {@link file://./bedsit-skin.ts} paints the model with the game's own frames,
- * and it is honest about what that gives: every wall carries a ghost of whatever
+ * Painting the model with the game's own frames, projected back onto it, was
+ * tried first, and it was honest about what that gives: every wall carries a ghost of whatever
  * stood against it, and the one clean swatch it can cut is a square of plaster
  * with no dado, no skirting and none of the damage that makes this a garret in
  * the Blitz rather than a box. This module is the other answer. It writes the
@@ -638,8 +638,7 @@ function rug(u: number, v: number, seed: number): RGB {
 
 /**
  * What stands across the road, left to right along the backdrop, **read off the
- * frames**: the bake of the street chart (`bedsit-skin.ts`, the projected skin)
- * laid over a drawing in the same coordinates shows where the real texels sit,
+ * frames**: a bake of the street chart off the game's frames, laid over a drawing in the same coordinates shows where the real texels sit,
  * and these segments are traced from it — each building's span in `u`, its
  * parapet in `z`, and what it is made of. Two patches of the backdrop are real
  * (behind each window); the rest of the row continues them in the same style.
