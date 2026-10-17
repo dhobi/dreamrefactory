@@ -8,8 +8,9 @@ import {
 import type { DrawSignature } from "./signature";
 import { Lights, shadedPalette } from "./shading";
 import type { Value } from "./interp";
-import { drawScaledSprite, scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
+import { scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
 import { Card, cardOf, cardTexel, paintCard } from "./props";
+import { drawWorldSprite, ViewBuffer } from "./sprite-blit";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
 // viewer.ts's import("./engine/actors").Occlusion keeps resolving.
@@ -721,8 +722,9 @@ export class ActorRuntime {
     cam: WorldCamera,
     occ: Occlusion | null = null,
   ): void {
+    const view = { rgba, width, height, palette: paletteRGBA };
     for (const entry of this.drawList(cam)) {
-      this.compositeOne(entry, rgba, width, height, paletteRGBA, cam, occ);
+      this.compositeOne(entry, view, cam, occ);
     }
   }
 
@@ -731,53 +733,24 @@ export class ActorRuntime {
    * the viewer can interleave actors and world props into a single far-to-near
    * pass on a v1 set (see Viewer.compositeWorld for the DF.EXE evidence).
    */
-  compositeOne(
-    { a, proj }: DrawEntry,
-    rgba: Uint8ClampedArray,
-    width: number,
-    height: number,
-    paletteRGBA: Uint8ClampedArray,
-    cam: WorldCamera,
-    occ: Occlusion | null = null,
-  ): void {
+  compositeOne({ a, proj }: DrawEntry, view: ViewBuffer, cam: WorldCamera, occ: Occlusion | null = null): void {
     const c = this.card(a, cam);
     if (c) {
       const hidden = occ ? (x: number, y: number, axial: number) => sceneryOccludes(occ, x, y, this.occludeAt(a, axial, occ)) : undefined;
-      paintCard(c, cam.v5!, { rgba, width, height }, this.shade(a, c.f.palette ?? paletteRGBA), inkAlpha(a.ink), hidden);
+      paintCard(c, cam.v5!, view, this.shade(a, c.f.palette ?? view.palette), inkAlpha(a.ink), hidden);
       return;
     }
-    const r = this.rect(a, proj, cam);
-    if (!r) return;
-    const level = occ ? this.occludeAt(a, hiddenBy(proj), occ) : 0;
-    // a v5 sprite colours through its own palette (df/shp.ts)
-    if (r.f.palette) paletteRGBA = r.f.palette;
-    paletteRGBA = this.shade(a, paletteRGBA);
-    const alpha = inkAlpha(a.ink);
-    if ("scaled" in r) {
-      const pal = paletteRGBA;
-      drawScaledSprite(r.f, proj.x, proj.y, r.w, r.h, !!(a.flip & 1), {
-        clip: { top: 0, left: 0, bottom: Math.min(cam.clipH, height), right: Math.min(cam.clipW, width) },
-        // scenery in front of the actor hides this pixel (SET Z image)
-        drawable: occ ? (x, y) => !sceneryOccludes(occ, x, y, level) : undefined,
-        plot: (x, y, c) => inkPixel(rgba, (y * width + x) * 4, pal, c * 4, alpha),
-      });
-      return;
-    }
-    const maxY = Math.min(cam.clipH, height, r.y + r.h);
-    const maxX = Math.min(cam.clipW, width, r.x + r.w);
-    for (let ty = Math.max(0, r.y); ty < maxY; ty++) {
-      let sy = Math.min(r.f.height - 1, Math.floor((ty - r.y) / r.k));
-      if (a.flip & 2) sy = r.f.height - 1 - sy;
-      for (let tx = Math.max(0, r.x); tx < maxX; tx++) {
-        let sx = Math.min(r.f.width - 1, Math.floor((tx - r.x) / r.k));
-        if (a.flip & 1) sx = r.f.width - 1 - sx;
-        const s = sy * r.f.width + sx;
-        if (!r.f.opaque[s]) continue;
-        // scenery in front of the actor hides this pixel (SET Z image)
-        if (occ && sceneryOccludes(occ, tx, ty, level)) continue;
-        inkPixel(rgba, (ty * width + tx) * 4, paletteRGBA, r.f.indexed[s] * 4, alpha);
-      }
-    }
+    const rect = this.rect(a, proj, cam);
+    if (!rect) return;
+    drawWorldSprite(view, cam, occ, {
+      rect,
+      at: proj,
+      flip: a.flip,
+      // a v5 sprite colours through its own palette (df/shp.ts)
+      palette: this.shade(a, rect.f.palette ?? view.palette),
+      alpha: inkAlpha(a.ink),
+      level: occ ? this.occludeAt(a, hiddenBy(proj), occ) : 0,
+    });
   }
 
   /**

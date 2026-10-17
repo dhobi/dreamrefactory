@@ -815,11 +815,7 @@ export class GameHost {
     // write it (`tour = true`) and test it (`if not tour`)
     session.interp.globals.set("tour", session.interp.bool(false));
     // paint the screen black up front so the movie host's openset doesn't flash
-    session.fade.queue.length = 0;
-    session.fade.snapshot = null;
-    session.fade.pendingReveal = false;
-    session.fade.blanked = false;
-    session.fade.level = 1;
+    session.fade.reset(1);
     // the movies the boot plays before anything else, so it cannot stall mid-logo
     const plan = await this.bootPlan();
     await this.session.whileLoading(Promise.all(plan.resources.map((f) => this.files.load(f))));

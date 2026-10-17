@@ -27,9 +27,7 @@ import { SessionTime } from "./session-time";
 import { SessionTransitions } from "./session-transitions";
 import { FileProvider } from "./setscripts";
 import { Df5Disk } from "./df5-disk";
-import { loadGame, snapshotSave } from "./saveload";
-import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
-import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
+import { sessionProfile, type SessionProfile } from "./session-profile";
 import { packPoint } from "./point";
 import { registerGameBuiltins } from "./builtins";
 import { scriptErrorName, type EngineFault } from "./script-errors";
@@ -611,9 +609,7 @@ export class GameSession {
       }
     };
     this.interp.realYieldSeq = () => this.realYieldSeq;
-    // which command table the IDs mean — Dust's and Titanic's disagree about
-    // what some of them answer (value-types.ts)
-    this.interp.tableVersion = () => (this.isV1 ? 1 : 4);
+    this.interp.tableVersion = () => this.profile.commandTable;
     // a watched global reads on the pane like the scripts' own message() lines
     this.interp.onGlobalChange = (name, from, to) =>
       this.onLog(`glob: ${name} = ${JSON.stringify(to)} (was ${JSON.stringify(from)})`);
@@ -643,7 +639,7 @@ export class GameSession {
     const name = scriptErrorName(e.code);
     this.scriptErrors.push({ code: e.code, name, where: e.where, message: e.message });
     this.onLog(`script error 0x${e.code.toString(16)} "${name}": ${e.message}`);
-    if (this.isV5 || this.isV1 || this.latchedError) return;
+    if (!this.profile.latchesScriptErrors || this.latchedError) return;
     this.latchedError = e;
     void Promise.resolve().then(() => this.showScriptError());
   }
@@ -1209,7 +1205,7 @@ export class GameSession {
     const g = this.deviceGain();
     this.audio.setChannelVolume("sound", g);
     this.audio.setChannelVolume("voice", g);
-    if (!this.isV1 && !this.isV5) this.audio.setChannelVolume("theme", (this.themeVolume / 255) * g);
+    if (this.profile.waveVolumeIsDevice) this.audio.setChannelVolume("theme", (this.themeVolume / 255) * g);
     return this.waveVolume;
   }
   /**
@@ -1218,10 +1214,10 @@ export class GameSession {
    * (waveOutSetVolume on the one handle at 0x460538) — and every mixer channel
    * plays into that one device, the theme's (0x489810) as much as the effects'
    * and the voice's, so in DreamFactory 4 it scales the music too. tl.exe the
-   * same. The other engines' are not read and scale the effects and voices.
+   * same (SessionProfile.waveVolumeIsDevice).
    */
   private deviceGain(): number {
-    if (this.isV1 || this.isV5) return this.waveVolume / 9;
+    if (!this.profile.waveVolumeIsDevice) return this.waveVolume / 9;
     return Math.trunc((this.waveVolume * 0xffff) / 9) / 0xffff;
   }
   /**
@@ -1275,7 +1271,7 @@ export class GameSession {
     this.themeVolume = Math.max(0, Math.min(255, Math.round(v)));
     if (track) this.trackVolume.set(track.toLowerCase(), this.themeVolume);
     // through the wave device in DreamFactory 4 (see deviceGain)
-    const device = this.isV1 || this.isV5 ? 1 : this.deviceGain();
+    const device = this.profile.waveVolumeIsDevice ? this.deviceGain() : 1;
     this.audio.setChannelVolume("theme", (this.themeVolume / 255) * device);
   }
   /** What a script last asked THIS track to play at, or undefined if it never
@@ -1700,7 +1696,7 @@ export class GameSession {
    */
   readonly debugChannel = new ScriptDebugger();
   get hasDebugChannel(): boolean {
-    return !this.isV1 && !this.isV5;
+    return this.profile.debugChannel;
   }
   get heapZoneBytes(): number {
     return this.lowMemory ? 4 * 1024 * 1024 : 64 * 1024 * 1024;
@@ -1808,22 +1804,23 @@ export class GameSession {
     return this.dfVersion === 1 || this.currentBinding?.set.version === 1;
   }
 
+  /** where this session's engine parts ways with the others (session-profile.ts) */
+  get profile(): SessionProfile {
+    return sessionProfile(this);
+  }
+
   /** produce the bytes of a save capturing the current progress — the
    *  logic lives in runtime/saveload.ts (and saveload-v1.ts, saveload-v5.ts).
    *  `version` is what `savegame` was given, which a v5 save stamps. */
   snapshotSave(version?: string): Uint8Array | null {
-    if (this.isV5) return snapshotSaveV5(this, version || undefined);
-    return this.isV1 ? snapshotSaveV1(this) : snapshotSave(this);
+    return this.profile.save(this, version || undefined);
   }
 
   /** load a save (restore globals, travel to the saved room) — the restore
    *  choreography lives in runtime/saveload.ts (and saveload-v1.ts, saveload-v5.ts).
    *  `version` is what `opengame` was given, which a v5 load compares. */
   loadGame(bytes: Uint8Array, version?: string): Promise<boolean> {
-    // a load is a script's (`opengame`), and RedJack.exe sends no idle while one
-    // runs: held as a running script, wherever the host starts it from
-    if (this.isV5) return this.track(loadGameV5(this, bytes, version || undefined), "load");
-    return this.isV1 ? loadGameV1(this, bytes) : loadGame(this, bytes);
+    return this.profile.load(this, bytes, version || undefined);
   }
 
   /** does any fallback script define this handler? — {@link runGlobal} without

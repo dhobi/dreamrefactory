@@ -1356,14 +1356,15 @@ export class ScreenDirector {
     if (cam && (this.room?.roomVersion === 1 || this.room?.spritesByDepth)) {
       const ar = this.session.actorRuntime;
       const pr = this.session.propRuntime;
+      const view = { rgba: data, width, height, palette };
       const jobs = [
         ...ar.drawList(cam).map((e) => ({
           depth: e.proj.depth,
-          draw: () => ar.compositeOne(e, data, width, height, palette, cam, occ),
+          draw: () => ar.compositeOne(e, view, cam, occ),
         })),
         ...pr.worldDrawList(cam).map((e) => ({
           depth: e.proj.depth,
-          draw: () => pr.compositeWorldOne(e, data, width, height, palette, cam, occ),
+          draw: () => pr.compositeWorldOne(e, view, cam, occ),
         })),
       ].sort((x, y) => y.depth - x.depth);
       for (const j of jobs) j.draw();
@@ -2291,11 +2292,7 @@ export class ScreenDirector {
     if (this.session.viewShowing) showing = "set";
     else if (this.session.currentFlat !== "none") showing = "stage";
     if (t === showing && !this.session.puppet?.visible) {
-      this.session.fade.queue.length = 0;
-      this.session.fade.snapshot = null;
-      this.session.fade.pendingReveal = false;
-      this.session.fade.blanked = false;
-      this.session.fade.level = 0;
+      this.session.fade.reset(0);
     }
   }
 

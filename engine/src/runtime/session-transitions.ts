@@ -1,4 +1,5 @@
 import { RAMP_STEP_MS, ticksAt } from "./clock";
+import { Fade } from "./fade";
 import type { GameSession } from "./session";
 import type { ExeEffect } from "./visual-effects";
 
@@ -11,53 +12,8 @@ import type { ExeEffect } from "./visual-effects";
 export class SessionTransitions {
   constructor(private readonly session: GameSession) {}
 
-  /**
-   * Screen fade (screentoblack/blacktoscreen around gotospecial): 0 = clear,
-   * 1 = black. Lives on the session — the viewer is rebuilt mid-transition.
-   * While fading OUT the pre-transition frame stays visible via `snapshot`.
-   */
-  fade = {
-    level: 0,
-    /**
-     * The last tick a step was taken on, or null before the ramp has a start.
-     * The fade builtin sets it to the tick BEFORE the one it was asked on
-     * (builtins/scene.ts), so step 1 is that tick's however late the host's
-     * next frame arrives — see {@link tickFade}.
-     */
-    lastTick: null as number | null,
-    queue: [] as { to: number; steps: number }[],
-    snapshot: null as { rgba: Uint8ClampedArray; width: number; height: number } | null,
-    /**
-     * A movie ended and nothing has said what the screen should look like
-     * afterwards — see {@link tickFade}, which lifts a leftover one-shot black
-     * once the script that played the movie has run out of things to say.
-     */
-    pendingReveal: false,
-    /**
-     * The black was BLANKED on, not ramped to — `blackscreen()` or
-     * `clut("black")` rather than `screentoblack`.
-     *
-     * The two are different things in TI.EXE and only look alike here. A ramp
-     * walks a NAMED palette to black, so it belongs to that palette and dies
-     * with it — which is why opening a stage file lifts one (StageController.
-     * openStageFile). `blackscreen` is the framebuffer: `0x43e650` clears it and
-     * nothing about swapping a stage draws over it again. Set by `blackNow`
-     * (builtins/scene.ts), cleared by either ramp and by the reveal in
-     * {@link tickFade}.
-     */
-    blanked: false,
-    /**
-     * Scripts blocked inside a fade ramp right now (builtins/scene.ts `fade`).
-     * TI.EXE's ramp (0x435b90 / 0x435be0) blends the palette and spins on the
-     * tick clock with no pass inside it, so nothing else runs until it is over:
-     * no pass, no prop step, no walk, no other script. The deck map's `open`
-     * view stands on one frame through the 240-step fade back into the engine
-     * room, and only `close()` after it animates (#541).
-     */
-    ramping: 0,
-    /** what waits for the ramp to be over — see {@link untilRampEnds} */
-    afterRamp: [] as (() => void)[],
-  };
+  /** the screen fade — see {@link Fade} */
+  readonly fade = new Fade();
 
   /**
    * Resolves once no script is blocked in a fade ramp — at once when none is.

@@ -1,6 +1,7 @@
 import type { PlayHandle } from "./audio";
-import { ScriptError } from "./interp";
+import { ScriptError, toNum, toStr, truthy, type Logic, type Value } from "./interp";
 import { pauseDepth } from "./pause";
+import { schedulerRules } from "./scheduler-rules";
 import type { GameSession } from "./session";
 import type { SoundChannels } from "./sound-channels";
 
@@ -79,13 +80,29 @@ export interface CricketSlot {
 }
 
 /**
+ * The six cricket opcodes as a script calls them (builtins/timing.ts). DF.EXE
+ * gave the same ids to its bouncing balls — makeball, stopball, pauseball,
+ * isball, countballs, indextoball — so a Dust session answers them from its
+ * BallRuntime (CricketsV1.opcodes) and the others from their cricket table.
+ */
+export interface CricketOpcodes {
+  makeCricket(name: string, args: readonly (Value | undefined)[]): void;
+  stopCricket(name: string): void;
+  /** the setter, or with no flag the getter: what it answers then, undefined for the setter */
+  pauseCricket(name: Value | undefined, flag: Value | undefined): number | boolean | Logic | undefined;
+  isCricket(name: string): boolean;
+  countCrickets(): number;
+  indexToCricket(n: number): string;
+}
+
+/**
  * The cricket table and the builtins over it — `makecricket`, `stopcricket`,
  * `pausecricket` and what a save puts back — and each pass's turn at it. What
  * TI.EXE (Titanic) and RedJack.exe do alike is here; how one cricket is
  * serviced in a pass is each engine's own (crickets-v4.ts, crickets-v5.ts), and
  * DF.EXE (Dust) runs its bouncing balls in that place (crickets-v1.ts).
  */
-export abstract class Crickets {
+export abstract class Crickets implements CricketOpcodes {
   constructor(
     /** the 16 slots in slot order, the scheduler's, kept across a change of engine */
     readonly table: Cricket[],
@@ -107,6 +124,37 @@ export abstract class Crickets {
   /** what a cricket keeps of the camera when it is made or put back: nothing, before DreamFactory 5 */
   protected measure(_c: Cricket): void {
     // TI.EXE's crickets keep nothing: the distance is worked out again every pass
+  }
+
+  /** what answers the cricket opcodes: the table itself, but for DF.EXE's balls */
+  get opcodes(): CricketOpcodes {
+    return this;
+  }
+
+  // ---- the opcodes (CricketOpcodes) ----
+
+  makeCricket(name: string, [x, y, radius, base, jitter]: readonly (Value | undefined)[]): void {
+    this.make(name, toNum(x ?? 0), toNum(y ?? 0), toNum(radius ?? 1), toNum(base ?? 0), toNum(jitter ?? -1));
+  }
+  stopCricket(name: string): void {
+    this.stop(name);
+  }
+  pauseCricket(name: Value | undefined, flag: Value | undefined): number | undefined {
+    // one argument is the getter: the pause count (TI.EXE 0x444880). RedJack.exe
+    // has none — its pausecricket (0x409210) reads a name and a number and nests
+    // the count (pause)
+    if (flag === undefined && name !== undefined && schedulerRules(this.session).pauseGetters) return this.depth(toStr(name));
+    this.pause(toStr(name ?? "all"), truthy(flag ?? 1));
+    return undefined;
+  }
+  isCricket(name: string): boolean {
+    return this.has(name);
+  }
+  countCrickets(): number {
+    return this.table.length;
+  }
+  indexToCricket(n: number): string {
+    return this.table[n - 1]?.name ?? "";
   }
 
   protected get sounds(): SoundChannels {
