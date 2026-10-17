@@ -52,9 +52,8 @@ import { inPolygon, projectQuad, type MazeCamera } from "@dreamfactory/engine/ru
 import { t } from "@dreamfactory/chrome/locales";
 import { chosenSource, encodingOf, filesIn, listSources, type Source } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
-import { appendScripts, installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
+import { $, appendScripts, installEditorPage, serverNote, serverRow, wireFileOpen } from "./editor-kit";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");

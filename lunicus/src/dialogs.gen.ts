@@ -2,7 +2,7 @@
  * LUNICUS.EXE's dialogs — GENERATED, do not edit.
  *
  * Regenerate with `npx tsx lunicus/tools/dialogs.ts`: the RT_DIALOG resources
- * DLOG2 and DLOG3 of gamefiles/LUNICUS/lunicus/lunires.dll, in dialog units of the
+ * DLOG2 and DLOG3 of lunicus/gamefiles/LUNICUS/lunicus/lunires.dll, in dialog units of the
  * system font (no DS_SETFONT). Each id is the control's Win32 id; what the
  * buttons do is src/dialogs.ts.
  */

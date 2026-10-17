@@ -2,7 +2,7 @@
  * RAVEN.EXE's dialogs — GENERATED, do not edit.
  *
  * Regenerate with `npx tsx jumpraven/tools/dialogs.ts`: the RT_DIALOG resources
- * DLOG2, DLOG3, DLOG6, DLOG7, DLOG8 of gamefiles/RAVEN/RAVEN/RAVENRES.DLL, in dialog units of the
+ * DLOG2, DLOG3, DLOG6, DLOG7 and DLOG8 of jumpraven/gamefiles/RAVEN/RAVEN/RAVENRES.DLL, in dialog units of the
  * system font (no DS_SETFONT). Each id is the control's Win32 id; what the
  * buttons do is src/dialogs.ts.
  */

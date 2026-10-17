@@ -38,6 +38,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { GAMES, UNLISTED } from "../chrome/src/games";
 
 /**
  * How many tags may go in one `git push`.
@@ -54,8 +55,7 @@ const RUN_APPEARS_MS = 90_000;
 const POLL_MS = 5_000;
 
 /** everything `deploy.yml` can release — the games, and the site around them */
-const TARGETS = ["site", "taoot", "dust", "timelapse", "skullcracker", "redjack", "lunicus", "jumpraven"] as const;
-type Target = (typeof TARGETS)[number];
+const TARGETS: readonly string[] = ["site", ...[...GAMES, ...UNLISTED].map((g) => g.dir)];
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const run = (cmd: string, args: string[]): string =>
@@ -69,7 +69,7 @@ const dryRun = argv.includes("--dry-run");
 const asked = argv.filter((a) => !a.startsWith("--"));
 
 for (const a of asked) {
-  if (!TARGETS.includes(a as Target)) {
+  if (!TARGETS.includes(a)) {
     console.error(`${a} is not releasable — one of: ${TARGETS.join(", ")}`);
     process.exit(1);
   }
