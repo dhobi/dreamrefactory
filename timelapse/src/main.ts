@@ -40,7 +40,7 @@ import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
-import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
+import { bindPointerInput } from "@dreamfactory/engine/web/shell-input";
 import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
@@ -49,7 +49,7 @@ import { VERSION } from "@dreamfactory/chrome/version";
 import { TL_CURSORS } from "./cursor-art";
 import { TimelapseFiles } from "./files";
 import { isNavRegion, keyAction } from "./input";
-import { screenPoint } from "@dreamfactory/engine/web/screen";
+import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { bugLine, exitsHtml, whereHtml } from "./location";
 import { NetMeter, fmtSize } from "@dreamfactory/chrome/net-meter";
 
@@ -540,9 +540,7 @@ async function showLocation(host: GameHost): Promise<void> {
  * Against {@link SCREEN}, not against `canvas.width`: the canvas is the doubled
  * plate, and the engine's coordinates are the 640x480 the game thinks in.
  */
-function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
-  return screenPoint(e, canvas.getBoundingClientRect(), SCREEN);
-}
+const canvasCoords = canvasCoordsFor(canvas, SCREEN);
 
 /**
  * The pointer, drawn the way Timelapse drew it.
@@ -573,15 +571,6 @@ const showCursor = cursor.show;
 const COARSE = navigator.maxTouchPoints > 0 || matchMedia("(pointer: coarse)").matches;
 
 function bindInput(host: GameHost, s: GameHost["session"]): void {
-  /** a key a gesture or a keystroke means, on one route */
-  const sendKey = (key: string, special = false): void => {
-    // a gesture is never a held key: the boot's `keyrepeat` sets `isrepeat` and
-    // its flat scripts read it, so a stale 1 from a leant-on arrow must not make
-    // this look like a repeat
-    s.interp.globals.set("isrepeat", false);
-    void host.director.keyDown(key, special);
-  };
-
   /**
    * A navigation hotspot, on a machine that has no cursor to reveal it — the
    * edge regions a finger must not be given (src/input.ts, NAV_REGIONS).
@@ -591,83 +580,35 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     return isNavRegion(s.hitTestAt(x, y));
   };
 
-  /**
-   * Which way the two swipe axes read, remembered per game.
-   *
-   * Its own storage prefix and not the other two shells': a player who inverted
-   * Titanic's turn has said nothing about this one's.
-   */
-  const swipeInvert = bindSwipeInvert("timelapse.swipe");
-
-  const touch = new TouchGestures({
-    coords: (e: PointerEventLike) => canvasCoords(e),
-    // props and flat regions take their press at once so a drag works; the
-    // picture itself keeps the wait, because swiping the picture is how a phone
-    // walks. `hitTestAt` answers this with no room, which is the whole reason
-    // the recogniser ports to a SET-less game unchanged.
-    //
-    // ...except the navigation regions, which on touch are not controls at all:
-    // owning the finger there is what stopped a swipe from the edge being a swipe.
-    ownedByGame: (x, y) => {
-      if (navHotspot(x, y)) return false;
-      const kind = s.hitTestAt(x, y).type;
-      return kind === "prop" || kind === "button";
-    },
-    press: (x, y) => {
-      // and a TAP on one is not a click either: on a phone the edge of the
-      // picture is where a thumb rests, and walking on a resting thumb is worse
-      // than not walking. Swipe is the whole navigation there.
-      if (navHotspot(x, y)) return;
-      void s.track(host.director.buttonDown(x, y), `press ${x},${y}`);
-    },
-    release: (x, y) => {
-      if (!s.pointerDown) return; // the press was suppressed: nothing to let go of
-      host.director.buttonUp(x, y);
-    },
-    sendKey: (key: GestureKey, special: boolean) => sendKey(key, special),
-    // read at RELEASE, so a box ticked mid-gesture applies to that gesture
-    invert: () => swipeInvert,
-  });
-
-  canvas.addEventListener("pointerdown", (e) => {
-    const { x, y } = canvasCoords(e);
-    s.setPointer(x, y);
-    // a finger is ambiguous until it moves or stays put — see TouchGestures
-    if (e.pointerType === "touch") {
-      touch.down(e);
-      return;
-    }
+  const { sendKey } = bindPointerInput(host, canvas, {
+    coords: canvasCoords,
+    /**
+     * Which way the two swipe axes read, remembered per game.
+     *
+     * Its own storage prefix and not the other two shells': a player who inverted
+     * Titanic's turn has said nothing about this one's.
+     */
+    swipeKey: "timelapse.swipe",
+    // `hitTestAt` answers the recogniser's "is it a control?" with no room, which
+    // is the whole reason it ports to a SET-less game unchanged. The navigation
+    // regions, though, are not controls on touch at all: owning the finger there
+    // is what stopped a swipe from the edge being a swipe.
+    freeForSwipe: navHotspot,
+    // and a TAP on one is not a click either: on a phone the edge of the
+    // picture is where a thumb rests, and walking on a resting thumb is worse
+    // than not walking. Swipe is the whole navigation there.
+    swallowsPress: navHotspot,
     // and ask again once the click has been dealt with: a click that walks or
     // turns changes what is under a pointer that has not moved, and a mouse at
     // rest gets no move event to notice it with
-    void host.director
-      .buttonDown(x, y)
-      .then(() => say(`click ${x},${y} · flat ${s.currentFlat}`))
-      .then(() => host.director.hover(x, y))
-      .then(showCursor);
+    click: (x, y) =>
+      void host.director
+        .buttonDown(x, y)
+        .then(() => say(`click ${x},${y} · flat ${s.currentFlat}`))
+        .then(() => host.director.hover(x, y))
+        .then(showCursor),
+    showCursor,
   });
-
-  // on the window, not the canvas: a drag that ends off-canvas still has to end
-  addEventListener("pointermove", (e) => {
-    const { x, y } = canvasCoords(e);
-    s.setPointer(x, y);
-    if (touch.owns(e)) {
-      touch.move(e);
-      return;
-    }
-    // the cursor the thing under the pointer asks for, through the same chain
-    if (e.pointerType !== "touch") void host.director.hover(x, y).then(showCursor);
-  });
-
-  addEventListener("pointerup", (e) => {
-    if (touch.up(e)) return;
-    if (!s.pointerDown) return;
-    const { x, y } = canvasCoords(e);
-    host.director.buttonUp(x, y);
-  });
-
-  /** a gesture the browser took away (a system edge-swipe) */
-  addEventListener("pointercancel", (e) => touch.cancel(e));
 
   /**
    * The SPACE button — the one game KEY this page draws, and the only way to the
