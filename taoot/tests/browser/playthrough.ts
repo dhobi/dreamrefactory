@@ -947,7 +947,7 @@ async function loadCheckpoint(page: Page, name: string): Promise<boolean> {
   // reasons (taoot/tests/playthrough/play.ts): a restored room may delay(), and m4anti's
   // restored lounge ASKS — its own openscene opens Zeitel's conversation and the
   // load dispatch waits inside it for an answer. Awaiting here would hang this
-  // evaluate with no timeout (TODO 7a).
+  // evaluate with no timeout.
   // The flags live on WINDOW, not on dbg: window.dbg is a getter that builds a
   // fresh object per read (taoot/src/main.ts), so a property set on one read is gone
   // by the next — a flag written there is a flag nobody ever sees again.

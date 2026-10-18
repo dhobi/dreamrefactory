@@ -27,23 +27,6 @@ export const NAV_REGIONS = new Set(["up", "down", "left", "right"]);
 export const isNavRegion = (hit: { type: string; name: string }): boolean =>
   hit.type === "button" && NAV_REGIONS.has(hit.name.toLowerCase());
 
-/**
- * Framebuffer coordinates for a pointer event.
- *
- * Against the game's SCREEN, not against `canvas.width`: the canvas is the
- * doubled plate, and the engine's coordinates are the 640x480 the game thinks in.
- */
-export function screenPoint(
-  e: { clientX: number; clientY: number },
-  r: { left: number; top: number; width: number; height: number },
-  screen: { width: number; height: number },
-): { x: number; y: number } {
-  return {
-    x: Math.round(((e.clientX - r.left) / r.width) * screen.width),
-    y: Math.round(((e.clientY - r.top) / r.height) * screen.height),
-  };
-}
-
 /** what a keystroke on the page is: the log's, the About box's, the game's, or nobody's */
 export type KeyAction = { log: true } | { about: true } | { key: string; special: boolean };
 

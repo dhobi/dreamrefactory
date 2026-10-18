@@ -40,7 +40,8 @@ import { TIMELAPSE } from "@dreamfactory/chrome/games";
 import { VERSION } from "@dreamfactory/chrome/version";
 import { TL_CURSORS } from "./cursor-art";
 import { TimelapseFiles } from "./files";
-import { isNavRegion, keyAction, screenPoint } from "./input";
+import { isNavRegion, keyAction } from "./input";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 import { bugLine, exitsHtml, whereHtml } from "./location";
 import { NetMeter, fmtSize } from "@dreamfactory/chrome/net-meter";
 

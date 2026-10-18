@@ -44,18 +44,6 @@ export function arrowUp(e: Pick<KeyEventLike, "key" | "target">): string | null 
   return arrow && !focusOwnsKey(e.target, e.key) ? arrow : null;
 }
 
-/** framebuffer coordinates for a pointer event, against the game's 640x480 */
-export function screenPoint(
-  e: { clientX: number; clientY: number },
-  r: { left: number; top: number; width: number; height: number },
-  screen: { width: number; height: number },
-): { x: number; y: number } {
-  return {
-    x: Math.round(((e.clientX - r.left) / r.width) * screen.width),
-    y: Math.round(((e.clientY - r.top) / r.height) * screen.height),
-  };
-}
-
 /** the readout under the picture, and the bug report's line: the room, or the stage before there is one */
 export function whereLine(s: {
   currentSetName: string;

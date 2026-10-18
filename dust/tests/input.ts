@@ -6,7 +6,11 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseHTML } from "linkedom";
-import { defaultSaveName, keyAction, screenPoint } from "../src/input";
+import { defaultSaveName, keyAction } from "../src/input";
+import { screenPoint as shared } from "@dreamfactory/engine/web/screen";
+
+/** the page's reading: floored, as DF.EXE's mouse is */
+const screenPoint: typeof shared = (e, r, s) => shared(e, r, s, Math.floor);
 
 const down = (key: string, more: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean; repeat: boolean; target: EventTarget | null }> = {}) =>
   keyAction({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, target: null, ...more });

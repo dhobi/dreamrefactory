@@ -53,7 +53,8 @@ import {
   indexedToRGBA,
 } from "@dreamfactory/engine/df/image";
 import { VIEW_H, VIEW_W, decodeSetFrames, setSummary, stillAt as stillOf, turnsFrom, walkFrom, walkerKey } from "./walker";
-import { defaultSaveName, keyAction, screenPoint } from "./input";
+import { defaultSaveName, keyAction } from "./input";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 import { NetMeter } from "@dreamfactory/chrome/net-meter";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import {
@@ -1387,7 +1388,7 @@ useSaveKind(DUST_SAVES);
 
 /** the pointer, in the canvas's own 512x384 coordinates */
 function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
-  return screenPoint(e, canvas.getBoundingClientRect(), { width: FLAT_W, height: FLAT_H });
+  return screenPoint(e, canvas.getBoundingClientRect(), { width: FLAT_W, height: FLAT_H }, Math.floor);
 }
 
 /**

@@ -7,7 +7,7 @@
  *
  * The route reaches this in segment 27 and only there, after a whole carried
  * game. `SEGMENTS=27` (which loads out/checkpoints/m4anti.ti) works — the load
- * comes back inside Zeitel's ambush and the gate answers it (TODO 7a) — but it
+ * comes back inside Zeitel's ambush and the gate answers it — but it
  * still plays the whole segment. So this deals the boat deck by hand,
  * the way BOOTFILE's `advanceday("startdisk2")` deals the sinking, sets
  * `clock = "endgame"` and calls `advanceday()` — which is the whole ending:

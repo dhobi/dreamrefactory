@@ -131,7 +131,7 @@ export async function newPlaythrough(): Promise<Playthrough> {
    * free, which is exactly why an unsatisfiable condition can sit in a route for
    * weeks: `EXHAUSTED` here is the cheap oracle for a wait that is burning
    * minutes over there. Steps, not seconds — see the wall-clock note in
-   * docs/, and TODO §4's "62 gestures, 661 ticks".
+   * docs/.
    *
    * A file rather than console.log because vitest only shows a passing test's
    * output on failure, same reason PROPTRACE_FILE exists.
@@ -268,7 +268,7 @@ export function saveOf(p: Playthrough): Uint8Array {
  * starts, and the test dies on its own timeout with nothing to say. The endgame's
  * lounge checkpoint is the first save that needs a frame to open.
  *
- * A restored room is also allowed to ASK (TODO 7a). The same lounge's own
+ * A restored room is also allowed to ASK. The same lounge's own
  * `openscene` (LOUNGE1C.SET c320) ambushes the view the m4anti save records, so
  * the load itself opens Zeitel's conversation and its dispatch then waits inside
  * `puppetevent(-1)` for an answer nobody else can give — while the game sits

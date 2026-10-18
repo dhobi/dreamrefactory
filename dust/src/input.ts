@@ -50,18 +50,6 @@ export function keyAction(e: KeyEventLike): KeyAction | null {
   return { key: ch, escape: e.key === "Escape", repeat: e.repeat };
 }
 
-/** the pointer, in the engine's own 512x384 — floored, as the original's mouse is */
-export function screenPoint(
-  e: { clientX: number; clientY: number },
-  r: { left: number; top: number; width: number; height: number },
-  screen: { width: number; height: number },
-): { x: number; y: number } {
-  return {
-    x: Math.floor(((e.clientX - r.left) / r.width) * screen.width),
-    y: Math.floor(((e.clientY - r.top) / r.height) * screen.height),
-  };
-}
-
 /**
  * The name the save dialog offers: where you are, and when.
  *

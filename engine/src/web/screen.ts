@@ -81,3 +81,21 @@ export function blankScreen(w: number, h: number): Uint8ClampedArray {
  * the common case and there is no reason to rebuild 786 KB per presenter.
  */
 export const BLANK_SCREEN: Uint8ClampedArray = blankScreen(SCREEN_W, SCREEN_H);
+
+/**
+ * Framebuffer coordinates for a pointer event: where it lands on the canvas as
+ * shown (`r`, its bounding box), in the game's own SCREEN — not `canvas.width`,
+ * which may be a doubled plate. `round` is the page's: Dust floors, as DF.EXE's
+ * mouse does; the others round to the nearest pixel.
+ */
+export function screenPoint(
+  e: { clientX: number; clientY: number },
+  r: { left: number; top: number; width: number; height: number },
+  screen: { width: number; height: number },
+  round: (n: number) => number = Math.round,
+): { x: number; y: number } {
+  return {
+    x: round(((e.clientX - r.left) / r.width) * screen.width),
+    y: round(((e.clientY - r.top) / r.height) * screen.height),
+  };
+}
