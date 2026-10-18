@@ -1,8 +1,9 @@
 import { ScriptError, toNum, toStr, truthy, type Value } from "../interp";
 import { RAMP_STEP_MS, ticksAt } from "../clock";
 import { packPoint } from "../point";
-import { dfPlan, isDfEffect, isExeEffect, type DfEffect, type ExeEffect } from "../visual-effects";
+import { dfPlan, type DfEffect, type ExeEffect } from "../visual-effects";
 import { BuiltinCtx } from "./context";
+import { byEngine, commandRules, forEngine, unknownCommand } from "./command-rules";
 
 type Session = BuiltinCtx["session"];
 
@@ -133,7 +134,7 @@ function registerSetAndStage(ctx: BuiltinCtx): void {
     // DreamFactory 1 looks the word up in the set's scene table first
     // (0x40ee66 -> 0x410c50) — TOWN.SET's "chicken" is a scene — and only
     // then reads it as a direction; the others jump to a "sceneNNN"
-    const set = session.isV1 ? session.currentBinding?.set : undefined;
+    const set = commandRules(session).sceneWordsFromSet ? session.currentBinding?.set : undefined;
     const isScene = set ? set.scenes.some((sc) => sc.sceneName.toLowerCase() === d) : d.startsWith("scene");
     if (isScene) {
       // a DreamFactory 1 jump runs its scene events before the next line
@@ -144,7 +145,7 @@ function registerSetAndStage(ctx: BuiltinCtx): void {
     }
     // a word that names no direction is a bad argument (TI.EXE 0x407c84;
     // DF.EXE 0x40ef44, which knows a fourth, "backwards")
-    const known = d === "left" || d === "right" || d === "strait" || (session.isV1 && d === "backwards");
+    const known = commandRules(session).directions.has(d);
     if (i_.classic && !known) throw new ScriptError(0xa, `currentscene(${d})`);
     await session.onNavigate(d);
   });
@@ -282,18 +283,16 @@ function registerSetTables(ctx: BuiltinCtx): void {
     }
     return set[dim];
   };
-  r("countpaintings", (_i, [scene, view]) =>
-    session.isV1
-      ? setGrid("mapHeight", "setheight")
-      : (viewByName(session, toStr(scene ?? ""), toStr(view ?? ""))?.objects.length ?? 0),
-  );
+  r("countpaintings", byEngine(session, {
+    v4: (_i, [scene, view]) => viewByName(session, toStr(scene ?? ""), toStr(view ?? ""))?.objects.length ?? 0,
+    v1: () => setGrid("mapHeight", "setheight"),
+  }));
   // v4's own `pointinpainting` has no semantics here: off DreamFactory 1 it stays
   // the unknown command it was
-  r("pointinpainting", (i, args) => {
-    if (session.isV1) return setGrid("mapWidth", "setwidth");
-    i.onUnknown("pointinpainting", args);
-    return 0;
-  });
+  r("pointinpainting", byEngine(session, {
+    v4: unknownCommand("pointinpainting"),
+    v1: () => setGrid("mapWidth", "setwidth"),
+  }));
   r("indextopainting", (_i, [scene, view, idx]) =>
     viewByName(session, toStr(scene ?? ""), toStr(view ?? ""))?.objects[toNum(idx ?? 0) - 1]?.identifier ?? "",
   );
@@ -413,16 +412,18 @@ function registerSettings(ctx: BuiltinCtx): void {
   // out — and anything else the loop CHUNK playing (0x429d10: the record's
   // +0x45), which TOWN.SET and NITE.SET test against "daymusic5" and
   // "nightwind3" to let their dog barks and owls in. "none" when no theme plays.
-  r("currenttheme", (_i, [n]) => {
-    if (!session.isV1) return session.currentThemeName;
-    const playing = session.currentThemeName;
-    if (playing === "none") return "none";
-    if (toNum(n ?? 0) === 2) return session.audioLib.trackNameOf(playing) ?? playing;
-    const since = session.themeSince;
-    const bank = session.audioLib.bankOf(playing);
-    if (!since || !bank || since.bank !== bank) return "none";
-    return session.audioLib.themeChunkAt(bank, (session.clock.now - since.at) / 1000) ?? "none";
-  });
+  r("currenttheme", byEngine(session, {
+    v4: () => session.currentThemeName,
+    v1: (_i, [n]) => {
+      const playing = session.currentThemeName;
+      if (playing === "none") return "none";
+      if (toNum(n ?? 0) === 2) return session.audioLib.trackNameOf(playing) ?? playing;
+      const since = session.themeSince;
+      const bank = session.audioLib.bankOf(playing);
+      if (!since || !bank || since.bank !== bank) return "none";
+      return session.audioLib.themeChunkAt(bank, (session.clock.now - since.at) / 1000) ?? "none";
+    },
+  }));
   // framerate([n]): getter/setter for the engine's target frame cadence. Drag
   // loops save it, drop to a slow rate to pace the rotate (TAOOT's turbine valves:
   // `rate = framerate(); framerate(2); …; framerate(rate)`), then restore. Our
@@ -529,12 +530,9 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
    */
   r("visualeffect", (_i, [effect, steps], _c, frame) => {
     // DF.EXE and RedJack.exe check the id's band BEFORE anything else, and an id
-    // outside it is error 0xe with no pass and no effect: DF.EXE's band is
-    // 24001..24014 (0x4202fa..0x42030a -> 0x4203cd), so the turns and `nodraw`
-    // are not effects there at all, and RedJack.exe's is 24001..24020
-    // (0x408ba2..0x408bb6 -> 0x408c6f), so `turnhalfright` (24021) is not one.
+    // outside it is error 0xe with no pass and no effect (CommandRules.effects)
     const id = toStr(effect ?? "").toLowerCase();
-    if (session.isV1 ? NOT_DF.has(id) : session.isV5 && id === "turnhalfright") {
+    if (commandRules(session).effects.outOfBand.has(id)) {
       throw new ScriptError(0xe, `visualeffect: ${id} is not an effect here`);
     }
     // A PASS first, with its screen copy held back (TI.EXE 0x43df85 raises
@@ -560,10 +558,6 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
       },
     );
   });
-  /** TI.EXE's effect names DF.EXE's command table does not have (see the band check above) */
-  const NOT_DF: ReadonlySet<string> = new Set([
-    "turnright", "turnleft", "turnup", "turndown", "nodraw", "turnhalfleft", "turnhalfright",
-  ]);
   const visualEffect = (effect: Value | undefined, steps: Value | undefined): Promise<void> | void => {
     const name = toStr(effect ?? "plain").toLowerCase();
     if (name === "plain") {
@@ -639,11 +633,12 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
      * snapshot of the screen, 0x46ce10, and is a plain copy without it; the port
      * always has it.)
      */
+    const effects = commandRules(session).effects;
     let exe: ExeEffect | DfEffect | null = null;
-    if (session.isV1 ? isDfEffect(name) : isExeEffect(name)) exe = name as ExeEffect | DfEffect;
+    if (effects.drawn(name)) exe = name as ExeEffect | DfEffect;
     let dir: typeof session.wipe.dir | undefined = DIR[name as keyof typeof DIR];
     if (exe) dir = "exe";
-    else if (session.isV5 && name === "turnhalfleft") dir = "dissolve";
+    else if (effects.halfLeftDissolves && name === "turnhalfleft") dir = "dissolve";
     if (!dir) return;
     const from = session.captureFrame?.() ?? null;
     if (!from) return;
@@ -672,7 +667,7 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
     // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a; DF.EXE
     // 0x420370..0x42038a, RedJack.exe 0x408c0c..0x408c25)
     const clamped = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
-    if (session.isV1 && exe) {
+    if (effects.draws === "df" && exe) {
       // DF.EXE: its fixed passes, each held its own length, and one more step
       // for the hold after the last pass (see dfPlan)
       const plan = dfPlan(exe as DfEffect, clamped, to.height);
@@ -815,21 +810,23 @@ function registerCursorAndStubs(ctx: BuiltinCtx): void {
       needSet("scenescript", 0x28);
       if (!sceneByName(session, toStr(scene ?? ""))) miss("scenescript", "scene", scene);
     },
-    paintingscript: ([scene, view, painting]) => {
-      if (session.isV1) {
+    paintingscript: (args) =>
+      forEngine(session, {
+        v4: ([scene, view, painting]: Value[]) => {
+          needSet("paintingscript", commandRules(session).paintingScriptNoSet);
+          if (!sceneByName(session, toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
+          const v = viewByName(session, toStr(scene ?? ""), toStr(view ?? ""));
+          if (!v) miss("paintingscript", "view", view);
+          if (!v!.objects.some((o) => o.identifier.toLowerCase() === lc(painting))) miss("paintingscript", "painting", painting);
+        },
         // DF.EXE's floorscript (n)
-        needSet("floorscript", 0x28);
-        if (typeof scene !== "number" || scene < 0 || scene >= 32) {
-          throw new ScriptError(0xe, `floorscript: floor ${toStr(scene ?? "")} is not 0..31`);
-        }
-        return;
-      }
-      needSet("paintingscript", session.isV5 ? 0x28 : 0xb);
-      if (!sceneByName(session, toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
-      const v = viewByName(session, toStr(scene ?? ""), toStr(view ?? ""));
-      if (!v) miss("paintingscript", "view", view);
-      if (!v!.objects.some((o) => o.identifier.toLowerCase() === lc(painting))) miss("paintingscript", "painting", painting);
-    },
+        v1: ([floor]: Value[]) => {
+          needSet("floorscript", 0x28);
+          if (typeof floor !== "number" || floor < 0 || floor >= 32) {
+            throw new ScriptError(0xe, `floorscript: floor ${toStr(floor ?? "")} is not 0..31`);
+          }
+        },
+      })(args),
     stagescript: () => needStage("stagescript"),
     flatscript: ([flat]) => {
       needStage("flatscript");
