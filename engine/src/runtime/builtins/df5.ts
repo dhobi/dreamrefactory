@@ -13,6 +13,13 @@ export function v5Registrar({ session, interp }: BuiltinCtx): (name: string, fn:
   return (name, v5) => interp.register(name, byEngine(session, { v4: unknownCommand(name), v5 }));
 }
 
+/** an integer argument, or the wrong-type error every handler below answers
+ *  for anything else (`cmp word [arg], 4` -> 0xe) */
+const int = (cmd: string, v: Value | undefined): number => {
+  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
+  return v | 0;
+};
+
 /**
  * DreamFactory 5's commands outside the room ({@link file://./maze.ts} has the
  * room's): what RedJack's scripts ask that no earlier game did, each read out of
@@ -23,19 +30,20 @@ export function v5Registrar({ session, interp }: BuiltinCtx): (name: string, fn:
  * unknown commands they always were.
  */
 export function registerDf5Builtins(ctx: BuiltinCtx): void {
-  const { session, interp } = ctx;
-  const r5 = v5Registrar(ctx);
-  const prop = (n: Value): PropInstance | null => session.propRuntime.get(toStr(n ?? ""));
-  const actor = (n: Value): ActorInstance | null => session.actorRuntime.get(toStr(n ?? ""));
-  /** a getter/setter pair, as every 16xxx command is: one argument reads, two write */
-  const acc5 = <T>(name: string, find: (n: Value) => T | null, get: (e: T) => Value, set: (e: T, v: Value) => void): void =>
-    r5(name, (_i, [n, v]) => {
-      const e = find(n);
-      if (!e) return 0;
-      if (v === undefined) return get(e);
-      set(e, v);
-    });
+  registerCalc(ctx);
+  registerStageSize(ctx);
+  registerDraws(ctx);
+  registerMemoryAndPoints(ctx);
+  registerSpriteOrder(ctx);
+  registerSpriteCards(ctx);
+  registerBrightness(ctx);
+  registerStageAndStubs(ctx);
+}
 
+/** the space bar, and the arithmetic of bits and characters */
+function registerCalc(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   // spacebar (): the key held right now — `GetAsyncKeyState (VK_SPACE)` (0x469c10).
   // The chests and crates play their opening until it is, `while (not spacebar () & i != 35)`
   r5("spacebar", () => (session.spaceDown ? 1 : 0));
@@ -44,13 +52,6 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   r5("calcrgb", (_i, [red, green, blue]) =>
     ((toNum(red ?? 0) & 0xff) << 16) | ((toNum(green ?? 0) & 0xff) << 8) | (toNum(blue ?? 0) & 0xff),
   );
-
-  /** an integer argument, or the wrong-type error every handler below answers
-   *  for anything else (`cmp word [arg], 4` -> 0xe) */
-  const int = (cmd: string, v: Value | undefined): number => {
-    if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-    return v | 0;
-  };
   // calcand (a, b), calcor (a, b): the bits of two integers (0x417a00, 0x417b70)
   r5("calcand", (_i, [a, b]) => int("calcand", a) & int("calcand", b));
   r5("calcor", (_i, [a, b]) => int("calcor", a) | int("calcor", b));
@@ -81,23 +82,33 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
     if (s.length !== 1) throw new ScriptError(0xa, `asciitostring (${JSON.stringify(s)})`);
     return s.charCodeAt(0) & 0xff;
   });
+}
 
-  // stagewidth (), stageheight (): the open stage's screen size, which Flat.c's
-  // open copies out of its container 0 (0x412da1, 0x412dab); 0 with no stage open
-  // (0x4155e0, 0x415630)
+/**
+ * stagewidth (), stageheight (): the open stage's screen size, which Flat.c's
+ * open copies out of its container 0 (0x412da1, 0x412dab); 0 with no stage open
+ * (0x4155e0, 0x415630)
+ */
+function registerStageSize(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   r5("stagewidth", () => session.stageCtrl.stageFile?.screen.width ?? 0);
   r5("stageheight", () => session.stageCtrl.stageFile?.screen.height ?? 0);
+}
 
-  /**
-   * norepeat (n) and serial (n): two tables of 256, each filled on its command's
-   * first call with `random (1)`, `random (2)` … `random (256)` (0x419297,
-   * 0x4191b7 — 256 draws from the stream before the first answer).
-   *
-   * norepeat (n), n in 2..256, is a random 1..n that is never the one it
-   * answered last time for the same n (0x419325): `random (n - 1)`, one more
-   * when it reaches the last. serial (n), n in 1..256, counts 1..n round from
-   * wherever its first `random (n)` put it (0x419240). Any other n is error 0xa.
-   */
+/**
+ * norepeat (n) and serial (n): two tables of 256, each filled on its command's
+ * first call with `random (1)`, `random (2)` … `random (256)` (0x419297,
+ * 0x4191b7 — 256 draws from the stream before the first answer).
+ *
+ * norepeat (n), n in 2..256, is a random 1..n that is never the one it
+ * answered last time for the same n (0x419325): `random (n - 1)`, one more
+ * when it reaches the last. serial (n), n in 1..256, counts 1..n round from
+ * wherever its first `random (n)` put it (0x419240). Any other n is error 0xa.
+ */
+function registerDraws(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   const draw = (n: number): number => (n > 0 ? Math.trunc(session.rng() * n) + 1 : 0);
   const table = (): number[] => Array.from({ length: 256 }, (_, k) => draw(k + 1));
   let lastPick: number[] | null = null;
@@ -119,7 +130,12 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
     counters[m] = value + 1 > m + 1 ? 1 : value + 1;
     return value;
   });
+}
 
+/** hasmem, the `permanent` table, and where a point of the room is on the screen */
+function registerMemoryAndPoints(ctx: BuiltinCtx): void {
+  const { session, interp } = ctx;
+  const r5 = v5Registrar(ctx);
   // hasmem (bytes): whether that much can be had on top of a 200K reserve
   // (0x419dd0 -> 0x46ce10). A page always has it
   r5("hasmem", (i, [bytes]) => {
@@ -151,15 +167,21 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
     const p = cam?.project(toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0));
     return p ? packPoint(p.x, p.y) : packPoint(32000, 32000);
   });
+}
 
-  /**
-   * proporder (p, what) and actororder (a, what): where a sprite is in its
-   * animation (0x42a5b0, 0x404040). 1 is the length of the order it plays, 2 the
-   * step it is on counted from 1, 3 the picture at that step, 7 how many pictures
-   * the view has; 4 to 6 are maxima over the pictures' own records, which no
-   * script asks. `for i = 1 to proporder (thename, 1)` + `forceupdate ()` is how
-   * the drinks and the doors play a view through once before going on.
-   */
+/**
+ * proporder (p, what) and actororder (a, what): where a sprite is in its
+ * animation (0x42a5b0, 0x404040). 1 is the length of the order it plays, 2 the
+ * step it is on counted from 1, 3 the picture at that step, 7 how many pictures
+ * the view has; 4 to 6 are maxima over the pictures' own records, which no
+ * script asks. `for i = 1 to proporder (thename, 1)` + `forceupdate ()` is how
+ * the drinks and the doors play a view through once before going on.
+ */
+function registerSpriteOrder(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const prop = (n: Value): PropInstance | null => session.propRuntime.get(toStr(n ?? ""));
+  const actor = (n: Value): ActorInstance | null => session.actorRuntime.get(toStr(n ?? ""));
   r5("proporder", (_i, [n, what]) => {
     const p = prop(n);
     const st = p?.state();
@@ -185,16 +207,30 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
     }
     return 0;
   });
+}
 
-  /**
-   * propistrue3d (p, on) and propisfacer (p, on): a prop drawn as a flat picture
-   * standing in the room, turned by its `propdeg` and tilted by its `proppitch`,
-   * rather than a sprite that is always square to the screen (0x42caa0 hands it
-   * to the 3D renderer, 0x456540). A facer — every prop until told otherwise
-   * (0x427783) — is turned to the camera, so only `propisfacer (p, false)` makes
-   * a difference you can see: Cartagena's planks lie flat on the ground, and its
-   * lock's chains hang against the door. See PropRuntime.cardOf.
-   */
+/**
+ * propistrue3d (p, on) and propisfacer (p, on): a prop drawn as a flat picture
+ * standing in the room, turned by its `propdeg` and tilted by its `proppitch`,
+ * rather than a sprite that is always square to the screen (0x42caa0 hands it
+ * to the 3D renderer, 0x456540). A facer — every prop until told otherwise
+ * (0x427783) — is turned to the camera, so only `propisfacer (p, false)` makes
+ * a difference you can see: Cartagena's planks lie flat on the ground, and its
+ * lock's chains hang against the door. See PropRuntime.cardOf.
+ */
+function registerSpriteCards(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const prop = (n: Value): PropInstance | null => session.propRuntime.get(toStr(n ?? ""));
+  const actor = (n: Value): ActorInstance | null => session.actorRuntime.get(toStr(n ?? ""));
+  /** a getter/setter pair, as every 16xxx command is: one argument reads, two write */
+  const acc5 = <T>(name: string, find: (n: Value) => T | null, get: (e: T) => Value, set: (e: T, v: Value) => void): void =>
+    r5(name, (_i, [n, v]) => {
+      const e = find(n);
+      if (!e) return 0;
+      if (v === undefined) return get(e);
+      set(e, v);
+    });
   acc5("propistrue3d", prop, (p) => (p.true3d ? 1 : 0), (p, v) => { p.true3d = truthy(v); });
   acc5("propisfacer", prop, (p) => (p.facer ? 1 : 0), (p, v) => { p.facer = truthy(v); });
   acc5("proppitch", prop, (p) => p.pitch, (p, v) => { p.pitch = toNum(v); });
@@ -207,15 +243,21 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
   acc5("propsnap", prop, (p) => (p.snap ? 1 : 0), (p, v) => { p.snap = truthy(v); });
   // actorflip (a, bits): propflip's twin (0x403c80) — 1 mirrors across, 2 upside down
   acc5("actorflip", actor, (a) => a.flip, (a, v) => { a.flip = Math.trunc(Number(v)) || 0; });
+}
 
-  /**
-   * propbrightness (p, r, g, b), actorbrightness and screenbrightness (r, g, b):
-   * a number added to each channel of a sprite's (or the whole screen's)
-   * colours, each held to -255..255 (0x40a7f0). The shading record beside it has
-   * a multiplier too (0x46f180), which these leave alone. Tavern bottles are lit
-   * `propbrightness (…, 10, 10, 10)`; the big fight turns the screen red when Nick
-   * is hit and back with `screenbrightness (0, 0, 0)`.
-   */
+/**
+ * propbrightness (p, r, g, b), actorbrightness and screenbrightness (r, g, b):
+ * a number added to each channel of a sprite's (or the whole screen's)
+ * colours, each held to -255..255 (0x40a7f0). The shading record beside it has
+ * a multiplier too (0x46f180), which these leave alone. Tavern bottles are lit
+ * `propbrightness (…, 10, 10, 10)`; the big fight turns the screen red when Nick
+ * is hit and back with `screenbrightness (0, 0, 0)`.
+ */
+function registerBrightness(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const prop = (n: Value): PropInstance | null => session.propRuntime.get(toStr(n ?? ""));
+  const actor = (n: Value): ActorInstance | null => session.actorRuntime.get(toStr(n ?? ""));
   // (p, k) reads channel k, 1..3 or error 0xa (0x42c210, 0x4062d0)
   const channel = (cmd: string, k: Value | undefined): number => {
     const c = int(cmd, k);
@@ -252,7 +294,12 @@ export function registerDf5Builtins(ctx: BuiltinCtx): void {
     const c = (v: Value | undefined): number => Math.max(-128, Math.min(128, Math.trunc(toNum(v ?? 0))));
     session.screenContrast = [c(rgb[0]), c(rgb[1]), c(rgb[2])];
   });
+}
 
+/** the stage's flat and origin, a theme's order, the screen depth, and the commands that do nothing here */
+function registerStageAndStubs(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   // stageflat (name) and stageflat (): v5's gotoflat and currentflat, whose own
   // ids have no handler in RedJack.exe (0x413110, 0x414140). The fights keep their
   // camera in the flat's name: `findword (stageflat (), " ", 2)`

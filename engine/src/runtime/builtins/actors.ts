@@ -519,8 +519,6 @@ function registerActorTables(ctx: BuiltinCtx): void {
 
 /** the walking primitives: to a star, to a point, along a path or a road */
 function registerWalking(ctx: BuiltinCtx): void {
-  const { session, r, log, findStar } = ctx;
-  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   // walking: straight-line motion at the actor's per-set speed, walk pose
   // cycling, facing the direction of travel (session.startWalk)
   //
@@ -540,6 +538,17 @@ function registerWalking(ctx: BuiltinCtx): void {
   // The last two are the track-following walkers, chosen only when the set has
   // a path network to follow. We walk in straight lines and have no track, so
   // 0x443ac0 is the builder we are — hence "defer" for both named walks.
+  registerWalkToStar(ctx);
+  registerWalkToXyz(ctx);
+  fileDeferredWalks(ctx);
+  registerRoadWalks(ctx);
+  registerWalkOnPath(ctx);
+}
+
+/** walktostar: to a star, to a point spelled as one, or along an authored route */
+function registerWalkToStar(ctx: BuiltinCtx): void {
+  const { session, r, log, findStar } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   r("walktostar", (_i, [n, starName]) => {
     const star = findStar(starName);
     const a = actor(n);
@@ -580,7 +589,7 @@ function registerWalking(ctx: BuiltinCtx): void {
       // built at 0x41c518 by 0x41cd30, which fails with 0xa at 0x41cd48 and says
       // "walktostar"; deferred at 0x41c546 by 0x41d290, which says "defer")
       const to = toStr(starName ?? "").toLowerCase();
-      const build = starWalk(a, toStr(n), to);
+      const build = starWalk(ctx, a, toStr(n), to);
       if (a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
         a.starName = WALK_DEFER;
         session.scheduler.deferWalk(toStr(n), to, build);
@@ -604,7 +613,7 @@ function registerWalking(ctx: BuiltinCtx): void {
     if (
       session.currentBinding?.set.version === 1 &&
       a.starName &&
-      startPathWalk(a, toStr(n), a.starName, toStr(starName).toLowerCase())
+      startPathWalk(ctx, a, toStr(n), a.starName, toStr(starName).toLowerCase())
     ) {
       return 0;
     }
@@ -613,226 +622,229 @@ function registerWalking(ctx: BuiltinCtx): void {
       toStr(n), star.positionX, star.positionZ, star.positionY, toStr(starName).toLowerCase(),
     );
   });
-  /**
-   * walktoxyz(actor, x, y, z): walk to a point that is not a star — and land on
-   * the `"custom"` sentinel, which is what tells a cast that the arrival was the
-   * ENGINE's and not a scripted move to a named place.
-   *
-   * TI.EXE's record builder (0x4436d0) stores `"custom"` in the walk record at
-   * +0x3e, and the arrival path copies that field into `actorstar` (0x443de3,
-   * actor+0x70) immediately before it dispatches `endwalk()`. The star-walk
-   * builder (0x443ac0) writes `"custom"` there too and only overwrites it with
-   * the destination for its named-star modes — so "arrived somewhere nobody
-   * named" is the default, and a name is the exception.
-   *
-   * The cast reads it constantly: `"custom"` is compared in 29 script files, and
-   * every `endwalk` in the corpus opens with the same guard —
-   *
-   *     code endwalk ()
-   *         actorpose (me, "stand")
-   *         if actorstar (me) = "custom"
-   *             exitcode
-   *         endif
-   *         … maxidle () / the decka patrol / vladidle ()
-   *
-   * so an engine-driven arrival is meant to run NO idle at all. Without the
-   * sentinel that guard never fired: `walktopuppet` walks a character to you with
-   * `moveactorxyz` -> `walktoxyz`, and their arrival re-armed the idle, which
-   * called `hasattention`, which accosted you again inside the conversation you
-   * were already having (#10/#19/#21).
-   *
-   * Mid-walk this one says `"walktoxyz"`, not `"defer"` — 0x4436d0 is its own
-   * builder and stamps its own name. No script compares either string.
-   */
+}
+
+/**
+ * walktoxyz(actor, x, y, z): walk to a point that is not a star — and land on
+ * the `"custom"` sentinel, which is what tells a cast that the arrival was the
+ * ENGINE's and not a scripted move to a named place.
+ *
+ * TI.EXE's record builder (0x4436d0) stores `"custom"` in the walk record at
+ * +0x3e, and the arrival path copies that field into `actorstar` (0x443de3,
+ * actor+0x70) immediately before it dispatches `endwalk()`. The star-walk
+ * builder (0x443ac0) writes `"custom"` there too and only overwrites it with
+ * the destination for its named-star modes — so "arrived somewhere nobody
+ * named" is the default, and a name is the exception.
+ *
+ * The cast reads it constantly: `"custom"` is compared in 29 script files, and
+ * every `endwalk` in the corpus opens with the same guard —
+ *
+ *     code endwalk ()
+ *         actorpose (me, "stand")
+ *         if actorstar (me) = "custom"
+ *             exitcode
+ *         endif
+ *         … maxidle () / the decka patrol / vladidle ()
+ *
+ * so an engine-driven arrival is meant to run NO idle at all. Without the
+ * sentinel that guard never fired: `walktopuppet` walks a character to you with
+ * `moveactorxyz` -> `walktoxyz`, and their arrival re-armed the idle, which
+ * called `hasattention`, which accosted you again inside the conversation you
+ * were already having (#10/#19/#21).
+ *
+ * Mid-walk this one says `"walktoxyz"`, not `"defer"` — 0x4436d0 is its own
+ * builder and stamps its own name. No script compares either string.
+ */
+function registerWalkToXyz(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   r("walktoxyz", (_i, [n, x, y, z]) => {
     const a = actor(n);
     if (!a) return 0;
     a.starName = "walktoxyz"; // sentinel while moving; "custom" lands on arrival
     session.scheduler.startWalk(toStr(n), toNum(x ?? 0), toNum(y ?? 0), toNum(z ?? 0), "custom");
   });
-  /**
-   * walkonpath(actor, fromStar|"resume", toStar): walk the AUTHORED ROUTE
-   * between two stars, not the straight line between them.
-   *
-   * The route is in the SET, on the star record that pairs the two names — an
-   * i16 container ref holding the polyline (engine/src/df/set.ts `StarPath`). Both of
-   * TI.EXE's lookups walk that table and both skip a record whose ref is 0, so
-   * an unpaired star never resolves:
-   *
-   *  - a named `from` matches the pair (`0x409fd0`), either way round — the
-   *    record is reversed when `from` is the secondary;
-   *  - `"resume"` matches on the DESTINATION alone (`0x40a0f0`), secondary first
-   *    (walk forward) then primary (walk reversed). This is the form the two
-   *    reported cases use — `walkonpath (me, "resume", "ga.2")` in gang.cst,
-   *    where Georgia has just finished talking and is already at the far end.
-   *
-   * And `"resume"` is not just a laxer LOOKUP — it TRIMS the route it found to
-   * where the actor is standing (`0x40a200`, called on the way out of that
-   * lookup and only from it). See {@link resumeFrom}.
-   *
-   * With no route authored between the two, the straight line IS the answer: the
-   * corpus has six paths and three of them are two points.
-   */
-  /**
-   * Start an actor along the AUTHORED route between two stars, if there is one.
-   *
-   * Lifted out of `walkonpath` so `walktostar` can use it too, which is what a
-   * DreamFactory 1 set needs: Dust never calls `walkonpath` — its cast library
-   * moves everyone with `moveactor`, which is `walktostar` — and yet its sets
-   * carry 34 authored routes, and `gang.cst` tests `actorstar (who) =
-   * "walkonpath"` to find out whether the walk it is interrupting was on one. So
-   * v1's `walktostar` is the walker that consults the table, and the sentinel it
-   * leaves behind is the one that script reads. Reported from the page as actors
-   * "walking directly to the destination point" instead of along a path.
-   *
-   * Answers true when a route was found and the walk started.
-   */
-  const startPathWalk = (
-    a: ActorInstance, name: string, fromName: string, toName: string,
-  ): boolean => {
-    const set = session.currentBinding?.set;
-    const named = fromName !== "resume";
-    const matches = (pa: string, pb: string): boolean =>
-      named
-        ? (pa === fromName && pb === toName) || (pb === fromName && pa === toName)
-        : pa === toName || pb === toName;
-    const rec = set?.starPaths.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
-    /**
-     * The open set first, because its record is the live one — and then every
-     * set that has been visited, because the script that starts a walk need not
-     * be running in the room the walk happens in.
-     *
-     * That second half is #394, and it is the same argument
-     * {@link GameSession.starRegistry} already makes for the DESTINATION: Dust
-     * starts the Mayor's Wife's street patrol from inside the saloon
-     * (`SALLOWER.SET`'s door `keydown`, which runs `setupactor ("street")` and
-     * only then `gototown`), so with the open set alone the star is found and
-     * the route is not, and she walks her first leg straight through the
-     * buildings. Nothing else would re-start that patrol either: her `mwifeidle` has arms for the
-     * `jones` stars alone, so the mwife1<->mwife2 ping-pong lives entirely in
-     * `endwalk`, which only fires if this first walk happens.
-     *
-     * Only on a DreamFactory 1 set, and that is the point of the guard rather
-     * than caution: Dust's star names are QUALIFIED (`town.mwife1`), so a name
-     * means one place in the whole game, while Titanic's are bare (`jones1`) and
-     * a room's route table is the only thing that disambiguates them.
-     */
-    /**
-     * A DreamFactory 5 room has no set: its routes are MARK's (df/sett.ts), in
-     * the stars' own axes, and RedJack.exe's `walkonpath` (0x41c820) looks them
-     * up the way TI.EXE does — the pair either way round (`0x444660`), or the
-     * destination alone for `"resume"` (`0x444890`), which trims the route to
-     * the actor on the way out (`0x444a80`). Only the open room's, as there:
-     * RedJack's star names are bare (`anne`, `const1`) and repeat room to room.
-     * The points are handed over in a v4 star path's (X, Z, Y) so the one
-     * conversion below serves both.
-     */
-    const room = set ? undefined : session.maze?.sett.routes.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
-    const routeOf = () => {
-      if (rec) {
-        return { a: rec.a.toLowerCase(), b: rec.b.toLowerCase(),
-                 points: readStarPath(set!.file.containers, rec.container, set!.version) };
-      }
-      if (room) {
-        return { a: room.a.toLowerCase(), b: room.b.toLowerCase(),
-                 points: room.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev })) };
-      }
-      if (set?.version === 1) return [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null;
-      return null;
-    };
-    const route = routeOf();
-    if (route) {
-      // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
-      // ground plane's second axis and worldZ the height, as walktostar builds it.
-      // Copied rather than read in place: the registry's points outlive this walk
-      // and the reversal below rewrites them.
-      let points = route.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
-      // the polyline is stored a->b; walk it backwards when the destination is
-      // the `a` end (TI.EXE's second match arm in both lookups)
-      if (route.a === toName) {
-        points.reverse();
-        // A point's `fromPrev` is the length of the leg BEHIND it, so reversing
-        // the polyline has to carry each length one point along — the leg that
-        // arrives at a point one way is the one that leaves it the other.
-        // Reversing the array alone pairs every leg with the wrong length:
-        // SCOT3's nine-point route out of Scotland Road walks its 3983-unit
-        // hallway as though it were 856 (4.65x too fast), its corners at 0.29x
-        // and 0.45x, and its last leg to the door with a stored length of ZERO —
-        // the hacker teleporting the final 752 units (#224); the route's total
-        // comes out 4678 against the 8661 its own container header declares.
-        for (let i = points.length - 1; i > 0; i--) points[i].fromPrev = points[i - 1].fromPrev;
-        points[0].fromPrev = 0;
-      }
-      // "resume" begins where the actor IS, not where the route does
-      if (!named && points.length >= 2) points = resumeFrom(points, a.worldX, a.worldY, a.worldZ);
-      if (points.length >= 2) {
-        a.starName = WALK_ON_PATH; // the kind of walk, until the arrival names the star
-        session.scheduler.startWalkPath(name, points, toName);
-        return true;
-      }
-    }
-    return false;
-  };
+}
 
-  /** the builder of a `walktostar` record (TI.EXE 0x4435c0): the star found
-   *  in the open set, or error 0xa (0x4435de) */
-  const starWalk = (a: ActorInstance, n: string, to: string) => (): void => {
+/**
+ * Start an actor along the AUTHORED route between two stars, if there is one.
+ *
+ * Lifted out of `walkonpath` so `walktostar` can use it too, which is what a
+ * DreamFactory 1 set needs: Dust never calls `walkonpath` — its cast library
+ * moves everyone with `moveactor`, which is `walktostar` — and yet its sets
+ * carry 34 authored routes, and `gang.cst` tests `actorstar (who) =
+ * "walkonpath"` to find out whether the walk it is interrupting was on one. So
+ * v1's `walktostar` is the walker that consults the table, and the sentinel it
+ * leaves behind is the one that script reads. Reported from the page as actors
+ * "walking directly to the destination point" instead of along a path.
+ *
+ * Answers true when a route was found and the walk started.
+ */
+function startPathWalk(
+  ctx: BuiltinCtx,
+  a: ActorInstance, name: string, fromName: string, toName: string,
+): boolean {
+  const { session } = ctx;
+  const set = session.currentBinding?.set;
+  const named = fromName !== "resume";
+  const matches = (pa: string, pb: string): boolean =>
+    named
+      ? (pa === fromName && pb === toName) || (pb === fromName && pa === toName)
+      : pa === toName || pb === toName;
+  const rec = set?.starPaths.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
+  /**
+   * The open set first, because its record is the live one — and then every
+   * set that has been visited, because the script that starts a walk need not
+   * be running in the room the walk happens in.
+   *
+   * That second half is #394, and it is the same argument
+   * {@link GameSession.starRegistry} already makes for the DESTINATION: Dust
+   * starts the Mayor's Wife's street patrol from inside the saloon
+   * (`SALLOWER.SET`'s door `keydown`, which runs `setupactor ("street")` and
+   * only then `gototown`), so with the open set alone the star is found and
+   * the route is not, and she walks her first leg straight through the
+   * buildings. Nothing else would re-start that patrol either: her `mwifeidle` has arms for the
+   * `jones` stars alone, so the mwife1<->mwife2 ping-pong lives entirely in
+   * `endwalk`, which only fires if this first walk happens.
+   *
+   * Only on a DreamFactory 1 set, and that is the point of the guard rather
+   * than caution: Dust's star names are QUALIFIED (`town.mwife1`), so a name
+   * means one place in the whole game, while Titanic's are bare (`jones1`) and
+   * a room's route table is the only thing that disambiguates them.
+   */
+  /**
+   * A DreamFactory 5 room has no set: its routes are MARK's (df/sett.ts), in
+   * the stars' own axes, and RedJack.exe's `walkonpath` (0x41c820) looks them
+   * up the way TI.EXE does — the pair either way round (`0x444660`), or the
+   * destination alone for `"resume"` (`0x444890`), which trims the route to
+   * the actor on the way out (`0x444a80`). Only the open room's, as there:
+   * RedJack's star names are bare (`anne`, `const1`) and repeat room to room.
+   * The points are handed over in a v4 star path's (X, Z, Y) so the one
+   * conversion below serves both.
+   */
+  const room = set ? undefined : session.maze?.sett.routes.find((p) => matches(p.a.toLowerCase(), p.b.toLowerCase()));
+  const routeOf = () => {
+    if (rec) {
+      return { a: rec.a.toLowerCase(), b: rec.b.toLowerCase(),
+               points: readStarPath(set!.file.containers, rec.container, set!.version) };
+    }
+    if (room) {
+      return { a: room.a.toLowerCase(), b: room.b.toLowerCase(),
+               points: room.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev })) };
+    }
+    if (set?.version === 1) return [...session.starPathRegistry.values()].find((p) => matches(p.a, p.b)) ?? null;
+    return null;
+  };
+  const route = routeOf();
+  if (route) {
+    // a star's (X, Z, Y) into the world triple a walk record uses: worldY is the
+    // ground plane's second axis and worldZ the height, as walktostar builds it.
+    // Copied rather than read in place: the registry's points outlive this walk
+    // and the reversal below rewrites them.
+    let points = route.points.map((p) => ({ x: p.x, y: p.z, z: p.y, fromPrev: p.fromPrev }));
+    // the polyline is stored a->b; walk it backwards when the destination is
+    // the `a` end (TI.EXE's second match arm in both lookups)
+    if (route.a === toName) {
+      points.reverse();
+      // A point's `fromPrev` is the length of the leg BEHIND it, so reversing
+      // the polyline has to carry each length one point along — the leg that
+      // arrives at a point one way is the one that leaves it the other.
+      // Reversing the array alone pairs every leg with the wrong length:
+      // SCOT3's nine-point route out of Scotland Road walks its 3983-unit
+      // hallway as though it were 856 (4.65x too fast), its corners at 0.29x
+      // and 0.45x, and its last leg to the door with a stored length of ZERO —
+      // the hacker teleporting the final 752 units (#224); the route's total
+      // comes out 4678 against the 8661 its own container header declares.
+      for (let i = points.length - 1; i > 0; i--) points[i].fromPrev = points[i - 1].fromPrev;
+      points[0].fromPrev = 0;
+    }
+    // "resume" begins where the actor IS, not where the route does
+    if (!named && points.length >= 2) points = resumeFrom(points, a.worldX, a.worldY, a.worldZ);
+    if (points.length >= 2) {
+      a.starName = WALK_ON_PATH; // the kind of walk, until the arrival names the star
+      session.scheduler.startWalkPath(name, points, toName);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** the builder of a `walktostar` record (TI.EXE 0x4435c0): the star found
+ *  in the open set, or error 0xa (0x4435de) */
+function starWalk(ctx: BuiltinCtx, a: ActorInstance, n: string, to: string): () => void {
+  const { session, findStar } = ctx;
+  return (): void => {
     const s = findStar(to);
     if (!s) throw new ScriptError(0xa, `walktostar: no star "${to}" for ${n}`);
     a.starName = WALK_STAR;
     session.scheduler.startWalk(n, s.positionX, s.positionZ, s.positionY, to);
   };
+}
+
+/** a deferred record's builder, by its mode, for a load to file it again */
+function fileDeferredWalks(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   // ...and a deferred record's, by its mode, for a load to file it again
   session.deferredWalkBuilder = (n, mode, to, from) => {
     const a = actor(n);
     if (!a) return null;
-    if (mode === 4 || mode === 5) return () => walkOnRoad(a, n, to, from, mode);
-    return mode === 3 ? () => walkOnPath(a, n, from, to) : starWalk(a, n, to);
+    if (mode === 4 || mode === 5) return () => walkOnRoad(ctx, a, n, to, from, mode);
+    return mode === 3 ? () => walkOnPath(ctx, a, n, from, to) : starWalk(ctx, a, n, to);
   };
+}
 
-  /**
-   * The route `walkonroad` and `walkonframes` walk: the camera ROAD that leaves
-   * `view` of `scene` in the open set, as TI.EXE builds it (de build). 0x405140
-   * finds the scene (0x4048c0) and the view's index in it, and answers the road
-   * register handle its standpoint frame carries (+0x34); none is error 0xa
-   * (0x43c22c). 0x404f90 then makes a route block of the road's frames — x, y
-   * and the height less the set header's 0xa0a word (0x40503f), each leg the
-   * integer root of its squares (0x40508a) — which the walk keeps at +0x12.
-   */
-  const roadRoute = (sceneName: string, viewName: string) => {
-    const set = session.currentBinding?.set;
-    const scene = set?.scenes.find((sc) => foldAscii(sc.sceneName) === foldAscii(sceneName));
-    const view = scene ? scene.views.findIndex((v) => foldAscii(v.viewName) === foldAscii(viewName)) : -1;
-    const stand = view >= 0 ? scene!.turns[RIGHTTURNS]?.frames.find((f) => f.viewID === view) : undefined;
-    const handle = stand?.transitionLog ?? 0;
-    const container = handle > 0 ? set!.file.containers[handle] : undefined;
-    if (!container) throw new ScriptError(0xa, `no road from ${sceneName}/${viewName}`);
-    const frames = readFrameRegister(container).frames;
-    if (frames.length < 2) throw new ScriptError(0xa, `the road from ${sceneName}/${viewName} has no length`);
-    const lift = set!.heightDifference ?? 0;
-    const path: { x: number; y: number; z: number; cum: number }[] = [];
-    let cum = 0;
-    for (const f of frames) {
-      const p = { x: f.posX16, y: f.posZ16, z: s16(f.posY16 - lift) };
-      const prev = path.at(-1);
-      if (prev) cum += isqrt((p.x - prev.x) ** 2 + (p.y - prev.y) ** 2 + (p.z - prev.z) ** 2);
-      path.push({ ...p, cum });
-    }
-    return path;
-  };
-  const walkOnRoad = (a: ActorInstance, n: string, scene: string, view: string, mode: 4 | 5): void => {
-    const path = roadRoute(scene, view);
-    // what `actorstar` reports meanwhile (0x43c2ca / 0x43c3aa)
-    a.starName = mode === 4 ? "walkonroad" : "walkonframes";
-    session.scheduler.startWalkRoad(n, path, mode);
-  };
-  /**
-   * walkonroad / walkonframes (actor, scene, view) — TI.EXE 0x43bba0 / 0x43bd00
-   * (de build): a name of 16 characters or more is error 0x1a; outside the
-   * walker's set the record is deferred like walktostar's, keeping the scene at
-   * +0x4e and the view at +0x5e (0x43c3d0, modes 4 and 5). No shipped script
-   * calls either.
-   */
+/**
+ * The route `walkonroad` and `walkonframes` walk: the camera ROAD that leaves
+ * `view` of `scene` in the open set, as TI.EXE builds it (de build). 0x405140
+ * finds the scene (0x4048c0) and the view's index in it, and answers the road
+ * register handle its standpoint frame carries (+0x34); none is error 0xa
+ * (0x43c22c). 0x404f90 then makes a route block of the road's frames — x, y
+ * and the height less the set header's 0xa0a word (0x40503f), each leg the
+ * integer root of its squares (0x40508a) — which the walk keeps at +0x12.
+ */
+function roadRoute(ctx: BuiltinCtx, sceneName: string, viewName: string) {
+  const { session } = ctx;
+  const set = session.currentBinding?.set;
+  const scene = set?.scenes.find((sc) => foldAscii(sc.sceneName) === foldAscii(sceneName));
+  const view = scene ? scene.views.findIndex((v) => foldAscii(v.viewName) === foldAscii(viewName)) : -1;
+  const stand = view >= 0 ? scene!.turns[RIGHTTURNS]?.frames.find((f) => f.viewID === view) : undefined;
+  const handle = stand?.transitionLog ?? 0;
+  const container = handle > 0 ? set!.file.containers[handle] : undefined;
+  if (!container) throw new ScriptError(0xa, `no road from ${sceneName}/${viewName}`);
+  const frames = readFrameRegister(container).frames;
+  if (frames.length < 2) throw new ScriptError(0xa, `the road from ${sceneName}/${viewName} has no length`);
+  const lift = set!.heightDifference ?? 0;
+  const path: { x: number; y: number; z: number; cum: number }[] = [];
+  let cum = 0;
+  for (const f of frames) {
+    const p = { x: f.posX16, y: f.posZ16, z: s16(f.posY16 - lift) };
+    const prev = path.at(-1);
+    if (prev) cum += isqrt((p.x - prev.x) ** 2 + (p.y - prev.y) ** 2 + (p.z - prev.z) ** 2);
+    path.push({ ...p, cum });
+  }
+  return path;
+}
+
+/** a road walk started: its route, and what `actorstar` reports meanwhile */
+function walkOnRoad(ctx: BuiltinCtx, a: ActorInstance, n: string, scene: string, view: string, mode: 4 | 5): void {
+  const { session } = ctx;
+  const path = roadRoute(ctx, scene, view);
+  // what `actorstar` reports meanwhile (0x43c2ca / 0x43c3aa)
+  a.starName = mode === 4 ? "walkonroad" : "walkonframes";
+  session.scheduler.startWalkRoad(n, path, mode);
+}
+
+/**
+ * walkonroad / walkonframes (actor, scene, view) — TI.EXE 0x43bba0 / 0x43bd00
+ * (de build): a name of 16 characters or more is error 0x1a; outside the
+ * walker's set the record is deferred like walktostar's, keeping the scene at
+ * +0x4e and the view at +0x5e (0x43c3d0, modes 4 and 5). No shipped script
+ * calls either.
+ */
+function registerRoadWalks(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   for (const [cmd, mode] of [["walkonroad", 4], ["walkonframes", 5]] as const) {
     r(cmd, (_i, [n, scene, view]) => {
       const a = actor(n);
@@ -842,12 +854,40 @@ function registerWalking(ctx: BuiltinCtx): void {
       if (sc.length >= 16 || vw.length >= 16) throw new ScriptError(0x1a, `${cmd}: name too long`);
       if (a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
         a.starName = WALK_DEFER;
-        session.scheduler.deferWalk(toStr(n), sc, () => walkOnRoad(a, toStr(n), sc, vw, mode), mode, vw);
+        session.scheduler.deferWalk(toStr(n), sc, () => walkOnRoad(ctx, a, toStr(n), sc, vw, mode), mode, vw);
         return;
       }
-      walkOnRoad(a, toStr(n), sc, vw, mode);
+      walkOnRoad(ctx, a, toStr(n), sc, vw, mode);
     });
   }
+}
+
+/**
+ * walkonpath(actor, fromStar|"resume", toStar): walk the AUTHORED ROUTE
+ * between two stars, not the straight line between them.
+ *
+ * The route is in the SET, on the star record that pairs the two names — an
+ * i16 container ref holding the polyline (engine/src/df/set.ts `StarPath`). Both of
+ * TI.EXE's lookups walk that table and both skip a record whose ref is 0, so
+ * an unpaired star never resolves:
+ *
+ *  - a named `from` matches the pair (`0x409fd0`), either way round — the
+ *    record is reversed when `from` is the secondary;
+ *  - `"resume"` matches on the DESTINATION alone (`0x40a0f0`), secondary first
+ *    (walk forward) then primary (walk reversed). This is the form the two
+ *    reported cases use — `walkonpath (me, "resume", "ga.2")` in gang.cst,
+ *    where Georgia has just finished talking and is already at the far end.
+ *
+ * And `"resume"` is not just a laxer LOOKUP — it TRIMS the route it found to
+ * where the actor is standing (`0x40a200`, called on the way out of that
+ * lookup and only from it). See {@link resumeFrom}.
+ *
+ * With no route authored between the two, the straight line IS the answer: the
+ * corpus has six paths and three of them are two points.
+ */
+function registerWalkOnPath(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   r("walkonpath", (_i, [n, from, to]) => {
     const a = actor(n);
     if (!a) return 0;
@@ -857,40 +897,43 @@ function registerWalking(ctx: BuiltinCtx): void {
     // 0x443ac0, mode 3, the route's start kept at +0x5e; RedJack.exe 0x41c959)
     if (commandRules(session).defersWalksOffSet && a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
       a.starName = WALK_DEFER;
-      session.scheduler.deferWalk(toStr(n), toName, () => walkOnPath(a, toStr(n), from, to), 3, fromName);
+      session.scheduler.deferWalk(toStr(n), toName, () => walkOnPath(ctx, a, toStr(n), from, to), 3, fromName);
       return 0;
     }
-    walkOnPath(a, toStr(n), from, to);
+    walkOnPath(ctx, a, toStr(n), from, to);
   });
-  const walkOnPath = (a: ActorInstance, n: string, from: Value, to: Value): void => {
-    const toName = toStr(to ?? "").toLowerCase();
-    const fromName = toStr(from ?? "").toLowerCase();
-    // RedJack.exe builds the walk from the route alone (0x41ce80): none between
-    // the two, or none ending at the destination for "resume", is error 0xa
-    // (0x41cefc) — there is no straight line to fall back on
-    if (commandRules(session).pathWalksNeedRoute) {
-      if (startPathWalk(a, n, fromName, toName)) return;
-      throw new ScriptError(0xa, `walkonpath: no route from ${fromName} to ${toName}`);
+}
+
+/** a walkonpath record built: along the route, or (before DreamFactory 5) the straight line to the star */
+function walkOnPath(ctx: BuiltinCtx, a: ActorInstance, n: string, from: Value, to: Value): void {
+  const { session, log, findStar } = ctx;
+  const toName = toStr(to ?? "").toLowerCase();
+  const fromName = toStr(from ?? "").toLowerCase();
+  // RedJack.exe builds the walk from the route alone (0x41ce80): none between
+  // the two, or none ending at the destination for "resume", is error 0xa
+  // (0x41cefc) — there is no straight line to fall back on
+  if (commandRules(session).pathWalksNeedRoute) {
+    if (startPathWalk(ctx, a, n, fromName, toName)) return;
+    throw new ScriptError(0xa, `walkonpath: no route from ${fromName} to ${toName}`);
+  }
+  const dest = findStar(to);
+  if (!dest) {
+    log(`walkonpath: star "${toStr(to ?? "")}" not found`);
+    return;
+  }
+  if (startPathWalk(ctx, a, n, fromName, toName)) return;
+  a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
+  if (fromName !== "resume") {
+    const start = findStar(from);
+    if (start) {
+      a.worldX = start.positionX;
+      a.worldY = start.positionZ;
+      a.worldZ = start.positionY;
     }
-    const dest = findStar(to);
-    if (!dest) {
-      log(`walkonpath: star "${toStr(to ?? "")}" not found`);
-      return;
-    }
-    if (startPathWalk(a, n, fromName, toName)) return;
-    a.starName = WALK_DEFER; // sentinel while moving; the name lands on arrival
-    if (fromName !== "resume") {
-      const start = findStar(from);
-      if (start) {
-        a.worldX = start.positionX;
-        a.worldY = start.positionZ;
-        a.worldZ = start.positionY;
-      }
-    }
-    session.scheduler.startWalk(
-      n, dest.positionX, dest.positionZ, dest.positionY, toName,
-    );
-  };
+  }
+  session.scheduler.startWalk(
+    n, dest.positionX, dest.positionZ, dest.positionY, toName,
+  );
 }
 
 /** the running walks: asked after, stopped, paused, counted, and turning */

@@ -12,29 +12,38 @@ import { panFrom255 } from "../sound-channels";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
 
-/**
- * DreamFactory 5's picture and sound commands — brightness, contrast, roll and
- * pitch, the sprites' own sounds — each read out of `RedJack.exe`
- * (`redjack/tools/rjdis.mts cmd NAME`). Every one answers only in a v5 game.
- *
- * Unlike the commands in df5.ts, these answer a name that is no prop or actor
- * with the exe's error 0xa (0x42c490 and 0x406550, the lookups every handler
- * here calls first, return it) rather than quietly with 0.
- */
-export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
-  const { session } = ctx;
-  const r5 = v5Registrar(ctx);
+/** an integer argument, or 0xe (`cmp word [arg], 4`) */
+const int = (cmd: string, v: Value | undefined): number => {
+  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
+  return v | 0;
+};
+/** a string argument, or 0xe (0x410560) */
+const str = (cmd: string, v: Value | undefined): string => {
+  if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
+  return v;
+};
+/** a channel 1..3 for a value form (0x42c26b, 0x41adcf), or 0xa */
+const channel = (cmd: string, v: Value | undefined): number => {
+  const k = int(cmd, v);
+  if (k < 1 || k > 3) throw new ScriptError(0xa, `${cmd}: channel ${k}`);
+  return k - 1;
+};
+const level = (v: number): number => Math.max(-255, Math.min(255, v));
+const contrast = (v: number): number => contrastOf(gammaOf(v));
+/** three integers, every one checked before anything is set (0x42be2e..0x42be4e) */
+const rgb = (cmd: string, args: Value[]): [number, number, number] =>
+  [int(cmd, args[0]), int(cmd, args[1]), int(cmd, args[2])];
 
-  /** an integer argument, or 0xe (`cmp word [arg], 4`) */
-  const int = (cmd: string, v: Value | undefined): number => {
-    if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-    return v | 0;
-  };
-  /** a string argument, or 0xe (0x410560) */
-  const str = (cmd: string, v: Value | undefined): string => {
-    if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-    return v;
-  };
+/** an angle as the turning setters keep it: its low 24 bits (0x428b1c, 0x441a34) */
+const angle = (cmd: string, v: Value | undefined): number => int(cmd, v) & 0xffffff;
+/** a little-endian RGBA word as the engine's 0x00RRGGBB */
+const rgbOf = (w: number): number => ((w & 0xff) << 16) | (w & 0xff00) | ((w >>> 16) & 0xff);
+
+/** the prop and the actor a command names, or the exe's error 0xa */
+function lookups(session: BuiltinCtx["session"]): {
+  prop: (cmd: string, n: Value | undefined) => PropInstance;
+  actor: (cmd: string, n: Value | undefined) => ActorInstance;
+} {
   const prop = (cmd: string, n: Value | undefined): PropInstance => {
     const p = session.propRuntime.get(str(cmd, n));
     if (!p) throw new ScriptError(0xa, `${cmd}: no prop "${String(n)}"`);
@@ -45,18 +54,40 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
     if (!a) throw new ScriptError(0xa, `${cmd}: no actor "${String(n)}"`);
     return a;
   };
-  /** a channel 1..3 for a value form (0x42c26b, 0x41adcf), or 0xa */
-  const channel = (cmd: string, v: Value | undefined): number => {
-    const k = int(cmd, v);
-    if (k < 1 || k > 3) throw new ScriptError(0xa, `${cmd}: channel ${k}`);
-    return k - 1;
-  };
-  const level = (v: number): number => Math.max(-255, Math.min(255, v));
-  const contrast = (v: number): number => contrastOf(gammaOf(v));
-  /** three integers, every one checked before anything is set (0x42be2e..0x42be4e) */
-  const rgb = (cmd: string, args: Value[]): [number, number, number] =>
-    [int(cmd, args[0]), int(cmd, args[1]), int(cmd, args[2])];
+  return { prop, actor };
+}
 
+/**
+ * DreamFactory 5's picture and sound commands — brightness, contrast, roll and
+ * pitch, the sprites' own sounds — each read out of `RedJack.exe`
+ * (`redjack/tools/rjdis.mts cmd NAME`). Every one answers only in a v5 game.
+ *
+ * Unlike the commands in df5.ts, these answer a name that is no prop or actor
+ * with the exe's error 0xa (0x42c490 and 0x406550, the lookups every handler
+ * here calls first, return it) rather than quietly with 0.
+ */
+export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
+  registerSpriteLights(ctx);
+  registerGroupLights(ctx);
+
+  // ---- turning ------------------------------------------------------------
+  registerTurning(ctx);
+
+  // ---- sound --------------------------------------------------------------
+  registerOwnSounds(ctx);
+  registerSoundBanks(ctx);
+  registerPuppetLines(ctx);
+
+  // ---- other --------------------------------------------------------------
+  registerSeeks(ctx);
+  registerColourAt(ctx);
+}
+
+/** a sprite's own contrast and the light group it is drawn under */
+function registerSpriteLights(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const { prop, actor } = lookups(session);
   /**
    * propcontrast (p, r, g, b) and actorcontrast (a, r, g, b): a sprite's own
    * gamma per channel (0x42bf40, 0x406000 -> 0x40a870), as screencontrast is the
@@ -97,20 +128,24 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
       if (k > 0) e.lightGroup = k;
     });
   }
+}
 
-  /**
-   * stagebrightness, setbrightness, moviebrightness, puppetbrightness (r, g, b)
-   * and their …contrast twins: the records the stage's flat, the movie's frames,
-   * the puppet's layers — and every sprite lit by that group — are drawn
-   * through (0x40a8f0 / 0x40aa10 with the group's index; the movie's own copies
-   * at 0x40ab30 / 0x40abe0). The set's lights nothing but the sprites put under
-   * it: no picture of the room is drawn through it (its slot 0x4c7958 has no
-   * other reader). (k) reads channel k (0x41ad90 / 0x41ae50).
-   *
-   * The puppet's value forms read the MOVIE's record, not the puppet's:
-   * 0x432034 and 0x432064 hand 0x41ad90 / 0x41ae50 group 4, where the statements
-   * at 0x431fef / 0x43200f hand it 5. Ported as they are.
-   */
+/**
+ * stagebrightness, setbrightness, moviebrightness, puppetbrightness (r, g, b)
+ * and their …contrast twins: the records the stage's flat, the movie's frames,
+ * the puppet's layers — and every sprite lit by that group — are drawn
+ * through (0x40a8f0 / 0x40aa10 with the group's index; the movie's own copies
+ * at 0x40ab30 / 0x40abe0). The set's lights nothing but the sprites put under
+ * it: no picture of the room is drawn through it (its slot 0x4c7958 has no
+ * other reader). (k) reads channel k (0x41ad90 / 0x41ae50).
+ *
+ * The puppet's value forms read the MOVIE's record, not the puppet's:
+ * 0x432034 and 0x432064 hand 0x41ad90 / 0x41ae50 group 4, where the statements
+ * at 0x431fef / 0x43200f hand it 5. Ported as they are.
+ */
+function registerGroupLights(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   for (const name of ["stage", "set", "movie", "puppet"] as const) {
     const rec = (): Shade => session.lights[name];
     const read = (): Shade => (name === "puppet" ? session.lights.group(LIT_MOVIE)! : rec());
@@ -128,12 +163,13 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
       if (name === "puppet") session.lights.puppetTable = null;
     });
   }
+}
 
-  // ---- turning ------------------------------------------------------------
-
-  /** an angle as the turning setters keep it: its low 24 bits (0x428b1c, 0x441a34) */
-  const angle = (cmd: string, v: Value | undefined): number => int(cmd, v) & 0xffffff;
-
+/** the camera's roll, a prop's, and an actor's pitch, roll, facer and snap */
+function registerTurning(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const { prop, actor } = lookups(session);
   // cameraroll (r) and cameraroll (): the camera's turn about the way it looks
   // (0x441a00 -> 0x438cf0; 0x441f10 reads it back). The room's picture and the
   // sprites in it both turn with it (MazeRuntime.spriteCamera, SphereImage.render).
@@ -179,22 +215,25 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
     if (v === undefined) return i.bool(a.snap);
     a.snap = truthy(v);
   });
+}
 
-  // ---- sound --------------------------------------------------------------
-
-  /**
-   * actorsound (a, volume, pan) and propsound (p, volume, pan): play the sound
-   * of the pose the actor is in, or of the view the prop shows — the u32 at the
-   * record's 0x0c (0x40840b, CastPose.sound; PropState.sound) — at a volume and
-   * a pan of 0..255 (0x471fc0, 0x4721e0; the sink's units as the crickets have
-   * them). A pose or view with none is 0xa (0x408243). Each has one buffer of its
-   * own, "Actor Sound" and "Prop Sound" (0x4c2a50, 0x4c8494), so a new one stops
-   * the last, and the same one starts again from its beginning (0x4718e0).
-   *
-   * And a sprite whose pictures go by the clock (a step time) and that has not
-   * had its first pass yet starts its clock now, at step 0 (0x408305..0x40833a,
-   * 0x42e1b5..0x42e1ea): the animation keeps time with its sound.
-   */
+/**
+ * actorsound (a, volume, pan) and propsound (p, volume, pan): play the sound
+ * of the pose the actor is in, or of the view the prop shows — the u32 at the
+ * record's 0x0c (0x40840b, CastPose.sound; PropState.sound) — at a volume and
+ * a pan of 0..255 (0x471fc0, 0x4721e0; the sink's units as the crickets have
+ * them). A pose or view with none is 0xa (0x408243). Each has one buffer of its
+ * own, "Actor Sound" and "Prop Sound" (0x4c2a50, 0x4c8494), so a new one stops
+ * the last, and the same one starts again from its beginning (0x4718e0).
+ *
+ * And a sprite whose pictures go by the clock (a step time) and that has not
+ * had its first pass yet starts its clock now, at step 0 (0x408305..0x40833a,
+ * 0x42e1b5..0x42e1ea): the animation keeps time with its sound.
+ */
+function registerOwnSounds(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const { prop, actor } = lookups(session);
   const channels: Record<"actor" | "prop", PlayHandle | null> = { actor: null, prop: null };
   const playOwn = (
     which: "actor" | "prop", data: Uint8Array | undefined, volume: number, pan: number,
@@ -237,7 +276,12 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
       p.frameIdx = 0;
     }
   });
+}
 
+/** the one-shots in the open banks: whether one is there, and how long */
+function registerSoundBanks(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   // soundexists (name): is a one-shot of that name in any open bank (0x448700,
   // the name compared whole, without regard to case)
   r5("soundexists", (i, [n]) => i.bool(!!session.audioLib.soundChunk(str("soundexists", n))));
@@ -256,13 +300,17 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
     if (!align || !rate) return 0;
     return Math.trunc((Math.trunc(v.getInt32(0x24, true) / align) * 60) / rate);
   });
+}
 
-  /**
-   * countpuppetsounds () and indextopuppetsoundname (n), indextopuppetsubtitle
-   * (n): the open puppet's lines — their count (the i16 at 0x6e, 0x4301f3), and
-   * the n-th's sound name (+0x118) or subtitle (+0x18), n in 1..count or 0xa
-   * (0x430220, 0x430300). No puppet open is 0x2d (0x4301ca).
-   */
+/**
+ * countpuppetsounds () and indextopuppetsoundname (n), indextopuppetsubtitle
+ * (n): the open puppet's lines — their count (the i16 at 0x6e, 0x4301f3), and
+ * the n-th's sound name (+0x118) or subtitle (+0x18), n in 1..count or 0xa
+ * (0x430220, 0x430300). No puppet open is 0x2d (0x4301ca).
+ */
+function registerPuppetLines(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   const lines = (cmd: string) => {
     const pup = session.puppet?.pup;
     if (!pup) throw new ScriptError(0x2d, `${cmd}: no puppet open`);
@@ -283,16 +331,26 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
   r5("countpuppetsounds", () => lines("countpuppetsounds").count);
   r5("indextopuppetsoundname", (_i, [n]) => line("indextopuppetsoundname", n).ident);
   r5("indextopuppetsubtitle", (_i, [n]) => line("indextopuppetsubtitle", n).text);
+}
 
-  // ---- other --------------------------------------------------------------
-
-  // actorseek (a) and propseek (p): read every pose's (view's) record, sound and
-  // first picture into memory ahead of need (0x402ab0 -> 0x407560 with 1,
-  // 0x429010 -> 0x42d410). The port reads a file whole the first time it is
-  // asked, so only the name is checked
+/**
+ * actorseek (a) and propseek (p): read every pose's (view's) record, sound and
+ * first picture into memory ahead of need (0x402ab0 -> 0x407560 with 1,
+ * 0x429010 -> 0x42d410). The port reads a file whole the first time it is
+ * asked, so only the name is checked
+ */
+function registerSeeks(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const { prop, actor } = lookups(session);
   r5("actorseek", (_i, [n]) => void actor("actorseek", n));
   r5("propseek", (_i, [n]) => void prop("propseek", n));
+}
 
+/** what the room or the stage shows at a screen point */
+function registerColourAt(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   /**
    * setcolor (point) and setdepth (point): what the room shows at a screen point
    * — the colour, 0x00RRGGBB as calcrgb makes it, or how far away the scenery
@@ -338,8 +396,6 @@ export function registerDf5LookBuiltins(ctx: BuiltinCtx): void {
     const v = s.at(x, y, width, height, cam);
     return depth ? v : rgbOf(v);
   };
-  /** a little-endian RGBA word as the engine's 0x00RRGGBB */
-  const rgbOf = (w: number): number => ((w & 0xff) << 16) | (w & 0xff00) | ((w >>> 16) & 0xff);
   r5("setcolor", (_i, [pt]) => roomAt("setcolor", pt, false));
   r5("setdepth", (_i, [pt]) => roomAt("setdepth", pt, true));
 

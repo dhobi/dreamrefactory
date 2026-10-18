@@ -62,45 +62,51 @@ interface Menu {
   items: MenuItem[];
 }
 
+const int = (cmd: string, v: Value | undefined): number => {
+  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
+  return v | 0;
+};
+// 0x410560: a string, or 0xe
+const str = (cmd: string, v: Value | undefined): string => {
+  if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
+  return v;
+};
+// a v5 boolean is 1/0 (Interpreter.bool), so the exe's `cmp word [arg], 2`
+// can only turn a string away here
+const bool = (cmd: string, v: Value | undefined): number => {
+  if (typeof v === "string" || v === undefined) throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a boolean`);
+  return v ? 1 : 0;
+};
+
 /**
  * DreamFactory 5's menus, keys and scripts, each read out of `RedJack.exe`
  * (`redjack/tools/rjdis.mts cmd NAME`). Every one answers only in a v5 game.
  */
 export function registerDf5UiBuiltins(ctx: BuiltinCtx): void {
-  const { session } = ctx;
+  registerMenus(ctx);
+  registerKey(ctx);
+  registerProfile(ctx);
+  registerRoomQueries(ctx);
+  registerThemeExists(ctx);
+}
+
+/**
+ * menu.c's model (0x41f410..0x420a70): up to 64 menus (the count at
+ * 0x4c7f58, their handles from 0x4c7f60), each a count, its name as a
+ * Pascal string of at most 127 and an array of 0x86-byte items — three words
+ * (checked, grayed, the command key) and the item's name, also kept to 127.
+ * Every lookup is by name, case folded, the first that matches.
+ *
+ * Only `drawmenus` (0x41f780 → 0x420a70) and `clearmenus` touch Windows,
+ * building the menu bar out of these and destroying it. The port has no
+ * native menu bar for a v5 game (`menuvisible` round-trips its flag,
+ * builtins/helpers.ts), so the model is all there is: what the scripts read
+ * back answers as the exe's does, and nothing is drawn. RedJack's `boot ()`
+ * builds its debug menus here and `menuvisible (isdebugging ())` keeps the
+ * bar hidden, which the port's would be too.
+ */
+function registerMenus(ctx: BuiltinCtx): void {
   const r5 = v5Registrar(ctx);
-
-  const int = (cmd: string, v: Value | undefined): number => {
-    if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-    return v | 0;
-  };
-  // 0x410560: a string, or 0xe
-  const str = (cmd: string, v: Value | undefined): string => {
-    if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-    return v;
-  };
-  // a v5 boolean is 1/0 (Interpreter.bool), so the exe's `cmp word [arg], 2`
-  // can only turn a string away here
-  const bool = (cmd: string, v: Value | undefined): number => {
-    if (typeof v === "string" || v === undefined) throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a boolean`);
-    return v ? 1 : 0;
-  };
-
-  /**
-   * menu.c's model (0x41f410..0x420a70): up to 64 menus (the count at
-   * 0x4c7f58, their handles from 0x4c7f60), each a count, its name as a
-   * Pascal string of at most 127 and an array of 0x86-byte items — three words
-   * (checked, grayed, the command key) and the item's name, also kept to 127.
-   * Every lookup is by name, case folded, the first that matches.
-   *
-   * Only `drawmenus` (0x41f780 → 0x420a70) and `clearmenus` touch Windows,
-   * building the menu bar out of these and destroying it. The port has no
-   * native menu bar for a v5 game (`menuvisible` round-trips its flag,
-   * builtins/helpers.ts), so the model is all there is: what the scripts read
-   * back answers as the exe's does, and nothing is drawn. RedJack's `boot ()`
-   * builds its debug menus here and `menuvisible (isdebugging ())` keeps the
-   * bar hidden, which the port's would be too.
-   */
   const menus: Menu[] = [];
   const menuNamed = (name: string): Menu => {
     const m = menus.find((x) => same(x.name, name));
@@ -204,15 +210,19 @@ export function registerDf5UiBuiltins(ctx: BuiltinCtx): void {
     if (k < 1 || k > m.items.length) throw new ScriptError(0xa, `indextoitem (${mn}, ${k}): ${m.items.length} items`);
     return m.items[k - 1].name;
   });
+}
 
-  /**
-   * key (name): is that key held NOW (0x419520 → 0x488be0). The name is looked
-   * up in the VK name table ({@link DF5_VK_NAMES}), its index the VK code;
-   * failing that a one-character name goes through `VkKeyScan`, and any other
-   * answers false. Then `GetAsyncKeyState (vk) < 0`: the page keeps the held
-   * keys ({@link GameSession.keysDown}), the space bar its own way as well
-   * (the phone's SPACE button), and the mouse buttons are the pointer's.
-   */
+/**
+ * key (name): is that key held NOW (0x419520 → 0x488be0). The name is looked
+ * up in the VK name table ({@link DF5_VK_NAMES}), its index the VK code;
+ * failing that a one-character name goes through `VkKeyScan`, and any other
+ * answers false. Then `GetAsyncKeyState (vk) < 0`: the page keeps the held
+ * keys ({@link GameSession.keysDown}), the space bar its own way as well
+ * (the phone's SPACE button), and the mouse buttons are the pointer's.
+ */
+function registerKey(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   r5("key", (i, [name]) => {
     const n = str("key", name);
     let vk = -1;
@@ -234,14 +244,18 @@ export function registerDf5UiBuiltins(ctx: BuiltinCtx): void {
       (vk === 0x02 && session.pointerDown && session.pointerButton === 2);
     return i.bool(held);
   });
+}
 
-  /**
-   * profilestart (n) and profilestop (n): ten stopwatches, n in 1..10 (0xa
-   * outside, 0xe for a non-integer). profilestart notes the engine clock
-   * (0x4086e0 → 0x469f30, milliseconds) in slot n; profilestop answers the
-   * milliseconds since, and since the clock's start for a slot never started
-   * (0x417770). It stops nothing.
-   */
+/**
+ * profilestart (n) and profilestop (n): ten stopwatches, n in 1..10 (0xa
+ * outside, 0xe for a non-integer). profilestart notes the engine clock
+ * (0x4086e0 → 0x469f30, milliseconds) in slot n; profilestop answers the
+ * milliseconds since, and since the clock's start for a slot never started
+ * (0x417770). It stops nothing.
+ */
+function registerProfile(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   const started = new Array<number>(11).fill(0);
   const slot = (cmd: string, n: Value | undefined): number => {
     const k = int(cmd, n);
@@ -253,7 +267,12 @@ export function registerDf5UiBuiltins(ctx: BuiltinCtx): void {
     return 0;
   });
   r5("profilestop", (_i, [n]) => Math.trunc(session.clock.now - started[slot("profilestop", n)]));
+}
 
+/** the open room's scenes, roads and quads */
+function registerRoomQueries(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   // the room commands: with no room open each is 0x28 before it reads an
   // argument (0x4c78d8 is clear)
   const room = (cmd: string) => {
@@ -321,12 +340,16 @@ export function registerDf5UiBuiltins(ctx: BuiltinCtx): void {
     if (k < 1 || k > q.length) throw new ScriptError(0xa, `indextoquad (${k}): ${q.length} quads`);
     return q[k - 1].name;
   });
+}
 
-  /**
-   * themeexists (name) (0x448810): whether an open track file calls itself
-   * that — the table at 0x4c7884 holds one 0x234-byte record per
-   * `opentrackfile`, its track name at +0x1c copied from the file's header
-   * (0x446cbd). By the track's name alone, not the file's.
-   */
+/**
+ * themeexists (name) (0x448810): whether an open track file calls itself
+ * that — the table at 0x4c7884 holds one 0x234-byte record per
+ * `opentrackfile`, its track name at +0x1c copied from the file's header
+ * (0x446cbd). By the track's name alone, not the file's.
+ */
+function registerThemeExists(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
   r5("themeexists", (i, [name]) => i.bool(session.audioLib.hasTrackName(str("themeexists", name))));
 }

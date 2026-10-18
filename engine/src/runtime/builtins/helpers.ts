@@ -373,6 +373,15 @@ function registerGeometry(ctx: BuiltinCtx): void {
 
 /** the disc, dialogs, quit, the machine, clocks, menu, bevels and path slots */
 function registerSystem(ctx: BuiltinCtx): void {
+  registerDisc(ctx);
+  registerDialogs(ctx);
+  registerMachine(ctx);
+  registerParamsAndFlags(ctx);
+  registerPathSlots(ctx);
+}
+
+/** currentcd — and, in DreamFactory 1, actorhitbox under the same id */
+function registerDisc(ctx: BuiltinCtx): void {
   const { session, r } = ctx;
   // currentcd([name]): the mounted CD volume. The original verified the named
   // disc (TAOOT: "Titanic1"/"Titanic2") was in the drive and returned "" if absent;
@@ -416,7 +425,11 @@ function registerSystem(ctx: BuiltinCtx): void {
     box[1] = s16(toNum(b ?? 0));
     return 0;
   };
+}
 
+/** the dialogs and quit, through the host */
+function registerDialogs(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // UI dialogs + quit — delegated to host hooks (browser wires alert/confirm/
   // prompt; headless defaults are safe). notedialog: modal note (OK).
   // questiondialog: yes/no, returns 1/0 (scripts do `if questiondialog(..)=false`).
@@ -450,7 +463,11 @@ function registerSystem(ctx: BuiltinCtx): void {
     await session.onQuit();
     return 0;
   });
+}
 
+/** the machine and the clocks: machinetype, freemem, sysmem, tick and frame */
+function registerMachine(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // machinetype(): host platform. Scripts branch `if machinetype() = "win"`; the
   // web build is the Windows engine's descendant, so report "win".
   r("machinetype", () => "win");
@@ -511,6 +528,11 @@ function registerSystem(ctx: BuiltinCtx): void {
    */
   r("tick", () => Math.floor((session.clock.now * 3) / 50));
   r("frame", () => session.frameCounter);
+}
+
+/** setparam, the menu and key-abort flags, and the bevel count */
+function registerParamsAndFlags(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // setparam(idx[, val]): per-set scratch parameters, getter/setter by arity —
   // the set-level twin of stageparam.
   const setParams = new Map<number, Value>();
@@ -538,7 +560,11 @@ function registerSystem(ctx: BuiltinCtx): void {
   // countbevels(): number of choice bevels on the active puppet screen (a
   // conversation gates on `if countbevels() > 3`).
   r("countbevels", () => session.puppet?.bevels.length ?? 0);
+}
 
+/** the path slots, and the disc they name */
+function registerPathSlots(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // path(n) / path(n, str): the engine's resource search-path table — 9 string
   // slots (0..8). Slot 0 is the install root (engine-set); scripts fill 1..8 via
   // BOOTFILE's setpath(), e.g. TAOOT's `path(1, path(0) @ "tour:")`, `path(3, mainpath @

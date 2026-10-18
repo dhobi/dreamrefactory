@@ -465,6 +465,12 @@ function registerSettings(ctx: BuiltinCtx): void {
 
 /** the CLUT palette effects and visualeffect */
 function registerScreenEffects(ctx: BuiltinCtx): void {
+  registerCluts(ctx);
+  registerVisualEffect(ctx);
+}
+
+/** mixclut and clut: a palette range dimmed, or a palette installed */
+function registerCluts(ctx: BuiltinCtx): void {
   const { session, r } = ctx;
   // clut(target)/mixclut(target,color,lo,hi,amt): the DreamFactory colour-
   // lookup-table effect. mixclut blends a palette range toward a colour (the
@@ -501,27 +507,31 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
     if (t === "black") return blackNow(session);
     session.onClut(t, null);
   });
-  /**
-   * visualeffect(effect, steps): how the NEXT screen arrives.
-   *
-   * Every effect but `plain` and `nodraw` is a reveal — the new screen is wiped,
-   * irised, scrolled or pushed in over the old one, one strip per 60 Hz tick
-   * over `steps` passes. A reveal also ENDS the transition-black the script put
-   * up to hide the change; an effect treated as a no-op would leave nothing
-   * ending it.
-   *
-   * TAOOT's blackjack is where that shows. HOUSE fades the dealer out with
-   * `screentoblack("puppet")` and then `transtoflat("blkjack.stg")`, which is the
-   * one stage the boot deliberately does NOT black out or fade back in (it is
-   * already black) — the table is revealed by `newgame`'s own
-   * `visualeffect(wiperight, 20)`. Without this the deal ran perfectly behind a
-   * screen that stayed dark: "black screen after the talk".
-   *
-   * `plain` is excluded because it is the opposite instruction — the scripts call
-   * it to CLEAR a pending effect immediately before `blacktoscreen`, which is the
-   * fade that then does the revealing. Lifting the black there would cancel the
-   * fade-in on every overlay the game opens.
-   */
+}
+
+/**
+ * visualeffect(effect, steps): how the NEXT screen arrives.
+ *
+ * Every effect but `plain` and `nodraw` is a reveal — the new screen is wiped,
+ * irised, scrolled or pushed in over the old one, one strip per 60 Hz tick
+ * over `steps` passes. A reveal also ENDS the transition-black the script put
+ * up to hide the change; an effect treated as a no-op would leave nothing
+ * ending it.
+ *
+ * TAOOT's blackjack is where that shows. HOUSE fades the dealer out with
+ * `screentoblack("puppet")` and then `transtoflat("blkjack.stg")`, which is the
+ * one stage the boot deliberately does NOT black out or fade back in (it is
+ * already black) — the table is revealed by `newgame`'s own
+ * `visualeffect(wiperight, 20)`. Without this the deal ran perfectly behind a
+ * screen that stayed dark: "black screen after the talk".
+ *
+ * `plain` is excluded because it is the opposite instruction — the scripts call
+ * it to CLEAR a pending effect immediately before `blacktoscreen`, which is the
+ * fade that then does the revealing. Lifting the black there would cancel the
+ * fade-in on every overlay the game opens.
+ */
+function registerVisualEffect(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   r("visualeffect", (_i, [effect, steps], _c, frame) => {
     // DF.EXE and RedJack.exe check the id's band BEFORE anything else, and an id
     // outside it is error 0xe with no pass and no effect (CommandRules.effects)
@@ -541,7 +551,7 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
         // the effect reads the held screen as the picture it leaves, and draws
         // from there on (GameSession.effectPassHeld)
         try {
-          return ok ? visualEffect(effect, steps) : undefined;
+          return ok ? visualEffect(session, effect, steps) : undefined;
         } finally {
           session.effectPassHeld = false;
         }
@@ -552,157 +562,163 @@ function registerScreenEffects(ctx: BuiltinCtx): void {
       },
     );
   });
-  const visualEffect = (effect: Value | undefined, steps: Value | undefined): Promise<void> | void => {
-    const name = toStr(effect ?? "plain").toLowerCase();
-    if (name === "plain") {
-      // NOT a no-op: `plain` is a full-screen redraw (tl.exe 0x448630 blits the
-      // screen rect to itself), which is how a script makes a change it just made
-      // visible before whatever it does next reads the screen. It still must not
-      // clear a pending reveal — see the note above.
-      session.repaintNow?.();
-      return;
-    }
-    // `nodraw` (24019) is no reveal at all: the jump table sends it to the
-    // dispatcher's bare `ret` (TI.EXE 0x43b615; RedJack.exe's slot 18 is its
-    // epilogue, 0x436a09), so the pass ran with its screen copy held back
-    // (0x489ef6) and nothing is copied after it — the screen keeps what it had,
-    // black included. The glowstick's x-ray asks for it every drag step
-    // (plugins.ts) and draws the picture itself. So it must not lift the
-    // transition-black the way a reveal does. (DF.EXE has no 24019.)
-    if (name === "nodraw") return;
-    session.fade.cut(0);
-    // A WIPE is animated, over `steps` engine passes (see GameSession.wipe).
-    //
-    // The screen being left is captured HERE, which is late enough to be right:
-    // the scripts change the screen first and ask for the effect second, and
-    // nothing has repainted in between — the change lands on the next frame.
-    // TAOOT's ending scrapbook turns its pages this way (narend.stg, 5 of the
-    // corpus's 9 reveals):
-    //
-    //     gotoflat (findword (worldwar1 (), ",", count))
-    //     voicesound ("paper")
-    //     visualeffect (wipeleft, 30)
-    //     voicesound ("n." @ findword (worldwar1 (), ",", count))
-    //     voicewait ()
-    //
-    // and the pages that are a CONTINUATION of one picture ("11b", "33b", "51b"
-    // …) ask for `visualeffect(plain, 0)` instead, so honouring the difference is
-    // what makes the flips land on the page turns and nowhere else (#12).
-    //
-    // TAOOT asks for wipeleft and wiperight (9 reveals), Dust adds barndooropen
-    // and barndoorclose — its map and inventory screens arrive middle-outwards
-    // (4 opens, 3 closes, reported from play as "the map and the menu have an
-    // opening animation in the real game"). `venetian`, the irises, the scrolls,
-    // wipeup/wipedown and turnup/turndown are in the vocabulary although no
-    // shipped script asks for them, and they are ported all the same, read off
-    // each exe's functions rather than guessed (runtime/visual-effects.ts has
-    // the addresses). TI.EXE, tl.exe and RedJack.exe draw them alike, strip for
-    // strip; DF.EXE has its own plan for its thirteen — a fixed number of passes
-    // with `steps` only setting how long each is held — so a Dust reveal is
-    // DF.EXE's (`draws: "df"`).
-    /**
-     * ...and the TURNS, which are not wipes at all.
-     *
-     * Timelapse turns by scrolling: `lefttoframeMin` shows the mid-turn flat,
-     * asks for `turnhalfleft`, shows the destination, asks for `turnleft`. It is
-     * the only game that asks — one call each, all four in those two handlers —
-     * and it is the path the game itself takes on a small machine (see
-     * freemem/sysmem in helpers.ts). What they do is settled in
-     * ScreenDirector.pushTurn, off `tl.exe`.
-     */
-    const DIR = {
-      turnleft: "turnleft", turnhalfleft: "turnleft",
-      turnright: "turnright", turnhalfright: "turnright",
-    } as const;
-    /**
-     * ...except in a DreamFactory 5 game, where 24020 is not `turnhalfleft` but
-     * `photodissolve` — RedJack.exe's own command table names it so, and v5
-     * has no 24021. It is how RedJack brings up its control panel and crosses
-     * into a new day, and read as the first leg of a Timelapse turn it held the
-     * screen on a half-pushed picture waiting for a second leg that never came.
-     *
-     * RedJack.exe's turnleft/turnright/turnup/turndown (0x4379a0, 0x4376a0,
-     * 0x437ca0, 0x437fa0) push exactly as TI.EXE's do, pass for pass, so v5
-     * takes TI.EXE's turns too. (Each first checks there is memory for a
-     * snapshot of the screen, 0x46ce10, and is a plain copy without it; the port
-     * always has it.)
-     */
-    const effects = commandRules(session).effects;
-    let exe: ExeEffect | DfEffect | null = null;
-    if (effects.drawn(name)) exe = name as ExeEffect | DfEffect;
-    let dir: typeof session.wipe.dir | undefined = DIR[name as keyof typeof DIR];
-    if (exe) dir = "exe";
-    else if (effects.halfLeftDissolves && name === "turnhalfleft") dir = "dissolve";
-    if (!dir) return;
-    const from = session.captureFrame?.() ?? null;
-    if (!from) return;
-    /**
-     * A reveal also captures the picture it is ARRIVING at, here, once. The
-     * script has already done `gotoflat`, so the current flat is the one the
-     * effect is arriving at; painting it now and holding the capture is the
-     * port's copy of the original's offscreen surface, which `gotoflat` drew
-     * and the modal effect then consumed unchanged. Left to the live frame
-     * instead, an animating destination swapped the entering strips mid-ramp
-     * (i0001.103's water reached frame 3 before the turn was over), and the
-     * between-legs composite drifted with it. Every effect is modal the same
-     * way in all three exes. See GameSession.wipe.to.
-     */
+}
+
+/** visualeffect's effect, once its pass has run: a redraw, nothing, or a reveal set going and waited for */
+function visualEffect(session: BuiltinCtx["session"], effect: Value | undefined, steps: Value | undefined): Promise<void> | void {
+  const name = toStr(effect ?? "plain").toLowerCase();
+  if (name === "plain") {
+    // NOT a no-op: `plain` is a full-screen redraw (tl.exe 0x448630 blits the
+    // screen rect to itself), which is how a script makes a change it just made
+    // visible before whatever it does next reads the screen. It still must not
+    // clear a pending reveal — see the note above.
     session.repaintNow?.();
-    const to = session.captureFrame?.() ?? null;
-    if (!to) return;
-    session.wipe.from = from;
-    session.wipe.to = to;
-    session.wipe.dir = dir;
-    session.wipe.effect = exe ?? "";
-    session.wipe.settled = false;
-    // the `half` pair travels half the screen (tl.exe 0x448b48); the rest all of it
-    const half = dir !== "dissolve" && (name === "turnhalfleft" || name === "turnhalfright");
-    session.wipe.span = half ? 0.5 : 1;
-    // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a; DF.EXE
-    // 0x420370..0x42038a, RedJack.exe 0x408c0c..0x408c25)
-    const clamped = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
-    if (effects.draws === "df" && exe) {
-      // DF.EXE: its fixed passes, each held its own length, and one more step
-      // for the hold after the last pass (see dfPlan)
-      const plan = dfPlan(exe as DfEffect, clamped, to.height);
-      session.wipe.draws = "df";
-      session.wipe.passMs = plan.passMs;
-      session.wipe.steps = plan.passes + 1;
-    } else {
-      session.wipe.draws = "ti";
-      session.wipe.passMs = 0;
-      session.wipe.steps = clamped;
-    }
-    session.wipe.step = 0;
-    session.wipe.lastTick = 0;
-    // the pacer's `timeBase`: the tick the effect begins on (see tickWipe)
-    session.wipe.baseTick = ticksAt(session.clock.now);
-    // The script WAITS for the reveal, as it does in the original: visualeffect
-    // performs the whole effect inside the command (0x43b480 off the back of a
-    // service pass) and its pacer spins until each strip's tick is due, so the
-    // statements after it run when the screen has finished arriving. For the
-    // scrapbook that is the difference between the narration starting under a
-    // turning page and starting on the page it belongs to.
-    //
-    // Bounded, and on the ENGINE's frame rather than a wall clock, for the same
-    // reasons walkAfterFade is: a host that stops ticking must not hang a script,
-    // and a poll on real milliseconds makes the headless oracle non-deterministic.
-    return (async () => {
-      // (a DF.EXE ramp's steps are its holds, which can be many ticks long)
-      const ticks = Math.ceil((session.wipe.steps * (session.wipe.passMs || RAMP_STEP_MS)) / RAMP_STEP_MS);
-      const cap = ticks * 4 + 60;
-      for (let i = 0; i < cap && session.wiping; i++) await session.frameWait();
-      // Gave up (the host stopped ticking): never leave a reveal holding the
-      // screen. But ONLY then — a wipe that finished was ended by tickWipe, and
-      // a half turn that finished has SETTLED, which must survive this return:
-      // the script's next statements are `gotoflat(namedest)` and the second
-      // leg's visualeffect, and any frame either yields must keep showing the
-      // settled composite for that leg to capture. Ending it here — which this
-      // line did unconditionally when only TAOOT's wipes existed — was the left
-      // turn's mid-picture jump (see GameSession.wipe.settled).
-      if (session.wiping) session.endWipe();
-    })();
-  };
+    return;
+  }
+  // `nodraw` (24019) is no reveal at all: the jump table sends it to the
+  // dispatcher's bare `ret` (TI.EXE 0x43b615; RedJack.exe's slot 18 is its
+  // epilogue, 0x436a09), so the pass ran with its screen copy held back
+  // (0x489ef6) and nothing is copied after it — the screen keeps what it had,
+  // black included. The glowstick's x-ray asks for it every drag step
+  // (plugins.ts) and draws the picture itself. So it must not lift the
+  // transition-black the way a reveal does. (DF.EXE has no 24019.)
+  if (name === "nodraw") return;
+  session.fade.cut(0);
+  // A WIPE is animated, over `steps` engine passes (see GameSession.wipe).
+  //
+  // The screen being left is captured HERE, which is late enough to be right:
+  // the scripts change the screen first and ask for the effect second, and
+  // nothing has repainted in between — the change lands on the next frame.
+  // TAOOT's ending scrapbook turns its pages this way (narend.stg, 5 of the
+  // corpus's 9 reveals):
+  //
+  //     gotoflat (findword (worldwar1 (), ",", count))
+  //     voicesound ("paper")
+  //     visualeffect (wipeleft, 30)
+  //     voicesound ("n." @ findword (worldwar1 (), ",", count))
+  //     voicewait ()
+  //
+  // and the pages that are a CONTINUATION of one picture ("11b", "33b", "51b"
+  // …) ask for `visualeffect(plain, 0)` instead, so honouring the difference is
+  // what makes the flips land on the page turns and nowhere else (#12).
+  //
+  // TAOOT asks for wipeleft and wiperight (9 reveals), Dust adds barndooropen
+  // and barndoorclose — its map and inventory screens arrive middle-outwards
+  // (4 opens, 3 closes, reported from play as "the map and the menu have an
+  // opening animation in the real game"). `venetian`, the irises, the scrolls,
+  // wipeup/wipedown and turnup/turndown are in the vocabulary although no
+  // shipped script asks for them, and they are ported all the same, read off
+  // each exe's functions rather than guessed (runtime/visual-effects.ts has
+  // the addresses). TI.EXE, tl.exe and RedJack.exe draw them alike, strip for
+  // strip; DF.EXE has its own plan for its thirteen — a fixed number of passes
+  // with `steps` only setting how long each is held — so a Dust reveal is
+  // DF.EXE's (`draws: "df"`).
+  /**
+   * ...and the TURNS, which are not wipes at all.
+   *
+   * Timelapse turns by scrolling: `lefttoframeMin` shows the mid-turn flat,
+   * asks for `turnhalfleft`, shows the destination, asks for `turnleft`. It is
+   * the only game that asks — one call each, all four in those two handlers —
+   * and it is the path the game itself takes on a small machine (see
+   * freemem/sysmem in helpers.ts). What they do is settled in
+   * ScreenDirector.pushTurn, off `tl.exe`.
+   */
+  const DIR = {
+    turnleft: "turnleft", turnhalfleft: "turnleft",
+    turnright: "turnright", turnhalfright: "turnright",
+  } as const;
+  /**
+   * ...except in a DreamFactory 5 game, where 24020 is not `turnhalfleft` but
+   * `photodissolve` — RedJack.exe's own command table names it so, and v5
+   * has no 24021. It is how RedJack brings up its control panel and crosses
+   * into a new day, and read as the first leg of a Timelapse turn it held the
+   * screen on a half-pushed picture waiting for a second leg that never came.
+   *
+   * RedJack.exe's turnleft/turnright/turnup/turndown (0x4379a0, 0x4376a0,
+   * 0x437ca0, 0x437fa0) push exactly as TI.EXE's do, pass for pass, so v5
+   * takes TI.EXE's turns too. (Each first checks there is memory for a
+   * snapshot of the screen, 0x46ce10, and is a plain copy without it; the port
+   * always has it.)
+   */
+  const effects = commandRules(session).effects;
+  let exe: ExeEffect | DfEffect | null = null;
+  if (effects.drawn(name)) exe = name as ExeEffect | DfEffect;
+  let dir: typeof session.wipe.dir | undefined = DIR[name as keyof typeof DIR];
+  if (exe) dir = "exe";
+  else if (effects.halfLeftDissolves && name === "turnhalfleft") dir = "dissolve";
+  if (!dir) return;
+  const from = session.captureFrame?.() ?? null;
+  if (!from) return;
+  /**
+   * A reveal also captures the picture it is ARRIVING at, here, once. The
+   * script has already done `gotoflat`, so the current flat is the one the
+   * effect is arriving at; painting it now and holding the capture is the
+   * port's copy of the original's offscreen surface, which `gotoflat` drew
+   * and the modal effect then consumed unchanged. Left to the live frame
+   * instead, an animating destination swapped the entering strips mid-ramp
+   * (i0001.103's water reached frame 3 before the turn was over), and the
+   * between-legs composite drifted with it. Every effect is modal the same
+   * way in all three exes. See GameSession.wipe.to.
+   */
+  session.repaintNow?.();
+  const to = session.captureFrame?.() ?? null;
+  if (!to) return;
+  session.wipe.from = from;
+  session.wipe.to = to;
+  session.wipe.dir = dir;
+  session.wipe.effect = exe ?? "";
+  session.wipe.settled = false;
+  // the `half` pair travels half the screen (tl.exe 0x448b48); the rest all of it
+  const half = dir !== "dissolve" && (name === "turnhalfleft" || name === "turnhalfright");
+  session.wipe.span = half ? 0.5 : 1;
+  // clamped the way TI.EXE clamps it, 1..1000 (0x43df60..0x43df7a; DF.EXE
+  // 0x420370..0x42038a, RedJack.exe 0x408c0c..0x408c25)
+  const clamped = Math.min(1000, Math.max(1, toNum(steps ?? 0) || 1));
+  if (effects.draws === "df" && exe) {
+    // DF.EXE: its fixed passes, each held its own length, and one more step
+    // for the hold after the last pass (see dfPlan)
+    const plan = dfPlan(exe as DfEffect, clamped, to.height);
+    session.wipe.draws = "df";
+    session.wipe.passMs = plan.passMs;
+    session.wipe.steps = plan.passes + 1;
+  } else {
+    session.wipe.draws = "ti";
+    session.wipe.passMs = 0;
+    session.wipe.steps = clamped;
+  }
+  session.wipe.step = 0;
+  session.wipe.lastTick = 0;
+  // the pacer's `timeBase`: the tick the effect begins on (see tickWipe)
+  session.wipe.baseTick = ticksAt(session.clock.now);
+  return waitForReveal(session);
+}
+
+/**
+ * The script WAITS for the reveal, as it does in the original: visualeffect
+ * performs the whole effect inside the command (0x43b480 off the back of a
+ * service pass) and its pacer spins until each strip's tick is due, so the
+ * statements after it run when the screen has finished arriving. For the
+ * scrapbook that is the difference between the narration starting under a
+ * turning page and starting on the page it belongs to.
+ *
+ * Bounded, and on the ENGINE's frame rather than a wall clock, for the same
+ * reasons walkAfterFade is: a host that stops ticking must not hang a script,
+ * and a poll on real milliseconds makes the headless oracle non-deterministic.
+ */
+async function waitForReveal(session: BuiltinCtx["session"]): Promise<void> {
+  // (a DF.EXE ramp's steps are its holds, which can be many ticks long)
+  const ticks = Math.ceil((session.wipe.steps * (session.wipe.passMs || RAMP_STEP_MS)) / RAMP_STEP_MS);
+  const cap = ticks * 4 + 60;
+  for (let i = 0; i < cap && session.wiping; i++) await session.frameWait();
+  // Gave up (the host stopped ticking): never leave a reveal holding the
+  // screen. But ONLY then — a wipe that finished was ended by tickWipe, and
+  // a half turn that finished has SETTLED, which must survive this return:
+  // the script's next statements are `gotoflat(namedest)` and the second
+  // leg's visualeffect, and any frame either yields must keep showing the
+  // settled composite for that leg to capture. Ending it here — which this
+  // line did unconditionally when only TAOOT's wipes existed — was the left
+  // turn's mid-picture jump (see GameSession.wipe.settled).
+  if (session.wiping) session.endWipe();
 }
 
 /** the cursor, the no-op and editor commands, the modifier keys */
