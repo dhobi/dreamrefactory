@@ -786,6 +786,9 @@ interface TalkState {
  * -1 arm may have a parting line to say". So a bail runs script, and the loop
  * below carries on skipping lines until the puppet actually closes.
  */
+/** what `otherwise:` asks for: stop the run, or answer the first or last plaque offered */
+export type Otherwise = "stop" | "first" | "last";
+
 /**
  * `otherwise:` — what to answer when the plaque offered is not the one named.
  *
@@ -794,7 +797,7 @@ interface TalkState {
  * silent `stop`: `otherwise: lsat` parses (the parser checks option KEYS, not
  * their values), and unchecked would quietly mean "throw on anything unplanned".
  */
-export function otherwiseOf(step: Step): "stop" | "first" | "last" {
+export function otherwiseOf(step: Step): Otherwise {
   const asked = step.opts.otherwise;
   if (asked === undefined) return "stop";
   const v = asked.trim().toLowerCase();
@@ -830,7 +833,7 @@ export const QUESTION_IDS =
 export async function converse(
   c: ActionContext,
   bevels: number[],
-  otherwise: "stop" | "first" | "last",
+  otherwise: Otherwise,
   then?: "leave" | "stop",
 ): Promise<void> {
   const { d } = c;
@@ -1064,7 +1067,7 @@ function chooseBevel(
   choices: NonNullable<TalkState["choices"]>,
   wanted: number[],
   picked: number[],
-  otherwise: "stop" | "first" | "last",
+  otherwise: Otherwise,
   then: "leave" | "stop" | undefined,
 ): number | "leave" | "stop" {
   let idx = wanted.length ? choices.findIndex((ch) => ch.id === wanted[0]) : -1;
