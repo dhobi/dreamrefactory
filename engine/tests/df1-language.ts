@@ -1,6 +1,6 @@
 /**
  * The language rules DF.EXE, TI.EXE and tl.exe agree on, and the one string
- * builtin where DF.EXE stands alone (engine/src/runtime/interp.ts `classic`,
+ * builtin where DF.EXE stands alone (engine/src/runtime/interp.ts `typed`,
  * builtins/core.ts, builtins/helpers.ts).
  *
  *   npx vitest run engine/tests/df1-language.ts

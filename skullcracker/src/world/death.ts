@@ -5,7 +5,7 @@
 import { Film } from "../film";
 import { DEATH_FILMS, PIT_DEPTH } from "../mission";
 import { random } from "../random";
-import { p, ui, levelIndex, DIFFICULTY, level } from "./state";
+import { p, ui, levelIndex, difficulty, level } from "./state";
 import { nobodyNear, view, setCamVx, setCamVy } from "./camera";
 import { dropAt, roomAt } from "./rooms";
 import { inv } from "./arsenal";
@@ -154,7 +154,7 @@ async function deathOver(): Promise<void> {
   deathRed = null;
   if (stats.lives < 0) {
     await ui.film(DEATH_FILMS[Math.floor(random() * DEATH_FILMS.length)]);
-    ui.gameOver(stats.score, levelIndex + 1, DIFFICULTY);
+    ui.gameOver(stats.score, levelIndex + 1, difficulty);
     return;
   }
   respawn();

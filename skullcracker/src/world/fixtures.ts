@@ -18,7 +18,7 @@ import { inv, loadRounds } from "./arsenal";
 import { stats } from "./blows";
 import { addClock } from "./hurt";
 import { film, died } from "./death";
-import { overlaps } from "./box";
+import { overlaps, type Box } from "./box";
 
 /** the planks standing in the room the player is in */
 export function planksHere(): Plank[] {
@@ -646,7 +646,7 @@ export function headAndArm(
 export function wormBounds(
   sbk: SbkFile,
   room: SbkRoom,
-): { left: number; right: number; top: number; bottom: number } | null {
+): Box | null {
   const r = sbk.entities.find(
     (e) =>
       e.name === BOGGS.worms.bounds &&
@@ -660,9 +660,9 @@ export function wormBounds(
 
 /** the worms' box against the body's own record point — `0x41acd9`..`0x41acfc` */
 export function boundsAgainst(
-  r: { left: number; right: number; top: number; bottom: number } | null,
+  r: Box | null,
   body: { pointX: number; pointY: number },
-): { left: number; right: number; top: number; bottom: number } | undefined {
+): Box | undefined {
   if (!r) return undefined;
   return {
     left: r.left - body.pointX,

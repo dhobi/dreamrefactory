@@ -745,7 +745,7 @@ export class Interpreter {
         const from = this.forNum(await this.evalExpr(st.from, frame), "from");
         const to = this.forNum(await this.evalExpr(st.to, frame), "to");
         const step = st.step ? this.forNum(await this.evalExpr(st.step, frame), "step") : 1;
-        if (this.typed) return this.classicFor(st.varName, from, to, step, st.body, frame);
+        if (this.typed) return this.typedFor(st.varName, from, to, step, st.body, frame);
         if (step === 0) throw new Error("for loop with step 0");
         for (let i = from; step > 0 ? i <= to : i >= to; i += step) {
           this.setVar(st.varName, i, frame);
@@ -861,7 +861,7 @@ export class Interpreter {
    *   (0x4038ff-0x403933), so the body may move it; the loop goes on while it
    *   is `<= to` (step >= 0) or `>= to` (step < 0). It ends one step past `to`.
    */
-  private async classicFor(
+  private async typedFor(
     name: string,
     from: number,
     to: number,
@@ -877,13 +877,13 @@ export class Interpreter {
       throw new ScriptError(3, "for loops nested 20 deep");
     }
     try {
-      return await this.classicForBody(name, to, step, body, frame);
+      return await this.typedForBody(name, to, step, body, frame);
     } finally {
       this.forOpen--;
     }
   }
 
-  private async classicForBody(name: string, to: number, step: number, body: Stmt[], frame: Frame): Promise<Signal> {
+  private async typedForBody(name: string, to: number, step: number, body: Stmt[], frame: Frame): Promise<Signal> {
     let guard = 0;
     let lastYield = this.realYieldSeq();
     for (;;) {
@@ -907,7 +907,7 @@ export class Interpreter {
     }
   }
 
-  /** a `for` bound — an integer, or error 0xe in the classic engines */
+  /** a `for` bound — an integer, or error 0xe in the typed engines */
   private forNum(v: Value, what: string): number {
     if (this.typed && typeof v !== "number") throw typeError(`for: ${what} wants an integer, got ${show(v)}`);
     return toNum(v);
@@ -982,7 +982,7 @@ export class Interpreter {
           if (e.op === "|" && truthy(l)) return 1;
         }
         const r = await this.evalExpr(e.r, frame);
-        if (this.typed) return classicBinary(e.op, l, r);
+        if (this.typed) return typedBinary(e.op, l, r);
         switch (e.op) {
           case "&":
             return truthy(l) && truthy(r) ? 1 : 0;
@@ -1167,7 +1167,7 @@ function asLogic(v: Value): boolean | Logic {
   return isLogic(v) ? v : truthy(v);
 }
 /** a value as a number; a boolean is 1/0 (the port's own reads — the engines
- *  would refuse it, see {@link classicBinary}) */
+ *  would refuse it, see {@link typedBinary}) */
 export function toNum(v: Value): number {
   if (typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
@@ -1205,7 +1205,7 @@ function show(v: Value): string {
  *
  * Anything refused is error 0xe. Every answer of a comparison is a boolean.
  */
-export function classicBinary(op: string, l: Value, r: Value): Value {
+export function typedBinary(op: string, l: Value, r: Value): Value {
   const ints = (): [number, number] => {
     if (typeof l !== "number" || typeof r !== "number") throw typeError(`${show(l)} ${op} ${show(r)}`);
     return [l, r];

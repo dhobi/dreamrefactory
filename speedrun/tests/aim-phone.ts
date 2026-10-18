@@ -19,7 +19,7 @@ const SCREEN = { width: 640, height: 480 };
 /** a canvas `width` px across, its top-left on fractional client pixels as a phone lays it out */
 const rectFor = (width: number) => ({ left: 7.796875, top: 120.40625, width, height: (width * 3) / 4 });
 
-/** the page's own conversion of a client point back to a screen pixel (taoot/src/play-rules.ts canvasPoint) */
+/** the page's own conversion of a client point back to a screen pixel (engine/src/web/screen.ts screenPoint, floored) */
 const back = (c: { x: number; y: number }, r: ReturnType<typeof rectFor>) => ({
   x: Math.floor(((c.x - r.left) / r.width) * SCREEN.width),
   y: Math.floor(((c.y - r.top) / r.height) * SCREEN.height),

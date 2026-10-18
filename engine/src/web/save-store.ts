@@ -64,7 +64,7 @@ let kind: SaveKind | null = null;
  * strand whatever was already read from the other database.
  */
 export function useSaveKind(k: SaveKind): void {
-  if (kind && k.db === kind.db && k.ext === kind.ext) {
+  if (k.db === kind?.db && k.ext === kind.ext) {
     kind = k;
     return;
   }

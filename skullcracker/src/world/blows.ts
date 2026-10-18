@@ -11,11 +11,11 @@ import { FOE_SFX } from "../sound";
 import { GRAB, WEAPONS } from "../guns";
 import { CLOCK_FULL, HudFighter } from "../hud";
 import { random } from "../random";
-import { p, level, player, type Level, HURT, DIFFICULTY, blowCodes, heldPose, actions, sound } from "./state";
+import { p, level, player, type Level, HURT, difficulty, blowCodes, heldPose, actions, sound } from "./state";
 import { playerBox, celRec, lastCel, foeAnchor, baseOf, celOf } from "./cels";
 import { dropAt, corpseFrames, groundAt } from "./rooms";
 import { gunAhead, inv } from "./arsenal";
-import { celBoxAt } from "./box";
+import { celBoxAt, facingRect, type Box } from "./box";
 
 /**
  * The three flags {@link waitsFor} reads: `[0x472574]` (`hardcore`),
@@ -240,12 +240,9 @@ export function hurtBox(
   e: Enemy,
   c: SbkCel,
   lvl: Level,
-): { top: number; left: number; bottom: number; right: number } {
+): Box {
   const a = foeAnchor(e, lvl);
-  const b =
-    e.facing < 0 && c.body
-      ? { ...c.body, x0: -c.body.x1, x1: -c.body.x0 }
-      : c.body;
+  const b = c.body && facingRect(c.body, e.facing < 0);
   return a && b
     ? celBoxAt(a.x, a.y, b)
     : {
@@ -277,7 +274,7 @@ export const stats = {
   lives: 3,
   /** `[0x4ac3d0]` and `[0x4ac3d8]` — and only {@link damageOn} ever spends it */
   health: HURT.max as number,
-  maxHealth: HURT.maxAt(DIFFICULTY),
+  maxHealth: HURT.maxAt(difficulty),
   /** what this level stood up with, and how many of them may still stand */
   census: 0,
   allowance: 0,

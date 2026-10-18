@@ -71,7 +71,7 @@ import { PLAYERS } from "../players";
  * string in as `globalThis.SC_QUERY` before the game is loaded, so a test
  * says exactly what a URL would.
  */
-export let QUERY = new URLSearchParams(
+export let query = new URLSearchParams(
   (globalThis as { SC_QUERY?: string }).SC_QUERY ??
     (typeof location === "undefined" ? "" : location.search),
 );
@@ -109,7 +109,7 @@ export const ui: GameUi = {
  *
  * `?char=1` picks one before the level loads; Shift+C is action 11.
  */
-export let character: 0 | 1 = QUERY.get("char") === "1" ? 1 : 0;
+export let character: 0 | 1 = query.get("char") === "1" ? 1 : 0;
 export let kit = PLAYERS[character];
 export let anim = kit.anim;
 export let actions = kit.actions;
@@ -546,7 +546,7 @@ export const HURT = {
  *
  * It starts off. See {@link HURT} for why, and for everything it turns on.
  */
-export let damageOn = QUERY.get("damage") === "1";
+export let damageOn = query.get("damage") === "1";
 
 /**
  * ...and whether a CREATURE's blow is one of the things it may spend — `?foehit=1`,
@@ -560,7 +560,7 @@ export let damageOn = QUERY.get("damage") === "1";
  * NOT the damage — so the creature half gets a switch of its own and it starts
  * off. Everything else the switch above arms is unchanged.
  */
-export let foesHurt = QUERY.get("foehit") === "1";
+export let foesHurt = query.get("foehit") === "1";
 
 /**
  * `?foes=0` — the level with its creatures left out, and it is the page's, not
@@ -568,7 +568,7 @@ export let foesHurt = QUERY.get("foehit") === "1";
  * and a punk put down on the same landing shoves the player off it
  * ({@link bodyPush}), exactly as the original would.
  */
-export let foesOff = QUERY.get("foes") === "0";
+export let foesOff = query.get("foes") === "0";
 
 /**
  * How hard — `0x46b20c`, and the preferences panel is what sets it.
@@ -592,20 +592,20 @@ const difficultyOf = (q: URLSearchParams): -1 | 0 | 1 => {
   const n = Number(q.get("difficulty") ?? 0);
   return n === 1 || n === -1 ? n : 0;
 };
-export let DIFFICULTY = difficultyOf(QUERY);
+export let difficulty = difficultyOf(query);
 
 /**
  * A new set of switches, for a headless run that stands the game up again in
  * the same process — every switch read at load is read again. The page never
  * calls it: its switches are its address bar's, once.
  */
-export function setQuery(query: string): void {
-  QUERY = new URLSearchParams(query);
-  useCharacter(QUERY.get("char") === "1" ? 1 : 0);
-  damageOn = QUERY.get("damage") === "1";
-  foesHurt = QUERY.get("foehit") === "1";
-  foesOff = QUERY.get("foes") === "0";
-  DIFFICULTY = difficultyOf(QUERY);
+export function setQuery(text: string): void {
+  query = new URLSearchParams(text);
+  useCharacter(query.get("char") === "1" ? 1 : 0);
+  damageOn = query.get("damage") === "1";
+  foesHurt = query.get("foehit") === "1";
+  foesOff = query.get("foes") === "0";
+  difficulty = difficultyOf(query);
 }
 
 /**
@@ -620,7 +620,7 @@ export function setQuery(query: string): void {
  * everywhere without moving a single number that was already measured.
  */
 export function scaled(n: number): number {
-  return n - Math.trunc(n / 2) * DIFFICULTY;
+  return n - Math.trunc(n / 2) * difficulty;
 }
 export const held = {
   left: false,

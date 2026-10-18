@@ -20,6 +20,11 @@ export function overlaps(a: Box, b: Box): boolean {
   return a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
 }
 
+/** a cel's rect as drawn facing west when `west`: its x span mirrored about the anchor */
+export function facingRect(r: SbkCelBox, west: boolean): SbkCelBox {
+  return west ? { ...r, x0: -r.x1, x1: -r.x0 } : r;
+}
+
 /** a cel's rect (`x0..x1`, `y0..y1` off its anchor) with the anchor at (x, y) */
 export function celBoxAt(x: number, y: number, r: SbkCelBox): Box {
   return { left: x + r.x0, right: x + r.x1, top: y + r.y0, bottom: y + r.y1 };

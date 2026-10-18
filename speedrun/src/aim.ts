@@ -104,7 +104,7 @@ export function spotAt(a: Aim, want: string, x: number, y: number): boolean {
  * given as rectangles walked on a grid.
  *
  * Reaches, and not merely "hits": a click is sent as a CLIENT pixel and the
- * page floors it back (`canvasPoint`). On a canvas drawn smaller than 1:1 — a
+ * page floors it back (`screenPoint`). On a canvas drawn smaller than 1:1 — a
  * phone shows 640x480 at about 375 px across — some framebuffer pixels have no
  * client pixel of their own, and a click aimed at one arrives at the pixel
  * beside it ({@link Aim.reach}). The sweep meets a thing at its top-left edge

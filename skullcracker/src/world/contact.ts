@@ -23,7 +23,7 @@ import { heads, headCel, kickHead, BURN_CODE, casts, castBlow, castCel, burstCas
 import { machineBox, strikeMachine, boggsCel, boggsStruck, clawCel, boggsWormCel, fittingCel } from "./machines";
 import { strikeFoe } from "./foehit";
 import { bushCel } from "./shots";
-import { celBoxAt, overlaps, type Box } from "./box";
+import { celBoxAt, facingRect, overlaps, type Box } from "./box";
 
 export function landHits(): void {
   if (!level || !player || !p.act) return;
@@ -51,14 +51,7 @@ export function landHits(): void {
     if (struckHeads.has(h)) continue;
     const body = celRec(level.sbk, headCel(h))?.body;
     if (!body) continue;
-    const [x0, x1] = h.west ? [-body.x1, -body.x0] : [body.x0, body.x1];
-    if (!(
-      mine.right > h.x + x0 &&
-      mine.left < h.x + x1 &&
-      mine.bottom > h.y + body.y0 &&
-      mine.top < h.y + body.y1
-    ))
-      continue;
+    if (!overlaps(mine, celBoxAt(h.x, h.y, facingRect(body, h.west)))) continue;
     struckHeads.add(h);
     kickHead(h, mine.blow);
   }
@@ -747,8 +740,7 @@ export function boltHits(): void {
     const art = celRec(lvl.sbk, boltCel(b));
     const sb = art?.strike ?? { y0: -4, x0: -4, y1: 2, x1: 2 };
     const at = b.was;
-    const [x0, x1] = b.facing < 0 ? [-sb.x1, -sb.x0] : [sb.x0, sb.x1];
-    const box = { left: at.x + x0, right: at.x + x1, top: at.y + sb.y0, bottom: at.y + sb.y1 };
+    const box = celBoxAt(at.x, at.y, facingRect(sb, b.facing < 0));
     const was = at.x;
     const met = boltMeetsBoggs(lvl, b, box, was);
     let hit = false;

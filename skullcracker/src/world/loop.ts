@@ -13,7 +13,7 @@ import { GRAB, STREAMS, WEAPONS } from "../guns";
 import { Cheat, CheatTyper } from "../cheats";
 import { CLOCK, LABEL, buttonBit } from "../hud";
 import { random } from "../random";
-import { levelIndex, sound, p, anim, held, actions, HURT, kit, HOLD_FRAMES, measured, level, player, character, damageOn, files, ui, setPlayer, QUERY, setStartTicks } from "./state";
+import { levelIndex, sound, p, anim, held, actions, HURT, kit, HOLD_FRAMES, measured, level, player, character, damageOn, files, ui, setPlayer, query, setStartTicks } from "./state";
 import { punchPressed, kickPressed, jumpPressed, upPressed, setJumpPressed, setUpPressed, setPunchPressed, setKickPressed } from "./keys";
 import { runStridePx, stridePx, IDLE_HOLD, crawlStridePx, AIR_HOLD, roundAway, DIVISOR, STICK_PX, engineFrame, knockedOff, LADDER, dragged, airThink, startJump, CLIMB_PX, PLAYER_GRAVITY, MONKEYBAR, setKnockedOff } from "./motion";
 import { lastCel, celRec, setLastCel } from "./cels";
@@ -1471,7 +1471,7 @@ export function setPlayerPal(v: typeof playerPal): void {
 
 /**
  * Stand the game up on whatever files have been set ({@link setFiles}): the
- * player's book, the level the switches name ({@link QUERY}), and what a loaded
+ * player's book, the level the switches name ({@link query}), and what a loaded
  * game carries with it. The page calls this from its boot; a headless run calls
  * it directly. False when the rip has no player book.
  */
@@ -1484,7 +1484,7 @@ export async function startGame(): Promise<boolean> {
   const book = readSbkFile(pb);
   setPlayer(book);
   setPlayerPal(paletteToRGBA(book.paletteRaw!, 256));
-  const params = QUERY;
+  const params = query;
   const clock = params.get("clock");
   if (clock !== null && Number.isFinite(Number(clock)))
     setStartTicks(Math.max(0, Number(clock)));
