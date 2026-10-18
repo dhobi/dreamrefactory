@@ -516,7 +516,7 @@ export class ScreenDirector {
     // no SetViewer ever drained its queue. A click made while a flat's loop was
     // running went nowhere — the spear's jab at Egypt's crocodile, whose
     // `animtick` is running most of the time the beast's head is turned.
-    if ((this.rules.directorTakesQueue || !this.room) && this.takesQueuedInput) this.takeQueued();
+    if (this.takesQueueItself && this.takesQueuedInput) this.takeQueued();
     this.serviceCursor();
     if (this.movies.playing) {
       // a self-paced movie may finish mid-tick; fall back to the settled room
@@ -581,7 +581,7 @@ export class ScreenDirector {
   }
 
   private untickedFrame(): CachedFrame | null {
-    if ((this.rules.directorTakesQueue || !this.room) && this.takesQueuedInput) this.takeQueued();
+    if (this.takesQueueItself && this.takesQueuedInput) this.takeQueued();
     this.serviceCursor();
     if (this.movies.playing) return this.movies.currentFrame() ?? this.room?.roomFrame() ?? null;
     return this.room ? (this.room.takeInputOnly?.() ?? this.room.roomFrame()) : null;
@@ -1457,11 +1457,20 @@ export class ScreenDirector {
     return !this.inputLocked && !this.session.scheduler.idleRunning && this.session.events.length > 0;
   }
 
+  /**
+   * The director takes the event queue itself: in a DreamFactory 5 game
+   * (ScreenRules.directorTakesQueue), and in any game with no room open, since
+   * there is no viewer to pop it.
+   */
+  private get takesQueueItself(): boolean {
+    return this.rules.directorTakesQueue || !this.room;
+  }
+
   get inputDrainable(): boolean {
     // not while the BOOTFILE idle runs: it is taken after it returns (TI.EXE en
     // 0x431c43), and a clock held for it would hold the idle that it waits on
     if (!this.session.events.length || this.session.scheduler.idleRunning) return false;
-    if (this.rules.directorTakesQueue || !this.room) return !this.inputLocked;
+    if (this.takesQueueItself) return !this.inputLocked;
     if (this.movies.playing) return false;
     // a key queued behind a fade is taken once the fade is over (see keyNow)
     return !this.movingCamera && !this.session.fading;
@@ -1517,7 +1526,7 @@ export class ScreenDirector {
    * head (DF.EXE, see {@link tick}).
    */
   private get gestureWaitsForIdle(): boolean {
-    return this.session.scheduler.idleRunning && this.rules.idleHoldsGestures;
+    return this.session.scheduler.idleRunning && !this.rules.inputAtPassHead;
   }
 
   /** {@link keyDown}, saying when a queued press has been taken */

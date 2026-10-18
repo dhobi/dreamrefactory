@@ -2,6 +2,7 @@ import { loadGame, snapshotSave } from "./saveload";
 import { loadGameV1, snapshotSaveV1 } from "./saveload-v1";
 import { loadGameV5, snapshotSaveV5 } from "./saveload-v5";
 import type { GameSession } from "./session";
+import { forEngine, type EngineFlags } from "./engine";
 
 /**
  * Where the session's three engines part ways, side by side: DF.EXE (Dust,
@@ -10,7 +11,6 @@ import type { GameSession } from "./session";
  * scheduler has its own (scheduler-rules.ts).
  */
 export interface SessionProfile {
-  readonly engine: 1 | 4 | 5;
   /** which command table the ids mean — Dust's and Titanic's disagree about what some answer (value-types.ts) */
   readonly commandTable: 1 | 4;
   /** a script error opens the error box and stops the game (TI.EXE); the others log it and go on */
@@ -39,6 +39,20 @@ export interface SessionProfile {
    * room's lifecycle.
    */
   readonly loadMutesOpens: boolean;
+  /** `savegame` refuses with a conversation open or on a road (RedJack.exe 0x43c9b6, 0x43c9e9) */
+  readonly refusesBusySaves: boolean;
+
+  // ---- scripts and sprites ----
+  /**
+   * How the interpreter reads a script (Interpreter.shortCircuit, .classic):
+   * RedJack.exe steps over the right operand of a decided `|`/`&` (0x410788);
+   * DF.EXE, TI.EXE and tl.exe type their values — a boolean is not a number,
+   * and a mismatch is error 0xe — where RedJack.exe keeps 1/0 and lenient
+   * operators.
+   */
+  readonly scripts: { readonly shortCircuit: boolean; readonly typed: boolean };
+  /** a sprite's point test is the engines' own (sprite-scaler.ts); DreamFactory 5's was not ported from those */
+  readonly enginePointTests: boolean;
 
   // ---- the boot ----
   /** the BOOTFILE's literal `boot()` assignments seed the globals (SessionBoot.seedFromBoot) */
@@ -77,6 +91,8 @@ export interface SessionProfile {
   readonly oneConversation: boolean;
   /** opening a conversation shows the arrow (RedJack.exe's Pupp.c, 0x42e6b0, #446) */
   readonly conversationArrow: boolean;
+  /** `puppetevent (n)` waits n ticks (PuppetController.puppetEvent); before DreamFactory 5 it takes no argument */
+  readonly puppetEventWaits: boolean;
   /** how long a line with no recording is held, in ticks (PuppetController.holdUnknownLine) */
   readonly unknownLineTicks: (length: number, param9: number | undefined) => number;
   /** a `path` that names one of the game's discs, its number captured, and the discs' name */
@@ -85,7 +101,6 @@ export interface SessionProfile {
 
 /** Titanic */
 const V4: SessionProfile = {
-  engine: 4,
   commandTable: 4,
   latchesScriptErrors: true,
   waveVolumeIsDevice: true,
@@ -94,6 +109,10 @@ const V4: SessionProfile = {
   load: (session, bytes) => loadGame(session, bytes),
   loadOpensItsSet: false,
   loadMutesOpens: false,
+  refusesBusySaves: false,
+  scripts: { shortCircuit: false, typed: true },
+  enginePointTests: true,
+  puppetEventWaits: false,
   seedsGlobalsFromBoot: true,
   puppetParamSeeds: [],
   closedSoundsStopCrickets: false,
@@ -116,7 +135,6 @@ const V4: SessionProfile = {
 /** Dust */
 const V1: SessionProfile = {
   ...V4,
-  engine: 1,
   commandTable: 1,
   latchesScriptErrors: false,
   waveVolumeIsDevice: false,
@@ -132,7 +150,6 @@ const V1: SessionProfile = {
 /** RedJack */
 const V5: SessionProfile = {
   ...V4,
-  engine: 5,
   latchesScriptErrors: false,
   waveVolumeIsDevice: false,
   debugChannel: false,
@@ -141,6 +158,10 @@ const V5: SessionProfile = {
   // runs: held as a running script, wherever the host starts it from
   load: (session, bytes, version) => session.track(loadGameV5(session, bytes, version), "load"),
   loadMutesOpens: true,
+  refusesBusySaves: true,
+  scripts: { shortCircuit: true, typed: false },
+  enginePointTests: false,
+  puppetEventWaits: true,
   seedsGlobalsFromBoot: false,
   puppetParamSeeds: [[3, 0xffffff], [4, 0xff0000]],
   closedSoundsStopCrickets: true,
@@ -161,7 +182,6 @@ const V5: SessionProfile = {
  * kept, because a session learns which it is as it boots: v5 from the BOOTFILE,
  * v1 from the set it opens.
  */
-export function sessionProfile(engine: { readonly isV1: boolean; readonly isV5: boolean }): SessionProfile {
-  if (engine.isV5) return V5;
-  return engine.isV1 ? V1 : V4;
+export function sessionProfile(engine: EngineFlags): SessionProfile {
+  return forEngine(engine, { v4: V4, v1: V1, v5: V5 });
 }

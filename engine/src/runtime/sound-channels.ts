@@ -171,6 +171,11 @@ export abstract class SoundChannels {
     return this.board.channels.every((c) => !c || c.handle.done);
   }
 
+  /** `sounddone ()`: both effect channels idle ({@link allIdle}) */
+  done(): boolean {
+    return this.allIdle();
+  }
+
   /** the live handle of a record playing on a channel, if it is (a cricket's shot) */
   liveHandle(name: string): PlayHandle | null {
     return this.board.channels.find((c) => c?.name === name && !c.handle.done)?.handle ?? null;

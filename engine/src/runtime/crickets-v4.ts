@@ -1,6 +1,6 @@
 import { Crickets, cricketPan, type Cricket } from "./crickets";
 import { engineBearing } from "./geometry";
-import { s16 } from "./scheduler-rules";
+import { s16 } from "./point";
 
 /** TI.EXE's (Titanic, and tl.exe's Timelapse): positions in 16-bit words, the camera's table bearing */
 export class CricketsV4 extends Crickets {

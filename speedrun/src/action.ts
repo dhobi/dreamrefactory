@@ -1263,7 +1263,7 @@ async function clickMenu(c: ActionContext, name: string): Promise<void> {
     const s = window.dbg.session;
     const r = s.stageCtrl.flatRegion(String(s.currentFlat), ${JSON.stringify(name)});
     if (!r) return null;
-    const o = s.isV5 ? s.stageOrigin : { x: 0, y: 0 };
+    const o = s.profile.flatsAtStageOrigin ? s.stageOrigin : { x: 0, y: 0 };
     return { x: Math.floor((r.left + r.right) / 2) + o.x, y: Math.floor((r.top + r.bottom) / 2) + o.y };
   })()`);
   if (!at) return clickThing(c, name, "none");

@@ -3,7 +3,8 @@ import { RAMP_STEP_MS, ticksAt } from "../clock";
 import { packPoint } from "../point";
 import { dfPlan, type DfEffect, type ExeEffect } from "../visual-effects";
 import { BuiltinCtx } from "./context";
-import { byEngine, commandRules, forEngine, unknownCommand } from "./command-rules";
+import { byEngine, commandRules, unknownCommand } from "./command-rules";
+import { forEngine } from "../engine";
 
 type Session = BuiltinCtx["session"];
 
@@ -800,6 +801,13 @@ function registerCursorAndStubs(ctx: BuiltinCtx): void {
   const needFlat = (cmd: string, flat: Value | undefined): void => {
     if (!has(session.flatNames, flat)) miss(cmd, "flat", flat);
   };
+  const paintingScript = (noSet: number) => ([scene, view, painting]: Value[]): void => {
+    needSet("paintingscript", noSet);
+    if (!sceneByName(session, toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
+    const v = viewByName(session, toStr(scene ?? ""), toStr(view ?? ""));
+    if (!v) miss("paintingscript", "view", view);
+    if (!v!.objects.some((o) => o.identifier.toLowerCase() === lc(painting))) miss("paintingscript", "painting", painting);
+  };
   const editorChecks: Record<string, (args: Value[]) => void> = {
     bootscript: () => {},
     // in DF.EXE these two are error 1 before they get here (value-types.ts dispatches)
@@ -812,13 +820,9 @@ function registerCursorAndStubs(ctx: BuiltinCtx): void {
     },
     paintingscript: (args) =>
       forEngine(session, {
-        v4: ([scene, view, painting]: Value[]) => {
-          needSet("paintingscript", commandRules(session).paintingScriptNoSet);
-          if (!sceneByName(session, toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
-          const v = viewByName(session, toStr(scene ?? ""), toStr(view ?? ""));
-          if (!v) miss("paintingscript", "view", view);
-          if (!v!.objects.some((o) => o.identifier.toLowerCase() === lc(painting))) miss("paintingscript", "painting", painting);
-        },
+        // with no set open, TI.EXE's is error 0xb and RedJack.exe's 0x28
+        v4: paintingScript(0xb),
+        v5: paintingScript(0x28),
         // DF.EXE's floorscript (n)
         v1: ([floor]: Value[]) => {
           needSet("floorscript", 0x28);
