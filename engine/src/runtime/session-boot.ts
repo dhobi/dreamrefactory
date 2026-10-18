@@ -257,8 +257,8 @@ export class SessionBoot {
       this.session.isV5 = versionOf(file.containers[0]?.data ?? new Uint8Array()) === 5;
       // DreamFactory 5's slots 3 and 4 are 0x00RRGGBB colours, not clut indices:
       // RedJack.exe seeds white answers and a red frame (0x439d41)
-      if (this.session.isV5) this.session.puppetParams.set(3, 0xffffff).set(4, 0xff0000);
-      if (this.session.isV5) this.session.audioLib.onSoundsClosed = (names) => names.forEach((n) => this.session.scheduler.crickets.stop(n));
+      for (const [slot, value] of this.session.profile.puppetParamSeeds) this.session.puppetParams.set(slot, value);
+      if (this.session.profile.closedSoundsStopCrickets) this.session.audioLib.onSoundsClosed = (names) => names.forEach((n) => this.session.scheduler.crickets.stop(n));
       for (let i = 1; i < file.containers.length; i++) {
         const inst = this.session.instanceFrom(file.containers[i].data, `boot${i}`);
         if (inst) this.session.bootScripts.push(inst);
@@ -318,7 +318,7 @@ export class SessionBoot {
    * Only names nothing has set yet, so the port's own seeds stand.
    */
   private seedFromBoot(): void {
-    if (this.session.isV5) return;
+    if (!this.session.profile.seedsGlobalsFromBoot) return;
     const boot = this.session.bootScripts.find((b) => b.script.codes.has("boot"))?.script.codes.get("boot");
     if (!boot) return;
     const seeds = new Map<string, Value>();

@@ -36,8 +36,25 @@ export interface CommandRules {
   readonly directions: ReadonlySet<string>;
   /** `paintingscript`'s error with no set open */
   readonly paintingScriptNoSet: number;
-  /** a `path` that names one of the game's discs, its number captured */
-  readonly discPath: RegExp;
+  /**
+   * A polled command answers at once, and only the ask a bare poll loop makes —
+   * the same call again in the same tick — waits a frame (RepeatedAsk). RedJack.exe's
+   * `button`, `stilldown`, `voicedone` and `currentsound` read state, and its
+   * fights ask them from loops that run inside a pass.
+   */
+  readonly pollsAnswerAtOnce: boolean;
+  /** what `dualsound` plays as: DF.EXE's is a call to `singlesound` (0x42a250) */
+  readonly dualSound: "single" | "dual";
+  /** `sounddone` asks the effect channels (DF.EXE 0x429c00, TI.EXE 0x424cc0), not the one sound */
+  readonly soundDoneAsksChannels: boolean;
+  /** `savegame` refuses with a conversation open or on a road (RedJack.exe 0x43c9b6, 0x43c9e9) */
+  readonly refusesBusySaves: boolean;
+  /** `sendtopost` and `sendtoserver` are DF.EXE's grid questions, `rowcoltoscene` and `scenebuild` */
+  readonly postAndServerAreGrid: boolean;
+  /** `pointinprop` tests the drawn frame's box (RedJack.exe); TI.EXE tests the box and then the pixel (0x417120) */
+  readonly pointInPropIsBox: boolean;
+  /** `puppetevent (n)` waits n ticks (PuppetController.puppetEvent); before DreamFactory 5 it takes no argument */
+  readonly puppetEventWaits: boolean;
   readonly effects: {
     /**
      * Effect names outside the engine's band, error 0xe before anything else:
@@ -72,7 +89,13 @@ const V4: CommandRules = {
   sceneWordsFromSet: false,
   directions: TI_DIRECTIONS,
   paintingScriptNoSet: 0xb,
-  discPath: /^titanic([12]):/i,
+  pollsAnswerAtOnce: false,
+  dualSound: "dual",
+  soundDoneAsksChannels: true,
+  refusesBusySaves: false,
+  postAndServerAreGrid: false,
+  puppetEventWaits: false,
+  pointInPropIsBox: false,
   effects: { outOfBand: new Set(), drawn: isExeEffect, draws: "ti", halfLeftDissolves: false },
 };
 
@@ -83,6 +106,8 @@ const V1: CommandRules = {
   worldPropsDrawAuthored: true,
   defersWalksOffSet: false,
   sceneWordsFromSet: true,
+  dualSound: "single",
+  postAndServerAreGrid: true,
   directions: new Set([...TI_DIRECTIONS, "backwards"]),
   effects: {
     outOfBand: new Set(["turnright", "turnleft", "turnup", "turndown", "nodraw", "turnhalfleft", "turnhalfright"]),
@@ -102,7 +127,11 @@ const V5: CommandRules = {
   deleteClosesActor: true,
   pathWalksNeedRoute: true,
   paintingScriptNoSet: 0x28,
-  discPath: /^rjdisk([1-3]):/i,
+  pollsAnswerAtOnce: true,
+  soundDoneAsksChannels: false,
+  refusesBusySaves: true,
+  puppetEventWaits: true,
+  pointInPropIsBox: true,
   effects: { ...V4.effects, outOfBand: new Set(["turnhalfright"]), halfLeftDissolves: true },
 };
 
@@ -148,4 +177,10 @@ export function unknownCommand(name: string): Builtin {
 export function onlyOnV5(engine: Engine, interp: Interpreter, name: string): void {
   const v5 = interp.builtins.get(name)!;
   interp.builtins.set(name, byEngine(engine, { v4: unknownCommand(name), v5 }));
+}
+
+/** give a command already registered DreamFactory 5's own body, which may fall back to the older one it is handed */
+export function overrideOnV5(engine: Engine, interp: Interpreter, name: string, v5: (v4: Builtin) => Builtin): void {
+  const v4 = interp.builtins.get(name)!;
+  interp.builtins.set(name, byEngine(engine, { v4, v5: v5(v4) }));
 }

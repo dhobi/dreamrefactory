@@ -300,7 +300,7 @@ export class StageController {
   regionAt(x: number, y: number): StgRegion | null {
     const regions = this.currentFlatRegions();
     const inside = (r: StgRegion): boolean => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-    if (this.session.isV5) return regions.find(inside) ?? null;
+    if (this.session.profile.firstRegionWins) return regions.find(inside) ?? null;
     for (let i = regions.length - 1; i >= 0; i--) if (inside(regions[i])) return regions[i];
     return null;
   }

@@ -345,7 +345,7 @@ export class GameHost {
     this.session.onDiscChange = (disc) => {
       if (this.files.activeDisc?.() === disc) return;
       this.files.setDisc(disc);
-      this.ui.log(`disc ${disc} (${this.session.isV5 ? "rjdisk" : "titanic"}${disc}) mounted`);
+      this.ui.log(`disc ${disc} (${this.session.profile.disc.name}${disc}) mounted`);
     };
     // forceupdate() is one pass of TI.EXE's main loop: service the world, then
     // RENDER a frame — and rendering is what advances a turn or walk animation.
@@ -704,7 +704,7 @@ export class GameHost {
     // the set itself — the way Dust's own page loads one (`dbg.loadSave`).
     // Parsed as a TAOOT save it failed on the HUD and resolved, so a speedrun
     // `load()` reported success over the game it had not left.
-    if (this.session.isV1) {
+    if (this.session.profile.loadOpensItsSet) {
       this.current?.abandonMovie();
       if (!(await this.session.loadGame(bytes))) throw new Error(`not a game this engine could load`);
       this.session.fade.level = 0;
@@ -939,7 +939,7 @@ export class GameHost {
     }
     // (a DreamFactory 5 boot only: the older games keep the path they were
     // measured on)
-    if (advanced && session.isV5) {
+    if (advanced && session.profile.bootAdvancesDay) {
       session.onPlayMovie = films;
       this.startAtHalfMix();
       return;

@@ -28,8 +28,6 @@ export interface ScreenRules {
   readonly keysHoldEngine: boolean;
   /** a key's release reaches the scripts (RedJack.exe's `keyup`) */
   readonly hearsKeyUp: boolean;
-  /** a flat is drawn at the stage's origin (`stageorigin`), its regions in the flat's own coordinates */
-  readonly flatsAtStageOrigin: boolean;
   // ---- drawing ---------------------------------------------------------------
   /** films, the stage's flat and the puppet are drawn through their light groups (`stagebrightness`…, 0x41658d) */
   readonly lightGroups: boolean;
@@ -64,7 +62,6 @@ const V4: ScreenRules = {
   clickClearsConsumed: false,
   keysHoldEngine: true,
   hearsKeyUp: false,
-  flatsAtStageOrigin: false,
   lightGroups: false,
   onlyUiPropsOverRoom: true,
   bevelInkIsRgb: false,
@@ -100,7 +97,6 @@ const V5: ScreenRules = {
   clickClearsConsumed: true,
   keysHoldEngine: false,
   hearsKeyUp: true,
-  flatsAtStageOrigin: true,
   lightGroups: true,
   onlyUiPropsOverRoom: false,
   bevelInkIsRgb: true,

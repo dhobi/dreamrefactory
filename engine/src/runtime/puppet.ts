@@ -332,7 +332,7 @@ export class PuppetController {
     // (0x435850) answers error 0x2d at 0x43585d while the open flag 0x460bd2 is
     // set, and leaves the puppet that is up alone. Replacing it, as this did,
     // let a scene event's `runpuppet` take over a conversation in progress.
-    if (this.puppet && this.session.isV1) {
+    if (this.puppet && this.session.profile.oneConversation) {
       this.session.onLog(`openpuppetfile: "${fileName}" refused, ${this.puppet.name} is open`);
       return false;
     }
@@ -399,7 +399,7 @@ export class PuppetController {
     // `walkandtalk` has just said `cursor ("watch")`, and without this the
     // hourglass would stand over every choice (#446). It is the engine's current
     // cursor afterwards too, as the original's is, until a script names another.
-    if (this.session.isV5) this.session.cursorName = "arrow";
+    if (this.session.profile.conversationArrow) this.session.cursorName = "arrow";
     this.session.onLog(`puppet opened: ${key} (${pup.dialogue.size} lines, ${pup.scripts.length} scripts)`);
     return true;
   }
@@ -475,9 +475,7 @@ export class PuppetController {
    * neither does this.
    */
   private async holdUnknownLine(p: NonNullable<PuppetController["puppet"]>, text: string): Promise<void> {
-    const ticks = this.session.isV1
-      ? (text.length >> 1) + 60
-      : Math.max(text.length * (this.session.puppetParams.get(9) ?? 2), 60);
+    const ticks = this.session.profile.unknownLineTicks(text.length, this.session.puppetParams.get(9));
     p.subtitle = text;
     // drawn by the band routine alone, past the subtitles switch — see
     // `subtitleUngated`

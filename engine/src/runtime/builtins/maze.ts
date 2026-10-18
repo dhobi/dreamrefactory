@@ -2,6 +2,7 @@ import { toNum, toStr } from "../interp";
 import { calcTurn, degDiff, degMask, degToSimple, simpleToDeg } from "../maze";
 import { packPoint, pointX, pointY } from "../point";
 import { BuiltinCtx } from "./context";
+import { overrideOnV5 } from "./command-rules";
 
 /**
  * DreamFactory 5's room commands: the camera, the exits, the walk and the
@@ -89,11 +90,8 @@ export function registerMazeBuiltins(ctx: BuiltinCtx): void {
   r("sysparam", (_i, [n]) => sysparam(toNum(n ?? 0)));
   // roadahead (scene, view): v4 asks the set's transitions (scene.ts); a v5
   // room answers the film ahead of a scene's view
-  const roadahead = ctx.interp.builtins.get("roadahead")!;
-  ctx.interp.builtins.set("roadahead", (i, args, call, frame) =>
-    session.isV5
-      ? (maze()?.roadAhead(toStr(args[0] ?? ""), toStr(args[1] ?? "")) ?? 0)
-      : roadahead(i, args, call, frame),
+  overrideOnV5(session, ctx.interp, "roadahead", () => (_i, args) =>
+    maze()?.roadAhead(toStr(args[0] ?? ""), toStr(args[1] ?? "")) ?? 0,
   );
   // cameraxyz (axis) and scenexyz (scene, axis): a v5 room's camera and places
   // are points in its own units (engine/src/df/sett.ts), which the scripts put
@@ -109,22 +107,17 @@ export function registerMazeBuiltins(ctx: BuiltinCtx): void {
     }
   };
   for (const name of ["cameraxyz", "playerxyz"]) {
-    const v4 = ctx.interp.builtins.get(name)!;
-    ctx.interp.builtins.set(name, (i, args, call, frame) => {
-      const cam = session.isV5 ? maze()?.camera() : null;
+    overrideOnV5(session, ctx.interp, name, (v4) => (i, args, call, frame) => {
+      const cam = maze()?.camera();
       return cam ? axisOf(cam, toNum(args[0] ?? 1)) : v4(i, args, call, frame);
     });
   }
-  const scenexyz = ctx.interp.builtins.get("scenexyz")!;
-  ctx.interp.builtins.set("scenexyz", (i, args, call, frame) => {
-    const m = session.isV5 ? maze() : null;
-    if (!m) return scenexyz(i, args, call, frame);
+  overrideOnV5(session, ctx.interp, "scenexyz", (v4) => (i, args, call, frame) => {
+    const m = maze();
+    if (!m) return v4(i, args, call, frame);
     const n = toStr(args[0] ?? "");
     const at = m.findNode(n) ?? m.findScene(n);
     return at ? axisOf(at, toNum(args[1] ?? 1)) : 0;
   });
-  const propspeed = ctx.interp.builtins.get("propspeed")!;
-  ctx.interp.builtins.set("propspeed", (i, args, call, frame) =>
-    session.isV5 ? sysparam(toNum(args[0] ?? 0)) : propspeed(i, args, call, frame),
-  );
+  overrideOnV5(session, ctx.interp, "propspeed", () => (_i, args) => sysparam(toNum(args[0] ?? 0)));
 }

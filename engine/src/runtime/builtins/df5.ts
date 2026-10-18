@@ -3,19 +3,14 @@ import { packPoint } from "../point";
 import type { ActorInstance } from "../actors";
 import type { PropInstance } from "../props";
 import { BuiltinCtx } from "./context";
+import { byEngine, unknownCommand } from "./command-rules";
 
 /**
  * Register a command that answers only in a v5 game; in any other it stays the
  * unknown command it always was.
  */
 export function v5Registrar({ session, interp }: BuiltinCtx): (name: string, fn: Builtin) => void {
-  return (name, fn) => {
-    interp.register(name, (i, args, call, frame) => {
-      if (session.isV5) return fn(i, args, call, frame);
-      i.onUnknown(name, args);
-      return 0;
-    });
-  };
+  return (name, v5) => interp.register(name, byEngine(session, { v4: unknownCommand(name), v5 }));
 }
 
 /**

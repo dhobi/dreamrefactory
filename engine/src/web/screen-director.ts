@@ -2036,7 +2036,7 @@ export class ScreenDirector {
     // a v5 flat is drawn at the stage's origin (`stageorigin`), and its regions are
     // the flat's own coordinates: scombat2.stag's "Vine" is x 677–841 of a flat
     // wider than the screen, in reach only once Nick leans and the origin moves
-    if (this.rules.flatsAtStageOrigin) {
+    if (this.session.profile.flatsAtStageOrigin) {
       x -= this.session.stageOrigin.x;
       y -= this.session.stageOrigin.y;
     }

@@ -115,7 +115,7 @@ export class SessionEvents {
      * library's `mousedown` fires — `sendtoprop ("cannon", fire ())`. Not while
      * the library is already running the handler, as for the keys above.
      */
-    const post = this.session.isV5 && /^sendto(scene|set|actor|cast|prop)(fx)?$/.test(cmd) ? this.session.bootScripts[1] : undefined;
+    const post = this.session.profile.libraryHearsSends && /^sendto(scene|set|actor|cast|prop)(fx)?$/.test(cmd) ? this.session.bootScripts[1] : undefined;
     if (post && !chain.includes(post) && !this.session.interp.isRunning(post, handler)) chain.push(post);
     /**
      * `me` is the PROP, not its sprite group, on the prop's own script.
@@ -223,24 +223,24 @@ export class SessionEvents {
      * initactors ())` went to ship.sett's main, which has no `initactors`, and
      * the ship's crew never came aboard. Gated on v5.
      */
-    const castFirst = cmd === "sendtocast" && this.session.isV5 ? this.session.resourceCtrl.castMainFor(targetName) : null;
+    const castFirst = cmd === "sendtocast" && this.session.profile.sendsFindTheirKind ? this.session.resourceCtrl.castMainFor(targetName) : null;
     // ...and its `sendtoprop` among the PROPS (0x42b550 finds the name in the prop
     // table): cannon.shop's "cannon" is a prop in cannon.sett, and the boot's
     // `sendtoprop ("cannon", fire ())` reached the room's main instead
     const propFirst =
-      /^sendtoprop(fx)?$/.test(cmd) && this.session.isV5 ? this.session.resourceCtrl.propScriptFor(targetName.toLowerCase()) : null;
+      /^sendtoprop(fx)?$/.test(cmd) && this.session.profile.sendsFindTheirKind ? this.session.resourceCtrl.propScriptFor(targetName.toLowerCase()) : null;
     // ...and a shop by the names `closeshopfile` knows it by, the one it gives
     // itself among them: jcombat.shop calls itself "combat", and the alley fight
     // asks `sendtoshop ("combat", moveobjects ())` every step (see openShopKey)
     const shopFirst =
-      /^sendtoshop(fx)?$/.test(cmd) && this.session.isV5 ? this.session.resourceCtrl.shopMains.get(this.session.resourceCtrl.openShopKey(targetName)) ?? null : null;
+      /^sendtoshop(fx)?$/.test(cmd) && this.session.profile.sendsFindTheirKind ? this.session.resourceCtrl.shopMains.get(this.session.resourceCtrl.openShopKey(targetName)) ?? null : null;
     // ...and its `sendtoquad` among the room's QUADS (0x446570 → 0x446190 walks
     // the set's 80-byte quad records, the name at +0x1c): horn4.sett calls itself
     // "horn", as it does the quad the horn stands on, and the boot's
     // `sendtoquad ("horn", mousedown (…))` reached the set's main, whose
     // `mousedown` walks on — the horn could not be blown
     const quadFirst =
-      /^sendtoquad(fx)?$/.test(cmd) && this.session.isV5 ? this.session.maze?.quadScript(targetName) ?? null : null;
+      /^sendtoquad(fx)?$/.test(cmd) && this.session.profile.sendsFindTheirKind ? this.session.maze?.quadScript(targetName) ?? null : null;
     let inst =
       castFirst ??
       propFirst ??

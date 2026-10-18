@@ -3,6 +3,7 @@ import { CELL_UNITS } from "../../df/set-v1-to-v4";
 import type { GameSession } from "../session";
 import { Builtin, Frame, Interpreter, ScriptError, Value, toNum, toStr } from "../interp";
 import { ticksAt } from "../clock";
+import { commandRules } from "./command-rules";
 
 /**
  * Shared plumbing handed to every `register*Builtins` module. Only the pieces
@@ -220,7 +221,7 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
       // and `currentsound` read state, no wait), and its fights ask them from
       // loops that run inside a pass: there a frame is waited only for the ask a
       // bare poll loop makes — the same call again in the same tick
-      if (session.isV5 && !lastAsk.repeats(site, ticksAt(session.clock.now))) return;
+      if (commandRules(session).pollsAnswerAtOnce && !lastAsk.repeats(site, ticksAt(session.clock.now))) return;
       await session.frameWait();
     },
   };
