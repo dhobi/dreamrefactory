@@ -45,7 +45,7 @@ import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { replyIds } from "@dreamfactory/engine/web/puppet-view";
-import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "./cursor-art";
 import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import {
@@ -168,14 +168,6 @@ const preferPortBox = document.getElementById("preferPortBox") as HTMLInputEleme
 const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
 /** where the bug button says what became of the screenshot */
 const bugNote = document.getElementById("bugNote");
-/** which way a swipe reads — its own row, hidden unless the pointer is a finger */
-const swipeOpts = document.getElementById("swipeOpts");
-const swipeInvertTurnBox = document.getElementById(
-  "swipeInvertTurn",
-) as HTMLInputElement | null;
-const swipeInvertWalkBox = document.getElementById(
-  "swipeInvertWalk",
-) as HTMLInputElement | null;
 const pictureModeSel = document.getElementById(
   "pictureMode",
 ) as HTMLSelectElement | null;
@@ -431,40 +423,17 @@ function detailsWanted(): boolean {
  * (see {@link CursorSheet}) — the five mappings, plus
  * `crosshair` for `sight` and `none` for a pointer `hidecursor()` has taken away.
  */
-const cursors = new CursorSheet(TI_CURSORS);
-
-/** the name last answered, so a change of size can redraw it at the new one */
-let cursorShown = "";
-
 /**
- * Show what the thing under the pointer asked for.
- *
- * An empty answer is the game's ARROW rather than the browser's default:
- * `CURS.ARROW` is the window class's cursor in `ti.exe`, which is what the player
- * saw everywhere no script had claimed the pointer.
+ * Scaled against the canvas, which is the framebuffer (512x384) CSS stretches —
+ * per axis, for a stretched fullscreen — and redrawn whenever the PICTURE
+ * changes size, a window resize being only one way to do that: the workbench
+ * picks a whole-number scale for the screen (taoot/src/speedrun-widths.ts) with
+ * no resize event at all.
  */
-function showCursor(name: string): void {
-  cursorShown = name;
-  const rect = screen.getBoundingClientRect();
-  // the scale the PICTURE is shown at: the canvas is the framebuffer (512x384)
-  // and CSS stretches it, so a cursor at 1x would be half the size the artist
-  // drew it at against a doubled picture. Per axis, for a stretched fullscreen.
-  screen.style.cursor = cursors.css(
-    name || "arrow",
-    rect.width / screen.width,
-    rect.height / screen.height,
-  );
-}
-/**
- * Redrawn whenever the PICTURE changes size, which a window resize is only one
- * way to do: the workbench lets the reader pick a whole-number scale for the
- * screen (taoot/src/speedrun-widths.ts) and that fires no resize event at all.
- * Watching
- * the canvas catches both, and asks nothing of whatever changed it.
- */
-new ResizeObserver(() => showCursor(cursorShown)).observe(screen);
+const cursor = new ShownCursor(screen, new CursorSheet(TI_CURSORS), screen);
+const showCursor = cursor.show;
 // ...and when TH scales the picture inside the same box (engine/src/web/tylerhartman.ts)
-th.onRescale = () => showCursor(cursorShown);
+th.onRescale = cursor.redraw;
 
 /**
  * The bar the player watches while the game is fetched (GameHost.preload).
@@ -1366,15 +1335,12 @@ screen.addEventListener("pointerdown", (e) => {
    * `this.room?.` and says so — so this is the same call reaching the same place,
    * minus a guard that was asking about the wrong thing.
    */
-  session.pointerDown = true;
-  // What the press CARRIED, for `shiftkey()` (engine/src/runtime/builtins/scene.ts). Taken
-  // here rather than tracked as live keyboard state because that is how the
-  // original asks: house.shp's HELP button reads it inside its own mousedown, so
-  // the question is what was held when the click happened.
-  session.shiftDown = e.shiftKey;
+  // What the press CARRIED, for `shiftkey()` (engine/src/runtime/builtins/scene.ts):
+  // house.shp's HELP button reads it inside its own mousedown, so the question
+  // is what was held when the click happened (ScreenDirector.buttonDown).
   noteGame(
     clickLabel(x, y),
-    () => session.track(host.director.press(x, y), `press ${x},${y}`),
+    () => session.track(host.director.buttonDown(x, y, { shift: e.shiftKey }), `press ${x},${y}`),
     hitAt(x, y),
   );
 });
@@ -1390,13 +1356,12 @@ window.addEventListener("pointerup", (e) => {
   // a finger of TH's two-finger tap lifts on nothing
   if (th.touchUp(e)) return;
   if (touch.up(e)) return;
-  session.pointerDown = false;
   // `shiftDown` is deliberately NOT cleared here. A press dispatch is async — it
   // can be waiting on a movie or a walk when the button comes up — and the script
   // that reads `shiftkey()` may not have run yet. It says what the last press
   // carried until the next press says otherwise, which is the question scripts
   // actually ask.
-  host.director.release(session.pointerX, session.pointerY);
+  host.director.buttonUp(session.pointerX, session.pointerY);
 });
 
 // no browser menu over TH's right click. Not a toggle itself: a phone fires
@@ -1479,13 +1444,9 @@ const touch = new TouchGestures({
   // The finger's half of the same thing the mouse handler above does, and it had
   // the same guard: a tap on the demo's menu was dropped for want of a room.
   press: (x, y) => {
-    session.pointerDown = true;
-    noteGame(clickLabel(x, y), () => session.track(host.director.press(x, y)), hitAt(x, y));
+    noteGame(clickLabel(x, y), () => session.track(host.director.buttonDown(x, y)), hitAt(x, y));
   },
-  release: (x, y) => {
-    session.pointerDown = false;
-    host.director.release(x, y);
-  },
+  release: (x, y) => host.director.buttonUp(x, y),
   /**
    * The two halves of a gesture that is a KEY, and they differ: three of the
    * four arrows are navigation presses the scripts may intercept, DOWN is a
@@ -1564,12 +1525,7 @@ window.addEventListener("pointercancel", (e) => {
  * has the arrow keys and never reaches a gesture, so on a desktop the question is
  * noise in a bar that is otherwise one hint and one button.
  */
-const swipeInvert = bindSwipeInvert({
-  storageKey: "taoot.swipe",
-  turnBox: swipeInvertTurnBox,
-  walkBox: swipeInvertWalkBox,
-  reveal: swipeOpts,
-});
+const swipeInvert = bindSwipeInvert("taoot.swipe");
 
 /**
  * The picture setting under the screen, and its memory.

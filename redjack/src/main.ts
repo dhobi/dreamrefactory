@@ -23,9 +23,16 @@
  */
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
-import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { GestureAudio, PageLog, screenPlate, showVersion } from "@dreamfactory/engine/web/page-shell";
+import {
+  GestureAudio,
+  PageLog,
+  busySpinner,
+  screenPlate,
+  showVersion,
+  waitForStart,
+} from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
@@ -147,39 +154,9 @@ function progress(f: number, label?: string): void {
 const fmtSize = (bytes: number): string =>
   bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-/** the disc is read; wait to be told to go (a keyboard gesture as much as a click) */
-async function waitForStart(): Promise<void> {
-  bootEl.classList.add("ready");
-  startEl.focus();
-  await new Promise<void>((resolve) => startEl.addEventListener("click", () => resolve(), { once: true }));
-}
-
 function beginPlaying(): void {
   document.body.classList.remove("booting");
   document.body.classList.add("playing");
-  // the frame is `display: none` under the curtain, so a cursor sized while
-  // booting was sized for a 0x0 picture; size it again now there is one
-  showCursor(cursorShown, true);
-}
-
-/** the spinner in the corner of the picture, once a wait is long enough to be one */
-const BUSY_AFTER_MS = 400;
-function watchNetwork(files: RedJackFiles): void {
-  const netbusy = document.getElementById("netbusy") as HTMLDivElement;
-  let timer = 0;
-  files.onBusyChange = (inFlight) => {
-    if (inFlight > 0) {
-      if (timer || !netbusy.hidden) return;
-      timer = window.setTimeout(() => {
-        timer = 0;
-        netbusy.hidden = false;
-      }, BUSY_AFTER_MS);
-      return;
-    }
-    if (timer) clearTimeout(timer);
-    timer = 0;
-    netbusy.hidden = true;
-  };
 }
 
 /**
@@ -189,15 +166,8 @@ function watchNetwork(files: RedJackFiles): void {
  * `none` is by name, and a name the build has no cursor for is the browser's
  * arrow.
  */
-const cursors = new CursorSheet(RJ_CURSORS);
-let cursorShown = "";
-function showCursor(name: string, force = false): void {
-  if (name === cursorShown && !force) return;
-  cursorShown = name;
-  const rect = canvas.getBoundingClientRect();
-  canvas.style.cursor = cursors.css(name || "arrow", rect.width / SCREEN.width, rect.height / SCREEN.height);
-}
-addEventListener("resize", () => showCursor(cursorShown, true));
+const cursor = new ShownCursor(canvas, new CursorSheet(RJ_CURSORS), SCREEN);
+const showCursor = cursor.show;
 
 /* ------------------------------------------------------------------------- *
  * The boot
@@ -216,7 +186,7 @@ async function main(): Promise<void> {
   }
   progress(INDEXED, `indexed ${files.size} names across three discs`);
   say(`indexed ${files.size} names across the rip`);
-  watchNetwork(files);
+  files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
 
   const host = new GameHost(
     files,
@@ -326,7 +296,7 @@ async function main(): Promise<void> {
   bindInput(host, s);
 
   progress(1, "ready");
-  await waitForStart();
+  await waitForStart(bootEl, startEl);
   ensureAudio();
   beginPlaying();
 
@@ -360,12 +330,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
   };
 
   // which way the two swipe axes read, remembered for this game alone
-  const swipeInvert = bindSwipeInvert({
-    storageKey: "redjack.swipe",
-    turnBox: document.getElementById("swipeInvertTurn") as HTMLInputElement | null,
-    walkBox: document.getElementById("swipeInvertWalk") as HTMLInputElement | null,
-    reveal: document.getElementById("swipeOpts"),
-  });
+  const swipeInvert = bindSwipeInvert("redjack.swipe");
 
   /** the last tap's press, answered — see {@link fingerLifted} */
   let tapped: Promise<unknown> = Promise.resolve();
@@ -377,14 +342,11 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     },
     press: (x, y) => {
       if (room.swallowsPress(x, y)) return;
-      s.pointerDown = true;
-      s.pointerButton = 1;
-      tapped = s.track(host.director.press(x, y), `press ${x},${y}`);
+      tapped = s.track(host.director.buttonDown(x, y), `press ${x},${y}`);
     },
     release: (x, y) => {
       if (!s.pointerDown) return;
-      s.pointerDown = false;
-      host.director.release(x, y);
+      host.director.buttonUp(x, y);
     },
     sendKey: (key: GestureKey, special: boolean) => sendKey(SWIPE_ARROWS[key] ?? key, special),
     invert: () => swipeInvert,
@@ -401,10 +363,8 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
       room.afterDown(e);
       return;
     }
-    s.pointerDown = true;
     // `sysparam (7)`: a room's mousedown zooms while the right button is held
-    s.pointerButton = e.button === 2 ? 2 : 1;
-    void host.director.press(x, y).then(() => say(`click ${x},${y}`));
+    void host.director.buttonDown(x, y, { button: e.button === 2 ? 2 : 1 }).then(() => say(`click ${x},${y}`));
   });
   // the right button is the game's, not the browser's menu
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -457,9 +417,8 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
       if (room.up(e)) return;
       if (touch.up(e)) return;
       if (!s.pointerDown) return;
-      s.pointerDown = false;
       const { x, y } = canvasCoords(e);
-      host.director.release(x, y);
+      host.director.buttonUp(x, y);
     } finally {
       fingerLifted(e);
     }

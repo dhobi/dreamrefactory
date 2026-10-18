@@ -1668,6 +1668,28 @@ export class ScreenDirector {
     return interp.eventConsumed;
   }
 
+  /**
+   * The player's button went down: the button state the scripts poll, then the
+   * press.
+   *
+   * `pointerDown` first, so held-button drag loops (`while stilldown()`) see the
+   * button held. `button` is DreamFactory 5's `sysparam (7)`, 1 the left and 2 the
+   * right; `shift` is what the press CARRIED, for `shiftkey()` — read inside the
+   * game's own mousedown, so it is snapshotted here and left alone on release.
+   */
+  buttonDown(x: number, y: number, carried: { button?: 1 | 2; shift?: boolean } = {}): Promise<void> {
+    this.session.pointerDown = true;
+    this.session.pointerButton = carried.button ?? 1;
+    if (carried.shift !== undefined) this.session.shiftDown = carried.shift;
+    return this.press(x, y);
+  }
+
+  /** the player's button came up: no longer held, then {@link release} */
+  buttonUp(x: number, y: number): void {
+    this.session.pointerDown = false;
+    this.release(x, y);
+  }
+
   /** press and release at one point */
   async click(x: number, y: number): Promise<void> {
     await this.press(x, y);
@@ -1682,9 +1704,10 @@ export class ScreenDirector {
   async press(x: number, y: number, taken?: () => void): Promise<void> {
     this.session.noteEvent();
     // publish the cursor position so scripts that hit-test themselves (stage
-    // flats, draggable props) read the click via mouse()/pointx/pointy. The
-    // caller (pointerdown) has already set pointerDown, so held-button drag
-    // loops (`while stilldown()`) see the button held.
+    // flats, draggable props) read the click via mouse()/pointx/pointy. A
+    // player's press came through {@link buttonDown}, which has already set
+    // pointerDown, so held-button drag loops (`while stilldown()`) see the
+    // button held.
     this.session.setPointer(x, y);
     // a press made while the BOOTFILE idle runs is queued like one made while
     // a script runs, and taken after the idle has returned (TI.EXE en 0x431c43)
