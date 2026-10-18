@@ -1,5 +1,5 @@
 import type { WireEvent } from "@dreamfactory/engine/web/host";
-import { RipFiles, ripName } from "@dreamfactory/engine/web/rip-files";
+import { RipFiles, readManifest, ripName } from "@dreamfactory/engine/web/rip-files";
 import { siteUrl } from "@dreamfactory/chrome/site";
 
 /**
@@ -106,7 +106,7 @@ export class DustFiles extends RipFiles {
     // (tools/manifest.ts), so this download is the one disc and not every
     // TAOOT edition beside it. Resolved through siteUrl, like every URL a
     // page builds itself, so the page runs from any directory of any host.
-    const manifest = await RipFiles.readManifest(siteUrl("gamefiles.json"));
+    const manifest = await readManifest(siteUrl("gamefiles.json"));
     for (const path of Object.keys(manifest)) {
       store.paths.push(path);
       if (!path.startsWith(root)) continue;

@@ -80,7 +80,7 @@ export function registerTimingBuiltins(ctx: BuiltinCtx): void {
     // own idle, which the host started and whose clock the host moves.
     const sched = session.scheduler;
     const wait = sched.passWait(frame);
-    if (wait === "jump") await session.transitionCtrl.untilRampEnds();
+    if (wait === "jump") await session.fade.whenRampEnds();
     await sched.pass({ wait });
     if (session.hasRealFrames) session.realYieldSeq++;
     else if (wait === "jump") await session.nextFrame();

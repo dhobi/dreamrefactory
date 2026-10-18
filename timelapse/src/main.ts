@@ -213,17 +213,6 @@ let showAbout: () => void = () => {};
 /** the boot caption: the name of the file being opened, or the rate while bytes are arriving */
 const caption = new BootCaption(bootSayEl, () => meter.caption(performance.now(), bytesLeft?.() ?? 0));
 
-/**
- * The disc is read; wait to be told to go (engine/src/web/page-shell.ts).
- *
- * Held open for {@link CHARGED} first, because the fill's own `width` transition
- * is 380ms and swapping it out the instant the number says 100 means the bar
- * never visibly arrives — the whole point of counting real bytes was to earn that
- * end, so it gets to be watched reaching it. Then the gauge crossfades to the
- * button in the same slot.
- */
-const CHARGED = 520;
-
 /** the title card rises, by FLIP (engine/src/web/page-shell.ts); the failure paths reach here too */
 const raiseTitle = titleRise(bootEl, brandEl);
 
@@ -338,7 +327,7 @@ async function main(): Promise<void> {
   const missing: string[] = [];
   await Promise.all(
     prefetch.map(async (name) => {
-      progress(bar.at, `opening ${name}`);
+      bar.say(`opening ${name}`);
       const bytes = await files.load(name, (n) => {
         arrived += n;
         // The denominator GROWS rather than being fixed at the manifest's total,
@@ -462,7 +451,7 @@ async function main(): Promise<void> {
   }
 
   progress(1, "ready");
-  await untilStarted(bootEl, startEl, CHARGED);
+  await untilStarted(bootEl, startEl);
   ensureAudio();
   raiseTitle();
 

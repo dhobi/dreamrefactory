@@ -238,7 +238,7 @@ async function main(): Promise<void> {
   let arrived = 0;
   await Promise.all(
     prefetch.map(async (name) => {
-      progress(bar.at, `opening ${name}`);
+      bar.say(`opening ${name}`);
       await files.load(name, (n) => {
         arrived += n;
         progress(PLANNED + (FETCHED - PLANNED) * (arrived / Math.max(1, arrived + files.bytesLeft(prefetch))));

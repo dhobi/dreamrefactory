@@ -9,14 +9,14 @@ export class Fade {
    * The last tick a step was taken on, or null before the ramp has a start.
    * {@link rampTo} sets it to the tick BEFORE the one it was asked on
    * (the fade builtin, builtins/scene.ts), so step 1 is that tick's however late the host's
-   * next frame arrives — see SessionTransitions.tickFade.
+   * next frame arrives — see {@link advanceTo}.
    */
   lastTick: number | null = null;
   readonly queue: { to: number; steps: number }[] = [];
   snapshot: { rgba: Uint8ClampedArray; width: number; height: number } | null = null;
   /**
    * A movie ended and nothing has said what the screen should look like
-   * afterwards — see SessionTransitions.tickFade, which lifts a leftover
+   * afterwards — see {@link idle}, which lifts a leftover
    * one-shot black once the script that played the movie has run out of things
    * to say.
    */
@@ -30,8 +30,8 @@ export class Fade {
    * with it — which is why opening a stage file lifts one (StageController.
    * openStageFile). `blackscreen` is the framebuffer: `0x43e650` clears it and
    * nothing about swapping a stage draws over it again. Set by {@link blankNow}
-   * (`blackNow`, builtins/scene.ts), cleared by either ramp and by the reveal in
-   * SessionTransitions.tickFade.
+   * (`blackNow`, builtins/scene.ts), cleared by either ramp and by the reveal
+   * ({@link idle}).
    */
   blanked = false;
   /**
@@ -73,7 +73,7 @@ export class Fade {
    * Queue a ramp to `to` (0 clear, 1 black) over `steps` ticks, asked on tick
    * `tick`. A ramp to black freezes the frame showing now (`capture`) unless
    * one is held already. Step 1 is drawn on the tick it is asked on
-   * (0x435b90) — see SessionTransitions.tickFade — so a fresh ramp starts its
+   * (0x435b90) — see {@link advanceTo} — so a fresh ramp starts its
    * clock on the tick before. A ramp owes no reveal and is a ramp of a named
    * palette, not a blanked black.
    */
@@ -105,7 +105,11 @@ export class Fade {
     for (const w of this.afterRamp.splice(0)) w();
   }
 
-  /** resolves once no script is blocked in a ramp — at once when none is */
+  /**
+   * Resolves once no script is blocked in a ramp — at once when none is. A
+   * script waiting on a frame waits on this too: in TI.EXE nothing but the
+   * ramp runs until it is done.
+   */
   whenRampEnds(): Promise<void> {
     if (!this.ramping) return Promise.resolve();
     return new Promise((resolve) => this.afterRamp.push(resolve));
@@ -113,8 +117,8 @@ export class Fade {
 
   /**
    * No ramp queued: the ramp clock starts afresh with the next one, and a
-   * reveal owed is made once nothing holds the frame and no script is `busy`
-   * (SessionTransitions.tickFade).
+   * reveal owed is made once nothing holds the frame and no script is `busy`.
+   * The host's frame asks (SessionTransitions.tickFade).
    */
   idle(busy: boolean): void {
     this.lastTick = null;
@@ -155,8 +159,8 @@ export class Fade {
   }
 
   /**
-   * Whatever is showing is left to the reveal — SessionTransitions.tickFade
-   * lifts the black once the script falls quiet. `dropFrame` also forgets a
+   * Whatever is showing is left to the reveal — {@link idle} lifts the black
+   * once the script falls quiet. `dropFrame` also forgets a
    * frame a `screentoblack` froze, which would otherwise hold the black.
    */
   oweReveal(dropFrame = false): void {

@@ -1,4 +1,4 @@
-import { RipFiles, ripName } from "@dreamfactory/engine/web/rip-files";
+import { RipFiles, readManifest, ripName } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
@@ -48,7 +48,7 @@ export class RedJackFiles extends RipFiles {
   static async open(root = "gamefiles/"): Promise<RedJackFiles> {
     const store = new RedJackFiles();
     // through pageUrl, so the page runs from any directory
-    const manifest = await RipFiles.readManifest(pageUrl("gamefiles.json"));
+    const manifest = await readManifest(pageUrl("gamefiles.json"));
     /** which disc each name was first found on, while the index is built */
     const discOf = new Map<string, number>();
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {

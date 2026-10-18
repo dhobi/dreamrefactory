@@ -20,18 +20,20 @@
 import { SCREEN_H, SCREEN_W, type Screen } from "../v0/screen";
 import type { GameFiles, Speaker } from "../v0/machine";
 import { installFullscreen } from "./fullscreen";
+import { BootBar, brandFallback, escHtml } from "./page-shell";
 import { pageUrl } from "./page-url";
+import { readManifest, readStream } from "./rip-files";
 import { browseForSave } from "./save-browser";
+import { screenPoint } from "./screen";
 import type { GestureKey } from "./touch";
 
 export const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-
-const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
 
 /** a gesture's key, as `KeyboardEvent.key` names it */
 export const GESTURE_KEYS: Record<GestureKey, string> = { uparrow: "ArrowUp", downarrow: "ArrowDown", leftarrow: "ArrowLeft", rightarrow: "ArrowRight", ".": "Escape" };
 
 const SCALE = 2;
+const SCREEN = { width: SCREEN_W, height: SCREEN_H };
 const BUG_NOTE_MS = 6000;
 
 export interface V0PageOptions {
@@ -81,19 +83,20 @@ export class V0Page {
   private readonly offCtx = new OffscreenCanvas(SCREEN_W, SCREEN_H).getContext("2d")!;
   private drawn = -1;
 
+  /** the boot's gauge: a `<progress>` for its value, its caption one line */
+  private readonly gauge = new BootBar(
+    $("charge"),
+    $("bootpct"),
+    (pct) => ($<HTMLProgressElement>("barvalue").value = pct),
+    (label) => ($("bootsay").textContent = label),
+  );
+
   constructor(private readonly opts: V0PageOptions) {
     this.ctx.imageSmoothingEnabled = false;
     $("ver").textContent = `v${opts.version}`;
 
-    /** the title card, which closes the band up when it fails to load — see #brand in index.html */
-    const brandEl = $<HTMLImageElement>("brand");
-    const dropBrand = (): void => {
-      brandEl.hidden = true;
-      document.body.classList.add("nobrand");
-    };
-    // a module runs after parsing, so the image may already have failed by now
-    if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
-    else brandEl.addEventListener("error", dropBrand);
+    // the title card, which closes the band up when it fails to load — see #brand in index.html
+    brandFallback($<HTMLImageElement>("brand"));
 
     $("logBtn").addEventListener("click", this.toggleLog);
     installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: this.say, landscape: true });
@@ -105,17 +108,17 @@ export class V0Page {
 
   readonly step = (line: string): void => {
     this.logLines.push(line);
-    this.logEl.innerHTML += `<b>${esc(line)}</b>\n`;
+    this.logEl.innerHTML += `<b>${escHtml(line)}</b>\n`;
   };
   readonly complain = (line: string): void => {
     this.logLines.push(line);
-    this.logEl.innerHTML += `<i>${esc(line)}</i>\n`;
+    this.logEl.innerHTML += `<i>${escHtml(line)}</i>\n`;
     this.errEl.textContent = line;
     this.logEl.hidden = false;
   };
   readonly say = (line: string): void => {
     this.logLines.push(line);
-    this.logEl.innerHTML += `${esc(line)}\n`;
+    this.logEl.innerHTML += `${escHtml(line)}\n`;
     this.logEl.scrollTop = this.logEl.scrollHeight;
   };
   readonly toggleLog = (): void => {
@@ -152,19 +155,8 @@ export class V0Page {
       p = (async () => {
         const res = await fetch(pageUrl(this.opts.rip + path));
         if (!res.ok || !res.body) throw new Error(`${path}: ${res.status}`);
-        const reader = res.body.getReader();
-        const parts: Uint8Array[] = [];
         let got = 0;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          parts.push(value);
-          got += value.length;
-          onProgress?.(got);
-        }
-        const out = new Uint8Array(got);
-        let at = 0;
-        for (const part of parts) (out.set(part, at), (at += part.length));
+        const out = await readStream(res.body, (n) => onProgress?.((got += n)));
         this.bytes.set(path, out);
         return out;
       })();
@@ -266,9 +258,7 @@ export class V0Page {
    * go off the canvas keeps where it really was.
    */
   readonly at = (e: PointerEvent): { x: number; y: number } => {
-    const r = this.canvas.getBoundingClientRect();
-    const x = Math.floor(((e.clientX - r.left) / r.width) * SCREEN_W);
-    const y = Math.floor(((e.clientY - r.top) / r.height) * SCREEN_H);
+    const { x, y } = screenPoint(e, this.canvas.getBoundingClientRect(), SCREEN, Math.floor);
     if (e.target !== this.canvas) return { x, y };
     return { x: Math.min(SCREEN_W - 1, Math.max(0, x)), y: Math.min(SCREEN_H - 1, Math.max(0, y)) };
   };
@@ -310,23 +300,15 @@ export class V0Page {
    * The boot
    * ----------------------------------------------------------------------- */
 
-  private gauge(fraction: number, what: string): void {
-    const pct = Math.round(fraction * 100);
-    $("charge").style.width = `${pct}%`;
-    $<HTMLProgressElement>("barvalue").value = pct;
-    $("bootpct").textContent = `${pct}%`;
-    $("bootsay").textContent = what;
-  }
-
   /** the manifest read, the preload fetched under the gauge, the boot screen let go */
   async boot({ preload, ready, manifest: listed }: V0Boot): Promise<void> {
     const { name, year, slug, rip } = this.opts;
     this.ctx.fillStyle = "#000";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.step(`${name} (${year}) — DreamFactory 0`);
-    const res = await fetch(pageUrl("gamefiles.json"));
-    if (!res.ok) throw new Error(`no gamefiles.json (${res.status}) — is ${slug}/gamefiles/ there?`);
-    const manifest = (await res.json()) as Record<string, number>;
+    const manifest = await readManifest(pageUrl("gamefiles.json"), {
+      orThrow: (status) => new Error(`no gamefiles.json (${status}) — is ${slug}/gamefiles/ there?`),
+    });
     this.sizes = Object.fromEntries(Object.entries(manifest).filter(([k]) => k.startsWith(rip)));
     listed?.(manifest);
     const missing = preload.filter((p) => !(rip + p in this.sizes));
@@ -337,11 +319,11 @@ export class V0Page {
       preload.map((p) =>
         this.fetchBytes(p, (n) => {
           got.set(p, n);
-          this.gauge([...got.values()].reduce((a, b) => a + b, 0) / total, `reading ${p}…`);
+          this.gauge.set([...got.values()].reduce((a, b) => a + b, 0) / total, `reading ${p}…`);
         }),
       ),
     );
-    this.gauge(1, "ready");
+    this.gauge.set(1, "ready");
     $("boot").classList.add("ready");
     document.body.classList.remove("booting");
     this.step(ready);

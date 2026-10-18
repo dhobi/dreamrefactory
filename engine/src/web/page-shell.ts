@@ -326,11 +326,6 @@ export class BootBar {
     private readonly label: (text: string) => void,
   ) {}
 
-  /** how far the bar stands, 0..1 — for a label said without moving it */
-  get at(): number {
-    return this.done;
-  }
-
   set = (f: number, label?: string): void => {
     this.done = Math.max(this.done, Math.min(1, f));
     const pct = Math.round(this.done * 100);
@@ -342,10 +337,16 @@ export class BootBar {
     }
     if (label) this.label(label);
   };
+
+  /** a label said where the bar already stands */
+  say = (label: string): void => this.set(this.done, label);
 }
 
 /** a real pause, for the one place that wants to be SEEN rather than be quick */
 const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** how long the full bar is held: the fill's own `width` transition is 380ms */
+const HELD_MS = 520;
 
 /**
  * The boot is done: hold the full bar for `ms`, then {@link waitForStart}.
@@ -355,7 +356,7 @@ const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
  * — the whole point of counting real work was to earn that end, so it gets to be
  * watched reaching it.
  */
-export async function untilStarted(bootEl: HTMLElement, startEl: HTMLElement, ms: number, autostart = false): Promise<void> {
+export async function untilStarted(bootEl: HTMLElement, startEl: HTMLElement, autostart = false, ms = HELD_MS): Promise<void> {
   await hold(ms);
   await waitForStart(bootEl, startEl, autostart);
 }

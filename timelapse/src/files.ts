@@ -1,4 +1,4 @@
-import { RipFiles, ripName } from "@dreamfactory/engine/web/rip-files";
+import { RipFiles, readManifest, ripName } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
@@ -94,7 +94,7 @@ export class TimelapseFiles extends RipFiles {
   static async open(root = "gamefiles/"): Promise<TimelapseFiles> {
     const store = new TimelapseFiles();
     // through pageUrl, so the page runs from any directory
-    const manifest = await RipFiles.readManifest(pageUrl("gamefiles.json"));
+    const manifest = await readManifest(pageUrl("gamefiles.json"));
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
       const base = ripName(path);

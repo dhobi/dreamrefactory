@@ -36,6 +36,7 @@
  *     a "touch" press is ambiguous until it moves and goes down a different path
  *     (`beginTouch`).
  */
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 import {
   heldTurnExpr,
   READY_TO_LOOK,
@@ -660,10 +661,7 @@ function aiming(page: Page): Pick<SpeedrunDriver, "aim"> {
           reach: (x: number, y: number) => {
             const r = canvas.getBoundingClientRect();
             const c = clientPointFor(x, y, r, canvas);
-            return {
-              x: Math.floor(((c.x - r.left) / r.width) * canvas.width),
-              y: Math.floor(((c.y - r.top) / r.height) * canvas.height),
-            };
+            return screenPoint({ clientX: c.x, clientY: c.y }, r, canvas, Math.floor);
           },
           hitTest: (x: number, y: number) => s.hitTestAt(x, y),
           propUnder: (x: number, y: number) => {

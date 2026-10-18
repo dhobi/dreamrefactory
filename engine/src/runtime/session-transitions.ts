@@ -15,15 +15,6 @@ export class SessionTransitions {
   /** the screen fade — see {@link Fade} */
   readonly fade = new Fade();
 
-  /**
-   * Resolves once no script is blocked in a fade ramp — at once when none is.
-   * A script waiting on a frame waits on this too: in TI.EXE nothing but the
-   * ramp runs until it is done.
-   */
-  untilRampEnds(): Promise<void> {
-    return this.fade.whenRampEnds();
-  }
-
   /** a script enters a blocking fade ramp of `ms` and leaves it (builtins/scene.ts) */
   async ramp(ms: number): Promise<void> {
     this.fade.enterRamp();
@@ -234,10 +225,6 @@ export class SessionTransitions {
     this.wipe.span = 1;
     this.wipe.settled = false;
     this.wipe.to = null;
-  }
-
-  get fading(): boolean {
-    return this.fade.fading;
   }
 
   /** advance the fade one script tick at a time — the ramp's own clock in the

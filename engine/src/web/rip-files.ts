@@ -79,17 +79,6 @@ export abstract class RipFiles implements HostFiles {
   abstract activeEdition(): string;
   abstract serverSetNames(): string[];
 
-  /**
-   * The manifest the dev server and the build both publish, read from `src`:
-   * every served path → its size in bytes. Nothing at all where it could not be
-   * read, so a page that indexed nothing can say so instead of throwing. Which
-   * paths to take and which copy of a repeated name wins is each game's `open`.
-   */
-  protected static async readManifest(src: string): Promise<Record<string, number>> {
-    const res = await fetch(src);
-    return res.ok ? await res.json() : {};
-  }
-
   /** how many names the rip offers — a boot that indexed nothing says so */
   get size(): number {
     return this.urls.size;
@@ -252,6 +241,30 @@ export abstract class RipFiles implements HostFiles {
   /** nothing is evicted — see the class comment */
   evict(): number {
     return 0;
+  }
+}
+
+export interface ManifestOptions {
+  /** a fetch that fails outright (offline, blocked) or a body that is not JSON reads as no manifest too, rather than throwing */
+  quiet?: boolean;
+  /** for a page that cannot run without one: what to throw, given the status, instead of reading nothing */
+  orThrow?: (status: number) => Error;
+}
+
+/**
+ * The manifest the dev server and the build both publish, read from `src`:
+ * every served path → its size in bytes. Nothing at all where it could not be
+ * read, so a page that indexed nothing can say so instead of throwing. Which
+ * paths to take and which copy of a repeated name wins is each game's `open`.
+ */
+export async function readManifest(src: string, opts: ManifestOptions = {}): Promise<Record<string, number>> {
+  try {
+    const res = await fetch(src);
+    if (!res.ok && opts.orThrow) throw opts.orThrow(res.status);
+    return res.ok ? ((await res.json()) as Record<string, number>) : {};
+  } catch (e) {
+    if (opts.quiet) return {};
+    throw e;
   }
 }
 

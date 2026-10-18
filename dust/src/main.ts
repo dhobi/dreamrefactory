@@ -74,6 +74,7 @@ import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { readManifest } from "@dreamfactory/engine/web/rip-files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import {
   GestureKey,
@@ -506,38 +507,11 @@ const fuse = new BootBar(
 const progress = fuse.set;
 
 /**
- * The title card rises, by FLIP.
+ * The boot is done; wait to be told to go (`untilStarted`,
+ * engine/src/web/page-shell.ts): the burnt-out fuse is held a moment, then the
+ * gauge crossfades to the button in the same slot (a fixed-height #boot, see
+ * the styles) and the button takes focus.
  *
- * Measure where it is, switch the state, measure where it landed, then play the
- * difference back as a transform from the old rect to the new one. Which is not
- * ceremony: the two states size the image by DIFFERENT properties — centred by
- * `max-height: 46vh`, risen by `height: 100%` of a `clamp()`ed band — and a
- * transition between two sizing modes has nothing to interpolate. A transform
- * does, and it is the one property that animates without touching layout, which
- * matters here because the game's frame loop starts in the same frame this does.
- *
- * The fuse is PINNED before the switch and faded after it. It is a flex child of
- * the band the card is rising into, so the class change removes it from the
- * layout it is standing in; freezing it at the rect it already occupies lets it
- * fade out where the player last saw it instead of jumping to the top with the
- * logo.
- */
-/**
- * The boot is done; wait to be told to go.
- *
- * Held open for {@link BURN_OUT} first, because the fuse's own `width` transition
- * is 380ms and swapping it out the instant the number says 100 means the bar never
- * visibly arrives — the whole point of counting fetches was to earn that end, so
- * it gets to be watched reaching it.
- *
- * Then the gauge crossfades to the button in the same slot (a fixed-height #boot,
- * see the styles) and the button takes focus, so this is a keyboard gesture as
- * much as a pointer one — Enter and Space are what a focused button already does,
- * and the AudioContext accepts either.
- */
-const BURN_OUT = 520;
-
-/**
  * Except on a page that says not to wait — `<meta name="autostart">`.
  *
  * The speedrun workbench (dust/speedrun/) declares it, and the reason is what
@@ -759,8 +733,7 @@ addEventListener("keydown", (e) => {
  */
 async function browse(): Promise<void> {
   progress(...HEAD_STEPS[0]);
-  const res = await fetch(siteUrl("gamefiles.json"));
-  const manifest: Record<string, number> = res.ok ? await res.json() : {};
+  const manifest = await readManifest(siteUrl("gamefiles.json"));
   const sets = Object.keys(manifest)
     .filter((p) => /^gamefiles\/dustcd\/DATA\/.+\.SET$/i.test(p))
     .map((p) => p.split("/").pop()!)
@@ -816,7 +789,7 @@ async function runBoot(): Promise<void> {
   // for the same middle of the same page, and only one of them is the picture.
   const bootSay = (l: string) => {
     say(l);
-    progress(fuse.at, l.trim());
+    fuse.say(l.trim());
   };
   progress(...HEAD_STEPS[3]);
   // the build the reader is looking at, first thing in its own account —
@@ -996,7 +969,7 @@ async function runBoot(): Promise<void> {
    * its end instead of being started and abandoned) and gives the movie player
    * something that renders it.
    */
-  await untilStarted(bootEl, startEl, BURN_OUT, AUTOSTART);
+  await untilStarted(bootEl, startEl, AUTOSTART);
   /**
    * The canvas is NOT blank here: the fallback browser painted its preview room
    * onto it during the load, behind the title card — harmless when the game's
@@ -1597,7 +1570,7 @@ start().catch((e) => {
   // a boot that threw has an account of itself and no picture: raise the card so
   // the log has the page, and stop the fuse where it stopped rather than leaving
   // it burning at whatever fraction it had reached
-  progress(fuse.at, String(e));
+  fuse.say(String(e));
   raiseTitle();
   logEl.hidden = false;
 });

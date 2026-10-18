@@ -27,6 +27,7 @@
  */
 import { DfEncoding } from "@dreamfactory/engine/df/text";
 import { detectVersion } from "@dreamfactory/engine/df/version";
+import { readManifest } from "@dreamfactory/engine/web/rip-files";
 import { uiLanguage } from "@dreamfactory/chrome/locales";
 import { siteUrl } from "@dreamfactory/chrome/site";
 import { GAMES, GameEditions, GameScreen, NEUTRAL, editionOfUrl } from "@dreamfactory/chrome/games";
@@ -63,14 +64,7 @@ const manifests = new Map<string, Promise<Record<string, number>>>();
 function manifestOf(game: GameEditions): Promise<Record<string, number>> {
   const existing = manifests.get(game.dir);
   if (existing) return existing;
-  const p = (async () => {
-    try {
-      const r = await fetch(siteUrl(`${game.dir}/gamefiles.json`));
-      return r.ok ? ((await r.json()) as Record<string, number>) : {};
-    } catch {
-      return {};
-    }
-  })();
+  const p = readManifest(siteUrl(`${game.dir}/gamefiles.json`), { quiet: true });
   manifests.set(game.dir, p);
   return p;
 }
