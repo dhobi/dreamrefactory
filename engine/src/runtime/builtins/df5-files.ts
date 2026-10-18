@@ -31,6 +31,21 @@ interface CacheEntry {
   src: string;
 }
 
+const int = (cmd: string, v: Value | undefined): number => {
+  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
+  return v | 0;
+};
+// 0x410560: a string, or 0xe
+const str = (cmd: string, v: Value | undefined): string => {
+  if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
+  return v;
+};
+// a v5 boolean is 1/0, so `cmp word [arg], 2` can only turn a string away here
+const bool = (cmd: string, v: Value | undefined): number => {
+  if (typeof v === "string" || v === undefined) throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a boolean`);
+  return v ? 1 : 0;
+};
+
 /**
  * DreamFactory 5's file, folder, volume and registry commands, each read out
  * of `RedJack.exe` (`redjack/tools/rjdis.mts cmd NAME`), over the stand-in
@@ -42,50 +57,27 @@ interface CacheEntry {
  * does the same.
  */
 export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
+  registerListings(ctx);
+  registerFileOps(ctx);
+  registerCopyLocal(ctx);
+  registerTextFile(ctx);
+  registerRegistry(ctx);
+}
+
+/**
+ * buildfilenames (folder): two lists made afresh, the folder's files at
+ * [0x4dffbc] (count [0x4dffb0]) and its folders at [0x4dffb8] ([0x4dffb4]),
+ * each name a Pascal string in a 256-byte slot (0x43efe0). The search is
+ * `folder @ "*.*"` (0x48d330), so `folder` is a prefix: a path that does not
+ * end in `:` lists the names in its parent that start with its last part.
+ * 0x48d330 steps over `.` and `..` to the first entry; the loop then leaves
+ * out any name that starts with a dot. A folder that is not there leaves both
+ * lists empty, and is not an error.
+ */
+function registerListings(ctx: BuiltinCtx): void {
   const { session } = ctx;
   const r5 = v5Registrar(ctx);
   const disk = (): Df5Disk => session.df5Disk;
-
-  const int = (cmd: string, v: Value | undefined): number => {
-    if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-    return v | 0;
-  };
-  // 0x410560: a string, or 0xe
-  const str = (cmd: string, v: Value | undefined): string => {
-    if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-    return v;
-  };
-  // a v5 boolean is 1/0, so `cmp word [arg], 2` can only turn a string away here
-  const bool = (cmd: string, v: Value | undefined): number => {
-    if (typeof v === "string" || v === undefined) throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a boolean`);
-    return v ? 1 : 0;
-  };
-
-  /** a file's bytes, from the hard disk or, by its name, from the disc it is on */
-  const readFile = async (path: string): Promise<Uint8Array | null> => {
-    const st = disk().stat(path);
-    if (!st || st.busy) return null;
-    const hd = disk().hdFile(path);
-    if (hd?.bytes) return hd.bytes;
-    const onDisc = hd ? hd.copyOf : disk().discFile(path);
-    if (!onDisc) return null;
-    // the file index is by basename (a disc's one repeated name, death.move,
-    // is served from the mounted disc)
-    const base = onDisc.split("/").pop()!;
-    if (!session.files(base)) await session.ensureFile(base);
-    return session.files(base);
-  };
-
-  /**
-   * buildfilenames (folder): two lists made afresh, the folder's files at
-   * [0x4dffbc] (count [0x4dffb0]) and its folders at [0x4dffb8] ([0x4dffb4]),
-   * each name a Pascal string in a 256-byte slot (0x43efe0). The search is
-   * `folder @ "*.*"` (0x48d330), so `folder` is a prefix: a path that does not
-   * end in `:` lists the names in its parent that start with its last part.
-   * 0x48d330 steps over `.` and `..` to the first entry; the loop then leaves
-   * out any name that starts with a dot. A folder that is not there leaves both
-   * lists empty, and is not an error.
-   */
   const files: string[] = [];
   const folders: string[] = [];
   r5("buildfilenames", (_i, [path]) => {
@@ -111,7 +103,13 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
     });
   indexed("indextofilename", files);
   indexed("indextofoldername", folders);
+}
 
+/** deletefile, and what a path says: its volume, its name, the space on its disk */
+function registerFileOps(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const disk = (): Df5Disk => session.df5Disk;
   /**
    * deletefile (path) (0x43ef20): 0x48ceb0 first — not there is 0x2a, there
    * but not openable (a folder: CreateFileA without backup semantics fails) is
@@ -138,34 +136,39 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
    * A CD has none; the hard disk's is the stand-in's (Df5Disk.freeSpace).
    */
   r5("diskspace", (_i, [path]) => disk().freeSpace(df5VolumeName(str("diskspace", path)) + ":"));
+}
 
-  /**
-   * copylocal (name, folder, progress, cache) (0x4183c0): `name` is looked for
-   * as `path (n) @ name` for n = 1..8 — slot 0 is skipped — and the first that
-   * 0x48ceb0 finds is copied to `folder @ name` by 0x40f3d0; none found is
-   * false. Both flags must be booleans (0xe). The answer is a boolean.
-   *
-   * 0x40f3d0, in order:
-   * - the source not there: false; the copy already there: true, untouched;
-   * - the free space where the copy goes (0x48cdd0) fails: false;
-   * - with `cache`, a source on any volume but `currentcd ()`'s (0x4c7600,
-   *   compared by 0x469110): false;
-   * - then, until the source fits in the free space less 30 MiB (0x1e00000) and
-   *   — with `cache` — one of the 32 cache records is empty: the cached copy
-   *   made first (lowest order number) that is still there and can be opened is
-   *   deleted and its record emptied; none left to delete is false;
-   * - the copy made in 8 KiB pieces, behind a PROGRESS dialog with `progress`
-   *   (cancelling it deletes the copy and answers false — there is no dialog
-   *   here, so nothing cancels);
-   * - with `cache`, a record of it (order number, progress flag, copy, source).
-   *
-   * The cache's copies are deleted as the game quits (0x40f300), so here they
-   * are transient: kept for the session, never persisted. A copy of a disc file
-   * is kept as the name of what it copies, not the bytes again. The port reads
-   * every file by its name, so a copy changes what the game loads not at all;
-   * what it changes is what the scripts see: the answer, `diskspace`, and the
-   * copies a listing finds.
-   */
+/**
+ * copylocal (name, folder, progress, cache) (0x4183c0): `name` is looked for
+ * as `path (n) @ name` for n = 1..8 — slot 0 is skipped — and the first that
+ * 0x48ceb0 finds is copied to `folder @ name` by 0x40f3d0; none found is
+ * false. Both flags must be booleans (0xe). The answer is a boolean.
+ *
+ * 0x40f3d0, in order:
+ * - the source not there: false; the copy already there: true, untouched;
+ * - the free space where the copy goes (0x48cdd0) fails: false;
+ * - with `cache`, a source on any volume but `currentcd ()`'s (0x4c7600,
+ *   compared by 0x469110): false;
+ * - then, until the source fits in the free space less 30 MiB (0x1e00000) and
+ *   — with `cache` — one of the 32 cache records is empty: the cached copy
+ *   made first (lowest order number) that is still there and can be opened is
+ *   deleted and its record emptied; none left to delete is false;
+ * - the copy made in 8 KiB pieces, behind a PROGRESS dialog with `progress`
+ *   (cancelling it deletes the copy and answers false — there is no dialog
+ *   here, so nothing cancels);
+ * - with `cache`, a record of it (order number, progress flag, copy, source).
+ *
+ * The cache's copies are deleted as the game quits (0x40f300), so here they
+ * are transient: kept for the session, never persisted. A copy of a disc file
+ * is kept as the name of what it copies, not the bytes again. The port reads
+ * every file by its name, so a copy changes what the game loads not at all;
+ * what it changes is what the scripts see: the answer, `diskspace`, and the
+ * copies a listing finds.
+ */
+function registerCopyLocal(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const disk = (): Df5Disk => session.df5Disk;
   const cache: (CacheEntry | null)[] = new Array(32).fill(null);
   let seq = 10;
   const copy = (src: string, dst: string, progress: number, cached: number): boolean => {
@@ -219,13 +222,34 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
     }
     return i.bool(false);
   });
+}
 
-  /**
-   * The text file: one buffer at [0x4c2a84], [0x4c2a80] bytes long, its lines
-   * ended by CR alone (txed.c). Read in, a CR LF is a CR, a lone LF a CR and an
-   * LF as the file's first byte nothing (0x48dfe0); written out, every CR is
-   * CR LF (0x48e250).
-   */
+/**
+ * The text file: one buffer at [0x4c2a84], [0x4c2a80] bytes long, its lines
+ * ended by CR alone (txed.c). Read in, a CR LF is a CR, a lone LF a CR and an
+ * LF as the file's first byte nothing (0x48dfe0); written out, every CR is
+ * CR LF (0x48e250).
+ */
+function registerTextFile(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const disk = (): Df5Disk => session.df5Disk;
+
+  /** a file's bytes, from the hard disk or, by its name, from the disc it is on */
+  const readFile = async (path: string): Promise<Uint8Array | null> => {
+    const st = disk().stat(path);
+    if (!st || st.busy) return null;
+    const hd = disk().hdFile(path);
+    if (hd?.bytes) return hd.bytes;
+    const onDisc = hd ? hd.copyOf : disk().discFile(path);
+    if (!onDisc) return null;
+    // the file index is by basename (a disc's one repeated name, death.move,
+    // is served from the mounted disc)
+    const base = onDisc.split("/").pop()!;
+    if (!session.files(base)) await session.ensureFile(base);
+    return session.files(base);
+  };
+
   let text = "";
   /**
    * opentextfile (path) (0x40aef0): the file read into the buffer (0x48df80 →
@@ -310,22 +334,27 @@ export function registerDf5FilesBuiltins(ctx: BuiltinCtx): void {
     const cr = s.indexOf(CR);
     return cr < 0 ? s : s.slice(0, cr);
   });
+}
 
-  /**
-   * registrystring (name [, value]) and registrynumber (name [, n]): values
-   * of `HKEY_CURRENT_USER\Software\RedJack` (the app name at 0x4ba198, "Software\"
-   * at 0x4c1370), the key made by RegCreateKeyExA on every call. Two arguments
-   * set the value, REG_SZ (0x46bd30) or REG_DWORD (0x46ba90); one reads it
-   * (0x46c030 into 256 bytes, 0x46bec0 into 4), a value not there answering ""
-   * or 0. The installer writes nothing under that key (its registry work in
-   * SETUP.INS is the file types under Software\Classes and the uninstall
-   * entry), so the key starts empty.
-   *
-   * A value of the other type is an assertion in puti.c (0xfa0, 0xf86), past
-   * which the exe goes on with the bytes it read: a REG_DWORD read as a string
-   * is its bytes up to a NUL; a REG_SZ read as a number is its bytes if the
-   * string and its NUL fit in four, else RegQueryValueExA fails and it is 0.
-   */
+/**
+ * registrystring (name [, value]) and registrynumber (name [, n]): values
+ * of `HKEY_CURRENT_USER\Software\RedJack` (the app name at 0x4ba198, "Software\"
+ * at 0x4c1370), the key made by RegCreateKeyExA on every call. Two arguments
+ * set the value, REG_SZ (0x46bd30) or REG_DWORD (0x46ba90); one reads it
+ * (0x46c030 into 256 bytes, 0x46bec0 into 4), a value not there answering ""
+ * or 0. The installer writes nothing under that key (its registry work in
+ * SETUP.INS is the file types under Software\Classes and the uninstall
+ * entry), so the key starts empty.
+ *
+ * A value of the other type is an assertion in puti.c (0xfa0, 0xf86), past
+ * which the exe goes on with the bytes it read: a REG_DWORD read as a string
+ * is its bytes up to a NUL; a REG_SZ read as a number is its bytes if the
+ * string and its NUL fit in four, else RegQueryValueExA fails and it is 0.
+ */
+function registerRegistry(ctx: BuiltinCtx): void {
+  const { session } = ctx;
+  const r5 = v5Registrar(ctx);
+  const disk = (): Df5Disk => session.df5Disk;
   r5("registrystring", (_i, args) => {
     const name = str("registrystring", args[0]);
     if (args.length >= 2) {

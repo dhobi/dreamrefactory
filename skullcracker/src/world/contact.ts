@@ -798,66 +798,7 @@ export function boltHits(): void {
     const [x0, x1] = b.facing < 0 ? [-sb.x1, -sb.x0] : [sb.x0, sb.x1];
     const box = { left: at.x + x0, right: at.x + x1, top: at.y + sb.y0, bottom: at.y + sb.y1 };
     const was = at.x;
-    /**
-     * What it meets first. Boggs' body and a machine can both stand over the
-     * point it is tested at; both take the same hundred — `0x41bc71` on the
-     * body and `0x41b510` in the machinery's handler translate the `-1`
-     * identically — and the nearer along the way it flies is taken.
-     */
-    const met: { edge: number; take: () => void }[] = [];
-    for (const g of hereOf((l) => l.boggs)) {
-      const cel = celRec(lvl.sbk, boggsCel(g));
-      if (cel?.body) {
-        // the cel's BODY box off the anchor, which is what the collision pass
-        // tests a victim by (`0x4303b3` reads `cel+0xc`, `0x40e680` translates
-        // it) — 5988's is x −151..31, y −36..127, so a bolt at a standing
-        // player's knee height passes under the body and meets the machine
-        // behind it
-        const gb = {
-          left: g.x + cel.body.x0,
-          right: g.x + cel.body.x1,
-          top: g.y + cel.body.y0,
-          bottom: g.y + cel.body.y1,
-        };
-        if (
-          box.right > gb.left &&
-          box.left < gb.right &&
-          box.bottom > gb.top &&
-          box.top < gb.bottom
-        ) {
-          met.push({
-            edge: b.vx >= 0 ? Math.max(gb.left, was) : Math.min(gb.right, was),
-            take: () => {
-              // `0x41bc71` -> 100, then `0x42f910` the usual way
-              g.hp = Math.max(0, g.hp - BOGGS.translatesTo);
-              sound?.effect(BOLT.sound, g.x, g.y);
-              boggsStruck(g, true);
-            },
-          });
-        }
-      }
-      for (let k = 0; k < g.machines.length; k++) {
-        const mb = machineBox(g, k);
-        if (!mb) continue;
-        if (!(
-          box.right > mb.left &&
-          box.left < mb.right &&
-          box.bottom > mb.top &&
-          box.top < mb.bottom
-        ))
-          continue;
-        met.push({
-          // clamped to where the bolt STARTED this step: it materialises 120px
-          // ahead of the muzzle and can be inside several boxes already, and a
-          // leading edge behind it is not the thing it met first
-          edge: b.vx >= 0 ? Math.max(mb.left, was) : Math.min(mb.right, was),
-          take: () => {
-            strikeMachine(g, k, BOGGS.translatesTo, true);
-            sound?.effect(BOLT.sound, g.machines[k].x, g.machines[k].y);
-          },
-        });
-      }
-    }
+    const met = boltMeetsBoggs(lvl, b, box, was);
     let hit = false;
     if (met.length) {
       met.sort((l, r) => (b.vx >= 0 ? l.edge - r.edge : r.edge - l.edge));
@@ -875,92 +816,170 @@ export function boltHits(): void {
       b.spent = true;
       continue;
     }
-    /**
-     * ...and the creatures, which a bolt does NOT simply stop on.
-     *
-     * The hit pass `0x430350` hands the bolt to each body's handler in turn,
-     * and what happens next is the handler's ANSWER and the bolt's strength
-     * AFTER it:
-     *
-     * - an answer of 0 (`0x43042b`) moves on to the next body — nothing is
-     *   exchanged, nothing marks the bolt, and it flies on. Every handler that
-     *   turns a negative strength away answers 0 to the blaster's −1, and so
-     *   does puke's, after its sound (`0x418278`): the bolt goes THROUGH them;
-     * - an answer of 1 with a strength over 0 runs `0x430470`, which sets the
-     *   bolt's `obj+0x2a` (`0x430663`), and the bolt's think lets it go on its
-     *   next frame (`0x413b56`). A handler of {@link Foe.minusOne} `as` writes
-     *   the 100 onto the BOLT before it answers (`0x4147e0`, `0x418b4e`,
-     *   `0x4199a0`), which is what lets its 1 stop it;
-     * - and a handler that rewrites and then answers 0 — an arm that has hold
-     *   of you (`0x418b58`) — leaves a hundred-strength bolt going on to the
-     *   next body in the same pass. The think puts the −1 back next frame
-     *   (`0x413bf9`, from the variant, every frame).
-     *
-     * A cel with no body box is not there to a bolt either (`0x4303b3`): a
-     * flinching TCop, the tube on its stand.
-     */
-    let str: number = b.code;
-    for (const e of pool) {
-      if (!takesBlows(e)) continue;
-      const c = celRec(lvl.sbk, celOf(e));
-      if (!c?.body) continue;
-      const hurt = hurtBox(e, c, lvl);
-      if (!(
-        box.right > hurt.left &&
-        box.left < hurt.right &&
-        box.bottom > hurt.top &&
-        box.top < hurt.bottom
-      ))
-        continue;
-      const foe = FOES[e.kind];
-      if (str === -1) {
-        const minus = foe.minusOne;
-        if (!minus) continue;
-        if ("sound" in minus) {
-          // puke's `0x41825e` answers it through `0x40f090` (`0x418273`)
-          sound?.effect(minus.sound, b.x, b.y, "lead");
-          continue;
-        }
-        str = minus.as;
-      } else if (b.code === 100 && e.kind === "initcop") {
-        // the big gun's bolt is the bolt class `[0x46c600]` below tag 2,
-        // which the TCop turns away (`0x41482a`) — an answer of 0
-        continue;
-      } else if (b.code === 100 && !foesHurt) {
-        // ...and to anything else it is a blow of a hundred, which lands
-        // under the creature switch like every other blow a machine throws;
-        // without it the bolt stops there and takes nothing
-        b.spent = true;
-        break;
-      }
-      // `0x42f910` at the strength it now has: 4000's own pair, scaled and
-      // mirrored, plus `obj+0xc` — the bolt's hundred a frame, which is what
-      // {@link Bolt.vx} already holds, a step being one engine frame — and the
-      // integer root of the sum of squares (`0x434630`)
-      const pair = art?.blow ?? { dx: 0, dy: 0 };
-      const facing = b.vx < 0 ? -1 : 1;
-      const vx = b.vx;
-      const dx = Math.trunc((pair.dx * str) / 100) * facing + vx;
-      const dy = Math.trunc((pair.dy * str) / 100);
-      // a taken blow is a counted one; a gate that turned it away left the
-      // count where it was — the handler's 1 or 0
-      const dents = e.dents;
-      strikeFoe(e, {
-        damage: Math.floor(Math.hypot(dx, dy)),
-        shove: pair,
-        from: facing,
-        mid: at.y,
-        box: hurt,
-        contact: { x: at.x, y: at.y },
-        hitter: { mass: BOLT.divisor, vx, vy: 0, by: {} },
-      });
-      if (e.dents !== dents) {
-        b.spent = true;
-        break;
-      }
-    }
+    boltThroughFoes(lvl, pool, b, art, box, at);
   }
   setBolts(bolts.filter((b) => !b.spent));
+}
+
+/** a bolt's strike box, which every body is tested against */
+type BoltBox = { left: number; right: number; top: number; bottom: number };
+
+/**
+ * What it meets first. Boggs' body and a machine can both stand over the
+ * point it is tested at; both take the same hundred — `0x41bc71` on the
+ * body and `0x41b510` in the machinery's handler translate the `-1`
+ * identically — and the nearer along the way it flies is taken.
+ */
+function boltMeetsBoggs(lvl: Level, b: (typeof bolts)[number], box: BoltBox, was: number): { edge: number; take: () => void }[] {
+  const met: { edge: number; take: () => void }[] = [];
+  for (const g of hereOf((l) => l.boggs)) {
+    const cel = celRec(lvl.sbk, boggsCel(g));
+    if (cel?.body) {
+      // the cel's BODY box off the anchor, which is what the collision pass
+      // tests a victim by (`0x4303b3` reads `cel+0xc`, `0x40e680` translates
+      // it) — 5988's is x −151..31, y −36..127, so a bolt at a standing
+      // player's knee height passes under the body and meets the machine
+      // behind it
+      const gb = {
+        left: g.x + cel.body.x0,
+        right: g.x + cel.body.x1,
+        top: g.y + cel.body.y0,
+        bottom: g.y + cel.body.y1,
+      };
+      if (
+        box.right > gb.left &&
+        box.left < gb.right &&
+        box.bottom > gb.top &&
+        box.top < gb.bottom
+      ) {
+        met.push({
+          edge: b.vx >= 0 ? Math.max(gb.left, was) : Math.min(gb.right, was),
+          take: () => {
+            // `0x41bc71` -> 100, then `0x42f910` the usual way
+            g.hp = Math.max(0, g.hp - BOGGS.translatesTo);
+            sound?.effect(BOLT.sound, g.x, g.y);
+            boggsStruck(g, true);
+          },
+        });
+      }
+    }
+    for (let k = 0; k < g.machines.length; k++) {
+      const mb = machineBox(g, k);
+      if (!mb) continue;
+      if (!(
+        box.right > mb.left &&
+        box.left < mb.right &&
+        box.bottom > mb.top &&
+        box.top < mb.bottom
+      ))
+        continue;
+      met.push({
+        // clamped to where the bolt STARTED this step: it materialises 120px
+        // ahead of the muzzle and can be inside several boxes already, and a
+        // leading edge behind it is not the thing it met first
+        edge: b.vx >= 0 ? Math.max(mb.left, was) : Math.min(mb.right, was),
+        take: () => {
+          strikeMachine(g, k, BOGGS.translatesTo, true);
+          sound?.effect(BOLT.sound, g.machines[k].x, g.machines[k].y);
+        },
+      });
+    }
+  }
+  return met;
+}
+
+/**
+ * ...and the creatures, which a bolt does NOT simply stop on.
+ *
+ * The hit pass `0x430350` hands the bolt to each body's handler in turn,
+ * and what happens next is the handler's ANSWER and the bolt's strength
+ * AFTER it:
+ *
+ * - an answer of 0 (`0x43042b`) moves on to the next body — nothing is
+ *   exchanged, nothing marks the bolt, and it flies on. Every handler that
+ *   turns a negative strength away answers 0 to the blaster's −1, and so
+ *   does puke's, after its sound (`0x418278`): the bolt goes THROUGH them;
+ * - an answer of 1 with a strength over 0 runs `0x430470`, which sets the
+ *   bolt's `obj+0x2a` (`0x430663`), and the bolt's think lets it go on its
+ *   next frame (`0x413b56`). A handler of {@link Foe.minusOne} `as` writes
+ *   the 100 onto the BOLT before it answers (`0x4147e0`, `0x418b4e`,
+ *   `0x4199a0`), which is what lets its 1 stop it;
+ * - and a handler that rewrites and then answers 0 — an arm that has hold
+ *   of you (`0x418b58`) — leaves a hundred-strength bolt going on to the
+ *   next body in the same pass. The think puts the −1 back next frame
+ *   (`0x413bf9`, from the variant, every frame).
+ *
+ * A cel with no body box is not there to a bolt either (`0x4303b3`): a
+ * flinching TCop, the tube on its stand.
+ */
+function boltThroughFoes(
+  lvl: Level,
+  pool: Level["spawned"][number],
+  b: (typeof bolts)[number],
+  art: SbkCel | undefined,
+  box: BoltBox,
+  at: NonNullable<(typeof bolts)[number]["was"]>,
+): void {
+  let str: number = b.code;
+  for (const e of pool) {
+    if (!takesBlows(e)) continue;
+    const c = celRec(lvl.sbk, celOf(e));
+    if (!c?.body) continue;
+    const hurt = hurtBox(e, c, lvl);
+    if (!(
+      box.right > hurt.left &&
+      box.left < hurt.right &&
+      box.bottom > hurt.top &&
+      box.top < hurt.bottom
+    ))
+      continue;
+    const foe = FOES[e.kind];
+    if (str === -1) {
+      const minus = foe.minusOne;
+      if (!minus) continue;
+      if ("sound" in minus) {
+        // puke's `0x41825e` answers it through `0x40f090` (`0x418273`)
+        sound?.effect(minus.sound, b.x, b.y, "lead");
+        continue;
+      }
+      str = minus.as;
+    } else if (b.code === 100 && e.kind === "initcop") {
+      // the big gun's bolt is the bolt class `[0x46c600]` below tag 2,
+      // which the TCop turns away (`0x41482a`) — an answer of 0
+      continue;
+    } else if (b.code === 100 && !foesHurt) {
+      // ...and to anything else it is a blow of a hundred, which lands
+      // under the creature switch like every other blow a machine throws;
+      // without it the bolt stops there and takes nothing
+      b.spent = true;
+      return;
+    }
+    // `0x42f910` at the strength it now has: 4000's own pair, scaled and
+    // mirrored, plus `obj+0xc` — the bolt's hundred a frame, which is what
+    // {@link Bolt.vx} already holds, a step being one engine frame — and the
+    // integer root of the sum of squares (`0x434630`)
+    const pair = art?.blow ?? { dx: 0, dy: 0 };
+    const facing = b.vx < 0 ? -1 : 1;
+    const vx = b.vx;
+    const dx = Math.trunc((pair.dx * str) / 100) * facing + vx;
+    const dy = Math.trunc((pair.dy * str) / 100);
+    // a taken blow is a counted one; a gate that turned it away left the
+    // count where it was — the handler's 1 or 0
+    const dents = e.dents;
+    strikeFoe(e, {
+      damage: Math.floor(Math.hypot(dx, dy)),
+      shove: pair,
+      from: facing,
+      mid: at.y,
+      box: hurt,
+      contact: { x: at.x, y: at.y },
+      hitter: { mass: BOLT.divisor, vx, vy: 0, by: {} },
+    });
+    if (e.dents !== dents) {
+      b.spent = true;
+      return;
+    }
+  }
 }
 
 /**

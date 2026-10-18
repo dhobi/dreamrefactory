@@ -127,24 +127,32 @@ function registerPropLifecycle(ctx: BuiltinCtx): void {
 
 /** view, position, set, scale, clip and owner */
 function registerPropPlacement(ctx: BuiltinCtx): void {
-  const { session, r } = ctx;
   // prop commands — getter/setter by arity
+  registerPropView(ctx);
+  registerPropXy(ctx);
+  registerPropSetScaleOwner(ctx);
+}
+
+/**
+ * The getter answers the state the prop is actually IN, which for one no script
+ * has touched is its FIRST state — the same one `PropInstance.state()` resolves
+ * to and the engine draws. Answering "" there told scripts something the screen
+ * disagreed with, and BOIL.STG's OK button is where that shows: it tidies the
+ * boiler panel on the way out with
+ *
+ *     if propview ("boilgate") != "up"
+ *         sendtoprop ("boilgate", up ())
+ *     endif
+ *
+ * and `boilgate`'s first state IS "up" (BOIL.SHP), so the guard exists to do
+ * nothing when the big door is already up. Reading "" made it true every time,
+ * so leaving the panel played the big door's 13-frame raise for no reason (#15).
+ */
+function registerPropView(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
   /** getter/setter by arity; a missing prop answers the empty value */
   const acc = accessorFamily(r, prop, ctx.miss);
-  // The getter answers the state the prop is actually IN, which for one no script
-  // has touched is its FIRST state — the same one `PropInstance.state()` resolves
-  // to and the engine draws. Answering "" there told scripts something the screen
-  // disagreed with, and BOIL.STG's OK button is where that shows: it tidies the
-  // boiler panel on the way out with
-  //
-  //     if propview ("boilgate") != "up"
-  //         sendtoprop ("boilgate", up ())
-  //     endif
-  //
-  // and `boilgate`'s first state IS "up" (BOIL.SHP), so the guard exists to do
-  // nothing when the big door is already up. Reading "" made it true every time,
-  // so leaving the panel played the big door's 13-frame raise for no reason (#15).
   acc("propview", "", (p) => p.stateName || (p.state()?.identifier.toLowerCase() ?? ""), (p, v) => {
     p.stateName = toStr(v).toLowerCase();
     p.lastTick = 0;
@@ -207,6 +215,12 @@ function registerPropPlacement(ctx: BuiltinCtx): void {
       p.animating = !!st && (p.frameCount(st) > 1 || st.playsOnce === true);
     }
   });
+}
+
+/** propxy and propxyz: where a prop stands, on the screen and in the world */
+function registerPropXy(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const prop = (name: Value) => session.propRuntime.get(toStr(name));
   r("propxy", (_i, [n, x, y]) => {
     const p = prop(n);
     if (!p || x === undefined) return 0;
@@ -265,46 +279,53 @@ function registerPropPlacement(ctx: BuiltinCtx): void {
     // never resolved must not overrule it when its set opens (settleStars)
     p.starPending = false;
   });
-  /**
-   * `propset(name, set)` says which SET a prop belongs to — and belonging to a
-   * set is what makes it scenery.
-   *
-   * Storing the name and nothing else is not enough: the set filter that reads
-   * it lives in {@link PropRuntime.worldDrawList} — which a screen-space prop
-   * never reaches. So a prop assigned to a room but not yet positioned would stay
-   * in the SCREEN draw list, pinned at the default anchor (256, 192) and drawn
-   * over every room in the game. #290 is that, in the Mayor's spare room on the
-   * morning of day 2: a pile of dung, a tumbleweed and a vase
-   * of flowers stacked in mid-air at the centre of the view, unchanged by turning
-   * or walking, and clickable.
-   *
-   * The corpora say the two are the same statement. All 94 `propset` calls in
-   * Dust and all 27 in Titanic are about world props — every one is within a few
-   * lines of a `propxyz`, `propstar`, `makecricket` or a `propscale` in the
-   * thousands — and Dust is the game that leans on the ORDER:
-   *
-   *     code setupprop (where)            / / HOUSE.PRP, the dung
-   *         if where = "town"
-   *             propset (me, "town")
-   *             propvisible (me, true)
-   *             propscale (me, 500)
-   *             propdeg (me, random (255))
-   *
-   * with the position arriving later and from somewhere else — `randomloc()` when
-   * the town opens, `movestar()` for the shooting star, a `makecricket` for the
-   * shooting-range bullet. Titanic always places first and calls `propset` after
-   * (`propstar (me, "flames")` then `propset (me, "smoke")`), which is why this
-   * costs it nothing: by the time propset runs there, the prop is already a world
-   * prop.
-   *
-   * `propdeg (me, random (255))` is the same fact said twice: 0..255 is an
-   * ORIENTATION, which is only meaningful for a prop drawn against a camera —
-   * screen-space props read propdeg as a frame index (see the note there).
-   *
-   * An empty name is not an assignment and does not move a prop into the world;
-   * `propxy` still takes it back out, so a script that places a prop on the
-   * screen after assigning it to a set gets what it asked for, in that order.
-   */
+}
+
+/**
+ * `propset(name, set)` says which SET a prop belongs to — and belonging to a
+ * set is what makes it scenery.
+ *
+ * Storing the name and nothing else is not enough: the set filter that reads
+ * it lives in {@link PropRuntime.worldDrawList} — which a screen-space prop
+ * never reaches. So a prop assigned to a room but not yet positioned would stay
+ * in the SCREEN draw list, pinned at the default anchor (256, 192) and drawn
+ * over every room in the game. #290 is that, in the Mayor's spare room on the
+ * morning of day 2: a pile of dung, a tumbleweed and a vase
+ * of flowers stacked in mid-air at the centre of the view, unchanged by turning
+ * or walking, and clickable.
+ *
+ * The corpora say the two are the same statement. All 94 `propset` calls in
+ * Dust and all 27 in Titanic are about world props — every one is within a few
+ * lines of a `propxyz`, `propstar`, `makecricket` or a `propscale` in the
+ * thousands — and Dust is the game that leans on the ORDER:
+ *
+ *     code setupprop (where)            / / HOUSE.PRP, the dung
+ *         if where = "town"
+ *             propset (me, "town")
+ *             propvisible (me, true)
+ *             propscale (me, 500)
+ *             propdeg (me, random (255))
+ *
+ * with the position arriving later and from somewhere else — `randomloc()` when
+ * the town opens, `movestar()` for the shooting star, a `makecricket` for the
+ * shooting-range bullet. Titanic always places first and calls `propset` after
+ * (`propstar (me, "flames")` then `propset (me, "smoke")`), which is why this
+ * costs it nothing: by the time propset runs there, the prop is already a world
+ * prop.
+ *
+ * `propdeg (me, random (255))` is the same fact said twice: 0..255 is an
+ * ORIENTATION, which is only meaningful for a prop drawn against a camera —
+ * screen-space props read propdeg as a frame index (see the note there).
+ *
+ * An empty name is not an assignment and does not move a prop into the world;
+ * `propxy` still takes it back out, so a script that places a prop on the
+ * screen after assigning it to a set gets what it asked for, in that order.
+ */
+function registerPropSetScaleOwner(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const prop = (name: Value) => session.propRuntime.get(toStr(name));
+  /** getter/setter by arity; a missing prop answers the empty value */
+  const acc = accessorFamily(r, prop, ctx.miss);
   acc("propset", "", (p) => p.setName, (p, v) => {
     const name = toStr(v).toLowerCase();
     p.setName = name;

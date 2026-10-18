@@ -311,6 +311,79 @@ export async function runSheet(
   const actionCount = steps.filter((s) => s.verb !== "split").length;
   let index = 0;
 
+  const watchdog = watchdogFor(d, actions, hooks, verbs);
+  for (const step of steps) {
+    if (step.verb === "split") {
+      const now = await d.clock();
+      const split = splitBetween(step.args[0] ?? `split ${splits.length + 1}`, splitFrom, now, splitActions);
+      splits.push(split);
+      hooks.onSplit?.(split);
+      splitFrom = now;
+      splitActions = 0;
+      continue;
+    }
+
+    hooks.onStep?.(step, index++, actionCount);
+    const action = resolve(step.verb)!;
+    const ran = await runStep(d, step, action, actions, hooks, verbs, watchdog);
+    const { timing, voided } = ran;
+    // null until now: a failure ends the loop below
+    failure = ran.failure;
+    timings.push(timing);
+    hooks.onDone?.(timing);
+    if (action.voidsTime || voided) invalid.push(`${step.source.trim()} on line ${step.line}`);
+    splitActions++;
+    if (failure) break;
+  }
+
+  const ended = await d.clock().catch(() => started);
+  if (splitActions) {
+    const split = splitBetween(failure ? "(unfinished)" : "(final)", splitFrom, ended, splitActions);
+    splits.push(split);
+    hooks.onSplit?.(split);
+  }
+
+  const where = failure ? await d.evaluate<string>(WHERE).catch(() => "could not be sampled") : null;
+
+  return {
+    timings,
+    splits,
+    total: {
+      ms: netMs(started, ended),
+      frames: ended.frames - started.frames,
+      game: ended.game - started.game,
+      loading: ended.loading - started.loading,
+    },
+    failure,
+    where,
+    invalid,
+  };
+}
+
+/** one split: the clock between `from` and `to`, and the actions run in it */
+function splitBetween(name: string, from: Clock, to: Clock, actions: number): Split {
+  return {
+    name,
+    ms: netMs(from, to),
+    frames: to.frames - from.frames,
+    game: to.game - from.game,
+    loading: to.loading - from.loading,
+    actions,
+  };
+}
+
+/**
+ * The standing watches for one run, and the watchdog that polls them beside a
+ * running step. A watch belongs to the run that registered it, and so does
+ * this: one per {@link runSheet}.
+ */
+function watchdogFor(
+  d: SpeedrunDriver,
+  actions: ActionTable,
+  hooks: RunHooks,
+  verbs: ReturnType<typeof verbsOf>,
+): (done: () => boolean, finished: Promise<void>) => Promise<void> {
+  const resolve = (verb: string): Action | undefined => resolveIn(actions, verb);
   /**
    * The standing watches, polled ALONGSIDE the running step (#255).
    *
@@ -456,130 +529,89 @@ export async function runSheet(
         if (sheet) await closeWatches(live);
       }
     })();
-  for (const step of steps) {
-    if (step.verb === "split") {
-      const now = await d.clock();
-      const split: Split = {
-        name: step.args[0] ?? `split ${splits.length + 1}`,
-        ms: netMs(splitFrom, now),
-        frames: now.frames - splitFrom.frames,
-        game: now.game - splitFrom.game,
-        loading: now.loading - splitFrom.loading,
-        actions: splitActions,
-      };
-      splits.push(split);
-      hooks.onSplit?.(split);
-      splitFrom = now;
-      splitActions = 0;
-      continue;
-    }
+  return watchdog;
+}
 
-    hooks.onStep?.(step, index++, actionCount);
-    const action = resolve(step.verb)!;
-    const says: string[] = [];
-    let suggestion: string | undefined;
-    let voided = false;
-    const before = await d.clock();
-    const paddedBefore = d.padded();
+/** one line of the sheet, run and timed: its says, its suggestion, and the failure it stopped on */
+async function runStep(
+  d: SpeedrunDriver,
+  step: Step,
+  action: Action,
+  actions: ActionTable,
+  hooks: RunHooks,
+  verbs: ReturnType<typeof verbsOf>,
+  watchdog: (done: () => boolean, finished: Promise<void>) => Promise<void>,
+): Promise<{ timing: Timing; voided: boolean; failure: { step: Step; error: Error } | null }> {
+  let failure: { step: Step; error: Error } | null = null;
+  const says: string[] = [];
+  let suggestion: string | undefined;
+  let voided = false;
+  const before = await d.clock();
+  const paddedBefore = d.padded();
 
-    try {
-      const ctx: ActionContext = {
-        d,
-        step,
-        wait: waitOf(actions, step),
-        /**
-         * TEN SECONDS, and the point of it is the sheet rather than the run.
-         *
-         * This was 120 s, and a two-minute ceiling is not a default so much as
-         * an absence of one: nothing in a working run ever reaches it, so it
-         * never appears in the report and never has to be justified. What it
-         * bought instead was a `budget:` on 51 lines of the sheet of which 47
-         * were at or below the default — four of them exactly 120000 — written
-         * out of caution rather than measurement, and each one a number a
-         * reader has to decide whether to believe.
-         *
-         * At ten seconds the option means something again. Every line that
-         * needs longer has to SAY it needs longer, which turns `budget:` from
-         * noise into the sheet's list of the genuinely slow moments — the
-         * intro film, the fight, the smokestack climb, a walk across the ship.
-         * And a leg that hangs is called stuck in ten seconds instead of two
-         * minutes, which is the whole edit loop when a sheet is being written.
-         *
-         * It costs nothing when a line works: the budget is a ceiling on a
-         * hold, not a wait, and a hold resolves the moment its condition does.
-         */
-        budget: Number(step.opts.budget ?? 10_000) * (hooks.patience ?? 1),
-        gap: Number(step.opts.gap ?? 16),
-        say: (m: string) => says.push(m),
-        suggest: (line: string) => (suggestion = line),
-        voidTime: () => (voided = true),
-        verbs,
-      };
-      let over = false;
-      let finish = (): void => {};
-      const finished = new Promise<void>((r) => (finish = r));
-      const dog = watches().length && step.verb !== "watchfor"
-        ? watchdog(() => over, finished)
-        : null;
-      try {
-        for (let i = 0; i < step.repeat; i++) {
-          await action.run(ctx);
-          if (step.opts.after) await d.pad(Number(step.opts.after));
-        }
-      } finally {
-        over = true;
-        finish();
-        if (dog) await dog;
-      }
-    } catch (e) {
-      failure = { step, error: e as Error };
-    }
-
-    const after = await d.clock().catch(() => before);
-    const timing: Timing = {
+  try {
+    const ctx: ActionContext = {
+      d,
       step,
-      ms: netMs(before, after),
-      frames: after.frames - before.frames,
-      game: after.game - before.game,
-      loading: after.loading - before.loading,
-      padded: d.padded() - paddedBefore,
-      says,
-      suggestion,
+      wait: waitOf(actions, step),
+      /**
+       * TEN SECONDS, and the point of it is the sheet rather than the run.
+       *
+       * This was 120 s, and a two-minute ceiling is not a default so much as
+       * an absence of one: nothing in a working run ever reaches it, so it
+       * never appears in the report and never has to be justified. What it
+       * bought instead was a `budget:` on 51 lines of the sheet of which 47
+       * were at or below the default — four of them exactly 120000 — written
+       * out of caution rather than measurement, and each one a number a
+       * reader has to decide whether to believe.
+       *
+       * At ten seconds the option means something again. Every line that
+       * needs longer has to SAY it needs longer, which turns `budget:` from
+       * noise into the sheet's list of the genuinely slow moments — the
+       * intro film, the fight, the smokestack climb, a walk across the ship.
+       * And a leg that hangs is called stuck in ten seconds instead of two
+       * minutes, which is the whole edit loop when a sheet is being written.
+       *
+       * It costs nothing when a line works: the budget is a ceiling on a
+       * hold, not a wait, and a hold resolves the moment its condition does.
+       */
+      budget: Number(step.opts.budget ?? 10_000) * (hooks.patience ?? 1),
+      gap: Number(step.opts.gap ?? 16),
+      say: (m: string) => says.push(m),
+      suggest: (line: string) => (suggestion = line),
+      voidTime: () => (voided = true),
+      verbs,
     };
-    timings.push(timing);
-    hooks.onDone?.(timing);
-    if (action.voidsTime || voided) invalid.push(`${step.source.trim()} on line ${step.line}`);
-    splitActions++;
-    if (failure) break;
+    let over = false;
+    let finish = (): void => {};
+    const finished = new Promise<void>((r) => (finish = r));
+    const dog = watches().length && step.verb !== "watchfor"
+      ? watchdog(() => over, finished)
+      : null;
+    try {
+      for (let i = 0; i < step.repeat; i++) {
+        await action.run(ctx);
+        if (step.opts.after) await d.pad(Number(step.opts.after));
+      }
+    } finally {
+      over = true;
+      finish();
+      if (dog) await dog;
+    }
+  } catch (e) {
+    failure = { step, error: e as Error };
   }
 
-  const ended = await d.clock().catch(() => started);
-  if (splitActions) {
-    const split: Split = {
-      name: failure ? "(unfinished)" : "(final)",
-      ms: netMs(splitFrom, ended),
-      frames: ended.frames - splitFrom.frames,
-      game: ended.game - splitFrom.game,
-      loading: ended.loading - splitFrom.loading,
-      actions: splitActions,
-    };
-    splits.push(split);
-    hooks.onSplit?.(split);
-  }
-
-  const where = failure ? await d.evaluate<string>(WHERE).catch(() => "could not be sampled") : null;
-
-  return {
-    timings,
-    splits,
-    total: {
-      ms: netMs(started, ended),
-      frames: ended.frames - started.frames,
-      game: ended.game - started.game,
-      loading: ended.loading - started.loading,
-    },
-    failure,
-    where,
-    invalid,
+  const after = await d.clock().catch(() => before);
+  const timing: Timing = {
+    step,
+    ms: netMs(before, after),
+    frames: after.frames - before.frames,
+    game: after.game - before.game,
+    loading: after.loading - before.loading,
+    padded: d.padded() - paddedBefore,
+    says,
+    suggestion,
   };
+  return { timing, voided, failure };
 }

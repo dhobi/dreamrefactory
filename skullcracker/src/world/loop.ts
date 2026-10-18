@@ -332,53 +332,8 @@ export function tick(): void {
   startAttack();
   stepAct(frame);
 
-  // a ladder is climbed, not walked along, so it is decided before the walk
-  // W or S GRABS a ladder; what lets go of one is a direction or J, not a
-  // release. `0x42ae50` stays in the ladder state until forward, backward or
-  // the jump key is down, and then leaves through the hop below. Letting go on
-  // a release — which this did — dropped the player straight down the rail the
-  // moment the key came up, and whether the step west registered first was a
-  // race between two key events and one tick.
-  // The latch goes on the ground OR once the fall passes 55: `0x42848a`
-  // clears `[0x46b1b8]` unless `obj+0x32 <= 0x37` and the player is airborne,
-  // so a long drop off a ladder may grab the next one on the way down.
-  if (p.onGround || p.fallPx > 0x37) ladderLatch = false;
-  const asked = held.right !== held.left || held.jump || jumpPressed;
-  // `0x42ae6f` — knocked off asks as a key does, and `0x42aea1` spends it once
-  // the rung is done, whether or not a room lets him go
-  const bumped = p.climbing && !asked && knockedOff;
-  if (p.climbing && (asked || knockedOff) && p.climbClock >= LADDER.rungFrames) setKnockedOff(false);
-  const letGo = p.climbing && (asked || bumped) && canLetGo();
-  let ladder: SbkEntity | undefined;
-  if (p.climbing) ladder = p.act || letGo ? undefined : p.ladder;
-  else if (
-    !p.act &&
-    !p.flail &&
-    !ladderLatch &&
-    (held.down || (held.up && held.right === held.left))
-  )
-    ladder = ladderAt();
-  /**
-   * ...and the other thing the same W reach finds — see {@link MONKEYBAR}.
-   *
-   * `0x412390` answers `monkeybar` only after `ladder`, `exitfarm` and
-   * `exitroom` have all missed, so the bar is asked for last. Letting go is
-   * S or J and **only out of the hang tag**: `0x42b522` is in tag 0's arm
-   * and no other arm tests for it, so a swing always finishes.
-   */
-  const barLetGo =
-    !!p.bar && p.barTag === 0 && (held.down || held.jump || jumpPressed);
-  let bar: SbkEntity | undefined;
-  if (p.bar) bar = p.act || barLetGo ? undefined : p.bar;
-  else if (
-    !ladder &&
-    !p.act &&
-    !p.flail &&
-    !ladderLatch &&
-    held.up &&
-    held.right === held.left
-  )
-    bar = barAt();
+  const { ladder, bumped } = reachLadder();
+  const bar = reachBar(ladder);
   // ...and INV stands you still: state 15 reads no direction at all, and the
   // idle it hands you to goes straight back to it while the button is down
   let dir = 0;
@@ -447,6 +402,96 @@ export function tick(): void {
   // the duck: S on the ground with nothing else going on. The engine's is
   // reached the same way — from the standing state, not out of a walk.
   p.crouching = p.onGround && held.down && !p.act && !p.climbing;
+  fidget();
+  // and the obstacles, once the whole move is in — the engine resolves them in
+  // the mover after everything else has had its say (`0x430146`)
+  if (!p.climbing) ejectFromObstacles();
+  stepWorld(frame);
+  // the mission clock runs at the engine's rate, not this page's — and 32000
+  // is no clock at all: `0x40d25b` returns before the `dec`
+  if (stats.ticks < CLOCK.noLimit) stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
+  if (stats.ticks <= 0 && !film) void ranOut();
+  // `0x443dea`: the life is spent when the dying animation ENDS, not when the
+  // health runs out, and `0x443ec7` turns the last one into the game-over state
+  // ...and not `damageOn &&`: the switch decides whether anything may SPEND
+  // health, not what an empty bar means. `harakari` empties it with the switch
+  // off and the original has no switch at all
+  if (stats.health <= 0 && p.act === null && !film) died();
+  if (fellOut() && !film) died();
+  setUpPressed(false);
+  // J is read by the frame's think, not by the tick, so it waits for one
+  if (frame) setJumpPressed(false);
+  setPunchPressed(false);
+  setKickPressed(false);
+  choosePlayerCel();
+  // ...and only now, every think and script of the frame done and the
+  // player's cel put up, the hit pass — and the cel again, for a reaction
+  if (frame) {
+    hitPass(ladder !== undefined);
+    choosePlayerCel();
+  }
+  stepGoal();
+}
+
+/**
+ * a ladder is climbed, not walked along, so it is decided before the walk
+ * W or S GRABS a ladder; what lets go of one is a direction or J, not a
+ * release. `0x42ae50` stays in the ladder state until forward, backward or
+ * the jump key is down, and then leaves through the hop below. Letting go on
+ * a release — which this did — dropped the player straight down the rail the
+ * moment the key came up, and whether the step west registered first was a
+ * race between two key events and one tick.
+ * The latch goes on the ground OR once the fall passes 55: `0x42848a`
+ * clears `[0x46b1b8]` unless `obj+0x32 <= 0x37` and the player is airborne,
+ * so a long drop off a ladder may grab the next one on the way down.
+ */
+function reachLadder(): { ladder: SbkEntity | undefined; bumped: boolean } {
+  if (p.onGround || p.fallPx > 0x37) ladderLatch = false;
+  const asked = held.right !== held.left || held.jump || jumpPressed;
+  // `0x42ae6f` — knocked off asks as a key does, and `0x42aea1` spends it once
+  // the rung is done, whether or not a room lets him go
+  const bumped = p.climbing && !asked && knockedOff;
+  if (p.climbing && (asked || knockedOff) && p.climbClock >= LADDER.rungFrames) setKnockedOff(false);
+  const letGo = p.climbing && (asked || bumped) && canLetGo();
+  let ladder: SbkEntity | undefined;
+  if (p.climbing) ladder = p.act || letGo ? undefined : p.ladder;
+  else if (
+    !p.act &&
+    !p.flail &&
+    !ladderLatch &&
+    (held.down || (held.up && held.right === held.left))
+  )
+    ladder = ladderAt();
+  return { ladder, bumped };
+}
+
+/**
+ * ...and the other thing the same W reach finds — see {@link MONKEYBAR}.
+ *
+ * `0x412390` answers `monkeybar` only after `ladder`, `exitfarm` and
+ * `exitroom` have all missed, so the bar is asked for last. Letting go is
+ * S or J and **only out of the hang tag**: `0x42b522` is in tag 0's arm
+ * and no other arm tests for it, so a swing always finishes.
+ */
+function reachBar(ladder: SbkEntity | undefined): SbkEntity | undefined {
+  const barLetGo =
+    !!p.bar && p.barTag === 0 && (held.down || held.jump || jumpPressed);
+  let bar: SbkEntity | undefined;
+  if (p.bar) bar = p.act || barLetGo ? undefined : p.bar;
+  else if (
+    !ladder &&
+    !p.act &&
+    !p.flail &&
+    !ladderLatch &&
+    held.up &&
+    held.right === held.left
+  )
+    bar = barAt();
+  return bar;
+}
+
+/** the duck's fidget and the idle's, each only while there is nothing else going on */
+function fidget(): void {
   // the duck's own fidget: tag 1 is a single cel, so its script ends every
   // frame, and 0x42aadd rolls rand(0x2c3) < 13 at each end — 13 in 707
   if (p.crouching && !p.moving) {
@@ -479,34 +524,6 @@ export function tick(): void {
     p.idleClock = 0;
     p.fidget = null;
   }
-  // and the obstacles, once the whole move is in — the engine resolves them in
-  // the mover after everything else has had its say (`0x430146`)
-  if (!p.climbing) ejectFromObstacles();
-  stepWorld(frame);
-  // the mission clock runs at the engine's rate, not this page's — and 32000
-  // is no clock at all: `0x40d25b` returns before the `dec`
-  if (stats.ticks < CLOCK.noLimit) stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
-  if (stats.ticks <= 0 && !film) void ranOut();
-  // `0x443dea`: the life is spent when the dying animation ENDS, not when the
-  // health runs out, and `0x443ec7` turns the last one into the game-over state
-  // ...and not `damageOn &&`: the switch decides whether anything may SPEND
-  // health, not what an empty bar means. `harakari` empties it with the switch
-  // off and the original has no switch at all
-  if (stats.health <= 0 && p.act === null && !film) died();
-  if (fellOut() && !film) died();
-  setUpPressed(false);
-  // J is read by the frame's think, not by the tick, so it waits for one
-  if (frame) setJumpPressed(false);
-  setPunchPressed(false);
-  setKickPressed(false);
-  choosePlayerCel();
-  // ...and only now, every think and script of the frame done and the
-  // player's cel put up, the hit pass — and the cel again, for a reaction
-  if (frame) {
-    hitPass(ladder !== undefined);
-    choosePlayerCel();
-  }
-  stepGoal();
 }
 
 /**
@@ -1045,349 +1062,382 @@ interface Grip {
 
 /** on a ladder, hanging from a bar, or in the air: the vertical half of the tick, and the landing */
 function climbOrFall({ tickX, dir, ladder, bar, bumped, wasClimbing, wasHanging }: Grip): void {
-  if (ladder) {
-    /**
-     * Step ONTO it, where the record says and facing the way it says.
-     *
-     * Where the record says and facing the way it says: `0x42b2b2` writes the
-     * record's own `pointX` straight into the player's x and `0x42b279` turns
-     * them by the sign of the spacing, so neither is a snap of this page's
-     * invention. {@link ladderAt} has the trigger the engine tests.
-     */
-    const spacing = Math.abs(ladder.param) || 35;
-    const last = Math.floor((ladder.bottom - ladder.top) / spacing);
-    // the resting cel's own box is how far the feet hang below the anchor, and
-    // the anchor is what a rung IS
-    const rest = celRec(player, LADDER.restCel);
-    const feet = rest?.body ? rest.body.y1 : 96;
-    if (!wasClimbing) {
-      p.ladder = ladder;
-      p.x = ladder.pointX;
-      // `0x42b279`: a positive spacing wants `obj+0x28` SET and a negative one
-      // wants it clear — which, for the player's book, is facing left and facing
-      // right. See {@link LADDER}: the sign is the ladder art's own mirror flag,
-      // so `+35` is rungs pointing east, and you climb those from the east side
-      // facing back into them
-      p.facing = ladder.param < 0 ? 1 : -1;
-      // `0x42b300`: the rung you arrive on is the one above where you stood, and
-      // the y it measures is the ANCHOR — `obj+6` as the pose you grabbed from
-      // left it, which is the standing cel's 88 above the feet, not the climb
-      // cel's 96
-      const anchor = p.y - p.feet;
-      p.rung =
-        anchor > ladder.top
-          ? Math.max(0, Math.floor((anchor - ladder.top) / spacing) - 1)
-          : 0;
-      p.climbTag = held.down ? 3 : 0;
-      p.climbClock = 0;
-    } else {
-      p.climbClock += TICK_SCALE;
-      // one rung per completed tag, and a change of mind costs a tag without
-      // moving — `0x42afc4`'s four cases, which only ever step the rung on the
-      // two tags already going that way. S is tested after W, so S wins.
-      if (p.climbClock >= LADDER.rungFrames) {
-        const t = p.climbTag;
-        const was = p.rung;
-        // ...and a tag is INSTALLED only when there is a rung to take or a
-        // direction to turn to. At rung 0 with W held — `cmp [0x4ac406], 0;
-        // jle` in `0x42afc4` and `0x42b054` — or at the last with S
-        // (`0x42b134`, `0x42b1cd`), the case is skipped whole: no tag, no
-        // sound, and the cel HOLDS. This page installed the other tag of the
-        // same direction instead, four frames each way, and the player
-        // flickered at the top of every ladder in the game.
-        let installed = true;
-        if (held.down) {
-          if (t === 2 || t === 3) {
-            if (p.rung < last) {
-              p.rung += 1;
-              p.climbTag = t === 2 ? 3 : 2;
-            } else installed = false;
-          } else p.climbTag = t === 0 ? 3 : 2;
-        } else if (held.up) {
-          if (t === 0 || t === 1) {
-            if (p.rung > 0) {
-              p.rung -= 1;
-              p.climbTag = t === 0 ? 1 : 0;
-            } else installed = false;
-          } else p.climbTag = t === 2 ? 1 : 0;
+  if (ladder) climbLadder(ladder, wasClimbing);
+  else if (bar) hangFromBar(bar, wasHanging);
+  else fall(tickX, dir, bumped, wasClimbing, wasHanging);
+}
+
+/** on a ladder: onto it or one rung along it, the feet on the rung, and the room the rung is in */
+function climbLadder(ladder: SbkEntity, wasClimbing: boolean): void {
+  const spacing = Math.abs(ladder.param) || 35;
+  const last = Math.floor((ladder.bottom - ladder.top) / spacing);
+  // the resting cel's own box is how far the feet hang below the anchor, and
+  // the anchor is what a rung IS
+  const rest = celRec(player, LADDER.restCel);
+  const feet = rest?.body ? rest.body.y1 : 96;
+  if (!wasClimbing) grabLadder(ladder, spacing);
+  else climbRung(last);
+  p.vy = 0;
+  p.vx = 0;
+  p.climbY = ladder.top + p.rung * spacing;
+  const was = p.y;
+  p.y = p.climbY + feet;
+  p.travelled += Math.abs(p.y - was);
+  reaskRoom();
+  p.onGround = false;
+}
+
+/**
+ * Step ONTO it, where the record says and facing the way it says.
+ *
+ * Where the record says and facing the way it says: `0x42b2b2` writes the
+ * record's own `pointX` straight into the player's x and `0x42b279` turns
+ * them by the sign of the spacing, so neither is a snap of this page's
+ * invention. {@link ladderAt} has the trigger the engine tests.
+ */
+function grabLadder(ladder: SbkEntity, spacing: number): void {
+  p.ladder = ladder;
+  p.x = ladder.pointX;
+  // `0x42b279`: a positive spacing wants `obj+0x28` SET and a negative one
+  // wants it clear — which, for the player's book, is facing left and facing
+  // right. See {@link LADDER}: the sign is the ladder art's own mirror flag,
+  // so `+35` is rungs pointing east, and you climb those from the east side
+  // facing back into them
+  p.facing = ladder.param < 0 ? 1 : -1;
+  // `0x42b300`: the rung you arrive on is the one above where you stood, and
+  // the y it measures is the ANCHOR — `obj+6` as the pose you grabbed from
+  // left it, which is the standing cel's 88 above the feet, not the climb
+  // cel's 96
+  const anchor = p.y - p.feet;
+  p.rung =
+    anchor > ladder.top
+      ? Math.max(0, Math.floor((anchor - ladder.top) / spacing) - 1)
+      : 0;
+  p.climbTag = held.down ? 3 : 0;
+  p.climbClock = 0;
+}
+
+/** a tick on the ladder, and at the end of a rung's tag the next one, up or down, or the cel held */
+function climbRung(last: number): void {
+  p.climbClock += TICK_SCALE;
+  // one rung per completed tag, and a change of mind costs a tag without
+  // moving — `0x42afc4`'s four cases, which only ever step the rung on the
+  // two tags already going that way. S is tested after W, so S wins.
+  if (p.climbClock >= LADDER.rungFrames) {
+    const t = p.climbTag;
+    const was = p.rung;
+    // ...and a tag is INSTALLED only when there is a rung to take or a
+    // direction to turn to. At rung 0 with W held — `cmp [0x4ac406], 0;
+    // jle` in `0x42afc4` and `0x42b054` — or at the last with S
+    // (`0x42b134`, `0x42b1cd`), the case is skipped whole: no tag, no
+    // sound, and the cel HOLDS. This page installed the other tag of the
+    // same direction instead, four frames each way, and the player
+    // flickered at the top of every ladder in the game.
+    let installed = true;
+    if (held.down) {
+      if (t === 2 || t === 3) {
+        if (p.rung < last) {
+          p.rung += 1;
+          p.climbTag = t === 2 ? 3 : 2;
         } else installed = false;
-        // nothing installed: the animation stays ended and the cel holds
-        p.climbClock = installed ? 0 : LADDER.rungFrames;
-        // one hand then the other: the ladder state plays skulz 3 as it
-        // installs the odd tags and skulz 2 as it installs the even ones
-        if (p.rung !== was) sound?.own(OWN.rung[p.climbTag % 2], p.x, p.y);
-      }
+      } else p.climbTag = t === 0 ? 3 : 2;
+    } else if (held.up) {
+      if (t === 0 || t === 1) {
+        if (p.rung > 0) {
+          p.rung -= 1;
+          p.climbTag = t === 0 ? 1 : 0;
+        } else installed = false;
+      } else p.climbTag = t === 2 ? 1 : 0;
+    } else installed = false;
+    // nothing installed: the animation stays ended and the cel holds
+    p.climbClock = installed ? 0 : LADDER.rungFrames;
+    // one hand then the other: the ladder state plays skulz 3 as it
+    // installs the odd tags and skulz 2 as it installs the even ones
+    if (p.rung !== was) sound?.own(OWN.rung[p.climbTag % 2], p.x, p.y);
+  }
+}
+
+/**
+ * ...and the region you are in is whichever one contains your point — on
+ * THIS axis as much as on the other.
+ *
+ * The walk already re-asks `0x40b940(2, point)` every time it moves the
+ * player sideways; a climb moves the player UP far enough to matter too.
+ * Seven of the nine ladders reach out of the region they start in,
+ * TOWER's second spans three and its third spans four, and MAZE's first
+ * runs 1426px from room 1 down into room 5. Without this the climb tops
+ * out still standing in the room below — which has no floor up there and
+ * none of the platforms the ladder was put there to reach.
+ */
+function reaskRoom(): void {
+  const here =
+    !!p.room &&
+    p.x >= p.room.left &&
+    p.x <= p.room.right &&
+    p.y >= p.room.top &&
+    p.y <= p.room.bottom;
+  if (!here) {
+    const into = level?.rooms.find(
+      (r) =>
+        p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom,
+    );
+    if (into) p.room = into;
+  }
+}
+
+/**
+ * State 8 — `0x42b410`, and its preamble runs before the dispatch does.
+ *
+ * Both velocities to zero, the anchor back on the record's `top` and x
+ * clamped into `left..right`, every frame and whatever the tag. See
+ * {@link MONKEYBAR}.
+ */
+function hangFromBar(bar: SbkEntity, wasHanging: boolean): void {
+  p.vx = 0;
+  p.vy = 0;
+  p.vyRaw = 0;
+  p.stepPx = 0;
+  if (p.x > bar.right) p.x = bar.right;
+  if (p.x < bar.left) p.x = bar.left;
+  const spacing = Math.abs(bar.param) || 65;
+  // the swing reads the keys RAW: `dir` above is already zero because a
+  // hanging player does not walk, and these are the engine's own two
+  // flags, `[0x4ac3d2]` toward and `[0x4ac38c]` away, which are relative
+  // to the facing and not to the screen
+  const barDir = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  const toward = barDir !== 0 && barDir === p.facing;
+  const away = barDir !== 0 && barDir !== p.facing;
+  if (!wasHanging) {
+    // `0x42ef11` — tag 0, and nothing is snapped on the grab: you hang
+    // where the jump put you and the first swing puts you on the grid
+    p.barTag = 0;
+    p.barClock = 0;
+  } else if (p.barTag === 0) {
+    // `0x42b4bf` reads toward, away and W in that order
+    if (toward || away) {
+      p.barTag = toward ? 1 : 2;
+      p.barClock = 0;
+    } else if (held.up) {
+      p.barTag = 3;
+      p.barClock = 0;
     }
-    p.vy = 0;
-    p.vx = 0;
-    p.climbY = ladder.top + p.rung * spacing;
-    const was = p.y;
-    p.y = p.climbY + feet;
-    p.travelled += Math.abs(p.y - was);
-    /**
-     * ...and the region you are in is whichever one contains your point — on
-     * THIS axis as much as on the other.
-     *
-     * The walk already re-asks `0x40b940(2, point)` every time it moves the
-     * player sideways; a climb moves the player UP far enough to matter too.
-     * Seven of the nine ladders reach out of the region they start in,
-     * TOWER's second spans three and its third spans four, and MAZE's first
-     * runs 1426px from room 1 down into room 5. Without this the climb tops
-     * out still standing in the room below — which has no floor up there and
-     * none of the platforms the ladder was put there to reach.
-     */
-    const here =
-      !!p.room &&
-      p.x >= p.room.left &&
-      p.x <= p.room.right &&
-      p.y >= p.room.top &&
-      p.y <= p.room.bottom;
-    if (!here) {
-      const into = level?.rooms.find(
-        (r) =>
-          p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom,
+  } else stepSwing(bar, spacing, toward, away);
+  p.barHold = Math.round((p.x - bar.left) / spacing);
+  // the anchor is the record's own `top`, and `p.y` is the feet, so the
+  // hanging cel's own box is what stands between them
+  const hung = celRec(player, (ANIM.bar[0] ?? [])[0] ?? 0);
+  const feet = hung?.body ? hung.body.y1 : p.feet;
+  p.y = bar.top + feet;
+  p.feet = feet;
+  p.onGround = false;
+  // ...and the room is NOT re-asked, unlike the ladder: `0x42b410` never
+  // calls `0x40b940`, and it does not have to — the one bar in the game
+  // spans 5908..6617 inside a VAT room of 5719..6688
+}
+
+/** a swing or a chin-up under way: its travel, its hands' sounds, and the tag after it */
+function stepSwing(bar: SbkEntity, spacing: number, toward: boolean, away: boolean): void {
+  const swinging = p.barTag === 1 || p.barTag === 2;
+  /**
+   * Which way the body is actually going, which is not the facing: tag 1
+   * carries `dx +120` and tag 2 carries `-120`, and `0x45d18e` mirrors
+   * either by `obj+0x28`. Nothing on a monkeybar ever turns the player,
+   * so a westward swing is a player facing east playing tag 2.
+   */
+  const way = p.facing * (p.barTag === 1 ? 1 : -1);
+  // the script's own `dx`, spent by `0x45d0f0` on EVERY frame and not
+  // once a cel — `0x42b410` zeroes the velocity again next frame, so
+  // what it really amounts to is 10 pixels of travel an engine frame
+  if (swinging) p.x += way * (MEASURED.barSwing / DIVISOR) * TICK_SCALE;
+  const before = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
+  p.barClock += TICK_SCALE;
+  const frame = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
+  if (frame !== before)
+    for (const hand of MONKEYBAR.soundAt[p.barTag] ?? [])
+      if (hand.frame === frame) sound?.own(hand.own, p.x, p.y);
+  const len = swinging ? MONKEYBAR.handFrames : MONKEYBAR.pullFrames;
+  if (p.barClock >= len) {
+    if (swinging) {
+      /**
+       * The snap — and the `+1` belongs to TRAVELLING EAST, not to the
+       * facing, which is the thing that is easy to read wrong here.
+       *
+       * All four arms are written out separately in the executable and
+       * only two of them carry the `inc`: `0x42b621` is tag 1 with
+       * `obj+0x28` clear and `0x42b77b` is tag 2 with it set. Both of
+       * those are the body going east — where truncation leaves you
+       * short of the hold above — and the two without it are the body
+       * going west, where truncation has already carried you past the
+       * hold below. Take the facing alone and a westward swing snaps
+       * fifteen pixels back east every time it completes.
+       */
+      let n = 0;
+      if (p.x > bar.left) n = Math.trunc((p.x - bar.left) / spacing) + (way === 1 ? 1 : 0);
+      p.x = Math.max(
+        bar.left,
+        Math.min(bar.right, bar.left + n * spacing),
       );
-      if (into) p.room = into;
+      // `0x42b67a` / `0x42b7a6`: the SAME direction carries on, W goes
+      // to the chin-up, and anything else drops back to the hang. The
+      // opposite direction is not tested, so a reversal costs a tag.
+      const keep = p.barTag === 1 ? toward : away;
+      if (!keep) p.barTag = held.up ? 3 : 0;
+      p.barClock = 0;
+    } else if (p.barTag === 3) {
+      // `0x42b7ff` — W still down and the last cel simply HOLDS
+      if (held.up) p.barClock = MONKEYBAR.pullFrames;
+      else {
+        p.barTag = 4;
+        p.barClock = 0;
+      }
+    } else {
+      p.barTag = 0;
+      p.barClock = 0;
     }
-    p.onGround = false;
-  } else if (bar) {
-    /**
-     * State 8 — `0x42b410`, and its preamble runs before the dispatch does.
-     *
-     * Both velocities to zero, the anchor back on the record's `top` and x
-     * clamped into `left..right`, every frame and whatever the tag. See
-     * {@link MONKEYBAR}.
-     */
-    p.vx = 0;
+  }
+}
+
+/**
+ * The jump itself is decided and launched in the frame block above, in
+ * the engine's own order. What is left here is the body: the feet under
+ * the pose, the floor under the feet, and the fall.
+ *
+ * The lift — hold W and go higher, the original's own mechanic and the
+ * reason the same key runs, climbs and jumps — is up there too: `0x429f55`
+ * calls `0x42f8b0` with `-125`, which is `+= round_away(-125/12)` = -11
+ * on the VELOCITY, once a frame, for the two frames `0x4723f0` lasts, and
+ * only once tag 0 is playing. A held jump is 137 high to a plain one's 80.
+ */
+function fall(tickX: number, dir: number, bumped: boolean, wasClimbing: boolean, wasHanging: boolean): void {
+  letGo(dir, bumped, wasClimbing, wasHanging);
+  poseFeet();
+  if (p.onGround) followFloor();
+  if (!p.onGround) fallAndLand(tickX);
+}
+
+/** off a ladder or a bar: the latch, the drop, and the hop off a ladder sideways */
+function letGo(dir: number, bumped: boolean, wasClimbing: boolean, wasHanging: boolean): void {
+  if (wasClimbing) {
+    ladderLatch = true;
+    p.ladder = undefined;
+  }
+  if (wasHanging) {
+    // `0x42b53a` — gravity back to 1 and `0x471b28` tag 0, which is the
+    // plain fall. No hop, no velocity, and no latch: the ladder's leave
+    // sets `[0x46b1b8]` and this one does not, so you may grab again at
+    // once if you can get your anchor back into the rect.
     p.vy = 0;
     p.vyRaw = 0;
     p.stepPx = 0;
-    if (p.x > bar.right) p.x = bar.right;
-    if (p.x < bar.left) p.x = bar.left;
-    const spacing = Math.abs(bar.param) || 65;
-    // the swing reads the keys RAW: `dir` above is already zero because a
-    // hanging player does not walk, and these are the engine's own two
-    // flags, `[0x4ac3d2]` toward and `[0x4ac38c]` away, which are relative
-    // to the facing and not to the screen
-    const barDir = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-    const toward = barDir !== 0 && barDir === p.facing;
-    const away = barDir !== 0 && barDir !== p.facing;
-    if (!wasHanging) {
-      // `0x42ef11` — tag 0, and nothing is snapped on the grab: you hang
-      // where the jump put you and the first swing puts you on the grid
-      p.barTag = 0;
-      p.barClock = 0;
-    } else if (p.barTag === 0) {
-      // `0x42b4bf` reads toward, away and W in that order
-      if (toward || away) {
-        p.barTag = toward ? 1 : 2;
-        p.barClock = 0;
-      } else if (held.up) {
-        p.barTag = 3;
-        p.barClock = 0;
-      }
-    } else {
-      const swinging = p.barTag === 1 || p.barTag === 2;
-      /**
-       * Which way the body is actually going, which is not the facing: tag 1
-       * carries `dx +120` and tag 2 carries `-120`, and `0x45d18e` mirrors
-       * either by `obj+0x28`. Nothing on a monkeybar ever turns the player,
-       * so a westward swing is a player facing east playing tag 2.
-       */
-      const way = p.facing * (p.barTag === 1 ? 1 : -1);
-      // the script's own `dx`, spent by `0x45d0f0` on EVERY frame and not
-      // once a cel — `0x42b410` zeroes the velocity again next frame, so
-      // what it really amounts to is 10 pixels of travel an engine frame
-      if (swinging) p.x += way * (MEASURED.barSwing / DIVISOR) * TICK_SCALE;
-      const before = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
-      p.barClock += TICK_SCALE;
-      const frame = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
-      if (frame !== before)
-        for (const hand of MONKEYBAR.soundAt[p.barTag] ?? [])
-          if (hand.frame === frame) sound?.own(hand.own, p.x, p.y);
-      const len = swinging ? MONKEYBAR.handFrames : MONKEYBAR.pullFrames;
-      if (p.barClock >= len) {
-        if (swinging) {
-          /**
-           * The snap — and the `+1` belongs to TRAVELLING EAST, not to the
-           * facing, which is the thing that is easy to read wrong here.
-           *
-           * All four arms are written out separately in the executable and
-           * only two of them carry the `inc`: `0x42b621` is tag 1 with
-           * `obj+0x28` clear and `0x42b77b` is tag 2 with it set. Both of
-           * those are the body going east — where truncation leaves you
-           * short of the hold above — and the two without it are the body
-           * going west, where truncation has already carried you past the
-           * hold below. Take the facing alone and a westward swing snaps
-           * fifteen pixels back east every time it completes.
-           */
-          let n = 0;
-          if (p.x > bar.left) n = Math.trunc((p.x - bar.left) / spacing) + (way === 1 ? 1 : 0);
-          p.x = Math.max(
-            bar.left,
-            Math.min(bar.right, bar.left + n * spacing),
-          );
-          // `0x42b67a` / `0x42b7a6`: the SAME direction carries on, W goes
-          // to the chin-up, and anything else drops back to the hang. The
-          // opposite direction is not tested, so a reversal costs a tag.
-          const keep = p.barTag === 1 ? toward : away;
-          if (!keep) p.barTag = held.up ? 3 : 0;
-          p.barClock = 0;
-        } else if (p.barTag === 3) {
-          // `0x42b7ff` — W still down and the last cel simply HOLDS
-          if (held.up) p.barClock = MONKEYBAR.pullFrames;
-          else {
-            p.barTag = 4;
-            p.barClock = 0;
-          }
-        } else {
-          p.barTag = 0;
-          p.barClock = 0;
-        }
-      }
-    }
-    p.barHold = Math.round((p.x - bar.left) / spacing);
-    // the anchor is the record's own `top`, and `p.y` is the feet, so the
-    // hanging cel's own box is what stands between them
-    const hung = celRec(player, (ANIM.bar[0] ?? [])[0] ?? 0);
-    const feet = hung?.body ? hung.body.y1 : p.feet;
-    p.y = bar.top + feet;
-    p.feet = feet;
     p.onGround = false;
-    // ...and the room is NOT re-asked, unlike the ladder: `0x42b410` never
-    // calls `0x40b940`, and it does not have to — the one bar in the game
-    // spans 5908..6617 inside a VAT room of 5719..6688
-  } else {
-    if (wasClimbing) {
-      ladderLatch = true;
-      p.ladder = undefined;
-    }
-    if (wasHanging) {
-      // `0x42b53a` — gravity back to 1 and `0x471b28` tag 0, which is the
-      // plain fall. No hop, no velocity, and no latch: the ladder's leave
-      // sets `[0x46b1b8]` and this one does not, so you may grab again at
-      // once if you can get your anchor back into the rect.
-      p.vy = 0;
-      p.vyRaw = 0;
-      p.stepPx = 0;
-      p.onGround = false;
-      setJumpPressed(false);
-    }
-    if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed || bumped)) {
-      /**
-       * Off the ladder sideways. `0x42ae50` leaves the ladder state on
-       * forward, backward or J — at the end of the rung tag playing — and
-       * `0x42af30` does the leaving: gravity back on, a turn if it was
-       * backward, and tag 6 with J held (the leap's own `200(dx 180, dy
-       * -420)`) or tag 7 without (`200(dx 120, dy -210)`: a HOP, 10 forward
-       * and 18 up). Both tags dispatch to the steering handler from their
-       * first frame, so a held direction drives this to 30 at once. Without
-       * it the player drops straight down the rail and misses the roof the
-       * ladder was there to reach.
-       */
-      if (dir) p.facing = dir;
-      const leap = held.jump || jumpPressed;
-      p.vyRaw = roundAway(-(leap ? MEASURED.jump : MEASURED.hopDy) / DIVISOR);
-      p.vx =
-        p.facing *
-        roundAway((leap ? MEASURED.runJumpDx : MEASURED.hopDx) / DIVISOR);
-      p.stepPx = 0;
-      p.launched = true;
-      p.leap = true;
-      p.airFrames = 2;
-      p.hold = HOLD_FRAMES;
-      setJumpPressed(false);
-    }
+    setJumpPressed(false);
+  }
+  if (wasClimbing && !p.onGround && (dir || held.jump || jumpPressed || bumped)) {
     /**
-     * The jump itself is decided and launched in the frame block above, in
-     * the engine's own order. What is left here is the body: the feet under
-     * the pose, the floor under the feet, and the fall.
-     *
-     * The lift — hold W and go higher, the original's own mechanic and the
-     * reason the same key runs, climbs and jumps — is up there too: `0x429f55`
-     * calls `0x42f8b0` with `-125`, which is `+= round_away(-125/12)` = -11
-     * on the VELOCITY, once a frame, for the two frames `0x4723f0` lasts, and
-     * only once tag 0 is playing. A held jump is 137 high to a plain one's 80.
+     * Off the ladder sideways. `0x42ae50` leaves the ladder state on
+     * forward, backward or J — at the end of the rung tag playing — and
+     * `0x42af30` does the leaving: gravity back on, a turn if it was
+     * backward, and tag 6 with J held (the leap's own `200(dx 180, dy
+     * -420)`) or tag 7 without (`200(dx 120, dy -210)`: a HOP, 10 forward
+     * and 18 up). Both tags dispatch to the steering handler from their
+     * first frame, so a held direction drives this to 30 at once. Without
+     * it the player drops straight down the rail and misses the roof the
+     * ladder was there to reach.
      */
-    poseFeet();
-    if (p.onGround) {
-      // follow the floor: up a curb, down a step, off an edge
-      const s = surfaceUnder(p.x, p.y - CLIMB_PX, p.y + STICK_PX);
-      if (s === null) {
-        // walked off: airborne on the gait's own velocity, with no steering,
-        // and still in a ground state — see `p.fallState`
-        p.onGround = false;
-        p.airFrames = 0;
-        p.fallState = p.running && !p.act ? "run" : "idle";
-      } else {
-        p.y = s;
-        p.vy = 0;
-        p.vyRaw = 0;
-        p.stepPx = 0;
-      }
-    }
-    if (!p.onGround) {
-      /**
-       * Fall the way `SC.EXE` falls, and stop at the first surface crossed.
-       *
-       * The velocity is advanced ONCE AN ENGINE FRAME in whole pixels and the
-       * frame's step is spread across its four ticks so the sweep still
-       * catches a ledge it crosses diagonally. Integrating this as floats —
-       * which is what this did — loses the away-from-zero rounding on every
-       * single frame, and the jump comes out about a fifth short.
-       */
-      // ...uncapped: the body stepper adds `obj+0x24` to `obj+0xa` every
-      // airborne frame (`0x430327`) and nothing anywhere limits the sum
-      p.vy = p.stepPx * TICK_SCALE;
-      const ny = p.y + p.vy;
-      const land = p.vy >= 0 ? surfaceCrossed(tickX, p.y, p.x, ny) : null;
-      if (land !== null) {
-        // `0x42ff5d`: the feet to the floor and the fall stopped. The
-        // horizontal is left alone — the ground's drag has it from here
-        p.y = land;
-        p.vy = 0;
-        p.vyRaw = 0;
-        p.stepPx = 0;
-        p.onGround = true;
-      } else p.y = ny;
-      // last resort: under the floor is not a place. Nothing here can be
-      // below the terrain, so anything that gets there is put back on top of
-      // it rather than falling out of the level.
-      const g = groundAt(p.x);
-      if (g !== null && p.y > g) {
-        p.y = g;
-        p.vy = 0;
-        p.vyRaw = 0;
-        p.stepPx = 0;
-        p.onGround = true;
-      }
-      /**
-       * ...and a flail's landing is the flail handler's: `0x42922c` stops
-       * character 0's scream (character 1's `0x443c72` does not), and then past 530 of
-       * accumulated fall the landing is fatal — straight into `0x4721a0` tag
-       * 0 — and under it sound 5, `0x471c68` tag 5 and ten health off
-       * (`0x4292bf`). The health and the death are behind the damage switch
-       * like every other way the game takes a point off you; the roll is not.
-       */
-      if (p.flail && p.onGround) {
-        p.flail = false;
-        // `0x42923c` — character 0's scream is silenced as he lands
-        // (`0x40eee0`); character 1's plays out (`0x443c72` has no such call)
-        if (CHARACTER === 0) sound?.mute(KIT.flailSound, true);
-        sound?.own(OWN.landHard, p.x, p.y);
-        // `0x4292b7` / `0x429384` (character 1's `0x42a14b` / `0x42a38d`) — and
-        // either way the view jolts
-        shake(1);
-        if (damageOn && p.fallPx > HURT.fatalFall && p.act !== "dying") {
-          p.act = "dying";
-          p.actClock = 0;
-        } else if (p.act !== "dying") {
-          p.act = "landRoll";
-          p.actClock = 0;
-          if (damageOn) takeHealth(HURT.fallDamage);
-        }
-      }
-    }
+    if (dir) p.facing = dir;
+    const leap = held.jump || jumpPressed;
+    p.vyRaw = roundAway(-(leap ? MEASURED.jump : MEASURED.hopDy) / DIVISOR);
+    p.vx =
+      p.facing *
+      roundAway((leap ? MEASURED.runJumpDx : MEASURED.hopDx) / DIVISOR);
+    p.stepPx = 0;
+    p.launched = true;
+    p.leap = true;
+    p.airFrames = 2;
+    p.hold = HOLD_FRAMES;
+    setJumpPressed(false);
+  }
+}
+
+/** follow the floor: up a curb, down a step, off an edge */
+function followFloor(): void {
+  const s = surfaceUnder(p.x, p.y - CLIMB_PX, p.y + STICK_PX);
+  if (s === null) {
+    // walked off: airborne on the gait's own velocity, with no steering,
+    // and still in a ground state — see `p.fallState`
+    p.onGround = false;
+    p.airFrames = 0;
+    p.fallState = p.running && !p.act ? "run" : "idle";
+  } else {
+    p.y = s;
+    p.vy = 0;
+    p.vyRaw = 0;
+    p.stepPx = 0;
+  }
+}
+
+/**
+ * Fall the way `SC.EXE` falls, and stop at the first surface crossed.
+ *
+ * The velocity is advanced ONCE AN ENGINE FRAME in whole pixels and the
+ * frame's step is spread across its four ticks so the sweep still
+ * catches a ledge it crosses diagonally. Integrating this as floats —
+ * which is what this did — loses the away-from-zero rounding on every
+ * single frame, and the jump comes out about a fifth short.
+ */
+function fallAndLand(tickX: number): void {
+  // ...uncapped: the body stepper adds `obj+0x24` to `obj+0xa` every
+  // airborne frame (`0x430327`) and nothing anywhere limits the sum
+  p.vy = p.stepPx * TICK_SCALE;
+  const ny = p.y + p.vy;
+  const land = p.vy >= 0 ? surfaceCrossed(tickX, p.y, p.x, ny) : null;
+  if (land !== null) {
+    // `0x42ff5d`: the feet to the floor and the fall stopped. The
+    // horizontal is left alone — the ground's drag has it from here
+    p.y = land;
+    p.vy = 0;
+    p.vyRaw = 0;
+    p.stepPx = 0;
+    p.onGround = true;
+  } else p.y = ny;
+  // last resort: under the floor is not a place. Nothing here can be
+  // below the terrain, so anything that gets there is put back on top of
+  // it rather than falling out of the level.
+  const g = groundAt(p.x);
+  if (g !== null && p.y > g) {
+    p.y = g;
+    p.vy = 0;
+    p.vyRaw = 0;
+    p.stepPx = 0;
+    p.onGround = true;
+  }
+  if (p.flail && p.onGround) landFlail();
+}
+
+/**
+ * ...and a flail's landing is the flail handler's: `0x42922c` stops
+ * character 0's scream (character 1's `0x443c72` does not), and then past 530 of
+ * accumulated fall the landing is fatal — straight into `0x4721a0` tag
+ * 0 — and under it sound 5, `0x471c68` tag 5 and ten health off
+ * (`0x4292bf`). The health and the death are behind the damage switch
+ * like every other way the game takes a point off you; the roll is not.
+ */
+function landFlail(): void {
+  p.flail = false;
+  // `0x42923c` — character 0's scream is silenced as he lands
+  // (`0x40eee0`); character 1's plays out (`0x443c72` has no such call)
+  if (CHARACTER === 0) sound?.mute(KIT.flailSound, true);
+  sound?.own(OWN.landHard, p.x, p.y);
+  // `0x4292b7` / `0x429384` (character 1's `0x42a14b` / `0x42a38d`) — and
+  // either way the view jolts
+  shake(1);
+  if (damageOn && p.fallPx > HURT.fatalFall && p.act !== "dying") {
+    p.act = "dying";
+    p.actClock = 0;
+  } else if (p.act !== "dying") {
+    p.act = "landRoll";
+    p.actClock = 0;
+    if (damageOn) takeHealth(HURT.fallDamage);
   }
 }
 

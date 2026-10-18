@@ -932,114 +932,28 @@ export async function converse(
      * the branch above, answered with a click and not with an abort.
      */
     if (s.playing) {
-      const n = await d.hammer("Escape", {
-        until: `!(${SHOWING})`,
-        arm: SHOWING,
-        gap: c.gap,
-        budget: left(),
-        what: "the inline clip to end",
-      });
-      c.say(`skipped an inline clip (${n} ESC)`);
+      await skipInlineClip(c, left());
       continue;
     }
     if (!s.conversing) return finish();
     if (!s.awaiting) {
-      /*
-       * ONE Escape per spoken line — never a hammer.
-       *
-       * ESC means two different things inside a conversation and they are one
-       * frame apart: while a line is being spoken it cuts the line short, and at
-       * a plaque it answers -1 and LEAVES (#131). So a press that arrives a beat
-       * late does not skip anything, it walks out of the conversation.
-       *
-       * Hammering makes that likely rather than rare. At a 16 ms gap a two-second
-       * line takes ~125 presses, of which the first does all the work: `speakSkip`
-       * resolves on it and the line ends. The rest are fired against a puppet
-       * that is already moving on, and `p.speakSkip` is only nulled a tick after
-       * the race resolves (puppet.ts) — so `speaking` reads true for a moment
-       * after the line is over, the guard passes, and the extra ESC lands on the
-       * plaques that just appeared.
-       *
-       * It shows as a conversation that "is not correctly skipped on the very
-       * first run, and works fine afterwards", which is exactly the shape of a
-       * race: a cold run fetches, allocates and compiles, and stretches that
-       * moment past the gap far more often than a warm one does.
-       *
-       * So: press once, then WAIT for the line to be over before considering
-       * another. It is also strictly less work — the other 124 presses would do
-       * nothing but risk this.
-       */
-      /**
-       * The line is over — or something else has taken the screen.
-       *
-       * `moviePlaying` belongs in here and its absence is why the skip above
-       * never ran. Between two spoken lines this loop parks in the second of the
-       * holds below, waiting for the next line to start, with the whole remaining
-       * budget to do it in. A `spotmovie` starting is not a line starting and was
-       * not any of the other three conditions either, so the wait simply held —
-       * for the length of the film — and the loop never came round to notice
-       * there was one. berg.mov is 648 frames and 40 s of audio, all of it spent
-       * inside a `tryHold` that could not see it.
-       *
-       * So: anything that takes the screen ends the wait, and the top of the loop
-       * decides what it was. That is the rule the other three already followed.
-       */
-      const done = `(() => { const v = window.dbg.viewer; return !v || !v.conversing || v.awaitingChoice || (v.movieRegions || []).length > 0 || !!v.moviePlaying; })()`;
-      const speaking = `!!(window.dbg.viewer && window.dbg.viewer.speaking)`;
-      if (await d.evaluate<boolean>(speaking)) {
-        await d.key("Escape", "none", left());
-        // this line, and only this line: wait for it to have ended
-        await d.tryHold(`(${done}) || !(${speaking})`, left());
-      } else {
-        // between lines, or before the first: nothing to skip yet, so wait for
-        // the next line to start rather than pressing into the gap
-        await d.tryHold(`(${done}) || (${speaking})`, left());
-      }
+      await skipLine(c, left);
       continue;
     }
     turn++;
     const choices = s.choices ?? [];
-    let idx = wanted.length ? choices.findIndex((ch) => ch.id === wanted[0]) : -1;
-    if (idx >= 0) {
-      picked.push(wanted.shift()!);
-    } else if (!wanted.length && then) {
-      /*
-       * Everything on the line has been said, and the line said what to do next.
-       *
-       * Before `otherwise:` and not after, so `then:` decides the exhausted case
-       * on its own — but only when it is written. Left out, this falls through
-       * exactly as it always did, which is what keeps `say([101,102],
-       * otherwise: last)` answering to the end of the conversation in the sheets
-       * that already say it.
-       */
-      if (then === "stop") {
-        c.say(`said ${picked.join(",") || "nothing"} — left them waiting`);
-        return;
-      }
+    const idx = chooseBevel(s, choices, wanted, picked, otherwise, then);
+    if (idx === "stop") {
+      c.say(`said ${picked.join(",") || "nothing"} — left them waiting`);
+      return;
+    }
+    if (idx === "leave") {
       // `leave`: the plaque is up, so this ESC is the -1 answer and nothing else
       // (see the note above). Then round the loop, which skips whatever the -1
       // arm has to say and returns when the puppet closes.
       await d.key("Escape", "none", left());
       bailed++;
       continue;
-    } else if (otherwise === "last") {
-      idx = choices.length - 1;
-    } else if (otherwise === "first") {
-      idx = 0;
-    } else {
-      const offered = choices.map((ch) => ch.id + ":" + ch.text).join(" | ");
-      throw new Error(
-        wanted.length
-          ? `bevel ${wanted[0]} not offered by ${s.with || "them"}; got ${offered}`
-          : `unplanned choice from ${s.with || "them"}: ` +
-            offered +
-            // the IDS, because a sheet speaks in numbers and this message used
-            // to speak only in words — which made a whole class of failures
-            // undiagnosable from the report. `then: stop` is usually what the
-            // line wanted, so it is named.
-            `. The list ran out and it is still asking; a line that means to answer` +
-            ` one plaque and hand back wants then: stop`,
-      );
     }
     const at = (s.rects ?? [])[idx];
     if (!at) throw new Error(`no plaque rectangle for choice ${idx}`);
@@ -1052,6 +966,141 @@ export async function converse(
     );
   }
   throw new Error(`conversation did not close in ${maxTurns} turns (picked ${picked.join(",") || "nothing"})`);
+}
+
+/**
+ * An INLINE CLIP — `spotmovie`, which suspends the puppet and plays a film.
+ *
+ * Waited out in full, that is minutes: ZEIT1.PUP's `willie` runs
+ * `spotmovie("berg.mov")` between the second plaque and the notebook, and it
+ * is not `speaking`, not `awaiting`, not parked on regions — so without this
+ * branch the loop would sit there until the iceberg had finished.
+ *
+ * ESC is safe here in a way it is nowhere else in this function, and the
+ * engine is what makes it safe rather than our timing: `SetViewer.keyDown`
+ * tests `movies.playing` FIRST and hands the key to the clip, ahead of the
+ * puppet branch, so while a film is up a press cannot reach a plaque however
+ * late it lands. That is the whole hazard the one-ESC-per-line rule below
+ * exists to dodge, and it does not exist while this is true.
+ *
+ * Hammered through the same gate `skipMovie` uses: `arm` is SHOWING, so it
+ * presses only while a clip is up AND not asking. A `spotmovie` that carries
+ * regions is a question — the Smethells briefing's penote.mov — and that is
+ * the branch above, answered with a click and not with an abort.
+ */
+async function skipInlineClip(c: ActionContext, budget: number): Promise<void> {
+  const { d } = c;
+  const n = await d.hammer("Escape", {
+    until: `!(${SHOWING})`,
+    arm: SHOWING,
+    gap: c.gap,
+    budget,
+    what: "the inline clip to end",
+  });
+  c.say(`skipped an inline clip (${n} ESC)`);
+}
+
+/**
+ * ONE Escape per spoken line — never a hammer.
+ *
+ * ESC means two different things inside a conversation and they are one
+ * frame apart: while a line is being spoken it cuts the line short, and at
+ * a plaque it answers -1 and LEAVES (#131). So a press that arrives a beat
+ * late does not skip anything, it walks out of the conversation.
+ *
+ * Hammering makes that likely rather than rare. At a 16 ms gap a two-second
+ * line takes ~125 presses, of which the first does all the work: `speakSkip`
+ * resolves on it and the line ends. The rest are fired against a puppet
+ * that is already moving on, and `p.speakSkip` is only nulled a tick after
+ * the race resolves (puppet.ts) — so `speaking` reads true for a moment
+ * after the line is over, the guard passes, and the extra ESC lands on the
+ * plaques that just appeared.
+ *
+ * It shows as a conversation that "is not correctly skipped on the very
+ * first run, and works fine afterwards", which is exactly the shape of a
+ * race: a cold run fetches, allocates and compiles, and stretches that
+ * moment past the gap far more often than a warm one does.
+ *
+ * So: press once, then WAIT for the line to be over before considering
+ * another. It is also strictly less work — the other 124 presses would do
+ * nothing but risk this.
+ */
+async function skipLine(c: ActionContext, left: () => number): Promise<void> {
+  const { d } = c;
+  /**
+   * The line is over — or something else has taken the screen.
+   *
+   * `moviePlaying` belongs in here and its absence is why the skip above
+   * never ran. Between two spoken lines this loop parks in the second of the
+   * holds below, waiting for the next line to start, with the whole remaining
+   * budget to do it in. A `spotmovie` starting is not a line starting and was
+   * not any of the other three conditions either, so the wait simply held —
+   * for the length of the film — and the loop never came round to notice
+   * there was one. berg.mov is 648 frames and 40 s of audio, all of it spent
+   * inside a `tryHold` that could not see it.
+   *
+   * So: anything that takes the screen ends the wait, and the top of the loop
+   * decides what it was. That is the rule the other three already followed.
+   */
+  const done = `(() => { const v = window.dbg.viewer; return !v || !v.conversing || v.awaitingChoice || (v.movieRegions || []).length > 0 || !!v.moviePlaying; })()`;
+  const speaking = `!!(window.dbg.viewer && window.dbg.viewer.speaking)`;
+  if (await d.evaluate<boolean>(speaking)) {
+    await d.key("Escape", "none", left());
+    // this line, and only this line: wait for it to have ended
+    await d.tryHold(`(${done}) || !(${speaking})`, left());
+  } else {
+    // between lines, or before the first: nothing to skip yet, so wait for
+    // the next line to start rather than pressing into the gap
+    await d.tryHold(`(${done}) || (${speaking})`, left());
+  }
+}
+
+/**
+ * Which plaque to answer: the next bevel on the list, `then:` once the list
+ * has run out, or `otherwise:`; and a refusal when none of them says.
+ */
+function chooseBevel(
+  s: TalkState,
+  choices: NonNullable<TalkState["choices"]>,
+  wanted: number[],
+  picked: number[],
+  otherwise: "stop" | "first" | "last",
+  then: "leave" | "stop" | undefined,
+): number | "leave" | "stop" {
+  let idx = wanted.length ? choices.findIndex((ch) => ch.id === wanted[0]) : -1;
+  if (idx >= 0) {
+    picked.push(wanted.shift()!);
+  } else if (!wanted.length && then) {
+    /*
+     * Everything on the line has been said, and the line said what to do next.
+     *
+     * Before `otherwise:` and not after, so `then:` decides the exhausted case
+     * on its own — but only when it is written. Left out, this falls through
+     * exactly as it always did, which is what keeps `say([101,102],
+     * otherwise: last)` answering to the end of the conversation in the sheets
+     * that already say it.
+     */
+    return then;
+  } else if (otherwise === "last") {
+    idx = choices.length - 1;
+  } else if (otherwise === "first") {
+    idx = 0;
+  } else {
+    const offered = choices.map((ch) => ch.id + ":" + ch.text).join(" | ");
+    throw new Error(
+      wanted.length
+        ? `bevel ${wanted[0]} not offered by ${s.with || "them"}; got ${offered}`
+        : `unplanned choice from ${s.with || "them"}: ` +
+          offered +
+          // the IDS, because a sheet speaks in numbers and this message used
+          // to speak only in words — which made a whole class of failures
+          // undiagnosable from the report. `then: stop` is usually what the
+          // line wanted, so it is named.
+          `. The list ran out and it is still asking; a line that means to answer` +
+          ` one plaque and hand back wants then: stop`,
+    );
+  }
+  return idx;
 }
 
 /* ------------------------------------------------------------------ *

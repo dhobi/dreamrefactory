@@ -457,12 +457,43 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
   session.currentSetName = "none";
   session.currentSetFile = "";
 
-  // the cast and prop FILES the save had open, by the names the manifest gives
-  // them — a v1 list carries no extension of its own
+  await reopenFilesV1(session, save);
+
+  restoreCastAndPropsV1(session, save);
+
+  restoreLoopsV1(session, save);
+
+  restoreBallsV1(session, save);
+
+  const waiting = resumeWalksV1(session, save);
+
+  // ---- the arrival ----------------------------------------------------
+  const s = save.standpoint;
+  await arriveV1(session, s);
+
+  keepWaitingV1(session, waiting);
+
+  // the script settings the standpoint block carries (C1_PUPPET_GRAB in
+  // df/savegame-v1.ts): set after the room opens, because DF.EXE's own
+  // opensetfile resets two of them and its loader never runs that
+  session.puppetGrab = s.puppetGrab;
+  session.frameRate = s.frameInterval;
+  session.balls.playerHitbox = [s.playerHitbox[0], s.playerHitbox[1]];
+  session.setVisible = s.setVisible;
+}
+
+/**
+ * the cast and prop FILES the save had open, by the names the manifest gives
+ * them — a v1 list carries no extension of its own
+ */
+async function reopenFilesV1(session: GameSession, save: SaveGameV1): Promise<void> {
   for (const file of save.castFiles) await session.openCastFile(file);
   for (const file of save.propFiles) await session.openShop(file);
   await restoreThemeV1(session, save);
+}
 
+/** the cast and the props, their records and what the v4 shape leaves out of them */
+function restoreCastAndPropsV1(session: GameSession, save: SaveGameV1): void {
   resetCast(session);
   restoreActors(
     session,
@@ -482,9 +513,13 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
     const p = session.propRuntime.get(sp.name);
     if (p && sp.speed > 0) p.speed = sp.speed;
   }
+}
 
-  // the scheduler table, mid-count: the idles that make the town act, the
-  // scene's own timer, the star that crosses the sky
+/**
+ * the scheduler table, mid-count: the idles that make the town act, the
+ * scene's own timer, the star that crosses the sky
+ */
+function restoreLoopsV1(session: GameSession, save: SaveGameV1): void {
   for (const l of save.loops) {
     session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
     // `pauseloop` held it, this many deep (+2, 0x43904d)
@@ -494,8 +529,10 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
       restored.pauseDepth = l.pauseDepth;
     }
   }
+}
 
-  // the balls in flight, slot for slot (the table at 0x45fbd0 is positional)
+/** the balls in flight, slot for slot (the table at 0x45fbd0 is positional) */
+function restoreBallsV1(session: GameSession, save: SaveGameV1): void {
   for (const b of save.balls) {
     if (!b.active || b.slot >= session.balls.slots.length) continue;
     session.balls.slots[b.slot] = {
@@ -515,21 +552,23 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
       ty: b.ty,
     };
   }
+}
 
-  /*
-   * ...and the walkers, mid-stride.
-   *
-   * A character caught walking is caught in TWO tables, and restoring only one
-   * of them is worse than restoring neither: the cast record gives them the
-   * `walk` pose, and an actor steps through its walk animation whether or not a
-   * walk is actually running — so Jones would come back marching on the spot
-   * in the middle of the street. (AFTERDOG has him 82% of the way to
-   * `town.jones2`.)
-   *
-   * So each walk is resumed from where the save caught it, with only what was
-   * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
-   * the other half of the same rule, and the one the play page follows (#181).
-   */
+/**
+ * ...and the walkers, mid-stride.
+ *
+ * A character caught walking is caught in TWO tables, and restoring only one
+ * of them is worse than restoring neither: the cast record gives them the
+ * `walk` pose, and an actor steps through its walk animation whether or not a
+ * walk is actually running — so Jones would come back marching on the spot
+ * in the middle of the street. (AFTERDOG has him 82% of the way to
+ * `town.jones2`.)
+ *
+ * So each walk is resumed from where the save caught it, with only what was
+ * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
+ * the other half of the same rule, and the one the play page follows (#181).
+ */
+function resumeWalksV1(session: GameSession, save: SaveGameV1): SaveGameV1["walks"] {
   const waiting = save.walks.filter((w) => w.waiting && !w.turnOnly);
   for (const w of save.walks) {
     if (waiting.includes(w)) continue;
@@ -564,9 +603,11 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
     standUp(a ?? undefined);
     session.onLog(`opengame: ${w.actor} was saved mid-walk and could not be resumed — standing them up`);
   }
+  return waiting;
+}
 
-  // ---- the arrival ----------------------------------------------------
-  const s = save.standpoint;
+/** the arrival: the room the save had open, at the scene under its cell */
+async function arriveV1(session: GameSession, s: SaveGameV1["standpoint"]): Promise<void> {
   /*
    * The room is the FILE the save had open, not the set it names.
    *
@@ -606,16 +647,18 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
     );
   }
   await session.openSetFile(file, scene ?? "", scene ? s.view : "");
+}
 
-  /*
-   * The walks that were WAITING (their walker not in the open set, +44 = 0)
-   * come back waiting: DF.EXE's walk service moves nothing until the walker's
-   * set is the open one and the star is in it, then puts the actor there and
-   * ends the walk (0x4396f5; see the scheduler's `waiting`). The first pass
-   * does that for a walker already at home — the `endwalk` three playthrough
-   * rungs wait on — and one in another room waits for its room, where this
-   * used to fetch the star from any set's table and place them at once.
-   */
+/**
+ * The walks that were WAITING (their walker not in the open set, +44 = 0)
+ * come back waiting: DF.EXE's walk service moves nothing until the walker's
+ * set is the open one and the star is in it, then puts the actor there and
+ * ends the walk (0x4396f5; see the scheduler's `waiting`). The first pass
+ * does that for a walker already at home — the `endwalk` three playthrough
+ * rungs wait on — and one in another room waits for its room, where this
+ * used to fetch the star from any set's table and place them at once.
+ */
+function keepWaitingV1(session: GameSession, waiting: SaveGameV1["walks"]): void {
   for (const w of waiting) {
     const a = session.actorRuntime.get(w.actor);
     const kept =
@@ -641,14 +684,6 @@ async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promis
     standUp(a ?? undefined);
     session.onLog(`opengame: ${w.actor} was waiting for "${w.star}" and is not in the cast — standing them up`);
   }
-
-  // the script settings the standpoint block carries (C1_PUPPET_GRAB in
-  // df/savegame-v1.ts): set after the room opens, because DF.EXE's own
-  // opensetfile resets two of them and its loader never runs that
-  session.puppetGrab = s.puppetGrab;
-  session.frameRate = s.frameInterval;
-  session.balls.playerHitbox = [s.playerHitbox[0], s.playerHitbox[1]];
-  session.setVisible = s.setVisible;
 }
 
 /**
@@ -664,63 +699,9 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
 
   const { numGlobals, strGlobals, boolGlobals } = scriptGlobals(session);
 
-  // where the player is, in the file's own terms: the cell under the scene the
-  // viewer is standing in, and the heading it looks along
   const setFile = session.currentSetFile ? `${session.currentSetFile}.set` : "";
-  const cell = setFile ? cellOfScene(session, setFile, session.currentSceneName()) : null;
-  const deg = Math.round(((session.currentRotation?.() ?? 0) * 128) / Math.PI) & 0xff;
-  const standpoint = cell
-    ? {
-        set: session.currentSetFile,
-        // the FILE as well as the name: a load reopens the room from the
-        // manifest, so a save taken in another room has to say so there too
-        setFile: setFile,
-        cellX: cell.x,
-        cellZ: cell.z,
-        // the facing the set itself numbers this heading with, which the port
-        // does not track separately — the heading is the authority and the
-        // original's own second copy of the triple is written from it
-        facing: FACING_OF_DEG[deg] ?? 1,
-        deg,
-        camX: cell.x * CELL_UNITS + CELL_MID,
-        camY: cell.z * CELL_UNITS + CELL_MID,
-      }
-    : undefined;
-
-  /**
-   * What the room contributes to the file beyond its name: the two registers a
-   * load re-acquires, and the palette it comes back in.
-   *
-   * Read off the set FILE rather than the live binding, because the binding is
-   * the v1 set translated into the v4 shape and the translation reads the two
-   * register tables directly instead of carrying their indices — so it zeroes
-   * them (see set-v1-to-v4.ts). The bytes are in the store whenever the room is
-   * open, which is whenever there is something to save.
-   */
-  const openSet = ((): SavePatchV1["openSet"] => {
-    if (!setFile) return undefined;
-    const raw = session.files(setFile.toLowerCase());
-    if (!raw) {
-      session.onLog(`savegame: ${setFile} is not in the store — its registers keep the base's`);
-      return undefined;
-    }
-    try {
-      if (detectVersion(raw) !== 1) return undefined;
-      const set = readSetFileV1(raw);
-      return {
-        transitionRegister: set.transitionRegister,
-        actorRegister: set.actorRegister,
-        // the camera the original projects its cast through — per room, and a
-        // hover on every restored character when left as the base room's
-        eyeHeight: set.eyeHeight,
-        cameraSetback: set.cameraSetback,
-        clut: set.paletteRaw,
-      };
-    } catch (e) {
-      session.onLog(`savegame: ${setFile}: ${(e as Error).message}`);
-      return undefined;
-    }
-  })();
+  const standpoint = standpointOf(session, setFile);
+  const openSet = openSetOf(session, setFile);
 
   const dropped: string[] = [];
   const bytes = applyPatchV1(base, {
@@ -758,133 +739,17 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
      * The map's KEY is the prop's name — a PropInstance does not carry it, the
      * same reason the play page's snapshot destructures the entry.
      */
-    props: [...session.propRuntime.props].map(([name, p]) => ({
-      name,
-      owner: String(p.owner),
-      visible: p.visible,
-      is3d: p.worldSpace,
-      deg: Number(p.deg) || 0,
-      // a state the script chose, not the empty string this starts as
-      view: p.stateName || undefined,
-      set: p.setName || undefined,
-      star: p.starName || undefined,
-      // the port ignores `scale` for a screen prop, so 0 means "never told"
-      scale: p.scale > 0 ? p.scale : undefined,
-      // ...and 0 is this port's default where the original's is -1
-      dist: p.dist !== 0 ? p.dist : undefined,
-      // only a prop a script actually placed on the screen has an anchor to save
-      screenX: p.screenPlaced ? p.anchorX : undefined,
-      screenY: p.screenPlaced ? p.anchorY : undefined,
-      // ...and only a prop in the world has a world position
-      x: p.worldSpace ? p.worldX : undefined,
-      y: p.worldSpace ? p.worldY : undefined,
-      z: p.worldSpace ? p.worldZ : undefined,
-      // `propvalue` and `propzclip` (+72, +76): numbers in the record, so a
-      // string value is the base's to keep
-      value: typeof p.value === "number" ? p.value : undefined,
-      zclip: p.zclip,
-      step: propStep(p),
-      // the base's own value (4 when nothing set it) for a prop no script sped
-      speed: p.speed > 0 ? p.speed : undefined,
-    })),
-    actors: [...session.actorRuntime.actors.values()].map((a) => {
-      /**
-       * Has this port SET THIS ACTOR UP? `stdactor` — the handler every cast
-       * member's `setupactor` calls — is what gives an actor its scale, and
-       * nothing else does. So a scale is the port's word for "I have placed and
-       * dressed this character"; without one, its position, pace and turn rate
-       * are construction defaults and the base's are worth more.
-       */
-      const dressed = a.scale > 0;
-      return {
-        name: a.member.name,
-        owner: String(a.owner),
-        visible: a.visible,
-        // in the world at all: the original's draw gate reads this before
-        // anything else, and a visible actor without it is drawn screen-anchored
-        // at the top-left in every room (#319, #320). Asserted only where the
-        // port has placed the character; an undressed one keeps the base's
-        // sticky bit, which is what the original itself does.
-        is3d: dressed || a.visible ? true : undefined,
-        deg: a.deg & 0xff,
-        set: a.setName || undefined,
-        star: a.starName || undefined,
-        pose: a.poseName || undefined,
-        scale: dressed ? a.scale : undefined,
-        speed: dressed ? a.speed : undefined,
-        turn: dressed ? a.turn : undefined,
-        x: dressed ? a.worldX : undefined,
-        y: dressed ? a.worldY : undefined,
-        z: dressed ? a.worldZ : undefined,
-        value: typeof a.value === "number" ? a.value : undefined,
-        zclip: dressed ? a.zclip : undefined,
-        hitbox: [a.hitbox[0], a.hitbox[1]] as [number, number],
-        step: dressed ? a.step : undefined,
-        // a screen actor's layer and anchor; a world actor's +42 is a draw cache
-        dist: dressed && !a.worldSpace ? a.dist : undefined,
-        anchorX: dressed && !a.worldSpace ? a.anchorX : undefined,
-        anchorY: dressed && !a.worldSpace ? a.anchorY : undefined,
-      };
-    }),
-    walks: [...session.scheduler.walks].map(([actor, w]) => ({
-      actor,
-      star: w.arriveStar ?? "",
-      startX: w.sx,
-      startY: w.sy,
-      startZ: w.sz,
-      dx: w.dx,
-      dy: w.dy,
-      dz: w.dz,
-      dist: w.dist,
-      progress: w.progress,
-      turnTo: w.turnTo ?? -1,
-      deg: session.actorRuntime.get(actor)?.deg ?? 0,
-      turnOnly: !!w.turnOnly,
-      paused: w.paused,
-      pauseDepth: w.pauseDepth,
-      hasPath: !!w.path,
-      path: w.path,
-      waiting: w.waiting,
-    })),
-    balls: session.balls.slots.flatMap((b, slot) =>
-      b
-        ? [
-            {
-              slot,
-              name: b.name,
-              pause: b.pause,
-              vx: b.vx,
-              vy: b.vy,
-              vz: b.vz,
-              gravity: b.gravity,
-              bounce: b.bounce,
-              frames: b.frames,
-              deg: Number(b.deg) || 0,
-              x: b.x,
-              y: b.y,
-              z: b.z,
-              tx: b.tx,
-              ty: b.ty,
-            },
-          ]
-        : [],
-    ),
+    props: propsPatch(session),
+    actors: actorsPatch(session),
+    walks: walksPatch(session),
+    balls: ballsPatch(session),
     settings: {
       puppetGrab: session.puppetGrab,
       frameInterval: session.frameRate,
       setVisible: session.setVisible,
       playerHitbox: [session.balls.playerHitbox[0], session.balls.playerHitbox[1]],
     },
-    loops: session.scheduler.loops.map((l) => ({
-      kind: l.kind,
-      name: l.name,
-      handler: l.handler,
-      // the live countdown, mid-flight: the original dumps its service table
-      // verbatim, so what the field holds is the ticks that are left
-      period: l.count,
-      paused: l.paused,
-      pauseDepth: l.pauseDepth,
-    })),
+    loops: loopsPatch(session),
     ...soundPatch(session),
     onDrop: (name, why) => dropped.push(`${name} (${why})`),
   });
@@ -898,6 +763,208 @@ export function snapshotSaveV1(session: GameSession): Uint8Array | null {
     );
   }
   return bytes;
+}
+
+/**
+ * where the player is, in the file's own terms: the cell under the scene the
+ * viewer is standing in, and the heading it looks along
+ */
+function standpointOf(session: GameSession, setFile: string): SavePatchV1["standpoint"] {
+  const cell = setFile ? cellOfScene(session, setFile, session.currentSceneName()) : null;
+  const deg = Math.round(((session.currentRotation?.() ?? 0) * 128) / Math.PI) & 0xff;
+  return cell
+    ? {
+        set: session.currentSetFile,
+        // the FILE as well as the name: a load reopens the room from the
+        // manifest, so a save taken in another room has to say so there too
+        setFile: setFile,
+        cellX: cell.x,
+        cellZ: cell.z,
+        // the facing the set itself numbers this heading with, which the port
+        // does not track separately — the heading is the authority and the
+        // original's own second copy of the triple is written from it
+        facing: FACING_OF_DEG[deg] ?? 1,
+        deg,
+        camX: cell.x * CELL_UNITS + CELL_MID,
+        camY: cell.z * CELL_UNITS + CELL_MID,
+      }
+    : undefined;
+}
+
+/**
+ * What the room contributes to the file beyond its name: the two registers a
+ * load re-acquires, and the palette it comes back in.
+ *
+ * Read off the set FILE rather than the live binding, because the binding is
+ * the v1 set translated into the v4 shape and the translation reads the two
+ * register tables directly instead of carrying their indices — so it zeroes
+ * them (see set-v1-to-v4.ts). The bytes are in the store whenever the room is
+ * open, which is whenever there is something to save.
+ */
+function openSetOf(session: GameSession, setFile: string): SavePatchV1["openSet"] {
+  if (!setFile) return undefined;
+  const raw = session.files(setFile.toLowerCase());
+  if (!raw) {
+    session.onLog(`savegame: ${setFile} is not in the store — its registers keep the base's`);
+    return undefined;
+  }
+  try {
+    if (detectVersion(raw) !== 1) return undefined;
+    const set = readSetFileV1(raw);
+    return {
+      transitionRegister: set.transitionRegister,
+      actorRegister: set.actorRegister,
+      // the camera the original projects its cast through — per room, and a
+      // hover on every restored character when left as the base room's
+      eyeHeight: set.eyeHeight,
+      cameraSetback: set.cameraSetback,
+      clut: set.paletteRaw,
+    };
+  } catch (e) {
+    session.onLog(`savegame: ${setFile}: ${(e as Error).message}`);
+    return undefined;
+  }
+}
+
+/** each prop's record, with only what the port has a positive value for — see snapshotSaveV1 */
+function propsPatch(session: GameSession): SavePatchV1["props"] {
+  return [...session.propRuntime.props].map(([name, p]) => ({
+    name,
+    owner: String(p.owner),
+    visible: p.visible,
+    is3d: p.worldSpace,
+    deg: Number(p.deg) || 0,
+    // a state the script chose, not the empty string this starts as
+    view: p.stateName || undefined,
+    set: p.setName || undefined,
+    star: p.starName || undefined,
+    // the port ignores `scale` for a screen prop, so 0 means "never told"
+    scale: p.scale > 0 ? p.scale : undefined,
+    // ...and 0 is this port's default where the original's is -1
+    dist: p.dist !== 0 ? p.dist : undefined,
+    // only a prop a script actually placed on the screen has an anchor to save
+    screenX: p.screenPlaced ? p.anchorX : undefined,
+    screenY: p.screenPlaced ? p.anchorY : undefined,
+    // ...and only a prop in the world has a world position
+    x: p.worldSpace ? p.worldX : undefined,
+    y: p.worldSpace ? p.worldY : undefined,
+    z: p.worldSpace ? p.worldZ : undefined,
+    // `propvalue` and `propzclip` (+72, +76): numbers in the record, so a
+    // string value is the base's to keep
+    value: typeof p.value === "number" ? p.value : undefined,
+    zclip: p.zclip,
+    step: propStep(p),
+    // the base's own value (4 when nothing set it) for a prop no script sped
+    speed: p.speed > 0 ? p.speed : undefined,
+  }));
+}
+
+/** each cast record, with only what the port has set up — a dressed actor's own and the base's otherwise */
+function actorsPatch(session: GameSession): SavePatchV1["actors"] {
+  return [...session.actorRuntime.actors.values()].map((a) => {
+    /**
+     * Has this port SET THIS ACTOR UP? `stdactor` — the handler every cast
+     * member's `setupactor` calls — is what gives an actor its scale, and
+     * nothing else does. So a scale is the port's word for "I have placed and
+     * dressed this character"; without one, its position, pace and turn rate
+     * are construction defaults and the base's are worth more.
+     */
+    const dressed = a.scale > 0;
+    return {
+      name: a.member.name,
+      owner: String(a.owner),
+      visible: a.visible,
+      // in the world at all: the original's draw gate reads this before
+      // anything else, and a visible actor without it is drawn screen-anchored
+      // at the top-left in every room (#319, #320). Asserted only where the
+      // port has placed the character; an undressed one keeps the base's
+      // sticky bit, which is what the original itself does.
+      is3d: dressed || a.visible ? true : undefined,
+      deg: a.deg & 0xff,
+      set: a.setName || undefined,
+      star: a.starName || undefined,
+      pose: a.poseName || undefined,
+      scale: dressed ? a.scale : undefined,
+      speed: dressed ? a.speed : undefined,
+      turn: dressed ? a.turn : undefined,
+      x: dressed ? a.worldX : undefined,
+      y: dressed ? a.worldY : undefined,
+      z: dressed ? a.worldZ : undefined,
+      value: typeof a.value === "number" ? a.value : undefined,
+      zclip: dressed ? a.zclip : undefined,
+      hitbox: [a.hitbox[0], a.hitbox[1]] as [number, number],
+      step: dressed ? a.step : undefined,
+      // a screen actor's layer and anchor; a world actor's +42 is a draw cache
+      dist: dressed && !a.worldSpace ? a.dist : undefined,
+      anchorX: dressed && !a.worldSpace ? a.anchorX : undefined,
+      anchorY: dressed && !a.worldSpace ? a.anchorY : undefined,
+    };
+  });
+}
+
+/** the walks under way, mid-stride */
+function walksPatch(session: GameSession): SavePatchV1["walks"] {
+  return [...session.scheduler.walks].map(([actor, w]) => ({
+    actor,
+    star: w.arriveStar ?? "",
+    startX: w.sx,
+    startY: w.sy,
+    startZ: w.sz,
+    dx: w.dx,
+    dy: w.dy,
+    dz: w.dz,
+    dist: w.dist,
+    progress: w.progress,
+    turnTo: w.turnTo ?? -1,
+    deg: session.actorRuntime.get(actor)?.deg ?? 0,
+    turnOnly: !!w.turnOnly,
+    paused: w.paused,
+    pauseDepth: w.pauseDepth,
+    hasPath: !!w.path,
+    path: w.path,
+    waiting: w.waiting,
+  }));
+}
+
+/** the balls in flight, slot for slot */
+function ballsPatch(session: GameSession): SavePatchV1["balls"] {
+  return session.balls.slots.flatMap((b, slot) =>
+    b
+      ? [
+          {
+            slot,
+            name: b.name,
+            pause: b.pause,
+            vx: b.vx,
+            vy: b.vy,
+            vz: b.vz,
+            gravity: b.gravity,
+            bounce: b.bounce,
+            frames: b.frames,
+            deg: Number(b.deg) || 0,
+            x: b.x,
+            y: b.y,
+            z: b.z,
+            tx: b.tx,
+            ty: b.ty,
+          },
+        ]
+      : [],
+  );
+}
+
+/** the scheduler table, each loop with the ticks it has left */
+function loopsPatch(session: GameSession): SavePatchV1["loops"] {
+  return session.scheduler.loops.map((l) => ({
+    kind: l.kind,
+    name: l.name,
+    handler: l.handler,
+    // the live countdown, mid-flight: the original dumps its service table
+    // verbatim, so what the field holds is the ticks that are left
+    period: l.count,
+    paused: l.paused,
+    pauseDepth: l.pauseDepth,
+  }));
 }
 
 /**
