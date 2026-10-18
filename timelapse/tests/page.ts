@@ -91,6 +91,7 @@ class FakeHost {
     actorRuntime: { actors: new Map() },
     interp: {
       globals: this.globals,
+      bool: (b: boolean) => b,
       runHandler: async (_i: unknown, h: string) => ({ value: `ran ${h}` }),
     },
     instanceFrom: (_c: unknown, name: string) => ({ name }),

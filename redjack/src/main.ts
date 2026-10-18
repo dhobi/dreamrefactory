@@ -36,10 +36,11 @@ import {
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
-import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
+import { bindPointerInput } from "@dreamfactory/engine/web/shell-input";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { REDJACK } from "@dreamfactory/chrome/games";
 import { VERSION } from "@dreamfactory/chrome/version";
+import { fmtSize } from "@dreamfactory/chrome/net-meter";
 import { RedJackFiles } from "./files";
 import { REDJACK_SAVES, keepDf5Disk, seedRedJackSaves } from "./saves";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
@@ -47,7 +48,7 @@ import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { RJ_CURSORS } from "./cursor-art";
 import { bindRoomTouch } from "./room-touch";
 import { SWIPE_ARROWS, arrowUp, defaultSaveName, heldKeys, keyAction, whereLine } from "./input";
-import { screenPoint } from "@dreamfactory/engine/web/screen";
+import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 
 const SCREEN = REDJACK.screen;
 
@@ -149,10 +150,6 @@ function progress(f: number, label?: string): void {
   barEl.value = pct;
   if (label) bootSayEl.textContent = label;
 }
-
-/** "13.1 MB" or "412 KB" */
-const fmtSize = (bytes: number): string =>
-  bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 function beginPlaying(): void {
   document.body.classList.remove("booting");
@@ -318,68 +315,21 @@ function showLocation(host: GameHost): void {
  * Input
  * ------------------------------------------------------------------------- */
 
-function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
-  return screenPoint(e, canvas.getBoundingClientRect(), SCREEN);
-}
-
+const canvasCoords = canvasCoordsFor(canvas, SCREEN);
 
 function bindInput(host: GameHost, s: GameHost["session"]): void {
-  const sendKey = (key: string, special = false): void => {
-    s.interp.globals.set("isrepeat", 0);
-    void host.director.keyDown(key, special);
-  };
-
-  // which way the two swipe axes read, remembered for this game alone
-  const swipeInvert = bindSwipeInvert("redjack.swipe");
-
-  /** the last tap's press, answered — see {@link fingerLifted} */
-  let tapped: Promise<unknown> = Promise.resolve();
-  const touch = new TouchGestures({
-    coords: (e: PointerEventLike) => canvasCoords(e),
-    ownedByGame: (x, y) => {
-      const kind = s.hitTestAt(x, y).type;
-      return kind === "prop" || kind === "button";
-    },
-    press: (x, y) => {
-      if (room.swallowsPress(x, y)) return;
-      tapped = s.track(host.director.buttonDown(x, y), `press ${x},${y}`);
-    },
-    release: (x, y) => {
-      if (!s.pointerDown) return;
-      host.director.buttonUp(x, y);
-    },
-    sendKey: (key: GestureKey, special: boolean) => sendKey(SWIPE_ARROWS[key] ?? key, special),
-    invert: () => swipeInvert,
-  });
-
-  // a finger in a room: look round, flick, zoom (src/room-touch.ts)
-  const room = bindRoomTouch({ host, touch, coords: canvasCoords, screen: SCREEN });
-
-  canvas.addEventListener("pointerdown", (e) => {
-    const { x, y } = canvasCoords(e);
-    s.setPointer(x, y);
-    if (e.pointerType === "touch") {
-      if (!room.down(e)) touch.down(e);
-      room.afterDown(e);
-      return;
-    }
+  const input = bindPointerInput(host, canvas, {
+    coords: canvasCoords,
+    swipeKey: "redjack.swipe",
     // `sysparam (7)`: a room's mousedown zooms while the right button is held
-    void host.director.buttonDown(x, y, { button: e.button === 2 ? 2 : 1 }).then(() => say(`click ${x},${y}`));
+    click: (x, y, e) => void host.director.buttonDown(x, y, { button: e.button === 2 ? 2 : 1 }).then(() => say(`click ${x},${y}`)),
+    gestureKey: (key) => SWIPE_ARROWS[key] ?? key,
+    // a finger in a room: look round, flick, zoom (src/room-touch.ts)
+    front: (touch) => bindRoomTouch({ host, touch, coords: canvasCoords, screen: SCREEN }),
   });
+  const { sendKey } = input;
   // the right button is the game's, not the browser's menu
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-
-  // on the window, not the canvas: a drag that ends off-canvas still has to end
-  addEventListener("pointermove", (e) => {
-    const { x, y } = canvasCoords(e);
-    s.setPointer(x, y);
-    if (room.move(e)) return;
-    if (touch.owns(e)) {
-      touch.move(e);
-      return;
-    }
-    if (e.pointerType !== "touch") void host.director.hover(x, y);
-  });
 
   /**
    * Where the pointer is once nothing points. RedJack.exe asks Windows where
@@ -406,28 +356,15 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
       const still = s.pointerX === x && s.pointerY === y;
       if (!fingers.size && !s.pointerDown && still) offWindow();
     };
-    void tapped.then(gone, gone);
+    void input.lastPress().then(gone, gone);
   };
   document.addEventListener("pointerout", (e) => {
     if (e.pointerType === "mouse" && !e.relatedTarget && !s.pointerDown) offWindow();
   });
 
-  addEventListener("pointerup", (e) => {
-    try {
-      if (room.up(e)) return;
-      if (touch.up(e)) return;
-      if (!s.pointerDown) return;
-      const { x, y } = canvasCoords(e);
-      host.director.buttonUp(x, y);
-    } finally {
-      fingerLifted(e);
-    }
-  });
-
-  addEventListener("pointercancel", (e) => {
-    if (!room.cancel(e)) touch.cancel(e);
-    fingerLifted(e);
-  });
+  // after the binder's own release and cancel, which were bound first
+  addEventListener("pointerup", fingerLifted);
+  addEventListener("pointercancel", fingerLifted);
 
   // SPACE, for a machine with no space bar: RedJack's control panel. It is held
   // a moment too, for the scripts that ask whether it is down rather than

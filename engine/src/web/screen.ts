@@ -99,3 +99,16 @@ export function screenPoint(
     y: round(((e.clientY - r.top) / r.height) * screen.height),
   };
 }
+
+/**
+ * A page's {@link screenPoint}, bound to its canvas and its screen: the
+ * `canvasCoords` every game page asks for. The canvas is measured at each call,
+ * and so is `screen` — a canvas passed as its own screen is read as it is then.
+ */
+export function canvasCoordsFor(
+  canvas: { getBoundingClientRect(): { left: number; top: number; width: number; height: number } },
+  screen: { width: number; height: number },
+  round: (n: number) => number = Math.round,
+): (e: { clientX: number; clientY: number }) => { x: number; y: number } {
+  return (e) => screenPoint(e, canvas.getBoundingClientRect(), screen, round);
+}
