@@ -240,7 +240,7 @@ export class GameSession {
    * and v1 loads mute only the room's lifecycle, as they always have.
    */
   get restoringV5(): boolean {
-    return this.restoringSave && this.isV5;
+    return this.restoringSave && this.profile.loadMutesOpens;
   }
 
   get boot(): ScriptInstance | null {

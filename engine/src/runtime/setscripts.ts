@@ -217,7 +217,7 @@ export class SetScripts {
     return this.fireLifecycle("openset", -1);
   }
   async closeSet(): Promise<void> {
-    if (this.session.isV1) {
+    if (this.session.profile.closesOutsideIn) {
       /**
        * DF.EXE (0x40f370) closes outside in: `closeset` (0x40f3bc), then
        * `closefloor` (0x40f444; no Dust script handles it), then the scene's

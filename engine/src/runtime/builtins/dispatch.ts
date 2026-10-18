@@ -1,5 +1,6 @@
 import { toStr } from "../interp";
 import { BuiltinCtx } from "./context";
+import { commandRules } from "./command-rules";
 
 /**
  * Event dispatch: the `sendto*` special forms (whose second argument is a
@@ -74,12 +75,12 @@ export function registerDispatchBuiltins(ctx: BuiltinCtx): void {
        * engine's rects have (`isbuild (scenecol (name), scenerow (name))` is the
        * other side of it).
        */
-      if (session.isV1 && (cmd === "sendtopostfx" || cmd === "sendtopost")) {
+      if (commandRules(session).postAndServerAreGrid && (cmd === "sendtopostfx" || cmd === "sendtopost")) {
         const row = await ip.evalExpr(argExprs[0], frame);
         const col = await ip.evalExpr(argExprs[1], frame);
         return ctx.sceneAt(row, col) ?? 0;
       }
-      if (session.isV1 && (cmd === "sendtoserverfx" || cmd === "sendtoserver")) {
+      if (commandRules(session).postAndServerAreGrid && (cmd === "sendtoserverfx" || cmd === "sendtoserver")) {
         const name = await ip.evalExpr(argExprs[0], frame);
         return ctx.sceneBuild(name) ? 1 : 0;
       }

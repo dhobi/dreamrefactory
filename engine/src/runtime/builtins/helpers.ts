@@ -1,7 +1,7 @@
 import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { bearingV5, engineBearing } from "../geometry";
 import { BuiltinCtx } from "./context";
-import { byEngine, commandRules, forEngine } from "./command-rules";
+import { byEngine, forEngine } from "./command-rules";
 import { packPoint, pointX, pointY, s16 } from "../point";
 import { decodeText, encodeText } from "../../df/text";
 import { latin1 } from "../../df/binary";
@@ -569,7 +569,7 @@ function registerSystem(ctx: BuiltinCtx): void {
       // RedJack's `resetpaths` does the same with `"RJ" @ disk`, one disc per
       // day (`advanceday`): `path (5, "RJDisk2:movies:")`. Its three discs each
       // carry a different `death.move`, so the film you die to is the day's.
-      const vol = commandRules(session).discPath.exec(value);
+      const vol = session.profile.disc.path.exec(value);
       if (vol) session.onDiscChange?.(Number(vol[1]));
     }
     return 0;

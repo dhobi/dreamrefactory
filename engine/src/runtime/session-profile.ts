@@ -27,6 +27,60 @@ export interface SessionProfile {
   readonly save: (session: GameSession, version: string | undefined) => Uint8Array | null;
   /** put a save back; `version` is what `opengame` was given */
   readonly load: (session: GameSession, bytes: Uint8Array, version: string | undefined) => Promise<boolean>;
+  /**
+   * A load opens its own set and is not this engine's save format (Dust): the
+   * host hands it the bytes and does not take its HUD apart first.
+   */
+  readonly loadOpensItsSet: boolean;
+  /**
+   * A load runs no `open…` handler while it rebuilds — `openactor`, `openshop`,
+   * `openprop`, `openstage`, `openflat`, `openset`, `openscene`
+   * (docs/engine/formats/savegame-v5.md); the v4 and v1 loads mute only the
+   * room's lifecycle.
+   */
+  readonly loadMutesOpens: boolean;
+
+  // ---- the boot ----
+  /** the BOOTFILE's literal `boot()` assignments seed the globals (SessionBoot.seedFromBoot) */
+  readonly seedsGlobalsFromBoot: boolean;
+  /** `puppetparam` slots the engine seeds: DreamFactory 5's 3 and 4 are 0x00RRGGBB, white answers and a red frame (0x439d41) */
+  readonly puppetParamSeeds: readonly (readonly [slot: number, value: number])[];
+  /** closing a sound bank stops its crickets */
+  readonly closedSoundsStopCrickets: boolean;
+  /** the boot's films are played by the director once a day has been advanced (GameHost) */
+  readonly bootAdvancesDay: boolean;
+
+  // ---- files and events ----
+  /**
+   * A resource name with no extension gets its type's (RedJack.exe 0x43c88e):
+   * `runpuppet ("lyle1", …)` opens `lyle1.pupp`; the older engines are handed
+   * their names unchanged.
+   */
+  readonly typedNames: boolean;
+  /** a cast has a main script, sent `closecast` when it closes */
+  readonly castsHaveMains: boolean;
+  /** every set opens visible (RedJack.exe 0x43f8e8) */
+  readonly setsOpenVisible: boolean;
+  /** the BOOTFILE's library hears the `sendto…` it did not send itself (RedJack's cannon) */
+  readonly libraryHearsSends: boolean;
+  /** `sendtocast`, `sendtoprop`, `sendtoshop` and `sendtoquad` find their target among their own kind first (RedJack.exe 0x405370, 0x42b550) */
+  readonly sendsFindTheirKind: boolean;
+  /** a flat is drawn at the stage's origin (`stageorigin`), its regions in the flat's own coordinates */
+  readonly flatsAtStageOrigin: boolean;
+  /** of overlapping regions the first wins; the older engines take the last */
+  readonly firstRegionWins: boolean;
+  /** `closeset` closes outside in, set before floor before scene (DF.EXE 0x40f370) */
+  readonly closesOutsideIn: boolean;
+
+  // ---- conversations ----
+  /** one conversation at a time: `openpuppetfile` is error 0x2d while one is open (DF.EXE 0x43585d) */
+  readonly oneConversation: boolean;
+  /** opening a conversation shows the arrow (RedJack.exe's Pupp.c, 0x42e6b0, #446) */
+  readonly conversationArrow: boolean;
+  /** how long a line with no recording is held, in ticks (PuppetController.holdUnknownLine) */
+  readonly unknownLineTicks: (length: number, param9: number | undefined) => number;
+  /** a `path` that names one of the game's discs, its number captured, and the discs' name */
+  readonly disc: { readonly path: RegExp; readonly name: string };
 }
 
 /** Titanic */
@@ -38,10 +92,30 @@ const V4: SessionProfile = {
   debugChannel: true,
   save: (session) => snapshotSave(session),
   load: (session, bytes) => loadGame(session, bytes),
+  loadOpensItsSet: false,
+  loadMutesOpens: false,
+  seedsGlobalsFromBoot: true,
+  puppetParamSeeds: [],
+  closedSoundsStopCrickets: false,
+  bootAdvancesDay: false,
+  typedNames: false,
+  castsHaveMains: false,
+  setsOpenVisible: false,
+  libraryHearsSends: false,
+  sendsFindTheirKind: false,
+  flatsAtStageOrigin: false,
+  firstRegionWins: false,
+  closesOutsideIn: false,
+  oneConversation: false,
+  conversationArrow: false,
+  // TI.EXE `length * puppetparam(9)` ticks, at least 60 — TAOOT's boot sets slot 9 to 1
+  unknownLineTicks: (length, param9) => Math.max(length * (param9 ?? 2), 60),
+  disc: { path: /^titanic([12]):/i, name: "titanic" },
 };
 
 /** Dust */
 const V1: SessionProfile = {
+  ...V4,
   engine: 1,
   commandTable: 1,
   latchesScriptErrors: false,
@@ -49,6 +123,10 @@ const V1: SessionProfile = {
   debugChannel: false,
   save: (session) => snapshotSaveV1(session),
   load: (session, bytes) => loadGameV1(session, bytes),
+  loadOpensItsSet: true,
+  closesOutsideIn: true,
+  oneConversation: true,
+  unknownLineTicks: (length) => (length >> 1) + 60,
 };
 
 /** RedJack */
@@ -62,6 +140,20 @@ const V5: SessionProfile = {
   // a load is a script's (`opengame`), and RedJack.exe sends no idle while one
   // runs: held as a running script, wherever the host starts it from
   load: (session, bytes, version) => session.track(loadGameV5(session, bytes, version), "load"),
+  loadMutesOpens: true,
+  seedsGlobalsFromBoot: false,
+  puppetParamSeeds: [[3, 0xffffff], [4, 0xff0000]],
+  closedSoundsStopCrickets: true,
+  bootAdvancesDay: true,
+  typedNames: true,
+  castsHaveMains: true,
+  setsOpenVisible: true,
+  libraryHearsSends: true,
+  sendsFindTheirKind: true,
+  flatsAtStageOrigin: true,
+  firstRegionWins: true,
+  conversationArrow: true,
+  disc: { path: /^rjdisk([1-3]):/i, name: "rjdisk" },
 };
 
 /**

@@ -63,7 +63,7 @@ export class SessionResources {
    */
   typedName(fileName: string, ext: "cast" | "stag" | "shop" | "pupp" | "sett" | "trak"): string {
     const name = toStr(fileName);
-    if (!this.session.isV5) return name;
+    if (!this.session.profile.typedNames) return name;
     const n = name.length;
     if (n >= 5 && (name[n - 5] === "." || name[n - 4] === ".")) return name;
     return `${name}.${ext}`;
@@ -82,13 +82,13 @@ export class SessionResources {
    * not. The cannon's dinghies are what a pose going round would get wrong: an
    * explosion's `endanim` hides the dinghy and counts it sunk (cannon.cast), and
    * a second telling counted the same wreck again. The older engines have no
-   * such event, and their scripts never answer it.
+   * such event, and their scripts never answer it: only a pass that owes one
+   * asks (SchedulerRules.endAnimsOwed).
    *
    * Which of `names` hear it; the pass sends it, each to its end
    * (Scheduler.passEndAnims).
    */
   endAnimTargets(cmd: "sendtoactor" | "sendtoprop", names: string[]): string[] {
-    if (!this.session.isV5) return [];
     return names.map((n) => n.toLowerCase()).filter((key) => {
       // an actor hears it hidden or not (RedJack.exe 0x408481 asks only the flag)
       if (cmd === "sendtoprop" && !this.session.propRuntime.get(key)?.visible) return false;
@@ -110,7 +110,7 @@ export class SessionResources {
     // advanceday closes liznite before the crate's stage, so the stage's
     // `setvisible (true)` has no set to act on — and without this the ship
     // opened hidden, and no key reached it.
-    if (this.session.isV5) this.session.setVisible = true;
+    if (this.session.profile.setsOpenVisible) this.session.setVisible = true;
     this.opening++;
     try {
       await this.session.onSetChange(key, sceneName.toLowerCase(), viewName.toLowerCase());
@@ -326,8 +326,8 @@ export class SessionResources {
      * casts themselves were never closed: the dinghies went on sailing, asking
      * for stars in whatever room was open.
      */
-    const key = (this.session.isV5 ? this.typedName(fileName, "cast") : fileName).toLowerCase();
-    const main = this.session.isV5 ? this.castMains.get(key) : undefined;
+    const key = this.typedName(fileName, "cast").toLowerCase();
+    const main = this.session.profile.castsHaveMains ? this.castMains.get(key) : undefined;
     if (main) await this.session.fireHandler(main, "closecast", key, `closecast ${key}`);
     const cast = this.session.actorRuntime.casts.get(key);
     if (cast) {

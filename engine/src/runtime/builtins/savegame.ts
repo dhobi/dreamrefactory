@@ -1,6 +1,7 @@
 import { toStr } from "../interp";
 import type { GameSession } from "../session";
 import { BuiltinCtx } from "./context";
+import { commandRules } from "./command-rules";
 
 /**
  * Save / load game builtins (`savegame` op 12077, `opengame` op 12078), called
@@ -32,11 +33,11 @@ export function registerSaveGameBuiltins(ctx: BuiltinCtx): void {
 
   r("savegame", async (_i, [version]) => {
     // RedJack.exe's two refusals, before any dialog (0x43c9b6, 0x43c9e9)
-    if (session.isV5 && session.puppetCtrl.puppet) {
+    if (commandRules(session).refusesBusySaves && session.puppetCtrl.puppet) {
       await session.onNoteDialog("Can't save game with puppet open.");
       return 0;
     }
-    if (session.isV5 && session.maze?.walk) {
+    if (commandRules(session).refusesBusySaves && session.maze?.walk) {
       await session.onNoteDialog("Can't save game while travelling on road.");
       return 0;
     }

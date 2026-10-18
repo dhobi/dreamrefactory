@@ -3,6 +3,7 @@ import { toNum, toStr } from "../interp";
 import { packPoint, pointX, pointY } from "../point";
 import { decodeText } from "../../df/text";
 import { BuiltinCtx, RepeatedAsk } from "./context";
+import { byEngine, commandRules } from "./command-rules";
 
 /**
  * Points + live pointer + persistent text. Points pack as (x<<16)|y with
@@ -48,13 +49,17 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
    * hit test read as a predicate; the other two are their own hooks, because they
    * must answer yes through a prop drawn on top (see GameSession.pointInSet).
    */
-  r("pointinactor", (_i, [name, point]) => {
-    const pt = toNum(point ?? 0);
-    const want = toStr(name ?? "").toLowerCase();
-    // DreamFactory 5 asks the actor alone (ActorRuntime.covers); the older
-    // engines' answer is the hit test's
-    if (session.isV5) {
-      const a = session.actorRuntime.get(want);
+  r("pointinactor", byEngine(session, {
+    // the older engines' answer is the hit test's
+    v4: (_i, [name, point]) => {
+      const pt = toNum(point ?? 0);
+      const hit = session.hitTestAt(pointX(pt), pointY(pt));
+      return hit.type === "actor" && hit.name.toLowerCase() === toStr(name ?? "").toLowerCase() ? 1 : 0;
+    },
+    // DreamFactory 5 asks the actor alone (ActorRuntime.covers)
+    v5: (_i, [name, point]) => {
+      const pt = toNum(point ?? 0);
+      const a = session.actorRuntime.get(toStr(name ?? "").toLowerCase());
       // through the camera the room's sprites are drawn with (MazeView.roomCamera)
       const m = session.maze;
       const at = m?.camera();
@@ -63,10 +68,8 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
         ? { x: at.x, y: at.y, z: at.z, deg: 0, f: 0, cx: m.size.width / 2, cy: m.size.height / 2, clipW: m.size.width, clipH: m.size.height, v5 }
         : null;
       return a && session.actorRuntime.covers(a, pointX(pt), pointY(pt), cam) ? 1 : 0;
-    }
-    const hit = session.hitTestAt(pointX(pt), pointY(pt));
-    return hit.type === "actor" && hit.name.toLowerCase() === want ? 1 : 0;
-  });
+    },
+  }));
   r("pointinset", (_i, [point]) => {
     const pt = toNum(point ?? 0);
     return session.pointInSet(pointX(pt), pointY(pt)) ? 1 : 0;
@@ -140,7 +143,7 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
   r("stilldown", async (_i, _a, c) => {
     session.inputPolled();
     const tick = ticksAt(session.clock.now);
-    const wait = session.isV5 ? stilldownAsk.repeats(c, tick) : !session.clock.ticked || tick === stilldownTick;
+    const wait = commandRules(session).pollsAnswerAtOnce ? stilldownAsk.repeats(c, tick) : !session.clock.ticked || tick === stilldownTick;
     if (wait) await session.clock.sleep(16);
     stilldownTick = ticksAt(session.clock.now);
     if (session.hasRealFrames) session.realYieldSeq++;
@@ -154,7 +157,7 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
     if (!region) return 0;
     const pt = toNum(point ?? 0);
     // on the flat, not the screen, in v5 (see ScreenDirector.flatRegionAt)
-    const o = session.isV5 ? session.stageOrigin : { x: 0, y: 0 };
+    const o = session.profile.flatsAtStageOrigin ? session.stageOrigin : { x: 0, y: 0 };
     const x = pointX(pt) - o.x, y = pointY(pt) - o.y;
     return x >= region.left && x <= region.right && y >= region.top && y <= region.bottom ? 1 : 0;
   });
@@ -166,7 +169,7 @@ export function registerPointerBuiltins(ctx: BuiltinCtx): void {
     const st = p?.state();
     if (!p || !st?.frames.length) return 0;
     // the frame drawn: a v5 view's is picked by step and degree (v5FrameIndex)
-    if (session.isV5) {
+    if (commandRules(session).pointInPropIsBox) {
       const f = p.shop.frame(st.steps ? p.currentFrame(st) : st.frames[Math.min(p.frameIdx, st.frames.length - 1)]);
       const x0 = p.anchorX - f.posXraw, y0 = p.anchorY - f.posYraw;
       const pt = toNum(point ?? 0);
