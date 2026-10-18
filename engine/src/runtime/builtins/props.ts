@@ -5,7 +5,9 @@ import {
 } from "../props";
 import { packPoint } from "../point";
 import { accessorFamily, BuiltinCtx } from "./context";
-import { byEngine, commandRules, forEngine, onlyOnV5 } from "./command-rules";
+import { byEngine, commandRules, onlyOnV5 } from "./command-rules";
+import { forEngine } from "../engine";
+import { schedulerRules } from "../scheduler-rules";
 
 
 /**
@@ -342,8 +344,8 @@ function registerPropLook(ctx: BuiltinCtx): void {
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
     p.deg = forEngine(session, {
       v4: typeof v === "string" ? v : toNum(v),
-      // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
-      v5: Math.trunc(Number(v) || 0) & 0xffffff,
+      // v5 keeps it to its turn's 24 bits (RedJack.exe 0x4288fc)
+      v5: Math.trunc(Number(v) || 0) & schedulerRules(session).turnWrap,
     });
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a

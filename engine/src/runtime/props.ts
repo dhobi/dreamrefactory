@@ -1152,8 +1152,8 @@ export class PropRuntime {
     return out;
   }
 
-  /** a DreamFactory 5 game: its point tests keep their own rules (Session.isV5) */
-  v5 = false;
+  /** the engines' own point tests, set from the session's profile (SessionProfile.enginePointTests) */
+  enginePointTests = true;
 
   /**
    * Is (x, y) one of `p`'s points? Before v5 the engines' own point tests
@@ -1175,7 +1175,7 @@ export class PropRuntime {
 
   /** a screen prop's point test: 1:1, the engines' own before v5 */
   private screenPointOf(p: PropInstance, f: ShpFrame, x0: number, y0: number, x: number, y: number): boolean {
-    if (!this.v5) return spriteCovers(f, x0, y0, x, y);
+    if (this.enginePointTests) return spriteCovers(f, x0, y0, x, y);
     let lx = x - x0;
     let ly = y - y0;
     if (lx < 0 || ly < 0 || lx >= f.width || ly >= f.height) return false;

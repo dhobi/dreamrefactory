@@ -1,3 +1,4 @@
+import { s16 } from "./point";
 import { CELL_UNITS } from "../df/set-v1-to-v4";
 import { becomeWorldProp } from "./props";
 import type { CricketOpcodes } from "./crickets";
@@ -52,8 +53,6 @@ export interface Ball {
   ty: number;
 }
 
-/** a WORD, as DF.EXE stores every field of the record */
-const s16 = (v: number): number => ((Math.trunc(v) << 16) >> 16);
 /** C's `/ 2` on a signed int: towards zero (cdq; sub eax, edx; sar eax, 1) */
 const half = (v: number): number => Math.trunc(v / 2);
 

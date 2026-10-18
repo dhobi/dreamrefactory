@@ -1,7 +1,8 @@
 import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { bearingV5, engineBearing } from "../geometry";
 import { BuiltinCtx } from "./context";
-import { byEngine, forEngine } from "./command-rules";
+import { byEngine } from "./command-rules";
+import { forEngine } from "../engine";
 import { packPoint, pointX, pointY, s16 } from "../point";
 import { decodeText, encodeText } from "../../df/text";
 import { latin1 } from "../../df/binary";

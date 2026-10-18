@@ -1,3 +1,5 @@
+import { forEngine, type EngineFlags } from "@dreamfactory/engine/runtime/engine";
+
 /**
  * Where the three engines' screens part ways, side by side: DF.EXE (Dust,
  * DreamFactory 1), TI.EXE (Titanic and Timelapse, 4) and RedJack.exe (RedJack,
@@ -7,10 +9,12 @@
  */
 export interface ScreenRules {
   // ---- input -----------------------------------------------------------------
-  /** the pass takes a queued press at its head (DF.EXE, see ScreenDirector.tick) */
+  /**
+   * The pass takes a queued press at its head (DF.EXE, see ScreenDirector.tick),
+   * so a gesture made while the BOOTFILE idle runs does not wait for it — TI.EXE
+   * (en 0x431c43) and RedJack.exe take it after the idle has returned.
+   */
   readonly inputAtPassHead: boolean;
-  /** a gesture made while the BOOTFILE idle runs waits for it (TI.EXE en 0x431c43, RedJack.exe); DF.EXE's pass takes it at its head */
-  readonly idleHoldsGestures: boolean;
   /**
    * The director takes the event queue itself, every frame, while nothing holds
    * the engine: RedJack.exe's main loop sends `idle ()` (event 9, 0x41e8c3) and
@@ -55,7 +59,6 @@ export interface ScreenRules {
 /** Titanic and Timelapse */
 const V4: ScreenRules = {
   inputAtPassHead: false,
-  idleHoldsGestures: true,
   directorTakesQueue: false,
   queuesBusyPresses: false,
   queuedClickKeepsMove: false,
@@ -78,7 +81,6 @@ const V4: ScreenRules = {
 const V1: ScreenRules = {
   ...V4,
   inputAtPassHead: true,
-  idleHoldsGestures: false,
   puppetGrab: true,
   dfMoves: true,
   jumpsAtOnce: true,
@@ -103,7 +105,6 @@ const V5: ScreenRules = {
 };
 
 /** the screen rules of the engine a session is running — asked each time, because it learns it as it boots */
-export function screenRules(engine: { readonly isV1: boolean; readonly isV5: boolean }): ScreenRules {
-  if (engine.isV5) return V5;
-  return engine.isV1 ? V1 : V4;
+export function screenRules(engine: EngineFlags): ScreenRules {
+  return forEngine(engine, { v4: V4, v1: V1, v5: V5 });
 }

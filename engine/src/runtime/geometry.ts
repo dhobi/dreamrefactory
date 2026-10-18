@@ -8,6 +8,8 @@
  * collected here so both depend only on this neutral module.
  */
 
+import { s16 } from "./point";
+
 /**
  * World→screen projection camera, built by the viewer. Angles are in 1/256
  * turns; the camera sits at the scene's map position with its height from the
@@ -205,9 +207,6 @@ export function engineBearing(dx: number, dy: number): number {
   if (b === a) return 0x20;
   return b < a ? (0x40 - look(b, a)) & 0xff : look(a, b) & 0xff;
 }
-
-/** sign-extend the low 16 bits (point.ts has the same; geometry keeps no import of it) */
-const s16 = (v: number): number => (v << 16) >> 16;
 
 /**
  * DreamFactory 5's bearing, in 2^24ths of a turn rather than 256ths — RedJack.exe

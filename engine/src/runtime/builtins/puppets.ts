@@ -1,7 +1,6 @@
 import { ScriptError, toNum, toStr, truthy } from "../interp";
 import { decodeText } from "../../df/text";
 import { BuiltinCtx } from "./context";
-import { commandRules } from "./command-rules";
 
 /**
  * Puppet (PUP conversation) commands: open/close, speak/clear, choice bevels,
@@ -37,7 +36,7 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
   );
   // v5 honours the argument as a wait in ticks (PuppetController.puppetEvent)
   r("puppetevent", (_i, [timeout]) =>
-    session.puppetCtrl.puppetEvent(commandRules(session).puppetEventWaits && timeout !== undefined ? Math.trunc(toNum(timeout)) : -1));
+    session.puppetCtrl.puppetEvent(session.profile.puppetEventWaits && timeout !== undefined ? Math.trunc(toNum(timeout)) : -1));
   r("countpuppets", () => session.puppet?.scripts.size ?? 0);
   r("indextopuppet", (_i, [idx]) => {
     return [...(session.puppet?.scripts.keys() ?? [])][toNum(idx ?? 0) - 1] ?? "";

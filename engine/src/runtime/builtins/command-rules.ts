@@ -1,5 +1,6 @@
 import type { Builtin, Interpreter } from "../interp";
 import { isDfEffect, isExeEffect } from "../visual-effects";
+import { forEngine, type EngineFlags, type PerEngine } from "../engine";
 
 /**
  * Where the three engines' commands part ways, side by side: DF.EXE (Dust,
@@ -14,12 +15,6 @@ export interface CommandRules {
   readonly propInstanceCopiesRecord: boolean;
   /** a world prop placed without a `propscale` draws at its authored size (becomeWorldProp) */
   readonly worldPropsDrawAuthored: boolean;
-  /**
-   * The bits of an actor's angle: a turn in 256 parts, or in 2²⁴ in
-   * DreamFactory 5 (engine/src/runtime/maze.ts; RedJack.exe 0x4288fc keeps
-   * `propdeg` to the same 24 bits).
-   */
-  readonly angleMask: number;
   /** a star carries a facing that placing on it takes; DreamFactory 5's is a point and no more (0x428430) */
   readonly starsFace: boolean;
   /** `actorstar` drops the actor's walk before it looks the star up (RedJack.exe) */
@@ -34,8 +29,6 @@ export interface CommandRules {
   readonly sceneWordsFromSet: boolean;
   /** the directions `currentscene` knows (DF.EXE 0x40ef44 has a fourth) */
   readonly directions: ReadonlySet<string>;
-  /** `paintingscript`'s error with no set open */
-  readonly paintingScriptNoSet: number;
   /**
    * A polled command answers at once, and only the ask a bare poll loop makes —
    * the same call again in the same tick — waits a frame (RepeatedAsk). RedJack.exe's
@@ -43,18 +36,10 @@ export interface CommandRules {
    * fights ask them from loops that run inside a pass.
    */
   readonly pollsAnswerAtOnce: boolean;
-  /** what `dualsound` plays as: DF.EXE's is a call to `singlesound` (0x42a250) */
-  readonly dualSound: "single" | "dual";
-  /** `sounddone` asks the effect channels (DF.EXE 0x429c00, TI.EXE 0x424cc0), not the one sound */
-  readonly soundDoneAsksChannels: boolean;
-  /** `savegame` refuses with a conversation open or on a road (RedJack.exe 0x43c9b6, 0x43c9e9) */
-  readonly refusesBusySaves: boolean;
   /** `sendtopost` and `sendtoserver` are DF.EXE's grid questions, `rowcoltoscene` and `scenebuild` */
   readonly postAndServerAreGrid: boolean;
   /** `pointinprop` tests the drawn frame's box (RedJack.exe); TI.EXE tests the box and then the pixel (0x417120) */
   readonly pointInPropIsBox: boolean;
-  /** `puppetevent (n)` waits n ticks (PuppetController.puppetEvent); before DreamFactory 5 it takes no argument */
-  readonly puppetEventWaits: boolean;
   readonly effects: {
     /**
      * Effect names outside the engine's band, error 0xe before anything else:
@@ -80,7 +65,6 @@ const V4: CommandRules = {
   actorInstanceCopiesRecord: false,
   propInstanceCopiesRecord: false,
   worldPropsDrawAuthored: false,
-  angleMask: 0xff,
   starsFace: true,
   starStopsWalk: false,
   deleteClosesActor: false,
@@ -88,13 +72,8 @@ const V4: CommandRules = {
   pathWalksNeedRoute: false,
   sceneWordsFromSet: false,
   directions: TI_DIRECTIONS,
-  paintingScriptNoSet: 0xb,
   pollsAnswerAtOnce: false,
-  dualSound: "dual",
-  soundDoneAsksChannels: true,
-  refusesBusySaves: false,
   postAndServerAreGrid: false,
-  puppetEventWaits: false,
   pointInPropIsBox: false,
   effects: { outOfBand: new Set(), drawn: isExeEffect, draws: "ti", halfLeftDissolves: false },
 };
@@ -106,7 +85,6 @@ const V1: CommandRules = {
   worldPropsDrawAuthored: true,
   defersWalksOffSet: false,
   sceneWordsFromSet: true,
-  dualSound: "single",
   postAndServerAreGrid: true,
   directions: new Set([...TI_DIRECTIONS, "backwards"]),
   effects: {
@@ -121,47 +99,22 @@ const V1: CommandRules = {
 const V5: CommandRules = {
   ...V4,
   propInstanceCopiesRecord: true,
-  angleMask: 0xffffff,
   starsFace: false,
   starStopsWalk: true,
   deleteClosesActor: true,
   pathWalksNeedRoute: true,
-  paintingScriptNoSet: 0x28,
   pollsAnswerAtOnce: true,
-  soundDoneAsksChannels: false,
-  refusesBusySaves: true,
-  puppetEventWaits: true,
   pointInPropIsBox: true,
   effects: { ...V4.effects, outOfBand: new Set(["turnhalfright"]), halfLeftDissolves: true },
 };
 
-/** what a session says about its engine — asked each time, because it learns it as it boots */
-interface Engine {
-  readonly isV1: boolean;
-  readonly isV5: boolean;
-}
-
 /** the command rules of the engine a session is running */
-export function commandRules(engine: Engine): CommandRules {
-  if (engine.isV5) return V5;
-  return engine.isV1 ? V1 : V4;
-}
-
-/** one thing per engine: Titanic's, and Dust's or RedJack's where theirs differs */
-export interface PerEngine<T> {
-  readonly v4: T;
-  readonly v1?: T;
-  readonly v5?: T;
-}
-
-/** this engine's own of {@link PerEngine} */
-export function forEngine<T>(engine: Engine, each: PerEngine<T>): T {
-  if (engine.isV5) return each.v5 ?? each.v4;
-  return (engine.isV1 ? each.v1 : undefined) ?? each.v4;
+export function commandRules(engine: EngineFlags): CommandRules {
+  return forEngine(engine, { v4: V4, v1: V1, v5: V5 });
 }
 
 /** a command whose whole body differs by engine, picked at each call */
-export function byEngine(engine: Engine, each: PerEngine<Builtin>): Builtin {
+export function byEngine(engine: EngineFlags, each: PerEngine<Builtin>): Builtin {
   return (i, args, call, frame) => forEngine(engine, each)(i, args, call, frame);
 }
 
@@ -174,13 +127,13 @@ export function unknownCommand(name: string): Builtin {
 }
 
 /** narrow a command already registered to DreamFactory 5: elsewhere it stays the unknown command it always was */
-export function onlyOnV5(engine: Engine, interp: Interpreter, name: string): void {
+export function onlyOnV5(engine: EngineFlags, interp: Interpreter, name: string): void {
   const v5 = interp.builtins.get(name)!;
   interp.builtins.set(name, byEngine(engine, { v4: unknownCommand(name), v5 }));
 }
 
 /** give a command already registered DreamFactory 5's own body, which may fall back to the older one it is handed */
-export function overrideOnV5(engine: Engine, interp: Interpreter, name: string, v5: (v4: Builtin) => Builtin): void {
+export function overrideOnV5(engine: EngineFlags, interp: Interpreter, name: string, v5: (v4: Builtin) => Builtin): void {
   const v4 = interp.builtins.get(name)!;
   interp.builtins.set(name, byEngine(engine, { v4, v5: v5(v4) }));
 }

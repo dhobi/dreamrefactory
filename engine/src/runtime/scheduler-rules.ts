@@ -1,5 +1,7 @@
+import { s16 } from "./point";
 import { bearingV5, engineBearing } from "./geometry";
 import { logic, type Logic } from "./interp";
+import { forEngine, type EngineFlags } from "./engine";
 
 /**
  * Where the scheduler's three engines part ways, side by side: DF.EXE (Dust,
@@ -55,8 +57,6 @@ export interface SchedulerRules {
   readonly endAnimsOwed: boolean;
 }
 
-/** sign-extend the low 16 bits — the walk records hold their positions in words */
-export const s16 = (v: number): number => (v << 16) >> 16;
 
 /** Titanic: the scheduler as TI.EXE runs it, the one the others are told apart from */
 const V4: SchedulerRules = {
@@ -108,7 +108,6 @@ const V5: SchedulerRules = {
  * kept, because a session learns which it is as it boots: v5 from the BOOTFILE,
  * v1 from the set it opens.
  */
-export function schedulerRules(engine: { readonly isV1: boolean; readonly isV5: boolean }): SchedulerRules {
-  if (engine.isV5) return V5;
-  return engine.isV1 ? V1 : V4;
+export function schedulerRules(engine: EngineFlags): SchedulerRules {
+  return forEngine(engine, { v4: V4, v1: V1, v5: V5 });
 }

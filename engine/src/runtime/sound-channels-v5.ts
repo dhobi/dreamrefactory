@@ -25,4 +25,9 @@ export class SoundChannelsV5 extends SoundChannels {
     this.board.channels[overlap ? 1 : 0] = { name: key, handle };
     this.session.captionClip(key, handle); // #50
   }
+
+  /** `sounddone ()` asks the sound channel, not the effect pair (RedJack.exe's reads state, no wait) */
+  done(): boolean {
+    return this.session.audio.isDone("sound");
+  }
 }

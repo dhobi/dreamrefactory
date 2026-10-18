@@ -492,8 +492,8 @@ export class ActorRuntime {
     return pose?.steps[0]?.[0]?.refScale || 96;
   }
 
-  /** a DreamFactory 5 game: its point tests keep their own rules (Session.isV5) */
-  v5 = false;
+  /** the engines' own point tests, set from the session's profile (SessionProfile.enginePointTests) */
+  enginePointTests = true;
 
   /**
    * Is (x, y) one of the opaque points of an actor drawn in rect `r`? Before v5
@@ -509,7 +509,7 @@ export class ActorRuntime {
     world: boolean,
   ): boolean {
     if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) return false;
-    if (!this.v5) {
+    if (this.enginePointTests) {
       if (!world) return spriteCovers(r.f, r.x, r.y, x, y);
       if ("scaled" in r) return scaledBoxCovers(r.f, r.x, r.y, r.w, r.h, x, y);
     }

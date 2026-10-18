@@ -2,13 +2,11 @@ import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { pauseDepthOf } from "../pause";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { commandRules, onlyOnV5 } from "./command-rules";
-import { packPoint } from "../point";
+import { packPoint, s16 } from "../point";
+import { schedulerRules } from "../scheduler-rules";
 import { RIGHTTURNS, isqrt, readFrameRegister, readStarPath } from "../../df/set";
 import { foldAscii } from "../caseless";
 import type { ActorInstance } from "../actors";
-
-/** a 16-bit word, as the engines keep coordinates */
-const s16 = (v: number): number => (v << 16) >> 16;
 
 /**
  * What `actorstar` reports while a straight-line walk to a named star is running
@@ -473,7 +471,8 @@ function registerActorState(ctx: BuiltinCtx): void {
     if (star) a.worldSpace = true; // as for actorxyz: a real placement in the world
   });
   acc("actordeg", 0, (a) => a.deg, (a, v) => {
-    a.deg = toNum(v) & commandRules(session).angleMask;
+    // a whole turn: 256 parts, or 2²⁴ in DreamFactory 5 (engine/src/runtime/maze.ts)
+    a.deg = toNum(v) & schedulerRules(session).turnWrap;
   });
   acc("actorpose", "", (a) => a.poseName, (a, v) => {
     a.poseName = toStr(v).toLowerCase();

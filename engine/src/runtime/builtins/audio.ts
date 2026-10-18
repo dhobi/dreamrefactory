@@ -1,6 +1,5 @@
 import { Value, toNum, toStr } from "../interp";
 import { BuiltinCtx } from "./context";
-import { commandRules } from "./command-rules";
 import type { SoundRule } from "../sound-channels";
 
 /**
@@ -55,7 +54,7 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   r("singlesound", (_i, [n]) => playNamed(n, "sound", false, "single"));
   r("multiplesound", (_i, [n]) => playNamed(n, "sound", true, "multiple"));
   r("bothsound", (_i, [n]) => playNamed(n, "sound", false, "both"));
-  r("dualsound", (_i, [n]) => playNamed(n, "sound", true, commandRules(session).dualSound));
+  r("dualsound", (_i, [n]) => playNamed(n, "sound", true, "dual"));
   // haltsound(n): the channel, loops on it included — TAOOT's crank cleanup
   // relies on it to end the gramophone hiss. DreamFactory 4 reads n (1, 2, 3).
   r("haltsound", (_i, [n]) => session.scheduler.sounds.halt(n === undefined ? undefined : toNum(n)));
@@ -80,9 +79,7 @@ export function registerAudioBuiltins(ctx: BuiltinCtx): void {
   // is always done, so the wait resolves at once and stays deterministic).
   const audioDonePoll = (channel: "sound" | "voice") => async (_i: unknown, _a: unknown, c: object) => {
     await ctx.yieldFrame(c);
-    // v1: both effect channels idle (0x429c00)
-    // ...and DreamFactory 4's the same (TI.EXE 0x424cc0: channels 1 and 2 empty)
-    if (channel === "sound" && commandRules(session).soundDoneAsksChannels) return session.scheduler.sounds.allIdle() ? 1 : 0;
+    if (channel === "sound") return session.scheduler.sounds.done() ? 1 : 0;
     return session.audio.isDone(channel) ? 1 : 0;
   };
   r("sounddone", audioDonePoll("sound"));
