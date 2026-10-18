@@ -115,21 +115,25 @@ function registerStrings(ctx: BuiltinCtx): void {
     }
     const sep = toStr(delim);
     const at = Math.max(1, i || 1) - 1;
-    if (interp.classic) {
+    return forEngine(session, {
       // DF.EXE 0x42d710 appends the separator before it counts (0x42d7bb), so
       // "" is one empty word and "a,b," three; a word past the last one is no
       // replacement at all and the answer is "" (0x42d823 -> 0x42d96e). TI.EXE
       // 0x42b7a3 and tl.exe the same. The appended separator is taken off
       // again (0x42d839) — a replaced last word keeps none.
-      const parts = str.split(sep);
-      if (at >= parts.length) return "";
-      parts[at] = w;
-      return parts.join(sep);
-    }
-    const parts = str === "" ? [] : str.split(sep);
-    while (parts.length <= at) parts.push("");
-    parts[at] = w;
-    return parts.join(sep);
+      v4: () => {
+        const parts = str.split(sep);
+        if (at >= parts.length) return "";
+        parts[at] = w;
+        return parts.join(sep);
+      },
+      v5: () => {
+        const parts = str === "" ? [] : str.split(sep);
+        while (parts.length <= at) parts.push("");
+        parts[at] = w;
+        return parts.join(sep);
+      },
+    })();
   });
   r("stringlength", (_i, [s]) => toStr(s ?? "").length);
   /**
@@ -157,7 +161,7 @@ function registerStrings(ctx: BuiltinCtx): void {
    * the same way and the comparison is between them.
    *
    * Neither half creates anything before DreamFactory 5: a name that is neither
-   * a local nor a global is error 9 both ways (see the classic arm below).
+   * a local nor a global is error 9 both ways (see the v4 arm below).
    * Dust's `variable (me, 1)` reaches the bounty globals `extra.cst`'s
    * setupactor declares (`global bounty1, … bounty5`), and Titanic's computed
    * names are `who @ "…"` pairs in blkjack.stg, which the stage declares (its
@@ -165,13 +169,13 @@ function registerStrings(ctx: BuiltinCtx): void {
    * DreamFactory 5 keeps the port's old answers: 0 for a miss, and a setter that
    * makes a global.
    */
-  r("variable", (i_, [name, val], _call, frame) => {
+  r("variable", byEngine(session, {
     // Before DreamFactory 5 the name is a string or error 0xe, and a name that is
     // neither a local nor a global is error 9 both ways — the setter creates
     // nothing (TI.EXE getter 0x42b2d0, setter 0x415b20: 0x431de0, then 0x449fe0 on
     // the locals and on the globals; DF.EXE 0x42d350 / 0x420eb0 the same). Dust's
     // crowd counter is safe: extra.cst declares its five bounty globals first.
-    if (i_.classic) {
+    v4: (_i, [name, val], _call, frame) => {
       if (typeof name !== "string") throw new ScriptError(0xe, `variable: the name must be a string, got ${String(name)}`);
       const local = frame?.locals.has(name);
       if (!local && !interp.globals.has(name)) throw new ScriptError(9, `variable: no such variable ${name}`);
@@ -179,13 +183,15 @@ function registerStrings(ctx: BuiltinCtx): void {
       if (local) frame!.locals.set(name, val);
       else interp.setGlobal(name, val);
       return 0;
-    }
-    const key = toStr(name ?? "");
-    if (val === undefined) return frame ? interp.getVar(key, frame) : interp.globals.get(key) ?? 0;
-    if (frame?.locals.has(key)) frame.locals.set(key, val);
-    else interp.setGlobal(key, val);
-    return 0;
-  });
+    },
+    v5: (_i, [name, val], _call, frame) => {
+      const key = toStr(name ?? "");
+      if (val === undefined) return frame ? interp.getVar(key, frame) : interp.globals.get(key) ?? 0;
+      if (frame?.locals.has(key)) frame.locals.set(key, val);
+      else interp.setGlobal(key, val);
+      return 0;
+    },
+  }));
 
   r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
 }
@@ -281,15 +287,17 @@ function registerGeometry(ctx: BuiltinCtx): void {
   // shows. By 0 the engines divide anyway (TI.EXE 0x429b4d, tl.exe 0x43928d):
   // the CPU faults and Windows ends the game — session.engineFault.
   // DreamFactory 5 keeps the non-negative modulo it had.
-  r("calcmod", (i_, [a, b]) => {
-    const m = toNum(b ?? 0);
-    if (m === 0) {
-      if (!i_.classic) return 0;
-      return session.engineFault({ kind: "divide error", where: `calcmod(${toNum(a ?? 0)}, 0)` }).then(() => 0);
-    }
-    if (i_.classic) return toNum(a ?? 0) % m | 0;
-    return ((toNum(a ?? 0) % m) + m) % m;
-  });
+  r("calcmod", byEngine(session, {
+    v4: (_i, [a, b]) => {
+      const m = toNum(b ?? 0);
+      if (m === 0) return session.engineFault({ kind: "divide error", where: `calcmod(${toNum(a ?? 0)}, 0)` }).then(() => 0);
+      return toNum(a ?? 0) % m | 0;
+    },
+    v5: (_i, [a, b]) => {
+      const m = toNum(b ?? 0);
+      return m === 0 ? 0 : ((toNum(a ?? 0) % m) + m) % m;
+    },
+  }));
   // primitives behind the cast library's distance/facing helpers (TAOOT's
   // realdist()):
   // playerxyz(4) = the camera's packed ground position, calcdist between

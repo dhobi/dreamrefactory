@@ -43,7 +43,10 @@ vi.mock("@dreamfactory/engine/df/savegame-patch", async (actual) => ({
   },
 }));
 
-const { loadTemplates, saveTemplateFor, seedSaves } = await import("../../src/save-seed");
+const { TAOOT_SAVES, loadTemplates, saveTemplateFor, seedSaves } = await import("../../src/save-seed");
+const { useSaveKind } = await import("@dreamfactory/engine/web/save-store");
+// what the play page declares at boot: the store has no kind of its own
+useSaveKind(TAOOT_SAVES);
 
 /** a manifest with both languages' shipped saves, as gamefiles.json lists them */
 const MANIFEST = [

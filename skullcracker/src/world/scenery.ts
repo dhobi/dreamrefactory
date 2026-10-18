@@ -16,6 +16,7 @@ import { roll, hereOf, spawnedHere, groundAt, surfaceUnder } from "./rooms";
 import { rallyFall, hurtBox, strikeOf, stats } from "./blows";
 import { takeHealth } from "./hurt";
 import { switchesHere, nestsHere } from "./fixtures";
+import { overlaps } from "./box";
 
 /**
  * How long this level gives you, and it was in the books all along.
@@ -747,13 +748,7 @@ export function feedTheGang(): void {
       const cel = dripStrike(d);
       if (!cel) return false;
       const b = strikeOf(cel, d.x, d.y, 1);
-      return (
-        !!b &&
-        b.right > box.left &&
-        b.left < box.right &&
-        b.bottom > box.top &&
-        b.top < box.bottom
-      );
+      return !!b && overlaps(b, box);
     });
     if (!fed) continue;
     // clamped to `0x40e300` of the starting figure — the difficulty-scaled one

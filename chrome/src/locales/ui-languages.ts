@@ -63,6 +63,3 @@ export const UI_LANG_STORAGE_KEY = "taoot.uilang";
 
 export const isUiLanguage = (code: string): boolean =>
   UI_LANGUAGES.some((l) => l.code === code.toLowerCase());
-
-export const uiLanguageName = (code: string): string =>
-  UI_LANGUAGES.find((l) => l.code === code.toLowerCase())?.name ?? code;

@@ -6,6 +6,7 @@
  * IDCANCEL (2), which none of these procedures handles, so it does nothing,
  * as it did.
  */
+import { askName, editKeyFields } from "@dreamfactory/engine/web/df0-dialogs";
 import { openWindowDialog } from "@dreamfactory/engine/web/window-dialog";
 import { EDIT_KEYS, HIGH_SCORE, PAUSE, QUIT, SOUND } from "./dialogs.gen";
 
@@ -13,16 +14,7 @@ const OK = 101;
 
 /** DLOG2 (0x4227c1): "You have a high score! Enter your name:" — OK the field (empty is none), Cancel none */
 export function askHighScoreName(frame: HTMLElement, done: (name: string | null) => void): void {
-  const NAME = 104;
-  const CANCEL = 102;
-  openWindowDialog(frame, HIGH_SCORE, {
-    onCommand(id, d) {
-      if (id !== OK && id !== CANCEL) return;
-      const name = id === OK ? d.text(NAME) : "";
-      d.close();
-      done(name || null);
-    },
-  });
+  askName(frame, HIGH_SCORE, done);
 }
 
 /** DLOG6 (0x422bda, its procedure 0x422bfd): OK true, Cancel false */
@@ -79,16 +71,5 @@ const FIELDS = [108, 109, 110, 111, 112, 113];
  * and leaves the dialog up (0x422ae0), Cancel keeps the table as it was
  */
 export function editKeys(frame: HTMLElement, fields: string[], defaults: string[], done: (fields: string[] | null) => void): void {
-  const DEFAULT = 102;
-  const CANCEL = 103;
-  const dlg = openWindowDialog(frame, EDIT_KEYS, {
-    onCommand(id, d) {
-      if (id === DEFAULT) return FIELDS.forEach((f, i) => d.setText(f, defaults[i]));
-      if (id !== OK && id !== CANCEL) return;
-      const out = FIELDS.map((f) => d.text(f));
-      d.close();
-      done(id === OK ? out : null);
-    },
-  });
-  FIELDS.forEach((f, i) => dlg.setText(f, fields[i]));
+  editKeyFields(frame, EDIT_KEYS, FIELDS, fields, defaults, done);
 }

@@ -52,6 +52,7 @@ import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 import "../pad.css";
 import { MOBILE } from "@dreamfactory/engine/web/mobile";
 import { SkullFiles } from "../files";
@@ -68,8 +69,8 @@ import { keyName } from "../prefs";
 import { NAME_PROMPT, loadBoards, offerScore, saveBoards } from "../scores";
 import { CEL, paintHud } from "../hud";
 import {
-  BLOW_CODES,
-  CHARACTER,
+  blowCodes,
+  character,
   ENGINE_HZ,
   INVENTED,
   KEYS,
@@ -215,6 +216,7 @@ import {
   wormsHere,
 } from "../world";
 import type { Cheat } from "../cheats";
+import { overlaps } from "../world/box";
 
 
 /**
@@ -635,7 +637,7 @@ addEventListener("keydown", (e) => {
   // level is reloaded under it because the two of them are different sizes and
   // the pose on screen belongs to the one who is leaving
   else if (e.shiftKey && e.key === "C") {
-    useCharacter(CHARACTER === 0 ? 1 : 0);
+    useCharacter(character === 0 ? 1 : 0);
     void loadLevel(levelIndex);
   }
   // Shift+M is this page's own, and it is the only key here that is: the
@@ -675,12 +677,8 @@ canvas.addEventListener("pointerdown", (e) => {
   if (!film) return;
   // the panel is three buttons and a tap on one of them is the answer
   if (filmIsPanel) {
-    const r = canvas.getBoundingClientRect();
-    film.click(
-      Math.round(((e.clientX - r.left) / r.width) * W),
-      Math.round(((e.clientY - r.top) / r.height) * H),
-      performance.now(),
-    );
+    const { x, y } = screenPoint(e, canvas.getBoundingClientRect(), { width: W, height: H });
+    film.click(x, y, performance.now());
     return;
   }
   film.skip();
@@ -1575,7 +1573,7 @@ function sayPlayer(): string {
   else if (p.moving) state = ` · ${p.running ? "RUNNING" : "walking"} ${Math.abs(p.vx) * ENGINE_HZ}px/s`;
   const celNow = ` · cel ${lastCel}`;
   // which of the two players `0x46b1a8` is on — Shift+C is action 11
-  const who = ` · char ${CHARACTER}`;
+  const who = ` · char ${character}`;
   // the view's own corner — `[0x4a8970]`, which is what a probe has to read to
   // say anything about what is on screen
   const cam = ` · view ${Math.round(view.x)},${Math.round(view.y)}`;
@@ -1611,11 +1609,7 @@ function sayGoal(): string {
   const room = p.room;
   const here = solids();
   const box = playerBox();
-  const inside = (e: SbkEntity): boolean =>
-    box.right > e.left &&
-    box.left < e.right &&
-    box.bottom > e.top &&
-    box.top < e.bottom;
+  const inside = (e: SbkEntity): boolean => overlaps(box, e);
   const atDoor =
     room?.exits.some((e) => inside(e as unknown as SbkEntity)) ?? false;
   const alive = aliveNow();
@@ -1878,11 +1872,7 @@ function sayPickupTouch(): string {
   )[0];
   if (!nearPick || !player) return "";
   const box = playerBox();
-  const rect =
-    box.right > nearPick.left &&
-    box.left < nearPick.right &&
-    box.bottom > nearPick.top &&
-    box.top < nearPick.bottom;
+  const rect = overlaps(box, nearPick);
   const kind = PICKUP.kinds[nearPick.code];
   const loc = player.byId.get(kind.cels[loopIndex(kind, nearPick.clock)]);
   const pf = loc === undefined ? null : playerFrame(loc);
@@ -1960,7 +1950,7 @@ function saySlide(): string {
  * needs to see the system at all
  */
 function sayBlows(): string {
-  const reacting = Object.values(BLOW_CODES).find((r) => r.act === p.act);
+  const reacting = Object.values(blowCodes).find((r) => r.act === p.act);
   const code =
     (reacting
       ? ` · <b>code ${reacting.code}</b> ${reacting.act} frame ${Math.floor(p.actClock)}`

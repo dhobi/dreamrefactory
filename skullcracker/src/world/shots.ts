@@ -7,7 +7,7 @@ import { SbkCel } from "@dreamfactory/engine/df/sbk";
 import { TICK_SCALE } from "../brains/kit";
 import { CROW, burnCrow, crowCel, BUSH, Bush } from "../props";
 import { BOLT, FLARE, GUN_CODES, STREAMS, type Stream } from "../guns";
-import { p, held, level, sound, CHARACTER } from "./state";
+import { p, held, level, sound, character } from "./state";
 import { dragged, PLAYER_GRAVITY } from "./motion";
 import { celRec, celOf } from "./cels";
 import { hereOf, roll, surfaceUnder } from "./rooms";
@@ -16,6 +16,7 @@ import { stats, takesBlows, hurtBox } from "./blows";
 import { regionFloorUnder } from "./scenery";
 import { cans, BURN_CODE, casts, castCel, castHurtBox, strikeCast, lightFlame } from "./casts";
 import { strikeFoe } from "./foehit";
+import { celBoxAt, overlaps } from "./box";
 
 /**
  * INV, one engine frame of it — the button that puts the gun away and gets it
@@ -103,7 +104,7 @@ export function takeGun(): void {
     stats.health = Math.min(stats.maxHealth, stats.health + 150);
     // at the player's point — 0xa for character 0 (`0x428893`), 8 for
     // character 1 (`0x443319`), both through `0x40ef30`
-    sound?.own(CHARACTER === 1 ? 8 : 0xa, p.x, p.y);
+    sound?.own(character === 1 ? 8 : 0xa, p.x, p.y);
     inv.drawn = false; // `0x42887c` ends on the unarmed idle too
     return;
   }
@@ -208,12 +209,7 @@ export function stepStreams(): void {
       const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
-      if (!(
-        box.right > hurt.left &&
-        box.left < hurt.right &&
-        box.bottom > hurt.top &&
-        box.top < hurt.bottom
-      ))
+      if (!overlaps(box, hurt))
         continue;
       // `0x42f910`: the cel's OWN pair scaled by the object's strength, and the
       // magnitude of that is the damage. It is small on purpose — the soaker's
@@ -258,12 +254,7 @@ export function stepStreams(): void {
         const art = celRec(lvl.sbk, castCel(c));
         if (!art) continue;
         const hurt = castHurtBox(c, art);
-        if (!(
-          box.right > hurt.left &&
-          box.left < hurt.right &&
-          box.bottom > hurt.top &&
-          box.top < hurt.bottom
-        ))
+        if (!overlaps(box, hurt))
           continue;
         strikeCast(c, BURN_CODE);
       }
@@ -286,18 +277,8 @@ export function stepStreams(): void {
         // its body box, the way `landHits` takes it — the tumble has none
         const art = celRec(lvl.sbk, crowCel(c));
         if (!art?.body) continue;
-        const hurt = {
-          left: c.x + art.body.x0,
-          right: c.x + art.body.x1,
-          top: c.y + art.body.y0,
-          bottom: c.y + art.body.y1,
-        };
-        if (!(
-          box.right > hurt.left &&
-          box.left < hurt.right &&
-          box.bottom > hurt.top &&
-          box.top < hurt.bottom
-        ))
+        const hurt = celBoxAt(c.x, c.y, art.body);
+        if (!overlaps(box, hurt))
           continue;
         // woods 17 is the fall's own sound and `0x451e5a` plays it under the
         // state, so it goes with entering it rather than with the blow
@@ -335,12 +316,7 @@ export function streamBox(
     q.facing < 0
       ? { ...cel.strike, x0: -cel.strike.x1, x1: -cel.strike.x0 }
       : cel.strike;
-  return {
-    left: q.x + b.x0,
-    right: q.x + b.x1,
-    top: q.y + b.y0,
-    bottom: q.y + b.y1,
-  };
+  return celBoxAt(q.x, q.y, b);
 }
 
 /**

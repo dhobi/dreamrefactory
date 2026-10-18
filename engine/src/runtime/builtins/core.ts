@@ -7,8 +7,13 @@
  */
 import { Interpreter, ScriptError, toNum, toStr } from "../interp";
 import { foldAscii } from "../caseless";
+import type { EngineFlags } from "../engine";
+import { byEngine, commandRules } from "./command-rules";
 
-export function registerCoreBuiltins(interp: Interpreter, rng: () => number = Math.random): void {
+/** a bare interpreter's engine: Titanic's */
+const TI_EXE: EngineFlags = { isV1: false, isV5: false };
+
+export function registerCoreBuiltins(interp: Interpreter, rng: () => number = Math.random, engine: EngineFlags = TI_EXE): void {
   const r = interp.register.bind(interp);
   /**
    * random(n): 1..n. The DISTRIBUTION is the engines'; the draws are this port's
@@ -22,16 +27,17 @@ export function registerCoreBuiltins(interp: Interpreter, rng: () => number = Ma
    * tick) is not reproduced, so its modulo would buy no fidelity, and it would
    * move every seeded draw a published route was calculated against.
    */
-  r("random", (i_, [n]) => {
+  r("random", (_i, [n]) => {
     const max = toNum(n ?? 0);
-    if (i_.classic && i_.tableVersion() !== 1 && max <= 0) throw new ScriptError(0xa, `random(${max})`);
+    if (commandRules(engine).randomRefusesNonPositive && max <= 0) throw new ScriptError(0xa, `random(${max})`);
     return Math.trunc(rng() * max) + 1;
   });
   // the integer root of the argument as UNSIGNED, low word (TI.EXE 0x429a80 ->
   // 0x436100, DF.EXE 0x42bc20 -> 0x430650): sqrt(-1) is 65535, not NaN
-  r("sqrt", (i_, [n]) =>
-    i_.classic ? Math.floor(Math.sqrt(toNum(n ?? 0) >>> 0)) & 0xffff : Math.floor(Math.sqrt(toNum(n ?? 0))),
-  );
+  r("sqrt", byEngine(engine, {
+    v4: (_i, [n]) => Math.floor(Math.sqrt(toNum(n ?? 0) >>> 0)) & 0xffff,
+    v5: (_i, [n]) => Math.floor(Math.sqrt(toNum(n ?? 0))),
+  }));
   r("stringtonum", (_i, [s]) => toNum(s ?? 0));
   // substring(haystack, needle): 1-based FIND, -1 when absent — not a slice.
   // Every TAOOT corpus call compares the result (`substring(propview(me),"idle")>=0`,
@@ -41,13 +47,16 @@ export function registerCoreBuiltins(interp: Interpreter, rng: () => number = Ma
   // An EMPTY needle finds nothing: DF.EXE starts the answer at -1 and skips the
   // search when the needle's length byte is 0 (0x42d627); TI.EXE 0x42b5a7 and
   // tl.exe 0x43ace7 the same.
-  r("substring", (i_, [s, needle]) => {
-    if (i_.classic && toStr(needle ?? "") === "") return -1;
-    // folded A-Z only before DreamFactory 5 (caseless.ts foldAscii)
-    const fold = i_.classic ? foldAscii : (x: string) => x.toLowerCase();
-    const i = fold(toStr(s ?? "")).indexOf(fold(toStr(needle ?? "")));
+  // Folded A-Z only before DreamFactory 5 (caseless.ts foldAscii), and there
+  // only an empty needle misses.
+  const find = (fold: (x: string) => string, s: string, needle: string): number => {
+    const i = fold(s).indexOf(fold(needle));
     return i < 0 ? -1 : i + 1;
-  });
+  };
+  r("substring", byEngine(engine, {
+    v4: (_i, [s, needle]) => (toStr(needle ?? "") === "" ? -1 : find(foldAscii, toStr(s ?? ""), toStr(needle ?? ""))),
+    v5: (_i, [s, needle]) => find((x) => x.toLowerCase(), toStr(s ?? ""), toStr(needle ?? "")),
+  }));
   r("true", (i_) => i_.bool(true));
   r("false", (i_) => i_.bool(false));
 }

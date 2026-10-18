@@ -19,6 +19,7 @@ import { takeHealth } from "./hurt";
 import { film, died } from "./death";
 import { switchSurgesOn, playerSprite } from "./fixtures";
 import { lightFlame, castAt, BOGGS_THROW } from "./casts";
+import { celBoxAt, type Box } from "./box";
 
 /**
  * ...the alarms, which sweep and sound while the vertical fan carrying their
@@ -1343,14 +1344,9 @@ export function strikeMachine(b: Boggs, i: number, damage: number, bolted = fals
 export function machineBox(
   b: Boggs,
   i: number,
-): { left: number; right: number; top: number; bottom: number } | null {
+): Box | null {
   const art = celRec(level?.sbk, machineCel(b, i));
   if (!art?.body) return null;
   const m = b.machines[i];
-  return {
-    left: m.x + art.body.x0,
-    right: m.x + art.body.x1,
-    top: m.y + art.body.y0,
-    bottom: m.y + art.body.y1,
-  };
+  return celBoxAt(m.x, m.y, art.body);
 }

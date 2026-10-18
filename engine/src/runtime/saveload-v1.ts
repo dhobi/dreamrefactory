@@ -47,7 +47,7 @@ import { detectVersion } from "../df/version";
 import type { SavedActor, SavedProp } from "../df/savegame";
 import type { GameSession } from "./session";
 import type { PropInstance } from "./props";
-import { resetCast, restoreActors, restoreProps, restoredNumber, saveBase, scriptGlobals } from "./saveload";
+import { resetCast, restoreActors, restoreProps, replaceGlobals, saveBase, scriptGlobals } from "./saveload";
 
 /** the flat the game plays under — the in-game panel, not the menu you saved from */
 const PLAY_FLAT = "mainpanel";
@@ -395,13 +395,7 @@ function restoreUnroomedStateV1(session: GameSession, save: SaveGameV1): void {
    * into lost state. `dust/tests/saves.ts`'s round trip holds the writer to it
    * (#357).
    */
-  for (const name of session.interp.globals.keys()) {
-    if (name.startsWith("__")) continue;
-    if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
-    session.interp.globals.delete(name);
-  }
-  for (const [k, v] of save.numGlobals) session.interp.globals.set(k, restoredNumber(session, save.boolGlobals, k, v));
-  for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
+  replaceGlobals(session, save);
   /*
    * The frame counter, with the globals rather than after them, because several
    * of them are frame STAMPS and the game only ever reads a stamp as

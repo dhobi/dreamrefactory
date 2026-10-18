@@ -44,6 +44,7 @@
  */
 
 import type { SoundWay } from "./sound";
+import type { Box } from "./world/box";
 
 /** one of the three states a plank shows, as its own script */
 export interface PlankAnim {
@@ -4059,13 +4060,13 @@ export interface Boggs {
   /** `[0x46e4e4]` — blows on the two halves since theirs, {@link BOGGS.machineStruck} */
   machineBlows?: number;
   /** the `wormbounds` record, which `0x41ac16` keeps every worm inside */
-  bounds: { left: number; right: number; top: number; bottom: number } | null;
+  bounds: Box | null;
   /**
    * ...and where it stood against the body's own record — `[0x4a50d8]` and
    * `[0x4a50da]`, taken once (`0x41acea`, `0x41acfc`); `0x41ab90` moves the
    * box with the body every frame by them
    */
-  boundsOff?: { left: number; right: number; top: number; bottom: number };
+  boundsOff?: Box;
 }
 
 /**

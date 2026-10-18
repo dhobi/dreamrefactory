@@ -12,7 +12,7 @@
  * 3 the stance register.
  */
 import { ContainerBuilder, emptyScript, i16, i32, paletteBlock, pstr } from "./build";
-import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
+import { ContainerRef, DFContainerFile } from "./container";
 import { MAX_LAYER_FRAMES, PUP_LAYERS } from "./pup";
 import { ShpFrame, encodeShpFrame } from "./shp";
 
@@ -202,9 +202,4 @@ export function buildPupFile(opts: PupBuildOptions): PupBuildResult {
   });
 
   return { file: b.finish(), frameLocs };
-}
-
-/** {@link buildPupFile}, serialized */
-export function buildPupBytes(opts: PupBuildOptions): Uint8Array {
-  return writeContainerFile(buildPupFile(opts).file);
 }

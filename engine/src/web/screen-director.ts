@@ -40,7 +40,6 @@
  * three down with it.
  */
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
-import { DfVersion } from "@dreamfactory/engine/df/version";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { DrawSignature } from "@dreamfactory/engine/runtime/signature";
 import { subtitleFont, wrapText } from "./fonts";
@@ -104,14 +103,13 @@ export function dimPalette(base: Uint8ClampedArray, dim: ClutDim): Uint8ClampedA
  * (`worldDrawList`, `WorldCamera`, {@link ScreenDirector.compositeWorld}).
  */
 export interface RoomLayer {
-  /** which engine wrote the room — v1 merges actors and props into one depth list */
-  readonly roomVersion: DfVersion;
   /**
-   * Draw actors and world props as one list, far to near, as a v1 room does.
-   * A DreamFactory 5 room asks for it: RedJack.exe's placement stamps actors
-   * and props alike with their distance at record +0x44 (0x406bf0, 0x42caa0).
+   * Draw actors and world props as one list, far to near, as a v1 room does; a
+   * v4 room draws them in two passes. A DreamFactory 5 room asks for it too:
+   * RedJack.exe's placement stamps actors and props alike with their distance
+   * at record +0x44 (0x406bf0, 0x42caa0).
    */
-  readonly spritesByDepth?: boolean;
+  readonly spritesByDepth: boolean;
   /**
    * The sprite under a point, where the room decides it rather than the
    * director's props-then-room order: RedJack.exe's `hittest` walks actors and
@@ -1359,7 +1357,7 @@ export class ScreenDirector {
      * measured against TAOOT and no TI.EXE evidence has been read either way —
      * so the merge is gated on the room's own version.
      */
-    if (cam && (this.room?.roomVersion === 1 || this.room?.spritesByDepth)) {
+    if (cam && this.room?.spritesByDepth) {
       const ar = this.session.actorRuntime;
       const pr = this.session.propRuntime;
       const view = { rgba: data, width, height, palette };

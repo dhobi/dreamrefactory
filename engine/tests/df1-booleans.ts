@@ -1,6 +1,6 @@
 /**
  * Booleans are a type of their own before DreamFactory 5 — engine/src/runtime/
- * interp.ts (`classic`, `classicBinary`), engine/src/runtime/value-types.ts.
+ * interp.ts (`typed`, `typedBinary`), engine/src/runtime/value-types.ts.
  *
  *   npx vitest run engine/tests/df1-booleans.ts
  *

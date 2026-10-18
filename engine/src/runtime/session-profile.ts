@@ -44,7 +44,7 @@ export interface SessionProfile {
 
   // ---- scripts and sprites ----
   /**
-   * How the interpreter reads a script (Interpreter.shortCircuit, .classic):
+   * How the interpreter reads a script (Interpreter.shortCircuit, .typed):
    * RedJack.exe steps over the right operand of a decided `|`/`&` (0x410788);
    * DF.EXE, TI.EXE and tl.exe type their values — a boolean is not a number,
    * and a mismatch is error 0xe — where RedJack.exe keeps 1/0 and lenient

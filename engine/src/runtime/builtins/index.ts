@@ -41,7 +41,7 @@ export function registerGameBuiltins(session: GameSession): void {
 
   // through a closure, not session.rng directly: the session assigns its
   // default after this constructor call, and a harness reseeds later still.
-  registerCoreBuiltins(session.interp, () => session.rng());
+  registerCoreBuiltins(session.interp, () => session.rng(), session);
   const ctx = createBuiltinCtx(session);
   registerDispatchBuiltins(ctx);
   registerSceneBuiltins(ctx);

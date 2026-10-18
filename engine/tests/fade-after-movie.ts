@@ -62,7 +62,7 @@ function stubRoom(): RoomLayer {
   const pal = new Uint8ClampedArray(256 * 3);
   pal.set(PALETTE);
   return {
-    roomVersion: 4,
+    spritesByDepth: false,
     roomAnimating: false,
     roomFrame: () => frame,
     roomPalette: () => pal,

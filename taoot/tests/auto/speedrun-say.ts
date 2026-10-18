@@ -153,6 +153,7 @@ async function say(
     // `say` never parses a line, so the vocabulary is only here because the
     // context carries it — this suite drives ONE verb and not a sheet
     verbs: VERBS,
+    watches: [],
   };
   try {
     await resolve("say")!.run(c);

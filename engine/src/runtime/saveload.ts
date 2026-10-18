@@ -78,10 +78,29 @@ export function scriptGlobals(session: GameSession): {
   return { numGlobals, strGlobals, boolGlobals };
 }
 
+/**
+ * The globals a save names, and only those: every other one is deleted but the
+ * port's own `__` bookkeeping. A tag-2 number comes back a boolean
+ * ({@link restoredNumber}). Shared by the v4 and v1 loads.
+ */
+export function replaceGlobals(
+  session: GameSession,
+  save: { numGlobals: Map<string, number>; strGlobals: Map<string, string>; boolGlobals: Set<string> },
+): void {
+  const globals = session.interp.globals;
+  for (const name of globals.keys()) {
+    if (name.startsWith("__")) continue;
+    if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
+    globals.delete(name);
+  }
+  for (const [k, v] of save.numGlobals) globals.set(k, restoredNumber(session, save.boolGlobals, k, v));
+  for (const [k, v] of save.strGlobals) globals.set(k, v);
+}
+
 /** a saved number as the interpreter holds it: a tag-2 record is a boolean */
 export function restoredNumber(session: GameSession, bools: Set<string>, name: string, v: number): Value {
   if (!bools.has(name)) return v;
-  return session.interp.classic ? logic(v) : session.interp.bool(v !== 0);
+  return session.interp.typed ? logic(v) : session.interp.bool(v !== 0);
 }
 
 /**
@@ -552,17 +571,10 @@ function restoreGlobals(session: GameSession, save: SaveGame): void {
    * skips the same prefix when writing, for the same reason. Everything else a
    * booted session holds is carried by all 109 saves.
    */
-  for (const name of session.interp.globals.keys()) {
-    if (name.startsWith("__")) continue;
-    if (save.numGlobals.has(name) || save.strGlobals.has(name)) continue;
-    session.interp.globals.delete(name);
-  }
-
   // script globals: numbers (mission/phase/counters/puzzles) and strings
   // (hallside, savedeck, handitem, fusebox, savestage/saveflat stack, …) both
   // restore from the variable records — see decodeVars for the format.
-  for (const [k, v] of save.numGlobals) session.interp.globals.set(k, restoredNumber(session, save.boolGlobals, k, v));
-  for (const [k, v] of save.strGlobals) session.interp.globals.set(k, v);
+  replaceGlobals(session, save);
   // `clock` rides those two maps with everything else. hallside decodes from
   // its record alone (the 4 shipped saves without one never entered a hall —
   // measured; an unset side is what a fresh game has too); savedeck keeps a

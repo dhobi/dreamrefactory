@@ -40,6 +40,15 @@ export interface CommandRules {
   readonly postAndServerAreGrid: boolean;
   /** `pointinprop` tests the drawn frame's box (RedJack.exe); TI.EXE tests the box and then the pixel (0x417120) */
   readonly pointInPropIsBox: boolean;
+  /**
+   * A bad call is a script error: an argument too many (`puppetspeak`), a word
+   * that is no direction (`currentscene`), an accessor's unknown name, the
+   * scripts' own `error()`. DreamFactory 5 logs or ignores them, as the port
+   * always did — it was never checked against RedJack.exe.
+   */
+  readonly strictCalls: boolean;
+  /** `random (n)` with n <= 0 is error 0xa (TI.EXE 0x42a900, tl.exe 0x43a040); DF.EXE has no check */
+  readonly randomRefusesNonPositive: boolean;
   readonly effects: {
     /**
      * Effect names outside the engine's band, error 0xe before anything else:
@@ -75,6 +84,8 @@ const V4: CommandRules = {
   pollsAnswerAtOnce: false,
   postAndServerAreGrid: false,
   pointInPropIsBox: false,
+  strictCalls: true,
+  randomRefusesNonPositive: true,
   effects: { outOfBand: new Set(), drawn: isExeEffect, draws: "ti", halfLeftDissolves: false },
 };
 
@@ -86,6 +97,7 @@ const V1: CommandRules = {
   defersWalksOffSet: false,
   sceneWordsFromSet: true,
   postAndServerAreGrid: true,
+  randomRefusesNonPositive: false,
   directions: new Set([...TI_DIRECTIONS, "backwards"]),
   effects: {
     outOfBand: new Set(["turnright", "turnleft", "turnup", "turndown", "nodraw", "turnhalfleft", "turnhalfright"]),
@@ -105,6 +117,8 @@ const V5: CommandRules = {
   pathWalksNeedRoute: true,
   pollsAnswerAtOnce: true,
   pointInPropIsBox: true,
+  strictCalls: false,
+  randomRefusesNonPositive: false,
   effects: { ...V4.effects, outOfBand: new Set(["turnhalfright"]), halfLeftDissolves: true },
 };
 

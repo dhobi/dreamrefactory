@@ -45,6 +45,7 @@ async function run(
     say: (m) => said.push(m),
     suggest: () => {},
     verbs: VERBS,
+    watches: [],
   };
   try {
     await resolve(verb)!.run(c);

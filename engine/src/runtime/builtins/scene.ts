@@ -111,7 +111,7 @@ function registerSetAndStage(ctx: BuiltinCtx): void {
   // SCENE NAME ("sceneNNN") teleports to that scene — paired with the following
   // currentview("viewNNN") it's how TAOOT's halls cross to the other side of the ship
   // (HALLC/HALLA keydown toggle hallside then cut to the mirrored view).
-  r("currentscene", async (i_, [dir]) => {
+  r("currentscene", async (_i, [dir]) => {
     if (dir === undefined) return session.currentSceneName();
     // a DreamFactory 5 room: a direction turns or walks a scene's views, a
     // name goes to another node or scene (engine/src/runtime/maze.ts)
@@ -139,8 +139,8 @@ function registerSetAndStage(ctx: BuiltinCtx): void {
     }
     // a word that names no direction is a bad argument (TI.EXE 0x407c84;
     // DF.EXE 0x40ef44, which knows a fourth, "backwards")
-    const known = commandRules(session).directions.has(d);
-    if (i_.classic && !known) throw new ScriptError(0xa, `currentscene(${d})`);
+    const rules = commandRules(session);
+    if (rules.strictCalls && !rules.directions.has(d)) throw new ScriptError(0xa, `currentscene(${d})`);
     await session.onNavigate(d);
   });
   // currentview() reads the current view; currentview("viewNNN") SETS it — the
@@ -388,7 +388,7 @@ function registerFades(ctx: BuiltinCtx): void {
    */
   r("blacktoscreen", (_i, [, steps]) => {
     const f = session.fade;
-    if (f.level === 0 && !f.queue.some((q) => q.to === 1)) f.level = 1;
+    if (f.level === 0 && !f.queue.some((q) => q.to === 1)) f.holdBlack();
     return fade(session, 0, steps);
   });
   r("blackscreen", () => blackNow(session));

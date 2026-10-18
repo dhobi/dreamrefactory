@@ -16,18 +16,6 @@ import {
 } from "@dreamfactory/engine/web/screen-gamma";
 import type { Gate } from "./input-log";
 
-/** a pointer event mapped to framebuffer pixels: the canvas IS the framebuffer, and CSS stretches it */
-export function canvasPoint(
-  e: { clientX: number; clientY: number },
-  rect: { left: number; top: number; width: number; height: number },
-  size: { width: number; height: number },
-): { x: number; y: number } {
-  return {
-    x: Math.floor(((e.clientX - rect.left) / rect.width) * size.width),
-    y: Math.floor(((e.clientY - rect.top) / rect.height) * size.height),
-  };
-}
-
 /**
  * Browser key -> the name the engine sees, the window proc's whole job.
  *

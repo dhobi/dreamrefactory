@@ -7,7 +7,6 @@ import { packPoint } from "../point";
 import { accessorFamily, BuiltinCtx } from "./context";
 import { byEngine, commandRules, onlyOnV5 } from "./command-rules";
 import { forEngine } from "../engine";
-import { schedulerRules } from "../scheduler-rules";
 
 
 /**
@@ -364,10 +363,10 @@ function registerPropLook(ctx: BuiltinCtx): void {
   // The pinned frame overrides auto-animation until propview() changes state.
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
     p.deg = forEngine(session, {
-      v4: typeof v === "string" ? v : toNum(v),
+      v4: () => (typeof v === "string" ? v : toNum(v)),
       // v5 keeps it to its turn's 24 bits (RedJack.exe 0x4288fc)
-      v5: Math.trunc(Number(v) || 0) & schedulerRules(session).turnWrap,
-    });
+      v5: () => Math.trunc(Number(v) || 0) & 0xffffff,
+    })();
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a
     // 32-view card table, a 21-view fire). Clamping it as a frame index froze
@@ -524,8 +523,8 @@ function registerPropTables(ctx: BuiltinCtx): void {
   // error(): the scripts' own assertion — it answers error 0x2f, "Runtime user
   // error", and nothing else (TI.EXE 0x4155c0, DF.EXE 0x420930), which unwinds
   // the chain like any other (interp.ts ScriptError)
-  r("error", (i_, args) => {
-    if (!i_.classic) return log(`script error(): ${args.map(String).join(", ")}`);
+  r("error", (_i, args) => {
+    if (!commandRules(session).strictCalls) return log(`script error(): ${args.map(String).join(", ")}`);
     throw new ScriptError(0x2f, "error() — runtime user error");
   });
   acc("propvalue", 0, (p) => p.value, (p, v) => {

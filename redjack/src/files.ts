@@ -1,9 +1,9 @@
-import type { HostFiles } from "@dreamfactory/engine/web/host";
+import { RipFiles } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
 /**
- * The three RedJack CDs as one {@link HostFiles}.
+ * The three RedJack CDs as one `HostFiles` (a {@link RipFiles}).
  *
  * Indexed by lowercase BASENAME across the whole rip, for the reason Timelapse's
  * and Dust's stores are: the scripts ask for `control.stag` and `ship.sett`,
@@ -26,7 +26,8 @@ import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
  * sets `disk` for the day and `resetpaths` writes `"RJDisk2:movies:"` into the
  * path table, which the engine hands on as a disc change ({@link setDisc}). A
  * repeated name is served from that disc, and from the lowest one that has it
- * until the game has said.
+ * until the game has said. The fetching, the flights and the bar's arithmetic are
+ * {@link RipFiles}'s, which ties each flight to the copy it is reading.
  */
 
 /** the name the engine asks for → the name this rip ships it under */
@@ -35,17 +36,7 @@ const ALIASES: Record<string, string> = { bootfile: "bootfile.boot" };
 /** this page's own URL for a served path, so it runs from any directory */
 const url = (path: string): string => pageUrl(path);
 
-export class RedJackFiles implements HostFiles {
-  private readonly urls = new Map<string, string>();
-  private readonly cache = new Map<string, Uint8Array>();
-  /** one fetch per name however many callers ask at once */
-  /** each download under way, by name, with the address it is reading — after a
-   *  disc change a name can be wanted from one disc while a copy from the other
-   *  is still arriving, and the two are not the same download */
-  private readonly inFlight = new Map<string, { src: string; flight: Promise<{ bytes: Uint8Array | null; streamed: boolean }> }>();
-  onBackgroundLoad: ((key: string, data: Uint8Array) => void) | null = null;
-  /** basename → size in bytes, from the manifest */
-  private readonly sizes = new Map<string, number>();
+export class RedJackFiles extends RipFiles {
   /** a name more than one disc carries → each disc's copy (1-based) */
   private readonly copies = new Map<string, Map<number, { url: string; size: number }>>();
   private disc = 1;
@@ -55,16 +46,6 @@ export class RedJackFiles implements HostFiles {
    * commands list and look up (engine/src/runtime/df5-disk.ts)
    */
   readonly tree = new Map<string, number>();
-  /** every name the engine asked for and did not have, in order */
-  readonly misses: string[] = [];
-  /** every name that arrived, in the order it did */
-  readonly loads: string[] = [];
-  /** every chunk of every fetch — what the loading bar's meter samples */
-  onChunk: ((name: string, bytes: number) => void) | null = null;
-  /** fires as the number of fetches in flight changes (the canvas-corner spinner) */
-  onBusyChange: ((inFlight: number) => void) | null = null;
-  /** how far each in-flight fetch has got */
-  private readonly partial = new Map<string, number>();
 
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<RedJackFiles> {
@@ -96,119 +77,9 @@ export class RedJackFiles implements HostFiles {
   }
 
   /** the key a name is stored under, after the one alias this rip needs */
-  private key(name: string): string {
+  protected override key(name: string): string {
     const k = name.toLowerCase();
     return ALIASES[k] ?? k;
-  }
-
-  /** how many names the rip offers — a boot that indexed nothing says so */
-  get size(): number {
-    return this.urls.size;
-  }
-
-  /** what the manifest says this file weighs; 0 for one it does not list */
-  sizeOf(name: string): number {
-    return this.sizes.get(this.key(name)) ?? 0;
-  }
-
-  /** how many bytes of these names are still to come */
-  bytesLeft(names: Iterable<string>): number {
-    let left = 0;
-    for (const name of names) {
-      const key = this.key(name);
-      if (this.cache.has(key)) continue;
-      left += Math.max(0, (this.sizes.get(key) ?? 0) - (this.partial.get(key) ?? 0));
-    }
-    return left;
-  }
-
-  /** the engine's synchronous provider: what is in hand, or null and a fetch started */
-  provide = (name: string): Uint8Array | null => {
-    const key = this.key(name);
-    const have = this.cache.get(key);
-    if (have) return have;
-    this.misses.push(key);
-    if (this.urls.has(key)) void this.load(key);
-    return null;
-  };
-
-  async load(name: string, onBytes?: (n: number) => void): Promise<Uint8Array | null> {
-    const key = this.key(name);
-    const have = this.cache.get(key);
-    if (have) {
-      onBytes?.(have.byteLength);
-      return have;
-    }
-    const src = this.urls.get(key);
-    if (!src) return null;
-    const running = this.inFlight.get(key);
-    const started = running?.src !== src;
-    const flight =
-      !started && running
-        ? running.flight
-        : (async () => {
-            const res = await fetch(src);
-            if (!res.ok) return { bytes: null, streamed: false };
-            const bytes = res.body
-              ? await this.readStream(key, src, res.body, onBytes)
-              : new Uint8Array(await res.arrayBuffer());
-            // a disc change while this was arriving made it the wrong copy:
-            // hand it to whoever asked for it, but do not keep it
-            if (this.urls.get(key) === src) {
-              this.cache.set(key, bytes);
-              this.loads.push(key);
-              this.onBackgroundLoad?.(key, bytes);
-            }
-            return { bytes, streamed: res.body !== null };
-          })();
-    if (started) {
-      const was = this.inFlight.size;
-      this.inFlight.set(key, { src, flight });
-      if (this.inFlight.size !== was) this.onBusyChange?.(this.inFlight.size);
-    }
-    try {
-      const { bytes, streamed } = await flight;
-      // the owner of a streamed fetch has been told chunk by chunk already
-      if (bytes && (!streamed || !started)) onBytes?.(bytes.byteLength);
-      return bytes;
-    } finally {
-      // only this download's own entry: a newer one for the other disc's copy
-      // may have taken the name since
-      if (this.inFlight.get(key)?.flight === flight) {
-        this.partial.delete(key);
-        this.inFlight.delete(key);
-        this.onBusyChange?.(this.inFlight.size);
-      }
-    }
-  }
-
-  /** drain a response body, reporting each chunk, then join it into one array */
-  private async readStream(
-    key: string,
-    src: string,
-    body: ReadableStream<Uint8Array>,
-    onBytes?: (n: number) => void,
-  ): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.byteLength;
-      // the bar counts the copy the game will get, not one a disc change orphaned
-      if (this.urls.get(key) === src) this.partial.set(key, total);
-      this.onChunk?.(key, value.byteLength);
-      onBytes?.(value.byteLength);
-    }
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const c of chunks) {
-      out.set(c, at);
-      at += c.byteLength;
-    }
-    return out;
   }
 
   /** which disc each name was first found on, while the index is built */
@@ -238,21 +109,8 @@ export class RedJackFiles implements HostFiles {
     return "redjack";
   }
 
-  has(name: string): boolean {
-    return this.cache.has(this.key(name));
-  }
-
   /** the rooms, under v5's own extension */
   serverSetNames(): string[] {
     return [...this.urls.keys()].filter((n) => n.endsWith(".sett"));
-  }
-
-  serverUrl(name: string): string | null {
-    return this.urls.get(this.key(name)) ?? null;
-  }
-
-  /** nothing is evicted: this is a prototype, and what it asked for is data */
-  evict(): number {
-    return 0;
   }
 }

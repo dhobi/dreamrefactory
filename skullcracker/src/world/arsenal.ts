@@ -6,7 +6,7 @@
 import { SbkFile, SbkRoom } from "@dreamfactory/engine/df/sbk";
 import type { Enemy } from "../brains/kit";
 import { BOLT, GUNBOLT, FLARE, GRAB, GUN_CODES, STREAMS, WEAPONS, type Bolt, type Flare, type Gun, type Stream, type StreamKit } from "../guns";
-import { p, level, sound, CHARACTER } from "./state";
+import { p, level, sound, character } from "./state";
 import { roundAway } from "./motion";
 import { hereOf, roll } from "./rooms";
 
@@ -242,7 +242,7 @@ export function openStream(): void {
 
 /** the character's own sound a stream starts with — {@link StreamKit.sound} */
 function streamOwn(kit: StreamKit): number | undefined {
-  return CHARACTER === 1 ? (kit.sound.own1 ?? kit.sound.own) : kit.sound.own;
+  return character === 1 ? (kit.sound.own1 ?? kit.sound.own) : kit.sound.own;
 }
 
 /**

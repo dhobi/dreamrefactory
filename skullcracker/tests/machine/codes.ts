@@ -28,7 +28,7 @@ test.skipIf(!haveRip())("codes", async () => {
 
   /** the reaction the player is playing, by the code that installed it — or null */
   const code = (): { code: number; act: string } | null =>
-    Object.values(game.BLOW_CODES).find((r) => r.act === p.act) ?? null;
+    Object.values(game.blowCodes).find((r) => r.act === p.act) ?? null;
   const reacting = (n: number, act: string): boolean => {
     const c = code();
     return c !== null && c.code === n && c.act === act;

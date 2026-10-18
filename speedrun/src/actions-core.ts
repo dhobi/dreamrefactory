@@ -22,7 +22,6 @@ import { SHOWING, budgetNow } from "./driver";
 import {
   IDLE,
   aimAtSettled,
-  WATCHES,
   arrow,
   clickThing,
   condition,
@@ -1136,10 +1135,10 @@ export const CORE_ACTIONS: ActionTable = {
       const cond = c.step.args[0];
       const body = c.step.args[1];
       const expr = condition(cond);
-      const at = WATCHES.findIndex((w) => w.expr === expr);
+      const at = c.watches.findIndex((w) => w.expr === expr);
       if (body.trim().toLowerCase() === "off") {
         if (at < 0) throw new Error(`no watch on "${cond}" to turn off`);
-        WATCHES.splice(at, 1);
+        c.watches.splice(at, 1);
         c.say(`stopped watching ${cond}`);
         return;
       }
@@ -1152,8 +1151,8 @@ export const CORE_ACTIONS: ActionTable = {
         throw new Error(`watchFor's action must be exactly one line, got ${parsed.length}: ${body}`);
       }
       if (parsed[0].verb === "watchfor") throw new Error(`a watch cannot register a watch`);
-      if (at >= 0) WATCHES.splice(at, 1); // re-registering replaces
-      WATCHES.push({ source: cond, expr, action: parsed[0], armed: false, fired: 0 });
+      if (at >= 0) c.watches.splice(at, 1); // re-registering replaces
+      c.watches.push({ source: cond, expr, action: parsed[0], armed: false, fired: 0 });
       c.say(`watching ${cond} -> ${parsed[0].source}`);
     },
   },

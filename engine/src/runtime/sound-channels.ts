@@ -66,9 +66,6 @@ export abstract class SoundChannels {
     protected readonly session: GameSession,
   ) {}
 
-  /** the engine whose rules these are */
-  abstract readonly engine: 1 | 4 | 5;
-
   /** play a named sound on the channels, honouring its loop flag (the play builtins) */
   abstract play(name: string, overlap: boolean, rule?: SoundRule): void;
 
@@ -166,14 +163,9 @@ export abstract class SoundChannels {
     return slot && !slot.handle.done ? slot.name : "none";
   }
 
-  /** both channels idle: DF.EXE's `sounddone()` (0x4078a0 -> 0x429c00), and TI.EXE's (0x424cc0) */
-  allIdle(): boolean {
-    return this.board.channels.every((c) => !c || c.handle.done);
-  }
-
-  /** `sounddone ()`: both effect channels idle ({@link allIdle}) */
+  /** `sounddone ()`: both effect channels idle — DF.EXE 0x4078a0 -> 0x429c00, TI.EXE 0x424cc0 */
   done(): boolean {
-    return this.allIdle();
+    return this.board.channels.every((c) => !c || c.handle.done);
   }
 
   /** the live handle of a record playing on a channel, if it is (a cricket's shot) */

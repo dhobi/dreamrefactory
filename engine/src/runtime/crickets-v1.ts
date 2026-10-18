@@ -7,8 +7,6 @@ import { CricketsV4 } from "./crickets-v4";
  * cricket opcodes are its balls' (BallRuntime).
  */
 export class CricketsV1 extends CricketsV4 {
-  override readonly engine = 1;
-
   override get opcodes(): CricketOpcodes {
     return this.session.balls;
   }

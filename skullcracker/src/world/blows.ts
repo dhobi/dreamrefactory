@@ -11,10 +11,11 @@ import { FOE_SFX } from "../sound";
 import { GRAB, WEAPONS } from "../guns";
 import { CLOCK_FULL, HudFighter } from "../hud";
 import { random } from "../random";
-import { p, level, player, type Level, HURT, DIFFICULTY, BLOW_CODES, HELD, ACTIONS, sound } from "./state";
+import { p, level, player, type Level, HURT, difficulty, blowCodes, heldPose, actions, sound } from "./state";
 import { playerBox, celRec, lastCel, foeAnchor, baseOf, celOf } from "./cels";
 import { dropAt, corpseFrames, groundAt } from "./rooms";
 import { gunAhead, inv } from "./arsenal";
+import { celBoxAt, facingRect, type Box } from "./box";
 
 /**
  * The three flags {@link waitsFor} reads: `[0x472574]` (`hardcore`),
@@ -239,19 +240,11 @@ export function hurtBox(
   e: Enemy,
   c: SbkCel,
   lvl: Level,
-): { top: number; left: number; bottom: number; right: number } {
+): Box {
   const a = foeAnchor(e, lvl);
-  const b =
-    e.facing < 0 && c.body
-      ? { ...c.body, x0: -c.body.x1, x1: -c.body.x0 }
-      : c.body;
+  const b = c.body && facingRect(c.body, e.facing < 0);
   return a && b
-    ? {
-        left: a.x + b.x0,
-        right: a.x + b.x1,
-        top: a.y + b.y0,
-        bottom: a.y + b.y1,
-      }
+    ? celBoxAt(a.x, a.y, b)
     : {
         left: e.x - c.width / 2,
         right: e.x + c.width / 2,
@@ -281,7 +274,7 @@ export const stats = {
   lives: 3,
   /** `[0x4ac3d0]` and `[0x4ac3d8]` — and only {@link damageOn} ever spends it */
   health: HURT.max as number,
-  maxHealth: HURT.maxAt(DIFFICULTY),
+  maxHealth: HURT.maxAt(difficulty),
   /** what this level stood up with, and how many of them may still stand */
   census: 0,
   allowance: 0,
@@ -319,7 +312,7 @@ export const stats = {
  */
 /**
  * The animation one act plays, including the two that are not in
- * {@link ACTIONS} because they are not the fists'.
+ * {@link actions} because they are not the fists'.
  *
  * `reach` is `0x472360`, the game's one kind-14 script, and `fire` is whichever
  * weapon is in your hands — its own script's wind-up tag followed by whatever
@@ -339,20 +332,20 @@ export function actOf(name: string): {
     return { cels, dx: cels.map(() => 0), from: GRAB.from };
   }
   // the reaction to a blow CODE, straight off the table at `0x4492b8`
-  const code = Object.values(BLOW_CODES).find((r) => r.act === name);
+  const code = Object.values(blowCodes).find((r) => r.act === name);
   if (code) return { ...code.anim, dx: code.anim.cels.map(() => 0) };
-  if (name === "held") return { ...HELD.loop, dx: HELD.loop.cels.map(() => 0) };
+  if (name === "held") return { ...heldPose.loop, dx: heldPose.loop.cels.map(() => 0) };
   if (name === "struggle")
-    return { ...HELD.struggle, dx: HELD.struggle.cels.map(() => 0) };
+    return { ...heldPose.struggle, dx: heldPose.struggle.cels.map(() => 0) };
   // `0x42f3d4` — the lightning's death is tag 3 of the same script
-  if (name === "dying" && p.dyingTag === 3 && ACTIONS.dyingStruck) return ACTIONS.dyingStruck;
+  if (name === "dying" && p.dyingTag === 3 && actions.dyingStruck) return actions.dyingStruck;
   if (name === "fire") {
     const w = WEAPONS[inv.weapon];
     if (!w) return null;
     const cels = [...w.moveset.fire, ...w.moveset.shot];
     return { cels, dx: cels.map(() => 0), from: w.moveset.from };
   }
-  return ACTIONS[name] ?? null;
+  return actions[name] ?? null;
 }
 
 /**

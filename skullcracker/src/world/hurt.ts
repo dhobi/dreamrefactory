@@ -8,7 +8,7 @@ import type { CastKit, Enemy } from "../brains/kit";
 import { COP_SLUG, IGOR_THROW, SKEL_BONE, PUKE_GOB, TUBE_BREATH, TUBE_SHARDS, VPRIEST_BOLT, WBOOLY_HIGH, WBOOLY_LOW, KRAGG_SHOT_AIR, KRAGG_SHOT_GROUND, GHENGIS_BLAST, KNIFEBOY_KNIFE, KNIFEBOY_LOB } from "../brains";
 import { BOGGS, Boggs } from "../props";
 import { gripOf } from "../codes";
-import { p, scaled, player, level, BLOW_CODES, sound, damageOn } from "./state";
+import { p, scaled, player, level, blowCodes, sound, damageOn } from "./state";
 import { dropKeys } from "./keys";
 import { hanging, knockedOff, setKnockedOff } from "./motion";
 import { celRec, lastCel } from "./cels";
@@ -227,7 +227,7 @@ export function gripAt(
  * A blow CODE landed: run its row of the table at `0x4492b8`.
  *
  * Returns what the original's handler returns — true where it answered 1, which
- * tells `0x430367`'s loop the blow was consumed. {@link BLOW_CODES} is the whole
+ * tells `0x430367`'s loop the blow was consumed. {@link blowCodes} is the whole
  * of the data; this is only the eight side effects the eight cases share.
  *
  * `-9` and anything below it is NOT in the table (`0x448c84`'s range test sends
@@ -241,7 +241,7 @@ export function takeCode(
   /** what struck, for the one reaction whose spray follows it (`0x42eb15`) */
   striker?: Parameters<typeof bleed>[2],
 ): boolean {
-  const r = BLOW_CODES[code];
+  const r = blowCodes[code];
   if (!r) return false;
   // `0x448c19` and `0x448c40`: the FIRST thing the player's handler does, before
   // it has even looked at the strength, is cancel a running stream with -1

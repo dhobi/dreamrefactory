@@ -1,6 +1,7 @@
 import { ScriptError } from "../interp";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
+import { str } from "./df5-args";
 
 /**
  * DreamFactory 5's network commands that no earlier engine had — `netcatchup`,
@@ -32,8 +33,7 @@ export function registerDf5NetBuiltins(ctx: BuiltinCtx): void {
 
   // stringtonetid (text): a string (0xe otherwise, 0x424a8c), as a net id (0x492cf0)
   r5("stringtonetid", (_i, [s]) => {
-    if (typeof s !== "string") throw new ScriptError(0xe, `stringtonetid: ${String(s)} is not a string`);
-    return stringToNetId(s);
+    return stringToNetId(str("stringtonetid", s));
   });
 }
 

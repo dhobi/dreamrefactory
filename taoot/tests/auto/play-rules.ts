@@ -8,11 +8,11 @@
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SCREEN_GAMMA, SCREEN_GAMMA_STEP } from "@dreamfactory/engine/web/screen-gamma";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 import {
   BRIGHTNESS_PRESETS,
   DF_KEY,
   GAMMA_KEYS,
-  canvasPoint,
   defaultSaveName,
   gammaFor,
   gateOf,
@@ -27,9 +27,9 @@ import {
 describe("the pointer", () => {
   it("lands on the 512x384 framebuffer, flooring, whatever size CSS shows it at", () => {
     const fb = { width: 512, height: 384 };
-    expect(canvasPoint({ clientX: 0, clientY: 0 }, { left: 0, top: 0, width: 1024, height: 768 }, fb)).toEqual({ x: 0, y: 0 });
-    expect(canvasPoint({ clientX: 1023, clientY: 767 }, { left: 0, top: 0, width: 1024, height: 768 }, fb)).toEqual({ x: 511, y: 383 });
-    expect(canvasPoint({ clientX: 110, clientY: 60 }, { left: 100, top: 50, width: 256, height: 192 }, fb)).toEqual({ x: 20, y: 20 });
+    expect(screenPoint({ clientX: 0, clientY: 0 }, { left: 0, top: 0, width: 1024, height: 768 }, fb, Math.floor)).toEqual({ x: 0, y: 0 });
+    expect(screenPoint({ clientX: 1023, clientY: 767 }, { left: 0, top: 0, width: 1024, height: 768 }, fb, Math.floor)).toEqual({ x: 511, y: 383 });
+    expect(screenPoint({ clientX: 110, clientY: 60 }, { left: 100, top: 50, width: 256, height: 192 }, fb, Math.floor)).toEqual({ x: 20, y: 20 });
   });
 });
 

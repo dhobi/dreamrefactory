@@ -23,6 +23,7 @@
  */
 import { DfEncoding } from "@dreamfactory/engine/df/text";
 import type { WireEvent } from "@dreamfactory/engine/web/host";
+import { readStream } from "@dreamfactory/engine/web/rip-files";
 import { NEUTRAL, TITANIC, editionOfUrl as editionOfUrlIn } from "@dreamfactory/chrome/games";
 import { encodingOf, isEditionCode } from "./languages";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
@@ -505,28 +506,4 @@ export class FileStore {
       this.fetchEnded(id, url, true);
     }
   }
-}
-
-/** drain a response body, reporting each chunk, then join it into one array */
-async function readStream(
-  body: ReadableStream<Uint8Array>,
-  onBytes: (n: number) => void,
-): Promise<Uint8Array> {
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    total += value.byteLength;
-    onBytes(value.byteLength);
-  }
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const c of chunks) {
-    out.set(c, at);
-    at += c.byteLength;
-  }
-  return out;
 }

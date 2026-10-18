@@ -113,9 +113,6 @@ export abstract class Crickets implements CricketOpcodes {
     protected readonly rand: (n: number) => number,
   ) {}
 
-  /** the engine whose crickets these are */
-  abstract readonly engine: 1 | 4 | 5;
-  /** `makecricket` wants a set open (TI.EXE error 0x28) */
   protected readonly needsSet: boolean = true;
   /** a position as a cricket record holds it */
   protected abstract word(v: number): number;

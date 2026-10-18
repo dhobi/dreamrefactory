@@ -12,10 +12,35 @@
  * is NOT set, so a later launch with the files available can still seed.
  */
 
-import { SaveEntry, deleteSave, displayName, getMeta, listSaves, putSave, setMeta } from "@dreamfactory/engine/web/save-store";
+import {
+  SaveEntry,
+  type SaveKind,
+  deleteSave,
+  displayName,
+  getMeta,
+  listSaves,
+  putSave,
+  setMeta,
+} from "@dreamfactory/engine/web/save-store";
 import { globalsCapacity } from "@dreamfactory/engine/df/savegame-patch";
 import { NEUTRAL, editionOfUrl } from "./files";
 import { siteUrl } from "@dreamfactory/chrome/site";
+
+/** Titanic's saves: `.ti` in the `taoot-saves` database, grouped by the shipped folders */
+export const TAOOT_SAVES: SaveKind = {
+  db: "taoot-saves",
+  ext: ".ti",
+  game: "Titanic",
+  folders: {
+    "": "My Saves",
+    "1": "Disk 1",
+    "2": "Disk 2",
+    ENDGAME1: "Endgame (Disk 1)",
+    ENDGAME2: "Endgame (Disk 2)",
+  },
+  order: ["", "1", "2", "ENDGAME1", "ENDGAME2"],
+  valid: () => true,
+};
 
 const SEEDED = "seeded";
 /** which language's shipped saves are in the store — see {@link seedSaves} */

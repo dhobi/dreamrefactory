@@ -4,6 +4,7 @@ import type { ActorInstance } from "../actors";
 import type { PropInstance } from "../props";
 import { BuiltinCtx } from "./context";
 import { byEngine, unknownCommand } from "./command-rules";
+import { int, str } from "./df5-args";
 
 /**
  * Register a command that answers only in a v5 game; in any other it stays the
@@ -12,13 +13,6 @@ import { byEngine, unknownCommand } from "./command-rules";
 export function v5Registrar({ session, interp }: BuiltinCtx): (name: string, fn: Builtin) => void {
   return (name, v5) => interp.register(name, byEngine(session, { v4: unknownCommand(name), v5 }));
 }
-
-/** an integer argument, or the wrong-type error every handler below answers
- *  for anything else (`cmp word [arg], 4` -> 0xe) */
-const int = (cmd: string, v: Value | undefined): number => {
-  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-  return v | 0;
-};
 
 /**
  * DreamFactory 5's commands outside the room ({@link file://./maze.ts} has the
@@ -77,8 +71,8 @@ function registerCalc(ctx: BuiltinCtx): void {
     if (c < 0 || c > 255) throw new ScriptError(0xa, `stringtoascii (${c})`);
     return String.fromCharCode(c);
   });
-  r5("asciitostring", (_i, [s]) => {
-    if (typeof s !== "string") throw new ScriptError(0xe, `asciitostring: ${String(s)} is not a string`);
+  r5("asciitostring", (_i, [arg]) => {
+    const s = str("asciitostring", arg);
     if (s.length !== 1) throw new ScriptError(0xa, `asciitostring (${JSON.stringify(s)})`);
     return s.charCodeAt(0) & 0xff;
   });

@@ -13,7 +13,7 @@ import { GRAB, STREAMS, WEAPONS } from "../guns";
 import { Cheat, CheatTyper } from "../cheats";
 import { CLOCK, LABEL, buttonBit } from "../hud";
 import { random } from "../random";
-import { levelIndex, sound, p, ANIM, held, ACTIONS, HURT, KIT, HOLD_FRAMES, MEASURED, level, player, CHARACTER, damageOn, files, ui, setPlayer, QUERY, setStartTicks } from "./state";
+import { levelIndex, sound, p, anim, held, actions, HURT, kit, HOLD_FRAMES, measured, level, player, character, damageOn, files, ui, setPlayer, query, setStartTicks } from "./state";
 import { punchPressed, kickPressed, jumpPressed, upPressed, setJumpPressed, setUpPressed, setPunchPressed, setKickPressed } from "./keys";
 import { runStridePx, stridePx, IDLE_HOLD, crawlStridePx, AIR_HOLD, roundAway, DIVISOR, STICK_PX, engineFrame, knockedOff, LADDER, dragged, airThink, startJump, CLIMB_PX, PLAYER_GRAVITY, MONKEYBAR, setKnockedOff } from "./motion";
 import { lastCel, celRec, setLastCel } from "./cels";
@@ -132,26 +132,26 @@ export function choosePlayerCel(): void {
    * carried gun you have put away with INV ({@link stepInv}) leaves you on the
    * fists' own moveset.
    */
-  const kit =
+  const moveset =
     inv.drawn ? (WEAPONS[inv.weapon]?.moveset ?? null) : null;
   let seq: readonly number[];
   if (acting) seq = acting.cels;
-  else if (p.bar) seq = ANIM.bar[p.barTag] ?? ANIM.bar[0] ?? ANIM.hang;
-  else if (p.climbing) seq = ANIM.climb[p.climbTag] ?? ANIM.hang;
+  else if (p.bar) seq = anim.bar[p.barTag] ?? anim.bar[0] ?? anim.hang;
+  else if (p.climbing) seq = anim.climb[p.climbTag] ?? anim.hang;
   // `0x472350` whatever is in the player's hands: the preamble that
   // installs it runs ahead of every armed state's handler too
-  else if (p.flail) seq = ANIM.flail;
-  else if (p.landLeft > 0) seq = p.hardLand ? (kit?.fall ?? ANIM.air) : (kit?.land ?? ANIM.land);
-  else if (!p.onGround || p.windup > 0) seq = kit?.jump ?? ANIM.air;
-  else if (p.crouching) seq = kit?.duck ?? ANIM.crouch;
-  else if (p.running) seq = kit?.run ?? ANIM.run;
-  else if (p.moving) seq = kit?.walk ?? ANIM.walk;
-  else seq = kit?.idle ?? ANIM.idle;
+  else if (p.flail) seq = anim.flail;
+  else if (p.landLeft > 0) seq = p.hardLand ? (moveset?.fall ?? anim.air) : (moveset?.land ?? anim.land);
+  else if (!p.onGround || p.windup > 0) seq = moveset?.jump ?? anim.air;
+  else if (p.crouching) seq = moveset?.duck ?? anim.crouch;
+  else if (p.running) seq = moveset?.run ?? anim.run;
+  else if (p.moving) seq = moveset?.walk ?? anim.walk;
+  else seq = moveset?.idle ?? anim.idle;
   // Three clocks, because the engine has three. An action and the idle run on
   // engine frames at their script's own ticksPerFrame; anything that covers
   // ground is clocked by the GROUND it covers, one cel per stride, so the feet
   // cannot slide whatever this page's Hz is; and the flight runs on its own.
-  const running = seq === (kit?.run ?? ANIM.run);
+  const running = seq === (moveset?.run ?? anim.run);
   const stride = running ? runStridePx() : stridePx();
   let id: number;
   if (acting)
@@ -167,45 +167,45 @@ export function choosePlayerCel(): void {
   // ladder holds you on when you stop asking to move
   else if (p.climbing)
     id = seq[Math.min(seq.length - 1, Math.floor(p.climbClock))];
-  else if (seq === (kit?.idle ?? ANIM.idle))
+  else if (seq === (moveset?.idle ?? anim.idle))
     // the fidgets are the fists' own two tags and no weapon script has any
     id =
-      p.fidget && !kit
+      p.fidget && !moveset
         ? p.fidget[
             Math.min(p.fidget.length - 1, Math.floor(p.fidgetClock / IDLE_HOLD))
           ]
         : seq[Math.floor(p.idleClock / IDLE_HOLD) % seq.length];
-  else if (seq === kit?.duck) id = seq[0];
-  else if (seq === kit?.land || seq === kit?.fall)
+  else if (seq === moveset?.duck) id = seq[0];
+  else if (seq === moveset?.land || seq === moveset?.fall)
     id = seq[Math.min(seq.length - 1, Math.floor(p.actClock))];
-  else if (seq === kit?.jump)
+  else if (seq === moveset?.jump)
     // two records, the second carrying the dy: the wind-up cel, then the tuck
     id = seq[p.windup > 0 || p.airFrames === 0 ? 0 : seq.length - 1];
-  else if (seq === ANIM.crouch) {
+  else if (seq === anim.crouch) {
     // moving while ducked is the crawl, clocked by ground covered like every
     // gait; still is the held duck, with its rare settle fidget over it
-    if (p.moving) id = ANIM.crawl[Math.floor(p.travelled / crawlStridePx()) % ANIM.crawl.length];
-    else if (p.fidget === ANIM.crouchFidget)
-      id = ANIM.crouchFidget[Math.min(ANIM.crouchFidget.length - 1, Math.floor(p.fidgetClock))];
-    else id = ANIM.crouch[0];
+    if (p.moving) id = anim.crawl[Math.floor(p.travelled / crawlStridePx()) % anim.crawl.length];
+    else if (p.fidget === anim.crouchFidget)
+      id = anim.crouchFidget[Math.min(anim.crouchFidget.length - 1, Math.floor(p.fidgetClock))];
+    else id = anim.crouch[0];
   }
-  else if (seq === ANIM.land)
+  else if (seq === anim.land)
     id =
-      ANIM.land[Math.min(ANIM.land.length - 1, ANIM.land.length - p.landLeft)];
-  else if (seq === ANIM.air && p.landLeft > 0) {
+      anim.land[Math.min(anim.land.length - 1, anim.land.length - p.landLeft)];
+  else if (seq === anim.air && p.landLeft > 0) {
     // the hard landing, four frames a cel on the ground
-    const f = Math.floor((ANIM.air.length * AIR_HOLD - p.landLeft) / AIR_HOLD);
-    id = ANIM.air[Math.min(ANIM.air.length - 1, f)];
-  } else if (seq === ANIM.air) {
+    const f = Math.floor((anim.air.length * AIR_HOLD - p.landLeft) / AIR_HOLD);
+    id = anim.air[Math.min(anim.air.length - 1, f)];
+  } else if (seq === anim.air) {
     // the wind-up on the ground — 250 251 252 as the count runs down — then 253
     // for the launch frame, then the TUCK: 200 on the frame tag 0 is installed
     // and 220 held after. A run's leap is tag 4's single 200, then the same.
-    if (p.windup > 0) id = ANIM.launch[ANIM.launch.length - 1 - p.windup];
+    if (p.windup > 0) id = anim.launch[anim.launch.length - 1 - p.windup];
     else if (p.leap)
       id =
-        ANIM.tuck[Math.min(ANIM.tuck.length - 1, Math.max(0, p.airFrames - 1))];
-    else if (p.airFrames === 0) id = ANIM.launch.at(-1)!;
-    else id = ANIM.tuck[Math.min(ANIM.tuck.length - 1, p.airFrames - 1)];
+        anim.tuck[Math.min(anim.tuck.length - 1, Math.max(0, p.airFrames - 1))];
+    else if (p.airFrames === 0) id = anim.launch.at(-1)!;
+    else id = anim.tuck[Math.min(anim.tuck.length - 1, p.airFrames - 1)];
   } else {
     const f = Math.floor(p.travelled / stride) % seq.length;
     // the footfalls, and the engine fires them off the CYCLE's frame number
@@ -214,7 +214,7 @@ export function choosePlayerCel(): void {
     // run's own branch. Twelve cels, two steps, whatever the speed.
     if (
       f !== lastGaitFrame &&
-      (seq === ANIM.walk || seq === ANIM.run || seq === ANIM.crawl)
+      (seq === anim.walk || seq === anim.run || seq === anim.crawl)
     ) {
       const which = OWN.stepFrames.indexOf(f as 1 | 6);
       if (which >= 0 && p.onGround) sound?.own(OWN.step[which], p.x, p.y);
@@ -495,14 +495,14 @@ function fidget(): void {
   // the duck's own fidget: tag 1 is a single cel, so its script ends every
   // frame, and 0x42aadd rolls rand(0x2c3) < 13 at each end — 13 in 707
   if (p.crouching && !p.moving) {
-    if (p.fidget === ANIM.crouchFidget) {
+    if (p.fidget === anim.crouchFidget) {
       p.fidgetClock += TICK_SCALE;
-      if (p.fidgetClock >= ANIM.crouchFidget.length) p.fidget = null;
+      if (p.fidgetClock >= anim.crouchFidget.length) p.fidget = null;
     } else if (random() * 707 < 13 * TICK_SCALE) {
-      p.fidget = ANIM.crouchFidget;
+      p.fidget = anim.crouchFidget;
       p.fidgetClock = 0;
     }
-  } else if (p.fidget === ANIM.crouchFidget) p.fidget = null;
+  } else if (p.fidget === anim.crouchFidget) p.fidget = null;
   // the idle only runs while genuinely idle, and restarts each time it stops.
   // At each cycle's end, 0x42993c rolls rand(42) < 13 for a fidget.
   if (p.onGround && !p.moving && !p.act && !p.climbing && !p.crouching) {
@@ -511,11 +511,11 @@ function fidget(): void {
       if (p.fidgetClock >= p.fidget.length * IDLE_HOLD) p.fidget = null;
     } else {
       p.idleClock += TICK_SCALE;
-      const cycle = ANIM.idle.length * IDLE_HOLD;
+      const cycle = anim.idle.length * IDLE_HOLD;
       if (p.idleClock >= cycle) {
         p.idleClock -= cycle;
         if (random() * 42 < 13) {
-          p.fidget = random() < 0.5 ? ANIM.fidgetA : ANIM.fidgetB;
+          p.fidget = random() < 0.5 ? anim.fidgetA : anim.fidgetB;
           p.fidgetClock = 0;
         }
       }
@@ -759,7 +759,7 @@ function stepAct(frame: boolean): void {
         p.actClock = 0;
       } else if (
         /^punch(Run)?2?$/.test(p.act) &&
-        ACTIONS.punchStep &&
+        actions.punchStep &&
         p.onGround &&
         (p.facing > 0 ? held.right : held.left)
       ) {
@@ -886,7 +886,7 @@ function frameStep(frame: boolean, dir: number, ladder: SbkEntity | undefined): 
       p.vx = 0;
       // asked every frame past it, through `0x40ef30`: the mixer turns the ask
       // away while the scream still sounds, and a long enough fall screams again
-      if (p.fallPx > 0x276) sound?.own(KIT.flailSound, p.x, p.y);
+      if (p.fallPx > 0x276) sound?.own(kit.flailSound, p.x, p.y);
     } else if (p.landLeft > 0) {
       // tag 1, or 0x471c68's tag 5: `0x42a182` reads ESC and nothing else until
       // the script ends on the ground. The keys do nothing; the slide is the drag's
@@ -904,7 +904,7 @@ function frameStep(frame: boolean, dir: number, ladder: SbkEntity | undefined): 
       p.launched = false;
       p.hold = HOLD_FRAMES;
       p.hardLand = false;
-      p.landLeft = ANIM.land.length;
+      p.landLeft = anim.land.length;
       sound?.own(OWN.land, p.x, p.y);
     } else if (!p.onGround) {
       if (p.launched && p.airFrames >= 2) airThink(dir);
@@ -928,7 +928,7 @@ function frameStep(frame: boolean, dir: number, ladder: SbkEntity | undefined): 
           // the launch record: dy -420 and tag 3's dx 100 or tag 4's dx 180,
           // each divided once, away from zero, into the velocity — -35, 9, 15
           p.vyRaw += roundAway(
-            -(p.leap ? MEASURED.runJumpDy : MEASURED.jump) / DIVISOR,
+            -(p.leap ? measured.runJumpDy : measured.jump) / DIVISOR,
           );
           p.vx += p.facing * roundAway(p.launchDx / DIVISOR);
           p.onGround = false;
@@ -940,9 +940,9 @@ function frameStep(frame: boolean, dir: number, ladder: SbkEntity | undefined): 
       } else if (dir && p.onGround) {
         // the gait's own dx: the walk's 95, the run's 180, and ducked it is the
         // CRAWL — 0x4717c8 tag 4's 47, which cannot run
-        let dx: number = MEASURED.walk;
-        if (held.down) dx = MEASURED.crawl;
-        else if (p.running) dx = MEASURED.run;
+        let dx: number = measured.walk;
+        if (held.down) dx = measured.crawl;
+        else if (p.running) dx = measured.run;
         p.vx += p.facing * roundAway(dx / DIVISOR);
       }
     }
@@ -1061,10 +1061,10 @@ interface Grip {
 }
 
 /** on a ladder, hanging from a bar, or in the air: the vertical half of the tick, and the landing */
-function climbOrFall({ tickX, dir, ladder, bar, bumped, wasClimbing, wasHanging }: Grip): void {
-  if (ladder) climbLadder(ladder, wasClimbing);
-  else if (bar) hangFromBar(bar, wasHanging);
-  else fall(tickX, dir, bumped, wasClimbing, wasHanging);
+function climbOrFall(grip: Grip): void {
+  if (grip.ladder) climbLadder(grip.ladder, grip.wasClimbing);
+  else if (grip.bar) hangFromBar(grip.bar, grip.wasHanging);
+  else fall(grip);
 }
 
 /** on a ladder: onto it or one rung along it, the feet on the rung, and the room the rung is in */
@@ -1225,7 +1225,7 @@ function hangFromBar(bar: SbkEntity, wasHanging: boolean): void {
   p.barHold = Math.round((p.x - bar.left) / spacing);
   // the anchor is the record's own `top`, and `p.y` is the feet, so the
   // hanging cel's own box is what stands between them
-  const hung = celRec(player, (ANIM.bar[0] ?? [])[0] ?? 0);
+  const hung = celRec(player, (anim.bar[0] ?? [])[0] ?? 0);
   const feet = hung?.body ? hung.body.y1 : p.feet;
   p.y = bar.top + feet;
   p.feet = feet;
@@ -1248,7 +1248,7 @@ function stepSwing(bar: SbkEntity, spacing: number, toward: boolean, away: boole
   // the script's own `dx`, spent by `0x45d0f0` on EVERY frame and not
   // once a cel — `0x42b410` zeroes the velocity again next frame, so
   // what it really amounts to is 10 pixels of travel an engine frame
-  if (swinging) p.x += way * (MEASURED.barSwing / DIVISOR) * TICK_SCALE;
+  if (swinging) p.x += way * (measured.barSwing / DIVISOR) * TICK_SCALE;
   const before = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
   p.barClock += TICK_SCALE;
   const frame = MONKEYBAR.tagStart[p.barTag] + Math.floor(p.barClock / 2);
@@ -1308,15 +1308,15 @@ function stepSwing(bar: SbkEntity, spacing: number, toward: boolean, away: boole
  * on the VELOCITY, once a frame, for the two frames `0x4723f0` lasts, and
  * only once tag 0 is playing. A held jump is 137 high to a plain one's 80.
  */
-function fall(tickX: number, dir: number, bumped: boolean, wasClimbing: boolean, wasHanging: boolean): void {
-  letGo(dir, bumped, wasClimbing, wasHanging);
+function fall(grip: Grip): void {
+  letGo(grip);
   poseFeet();
   if (p.onGround) followFloor();
-  if (!p.onGround) fallAndLand(tickX);
+  if (!p.onGround) fallAndLand(grip.tickX);
 }
 
 /** off a ladder or a bar: the latch, the drop, and the hop off a ladder sideways */
-function letGo(dir: number, bumped: boolean, wasClimbing: boolean, wasHanging: boolean): void {
+function letGo({ dir, bumped, wasClimbing, wasHanging }: Grip): void {
   if (wasClimbing) {
     ladderLatch = true;
     p.ladder = undefined;
@@ -1346,10 +1346,10 @@ function letGo(dir: number, bumped: boolean, wasClimbing: boolean, wasHanging: b
      */
     if (dir) p.facing = dir;
     const leap = held.jump || jumpPressed;
-    p.vyRaw = roundAway(-(leap ? MEASURED.jump : MEASURED.hopDy) / DIVISOR);
+    p.vyRaw = roundAway(-(leap ? measured.jump : measured.hopDy) / DIVISOR);
     p.vx =
       p.facing *
-      roundAway((leap ? MEASURED.runJumpDx : MEASURED.hopDx) / DIVISOR);
+      roundAway((leap ? measured.runJumpDx : measured.hopDx) / DIVISOR);
     p.stepPx = 0;
     p.launched = true;
     p.leap = true;
@@ -1426,7 +1426,7 @@ function landFlail(): void {
   p.flail = false;
   // `0x42923c` — character 0's scream is silenced as he lands
   // (`0x40eee0`); character 1's plays out (`0x443c72` has no such call)
-  if (CHARACTER === 0) sound?.mute(KIT.flailSound, true);
+  if (character === 0) sound?.mute(kit.flailSound, true);
   sound?.own(OWN.landHard, p.x, p.y);
   // `0x4292b7` / `0x429384` (character 1's `0x42a14b` / `0x42a38d`) — and
   // either way the view jolts
@@ -1471,7 +1471,7 @@ export function setPlayerPal(v: typeof playerPal): void {
 
 /**
  * Stand the game up on whatever files have been set ({@link setFiles}): the
- * player's book, the level the switches name ({@link QUERY}), and what a loaded
+ * player's book, the level the switches name ({@link query}), and what a loaded
  * game carries with it. The page calls this from its boot; a headless run calls
  * it directly. False when the rip has no player book.
  */
@@ -1484,7 +1484,7 @@ export async function startGame(): Promise<boolean> {
   const book = readSbkFile(pb);
   setPlayer(book);
   setPlayerPal(paletteToRGBA(book.paletteRaw!, 256));
-  const params = QUERY;
+  const params = query;
   const clock = params.get("clock");
   if (clock !== null && Number.isFinite(Number(clock)))
     setStartTicks(Math.max(0, Number(clock)));

@@ -22,8 +22,6 @@ export function pickSoundChannelsV4(rule: SoundRule, p: number, p1: number, p2: 
  * `haltsound` that takes the channels, and the engine's balance for a pan.
  */
 export class SoundChannelsV4 extends SoundChannels {
-  readonly engine = 4;
-
   /**
    * TI.EXE 0x425150 / 0x425240 / 0x425330 / 0x425400 (singlesound,
    * multiplesound, dualsound, bothsound; tl.exe 0x433850..0x433b30), the

@@ -1,6 +1,7 @@
 import { ScriptError, toNum, toStr, truthy } from "../interp";
 import { decodeText } from "../../df/text";
 import { BuiltinCtx } from "./context";
+import { commandRules } from "./command-rules";
 
 /**
  * Puppet (PUP conversation) commands: open/close, speak/clear, choice bevels,
@@ -24,9 +25,9 @@ export function registerPuppetBuiltins(ctx: BuiltinCtx): void {
   // arguments it reads and only THEN wants the `)` — DF.EXE 0x41fced, TI.EXE
   // 0x4148f7 — so JONES's `puppetspeak ("jones.33", 101)` says jones.33 and then
   // fails with error 2, which unwinds the whole chain (see ScriptError).
-  r("puppetspeak", async (i_, args) => {
+  r("puppetspeak", async (_i, args) => {
     await session.puppetCtrl.puppetSpeak(toStr(args[0] ?? ""));
-    if (args.length > 1 && i_.classic) throw new ScriptError(2, "puppetspeak: ')' expected after its one argument");
+    if (args.length > 1 && commandRules(session).strictCalls) throw new ScriptError(2, "puppetspeak: ')' expected after its one argument");
   });
   r("puppetclear", () => session.puppetCtrl.puppetClear());
   // the bevel caption is a script string literal, so it is localised text and

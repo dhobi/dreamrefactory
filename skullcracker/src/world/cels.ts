@@ -6,7 +6,7 @@ import { SbkCel, SbkFile } from "@dreamfactory/engine/df/sbk";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { FOES, celAt, loopIndex, type Foe } from "../foes";
 import type { Enemy } from "../brains/kit";
-import { player, ANIM, p, type Level } from "./state";
+import { player, anim, p, type Level } from "./state";
 
 /**
  * The player's collision box: the drawn cel's own size, standing on the ground.
@@ -24,7 +24,7 @@ export function playerBox(): {
   bottom: number;
   right: number;
 } {
-  const art = celRec(player, ANIM.idle[0]);
+  const art = celRec(player, anim.idle[0]);
   const w = art?.width ?? 100;
   const h = art?.height ?? 148;
   return { top: p.y - h, left: p.x - w / 2, bottom: p.y, right: p.x + w / 2 };

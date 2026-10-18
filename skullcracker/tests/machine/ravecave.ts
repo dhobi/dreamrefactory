@@ -411,7 +411,7 @@ test.skipIf(!haveRip())("ravecave", async () => {
    */
   await go(13000);
   let hovered = false;
-  const grabCode = Object.values(game.BLOW_CODES).find((r) => r.code === -3)?.act;
+  const grabCode = Object.values(game.blowCodes).find((r) => r.code === -3)?.act;
   for (let i = 0; i < 110; i++) {
     if (game.p.heldBy || (grabCode && game.p.act === grabCode))
       fail(`the wraith's -3 is overwritten by 0x4248ad; it should hold nothing`);

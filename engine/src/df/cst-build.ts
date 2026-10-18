@@ -13,7 +13,7 @@
  * takes `(ShpFrame | null)[]` per step and means it.
  */
 import { ContainerBuilder, checkName, emptyScript, i16, i32, paletteBlock, pstr } from "./build";
-import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
+import { ContainerRef, DFContainerFile } from "./container";
 import { MEMBER_NAME_FIELD, POSE_NAME_FIELD } from "./cst";
 import { ShpFrame, encodeShpFrame } from "./shp";
 
@@ -176,9 +176,4 @@ export function buildCstFile(opts: CstBuildOptions): CstBuildResult {
   });
 
   return { file: b.finish(), spriteLocs };
-}
-
-/** {@link buildCstFile}, serialized */
-export function buildCstBytes(opts: CstBuildOptions): Uint8Array {
-  return writeContainerFile(buildCstFile(opts).file);
 }

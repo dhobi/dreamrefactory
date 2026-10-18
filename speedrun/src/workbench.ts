@@ -59,7 +59,7 @@ import { pageDriver, saveKeys, Aborted, type SaveKeys } from "./page-driver";
 import { Paused } from "./driver";
 import {
   runSheet, stepsFrom, pointerAfter, TOP,
-  type Pointer, type RunResult, type Split,
+  type ClockSpan, type Pointer, type RunResult, type Split,
 } from "./runner";
 import {
   CONDITIONS,
@@ -402,7 +402,7 @@ const LOAD_SHOWN_MS = 100;
  */
 function renderSplits(
   splits: Split[],
-  total?: { ms: number; frames: number; loading: number },
+  total?: ClockSpan,
 ): void {
   if (!splits.length) {
     splitsEl.textContent = "";

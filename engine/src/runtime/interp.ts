@@ -284,7 +284,7 @@ export class Interpreter {
    * `dumplocal` deletes. The session clears it with isV5, so DreamFactory 5
    * keeps what it had: 1/0 for true/false and lenient operators.
    */
-  classic = true;
+  typed = true;
   /**
    * Which engine's command table the running game's IDs mean (1 = DF.EXE, 4 =
    * TI.EXE/tl.exe) — they disagree about what some IDs answer (value-types.ts).
@@ -467,7 +467,7 @@ export class Interpreter {
    * in it (RedJack keeps the port's old answers).
    */
   bool(b: boolean): Value {
-    if (this.classic) return b;
+    if (this.typed) return b;
     return b ? 1 : 0;
   }
 
@@ -478,7 +478,7 @@ export class Interpreter {
    * 0x40ea5c) — `if 1` and `if "x"` are errors, not true.
    */
   condition(v: Value, what: string): boolean {
-    if (!this.classic) return truthy(v);
+    if (!this.typed) return truthy(v);
     const p = logicPayload(v);
     if (p === null) throw typeError(`${what} wants a boolean, got ${show(v)}`);
     return p !== 0;
@@ -535,7 +535,7 @@ export class Interpreter {
     // 0x443db0, DF.EXE 0x4030c0): one too many is error 2, a `)` where the
     // handler expects a `,` 0x1c, and no argument at all where it wants one is
     // the empty argument read as an expression — 0xe (0x431e60).
-    if (this.classic && wants !== undefined && args.length !== block.params.length) {
+    if (this.typed && wants !== undefined && args.length !== block.params.length) {
       let code = 0x1c;
       if (args.length > block.params.length) code = 2;
       else if (args.length === 0) code = 0xe;
@@ -558,7 +558,7 @@ export class Interpreter {
     this.onHandler?.(handler);
     try {
       const sig = await this.execBlock(block.body, frame);
-      if (this.classic && sig.s !== "return" && sig.s !== "abandoned") this.endOfHandler(sig, frame);
+      if (this.typed && sig.s !== "return" && sig.s !== "abandoned") this.endOfHandler(sig, frame);
       return {
         value: sig.s === "return" ? sig.value : 0,
         passed: sig.s === "passcode",
@@ -614,7 +614,7 @@ export class Interpreter {
       const sig = await this.execStmt(st, frame);
       if (sig.s !== "normal") return sig;
       // after every statement, the abort key (see keyAbort)
-      if (this.classic && this.keyAbort()) throw new ScriptError(0x35, "programmer keyboard abort (Esc under keyaborts)");
+      if (this.typed && this.keyAbort()) throw new ScriptError(0x35, "programmer keyboard abort (Esc under keyaborts)");
     }
     return NORMAL;
   }
@@ -648,7 +648,7 @@ export class Interpreter {
           // complaining about 37 variables it cannot store (#85), and a script
           // reading last time's value of a puzzle that has been reset.
           for (const n of st.names) this.globals.delete(n);
-        } else if (st.kind === "dumplocal" && this.classic) {
+        } else if (st.kind === "dumplocal" && this.typed) {
           // the local twin of dumpglobal: DF.EXE's 0x403a87 hands the names to
           // the same deleter (0x403e10 -> 0x4082a0) with the frame's locals
           // where 0x403a9d hands it the globals. TI.EXE 0x4446a7 and tl.exe
@@ -668,7 +668,7 @@ export class Interpreter {
         // The name is found before the value is read (TI.EXE 0x44401e locals,
         // 0x444037 globals): an assignment never creates a variable, and one
         // nobody declared is error 9 (DF.EXE 0x403434).
-        if (this.classic && !frame.locals.has(st.name) && !this.globals.has(st.name)) {
+        if (this.typed && !frame.locals.has(st.name) && !this.globals.has(st.name)) {
           throw new ScriptError(9, `no such variable: ${st.name} (assigned)`);
         }
         this.setVar(st.name, await this.evalExpr(st.value, frame), frame);
@@ -682,7 +682,7 @@ export class Interpreter {
         const subject = await this.evalExpr(st.subject, frame);
         // the subject is an integer or a string, anything else error 0xe
         // (TI.EXE 0x444236/0x44423e, DF.EXE 0x403616)
-        if (this.classic && isLogic(subject)) throw typeError(`switch ${show(subject)}`);
+        if (this.typed && isLogic(subject)) throw typeError(`switch ${show(subject)}`);
         let sig: Signal = NORMAL;
         let matched = false;
         for (let i = 0; i < st.cases.length && !matched; i++) {
@@ -700,7 +700,7 @@ export class Interpreter {
         // (the next `case` scans for it, 0x4442bc -> 0x444b50) and so does a
         // subject no case matched, and the scan meets `endcode` — error 0x1f
         // (0x444b90; DF.EXE 0x403f50 the same).
-        if (this.classic && st.open && sig.s === "normal") {
+        if (this.typed && st.open && sig.s === "normal") {
           throw new ScriptError(0x1f, "a `switch` without its `endswitch` ran to the end of the handler");
         }
         return sig;
@@ -715,7 +715,7 @@ export class Interpreter {
         let opened = false;
         try {
         while (this.condition(await this.evalExpr(st.cond, frame), "while")) {
-          if (!opened && this.classic) {
+          if (!opened && this.typed) {
             // the loop's record goes on the global while stack only once it is
             // entered (0x4445de); the 20th is error 3
             opened = true;
@@ -745,7 +745,7 @@ export class Interpreter {
         const from = this.forNum(await this.evalExpr(st.from, frame), "from");
         const to = this.forNum(await this.evalExpr(st.to, frame), "to");
         const step = st.step ? this.forNum(await this.evalExpr(st.step, frame), "step") : 1;
-        if (this.classic) return this.classicFor(st.varName, from, to, step, st.body, frame);
+        if (this.typed) return this.typedFor(st.varName, from, to, step, st.body, frame);
         if (step === 0) throw new Error("for loop with step 0");
         for (let i = from; step > 0 ? i <= to : i >= to; i += step) {
           this.setVar(st.varName, i, frame);
@@ -762,7 +762,7 @@ export class Interpreter {
       case "passcode":
         return { s: "passcode" };
       case "return":
-        if (this.classic) {
+        if (this.typed) {
           // a caller that asked for nothing cannot be answered (0x4448c8)
           if (frame.wants === false) throw new ScriptError(5, `\`return\` in ${frame.handler}, called for no value`);
           // ...and a `return` with nothing after it reads the line break as its
@@ -771,14 +771,14 @@ export class Interpreter {
         }
         return { s: "return", value: st.value ? await this.evalExpr(st.value, frame) : 0 };
       case "bare": {
-        if (!this.classic) return NORMAL;
+        if (!this.typed) return NORMAL;
         const known = frame.locals.has(st.name) || this.globals.has(st.name);
         throw new ScriptError(known ? 0x10 : 9, known ? `expected '=' after ${st.name}` : `no such variable: ${st.name}`);
       }
       case "stray":
         return this.stray(st, frame);
       case "fault":
-        if (!this.classic) return NORMAL;
+        if (!this.typed) return NORMAL;
         throw new ScriptError(st.code, st.why);
     }
   }
@@ -793,7 +793,7 @@ export class Interpreter {
    * skipped as before).
    */
   private async execIf(st: Extract<Stmt, { t: "if" }>, frame: Frame): Promise<Signal> {
-    const open = this.classic && st.open;
+    const open = this.typed && st.open;
     if (this.condition(await this.evalExpr(st.cond, frame), "if")) {
       frame.ifDepth++;
       const sig = await this.execBlock(st.body, frame);
@@ -824,7 +824,7 @@ export class Interpreter {
 
   /** a block keyword with no block to close — see the `stray` statement */
   private stray(st: Extract<Stmt, { t: "stray" }>, frame: Frame): Signal {
-    if (!this.classic) return NORMAL;
+    if (!this.typed) return NORMAL;
     switch (st.name.toLowerCase()) {
       case "endif":
         // a frame's open count can still take it (an `if` whose own `endif` the
@@ -861,7 +861,7 @@ export class Interpreter {
    *   (0x4038ff-0x403933), so the body may move it; the loop goes on while it
    *   is `<= to` (step >= 0) or `>= to` (step < 0). It ends one step past `to`.
    */
-  private async classicFor(
+  private async typedFor(
     name: string,
     from: number,
     to: number,
@@ -877,13 +877,13 @@ export class Interpreter {
       throw new ScriptError(3, "for loops nested 20 deep");
     }
     try {
-      return await this.classicForBody(name, to, step, body, frame);
+      return await this.typedForBody(name, to, step, body, frame);
     } finally {
       this.forOpen--;
     }
   }
 
-  private async classicForBody(name: string, to: number, step: number, body: Stmt[], frame: Frame): Promise<Signal> {
+  private async typedForBody(name: string, to: number, step: number, body: Stmt[], frame: Frame): Promise<Signal> {
     let guard = 0;
     let lastYield = this.realYieldSeq();
     for (;;) {
@@ -907,9 +907,9 @@ export class Interpreter {
     }
   }
 
-  /** a `for` bound — an integer, or error 0xe in the classic engines */
+  /** a `for` bound — an integer, or error 0xe in the typed engines */
   private forNum(v: Value, what: string): number {
-    if (this.classic && typeof v !== "number") throw typeError(`for: ${what} wants an integer, got ${show(v)}`);
+    if (this.typed && typeof v !== "number") throw typeError(`for: ${what} wants an integer, got ${show(v)}`);
     return toNum(v);
   }
 
@@ -920,7 +920,7 @@ export class Interpreter {
    * boolean case is never a match (0x404151 -> 0x40418f, the next case).
    */
   private caseMatches(subject: Value, match: Value): boolean {
-    if (!this.classic) return valueEq(subject, match);
+    if (!this.typed) return valueEq(subject, match);
     if (isLogic(subject) || isLogic(match)) {
       if (!isLogic(subject) || !isLogic(match)) throw typeError(`case ${show(match)} against ${show(subject)}`);
       return false;
@@ -944,7 +944,7 @@ export class Interpreter {
       case "var":
         // locals, then globals, then error 9 — never 0 (TI.EXE 0x4327f4/0x432811,
         // DF.EXE 0x40d8f4/0x40d913)
-        if (this.classic && !frame.locals.has(e.name) && !this.globals.has(e.name)) {
+        if (this.typed && !frame.locals.has(e.name) && !this.globals.has(e.name)) {
           throw new ScriptError(9, `no such variable: ${e.name}`);
         }
         return this.getVar(e.name, frame);
@@ -954,7 +954,7 @@ export class Interpreter {
         return (await this.evalCall(e, frame, true)) ?? 0;
       case "un": {
         const v = await this.evalExpr(e.e, frame);
-        if (this.classic) {
+        if (this.typed) {
           // `not` wants a boolean (DF.EXE 0x40dad8), unary `-` an integer
           // (0x40db9a); anything else is error 0xe
           if (e.op === "not") {
@@ -982,7 +982,7 @@ export class Interpreter {
           if (e.op === "|" && truthy(l)) return 1;
         }
         const r = await this.evalExpr(e.r, frame);
-        if (this.classic) return classicBinary(e.op, l, r);
+        if (this.typed) return typedBinary(e.op, l, r);
         switch (e.op) {
           case "&":
             return truthy(l) && truthy(r) ? 1 : 0;
@@ -999,9 +999,9 @@ export class Interpreter {
           case "/":
             return Math.trunc(toNum(l) / toNum(r));
           case "=":
-            return valueEq(l, r, this.classic) ? 1 : 0;
+            return valueEq(l, r, this.typed) ? 1 : 0;
           case "!=":
-            return valueEq(l, r, this.classic) ? 0 : 1;
+            return valueEq(l, r, this.typed) ? 0 : 1;
           case ">":
             return toNum(l) > toNum(r) ? 1 : 0;
           case "<":
@@ -1035,7 +1035,7 @@ export class Interpreter {
     // unknown command — the pickup that made no sound.
     // a call the engine's dispatcher does not reach in this context is error 1
     // before anything is evaluated (value-types.ts dispatches)
-    if (this.classic && call.id !== undefined && !dispatches(this.tableVersion(), call.id, wants)) {
+    if (this.typed && call.id !== undefined && !dispatches(this.tableVersion(), call.id, wants)) {
       throw new ScriptError(1, `${call.name}: not a command ${wants ? "with a value" : "statement"}`);
     }
     const folded = call.name.toLowerCase();
@@ -1052,14 +1052,14 @@ export class Interpreter {
         frame.sendWants = before;
       }
       // Dust's 20100 `scenebuild` is answered by the `sendtoserverfx` form
-      return this.classic && call.id !== undefined && out !== undefined && answersBoolean(this.tableVersion(), call.id)
+      return this.typed && call.id !== undefined && out !== undefined && answersBoolean(this.tableVersion(), call.id)
         ? asLogic(out)
         : out;
     }
     const builtin = this.builtins.get(folded);
     const args = await this.evalArgs(call.args, frame);
     if (builtin) {
-      if (!this.classic || call.id === undefined) return builtin(this, args, call, frame);
+      if (!this.typed || call.id === undefined) return builtin(this, args, call, frame);
       // The engine's own commands check and answer typed values — see
       // value-types.ts. A boolean argument that is not one is error 0xe, the
       // setter's `cmp word [arg], 2` (actorvisible: DF.EXE 0x412a48).
@@ -1089,7 +1089,7 @@ export class Interpreter {
           return (await this.runHandler(inst, call.name, args, frame.ctx, frame, wants)).value;
         }
       }
-      if (this.classic) {
+      if (this.typed) {
         // No handler anywhere: error 4, unless the name is one of the engine's
         // own events, which a script may call without defining (ENGINE_EVENTS)
         const events = this.tableVersion() === 1 ? ENGINE_EVENTS_V1 : ENGINE_EVENTS_V4;
@@ -1167,7 +1167,7 @@ function asLogic(v: Value): boolean | Logic {
   return isLogic(v) ? v : truthy(v);
 }
 /** a value as a number; a boolean is 1/0 (the port's own reads — the engines
- *  would refuse it, see {@link classicBinary}) */
+ *  would refuse it, see {@link typedBinary}) */
 export function toNum(v: Value): number {
   if (typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
@@ -1205,7 +1205,7 @@ function show(v: Value): string {
  *
  * Anything refused is error 0xe. Every answer of a comparison is a boolean.
  */
-export function classicBinary(op: string, l: Value, r: Value): Value {
+export function typedBinary(op: string, l: Value, r: Value): Value {
   const ints = (): [number, number] => {
     if (typeof l !== "number" || typeof r !== "number") throw typeError(`${show(l)} ${op} ${show(r)}`);
     return [l, r];
@@ -1272,7 +1272,7 @@ export function classicBinary(op: string, l: Value, r: Value): Value {
  * DF.EXE's 0x4303c0 checks the length byte, then folds both sides through the
  * table at 0x447478.
  *
- * `classic` is the engines before DreamFactory 5, and there a string is never
+ * `typed` is the engines before DreamFactory 5, and there a string is never
  * equal to a number: DF.EXE's `=` (0x40d461) answers false when the two type
  * tags differ, before it looks at either value, and `!=` (0x40d523) true; TI.EXE
  * 0x4322e1/0x4323e7 and tl.exe 0x41fc91 do the same. So `"5" = 5` is false, and
@@ -1280,24 +1280,24 @@ export function classicBinary(op: string, l: Value, r: Value): Value {
  * A boolean is a third type: `1 = true` is false. `switch` (0x404070) raises a
  * type error instead — see {@link Interpreter.caseMatches}.
  *
- * Off `classic` (RedJack) a mixed comparison is by text, as before.
+ * Off `typed` (RedJack) a mixed comparison is by text, as before.
  */
-export function valueEq(a: Value, b: Value, classic = false): boolean {
+export function valueEq(a: Value, b: Value, typed = false): boolean {
   // two booleans compare their payloads (DF.EXE 0x40d4fd)
   const la = logicPayload(a);
   const lb = logicPayload(b);
   if (la !== null || lb !== null) {
     if (la !== null && lb !== null) return la === lb;
-    if (classic) return false;
+    if (typed) return false;
     return toStr(a).toLowerCase() === toStr(b).toLowerCase();
   }
   // the engines fold A-Z and nothing else (TI.EXE's table at 0x45c068, DF.EXE's
   // at 0x447478): "É" and "é" are two letters to them
   if (typeof a === "string" && typeof b === "string") {
-    return classic ? foldAscii(a) === foldAscii(b) : a.toLowerCase() === b.toLowerCase();
+    return typed ? foldAscii(a) === foldAscii(b) : a.toLowerCase() === b.toLowerCase();
   }
   if (typeof a === typeof b) return a === b;
-  if (classic) return false;
+  if (typed) return false;
   // mixed: by text; comparing numerically would make "uparrow" = 0 true
   return toStr(a).toLowerCase() === toStr(b).toLowerCase();
 }

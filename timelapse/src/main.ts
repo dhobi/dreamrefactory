@@ -28,6 +28,7 @@ import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import {
+  BootCaption,
   GestureAudio,
   PageLog,
   busySpinner,
@@ -201,11 +202,7 @@ function progress(f: number, label?: string): void {
   }
   // the caption is one line and the newest one wins: what a player watches is
   // the loader naming what it is opening
-  if (label) {
-    idleCaption = label;
-    bootSayEl.textContent = label;
-    rateShown = false;
-  }
+  if (label) caption.say(label);
 }
 
 /** the network meter (chrome/src/net-meter.ts), read on a timer while the prefetch runs */
@@ -216,26 +213,8 @@ let meterTimer = 0;
 let bytesLeft: (() => number) | null = null;
 /** F12's About box, once there is a session to report on */
 let showAbout: () => void = () => {};
-/** the last thing the LOADER said, to fall back to when the wire goes quiet */
-let idleCaption = "";
-/** is the caption currently a rate, and therefore mine to replace? */
-let rateShown = false;
-
-/**
- * Show the rate while bytes are arriving and get out of the way when they are
- * not: a rate that survives the transfer it measured is the misleading thing,
- * and the name of the file being opened is better than a stale number.
- */
-function meterTick(): void {
-  const caption = meter.caption(performance.now(), bytesLeft?.() ?? 0);
-  if (caption) {
-    bootSayEl.textContent = caption;
-    rateShown = true;
-  } else if (rateShown) {
-    bootSayEl.textContent = idleCaption;
-    rateShown = false;
-  }
-}
+/** the boot caption: the name of the file being opened, or the rate while bytes are arriving */
+const caption = new BootCaption(bootSayEl, () => meter.caption(performance.now(), bytesLeft?.() ?? 0));
 
 /** a real pause, for the one place that wants to be SEEN rather than be quick */
 const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -276,7 +255,7 @@ async function main(): Promise<void> {
   say(`indexed ${files.size} names across the rip`);
   files.onChunk = (_name, bytes) => meter.chunk(bytes, performance.now());
   files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
-  meterTimer = window.setInterval(meterTick, TICK_MS);
+  meterTimer = window.setInterval(caption.tick, TICK_MS);
 
   const host = new GameHost(
     files,

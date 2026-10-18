@@ -23,7 +23,7 @@
  * which is what the shipped files do (a turn ring's standpoint frame IS the view).
  */
 import { ContainerBuilder, checkName, emptyScript, f64, i16, i32, paletteBlock, pstr } from "./build";
-import { ContainerRef, DFContainerFile, writeContainerFile } from "./container";
+import { ContainerRef, DFContainerFile } from "./container";
 import { encodeFrame, encodeZLayer } from "./image";
 import { isqrt } from "./set";
 
@@ -448,9 +448,4 @@ export function buildSetFile(opts: SetBuildOptions): SetBuildResult {
   pstr(c0, C0.defaultViewName, opts.defaultView ?? scenes[0].views[0]?.name ?? "", NAME_FIELD);
 
   return { file: b.finish(), artLocs };
-}
-
-/** {@link buildSetFile}, serialized */
-export function buildSetBytes(opts: SetBuildOptions): Uint8Array {
-  return writeContainerFile(buildSetFile(opts).file);
 }

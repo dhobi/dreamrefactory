@@ -12,10 +12,8 @@
  * presentation-shaped is behind {@link RunHooks}. What is left is the loop.
  */
 import {
-  clearWatches,
   resolveIn,
   verbsOf,
-  watches,
   type Action,
   type ActionContext,
   type ActionTable,
@@ -53,10 +51,9 @@ const WATCH_TICK_MS = 250;
  * seconds is a leg whose real cost is a download, and warming the cache
  * (engine/src/web/cache-warmup.ts) will change the run more than tuning it will.
  */
-/** what one action cost */
-export interface Timing {
-  step: Step;
-  /** wall ms with the loading taken out — what the action cost the route */
+/** how far the clock moved between two readings */
+export interface ClockSpan {
+  /** wall ms with the loading taken out — what the stretch cost the route */
   ms: number;
   frames: number;
   /** game ms — in-game time, the same on any machine under a sheet's clock (#508) */
@@ -64,29 +61,33 @@ export interface Timing {
   /** ms of it spent waiting on the network or with the tab hidden (#375), and
    *  therefore not in `ms` */
   loading: number;
+}
+
+/** what one action cost */
+export interface Timing extends ClockSpan {
+  step: Step;
   /** ms of `after:` padding inside it — dead time, called out separately */
   padded: number;
   says: string[];
   suggestion?: string;
 }
 
-export interface Split {
+export interface Split extends ClockSpan {
   name: string;
-  /** wall ms with the loading taken out — see the note above */
-  ms: number;
-  frames: number;
-  /** game ms — in-game time (#508) */
-  game: number;
-  /** ms of it spent waiting on the network, and therefore not in `ms` */
-  loading: number;
   actions: number;
+}
+
+/** the line a run stopped on, and why */
+export interface Failure {
+  step: Step;
+  error: Error;
 }
 
 export interface RunResult {
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number; game: number; loading: number };
-  failure: { step: Step; error: Error } | null;
+  total: ClockSpan;
+  failure: Failure | null;
   /** where the game was standing when it stopped — only sampled on failure */
   where: string | null;
   /**
@@ -300,10 +301,9 @@ export async function runSheet(
   const timings: Timing[] = [];
   const splits: Split[] = [];
   const invalid: string[] = [];
-  let failure: { step: Step; error: Error } | null = null;
-
+  let failure: Failure | null = null;
   // a watch belongs to the run that registered it, not to the process
-  clearWatches();
+  const watches: Watch[] = [];
 
   const started: Clock = await d.clock();
   let splitFrom = started;
@@ -311,7 +311,8 @@ export async function runSheet(
   const actionCount = steps.filter((s) => s.verb !== "split").length;
   let index = 0;
 
-  const watchdog = watchdogFor(d, actions, hooks, verbs);
+  const context: RunContext = { d, actions, hooks, verbs, watches };
+  const run: StepRun = { ...context, watchdog: watchdogFor(context) };
   for (const step of steps) {
     if (step.verb === "split") {
       const now = await d.clock();
@@ -325,7 +326,7 @@ export async function runSheet(
 
     hooks.onStep?.(step, index++, actionCount);
     const action = resolve(step.verb)!;
-    const ran = await runStep(d, step, action, actions, hooks, verbs, watchdog);
+    const ran = await runStep(run, step, action);
     const { timing, voided } = ran;
     // null until now: a failure ends the loop below
     failure = ran.failure;
@@ -348,28 +349,26 @@ export async function runSheet(
   return {
     timings,
     splits,
-    total: {
-      ms: netMs(started, ended),
-      frames: ended.frames - started.frames,
-      game: ended.game - started.game,
-      loading: ended.loading - started.loading,
-    },
+    total: clockBetween(started, ended),
     failure,
     where,
     invalid,
   };
 }
 
-/** one split: the clock between `from` and `to`, and the actions run in it */
-function splitBetween(name: string, from: Clock, to: Clock, actions: number): Split {
+/** the clock between `from` and `to`: wall time net of the network, frames, game ms and loading */
+function clockBetween(from: Clock, to: Clock): ClockSpan {
   return {
-    name,
     ms: netMs(from, to),
     frames: to.frames - from.frames,
     game: to.game - from.game,
     loading: to.loading - from.loading,
-    actions,
   };
+}
+
+/** one split: the clock between `from` and `to`, and the actions run in it */
+function splitBetween(name: string, from: Clock, to: Clock, actions: number): Split {
+  return { name, ...clockBetween(from, to), actions };
 }
 
 /**
@@ -377,12 +376,8 @@ function splitBetween(name: string, from: Clock, to: Clock, actions: number): Sp
  * running step. A watch belongs to the run that registered it, and so does
  * this: one per {@link runSheet}.
  */
-function watchdogFor(
-  d: SpeedrunDriver,
-  actions: ActionTable,
-  hooks: RunHooks,
-  verbs: ReturnType<typeof verbsOf>,
-): (done: () => boolean, finished: Promise<void>) => Promise<void> {
+function watchdogFor(run: RunContext): (done: () => boolean, finished: Promise<void>) => Promise<void> {
+  const { d, actions, hooks, watches } = run;
   const resolve = (verb: string): Action | undefined => resolveIn(actions, verb);
   /**
    * The standing watches, polled ALONGSIDE the running step (#255).
@@ -404,34 +399,24 @@ function watchdogFor(
    * a sheet that does not use them pays nothing.
    */
   const runWatches = async (sheet: boolean): Promise<void> => {
-    const live = watches();
-    if (!live.length) return;
+    if (!watches.length) return;
     let fire: boolean[];
     try {
       fire = sheet
-        ? await d.evaluate<boolean[]>(takeRises(live))
-        : edges(live, await d.evaluate<boolean[]>("[" + live.map((w) => `!!(${w.expr})`).join(",") + "]"));
+        ? await d.evaluate<boolean[]>(takeRises(watches))
+        : edges(watches, await d.evaluate<boolean[]>("[" + watches.map((w) => `!!(${w.expr})`).join(",") + "]"));
     } catch {
       return; // a page mid-navigation is not a watch failing
     }
-    for (let i = 0; i < live.length; i++) {
+    for (let i = 0; i < watches.length; i++) {
       if (!fire[i]) continue;
-      const w = live[i];
+      const w = watches[i];
       w.fired++;
       const act = resolve(w.action.verb);
       if (!act) continue;
       const said: string[] = [];
       try {
-        await act.run({
-          d: sheet ? watchDriver : d,
-          step: w.action,
-          wait: waitOf(actions, w.action),
-          budget: Number(w.action.opts.budget ?? 10_000) * (hooks.patience ?? 1),
-          gap: Number(w.action.opts.gap ?? 16),
-          say: (m: string) => said.push(m),
-          suggest: () => {},
-          verbs,
-        });
+        await act.run(contextFor(run, sheet ? watchDriver : d, w.action, (m) => said.push(m)));
         hooks.onWatch?.(w, said);
       } catch (e) {
         hooks.onWatch?.(w, [`failed: ${(e as Error).message}`]);
@@ -517,8 +502,7 @@ function watchdogFor(
    */
   const watchdog = (done: () => boolean, finished: Promise<void>): Promise<void> =>
     (async () => {
-      const live = watches();
-      const sheet = await openWatches(live);
+      const sheet = await openWatches(watches);
       try {
         while (!done()) {
           await runWatches(sheet);
@@ -526,23 +510,80 @@ function watchdogFor(
           await Promise.race([(d.wallWait ?? d.sleep).call(d, WATCH_TICK_MS), finished]);
         }
       } finally {
-        if (sheet) await closeWatches(live);
+        if (sheet) await closeWatches(watches);
       }
     })();
   return watchdog;
 }
 
-/** one line of the sheet, run and timed: its says, its suggestion, and the failure it stopped on */
-async function runStep(
+/** what every line of one run is run with (runSheet) */
+interface RunContext {
+  d: SpeedrunDriver;
+  actions: ActionTable;
+  hooks: RunHooks;
+  verbs: ReturnType<typeof verbsOf>;
+  /** the run's standing watches (`watchFor`) */
+  watches: Watch[];
+}
+
+/** ...and the watchdog that polls its watches beside each line */
+interface StepRun extends RunContext {
+  watchdog: ReturnType<typeof watchdogFor>;
+}
+
+/**
+ * What an action is run with, on `d`: the line's wait, budget and gap, and
+ * the run's vocabulary and watches. A line suggests and voids on top of this;
+ * a watch's action does neither.
+ */
+function contextFor(
+  { actions, hooks, verbs, watches }: RunContext,
   d: SpeedrunDriver,
   step: Step,
+  say: (m: string) => void,
+): ActionContext {
+  return {
+    d,
+    step,
+    wait: waitOf(actions, step),
+    /**
+     * TEN SECONDS, and the point of it is the sheet rather than the run.
+     *
+     * This was 120 s, and a two-minute ceiling is not a default so much as
+     * an absence of one: nothing in a working run ever reaches it, so it
+     * never appears in the report and never has to be justified. What it
+     * bought instead was a `budget:` on 51 lines of the sheet of which 47
+     * were at or below the default — four of them exactly 120000 — written
+     * out of caution rather than measurement, and each one a number a
+     * reader has to decide whether to believe.
+     *
+     * At ten seconds the option means something again. Every line that
+     * needs longer has to SAY it needs longer, which turns `budget:` from
+     * noise into the sheet's list of the genuinely slow moments — the
+     * intro film, the fight, the smokestack climb, a walk across the ship.
+     * And a leg that hangs is called stuck in ten seconds instead of two
+     * minutes, which is the whole edit loop when a sheet is being written.
+     *
+     * It costs nothing when a line works: the budget is a ceiling on a
+     * hold, not a wait, and a hold resolves the moment its condition does.
+     */
+    budget: Number(step.opts.budget ?? 10_000) * (hooks.patience ?? 1),
+    gap: Number(step.opts.gap ?? 16),
+    say,
+    suggest: () => {},
+    verbs,
+    watches,
+  };
+}
+
+/** one line of the sheet, run and timed: its says, its suggestion, and the failure it stopped on */
+async function runStep(
+  run: StepRun,
+  step: Step,
   action: Action,
-  actions: ActionTable,
-  hooks: RunHooks,
-  verbs: ReturnType<typeof verbsOf>,
-  watchdog: (done: () => boolean, finished: Promise<void>) => Promise<void>,
-): Promise<{ timing: Timing; voided: boolean; failure: { step: Step; error: Error } | null }> {
-  let failure: { step: Step; error: Error } | null = null;
+): Promise<{ timing: Timing; voided: boolean; failure: Failure | null }> {
+  const { d, watches, watchdog } = run;
+  let failure: Failure | null = null;
   const says: string[] = [];
   let suggestion: string | undefined;
   let voided = false;
@@ -551,41 +592,14 @@ async function runStep(
 
   try {
     const ctx: ActionContext = {
-      d,
-      step,
-      wait: waitOf(actions, step),
-      /**
-       * TEN SECONDS, and the point of it is the sheet rather than the run.
-       *
-       * This was 120 s, and a two-minute ceiling is not a default so much as
-       * an absence of one: nothing in a working run ever reaches it, so it
-       * never appears in the report and never has to be justified. What it
-       * bought instead was a `budget:` on 51 lines of the sheet of which 47
-       * were at or below the default — four of them exactly 120000 — written
-       * out of caution rather than measurement, and each one a number a
-       * reader has to decide whether to believe.
-       *
-       * At ten seconds the option means something again. Every line that
-       * needs longer has to SAY it needs longer, which turns `budget:` from
-       * noise into the sheet's list of the genuinely slow moments — the
-       * intro film, the fight, the smokestack climb, a walk across the ship.
-       * And a leg that hangs is called stuck in ten seconds instead of two
-       * minutes, which is the whole edit loop when a sheet is being written.
-       *
-       * It costs nothing when a line works: the budget is a ceiling on a
-       * hold, not a wait, and a hold resolves the moment its condition does.
-       */
-      budget: Number(step.opts.budget ?? 10_000) * (hooks.patience ?? 1),
-      gap: Number(step.opts.gap ?? 16),
-      say: (m: string) => says.push(m),
+      ...contextFor(run, d, step, (m) => says.push(m)),
       suggest: (line: string) => (suggestion = line),
       voidTime: () => (voided = true),
-      verbs,
     };
     let over = false;
     let finish = (): void => {};
     const finished = new Promise<void>((r) => (finish = r));
-    const dog = watches().length && step.verb !== "watchfor"
+    const dog = watches.length && step.verb !== "watchfor"
       ? watchdog(() => over, finished)
       : null;
     try {
@@ -605,10 +619,7 @@ async function runStep(
   const after = await d.clock().catch(() => before);
   const timing: Timing = {
     step,
-    ms: netMs(before, after),
-    frames: after.frames - before.frames,
-    game: after.game - before.game,
-    loading: after.loading - before.loading,
+    ...clockBetween(before, after),
     padded: d.padded() - paddedBefore,
     says,
     suggestion,

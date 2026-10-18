@@ -420,7 +420,7 @@ test.skipIf(!haveRip())("sewer", async () => {
   const codes: number[] = [];
   let heldEver = false;
   let topWhileUp = Infinity;
-  const reactions = Object.values(game.BLOW_CODES);
+  const reactions = Object.values(game.blowCodes);
   const bushes = game.hereOf((l) => l.bushes).filter((b) => Math.abs(b.x - 7689) < 300);
   if (!bushes.length) fail(`hugeroom's bush at x7689 should hang here`);
   const settled = h.until(() => {

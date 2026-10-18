@@ -212,7 +212,7 @@ export function createBuiltinCtx(session: GameSession): BuiltinCtx {
     miss: (cmd, name) => {
       const key = `${cmd}(${toStr(name ?? "")})`;
       session.accessorMisses.set(key, (session.accessorMisses.get(key) ?? 0) + 1);
-      if (interp.classic) throw new ScriptError(0xa, `no such object: ${key}`);
+      if (commandRules(session).strictCalls) throw new ScriptError(0xa, `no such object: ${key}`);
     },
     yieldFrame: async (site) => {
       if (!session.hasRealFrames) return;

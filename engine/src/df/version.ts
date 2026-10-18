@@ -103,3 +103,7 @@ export function detectVersion(data: Uint8Array, order: ByteOrder = PC): number {
   if (pos <= 1024 || pos + 8 + VERSION_OFFSET + 4 > data.length) return 0;
   return versionOf(data.subarray(pos + 8), order);
 }
+
+/** is this container DreamFactory 5's, and of this four-character kind? */
+export const isV5 = (d: Uint8Array, kind: string): boolean =>
+  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;

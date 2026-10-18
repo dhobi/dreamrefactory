@@ -133,8 +133,6 @@ export function parseBoard(text: string): Board | null {
   return board;
 }
 
-export const boardText = (b: Board): string => [...b].join(" ");
-
 const on = (row: number, col: number): boolean => row >= 0 && row < 8 && col >= 0 && col < 8;
 
 /** one move legal for `side` (0 Bolivar, otherwise the player) — the DLL's test */

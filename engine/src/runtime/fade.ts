@@ -82,6 +82,20 @@ export class Fade {
     this.blanked = false;
   }
 
+  /** one tick of the ramp at the front of the queue, which leaves it once it is there */
+  step(): void {
+    const ramp = this.queue[0];
+    if (ramp.to === 0) this.snapshot = null; // fading back in reveals the live frame
+    const delta = 1 / ramp.steps;
+    this.level = ramp.to > this.level ? Math.min(ramp.to, this.level + delta) : Math.max(ramp.to, this.level - delta);
+    // …and the level is thirds all over again: ten steps of 1/10 off 1 leave
+    // 1.4e-16, which is not `to` and cost an eleventh step to walk off
+    if (Math.abs(this.level - ramp.to) < delta / 2) {
+      this.level = ramp.to;
+      this.queue.shift();
+    }
+  }
+
   /** the screen is black from this instant — no ramp, nothing left running, BLANKED */
   blankNow(): void {
     this.cut(1);
@@ -102,5 +116,34 @@ export class Fade {
   reset(level: number): void {
     this.cut(level);
     this.blanked = false;
+  }
+
+  /**
+   * Stop holding the black: the room is already painted underneath, so there
+   * is nothing to ramp from. Whatever ramp or reveal is queued stays queued.
+   */
+  lift(): void {
+    this.level = 0;
+  }
+
+  /** hold the screen black until something draws — a ramp or reveal queued stays queued */
+  holdBlack(): void {
+    this.level = 1;
+  }
+
+  /**
+   * Black from this instant with no ramp, no frame held and no reveal owed,
+   * and hand back what puts the screen as it was (builtins/savegame.ts
+   * blackTheScreen). Whether the black was blanked on is left as it was.
+   */
+  blackUntilRestored(): () => void {
+    const was = { level: this.level, queue: [...this.queue], snapshot: this.snapshot, pending: this.pendingReveal };
+    this.cut(1);
+    return () => {
+      this.level = was.level;
+      this.queue.push(...was.queue);
+      this.snapshot = was.snapshot;
+      this.pendingReveal = was.pending;
+    };
   }
 }

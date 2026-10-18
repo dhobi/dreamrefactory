@@ -69,7 +69,7 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { busySpinner, titleRise, waitForStart } from "@dreamfactory/engine/web/page-shell";
+import { BootCaption, busySpinner, titleRise, waitForStart } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
@@ -453,35 +453,17 @@ let meterTimer = 0;
  * is working" and "this is broken" is being told how long it will take.
  */
 let bytesLeft: (() => number) | null = null;
-/** the last thing the LOADER said, to fall back to when the wire goes quiet */
-let idleCaption = "";
-/** is the caption currently a rate, and therefore mine to replace? */
-let rateShown = false;
 
 /** every chunk of every fetch the loading page makes */
 function netChunk(bytes: number): void {
   meter.chunk(bytes, performance.now());
 }
 
-/**
- * Show the rate while bytes are arriving, and get out of the way when they are
- * not: a rate that survives the transfer it measured is the misleading thing,
- * and what the page has to say between fetches (which room it is opening, what
- * the boot just loaded) is better than a stale number.
- */
-function meterTick(): void {
-  const caption = meter.caption(performance.now(), bytesLeft?.() ?? 0);
-  if (caption) {
-    bootSayEl.textContent = caption;
-    rateShown = true;
-  } else if (rateShown) {
-    bootSayEl.textContent = idleCaption;
-    rateShown = false;
-  }
-}
+/** the boot caption: the loader's label, or the rate while bytes are arriving */
+const caption = new BootCaption(bootSayEl, () => meter.caption(performance.now(), bytesLeft?.() ?? 0));
 
 function startMeter(): void {
-  if (!meterTimer) meterTimer = window.setInterval(meterTick, TICK_MS);
+  if (!meterTimer) meterTimer = window.setInterval(caption.tick, TICK_MS);
 }
 function stopMeter(): void {
   if (meterTimer) clearInterval(meterTimer);
@@ -531,11 +513,7 @@ function progress(f: number, label?: string): void {
   }
   // the caption is one line and the newest one wins: what a player watches for
   // two seconds is the engine naming what it just opened
-  if (label) {
-    idleCaption = label;
-    bootSayEl.textContent = label;
-    rateShown = false;
-  }
+  if (label) caption.say(label);
 }
 
 /**

@@ -19,6 +19,7 @@ import { shutStreams, inv } from "./arsenal";
 import { stats, pops, knockback, strikeOf } from "./blows";
 import { playerSprite } from "./fixtures";
 import { crowsHere } from "./scenery";
+import { celBoxAt, overlaps } from "./box";
 
 /**
  * Step each spawned thing: its animation, then whatever that animation moves.
@@ -1062,13 +1063,7 @@ export function castHurtBox(
     c.facing < 0 && art.body
       ? { ...art.body, x0: -art.body.x1, x1: -art.body.x0 }
       : art.body;
-  if (b)
-    return {
-      left: c.x + b.x0,
-      right: c.x + b.x1,
-      top: c.y + b.y0,
-      bottom: c.y + b.y1,
-    };
+  if (b) return celBoxAt(c.x, c.y, b);
   const left = c.facing < 0 ? c.x - (art.width - art.posX) : c.x - art.posX;
   return {
     left,
@@ -1406,12 +1401,7 @@ export function chainCasts(): void {
       const art = celRec(lvl.sbk, castCel(b));
       if (!art) continue;
       const hurt = castHurtBox(b, art);
-      if (!(
-        box.right > hurt.left &&
-        box.left < hurt.right &&
-        box.bottom > hurt.top &&
-        box.top < hurt.bottom
-      ))
+      if (!overlaps(box, hurt))
         continue;
       const was = b.landed;
       strikeCast(b, CHAIN_BLOW);
