@@ -18,9 +18,11 @@ import { decodeFrame, encodeFrame, FrameBuffer, indexedToRGBA, paletteToRGBA } f
 import { byExtension, chosenSource, encodingOf, filesIn, listSources } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
+  $,
   appendScripts,
   artSizes,
   download,
+  EditLog,
   exportContainerFile,
   indexPixels,
   installEditorPage,
@@ -51,7 +53,6 @@ import {
   patchViewName,
 } from "@dreamfactory/engine/df/set-patch";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -99,7 +100,7 @@ let fileName = "room.set";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 let mapPalette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 let sceneIdx = 0;
 let viewIdx = 0;
 /** the frame the preview shows and the PNG buttons act on; null = the
@@ -112,15 +113,6 @@ let playing: { stop: () => void } | null = null;
 function log(text: string): void {
   statusEl.textContent = text;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = t("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 const scene = () => set!.scenes[sceneIdx];
 const view = () => scene()?.views[viewIdx];
@@ -145,7 +137,7 @@ function loadSet(bytes: Uint8Array, name: string): void {
   mapPalette = paletteToRGBA(parsed.paletteRaw, 256);
   rings.clear();
   ringBytes = 0;
-  edits.length = 0;
+  edits.clear();
   dirtyEl.textContent = readOnlyV1 ? V1_READ_ONLY : "";
   // a button that refuses when pressed is worse than one that says so first
   ($("exportBtn") as HTMLButtonElement).disabled = readOnlyV1;
@@ -189,10 +181,10 @@ async function initServerSets(): Promise<void> {
 const serverListed = initServerSets();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stopPlayback();
   set = null;
-  edits.length = 0;
+  edits.clear();
   rings.clear();
   ringBytes = 0;
   editor.style.display = "none";
@@ -560,7 +552,7 @@ function buildSetFields(): void {
     const stored = patchSetName(s, name.value);
     name.value = stored;
     name.classList.add("edited");
-    markEdit(t("sets.setNameEdit", { name: stored }));
+    edits.mark(t("sets.setNameEdit", { name: stored }));
     log(t("sets.setNameNow", { name: stored }));
   };
 
@@ -591,7 +583,7 @@ function buildSetFields(): void {
   fillViews();
   const apply = (): void => {
     const stored = patchDefaultStart(s, sceneSel.value, viewSel.value);
-    markEdit(t("sets.defaultStartEdit", { scene: stored.scene, view: stored.view }));
+    edits.mark(t("sets.defaultStartEdit", { scene: stored.scene, view: stored.view }));
     log(t("sets.defaultStartNow", { scene: stored.scene, view: stored.view }));
   };
   sceneSel.onchange = () => {
@@ -634,7 +626,7 @@ function buildViews(): void {
     const stored = patchSceneName(set!, sceneIdx, sceneName.value);
     sceneName.value = stored;
     sceneName.classList.add("edited");
-    markEdit(`scene ${sceneIdx} name → ${stored}`);
+    edits.mark(`scene ${sceneIdx} name → ${stored}`);
     buildSceneSelect();
     buildSetFields();
   };
@@ -665,7 +657,7 @@ function buildViews(): void {
       const stored = patchViewName(set!, sceneIdx, i, name.value);
       name.value = stored;
       name.classList.add("edited");
-      markEdit(`view ${sceneIdx}/${i} name → ${stored}`);
+      edits.mark(`view ${sceneIdx}/${i} name → ${stored}`);
       buildSetFields();
       renderPreview();
     };
@@ -741,7 +733,7 @@ function buildObjects(): void {
       const stored = patchObjectIdentifier(set!, sceneIdx, viewIdx, i, id.value);
       id.value = stored;
       id.classList.add("edited");
-      markEdit(`hotspot ${sceneIdx}/${viewIdx}/${i} → ${stored}`);
+      edits.mark(`hotspot ${sceneIdx}/${viewIdx}/${i} → ${stored}`);
       buildScripts();
       drawOverlay();
     };
@@ -772,7 +764,7 @@ function buildObjects(): void {
         };
         patchObjectRegion(set!, sceneIdx, viewIdx, i, region);
         input.classList.add("edited");
-        markEdit(
+        edits.mark(
           `hotspot ${o.identifier || i} → ${region.startX},${region.startY}–${region.endX},${region.endY}`,
         );
         drawOverlay();
@@ -911,7 +903,7 @@ function buildRoads(): void {
       const stored = patchTransitionName(set!, i, name.value);
       name.value = stored;
       name.classList.add("edited");
-      markEdit(`road ${i} name → ${stored}`);
+      edits.mark(`road ${i} name → ${stored}`);
       renderPreview();
     };
     row.appendChild(name);
@@ -985,7 +977,7 @@ function buildActors(): void {
       patchActor(set!, i, { identifier: id.value });
       id.value = a.identifier;
       id.classList.add("edited");
-      markEdit(`actor ${i} → ${a.identifier}`);
+      edits.mark(`actor ${i} → ${a.identifier}`);
       buildScripts();
     };
     row.appendChild(id);
@@ -1014,7 +1006,7 @@ function buildActors(): void {
           rotation8: Number(fields.rotation8.value) || 0,
         });
         input.classList.add("edited");
-        markEdit(
+        edits.mark(
           `actor ${a.identifier || i} → ${a.positionX},${a.positionZ},${a.positionY} rot ${a.rotation8}`,
         );
       };
@@ -1166,7 +1158,7 @@ async function importPng(
   const data = encodeFrame(pixels, img.width, img.height, zBlock);
   set.file.containers[cur.loc] = { id: container.id, data };
   invalidateFrame(cur.loc);
-  markEdit(t("sets.artEdit", { loc: cur.loc, file: file.name }));
+  edits.mark(t("sets.artEdit", { loc: cur.loc, file: file.name }));
   log(
     t("sets.artReplaced", {
       loc: cur.loc,
@@ -1187,7 +1179,7 @@ $("exportBtn").addEventListener("click", () => {
   }
   if (!set) return;
   // sanity: the export must read back as a set
-  exportContainerFile(set.file, readSetFile, fileName, edits, log);
+  exportContainerFile(set.file, readSetFile, fileName, edits.notes, log);
 });
 
 void installEditorPage();

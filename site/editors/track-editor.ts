@@ -20,7 +20,17 @@ import { SndFile, readSndFile, sndLoopChunks } from "@dreamfactory/engine/df/snd
 import { wavBlob } from "./wav";
 import { context, play, stopPlayback } from "./playback";
 import { byExtension, chosenSource, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
-import { download, exportContainerFile, installEditorPage, LazyFill, serverNote, serverRow, wireFileOpen } from "./editor-kit";
+import {
+  $,
+  download,
+  EditLog,
+  exportContainerFile,
+  installEditorPage,
+  LazyFill,
+  serverNote,
+  serverRow,
+  wireFileOpen,
+} from "./editor-kit";
 import { t as tr } from "@dreamfactory/chrome/locales";
 import {
   DecodedAudio,
@@ -43,7 +53,6 @@ import {
   readBankV0,
 } from "@dreamfactory/engine/df/banks";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -154,7 +163,7 @@ const V0_READ_ONLY =
   "DreamFactory 0 bank (Lunicus): shown through the v0 reader, read-only. Nothing writes a v0 bank.";
 let fileName = "bank.trk";
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 /** decoded audio by container location (one bank open at a time) */
 const decoded = new Map<number, DecodedAudio | null>();
 /** substring filter over the one-shot list */
@@ -178,15 +187,6 @@ function refuseV1(): boolean {
   log(reshaped);
   return true;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = tr("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 // --- loading ----------------------------------------------------------------
 
@@ -223,7 +223,7 @@ function loadBank(bytes: Uint8Array, name: string, v0 = false): void {
   tables = parsedTables;
   fileName = name;
   decoded.clear();
-  edits.length = 0;
+  edits.clear();
   // a v5 bank reads but cannot be written yet (sources.ts)
   readOnlyV5 = isV5File(bytes);
   dirtyEl.textContent = reshaped ?? (readOnlyV5 ? V5_READ_ONLY : "");
@@ -272,14 +272,14 @@ async function initServerBanks(): Promise<void> {
 const serverListed = initServerBanks();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(tr("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stopPlayback();
   file = null;
   tables = null;
   sndSource = null;
   reshaped = null;
   bankV0 = false;
-  edits.length = 0;
+  edits.clear();
   editor.style.display = "none";
   landing.style.display = "block";
 });
@@ -429,7 +429,7 @@ async function importChunk(f: File, loc: number, what: string): Promise<void> {
   const old = file.containers[loc];
   file.containers[loc] = { id: old.id, data: encodeAudioContainer(audio, old.data) };
   decoded.delete(loc);
-  markEdit(tr("tracks.audioEdit", { loc, file: f.name }));
+  edits.mark(tr("tracks.audioEdit", { loc, file: f.name }));
   log(
     tr("tracks.audioReplaced", {
       what,
@@ -483,7 +483,7 @@ async function importTheme(f: File): Promise<void> {
     };
     decoded.delete(c.containerLoc);
   });
-  markEdit(tr("tracks.themeEdit", { file: f.name }));
+  edits.mark(tr("tracks.themeEdit", { file: f.name }));
   const repeats = tables.loopOrder.length - distinct.length;
   log(
     tr("tracks.themeReplaced", { file: f.name, secs: seconds(audio).toFixed(1) }) +
@@ -554,7 +554,7 @@ function buildBank(): void {
   name.onchange = () => {
     if (name.value === t.trackName) return;
     const stored = patchTrackName(file!, name.value);
-    markEdit(tr("tracks.trackNameEdit", { name: stored }));
+    edits.mark(tr("tracks.trackNameEdit", { name: stored }));
     log(tr("tracks.trackNameNow", { name: stored }));
     refresh();
   };
@@ -644,7 +644,7 @@ function buildMusic(): void {
 function setOrder(next: number[], note: string): void {
   if (refuseV1()) return;
   const stored = patchLoopOrder(file!, next);
-  markEdit(note);
+  edits.mark(note);
   log(tr("tracks.playOrderLog", { order: stored.length ? stored.join(" → ") : tr("tracks.playOrderEmpty") }));
   stopPlayback();
   refresh();
@@ -689,7 +689,7 @@ function chunkRow(
   id.addEventListener("change", () => {
     if (id.value === rec.identifier) return;
     const stored = patchChunkIdentifier(file!, tableLoc, rec.idOffset, id.value);
-    markEdit(`id @${rec.containerLoc} → ${stored}`);
+    edits.mark(`id @${rec.containerLoc} → ${stored}`);
     log(`"${rec.identifier}" is now "${stored}"`);
     refresh();
   });
@@ -791,7 +791,7 @@ $("exportBtn").addEventListener("click", () => {
       readAudioBank(back); // sanity: the export must read back as a bank
     },
     fileName,
-    edits,
+    edits.notes,
     log,
   );
 });

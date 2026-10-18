@@ -2,7 +2,7 @@
  * RAVEN.EXE's menu bar — GENERATED, do not edit.
  *
  * Regenerate with `npx tsx jumpraven/tools/menu.ts`: the RT_MENU resource MENUS of
- * gamefiles/RAVEN/RAVEN/RAVENRES.DLL. Each id is the command's Win32 id; the
+ * jumpraven/gamefiles/RAVEN/RAVEN/RAVENRES.DLL. Each id is the command's Win32 id; the
  * disabled ones are the ones the resource greys. What each does is src/menu.ts.
  */
 import type { WindowMenu } from "@dreamfactory/engine/web/window-bar";

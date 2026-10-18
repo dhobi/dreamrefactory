@@ -13,9 +13,12 @@
  * level, MF_GRAYED (0x01) / MF_CHECKED (0x08) the item's first state, and
  * MF_SEPARATOR (0x800) a rule with no text.
  *
- * Used by `taoot/tools/devmenu.ts` (TI.EXE's developer menu) and
- * `lunicus/tools/menu.ts` (LUNICUS.EXE's File, Settings and Sound).
+ * Used by `taoot/tools/devmenu.ts` (TI.EXE's developer menu), and by
+ * `lunicus/tools/menu.ts` and `jumpraven/tools/menu.ts` through
+ * {@link writeMenuModule}.
  */
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readResources } from "./peres";
 
@@ -83,6 +86,53 @@ function parseMenu(bytes: Uint8Array): RawItem[] {
     }
   };
   return level();
+}
+
+/** where a game's generated menu bar comes from, and what to call it in its header */
+export interface MenuSource {
+  /** the executable whose bar it is, e.g. "LUNICUS.EXE" */
+  exe: string;
+  /** the resource DLL, from the repository root */
+  dll: string;
+  /** the tool that regenerates it, from the repository root */
+  tool: string;
+}
+
+/**
+ * A DreamFactory 0 game's menu bar as a TypeScript module: the RT_MENU called
+ * MENUS, in the shape `engine/src/web/window-bar.ts` draws, each command keyed by
+ * its Win32 id. Written to `out`; used by lunicus/ and jumpraven/tools/menu.ts.
+ */
+export function writeMenuModule({ exe, dll, tool }: MenuSource, root: string, out: string): void {
+  const path = join(root, dll);
+  const menu = readMenus(path).find((m) => m.name === "MENUS");
+  if (!menu) throw new Error(`${path}: no RT_MENU named MENUS`);
+  const esc = (s: string): string => JSON.stringify(s);
+  const entry = (it: RawItem): string => {
+    if (it.separator) return `      { separator: true },`;
+    const flags = [it.grayed && "disabled: true", it.checked && "checked: true"].filter(Boolean);
+    const tail = flags.map((f) => ", " + f).join("");
+    return `      { id: ${esc(String(it.id))}, label: ${esc(it.label)}${tail} },`;
+  };
+  writeFileSync(
+    out,
+    `/**
+ * ${exe}'s menu bar — GENERATED, do not edit.
+ *
+ * Regenerate with \`npx tsx ${tool}\`: the RT_MENU resource ${menu.name} of
+ * ${dll}. Each id is the command's Win32 id; the
+ * disabled ones are the ones the resource greys. What each does is src/menu.ts.
+ */
+import type { WindowMenu } from "@dreamfactory/engine/web/window-bar";
+
+export const MENUS: readonly WindowMenu[] = [
+${menu.items
+  .map((top) => `  {\n    label: ${esc(top.label)},\n    items: [\n${top.children.map(entry).join("\n")}\n    ],\n  },`)
+  .join("\n")}
+];
+`,
+  );
+  console.log(`${out}: ${menu.items.length} menus, from ${menu.name} in ${path}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

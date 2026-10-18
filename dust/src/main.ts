@@ -54,7 +54,7 @@ import {
 } from "@dreamfactory/engine/df/image";
 import { VIEW_H, VIEW_W, decodeSetFrames, setSummary, stillAt as stillOf, turnsFrom, walkFrom, walkerKey } from "./walker";
 import { defaultSaveName, keyAction, screenPoint } from "./input";
-import { NetMeter } from "./meter";
+import { NetMeter } from "@dreamfactory/chrome/net-meter";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import {
   readSetFileV1,

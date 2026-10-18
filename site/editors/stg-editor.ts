@@ -18,8 +18,10 @@ import { decodeFrameV5, frameSizeV5, isKeyFrameV5, isV5Frame, paletteV5 } from "
 import { byExtension, chosenSource, encodingOf, filesIn, listSources, V5_READ_ONLY, isV5File } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
+  $,
   appendScripts,
   artSizes,
+  EditLog,
   exportContainerFile,
   fillSwatches,
   indexPixels,
@@ -45,7 +47,6 @@ import {
   readStgRegions,
 } from "@dreamfactory/engine/df/stg";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -75,7 +76,7 @@ const imageCache = new Map<number, FlatImage>();
 /** the selected flat's regions, parsed once and edited in place */
 let regions: StgRegion[] = [];
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 let flatIdx = 0;
 /** the region row the pointer is on, highlighted in the overlay */
 let hoveredRegion = -1;
@@ -84,15 +85,6 @@ let showRegions = true;
 function log(text: string): void {
   statusEl.textContent = text;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = t("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 const flat = () => stg!.flats[flatIdx];
 
@@ -116,7 +108,7 @@ function loadStg(bytes: Uint8Array, name: string): void {
   $("exportBtn").textContent = t("stages.export", { ext: /\.[a-z0-9]+$/i.exec(name)?.[0]?.toLowerCase() ?? "" });
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   imageCache.clear();
-  edits.length = 0;
+  edits.clear();
   // a v5 file reads but cannot be written yet (sources.ts)
   readOnly = isV5File(bytes);
   dirtyEl.textContent = readOnly ? V5_READ_ONLY : "";
@@ -164,9 +156,9 @@ async function initServerStages(): Promise<void> {
 const serverListed = initServerStages();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stg = null;
-  edits.length = 0;
+  edits.clear();
   imageCache.clear();
   editor.style.display = "none";
   landing.style.display = "block";
@@ -369,7 +361,7 @@ function buildFlatFields(): void {
     const stored = patchFlatName(stg!, flatIdx, name.value);
     name.value = stored;
     name.classList.add("edited");
-    markEdit(t("stages.flatNameEdit", { i: flatIdx, name: stored }));
+    edits.mark(t("stages.flatNameEdit", { i: flatIdx, name: stored }));
     log(
       t("stages.flatRenamed", { i: flatIdx, name: stored }),
     );
@@ -426,7 +418,7 @@ function buildRegions(): void {
       const stored = patchRegionName(stg!, f, r, name.value);
       name.value = stored;
       name.classList.add("edited");
-      markEdit(`region ${i} name → ${stored}`);
+      edits.mark(`region ${i} name → ${stored}`);
       buildScripts();
       drawOverlay();
     };
@@ -465,7 +457,7 @@ function buildRegions(): void {
           right: Number(fields.right.value) || 0,
         });
         input.classList.add("edited");
-        markEdit(`region ${r.name || i} → ${r.left},${r.top}–${r.right},${r.bottom}`);
+        edits.mark(`region ${r.name || i} → ${r.left},${r.top}–${r.right},${r.bottom}`);
         showSize();
         drawOverlay();
       };
@@ -544,7 +536,7 @@ async function importPng(file: File): Promise<void> {
   stg.file.containers[f.locationFrame] = { id: container.id, data };
   // every flat after it may be drawn over it
   imageCache.clear();
-  markEdit(t("stages.artEdit", { loc: f.locationFrame, file: file.name }));
+  edits.mark(t("stages.artEdit", { loc: f.locationFrame, file: file.name }));
   log(
     t("stages.artReplaced", {
       name: f.name,
@@ -571,7 +563,7 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   // sanity: the export must read back as a stage
-  exportContainerFile(stg.file, readStgFile, fileName, edits, log);
+  exportContainerFile(stg.file, readStgFile, fileName, edits.notes, log);
 });
 
 void installEditorPage();

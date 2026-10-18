@@ -25,6 +25,7 @@ import { join, resolve } from "node:path";
 import { defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
 import { siblingSignposts } from "../tools/vite-siblings";
+import { GAMES } from "../chrome/src/games";
 
 /** this file's own directory, not the working directory */
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -44,12 +45,12 @@ export default defineConfig({
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
-    // ALL THREE games' trees, each mounted where the editors resolve it to, and
+    // EVERY game's tree (chrome's GAMES), each mounted where the editors resolve it to, and
     // none of them emitted: a manifest belongs to whoever owns the tree, and each
     // game's own build writes its own. The editors list every source there is
     // (site/editors/sources.ts), so a dev server for the front door has to serve
     // every rip the editors can offer.
-    ...["taoot", "dust", "skullcracker", "lunicus", "jumpraven", "redjack", "timelapse"].map((game) =>
+    ...GAMES.map(({ dir: game }) =>
       gamefilesManifest({
         gamefiles: resolve(HERE, `../${game}/gamefiles`),
         publicDir: resolve(HERE, `../${game}/public`),

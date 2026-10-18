@@ -1,16 +1,15 @@
 /**
- * The network meter: one rolling window for the whole loading page.
+ * The network meter: one rolling window for a whole loading page. Dust's and
+ * Timelapse's pages feed it every byte their loaders pull down — Dust counts
+ * fetches against a plan, Timelapse bytes against its file list, and both read
+ * the same rate and caption off this.
  *
- * Sampled per CHUNK and read on a TIMER, and both halves matter. Measured per
- * completed file instead, `open.mov` reports nothing for as long as it takes to
- * arrive and then one enormous figure at the moment it lands — and on a slow
- * connection that silence is the entire experience of this loader.
- *
- * Dust's page has the same meter over its own 95 MB. Two copies rather than one
- * shared module, for now, because they differ in what they can promise: Dust
- * counts FETCHES against a plan of eight, and this counts BYTES, because two of
- * its thirteen files are three quarters of the download. The day a third page
- * wants one, it moves to `site/`.
+ * Sampled per CHUNK and read on a TIMER, and both halves of that matter. Measured
+ * per completed file, on the arrival that completed it, the first thing the boot
+ * fetches divides its whole size by a window that has barely opened: a 13 MB film
+ * reported some tens of MB/s the instant it landed, and nothing at all for the
+ * minute it spent arriving. On a slow connection that was the entire experience
+ * of a loader — a frozen bar under a number that was never true.
  */
 export class NetMeter {
   private readonly samples: { t: number; bytes: number }[] = [];
@@ -38,11 +37,11 @@ export class NetMeter {
   }
 
   /**
-   * "1.4 MB/s · 12.0 of 70.0 MB · ~35 s left", or null while nothing is arriving.
+   * "1.4 MB/s · 12.0 MB of 95.0 MB · ~35 s left", or null while nothing is arriving.
    *
-   * "12 of 70 MB" rather than "12 MB so far", once there is a total to be a
-   * fraction of — and the total is what has come down plus what is still owed
-   * (`left`), so it GROWS if the game asks for something the list did not name,
+   * "12 of 95 MB" rather than "12 MB so far", once there is a total to be a
+   * fraction of. The total is what has come down plus what is still owed
+   * (`left`), so it grows if the boot asks for something the plan did not name —
    * which is the honest direction for it to move.
    */
   caption(now: number, left: number): string | null {
@@ -50,8 +49,8 @@ export class NetMeter {
     if (!rate) return null;
     const scale = left ? `${fmtSize(this.total)} of ${fmtSize(this.total + left)}` : `${fmtSize(this.total)} so far`;
     const eta = left ? fmtLeft(left / rate) : "";
-    const then = eta ? ` · ${eta}` : "";
-    return `${fmtRate(rate)} · ${scale}${then}`;
+    const tail = eta ? ` · ${eta}` : "";
+    return `${fmtRate(rate)} · ${scale}${tail}`;
   }
 }
 

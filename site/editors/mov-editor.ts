@@ -18,7 +18,9 @@
 import { FrameBuffer, decodeFrame, indexedToRGBA, paletteToRGBA } from "@dreamfactory/engine/df/image";
 import { byExtension, chosenSource, filesIn, listSources, screenOf, V5_READ_ONLY } from "./sources";
 import {
+  $,
   download,
+  EditLog,
   exportContainerFile,
   fillSwatches,
   installEditorPage,
@@ -64,7 +66,6 @@ import {
 import type { GameScreen } from "@dreamfactory/chrome/games";
 import type { FilmEnding } from "@dreamfactory/engine/df/mov-film";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -127,7 +128,7 @@ const V1_READ_ONLY =
   "DreamFactory 1 container: shown through the v1 conversion, read-only. Export needs a v1 write path.";
 let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 let frameIdx = 0;
 /** the region row the pointer is on, highlighted in the overlay */
 let hoveredRegion = -1;
@@ -151,15 +152,6 @@ let framePalette: Uint8ClampedArray | null = null;
 function log(text: string): void {
   statusEl.textContent = text;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = t("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 const frame = (): MovFrame | undefined => segment()?.frames[frameIdx];
 
@@ -196,7 +188,7 @@ function loadMov(bytes: Uint8Array, name: string, v0 = false): void {
   segIdx = 0;
   // a v0 palette is the Macintosh way round, entry 0 white (mov-v0.ts)
   palette = parsed.dfV0 ? paletteV0(parsed.paletteRaw) : paletteToRGBA(parsed.paletteRaw, 256);
-  edits.length = 0;
+  edits.clear();
   // after the reset of everything else, or the read-only note is wiped with it
   dirtyEl.textContent = readOnly ?? "";
   frameIdx = 0;
@@ -240,10 +232,10 @@ async function initServerMovies(): Promise<void> {
 const serverListed = initServerMovies();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stopPlayback();
   mov = null;
-  edits.length = 0;
+  edits.clear();
   fb = new FrameBuffer();
   cursor = -1;
   editor.style.display = "none";
@@ -1166,7 +1158,7 @@ function buildMovieFields(): void {
   fill(a2, seg.actionFrame2);
   const apply = (): void => {
     const stored = patchActionFrames(seg, a1.value, a2.value);
-    markEdit(t("movies.actionFramesEdit", { a1: stored.actionFrame1 || "-", a2: stored.actionFrame2 || "-" }));
+    edits.mark(t("movies.actionFramesEdit", { a1: stored.actionFrame1 || "-", a2: stored.actionFrame2 || "-" }));
     log(
       t("movies.actionFramesNow", {
         a1: stored.actionFrame1 || t("movies.none"),
@@ -1182,7 +1174,7 @@ function buildMovieFields(): void {
   esc.checked = seg.keySkips;
   esc.onchange = () => {
     patchKeySkips(seg, esc.checked);
-    markEdit(t("movies.escEdit", { value: String(seg.keySkips) }));
+    edits.mark(t("movies.escEdit", { value: String(seg.keySkips) }));
     log(
       seg.keySkips
         ? t("movies.escOn")
@@ -1378,7 +1370,7 @@ function buildFrameLogic(): void {
     const stored = patchFrameName(seg, frameIdx, name.value);
     name.value = stored;
     name.classList.add("edited");
-    markEdit(`frame ${frameIdx} name → ${stored}`);
+    edits.mark(`frame ${frameIdx} name → ${stored}`);
     // a target — and an action-frame slot — is a stored STRING, so a rename
     // breaks every reference to the old name rather than following it. Only
     // within this SEGMENT: a jump names a frame of the segment it is in, and
@@ -1445,7 +1437,7 @@ function buildFrameLogic(): void {
   typeLabel.appendChild(
     typeSelect(f.type, (type) => {
       if (!patchFrameLogic(segment()!, frameIdx, { type })) return;
-      markEdit(`frame ${frameIdx} type → ${type}`);
+      edits.mark(`frame ${frameIdx} type → ${type}`);
       buildFrameList();
       renderPreview();
     }),
@@ -1476,7 +1468,7 @@ function buildFrameLogic(): void {
       if (!patchFrameLogic(segment()!, frameIdx, { [key]: input.value })) return;
       input.value = f[key];
       input.classList.add("edited");
-      markEdit(`frame ${frameIdx} ${key} → ${f[key]}`);
+      edits.mark(`frame ${frameIdx} ${key} → ${f[key]}`);
       buildFrameList();
       renderPreview();
     };
@@ -1516,7 +1508,7 @@ function buildRegions(): void {
     row.appendChild(
       typeSelect(r.type, (type) => {
         if (!patchRegionLogic(segment()!, f!, r, { type })) return;
-        markEdit(`region ${frameIdx}/${i} type → ${type}`);
+        edits.mark(`region ${frameIdx}/${i} type → ${type}`);
         buildFrameList();
         drawOverlay();
       }),
@@ -1546,7 +1538,7 @@ function buildRegions(): void {
           right: Number(fields.right.value) || 0,
         });
         input.classList.add("edited");
-        markEdit(`region ${frameIdx}/${i} → ${r.x0},${r.y0}–${r.x1},${r.y1}`);
+        edits.mark(`region ${frameIdx}/${i} → ${r.x0},${r.y0}–${r.x1},${r.y1}`);
         drawOverlay();
       };
       wrapper.appendChild(input);
@@ -1574,7 +1566,7 @@ function buildRegions(): void {
         if (!patchRegionLogic(segment()!, f!, r, { [key]: input.value })) return;
         input.value = r[key];
         input.classList.add("edited");
-        markEdit(`region ${frameIdx}/${i} ${key} → ${r[key]}`);
+        edits.mark(`region ${frameIdx}/${i} ${key} → ${r[key]}`);
         buildFrameList();
         drawOverlay();
       };
@@ -1784,7 +1776,7 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   // sanity: the export must read back as a movie
-  exportContainerFile(mov.file, readMovFile, fileName, edits, log);
+  exportContainerFile(mov.file, readMovFile, fileName, edits.notes, log);
 });
 
 void installEditorPage();

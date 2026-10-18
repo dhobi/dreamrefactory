@@ -2,7 +2,7 @@
  * LUNICUS.EXE's menu bar — GENERATED, do not edit.
  *
  * Regenerate with `npx tsx lunicus/tools/menu.ts`: the RT_MENU resource MENUS of
- * gamefiles/LUNICUS/lunicus/lunires.dll. Each id is the command's Win32 id; the
+ * lunicus/gamefiles/LUNICUS/lunicus/lunires.dll. Each id is the command's Win32 id; the
  * disabled ones are the ones the resource greys. What each does is src/menu.ts.
  */
 import type { WindowMenu } from "@dreamfactory/engine/web/window-bar";

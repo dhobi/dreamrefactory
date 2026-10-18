@@ -19,8 +19,10 @@ import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, V5_READ_ONLY, isV5File } from "./sources";
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
+  $,
   artSizes,
   drawScreenBands,
+  EditLog,
   exportContainerFile,
   fillSwatches,
   installEditorPage,
@@ -50,7 +52,6 @@ import {
 import { ShpFrame, decodeShpFrame, encodeShpFrame, patchFrameAnchor } from "@dreamfactory/engine/df/shp";
 import type { GameScreen } from "@dreamfactory/chrome/games";
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const landing = $("landing");
 const editor = $("editor");
@@ -120,7 +121,7 @@ let palette: Uint8ClampedArray = new Uint8ClampedArray(1024);
 /** decoded sprites by container location (one cast open at a time) */
 const frameCache = new Map<number, ShpFrame>();
 /** human-readable notes of every edit, shown next to the export button */
-const edits: string[] = [];
+const edits = new EditLog(dirtyEl);
 let memberIdx = 0;
 let poseIdx = 0;
 let stepIdx = 0;
@@ -133,15 +134,6 @@ let playing: { stop: () => void } | null = null;
 function log(text: string): void {
   statusEl.textContent = text;
 }
-
-function markEdit(note: string): void {
-  edits.push(note);
-  dirtyEl.textContent = t("counts.unexportedEdits", { n: edits.length });
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (edits.length) e.preventDefault();
-});
 
 const member = () => cst!.members[memberIdx];
 const pose = (): CastPose | undefined => member()?.poses[poseIdx];
@@ -183,7 +175,7 @@ function loadCst(bytes: Uint8Array, name: string): void {
   fileName = name;
   palette = paletteToRGBA(parsed.paletteRaw, 256);
   frameCache.clear();
-  edits.length = 0;
+  edits.clear();
   // a v5 file reads but cannot be written yet (sources.ts)
   readOnly = isV5File(bytes);
   dirtyEl.textContent = readOnly ? V5_READ_ONLY : "";
@@ -231,10 +223,10 @@ async function initServerCasts(): Promise<void> {
 const serverListed = initServerCasts();
 
 $("closeBtn").addEventListener("click", () => {
-  if (edits.length && !confirm(t("counts.discardEdits", { n: edits.length }))) return;
+  if (!edits.mayDiscard()) return;
   stopPlayback();
   cst = null;
-  edits.length = 0;
+  edits.clear();
   frameCache.clear();
   editor.style.display = "none";
   landing.style.display = "block";
@@ -520,7 +512,7 @@ function buildMemberFields(): void {
     const stored = patchMemberName(cst!, memberIdx, name.value);
     name.value = stored;
     name.classList.add("edited");
-    markEdit(t("casts.memberNameEdit", { i: memberIdx, name: stored }));
+    edits.mark(t("casts.memberNameEdit", { i: memberIdx, name: stored }));
     log(
       t("casts.memberRenamed", { i: memberIdx, name: stored }),
     );
@@ -568,7 +560,7 @@ function buildPoses(): void {
       const stored = patchPoseName(cst!, memberIdx, i, name.value);
       name.value = p.name;
       name.classList.add("edited");
-      markEdit(`pose ${memberIdx}/${i} → ${stored}`);
+      edits.mark(`pose ${memberIdx}/${i} → ${stored}`);
       renderPreview();
     };
     row.appendChild(name);
@@ -720,7 +712,7 @@ function buildFramePanel(): void {
     if (y === f.posYraw && x === f.posXraw) return;
     if (!patchFrameAnchor(cst!.file, loc, y, x)) return;
     frameCache.delete(loc);
-    markEdit(t("casts.offsetEdit", { loc, y, x }));
+    edits.mark(t("casts.offsetEdit", { loc, y, x }));
     log(
       t("casts.offsetMoved", { loc, x, y }),
     );
@@ -844,7 +836,7 @@ async function importPng(file: File, loc: number): Promise<void> {
   const data = encodeShpFrame(frame);
   cst.file.containers[loc] = { id: container.id, data };
   frameCache.delete(loc);
-  markEdit(t("casts.artEdit", { loc, file: file.name }));
+  edits.mark(t("casts.artEdit", { loc, file: file.name }));
   log(
     t("casts.artReplaced", {
       loc,
@@ -867,7 +859,7 @@ $("exportBtn").addEventListener("click", () => {
     return;
   }
   // sanity: the export must read back as a cast
-  exportContainerFile(cst.file, readCstFile, fileName, edits, log);
+  exportContainerFile(cst.file, readCstFile, fileName, edits.notes, log);
 });
 
 void installEditorPage();
