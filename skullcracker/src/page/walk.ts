@@ -47,7 +47,7 @@
  * which is the same mechanism a falling plank uses to take its floor down —
  * `0x42fcb9`, and {@link file://../props.ts} has both.
  */
-import { SbkEntity, LEVEL_ORDER, PLAY_PLANE_Z } from "@dreamfactory/engine/df/sbk";
+import { SbkEntity, SbkFile, LEVEL_ORDER, PLAY_PLANE_Z } from "@dreamfactory/engine/df/sbk";
 import { decodeShpFrame, ShpFrame } from "@dreamfactory/engine/df/shp";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
@@ -1174,41 +1174,76 @@ function loop(now: number): void {
   // (256, 192) to its corner, which is the middle of a 512-wide view
   sound?.listen(camX, camY + REACH.centreY);
   sound?.pump();
-  const drawOne = (q: (typeof lvl.draw)[number]): void => {
-    // cycle the disc's frame cels; still placements have one and never move
-    const loc =
-      q.cels.length > 1
-        ? q.cels[Math.floor(backdropFrames / q.hold) % q.cels.length]
-        : q.loc;
-    const art = cel(lvl, loc);
-    const f = frameOf(lvl, loc);
-    if (!art || !f) return;
-    // the ANCHOR's screen position: SC.EXE's rect builder (0x4026d0) places the
-    // cel so its stored anchor lands here, and on mirror it reflects the cel
-    // about that anchor — NOT the cel's centre. That distinction is invisible
-    // for a near-centred anchor and glaring for an off-centre one: the lamp's
-    // tiny glow cels (anchor 31 of 73) landed in the wrong place, the full lamp
-    // (anchor 144 of 186) barely moved.
-    const sx = (q.x - camX) * q.rate + W / 2;
-    const y = q.y - camY + VIEW.y - f.posYraw;
-    // left edge: anchor at sx normally, or reflected about sx when mirrored
-    const left = q.mirror ? sx - (art.width - f.posXraw) : sx - f.posXraw;
-    if (left + art.width < 0 || y + art.height < 0 || left > W || y > H) return;
-    if (q.mirror) {
-      ctx.save();
-      ctx.scale(-1, 1);
-      // scale(-1,1) maps x→−x, so drawing at −(left+width) lands the reversed
-      // cel spanning [left, left+width], anchor back at sx
-      ctx.drawImage(art, -(left + art.width), y);
-      ctx.restore();
-    } else {
-      ctx.drawImage(art, left, y);
-    }
-  };
   // everything the engine paints before the player (planes 3 and 0)
-  for (const q of lvl.draw) if (q.z < PLAY_PLANE_Z) drawOne(q);
+  for (const q of lvl.draw) if (q.z < PLAY_PLANE_Z) drawPlacement(lvl, q, camX, camY);
 
-  // the level's own spawned things, on the play plane with the player
+  drawBackProps(camX, camY);
+  /**
+   * ...in the engine's own order, which is by CLASS, not by record, and with
+   * the player's own call among them: the ones his level draws before him
+   * here, the rest after him ({@link ENEMY_PASSES}). Drawn in record order, a
+   * rat's hole placed after a punk was painted over him.
+   */
+  const creatures = enemyPasses();
+  for (const e of creatures.before) drawEnemy(e, camX, camY);
+  drawActors(camX, camY);
+
+  drawPlayer(player, camX, camY);
+  drawCarFronts(camX, camY);
+  // ...and the creatures this level draws after `0x402980` ({@link ENEMY_PASSES})
+  for (const e of creatures.after) drawEnemy(e, camX, camY);
+
+  // and everything after (planes 4, 1, 2 — the lamp-post and cables in front)
+  for (const q of lvl.draw) if (q.z > PLAY_PLANE_Z) drawPlacement(lvl, q, camX, camY);
+
+  ctx.restore();
+
+  flashView();
+
+  drawPanel();
+
+  // the red after a death: `0x434680` rewrites the one palette the whole screen
+  // draws through, so the panel goes red with the level
+  if (deathRed) redden(Math.min(deathRed.step, DEATH_RED.steps));
+
+  writeHud(lvl);
+}
+
+/** one of the level's own placements, at its plane's rate — the backdrop and the foreground alike */
+function drawPlacement(lvl: Level, q: Level["draw"][number], camX: number, camY: number): void {
+  // cycle the disc's frame cels; still placements have one and never move
+  const loc =
+    q.cels.length > 1
+      ? q.cels[Math.floor(backdropFrames / q.hold) % q.cels.length]
+      : q.loc;
+  const art = cel(lvl, loc);
+  const f = frameOf(lvl, loc);
+  if (!art || !f) return;
+  // the ANCHOR's screen position: SC.EXE's rect builder (0x4026d0) places the
+  // cel so its stored anchor lands here, and on mirror it reflects the cel
+  // about that anchor — NOT the cel's centre. That distinction is invisible
+  // for a near-centred anchor and glaring for an off-centre one: the lamp's
+  // tiny glow cels (anchor 31 of 73) landed in the wrong place, the full lamp
+  // (anchor 144 of 186) barely moved.
+  const sx = (q.x - camX) * q.rate + W / 2;
+  const y = q.y - camY + VIEW.y - f.posYraw;
+  // left edge: anchor at sx normally, or reflected about sx when mirrored
+  const left = q.mirror ? sx - (art.width - f.posXraw) : sx - f.posXraw;
+  if (left + art.width < 0 || y + art.height < 0 || left > W || y > H) return;
+  if (q.mirror) {
+    ctx.save();
+    ctx.scale(-1, 1);
+    // scale(-1,1) maps x→−x, so drawing at −(left+width) lands the reversed
+    // cel spanning [left, left+width], anchor back at sx
+    ctx.drawImage(art, -(left + art.width), y);
+    ctx.restore();
+  } else {
+    ctx.drawImage(art, left, y);
+  }
+}
+
+/** the level's own spawned things, on the play plane with the player */
+function drawBackProps(camX: number, camY: number): void {
   for (const k of planksHere()) drawPlank(k, camX, camY);
   // the BACK of the cage. Its front half and its winch come after the player —
   // see the second pass below, and {@link ELEVATOR.car}.
@@ -1266,14 +1301,13 @@ function loop(now: number): void {
   for (const f of feathers) {
     drawLevelCel(featherCel(f), f.x, f.y, camX, camY, f.mirror);
   }
-  /**
-   * ...in the engine's own order, which is by CLASS, not by record, and with
-   * the player's own call among them: the ones his level draws before him
-   * here, the rest after him ({@link ENEMY_PASSES}). Drawn in record order, a
-   * rat's hole placed after a punk was painted over him.
-   */
-  const creatures = enemyPasses();
-  for (const e of creatures.before) drawEnemy(e, camX, camY);
+}
+
+/**
+ * The play plane after the creatures drawn before the player: the craft, the
+ * level's machinery, the guns and shots, and the flames and sparks on top.
+ */
+function drawActors(camX: number, camY: number): void {
   // the goal's craft and the goo share the play plane with the player: the
   // engine's own effect class is collected with the actors, not the backdrop
   drawCraft(camX, camY);
@@ -1365,11 +1399,15 @@ function loop(now: number): void {
   // kragg's sparks, out of ARCADE's own book (`0x474ed8`)
   for (const k of sparks)
     drawLevelCel(SPARK.cels[Math.min(SPARK.cels.length - 1, Math.floor(k.age / SPARK.hold))], k.x, k.y, camX, camY);
+}
 
-  // the player, feet on the ground, between the rate-1 planes and the
-  // foreground — the disc's own cels for both facings, so nothing is mirrored
+/**
+ * the player, feet on the ground, between the rate-1 planes and the
+ * foreground — the disc's own cels for both facings, so nothing is mirrored
+ */
+function drawPlayer(book: SbkFile, camX: number, camY: number): void {
   const id = lastCel;
-  const loc = player.byId.get(id);
+  const loc = book.byId.get(id);
   // ...unless something is carrying him and drawing him itself — `0x419d25`
   // skips `0x402980` while `[0x46b1b4]` is clear
   if (loc !== undefined && !p.hidden) {
@@ -1402,43 +1440,43 @@ function loop(now: number): void {
       } else ctx.drawImage(art, left, top);
     }
   }
-  /**
-   * ...and the FRONT of every lift car, over the player standing in it.
-   *
-   * `0x453310` is the elevator class's collector and CITY's frame function
-   * (`0x4515d0`) calls it TWICE, with the player queued between the two:
-   *
-   * ```
-   *   4517ac  push edi (0)      ; 45332e: cel 0x47f = 1151, the BACK
-   *   4517ad  call 0x453310
-   *   4517d7  call 0x402980     ; 42fbd0([0x4ac3d4]) — THE PLAYER
-   *   4517eb  push 1            ; 45334a: cel 0x47e = 1150, the FRONT,
-   *   4517ed  call 0x453310     ;         and 42fbd0(winch) with it
-   *   4517fc  call 0x40c8b0(1)  ; the foreground planes, last
-   * ```
-   *
-   * `0x4515db` zeroes edi for the whole function, so the first pass really is
-   * the 0 case. The art agrees: 1151 is 113x190 and 73% opaque — a back wall —
-   * while 1150 is 106x314 and only 42%, a frame with a hollow middle, a mesh
-   * across its lower front and the cable above. Drawing 1150 alone, and before
-   * the player, put the rider's boots over the mesh he should be standing
-   * behind and left the back of the cage off the screen entirely.
-   */
+}
+
+/**
+ * ...and the FRONT of every lift car, over the player standing in it.
+ *
+ * `0x453310` is the elevator class's collector and CITY's frame function
+ * (`0x4515d0`) calls it TWICE, with the player queued between the two:
+ *
+ * ```
+ *   4517ac  push edi (0)      ; 45332e: cel 0x47f = 1151, the BACK
+ *   4517ad  call 0x453310
+ *   4517d7  call 0x402980     ; 42fbd0([0x4ac3d4]) — THE PLAYER
+ *   4517eb  push 1            ; 45334a: cel 0x47e = 1150, the FRONT,
+ *   4517ed  call 0x453310     ;         and 42fbd0(winch) with it
+ *   4517fc  call 0x40c8b0(1)  ; the foreground planes, last
+ * ```
+ *
+ * `0x4515db` zeroes edi for the whole function, so the first pass really is
+ * the 0 case. The art agrees: 1151 is 113x190 and 73% opaque — a back wall —
+ * while 1150 is 106x314 and only 42%, a frame with a hollow middle, a mesh
+ * across its lower front and the cable above. Drawing 1150 alone, and before
+ * the player, put the rider's boots over the mesh he should be standing
+ * behind and left the back of the cage off the screen entirely.
+ */
+function drawCarFronts(camX: number, camY: number): void {
   for (const e of elevatorsHere()) {
     drawLevelCel(ELEVATOR.car.front, e.x, e.y, camX, camY);
     drawLevelCel(elevatorCel(e), e.x, e.winchY, camX, camY);
   }
-  // ...and the creatures this level draws after `0x402980` ({@link ENEMY_PASSES})
-  for (const e of creatures.after) drawEnemy(e, camX, camY);
+}
 
-  // and everything after (planes 4, 1, 2 — the lamp-post and cables in front)
-  for (const q of lvl.draw) if (q.z > PLAY_PLANE_Z) drawOne(q);
-
-  ctx.restore();
-
-  // `0x40dfd0` — whatever queued a colour gets one frame of the whole view rect
-  // in it, and then the queue is empty again. It is drawn over the level and
-  // under the panel, because `0x40e0b0` fills the view rect and nothing else.
+/**
+ * `0x40dfd0` — whatever queued a colour gets one frame of the whole view rect
+ * in it, and then the queue is empty again. It is drawn over the level and
+ * under the panel, because `0x40e0b0` fills the view rect and nothing else.
+ */
+function flashView(): void {
   if (flashColour >= 0) {
     const pal = level?.pal;
     const i = flashColour * 4;
@@ -1450,7 +1488,10 @@ function loop(now: number): void {
     ctx.restore();
     setFlashColour(-1);
   }
+}
 
+/** the panel's two bands, out of the player's book through {@link HUD_ART} */
+function drawPanel(): void {
   if (iface) {
     paintHud(ctx, HUD_ART, {
       // nothing here can hurt the player, so the left-hand bar reads full: 1024
@@ -1484,23 +1525,65 @@ function loop(now: number): void {
       labelInk: panelInk(),
     });
   }
+}
 
-  // the red after a death: `0x434680` rewrites the one palette the whole screen
-  // draws through, so the panel goes red with the level
-  if (deathRed) redden(Math.min(deathRed.step, DEATH_RED.steps));
-
+/**
+ * The line under the canvas: everything a probe needs to read that the panel
+ * does not say. The pickups and the hands are sorted in place by distance, so
+ * the parts are asked for in this order and no other.
+ */
+function writeHud(lvl: Level): void {
   const room = p.room;
   const which = room ? `${room.name}/p${room.param}` : "nowhere";
   const doors = room?.exits.length
     ? " · doors to " + room.exits.map((e) => `p${e.to}`).join(", ")
     : "";
+  const whereabouts = sayPlayer();
+  const lights = sayLights();
+  const cheated = sayCheat();
+  const goal = sayGoal();
+  const foes = sayFoes();
+  const bird = sayCrows();
+  const machines = sayMachines();
+  const scenery = sayScenery();
+  const touch = sayPickupTouch();
+  const arms = sayArms();
+  const valve = sayValves();
+  const slid = saySlide();
+  const blows = sayBlows();
+  const air = sayAir();
+  const boss = sayBoss();
+  const run = sayRun();
+  const flatFloor = room && !room.ground ? ` · flat floor at y ${room.top + room.floorDrop} (no region)` : "";
+  hud.innerHTML =
+    `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
+    `${lvl.rooms.length} (${which})${doors}` +
+    flatFloor +
+    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${whereabouts}${lights}${foes}${valve}${machines}${scenery}${arms}${bird}${slid}${boss}${touch}${blows}${air}${run}${goal}${cheated}` +
+    ` · every pixel is the disc's, both facings included, and the motion is SC.EXE's`;
+}
+
+/** what the player is doing, which cel he shows, which of the two he is, and where the view stands */
+function sayPlayer(): string {
+  let state = "";
+  if (p.act) state = ` · ${p.act}`;
+  else if (p.bar)
+    state = ` · hanging hold ${p.barHold} tag ${p.barTag}` + ` at x ${Math.round(p.x)}, y ${Math.round(p.y)}`;
+  else if (p.climbing) state = ` · climbing rung ${p.rung} tag ${p.climbTag}`;
+  else if (!p.onGround) state = " · in the air";
+  else if (p.crouching) state = " · crouching";
+  else if (p.moving) state = ` · ${p.running ? "RUNNING" : "walking"} ${Math.abs(p.vx) * ENGINE_HZ}px/s`;
   const celNow = ` · cel ${lastCel}`;
   // which of the two players `0x46b1a8` is on — Shift+C is action 11
   const who = ` · char ${CHARACTER}`;
   // the view's own corner — `[0x4a8970]`, which is what a probe has to read to
   // say anything about what is on screen
   const cam = ` · view ${Math.round(view.x)},${Math.round(view.y)}`;
-  // MAZE's big guns and TOWER's lightning, so a probe can watch either run
+  return `${state}${celNow}${who}${cam}`;
+}
+
+/** MAZE's big guns and TOWER's lightning, so a probe can watch either run */
+function sayLights(): string {
   const guns = hereOf((l) => l.bigguns);
   const gunSay = guns.length
     ? " · " + guns.map((g) => `biggun ${g.state}/${g.hatch} y${Math.round(g.gunY)} cel ${gunCel(g)}`).join(" ")
@@ -1513,19 +1596,19 @@ function loop(now: number): void {
   const litSay = lit.length
     ? ` · lightfx ${levelClock}/${LIGHTFX.period - 1} ${lit.map((q) => lightCel(q)).join(",")}`
     : "";
-  // the word for four seconds after it is typed, so a probe can see one land
-  const cheated =
-    cheatSaid && performance.now() - cheatSaid.at < 4000
-      ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}`
-      : "";
-  let state = "";
-  if (p.act) state = ` · ${p.act}`;
-  else if (p.bar)
-    state = ` · hanging hold ${p.barHold} tag ${p.barTag}` + ` at x ${Math.round(p.x)}, y ${Math.round(p.y)}`;
-  else if (p.climbing) state = ` · climbing rung ${p.rung} tag ${p.climbTag}`;
-  else if (!p.onGround) state = " · in the air";
-  else if (p.crouching) state = " · crouching";
-  else if (p.moving) state = ` · ${p.running ? "RUNNING" : "walking"} ${Math.abs(p.vx) * ENGINE_HZ}px/s`;
+  return `${gunSay}${litSay}${flySay}`;
+}
+
+/** the word for four seconds after it is typed, so a probe can see one land */
+function sayCheat(): string {
+  return cheatSaid && performance.now() - cheatSaid.at < 4000
+    ? ` · <b>${cheatSaid.cheat.word}</b> — ${cheatSaid.cheat.say}`
+    : "";
+}
+
+/** the door underfoot, the quota and the goal — where it is, and what it still waits for */
+function sayGoal(): string {
+  const room = p.room;
   const here = solids();
   const box = playerBox();
   const inside = (e: SbkEntity): boolean =>
@@ -1567,6 +1650,11 @@ function loop(now: number): void {
     ` · quota ${Math.max(0, alive - stats.allowance)} of ${Math.max(0, stats.census - stats.allowance)}` +
     ` (kill ${Math.round(mission().kill * 100)}% of ${stats.census})`;
   const prompt = atDoor && !won ? " · <b>press ↑ for the door</b>" : "";
+  return `${quotaSay}${prompt}${toGoal}`;
+}
+
+/** how many are spawned and fighting, and the nearest of them with a plate and without one */
+function sayFoes(): string {
   const mob = spawnedHere().length ? ` · ${spawnedHere().length} spawned` : "";
   // how many of them have noticed you — the one number that says the shared AI
   // is running at all ({@link stepFight})
@@ -1610,9 +1698,11 @@ function loop(now: number): void {
       ` at x ${Math.round(plain.x)}, y ${Math.round(plain.y)} cel ${celOf(plain)}`;
     if (plain.script !== undefined) unplated += ` kind ${plain.script} tag ${plain.tag ?? 0}`;
   }
-  // the hydrant and its water: neither has a health bar, and the whole point of
-  // the burst is that one object turns into two and back into one
-  // the crows, which are the only thing on this page that flies
+  return `${mob}${fighting}${foe}${unplated}`;
+}
+
+/** the crows, which are the only thing on this page that flies */
+function sayCrows(): string {
   const birds = crowsHere();
   // whichever is nearest, plus anything that is not asleep — the two things worth
   // knowing, and a probe can read either
@@ -1633,6 +1723,11 @@ function loop(now: number): void {
             `${c.state} cel ${crowCel(c)} at ${Math.round(c.x)},${Math.round(c.y)}`,
         )
         .join(" · ");
+  return bird;
+}
+
+/** the planks, the lifts, the girders, the presses, the levers, the goop, the doors and the sumps */
+function sayMachines(): string {
   // the planks: a probe cannot otherwise tell a sound board from one about to go
   const boards = planksHere().filter(
     (k) => k.state !== "intact" || k.crossings > 0,
@@ -1684,9 +1779,19 @@ function loop(now: number): void {
   const sump = sumps.length
     ? " · " + sumps.map((e) => `lift x${e.x} ${e.state} y${Math.round(e.y)}`).join(" · ")
     : "";
+  const nests = nestsHere();
+  let goop = "";
+  if (nests.length) {
+    goop = ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling`;
+    if (drips.length) goop += ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}`;
+  }
+  return `${board}${car}${beam}${press}${lever}${goop}${gate}${sump}`;
+}
+
+/** the scenery, so a probe can see the two of it that move on their own */
+function sayScenery(): string {
   const sprinklers = hereOf((l) => l.sprinklers).length;
   const column = columns.size ? ` cel ${columnCel([...columns.values()][0])}` : "";
-  // the scenery, so a probe can see the two of it that move on their own
   const props = [
     ...hereOf((l) => l.shacks)
       .filter((k) => k.state !== "shut")
@@ -1758,34 +1863,44 @@ function loop(now: number): void {
     sprinklers ? `${sprinklers} sprinklers, ${columns.size} up${column}` : "",
   ].filter(Boolean);
   const prop = props.length ? ` · ${props.join(" · ")}` : "";
-  // what the two tests say about the nearest pickup, which is the only way to
-  // see the second one doing anything — see {@link spritesTouch}
+  const pools = hereOf((l) => l.sewage);
+  const pool = pools.length ? ` · ${pools.length} sewage` : "";
+  return `${prop}${pool}`;
+}
+
+/**
+ * what the two tests say about the nearest pickup, which is the only way to
+ * see the second one doing anything — see {@link spritesTouch}
+ */
+function sayPickupTouch(): string {
   const nearPick = hereOf((l) => l.pickups).sort(
     (a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x),
   )[0];
-  const touch = (() => {
-    if (!nearPick || !player) return "";
-    const box = playerBox();
-    const rect =
-      box.right > nearPick.left &&
-      box.left < nearPick.right &&
-      box.bottom > nearPick.top &&
-      box.top < nearPick.bottom;
-    const kind = PICKUP.kinds[nearPick.code];
-    const loc = player.byId.get(kind.cels[loopIndex(kind, nearPick.clock)]);
-    const pf = loc === undefined ? null : playerFrame(loc);
-    const me = playerSprite();
-    const px =
-      pf && me
-        ? spritesTouch(me, {
-            f: pf,
-            left: nearPick.x - pf.posXraw,
-            top: nearPick.y - pf.posYraw,
-            mirror: false,
-          })
-        : false;
-    return ` · pickup rect ${rect ? "yes" : "no"} pixels ${px ? "yes" : "no"}`;
-  })();
+  if (!nearPick || !player) return "";
+  const box = playerBox();
+  const rect =
+    box.right > nearPick.left &&
+    box.left < nearPick.right &&
+    box.bottom > nearPick.top &&
+    box.top < nearPick.bottom;
+  const kind = PICKUP.kinds[nearPick.code];
+  const loc = player.byId.get(kind.cels[loopIndex(kind, nearPick.clock)]);
+  const pf = loc === undefined ? null : playerFrame(loc);
+  const me = playerSprite();
+  const px =
+    pf && me
+      ? spritesTouch(me, {
+          f: pf,
+          left: nearPick.x - pf.posXraw,
+          top: nearPick.y - pf.posYraw,
+          mirror: false,
+        })
+      : false;
+  return ` · pickup rect ${rect ? "yes" : "no"} pixels ${px ? "yes" : "no"}`;
+}
+
+/** the pickups in the room, and the guns: the one in hand, the nearest lying about, the flares */
+function sayArms(): string {
   const got = hereOf((l) => l.pickups);
   const gots = got.length
     ? (() => {
@@ -1809,14 +1924,14 @@ function loop(now: number): void {
   if (arms.length)
     armed += ` · ${arms.length} guns · nearest ${GUN_CODES[lying!.code]?.name ?? lying!.code} at x ${Math.round(lying!.x)}, y ${Math.round(lying!.y)}${gunAhead() ? " IN REACH" : ""}`;
   if (flares.length) armed += ` · ${flares.length} flares`;
-  const pools = hereOf((l) => l.sewage);
-  const pool = pools.length ? ` · ${pools.length} sewage` : "";
-  const nests = nestsHere();
-  let goop = "";
-  if (nests.length) {
-    goop = ` · goop ${nests.filter((n) => n.on).length} of ${nests.length} on, ${drips.length} falling`;
-    if (drips.length) goop += ` cel ${dripCel(drips[0])} at ${Math.round(drips[0].x)},${Math.round(drips[0].y)}`;
-  }
+  return `${gots}${armed}`;
+}
+
+/**
+ * the hydrant and its water: neither has a health bar, and the whole point of
+ * the burst is that one object turns into two and back into one
+ */
+function sayValves(): string {
   const valves = spawnedHere()
     .filter((e) => FOES[e.kind].burst)
     .map(
@@ -1824,15 +1939,27 @@ function loop(now: number): void {
         `${e.state === "burst" ? "water" : e.kind} cel ${celOf(e)} at x ${Math.round(e.x)}`,
     );
   const valve = valves.length ? ` · ${valves.join(" · ")}` : "";
-  // where a struck thing ends up, which is the only way to see a slide from a
-  // probe: the flying kinds have no health bar to read
+  return valve;
+}
+
+/**
+ * where a struck thing ends up, which is the only way to see a slide from a
+ * probe: the flying kinds have no health bar to read
+ */
+function saySlide(): string {
   const flew = spawnedHere().find(
     (e) => FOES[e.kind].flies && (e.vx !== 0 || e.dents > 0),
   );
   const slid = flew ? ` · ${flew.kind} at x ${Math.round(flew.x)}` : "";
-  // the blow CODES — the reaction playing, what has hold of you, and the state
-  // of the nearest hand, none of which the panel shows and all of which a probe
-  // needs to see the system at all
+  return slid;
+}
+
+/**
+ * the blow CODES — the reaction playing, what has hold of you, and the state
+ * of the nearest hand, none of which the panel shows and all of which a probe
+ * needs to see the system at all
+ */
+function sayBlows(): string {
   const reacting = Object.values(BLOW_CODES).find((r) => r.act === p.act);
   const code =
     (reacting
@@ -1842,6 +1969,20 @@ function loop(now: number): void {
       ? ` · <b>${p.act}</b> frame ${p.heldClock}`
       : "") +
     (p.heldBy ? ` · HELD, gravity x${p.gravityScale}` : "");
+  const nearHand = hereOf((l) => l.hands).sort(
+    (a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x),
+  )[0];
+  let hand = "";
+  if (nearHand)
+    hand =
+      ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
+      ` cel ${handCel(nearHand)} at x ${Math.round(nearHand.atX)}` +
+      ` blow ${(nearHand.underfoot ? HAND.underfoot : HAND.anywhere).blow}`;
+  return `${code}${hand}`;
+}
+
+/** what is in the air: the bolts, the streams, the casts, the boards, the worms, the flames, the cans, the rollers */
+function sayAir(): string {
   let air = p.invLoop ? " · <b>INV held</b> — standing, decided on the release" : "";
   if (bolts.length)
     air += ` · ${bolts.length} bolts, nearest at x ${Math.round(bolts[0].x)}, y ${Math.round(bolts[0].y)} vx ${Math.round(bolts[0].vx)}`;
@@ -1888,6 +2029,11 @@ function loop(now: number): void {
       ` · ${rollers.length} roller, first cel ${rollerCel(rollers[0])}` +
       ` at x ${Math.round(rollers[0].x)}, y ${Math.round(rollers[0].y)}` +
       ` wait ${rollers[0].wait} vx ${rollers[0].vx} blow ${rollerBlow(rollers[0])}`;
+  return air;
+}
+
+/** the boss of the room, and what the right-hand bar is showing */
+function sayBoss(): string {
   // ...and a BOSS always, whichever of the three it is: the "nearest" line goes
   // to whatever is closest in x, and TOWER's bats chase, so one of them is
   // always nearer than the thing the room is about
@@ -1909,15 +2055,11 @@ function loop(now: number): void {
   const bar = stats.shown
     ? ` · bar ${stats.shown.health}/${stats.shown.max} plate ${stats.shown.nameCel}`
     : " · bar empty";
-  const nearHand = hereOf((l) => l.hands).sort(
-    (a, b) => Math.abs(a.atX - p.x) - Math.abs(b.atX - p.x),
-  )[0];
-  let hand = "";
-  if (nearHand)
-    hand =
-      ` · nearest hand ${nearHand.underfoot ? "underfoot" : "anywhere"} ${nearHand.state}` +
-      ` cel ${handCel(nearHand)} at x ${Math.round(nearHand.atX)}` +
-      ` blow ${(nearHand.underfoot ? HAND.underfoot : HAND.anywhere).blow}`;
+  return `${boss}${bar}`;
+}
+
+/** the lives, the clock, the damage switch, the score and the last save */
+function sayRun(): string {
   const lives =
     (ended ? " · <b>THE END</b> — credits.mov, and then the front again" : "") +
     ` · ${stats.lives} ${stats.lives === 1 ? "life" : "lives"} · clock ${Math.round(stats.ticks)}`;
@@ -1930,13 +2072,7 @@ function loop(now: number): void {
   const points = ` · ${stats.score} points`;
   // what the panel's middle button wrote, so a probe can see the save happen
   const saved = saidSave ? ` · saved ${saidSave}` : "";
-  const flatFloor = room && !room.ground ? ` · flat floor at y ${room.top + room.floorDrop} (no region)` : "";
-  hud.innerHTML =
-    `<b>level ${levelIndex + 1} · ${lvl.name}</b> · room ${lvl.rooms.indexOf(room!) + 1} of ` +
-    `${lvl.rooms.length} (${which})${doors}` +
-    flatFloor +
-    ` · x ${Math.round(p.x)}, y ${Math.round(p.y)}${state}${celNow}${who}${cam}${gunSay}${litSay}${flySay}${mob}${fighting}${foe}${unplated}${valve}${board}${car}${beam}${press}${lever}${goop}${gate}${sump}${prop}${pool}${gots}${armed}${bird}${slid}${boss}${bar}${touch}${code}${hand}${air}${lives}${hurt}${points}${saved}${quotaSay}${prompt}${toGoal}${cheated}` +
-    ` · every pixel is the disc's, both facings included, and the motion is SC.EXE's`;
+  return `${lives}${hurt}${points}${saved}`;
 }
 
 /**

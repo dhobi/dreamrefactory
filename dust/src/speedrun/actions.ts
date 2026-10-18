@@ -189,6 +189,371 @@ const GIVE: Action = {
  *  has to check before it presses anything */
 const TALKING = `!!(window.dbg.viewer && window.dbg.viewer.conversing)`;
 
+/** one walk's own state, shared by its steps: where it is going and how many roads it has spent */
+interface Walk {
+  c: ActionContext;
+  x: number;
+  z: number;
+  /** the way to face on arrival, if any */
+  want: string | undefined;
+  spent: number;
+}
+
+/**
+ * A conversation in the way of the walk — answered if it can be, named if it
+ * cannot.
+ *
+ * Characters here do not wait to be spoken to, and a walk of any length runs
+ * into one: the harness spends most of `walkTo`'s length on exactly this
+ * (`clearInterruption`, dust/tests/playthrough/route.ts) because every
+ * remaining key belongs to a puppet the moment one opens.
+ *
+ * WHAT IS OFFERED, first choice each turn, and the two things that shaped it:
+ *
+ *   - A preference list is wrong. `say` answers a list IN ORDER and errors on
+ *     the first entry a plaque does not carry, so the playthrough's own
+ *     leaving order died on `bevel 301 not offered by help1.pup; got 101 ...
+ *     102 ... 103`. Every leaving number belongs to somebody.
+ *   - `bailOut` is wrong too. ESC does not end every conversation: one
+ *     survived it across four re-plans, still talking, and put `helpbut` in
+ *     the hand on the way.
+ *
+ * And it does not always work, which is why it gives up out loud. `help1.pup`
+ * is the case: it is the game's HELP overlay rather than a character —
+ * `talk(help[...])` clicks the help BUTTON prop open — and nothing on its
+ * plaque closes it. A route meets that one in the opening and deals with it
+ * on its own line; this verb's job is to say so rather than to spin.
+ *
+ * `replies:` names the reply for a leg that knows which it wants, which
+ * matters because a leaving line is often the line that sets a character's
+ * phase — a rung whose whole point is Marie's 202 should not let a walk
+ * spend the beat on something else. `replies: none` refuses to answer at all.
+ */
+async function clearOrSay(c: ActionContext, spoken: string): Promise<void> {
+  const talking = (): Promise<boolean> => c.d.evaluate<boolean>(TALKING);
+  if (!(await talking())) return;
+  if (spoken === "none") {
+    throw new Error(
+      `a conversation is open and goto(replies: none) was told not to answer it`,
+    );
+  }
+  if (spoken) {
+    const ids = spoken.split(/[|\s]+/).map(Number).filter((n) => Number.isFinite(n));
+    await CORE_ACTIONS.say.run({
+      ...c,
+      step: { ...c.step, args: [], bevels: ids, ending: "leave" },
+      wait: "none",
+    });
+    return;
+  }
+  for (let turn = 0; turn < 10 && (await talking()); turn++) {
+    const offered = await c.d.evaluate<number[]>(
+      `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ch.id)`,
+    );
+    if (!offered.length) {
+      /*
+       * A LINE IS BEING SPOKEN, so cut it short and look again.
+       *
+       * Waiting alone was not enough: a sweep reported a walk giving up with
+       * "Nothing is on its plaque — it is still speaking", which is a
+       * conversation that would have got there and a verb that stopped
+       * asking. One ESC skips the line, which is what `converse` does at the
+       * same beat — never a hammer, because ESC at a plaque ANSWERS it.
+       */
+      const SPEAKING = `!!(window.dbg.viewer && window.dbg.viewer.speaking)`;
+      const CHOICES = `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ch.id)`;
+      if (await c.d.evaluate<boolean>(SPEAKING)) {
+        await c.d.key("Escape", "none", c.budget);
+        await c.d.tryHold(`!(${SPEAKING}) || (${CHOICES}).length > 0 || !(${TALKING})`, 6000);
+        continue;
+      }
+      if (!(await c.d.tryHold(`(${CHOICES}).length > 0 || !(${TALKING})`, 6000))) break;
+      continue;
+    }
+    await CORE_ACTIONS.say.run({
+      ...c,
+      step: { ...c.step, args: [], bevels: [offered[0]], ending: "stop" },
+      wait: "none",
+    });
+  }
+  if (await talking()) {
+    const offered = await c.d.evaluate<{ id: number; text: string }[]>(
+      `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ({ id: ch.id, text: String(ch.text || "") }))`,
+    );
+    const plaque = offered.length
+      ? `Its plaque offers ${offered.map((o) => o.id + ":" + o.text).join(" | ")}`
+      : `Nothing is on its plaque — it is still speaking, which is what the ` +
+        `HELP overlay does and no reply closes`;
+    throw new Error(
+      `a conversation interrupted the walk and would not close — answer it in the ` +
+        `sheet (talk(...) or say([...])), or pass replies: to this line. ` +
+        plaque,
+    );
+  }
+  c.say("answered something on the way");
+}
+
+/** a cell of the room's grid, and the views a standpoint in it has */
+interface Cell {
+  name: string;
+  x: number;
+  z: number;
+  build: boolean;
+  views: { name: string; id: number }[];
+}
+
+/** the room as {@link READ} reads it: which set, which scene, its cells and its one-way roads */
+interface Room {
+  set: string;
+  here: string;
+  cells: Cell[];
+  roads: [number, number][];
+}
+
+/** the room in the page, as cells and roads */
+const READ = `(() => {
+  const v = window.dbg.viewer, s = window.dbg.session;
+  if (!v || !v.set) return null;
+  return {
+    set: String(s.currentSetFile || "").toLowerCase().replace(/[.]set$/, ""),
+    here: String(v.scene.sceneName || "").toLowerCase(),
+    cells: v.set.scenes.map((sc) => ({
+      name: String(sc.sceneName || "").toLowerCase(),
+      x: Math.round((sc.sceneLocation[0] - 128) / 256),
+      z: Math.round((sc.sceneLocation[2] - 128) / 256),
+      build: !!sc.build,
+      views: sc.views.map((w) => ({ name: String(w.viewName || "").toLowerCase(), id: w.viewID })),
+    })),
+    roads: v.set.transitions.map((t) => [t.viewIDstart, t.viewIDend]),
+  };
+})()`;
+
+/** there: face the way asked, and say how many plans it took */
+async function arrive(w: Walk, set: string, goal: { name: string }, plans: number): Promise<void> {
+  const { c, want, x, z } = w;
+  if (want) {
+    await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
+  }
+  let how = ", already there";
+  if (w.spent) how = `, ${w.spent} road(s)` + (plans > 1 ? ` over ${plans} plans` : "");
+  c.say(`${set} ${goal.name} (${x},${z})` + how);
+  await c.d.settle(c.wait, `the walk to ${x},${z}`, c.budget);
+}
+
+/**
+ * `nite` AND `town` ARE THE SAME PLACE, and the guard has to know it.
+ *
+ * The town by day is `TOWN.SET` and the same town at night is `NITE.SET` —
+ * one 15x15 grid drawn twice, which is why the engine answers `"town"` for
+ * `currentset ()` in both (`hotdist ()` reads it, and the rungs say so).
+ * The playthrough plans over whichever of the two its rung happens to have
+ * bound and never asks the room's name, because either file's geometry is
+ * the right geometry.
+ *
+ * So a guard that compares names is stricter than the thing it is
+ * guarding, and it failed three legs of a sweep that were perfectly well
+ * placed: "goto(6, 8) expects to be in nite and this is town". Everything
+ * else stays strict — `hub` against `snake`, `hotupper` against
+ * `hotlower` are different rooms and a plan made in the wrong one is the
+ * mistake this guard exists to catch.
+ */
+function sameRoom(a: string, b: string): boolean {
+  if (a === b) return true;
+  const town = new Set(["nite", "town"]);
+  return town.has(a) && town.has(b);
+}
+
+/**
+ * THE ROOM MAY BE ARRIVING, so wait for it before saying it is wrong.
+ *
+ * An interior is entered by CONSEQUENCE here, not by a gesture aimed at
+ * it: an `uparrow` into the right cell runs `gotointerior ("court.set")`
+ * from the scene's own script, and a puzzle's last act is
+ * `sendtoset (gotohub ())`. Either way the press that causes it has
+ * already returned by the time the next line reads the room, and the
+ * room changes a moment later.
+ *
+ * So five legs of a sweep failed on a room that was on its way — "goto(2,
+ * 4) expects to be in hub and this is tbird" — which is the guard being
+ * right about the instant and wrong about the leg. Waiting costs nothing
+ * where the room is already correct, because this branch is only reached
+ * when it is not.
+ */
+async function awaitRoom(c: ActionContext, x: number, z: number, room: Room, mustBe: string): Promise<void> {
+  const ROOM = `String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/[.]set$/, "")`;
+  const twin = mustBe === "nite" ? "town" : "nite";
+  const arrived = await c.d.tryHold(
+    `${ROOM} === ${JSON.stringify(mustBe)}` +
+      (sameRoom("nite", mustBe) ? ` || ${ROOM} === ${JSON.stringify(twin)}` : ""),
+    Math.min(Math.max(c.budget, 20_000), 30_000),
+  );
+  if (!arrived) {
+    throw new Error(
+      `goto(${x}, ${z}) expects to be in ${mustBe} and this is ${room.set}, and it ` +
+        `did not become ${mustBe} while we waited — whatever opens that room has not ` +
+        `been done yet`,
+    );
+  }
+}
+
+/** the goal's cell, and a refusal that says why when it is not one that can be stood on */
+function standpoint(room: Room, x: number, z: number): Cell {
+  const goal = room.cells.find((s2) => s2.x === x && s2.z === z);
+  if (!goal) {
+    throw new Error(`${room.set} has no cell at ${x},${z} — its grid does not reach that far`);
+  }
+  if (!goal.views.length) {
+    const walkable = room.cells.filter((s2) => s2.views.length);
+    throw new Error(
+      `${room.set}'s cell ${x},${z} (${goal.name}) cannot be stood on` +
+        (goal.build ? " — it is built on" : " — it has no views") +
+        `. The ${walkable.length} that can: ` +
+        walkable.map((s2) => `${s2.x},${s2.z}`).join(" "),
+    );
+  }
+  return goal;
+}
+
+/** the fewest roads from where we stand to the goal, as the facing to leave each cell by */
+function planRoads(room: Room, goal: Cell, x: number, z: number): { face: string }[] {
+  // where every view id lives, so a road can say which cell it joins
+  const at = new Map<number, { scene: string; view: string }>();
+  for (const s2 of room.cells) for (const w of s2.views) at.set(w.id, { scene: s2.name, view: w.name });
+
+  const steps: { face: string }[] = [];
+  const prev = new Map<string, { from: string; leave: string }>();
+  const seen = new Set([room.here]);
+  const queue = [room.here];
+  while (queue.length) {
+    const now = queue.shift()!;
+    if (now === goal.name) break;
+    /*
+     * ONE WAY, and this is the one place Dust's geometry is not Titanic's.
+     *
+     * `stand` walks a road in either direction, and here that plans routes
+     * that cannot be walked: a road joins STANDPOINTS, so `viewIDstart` is
+     * both where you stand and which way you face, while `viewIDend` is the
+     * view you arrive facing — which looks onward, not back the way you
+     * came. Taken backwards it reads as "stand at the far view and walk",
+     * and the far view faces the wrong way.
+     *
+     * Measured: from `scene g15` (6,14) the bidirectional version planned
+     * `south -> south -> south -> south` up a street that runs the other
+     * way, and the first press reported "three ArrowUp presses and the world
+     * did not move ... nothing is refusing it, so there is simply nowhere to
+     * go" — the correct diagnosis of a plan that was nonsense.
+     *
+     * Nothing is lost by it. The town authors both directions separately:
+     * 110 roads over the 52 cells that can be stood on, which is every
+     * adjacency twice, once each way.
+     */
+    for (const [from, to] of room.roads) {
+      const side = at.get(from);
+      const other = at.get(to);
+      if (!side || !other || side.scene !== now || seen.has(other.scene)) continue;
+      seen.add(other.scene);
+      prev.set(other.scene, { from: now, leave: side.view });
+      queue.push(other.scene);
+    }
+  }
+  if (!prev.has(goal.name)) {
+    throw new Error(
+      `no way through ${room.set} from ${room.here} to ${goal.name} (${x},${z}) — ` +
+        `nothing joins them, so one of the two is off the street`,
+    );
+  }
+  for (let sc = goal.name; sc !== room.here; sc = prev.get(sc)!.from) {
+    steps.unshift({ face: prev.get(sc)!.leave });
+  }
+  return steps;
+}
+
+/**
+ * NOT INTO A FROZEN WORLD.
+ *
+ * `lockevents` is the strongest refusal in the engine and the only one
+ * that is not a state of the viewer: it is a script global, so `quiet`,
+ * `faded` and `ready` all answer true through it, and a gesture made
+ * while it is set is THROWN AWAY — not queued, not logged. `arrow`'s own
+ * gate is `IDLE`, which is `!inputLocked && no events`, and `inputLocked`
+ * does not read it.
+ *
+ * So a walk that arrives during one of the scripts that freeze the world
+ * spends its presses on nothing and reports the truth in a way that reads
+ * like a bad plan: "three ArrowUp presses and the world did not move ...
+ * the world is FROZEN (lockevents)". Waiting is all that is needed, and it
+ * is bounded — a freeze that never lifts is worth failing on.
+ */
+/** the engine will act on a press rather than file it or drop it */
+const IDLE_ENOUGH = `(() => {
+  const v = window.dbg.viewer, s = window.dbg.session;
+  if (!v) return false;
+  if (v.moviePlaying || v.conversing) return true;
+  return !v.inputLocked && s.events.length === 0;
+})()`;
+const FROZEN = `(() => {
+  const v = window.dbg.session.interp.globals.get("lockevents") ?? 0;
+  return typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : String(v).length > 0;
+})()`;
+
+/**
+ * ONE STEP AT A TIME, CHECKED — because the world moves while you walk.
+ *
+ * A plan is a list of facings made from one standpoint, and Dust's
+ * standpoints act when you land on them: a scene's `openscene` can turn
+ * you, a `hasattention` can start a conversation, a trigger cell can run
+ * `gotointerior`. Press the rest of the plan into that and every remaining
+ * step is aimed from a cell you are no longer standing in — which arrives
+ * as "three ArrowUp presses and the world did not move", a true report
+ * about a plan that stopped being true after its first step.
+ *
+ * So each step is followed by a look: still where the plan thinks? If not,
+ * stop pressing and re-plan from where we actually are, which is what the
+ * outer loop is for. It costs one read per cell and it is the difference
+ * between a walk that recovers and a leg that fails.
+ */
+const CELL = `(() => {
+  const v = window.dbg.viewer;
+  if (!v) return "";
+  return String(v.scene.sceneName || "").toLowerCase();
+})()`;
+
+/** walk the plan from `from`, a road at a time, looking after each where it actually put us */
+async function walkSteps(w: Walk, steps: { face: string }[], goal: Cell, from: string): Promise<void> {
+  const { c } = w;
+  let expected = from;
+  for (const step of steps) {
+    /*
+     * Wait for the world to be BOTH unfrozen and willing to take a press.
+     *
+     * Two different refusals and a walk meets both: `lockevents` throws a
+     * gesture away, and a script still running makes `inputLocked` true so
+     * the press waits on its own gate and dies there — "stuck waiting for
+     * the engine to be ready for ArrowRight", which is a leg that arrived
+     * a moment after something else started rather than a bad plan. The
+     * bound is generous because the thing being waited out is somebody
+     * else's script, not ours.
+     */
+    await c.d.tryHold(
+      `!(${FROZEN}) && (${IDLE_ENOUGH})`,
+      Math.min(Math.max(c.budget, 20_000), 30_000),
+    );
+    await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [step.face] }, wait: "none" });
+    // `wait: none` because `arrow` confirms the walk itself, by the
+    // standpoint changing, and presses again when it did not — a settle
+    // here would be paid once per cell for nothing
+    await CORE_ACTIONS.up.run({ ...c, step: { ...c.step, args: [] }, wait: "none" });
+    w.spent++;
+    // where the step actually put us — a walk arrives in ONE of the cells
+    // the road could reach, and anything else means the world intervened
+    const now = await c.d.evaluate<string>(CELL);
+    if (now && now !== expected) {
+      expected = now;
+    }
+    if (now === goal.name) break; // there already; the rest of the plan is moot
+  }
+}
+
 /**
  * Walk to a CELL of the room you are in, turning and walking.
  *
@@ -272,367 +637,44 @@ const GOTO: Action = {
     }
     const spoken = (c.step.opts.replies ?? "").trim().toLowerCase();
     const tries = Math.max(1, Number(c.step.opts.tries ?? 4));
-    const talking = (): Promise<boolean> => c.d.evaluate<boolean>(TALKING);
-
-    /**
-     * A conversation in the way of the walk — answered if it can be, named if it
-     * cannot.
-     *
-     * Characters here do not wait to be spoken to, and a walk of any length runs
-     * into one: the harness spends most of `walkTo`'s length on exactly this
-     * (`clearInterruption`, dust/tests/playthrough/route.ts) because every
-     * remaining key belongs to a puppet the moment one opens.
-     *
-     * WHAT IS OFFERED, first choice each turn, and the two things that shaped it:
-     *
-     *   - A preference list is wrong. `say` answers a list IN ORDER and errors on
-     *     the first entry a plaque does not carry, so the playthrough's own
-     *     leaving order died on `bevel 301 not offered by help1.pup; got 101 ...
-     *     102 ... 103`. Every leaving number belongs to somebody.
-     *   - `bailOut` is wrong too. ESC does not end every conversation: one
-     *     survived it across four re-plans, still talking, and put `helpbut` in
-     *     the hand on the way.
-     *
-     * And it does not always work, which is why it gives up out loud. `help1.pup`
-     * is the case: it is the game's HELP overlay rather than a character —
-     * `talk(help[...])` clicks the help BUTTON prop open — and nothing on its
-     * plaque closes it. A route meets that one in the opening and deals with it
-     * on its own line; this verb's job is to say so rather than to spin.
-     *
-     * `replies:` names the reply for a leg that knows which it wants, which
-     * matters because a leaving line is often the line that sets a character's
-     * phase — a rung whose whole point is Marie's 202 should not let a walk
-     * spend the beat on something else. `replies: none` refuses to answer at all.
-     */
-    const clearOrSay = async (): Promise<void> => {
-      if (!(await talking())) return;
-      if (spoken === "none") {
-        throw new Error(
-          `a conversation is open and goto(replies: none) was told not to answer it`,
-        );
-      }
-      if (spoken) {
-        const ids = spoken.split(/[|\s]+/).map(Number).filter((n) => Number.isFinite(n));
-        await CORE_ACTIONS.say.run({
-          ...c,
-          step: { ...c.step, args: [], bevels: ids, ending: "leave" },
-          wait: "none",
-        });
-        return;
-      }
-      for (let turn = 0; turn < 10 && (await talking()); turn++) {
-        const offered = await c.d.evaluate<number[]>(
-          `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ch.id)`,
-        );
-        if (!offered.length) {
-          /*
-           * A LINE IS BEING SPOKEN, so cut it short and look again.
-           *
-           * Waiting alone was not enough: a sweep reported a walk giving up with
-           * "Nothing is on its plaque — it is still speaking", which is a
-           * conversation that would have got there and a verb that stopped
-           * asking. One ESC skips the line, which is what `converse` does at the
-           * same beat — never a hammer, because ESC at a plaque ANSWERS it.
-           */
-          const SPEAKING = `!!(window.dbg.viewer && window.dbg.viewer.speaking)`;
-          const CHOICES = `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ch.id)`;
-          if (await c.d.evaluate<boolean>(SPEAKING)) {
-            await c.d.key("Escape", "none", c.budget);
-            await c.d.tryHold(`!(${SPEAKING}) || (${CHOICES}).length > 0 || !(${TALKING})`, 6000);
-            continue;
-          }
-          if (!(await c.d.tryHold(`(${CHOICES}).length > 0 || !(${TALKING})`, 6000))) break;
-          continue;
-        }
-        await CORE_ACTIONS.say.run({
-          ...c,
-          step: { ...c.step, args: [], bevels: [offered[0]], ending: "stop" },
-          wait: "none",
-        });
-      }
-      if (await talking()) {
-        const offered = await c.d.evaluate<{ id: number; text: string }[]>(
-          `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ({ id: ch.id, text: String(ch.text || "") }))`,
-        );
-        const plaque = offered.length
-          ? `Its plaque offers ${offered.map((o) => o.id + ":" + o.text).join(" | ")}`
-          : `Nothing is on its plaque — it is still speaking, which is what the ` +
-            `HELP overlay does and no reply closes`;
-        throw new Error(
-          `a conversation interrupted the walk and would not close — answer it in the ` +
-            `sheet (talk(...) or say([...])), or pass replies: to this line. ` +
-            plaque,
-        );
-      }
-      c.say("answered something on the way");
-    };
-
-    interface Cell {
-      name: string;
-      x: number;
-      z: number;
-      build: boolean;
-      views: { name: string; id: number }[];
-    }
-    const READ = `(() => {
-      const v = window.dbg.viewer, s = window.dbg.session;
-      if (!v || !v.set) return null;
-      return {
-        set: String(s.currentSetFile || "").toLowerCase().replace(/[.]set$/, ""),
-        here: String(v.scene.sceneName || "").toLowerCase(),
-        cells: v.set.scenes.map((sc) => ({
-          name: String(sc.sceneName || "").toLowerCase(),
-          x: Math.round((sc.sceneLocation[0] - 128) / 256),
-          z: Math.round((sc.sceneLocation[2] - 128) / 256),
-          build: !!sc.build,
-          views: sc.views.map((w) => ({ name: String(w.viewName || "").toLowerCase(), id: w.viewID })),
-        })),
-        roads: v.set.transitions.map((t) => [t.viewIDstart, t.viewIDend]),
-      };
-    })()`;
-
-    let spent = 0;
+    const walk: Walk = { c, x, z, want, spent: 0 };
     let last = "";
     /*
      * Re-planned from where we ACTUALLY are, every pass — the note above says
      * why both halves of that are needed. Each pass: answer anything open,
      * settle, read the room, plan, walk it.
      */
-    /** there: face the way asked, and say how many plans it took */
-    const arrive = async (set: string, goal: { name: string }, plans: number): Promise<void> => {
-      if (want) {
-        await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
-      }
-      let how = ", already there";
-      if (spent) how = `, ${spent} road(s)` + (plans > 1 ? ` over ${plans} plans` : "");
-      c.say(`${set} ${goal.name} (${x},${z})` + how);
-      await c.d.settle(c.wait, `the walk to ${x},${z}`, c.budget);
-    };
     for (let attempt = 1; attempt <= tries; attempt++) {
-      await clearOrSay();
+      await clearOrSay(c, spoken);
       await c.d.settle("quiet", `the room before planning the walk to ${x},${z}`, c.budget);
 
-      const room = await c.d.evaluate<{
-        set: string;
-        here: string;
-        cells: Cell[];
-        roads: [number, number][];
-      } | null>(READ);
+      const room = await c.d.evaluate<Room | null>(READ);
       if (!room) throw new Error(`there is no room in memory to plan a walk through`);
 
       // The guard `stand` earned the hard way, and it costs one word: a plan made
       // in the wrong room is not obviously wrong, it is a correct route through
       // somewhere else.
       const mustBe = (c.step.opts.set ?? "").toLowerCase();
-      /**
-       * `nite` AND `town` ARE THE SAME PLACE, and the guard has to know it.
-       *
-       * The town by day is `TOWN.SET` and the same town at night is `NITE.SET` —
-       * one 15x15 grid drawn twice, which is why the engine answers `"town"` for
-       * `currentset ()` in both (`hotdist ()` reads it, and the rungs say so).
-       * The playthrough plans over whichever of the two its rung happens to have
-       * bound and never asks the room's name, because either file's geometry is
-       * the right geometry.
-       *
-       * So a guard that compares names is stricter than the thing it is
-       * guarding, and it failed three legs of a sweep that were perfectly well
-       * placed: "goto(6, 8) expects to be in nite and this is town". Everything
-       * else stays strict — `hub` against `snake`, `hotupper` against
-       * `hotlower` are different rooms and a plan made in the wrong one is the
-       * mistake this guard exists to catch.
-       */
-      const sameRoom = (a: string, b: string): boolean => {
-        if (a === b) return true;
-        const town = new Set(["nite", "town"]);
-        return town.has(a) && town.has(b);
-      };
       if (mustBe && !sameRoom(room.set, mustBe)) {
-        /**
-         * THE ROOM MAY BE ARRIVING, so wait for it before saying it is wrong.
-         *
-         * An interior is entered by CONSEQUENCE here, not by a gesture aimed at
-         * it: an `uparrow` into the right cell runs `gotointerior ("court.set")`
-         * from the scene's own script, and a puzzle's last act is
-         * `sendtoset (gotohub ())`. Either way the press that causes it has
-         * already returned by the time the next line reads the room, and the
-         * room changes a moment later.
-         *
-         * So five legs of a sweep failed on a room that was on its way — "goto(2,
-         * 4) expects to be in hub and this is tbird" — which is the guard being
-         * right about the instant and wrong about the leg. Waiting costs nothing
-         * where the room is already correct, because this branch is only reached
-         * when it is not.
-         */
-        const ROOM = `String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/[.]set$/, "")`;
-        const twin = mustBe === "nite" ? "town" : "nite";
-        const arrived = await c.d.tryHold(
-          `${ROOM} === ${JSON.stringify(mustBe)}` +
-            (sameRoom("nite", mustBe) ? ` || ${ROOM} === ${JSON.stringify(twin)}` : ""),
-          Math.min(Math.max(c.budget, 20_000), 30_000),
-        );
-        if (!arrived) {
-          throw new Error(
-            `goto(${x}, ${z}) expects to be in ${mustBe} and this is ${room.set}, and it ` +
-              `did not become ${mustBe} while we waited — whatever opens that room has not ` +
-              `been done yet`,
-          );
-        }
+        await awaitRoom(c, x, z, room, mustBe);
         // the room changed under us, so the plan has to be made again in it
         c.say(`waited for ${mustBe} to open`);
         continue;
       }
 
-      const goal = room.cells.find((s2) => s2.x === x && s2.z === z);
-      if (!goal) {
-        throw new Error(`${room.set} has no cell at ${x},${z} — its grid does not reach that far`);
-      }
-      if (!goal.views.length) {
-        const walkable = room.cells.filter((s2) => s2.views.length);
-        throw new Error(
-          `${room.set}'s cell ${x},${z} (${goal.name}) cannot be stood on` +
-            (goal.build ? " — it is built on" : " — it has no views") +
-            `. The ${walkable.length} that can: ` +
-            walkable.map((s2) => `${s2.x},${s2.z}`).join(" "),
-        );
-      }
+      const goal = standpoint(room, x, z);
 
       // ARRIVED, asked at the top of the pass as well as at the end of a walk:
       // a walk the world finished for us costs nothing
-      if (room.here === goal.name) return arrive(room.set, goal, attempt - 1);
+      if (room.here === goal.name) return arrive(walk, room.set, goal, attempt - 1);
 
-      // where every view id lives, so a road can say which cell it joins
-      const at = new Map<number, { scene: string; view: string }>();
-      for (const s2 of room.cells) for (const w of s2.views) at.set(w.id, { scene: s2.name, view: w.name });
-
-      const steps: { face: string }[] = [];
-      const prev = new Map<string, { from: string; leave: string }>();
-      const seen = new Set([room.here]);
-      const queue = [room.here];
-      while (queue.length) {
-        const now = queue.shift()!;
-        if (now === goal.name) break;
-        /*
-         * ONE WAY, and this is the one place Dust's geometry is not Titanic's.
-         *
-         * `stand` walks a road in either direction, and here that plans routes
-         * that cannot be walked: a road joins STANDPOINTS, so `viewIDstart` is
-         * both where you stand and which way you face, while `viewIDend` is the
-         * view you arrive facing — which looks onward, not back the way you
-         * came. Taken backwards it reads as "stand at the far view and walk",
-         * and the far view faces the wrong way.
-         *
-         * Measured: from `scene g15` (6,14) the bidirectional version planned
-         * `south -> south -> south -> south` up a street that runs the other
-         * way, and the first press reported "three ArrowUp presses and the world
-         * did not move ... nothing is refusing it, so there is simply nowhere to
-         * go" — the correct diagnosis of a plan that was nonsense.
-         *
-         * Nothing is lost by it. The town authors both directions separately:
-         * 110 roads over the 52 cells that can be stood on, which is every
-         * adjacency twice, once each way.
-         */
-        for (const [from, to] of room.roads) {
-          const side = at.get(from);
-          const other = at.get(to);
-          if (!side || !other || side.scene !== now || seen.has(other.scene)) continue;
-          seen.add(other.scene);
-          prev.set(other.scene, { from: now, leave: side.view });
-          queue.push(other.scene);
-        }
-      }
-      if (!prev.has(goal.name)) {
-        throw new Error(
-          `no way through ${room.set} from ${room.here} to ${goal.name} (${x},${z}) — ` +
-            `nothing joins them, so one of the two is off the street`,
-        );
-      }
-      for (let sc = goal.name; sc !== room.here; sc = prev.get(sc)!.from) {
-        steps.unshift({ face: prev.get(sc)!.leave });
-      }
+      const steps = planRoads(room, goal, x, z);
 
       const where = `${room.set} (from ${room.here})`;
       const via = steps.map((s2) => s2.face).join(" -> ");
-      /**
-       * NOT INTO A FROZEN WORLD.
-       *
-       * `lockevents` is the strongest refusal in the engine and the only one
-       * that is not a state of the viewer: it is a script global, so `quiet`,
-       * `faded` and `ready` all answer true through it, and a gesture made
-       * while it is set is THROWN AWAY — not queued, not logged. `arrow`'s own
-       * gate is `IDLE`, which is `!inputLocked && no events`, and `inputLocked`
-       * does not read it.
-       *
-       * So a walk that arrives during one of the scripts that freeze the world
-       * spends its presses on nothing and reports the truth in a way that reads
-       * like a bad plan: "three ArrowUp presses and the world did not move ...
-       * the world is FROZEN (lockevents)". Waiting is all that is needed, and it
-       * is bounded — a freeze that never lifts is worth failing on.
-       */
-      /** the engine will act on a press rather than file it or drop it */
-      const IDLE_ENOUGH = `(() => {
-        const v = window.dbg.viewer, s = window.dbg.session;
-        if (!v) return false;
-        if (v.moviePlaying || v.conversing) return true;
-        return !v.inputLocked && s.events.length === 0;
-      })()`;
-      const FROZEN = `(() => {
-        const v = window.dbg.session.interp.globals.get("lockevents") ?? 0;
-        return typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : String(v).length > 0;
-      })()`;
-      /**
-       * ONE STEP AT A TIME, CHECKED — because the world moves while you walk.
-       *
-       * A plan is a list of facings made from one standpoint, and Dust's
-       * standpoints act when you land on them: a scene's `openscene` can turn
-       * you, a `hasattention` can start a conversation, a trigger cell can run
-       * `gotointerior`. Press the rest of the plan into that and every remaining
-       * step is aimed from a cell you are no longer standing in — which arrives
-       * as "three ArrowUp presses and the world did not move", a true report
-       * about a plan that stopped being true after its first step.
-       *
-       * So each step is followed by a look: still where the plan thinks? If not,
-       * stop pressing and re-plan from where we actually are, which is what the
-       * outer loop is for. It costs one read per cell and it is the difference
-       * between a walk that recovers and a leg that fails.
-       */
-      const CELL = `(() => {
-        const v = window.dbg.viewer;
-        if (!v) return "";
-        return String(v.scene.sceneName || "").toLowerCase();
-      })()`;
-      let expected = room.here;
       let drifted = "";
       try {
-        for (const step of steps) {
-          /*
-           * Wait for the world to be BOTH unfrozen and willing to take a press.
-           *
-           * Two different refusals and a walk meets both: `lockevents` throws a
-           * gesture away, and a script still running makes `inputLocked` true so
-           * the press waits on its own gate and dies there — "stuck waiting for
-           * the engine to be ready for ArrowRight", which is a leg that arrived
-           * a moment after something else started rather than a bad plan. The
-           * bound is generous because the thing being waited out is somebody
-           * else's script, not ours.
-           */
-          await c.d.tryHold(
-            `!(${FROZEN}) && (${IDLE_ENOUGH})`,
-            Math.min(Math.max(c.budget, 20_000), 30_000),
-          );
-          await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [step.face] }, wait: "none" });
-          // `wait: none` because `arrow` confirms the walk itself, by the
-          // standpoint changing, and presses again when it did not — a settle
-          // here would be paid once per cell for nothing
-          await CORE_ACTIONS.up.run({ ...c, step: { ...c.step, args: [] }, wait: "none" });
-          spent++;
-          // where the step actually put us — a walk arrives in ONE of the cells
-          // the road could reach, and anything else means the world intervened
-          const now = await c.d.evaluate<string>(CELL);
-          if (now && now !== expected) {
-            expected = now;
-          }
-          if (now === goal.name) break; // there already; the rest of the plan is moot
-        }
+        await walkSteps(walk, steps, goal, room.here);
         // and if the plan ran out somewhere other than the goal, say so and let
         // the outer loop plan again from here rather than reporting success
         const ended = await c.d.evaluate<string>(CELL);
@@ -644,7 +686,7 @@ const GOTO: Action = {
         }
         // and arriving is noticed HERE, not at the top of a next pass: there may
         // be none (`tries: 1`), and this plan is the one that got us there
-        if (ended === goal.name) return arrive(room.set, goal, attempt);
+        if (ended === goal.name) return arrive(walk, room.set, goal, attempt);
       } catch (e) {
         /*
          * A walk that stops is USUALLY somebody talking, and the next pass
@@ -656,7 +698,7 @@ const GOTO: Action = {
           `${(e as Error).message}\n    planning in ${where} via ${via}` +
           (drifted ? ` (ended at ${drifted})` : "");
         if (attempt === tries) throw new Error(last);
-        c.say(`plan ${attempt} stopped after ${spent} road(s); re-planning`);
+        c.say(`plan ${attempt} stopped after ${walk.spent} road(s); re-planning`);
         continue;
       }
     }

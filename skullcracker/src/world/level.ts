@@ -15,7 +15,7 @@ import { ENDING_FILM, MISSIONS, TIME_OUT_FILMS, allowanceFor } from "../mission"
 import { CHAPTER_WEAPON } from "../guns";
 import { CEL as HUD_CEL, CLOCK, CLOCK_FULL, dialCel } from "../hud";
 import { random, seedRandom } from "../random";
-import { ui, files, p, level, scaled, levelIndex, mission, startTicks, sound, aliveNow, CHARACTER, type Solids, setLevel, setLevelIndex, setStartTicks } from "./state";
+import { ui, files, p, level, scaled, levelIndex, mission, startTicks, sound, aliveNow, CHARACTER, type Level, type Solids, setLevel, setLevelIndex, setStartTicks } from "./state";
 import { setInput } from "./keys";
 import { playerBox } from "./cels";
 import { startCamera, setLevelClock, setBackdropFrames, setFlashColour, setFlypasts, setIface } from "./camera";
@@ -52,6 +52,82 @@ export async function loadLevel(index: number): Promise<void> {
   // planks before lifts: both OWN a platform record and a record has one owner,
   // so the planks claim theirs first and the lifts are told what is already spoken for
   const planks = rooms.map((r, i) => planksIn(sbk, r, solids[i]));
+  emptyTheWorld();
+  enterChapter(name);
+  // `0x448bc7` — and every level opens on the idle `0x475c88`, kind 0, whatever
+  // you carried in from the last one: the gun waits for INV
+  inv.drawn = false;
+  p.inv15 = p.invLoop = false;
+  setLevel({
+    sbk,
+    pal,
+    rooms,
+    solids,
+    ladders: sbk.entities.filter((e) => e.isEntity && e.name === "ladder"),
+    bars: sbk.entities.filter((e) => e.isEntity && e.name === "monkeybar"),
+    ...fightsIn(sbk),
+    spawned: ((claimed: Set<SbkEntity>) =>
+      rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
+    planks,
+    elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
+    ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
+    crushes: rooms.map((r) => crushesIn(sbk, r)),
+    switches: rooms.map((r) => switchesIn(sbk, r)),
+    nests: rooms.map((r) => nestsIn(sbk, r)),
+    doors: rooms.map((r) => doorsIn(sbk, r)),
+    elevs: rooms.map((r, i) => elevsIn(sbk, r, solids[i])),
+    shacks: rooms.map((r) => shacksIn(sbk, r)),
+    barrels: rooms.map((r, i) => barrelsIn(sbk, r, solids[i])),
+    ...sceneryIn(sbk, rooms),
+    pickups: rooms.map((r) => pickupsIn(sbk, r)),
+    guns: rooms.map((r) => gunsIn(sbk, r)),
+    ...trapsIn(sbk, rooms),
+    ...machinesIn(sbk, rooms),
+    ...fittingsIn(sbk, rooms),
+    ...bossIn(sbk, rooms),
+    ...fansIn(sbk, rooms),
+    ...groundIn(sbk, rooms),
+    crows: rooms.map((r) => crowsIn(sbk, r)),
+    ...drawOrder(sbk),
+    anchorX,
+    anchorY,
+    name,
+  });
+  setLevelIndex(index);
+  ui.levelShown(index);
+  takeCensus();
+  // `0x448ad8` fills it on the way in, and `0x402760` does the same on a respawn
+  stats.health = stats.maxHealth;
+  // ?clock= starts the mission clock short, which is the only way to reach the
+  // last two minutes of an eight-minute dial from a test. It is spent on the
+  // first level it is given to, so a timed-out level does not time out again.
+  stats.clockFull = clockFor(sbk);
+  stats.ticks = startTicks ?? stats.clockFull;
+  setStartTicks(null);
+  stats.shown = null;
+  goalOpen = false;
+  // `0x437020` / `0x43d440`, `0x41fa0c` / `0x421fa0`, `0x412cfb` / `0x4165ac`
+  bossDown.hardcore = bossDown.belfry = bossDown.lab = false;
+  leftGoal = false;
+  craft = null;
+  // `0x448a93` / `0x42e583` — the player's set-up opens the keys (`0x402df0`)
+  setInput(true);
+  setGobs([]);
+  setPops([]);
+  setSparks([]);
+  dropAt(roomAt(anchorX, anchorY), anchorX, anchorY);
+  // `0x42e580`: the corner goes on the start point itself, not the arrival's
+  startCamera(anchorX, anchorY);
+  // `0x4036ff` — and the dice start over, on the constant every level uses,
+  // once its things have been made: see {@link file://../random.ts}
+  seedRandom();
+  // the level's own theme and its chapter's effects bank — LEVEL_BANKS is the
+  // table SC.EXE's own opens spell out, keyed by this book's name
+  void sound?.open(name);
+}
+
+/** whatever the last level left lying about — the drips, the shots, the flames, the clocks — gone */
+function emptyTheWorld(): void {
   setDrips([]);
   setRoaches([]);
   setLevelClock(0);
@@ -72,11 +148,16 @@ export async function loadLevel(index: number): Promise<void> {
   setCans([]);
   setHeads([]);
   setFlames([]);
-  // the chapter's own entry function: zero every count, name the chapter's
-  // weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
-  // runs once per CHAPTER, not once per level, and that is the whole reason
-  // SEWER places two `statflare` and no gun to fire them with — you are
-  // expected to still be holding SERVICE's.
+}
+
+/**
+ * the chapter's own entry function: zero every count, name the chapter's
+ * weapon, and leave the hands empty (`0x4511f0` and its three siblings). It
+ * runs once per CHAPTER, not once per level, and that is the whole reason
+ * SEWER places two `statflare` and no gun to fire them with — you are
+ * expected to still be holding SERVICE's.
+ */
+function enterChapter(name: string): void {
   const chapter = CHAPTER_WEAPON[name.toUpperCase()];
   if (chapter !== undefined && chapter !== chapterWeapon) {
     chapterWeapon = chapter;
@@ -84,17 +165,11 @@ export async function loadLevel(index: number): Promise<void> {
     inv.armed = false;
     inv.rounds = {};
   }
-  // `0x448bc7` — and every level opens on the idle `0x475c88`, kind 0, whatever
-  // you carried in from the last one: the gun waits for INV
-  inv.drawn = false;
-  p.inv15 = p.invLoop = false;
-  setLevel({
-    sbk,
-    pal,
-    rooms,
-    solids,
-    ladders: sbk.entities.filter((e) => e.isEntity && e.name === "ladder"),
-    bars: sbk.entities.filter((e) => e.isEntity && e.name === "monkeybar"),
+}
+
+/** which of each class's fight moves this level's book has the cels for */
+function fightsIn(sbk: SbkFile): Pick<Level, "fights"> {
+  return {
     fights: Object.fromEntries(
       Object.entries(FIGHTS).map(([kind, f]) => [
         kind,
@@ -109,18 +184,12 @@ export async function loadLevel(index: number): Promise<void> {
         },
       ]),
     ),
-    spawned: ((claimed: Set<SbkEntity>) =>
-      rooms.map((r) => spawnIn(sbk, r, claimed)))(new Set<SbkEntity>()),
-    planks,
-    elevators: rooms.map((r, i) => elevatorsIn(sbk, r, solids[i], planks[i])),
-    ibeams: rooms.map((r) => ibeamsIn(sbk, r)),
-    crushes: rooms.map((r) => crushesIn(sbk, r)),
-    switches: rooms.map((r) => switchesIn(sbk, r)),
-    nests: rooms.map((r) => nestsIn(sbk, r)),
-    doors: rooms.map((r) => doorsIn(sbk, r)),
-    elevs: rooms.map((r, i) => elevsIn(sbk, r, solids[i])),
-    shacks: rooms.map((r) => shacksIn(sbk, r)),
-    barrels: rooms.map((r, i) => barrelsIn(sbk, r, solids[i])),
+  };
+}
+
+/** the scenery that does something: pipes, sewage, bushes, roach motels and sprinklers */
+function sceneryIn(sbk: SbkFile, rooms: SbkRoom[]): Pick<Level, "pipes" | "sewage" | "bushes" | "nests2" | "sprinklers"> {
+  return {
     pipes: rooms.map((r) =>
       placed(sbk, r, "initpipe", PIPE.mouth.cels, (e) => ({
         x: e.pointX,
@@ -184,8 +253,12 @@ export async function loadLevel(index: number): Promise<void> {
         right: e.right,
       })),
     ),
-    pickups: rooms.map((r) => pickupsIn(sbk, r)),
-    guns: rooms.map((r) => gunsIn(sbk, r)),
+  };
+}
+
+/** the traps: graves, swinging axes, floors that give, surges, cage doors and alarms */
+function trapsIn(sbk: SbkFile, rooms: SbkRoom[]): Pick<Level, "holes" | "axes" | "floors" | "surges" | "cages" | "alarms"> {
+  return {
     holes: rooms.map((r) =>
       placed(sbk, r, "initgrave", [HOLE.shut], (e) => ({
         x: e.pointX,
@@ -254,6 +327,15 @@ export async function loadLevel(index: number): Promise<void> {
         clock: 0,
       })),
     ),
+  };
+}
+
+/** the machines: big guns, probes, lightning, belts, chairs and claws */
+function machinesIn(
+  sbk: SbkFile,
+  rooms: SbkRoom[],
+): Pick<Level, "bigguns" | "probes" | "lights" | "belts" | "chairs" | "claws"> {
+  return {
     // `0x4115b0` — one record, two objects, and the turret starts home ten
     // pixels above the point the hatch sits on
     bigguns: rooms.map((r) =>
@@ -360,6 +442,12 @@ export async function loadLevel(index: number): Promise<void> {
         clock: 0,
       })),
     ),
+  };
+}
+
+/** VAT's showers, balls and teeth, each room's own */
+function fittingsIn(sbk: SbkFile, rooms: SbkRoom[]): Pick<Level, "fittings"> {
+  return {
     fittings: rooms.map((r) => {
       /**
        * Filed by the middle of their RECT rather than by their point. VAT's
@@ -403,6 +491,12 @@ export async function loadLevel(index: number): Promise<void> {
         ...placed(sbk, r, "initteeth", [FITTING.teeth.cel], (e) => fitted(e, "teeth")),
       ];
     }),
+  };
+}
+
+/** Boggs: the body, its eight machines, its head and its arm */
+function bossIn(sbk: SbkFile, rooms: SbkRoom[]): Pick<Level, "boggs"> {
+  return {
     boggs: rooms.map((r) =>
       placed(sbk, r, "initboggsbody", BOGGS.idle.cels, (e) => ({
         x: e.pointX,
@@ -445,6 +539,12 @@ export async function loadLevel(index: number): Promise<void> {
         zap: { kind: 0 as const, tag: 0, clock: 0, dy: 0, dx: 0, armed: false, taunted: false },
       })),
     ),
+  };
+}
+
+/** the fans, both ways round */
+function fansIn(sbk: SbkFile, rooms: SbkRoom[]): Pick<Level, "fans"> {
+  return {
     fans: [
       ...rooms.map((r) => [
         // `0x415304`: created on tag 0 with the counter at 40 (`0x411b38`)
@@ -478,6 +578,12 @@ export async function loadLevel(index: number): Promise<void> {
         })),
       ]),
     ],
+  };
+}
+
+/** what comes up out of the ground or gives under it: the bridges and the hands */
+function groundIn(sbk: SbkFile, rooms: SbkRoom[]): Pick<Level, "bridges" | "hands"> {
+  return {
     bridges: rooms.map((r) =>
       placed(sbk, r, "initbridge", [BRIDGE.whole], (e) => ({
         x: e.pointX,
@@ -508,7 +614,12 @@ export async function loadLevel(index: number): Promise<void> {
         clock: 0,
       })),
     ),
-    crows: rooms.map((r) => crowsIn(sbk, r)),
+  };
+}
+
+/** the book's placements, cycled and in the engine's paint order */
+function drawOrder(sbk: SbkFile): Pick<Level, "draw"> {
+  return {
     // z is the ENGINE's paint order, which is its collection order: the level's
     // frame fn (SC.EXE 0x412c30) collects plane lists p3, p0, then the actors,
     // then p4, p1, p2 into one node array that 0x40e520 paints in order. So the
@@ -538,16 +649,16 @@ export async function loadLevel(index: number): Promise<void> {
       .map((q) => ({ ...q, loc: q.cels[0] }))
       .filter((q) => q.loc >= 0)
       .sort((a, b) => a.z - b.z),
-    anchorX,
-    anchorY,
-    name,
-  });
-  setLevelIndex(index);
-  ui.levelShown(index);
-  // the quota, the engine's own way round: count what was just spawned, then
-  // take this stage's share off it (see src/mission.ts). The census counts only
-  // the things that can claim the panel's bar, which is the same set the engine
-  // counts — furniture never calls `0x40d1c0` and is not part of anyone's quota.
+  };
+}
+
+/**
+ * the quota, the engine's own way round: count what was just spawned, then
+ * take this stage's share off it (see src/mission.ts). The census counts only
+ * the things that can claim the panel's bar, which is the same set the engine
+ * counts — furniture never calls `0x40d1c0` and is not part of anyone's quota.
+ */
+function takeCensus(): void {
   stats.census =
     level!.spawned.reduce(
       (n, r) => n + r.filter((e) => FOES[e.kind].counts).length,
@@ -559,34 +670,6 @@ export async function loadLevel(index: number): Promise<void> {
     // walked to its goal without touching the thing the chapter is named for.
     level!.boggs.reduce((n, r) => n + r.length, 0);
   stats.allowance = allowanceFor(mission(), stats.census);
-  // `0x448ad8` fills it on the way in, and `0x402760` does the same on a respawn
-  stats.health = stats.maxHealth;
-  // ?clock= starts the mission clock short, which is the only way to reach the
-  // last two minutes of an eight-minute dial from a test. It is spent on the
-  // first level it is given to, so a timed-out level does not time out again.
-  stats.clockFull = clockFor(sbk);
-  stats.ticks = startTicks ?? stats.clockFull;
-  setStartTicks(null);
-  stats.shown = null;
-  goalOpen = false;
-  // `0x437020` / `0x43d440`, `0x41fa0c` / `0x421fa0`, `0x412cfb` / `0x4165ac`
-  bossDown.hardcore = bossDown.belfry = bossDown.lab = false;
-  leftGoal = false;
-  craft = null;
-  // `0x448a93` / `0x42e583` — the player's set-up opens the keys (`0x402df0`)
-  setInput(true);
-  setGobs([]);
-  setPops([]);
-  setSparks([]);
-  dropAt(roomAt(anchorX, anchorY), anchorX, anchorY);
-  // `0x42e580`: the corner goes on the start point itself, not the arrival's
-  startCamera(anchorX, anchorY);
-  // `0x4036ff` — and the dice start over, on the constant every level uses,
-  // once its things have been made: see {@link file://../random.ts}
-  seedRandom();
-  // the level's own theme and its chapter's effects bank — LEVEL_BANKS is the
-  // table SC.EXE's own opens spell out, keyed by this book's name
-  void sound?.open(name);
 }
 
 /**

@@ -10,7 +10,7 @@ import { OWN } from "../sound";
 import { Crow, crowCel, ibeamCel, crushCel, BUSH, HAND, SURGE, CLAW, FITTING, BOGGS, Head, ROLLER } from "../props";
 import { BOLT, FLARE } from "../guns";
 import { random } from "../random";
-import { level, player, p, foesHurt, damageOn, sound, HURT, levelIndex } from "./state";
+import { level, player, p, foesHurt, damageOn, sound, HURT, levelIndex, type Level } from "./state";
 import { hanging, roomHolds, setKnockedOff } from "./motion";
 import { celRec, celOf, foeAnchor } from "./cels";
 import { spawnedHere, hereOf, roomSpan } from "./rooms";
@@ -300,7 +300,34 @@ export function takeHits(): void {
     return;
   const mine = playerBody();
   if (!mine) return;
-  const hit = (
+  const hit = hitter(mine);
+  const lvl = level;
+  if (takeCodes(lvl, mine, hit)) return;
+  if (!damageOn) return;
+  if (takeCreatureBlows(lvl, mine, hit)) return;
+  if (takeThrown(lvl, mine, hit)) return;
+  takeFurniture(lvl, mine, hit);
+}
+
+/** the player's body box this frame, which every hitter is tested against */
+type Body = NonNullable<ReturnType<typeof playerBody>>;
+
+/** one hitter against the body: its cel, where it stands and how it moves; true when it landed */
+type Hit = (
+  cel: SbkCel,
+  x: number,
+  y: number,
+  facing: number,
+  vx: number,
+  vy: number,
+  code?: number,
+  grip?: () => { x: number; y: number } | null,
+  what?: object,
+) => boolean;
+
+/** what a blow does to the player once it reaches his body `mine` — a code dispatched, or the damage and the reaction */
+function hitter(mine: Body): Hit {
+  return (
     cel: SbkCel,
     x: number,
     y: number,
@@ -403,18 +430,20 @@ export function takeHits(): void {
     takeHealth(damage);
     return true;
   };
-  const lvl = level;
-  /**
-   * The three that carry a CODE go first, and they are the only three this
-   * function runs at all with the damage switch off.
-   *
-   * Order is not the reason — a code is not damage, so the switch has nothing
-   * to do with it, and the reactions have to land either way. Cost is: letting
-   * the whole loop below run with the switch off adds a linear scan of the
-   * level's cel table per hitter per frame, and ARCADE, which judges a boss
-   * fight by the wall clock, fails two runs in three with it. Three short loops
-   * always; the long one only when it can do anything.
-   */
+}
+
+/**
+ * The three that carry a CODE go first, and they are the only three this
+ * function runs at all with the damage switch off.
+ *
+ * Order is not the reason — a code is not damage, so the switch has nothing
+ * to do with it, and the reactions have to land either way. Cost is: letting
+ * the whole loop below run with the switch off adds a linear scan of the
+ * level's cel table per hitter per frame, and ARCADE, which judges a boss
+ * fight by the wall clock, fails two runs in three with it. Three short loops
+ * always; the long one only when it can do anything.
+ */
+function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
   // `0x417208` — the claw's first blow is a hundred, and its second is the code
   for (const c of hereOf((l) => l.claws)) {
     const cel = celRec(lvl.sbk, clawCel(c));
@@ -443,7 +472,7 @@ export function takeHits(): void {
     if (
       hit(cel, c.x, c.y, 1, 0, 0, code, () => gripAt(clawCel(c), c.x, c.y), c)
     )
-      return;
+      return true;
   }
   /**
    * ...and the HANDS, whose whole point is the code.
@@ -471,7 +500,7 @@ export function takeHits(): void {
         q,
       )
     )
-      return;
+      return true;
   }
   // ...and SEWER's bush, whose last seven cels are a grip and whose blow is -3
   for (const q of hereOf((l) => l.bushes)) {
@@ -487,7 +516,7 @@ export function takeHits(): void {
     if (
       hit(cel, q.x, q.y, facing, 0, 0, code, () => gripAt(bushCel(q), q.x, q.y, facing), q)
     )
-      return;
+      return true;
   }
   // ...and TOWER's current, which carries -4 on every cel of its arc — while it
   // is on (`0x426a90`; `0x426b78` zeroes it as it goes off)
@@ -495,7 +524,7 @@ export function takeHits(): void {
     if (!g.on) continue;
     const cel = celRec(lvl.sbk, surgeCel(g));
     if (!cel?.strike) continue;
-    if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return;
+    if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return true;
   }
   // `0x41b022` — Boggs' first machine, armed with −1 while it sweeps, seen or
   // not ({@link BOGGS.zap}); its `obj+0x28` is 0 (`0x41b28b`). A blow the
@@ -508,10 +537,14 @@ export function takeHits(): void {
     if (!cel?.strike || !m) continue;
     if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.zap.code, undefined, b.zap)) {
       b.zap.armed = false;
-      return;
+      return true;
     }
   }
-  if (!damageOn) return;
+  return false;
+}
+
+/** the creatures' own blows, under the creature switch: their cels, and the crows' dives */
+function takeCreatureBlows(lvl: Level, mine: Body, hit: Hit): boolean {
   for (const e of foesHurt ? spawnedHere() : []) {
     /**
      * A corpse does not: `dead` has no box worth reading and never had —
@@ -541,7 +574,7 @@ export function takeHits(): void {
       // `0x430663` — the exchange marks the hitter's `obj+0x2a`, for a blow
       // with a strength (`0x430430`)
       if (strength > 0) e.connected = true;
-      return;
+      return true;
     }
   }
   /**
@@ -562,8 +595,13 @@ export function takeHits(): void {
       reach.top < mine.bottom
     )
       c.hit = true;
-    if (hit(cel, c.x, c.y, 1, c.vx, c.vy)) return;
+    if (hit(cel, c.x, c.y, 1, c.vx, c.vy)) return true;
   }
+  return false;
+}
+
+/** what the creatures have thrown or dropped — the casts, Boggs' worms, the rollers — under the same switch as their fists */
+function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
   /**
    * ...and what the creatures have THROWN, which is a creature's blow at a
    * distance and so sits under the same switch as its fists.
@@ -621,7 +659,7 @@ export function takeHits(): void {
       // and no blow pair (6004..6006), so `hit` resolves them to nothing of
       // its own accord and the first cel that can take health is 7000's.
       if (c.landed === undefined) burstCast(c);
-      if (hit(cel, c.x, c.y, c.facing, 0, 0, c.kit.blow)) return;
+      if (hit(cel, c.x, c.y, c.facing, 0, 0, c.kit.blow)) return true;
       continue;
     }
     // ...or, for one that flies on, it is only worth nothing from now on
@@ -631,7 +669,7 @@ export function takeHits(): void {
     else c.spent = true;
     // `0x42f910` adds what the HITTER was doing to the cel's own pair, and a
     // cast's velocity is already in the executable's units — a frame's worth
-    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, blow)) return;
+    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, blow)) return true;
   }
   /**
    * ...and Boggs' WORMS, which are the same argument as a cast.
@@ -648,7 +686,7 @@ export function takeHits(): void {
       if (!box) continue;
       if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
         continue;
-      if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.worms.strength)) return;
+      if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.worms.strength)) return true;
     }
   }
   /**
@@ -669,8 +707,13 @@ export function takeHits(): void {
     if (!box) continue;
     if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
       continue;
-    if (hit(cel, r.x, r.y, face, Math.trunc(r.vx / ROLLER.divisor), 0, blow)) return;
+    if (hit(cel, r.x, r.y, face, Math.trunc(r.vx / ROLLER.divisor), 0, blow)) return true;
   }
+  return false;
+}
+
+/** the level's own furniture that hurts: presses, girders, the big gun's shot, axes, wrecking balls and the goop */
+function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
   // `0x454a38` arms a press only while its stroke runs, and only two of its cels
   // carry a box; `0x4537d0` arms a girder on every frame it has
   for (const c of crushesHere()) {

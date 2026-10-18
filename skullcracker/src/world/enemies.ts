@@ -507,38 +507,7 @@ export function stepEnemies(): void {
     // again, which only a brain that sets {@link Enemy.weightless} notices
     if (e.state !== "gait") e.weightless = false;
     e.clock += TICK_SCALE;
-    /**
-     * ...and the landing that gives one of them its second bar.
-     *
-     * `0x441726` — the fall's tag 1, weight on, waits for `obj+0x30` and
-     * `obj+0x2e`, the body on the floor; then `0x441747` writes the X it landed
-     * at into `[0x4a7574]` ({@link Enemy.home}), `0x473ba8` goes on,
-     * `0x44176f` sprays `0x40cba0(point, 0x14, 0)`, `0x441787` writes
-     * `0x40e300(0x3e8)` back into the health word whole and `0x44179b` says
-     * 0x18. Past the tag's two lifts, a vertical speed of nothing is the floor.
-     * See {@link Foe.rallies}.
-     */
-    if (
-      foe.rallies &&
-      e.rallied &&
-      e.hp <= 0 &&
-      e.state === "gait" &&
-      e.script === foe.rallies.fall.kind &&
-      e.tag === 1 &&
-      e.clock >= 2 &&
-      e.vy === 0
-    ) {
-      e.hp = scaled(foe.rallies.health);
-      e.max = e.hp;
-      e.home = e.x;
-      e.anim = foe.rallies.rise;
-      e.script = foe.rallies.rise.kind;
-      e.tag = foe.rallies.rise.tag;
-      e.clock = 0;
-      // no hitter behind it (`0x441767 push 0`), so the goo flies loose
-      spray(e, 0x14, { dx: 0, dy: 0 }, undefined, true);
-      sound?.effect(FOE_SFX.kraggRise, e.x, e.y);
-    }
+    rally(e, foe);
     const run = e.anim.cels.length * e.anim.hold;
     /**
      * ...and a class that DOES something while the page plays its reaction.
@@ -570,180 +539,7 @@ export function stepEnemies(): void {
       }
     }
     if (e.state === "dead") {
-      /**
-       * ...and what comes out of it. `0x454690` calls the punk's own creator
-       * from the first tag of the CHOPPER's death, at the CHOPPER's own position, so
-       * the thing that climbs out arrives as the death reaches its second group
-       * of cels ({@link Foe.hatches}).
-       */
-      /**
-       * ...and the HEAD, as the death's first tag ends — the zombie's
-       * `0x420832` and igor's `0x425629` install tag 1 and call `0x4208e0` on
-       * the same frame ({@link Foe.sheds}, {@link HEAD}).
-       */
-      const shed = foe.sheds;
-      if (shed && !e.shed && e.clock >= shed.afterCels * e.anim.hold) {
-        e.shed = true;
-        shedHead(e, shed.mode);
-      }
-      const born = foe.hatches;
-      if (born && !e.hatched && e.clock >= born.afterCels * e.anim.hold) {
-        e.hatched = true;
-        const kid = FOES[born.kind];
-        const g = celRec(lvl?.sbk, kid.gait.cels[0]);
-        if (kid && g) {
-          // `0x454669` — through `0x40f110`, which restarts it if it sounds
-          sound?.effect(FOE_SFX.weredHatch, e.x, e.y, "renew");
-          // `0x450b11`: handed a parent, the creator launches what it makes off
-          // it — the parent's way at a fixed thirty, fifty up, in its own leap
-          // script, which the page plays as a reaction so no brain steers the
-          // flight ({@link Foe.hatches})
-          const leap = born.leap;
-          pool.push({
-            kind: born.kind,
-            x: e.x,
-            y: e.y,
-            facing: e.facing,
-            left: e.left,
-            right: e.right,
-            top: e.top,
-            bottom: e.bottom,
-            clock: 0,
-            state: leap ? "flinch" : "gait",
-            anim: leap ? leap.anim : kid.gait,
-            linger: 0,
-            dents: 0,
-            vx: leap ? leap.vx * TICK_SCALE * e.facing : 0,
-            vy: leap ? leap.vy * TICK_SCALE : 0,
-            hp: kid.health,
-            max: kid.health,
-            // `0x450add` — `AI+0x10` is the point the creator was handed, the
-            // bike's own, and it is where FANG's state 6 sends it home to
-            home: e.x,
-          });
-        }
-      }
-      /**
-       * ...and the BIKE goes with it. Same frame, after the rider is out: the
-       * wreck is thrown forward and up as an impulse and gravity brings it
-       * down, which is what tags 2 and 3 of `0x477ba0` are drawn for. See
-       * {@link Foe.deathThrow}.
-       */
-      const thrown = foe.deathThrow;
-      if (
-        thrown &&
-        !e.threw &&
-        e.clock >= thrown.afterCels * e.anim.hold
-      ) {
-        e.threw = true;
-        // ADDED to the ride {@link killFoe} carried over, as `0x42f8b0` adds
-        // every script step, and then `0x454473`'s clamp, which runs in state
-        // 5 too: at speed the bike keeps its thirty and the impulse is spent
-        // on the lift
-        e.vx += (thrown.dx / foe.divisor) * TICK_SCALE * e.facing;
-        e.vy = (thrown.dy / foe.divisor) * TICK_SCALE;
-        if (foe.speedCap !== undefined) {
-          const cap = foe.speedCap * TICK_SCALE;
-          e.vx = Math.max(-cap, Math.min(cap, e.vx));
-        }
-      }
-      // ...and a thrown wreck FLIES, which the ordinary mover below never gets
-      // to do for it: the dead branch has always ended in `continue`. Same
-      // arithmetic, kept here rather than hoisted, because a corpse does not
-      // want the walls, the patrol rect or any of the rest of it. A body
-      // still in the air keeps falling through an apex where both words
-      // happen to read zero ({@link Enemy.lastBase} is only set in flight)
-      // ...and a body at rest still meets the mover every frame: a death
-      // state that raises its floor offset (the rat's −150 at `0x44e33f`, the
-      // gang's −20, the dog's −12) leaves the foot above the ground, nothing
-      // snaps it (`0x42ff56` only lifts), and gravity takes it down
-      if (
-        lvl &&
-        e.vx === 0 &&
-        e.vy === 0 &&
-        e.lastBase === undefined &&
-        !foe.floats &&
-        !e.weightless &&
-        foeGravity(foe) > 0
-      ) {
-        const b = baseOf(e, lvl);
-        if (foeSurfaceUnder(e.x, b - CLIMB_PX, b + 8) === null) {
-          e.vy = foeGravity(foe);
-          e.lastBase = b;
-        }
-      }
-      if (e.vx !== 0 || e.vy !== 0 || e.lastBase !== undefined) {
-        e.vy += foeGravity(foe); // `0x430327` — and no cap: nothing limits obj+0xa
-        e.x += e.vx;
-        e.y += e.vy;
-        const span = p.room ? roomSpan(p.room) : null;
-        if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
-        const base = lvl ? baseOf(e, lvl) : e.y;
-        // ...from wherever the feet were last frame too: a brain that swaps
-        // poses in the air (the dog's pounce and stand, whose boxes put the
-        // foot 200 pixels apart) moves the base further than the fall, and the
-        // sweep from the new one alone started under the floor it had crossed
-        const from = Math.min(base - Math.max(e.vy, 0), e.lastBase ?? base);
-        e.lastBase = base;
-        // `0x42ff56`: within eight pixels of it counts as on it
-        let floor = foeSurfaceUnder(e.x, from - CLIMB_PX, base + 8);
-        // ...and the region's floor is solid all the way down: `0x42ff3a` reads
-        // it under the point and puts anything at or below it back on top
-        // (`0x42ff5b`), however far in it is. Only the platforms are one-way.
-        // A pounce carried sideways into a rock face was under a floor the
-        // sweep above could not see, and fell out of the level
-        const ground = groundAt(e.x);
-        if (ground !== null && base >= ground) floor = ground;
-        if (floor !== null && base >= floor - landingWindow(e.vy)) {
-          e.lastBase = undefined;
-          e.y -= base - floor;
-          // a body that bounces — {@link Foe.corpseBounce}: `0x42ff83` hands
-          // back anything faster than 2 through `obj+0x20`, and the landing
-          // sets the flag the death state plays its thud on. The speed is the
-          // one it came down with: `0x430322` adds no gravity on a frame that
-          // ends on the floor (`0x42ff5d` sets `di`), so a body at rest is not
-          // handed its own tick of gravity back as a bounce
-          const bounce = foe.corpseBounce;
-          if (bounce && Math.abs((e.vy - foeGravity(foe)) / TICK_SCALE) > 2) {
-            e.vy = -Math.trunc((e.vy / TICK_SCALE) * bounce.restitution) * TICK_SCALE;
-            sound?.effect(bounce.sound, e.x, e.y);
-          } else e.vy = 0;
-          if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
-            e.vx =
-              dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
-              TICK_SCALE;
-        }
-      }
-      /**
-       * ...a death that is two scripts hands to its second half at its own
-       * rate, as a flinch does ({@link FoeAnim.next}). The gunner TCop's kind 9
-       * tag 3 is the case: `0x414566` waits for it to end, drops the blaster a
-       * hundred pixels behind it (`0x414599`, `0x45b060(6, …)`) and installs
-       * kind 11 (`0x4145a4`), which is the removal.
-       */
-      if (e.anim.next && e.clock >= run) {
-        if (e.kind === "initcop" && e.param) dropBlaster(e);
-        e.anim = e.anim.next;
-        e.clock = 0;
-        if (e.anim.kind !== undefined) {
-          e.script = e.anim.kind;
-          e.tag = e.anim.tag;
-        }
-        continue;
-      }
-      // the death animation, then the body, then a green ball where it was
-      if (e.clock >= run) {
-        e.linger -= TICK_SCALE;
-        if (e.linger <= 0) {
-          // only the kinds whose corpse handler calls `0x40cba0(pos, -13, 0)`
-          // ...at the corpse's own point, `obj+6` (`0x40cbf0`)
-          if (foe.vanishes) {
-            const at = (lvl && foeAnchor(e, lvl)) || { x: e.x, y: e.y };
-            pops.push({ x: at.x, y: at.y, age: 0 });
-          }
-          pool.splice(pool.indexOf(e), 1);
-        }
-      }
+      stepCorpse(e, foe, run, pool, lvl);
       continue;
     }
     // the water: it plays once where it was put and then the object goes, which is
@@ -761,452 +557,710 @@ export function stepEnemies(): void {
     // ...and every other class fights through the one shared brain, until its
     // own has been read — see {@link BRAINS}
     if (stepFight(e, foe, run)) continue;
-    // whatever it is doing, a thing carrying momentum flies, falls, and stops when
-    // its OWN cel's box lands. This has to come before the animation states: the
-    // mailbox's topple is four frames and its flight is far longer than that.
     // ...and kragg is a floater only until it is shot down: the fall's tag 1
     // calls `0x42f850(obj, 1.0)` at `0x4416e6` and it lands like anything else
     // from there, its brain holding the weight off through the steered first
     // tag ({@link Enemy.weightless}). See {@link Foe.rallies}
     const aloft = foe.floats && !(foe.rallies && e.rallied);
-    if (e.vx !== 0 || e.vy !== 0) {
-      // ...and a thing with no gravity keeps whatever velocity it was given:
-      // the hover below is what moves level eight's boss up and down
-      if (!aloft && !e.weightless)
-        e.vy += foeGravity(foe); // `0x430327` — and no cap: nothing limits obj+0xa
-      e.x += e.vx;
-      e.y += e.vy;
-      const span = p.room ? roomSpan(p.room) : null;
-      if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
-      // ...but kragg on the wing still meets its region's floor and ceiling
-      if (aloft && lvl) floaterInRegion(e, foe, lvl);
-      // ...and a thing with no gravity never lands, so none of the rest applies
-      if (!aloft) {
-        let base = lvl ? baseOf(e, lvl) : e.y;
-        /**
-         * `0x42fed4`: where the region's floor at the new point stands more
-         * than fifty pixels ABOVE it, that is a wall, not a floor. The move
-         * is undone, `obj+0xa` zeroed and `obj+0xc` multiplied by the
-         * restitution (`0x42ff02`, the allocator's 0x800 = a quarter, the
-         * dog's −0.3), and the thing counts as standing for the frame. A
-         * pounce into a rock face stops against it rather than landing on
-         * top of it — or, before the floor below was solid, falling out of
-         * the level under it.
-         */
-        const wall = groundAt(e.x);
-        if (wall !== null && wall + 50 < base) {
-          e.x -= e.vx;
-          e.y -= e.vy;
-          e.vy = 0;
-          e.vx *= foe.restitution ?? 0.25;
-          if (Math.abs(e.vx) < 0.01) e.vx = 0;
-          base = lvl ? baseOf(e, lvl) : e.y;
-        }
-        // the surfaces the PLAYER stands on — platform tops and then the room's
-        // floor — swept along the fall so a fast one cannot tunnel through a
-        // ledge, plus the one an open grave lays ({@link graveLidUnder}), so a
-        // foe already in the air over one is caught by it too
-        // ...from wherever the feet were last frame too: a brain that swaps
-        // poses in the air (the dog's pounce and stand, whose boxes put the
-        // foot 200 pixels apart) moves the base further than the fall, and the
-        // sweep from the new one alone started under the floor it had crossed
-        const from = Math.min(base - Math.max(e.vy, 0), e.lastBase ?? base);
-        e.lastBase = base;
-        // `0x42ff56`: within eight pixels of it counts as on it
-        let floor = foeSurfaceUnder(e.x, from - CLIMB_PX, base + 8);
-        // ...and the region's floor is solid all the way down: `0x42ff3a` reads
-        // it under the point and puts anything at or below it back on top
-        // (`0x42ff5b`), however far in it is. Only the platforms are one-way.
-        // A pounce carried sideways into a rock face was under a floor the
-        // sweep above could not see, and fell out of the level
-        const ground = groundAt(e.x);
-        if (ground !== null && base >= ground) floor = ground;
-        if (floor !== null && base >= floor - landingWindow(e.vy)) {
-          e.lastBase = undefined;
-          // by the CEL's box, not by where the upright one would have stood
-          e.y -= base - floor;
-          e.vy = 0;
-          // and on the ground the allocator's drag takes 70% a frame off it
-          // ({@link dragged}) — once a frame, on the frame's whole pixels
-          if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
-            e.vx =
-              dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
-              TICK_SCALE;
-        }
-      }
-    }
-    // a terminal flinch holds its last cel for good — the toppled mailbox
-    if (e.state === "flinch" && e.anim.terminal && e.clock >= run) {
-      e.clock = run;
-      continue;
-    }
-    // a two-script state hands to its second half at its own rate — the boss's
-    // knockdown into its get-up, {@link FoeAnim.next}
-    if (e.state === "flinch" && e.anim.next && e.clock >= run) {
-      e.anim = e.anim.next;
-      e.clock = 0;
-      continue;
-    }
-    /**
-     * ...and a reaction that is FATAL hands to the death when it ends.
-     *
-     * `0x4526ef` is the shape: the five frames of werec's state 3 run out, it
-     * squeals, clears the bar and installs `0x477a78` — the death — rather
-     * than going back to standing. So `fatal` does not mean "play this as the
-     * death", it means "and then die", which is why the burn animation and
-     * {@link Foe.death} are two different things.
-     */
-    if (
-      e.state === "flinch" &&
-      foe.burns?.fatal &&
-      e.anim === foe.burns.anim &&
-      e.clock >= run &&
-      foe.death
-    ) {
-      killFoe(e, foe);
-      // ...with the corpse time this death writes, where it has its own
-      // (`0x452731`, {@link Foe.burns})
-      if (foe.burns.linger !== undefined) e.linger = foe.burns.linger;
-      continue;
-    }
-    // ...and a reaction that hands its class's machine a state of its own
-    // rather than the gait — the punk's get-up ending on the taunt,
-    // `0x44ee90`, and see {@link FoeAnim.resume}
-    const resume = e.state === "flinch" && (cut ?? (e.clock >= run && e.anim.resume));
-    if (resume) {
-      e.state = "gait";
-      e.swing = false;
-      install(e, resume);
-      e.clock = 0;
-      continue;
-    }
-    /**
-     * ...or a reaction that is itself a state of the machine, whose case
-     * decides the moment the script ends ({@link FoeAnim.decides}): the brain
-     * is handed the reaction's own kind with the script finished, and runs on
-     * this same frame — the frame `obj+0x46` is set and the think installs
-     * what follows.
-     */
-    if (e.state === "flinch" && e.clock >= run && e.anim.decides) {
-      e.state = "gait";
-      e.swing = false;
+    fly(e, foe, lvl, aloft);
+    if (endFlinch(e, foe, run, cut, pool)) continue;
+    if (seekLever(e, foe, run)) continue;
+    const step = settleStride(e, foe);
+    walkSwept(e, foe, lvl, step);
+    standOnSurface(e, foe, lvl, aloft);
+  }
+}
+
+/**
+ * ...and the landing that gives one of them its second bar.
+ *
+ * `0x441726` — the fall's tag 1, weight on, waits for `obj+0x30` and
+ * `obj+0x2e`, the body on the floor; then `0x441747` writes the X it landed
+ * at into `[0x4a7574]` ({@link Enemy.home}), `0x473ba8` goes on,
+ * `0x44176f` sprays `0x40cba0(point, 0x14, 0)`, `0x441787` writes
+ * `0x40e300(0x3e8)` back into the health word whole and `0x44179b` says
+ * 0x18. Past the tag's two lifts, a vertical speed of nothing is the floor.
+ * See {@link Foe.rallies}.
+ */
+function rally(e: Enemy, foe: Foe): void {
+  if (
+    foe.rallies &&
+    e.rallied &&
+    e.hp <= 0 &&
+    e.state === "gait" &&
+    e.script === foe.rallies.fall.kind &&
+    e.tag === 1 &&
+    e.clock >= 2 &&
+    e.vy === 0
+  ) {
+    e.hp = scaled(foe.rallies.health);
+    e.max = e.hp;
+    e.home = e.x;
+    e.anim = foe.rallies.rise;
+    e.script = foe.rallies.rise.kind;
+    e.tag = foe.rallies.rise.tag;
+    e.clock = 0;
+    // no hitter behind it (`0x441767 push 0`), so the goo flies loose
+    spray(e, 0x14, { dx: 0, dy: 0 }, undefined, true);
+    sound?.effect(FOE_SFX.kraggRise, e.x, e.y);
+  }
+}
+
+/** a dead thing: what comes out of it, the wreck it throws, its fall, and then the body and the green ball */
+function stepCorpse(e: Enemy, foe: Foe, run: number, pool: Enemy[], lvl: Level | null): void {
+  shedAndHatch(e, foe, pool, lvl);
+  throwWreck(e, foe);
+  dropCorpse(e, foe, lvl);
+  /**
+   * ...a death that is two scripts hands to its second half at its own
+   * rate, as a flinch does ({@link FoeAnim.next}). The gunner TCop's kind 9
+   * tag 3 is the case: `0x414566` waits for it to end, drops the blaster a
+   * hundred pixels behind it (`0x414599`, `0x45b060(6, …)`) and installs
+   * kind 11 (`0x4145a4`), which is the removal.
+   */
+  if (e.anim.next && e.clock >= run) {
+    if (e.kind === "initcop" && e.param) dropBlaster(e);
+    e.anim = e.anim.next;
+    e.clock = 0;
+    if (e.anim.kind !== undefined) {
       e.script = e.anim.kind;
       e.tag = e.anim.tag;
-      stepFight(e, foe, run);
-      continue;
     }
-    if (e.state === "flinch" && e.clock >= run) {
-      // out of stages: the LAST stage's frame ending is what bursts a hydrant, and
-      // what bursts is a second object of the same class beside it — `0x44fb20`
-      // spawns one on the water tag 25px to its facing side and puts this one
-      // straight back on tag 0, whole, to be turned open all over again
-      if (foe.burst && foe.flinch && e.dents >= foe.flinch.length) {
-        // `0x44fb94`, on the frame the water is created
-        if (foe.burst.sound !== undefined)
-          sound?.effect(foe.burst.sound, e.x, e.y);
-        pool.push({
-          ...e,
-          state: "burst",
-          anim: foe.burst.anim,
-          clock: 0,
-          x: e.x + foe.burst.dx * (e.facing > 0 ? 1 : -1),
-          dents: 0,
-          vx: 0,
-          vy: 0,
-        });
-        e.dents = 0;
+    return;
+  }
+  // the death animation, then the body, then a green ball where it was
+  if (e.clock >= run) {
+    e.linger -= TICK_SCALE;
+    if (e.linger <= 0) {
+      // only the kinds whose corpse handler calls `0x40cba0(pos, -13, 0)`
+      // ...at the corpse's own point, `obj+6` (`0x40cbf0`)
+      if (foe.vanishes) {
+        const at = (lvl && foeAnchor(e, lvl)) || { x: e.x, y: e.y };
+        pops.push({ x: at.x, y: at.y, age: 0 });
       }
-      e.state = "gait";
-      // a blow ends whatever it was swinging
-      e.swing = false;
-      // `0x456058`: the boss's flinch hands back into the combat loop rather than
-      // to standing — it is still in the fight
-      e.anim = foe.drives && e.mode ? foe.drives.hover : foe.gait;
-      if (foe.drives && e.mode) e.mode = "hover";
-      // ...and a class with a machine of its own is put IN the state that
-      // script belongs to, not left in the one the blow interrupted: every
-      // hit handler installs its reaction through `0x45d090`, which writes the
-      // script's kind into `obj+0x18`, so what the think dispatches on after
-      // it is the reaction's own chain. A class whose chain goes somewhere
-      // other than its gait says so with {@link FoeAnim.resume}, above
-      install(e, e.anim);
-      e.clock = 0;
+      pool.splice(pool.indexOf(e), 1);
     }
-    /**
-     * ...and a lever of its own, which is the whole of level six.
-     *
-     * `0x438200` is the finder: the first object of the switch class whose
-     * position is inside this thing's own record rect **and whose tag is 3**, an
-     * unlit one. With one in hand the class turns to face it and walks — on the
-     * same six cels it patrols with, because the kind-6 script's tag 0 IS the
-     * walk — and inside `0x25` pixels stops and plays tag 1, the reach. One
-     * named frame of the reach calls `0x436820(lever, 0)`.
-     *
-     * SERVICE lays this out so that every one of its six levers is inside
-     * somebody's territory, which is why a level that starts dry does not stay
-     * dry, and why turning them off is a job rather than a one-off.
-     */
-    const aim =
-      foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep
-        ? leverFor(e, foe.lever.dir)
-        : null;
-    // the frame one is FOUND — the batboy's `0x4392a4` turns to it, says
-    // `0x4392d7` through `0x40f090` and puts the lever script on, once
-    if (aim && e.aimed !== aim && foe.lever?.found !== undefined)
-      sound?.effect(foe.lever.found, e.x, e.y, "lead");
-    e.aimed = aim ?? undefined;
-    if (e.state === "lever") {
-      const L = foe.lever!;
-      // ...and once it has thrown, the lever it threw is no longer the kind it
-      // looks for, so the reach plays out on its own: `0x43f769` waits for the
-      // script to end before the stand
-      if (!aim && !e.thrown) {
+  }
+}
+
+/**
+ * ...and what comes out of it. `0x454690` calls the punk's own creator
+ * from the first tag of the CHOPPER's death, at the CHOPPER's own position, so
+ * the thing that climbs out arrives as the death reaches its second group
+ * of cels ({@link Foe.hatches}).
+ *
+ * ...and the HEAD, as the death's first tag ends — the zombie's
+ * `0x420832` and igor's `0x425629` install tag 1 and call `0x4208e0` on
+ * the same frame ({@link Foe.sheds}, {@link HEAD}).
+ */
+function shedAndHatch(e: Enemy, foe: Foe, pool: Enemy[], lvl: Level | null): void {
+  const shed = foe.sheds;
+  if (shed && !e.shed && e.clock >= shed.afterCels * e.anim.hold) {
+    e.shed = true;
+    shedHead(e, shed.mode);
+  }
+  const born = foe.hatches;
+  if (born && !e.hatched && e.clock >= born.afterCels * e.anim.hold) {
+    e.hatched = true;
+    const kid = FOES[born.kind];
+    const g = celRec(lvl?.sbk, kid.gait.cels[0]);
+    if (kid && g) {
+      // `0x454669` — through `0x40f110`, which restarts it if it sounds
+      sound?.effect(FOE_SFX.weredHatch, e.x, e.y, "renew");
+      // `0x450b11`: handed a parent, the creator launches what it makes off
+      // it — the parent's way at a fixed thirty, fifty up, in its own leap
+      // script, which the page plays as a reaction so no brain steers the
+      // flight ({@link Foe.hatches})
+      const leap = born.leap;
+      pool.push({
+        kind: born.kind,
+        x: e.x,
+        y: e.y,
+        facing: e.facing,
+        left: e.left,
+        right: e.right,
+        top: e.top,
+        bottom: e.bottom,
+        clock: 0,
+        state: leap ? "flinch" : "gait",
+        anim: leap ? leap.anim : kid.gait,
+        linger: 0,
+        dents: 0,
+        vx: leap ? leap.vx * TICK_SCALE * e.facing : 0,
+        vy: leap ? leap.vy * TICK_SCALE : 0,
+        hp: kid.health,
+        max: kid.health,
+        // `0x450add` — `AI+0x10` is the point the creator was handed, the
+        // bike's own, and it is where FANG's state 6 sends it home to
+        home: e.x,
+      });
+    }
+  }
+}
+
+/**
+ * ...and the BIKE goes with it. Same frame, after the rider is out: the
+ * wreck is thrown forward and up as an impulse and gravity brings it
+ * down, which is what tags 2 and 3 of `0x477ba0` are drawn for. See
+ * {@link Foe.deathThrow}.
+ */
+function throwWreck(e: Enemy, foe: Foe): void {
+  const thrown = foe.deathThrow;
+  if (
+    thrown &&
+    !e.threw &&
+    e.clock >= thrown.afterCels * e.anim.hold
+  ) {
+    e.threw = true;
+    // ADDED to the ride {@link killFoe} carried over, as `0x42f8b0` adds
+    // every script step, and then `0x454473`'s clamp, which runs in state
+    // 5 too: at speed the bike keeps its thirty and the impulse is spent
+    // on the lift
+    e.vx += (thrown.dx / foe.divisor) * TICK_SCALE * e.facing;
+    e.vy = (thrown.dy / foe.divisor) * TICK_SCALE;
+    if (foe.speedCap !== undefined) {
+      const cap = foe.speedCap * TICK_SCALE;
+      e.vx = Math.max(-cap, Math.min(cap, e.vx));
+    }
+  }
+}
+
+/**
+ * ...and a thrown wreck FLIES, which the ordinary mover below never gets
+ * to do for it: the dead branch has always ended in `continue`. Same
+ * arithmetic, kept here rather than hoisted, because a corpse does not
+ * want the walls, the patrol rect or any of the rest of it. A body
+ * still in the air keeps falling through an apex where both words
+ * happen to read zero ({@link Enemy.lastBase} is only set in flight)
+ *
+ * ...and a body at rest still meets the mover every frame: a death
+ * state that raises its floor offset (the rat's −150 at `0x44e33f`, the
+ * gang's −20, the dog's −12) leaves the foot above the ground, nothing
+ * snaps it (`0x42ff56` only lifts), and gravity takes it down
+ */
+function dropCorpse(e: Enemy, foe: Foe, lvl: Level | null): void {
+  if (
+    lvl &&
+    e.vx === 0 &&
+    e.vy === 0 &&
+    e.lastBase === undefined &&
+    !foe.floats &&
+    !e.weightless &&
+    foeGravity(foe) > 0
+  ) {
+    const b = baseOf(e, lvl);
+    if (foeSurfaceUnder(e.x, b - CLIMB_PX, b + 8) === null) {
+      e.vy = foeGravity(foe);
+      e.lastBase = b;
+    }
+  }
+  if (e.vx !== 0 || e.vy !== 0 || e.lastBase !== undefined) {
+    e.vy += foeGravity(foe); // `0x430327` — and no cap: nothing limits obj+0xa
+    e.x += e.vx;
+    e.y += e.vy;
+    const span = p.room ? roomSpan(p.room) : null;
+    if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
+    const base = lvl ? baseOf(e, lvl) : e.y;
+    // ...from wherever the feet were last frame too: a brain that swaps
+    // poses in the air (the dog's pounce and stand, whose boxes put the
+    // foot 200 pixels apart) moves the base further than the fall, and the
+    // sweep from the new one alone started under the floor it had crossed
+    const from = Math.min(base - Math.max(e.vy, 0), e.lastBase ?? base);
+    e.lastBase = base;
+    // `0x42ff56`: within eight pixels of it counts as on it
+    let floor = foeSurfaceUnder(e.x, from - CLIMB_PX, base + 8);
+    // ...and the region's floor is solid all the way down: `0x42ff3a` reads
+    // it under the point and puts anything at or below it back on top
+    // (`0x42ff5b`), however far in it is. Only the platforms are one-way.
+    // A pounce carried sideways into a rock face was under a floor the
+    // sweep above could not see, and fell out of the level
+    const ground = groundAt(e.x);
+    if (ground !== null && base >= ground) floor = ground;
+    if (floor !== null && base >= floor - landingWindow(e.vy)) {
+      e.lastBase = undefined;
+      e.y -= base - floor;
+      // a body that bounces — {@link Foe.corpseBounce}: `0x42ff83` hands
+      // back anything faster than 2 through `obj+0x20`, and the landing
+      // sets the flag the death state plays its thud on. The speed is the
+      // one it came down with: `0x430322` adds no gravity on a frame that
+      // ends on the floor (`0x42ff5d` sets `di`), so a body at rest is not
+      // handed its own tick of gravity back as a bounce
+      const bounce = foe.corpseBounce;
+      if (bounce && Math.abs((e.vy - foeGravity(foe)) / TICK_SCALE) > 2) {
+        e.vy = -Math.trunc((e.vy / TICK_SCALE) * bounce.restitution) * TICK_SCALE;
+        sound?.effect(bounce.sound, e.x, e.y);
+      } else e.vy = 0;
+      if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
+        e.vx =
+          dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
+          TICK_SCALE;
+    }
+  }
+}
+
+/**
+ * whatever it is doing, a thing carrying momentum flies, falls, and stops when
+ * its OWN cel's box lands. This has to come before the animation states: the
+ * mailbox's topple is four frames and its flight is far longer than that.
+ */
+function fly(e: Enemy, foe: Foe, lvl: Level | null, aloft: boolean | undefined): void {
+  if (e.vx !== 0 || e.vy !== 0) {
+    // ...and a thing with no gravity keeps whatever velocity it was given:
+    // the hover below is what moves level eight's boss up and down
+    if (!aloft && !e.weightless)
+      e.vy += foeGravity(foe); // `0x430327` — and no cap: nothing limits obj+0xa
+    e.x += e.vx;
+    e.y += e.vy;
+    const span = p.room ? roomSpan(p.room) : null;
+    if (span) e.x = Math.max(span.lo, Math.min(span.hi, e.x));
+    // ...but kragg on the wing still meets its region's floor and ceiling
+    if (aloft && lvl) floaterInRegion(e, foe, lvl);
+    // ...and a thing with no gravity never lands, so none of the rest applies
+    if (!aloft) {
+      let base = lvl ? baseOf(e, lvl) : e.y;
+      /**
+       * `0x42fed4`: where the region's floor at the new point stands more
+       * than fifty pixels ABOVE it, that is a wall, not a floor. The move
+       * is undone, `obj+0xa` zeroed and `obj+0xc` multiplied by the
+       * restitution (`0x42ff02`, the allocator's 0x800 = a quarter, the
+       * dog's −0.3), and the thing counts as standing for the frame. A
+       * pounce into a rock face stops against it rather than landing on
+       * top of it — or, before the floor below was solid, falling out of
+       * the level under it.
+       */
+      const wall = groundAt(e.x);
+      if (wall !== null && wall + 50 < base) {
+        e.x -= e.vx;
+        e.y -= e.vy;
+        e.vy = 0;
+        e.vx *= foe.restitution ?? 0.25;
+        if (Math.abs(e.vx) < 0.01) e.vx = 0;
+        base = lvl ? baseOf(e, lvl) : e.y;
+      }
+      // the surfaces the PLAYER stands on — platform tops and then the room's
+      // floor — swept along the fall so a fast one cannot tunnel through a
+      // ledge, plus the one an open grave lays ({@link graveLidUnder}), so a
+      // foe already in the air over one is caught by it too
+      // ...from wherever the feet were last frame too: a brain that swaps
+      // poses in the air (the dog's pounce and stand, whose boxes put the
+      // foot 200 pixels apart) moves the base further than the fall, and the
+      // sweep from the new one alone started under the floor it had crossed
+      const from = Math.min(base - Math.max(e.vy, 0), e.lastBase ?? base);
+      e.lastBase = base;
+      // `0x42ff56`: within eight pixels of it counts as on it
+      let floor = foeSurfaceUnder(e.x, from - CLIMB_PX, base + 8);
+      // ...and the region's floor is solid all the way down: `0x42ff3a` reads
+      // it under the point and puts anything at or below it back on top
+      // (`0x42ff5b`), however far in it is. Only the platforms are one-way.
+      // A pounce carried sideways into a rock face was under a floor the
+      // sweep above could not see, and fell out of the level
+      const ground = groundAt(e.x);
+      if (ground !== null && base >= ground) floor = ground;
+      if (floor !== null && base >= floor - landingWindow(e.vy)) {
+        e.lastBase = undefined;
+        // by the CEL's box, not by where the upright one would have stood
+        e.y -= base - floor;
+        e.vy = 0;
+        // and on the ground the allocator's drag takes 70% a frame off it
+        // ({@link dragged}) — once a frame, on the frame's whole pixels
+        if (Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE))
+          e.vx =
+            dragged(Math.round(e.vx / TICK_SCALE), foe.drag ?? DRAG) *
+            TICK_SCALE;
+      }
+    }
+  }
+}
+
+/** the end of a reaction, in all its forms; true when the thing is done for the frame */
+function endFlinch(e: Enemy, foe: Foe, run: number, cut: FoeAnim | undefined, pool: Enemy[]): boolean {
+  // a terminal flinch holds its last cel for good — the toppled mailbox
+  if (e.state === "flinch" && e.anim.terminal && e.clock >= run) {
+    e.clock = run;
+    return true;
+  }
+  // a two-script state hands to its second half at its own rate — the boss's
+  // knockdown into its get-up, {@link FoeAnim.next}
+  if (e.state === "flinch" && e.anim.next && e.clock >= run) {
+    e.anim = e.anim.next;
+    e.clock = 0;
+    return true;
+  }
+  /**
+   * ...and a reaction that is FATAL hands to the death when it ends.
+   *
+   * `0x4526ef` is the shape: the five frames of werec's state 3 run out, it
+   * squeals, clears the bar and installs `0x477a78` — the death — rather
+   * than going back to standing. So `fatal` does not mean "play this as the
+   * death", it means "and then die", which is why the burn animation and
+   * {@link Foe.death} are two different things.
+   */
+  if (
+    e.state === "flinch" &&
+    foe.burns?.fatal &&
+    e.anim === foe.burns.anim &&
+    e.clock >= run &&
+    foe.death
+  ) {
+    killFoe(e, foe);
+    // ...with the corpse time this death writes, where it has its own
+    // (`0x452731`, {@link Foe.burns})
+    if (foe.burns.linger !== undefined) e.linger = foe.burns.linger;
+    return true;
+  }
+  // ...and a reaction that hands its class's machine a state of its own
+  // rather than the gait — the punk's get-up ending on the taunt,
+  // `0x44ee90`, and see {@link FoeAnim.resume}
+  const resume = e.state === "flinch" && (cut ?? (e.clock >= run && e.anim.resume));
+  if (resume) {
+    e.state = "gait";
+    e.swing = false;
+    install(e, resume);
+    e.clock = 0;
+    return true;
+  }
+  /**
+   * ...or a reaction that is itself a state of the machine, whose case
+   * decides the moment the script ends ({@link FoeAnim.decides}): the brain
+   * is handed the reaction's own kind with the script finished, and runs on
+   * this same frame — the frame `obj+0x46` is set and the think installs
+   * what follows.
+   */
+  if (e.state === "flinch" && e.clock >= run && e.anim.decides) {
+    e.state = "gait";
+    e.swing = false;
+    e.script = e.anim.kind;
+    e.tag = e.anim.tag;
+    stepFight(e, foe, run);
+    return true;
+  }
+  if (e.state === "flinch" && e.clock >= run) {
+    // out of stages: the LAST stage's frame ending is what bursts a hydrant, and
+    // what bursts is a second object of the same class beside it — `0x44fb20`
+    // spawns one on the water tag 25px to its facing side and puts this one
+    // straight back on tag 0, whole, to be turned open all over again
+    if (foe.burst && foe.flinch && e.dents >= foe.flinch.length) {
+      // `0x44fb94`, on the frame the water is created
+      if (foe.burst.sound !== undefined)
+        sound?.effect(foe.burst.sound, e.x, e.y);
+      pool.push({
+        ...e,
+        state: "burst",
+        anim: foe.burst.anim,
+        clock: 0,
+        x: e.x + foe.burst.dx * (e.facing > 0 ? 1 : -1),
+        dents: 0,
+        vx: 0,
+        vy: 0,
+      });
+      e.dents = 0;
+    }
+    e.state = "gait";
+    // a blow ends whatever it was swinging
+    e.swing = false;
+    // `0x456058`: the boss's flinch hands back into the combat loop rather than
+    // to standing — it is still in the fight
+    e.anim = foe.drives && e.mode ? foe.drives.hover : foe.gait;
+    if (foe.drives && e.mode) e.mode = "hover";
+    // ...and a class with a machine of its own is put IN the state that
+    // script belongs to, not left in the one the blow interrupted: every
+    // hit handler installs its reaction through `0x45d090`, which writes the
+    // script's kind into `obj+0x18`, so what the think dispatches on after
+    // it is the reaction's own chain. A class whose chain goes somewhere
+    // other than its gait says so with {@link FoeAnim.resume}, above
+    install(e, e.anim);
+    e.clock = 0;
+  }
+  return false;
+}
+
+/**
+ * ...and a lever of its own, which is the whole of level six.
+ *
+ * `0x438200` is the finder: the first object of the switch class whose
+ * position is inside this thing's own record rect **and whose tag is 3**, an
+ * unlit one. With one in hand the class turns to face it and walks — on the
+ * same six cels it patrols with, because the kind-6 script's tag 0 IS the
+ * walk — and inside `0x25` pixels stops and plays tag 1, the reach. One
+ * named frame of the reach calls `0x436820(lever, 0)`.
+ *
+ * SERVICE lays this out so that every one of its six levers is inside
+ * somebody's territory, which is why a level that starts dry does not stay
+ * dry, and why turning them off is a job rather than a one-off.
+ */
+function seekLever(e: Enemy, foe: Foe, run: number): boolean {
+  const aim =
+    foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep
+      ? leverFor(e, foe.lever.dir)
+      : null;
+  // the frame one is FOUND — the batboy's `0x4392a4` turns to it, says
+  // `0x4392d7` through `0x40f090` and puts the lever script on, once
+  if (aim && e.aimed !== aim && foe.lever?.found !== undefined)
+    sound?.effect(foe.lever.found, e.x, e.y, "lead");
+  e.aimed = aim ?? undefined;
+  if (e.state === "lever") {
+    const L = foe.lever!;
+    // ...and once it has thrown, the lever it threw is no longer the kind it
+    // looks for, so the reach plays out on its own: `0x43f769` waits for the
+    // script to end before the stand
+    if (!aim && !e.thrown) {
+      e.state = "gait";
+      e.anim = foe.gait;
+      e.clock = 0;
+    } else {
+      if (aim && !e.thrown && e.clock >= L.at * L.anim.hold) {
+        e.thrown = true;
+        // `0x43a191`: one roll in three, and then one of two takes
+        if (L.sound.length && roll(3) === 1) {
+          const which = L.sound[roll(L.sound.length) - 1];
+          sound?.effect(which, e.x, e.y);
+        }
+        throwSwitch(aim, foe.lever!.dir);
+      }
+      if (e.clock >= run) {
         e.state = "gait";
         e.anim = foe.gait;
         e.clock = 0;
-      } else {
-        if (aim && !e.thrown && e.clock >= L.at * L.anim.hold) {
-          e.thrown = true;
-          // `0x43a191`: one roll in three, and then one of two takes
-          if (L.sound.length && roll(3) === 1) {
-            const which = L.sound[roll(L.sound.length) - 1];
-            sound?.effect(which, e.x, e.y);
-          }
-          throwSwitch(aim, foe.lever!.dir);
-        }
-        if (e.clock >= run) {
-          e.state = "gait";
-          e.anim = foe.gait;
-          e.clock = 0;
-          e.thrown = false;
-        }
-        continue;
-      }
-    } else if (aim) {
-      e.facing = aim.x > e.x ? 1 : -1;
-      const L = foe.lever!;
-      // a class with a run of its own goes to the lever on it — the ox's
-      // `0x472ff0` tag 0 at dx 280 (`0x43f388`) — and the rest walk
-      if (L.run && e.anim !== L.run) {
-        e.anim = L.run;
-        e.clock = 0;
-      }
-      if (
-        Math.abs(aim.x - e.x) < L.reachPx &&
-        (L.reachY === undefined || Math.abs(aim.y - e.y) < L.reachY)
-      ) {
-        e.state = "lever";
-        e.anim = foe.lever!.anim;
-        e.clock = 0;
         e.thrown = false;
-        continue;
       }
+      return true;
     }
-    const i =
-      e.state === "gait" && !e.swing
-        ? loopIndex(e.anim, e.clock)
-        : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
-    /**
-     * The stride is a SETTLED velocity, not the script's number.
-     *
-     * `0x42f8b0` ends `idiv cx` with `add word ptr [esp+6], ax` — the script's
-     * `dx` over the divisor is an impulse ADDED to whatever velocity the object
-     * already has, every frame, and `0x4302c0` takes `v * obj+0x1e >> 13` back
-     * off on every frame that ended on the ground. So a walk is not its `dx`:
-     * it accelerates until the drag balances the impulse, which is the same
-     * arithmetic {@link DRAG} already describes for the player ("each frame adds
-     * 8 and the ground keeps 30%, and that settles at 12").
-     *
-     * Assigning `dx / divisor` instead — which this did — gave every class its
-     * impulse as a top speed, about 1.4x slow for the thirty that use the
-     * allocator's drag and **twenty times** slow for the one that does not. The
-     * CHOPPER settled at 142px a second, slower than the player walks; its own
-     * drag of 409 ({@link Foe.drag}) puts it where a motorcycle belongs.
-     *
-     * The move itself is still positional — the wall, the step and the pin below
-     * all read the place it is going — so this changes the speed and nothing
-     * about how a foe negotiates ground.
-     */
-    const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
-    // it only builds speed on the frames it is actually walking. Off its feet or
-    // rooted in a fight it keeps none, so nothing it could not spend is waiting
-    // to be spent the moment it lands.
-    const rolling = e.vx === 0 && (e.vy === 0 || foe.floats);
-    if (onFrame) {
-      e.speed = rolling
-        ? dragged(e.speed ?? 0, foe.drag ?? DRAG) +
-          roundAway((e.anim.dx?.[i] ?? 0) / (e.divisor ?? foe.divisor))
-        : 0;
-      // ...and its own think has the last word on how fast it may go
-      const cap = foe.speedCap;
-      if (cap !== undefined) e.speed = Math.max(-cap, Math.min(cap, e.speed));
+  } else if (aim) {
+    e.facing = aim.x > e.x ? 1 : -1;
+    const L = foe.lever!;
+    // a class with a run of its own goes to the lever on it — the ox's
+    // `0x472ff0` tag 0 at dx 280 (`0x43f388`) — and the rest walk
+    if (L.run && e.anim !== L.run) {
+      e.anim = L.run;
+      e.clock = 0;
     }
-    // ...and whether what the body pass takes off `obj+0xc` goes into its
-    // walk or its flight — see {@link bodyPush}, in the frame's {@link hitPass}
-    if (onFrame) e.rolling = rolling && !foe.floats;
-    /**
-     * ...and a FLOATER is not dragged, because the drag is the ground's.
-     *
-     * `0x4302c0` sits behind `0x4302a4`, which skips it in the air — the same
-     * test that lets the player's jump coast. A class built with
-     * `0x42f850(obj, 0)` and `obj+0x30 = 0` is never on the ground and so never
-     * meets it, and a velocity that only ever accumulates would run away. The
-     * things that fly are steered by their own think function instead (the
-     * probe's `0x410486` clamps `obj+0xc` to ±27 by hand), which this page has
-     * never modelled through the stride. So they keep the stride they had.
-     */
-    let step: number;
-    if (!foe.floats) step = (e.speed ?? 0) * TICK_SCALE;
-    else if (foe.accrues) step = 0;
-    else step = ((e.anim.dx?.[i] ?? 0) / (e.divisor ?? foe.divisor)) * TICK_SCALE;
-    // ...except a floater whose own think holds the velocity down, which gets
-    // the engine's reading: `0x45d1a3` adds the frame's `dx / divisor`, rounded
-    // away from zero, into `obj+0xc` on every frame it shows, with no drag in
-    // the air — see {@link Foe.accrues}
-    if (foe.floats && foe.accrues && onFrame && e.state === "gait") {
-      const dx = e.anim.dx?.[i] ?? 0;
-      if (dx !== 0)
-        e.vx += roundAway(dx / (e.divisor ?? foe.divisor)) * TICK_SCALE * e.facing;
+    if (
+      Math.abs(aim.x - e.x) < L.reachPx &&
+      (L.reachY === undefined || Math.abs(aim.y - e.y) < L.reachY)
+    ) {
+      e.state = "lever";
+      e.anim = foe.lever!.anim;
+      e.clock = 0;
+      e.thrown = false;
+      return true;
     }
-    /**
-     * A leap is an IMPULSE, not an offset.
-     *
-     * `0x477368 tag 0` carries `dy -480` on the frame cel 1942 shows, and the
-     * engine spends a number like that the way it spends the player's own jump:
-     * `0x42f8b0` rounds `dy / divisor` away from zero and writes it into
-     * `obj+0xa`, ONCE, on the frame it appears. Gravity takes it from there.
-     *
-     * Adding it straight to `e.y` instead moves the thing ninety-six pixels in
-     * four frames with no velocity to show for it, so the landing test never
-     * sees a fall: `foeSurfaceUnder` reaches {@link CLIMB_PX} below the feet and
-     * no further, finds nothing, and WOODS' CHOPPER goes nine thousand pixels
-     * out of the level still swinging. As velocity it uses the
-     * flight path every knocked-back thing already uses, sweeping the surfaces
-     * along the way down, and it lands.
-     *
-     * The frame's own `dx` goes with it — a leap that rises and does not travel
-     * is not what tag 0 says — and the stride block below then leaves it alone,
-     * because that only runs on a thing with no velocity.
-     */
-    const lift = e.anim.dy?.[i] ?? 0;
-    /**
-     * ...and it is ADDED, on every frame the cel shows, not set once.
-     *
-     * `0x45d1a3` calls `0x42f8b0` for the current frame on every engine frame,
-     * and that adds `dy / divisor` (and `dx / divisor`), rounded away from
-     * zero, into the velocity; a cel held two frames pushes twice. Gravity
-     * comes after the move and only in the air (`0x430322`), so a lift that
-     * keeps pushing keeps rising: the dog's pounce, −80 −80 −160 −160 −80 −80
-     * −80 −80 over its divisor of ten against a gravity of ten, climbs about
-     * ninety-six pixels, where setting its first −8 once climbed four.
-     */
-    if (lift !== 0 && onFrame && !foe.floats) {
-      // leaving the ground, it takes its walk with it...
-      if (e.vy === 0 && e.vx === 0) e.vx = (step || 0) * e.facing;
-      // ...and in the air the frame's own dx is pushed in with the lift
-      else if (e.anim.dx?.[i])
-        e.vx += roundAway(e.anim.dx[i] / (e.divisor ?? foe.divisor)) * TICK_SCALE * e.facing;
-      e.vy += roundAway(lift / (e.divisor ?? foe.divisor)) * TICK_SCALE;
-    }
-    /**
-     * ...and a class with a machine of its own is never pinned ({@link still}).
-     *
-     * {@link travels} reads {@link Foe.gait}, and `gait` is picked per class by
-     * eye: for `initwerea`, `inittube`, `inithardcore`, `initarm`, `initslurp`
-     * and `initknotboy` it is a standing, gesturing or lever script that carries
-     * no stride, so pinned by it those classes would read as rooted and lose
-     * every `dx`. A brain installs the script the executable installs, by kind,
-     * so it does not need the guess.
-     * A floater's own hover keeps `vy` busy for ever, and its script's stride
-     * has to travel anyway.
-     */
-    // and a NEGATIVE stride is a stride: `0x4771a0 tag 0` is the punk walking
-    // backwards at -225, and every class that gives ground has one
-    /**
-     * ...and the walk is SWEPT, because a stride can be longer than a wall.
-     *
-     * Every test in this block — the climbable step, the patrol edge, the pin
-     * that follows — reads the one place the move ends at, and a stride is a
-     * settled velocity, not a dozen pixels under {@link CLIMB_PX}: the CHOPPER
-     * at two hundred pixels an engine frame steps clean over WOODS' ledges,
-     * finds nothing under the far side and falls out of the level.
-     *
-     * So the move is cut into pieces no longer than the wall it has to notice,
-     * and each piece is tested and pinned on its own. Same arithmetic, sampled
-     * often enough to mean what it says.
-     */
-    const SWEEP_PX = CLIMB_PX;
-    if (step !== 0 && e.vx === 0 && (e.vy === 0 || foe.floats)) {
-      const total = step * e.facing;
-      const parts = Math.max(1, Math.ceil(Math.abs(total) / SWEEP_PX));
-      for (let part = 0; part < parts; part++) {
-        const nx = e.x + total / parts;
-        /**
-         * ...unless the ground there stands too high to climb, in which case the
-         * whole move is thrown away.
-         *
-         * This is `0x42fef3` — the body stepper's own wall, {@link CLIMB_PX} — and
-         * everything the stepper does applies to every object, not just the player.
-         * Without it a foe that walks into a rise it cannot climb is left standing
-         * where no floor is within reach of its feet, and the pin below then reads
-         * that as thin air and drops it: WOODS' ground steps up 85 pixels in ONE
-         * column at x10230, and the werewolf patrolling east of it fell through the
-         * world every time it walked west into that step.
-         */
-        const baseNow = lvl ? footOf(e, lvl, foe) : e.y;
-        const ground = groundAt(nx);
-        const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
-        // a floater has no feet to catch on a step
-        const blocked =
-          !foe.floats &&
-          ground !== null &&
-          ground < baseNow - CLIMB_PX &&
-          reach === null;
-        /**
-         * ...and nothing turns it at the edge of its rect, nor holds it there.
-         *
-         * The rect is the alarm, not a territory: every class runs a machine of
-         * its own, the stepper `0x42fd80` has no rect turn and clamps at no rect,
-         * and the rat's run `0x44e226` goes where it goes. Level eight's boss has
-         * a **twenty-pixel box** at x1373, and turning it round at the edges of
-         * that pinned it there for ever. The room is the only bound.
-         */
-        if (!blocked) {
-          const span = p.room ? roomSpan(p.room) : null;
-          e.x = span ? Math.max(span.lo, Math.min(span.hi, nx)) : nx;
-        } else break; // it walked into a step it cannot climb: the rest is thrown away
-        // ...and it is pinned HERE, not at the end of the whole stride, so it
-        // meets a ledge where the ledge is and steps off it rather than over it
-        if (parts > 1 && !foe.floats && e.vx === 0 && e.vy === 0) {
-          const b = lvl ? footOf(e, lvl, foe) : e.y;
-          const under = foeSurfaceUnder(e.x, b - CLIMB_PX, b + STICK_PX);
-          if (under !== null) e.y += under - b;
-          else {
-            stepOff(e, foe);
-            break;
-          }
+  }
+  return false;
+}
+
+/**
+ * The stride is a SETTLED velocity, not the script's number.
+ *
+ * `0x42f8b0` ends `idiv cx` with `add word ptr [esp+6], ax` — the script's
+ * `dx` over the divisor is an impulse ADDED to whatever velocity the object
+ * already has, every frame, and `0x4302c0` takes `v * obj+0x1e >> 13` back
+ * off on every frame that ended on the ground. So a walk is not its `dx`:
+ * it accelerates until the drag balances the impulse, which is the same
+ * arithmetic {@link DRAG} already describes for the player ("each frame adds
+ * 8 and the ground keeps 30%, and that settles at 12").
+ *
+ * Assigning `dx / divisor` instead — which this did — gave every class its
+ * impulse as a top speed, about 1.4x slow for the thirty that use the
+ * allocator's drag and **twenty times** slow for the one that does not. The
+ * CHOPPER settled at 142px a second, slower than the player walks; its own
+ * drag of 409 ({@link Foe.drag}) puts it where a motorcycle belongs.
+ *
+ * The move itself is still positional — the wall, the step and the pin below
+ * all read the place it is going — so this changes the speed and nothing
+ * about how a foe negotiates ground.
+ */
+function settleStride(e: Enemy, foe: Foe): number {
+  const i =
+    e.state === "gait" && !e.swing
+      ? loopIndex(e.anim, e.clock)
+      : Math.min(e.anim.cels.length - 1, Math.floor(e.clock / e.anim.hold));
+  const onFrame = Math.floor(e.clock) !== Math.floor(e.clock - TICK_SCALE);
+  // it only builds speed on the frames it is actually walking. Off its feet or
+  // rooted in a fight it keeps none, so nothing it could not spend is waiting
+  // to be spent the moment it lands.
+  const rolling = e.vx === 0 && (e.vy === 0 || foe.floats);
+  if (onFrame) {
+    e.speed = rolling
+      ? dragged(e.speed ?? 0, foe.drag ?? DRAG) +
+        roundAway((e.anim.dx?.[i] ?? 0) / (e.divisor ?? foe.divisor))
+      : 0;
+    // ...and its own think has the last word on how fast it may go
+    const cap = foe.speedCap;
+    if (cap !== undefined) e.speed = Math.max(-cap, Math.min(cap, e.speed));
+  }
+  // ...and whether what the body pass takes off `obj+0xc` goes into its
+  // walk or its flight — see {@link bodyPush}, in the frame's {@link hitPass}
+  if (onFrame) e.rolling = rolling && !foe.floats;
+  /**
+   * ...and a FLOATER is not dragged, because the drag is the ground's.
+   *
+   * `0x4302c0` sits behind `0x4302a4`, which skips it in the air — the same
+   * test that lets the player's jump coast. A class built with
+   * `0x42f850(obj, 0)` and `obj+0x30 = 0` is never on the ground and so never
+   * meets it, and a velocity that only ever accumulates would run away. The
+   * things that fly are steered by their own think function instead (the
+   * probe's `0x410486` clamps `obj+0xc` to ±27 by hand), which this page has
+   * never modelled through the stride. So they keep the stride they had.
+   */
+  let step: number;
+  if (!foe.floats) step = (e.speed ?? 0) * TICK_SCALE;
+  else if (foe.accrues) step = 0;
+  else step = ((e.anim.dx?.[i] ?? 0) / (e.divisor ?? foe.divisor)) * TICK_SCALE;
+  // ...except a floater whose own think holds the velocity down, which gets
+  // the engine's reading: `0x45d1a3` adds the frame's `dx / divisor`, rounded
+  // away from zero, into `obj+0xc` on every frame it shows, with no drag in
+  // the air — see {@link Foe.accrues}
+  if (foe.floats && foe.accrues && onFrame && e.state === "gait") {
+    const dx = e.anim.dx?.[i] ?? 0;
+    if (dx !== 0)
+      e.vx += roundAway(dx / (e.divisor ?? foe.divisor)) * TICK_SCALE * e.facing;
+  }
+  /**
+   * A leap is an IMPULSE, not an offset.
+   *
+   * `0x477368 tag 0` carries `dy -480` on the frame cel 1942 shows, and the
+   * engine spends a number like that the way it spends the player's own jump:
+   * `0x42f8b0` rounds `dy / divisor` away from zero and writes it into
+   * `obj+0xa`, ONCE, on the frame it appears. Gravity takes it from there.
+   *
+   * Adding it straight to `e.y` instead moves the thing ninety-six pixels in
+   * four frames with no velocity to show for it, so the landing test never
+   * sees a fall: `foeSurfaceUnder` reaches {@link CLIMB_PX} below the feet and
+   * no further, finds nothing, and WOODS' CHOPPER goes nine thousand pixels
+   * out of the level still swinging. As velocity it uses the
+   * flight path every knocked-back thing already uses, sweeping the surfaces
+   * along the way down, and it lands.
+   *
+   * The frame's own `dx` goes with it — a leap that rises and does not travel
+   * is not what tag 0 says — and the stride block below then leaves it alone,
+   * because that only runs on a thing with no velocity.
+   */
+  const lift = e.anim.dy?.[i] ?? 0;
+  /**
+   * ...and it is ADDED, on every frame the cel shows, not set once.
+   *
+   * `0x45d1a3` calls `0x42f8b0` for the current frame on every engine frame,
+   * and that adds `dy / divisor` (and `dx / divisor`), rounded away from
+   * zero, into the velocity; a cel held two frames pushes twice. Gravity
+   * comes after the move and only in the air (`0x430322`), so a lift that
+   * keeps pushing keeps rising: the dog's pounce, −80 −80 −160 −160 −80 −80
+   * −80 −80 over its divisor of ten against a gravity of ten, climbs about
+   * ninety-six pixels, where setting its first −8 once climbed four.
+   */
+  if (lift !== 0 && onFrame && !foe.floats) {
+    // leaving the ground, it takes its walk with it...
+    if (e.vy === 0 && e.vx === 0) e.vx = (step || 0) * e.facing;
+    // ...and in the air the frame's own dx is pushed in with the lift
+    else if (e.anim.dx?.[i])
+      e.vx += roundAway(e.anim.dx[i] / (e.divisor ?? foe.divisor)) * TICK_SCALE * e.facing;
+    e.vy += roundAway(lift / (e.divisor ?? foe.divisor)) * TICK_SCALE;
+  }
+  return step;
+}
+
+/**
+ * ...and a class with a machine of its own is never pinned ({@link still}).
+ *
+ * {@link travels} reads {@link Foe.gait}, and `gait` is picked per class by
+ * eye: for `initwerea`, `inittube`, `inithardcore`, `initarm`, `initslurp`
+ * and `initknotboy` it is a standing, gesturing or lever script that carries
+ * no stride, so pinned by it those classes would read as rooted and lose
+ * every `dx`. A brain installs the script the executable installs, by kind,
+ * so it does not need the guess.
+ * A floater's own hover keeps `vy` busy for ever, and its script's stride
+ * has to travel anyway.
+ *
+ * And a NEGATIVE stride is a stride: `0x4771a0 tag 0` is the punk walking
+ * backwards at -225, and every class that gives ground has one.
+ *
+ * ...and the walk is SWEPT, because a stride can be longer than a wall.
+ *
+ * Every test in this block — the climbable step, the patrol edge, the pin
+ * that follows — reads the one place the move ends at, and a stride is a
+ * settled velocity, not a dozen pixels under {@link CLIMB_PX}: the CHOPPER
+ * at two hundred pixels an engine frame steps clean over WOODS' ledges,
+ * finds nothing under the far side and falls out of the level.
+ *
+ * So the move is cut into pieces no longer than the wall it has to notice,
+ * and each piece is tested and pinned on its own. Same arithmetic, sampled
+ * often enough to mean what it says.
+ */
+function walkSwept(e: Enemy, foe: Foe, lvl: Level | null, step: number): void {
+  const SWEEP_PX = CLIMB_PX;
+  if (step !== 0 && e.vx === 0 && (e.vy === 0 || foe.floats)) {
+    const total = step * e.facing;
+    const parts = Math.max(1, Math.ceil(Math.abs(total) / SWEEP_PX));
+    for (let part = 0; part < parts; part++) {
+      const nx = e.x + total / parts;
+      /**
+       * ...unless the ground there stands too high to climb, in which case the
+       * whole move is thrown away.
+       *
+       * This is `0x42fef3` — the body stepper's own wall, {@link CLIMB_PX} — and
+       * everything the stepper does applies to every object, not just the player.
+       * Without it a foe that walks into a rise it cannot climb is left standing
+       * where no floor is within reach of its feet, and the pin below then reads
+       * that as thin air and drops it: WOODS' ground steps up 85 pixels in ONE
+       * column at x10230, and the werewolf patrolling east of it fell through the
+       * world every time it walked west into that step.
+       */
+      const baseNow = lvl ? footOf(e, lvl, foe) : e.y;
+      const ground = groundAt(nx);
+      const reach = foeSurfaceUnder(nx, baseNow - CLIMB_PX, baseNow + STICK_PX);
+      // a floater has no feet to catch on a step
+      const blocked =
+        !foe.floats &&
+        ground !== null &&
+        ground < baseNow - CLIMB_PX &&
+        reach === null;
+      /**
+       * ...and nothing turns it at the edge of its rect, nor holds it there.
+       *
+       * The rect is the alarm, not a territory: every class runs a machine of
+       * its own, the stepper `0x42fd80` has no rect turn and clamps at no rect,
+       * and the rat's run `0x44e226` goes where it goes. Level eight's boss has
+       * a **twenty-pixel box** at x1373, and turning it round at the edges of
+       * that pinned it there for ever. The room is the only bound.
+       */
+      if (!blocked) {
+        const span = p.room ? roomSpan(p.room) : null;
+        e.x = span ? Math.max(span.lo, Math.min(span.hi, nx)) : nx;
+      } else break; // it walked into a step it cannot climb: the rest is thrown away
+      // ...and it is pinned HERE, not at the end of the whole stride, so it
+      // meets a ledge where the ledge is and steps off it rather than over it
+      if (parts > 1 && !foe.floats && e.vx === 0 && e.vy === 0) {
+        const b = lvl ? footOf(e, lvl, foe) : e.y;
+        const under = foeSurfaceUnder(e.x, b - CLIMB_PX, b + STICK_PX);
+        if (under !== null) e.y += under - b;
+        else {
+          stepOff(e, foe);
+          break;
         }
       }
     }
-    /**
-     * They stand on the same surfaces the player does, not on `groundAt(e.x)`
-     * alone, the ROOM's floor: CITY's floor is a ledge to x691 and then y7250,
-     * so on it every one of its eight foes would be pinned 3300 pixels under the
-     * level on the first frame, its kill quota unmeetable and its goal
-     * unreachable.
-     *
-     * A platform top counts, the floor counts, and finding neither within a step
-     * means there is nothing underfoot — so it falls, rather than teleporting to
-     * whatever the region says.
-     */
-    // ...and a thing with no gravity stands on nothing: it keeps the height its
-    // record's point gave it ({@link Foe.floats})
-    if (e.vx === 0 && e.vy === 0 && !aloft && !e.weightless) {
-      const base = lvl ? footOf(e, lvl, foe) : e.y;
-      const s = foeSurfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
-      if (s !== null) e.y += s - base;
-      else stepOff(e, foe);
-    }
+  }
+}
+
+/**
+ * They stand on the same surfaces the player does, not on `groundAt(e.x)`
+ * alone, the ROOM's floor: CITY's floor is a ledge to x691 and then y7250,
+ * so on it every one of its eight foes would be pinned 3300 pixels under the
+ * level on the first frame, its kill quota unmeetable and its goal
+ * unreachable.
+ *
+ * A platform top counts, the floor counts, and finding neither within a step
+ * means there is nothing underfoot — so it falls, rather than teleporting to
+ * whatever the region says.
+ *
+ * ...and a thing with no gravity stands on nothing: it keeps the height its
+ * record's point gave it ({@link Foe.floats})
+ */
+function standOnSurface(e: Enemy, foe: Foe, lvl: Level | null, aloft: boolean | undefined): void {
+  if (e.vx === 0 && e.vy === 0 && !aloft && !e.weightless) {
+    const base = lvl ? footOf(e, lvl, foe) : e.y;
+    const s = foeSurfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);
+    if (s !== null) e.y += s - base;
+    else stepOff(e, foe);
   }
 }
 
