@@ -156,7 +156,10 @@ export class V0Page {
         const res = await fetch(pageUrl(this.opts.rip + path));
         if (!res.ok || !res.body) throw new Error(`${path}: ${res.status}`);
         let got = 0;
-        const out = await readStream(res.body, (n) => onProgress?.((got += n)));
+        const out = await readStream(res.body, (n) => {
+          got += n;
+          onProgress?.(got);
+        });
         this.bytes.set(path, out);
         return out;
       })();
