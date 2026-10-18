@@ -1563,6 +1563,19 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
   const index = v1Index(out);
   const drop = patch.onDrop ?? (() => {});
 
+  patchGlobalsV1(base, out, index, patch, drop);
+  patchStandpointV1(base, out, index, patch, drop);
+  patchSoundV1(base, out, index, patch, drop);
+  patchPropsAndCastV1(base, out, index, patch, drop);
+  patchLoopsV1(base, out, index, patch, drop);
+  patchBallsV1(base, out, index, patch, drop);
+  patchWalksV1(base, out, index, patch, drop);
+
+  return writeSaveFile(out);
+}
+
+/** the globals and the string pool they point into */
+function patchGlobalsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- globals -----------------------------------------------------------
   const globals = out.containers[index.globals];
   const pool = out.containers[index.pool];
@@ -1646,7 +1659,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       }
     }
   }
+}
 
+/** the standpoint, the frame counter, the set file and the open set */
+function patchStandpointV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the standpoint and the frame counter -------------------------------
   const c1 = out.containers[1]?.data;
   if (c1 && c1.length >= C1_SIZE) {
@@ -1773,75 +1789,79 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       }
     }
   }
+}
 
+/** the sound: per-sound settings of every open bank */
+function patchSoundV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the sound -----------------------------------------------------------
-  {
-    const c0 = out.containers[0]?.data;
-    const files = c0 ? readFiles(c0) : [];
-    const handleOf = (file: string): number => {
-      const want = file.toLowerCase();
-      return files.find((f) => (f.path.split(":").pop() ?? "").toLowerCase() === want)?.handle ?? 0;
-    };
-    if (c0 && patch.theme !== undefined) {
-      const h = patch.theme ? handleOf(patch.theme) : 0;
-      if (patch.theme && !h) drop(patch.theme, "the theme's bank is not in the base's open-file manifest");
-      put32(c0, C0_THEME, h);
-    }
-    // the bank tables, as (bank file, kind, name) -> record offset
-    const records = new Map<string, { data: Uint8Array; at: number }[]>();
-    const cb = out.containers[6]?.data;
-    if (cb) {
-      const dvb = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
-      for (let i = 0; i < index.banks; i++) {
-        const bank = fileByHandle(files, dvb.getUint32(i * BANK_STRIDE + BANK_FILE, true)).toLowerCase();
-        const arrays: ["sound" | "chunk", number, number][] = [
-          ["sound", 7 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_SOUNDS, true)],
-          ["chunk", 8 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_CHUNKS, true)],
-        ];
-        for (const [kind, ci, count] of arrays) {
-          const d = out.containers[ci]?.data;
-          if (!d) continue;
-          for (let r = 0; r < count && (r + 1) * SOUND_STRIDE <= d.length; r++) {
-            const name = pstr(d, r * SOUND_STRIDE + SOUND_NAME, 31).toLowerCase();
-            const key = kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${name}`;
-            const list = records.get(key) ?? [];
-            // a one-shot is one record; a theme's volume is on all of its chunks
-            if (kind === "chunk" || !list.length) list.push({ data: d, at: r * SOUND_STRIDE });
-            records.set(key, list);
-          }
+  const c0 = out.containers[0]?.data;
+  const files = c0 ? readFiles(c0) : [];
+  const handleOf = (file: string): number => {
+    const want = file.toLowerCase();
+    return files.find((f) => (f.path.split(":").pop() ?? "").toLowerCase() === want)?.handle ?? 0;
+  };
+  if (c0 && patch.theme !== undefined) {
+    const h = patch.theme ? handleOf(patch.theme) : 0;
+    if (patch.theme && !h) drop(patch.theme, "the theme's bank is not in the base's open-file manifest");
+    put32(c0, C0_THEME, h);
+  }
+  // the bank tables, as (bank file, kind, name) -> record offset
+  const records = new Map<string, { data: Uint8Array; at: number }[]>();
+  const cb = out.containers[6]?.data;
+  if (cb) {
+    const dvb = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
+    for (let i = 0; i < index.banks; i++) {
+      const bank = fileByHandle(files, dvb.getUint32(i * BANK_STRIDE + BANK_FILE, true)).toLowerCase();
+      const arrays: ["sound" | "chunk", number, number][] = [
+        ["sound", 7 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_SOUNDS, true)],
+        ["chunk", 8 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_CHUNKS, true)],
+      ];
+      for (const [kind, ci, count] of arrays) {
+        const d = out.containers[ci]?.data;
+        if (!d) continue;
+        for (let r = 0; r < count && (r + 1) * SOUND_STRIDE <= d.length; r++) {
+          const name = pstr(d, r * SOUND_STRIDE + SOUND_NAME, 31).toLowerCase();
+          const key = kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${name}`;
+          const list = records.get(key) ?? [];
+          // a one-shot is one record; a theme's volume is on all of its chunks
+          if (kind === "chunk" || !list.length) list.push({ data: d, at: r * SOUND_STRIDE });
+          records.set(key, list);
         }
-      }
-    }
-    if (c0 && patch.effect !== undefined) {
-      let file = 0;
-      let record = 0;
-      if (patch.effect) {
-        const e = patch.effect;
-        const rec = records.get(`${e.bank.toLowerCase()}|sound|${e.name.toLowerCase()}`)?.[0];
-        file = handleOf(e.bank);
-        record = rec ? new DataView(rec.data.buffer, rec.data.byteOffset).getInt32(rec.at + SOUND_RECORD, true) : 0;
-        if (!file || !record) {
-          drop(e.name, "the playing sound's bank is not one the base has open");
-          file = 0;
-          record = 0;
-        }
-      }
-      put32(c0, C0_EFFECT_FILE, file);
-      put32(c0, C0_EFFECT_RECORD, record);
-    }
-    for (const snd of patch.sounds ?? []) {
-      const bank = snd.bank.toLowerCase();
-      const key = snd.kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${snd.name.toLowerCase()}`;
-      // a bank the base never had open has no records to carry it
-      for (const rec of records.get(key) ?? []) {
-        put16(rec.data, rec.at + SOUND_VOLUME, snd.volume);
-        if (snd.kind === "chunk") continue;
-        put16(rec.data, rec.at + SOUND_PAN, snd.pan);
-        put16(rec.data, rec.at + SOUND_LOOP, snd.loop ? 1 : 0);
       }
     }
   }
+  if (c0 && patch.effect !== undefined) {
+    let file = 0;
+    let record = 0;
+    if (patch.effect) {
+      const e = patch.effect;
+      const rec = records.get(`${e.bank.toLowerCase()}|sound|${e.name.toLowerCase()}`)?.[0];
+      file = handleOf(e.bank);
+      record = rec ? new DataView(rec.data.buffer, rec.data.byteOffset).getInt32(rec.at + SOUND_RECORD, true) : 0;
+      if (!file || !record) {
+        drop(e.name, "the playing sound's bank is not one the base has open");
+        file = 0;
+        record = 0;
+      }
+    }
+    put32(c0, C0_EFFECT_FILE, file);
+    put32(c0, C0_EFFECT_RECORD, record);
+  }
+  for (const snd of patch.sounds ?? []) {
+    const bank = snd.bank.toLowerCase();
+    const key = snd.kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${snd.name.toLowerCase()}`;
+    // a bank the base never had open has no records to carry it
+    for (const rec of records.get(key) ?? []) {
+      put16(rec.data, rec.at + SOUND_VOLUME, snd.volume);
+      if (snd.kind === "chunk") continue;
+      put16(rec.data, rec.at + SOUND_PAN, snd.pan);
+      put16(rec.data, rec.at + SOUND_LOOP, snd.loop ? 1 : 0);
+    }
+  }
+}
 
+/** the props' and the cast's records, in place */
+function patchPropsAndCastV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- props and cast ----------------------------------------------------
   const cp = out.containers[4]?.data;
   if (cp && patch.props) {
@@ -1911,7 +1931,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (a.tileY !== undefined) put16(ca, o + ACTOR_TILE_Y, a.tileY);
     }
   }
+}
 
+/** the loop table */
+function patchLoopsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the loop table ----------------------------------------------------
   // Rewritten whole rather than merged: it IS the live scheduler (the writer
   // memcpy's the engine's own table), so a slot the running game does not have
@@ -1942,8 +1965,12 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       slot++;
     }
   }
+}
 
+/** the balls */
+function patchBallsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the balls ---------------------------------------------------------
+  const cp = out.containers[4]?.data;
   // Positional, like the table it is: a ball's slot is the one it was made in.
   const cbl = out.containers[index.crickets]?.data;
   if (cbl && patch.balls) {
@@ -1962,8 +1989,12 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       writePstrField(cbl, at + BALL_NAME, b.name);
     }
   }
+}
 
+/** the walks, each route's waypoints re-emitted after the table */
+function patchWalksV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the walks ---------------------------------------------------------
+  const ca = out.containers[2]?.data;
   // The same wholesale rewrite the loops get, and for the same reason: the table
   // IS the live mover, so a slot the running game does not have is a walker who
   // must not set off again on load. A walk on an authored route takes its
@@ -2019,8 +2050,6 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
     out.containers.length = index.walks + 1;
     for (const data of payloads) out.containers.push({ id: out.containers.length, data });
   }
-
-  return writeSaveFile(out);
 }
 
 /** the title a save written by this port carries — Dust's own, as its menu

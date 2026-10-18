@@ -341,6 +341,22 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
   session.interp.abandonRunning();
   session.cursorDepth = 0;
 
+  restoreUnroomedStateV1(session, save);
+
+  await leaveRoomV1(session, save);
+
+  // ---- the rebuild, with the script runners muted -------------------------
+  session.restoringSave = true;
+  try {
+    await rebuildFromSaveV1(session, save);
+  } finally {
+    session.restoringSave = false;
+  }
+  return true;
+}
+
+/** the state that is not in a room: the globals, the frame counter and lockevents */
+function restoreUnroomedStateV1(session: GameSession, save: SaveGameV1): void {
   // ---- the state that is not in a room ------------------------------------
   /*
    * Drop what the file is silent about, before restoring what it carries (#344).
@@ -413,7 +429,10 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
   if (session.interp.globals.get("lockevents")) {
     session.onLog("opengame: this save was taken with lockevents set — input stays locked until a script clears it");
   }
+}
 
+/** what belonged to the screen being left: timed state, speech, puppet, wipe, overlays */
+async function leaveRoomV1(session: GameSession, save: SaveGameV1): Promise<void> {
   // ---- drop what belonged to the screen being left ------------------------
   session.scheduler.reset();
   session.audio.halt("voice");
@@ -429,211 +448,207 @@ export async function loadGameV1(session: GameSession, bytes: Uint8Array): Promi
   session.stageCtrl.resetOverlayStack();
   if (session.stageCtrl.stageFile) await session.stageCtrl.gotoFlat(PLAY_FLAT);
   session.setVisible = true;
+}
 
-  // ---- the rebuild, with the script runners muted -------------------------
-  session.restoringSave = true;
-  try {
-    // the departing room is detached rather than closed: no `closeset` runs on a
-    // load, in this engine or the original
-    session.currentSetName = "none";
-    session.currentSetFile = "";
+/** the saved game rebuilt from the file — under `restoringSave`, so nothing in it is a script */
+async function rebuildFromSaveV1(session: GameSession, save: SaveGameV1): Promise<void> {
+  // the departing room is detached rather than closed: no `closeset` runs on a
+  // load, in this engine or the original
+  session.currentSetName = "none";
+  session.currentSetFile = "";
 
-    // the cast and prop FILES the save had open, by the names the manifest gives
-    // them — a v1 list carries no extension of its own
-    for (const file of save.castFiles) await session.openCastFile(file);
-    for (const file of save.propFiles) await session.openShop(file);
-    await restoreThemeV1(session, save);
+  // the cast and prop FILES the save had open, by the names the manifest gives
+  // them — a v1 list carries no extension of its own
+  for (const file of save.castFiles) await session.openCastFile(file);
+  for (const file of save.propFiles) await session.openShop(file);
+  await restoreThemeV1(session, save);
 
-    resetCast(session);
-    restoreActors(
-      session,
-      save.actors.map((a) => asV4Actor(session, a)),
-    );
-    // world positions included: the shooting star is at (2784, 4864) at
-    // height 499 and no script puts it back there on a load
-    restoreProps(
-      session,
-      save.props.map((p) => asV4Prop(session, p)),
-    );
-    restoreActorExtras(session, save);
-    restorePropSteps(session, save);
-    // `propspeed` (+38): the tumbleweed's `kickme` divides by it, and a 0 there
-    // is error 0x37 where the original had the 11 or 12 its `initprop` gave it
-    for (const sp of save.props) {
-      const p = session.propRuntime.get(sp.name);
-      if (p && sp.speed > 0) p.speed = sp.speed;
-    }
-
-    // the scheduler table, mid-count: the idles that make the town act, the
-    // scene's own timer, the star that crosses the sky
-    for (const l of save.loops) {
-      session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
-      // `pauseloop` held it, this many deep (+2, 0x43904d)
-      const restored = session.scheduler.loops.at(-1);
-      if (l.paused && restored?.handler && restored.name === l.name.toLowerCase()) {
-        restored.paused = true;
-        restored.pauseDepth = l.pauseDepth;
-      }
-    }
-
-    // the balls in flight, slot for slot (the table at 0x45fbd0 is positional)
-    for (const b of save.balls) {
-      if (!b.active || b.slot >= session.balls.slots.length) continue;
-      session.balls.slots[b.slot] = {
-        name: b.name,
-        pause: b.pause,
-        vx: b.vx,
-        vy: b.vy,
-        vz: b.vz,
-        gravity: b.gravity,
-        bounce: b.bounce,
-        frames: b.frames,
-        deg: b.deg,
-        x: b.x,
-        y: b.y,
-        z: b.z,
-        tx: b.tx,
-        ty: b.ty,
-      };
-    }
-
-    /*
-     * ...and the walkers, mid-stride.
-     *
-     * A character caught walking is caught in TWO tables, and restoring only one
-     * of them is worse than restoring neither: the cast record gives them the
-     * `walk` pose, and an actor steps through its walk animation whether or not a
-     * walk is actually running — so Jones would come back marching on the spot
-     * in the middle of the street. (AFTERDOG has him 82% of the way to
-     * `town.jones2`.)
-     *
-     * So each walk is resumed from where the save caught it, with only what was
-     * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
-     * the other half of the same rule, and the one the play page follows (#181).
-     */
-    const waiting = save.walks.filter((w) => w.waiting && !w.turnOnly);
-    for (const w of save.walks) {
-      if (waiting.includes(w)) continue;
-      const a = session.actorRuntime.get(w.actor);
-      const resumed =
-        !!a &&
-        session.scheduler.restoreWalk(w.actor, {
-          turnOnly: w.turnOnly,
-          turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
-          sx: w.startX,
-          sy: w.startY,
-          sz: w.startZ,
-          dx: w.dx,
-          dy: w.dy,
-          dz: w.dz,
-          dist: w.dist,
-          progress: w.progress,
-          arriveStar: w.star || undefined,
-          paused: w.paused,
-          pauseDepth: w.pauseDepth,
-          path: w.path,
-        });
-      if (resumed) {
-        const route = w.path ? ` on an authored route of ${w.path.length} points` : "";
-        session.onLog(
-          w.turnOnly
-            ? `opengame: ${w.actor} was saved mid-turn — resuming it`
-            : `opengame: ${w.actor} was saved walking to "${w.star}" (${w.progress} of ${w.dist})${route}`,
-        );
-        continue;
-      }
-      standUp(a ?? undefined);
-      session.onLog(`opengame: ${w.actor} was saved mid-walk and could not be resumed — standing them up`);
-    }
-
-    // ---- the arrival ----------------------------------------------------
-    const s = save.standpoint;
-    /*
-     * The room is the FILE the save had open, not the set it names.
-     *
-     * Dust's town exists twice — `town.set` by day, `nite.set` by night — and
-     * both call themselves "town", so the name field cannot tell them apart.
-     * The shipped saves demonstrate it both ways: twelve of them name "town"
-     * and hold `nite.set`, ten name "town" and hold `town.set`. Trusting the
-     * name opened the daylight town over a night game. The manifest handle
-     * beside it says which file, which is exactly how the original's own loader
-     * reopens the room.
-     */
-    const file = s.setFile || `${s.set}.set`;
-    /*
-     * The bytes, before anything asks the set a question.
-     *
-     * `sceneAtCell` reads the set's own grid to turn the saved cell into a scene
-     * name, and it does that through `GameSession.loadSet`, which is SYNCHRONOUS:
-     * it asks the provider for the file and gets null when the file has not been
-     * fetched. In the browser that is the ordinary state of any room the player
-     * has not been in yet — so on a FRESHLY BOOTED game the cell resolved to
-     * nothing, the loader fell back to "open it at its own standpoint", and the
-     * save came back in the right room at the wrong place. Reported from play, and
-     * exactly as narrow as it sounds: load `D1E_002` after visiting the saloon and
-     * the standpoint is right, load it as the first thing a boot does and it is
-     * `sallower.set`'s own opening view (Scene D1) instead of the saved Scene C4.
-     *
-     * Invisible on disk, which is why no test had it: a headless provider answers
-     * from the filesystem on the spot and `loadSet` always succeeds. The test that
-     * covers it now models the browser's provider — nothing answers until it has
-     * been fetched.
-     */
-    await session.ensureFile(file);
-    const scene = sceneAtCell(session, file, s.cellX, s.cellZ);
-    if (!scene) {
-      session.onLog(
-        `opengame: ${file} has no scene at cell (${s.cellX},${s.cellZ}) — opening it at its own standpoint`,
-      );
-    }
-    await session.openSetFile(file, scene ?? "", scene ? s.view : "");
-
-    /*
-     * The walks that were WAITING (their walker not in the open set, +44 = 0)
-     * come back waiting: DF.EXE's walk service moves nothing until the walker's
-     * set is the open one and the star is in it, then puts the actor there and
-     * ends the walk (0x4396f5; see the scheduler's `waiting`). The first pass
-     * does that for a walker already at home — the `endwalk` three playthrough
-     * rungs wait on — and one in another room waits for its room, where this
-     * used to fetch the star from any set's table and place them at once.
-     */
-    for (const w of waiting) {
-      const a = session.actorRuntime.get(w.actor);
-      const kept =
-        !!a &&
-        session.scheduler.restoreWalk(w.actor, {
-          sx: a.worldX,
-          sy: a.worldY,
-          sz: a.worldZ,
-          dx: 0,
-          dy: 0,
-          dz: 0,
-          dist: 1,
-          progress: 0,
-          arriveStar: w.star || undefined,
-          paused: w.paused,
-          pauseDepth: w.pauseDepth,
-          waiting: true,
-        });
-      if (kept) {
-        session.onLog(`opengame: ${w.actor} is waiting to arrive at "${w.star}"`);
-        continue;
-      }
-      standUp(a ?? undefined);
-      session.onLog(`opengame: ${w.actor} was waiting for "${w.star}" and is not in the cast — standing them up`);
-    }
-
-    // the script settings the standpoint block carries (C1_PUPPET_GRAB in
-    // df/savegame-v1.ts): set after the room opens, because DF.EXE's own
-    // opensetfile resets two of them and its loader never runs that
-    session.puppetGrab = s.puppetGrab;
-    session.frameRate = s.frameInterval;
-    session.balls.playerHitbox = [s.playerHitbox[0], s.playerHitbox[1]];
-    session.setVisible = s.setVisible;
-  } finally {
-    session.restoringSave = false;
+  resetCast(session);
+  restoreActors(
+    session,
+    save.actors.map((a) => asV4Actor(session, a)),
+  );
+  // world positions included: the shooting star is at (2784, 4864) at
+  // height 499 and no script puts it back there on a load
+  restoreProps(
+    session,
+    save.props.map((p) => asV4Prop(session, p)),
+  );
+  restoreActorExtras(session, save);
+  restorePropSteps(session, save);
+  // `propspeed` (+38): the tumbleweed's `kickme` divides by it, and a 0 there
+  // is error 0x37 where the original had the 11 or 12 its `initprop` gave it
+  for (const sp of save.props) {
+    const p = session.propRuntime.get(sp.name);
+    if (p && sp.speed > 0) p.speed = sp.speed;
   }
-  return true;
+
+  // the scheduler table, mid-count: the idles that make the town act, the
+  // scene's own timer, the star that crosses the sky
+  for (const l of save.loops) {
+    session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period);
+    // `pauseloop` held it, this many deep (+2, 0x43904d)
+    const restored = session.scheduler.loops.at(-1);
+    if (l.paused && restored?.handler && restored.name === l.name.toLowerCase()) {
+      restored.paused = true;
+      restored.pauseDepth = l.pauseDepth;
+    }
+  }
+
+  // the balls in flight, slot for slot (the table at 0x45fbd0 is positional)
+  for (const b of save.balls) {
+    if (!b.active || b.slot >= session.balls.slots.length) continue;
+    session.balls.slots[b.slot] = {
+      name: b.name,
+      pause: b.pause,
+      vx: b.vx,
+      vy: b.vy,
+      vz: b.vz,
+      gravity: b.gravity,
+      bounce: b.bounce,
+      frames: b.frames,
+      deg: b.deg,
+      x: b.x,
+      y: b.y,
+      z: b.z,
+      tx: b.tx,
+      ty: b.ty,
+    };
+  }
+
+  /*
+   * ...and the walkers, mid-stride.
+   *
+   * A character caught walking is caught in TWO tables, and restoring only one
+   * of them is worse than restoring neither: the cast record gives them the
+   * `walk` pose, and an actor steps through its walk animation whether or not a
+   * walk is actually running — so Jones would come back marching on the spot
+   * in the middle of the street. (AFTERDOG has him 82% of the way to
+   * `town.jones2`.)
+   *
+   * So each walk is resumed from where the save caught it, with only what was
+   * left to run — and anyone whose walk CANNOT be resumed is stood up, which is
+   * the other half of the same rule, and the one the play page follows (#181).
+   */
+  const waiting = save.walks.filter((w) => w.waiting && !w.turnOnly);
+  for (const w of save.walks) {
+    if (waiting.includes(w)) continue;
+    const a = session.actorRuntime.get(w.actor);
+    const resumed =
+      !!a &&
+      session.scheduler.restoreWalk(w.actor, {
+        turnOnly: w.turnOnly,
+        turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
+        sx: w.startX,
+        sy: w.startY,
+        sz: w.startZ,
+        dx: w.dx,
+        dy: w.dy,
+        dz: w.dz,
+        dist: w.dist,
+        progress: w.progress,
+        arriveStar: w.star || undefined,
+        paused: w.paused,
+        pauseDepth: w.pauseDepth,
+        path: w.path,
+      });
+    if (resumed) {
+      const route = w.path ? ` on an authored route of ${w.path.length} points` : "";
+      session.onLog(
+        w.turnOnly
+          ? `opengame: ${w.actor} was saved mid-turn — resuming it`
+          : `opengame: ${w.actor} was saved walking to "${w.star}" (${w.progress} of ${w.dist})${route}`,
+      );
+      continue;
+    }
+    standUp(a ?? undefined);
+    session.onLog(`opengame: ${w.actor} was saved mid-walk and could not be resumed — standing them up`);
+  }
+
+  // ---- the arrival ----------------------------------------------------
+  const s = save.standpoint;
+  /*
+   * The room is the FILE the save had open, not the set it names.
+   *
+   * Dust's town exists twice — `town.set` by day, `nite.set` by night — and
+   * both call themselves "town", so the name field cannot tell them apart.
+   * The shipped saves demonstrate it both ways: twelve of them name "town"
+   * and hold `nite.set`, ten name "town" and hold `town.set`. Trusting the
+   * name opened the daylight town over a night game. The manifest handle
+   * beside it says which file, which is exactly how the original's own loader
+   * reopens the room.
+   */
+  const file = s.setFile || `${s.set}.set`;
+  /*
+   * The bytes, before anything asks the set a question.
+   *
+   * `sceneAtCell` reads the set's own grid to turn the saved cell into a scene
+   * name, and it does that through `GameSession.loadSet`, which is SYNCHRONOUS:
+   * it asks the provider for the file and gets null when the file has not been
+   * fetched. In the browser that is the ordinary state of any room the player
+   * has not been in yet — so on a FRESHLY BOOTED game the cell resolved to
+   * nothing, the loader fell back to "open it at its own standpoint", and the
+   * save came back in the right room at the wrong place. Reported from play, and
+   * exactly as narrow as it sounds: load `D1E_002` after visiting the saloon and
+   * the standpoint is right, load it as the first thing a boot does and it is
+   * `sallower.set`'s own opening view (Scene D1) instead of the saved Scene C4.
+   *
+   * Invisible on disk, which is why no test had it: a headless provider answers
+   * from the filesystem on the spot and `loadSet` always succeeds. The test that
+   * covers it now models the browser's provider — nothing answers until it has
+   * been fetched.
+   */
+  await session.ensureFile(file);
+  const scene = sceneAtCell(session, file, s.cellX, s.cellZ);
+  if (!scene) {
+    session.onLog(
+      `opengame: ${file} has no scene at cell (${s.cellX},${s.cellZ}) — opening it at its own standpoint`,
+    );
+  }
+  await session.openSetFile(file, scene ?? "", scene ? s.view : "");
+
+  /*
+   * The walks that were WAITING (their walker not in the open set, +44 = 0)
+   * come back waiting: DF.EXE's walk service moves nothing until the walker's
+   * set is the open one and the star is in it, then puts the actor there and
+   * ends the walk (0x4396f5; see the scheduler's `waiting`). The first pass
+   * does that for a walker already at home — the `endwalk` three playthrough
+   * rungs wait on — and one in another room waits for its room, where this
+   * used to fetch the star from any set's table and place them at once.
+   */
+  for (const w of waiting) {
+    const a = session.actorRuntime.get(w.actor);
+    const kept =
+      !!a &&
+      session.scheduler.restoreWalk(w.actor, {
+        sx: a.worldX,
+        sy: a.worldY,
+        sz: a.worldZ,
+        dx: 0,
+        dy: 0,
+        dz: 0,
+        dist: 1,
+        progress: 0,
+        arriveStar: w.star || undefined,
+        paused: w.paused,
+        pauseDepth: w.pauseDepth,
+        waiting: true,
+      });
+    if (kept) {
+      session.onLog(`opengame: ${w.actor} is waiting to arrive at "${w.star}"`);
+      continue;
+    }
+    standUp(a ?? undefined);
+    session.onLog(`opengame: ${w.actor} was waiting for "${w.star}" and is not in the cast — standing them up`);
+  }
+
+  // the script settings the standpoint block carries (C1_PUPPET_GRAB in
+  // df/savegame-v1.ts): set after the room opens, because DF.EXE's own
+  // opensetfile resets two of them and its loader never runs that
+  session.puppetGrab = s.puppetGrab;
+  session.frameRate = s.frameInterval;
+  session.balls.playerHitbox = [s.playerHitbox[0], s.playerHitbox[1]];
+  session.setVisible = s.setVisible;
 }
 
 /**

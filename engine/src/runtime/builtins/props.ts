@@ -13,8 +13,15 @@ import { accessorFamily, BuiltinCtx } from "./context";
  * (`propstar`) that read the current set's named world points.
  */
 export function registerPropBuiltins(ctx: BuiltinCtx): void {
-  const { session, interp, r, log, findStar, sceneCell } = ctx;
+  registerPropLifecycle(ctx);
+  registerPropPlacement(ctx);
+  registerPropLook(ctx);
+  registerPropTables(ctx);
+}
 
+/** propexists, deleting, hiding and showing props */
+function registerPropLifecycle(ctx: BuiltinCtx): void {
+  const { session, r, sceneCell } = ctx;
   // prop commands — getter/setter by arity
   const prop = (name: Value) => session.propRuntime.get(toStr(name));
   /** getter/setter by arity; a missing prop answers the empty value */
@@ -110,6 +117,15 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     // every write of `true`.
     if (!was && p.visible) session.eraseTextUnderProp(p);
   });
+}
+
+/** view, position, set, scale, clip and owner */
+function registerPropPlacement(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  // prop commands — getter/setter by arity
+  const prop = (name: Value) => session.propRuntime.get(toStr(name));
+  /** getter/setter by arity; a missing prop answers the empty value */
+  const acc = accessorFamily(r, prop, ctx.miss);
   // The getter answers the state the prop is actually IN, which for one no script
   // has touched is its FIRST state — the same one `PropInstance.state()` resolves
   // to and the engine draws. Answering "" there told scripts something the screen
@@ -304,6 +320,15 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
   // propinstance(src, dst): make dst a second prop drawn with src's sprite
   // group (TAOOT: the bridge's tiling sky, SMOKE's extra plants/flames) — it copies
   // src's current display state, then the script repositions it via propxy.
+}
+
+/** instances, facing, distance, speed, ink and flip */
+function registerPropLook(ctx: BuiltinCtx): void {
+  const { session, interp, r } = ctx;
+  // prop commands — getter/setter by arity
+  const prop = (name: Value) => session.propRuntime.get(toStr(name));
+  /** getter/setter by arity; a missing prop answers the empty value */
+  const acc = accessorFamily(r, prop, ctx.miss);
   r("propinstance", (_i, [src, dst]) => {
     session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""), session.isV5);
   });
@@ -410,6 +435,15 @@ export function registerPropBuiltins(ctx: BuiltinCtx): void {
     i.onUnknown("propink", args);
     return 0;
   });
+}
+
+/** the prop table by index, error, values and stars */
+function registerPropTables(ctx: BuiltinCtx): void {
+  const { session, r, log, findStar } = ctx;
+  // prop commands — getter/setter by arity
+  const prop = (name: Value) => session.propRuntime.get(toStr(name));
+  /** getter/setter by arity; a missing prop answers the empty value */
+  const acc = accessorFamily(r, prop, ctx.miss);
   // ONE prop table, whoever asks: `countprops` is `mov ecx, [0x489f18]`
   // (0x418660) and `indextoprop` bounds-checks that same dword before walking the
   // table at [0x489f14] in 158-byte records (0x418710). No calling shop enters

@@ -47,8 +47,15 @@ export function isqrt32(n: number): number {
 }
 
 export function registerHelperBuiltins(ctx: BuiltinCtx): void {
-  const { session, interp, r } = ctx;
+  registerStrings(ctx);
+  registerMemory(ctx);
+  registerGeometry(ctx);
+  registerSystem(ctx);
+}
 
+/** word lists, string lengths, variables by name and number formatting */
+function registerStrings(ctx: BuiltinCtx): void {
+  const { session, interp, r } = ctx;
   // findword("a,b,c", ",", 2) -> "b": a word list is a string split on a
   // separator, and the idx is 1-based.
   //
@@ -177,6 +184,11 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
   });
 
   r("numtostring", (_i, [n]) => String(toNum(n ?? 0)));
+}
+
+/** the memory answers the scripts branch on, and the stage parameters */
+function registerMemory(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // No `lowmemory` here: it is no engine command (TI.EXE's table has none), and a
   // builtin of that name answered 0 to MAP.STG's and EXTRA.CST's
   // `if lowmemory ()` ahead of BOOTFILE's routine — an integer where the routine
@@ -202,7 +214,11 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     stageParams.set(k, val);
     return 0;
   });
+}
 
+/** the camera and player position, bearings, distances and vectors */
+function registerGeometry(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // helpers used around conversations that live outside any script.
   // cameraxyz and playerxyz are the SAME primitive here: the original engine
   // distinguished the player entity from the camera, but in a first-person
@@ -350,7 +366,11 @@ export function registerHelperBuiltins(ctx: BuiltinCtx): void {
     (session.isV5 ? v5 : v4)(i, args, call, frame);
   r("calcvectx", byEngine(vecComponent(Math.cos), vecComponentV5(Math.cos)));
   r("calcvecty", byEngine(vecComponent(Math.sin), vecComponentV5(Math.sin)));
+}
 
+/** the disc, dialogs, quit, the machine, clocks, menu, bevels and path slots */
+function registerSystem(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // currentcd([name]): the mounted CD volume. The original verified the named
   // disc (TAOOT: "Titanic1"/"Titanic2") was in the drive and returned "" if absent;
   // BOOTFILE's setpath() does `currentcd("Titanic1"); if currentcd()="" error`.

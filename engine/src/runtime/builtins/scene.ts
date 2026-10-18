@@ -4,6 +4,76 @@ import { packPoint } from "../point";
 import { dfPlan, isDfEffect, isExeEffect, type DfEffect, type ExeEffect } from "../visual-effects";
 import { BuiltinCtx } from "./context";
 
+type Session = BuiltinCtx["session"];
+
+/** the open set's scenes, and one of them or one of its views by name */
+const scenes = (session: Session) => session.currentBinding?.set.scenes ?? [];
+const sceneByName = (session: Session, name: string) => {
+  const n = name.toLowerCase();
+  return scenes(session).find((s) => s.sceneName.toLowerCase() === n);
+};
+const viewByName = (session: Session, scene: string, view: string) => {
+  const vn = view.toLowerCase();
+  return sceneByName(session, scene)?.views.find((x) => x.viewName.toLowerCase() === vn);
+};
+
+/**
+ * screentoblack(surface, steps) / blacktoscreen(surface, steps) — the fades,
+ * and they BLOCK.
+ *
+ * `gotospecial` wraps set changes in the pair; without them stair transitions
+ * look like nothing moved. Each is also the script saying what the screen
+ * should look like, so it cancels a movie's pending reveal — see
+ * {@link GameSession.tickFade}.
+ *
+ * Blocking is the part that matters, and it is not a detail. In TI.EXE
+ * both are a linear lerp between the named surface's palette and the black
+ * one, `steps` increments, and the loop (`0x435b90` / `0x435be0`, reached
+ * through `0x43e550` / `0x43e5d0`) BUSY-WAITS one 60 Hz tick per step on the
+ * engine's own clock (`0x41de90`, `timeGetTime() * 3 / 50`) with no message
+ * pump and no scheduler pass inside it. The interpreter is frozen for the
+ * whole ramp, so the statement AFTER a fade cannot run until the fade is over.
+ *
+ * Ours queued the ramp and returned, and the game noticed. `gang.cst`'s
+ * `prepuppet` is `screentoblack("current", 10)`, `openpuppetfile`,
+ * `visualeffect(plain, 0)`, `blacktoscreen("puppet", 10)` — and only then does
+ * `runpuppet` send the puppet its boot script, which is what speaks the first
+ * line. With the fade non-blocking the line started while the screen was still
+ * black and rode the ramp up: #6, "actors begin speaking before fade-in".
+ *
+ * Sleeping the script tick (the same unit and the same primitive `delay(n)`
+ * uses) rather than awaiting the queue: the ramp advances one step per tick
+ * from the tick it is pushed on, so `steps` ticks is always long enough, and a
+ * ramp that is somehow starved cannot wedge the script behind it forever.
+ *
+ * And blocking is conditional on a frame source, on exactly the test
+ * `playmovie` below uses and for exactly its reason: a host that does not
+ * advance the clock never ticks the ramp, so awaiting one would deadlock on
+ * the first transition. A bare `GameSession` is that host — several savegame
+ * tests drive the game's own `transtoflat` with no viewer attached and clear
+ * `fade.queue` by hand afterwards — and there the fades stay what they were,
+ * a level set and nothing waited on.
+ */
+const fade = async (session: Session, to: 0 | 1, steps: unknown): Promise<void> => {
+  const n = Math.max(1, Number(steps) || 10);
+  if (to === 1 && !session.fade.snapshot) {
+    session.fade.snapshot = session.captureFrame?.() ?? null;
+  }
+  // step 1 is drawn on the tick it is asked on (0x435b90) — see tickFade
+  if (!session.fade.queue.length) session.fade.lastTick = ticksAt(session.clock.now) - 1;
+  session.fade.queue.push({ to, steps: n });
+  session.fade.pendingReveal = false;
+  // a ramp is a ramp of a named palette — see GameSession.fade.blanked
+  session.fade.blanked = false;
+  if (session.hasRealFrames || session.modalMovies) await session.transitionCtrl.ramp((n * 50) / 3);
+};
+
+/** the screen is black from this instant — no ramp, nothing left running */
+const blackNow = (session: Session): void => {
+  session.fade.cut(1);
+  session.fade.blanked = true;
+};
+
 /**
  * Screen / scene / stage state: set switching, the STG stage + flat layer,
  * movie playback, shop/track file open/close, screen transitions + fades, the
@@ -11,8 +81,18 @@ import { BuiltinCtx } from "./context";
  * no-op / debug-affordance stubs.
  */
 export function registerSceneBuiltins(ctx: BuiltinCtx): void {
-  const { session, r } = ctx;
+  registerSetAndStage(ctx);
+  registerSetTables(ctx);
+  registerMoviesAndFiles(ctx);
+  registerFades(ctx);
+  registerSettings(ctx);
+  registerScreenEffects(ctx);
+  registerCursorAndStubs(ctx);
+}
 
+/** set switching, the stage and its flats */
+function registerSetAndStage(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // set switching — the engine primitives behind the boot library's set change
   // (TAOOT: boot's changeset())
   r("opensetfile", async (_i, [name, scene, view]) => {
@@ -128,23 +208,18 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   r("indextoflat", (_i, [i]) => session.flatNames[toNum(i) - 1] ?? "none");
   // countflats(): how many flats the current stage has (piste length bound).
   r("countflats", () => session.flatNames.length);
+}
 
+/** the open set's scenes, views, shops, buttons and paintings */
+function registerSetTables(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // scene / view enumeration over the current set — BOOTFILE walks every scene
   // × view to relocate 2D props on set entry; the debug menu dumps them.
-  const scenes = () => session.currentBinding?.set.scenes ?? [];
-  const sceneByName = (name: string) => {
-    const n = name.toLowerCase();
-    return scenes().find((s) => s.sceneName.toLowerCase() === n);
-  };
-  const viewByName = (scene: string, view: string) => {
-    const vn = view.toLowerCase();
-    return sceneByName(scene)?.views.find((x) => x.viewName.toLowerCase() === vn);
-  };
-  r("countscenes", () => scenes().length);
-  r("indextoscene", (_i, [idx]) => scenes()[toNum(idx ?? 0) - 1]?.sceneName ?? "");
-  r("countviews", (_i, [scene]) => sceneByName(toStr(scene ?? ""))?.views.length ?? 0);
+  r("countscenes", () => scenes(session).length);
+  r("indextoscene", (_i, [idx]) => scenes(session)[toNum(idx ?? 0) - 1]?.sceneName ?? "");
+  r("countviews", (_i, [scene]) => sceneByName(session, toStr(scene ?? ""))?.views.length ?? 0);
   r("indextoview", (_i, [scene, idx]) =>
-    sceneByName(toStr(scene ?? ""))?.views[toNum(idx ?? 0) - 1]?.viewName ?? "",
+    sceneByName(session, toStr(scene ?? ""))?.views[toNum(idx ?? 0) - 1]?.viewName ?? "",
   );
   /**
    * `scenexyz(scene, axis)` — where a standpoint IS, in world units.
@@ -168,7 +243,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
    * independent confirmation of the scale the camera poses were calibrated from.
    */
   r("scenexyz", (_i, [scene, axis]) => {
-    const sc = sceneByName(toStr(scene ?? ""));
+    const sc = sceneByName(session, toStr(scene ?? ""));
     if (!sc) return 0;
     switch (toNum(axis ?? 1)) {
       case 1: return sc.xAxisMap;
@@ -210,7 +285,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   r("countpaintings", (_i, [scene, view]) =>
     session.isV1
       ? setGrid("mapHeight", "setheight")
-      : (viewByName(toStr(scene ?? ""), toStr(view ?? ""))?.objects.length ?? 0),
+      : (viewByName(session, toStr(scene ?? ""), toStr(view ?? ""))?.objects.length ?? 0),
   );
   // v4's own `pointinpainting` has no semantics here: off DreamFactory 1 it stays
   // the unknown command it was
@@ -220,7 +295,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     return 0;
   });
   r("indextopainting", (_i, [scene, view, idx]) =>
-    viewByName(toStr(scene ?? ""), toStr(view ?? ""))?.objects[toNum(idx ?? 0) - 1]?.identifier ?? "",
+    viewByName(session, toStr(scene ?? ""), toStr(view ?? ""))?.objects[toNum(idx ?? 0) - 1]?.identifier ?? "",
   );
   // roadahead(scene, view): is there a walkable road leaving `scene` while
   // facing `view`? A SET transition ("road") connects two view IDs; roads are
@@ -230,7 +305,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // far end even though ArrowUp walks it). TAOOT's setuparrow() calls this via
   // myroadahead(), which also hardcodes a few scripted exceptions on top.
   r("roadahead", (_i, [scene, view]) => {
-    const v = viewByName(toStr(scene ?? ""), toStr(view ?? ""));
+    const v = viewByName(session, toStr(scene ?? ""), toStr(view ?? ""));
     if (!v) return 0;
     const trans = session.currentBinding?.set.transitions ?? [];
     return trans.some((t) => t.viewIDstart === v.viewID || t.viewIDend === v.viewID) ? 1 : 0;
@@ -243,7 +318,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   // before the fallback chain), which is what forced the port to transcribe their
   // per-stage switches into tables of TAOOT stage names. The game's own version
   // runs now; GameSession.transToFlat is how the host and the tests reach it.
+}
 
+/** movies, shop files and fileexists */
+function registerMoviesAndFiles(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // playmovie is MODAL in TI.EXE: it runs the movie's frame state machine to
   // completion (waiting for the player's clicks on interactive movies) before
   // the script continues. Await the host promise so the script blocks — TAOOT's
@@ -282,7 +361,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     await session.ensureFile(key);
     return session.files(key) ? 1 : 0;
   });
+}
 
+/** the effect names, and fades to and from black */
+function registerFades(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // the effect names `visualeffect` takes — each evaluates to itself, and what
   // it draws is `visualeffect`'s business (below)
   for (const t of [
@@ -293,57 +376,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   ]) {
     r(t, () => t);
   }
-  /**
-   * screentoblack(surface, steps) / blacktoscreen(surface, steps) — the fades,
-   * and they BLOCK.
-   *
-   * `gotospecial` wraps set changes in the pair; without them stair transitions
-   * look like nothing moved. Each is also the script saying what the screen
-   * should look like, so it cancels a movie's pending reveal — see
-   * {@link GameSession.tickFade}.
-   *
-   * Blocking is the part that matters, and it is not a detail. In TI.EXE
-   * both are a linear lerp between the named surface's palette and the black
-   * one, `steps` increments, and the loop (`0x435b90` / `0x435be0`, reached
-   * through `0x43e550` / `0x43e5d0`) BUSY-WAITS one 60 Hz tick per step on the
-   * engine's own clock (`0x41de90`, `timeGetTime() * 3 / 50`) with no message
-   * pump and no scheduler pass inside it. The interpreter is frozen for the
-   * whole ramp, so the statement AFTER a fade cannot run until the fade is over.
-   *
-   * Ours queued the ramp and returned, and the game noticed. `gang.cst`'s
-   * `prepuppet` is `screentoblack("current", 10)`, `openpuppetfile`,
-   * `visualeffect(plain, 0)`, `blacktoscreen("puppet", 10)` — and only then does
-   * `runpuppet` send the puppet its boot script, which is what speaks the first
-   * line. With the fade non-blocking the line started while the screen was still
-   * black and rode the ramp up: #6, "actors begin speaking before fade-in".
-   *
-   * Sleeping the script tick (the same unit and the same primitive `delay(n)`
-   * uses) rather than awaiting the queue: the ramp advances one step per tick
-   * from the tick it is pushed on, so `steps` ticks is always long enough, and a
-   * ramp that is somehow starved cannot wedge the script behind it forever.
-   *
-   * And blocking is conditional on a frame source, on exactly the test
-   * `playmovie` below uses and for exactly its reason: a host that does not
-   * advance the clock never ticks the ramp, so awaiting one would deadlock on
-   * the first transition. A bare `GameSession` is that host — several savegame
-   * tests drive the game's own `transtoflat` with no viewer attached and clear
-   * `fade.queue` by hand afterwards — and there the fades stay what they were,
-   * a level set and nothing waited on.
-   */
-  const fade = async (to: 0 | 1, steps: unknown): Promise<void> => {
-    const n = Math.max(1, Number(steps) || 10);
-    if (to === 1 && !session.fade.snapshot) {
-      session.fade.snapshot = session.captureFrame?.() ?? null;
-    }
-    // step 1 is drawn on the tick it is asked on (0x435b90) — see tickFade
-    if (!session.fade.queue.length) session.fade.lastTick = ticksAt(session.clock.now) - 1;
-    session.fade.queue.push({ to, steps: n });
-    session.fade.pendingReveal = false;
-    // a ramp is a ramp of a named palette — see GameSession.fade.blanked
-    session.fade.blanked = false;
-    if (session.hasRealFrames || session.modalMovies) await session.transitionCtrl.ramp((n * 50) / 3);
-  };
-  r("screentoblack", (_i, [, steps]) => fade(1, steps));
+  r("screentoblack", (_i, [, steps]) => fade(session, 1, steps));
   /**
    * `blacktoscreen(name, steps)` reveals FROM black — which is what the name
    * says, and it has to be said in code because the screen is not always black
@@ -363,14 +396,14 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   r("blacktoscreen", (_i, [, steps]) => {
     const f = session.fade;
     if (f.level === 0 && !f.queue.some((q) => q.to === 1)) f.level = 1;
-    return fade(0, steps);
+    return fade(session, 0, steps);
   });
-  /** the screen is black from this instant — no ramp, nothing left running */
-  const blackNow = (): void => {
-    session.fade.cut(1);
-    session.fade.blanked = true;
-  };
-  r("blackscreen", blackNow);
+  r("blackscreen", () => blackNow(session));
+}
+
+/** theme, frame rate and volumes */
+function registerSettings(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // currenttheme([layer]): the looping theme currently playing (the layer arg
   // selects a mix channel in TI.EXE; we track a single theme, so it's ignored).
   //
@@ -433,6 +466,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     session.setThemeVolume(toNum(vol), toStr(track ?? "") || undefined);
     return 0;
   });
+}
+
+/** the CLUT palette effects and visualeffect */
+function registerScreenEffects(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   // clut(target)/mixclut(target,color,lo,hi,amt): the DreamFactory colour-
   // lookup-table effect. mixclut blends a palette range toward a colour (the
   // TAOOT corpus only ever uses "black" — a dim-to-dark), clut(target) restores the normal
@@ -465,7 +503,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
   r("clut", (_i, [target]) => {
     const t = toStr(target ?? "").toLowerCase();
     if (t === "") return;
-    if (t === "black") return blackNow();
+    if (t === "black") return blackNow(session);
     session.onClut(t, null);
   });
   /**
@@ -676,7 +714,11 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
       if (session.wiping) session.endWipe();
     })();
   };
+}
 
+/** the cursor, the no-op and editor commands, the modifier keys */
+function registerCursorAndStubs(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   /**
    * `hidecursor()` / `showcursor()` — the pointer goes away where the game draws
    * its own.
@@ -771,7 +813,7 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
     setscript: () => needSet("setscript", 0x28),
     scenescript: ([scene]) => {
       needSet("scenescript", 0x28);
-      if (!sceneByName(toStr(scene ?? ""))) miss("scenescript", "scene", scene);
+      if (!sceneByName(session, toStr(scene ?? ""))) miss("scenescript", "scene", scene);
     },
     paintingscript: ([scene, view, painting]) => {
       if (session.isV1) {
@@ -783,8 +825,8 @@ export function registerSceneBuiltins(ctx: BuiltinCtx): void {
         return;
       }
       needSet("paintingscript", session.isV5 ? 0x28 : 0xb);
-      if (!sceneByName(toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
-      const v = viewByName(toStr(scene ?? ""), toStr(view ?? ""));
+      if (!sceneByName(session, toStr(scene ?? ""))) miss("paintingscript", "scene", scene);
+      const v = viewByName(session, toStr(scene ?? ""), toStr(view ?? ""));
       if (!v) miss("paintingscript", "view", view);
       if (!v!.objects.some((o) => o.identifier.toLowerCase() === lc(painting))) miss("paintingscript", "painting", painting);
     },

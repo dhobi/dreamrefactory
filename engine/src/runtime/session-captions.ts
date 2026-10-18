@@ -91,7 +91,7 @@ export class SessionCaptions {
    * this is only used where a movie IS a few short lines.
    */
   movieCaption(movie: string, progress: number): CaptionLine | null {
-    if (!this.everyLineSubtitled || !this.session.subtitlesOn() || progress < 0) return null;
+    if (!this.everyLineSubtitled || !this.subtitlesOn() || progress < 0) return null;
     const key = movie.toLowerCase();
     const source = this.movieCaptionSources.get(key);
     if (!source) return null;
@@ -251,7 +251,7 @@ export class SessionCaptions {
    * is — {@link movieCaption}.)
    */
   captionLines(): CaptionLine[] {
-    if (!this.everyLineSubtitled || !this.session.subtitlesOn()) return [];
+    if (!this.everyLineSubtitled || !this.subtitlesOn()) return [];
     const out: CaptionLine[] = [];
     const t = this.themeNow;
     if (t?.bank === this.session.audioLib.bankOf(this.session.currentThemeName)) {
