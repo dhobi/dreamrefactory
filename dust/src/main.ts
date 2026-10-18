@@ -1550,12 +1550,11 @@ function sendGestureKey(ch: string, isEsc = false): void {
 
 
 /**
- * Boot the game. If it cannot produce a viewer, show the set browser instead.
+ * Open the set browser on a room, then boot the game over it.
  *
- * In that order and not the other way round, because the browser decodes every
- * frame of a set up front (~20 MB and about a second) and the game does not need
- * it. The fallback is the honest half of this: a boot that fails should leave
- * something on screen that says so and still shows the disc.
+ * The browser first, so a boot that fails still leaves something on screen: the
+ * disc, and the error that says why. The room it opens is the head of the boot
+ * bar too — the panel and one set's bytes and frames (see {@link browse}).
  */
 async function start(): Promise<void> {
   setScreenGammaRounding("trunc");

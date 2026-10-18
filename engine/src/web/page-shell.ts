@@ -349,15 +349,15 @@ const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
 const HELD_MS = 520;
 
 /**
- * The boot is done: hold the full bar for `ms`, then {@link waitForStart}.
+ * The boot is done: hold the full bar for {@link HELD_MS}, then {@link waitForStart}.
  *
  * Held because the fill's own `width` transition takes time, and swapping the
  * gauge out the instant the number says 100 means the bar never visibly arrives
  * — the whole point of counting real work was to earn that end, so it gets to be
  * watched reaching it.
  */
-export async function untilStarted(bootEl: HTMLElement, startEl: HTMLElement, autostart = false, ms = HELD_MS): Promise<void> {
-  await hold(ms);
+export async function untilStarted(bootEl: HTMLElement, startEl: HTMLElement, autostart = false): Promise<void> {
+  await hold(HELD_MS);
   await waitForStart(bootEl, startEl, autostart);
 }
 

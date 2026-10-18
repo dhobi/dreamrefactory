@@ -23,6 +23,7 @@
 import { readContainerFile, type DFContainerFile } from "@dreamfactory/engine/df/container";
 import { readAudioBank } from "@dreamfactory/engine/df/banks";
 import { readMovFile } from "@dreamfactory/engine/df/mov";
+import { ripName } from "@dreamfactory/engine/web/rip-files";
 import { decodeAudioContainer, type DecodedAudio } from "@dreamfactory/engine/df/audio";
 import { installLanguageMenu } from "@dreamfactory/chrome/lang-menu";
 import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
@@ -537,7 +538,7 @@ async function boot(): Promise<void> {
   bankPaths = new Map(
     inChosenEdition(paths, edition)
       .filter((p) => /\.(sfx|trk|11k|mov)$/i.test(p))
-      .map((p) => [p.split("/").pop()!.toLowerCase(), p]),
+      .map((p) => [ripName(p), p]),
   );
   file = loadDraft();
   let note: string;

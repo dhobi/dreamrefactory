@@ -258,14 +258,17 @@ export interface ManifestOptions {
  * paths to take and which copy of a repeated name wins is each game's `open`.
  */
 export async function readManifest(src: string, opts: ManifestOptions = {}): Promise<Record<string, number>> {
+  let res: Response;
   try {
-    const res = await fetch(src);
-    if (!res.ok && opts.orThrow) throw opts.orThrow(res.status);
-    return res.ok ? ((await res.json()) as Record<string, number>) : {};
+    res = await fetch(src);
+    if (res.ok) return (await res.json()) as Record<string, number>;
   } catch (e) {
     if (opts.quiet) return {};
     throw e;
   }
+  // outside the `try`, so `quiet` cannot swallow what `orThrow` raises
+  if (opts.orThrow) throw opts.orThrow(res.status);
+  return {};
 }
 
 /** the name a manifest path is indexed under: its basename, lowercased */

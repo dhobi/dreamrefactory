@@ -19,11 +19,10 @@
  * developer clicks (`optionkey() & shiftkey()` opens prop scripts and a testing
  * dialog) and would change how the game plays.
  */
+import { escHtml } from "@dreamfactory/engine/web/page-shell";
 
 export const EXITS = ["forward", "back", "left", "right", "back-left", "back-right"] as const;
 export const ARROWS = ["↑", "↓", "←", "→", "↙", "↘"] as const;
-
-const esc = (s: string): string => s.replace(/[&<>]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt" }[c]};`);
 
 /**
  * One slot of a `getframeaction` string, in words.
@@ -79,10 +78,10 @@ export const bugLine = (p: Place): string =>
 
 /** the readout's first line, as HTML */
 export const whereHtml = (p: Place): string =>
-  `<b>world ${p.world || "?"}</b>  stage ${p.stage}  region ${p.region}  <b>frame ${p.frame}</b>  <i>${esc(p.flat)}</i>`;
+  `<b>world ${p.world || "?"}</b>  stage ${p.stage}  region ${p.region}  <b>frame ${p.frame}</b>  <i>${escHtml(p.flat)}</i>`;
 
 /** the readout's second line: the six ways and where each leads, as HTML */
 export function exitsHtml(action: string): string {
   const words = action.trim().split(/\s+/);
-  return EXITS.map((_, i) => `${ARROWS[i]} ${esc(exitText(words[i]))}`).join("   ");
+  return EXITS.map((_, i) => `${ARROWS[i]} ${escHtml(exitText(words[i]))}`).join("   ");
 }
