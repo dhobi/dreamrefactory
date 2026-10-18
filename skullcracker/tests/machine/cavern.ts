@@ -274,7 +274,7 @@ test.skipIf(!haveRip())("cavern", async () => {
   const strikeBat = (b: Enemy, code = 0): void => {
     const a = game.foeAnchor(b, game.level!)!;
     const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
-    game.strikeFoe(b, code ? 0 : 47, { dx: 20, dy: 0 }, 1, a.y, box, code, { x: a.x, y: a.y });
+    game.strikeFoe(b, { damage: code ? 0 : 47, shove: { dx: 20, dy: 0 }, from: 1, mid: a.y, box, code, contact: { x: a.x, y: a.y } });
   };
   const hitBat = nearestOf("initbat")!;
   const gobsBefore = game.gobs.length;
@@ -338,7 +338,7 @@ test.skipIf(!haveRip())("cavern", async () => {
     const before = game.gobs.length;
     const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
     // a strong blow straight east, so a directed spray would all go one way
-    game.strikeFoe(g, 120, { dx: 90, dy: 0 }, 1, a.y, box, 0, { x: a.x, y: a.y });
+    game.strikeFoe(g, { damage: 120, shove: { dx: 90, dy: 0 }, from: 1, mid: a.y, box, contact: { x: a.x, y: a.y } });
     const thrown = game.gobs.slice(before).map((q) => ({ vx: q.vx / TICK_SCALE, vy: q.vy / TICK_SCALE }));
     const out = thrown.filter((q) => q.vx < -39 || q.vx > 40 || q.vy < -39 || q.vy > 40);
     if (thrown.length !== gobCount(120) || out.length || !thrown.some((q) => q.vx < 0) || !thrown.some((q) => q.vy < 0))
@@ -537,7 +537,7 @@ test.skipIf(!haveRip())("cavern", async () => {
     skel(e, FOES.initskel, e.clock, k);
     if (e.script !== 3 || !game.p.hidden) fail(`the grab should have him before the blow`);
     const box = { top: e.y - 120, left: e.x - 30, bottom: e.y, right: e.x + 30 };
-    game.strikeFoe(e, 20, { dx: 20, dy: 0 }, 1, e.y - 60, box);
+    game.strikeFoe(e, { damage: 20, shove: { dx: 20, dy: 0 }, from: 1, mid: e.y - 60, box });
     h.frame(40);
     if (e.script === 3 || !game.p.hidden || k.player.free)
       fail(`a blow mid-grab flinches it and leaves him undrawn and claimed: kind ${e.script}, hidden ${game.p.hidden}, free ${k.player.free}`);

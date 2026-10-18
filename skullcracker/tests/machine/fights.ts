@@ -173,8 +173,14 @@ test.skipIf(!haveRip())("fights", async () => {
         hp: 5000, max: 5000, script,
       } as Parameters<typeof game.strikeFoe>[0];
       let recoiled = false;
-      game.strikeFoe(e, 10, { dx: 40, dy: 0 }, 1, e.x, { top: 0, left: 0, bottom: 1, right: 1 }, 0, undefined,
-        { mass: 12, vx: 5, vy: 0, recoil: () => { recoiled = true; } });
+      game.strikeFoe(e, {
+        damage: 10,
+        shove: { dx: 40, dy: 0 },
+        from: 1,
+        mid: e.x,
+        box: { top: 0, left: 0, bottom: 1, right: 1 },
+        hitter: { mass: 12, vx: 5, vy: 0, recoil: () => { recoiled = true; } },
+      });
       return recoiled;
     };
     if (!exchanged("initkragg", 1)) fail(`kragg flying (state 1) answers 1, and the blow is exchanged`);

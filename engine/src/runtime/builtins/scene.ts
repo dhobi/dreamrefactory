@@ -58,22 +58,15 @@ const viewByName = (session: Session, scene: string, view: string) => {
  */
 const fade = async (session: Session, to: 0 | 1, steps: unknown): Promise<void> => {
   const n = Math.max(1, Number(steps) || 10);
-  if (to === 1 && !session.fade.snapshot) {
-    session.fade.snapshot = session.captureFrame?.() ?? null;
-  }
-  // step 1 is drawn on the tick it is asked on (0x435b90) — see tickFade
-  if (!session.fade.queue.length) session.fade.lastTick = ticksAt(session.clock.now) - 1;
-  session.fade.queue.push({ to, steps: n });
-  session.fade.pendingReveal = false;
+  // step 1 is drawn on the tick it is asked on (0x435b90) — see Fade.rampTo;
   // a ramp is a ramp of a named palette — see GameSession.fade.blanked
-  session.fade.blanked = false;
+  session.fade.rampTo(to, n, ticksAt(session.clock.now), () => session.captureFrame?.() ?? null);
   if (session.hasRealFrames || session.modalMovies) await session.transitionCtrl.ramp((n * 50) / 3);
 };
 
 /** the screen is black from this instant — no ramp, nothing left running */
 const blackNow = (session: Session): void => {
-  session.fade.cut(1);
-  session.fade.blanked = true;
+  session.fade.blankNow();
 };
 
 /**

@@ -7,8 +7,8 @@ export class Fade {
   level = 0;
   /**
    * The last tick a step was taken on, or null before the ramp has a start.
-   * The fade builtin sets it to the tick BEFORE the one it was asked on
-   * (builtins/scene.ts), so step 1 is that tick's however late the host's
+   * {@link rampTo} sets it to the tick BEFORE the one it was asked on
+   * (the fade builtin, builtins/scene.ts), so step 1 is that tick's however late the host's
    * next frame arrives — see SessionTransitions.tickFade.
    */
   lastTick: number | null = null;
@@ -29,8 +29,8 @@ export class Fade {
    * walks a NAMED palette to black, so it belongs to that palette and dies
    * with it — which is why opening a stage file lifts one (StageController.
    * openStageFile). `blackscreen` is the framebuffer: `0x43e650` clears it and
-   * nothing about swapping a stage draws over it again. Set by `blackNow`
-   * (builtins/scene.ts), cleared by either ramp and by the reveal in
+   * nothing about swapping a stage draws over it again. Set by {@link blankNow}
+   * (`blackNow`, builtins/scene.ts), cleared by either ramp and by the reveal in
    * SessionTransitions.tickFade.
    */
   blanked = false;
@@ -51,10 +51,51 @@ export class Fade {
    * held, no reveal owed. Whether the black was blanked on is left as it was.
    */
   cut(level: number): void {
+    this.settle(level);
+    this.pendingReveal = false;
+  }
+
+  /**
+   * {@link cut} with a reveal already owed left owed: no ramp left to run, no
+   * frame held, the screen at `level`. Opening a stage file settles the screen
+   * this way (StageController) — a movie's leftover reveal outlives it.
+   */
+  settle(level: number): void {
     this.queue.length = 0;
     this.snapshot = null;
-    this.pendingReveal = false;
     this.level = level;
+  }
+
+  /**
+   * Queue a ramp to `to` (0 clear, 1 black) over `steps` ticks, asked on tick
+   * `tick`. A ramp to black freezes the frame showing now (`capture`) unless
+   * one is held already. Step 1 is drawn on the tick it is asked on
+   * (0x435b90) — see SessionTransitions.tickFade — so a fresh ramp starts its
+   * clock on the tick before. A ramp owes no reveal and is a ramp of a named
+   * palette, not a blanked black.
+   */
+  rampTo(to: 0 | 1, steps: number, tick: number, capture: () => Fade["snapshot"]): void {
+    if (to === 1 && !this.snapshot) this.snapshot = capture();
+    if (!this.queue.length) this.lastTick = tick - 1;
+    this.queue.push({ to, steps });
+    this.pendingReveal = false;
+    this.blanked = false;
+  }
+
+  /** the screen is black from this instant — no ramp, nothing left running, BLANKED */
+  blankNow(): void {
+    this.cut(1);
+    this.blanked = true;
+  }
+
+  /**
+   * Whatever is showing is left to the reveal — SessionTransitions.tickFade
+   * lifts the black once the script falls quiet. `dropFrame` also forgets a
+   * frame a `screentoblack` froze, which would otherwise hold the black.
+   */
+  oweReveal(dropFrame = false): void {
+    if (dropFrame) this.snapshot = null;
+    this.pendingReveal = true;
   }
 
   /** {@link cut}, and forget a blanked black too: a fresh start at `level` */

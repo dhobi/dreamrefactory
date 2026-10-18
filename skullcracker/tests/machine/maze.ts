@@ -203,7 +203,7 @@ test.skipIf(!haveRip())("maze", async () => {
   if (pop?.kind !== "initslurp") fail(`a slurp should be nearest at x1000; it is ${pop?.kind}`);
   pop.hp = 1;
   const gobsWere = game.gobs.length;
-  game.strikeFoe(pop, 5, { dx: 0, dy: 0 }, 1, pop.y, { top: 0, left: 0, bottom: 1, right: 1 });
+  game.strikeFoe(pop, { damage: 5, shove: { dx: 0, dy: 0 }, from: 1, mid: pop.y, box: { top: 0, left: 0, bottom: 1, right: 1 } });
   const blood = game.gobs.length - gobsWere;
   h.frame(2);
   const burst = game.gobs.slice(gobsWere + blood);

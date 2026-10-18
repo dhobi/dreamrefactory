@@ -496,6 +496,19 @@ export function bodyPush(ladder: boolean): void {
   }
 }
 
+/**
+ * What one creature's step this frame works on, built once per creature in
+ * {@link stepEnemies}: the creature, its class, how long its animation runs,
+ * the pool it lives in and the level.
+ */
+interface EnemyStep {
+  readonly e: Enemy;
+  readonly foe: Foe;
+  readonly run: number;
+  readonly pool: Enemy[];
+  readonly lvl: Level | null;
+}
+
 export function stepEnemies(): void {
   const lvl = level;
   const pool = spawnedHere();
@@ -509,6 +522,7 @@ export function stepEnemies(): void {
     e.clock += TICK_SCALE;
     rally(e, foe);
     const run = e.anim.cels.length * e.anim.hold;
+    const ctx: EnemyStep = { e, foe, run, pool, lvl };
     /**
      * ...and a class that DOES something while the page plays its reaction.
      *
@@ -539,7 +553,7 @@ export function stepEnemies(): void {
       }
     }
     if (e.state === "dead") {
-      stepCorpse(e, foe, run, pool, lvl);
+      stepCorpse(ctx);
       continue;
     }
     // the water: it plays once where it was put and then the object goes, which is
@@ -562,12 +576,12 @@ export function stepEnemies(): void {
     // from there, its brain holding the weight off through the steered first
     // tag ({@link Enemy.weightless}). See {@link Foe.rallies}
     const aloft = foe.floats && !(foe.rallies && e.rallied);
-    fly(e, foe, lvl, aloft);
-    if (endFlinch(e, foe, run, cut, pool)) continue;
-    if (seekLever(e, foe, run)) continue;
+    fly(ctx, aloft);
+    if (endFlinch(ctx, cut)) continue;
+    if (seekLever(ctx)) continue;
     const step = settleStride(e, foe);
-    walkSwept(e, foe, lvl, step);
-    standOnSurface(e, foe, lvl, aloft);
+    walkSwept(ctx, step);
+    standOnSurface(ctx, aloft);
   }
 }
 
@@ -607,10 +621,11 @@ function rally(e: Enemy, foe: Foe): void {
 }
 
 /** a dead thing: what comes out of it, the wreck it throws, its fall, and then the body and the green ball */
-function stepCorpse(e: Enemy, foe: Foe, run: number, pool: Enemy[], lvl: Level | null): void {
-  shedAndHatch(e, foe, pool, lvl);
+function stepCorpse(ctx: EnemyStep): void {
+  const { e, foe, run, pool, lvl } = ctx;
+  shedAndHatch(ctx);
   throwWreck(e, foe);
-  dropCorpse(e, foe, lvl);
+  dropCorpse(ctx);
   /**
    * ...a death that is two scripts hands to its second half at its own
    * rate, as a flinch does ({@link FoeAnim.next}). The gunner TCop's kind 9
@@ -653,7 +668,8 @@ function stepCorpse(e: Enemy, foe: Foe, run: number, pool: Enemy[], lvl: Level |
  * `0x420832` and igor's `0x425629` install tag 1 and call `0x4208e0` on
  * the same frame ({@link Foe.sheds}, {@link HEAD}).
  */
-function shedAndHatch(e: Enemy, foe: Foe, pool: Enemy[], lvl: Level | null): void {
+function shedAndHatch(ctx: EnemyStep): void {
+  const { e, foe, pool, lvl } = ctx;
   const shed = foe.sheds;
   if (shed && !e.shed && e.clock >= shed.afterCels * e.anim.hold) {
     e.shed = true;
@@ -738,7 +754,8 @@ function throwWreck(e: Enemy, foe: Foe): void {
  * gang's −20, the dog's −12) leaves the foot above the ground, nothing
  * snaps it (`0x42ff56` only lifts), and gravity takes it down
  */
-function dropCorpse(e: Enemy, foe: Foe, lvl: Level | null): void {
+function dropCorpse(ctx: EnemyStep): void {
+  const { e, foe, lvl } = ctx;
   if (
     lvl &&
     e.vx === 0 &&
@@ -803,7 +820,8 @@ function dropCorpse(e: Enemy, foe: Foe, lvl: Level | null): void {
  * its OWN cel's box lands. This has to come before the animation states: the
  * mailbox's topple is four frames and its flight is far longer than that.
  */
-function fly(e: Enemy, foe: Foe, lvl: Level | null, aloft: boolean | undefined): void {
+function fly(ctx: EnemyStep, aloft: boolean | undefined): void {
+  const { e, foe, lvl } = ctx;
   if (e.vx !== 0 || e.vy !== 0) {
     // ...and a thing with no gravity keeps whatever velocity it was given:
     // the hover below is what moves level eight's boss up and down
@@ -873,7 +891,8 @@ function fly(e: Enemy, foe: Foe, lvl: Level | null, aloft: boolean | undefined):
 }
 
 /** the end of a reaction, in all its forms; true when the thing is done for the frame */
-function endFlinch(e: Enemy, foe: Foe, run: number, cut: FoeAnim | undefined, pool: Enemy[]): boolean {
+function endFlinch(ctx: EnemyStep, cut: FoeAnim | undefined): boolean {
+  const { e, foe, run, pool } = ctx;
   // a terminal flinch holds its last cel for good — the toppled mailbox
   if (e.state === "flinch" && e.anim.terminal && e.clock >= run) {
     e.clock = run;
@@ -988,7 +1007,8 @@ function endFlinch(e: Enemy, foe: Foe, run: number, cut: FoeAnim | undefined, po
  * somebody's territory, which is why a level that starts dry does not stay
  * dry, and why turning them off is a job rather than a one-off.
  */
-function seekLever(e: Enemy, foe: Foe, run: number): boolean {
+function seekLever(ctx: EnemyStep): boolean {
+  const { e, foe, run } = ctx;
   const aim =
     foe.lever && (e.state === "gait" || e.state === "lever") && !e.asleep
       ? leverFor(e, foe.lever.dir)
@@ -1185,7 +1205,8 @@ function settleStride(e: Enemy, foe: Foe): number {
  * and each piece is tested and pinned on its own. Same arithmetic, sampled
  * often enough to mean what it says.
  */
-function walkSwept(e: Enemy, foe: Foe, lvl: Level | null, step: number): void {
+function walkSwept(ctx: EnemyStep, step: number): void {
+  const { e, foe, lvl } = ctx;
   const SWEEP_PX = CLIMB_PX;
   if (step !== 0 && e.vx === 0 && (e.vy === 0 || foe.floats)) {
     const total = step * e.facing;
@@ -1255,7 +1276,8 @@ function walkSwept(e: Enemy, foe: Foe, lvl: Level | null, step: number): void {
  * ...and a thing with no gravity stands on nothing: it keeps the height its
  * record's point gave it ({@link Foe.floats})
  */
-function standOnSurface(e: Enemy, foe: Foe, lvl: Level | null, aloft: boolean | undefined): void {
+function standOnSurface(ctx: EnemyStep, aloft: boolean | undefined): void {
+  const { e, foe, lvl } = ctx;
   if (e.vx === 0 && e.vy === 0 && !aloft && !e.weightless) {
     const base = lvl ? footOf(e, lvl, foe) : e.y;
     const s = foeSurfaceUnder(e.x, base - CLIMB_PX, base + STICK_PX);

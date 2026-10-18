@@ -228,7 +228,7 @@ test.skipIf(!haveRip())("service", async () => {
   felled.hp = 1;
   const heard = recordSound(game);
   const gobsWere = game.gobs.length;
-  game.strikeFoe(felled, 120, { dx: 40, dy: 0 }, 1, felled.y, { top: 0, left: 0, bottom: 1, right: 1 });
+  game.strikeFoe(felled, { damage: 120, shove: { dx: 40, dy: 0 }, from: 1, mid: felled.y, box: { top: 0, left: 0, bottom: 1, right: 1 } });
   const goo = game.gobs.slice(gobsWere);
   if (goo.length !== 20 || !goo.some((g) => g.vx < 0) || !goo.some((g) => g.vx > 0))
     fail(`a blow of 120 from the west should throw twenty gobs both ways; ${goo.map((g) => Math.sign(g.vx)).join(" ")}`);

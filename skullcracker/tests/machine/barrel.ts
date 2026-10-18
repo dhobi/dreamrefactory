@@ -147,12 +147,12 @@ test.skipIf(!haveRip())("barrel", async () => {
   const packs = () => game.level!.guns.flat().length;
   const lie = packs();
   const paid = game.stats.score;
-  game.strikeFoe(gunner, gunner.hp + 1, { dx: 0, dy: 0 }, 1, gunner.y - 50, box);
+  game.strikeFoe(gunner, { damage: gunner.hp + 1, shove: { dx: 0, dy: 0 }, from: 1, mid: gunner.y - 50, box });
   if (gunner.state !== "dead" || gunner.anim.from !== "0x46c8f0 tag 3" || gunner.script !== 9 || gunner.tag !== 3)
     fail(`a gunner dies on 0x46c8f0 tag 3 (0x4148f4); it is on ${gunner.anim.from}`);
   if (!game.celRec(game.level!.sbk, 2130)?.body || !FOES.initcop.corpseTakesHits)
     fail(`2130..2133 carry a body, so the gunner's death takes blows`);
-  game.strikeFoe(gunner, 50, { dx: 0, dy: 0 }, 1, gunner.y - 50, box);
+  game.strikeFoe(gunner, { damage: 50, shove: { dx: 0, dy: 0 }, from: 1, mid: gunner.y - 50, box });
   if (game.stats.score - paid !== 2 * 550) fail(`a second blow in tag 3 pays 0x226 again; the score rose ${game.stats.score - paid}`);
   if (packs() !== lie) fail(`the blaster drops as tag 3 ENDS, not at the blow`);
   h.until(() => gunner.anim.from === "0x46c9a8 tag 0", 8);

@@ -37,23 +37,19 @@ function fistHitter(): FoeHitter {
 }
 
 /**
- * What a landed blow DOES to one creature — the class handler's own sequence,
- * lifted out of {@link landHits} so that something other than a fist can land
- * one. A flare is the other thing: {@link FLARE} gives it 100 and `0x43ad80`
- * hands it to the same handler a punch goes through.
+ * One blow as {@link strikeFoe} takes it.
  *
  * `from` is which way the blow travelled (the shove is along it) and `mid` is
  * how high it landed, which is the second thing a handler's flinch picks on.
  */
-export function strikeFoe(
-  e: Enemy,
-  damage: number,
-  shove: { dx: number; dy: number },
-  from: number,
-  mid: number,
-  box: { top: number; left: number; bottom: number; right: number },
+export interface FoeBlow {
+  damage: number;
+  shove: { dx: number; dy: number };
+  from: number;
+  mid: number;
+  box: { top: number; left: number; bottom: number; right: number };
   /**
-   * A CODE — and against a creature there is only one, which is fire.
+   * A CODE — and against a creature there is only one, which is fire. None is 0.
    *
    * `0x448c84`'s range test is the player's table and −9 falls below it, so
    * against the player this lands as ordinary damage. Against a creature it is
@@ -67,20 +63,30 @@ export function strikeFoe(
    * A class with no such handler is not set on fire and takes nothing, which
    * is why the flamer crosses these sixteen levels touching almost nothing.
    */
-  code = 0,
+  code?: number;
   /**
    * Where the blow met the body — the middle of the two boxes' overlap, which
    * `0x43041e` hands the hit handler and the handler hands `0x40cba0` as the
    * point the goo leaves from.
    */
-  contact?: { x: number; y: number },
+  contact?: { x: number; y: number };
   /**
    * The hitter, for `0x430470`'s exchange: its mass `obj+0xe`, its own velocity
    * in pixels a frame, and where its share of the exchange goes. The player's
    * fist by default.
    */
-  hitter: FoeHitter = fistHitter(),
-): void {
+  hitter?: FoeHitter;
+}
+
+/**
+ * What a landed blow DOES to one creature — the class handler's own sequence,
+ * lifted out of {@link landHits} so that something other than a fist can land
+ * one. A flare is the other thing: {@link FLARE} gives it 100 and `0x43ad80`
+ * hands it to the same handler a punch goes through.
+ */
+export function strikeFoe(e: Enemy, struck: FoeBlow): void {
+  const { shove, from, mid, box, contact, hitter = fistHitter() } = struck;
+  let { damage, code = 0 } = struck;
   if (!level) return;
   const foe = FOES[e.kind];
   // a handler that asks its own state first — `0x441d26`, and see {@link GATES}
