@@ -69,6 +69,12 @@ export interface Aim {
   boxes?(name: string): { x0: number; y0: number; x1: number; y1: number }[];
   /** the named hotspot's rectangle in the current view, or null */
   hotspot(name: string): { x0: number; y0: number; x1: number; y1: number } | null;
+  /**
+   * The framebuffer pixel a click aimed at (x, y) arrives at, when the driver
+   * sends clicks through a scaled canvas; absent, every pixel reaches itself.
+   * See {@link sweep}.
+   */
+  reach?(x: number, y: number): { x: number; y: number };
   /** the game's framebuffer width — `host.screen.width`, never the canvas's */
   width: number;
   /** and its height. See the note above on whose fact this is */
@@ -78,20 +84,57 @@ export interface Aim {
 /** the sweep grid — fine enough for a small prop, coarse enough to be quick */
 export const AIM_STEP = 4;
 
+/** the hit test names `want` at (x, y) as a thing a click can reach (or, with `props`, the click path's prop) */
+export function thingAt(a: Aim, want: string, x: number, y: number, props = false): boolean {
+  const hit = a.hitTest(x, y);
+  if (hit.name?.toLowerCase() === want && ["actor", "prop", "button", "painting"].includes(hit.type)) return true;
+  return props && a.propUnder(x, y)?.toLowerCase() === want;
+}
+
+/** the hit test names the view hotspot `want` at (x, y) */
+export function spotAt(a: Aim, want: string, x: number, y: number): boolean {
+  const hit = a.hitTest(x, y);
+  // a view hotspot is a "painting" to the engine's own hit test — "scene" is
+  // its answer for the room BEHIND the hotspots, and carries the scene's name
+  return hit.type === "painting" && hit.name?.toLowerCase() === want;
+}
+
+/**
+ * The first point of a sweep whose click REACHES the thing, or null — the sweep
+ * given as rectangles walked on a grid.
+ *
+ * Reaches, and not merely "hits": a click is sent as a CLIENT pixel and the
+ * page floors it back (`canvasPoint`). On a canvas drawn smaller than 1:1 — a
+ * phone shows 640x480 at about 375 px across — some framebuffer pixels have no
+ * client pixel of their own, and a click aimed at one arrives at the pixel
+ * beside it ({@link Aim.reach}). The sweep meets a thing at its top-left edge
+ * first, so that neighbour is usually outside it. On phone Chrome and Safari the
+ * c73 pocket watch, a 6x3 sprite, was clicked beside and never picked up, and
+ * the deck map then refused every jump ("Jumping to red areas disabled").
+ */
+export function sweep(
+  hits: (x: number, y: number) => boolean,
+  rects: { x0: number; y0: number; x1: number; y1: number }[],
+  step: number,
+  reach?: (x: number, y: number) => { x: number; y: number },
+): { x: number; y: number } | null {
+  for (const r of rects) {
+    for (let y = r.y0; y <= r.y1; y += step) {
+      for (let x = r.x0; x <= r.x1; x += step) {
+        const to = reach ? reach(x, y) : { x, y };
+        if (hits(to.x, to.y)) return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
 /** a point inside the named hotspot that the hit test agrees IS that hotspot */
 export function aimAtHotspot(a: Aim, name: string): { x: number; y: number } | null {
   const want = name.toLowerCase();
   const r = a.hotspot(want);
   if (!r) return null;
-  for (let y = r.y0; y <= r.y1; y += AIM_STEP) {
-    for (let x = r.x0; x <= r.x1; x += AIM_STEP) {
-      const hit = a.hitTest(x, y);
-      // a view hotspot is a "painting" to the engine's own hit test — "scene" is
-      // its answer for the room BEHIND the hotspots, and carries the scene's name
-      if (hit.type === "painting" && hit.name?.toLowerCase() === want) return { x, y };
-    }
-  }
-  return null;
+  return sweep((x, y) => spotAt(a, want, x, y), [r], AIM_STEP, a.reach);
 }
 
 /**
@@ -107,39 +150,22 @@ export function aimAtThing(a: Aim, name: string): { x: number; y: number } | nul
     const spot = aimAtHotspot(a, want);
     if (spot) return spot;
   }
-  const kinds = new Set(["actor", "prop", "button", "painting"]);
   const only = a.where?.(want) ?? null;
-  if (only) {
-    for (const r of only) {
-      for (let y = r.y0; y <= r.y1; y += AIM_STEP) {
-        for (let x = r.x0; x <= r.x1; x += AIM_STEP) {
-          const hit = a.hitTest(x, y);
-          if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
-        }
-      }
-    }
-    return null;
-  }
-  for (let y = 2; y < a.height; y += AIM_STEP) {
-    for (let x = 2; x < a.width; x += AIM_STEP) {
-      const hit = a.hitTest(x, y);
-      if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
-      if (!a.inFlat && a.propUnder(x, y)?.toLowerCase() === want) return { x, y };
-    }
-  }
+  if (only) return sweep((x, y) => thingAt(a, want, x, y), only, AIM_STEP, a.reach);
+  const screen = { x0: 2, y0: 2, x1: a.width - 1, y1: a.height - 1 };
+  const seen = sweep((x, y) => thingAt(a, want, x, y, !a.inFlat), [screen], AIM_STEP, a.reach);
+  if (seen) return seen;
   // A world sprite far off is drawn the way the engines size it, truncating, so
   // Titanic's pocket watch on the c73 table comes out 6x3 and the grid above
   // steps over it. Every pixel of where it is drawn, then: only on a miss, and
   // only inside the thing's own box, so a wait for something absent stays cheap.
-  for (const r of a.boxes?.(want) ?? []) {
-    for (let y = Math.max(0, r.y0); y <= Math.min(a.height - 1, r.y1); y++) {
-      for (let x = Math.max(0, r.x0); x <= Math.min(a.width - 1, r.x1); x++) {
-        const hit = a.hitTest(x, y);
-        if (hit.name?.toLowerCase() === want && kinds.has(hit.type)) return { x, y };
-      }
-    }
-  }
-  return null;
+  const boxes = (a.boxes?.(want) ?? []).map((r) => ({
+    x0: Math.max(0, r.x0),
+    y0: Math.max(0, r.y0),
+    x1: Math.min(a.width - 1, r.x1),
+    y1: Math.min(a.height - 1, r.y1),
+  }));
+  return sweep((x, y) => thingAt(a, want, x, y), boxes, 1, a.reach);
 }
 
 /**
@@ -182,6 +208,9 @@ export function flatWhere(s: any, n: string): { x0: number; y0: number; x1: numb
 export function aimSource(): string {
   return (
     `const AIM_STEP = ${AIM_STEP};\n` +
+    `const thingAt = ${thingAt.toString()};\n` +
+    `const spotAt = ${spotAt.toString()};\n` +
+    `const sweep = ${sweep.toString()};\n` +
     `const flatWhere = ${flatWhere.toString()};\n` +
     `const aimAtHotspot = ${aimAtHotspot.toString()};\n` +
     `const aimAtThing = ${aimAtThing.toString()};\n`

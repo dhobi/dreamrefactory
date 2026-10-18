@@ -533,6 +533,17 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
           // a 1024x768 canvas, and a hit test is asked in framebuffer pixels
           width: dbg.host.screen.width,
           height: dbg.host.screen.height,
+          // where a click sent through this canvas arrives: on a phone the
+          // canvas is drawn smaller than 1:1 and some pixels cannot be clicked
+          // (aim.ts, `sweep`) — the page's own floor, applied to clickAt's point
+          reach: (x: number, y: number) => {
+            const r = canvas.getBoundingClientRect();
+            const c = clientPointFor(x, y, r, canvas);
+            return {
+              x: Math.floor(((c.x - r.left) / r.width) * canvas.width),
+              y: Math.floor(((c.y - r.top) / r.height) * canvas.height),
+            };
+          },
           hitTest: (x: number, y: number) => s.hitTestAt(x, y),
           propUnder: (x: number, y: number) => {
             const p = v.propUnder(x, y);
