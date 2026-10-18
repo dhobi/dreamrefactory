@@ -51,6 +51,7 @@ import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { SCREEN_H, SCREEN_W, canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
+import { BootBar } from "@dreamfactory/engine/web/page-shell";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { VERSION, installVersion } from "@dreamfactory/chrome/version";
 import { SkullFiles } from "../files";
@@ -922,17 +923,13 @@ function frameLoop(now: number): void {
 async function boot(): Promise<void> {
   installVersion();
   const say = $<HTMLSpanElement>("bootsay");
-  const pct = $<HTMLSpanElement>("bootpct");
-  const charge = $<HTMLDivElement>("charge");
   const conduit = $<HTMLDivElement>("conduit");
-
-  const progress = (fraction: number, what: string): void => {
-    const n = Math.max(0, Math.min(100, Math.round(fraction * 100)));
-    charge.style.width = `${n}%`;
-    conduit.setAttribute("aria-valuenow", String(n));
-    pct.textContent = `${n}%`;
-    say.textContent = what;
-  };
+  const progress = new BootBar(
+    $<HTMLDivElement>("charge"),
+    $<HTMLSpanElement>("bootpct"),
+    (pct) => conduit.setAttribute("aria-valuenow", String(pct)),
+    (label) => (say.textContent = label),
+  ).set;
 
   progress(0, "reading the disc…");
   files = await SkullFiles.open();

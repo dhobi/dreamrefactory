@@ -69,11 +69,12 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { BootCaption, busySpinner, titleRise, waitForStart } from "@dreamfactory/engine/web/page-shell";
+import { BootBar, BootCaption, brandFallback, busySpinner, titleRise, untilStarted } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { readManifest } from "@dreamfactory/engine/web/rip-files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import {
   GestureKey,
@@ -369,14 +370,7 @@ function say(line: string): void {
 }
 /** the title card, which rises rather than leaving — see #brand in dust/index.html */
 const brandEl = document.getElementById("brand") as HTMLImageElement | null;
-function dropBrand(): void {
-  if (!brandEl) return;
-  brandEl.hidden = true;
-  document.body.classList.add("nobrand");
-}
-// a module runs after parsing, so the image may already have failed by now
-if (brandEl?.complete && brandEl.naturalWidth === 0) dropBrand();
-else brandEl?.addEventListener("error", dropBrand);
+brandFallback(brandEl);
 /** the fuse: the bar, the burnt length, the boot's newest word, the percentage */
 const bootEl = document.getElementById("boot") as HTMLElement;
 const startEl = document.getElementById("start") as HTMLButtonElement;
@@ -499,60 +493,25 @@ async function fetchWatched(url: string, from: number, to: number): Promise<Resp
 }
 
 
-/** the bar only ever goes forwards, whatever order the answers arrive in */
-let burnt = 0;
-let shownPct = -1;
-function progress(f: number, label?: string): void {
-  burnt = Math.max(burnt, Math.min(1, f));
-  const pct = Math.round(burnt * 100);
-  if (pct !== shownPct) {
-    shownPct = pct;
-    burnEl.style.width = `${pct}%`;
-    bootPctEl.textContent = `${pct}%`;
-    fuseValueEl.value = pct;
-  }
-  // the caption is one line and the newest one wins: what a player watches for
-  // two seconds is the engine naming what it just opened
-  if (label) caption.say(label);
-}
-
 /**
- * The title card rises, by FLIP.
- *
- * Measure where it is, switch the state, measure where it landed, then play the
- * difference back as a transform from the old rect to the new one. Which is not
- * ceremony: the two states size the image by DIFFERENT properties — centred by
- * `max-height: 46vh`, risen by `height: 100%` of a `clamp()`ed band — and a
- * transition between two sizing modes has nothing to interpolate. A transform
- * does, and it is the one property that animates without touching layout, which
- * matters here because the game's frame loop starts in the same frame this does.
- *
- * The fuse is PINNED before the switch and faded after it. It is a flex child of
- * the band the card is rising into, so the class change removes it from the
- * layout it is standing in; freezing it at the rect it already occupies lets it
- * fade out where the player last saw it instead of jumping to the top with the
- * logo.
+ * The bar only ever goes forwards, whatever order the answers arrive in. The
+ * caption is one line and the newest one wins: what a player watches for two
+ * seconds is the engine naming what it just opened.
  */
-/** a real pause, for the one place that wants to be SEEN rather than be quick */
-const hold = (ms: number): Promise<void> =>
-  new Promise((r) => setTimeout(r, ms));
+const fuse = new BootBar(
+  burnEl,
+  bootPctEl,
+  (pct) => (fuseValueEl.value = pct),
+  (label) => caption.say(label),
+);
+const progress = fuse.set;
 
 /**
- * The boot is done; wait to be told to go.
+ * The boot is done; wait to be told to go (`untilStarted`,
+ * engine/src/web/page-shell.ts): the burnt-out fuse is held a moment, then the
+ * gauge crossfades to the button in the same slot (a fixed-height #boot, see
+ * the styles) and the button takes focus.
  *
- * Held open for {@link BURN_OUT} first, because the fuse's own `width` transition
- * is 380ms and swapping it out the instant the number says 100 means the bar never
- * visibly arrives — the whole point of counting fetches was to earn that end, so
- * it gets to be watched reaching it.
- *
- * Then the gauge crossfades to the button in the same slot (a fixed-height #boot,
- * see the styles) and the button takes focus, so this is a keyboard gesture as
- * much as a pointer one — Enter and Space are what a focused button already does,
- * and the AudioContext accepts either.
- */
-const BURN_OUT = 520;
-
-/**
  * Except on a page that says not to wait — `<meta name="autostart">`.
  *
  * The speedrun workbench (dust/speedrun/) declares it, and the reason is what
@@ -567,11 +526,6 @@ const BURN_OUT = 520;
  * measures gestures and frames, not whether the intro was scored.
  */
 const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
-
-async function untilStarted(): Promise<void> {
-  await hold(BURN_OUT);
-  await waitForStart(bootEl, startEl, AUTOSTART);
-}
 
 /** the title card rises off the burnt-out fuse, by FLIP, once however many
  *  failure paths reach it (engine/src/web/page-shell.ts) */
@@ -779,8 +733,7 @@ addEventListener("keydown", (e) => {
  */
 async function browse(): Promise<void> {
   progress(...HEAD_STEPS[0]);
-  const res = await fetch(siteUrl("gamefiles.json"));
-  const manifest: Record<string, number> = res.ok ? await res.json() : {};
+  const manifest = await readManifest(siteUrl("gamefiles.json"));
   const sets = Object.keys(manifest)
     .filter((p) => /^gamefiles\/dustcd\/DATA\/.+\.SET$/i.test(p))
     .map((p) => p.split("/").pop()!)
@@ -836,7 +789,7 @@ async function runBoot(): Promise<void> {
   // for the same middle of the same page, and only one of them is the picture.
   const bootSay = (l: string) => {
     say(l);
-    progress(burnt, l.trim());
+    fuse.say(l.trim());
   };
   progress(...HEAD_STEPS[3]);
   // the build the reader is looking at, first thing in its own account —
@@ -1016,7 +969,7 @@ async function runBoot(): Promise<void> {
    * its end instead of being started and abandoned) and gives the movie player
    * something that renders it.
    */
-  await untilStarted();
+  await untilStarted(bootEl, startEl, AUTOSTART);
   /**
    * The canvas is NOT blank here: the fallback browser painted its preview room
    * onto it during the load, behind the title card — harmless when the game's
@@ -1597,12 +1550,11 @@ function sendGestureKey(ch: string, isEsc = false): void {
 
 
 /**
- * Boot the game. If it cannot produce a viewer, show the set browser instead.
+ * Open the set browser on a room, then boot the game over it.
  *
- * In that order and not the other way round, because the browser decodes every
- * frame of a set up front (~20 MB and about a second) and the game does not need
- * it. The fallback is the honest half of this: a boot that fails should leave
- * something on screen that says so and still shows the disc.
+ * The browser first, so a boot that fails still leaves something on screen: the
+ * disc, and the error that says why. The room it opens is the head of the boot
+ * bar too — the panel and one set's bytes and frames (see {@link browse}).
  */
 async function start(): Promise<void> {
   setScreenGammaRounding("trunc");
@@ -1617,7 +1569,7 @@ start().catch((e) => {
   // a boot that threw has an account of itself and no picture: raise the card so
   // the log has the page, and stop the fuse where it stopped rather than leaving
   // it burning at whatever fraction it had reached
-  progress(burnt, String(e));
+  fuse.say(String(e));
   raiseTitle();
   logEl.hidden = false;
 });

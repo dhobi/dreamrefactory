@@ -36,6 +36,7 @@
  * hand-written sheet already makes.
  */
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
+import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 
 export interface Recorder {
   /** is it armed */
@@ -93,13 +94,12 @@ export function attachRecorder(opts: RecorderOptions): Recorder {
     write(`key(${e.key})`);
   };
 
+  const canvasPixel = canvasCoordsFor(canvas, canvas, Math.floor);
   const onPoint = (e: PointerEvent): void => {
     if (!on || !e.isTrusted) return;
     // main.ts's own mapping, floor and all, so the pixel recorded is the pixel
     // the engine was handed
-    const r = canvas.getBoundingClientRect();
-    const x = Math.floor(((e.clientX - r.left) / r.width) * canvas.width);
-    const y = Math.floor(((e.clientY - r.top) / r.height) * canvas.height);
+    const { x, y } = canvasPixel(e);
 
     const name = nameAt(win, x, y);
     write(name ? `click(${name})` : `clickAt(${x}, ${y})`);

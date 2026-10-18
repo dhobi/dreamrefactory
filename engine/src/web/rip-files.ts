@@ -67,7 +67,15 @@ export abstract class RipFiles implements HostFiles {
    *  `FileStore` has the same hook, and the same canvas-corner spinner on it */
   onBusyChange: ((inFlight: number) => void) | null = null;
 
-  abstract setDisc(disc: number): void;
+  /**
+   * The game is on another disc. Nothing to do for a store whose every disc is
+   * indexed at once with no copy that differs between them, which is all but
+   * RedJack's: a rip with per-disc copies of a name overrides this.
+   */
+  setDisc(_disc: number): void {
+    // every disc is indexed already
+  }
+
   abstract activeEdition(): string;
   abstract serverSetNames(): string[];
 
@@ -234,6 +242,38 @@ export abstract class RipFiles implements HostFiles {
   evict(): number {
     return 0;
   }
+}
+
+export interface ManifestOptions {
+  /** a fetch that fails outright (offline, blocked) or a body that is not JSON reads as no manifest too, rather than throwing */
+  quiet?: boolean;
+  /** for a page that cannot run without one: what to throw, given the status, instead of reading nothing */
+  orThrow?: (status: number) => Error;
+}
+
+/**
+ * The manifest the dev server and the build both publish, read from `src`:
+ * every served path → its size in bytes. Nothing at all where it could not be
+ * read, so a page that indexed nothing can say so instead of throwing. Which
+ * paths to take and which copy of a repeated name wins is each game's `open`.
+ */
+export async function readManifest(src: string, opts: ManifestOptions = {}): Promise<Record<string, number>> {
+  let res: Response;
+  try {
+    res = await fetch(src);
+    if (res.ok) return (await res.json()) as Record<string, number>;
+  } catch (e) {
+    if (opts.quiet) return {};
+    throw e;
+  }
+  // outside the `try`, so `quiet` cannot swallow what `orThrow` raises
+  if (opts.orThrow) throw opts.orThrow(res.status);
+  return {};
+}
+
+/** the name a manifest path is indexed under: its basename, lowercased */
+export function ripName(path: string): string {
+  return path.split("/").pop()!.toLowerCase();
 }
 
 /**

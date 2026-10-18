@@ -1,4 +1,4 @@
-import { RipFiles } from "@dreamfactory/engine/web/rip-files";
+import { RipFiles, readManifest, ripName } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
@@ -33,9 +33,6 @@ import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 /** the name the engine asks for → the name this rip ships it under */
 const ALIASES: Record<string, string> = { bootfile: "bootfile.boot" };
 
-/** this page's own URL for a served path, so it runs from any directory */
-const url = (path: string): string => pageUrl(path);
-
 export class RedJackFiles extends RipFiles {
   /** a name more than one disc carries → each disc's copy (1-based) */
   private readonly copies = new Map<string, Map<number, { url: string; size: number }>>();
@@ -50,19 +47,21 @@ export class RedJackFiles extends RipFiles {
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<RedJackFiles> {
     const store = new RedJackFiles();
-    const res = await fetch(url("gamefiles.json"));
-    const manifest: Record<string, number> = res.ok ? await res.json() : {};
+    // through pageUrl, so the page runs from any directory
+    const manifest = await readManifest(pageUrl("gamefiles.json"));
+    /** which disc each name was first found on, while the index is built */
+    const discOf = new Map<string, number>();
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
-      const base = path.split("/").pop()!.toLowerCase();
+      const base = ripName(path);
       const disc = Number(/\/RJDisk(\d)\//i.exec(path)?.[1] ?? 0);
       if (disc) store.tree.set(path.slice(root.length), manifest[path]);
-      const copy = { url: url(path), size: manifest[path] };
+      const copy = { url: pageUrl(path), size: manifest[path] };
       if (store.urls.has(base)) {
         // a second disc's copy: kept, and served when that disc is mounted
         let byDisc = store.copies.get(base);
         if (!byDisc) {
-          byDisc = new Map([[store.discOf.get(base) ?? 0, { url: store.urls.get(base)!, size: store.sizes.get(base)! }]]);
+          byDisc = new Map([[discOf.get(base) ?? 0, { url: store.urls.get(base)!, size: store.sizes.get(base)! }]]);
           store.copies.set(base, byDisc);
         }
         if (!byDisc.has(disc)) byDisc.set(disc, copy);
@@ -71,7 +70,7 @@ export class RedJackFiles extends RipFiles {
       // until the game names a disc, the lowest wins: the keys are sorted
       store.urls.set(base, copy.url);
       store.sizes.set(base, copy.size);
-      store.discOf.set(base, disc);
+      discOf.set(base, disc);
     }
     return store;
   }
@@ -81,9 +80,6 @@ export class RedJackFiles extends RipFiles {
     const k = name.toLowerCase();
     return ALIASES[k] ?? k;
   }
-
-  /** which disc each name was first found on, while the index is built */
-  private readonly discOf = new Map<string, number>();
 
   /**
    * The game is on another disc: every name more than one disc carries is now

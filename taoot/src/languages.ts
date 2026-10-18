@@ -115,18 +115,6 @@ export const LANG_FLAT = { choose: "choose", wait: "wait" } as const;
 export const EDITION_STORAGE_KEY = TITANIC.storageKey;
 
 /**
- * The key the EDITION was kept under while it was called a language, still read
- * (once, as a fallback) so that a reader who chose the German data before the two
- * axes were split keeps the German data after.
- *
- * It is deliberately not the UI language's key, which is what it would have been
- * if `?lang=`'s new meaning had taken the matching storage name: everyone who had
- * ever picked a data language would have had their PAGE language pinned to it, and
- * a German-reading browser on the English disc would have gone quietly English.
- */
-export const LEGACY_EDITION_KEY = TITANIC.legacyKey!;
-
-/**
  * Editions that are not one of the six {@link LANGUAGES}: a different cut of the
  * game rather than a translation of it.
  *

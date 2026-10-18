@@ -63,7 +63,7 @@
 
 import { pstrAtChecked } from "./binary";
 import { Container } from "./container";
-import { RawSaveFile, readSaveFile, writeSaveFile } from "./savegame";
+import { RawSaveFile, ScriptGlobals, readSaveFile, writeSaveFile } from "./savegame";
 import {
   DFVALUE_BOOLEAN,
   DFVALUE_NUMBER_WRITTEN,
@@ -813,7 +813,7 @@ export interface SavedStandpointV1 {
 }
 
 /** everything this reader takes out of a `.rtd` */
-export interface SaveGameV1 {
+export interface SaveGameV1 extends ScriptGlobals {
   /** the version string the original loader gates on ("dust 0.3") */
   title: string;
   /** the nine resource path prefixes, in the engine's own order */
@@ -848,10 +848,6 @@ export interface SaveGameV1 {
   /** open sound banks, by file name */
   bankFiles: string[];
   vars: SavedVar[];
-  numGlobals: Map<string, number>;
-  strGlobals: Map<string, string>;
-  /** the {@link numGlobals} whose record is a BOOLEAN (type 2) */
-  boolGlobals: Set<string>;
   loops: SavedLoopV1[];
   /** characters caught mid-stride */
   walks: SavedWalkV1[];

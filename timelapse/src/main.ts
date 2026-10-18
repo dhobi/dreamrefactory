@@ -28,6 +28,7 @@ import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import {
+  BootBar,
   BootCaption,
   GestureAudio,
   PageLog,
@@ -35,7 +36,7 @@ import {
   screenPlate,
   showVersion,
   titleRise,
-  waitForStart,
+  untilStarted,
 } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
@@ -188,22 +189,18 @@ const PLANNED = 0.07;
 /** and where the prefetch leaves it: the last few per cent are the boot's own */
 const FETCHED = 0.96;
 
-/** the bar only ever goes forwards, whatever order the answers arrive in */
-let charged = 0;
-let shownPct = -1;
-function progress(f: number, label?: string): void {
-  charged = Math.max(charged, Math.min(1, f));
-  const pct = Math.round(charged * 100);
-  if (pct !== shownPct) {
-    shownPct = pct;
-    chargeEl.style.width = `${pct}%`;
-    bootPctEl.textContent = `${pct}%`;
-    conduitEl.setAttribute("aria-valuenow", String(pct));
-  }
-  // the caption is one line and the newest one wins: what a player watches is
-  // the loader naming what it is opening
-  if (label) caption.say(label);
-}
+/**
+ * The bar only ever goes forwards, whatever order the answers arrive in. The
+ * caption is one line and the newest one wins: what a player watches is the
+ * loader naming what it is opening.
+ */
+const bar = new BootBar(
+  chargeEl,
+  bootPctEl,
+  (pct) => conduitEl.setAttribute("aria-valuenow", String(pct)),
+  (label) => caption.say(label),
+);
+const progress = bar.set;
 
 /** the network meter (chrome/src/net-meter.ts), read on a timer while the prefetch runs */
 const TICK_MS = 250;
@@ -215,24 +212,6 @@ let bytesLeft: (() => number) | null = null;
 let showAbout: () => void = () => {};
 /** the boot caption: the name of the file being opened, or the rate while bytes are arriving */
 const caption = new BootCaption(bootSayEl, () => meter.caption(performance.now(), bytesLeft?.() ?? 0));
-
-/** a real pause, for the one place that wants to be SEEN rather than be quick */
-const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-/**
- * The disc is read; wait to be told to go (engine/src/web/page-shell.ts).
- *
- * Held open for {@link CHARGED} first, because the fill's own `width` transition
- * is 380ms and swapping it out the instant the number says 100 means the bar
- * never visibly arrives — the whole point of counting real bytes was to earn that
- * end, so it gets to be watched reaching it. Then the gauge crossfades to the
- * button in the same slot.
- */
-const CHARGED = 520;
-async function untilStarted(): Promise<void> {
-  await hold(CHARGED);
-  await waitForStart(bootEl, startEl);
-}
 
 /** the title card rises, by FLIP (engine/src/web/page-shell.ts); the failure paths reach here too */
 const raiseTitle = titleRise(bootEl, brandEl);
@@ -348,7 +327,7 @@ async function main(): Promise<void> {
   const missing: string[] = [];
   await Promise.all(
     prefetch.map(async (name) => {
-      progress(charged, `opening ${name}`);
+      bar.say(`opening ${name}`);
       const bytes = await files.load(name, (n) => {
         arrived += n;
         // The denominator GROWS rather than being fixed at the manifest's total,
@@ -472,7 +451,7 @@ async function main(): Promise<void> {
   }
 
   progress(1, "ready");
-  await untilStarted();
+  await untilStarted(bootEl, startEl);
   ensureAudio();
   raiseTitle();
 

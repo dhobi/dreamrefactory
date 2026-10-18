@@ -226,7 +226,7 @@ test("there is one set to offer, once the disc is known to carry it", async () =
   const files = await DustFiles.open();
   expect(files.serverSetNames()).toEqual(["town.set"]);
   // one volume and nothing to swap or evict: these are answers, not stubs
-  files.setDisc();
+  files.setDisc(2);
   expect(files.activeEdition()).toBe("dust");
   expect(files.evict()).toBe(0);
 });

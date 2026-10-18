@@ -54,11 +54,8 @@
  */
 
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
-import { readStream } from "@dreamfactory/engine/web/rip-files";
+import { readManifest, readStream, ripName } from "@dreamfactory/engine/web/rip-files";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
-
-/** this page's own URL for a served path, so it runs from any directory */
-const url = (path: string): string => pageUrl(path);
 
 /**
  * Basenames where the INSTALLED copy is the real one, not the CD's.
@@ -107,9 +104,7 @@ export class SkullFiles {
 
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<SkullFiles> {
-    const res = await fetch(url("gamefiles.json"));
-    const manifest: Record<string, number> = res.ok ? await res.json() : {};
-    return SkullFiles.index(manifest, url, root);
+    return SkullFiles.index(await readManifest(pageUrl("gamefiles.json")), pageUrl, root);
   }
 
   /**
@@ -135,7 +130,7 @@ export class SkullFiles {
     const store = new SkullFiles();
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
-      const base = path.split("/").pop()!.toLowerCase();
+      const base = ripName(path);
       const installed = path.toLowerCase().includes(INSTALLED_DIR);
       // first path wins, EXCEPT where the installed copy is the right one and
       // this is it (see INSTALLED_WINS)

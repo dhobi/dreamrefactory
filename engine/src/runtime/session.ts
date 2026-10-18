@@ -547,7 +547,7 @@ export class GameSession {
   get wipe() { return this.transitionCtrl.wipe; }
   get wiping() { return this.transitionCtrl.wiping; }
   get compositing() { return this.transitionCtrl.compositing; }
-  get fading() { return this.transitionCtrl.fading; }
+  get fading() { return this.fade.fading; }
   tickWipe(...a: Parameters<SessionTransitions["tickWipe"]>) { return this.transitionCtrl.tickWipe(...a); }
   endWipe(...a: Parameters<SessionTransitions["endWipe"]>) { return this.transitionCtrl.endWipe(...a); }
   tickFade(...a: Parameters<SessionTransitions["tickFade"]>) { return this.transitionCtrl.tickFade(...a); }
@@ -749,7 +749,7 @@ export class GameSession {
    */
   frameWait(): Promise<void> {
     if (!(this.nominalTime || this.sheetClock) || !this.bootCtrl.coreLoaded) {
-      return this.nextFrame().then(() => this.transitionCtrl.untilRampEnds());
+      return this.nextFrame().then(() => this.fade.whenRampEnds());
     }
     const tick = this.timeCtrl.nextTick();
     void this.nextFrame();

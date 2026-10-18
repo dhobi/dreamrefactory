@@ -85,7 +85,14 @@ export interface GameEditions {
   editions: readonly Edition[];
   /** where the reader's choice is remembered */
   storageKey: string;
-  /** a key still read ONCE as a fallback, from before the two axes split */
+  /**
+   * A key still read ONCE as a fallback, from before the two axes split:
+   * Titanic's edition was kept under it while it was called a language, so a
+   * reader who chose the German data before the split keeps it after. It is
+   * deliberately not the UI language's key — had `?lang=`'s new meaning taken
+   * that storage name, everyone who ever picked a data language would have had
+   * their PAGE language pinned to it.
+   */
   legacyKey?: string;
   /** the edition to fall back to when nothing else answers */
   fallback: string;

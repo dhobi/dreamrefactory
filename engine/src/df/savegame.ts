@@ -419,7 +419,19 @@ export type SavedActorPatch = Pick<SavedActor, "name" | "owner" | "value"> & {
   cast?: string;
 };
 
-export interface SaveGame {
+/** the script globals a save carries, split the way the file stores them */
+export interface ScriptGlobals {
+  /** numeric globals (type-2/4 records): name → value */
+  numGlobals: Map<string, number>;
+  /** the {@link numGlobals} whose record is a BOOLEAN (type 2): a load gives
+   *  them back as `true`/`false`, the type the scripts left them in */
+  boolGlobals: Set<string>;
+  /** string globals (type-3 records; TI.EXE's decoded via the string pool):
+   *  name → value. Titanic's include hallside, savedeck, handitem, savestage1-3… */
+  strGlobals: Map<string, string>;
+}
+
+export interface SaveGame extends ScriptGlobals {
   /** "Titanic 1.0" version string from container 0. */
   title: string;
   /** disk family, e.g. "Titanic1" / "Titanic2" (c0 @256). */
@@ -453,14 +465,6 @@ export interface SaveGame {
   savedeck: string;
   /** decoded script variables from the globals container, in file order. */
   vars: SavedVar[];
-  /** numeric globals to restore (type-2/4 records): name → value. */
-  numGlobals: Map<string, number>;
-  /** the {@link numGlobals} whose record is a BOOLEAN (type 2): a load gives
-   *  them back as `true`/`false`, the type the scripts left them in. */
-  boolGlobals: Set<string>;
-  /** string globals to restore (type-3 records, decoded via the string pool):
-   * name → value. Includes hallside, savedeck, handitem, savestage1-3… */
-  strGlobals: Map<string, string>;
   /** every prop serialized in the inventory container (inventory items + more). */
   inventory: SavedProp[];
   /** every actor serialized in the actor container, with its `actorowner`. */

@@ -35,6 +35,7 @@
  */
 import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameHost } from "@dreamfactory/engine/web/host";
+import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { CursorSheet } from "@dreamfactory/engine/web/cursors";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { TI_CURSORS } from "../../src/cursor-art";
@@ -420,13 +421,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
 
 
   /** where a pointer event lands in the engine's 512x384, whatever the CSS size */
-  const at = (e: PointerEvent): { x: number; y: number } => {
-    const r = canvas.getBoundingClientRect();
-    return {
-      x: Math.round(((e.clientX - r.left) / r.width) * SCREEN.width),
-      y: Math.round(((e.clientY - r.top) / r.height) * SCREEN.height),
-    };
-  };
+  const at = canvasCoordsFor(canvas, SCREEN);
   canvas.addEventListener("pointerdown", (e) => {
     ensureAudio();
     const p = at(e);

@@ -1,4 +1,4 @@
-import { RipFiles } from "@dreamfactory/engine/web/rip-files";
+import { RipFiles, readManifest, ripName } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
@@ -10,7 +10,10 @@ import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
  * store is: the scripts ask for `I001.Stg` and `I.Shp`, never for a path. The
  * game's own `enterworld` does the pathing itself (`path(2, "TimeLapse1:E:")`,
  * `path(3, "TimeLapse1:T:")`) and a browser has no volumes to point those at, so
- * the index is flat and every disc is mounted at once.
+ * the index is flat and every disc is mounted at once. Which is also why there is
+ * no `setDisc` here: a two-CD DreamFactory game follows its BOOTFILE's
+ * `setpath(disk)` through it, and Timelapse switches discs only by those `path`
+ * calls, which this store cannot see and does not need to.
  *
  * Collisions are safe here, which is the fact that makes a flat index legal:
  * across the four discs the only repeated basenames are the 27 films in each
@@ -86,37 +89,24 @@ const INSTALLED = [
   "p.stg", "camera.fil",
 ];
 
-/** this page's own URL for a served path, so it runs from any directory */
-const url = (path: string): string => pageUrl(path);
-
 export class TimelapseFiles extends RipFiles {
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<TimelapseFiles> {
     const store = new TimelapseFiles();
-    const res = await fetch(url("gamefiles.json"));
-    const manifest: Record<string, number> = res.ok ? await res.json() : {};
+    // through pageUrl, so the page runs from any directory
+    const manifest = await readManifest(pageUrl("gamefiles.json"));
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
-      const base = path.split("/").pop()!.toLowerCase();
+      const base = ripName(path);
       // lowest disc wins: the keys are sorted, so the first one seen is it
       if (store.urls.has(base)) continue;
-      store.urls.set(base, url(path));
+      store.urls.set(base, pageUrl(path));
       store.sizes.set(base, manifest[path]);
     }
     for (const base of INSTALLED) {
-      if (!store.urls.has(base)) store.urls.set(base, url(INSTALL_DIR + base));
+      if (!store.urls.has(base)) store.urls.set(base, pageUrl(INSTALL_DIR + base));
     }
     return store;
-  }
-
-  /**
-   * Nothing to swap. `setDisc` is how a two-CD DreamFactory game follows its
-   * BOOTFILE's `setpath(disk)`; Timelapse has four discs and switches between
-   * them with `path(n, …)` inside its own `enterworld`, which this store cannot
-   * see and does not need to — every disc is indexed at once.
-   */
-  setDisc(): void {
-    // every disc is indexed already
   }
 
   activeEdition(): string {
