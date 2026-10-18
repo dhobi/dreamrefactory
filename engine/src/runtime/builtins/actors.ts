@@ -116,11 +116,18 @@ function resumeFrom(points: RoutePoint[], x: number, y: number, z: number): Rout
  * the walking primitives (walktostar / walktoxyz / walkonpath).
  */
 export function registerActorBuiltins(ctx: BuiltinCtx): void {
-  const { session, r, log, findStar, sceneCell } = ctx;
+  registerCastsAndSight(ctx);
+  registerActorLifecycle(ctx);
+  registerActorState(ctx);
+  registerActorTables(ctx);
+  registerWalking(ctx);
+  registerWalkTable(ctx);
+}
 
+/** cast files, actorexists and what an actor can see */
+function registerCastsAndSight(ctx: BuiltinCtx): void {
+  const { session, r, log, sceneCell } = ctx;
   const actor = (name: Value) => session.actorRuntime.get(toStr(name));
-  /** getter/setter by arity; a missing actor answers the empty value */
-  const acc = accessorFamily(r, actor, ctx.miss);
   r("opencastfile", async (_i, [n]) => ((await session.openCastFile(toStr(n ?? ""))) ? 1 : 0));
   r("closecastfile", (_i, [n]) => session.closeCastFile(toStr(n ?? "")));
   // ...or, on a v1 set, the scene's grid ROW — see BuiltinCtx.sceneCell
@@ -256,6 +263,14 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     // which is the wrong side of `hotdist("stair1c1")` = 4000.
     return sight(n, Math.round(Math.hypot(a.worldX - lis.x, a.worldY - lis.y)));
   });
+}
+
+/** spawning, deleting and hiding actors */
+function registerActorLifecycle(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
+  /** getter/setter by arity; a missing actor answers the empty value */
+  const acc = accessorFamily(r, actor, ctx.miss);
   // actorinstance(src, dst): spawn a new actor sharing src's cast sprite;
   // actordelete(name): remove one. TAOOT's gang cast fills its lifeboat crowd with
   // dozens of actorinstance("life1", "lifeN") calls, then places each.
@@ -346,6 +361,14 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
     a.visible = false;
     dropAttention(toStr(n));
   });
+}
+
+/** set, position, star placement, ink and the other per-actor fields */
+function registerActorState(ctx: BuiltinCtx): void {
+  const { session, r, findStar } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
+  /** getter/setter by arity; a missing actor answers the empty value */
+  const acc = accessorFamily(r, actor, ctx.miss);
   // actorset binds an actor to a set; it only draws there (like propset)
   acc("actorset", "", (a) => a.setName, (a, v) => {
     a.setName = toStr(v).toLowerCase();
@@ -486,6 +509,11 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   acc("actorowner", "", (a) => a.owner, (a, v) => {
     a.owner = v;
   });
+}
+
+/** the actors and cast files by index */
+function registerActorTables(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
   r("countactors", () => session.actorRuntime.actors.size);
   r("indextoactor", (_i, [idx]) => {
     return [...session.actorRuntime.actors.keys()][toNum(idx ?? 0) - 1] ?? "";
@@ -493,6 +521,12 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
   // countcasts()/indextocast(n): open cast files (1-based). TAOOT's CTL.STG lists them.
   r("countcasts", () => session.actorRuntime.casts.size);
   r("indextocast", (_i, [idx]) => [...session.actorRuntime.casts.keys()][toNum(idx ?? 0) - 1] ?? "");
+}
+
+/** the walking primitives: to a star, to a point, along a path or a road */
+function registerWalking(ctx: BuiltinCtx): void {
+  const { session, r, log, findStar } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   // walking: straight-line motion at the actor's per-set speed, walk pose
   // cycling, facing the direction of travel (session.startWalk)
   //
@@ -863,6 +897,12 @@ export function registerActorBuiltins(ctx: BuiltinCtx): void {
       n, dest.positionX, dest.positionZ, dest.positionY, toName,
     );
   };
+}
+
+/** the running walks: asked after, stopped, paused, counted, and turning */
+function registerWalkTable(ctx: BuiltinCtx): void {
+  const { session, r } = ctx;
+  const actor = (name: Value) => session.actorRuntime.get(toStr(name));
   r("iswalk", (_i, [n]) => (n !== undefined && session.scheduler.isWalk(toStr(n)) ? 1 : 0));
   r("stopwalk", (_i, [n]) => {
     if (n !== undefined) session.scheduler.stopWalk(toStr(n));

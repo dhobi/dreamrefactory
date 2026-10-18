@@ -221,7 +221,7 @@ export class SessionTransitions {
       if (++w.step >= w.steps) {
         if ((w.dir === "turnleft" || w.dir === "turnright") && w.span < 1) {
           w.settled = true;
-        } else this.session.endWipe();
+        } else this.endWipe();
       }
     }
   }

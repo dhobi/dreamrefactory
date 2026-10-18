@@ -483,6 +483,24 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // The DISC, before anything reads a byte off one. See mountSavedDisc.
   mountSavedDisc(session, save.disk);
 
+  restoreGlobals(session, save);
+
+  await leaveRoom(session, save);
+
+  // The rebuild proper, with the script runners muted (restoringSave gates
+  // SetScripts.fireLifecycle): the whole point of #143 is that nothing below
+  // is a script.
+  session.restoringSave = true;
+  try {
+    await rebuildFromSave(session, save);
+  } finally {
+    session.restoringSave = false;
+  }
+  return true;
+}
+
+/** the file's globals over the session's, and the frame counter they are stamped against */
+function restoreGlobals(session: GameSession, save: SaveGame): void {
   /*
    * The globals the file does NOT name, which have to GO — the third twin of
    * `resetCast` and the shop close below (#340).
@@ -560,6 +578,10 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // counting from the browser tab's start instead of the saved game's, every
   // one of those deadlines would be long past the moment the save loaded.
   session.frameCounter = save.frame;
+}
+
+/** the room being left: input unfrozen, timed state, speech, puppet, wipe and stage gone */
+async function leaveRoom(session: GameSession, save: SaveGame): Promise<void> {
   // A save is taken from the CTL menu, which sets lockevents=1 to freeze world
   // input while the panel is up — so every save carries lockevents=1. A load
   // returns you to interactive control, so drop it here. Left set, boot's
@@ -636,173 +658,167 @@ export async function loadGame(session: GameSession, bytes: Uint8Array): Promise
   // loaded room stays hidden behind the empty main.stg band (a white screen).
   session.stageCtrl.resetOverlayStack();
   await session.stageCtrl.closeStageFile();
+}
 
-  // The rebuild proper, with the script runners muted (restoringSave gates
-  // SetScripts.fireLifecycle): the whole point of #143 is that nothing below
-  // is a script.
-  session.restoringSave = true;
-  try {
-    // The departing room is DETACHED, not closed: its closeset does not run (the
-    // original runs no scripts on a load — ENGINE.SET's closeset putting Vlad
-    // down mid-load was half of #86), its timed state died with the scheduler
-    // reset above, and the host releases its files when the new set activates.
-    session.currentSetName = "none";
-    session.currentSetFile = "";
+/** the saved game rebuilt from the file — under `restoringSave`, so nothing in it is a script */
+async function rebuildFromSave(session: GameSession, save: SaveGame): Promise<void> {
+  // The departing room is DETACHED, not closed: its closeset does not run (the
+  // original runs no scripts on a load — ENGINE.SET's closeset putting Vlad
+  // down mid-load was half of #86), its timed state died with the scheduler
+  // reset above, and the host releases its files when the new set activates.
+  session.currentSetName = "none";
+  session.currentSetFile = "";
 
-    // The cast FILES the save had open, before any record is applied. A room's
-    // crowd is not in the boot cast: lounge1c, smoke and deckbd2 each
-    // `opencastfile("extra.cst")` from their openset, and a load runs no openset
-    // (#143) — so without this the eight members the extras are instanced from
-    // are missing, and restoreActors drops every crowd record it cannot find a
-    // source for: 344 of them, across 39 of the 109 shipped saves (#186).
-    //
-    // The list is the file's own (SaveGame.castFiles), not a guess from the set
-    // being entered: the save records what was open, which is exactly the
-    // question, and `openCastFile` is idempotent so the boot cast costs nothing.
-    //
-    // A cast file the PREVIOUS room had open and this save does not name is left
-    // open rather than closed. It is inert: resetCast puts every member down, and
-    // a member the file has no record for stays that way.
-    for (const file of save.castFiles) await session.openCastFile(file);
+  // The cast FILES the save had open, before any record is applied. A room's
+  // crowd is not in the boot cast: lounge1c, smoke and deckbd2 each
+  // `opencastfile("extra.cst")` from their openset, and a load runs no openset
+  // (#143) — so without this the eight members the extras are instanced from
+  // are missing, and restoreActors drops every crowd record it cannot find a
+  // source for: 344 of them, across 39 of the 109 shipped saves (#186).
+  //
+  // The list is the file's own (SaveGame.castFiles), not a guess from the set
+  // being entered: the save records what was open, which is exactly the
+  // question, and `openCastFile` is idempotent so the boot cast costs nothing.
+  //
+  // A cast file the PREVIOUS room had open and this save does not name is left
+  // open rather than closed. It is inert: resetCast puts every member down, and
+  // a member the file has no record for stays that way.
+  for (const file of save.castFiles) await session.openCastFile(file);
 
-    // The cast, wholesale from the file — the original replaces its live actor
-    // list with the read container (0x4143d2), so first everything not in the
-    // file must go: instances are removed, members put down. Then every record
-    // is applied, re-instancing the crowd extras the file names.
-    resetCast(session);
-    restoreActors(session, save.actors);
+  // The cast, wholesale from the file — the original replaces its live actor
+  // list with the read container (0x4143d2), so first everything not in the
+  // file must go: instances are removed, members put down. Then every record
+  // is applied, re-instancing the crowd extras the file names.
+  resetCast(session);
+  restoreActors(session, save.actors);
 
-    // The departing ROOM's props, which the file cannot speak for — the prop
-    // half of `resetCast` above (#339).
-    //
-    // A save's prop table is the BOOT shops and nothing else: all 109 shipped
-    // saves carry exactly 72 records, the two persistent shops' props, including
-    // the ones taken inside rooms whose own shop was open at the time. That is
-    // the original's answer to the question — a room's props are the room's, and
-    // a load rebuilds the room. `restoreProps` below applies the records it has
-    // and leaves everything else exactly as the abandoned game left it, so a
-    // room shop still loaded from the room being left kept its props, visible,
-    // over whatever came next.
-    //
-    // Reported from the false smokestack, which is where it shows because the
-    // smokestack's crates ARE its state: `SMSTACK2.SET setupblocks()` makes the
-    // gaps of this (maze, level) visible and nothing ever hides one, so a
-    // checkpoint loaded out of the stack and a walk back in put the previous
-    // climb's crates on top of the new maze's — the debug readout naming maze 1
-    // beside a floor wearing maze 3's crates.
-    //
-    // Closed rather than hidden, and only the non-persistent ones: a room shop
-    // belongs to a room that is being thrown away. The room ARRIVING does not
-    // get its shop from its `openset`, which does not run on a load
-    // (`restoringSave` mutes the whole lifecycle; see SetScripts.fireLifecycle);
-    // a set's own `.shp` is opened when the viewer wires it (SetViewer.addResource).
-    // The two boot shops are persistent, so their 72 props are still here to
-    // receive the records the file does carry.
-    const shops = Array.from(session.propRuntime.shops.entries());
-    for (const [name, shop] of shops) {
-      if (!shop.persistent) await session.closeShop(name);
-    }
+  // The departing ROOM's props, which the file cannot speak for — the prop
+  // half of `resetCast` above (#339).
+  //
+  // A save's prop table is the BOOT shops and nothing else: all 109 shipped
+  // saves carry exactly 72 records, the two persistent shops' props, including
+  // the ones taken inside rooms whose own shop was open at the time. That is
+  // the original's answer to the question — a room's props are the room's, and
+  // a load rebuilds the room. `restoreProps` below applies the records it has
+  // and leaves everything else exactly as the abandoned game left it, so a
+  // room shop still loaded from the room being left kept its props, visible,
+  // over whatever came next.
+  //
+  // Reported from the false smokestack, which is where it shows because the
+  // smokestack's crates ARE its state: `SMSTACK2.SET setupblocks()` makes the
+  // gaps of this (maze, level) visible and nothing ever hides one, so a
+  // checkpoint loaded out of the stack and a walk back in put the previous
+  // climb's crates on top of the new maze's — the debug readout naming maze 1
+  // beside a floor wearing maze 3's crates.
+  //
+  // Closed rather than hidden, and only the non-persistent ones: a room shop
+  // belongs to a room that is being thrown away. The room ARRIVING does not
+  // get its shop from its `openset`, which does not run on a load
+  // (`restoringSave` mutes the whole lifecycle; see SetScripts.fireLifecycle);
+  // a set's own `.shp` is opened when the viewer wires it (SetViewer.addResource).
+  // The two boot shops are persistent, so their 72 props are still here to
+  // receive the records the file does carry.
+  const shops = Array.from(session.propRuntime.shops.entries());
+  for (const [name, shop] of shops) {
+    if (!shop.persistent) await session.closeShop(name);
+  }
 
-    // Every prop, both halves, from the file, in place of the script re-runs a
-    // load would otherwise need: initprops' mission defaults, the
-    // house.shp openshop/initprops/showinterface dance, a hand-mirrored open
-    // pocketwatch (its lid/hrs/min/sec anchor and z-order are IN the record:
-    // x/y = the band anchor, dist = −6/−5/−5/−4), the nav arrow's lit deg (#4).
-    restoreProps(session, save.inventory);
+  // Every prop, both halves, from the file, in place of the script re-runs a
+  // load would otherwise need: initprops' mission defaults, the
+  // house.shp openshop/initprops/showinterface dance, a hand-mirrored open
+  // pocketwatch (its lid/hrs/min/sec anchor and z-order are IN the record:
+  // x/y = the band anchor, dist = −6/−5/−5/−4), the nav arrow's lit deg (#4).
+  restoreProps(session, save.inventory);
 
-    // The music, from the file's track state — the track whose playing/looping
-    // arrays are non-empty is the live theme (measured: exactly one track in
-    // every shipped save; `savetheme`, the global, lags the file by up to a
-    // whole act in 91 of 109 and is NOT it). No setupsound re-score, no
-    // "currentset = none" guard games: the room comes back sounding as saved.
-    // Before the loop table: a loop's handler plays out of these banks
-    // (BOOTFILE `playcrickets` draws `random (countsounds ("insddest.sfx"))`,
-    // and random(0) is error 0xa — TI.EXE 0x42a93b). The original restores
-    // in one call with nothing run between; here the banks load across awaits,
-    // so a load that failed after the loops and before the banks left a live
-    // loop over a bank that was never opened.
-    await restoreTheme(session, save);
+  // The music, from the file's track state — the track whose playing/looping
+  // arrays are non-empty is the live theme (measured: exactly one track in
+  // every shipped save; `savetheme`, the global, lags the file by up to a
+  // whole act in 91 of 109 and is NOT it). No setupsound re-score, no
+  // "currentset = none" guard games: the room comes back sounding as saved.
+  // Before the loop table: a loop's handler plays out of these banks
+  // (BOOTFILE `playcrickets` draws `random (countsounds ("insddest.sfx"))`,
+  // and random(0) is error 0xa — TI.EXE 0x42a93b). The original restores
+  // in one call with nothing run between; here the banks load across awaits,
+  // so a load that failed after the loops and before the banks left a live
+  // loop over a bank that was never opened.
+  await restoreTheme(session, save);
 
-    // The scheduler tables, mid-count, which would otherwise need the arriving
-    // room's openset: the idles that make characters act, the scene timers, the
-    // room's positional ambience.
-    for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period, l.pause);
-    for (const c of save.crickets) session.scheduler.crickets.restore(c);
-    // A walk in flight comes back mid-stride, because the original's does: load
-    // save 17 in TI.EXE and Daisy finishes crossing the Grand Staircase to the
-    // middle of the room. (User-reported, against a build that stood her still.)
-    //
-    // The record carries its own origin, deltas, distance and progress — and an
-    // authored route carries its waypoints in a payload container of its own —
-    // so this is a restore and not a fresh `walktostar`: the walker sets off from
-    // where the save caught them with only what was left to run. See
-    // `Scheduler.restoreWalk`.
-    //
-    // A walk that cannot be put back is DROPPED and its walker stood up: the
-    // actor record restores the pose it was saved in, that pose is `walk`, and an
-    // actor steps through its play script whether a walk is running or not
-    // (#181) — so a drop that left the pose alone would leave them treadmilling.
-    for (const w of save.walks) {
-      const a = session.actorRuntime.get(w.actor);
-      if (w.deferred) {
-        // filed again as it was: built on the first pass its walker's set is open
-        const build = a ? session.deferredWalkBuilder(w.actor, w.type, w.deferred.to, w.deferred.from) : null;
-        if (build) {
-          session.scheduler.deferWalk(w.actor, w.deferred.to, build, w.type, w.deferred.from);
-          const rec = session.scheduler.walks.get(w.actor);
-          if (rec && w.paused) Object.assign(rec, { paused: true, pauseDepth: Math.max(1, w.pause ?? 1) });
-          continue;
-        }
-      }
-      const usable = w.type === 0 || w.type === 1 || (w.type >= 3 && w.type <= 5 && !!w.path);
-      const resumed =
-        !!a &&
-        usable &&
-        session.scheduler.restoreWalk(w.actor, {
-          // type 0 is a `turntodeg`: a facing target and no mover at all
-          turnOnly: w.type === 0,
-          paused: w.paused,
-          pauseDepth: w.pause,
-          turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
-          deg: w.deg,
-          sx: w.startX, sy: w.startY, sz: w.startZ,
-          dx: w.destX - w.startX, dy: w.destY - w.startY, dz: w.destZ - w.startZ,
-          dist: w.dist,
-          progress: w.progress,
-          arriveStar: w.star || undefined,
-          path: w.path,
-          roadMode: w.type === 4 || w.type === 5 ? w.type : undefined,
-        });
-      if (resumed) {
-        session.onLog(
-          w.type === 0
-            ? `loadgame: ${w.actor} was saved mid-turn — resuming it`
-            : `loadgame: ${w.actor} was saved walking to "${w.star}" — resuming it`,
-        );
+  // The scheduler tables, mid-count, which would otherwise need the arriving
+  // room's openset: the idles that make characters act, the scene timers, the
+  // room's positional ambience.
+  for (const l of save.loops) session.scheduler.restoreLoop(l.kind, l.name, l.handler, l.period, l.pause);
+  for (const c of save.crickets) session.scheduler.crickets.restore(c);
+  // A walk in flight comes back mid-stride, because the original's does: load
+  // save 17 in TI.EXE and Daisy finishes crossing the Grand Staircase to the
+  // middle of the room. (User-reported, against a build that stood her still.)
+  //
+  // The record carries its own origin, deltas, distance and progress — and an
+  // authored route carries its waypoints in a payload container of its own —
+  // so this is a restore and not a fresh `walktostar`: the walker sets off from
+  // where the save caught them with only what was left to run. See
+  // `Scheduler.restoreWalk`.
+  //
+  // A walk that cannot be put back is DROPPED and its walker stood up: the
+  // actor record restores the pose it was saved in, that pose is `walk`, and an
+  // actor steps through its play script whether a walk is running or not
+  // (#181) — so a drop that left the pose alone would leave them treadmilling.
+  for (const w of save.walks) {
+    const a = session.actorRuntime.get(w.actor);
+    if (w.deferred) {
+      // filed again as it was: built on the first pass its walker's set is open
+      const build = a ? session.deferredWalkBuilder(w.actor, w.type, w.deferred.to, w.deferred.from) : null;
+      if (build) {
+        session.scheduler.deferWalk(w.actor, w.deferred.to, build, w.type, w.deferred.from);
+        const rec = session.scheduler.walks.get(w.actor);
+        if (rec && w.paused) Object.assign(rec, { paused: true, pauseDepth: Math.max(1, w.pause ?? 1) });
         continue;
       }
-      if (a?.poseName.startsWith("walk")) {
-        const lj = `stand${a.poseName.slice(4)}`; // walklj -> standlj, walk -> stand
-        a.poseName = a.member.poses.some((p) => p.name === lj) ? lj : "stand";
-        a.restartPose();
-      }
-      session.onLog(`loadgame: ${w.actor} was saved mid-walk — standing them at their saved position`);
     }
-
-    // The in-game stage comes back once the file's state is in, so that its
-    // flat's `openflat` reads the game it is opening into. MAIN.STG's "main 1"
-    // asks `if handitem != ""` and then `if propowner ("bag") != "frank"
-    // error ()` — opened before the props were restored, it read the bag of the
-    // game being LEFT, and error() is an error (0x2f) that unwinds the load.
-    await session.stageCtrl.openStageFile("main.stg");
-    session.setVisible = true;
-
-    // The arrival, through the engine's set machinery alone.
-    await session.openSetFile(`${save.set}.set`, save.scene, save.view);
-  } finally {
-    session.restoringSave = false;
+    const usable = w.type === 0 || w.type === 1 || (w.type >= 3 && w.type <= 5 && !!w.path);
+    const resumed =
+      !!a &&
+      usable &&
+      session.scheduler.restoreWalk(w.actor, {
+        // type 0 is a `turntodeg`: a facing target and no mover at all
+        turnOnly: w.type === 0,
+        paused: w.paused,
+        pauseDepth: w.pause,
+        turnTo: w.turnTo >= 0 ? w.turnTo : undefined,
+        deg: w.deg,
+        sx: w.startX, sy: w.startY, sz: w.startZ,
+        dx: w.destX - w.startX, dy: w.destY - w.startY, dz: w.destZ - w.startZ,
+        dist: w.dist,
+        progress: w.progress,
+        arriveStar: w.star || undefined,
+        path: w.path,
+        roadMode: w.type === 4 || w.type === 5 ? w.type : undefined,
+      });
+    if (resumed) {
+      session.onLog(
+        w.type === 0
+          ? `loadgame: ${w.actor} was saved mid-turn — resuming it`
+          : `loadgame: ${w.actor} was saved walking to "${w.star}" — resuming it`,
+      );
+      continue;
+    }
+    if (a?.poseName.startsWith("walk")) {
+      const lj = `stand${a.poseName.slice(4)}`; // walklj -> standlj, walk -> stand
+      a.poseName = a.member.poses.some((p) => p.name === lj) ? lj : "stand";
+      a.restartPose();
+    }
+    session.onLog(`loadgame: ${w.actor} was saved mid-walk — standing them at their saved position`);
   }
-  return true;
+
+  // The in-game stage comes back once the file's state is in, so that its
+  // flat's `openflat` reads the game it is opening into. MAIN.STG's "main 1"
+  // asks `if handitem != ""` and then `if propowner ("bag") != "frank"
+  // error ()` — opened before the props were restored, it read the bag of the
+  // game being LEFT, and error() is an error (0x2f) that unwinds the load.
+  await session.stageCtrl.openStageFile("main.stg");
+  session.setVisible = true;
+
+  // The arrival, through the engine's set machinery alone.
+  await session.openSetFile(`${save.set}.set`, save.scene, save.view);
 }
 
 /**

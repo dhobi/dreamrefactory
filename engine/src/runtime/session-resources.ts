@@ -99,7 +99,7 @@ export class SessionResources {
 
   /** engine primitive behind boot's changeset(): switch to another set */
   async openSetFile(fileName: string, sceneName = "", viewName = ""): Promise<void> {
-    fileName = this.session.typedName(fileName, "sett");
+    fileName = this.typedName(fileName, "sett");
     const key = fileName.toLowerCase();
     this.session.onLog(`opensetfile("${key}", "${sceneName}", "${viewName}")`);
     this.session.lastRotation = this.session.currentRotation ? this.session.currentRotation() : null;
@@ -166,7 +166,7 @@ export class SessionResources {
   }
 
   async openTrackFile(fileName: string): Promise<boolean> {
-    fileName = this.session.typedName(fileName, "trak");
+    fileName = this.typedName(fileName, "trak");
     const key = toStr(fileName).toLowerCase();
     // A title may name theme tracks by REGION rather than by set — TAOOT names
     // them by deck: recept1c's theme is deckd.trk, halla's is decka.trk (see
@@ -251,7 +251,7 @@ export class SessionResources {
    * their scripts. Idempotent — sets call opencastfile("extra.cst") freely.
    */
   async openCastFile(fileName: string): Promise<boolean> {
-    fileName = this.session.typedName(fileName, "cast");
+    fileName = this.typedName(fileName, "cast");
     const key = fileName.toLowerCase();
     if (this.castMains.has(key)) return true;
     await this.session.ensureFile(key);
@@ -326,7 +326,7 @@ export class SessionResources {
      * casts themselves were never closed: the dinghies went on sailing, asking
      * for stars in whatever room was open.
      */
-    const key = (this.session.isV5 ? this.session.typedName(fileName, "cast") : fileName).toLowerCase();
+    const key = (this.session.isV5 ? this.typedName(fileName, "cast") : fileName).toLowerCase();
     const main = this.session.isV5 ? this.castMains.get(key) : undefined;
     if (main) await this.session.fireHandler(main, "closecast", key, `closecast ${key}`);
     const cast = this.session.actorRuntime.casts.get(key);
@@ -337,7 +337,7 @@ export class SessionResources {
       // scripts have to go with them or the next cast to use those names
       // (stok2…stok10, life1…) inherits the old one.
       for (const [name, a] of this.session.actorRuntime.actors) {
-        if (a.cast === cast) this.session.dropInstancedScript(name);
+        if (a.cast === cast) this.dropInstancedScript(name);
       }
     }
     this.castMains.delete(key);
@@ -449,7 +449,7 @@ export class SessionResources {
    * inven.shp) stay loaded across set changes.
    */
   async openShop(fileName: string): Promise<boolean> {
-    fileName = this.session.typedName(fileName, "shop");
+    fileName = this.typedName(fileName, "shop");
     const key = fileName.toLowerCase();
     // Already loaded: re-run its openshop handler without rebuilding the props
     // (which would drop their state). A stage opens its shop on entry via

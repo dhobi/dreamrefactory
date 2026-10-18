@@ -558,6 +558,17 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   openFilesPatch(containers, saveIndex(raw), patch);
   const index = saveIndex(raw);
 
+  patchGlobals(base, containers, index, patch);
+  patchRoom(base, containers, index, patch);
+  patchInventory(base, containers, index, patch);
+  patchActors(base, containers, index, patch);
+  patchScheduler(base, containers, index, patch);
+  patchTheme(base, containers, index, patch);
+  return writeSaveFile(raw);
+}
+
+/** the globals container: every variable the patch carries, in place or as a new record */
+function patchGlobals(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
   // globals: overwrite each variable's DFValue (type at slot+24, value at
   // slot+26 — the slot recordOffsets maps to already accounts for the
   // name/value node pairing). Numbers are written inline and tagged type 4;
@@ -636,7 +647,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     offs.set(name, slot);
     if (!writeVar(name, slot)) patch.onDrop?.(name, "no pool room");
   }
+}
 
+/** container 1's room, frame counter and set file, and container 0's disc label */
+function patchRoom(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
   // container 1: set/scene/view live in 16-byte fields at fixed offsets.
   const c1 = containers[1].data;
   if (c1.length >= C1_VIEW + 16) {
@@ -713,7 +727,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       }
     }
   }
+}
 
+/** the props' views and owners, in place in the prop grid */
+function patchInventory(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
   // inventory: overwrite each named prop's view (record+48) and owner (record+64)
   // in place. Both are read at fixed offsets, so writing them as Pascal strings
   // there preserves the 158-byte grid (the value field trailing owner is ignored
@@ -761,7 +778,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       put(PROP_FIELDS.zclip, sp.zclip);
     }
   }
+}
 
+/** the actors' records, in place in the actor grid */
+function patchActors(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
   // actors: the same in-place write — the memory of the player (owner, conversation
   // count) and, when the caller supplies one, the whole placement half.
   if (patch.actors?.length) {
@@ -863,7 +883,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       put(off + ACTOR_PLACEMENT.zclip, clampI16(p.zclip));
     }
   }
+}
 
+/** the scheduler's three service tables */
+function patchScheduler(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
   // the scheduler: the three fixed-size service tables, written whole.
   if (patch.scheduler) {
     const si = index.loops;
@@ -981,7 +1004,10 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
     containers.length = si + 3;
     for (const p of payloads) containers.push({ id: containers.length, data: p });
   }
+}
 
+/** the theme's playing and looping lists */
+function patchTheme(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
   // the theme: empty every track's playing/looping lists, then write the named
   // track's as ONE RECORD PER LOOP CHUNK, exactly the shape TI.EXE's writer
   // dumps and — the part that is not optional — the shape its post-load resume
@@ -1041,6 +1067,4 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
       patch.onDrop?.(`theme(${want})`, "the bank's loop table was not readable — the room will load silent");
     }
   }
-
-  return writeSaveFile(raw);
 }

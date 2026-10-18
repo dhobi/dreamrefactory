@@ -143,7 +143,7 @@ export class SessionEvents {
      */
     const propOwn = /^sendtoprop(fx)?$/.test(cmd) && !!evTarget;
     const room = this.session.maze;
-    const { value, ran, passed, visited } = await this.session.runHandlerChain(
+    const { value, ran, passed, visited } = await this.runHandlerChain(
       chain,
       handler,
       args,
@@ -583,7 +583,7 @@ export class SessionEvents {
     // last thing containment would try — so a stage handler that passcodes used
     // to be the one that got run again. (And a passcode here keeps climbing —
     // the shared traversal rule, see runHandlerChain.)
-    const res = await this.session.runHandlerChain(
+    const res = await this.runHandlerChain(
       libs.filter((l) => !visited.includes(l)),
       handler,
       args,

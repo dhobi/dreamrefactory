@@ -1563,6 +1563,19 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
   const index = v1Index(out);
   const drop = patch.onDrop ?? (() => {});
 
+  patchGlobalsV1(base, out, index, patch, drop);
+  patchStandpointV1(base, out, index, patch, drop);
+  patchSoundV1(base, out, index, patch, drop);
+  patchPropsAndCastV1(base, out, index, patch, drop);
+  patchLoopsV1(base, out, index, patch, drop);
+  patchBallsV1(base, out, index, patch, drop);
+  patchWalksV1(base, out, index, patch, drop);
+
+  return writeSaveFile(out);
+}
+
+/** the globals and the string pool they point into */
+function patchGlobalsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- globals -----------------------------------------------------------
   const globals = out.containers[index.globals];
   const pool = out.containers[index.pool];
@@ -1646,7 +1659,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       }
     }
   }
+}
 
+/** the standpoint, the frame counter, the set file and the open set */
+function patchStandpointV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the standpoint and the frame counter -------------------------------
   const c1 = out.containers[1]?.data;
   if (c1 && c1.length >= C1_SIZE) {
@@ -1773,7 +1789,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       }
     }
   }
+}
 
+/** the sound: per-sound settings of every open bank */
+function patchSoundV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the sound -----------------------------------------------------------
   {
     const c0 = out.containers[0]?.data;
@@ -1841,7 +1860,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       }
     }
   }
+}
 
+/** the props' and the cast's records, in place */
+function patchPropsAndCastV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- props and cast ----------------------------------------------------
   const cp = out.containers[4]?.data;
   if (cp && patch.props) {
@@ -1911,7 +1933,10 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       if (a.tileY !== undefined) put16(ca, o + ACTOR_TILE_Y, a.tileY);
     }
   }
+}
 
+/** the loop table */
+function patchLoopsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the loop table ----------------------------------------------------
   // Rewritten whole rather than merged: it IS the live scheduler (the writer
   // memcpy's the engine's own table), so a slot the running game does not have
@@ -1942,8 +1967,12 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       slot++;
     }
   }
+}
 
+/** the balls */
+function patchBallsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the balls ---------------------------------------------------------
+  const cp = out.containers[4]?.data;
   // Positional, like the table it is: a ball's slot is the one it was made in.
   const cbl = out.containers[index.crickets]?.data;
   if (cbl && patch.balls) {
@@ -1962,8 +1991,12 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
       writePstrField(cbl, at + BALL_NAME, b.name);
     }
   }
+}
 
+/** the walks, each route's waypoints re-emitted after the table */
+function patchWalksV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the walks ---------------------------------------------------------
+  const ca = out.containers[2]?.data;
   // The same wholesale rewrite the loops get, and for the same reason: the table
   // IS the live mover, so a slot the running game does not have is a walker who
   // must not set off again on load. A walk on an authored route takes its
@@ -2019,8 +2052,6 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
     out.containers.length = index.walks + 1;
     for (const data of payloads) out.containers.push({ id: out.containers.length, data });
   }
-
-  return writeSaveFile(out);
 }
 
 /** the title a save written by this port carries — Dust's own, as its menu
