@@ -264,9 +264,9 @@ test.skipIf(!haveRip())("mall", async () => {
     const a = game.foeAnchor(m, game.level!)!;
     const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
     const dents = m.dents;
-    game.strikeFoe(m, 50, { dx: 20, dy: 0 }, 1, a.y, box, 0, undefined, { mass: 5, vx: 40, vy: 0 });
+    game.strikeFoe(m, { damage: 50, shove: { dx: 20, dy: 0 }, from: 1, mid: a.y, box, hitter: { mass: 5, vx: 40, vy: 0 } });
     if (m.dents !== dents || m.state !== "gait") fail(`0x43b660: a blow that is not the player's is turned away; dents ${dents} -> ${m.dents}, ${m.state}`);
-    game.strikeFoe(m, 50, { dx: 20, dy: 0 }, 1, a.y, box, 0);
+    game.strikeFoe(m, { damage: 50, shove: { dx: 20, dy: 0 }, from: 1, mid: a.y, box });
     if (m.dents !== dents + 1) fail(`...and the player's own lands: dents ${dents} -> ${m.dents}`);
     ok(`a flare's blow on a Coke machine is turned away, and the player's lands (0x43b660)`);
   }

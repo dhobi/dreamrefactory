@@ -220,25 +220,22 @@ export function stepStreams(): void {
       // 9806 carries `dx 8`, so a stream is eight a frame rather than a blow,
       // and a two-hundred-health zombie takes about twenty-five frames of it.
       if (burns) {
-        strikeFoe(e, 0, { dx: 0, dy: 0 }, q.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE, undefined, { mass: 0, vx: 0, vy: 0, by: {} });
+        strikeFoe(e, { damage: 0, shove: { dx: 0, dy: 0 }, from: q.facing, mid: (box.top + box.bottom) / 2, box: hurt, code: BURN_CODE, hitter: { mass: 0, vx: 0, vy: 0, by: {} } });
         continue;
       }
       const scale = kit.blow / 100;
       const bx = cel!.blow!.dx * scale;
       const by = cel!.blow!.dy * scale;
-      strikeFoe(
-        e,
-        Math.sqrt(bx * bx + by * by),
-        { dx: bx, dy: by },
-        q.facing,
-        (box.top + box.bottom) / 2,
-        hurt,
-        0,
-        undefined,
+      strikeFoe(e, {
+        damage: Math.sqrt(bx * bx + by * by),
+        shove: { dx: bx, dy: by },
+        from: q.facing,
+        mid: (box.top + box.bottom) / 2,
+        box: hurt,
         // the stream class leaves `obj+0xe` at the allocator's nothing
         // (`0x424534`), so it trades no momentum with what it wets
-        { mass: 0, vx: 0, vy: 0, by: {} },
-      );
+        hitter: { mass: 0, vx: 0, vy: 0, by: {} },
+      });
     }
     /**
      * ...and what it does to a CAST, which is where the −9 stops being a

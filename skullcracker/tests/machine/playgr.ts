@@ -175,7 +175,7 @@ test.skipIf(!haveRip())("playgr", async () => {
     const hit = (damage: number): void => {
       const a = game.foeAnchor(b, game.level!)!;
       const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
-      game.strikeFoe(b, damage, { dx: 30, dy: 0 }, 1, a.y, box, 0, { x: a.x, y: a.y }, { mass: 12, vx: 30, vy: 0 });
+      game.strikeFoe(b, { damage, shove: { dx: 30, dy: 0 }, from: 1, mid: a.y, box, contact: { x: a.x, y: a.y }, hitter: { mass: 12, vx: 30, vy: 0 } });
     };
     const calls = recordSound(game);
     const effects = (): number[] => calls.filter((c) => c.call === "effect").map((c) => c.args[0] as number);

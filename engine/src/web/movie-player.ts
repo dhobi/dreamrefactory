@@ -1116,8 +1116,7 @@ export class MoviePlayer {
     // screentoblacks (snapshot taken), opens the stage, plays `trnkopen.mov`
     // and stops. The trunk was open, composited and 172k lit pixels in the
     // framebuffer, behind a screen that stayed black for ever.
-    this.session.fade.snapshot = null;
-    this.session.fade.pendingReveal = true;
+    this.session.fade.oweReveal(true);
     this.onFinished();
     // release the script blocked in playmovie() (whole chain done)
     const resolve = this.resolveWhenDone;

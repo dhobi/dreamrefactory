@@ -12,6 +12,23 @@ import type { GameSession } from "./session";
  *  name — see {@link SessionEvents.resolveEventTarget} */
 const ACTOR_ADDRESSEE = /^sendtoactor(fx)?$/;
 
+/** how {@link SessionEvents.runHandlerChain} walks its chain */
+export interface HandlerChainOptions {
+  /**
+   * Whether a link that RAN ends the walk. True for every event but the
+   * keyboard's, where the original's rule is different and the corpus shows it:
+   * `deckbd.set`'s keydown is a ladder of `if currentview() = "viewNN" & arg =
+   * "uparrow" … exitcode`, and for any other key it simply falls off the end. If
+   * that ended the walk, no arrow would ever reach the boot's default movement
+   * — so for a key event only `exitcode` stops the chain (see
+   * SetScripts.keyDown, which has always said this). True when not given.
+   */
+  stopOnHandled?: boolean;
+  /** the frame this chain is being run FROM, if a script is running it — see
+   *  {@link SessionEvents.sendEvent} and {@link Frame.dispatch} */
+  parent?: Frame;
+}
+
 export class SessionEvents {
   constructor(private readonly session: GameSession) {}
 
@@ -148,8 +165,7 @@ export class SessionEvents {
       handler,
       args,
       (link) => ({ me: propOwn && link === inst ? evTarget : link.name, target: evTarget }),
-      !keyEvent,
-      parent,
+      { stopOnHandled: !keyEvent, parent },
     );
     // `passcode` means "not mine, ask whoever holds me" — so a chain that ends on
     // one keeps going up the containment chain, exactly as a chain that had no
@@ -481,19 +497,7 @@ export class SessionEvents {
     handler: string,
     args: Value[],
     ctxFor: (link: ScriptInstance) => CallCtx,
-    /**
-     * Whether a link that RAN ends the walk. True for every event but the
-     * keyboard's, where the original's rule is different and the corpus shows it:
-     * `deckbd.set`'s keydown is a ladder of `if currentview() = "viewNN" & arg =
-     * "uparrow" … exitcode`, and for any other key it simply falls off the end. If
-     * that ended the walk, no arrow would ever reach the boot's default movement
-     * — so for a key event only `exitcode` stops the chain (see
-     * SetScripts.keyDown, which has always said this).
-     */
-    stopOnHandled = true,
-    /** the frame this chain is being run FROM, if a script is running it — see
-     *  {@link sendEvent} and {@link Frame.dispatch} */
-    parent?: Frame,
+    { stopOnHandled = true, parent }: HandlerChainOptions = {},
   ): Promise<{ value: Value; ran: boolean; passed: boolean; visited: ScriptInstance[] }> {
     let value: Value = 0;
     let ran = false;
@@ -588,8 +592,7 @@ export class SessionEvents {
       handler,
       args,
       () => ({ me: inst.name, target: evTarget }),
-      true,
-      parent,
+      { parent },
     );
     return res.ran ? res.value : fallback;
   }

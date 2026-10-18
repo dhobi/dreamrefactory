@@ -103,19 +103,17 @@ export function landHits(): void {
     ))
       continue;
     struck.add(e);
-    strikeFoe(
-      e,
-      mine.damage,
-      mine.blow,
-      p.facing,
-      (mine.top + mine.bottom) / 2,
+    strikeFoe(e, {
+      damage: mine.damage,
+      shove: mine.blow,
+      from: p.facing,
+      mid: (mine.top + mine.bottom) / 2,
       box,
-      0,
-      {
+      contact: {
         x: (Math.max(mine.left, box.left) + Math.min(mine.right, box.right)) / 2,
         y: (Math.max(mine.top, box.top) + Math.min(mine.bottom, box.bottom)) / 2,
       },
-    );
+    });
   }
   // and BOGGS, which is four objects: `0x41aad0` turns a blow away only when the
   // striker is one of Boggs' own parts, so a fist is none of those and lands on
@@ -223,20 +221,19 @@ export function foesStrikeFoes(): void {
       }
       mem.hit.add(v);
       landed = true;
-      strikeFoe(
-        v,
+      strikeFoe(v, {
         damage,
-        cel.blow ?? { dx: 0, dy: 0 },
-        facing,
-        (box.top + box.bottom) / 2,
-        hb,
-        Math.min(code, 0),
-        {
+        shove: cel.blow ?? { dx: 0, dy: 0 },
+        from: facing,
+        mid: (box.top + box.bottom) / 2,
+        box: hb,
+        code: Math.min(code, 0),
+        contact: {
           x: (Math.max(box.left, hb.left) + Math.min(box.right, hb.right)) / 2,
           y: (Math.max(box.top, hb.top) + Math.min(box.bottom, hb.bottom)) / 2,
         },
-        { mass, vx, vy, recoil, by: { kind, kit } },
-      );
+        hitter: { mass, vx, vy, recoil, by: { kind, kit } },
+      });
     }
     return landed;
   };
@@ -312,35 +309,29 @@ export function takeHits(): void {
 /** the player's body box this frame, which every hitter is tested against */
 type Body = NonNullable<ReturnType<typeof playerBody>>;
 
-/** one hitter against the body: its cel, where it stands and how it moves; true when it landed */
-type Hit = (
-  cel: SbkCel,
-  x: number,
-  y: number,
-  facing: number,
-  vx: number,
-  vy: number,
-  code?: number,
-  grip?: () => { x: number; y: number } | null,
-  what?: object,
-) => boolean;
+/** one hitter against the body: its cel, where it stands and how it moves */
+interface Swing {
+  cel: SbkCel;
+  x: number;
+  y: number;
+  facing: number;
+  /** the hitter's own velocity; none is 0 */
+  vx?: number;
+  vy?: number;
+  /** the hitter's own `obj+0x1a`; negative is a CODE and never damage */
+  code?: number;
+  /** where this hitter would hold you, re-read every frame — see {@link gripOf} */
+  grip?: () => { x: number; y: number } | null;
+  /** the hitter itself, so it can ask later whether it still has you */
+  what?: object;
+}
+
+/** one {@link Swing} against the body; true when it landed */
+type Hit = (swing: Swing) => boolean;
 
 /** what a blow does to the player once it reaches his body `mine` — a code dispatched, or the damage and the reaction */
 function hitter(mine: Body): Hit {
-  return (
-    cel: SbkCel,
-    x: number,
-    y: number,
-    facing: number,
-    vx: number,
-    vy: number,
-    /** the hitter's own `obj+0x1a`; negative is a CODE and never damage */
-    code = 100,
-    /** where this hitter would hold you, re-read every frame — see {@link gripOf} */
-    grip?: () => { x: number; y: number } | null,
-    /** the hitter itself, so it can ask later whether it still has you */
-    what?: object,
-  ): boolean => {
+  return ({ cel, x, y, facing, vx = 0, vy = 0, code = 100, grip, what }: Swing): boolean => {
     const box = strikeOf(cel, x, y, facing);
     if (!box) return false;
     if (!(
@@ -470,7 +461,7 @@ function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
     // is what the blow leads to — see {@link Claw.caught}
     const code = c.state === "clamp" ? CLAW.grab : CLAW.blow;
     if (
-      hit(cel, c.x, c.y, 1, 0, 0, code, () => gripAt(clawCel(c), c.x, c.y), c)
+      hit({ cel, x: c.x, y: c.y, facing: 1, code, grip: () => gripAt(clawCel(c), c.x, c.y), what: c })
     )
       return true;
   }
@@ -488,17 +479,15 @@ function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
     if (!cel?.strike) continue;
     const kind = q.underfoot ? HAND.underfoot : HAND.anywhere;
     if (
-      hit(
+      hit({
         cel,
-        q.atX,
-        q.atY,
-        1,
-        0,
-        0,
-        kind.blow,
-        () => gripAt(handCel(q), q.atX, q.atY),
-        q,
-      )
+        x: q.atX,
+        y: q.atY,
+        facing: 1,
+        code: kind.blow,
+        grip: () => gripAt(handCel(q), q.atX, q.atY),
+        what: q,
+      })
     )
       return true;
   }
@@ -514,7 +503,7 @@ function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
     // mirrored about its anchor with the object, as `0x4026d0` builds the rect
     const facing = q.mirror ? -1 : 1;
     if (
-      hit(cel, q.x, q.y, facing, 0, 0, code, () => gripAt(bushCel(q), q.x, q.y, facing), q)
+      hit({ cel, x: q.x, y: q.y, facing, code, grip: () => gripAt(bushCel(q), q.x, q.y, facing), what: q })
     )
       return true;
   }
@@ -524,7 +513,7 @@ function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
     if (!g.on) continue;
     const cel = celRec(lvl.sbk, surgeCel(g));
     if (!cel?.strike) continue;
-    if (hit(cel, g.x, g.y, 1, 0, 0, SURGE.blow)) return true;
+    if (hit({ cel, x: g.x, y: g.y, facing: 1, code: SURGE.blow })) return true;
   }
   // `0x41b022` — Boggs' first machine, armed with −1 while it sweeps, seen or
   // not ({@link BOGGS.zap}); its `obj+0x28` is 0 (`0x41b28b`). A blow the
@@ -535,7 +524,7 @@ function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
     const cel = celRec(lvl.sbk, BOGGS.zap.cel);
     const m = b.machines[0];
     if (!cel?.strike || !m) continue;
-    if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.zap.code, undefined, b.zap)) {
+    if (hit({ cel, x: m.x, y: m.y, facing: 1, code: BOGGS.zap.code, what: b.zap })) {
       b.zap.armed = false;
       return true;
     }
@@ -570,7 +559,7 @@ function takeCreatureBlows(lvl: Level, mine: Body, hit: Hit): boolean {
     const strength = e.state === "burst" ? 0 : (e.strength ?? 100);
     // the box hangs off `obj+6`, the anchor, not the feet ({@link strikeOf})
     const a = foeAnchor(e, lvl) ?? { x: e.x, y: e.y };
-    if (hit(c, a.x, a.y, e.facing, vx, e.vy / TICK_SCALE, strength)) {
+    if (hit({ cel: c, x: a.x, y: a.y, facing: e.facing, vx, vy: e.vy / TICK_SCALE, code: strength })) {
       // `0x430663` — the exchange marks the hitter's `obj+0x2a`, for a blow
       // with a strength (`0x430430`)
       if (strength > 0) e.connected = true;
@@ -595,7 +584,7 @@ function takeCreatureBlows(lvl: Level, mine: Body, hit: Hit): boolean {
       reach.top < mine.bottom
     )
       c.hit = true;
-    if (hit(cel, c.x, c.y, 1, c.vx, c.vy)) return true;
+    if (hit({ cel, x: c.x, y: c.y, facing: 1, vx: c.vx, vy: c.vy })) return true;
   }
   return false;
 }
@@ -659,7 +648,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
       // and no blow pair (6004..6006), so `hit` resolves them to nothing of
       // its own accord and the first cel that can take health is 7000's.
       if (c.landed === undefined) burstCast(c);
-      if (hit(cel, c.x, c.y, c.facing, 0, 0, c.kit.blow)) return true;
+      if (hit({ cel, x: c.x, y: c.y, facing: c.facing, code: c.kit.blow })) return true;
       continue;
     }
     // ...or, for one that flies on, it is only worth nothing from now on
@@ -669,7 +658,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
     else c.spent = true;
     // `0x42f910` adds what the HITTER was doing to the cel's own pair, and a
     // cast's velocity is already in the executable's units — a frame's worth
-    if (hit(cel, c.x, c.y, c.facing, c.vx, 0, blow)) return true;
+    if (hit({ cel, x: c.x, y: c.y, facing: c.facing, vx: c.vx, code: blow })) return true;
   }
   /**
    * ...and Boggs' WORMS, which are the same argument as a cast.
@@ -686,7 +675,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
       if (!box) continue;
       if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
         continue;
-      if (hit(cel, m.x, m.y, 1, 0, 0, BOGGS.worms.strength)) return true;
+      if (hit({ cel, x: m.x, y: m.y, facing: 1, code: BOGGS.worms.strength })) return true;
     }
   }
   /**
@@ -707,7 +696,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
     if (!box) continue;
     if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
       continue;
-    if (hit(cel, r.x, r.y, face, Math.trunc(r.vx / ROLLER.divisor), 0, blow)) return true;
+    if (hit({ cel, x: r.x, y: r.y, facing: face, vx: Math.trunc(r.vx / ROLLER.divisor), code: blow })) return true;
   }
   return false;
 }
@@ -720,13 +709,13 @@ function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
     if (c.state !== "slam") continue;
     const cel = celRec(lvl.sbk, crushCel(c));
     if (!cel?.strike) continue;
-    if (hit(cel, c.x, c.y, 1, 0, 0)) return;
+    if (hit({ cel, x: c.x, y: c.y, facing: 1 })) return;
   }
   for (const b of ibeamsHere()) {
     if (b.delay > 0) continue;
     const cel = celRec(lvl.sbk, ibeamCel(b));
     if (!cel?.strike) continue;
-    if (hit(cel, b.x, b.y, 1, 0, 0)) return;
+    if (hit({ cel, x: b.x, y: b.y, facing: 1 })) return;
   }
   // the big gun's shot, a hundred (`0x413bed`), tested where it stood as the
   // frame began on the record the step shows ({@link GUNBOLT}); a blow taken
@@ -735,7 +724,7 @@ function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
     if (b.code !== 100 || b.spent || !b.was) continue;
     const cel = celRec(lvl.sbk, boltCel(b));
     if (!cel?.strike) continue;
-    if (hit(cel, b.was.x, b.was.y, b.facing, b.vx, 0)) {
+    if (hit({ cel, x: b.was.x, y: b.was.y, facing: b.facing, vx: b.vx })) {
       b.spent = true;
       return;
     }
@@ -745,7 +734,7 @@ function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
   for (const a of hereOf((l) => l.axes)) {
     const cel = celRec(lvl.sbk, axeCel(a));
     if (!cel?.strike) continue;
-    if (hit(cel, a.x, a.y, 1, 0, 0)) return;
+    if (hit({ cel, x: a.x, y: a.y, facing: 1 })) return;
   }
   // ...and VAT's wrecking balls: `0x41a89e` writes a hundred every frame, and
   // every cel of the swing carries a box. It is pinned to its point with both
@@ -754,7 +743,7 @@ function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
     if (f.kind !== "ball") continue;
     const cel = celRec(lvl.sbk, fittingCel(f));
     if (!cel?.strike) continue;
-    if (hit(cel, f.x, f.y, 1, 0, 0, FITTING.ball.blow)) return;
+    if (hit({ cel, x: f.x, y: f.y, facing: 1, code: FITTING.ball.blow })) return;
   }
   // ...and the goop, which carries `obj+0x1a = 0x64` and therefore its cel's own
   // pair unscaled — see {@link dripStrike} for why that is one cel of nine
@@ -773,7 +762,7 @@ function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
     )
       d.hit = true;
     // a drip keeps its velocity in pixels a FRAME already (see {@link stepGoop})
-    if (hit(cel, d.x, d.y, 1, d.vx, d.vy)) return;
+    if (hit({ cel, x: d.x, y: d.y, facing: 1, vx: d.vx, vy: d.vy })) return;
   }
   // ...and level eight's water is not in this list: it never hurts the player.
   // The column is born out of `0x42f550` with `obj+0x1a = 0` (`0x42f5af`), and
@@ -956,17 +945,15 @@ export function boltHits(): void {
       // a taken blow is a counted one; a gate that turned it away left the
       // count where it was — the handler's 1 or 0
       const dents = e.dents;
-      strikeFoe(
-        e,
-        Math.floor(Math.hypot(dx, dy)),
-        pair,
-        facing,
-        at.y,
-        hurt,
-        0,
-        { x: at.x, y: at.y },
-        { mass: BOLT.divisor, vx, vy: 0, by: {} },
-      );
+      strikeFoe(e, {
+        damage: Math.floor(Math.hypot(dx, dy)),
+        shove: pair,
+        from: facing,
+        mid: at.y,
+        box: hurt,
+        contact: { x: at.x, y: at.y },
+        hitter: { mass: BOLT.divisor, vx, vy: 0, by: {} },
+      });
       if (e.dents !== dents) {
         b.spent = true;
         break;
@@ -1032,7 +1019,7 @@ export function flareHits(): void {
        * has: see {@link Foe.burns}.
        */
       if (levelIndex % 4 === 3) {
-        strikeFoe(e, 0, { dx: 0, dy: 0 }, f.facing, (box.top + box.bottom) / 2, hurt, BURN_CODE, undefined, { mass: FLARE.divisor, vx: 0, vy: 0, by: {} });
+        strikeFoe(e, { damage: 0, shove: { dx: 0, dy: 0 }, from: f.facing, mid: (box.top + box.bottom) / 2, box: hurt, code: BURN_CODE, hitter: { mass: FLARE.divisor, vx: 0, vy: 0, by: {} } });
       } else {
         // `0x42f910` at strength 100: the cel's own pair, mirrored by facing,
         // plus the flare's own velocity, and the damage is the length of that —
@@ -1041,18 +1028,15 @@ export function flareHits(): void {
         const pair = art?.blow ?? { dx: 0, dy: 0 };
         const dx = pair.dx + at.vx * f.facing;
         const dy = pair.dy + at.vy;
-        strikeFoe(
-          e,
-          Math.round(Math.hypot(dx, dy)),
-          { dx, dy },
-          f.facing,
-          (box.top + box.bottom) / 2,
-          hurt,
-          0,
-          undefined,
+        strikeFoe(e, {
+          damage: Math.round(Math.hypot(dx, dy)),
+          shove: { dx, dy },
+          from: f.facing,
+          mid: (box.top + box.bottom) / 2,
+          box: hurt,
           // the flare's own mass, its divisor of 5 (`0x43ab50`)
-          { mass: FLARE.divisor, vx: at.vx * f.facing, vy: at.vy, by: {} },
-        );
+          hitter: { mass: FLARE.divisor, vx: at.vx * f.facing, vy: at.vy, by: {} },
+        });
       }
       f.burn = -1;
       struck = true;

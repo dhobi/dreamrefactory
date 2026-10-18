@@ -141,11 +141,9 @@ export class StageController {
      * by the quiet.
      */
     if (this.session.fade.blanked && this.session.fade.level === 1) {
-      this.session.fade.pendingReveal = true;
+      this.session.fade.oweReveal();
     } else {
-      this.session.fade.queue.length = 0;
-      this.session.fade.snapshot = null;
-      this.session.fade.level = 0;
+      this.session.fade.settle(0);
     }
     // the container the STAGE names, not container 1 — see StgFile.mainScriptLocation
     this.session.stageScript = this.session.instanceFrom(

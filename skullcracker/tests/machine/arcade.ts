@@ -601,7 +601,7 @@ test.skipIf(!haveRip())("arcade", async () => {
     const hit = (damage: number, code = 0): void => {
       const a = game.foeAnchor(b, game.level!)!;
       const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
-      game.strikeFoe(b, damage, { dx: 20, dy: 0 }, 1, a.y, box, code, { x: a.x, y: a.y }, { mass: 5, vx: 0, vy: 0 });
+      game.strikeFoe(b, { damage, shove: { dx: 20, dy: 0 }, from: 1, mid: a.y, box, code, contact: { x: a.x, y: a.y }, hitter: { mass: 5, vx: 0, vy: 0 } });
     };
     const calls = recordSound(game);
     const effects = (): number[] => calls.filter((c) => c.call === "effect").map((c) => c.args[0] as number);

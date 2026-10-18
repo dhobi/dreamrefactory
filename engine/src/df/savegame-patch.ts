@@ -539,6 +539,17 @@ function openFilesPatch(containers: Container[], index: SaveIndex, patch: SavePa
 }
 
 /**
+ * What every step of {@link applyPatch} works on: the copied containers it
+ * writes, their index (read after the open-file lists moved the map), and the
+ * patch.
+ */
+interface PatchJob {
+  readonly containers: Container[];
+  readonly index: SaveIndex;
+  readonly patch: SavePatch;
+}
+
+/**
  * Produce the bytes of a save that carries `patch`'s progress, using `base` as
  * the structural template. The base's containers are copied; the globals-
  * container values and container 1's set/scene/view are overwritten in place.
@@ -558,17 +569,19 @@ export function applyPatch(base: RawSaveFile, patch: SavePatch): Uint8Array {
   openFilesPatch(containers, saveIndex(raw), patch);
   const index = saveIndex(raw);
 
-  patchGlobals(base, containers, index, patch);
-  patchRoom(base, containers, index, patch);
-  patchInventory(base, containers, index, patch);
-  patchActors(base, containers, index, patch);
-  patchScheduler(base, containers, index, patch);
-  patchTheme(base, containers, index, patch);
+  const job: PatchJob = { containers, index, patch };
+  patchGlobals(job);
+  patchRoom(job);
+  patchInventory(job);
+  patchActors(job);
+  patchScheduler(job);
+  patchTheme(job);
   return writeSaveFile(raw);
 }
 
 /** the globals container: every variable the patch carries, in place or as a new record */
-function patchGlobals(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
+function patchGlobals(job: PatchJob): void {
+  const { containers, index, patch } = job;
   // globals: overwrite each variable's DFValue (type at slot+24, value at
   // slot+26 — the slot recordOffsets maps to already accounts for the
   // name/value node pairing). Numbers are written inline and tagged type 4;
@@ -650,7 +663,8 @@ function patchGlobals(base: RawSaveFile, containers: Container[], index: SaveInd
 }
 
 /** container 1's room, frame counter and set file, and container 0's disc label */
-function patchRoom(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
+function patchRoom(job: PatchJob): void {
+  const { containers, patch } = job;
   // container 1: set/scene/view live in 16-byte fields at fixed offsets.
   const c1 = containers[1].data;
   if (c1.length >= C1_VIEW + 16) {
@@ -730,7 +744,8 @@ function patchRoom(base: RawSaveFile, containers: Container[], index: SaveIndex,
 }
 
 /** the props' views and owners, in place in the prop grid */
-function patchInventory(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
+function patchInventory(job: PatchJob): void {
+  const { containers, index, patch } = job;
   // inventory: overwrite each named prop's view (record+48) and owner (record+64)
   // in place. Both are read at fixed offsets, so writing them as Pascal strings
   // there preserves the 158-byte grid (the value field trailing owner is ignored
@@ -781,7 +796,8 @@ function patchInventory(base: RawSaveFile, containers: Container[], index: SaveI
 }
 
 /** the actors' records, in place in the actor grid */
-function patchActors(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
+function patchActors(job: PatchJob): void {
+  const { containers, index, patch } = job;
   // actors: the same in-place write — the memory of the player (owner, conversation
   // count) and, when the caller supplies one, the whole placement half.
   if (patch.actors?.length) {
@@ -886,7 +902,8 @@ function patchActors(base: RawSaveFile, containers: Container[], index: SaveInde
 }
 
 /** the scheduler's three service tables */
-function patchScheduler(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
+function patchScheduler(job: PatchJob): void {
+  const { containers, index, patch } = job;
   // the scheduler: the three fixed-size service tables, written whole.
   if (patch.scheduler) {
     const si = index.loops;
@@ -1007,7 +1024,8 @@ function patchScheduler(base: RawSaveFile, containers: Container[], index: SaveI
 }
 
 /** the theme's playing and looping lists */
-function patchTheme(base: RawSaveFile, containers: Container[], index: SaveIndex, patch: SavePatch): void {
+function patchTheme(job: PatchJob): void {
+  const { containers, index, patch } = job;
   // the theme: empty every track's playing/looping lists, then write the named
   // track's as ONE RECORD PER LOOP CHUNK, exactly the shape TI.EXE's writer
   // dumps and — the part that is not optional — the shape its post-load resume

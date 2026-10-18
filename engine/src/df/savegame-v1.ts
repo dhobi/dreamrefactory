@@ -1540,6 +1540,18 @@ function byName(d: Uint8Array, stride: number, nameOff: number): Map<string, num
 }
 
 /**
+ * What every step of {@link applyPatchV1} works on: the copy of the base it
+ * writes, the copy's index, the patch, and where a field that could not be
+ * placed is reported.
+ */
+interface PatchJobV1 {
+  readonly out: RawSaveFile;
+  readonly index: V1Index;
+  readonly patch: SavePatchV1;
+  readonly drop: NonNullable<SavePatchV1["onDrop"]>;
+}
+
+/**
  * Write a snapshot into a base save and serialize it.
  *
  * The same bargain v4's `applyPatch` makes, for the same reason: a save is a
@@ -1563,19 +1575,21 @@ export function applyPatchV1(base: RawSaveFile, patch: SavePatchV1): Uint8Array 
   const index = v1Index(out);
   const drop = patch.onDrop ?? (() => {});
 
-  patchGlobalsV1(base, out, index, patch, drop);
-  patchStandpointV1(base, out, index, patch, drop);
-  patchSoundV1(base, out, index, patch, drop);
-  patchPropsAndCastV1(base, out, index, patch, drop);
-  patchLoopsV1(base, out, index, patch, drop);
-  patchBallsV1(base, out, index, patch, drop);
-  patchWalksV1(base, out, index, patch, drop);
+  const job: PatchJobV1 = { out, index, patch, drop };
+  patchGlobalsV1(job);
+  patchStandpointV1(job);
+  patchSoundV1(job);
+  patchPropsAndCastV1(job);
+  patchLoopsV1(job);
+  patchBallsV1(job);
+  patchWalksV1(job);
 
   return writeSaveFile(out);
 }
 
 /** the globals and the string pool they point into */
-function patchGlobalsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchGlobalsV1(job: PatchJobV1): void {
+  const { out, index, patch, drop } = job;
   // ---- globals -----------------------------------------------------------
   const globals = out.containers[index.globals];
   const pool = out.containers[index.pool];
@@ -1662,7 +1676,8 @@ function patchGlobalsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, pat
 }
 
 /** the standpoint, the frame counter, the set file and the open set */
-function patchStandpointV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchStandpointV1(job: PatchJobV1): void {
+  const { out, patch, drop } = job;
   // ---- the standpoint and the frame counter -------------------------------
   const c1 = out.containers[1]?.data;
   if (c1 && c1.length >= C1_SIZE) {
@@ -1792,7 +1807,8 @@ function patchStandpointV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, 
 }
 
 /** the sound: per-sound settings of every open bank */
-function patchSoundV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchSoundV1(job: PatchJobV1): void {
+  const { out, index, patch, drop } = job;
   // ---- the sound -----------------------------------------------------------
   const c0 = out.containers[0]?.data;
   const files = c0 ? readFiles(c0) : [];
@@ -1861,7 +1877,8 @@ function patchSoundV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch
 }
 
 /** the props' and the cast's records, in place */
-function patchPropsAndCastV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchPropsAndCastV1(job: PatchJobV1): void {
+  const { out, patch, drop } = job;
   // ---- props and cast ----------------------------------------------------
   const cp = out.containers[4]?.data;
   if (cp && patch.props) {
@@ -1934,7 +1951,8 @@ function patchPropsAndCastV1(base: RawSaveFile, out: RawSaveFile, index: V1Index
 }
 
 /** the loop table */
-function patchLoopsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchLoopsV1(job: PatchJobV1): void {
+  const { out, index, patch, drop } = job;
   // ---- the loop table ----------------------------------------------------
   // Rewritten whole rather than merged: it IS the live scheduler (the writer
   // memcpy's the engine's own table), so a slot the running game does not have
@@ -1968,7 +1986,8 @@ function patchLoopsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch
 }
 
 /** the balls */
-function patchBallsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchBallsV1(job: PatchJobV1): void {
+  const { out, index, patch, drop } = job;
   // ---- the balls ---------------------------------------------------------
   const cp = out.containers[4]?.data;
   // Positional, like the table it is: a ball's slot is the one it was made in.
@@ -1992,7 +2011,8 @@ function patchBallsV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch
 }
 
 /** the walks, each route's waypoints re-emitted after the table */
-function patchWalksV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
+function patchWalksV1(job: PatchJobV1): void {
+  const { out, index, patch, drop } = job;
   // ---- the walks ---------------------------------------------------------
   const ca = out.containers[2]?.data;
   // The same wholesale rewrite the loops get, and for the same reason: the table

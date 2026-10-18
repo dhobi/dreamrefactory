@@ -322,13 +322,13 @@ test.skipIf(!haveRip())("sewer", async () => {
   {
     const box = { top: 0, left: 0, bottom: 1, right: 1 };
     eye.script = 7;
-    game.strikeFoe(eye, 10, { dx: 0, dy: 0 }, 1, eye.y, box);
+    game.strikeFoe(eye, { damage: 10, shove: { dx: 0, dy: 0 }, from: 1, mid: eye.y, box });
     const out = FOES.initeyeball.flinch![3];
     if (eye.state !== "flinch" || eye.anim !== out || eye.script !== 3)
       fail(`a blow on a spitting eye is 0x4727f0 tag 0, kind 3: ${eye.state} ${eye.anim.from} kind ${eye.script}`);
     h.frame(3);
     const at = eye.clock;
-    game.strikeFoe(eye, 10, { dx: 0, dy: 0 }, 1, eye.y, box);
+    game.strikeFoe(eye, { damage: 10, shove: { dx: 0, dy: 0 }, from: 1, mid: eye.y, box });
     if (eye.anim !== out || eye.clock !== at || (eye.hp as number) !== 30)
       fail(`a second blow takes ten and leaves the knock-out running: ${eye.anim.from} at ${eye.clock} (was ${at}), hp ${eye.hp}`);
   }
@@ -555,7 +555,7 @@ test.skipIf(!haveRip())("sewer", async () => {
     const paid = game.stats.score;
     ox.clock = 1;
     const a = game.foeAnchor(ox, game.level!) ?? { x: ox.x, y: ox.y };
-    game.strikeFoe(ox, 47, { dx: 20, dy: 0 }, 1, a.y, { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 }, 0, a);
+    game.strikeFoe(ox, { damage: 47, shove: { dx: 20, dy: 0 }, from: 1, mid: a.y, box: { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 }, contact: a });
     if (game.stats.score - paid !== 320 || ox.clock !== 0 || ox.state !== "dead")
       fail(`an ox struck on 5190 dies again and pays again; the score rose ${game.stats.score - paid}`);
     ok(`an ox struck as it falls dies again from the top and pays another 320`);

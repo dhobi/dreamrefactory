@@ -416,7 +416,7 @@ test.skipIf(!haveRip())("foes", async () => {
     const m = nearestOf("initmailbox")!;
     const a = game.foeAnchor(m, game.level!)!;
     const box = { left: a.x - 20, right: a.x + 20, top: a.y - 20, bottom: a.y + 20 };
-    const strike = (damage: number): void => game.strikeFoe(m, damage, { dx: 5, dy: 0 }, 1, a.y, box, 0);
+    const strike = (damage: number): void => game.strikeFoe(m, { damage, shove: { dx: 5, dy: 0 }, from: 1, mid: a.y, box });
     strike(5);
     if (m.state !== "gait") fail(`0x44fec8: under ten installs nothing on a standing mailbox; it is ${m.state}`);
     strike(60);
