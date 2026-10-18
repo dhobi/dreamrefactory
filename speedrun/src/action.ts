@@ -212,15 +212,11 @@ function shape(text: string): { key: string; of: string; op: string; rest: strin
   return { key: head[1], of: head[2] ?? "", op, rest: tail.slice(op.length).trimStart() };
 }
 
-export function predicate(text: string): string {
-  const m = shape(text.trim());
-  if (!m) throw new Error(`"${text}" is not a condition`);
-  const k = m.key.toLowerCase();
-  const of = m.of.toLowerCase();
-  const op = m.op;
-  const value = m.rest.trim();
-  const q = (v: string) => JSON.stringify(v.toLowerCase());
-
+/**
+ * The spellings conditions had before they took a dot and `==`, refused with
+ * the one they have now — `global:mission == 1`, `owns = map`, `scene = a1`.
+ */
+function refuseOldSpelling(k: string, of: string, op: string, value: string): void {
   // `global:mission == 1`, named rather than left to fall through as "not a
   // condition": the accessor is `global.mission`, and a colon means a named argument
   if (!op && !of && value.startsWith(":")) {
@@ -230,20 +226,34 @@ export function predicate(text: string): string {
         (rest.length && rest.at(-1) ? ` == ${rest.at(-1)}` : ""),
     );
   }
-  if (!op && value.startsWith("=")) {
-    const rest = value.replace(/^=+/, "").trim();
-    // The old spelling of an accessor was a comparison, so say the dot rather
-    // than doubling the equals — `owns.map` wants `owns.map`, not `owns == map`.
-    const DOTTED: Record<string, boolean> = { owns: true, visible: true, walking: true, actor: true, global: true, g: true };
-    if (DOTTED[k] && !of) {
-      let compared = "";
-      if (k === "global" || k === "g") compared = ` == <value>`;
-      else if (rest.includes(":")) compared = ` == ${rest.split(":")[1]}`;
-      throw new Error(`a named thing is reached with a dot now — ${k}.${rest.split(/[:=]/)[0]}${compared}`);
-    }
-    const dotted = of ? `.${of}` : "";
-    throw new Error(`conditions compare with == now — ${k}${dotted} == ${rest}`);
+  if (!op && value.startsWith("=")) refuseSingleEquals(k, of, value.replace(/^=+/, "").trim());
+}
+
+/** `scene = a1`, and `owns = map` from when an accessor was a comparison */
+function refuseSingleEquals(k: string, of: string, rest: string): never {
+  // The old spelling of an accessor was a comparison, so say the dot rather
+  // than doubling the equals — `owns.map` wants `owns.map`, not `owns == map`.
+  const DOTTED: Record<string, boolean> = { owns: true, visible: true, walking: true, actor: true, global: true, g: true };
+  if (DOTTED[k] && !of) {
+    let compared = "";
+    if (k === "global" || k === "g") compared = ` == <value>`;
+    else if (rest.includes(":")) compared = ` == ${rest.split(":")[1]}`;
+    throw new Error(`a named thing is reached with a dot now — ${k}.${rest.split(/[:=]/)[0]}${compared}`);
   }
+  const dotted = of ? `.${of}` : "";
+  throw new Error(`conditions compare with == now — ${k}${dotted} == ${rest}`);
+}
+
+export function predicate(text: string): string {
+  const m = shape(text.trim());
+  if (!m) throw new Error(`"${text}" is not a condition`);
+  const k = m.key.toLowerCase();
+  const of = m.of.toLowerCase();
+  const op = m.op;
+  const value = m.rest.trim();
+  const q = (v: string) => JSON.stringify(v.toLowerCase());
+
+  refuseOldSpelling(k, of, op, value);
   /** this condition takes no operand at all */
   const bare = (expr: string): string => {
     if (of || op || value) throw new Error(`${k} takes nothing after it — write \`${k}\` on its own`);
@@ -263,303 +273,371 @@ export function predicate(text: string): string {
     return of;
   };
 
-  switch (k) {
-    // where we are
-    case "set":
-      return reads(String.raw`String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, "")`);
-    case "scene":
-      return reads(`String(window.dbg.viewer.scene.sceneName || "").toLowerCase()`);
-    case "view":
-      return reads(`String(window.dbg.viewer.scene.views[window.dbg.viewer.viewIdx].viewName || "").toLowerCase()`);
-    case "flat":
-      return reads(`String(window.dbg.session.currentFlat || "").toLowerCase()`);
-    case "noflat":
-      return bare(`!window.dbg.session.currentFlat || window.dbg.session.viewShowing`);
-    /**
-     * A script global, compared. `global.mission == 1` is the common case, but
-     * the numeric operators earn their place: the flat's whole exit condition is
-     * `bombpoints < 0` (BEDSIT1 slams it to -20000 the moment it passes 10), and
-     * spelling that as a `js` expression is both unreadable and a trap — the
-     * tokeniser eats the quotes a `globals.get("name")` needs.
-     */
-    case "global":
-    case "g": {
-      const name = about();
-      if (op && !value) {
-        throw new Error(
-          `global.${name} == with nothing after it — for the empty string write ` +
-            `\`!global.${name}\`, and for "is it set" write \`global.${name}\``,
-        );
-      }
-      const got = `window.dbg.session.interp.globals.get(${q(name)})`;
-      /**
-       * `global.handitem` with NO comparison — is it set to anything at all.
-       *
-       * The accessor form the other named conditions already have (`owns.map`,
-       * `actor.purs`), and it is here because the empty string is a real value
-       * in this game rather than an absence: `handitem` is "" with nothing in
-       * hand, `loopsound` is "" with no ambience running, `playerdeath` is ""
-       * while you are alive. Sixteen of the route's own claims are exactly
-       * those, and `global.handitem == ` with nothing after it is not a
-       * condition a reader can see the meaning of.
-       *
-       * So "empty" is spelled `!global.handitem` and "holding something" is
-       * `global.handitem`. Meaningless for a NUMERIC global — 0 stringifies to
-       * "0", which is not empty — and that is why this is documented rather than
-       * clever: a number wants `global.phase == 0`.
-       */
-      if (!op) return `String(${got} ?? "") !== ""`;
-      /*
-       * CASE-INSENSITIVE, like every other string condition here.
-       *
-       * `set ==`, `scene ==`, `view ==`, `flat ==`, `actor.x == owner` and
-       * `prop.x == owner` all lower both sides; this one lowered only the sheet's
-       * half, and was the only string comparison in the grammar that could fail
-       * on capitalisation alone. Which it did: the route's own claim is
-       * `handitem == cards` and the engine answers "Cards", so a leg that had
-       * done everything asked of it failed its last assertion. The playthrough
-       * compares the same pair and lowers both (`playthrough.ts`), which is the
-       * reading this now matches.
-       */
-      const lower = `String(${got} ?? "").toLowerCase()`;
-      if (op === "==") return `${lower} === ${q(value)}`;
-      if (op === "!=") return `${lower} !== ${q(value)}`;
-      return `Number(${got}) ${op} ${Number(value)}`;
-    }
-    case "owns": {
-      const prop = about();
-      if (op) throw new Error(`owns.${prop} is the whole condition — it takes no comparison`);
-      /*
-       * WHOSE HAND IS THE PLAYER'S depends on the disc. Titanic's hero is
-       * `frank` and Dust's is `stranger` — its own data agrees, and the save
-       * files call him that ("the player's own owner string is `stranger`, and
-       * Dust's hero has no name"). Hardcoded to one of them, this condition was
-       * simply always false on the other game, which is a sheet line that can
-       * never come true and says nothing about why.
-       */
-      return `(() => {
-        const p = window.dbg.session.propRuntime.get(${q(prop)});
-        if (!p) return false;
-        const o = String(p.owner || "").toLowerCase();
-        return o === "frank" || o === "stranger";
-      })()`;
-    }
-    /**
-     * WHO OWNS A PROP — `prop.ring == ruby`, and `prop.ring` for "anybody".
-     *
-     * The counterpart to `actor.<name> == <owner>`, and the thing the
-     * playthrough's rungs check more than any other: a gift landing is
-     * `Ring@stranger -> Ring@ruby` in the save and `owner ("ring") !== "ruby"`
-     * in the rung. `owns.<prop>` answers only about the player, so a route had
-     * no way to say where something else went.
-     */
-    case "prop": {
-      const name = about();
-      const got = `String((window.dbg.session.propRuntime.get(${q(name)}) || {}).owner || "").toLowerCase()`;
-      if (!op) return `!!window.dbg.session.propRuntime.get(${q(name)})`;
-      if (op !== "==" && op !== "!=") throw new Error(`a prop's owner compares with == or != , not ${op}`);
-      const same = `${got} === ${q(value)}`;
-      return op === "==" ? same : `!(${same})`;
-    }
-    /**
-     * A character is loaded — and optionally, what their `actorowner` is.
-     *
-     * The owner is how this game keeps a character's place in a chain of
-     * errands, and the Purser is the clearest case: PURS1.PUP offers one topic
-     * slot whose text switches entirely on `actorowner("purs")`, walking
-     * none -> sendgram -> sentgram -> left1 -> none2 -> findcuff -> foundcuff ->
-     * left2 as each errand is done. A route that visits him six times needs to
-     * be able to say which rung it expects to find him on, and nothing else in
-     * the state says it — the globals do not move, and neither does the room.
-     */
-    case "actor": {
-      const name = about();
-      const got = `window.dbg.session.actorRuntime.actors.get(${q(name)})`;
-      if (!op) return `(() => { const a = ${got}; return !!a; })()`;
-      if (op !== "==" && op !== "!=") throw new Error(`an actorowner compares with == or != , not ${op}`);
-      const same = `(() => { const a = ${got}; return !!a && String(a.owner || "").toLowerCase() === ${q(value)}; })()`;
-      return op === "==" ? same : `!${same}`;
-    }
-    /**
-     * WHERE a character is standing — the star they were last placed on.
-     *
-     * `actorstar` is how Dust moves its cast about: a script sets the name and
-     * the scheduler walks them there, so "has Jackalope left the first hiding
-     * place" is `star.jones != town.seek1` and nothing else says it. `visible.`
-     * is the wrong question (he is visible at both) and `global.` cannot see it
-     * (the name lives on the actor, not in a script variable).
-     *
-     * Reads the same field the `actorstar` getter does, which means it answers
-     * the DESTINATION the moment the walk is ordered rather than when it lands —
-     * exactly what a route waiting to stop clicking wants to know.
-     */
-    case "star": {
-      const name = about();
-      const got = `window.dbg.session.actorRuntime.actors.get(${q(name)})`;
-      if (!op) throw new Error(`star.${name} needs a comparison — \`star.${name} == town.seek1\``);
-      if (op !== "==" && op !== "!=") throw new Error(`a star compares with == or != , not ${op}`);
-      const same = `(() => { const a = ${got}; return !!a && String(a.starName || "").toLowerCase() === ${q(value)}; })()`;
-      return op === "==" ? same : `!${same}`;
-    }
-    /**
-     * A character is not merely loaded but ON SCREEN.
-     *
-     * The distinction matters because a room places its cast from its own
-     * `openscene`, which runs after the walk that brought you in has finished.
-     * A route that arrives faster than the planner does can therefore be
-     * standing in the right view, facing the right way, with the person it came
-     * to see not yet put down — and every click aimed at them finds nothing.
-     */
-    case "visible": {
-      const name = about();
-      if (op) throw new Error(`visible.${name} is the whole condition — it takes no comparison`);
-      return `(() => { const a = window.dbg.session.actorRuntime.actors.get(${q(name)}); return !!a && !!a.visible; })()`;
-    }
-    /**
-     * A character is ON HIS FEET — the scripts' own `iswalk`, which counts a turn
-     * as a walk because TI.EXE's never looked at the mode (scheduler.ts,
-     * `turning`).
-     *
-     * Wanted almost always negated, because half a dozen scripts in this corpus
-     * refuse a click at someone who is moving and say nothing about why. The
-     * clearest is the Turkish bath door, TURKSTRS.SET c7:
-     *
-     *     if actorvisible ("morrow") & morrowphase = 0
-     *         sendtoactor ("morrow", mousedown (0))   <- he answers the knock
-     *         exitcode
-     *     endif
-     *     if iswalk ("morrow")
-     *         exitcode                                 <- and so does this
-     *     endif
-     *     sendtoprop ("door", setupprop ("turkstrs-turk"))
-     *
-     * and `walktopuppet` walks whoever you just spoke to BACK to the star they
-     * came from as the puppet closes — so the instant a conversation ends is the
-     * one instant that second guard is certain to refuse. A sheet that opens the
-     * door there gets a Space that does nothing and then an `up()` reporting that
-     * the world did not move, which is true and unhelpful.
-     *
-     * `wait(!walking.morrow)` is the whole fix, and it is the leg saying out loud
-     * what it was relying on.
-     */
-    case "walking": {
-      const name = about();
-      if (op) throw new Error(`walking.${name} is the whole condition — it takes no comparison`);
-      return `!!(window.dbg.session.scheduler.isWalk(${q(name)}))`;
-    }
-    // what is on screen
-    case "quiet":
-      return bare(`(() => { const v = window.dbg.viewer; return !!v && (v.quiescent || v.conversing); })()`);
-    /**
-     * The engine is waiting on a CLICK — a movie parked on its regions with the
-     * script that opened it suspended. This and not `asking` is what "the boot
-     * menu is up" means: `asking` only counts rectangles, and a clip can carry
-     * regions for a frame or two on its way past, which is enough for a
-     * `skipMovie until: asking` to stop at the logos and call it the menu.
-     */
-    case "awaiting":
-      return bare(`!!(${SCREEN} && ${SCREEN}.awaitingInput)`);
-    /**
-     * No fade is ramping. Worth having as its own condition because it is
-     * exactly the gap in which a key press is DROPPED (viewer.ts's note on
-     * `pressNav`), so "the room has finished arriving" is a different claim from
-     * "a movie is not playing" and a route needs to be able to make it.
-     */
-    case "faded":
-      return bare(`window.dbg.session.fade.level === 0`);
-    /**
-     * The world is FROZEN — `lockevents`, which the scripts set while the game is
-     * doing something to you and a gesture must not interrupt.
-     *
-     * The strongest refusal in the engine and the only one that is not a state of
-     * the viewer: it is a script global, so `quiet`, `faded` and `ready` all
-     * answer true through it. What it does is throw a gesture away — the click
-     * dispatch returns before the hit test and the boot's keydown exitcodes on it
-     * (viewer.ts's note on both), so the press is not run, not queued and not
-     * logged. There is nothing afterwards to notice it went missing.
-     *
-     * `truthy` and not `Number`, deliberately: this interpreter's booleans can
-     * arrive as the STRING "false", which is truthy by its own rule (interp.ts)
-     * and which `Number()` would turn into NaN and read as unlocked. The engine
-     * asks `truthy(globals.get("lockevents") ?? 0)`; so does this.
-     */
-    case "locked":
-      return bare(`(() => {
-        const v = window.dbg.session.interp.globals.get("lockevents") ?? 0;
-        return typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : String(v).length > 0;
-      })()`);
-    /**
-     * A script is sitting in an input poll loop RIGHT NOW — `while not button()`,
-     * `while stilldown()` — waiting for the mouse rather than for the engine.
-     *
-     * The engine keeps this itself (`GameSession.pollingInput`) because such a
-     * press must not also go in the event queue, and it answers the one question
-     * a held press needs: has the loop I am holding this down for noticed yet.
-     * `!polling` after it was polling is that loop letting go.
-     */
-    case "polling":
-      return bare(`window.dbg.session.pollingInput()`);
-    case "talking":
-      return bare(`!!(window.dbg.viewer && window.dbg.viewer.conversing)`);
-    /**
-     * A puppet EXISTS. The earliest sign that a character accepted a gesture and
-     * is loading their conversation, which is why the rungs hammer against this
-     * one and not against `talking` — `walktopuppet()` can spend seconds getting
-     * there, and every extra click in the meantime is a click the script may
-     * spend on something else.
-     */
-    case "puppet":
-      return bare(`!!window.dbg.session.puppet`);
-    /**
-     * A plaque is up AND the script is suspended on it. Not "are there bevels?":
-     * an answered list stays framed until the PUP script clears it, so bevels
-     * outlive the question they asked. `eventWaiter` is the question itself, and
-     * it is the only reading a `say` can be handed to without racing.
-     */
-    case "choosing":
-      return bare(`!!(window.dbg.viewer && window.dbg.viewer.awaitingChoice)`);
-    case "nomovie":
-      return bare(`!(${SCREEN} && ${SCREEN}.moviePlaying)`);
-    /**
-     * A film is on screen, asking or not.
-     *
-     * Asked of {@link SCREEN} rather than of `window.dbg.viewer` — as are
-     * `nomovie`, `asking`, `awaiting` and `movie ==`, the five conditions that
-     * are about the SCREEN rather than about a room. Dust's intro films play
-     * before any set is opened, so a viewer-first reading answered "no film"
-     * through the whole opening and nothing could skip it; the measurement is in
-     * the note on SCREEN (driver.ts).
-     *
-     * Distinct from `asking` (parked on regions) and from `nomovie`, and needed
-     * because a close-up is FETCHED OVER HTTP: for a moment after the click there
-     * is no movie yet, so "no movie" is true and an ESC sent then hits nothing at
-     * all. Measured — four ESCs landed in that gap, the film then loaded and
-     * parked, and the next key press sat against it for 2m10s.
-     */
-    case "playing":
-      return bare(`!!(${SCREEN} && ${SCREEN}.moviePlaying)`);
-    case "movie":
-      return reads(`String((${SCREEN} && ${SCREEN}.movieFile) || "").toLowerCase()`);
-    case "asking":
-      return bare(`!!(${SCREEN} && ${SCREEN}.movieRegions.length)`);
-    case "theme":
-      return reads(`String(window.dbg.session.currentThemeName || "").toLowerCase()`);
-    /**
-     * The escape hatch, and the only condition whose operand is not a name.
-     * `js == <expression>` — everything after the operator is handed through.
-     */
-    case "js":
-      if (!value) throw new Error(`js needs an expression — \`js == window.dbg.session.frameCounter > 0\``);
-      return op === "!=" ? `(!(${value}))` : `(${value})`;
-    default:
-      throw new Error(
-        `unknown condition "${text}" — try set == , scene == , view == , flat == , noflat, ` +
-          `global.name == v, owns.prop, actor.name, actor.name == owner, star.name == s, visible.name, ` +
-          `walking.name, quiet, talking, puppet, choosing, nomovie, movie == , asking, theme == , faded, locked, ` +
-          `or js == <expression>`,
-      );
-  }
+  const cond: Cond = { text, k, of, op, value, q, bare, reads, about };
+  const compile = Object.hasOwn(COMPILERS, k) ? COMPILERS[k] : undefined;
+  if (compile) return compile(cond);
+  throw new Error(
+    `unknown condition "${text}" — try set == , scene == , view == , flat == , noflat, ` +
+      `global.name == v, owns.prop, actor.name, actor.name == owner, star.name == s, visible.name, ` +
+      `walking.name, quiet, talking, puppet, choosing, nomovie, movie == , asking, theme == , faded, locked, ` +
+      `or js == <expression>`,
+  );
 }
+
+/** a condition as {@link predicate} has read it, and the helpers every compiler shares */
+interface Cond {
+  text: string;
+  /** the keyword, lowercased: `global` of `global.mission == 1` */
+  k: string;
+  /** what it is about, after the dot: `mission` */
+  of: string;
+  op: string;
+  value: string;
+  /** a sheet value as a JS string literal, lowercased */
+  q: (v: string) => string;
+  /** this condition takes no operand at all */
+  bare: (expr: string) => string;
+  /** `key == value`, the reading of something the engine holds one of */
+  reads: (got: string) => string;
+  /** `key.name`, a fact about the named thing */
+  about: () => string;
+}
+
+/** each condition keyword, and the page expression it compiles to */
+const COMPILERS: Record<string, (c: Cond) => string> = {
+  // where we are
+  set: (c) => {
+    const { reads } = c;
+    return reads(String.raw`String(window.dbg.session.currentSetFile || "").toLowerCase().replace(/\.set$/, "")`);
+  },
+  scene: (c) => {
+    const { reads } = c;
+    return reads(`String(window.dbg.viewer.scene.sceneName || "").toLowerCase()`);
+  },
+  view: (c) => {
+    const { reads } = c;
+    return reads(`String(window.dbg.viewer.scene.views[window.dbg.viewer.viewIdx].viewName || "").toLowerCase()`);
+  },
+  flat: (c) => {
+    const { reads } = c;
+    return reads(`String(window.dbg.session.currentFlat || "").toLowerCase()`);
+  },
+  noflat: (c) => {
+    const { bare } = c;
+    return bare(`!window.dbg.session.currentFlat || window.dbg.session.viewShowing`);
+  },
+  /**
+   * A script global, compared. `global.mission == 1` is the common case, but
+   * the numeric operators earn their place: the flat's whole exit condition is
+   * `bombpoints < 0` (BEDSIT1 slams it to -20000 the moment it passes 10), and
+   * spelling that as a `js` expression is both unreadable and a trap — the
+   * tokeniser eats the quotes a `globals.get("name")` needs.
+   */
+  global: (c) => {
+    const { op, value, q, about } = c;
+    const name = about();
+    if (op && !value) {
+      throw new Error(
+        `global.${name} == with nothing after it — for the empty string write ` +
+          `\`!global.${name}\`, and for "is it set" write \`global.${name}\``,
+      );
+    }
+    const got = `window.dbg.session.interp.globals.get(${q(name)})`;
+    /**
+     * `global.handitem` with NO comparison — is it set to anything at all.
+     *
+     * The accessor form the other named conditions already have (`owns.map`,
+     * `actor.purs`), and it is here because the empty string is a real value
+     * in this game rather than an absence: `handitem` is "" with nothing in
+     * hand, `loopsound` is "" with no ambience running, `playerdeath` is ""
+     * while you are alive. Sixteen of the route's own claims are exactly
+     * those, and `global.handitem == ` with nothing after it is not a
+     * condition a reader can see the meaning of.
+     *
+     * So "empty" is spelled `!global.handitem` and "holding something" is
+     * `global.handitem`. Meaningless for a NUMERIC global — 0 stringifies to
+     * "0", which is not empty — and that is why this is documented rather than
+     * clever: a number wants `global.phase == 0`.
+     */
+    if (!op) return `String(${got} ?? "") !== ""`;
+    /*
+     * CASE-INSENSITIVE, like every other string condition here.
+     *
+     * `set ==`, `scene ==`, `view ==`, `flat ==`, `actor.x == owner` and
+     * `prop.x == owner` all lower both sides; this one lowered only the sheet's
+     * half, and was the only string comparison in the grammar that could fail
+     * on capitalisation alone. Which it did: the route's own claim is
+     * `handitem == cards` and the engine answers "Cards", so a leg that had
+     * done everything asked of it failed its last assertion. The playthrough
+     * compares the same pair and lowers both (`playthrough.ts`), which is the
+     * reading this now matches.
+     */
+    const lower = `String(${got} ?? "").toLowerCase()`;
+    if (op === "==") return `${lower} === ${q(value)}`;
+    if (op === "!=") return `${lower} !== ${q(value)}`;
+    return `Number(${got}) ${op} ${Number(value)}`;
+  },
+  g: (c) => COMPILERS.global(c),
+  owns: (c) => {
+    const { op, q, about } = c;
+    const prop = about();
+    if (op) throw new Error(`owns.${prop} is the whole condition — it takes no comparison`);
+    /*
+     * WHOSE HAND IS THE PLAYER'S depends on the disc. Titanic's hero is
+     * `frank` and Dust's is `stranger` — its own data agrees, and the save
+     * files call him that ("the player's own owner string is `stranger`, and
+     * Dust's hero has no name"). Hardcoded to one of them, this condition was
+     * simply always false on the other game, which is a sheet line that can
+     * never come true and says nothing about why.
+     */
+    return `(() => {
+      const p = window.dbg.session.propRuntime.get(${q(prop)});
+      if (!p) return false;
+      const o = String(p.owner || "").toLowerCase();
+      return o === "frank" || o === "stranger";
+    })()`;
+  },
+  /**
+   * WHO OWNS A PROP — `prop.ring == ruby`, and `prop.ring` for "anybody".
+   *
+   * The counterpart to `actor.<name> == <owner>`, and the thing the
+   * playthrough's rungs check more than any other: a gift landing is
+   * `Ring@stranger -> Ring@ruby` in the save and `owner ("ring") !== "ruby"`
+   * in the rung. `owns.<prop>` answers only about the player, so a route had
+   * no way to say where something else went.
+   */
+  prop: (c) => {
+    const { op, value, q, about } = c;
+    const name = about();
+    const got = `String((window.dbg.session.propRuntime.get(${q(name)}) || {}).owner || "").toLowerCase()`;
+    if (!op) return `!!window.dbg.session.propRuntime.get(${q(name)})`;
+    if (op !== "==" && op !== "!=") throw new Error(`a prop's owner compares with == or != , not ${op}`);
+    const same = `${got} === ${q(value)}`;
+    return op === "==" ? same : `!(${same})`;
+  },
+  /**
+   * A character is loaded — and optionally, what their `actorowner` is.
+   *
+   * The owner is how this game keeps a character's place in a chain of
+   * errands, and the Purser is the clearest case: PURS1.PUP offers one topic
+   * slot whose text switches entirely on `actorowner("purs")`, walking
+   * none -> sendgram -> sentgram -> left1 -> none2 -> findcuff -> foundcuff ->
+   * left2 as each errand is done. A route that visits him six times needs to
+   * be able to say which rung it expects to find him on, and nothing else in
+   * the state says it — the globals do not move, and neither does the room.
+   */
+  actor: (c) => {
+    const { op, value, q, about } = c;
+    const name = about();
+    const got = `window.dbg.session.actorRuntime.actors.get(${q(name)})`;
+    if (!op) return `(() => { const a = ${got}; return !!a; })()`;
+    if (op !== "==" && op !== "!=") throw new Error(`an actorowner compares with == or != , not ${op}`);
+    const same = `(() => { const a = ${got}; return !!a && String(a.owner || "").toLowerCase() === ${q(value)}; })()`;
+    return op === "==" ? same : `!${same}`;
+  },
+  /**
+   * WHERE a character is standing — the star they were last placed on.
+   *
+   * `actorstar` is how Dust moves its cast about: a script sets the name and
+   * the scheduler walks them there, so "has Jackalope left the first hiding
+   * place" is `star.jones != town.seek1` and nothing else says it. `visible.`
+   * is the wrong question (he is visible at both) and `global.` cannot see it
+   * (the name lives on the actor, not in a script variable).
+   *
+   * Reads the same field the `actorstar` getter does, which means it answers
+   * the DESTINATION the moment the walk is ordered rather than when it lands —
+   * exactly what a route waiting to stop clicking wants to know.
+   */
+  star: (c) => {
+    const { op, value, q, about } = c;
+    const name = about();
+    const got = `window.dbg.session.actorRuntime.actors.get(${q(name)})`;
+    if (!op) throw new Error(`star.${name} needs a comparison — \`star.${name} == town.seek1\``);
+    if (op !== "==" && op !== "!=") throw new Error(`a star compares with == or != , not ${op}`);
+    const same = `(() => { const a = ${got}; return !!a && String(a.starName || "").toLowerCase() === ${q(value)}; })()`;
+    return op === "==" ? same : `!${same}`;
+  },
+  /**
+   * A character is not merely loaded but ON SCREEN.
+   *
+   * The distinction matters because a room places its cast from its own
+   * `openscene`, which runs after the walk that brought you in has finished.
+   * A route that arrives faster than the planner does can therefore be
+   * standing in the right view, facing the right way, with the person it came
+   * to see not yet put down — and every click aimed at them finds nothing.
+   */
+  visible: (c) => {
+    const { op, q, about } = c;
+    const name = about();
+    if (op) throw new Error(`visible.${name} is the whole condition — it takes no comparison`);
+    return `(() => { const a = window.dbg.session.actorRuntime.actors.get(${q(name)}); return !!a && !!a.visible; })()`;
+  },
+  /**
+   * A character is ON HIS FEET — the scripts' own `iswalk`, which counts a turn
+   * as a walk because TI.EXE's never looked at the mode (scheduler.ts,
+   * `turning`).
+   *
+   * Wanted almost always negated, because half a dozen scripts in this corpus
+   * refuse a click at someone who is moving and say nothing about why. The
+   * clearest is the Turkish bath door, TURKSTRS.SET c7:
+   *
+   *     if actorvisible ("morrow") & morrowphase = 0
+   *         sendtoactor ("morrow", mousedown (0))   <- he answers the knock
+   *         exitcode
+   *     endif
+   *     if iswalk ("morrow")
+   *         exitcode                                 <- and so does this
+   *     endif
+   *     sendtoprop ("door", setupprop ("turkstrs-turk"))
+   *
+   * and `walktopuppet` walks whoever you just spoke to BACK to the star they
+   * came from as the puppet closes — so the instant a conversation ends is the
+   * one instant that second guard is certain to refuse. A sheet that opens the
+   * door there gets a Space that does nothing and then an `up()` reporting that
+   * the world did not move, which is true and unhelpful.
+   *
+   * `wait(!walking.morrow)` is the whole fix, and it is the leg saying out loud
+   * what it was relying on.
+   */
+  walking: (c) => {
+    const { op, q, about } = c;
+    const name = about();
+    if (op) throw new Error(`walking.${name} is the whole condition — it takes no comparison`);
+    return `!!(window.dbg.session.scheduler.isWalk(${q(name)}))`;
+  },
+  // what is on screen
+  quiet: (c) => {
+    const { bare } = c;
+    return bare(`(() => { const v = window.dbg.viewer; return !!v && (v.quiescent || v.conversing); })()`);
+  },
+  /**
+   * The engine is waiting on a CLICK — a movie parked on its regions with the
+   * script that opened it suspended. This and not `asking` is what "the boot
+   * menu is up" means: `asking` only counts rectangles, and a clip can carry
+   * regions for a frame or two on its way past, which is enough for a
+   * `skipMovie until: asking` to stop at the logos and call it the menu.
+   */
+  awaiting: (c) => {
+    const { bare } = c;
+    return bare(`!!(${SCREEN} && ${SCREEN}.awaitingInput)`);
+  },
+  /**
+   * No fade is ramping. Worth having as its own condition because it is
+   * exactly the gap in which a key press is DROPPED (viewer.ts's note on
+   * `pressNav`), so "the room has finished arriving" is a different claim from
+   * "a movie is not playing" and a route needs to be able to make it.
+   */
+  faded: (c) => {
+    const { bare } = c;
+    return bare(`window.dbg.session.fade.level === 0`);
+  },
+  /**
+   * The world is FROZEN — `lockevents`, which the scripts set while the game is
+   * doing something to you and a gesture must not interrupt.
+   *
+   * The strongest refusal in the engine and the only one that is not a state of
+   * the viewer: it is a script global, so `quiet`, `faded` and `ready` all
+   * answer true through it. What it does is throw a gesture away — the click
+   * dispatch returns before the hit test and the boot's keydown exitcodes on it
+   * (viewer.ts's note on both), so the press is not run, not queued and not
+   * logged. There is nothing afterwards to notice it went missing.
+   *
+   * `truthy` and not `Number`, deliberately: this interpreter's booleans can
+   * arrive as the STRING "false", which is truthy by its own rule (interp.ts)
+   * and which `Number()` would turn into NaN and read as unlocked. The engine
+   * asks `truthy(globals.get("lockevents") ?? 0)`; so does this.
+   */
+  locked: (c) => {
+    const { bare } = c;
+    return bare(`(() => {
+      const v = window.dbg.session.interp.globals.get("lockevents") ?? 0;
+      return typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : String(v).length > 0;
+    })()`);
+  },
+  /**
+   * A script is sitting in an input poll loop RIGHT NOW — `while not button()`,
+   * `while stilldown()` — waiting for the mouse rather than for the engine.
+   *
+   * The engine keeps this itself (`GameSession.pollingInput`) because such a
+   * press must not also go in the event queue, and it answers the one question
+   * a held press needs: has the loop I am holding this down for noticed yet.
+   * `!polling` after it was polling is that loop letting go.
+   */
+  polling: (c) => {
+    const { bare } = c;
+    return bare(`window.dbg.session.pollingInput()`);
+  },
+  talking: (c) => {
+    const { bare } = c;
+    return bare(`!!(window.dbg.viewer && window.dbg.viewer.conversing)`);
+  },
+  /**
+   * A puppet EXISTS. The earliest sign that a character accepted a gesture and
+   * is loading their conversation, which is why the rungs hammer against this
+   * one and not against `talking` — `walktopuppet()` can spend seconds getting
+   * there, and every extra click in the meantime is a click the script may
+   * spend on something else.
+   */
+  puppet: (c) => {
+    const { bare } = c;
+    return bare(`!!window.dbg.session.puppet`);
+  },
+  /**
+   * A plaque is up AND the script is suspended on it. Not "are there bevels?":
+   * an answered list stays framed until the PUP script clears it, so bevels
+   * outlive the question they asked. `eventWaiter` is the question itself, and
+   * it is the only reading a `say` can be handed to without racing.
+   */
+  choosing: (c) => {
+    const { bare } = c;
+    return bare(`!!(window.dbg.viewer && window.dbg.viewer.awaitingChoice)`);
+  },
+  nomovie: (c) => {
+    const { bare } = c;
+    return bare(`!(${SCREEN} && ${SCREEN}.moviePlaying)`);
+  },
+  /**
+   * A film is on screen, asking or not.
+   *
+   * Asked of {@link SCREEN} rather than of `window.dbg.viewer` — as are
+   * `nomovie`, `asking`, `awaiting` and `movie ==`, the five conditions that
+   * are about the SCREEN rather than about a room. Dust's intro films play
+   * before any set is opened, so a viewer-first reading answered "no film"
+   * through the whole opening and nothing could skip it; the measurement is in
+   * the note on SCREEN (driver.ts).
+   *
+   * Distinct from `asking` (parked on regions) and from `nomovie`, and needed
+   * because a close-up is FETCHED OVER HTTP: for a moment after the click there
+   * is no movie yet, so "no movie" is true and an ESC sent then hits nothing at
+   * all. Measured — four ESCs landed in that gap, the film then loaded and
+   * parked, and the next key press sat against it for 2m10s.
+   */
+  playing: (c) => {
+    const { bare } = c;
+    return bare(`!!(${SCREEN} && ${SCREEN}.moviePlaying)`);
+  },
+  movie: (c) => {
+    const { reads } = c;
+    return reads(`String((${SCREEN} && ${SCREEN}.movieFile) || "").toLowerCase()`);
+  },
+  asking: (c) => {
+    const { bare } = c;
+    return bare(`!!(${SCREEN} && ${SCREEN}.movieRegions.length)`);
+  },
+  theme: (c) => {
+    const { reads } = c;
+    return reads(`String(window.dbg.session.currentThemeName || "").toLowerCase()`);
+  },
+  /**
+   * The escape hatch, and the only condition whose operand is not a name.
+   * `js == <expression>` — everything after the operator is handed through.
+   */
+  js: (c) => {
+    const { op, value } = c;
+    if (!value) throw new Error(`js needs an expression — \`js == window.dbg.session.frameCounter > 0\``);
+    return op === "!=" ? `(!(${value}))` : `(${value})`;
+  },
+};
 
 /**
  * Split on a joining word that is not inside parentheses. Character-wise rather

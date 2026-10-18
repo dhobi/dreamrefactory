@@ -928,7 +928,7 @@ export class Navigator {
    * In a browser a dud click cost 8.1 s of real time and now costs 1.6 s: segment 26
    * 185.7 s -> 89.8 s, segment 6 311.9 s -> 256.0 s. Headless it costs almost
    * nothing either way, which is why it hid for so long — and why it moved the
-   * oracle when it went (TODO §4a).
+   * oracle when it went.
    */
   private async answers(name: string): Promise<boolean> {
     const where = (): ActorSpot | null => this.d.actorSpot(name);

@@ -7,7 +7,8 @@
 import { describe, expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { ESCAPE_KEY } from "@dreamfactory/engine/web/keys";
-import { isNavRegion, keyAction, screenPoint } from "../src/input";
+import { isNavRegion, keyAction } from "../src/input";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 
 const key = (k: string, more: Partial<{ metaKey: boolean; ctrlKey: boolean; target: EventTarget | null }> = {}) =>
   keyAction({ key: k, metaKey: false, ctrlKey: false, target: null, ...more });

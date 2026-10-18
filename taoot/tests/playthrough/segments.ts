@@ -3467,7 +3467,7 @@ export async function segment26(s: Story): Promise<void> {
 }
 
 /**
- * Answer the question the m4anti checkpoint loads INTO (TODO 7a).
+ * Answer the question the m4anti checkpoint loads INTO.
  *
  * The save records the view segment 26 ends on, and `LOUNGE1C.SET` c320's
  * `openscene` ambushes exactly that view — so the load's own `changeset` re-runs
@@ -3573,7 +3573,7 @@ export async function segment27(s: Story): Promise<void> {
   // What remains is a bounded risk rather than a certainty: a run whose clock
   // straddles 13:15 during the handover records phase 1 here and phase 0 there.
   // If that ever shows up it is two beats' worth of a scoped allowance, and 231 s
-  // is not the price to pay for avoiding it (TODO §4a, §7b).
+  // is not the price to pay for avoiding it.
   await beat("m4.0 the painting kept, Georgia refused");
   expect(s.num("mission")).toBe(4);
   expect(d.propOwner("rubaiyat"), "ours since the coal bunker — one of the four").toBe("frank");

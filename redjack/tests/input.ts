@@ -8,7 +8,8 @@
 import { describe, expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { ESCAPE_KEY } from "@dreamfactory/engine/web/keys";
-import { arrowUp, defaultSaveName, keyAction, screenPoint, whereLine } from "../src/input";
+import { arrowUp, defaultSaveName, keyAction, whereLine } from "../src/input";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 
 const down = (key: string, more: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; target: EventTarget | null }> = {}) =>
   keyAction({ key, metaKey: false, ctrlKey: false, altKey: false, target: null, ...more });

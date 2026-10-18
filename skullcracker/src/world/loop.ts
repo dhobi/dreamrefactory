@@ -329,6 +329,262 @@ export function tick(): void {
   // air, which is where the flying moves live
   // (and state 15, INV held, reads no other key at all — `0x428975`)
   if (frame) stepInv();
+  startAttack();
+  stepAct(frame);
+
+  // a ladder is climbed, not walked along, so it is decided before the walk
+  // W or S GRABS a ladder; what lets go of one is a direction or J, not a
+  // release. `0x42ae50` stays in the ladder state until forward, backward or
+  // the jump key is down, and then leaves through the hop below. Letting go on
+  // a release — which this did — dropped the player straight down the rail the
+  // moment the key came up, and whether the step west registered first was a
+  // race between two key events and one tick.
+  // The latch goes on the ground OR once the fall passes 55: `0x42848a`
+  // clears `[0x46b1b8]` unless `obj+0x32 <= 0x37` and the player is airborne,
+  // so a long drop off a ladder may grab the next one on the way down.
+  if (p.onGround || p.fallPx > 0x37) ladderLatch = false;
+  const asked = held.right !== held.left || held.jump || jumpPressed;
+  // `0x42ae6f` — knocked off asks as a key does, and `0x42aea1` spends it once
+  // the rung is done, whether or not a room lets him go
+  const bumped = p.climbing && !asked && knockedOff;
+  if (p.climbing && (asked || knockedOff) && p.climbClock >= LADDER.rungFrames) setKnockedOff(false);
+  const letGo = p.climbing && (asked || bumped) && canLetGo();
+  let ladder: SbkEntity | undefined;
+  if (p.climbing) ladder = p.act || letGo ? undefined : p.ladder;
+  else if (
+    !p.act &&
+    !p.flail &&
+    !ladderLatch &&
+    (held.down || (held.up && held.right === held.left))
+  )
+    ladder = ladderAt();
+  /**
+   * ...and the other thing the same W reach finds — see {@link MONKEYBAR}.
+   *
+   * `0x412390` answers `monkeybar` only after `ladder`, `exitfarm` and
+   * `exitroom` have all missed, so the bar is asked for last. Letting go is
+   * S or J and **only out of the hang tag**: `0x42b522` is in tag 0's arm
+   * and no other arm tests for it, so a swing always finishes.
+   */
+  const barLetGo =
+    !!p.bar && p.barTag === 0 && (held.down || held.jump || jumpPressed);
+  let bar: SbkEntity | undefined;
+  if (p.bar) bar = p.act || barLetGo ? undefined : p.bar;
+  else if (
+    !ladder &&
+    !p.act &&
+    !p.flail &&
+    !ladderLatch &&
+    held.up &&
+    held.right === held.left
+  )
+    bar = barAt();
+  // ...and INV stands you still: state 15 reads no direction at all, and the
+  // idle it hands you to goes straight back to it while the button is down
+  let dir = 0;
+  if (!(ladder || bar || p.act || p.invLoop)) dir = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  p.moving = dir !== 0;
+  /**
+   * The run — `[0x4ac3fe]`, which is W held, and see {@link KEYS} for why that
+   * was not obvious. One flag with two jobs in the original: the ladder state
+   * reads it as "up", so a ladder takes it and the run does not happen, which
+   * is what `ladder` being defined means here.
+   *
+   * The air keeps it, as the original does: the jump script's tag 3 is the
+   * RUNNING launch, `250 251 252 253` with dx 100 where the standing one has
+   * dx 0, so a run-jump carries its speed off the edge.
+   */
+  p.running =
+    p.moving && held.up && ladder === undefined && bar === undefined && !held.down;
+  /**
+   * THE ENGINE'S FRAME, in the engine's order. The level loop (`0x417c20`)
+   * runs the player's input handler first — `0x402950` → `0x428080`, the
+   * dispatch on `[player+0x18]` — and then `0x42fc10` steps every script
+   * (`0x45d0f0`: the record's dx/dy into the velocity) and then every body
+   * (`0x42fd80`: the move, the landing, the drag). Think, animate, move. So a
+   * jump pressed on frame A crouches through A, B and C, launches on D, has
+   * tag 0 installed on E and is first steered on F; and a walk's impulse
+   * lands on the same frame's move. Nothing here happens between frames.
+   */
+  frameStep(frame, dir, ladder);
+  // every tick moves by a quarter of the frame's velocity, in the air and on the
+  // ground alike: the stepper adds `obj+0xc` to the position whatever the input,
+  // so a released jump coasts and a landing slides
+  // ...and the side walls hold a point that is not moving too: the mover asks
+  // them of every frame's point (`0x430058`), which is what stands BARREL's
+  // opening record, x12 against a floor from x51, on x52 (`0x43006b`)
+  if (!ladder && p.vx === 0 && p.room && level) {
+    const nx = sideWalls(p.x);
+    if (nx !== null) p.x = nx;
+  }
+  if (!ladder && p.vx !== 0) moveAcross();
+
+  // up opens a door and climbs a ladder; jump is its own key, as it is in the
+  // original. A touch still sends both, so a door still has to CONSUME the
+  // press — otherwise the tap that opens it also jumps, and the player
+  // arrives in the next room already in the air.
+  // ...and only from a STANDSTILL, now that the same key is the run. Otherwise
+  // every sprint past a doorway ends in the next room, which is the trap this
+  // door already had once, arrived at from the other direction.
+  if (upPressed && p.onGround && dir === 0 && takeDoor()) {
+    setJumpPressed(false);
+    setUpPressed(false);
+  }
+  const wasClimbing = p.climbing;
+  p.climbing = ladder !== undefined;
+  const wasHanging = p.bar !== undefined;
+  p.bar = bar;
+  // the climb `0x471e78` is kind 7 and the bar `0x472048` kind 8, and both end
+  // on the unarmed fall `0x471b28` (`0x42af84`, `0x42b597`): the gun goes away
+  // on the way up and INV is what brings it back
+  if (ladder || bar) inv.drawn = false;
+  climbOrFall({ tickX, dir, ladder, bar, bumped, wasClimbing, wasHanging });
+  // the fall since the apex is kept by the body step above, in the engine's own
+  // units — see {@link engineFrame}. It outlives the landing by the one frame
+  // the tag-0 handler needs to read it (0x42a109's 360 test), and the plank's
+  // handler reads the same field on the same frame ({@link PLANK.hardFallPx})
+  if (p.onGround && p.landLeft === 0 && !p.launched) p.leap = false;
+  // the duck: S on the ground with nothing else going on. The engine's is
+  // reached the same way — from the standing state, not out of a walk.
+  p.crouching = p.onGround && held.down && !p.act && !p.climbing;
+  // the duck's own fidget: tag 1 is a single cel, so its script ends every
+  // frame, and 0x42aadd rolls rand(0x2c3) < 13 at each end — 13 in 707
+  if (p.crouching && !p.moving) {
+    if (p.fidget === ANIM.crouchFidget) {
+      p.fidgetClock += TICK_SCALE;
+      if (p.fidgetClock >= ANIM.crouchFidget.length) p.fidget = null;
+    } else if (random() * 707 < 13 * TICK_SCALE) {
+      p.fidget = ANIM.crouchFidget;
+      p.fidgetClock = 0;
+    }
+  } else if (p.fidget === ANIM.crouchFidget) p.fidget = null;
+  // the idle only runs while genuinely idle, and restarts each time it stops.
+  // At each cycle's end, 0x42993c rolls rand(42) < 13 for a fidget.
+  if (p.onGround && !p.moving && !p.act && !p.climbing && !p.crouching) {
+    if (p.fidget) {
+      p.fidgetClock += TICK_SCALE;
+      if (p.fidgetClock >= p.fidget.length * IDLE_HOLD) p.fidget = null;
+    } else {
+      p.idleClock += TICK_SCALE;
+      const cycle = ANIM.idle.length * IDLE_HOLD;
+      if (p.idleClock >= cycle) {
+        p.idleClock -= cycle;
+        if (random() * 42 < 13) {
+          p.fidget = random() < 0.5 ? ANIM.fidgetA : ANIM.fidgetB;
+          p.fidgetClock = 0;
+        }
+      }
+    }
+  } else {
+    p.idleClock = 0;
+    p.fidget = null;
+  }
+  // and the obstacles, once the whole move is in — the engine resolves them in
+  // the mover after everything else has had its say (`0x430146`)
+  if (!p.climbing) ejectFromObstacles();
+  stepWorld(frame);
+  // the mission clock runs at the engine's rate, not this page's — and 32000
+  // is no clock at all: `0x40d25b` returns before the `dec`
+  if (stats.ticks < CLOCK.noLimit) stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
+  if (stats.ticks <= 0 && !film) void ranOut();
+  // `0x443dea`: the life is spent when the dying animation ENDS, not when the
+  // health runs out, and `0x443ec7` turns the last one into the game-over state
+  // ...and not `damageOn &&`: the switch decides whether anything may SPEND
+  // health, not what an empty bar means. `harakari` empties it with the switch
+  // off and the original has no switch at all
+  if (stats.health <= 0 && p.act === null && !film) died();
+  if (fellOut() && !film) died();
+  setUpPressed(false);
+  // J is read by the frame's think, not by the tick, so it waits for one
+  if (frame) setJumpPressed(false);
+  setPunchPressed(false);
+  setKickPressed(false);
+  choosePlayerCel();
+  // ...and only now, every think and script of the frame done and the
+  // player's cel put up, the hit pass — and the cel again, for a reaction
+  if (frame) {
+    hitPass(ladder !== undefined);
+    choosePlayerCel();
+  }
+  stepGoal();
+}
+
+/**
+ * Everything in the level that moves after the player: the props, the
+ * creatures and the craft, in the engine's own order. Some step every tick,
+ * most once an engine frame.
+ */
+/** a world step that runs every tick, or only on an engine frame's */
+const TICK = false;
+const FRAME = true;
+
+/**
+ * The world's steps in the engine's own order, each with when it runs. Made on
+ * the first tick rather than at load, so a module still loading in an import
+ * cycle has its step defined by the time it is read.
+ */
+let worldSteps: readonly (readonly [() => void, boolean])[] | null = null;
+const WORLD_STEPS = (): readonly (readonly [() => void, boolean])[] => [
+  [stepPlanks, TICK],
+  [stepElevators, TICK],
+  [stepIbeams, TICK],
+  [stepCrushes, TICK],
+  [stepSwitches, TICK],
+  [stepGoop, TICK],
+  [stepDoors, TICK],
+  [stepElevs, TICK],
+  [stepScenery, TICK],
+  // a think, so once an engine frame: every step in it is a frame's
+  [stepBushes, FRAME],
+  [stepColumns, TICK],
+  [stepPickups, TICK],
+  [stepHoles, FRAME],
+  [stepHands, FRAME],
+  [stepAxes, FRAME],
+  [stepBridges, FRAME],
+  [stepFloors, FRAME],
+  [stepSurges, FRAME],
+  [stepCages, FRAME],
+  [stepAlarms, FRAME],
+  [stepBigGuns, FRAME],
+  [stepLights, FRAME],
+  [stepProbes, FRAME],
+  [stepFlypasts, FRAME],
+  [stepFans, FRAME],
+  [stepBelts, FRAME],
+  [stepChairs, FRAME],
+  [stepClaws, FRAME],
+  [stepFittings, FRAME],
+  // last of the props, because the grip is read off whatever moved just now
+  [stepHeld, FRAME],
+  [stepBoggs, FRAME],
+  [stepGuns, TICK],
+  [stepFlares, FRAME],
+  [stepBolts, FRAME],
+  [stepStreams, FRAME],
+  [stepCasts, FRAME],
+  [stepBoards, FRAME],
+  [stepRollers, FRAME],
+  [stepCans, FRAME],
+  [stepHeads, FRAME],
+  [stepCrows, FRAME],
+  [stepEnemies, TICK],
+  // after the creatures, as WOODS' runner has it — the CHOPPER's pass
+  // `0x4540d3` and then the flames' `0x4540ec` — so a flame on something
+  // riding thirty a frame is where it is this frame, not where it was
+  [stepFlames, FRAME],
+  [stepGobs, TICK],
+  [stepCraft, TICK],
+  [claimBar, TICK],
+];
+
+function stepWorld(frame: boolean): void {
+  worldSteps ??= WORLD_STEPS();
+  for (const [step, frameOnly] of worldSteps) if (frame || !frameOnly) step();
+}
+
+/** standing free on the ground: the attack keys start a move (the punch, the kick, the headbutt, …) */
+function startAttack(): void {
   if (p.onGround && !p.act && p.windup === 0 && p.landLeft === 0 && !p.invLoop) {
     // W picks the bigger variant of either, which is what both state machines
     // do with `0x4ac3fe` before they look at their own button
@@ -418,6 +674,10 @@ export function tick(): void {
       swing();
     }
   }
+}
+
+/** an attack under way owns the player until it ends: its frames, its impulses, what it strikes */
+function stepAct(frame: boolean): void {
   if (p.act) {
     let a = actOf(p.act);
     let f = a ? Math.floor(p.actClock / (a.hold ?? 1)) : 0;
@@ -570,81 +830,10 @@ export function tick(): void {
       p.actClock += TICK_SCALE;
     }
   }
+}
 
-  // a ladder is climbed, not walked along, so it is decided before the walk
-  // W or S GRABS a ladder; what lets go of one is a direction or J, not a
-  // release. `0x42ae50` stays in the ladder state until forward, backward or
-  // the jump key is down, and then leaves through the hop below. Letting go on
-  // a release — which this did — dropped the player straight down the rail the
-  // moment the key came up, and whether the step west registered first was a
-  // race between two key events and one tick.
-  // The latch goes on the ground OR once the fall passes 55: `0x42848a`
-  // clears `[0x46b1b8]` unless `obj+0x32 <= 0x37` and the player is airborne,
-  // so a long drop off a ladder may grab the next one on the way down.
-  if (p.onGround || p.fallPx > 0x37) ladderLatch = false;
-  const asked = held.right !== held.left || held.jump || jumpPressed;
-  // `0x42ae6f` — knocked off asks as a key does, and `0x42aea1` spends it once
-  // the rung is done, whether or not a room lets him go
-  const bumped = p.climbing && !asked && knockedOff;
-  if (p.climbing && (asked || knockedOff) && p.climbClock >= LADDER.rungFrames) setKnockedOff(false);
-  const letGo = p.climbing && (asked || bumped) && canLetGo();
-  let ladder: SbkEntity | undefined;
-  if (p.climbing) ladder = p.act || letGo ? undefined : p.ladder;
-  else if (
-    !p.act &&
-    !p.flail &&
-    !ladderLatch &&
-    (held.down || (held.up && held.right === held.left))
-  )
-    ladder = ladderAt();
-  /**
-   * ...and the other thing the same W reach finds — see {@link MONKEYBAR}.
-   *
-   * `0x412390` answers `monkeybar` only after `ladder`, `exitfarm` and
-   * `exitroom` have all missed, so the bar is asked for last. Letting go is
-   * S or J and **only out of the hang tag**: `0x42b522` is in tag 0's arm
-   * and no other arm tests for it, so a swing always finishes.
-   */
-  const barLetGo =
-    !!p.bar && p.barTag === 0 && (held.down || held.jump || jumpPressed);
-  let bar: SbkEntity | undefined;
-  if (p.bar) bar = p.act || barLetGo ? undefined : p.bar;
-  else if (
-    !ladder &&
-    !p.act &&
-    !p.flail &&
-    !ladderLatch &&
-    held.up &&
-    held.right === held.left
-  )
-    bar = barAt();
-  // ...and INV stands you still: state 15 reads no direction at all, and the
-  // idle it hands you to goes straight back to it while the button is down
-  let dir = 0;
-  if (!(ladder || bar || p.act || p.invLoop)) dir = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-  p.moving = dir !== 0;
-  /**
-   * The run — `[0x4ac3fe]`, which is W held, and see {@link KEYS} for why that
-   * was not obvious. One flag with two jobs in the original: the ladder state
-   * reads it as "up", so a ladder takes it and the run does not happen, which
-   * is what `ladder` being defined means here.
-   *
-   * The air keeps it, as the original does: the jump script's tag 3 is the
-   * RUNNING launch, `250 251 252 253` with dx 100 where the standing one has
-   * dx 0, so a run-jump carries its speed off the edge.
-   */
-  p.running =
-    p.moving && held.up && ladder === undefined && bar === undefined && !held.down;
-  /**
-   * THE ENGINE'S FRAME, in the engine's order. The level loop (`0x417c20`)
-   * runs the player's input handler first — `0x402950` → `0x428080`, the
-   * dispatch on `[player+0x18]` — and then `0x42fc10` steps every script
-   * (`0x45d0f0`: the record's dx/dy into the velocity) and then every body
-   * (`0x42fd80`: the move, the landing, the drag). Think, animate, move. So a
-   * jump pressed on frame A crouches through A, B and C, launches on D, has
-   * tag 0 installed on E and is first steered on F; and a walk's impulse
-   * lands on the same frame's move. Nothing here happens between frames.
-   */
+/** the engine frame's own work on the player: impulses, gravity, the jump — none of it between frames */
+function frameStep(frame: boolean, dir: number, ladder: SbkEntity | undefined): void {
   if (frame && !ladder) {
     if (!p.onGround) p.airFrames += 1;
     else p.fallState = null;
@@ -749,122 +938,113 @@ export function tick(): void {
     // one call before the body step at 0x417c57)
     else p.fallPx = 0;
   }
-  // every tick moves by a quarter of the frame's velocity, in the air and on the
-  // ground alike: the stepper adds `obj+0xc` to the position whatever the input,
-  // so a released jump coasts and a landing slides
-  // ...and the side walls hold a point that is not moving too: the mover asks
-  // them of every frame's point (`0x430058`), which is what stands BARREL's
-  // opening record, x12 against a floor from x51, on x52 (`0x43006b`)
-  if (!ladder && p.vx === 0 && p.room && level) {
-    const nx = sideWalls(p.x);
-    if (nx !== null) p.x = nx;
-  }
-  if (!ladder && p.vx !== 0) {
-    let nx = p.x + p.vx * TICK_SCALE;
-    /**
-     * The region's side walls — `0x42ffa3`..`0x430146` — asked of the anchor
-     * point. The bounds are `0x40bbd0`'s, filled at `0x42fde7` into the rect
-     * `0x430058` and `0x4300cf` compare against: the region's own floor,
-     * `x0 .. x0 + n` (`0x40bc66`), or its rect less fifty each end where it has
-     * no floor (`0x40bc92`) — see {@link insideSides}. The flags are the
-     * region record's (`0x40ba30` copies it). Nothing reserves half a sprite:
-     *
-     * - past the left edge with flag 2 set, the point is held at left + 1
-     *   (`0x43006b`); with it clear, the region whose rect holds the point
-     *   takes over (`0x40b940(2, point)`, `0x4300a0`), and with none it is
-     *   held at the edge all the same (`0x4300c3`);
-     * - the right edge the same, with flag 8 (`0x4300e2`, `0x430117`).
-     *
-     * MALL's three regions meet with the flags clear, so you walk from one into
-     * the next; STREETS' ends are walls; and every region is walked the length
-     * of its FLOOR, not its rect.
-     */
-    let inRoom = true;
-    const from = p.room;
-    const wallAt = sideWalls(nx);
-    if (wallAt !== null) {
-      nx = wallAt;
-      if (nx === p.x) inRoom = false;
-    }
-    // world. Off a platform you certainly can: the floor is still under it.
-    // ...and the wall below is asked first in the engine (`0x42fedc`, before
-    // the side test at `0x430058`), so of the region the move STARTED in: at
-    // MALL's seam region two's floor stands 94 higher four pixels before
-    // region one's ends, and asked of region two it walled the hand-over off
-    const handed = p.room;
-    p.room = from;
-    const ahead = groundAt(nx);
-    p.room = handed;
-    // and a floor that rises more than a step is a wall, not a slope. Without
-    // this the player walks INTO the terrain and then falls through it
-    // forever, because everything solid is now above them: BARREL's floor
-    // climbs 141px between two adjacent columns.
-    //
-    // `0x42fedc` asks it of every move, in the air as much as on the ground,
-    // and excuses it only where a platform stands under the point above that
-    // floor (`0x42feec`, the platform search's flag): then the platform is
-    // the floor. A wall in the air also stops the rise — `0x42ff0c` zeroes
-    // `obj+0xa` with the move — so a jump that meets a step more than 50 above
-    // its feet drops back rather than climbing it.
-    const bridged =
-      ahead !== null &&
-      !!level?.solids.some((room) =>
-        room.platforms.some(
-          (e) =>
-            nx >= e.left && nx <= e.right && e.top < ahead && e.bottom >= p.y,
-        ),
-      );
-    // ...and it is asked of the position the WHOLE frame's move reaches:
-    // `0x42fd9e` adds both velocities before `0x42fedc` compares, so the
-    // launch frame's 35 pixels of rise count against a step it is jumping
-    // at. This page spreads that rise across four ticks, so the frame's own
-    // step stands in for it.
-    const reachY = p.onGround ? p.y : p.y + Math.min(0, p.stepPx);
-    const wall = ahead !== null && ahead < reachY - CLIMB_PX && !bridged;
-    if (inRoom && !wall) {
-      p.travelled += Math.abs(nx - p.x);
-      p.x = nx;
-    } else if (wall) {
-      /**
-       * A wall — `0x42fef3`..`0x42ff30`, on the ground as much as in the air:
-       * nothing on that path asks whether the feet are down, so a walk into a
-       * step more than 50 high is thrown back the frame's vx as a jump is.
-       * The point goes back to where the frame began LESS the frame's vx
-       * (`0x42ff13`), the vx keeps
-       * `obj+0x20`'s quarter (`0x42ff0c`), and `obj+0xa` is zeroed — before
-       * `0x43032e` adds this frame's gravity, so the next frame falls again.
-       * Zeroing it after the gravity, and standing the player where the move
-       * stopped, held a jump that met a wall hanging in the air for good:
-       * GRAVE's graves have one at each side of the mouth.
-       */
-      p.x -= p.vx;
-      p.vx = Math.trunc(p.vx / 4);
-      if (!p.onGround) {
-        p.vyRaw = PLAYER_GRAVITY * p.gravityScale;
-        p.stepPx = 0;
-      }
-    } else p.vx = 0;
-  }
+}
 
-  // up opens a door and climbs a ladder; jump is its own key, as it is in the
-  // original. A touch still sends both, so a door still has to CONSUME the
-  // press — otherwise the tap that opens it also jumps, and the player
-  // arrives in the next room already in the air.
-  // ...and only from a STANDSTILL, now that the same key is the run. Otherwise
-  // every sprint past a doorway ends in the next room, which is the trap this
-  // door already had once, arrived at from the other direction.
-  if (upPressed && p.onGround && dir === 0 && takeDoor()) {
-    setJumpPressed(false);
-    setUpPressed(false);
+/** the tick's horizontal move, against the walls and the room's edges */
+function moveAcross(): void {
+  let nx = p.x + p.vx * TICK_SCALE;
+  /**
+   * The region's side walls — `0x42ffa3`..`0x430146` — asked of the anchor
+   * point. The bounds are `0x40bbd0`'s, filled at `0x42fde7` into the rect
+   * `0x430058` and `0x4300cf` compare against: the region's own floor,
+   * `x0 .. x0 + n` (`0x40bc66`), or its rect less fifty each end where it has
+   * no floor (`0x40bc92`) — see {@link insideSides}. The flags are the
+   * region record's (`0x40ba30` copies it). Nothing reserves half a sprite:
+   *
+   * - past the left edge with flag 2 set, the point is held at left + 1
+   *   (`0x43006b`); with it clear, the region whose rect holds the point
+   *   takes over (`0x40b940(2, point)`, `0x4300a0`), and with none it is
+   *   held at the edge all the same (`0x4300c3`);
+   * - the right edge the same, with flag 8 (`0x4300e2`, `0x430117`).
+   *
+   * MALL's three regions meet with the flags clear, so you walk from one into
+   * the next; STREETS' ends are walls; and every region is walked the length
+   * of its FLOOR, not its rect.
+   */
+  let inRoom = true;
+  const from = p.room;
+  const wallAt = sideWalls(nx);
+  if (wallAt !== null) {
+    nx = wallAt;
+    if (nx === p.x) inRoom = false;
   }
-  const wasClimbing = p.climbing;
-  p.climbing = ladder !== undefined;
-  const wasHanging = p.bar !== undefined;
-  p.bar = bar;
-  // the climb `0x471e78` is kind 7 and the bar `0x472048` kind 8, and both end
-  // on the unarmed fall `0x471b28` (`0x42af84`, `0x42b597`): the gun goes away
-  // on the way up and INV is what brings it back
-  if (ladder || bar) inv.drawn = false;
+  // world. Off a platform you certainly can: the floor is still under it.
+  // ...and the wall below is asked first in the engine (`0x42fedc`, before
+  // the side test at `0x430058`), so of the region the move STARTED in: at
+  // MALL's seam region two's floor stands 94 higher four pixels before
+  // region one's ends, and asked of region two it walled the hand-over off
+  const handed = p.room;
+  p.room = from;
+  const ahead = groundAt(nx);
+  p.room = handed;
+  // and a floor that rises more than a step is a wall, not a slope. Without
+  // this the player walks INTO the terrain and then falls through it
+  // forever, because everything solid is now above them: BARREL's floor
+  // climbs 141px between two adjacent columns.
+  //
+  // `0x42fedc` asks it of every move, in the air as much as on the ground,
+  // and excuses it only where a platform stands under the point above that
+  // floor (`0x42feec`, the platform search's flag): then the platform is
+  // the floor. A wall in the air also stops the rise — `0x42ff0c` zeroes
+  // `obj+0xa` with the move — so a jump that meets a step more than 50 above
+  // its feet drops back rather than climbing it.
+  const bridged =
+    ahead !== null &&
+    !!level?.solids.some((room) =>
+      room.platforms.some(
+        (e) =>
+          nx >= e.left && nx <= e.right && e.top < ahead && e.bottom >= p.y,
+      ),
+    );
+  // ...and it is asked of the position the WHOLE frame's move reaches:
+  // `0x42fd9e` adds both velocities before `0x42fedc` compares, so the
+  // launch frame's 35 pixels of rise count against a step it is jumping
+  // at. This page spreads that rise across four ticks, so the frame's own
+  // step stands in for it.
+  const reachY = p.onGround ? p.y : p.y + Math.min(0, p.stepPx);
+  const wall = ahead !== null && ahead < reachY - CLIMB_PX && !bridged;
+  if (inRoom && !wall) {
+    p.travelled += Math.abs(nx - p.x);
+    p.x = nx;
+  } else if (wall) {
+    /**
+     * A wall — `0x42fef3`..`0x42ff30`, on the ground as much as in the air:
+     * nothing on that path asks whether the feet are down, so a walk into a
+     * step more than 50 high is thrown back the frame's vx as a jump is.
+     * The point goes back to where the frame began LESS the frame's vx
+     * (`0x42ff13`), the vx keeps
+     * `obj+0x20`'s quarter (`0x42ff0c`), and `obj+0xa` is zeroed — before
+     * `0x43032e` adds this frame's gravity, so the next frame falls again.
+     * Zeroing it after the gravity, and standing the player where the move
+     * stopped, held a jump that met a wall hanging in the air for good:
+     * GRAVE's graves have one at each side of the mouth.
+     */
+    p.x -= p.vx;
+    p.vx = Math.trunc(p.vx / 4);
+    if (!p.onGround) {
+      p.vyRaw = PLAYER_GRAVITY * p.gravityScale;
+      p.stepPx = 0;
+    }
+  } else p.vx = 0;
+
+
+}
+
+/** what the tick decided the player holds, and which way he goes, before he moves */
+interface Grip {
+  /** where the tick started, so a fall is tested along the path it took */
+  tickX: number;
+  dir: number;
+  ladder: SbkEntity | undefined;
+  bar: SbkEntity | undefined;
+  /** knocked off a rung with no key asking */
+  bumped: boolean;
+  wasClimbing: boolean;
+  wasHanging: boolean;
+}
+
+/** on a ladder, hanging from a bar, or in the air: the vertical half of the tick, and the landing */
+function climbOrFall({ tickX, dir, ladder, bar, bumped, wasClimbing, wasHanging }: Grip): void {
   if (ladder) {
     /**
      * Step ONTO it, where the record says and facing the way it says.
@@ -1209,124 +1389,6 @@ export function tick(): void {
       }
     }
   }
-  // the fall since the apex is kept by the body step above, in the engine's own
-  // units — see {@link engineFrame}. It outlives the landing by the one frame
-  // the tag-0 handler needs to read it (0x42a109's 360 test), and the plank's
-  // handler reads the same field on the same frame ({@link PLANK.hardFallPx})
-  if (p.onGround && p.landLeft === 0 && !p.launched) p.leap = false;
-  // the duck: S on the ground with nothing else going on. The engine's is
-  // reached the same way — from the standing state, not out of a walk.
-  p.crouching = p.onGround && held.down && !p.act && !p.climbing;
-  // the duck's own fidget: tag 1 is a single cel, so its script ends every
-  // frame, and 0x42aadd rolls rand(0x2c3) < 13 at each end — 13 in 707
-  if (p.crouching && !p.moving) {
-    if (p.fidget === ANIM.crouchFidget) {
-      p.fidgetClock += TICK_SCALE;
-      if (p.fidgetClock >= ANIM.crouchFidget.length) p.fidget = null;
-    } else if (random() * 707 < 13 * TICK_SCALE) {
-      p.fidget = ANIM.crouchFidget;
-      p.fidgetClock = 0;
-    }
-  } else if (p.fidget === ANIM.crouchFidget) p.fidget = null;
-  // the idle only runs while genuinely idle, and restarts each time it stops.
-  // At each cycle's end, 0x42993c rolls rand(42) < 13 for a fidget.
-  if (p.onGround && !p.moving && !p.act && !p.climbing && !p.crouching) {
-    if (p.fidget) {
-      p.fidgetClock += TICK_SCALE;
-      if (p.fidgetClock >= p.fidget.length * IDLE_HOLD) p.fidget = null;
-    } else {
-      p.idleClock += TICK_SCALE;
-      const cycle = ANIM.idle.length * IDLE_HOLD;
-      if (p.idleClock >= cycle) {
-        p.idleClock -= cycle;
-        if (random() * 42 < 13) {
-          p.fidget = random() < 0.5 ? ANIM.fidgetA : ANIM.fidgetB;
-          p.fidgetClock = 0;
-        }
-      }
-    }
-  } else {
-    p.idleClock = 0;
-    p.fidget = null;
-  }
-  // and the obstacles, once the whole move is in — the engine resolves them in
-  // the mover after everything else has had its say (`0x430146`)
-  if (!p.climbing) ejectFromObstacles();
-  stepPlanks();
-  stepElevators();
-  stepIbeams();
-  stepCrushes();
-  stepSwitches();
-  stepGoop();
-  stepDoors();
-  stepElevs();
-  stepScenery();
-  // a think, so once an engine frame: every step in it is a frame's
-  if (frame) stepBushes();
-  stepColumns();
-  stepPickups();
-  if (frame) stepHoles();
-  if (frame) stepHands();
-  if (frame) stepAxes();
-  if (frame) stepBridges();
-  if (frame) stepFloors();
-  if (frame) stepSurges();
-  if (frame) stepCages();
-  if (frame) stepAlarms();
-  if (frame) stepBigGuns();
-  if (frame) stepLights();
-  if (frame) stepProbes();
-  if (frame) stepFlypasts();
-  if (frame) stepFans();
-  if (frame) stepBelts();
-  if (frame) stepChairs();
-  if (frame) stepClaws();
-  if (frame) stepFittings();
-  // last of the props, because the grip is read off whatever moved just now
-  if (frame) stepHeld();
-  if (frame) stepBoggs();
-  stepGuns();
-  if (frame) stepFlares();
-  if (frame) stepBolts();
-  if (frame) stepStreams();
-  if (frame) stepCasts();
-  if (frame) stepBoards();
-  if (frame) stepRollers();
-  if (frame) stepCans();
-  if (frame) stepHeads();
-  if (frame) stepCrows();
-  stepEnemies();
-  // after the creatures, as WOODS' runner has it — the CHOPPER's pass
-  // `0x4540d3` and then the flames' `0x4540ec` — so a flame on something
-  // riding thirty a frame is where it is this frame, not where it was
-  if (frame) stepFlames();
-  stepGobs();
-  stepCraft();
-  claimBar();
-  // the mission clock runs at the engine's rate, not this page's — and 32000
-  // is no clock at all: `0x40d25b` returns before the `dec`
-  if (stats.ticks < CLOCK.noLimit) stats.ticks = Math.max(0, stats.ticks - TICK_SCALE);
-  if (stats.ticks <= 0 && !film) void ranOut();
-  // `0x443dea`: the life is spent when the dying animation ENDS, not when the
-  // health runs out, and `0x443ec7` turns the last one into the game-over state
-  // ...and not `damageOn &&`: the switch decides whether anything may SPEND
-  // health, not what an empty bar means. `harakari` empties it with the switch
-  // off and the original has no switch at all
-  if (stats.health <= 0 && p.act === null && !film) died();
-  if (fellOut() && !film) died();
-  setUpPressed(false);
-  // J is read by the frame's think, not by the tick, so it waits for one
-  if (frame) setJumpPressed(false);
-  setPunchPressed(false);
-  setKickPressed(false);
-  choosePlayerCel();
-  // ...and only now, every think and script of the frame done and the
-  // player's cel put up, the hit pass — and the cel again, for a reaction
-  if (frame) {
-    hitPass(ladder !== undefined);
-    choosePlayerCel();
-  }
-  stepGoal();
 }
 
 /** the eight buttons as one word, in the bit order `0x40da41` walks them in */

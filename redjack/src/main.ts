@@ -39,7 +39,8 @@ import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/we
 import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { RJ_CURSORS } from "./cursor-art";
 import { bindRoomTouch } from "./room-touch";
-import { SWIPE_ARROWS, arrowUp, defaultSaveName, heldKeys, keyAction, screenPoint, whereLine } from "./input";
+import { SWIPE_ARROWS, arrowUp, defaultSaveName, heldKeys, keyAction, whereLine } from "./input";
+import { screenPoint } from "@dreamfactory/engine/web/screen";
 
 const SCREEN = REDJACK.screen;
 

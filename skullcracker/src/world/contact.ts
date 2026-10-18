@@ -159,25 +159,34 @@ export function landHits(): void {
     boggsStruck(b, false);
   }
 }
+/** one blow a creature or a cast throws this tick, as {@link foesStrikeFoes} lands it */
+interface Strike {
+  /** who throws it: one blow lands once per animation on each body */
+  who: object;
+  /** the thrower's class, which most handlers turn away; null for a cast */
+  kind: string | null;
+  /** the animation the blow belongs to — a new one may land again */
+  anim: unknown;
+  cel: SbkCel;
+  x: number;
+  y: number;
+  facing: number;
+  vx: number;
+  vy: number;
+  /** the blow's strength code: 100 whole, 0x65 whole and still, below 0 a burn */
+  code: number;
+  mass: number;
+  /** the struck body pushes back on the thrower */
+  recoil: (vx: number, vy: number) => void;
+  /** a cast's kit, which two handlers turn away ({@link SPARES}) */
+  kit?: CastKit | null;
+}
+
 export function foesStrikeFoes(): void {
   const lvl = level;
   if (!lvl || !foesHurt) return;
   const bodies = spawnedHere().filter(takesBlows);
-  const land = (
-    who: object,
-    kind: string | null,
-    anim: unknown,
-    cel: SbkCel,
-    x: number,
-    y: number,
-    facing: number,
-    vx: number,
-    vy: number,
-    code: number,
-    mass: number,
-    recoil: (vx: number, vy: number) => void,
-    kit: CastKit | null = null,
-  ): boolean => {
+  const land = ({ who, kind, anim, cel, x, y, facing, vx, vy, code, mass, recoil, kit = null }: Strike): boolean => {
     if (code === 0 || (code < 0 && code !== BURN_CODE)) return false;
     const box = strikeOf(cel, x, y, facing);
     if (!box) return false;
@@ -239,13 +248,16 @@ export function foesStrikeFoes(): void {
     const a = foeAnchor(e, lvl) ?? { x: e.x, y: e.y };
     const vx = e.vx / TICK_SCALE + (e.vx === 0 ? (e.speed ?? 0) * e.facing : 0);
     const foe = FOES[e.kind];
-    land(e, e.kind, e.anim, c, a.x, a.y, e.facing, vx, e.vy / TICK_SCALE, e.strength ?? 100,
-      e.divisor ?? foe.divisor, (hvx, hvy) => {
+    land({
+      who: e, kind: e.kind, anim: e.anim, cel: c, x: a.x, y: a.y, facing: e.facing,
+      vx, vy: e.vy / TICK_SCALE, code: e.strength ?? 100, mass: e.divisor ?? foe.divisor,
+      recoil: (hvx, hvy) => {
         if (foe.rooted) return;
         e.vx = hvx * TICK_SCALE;
         e.vy = hvy * TICK_SCALE;
         if (!foe.floats) e.speed = 0;
-      });
+      },
+    });
   }
   for (const c of casts) {
     if (c.spent || c.landed !== undefined) continue;
@@ -254,11 +266,15 @@ export function foesStrikeFoes(): void {
     if (!cel?.strike) continue;
     // a cast is a class of its own, so it turns away nobody — though two
     // handlers turn IT away ({@link SPARES})
-    const hit = land(c, null, c, cel, c.x, c.y, c.facing, c.vx, c.vy, code, c.kit.divisor ?? 1,
-      (hvx, hvy) => {
+    const hit = land({
+      who: c, kind: null, anim: c, cel, x: c.x, y: c.y, facing: c.facing,
+      vx: c.vx, vy: c.vy, code, mass: c.kit.divisor ?? 1,
+      recoil: (hvx, hvy) => {
         c.vx = hvx;
         c.vy = hvy;
-      }, c.kit);
+      },
+      kit: c.kit,
+    });
     if (hit && code !== 0x65) {
       if (c.kit.flyOn) c.struck = true;
       else c.spent = true;
