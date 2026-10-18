@@ -9,7 +9,7 @@ import { TICK_SCALE, install, type BrainCtx, type Enemy, type Track } from "../b
 import { BRAINS, REACTIONS } from "../brains";
 import { FOE_SFX } from "../sound";
 import { Sprinkler } from "../props";
-import { p, level, type Level, CHARACTER, scaled, sound, damageOn } from "./state";
+import { p, level, type Level, character, scaled, sound, damageOn } from "./state";
 import { foeGravity, CLIMB_PX, landingWindow, dragged, DRAG, roundAway, STICK_PX } from "./motion";
 import { foeAnchor, footOf, celRec, celOf, baseOf } from "./cels";
 import { shake, setFlashColour } from "./camera";
@@ -266,7 +266,7 @@ export const BRAIN_CTX: BrainCtx = {
       return p.crouching;
     },
     get character() {
-      return CHARACTER;
+      return character;
     },
     get jolted() {
       return p.act === "jolt";

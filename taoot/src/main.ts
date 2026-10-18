@@ -30,7 +30,6 @@ import {
   BRIGHTNESS_PRESETS,
   GAMMA_KEYS,
   TI_EXE_COMPILED,
-  canvasPoint,
   defaultSaveName,
   gammaFor,
   gateOf,
@@ -47,12 +46,12 @@ import { GameHost } from "@dreamfactory/engine/web/host";
 import { replyIds } from "@dreamfactory/engine/web/puppet-view";
 import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { TI_CURSORS } from "./cursor-art";
-import { loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
+import { TAOOT_SAVES, loadTemplates, saveTemplateFor, seedSaves } from "./save-seed";
 import {
   browseForLoad,
   browseForSave,
 } from "@dreamfactory/engine/web/save-browser";
-import { TAOOT_SAVES, useSaveKind } from "@dreamfactory/engine/web/save-store";
+import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
@@ -107,6 +106,7 @@ import {
   setScreenGamma,
   stepScreenGamma,
 } from "@dreamfactory/engine/web/screen-gamma";
+import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 
 // ---------------------------------------------------------------------------
 // Audio: AudioContext must be created after a user gesture; the sink proxies
@@ -1283,13 +1283,9 @@ function noteGame(
   inputs.note(what, dispatch, hit);
 }
 
-/** map a mouse event to view-pixel coordinates on the canvas */
-function canvasCoords(e: { clientX: number; clientY: number }): {
-  x: number;
-  y: number;
-} {
-  return canvasPoint(e, screen.getBoundingClientRect(), screen);
-}
+/** map a mouse event to view-pixel coordinates on the canvas: the canvas IS the
+ *  framebuffer, CSS stretches it, and Titanic floors where the other pages round */
+const canvasCoords = canvasCoordsFor(screen, screen, Math.floor);
 
 // Press/move/release so held-button drag loops work (`while stilldown()` in
 // the wireless knobs). pointerdown routes the mousedown (which may enter a

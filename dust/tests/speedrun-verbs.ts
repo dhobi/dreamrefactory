@@ -280,6 +280,7 @@ async function play(line: string): Promise<void> {
     say: (m) => said.push(m),
     suggest: () => {},
     verbs: VERBS,
+    watches: [],
   };
   await action.run(c);
 }

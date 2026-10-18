@@ -261,3 +261,45 @@ export function busySpinner(el: HTMLElement): (inFlight: number) => void {
     el.hidden = true;
   };
 }
+
+/**
+ * The loading page's one-line caption, shared by the loader and the network
+ * meter: the newest label wins, and the meter's rate shows while bytes are
+ * arriving and gets out of the way when they are not.
+ *
+ * A rate that survives the transfer it measured is the misleading thing, and
+ * what the page has to say between fetches (which room it is opening, what the
+ * boot just loaded) is better than a stale number — so a quiet {@link tick}
+ * puts back the last label, and only when the rate was showing.
+ */
+export class BootCaption {
+  /** the last thing the LOADER said, to fall back to when the wire goes quiet */
+  private idle = "";
+  /** is the caption currently a rate, and therefore the meter's to replace? */
+  private rateShown = false;
+
+  constructor(
+    private readonly el: HTMLElement,
+    /** the meter's caption now, or null while there is no rate to give */
+    private readonly rate: () => string | null,
+  ) {}
+
+  /** the loader names what it is opening */
+  say(label: string): void {
+    this.idle = label;
+    this.el.textContent = label;
+    this.rateShown = false;
+  }
+
+  /** read the meter, on the page's timer */
+  tick = (): void => {
+    const caption = this.rate();
+    if (caption) {
+      this.el.textContent = caption;
+      this.rateShown = true;
+    } else if (this.rateShown) {
+      this.el.textContent = this.idle;
+      this.rateShown = false;
+    }
+  };
+}

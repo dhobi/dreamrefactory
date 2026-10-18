@@ -9,7 +9,7 @@ import { loopIndex } from "../foes";
 import { TICK_SCALE } from "../brains/kit";
 import { FOE_SFX } from "../sound";
 import { ELEVATOR, Elevator, IBEAM, CRUSH, Ibeam, Crush, PLANK, Plank, elevatorFrames, crushFrames, plankCel, plankFrames, PICKUP, Pickup, SHACK, Shack, BARREL, Barrel, DOOR, Door, ELEV, Elev, SWITCH, Switch, switchFrames, GOOP, Nest, HOLE, Hole, HAND, Hand, AXE, Axe, BRIDGE, Bridge, FLOOR, Floor, SURGE, Surge, CAGE, Cage, BOGGS } from "../props";
-import { level, p, sound, held, type Solids, player, CHARACTER } from "./state";
+import { level, p, sound, held, type Solids, player, character } from "./state";
 import { dropKeys, punchPressed } from "./keys";
 import { roundAway, DIVISOR } from "./motion";
 import { celRec, lastCel, playerFrame, playerBox } from "./cels";
@@ -18,6 +18,7 @@ import { inv, loadRounds } from "./arsenal";
 import { stats } from "./blows";
 import { addClock } from "./hurt";
 import { film, died } from "./death";
+import { overlaps } from "./box";
 
 /** the planks standing in the room the player is in */
 export function planksHere(): Plank[] {
@@ -880,12 +881,7 @@ export function stepPickups(): void {
     if (gone.length) continue;
     // `0x434140` against the pickup's own RECORD rect, which is what the creator
     // filed at `user+4` — the art is only what is drawn
-    if (!(
-      mine.right > q.left &&
-      mine.left < q.right &&
-      mine.bottom > q.top &&
-      mine.top < q.bottom
-    ))
+    if (!overlaps(mine, q))
       continue;
     const kind = PICKUP.kinds[q.code];
     // ...and then `0x40e680`, which is the art. See {@link spritesTouch}.
@@ -904,7 +900,7 @@ export function stepPickups(): void {
       continue;
     gone.push(q);
     // at the PLAYER's point (`[0x4ac3d4]+6`), and each character plays its own
-    if (CHARACTER === 1) sound?.own(kind.bones.sound, p.x, p.y, kind.bones.way);
+    if (character === 1) sound?.own(kind.bones.sound, p.x, p.y, kind.bones.way);
     else sound?.own(kind.sound, p.x, p.y);
     if (q.code === "-1")
       stats.health = Math.min(stats.maxHealth, stats.health + PICKUP.health);

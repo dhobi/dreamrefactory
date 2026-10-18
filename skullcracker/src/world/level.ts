@@ -15,7 +15,7 @@ import { ENDING_FILM, MISSIONS, TIME_OUT_FILMS, allowanceFor } from "../mission"
 import { CHAPTER_WEAPON } from "../guns";
 import { CEL as HUD_CEL, CLOCK, CLOCK_FULL, dialCel } from "../hud";
 import { random, seedRandom } from "../random";
-import { ui, files, p, level, scaled, levelIndex, mission, startTicks, sound, aliveNow, CHARACTER, type Level, type Solids, setLevel, setLevelIndex, setStartTicks } from "./state";
+import { ui, files, p, level, scaled, levelIndex, mission, startTicks, sound, aliveNow, character, type Level, type Solids, setLevel, setLevelIndex, setStartTicks } from "./state";
 import { setInput } from "./keys";
 import { playerBox } from "./cels";
 import { startCamera, setLevelClock, setBackdropFrames, setFlashColour, setFlypasts, setIface } from "./camera";
@@ -26,6 +26,7 @@ import { deathRed, advancing, setDeathRed, setAdvancing, setSpawnIndex } from ".
 import { ibeamsIn, crushesIn, switchesIn, nestsIn, doorsIn, elevsIn, shacksIn, barrelsIn, placed, pickupsIn, wormBounds, boundsAgainst, headAndArm, filedIn } from "./fixtures";
 import { clockFor, setDrips, setRoaches, setColumns, setRaised, setFeathers } from "./scenery";
 import { setCasts, setSkates, setRollers, setCans, setHeads, setFlames } from "./casts";
+import { overlaps } from "./box";
 
 export async function loadLevel(index: number): Promise<void> {
   // a level loaded in the middle of the red is a level with its own palette
@@ -853,7 +854,7 @@ export function stepCraft(): void {
       bobbed: 0,
     };
     // `0x41020a`..`0x410230` — the hum's record armed to loop as it is made
-    sound?.loop(CRAFT.hum[CHARACTER], true, true);
+    sound?.loop(CRAFT.hum[character], true, true);
   }
   if (!craft) return;
   craft.clock += TICK_SCALE;
@@ -862,7 +863,7 @@ export function stepCraft(): void {
   // turns the ask away while the hum still sounds — the loop armed above keeps
   // it sounding — and each ask moves it to where the craft now is
   const onFrame = Math.floor(craft.clock) !== Math.floor(craft.clock - TICK_SCALE);
-  if (onFrame) sound?.own(CRAFT.hum[CHARACTER], craft.x, craft.y);
+  if (onFrame) sound?.own(CRAFT.hum[character], craft.x, craft.y);
   if (craft.state === "open") {
     // `0x41073c`..`0x41074d` — the screen's last cel has run out and the flag
     // is not yet up: the tally, before anything else
@@ -879,11 +880,7 @@ export function stepCraft(): void {
   craft.bobbed += craft.drift * TICK_SCALE;
   craft.y += craft.drift * TICK_SCALE;
   const box = playerBox();
-  const inRect =
-    box.right > g.left &&
-    box.left < g.right &&
-    box.bottom > g.top &&
-    box.top < g.bottom;
+  const inRect = overlaps(box, g);
   const close =
     Math.abs(p.x - craft.x) <= CRAFT.near.x &&
     Math.abs(p.y - craft.y) <= CRAFT.near.y;
@@ -896,8 +893,8 @@ export function stepCraft(): void {
     craft.clock = 0;
     // `0x4106c1`..`0x4106d9` — the screen's own sound as it starts down, and
     // `0x4106f8` takes the hum's loop flag off again
-    sound?.own(CRAFT.opens[CHARACTER], craft.x, craft.y);
-    sound?.loop(CRAFT.hum[CHARACTER], false, true);
+    sound?.own(CRAFT.opens[character], craft.x, craft.y);
+    sound?.loop(CRAFT.hum[character], false, true);
     // `0x410702` — `0x402e30(0)`: the keys are dropped and shut out until the
     // tally has run, so the player stands at the goal while the screen comes down
     setInput(false);
@@ -949,7 +946,7 @@ function startTally(c: NonNullable<typeof craft>): void {
 export function stepTally(c: NonNullable<typeof craft>): void {
   const t = c.tally!;
   stats.score += CRAFT.tally.points;
-  sound?.own(CRAFT.tally.sound[CHARACTER], p.x, p.y, "renew");
+  sound?.own(CRAFT.tally.sound[character], p.x, p.y, "renew");
   t.frames += 1;
   if (t.frames >= (HUD_CEL.dialOff - t.dial) * CRAFT.tally.perStep) endTally(c);
 }
@@ -1084,12 +1081,7 @@ export let chapterWeapon: number | null = null;
 export function stepGoal(): void {
   const goal = solids().goal;
   const box = playerBox();
-  const inGoal =
-    goal !== undefined &&
-    box.right > goal.left &&
-    box.left < goal.right &&
-    box.bottom > goal.top &&
-    box.top < goal.bottom;
+  const inGoal = goal !== undefined && overlaps(box, goal);
   if (!inGoal) leftGoal = true;
   if (craftOpened() && !advancing) void nextLevel();
 }

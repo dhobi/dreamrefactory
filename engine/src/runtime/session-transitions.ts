@@ -260,11 +260,7 @@ export class SessionTransitions {
       // fades the flat in; revealing at movie end would flash the room, fully lit,
       // in between). A stage that never fades still gets its reveal (TAOOT's
       // bomb: blackscreen -> bombopen.mov -> setvisible(false), no fade follows).
-      if (f.pendingReveal && !f.snapshot && !this.session.scriptBusy) {
-        f.pendingReveal = false;
-        f.blanked = false;
-        f.level = 0;
-      }
+      if (f.pendingReveal && !f.snapshot && !this.session.scriptBusy) f.reset(0);
       return;
     }
     f.pendingReveal = false;
@@ -284,19 +280,7 @@ export class SessionTransitions {
     f.lastTick ??= tick - 1;
     while (f.queue.length && f.lastTick < tick) {
       f.lastTick++;
-      const ramp = f.queue[0];
-      if (ramp.to === 0) f.snapshot = null; // fading back in reveals the live frame
-      const delta = 1 / ramp.steps;
-      f.level =
-        ramp.to > f.level
-          ? Math.min(ramp.to, f.level + delta)
-          : Math.max(ramp.to, f.level - delta);
-      // …and the level is thirds all over again: ten steps of 1/10 off 1 leave
-      // 1.4e-16, which is not `to` and cost an eleventh step to walk off
-      if (Math.abs(f.level - ramp.to) < delta / 2) {
-        f.level = ramp.to;
-        f.queue.shift();
-      }
+      f.step();
     }
   }
 }

@@ -1,6 +1,7 @@
 import { ScriptError, Value } from "../interp";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
+import { int, str, bool } from "./df5-args";
 
 /**
  * RedJack.exe's virtual-key name table, 0x4c1958..0x4c1d58: 256 pointers, one
@@ -61,22 +62,6 @@ interface Menu {
   name: string;
   items: MenuItem[];
 }
-
-const int = (cmd: string, v: Value | undefined): number => {
-  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-  return v | 0;
-};
-// 0x410560: a string, or 0xe
-const str = (cmd: string, v: Value | undefined): string => {
-  if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-  return v;
-};
-// a v5 boolean is 1/0 (Interpreter.bool), so the exe's `cmp word [arg], 2`
-// can only turn a string away here
-const bool = (cmd: string, v: Value | undefined): number => {
-  if (typeof v === "string" || v === undefined) throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a boolean`);
-  return v ? 1 : 0;
-};
 
 /**
  * DreamFactory 5's menus, keys and scripts, each read out of `RedJack.exe`

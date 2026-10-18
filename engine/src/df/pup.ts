@@ -2,7 +2,7 @@ import { BinaryReader, latin1 } from "./binary";
 import { little } from "./byte-order";
 import { DFContainerFile, readContainerFile } from "./container";
 import { DEFAULT_ENCODING, DfEncoding, decodeText, encodeText } from "./text";
-import { versionOf } from "./version";
+import { isV5, versionOf } from "./version";
 import { readPuppetTrackV0, readTalkFileV0 } from "./talk-v0";
 
 /**
@@ -239,8 +239,6 @@ export interface PupAnimFrame {
  */
 const V5_SHIFT = 0x800;
 const V5_FRMR_RECORDS = 0x16;
-const isV5 = (d: Uint8Array, kind: string): boolean =>
-  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;
 
 export function readAnimLogic(pup: PupFile, location: number): PupAnimFrame[] {
   const c = pup.file.containers[location]?.data;

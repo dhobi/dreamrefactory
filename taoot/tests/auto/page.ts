@@ -266,6 +266,7 @@ vi.mock("../../src/lang-chooser", async (actual) => ({
   LangChooser: FakeChooser,
 }));
 vi.mock("../../src/save-seed", () => ({
+  TAOOT_SAVES: { name: "taoot" },
   seedSaves: async () => void calls.push("seedSaves"),
   loadTemplates: async () => void calls.push("loadTemplates"),
   saveTemplateFor: (disc: string) => `template ${disc}`,
@@ -276,7 +277,6 @@ vi.mock("@dreamfactory/engine/web/save-browser", () => ({
   browseForLoad: async () => (calls.push("load"), null),
 }));
 vi.mock("@dreamfactory/engine/web/save-store", () => ({
-  TAOOT_SAVES: { name: "taoot" },
   useSaveKind: (k: { valid: (b: Uint8Array) => boolean }) => void calls.push(`saveKind ${typeof k.valid}`),
 }));
 vi.mock("@dreamfactory/engine/web/load-clock", () => ({ loadClock: { ms: 12, waiting: false }, watchLoads: () => () => {} }));

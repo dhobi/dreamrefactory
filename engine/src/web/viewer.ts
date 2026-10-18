@@ -2,7 +2,6 @@ import { SetFile, Scene, FrameInfo, Transition, ObjectEntry, RIGHTTURNS, LEFTTUR
 import { FrameBuffer, decodeFrame, paletteToRGBA, indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { ShpFrame } from "@dreamfactory/engine/df/shp";
-import { DfVersion } from "@dreamfactory/engine/df/version";
 import { ENGINE_STEP_MS, ticksAt } from "@dreamfactory/engine/runtime/clock";
 import { Value } from "@dreamfactory/engine/runtime/interp";
 import { SetScripts } from "@dreamfactory/engine/runtime/setscripts";
@@ -916,10 +915,9 @@ export class SetViewer implements RoomLayer {
   // cache's to hand out.
   // -------------------------------------------------------------------------
 
-  /** which engine wrote this room — v1 merges actors and world props into one
-   *  depth-sorted list, v4 draws them in two passes (compositeWorld) */
-  get roomVersion(): DfVersion {
-    return this.set.version;
+  /** a v1 room merges actors and world props into one depth-sorted list (RoomLayer) */
+  get spritesByDepth(): boolean {
+    return this.set.version === 1;
   }
 
   /** is the camera mid-turn, mid-walk or mid-road? */

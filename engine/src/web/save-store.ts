@@ -31,8 +31,8 @@ const META = "meta";
  * it is.
  *
  * A page declares its kind once, at boot, before the first store call
- * ({@link useSaveKind}); the default is Titanic's, so the play page says
- * nothing and is unaffected.
+ * ({@link useSaveKind}). There is no default: a store call before the page has
+ * said which game it is fails rather than opening some other game's database.
  */
 export interface SaveKind {
   /** IndexedDB database name — one per game, see above */
@@ -56,23 +56,7 @@ export interface SaveKind {
   valid: (bytes: Uint8Array) => boolean;
 }
 
-/** Titanic's saves — the default, so the play page declares nothing. */
-export const TAOOT_SAVES: SaveKind = {
-  db: "taoot-saves",
-  ext: ".ti",
-  game: "Titanic",
-  folders: {
-    "": "My Saves",
-    "1": "Disk 1",
-    "2": "Disk 2",
-    ENDGAME1: "Endgame (Disk 1)",
-    ENDGAME2: "Endgame (Disk 2)",
-  },
-  order: ["", "1", "2", "ENDGAME1", "ENDGAME2"],
-  valid: () => true,
-};
-
-let kind: SaveKind = TAOOT_SAVES;
+let kind: SaveKind | null = null;
 
 /**
  * Declare which game's saves this page keeps. Call once at boot, before any
@@ -80,7 +64,7 @@ let kind: SaveKind = TAOOT_SAVES;
  * strand whatever was already read from the other database.
  */
 export function useSaveKind(k: SaveKind): void {
-  if (k.db === kind.db && k.ext === kind.ext) {
+  if (kind && k.db === kind.db && k.ext === kind.ext) {
     kind = k;
     return;
   }
@@ -88,8 +72,9 @@ export function useSaveKind(k: SaveKind): void {
   dbPromise = null;
 }
 
-/** The kind this page declared (Titanic's until told otherwise). */
+/** The kind this page declared; asking before {@link useSaveKind} is a page's bug. */
 export function saveKind(): SaveKind {
+  if (!kind) throw new Error("save-store: no save kind declared — call useSaveKind at boot");
   return kind;
 }
 
@@ -114,7 +99,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(kind.db, DB_VERSION);
+    const req = indexedDB.open(saveKind().db, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(SAVES)) db.createObjectStore(SAVES, { keyPath: "path" });
@@ -179,6 +164,6 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
 
 /** Split a save file basename into its display name (drop the extension). */
 export function displayName(basename: string): string {
-  const ext = kind.ext.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const ext = saveKind().ext.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
   return basename.replace(new RegExp(`${ext}$`, "i"), "");
 }

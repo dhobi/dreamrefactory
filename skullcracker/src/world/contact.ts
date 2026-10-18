@@ -23,6 +23,7 @@ import { heads, headCel, kickHead, BURN_CODE, casts, castBlow, castCel, burstCas
 import { machineBox, strikeMachine, boggsCel, boggsStruck, clawCel, boggsWormCel, fittingCel } from "./machines";
 import { strikeFoe } from "./foehit";
 import { bushCel } from "./shots";
+import { celBoxAt, overlaps, type Box } from "./box";
 
 export function landHits(): void {
   if (!level || !player || !p.act) return;
@@ -38,18 +39,8 @@ export function landHits(): void {
     // the tumble's cels have none, which is what makes a dead crow unhittable
     const body = celRec(level.sbk, crowCel(c))?.body;
     if (!body) continue;
-    const box = {
-      left: c.x + body.x0,
-      right: c.x + body.x1,
-      top: c.y + body.y0,
-      bottom: c.y + body.y1,
-    };
-    if (!(
-      mine.right > box.left &&
-      mine.left < box.right &&
-      mine.bottom > box.top &&
-      mine.top < box.bottom
-    ))
+    const box = celBoxAt(c.x, c.y, body);
+    if (!overlaps(mine, box))
       continue;
     struckCrows.add(c);
     strikeCrow(c, mine.damage);
@@ -95,12 +86,7 @@ export function landHits(): void {
     const c = celRec(level.sbk, celOf(e));
     if (!c) continue;
     const box = hurtBox(e, c, level);
-    if (!(
-      mine.right > box.left &&
-      mine.left < box.right &&
-      mine.bottom > box.top &&
-      mine.top < box.bottom
-    ))
+    if (!overlaps(mine, box))
       continue;
     struck.add(e);
     strikeFoe(e, {
@@ -124,12 +110,7 @@ export function landHits(): void {
     for (let k = 0; k < b.machines.length; k++) {
       const mb = machineBox(b, k);
       if (!mb) continue;
-      if (!(
-        mine.right > mb.left &&
-        mine.left < mb.right &&
-        mine.bottom > mb.top &&
-        mine.top < mb.bottom
-      ))
+      if (!overlaps(mine, mb))
         continue;
       if (struckBoggs.has(String(k))) continue;
       struckBoggs.add(String(k));
@@ -143,12 +124,7 @@ export function landHits(): void {
       top: b.y - art.posY,
       bottom: b.y - art.posY + art.height,
     };
-    if (!(
-      mine.right > bb.left &&
-      mine.left < bb.right &&
-      mine.bottom > bb.top &&
-      mine.top < bb.bottom
-    ))
+    if (!overlaps(mine, bb))
       continue;
     if (struckBoggs.has("body")) continue;
     struckBoggs.add("body");
@@ -205,7 +181,7 @@ export function foesStrikeFoes(): void {
       // `0x4303b3` — a body whose cel has no box takes nothing
       if (!vc?.body) continue;
       const hb = hurtBox(v, vc, lvl);
-      if (!(box.right > hb.left && box.left < hb.right && box.bottom > hb.top && box.top < hb.bottom))
+      if (!overlaps(box, hb))
         continue;
       let damage = 0;
       if (code > 0) {
@@ -334,12 +310,7 @@ function hitter(mine: Body): Hit {
   return ({ cel, x, y, facing, vx = 0, vy = 0, code = 100, grip, what }: Swing): boolean => {
     const box = strikeOf(cel, x, y, facing);
     if (!box) return false;
-    if (!(
-      box.right > mine.left &&
-      box.left < mine.right &&
-      box.bottom > mine.top &&
-      box.top < mine.bottom
-    ))
+    if (!overlaps(box, mine))
       return false;
     // `0x448c72` reads the SIGN first: a code is dispatched and the arithmetic
     // below never runs. A grab cel proves the order matters — 1556 and 2456
@@ -447,14 +418,7 @@ function takeCodes(lvl: Level, mine: Body, hit: Hit): boolean {
      * contact would never mark one: the dive would touch you and go back up.
      */
     const reach = strikeOf(cel, c.x, c.y, 1);
-    if (
-      c.state === "dive" &&
-      reach &&
-      reach.right > mine.left &&
-      reach.left < mine.right &&
-      reach.bottom > mine.top &&
-      reach.top < mine.bottom
-    )
+    if (c.state === "dive" && reach && overlaps(reach, mine))
       c.caught = true;
     // `0x417208` gives it a hundred at the top of every think and only the
     // CLAMP (`0x417485`) writes the code, so a dive is a real blow and the grab
@@ -576,13 +540,7 @@ function takeCreatureBlows(lvl: Level, mine: Body, hit: Hit): boolean {
     const cel = celRec(lvl.sbk, crowCel(c));
     if (!cel?.strike) continue;
     const reach = strikeOf(cel, c.x, c.y, 1);
-    if (
-      reach &&
-      reach.right > mine.left &&
-      reach.left < mine.right &&
-      reach.bottom > mine.top &&
-      reach.top < mine.bottom
-    )
+    if (reach && overlaps(reach, mine))
       c.hit = true;
     if (hit({ cel, x: c.x, y: c.y, facing: 1, vx: c.vx, vy: c.vy })) return true;
   }
@@ -641,7 +599,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
     if (!cel?.strike) continue;
     const box = strikeOf(cel, c.x, c.y, c.facing);
     if (!box) continue;
-    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+    if (!overlaps(box, mine))
       continue;
     if (dud) {
       // meeting you IS the landing. The flight's own cels carry a strike box
@@ -673,7 +631,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
       if (!cel?.strike) continue;
       const box = strikeOf(cel, m.x, m.y, 1);
       if (!box) continue;
-      if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+      if (!overlaps(box, mine))
         continue;
       if (hit({ cel, x: m.x, y: m.y, facing: 1, code: BOGGS.worms.strength })) return true;
     }
@@ -694,7 +652,7 @@ function takeThrown(lvl: Level, mine: Body, hit: Hit): boolean {
     const face = r.vx < 0 ? -1 : 1;
     const box = strikeOf(cel, r.x, r.y, face);
     if (!box) continue;
-    if (!(box.right > mine.left && box.left < mine.right && box.bottom > mine.top && box.top < mine.bottom))
+    if (!overlaps(box, mine))
       continue;
     if (hit({ cel, x: r.x, y: r.y, facing: face, vx: Math.trunc(r.vx / ROLLER.divisor), code: blow })) return true;
   }
@@ -753,13 +711,7 @@ function takeFurniture(lvl: Level, mine: Body, hit: Hit): void {
     // touching is what sets `obj+0x2a` (the exchange, `0x430663`), and a gob that has touched
     // bursts on its next think (`0x43746a`) whatever the blow came to
     const reach = strikeOf(cel, d.x, d.y, 1);
-    if (
-      reach &&
-      reach.right > mine.left &&
-      reach.left < mine.right &&
-      reach.bottom > mine.top &&
-      reach.top < mine.bottom
-    )
+    if (reach && overlaps(reach, mine))
       d.hit = true;
     // a drip keeps its velocity in pixels a FRAME already (see {@link stepGoop})
     if (hit({ cel, x: d.x, y: d.y, facing: 1, vx: d.vx, vy: d.vy })) return;
@@ -821,16 +773,13 @@ export function boltHits(): void {
   setBolts(bolts.filter((b) => !b.spent));
 }
 
-/** a bolt's strike box, which every body is tested against */
-type BoltBox = { left: number; right: number; top: number; bottom: number };
-
 /**
  * What it meets first. Boggs' body and a machine can both stand over the
  * point it is tested at; both take the same hundred — `0x41bc71` on the
  * body and `0x41b510` in the machinery's handler translate the `-1`
  * identically — and the nearer along the way it flies is taken.
  */
-function boltMeetsBoggs(lvl: Level, b: (typeof bolts)[number], box: BoltBox, was: number): { edge: number; take: () => void }[] {
+function boltMeetsBoggs(lvl: Level, b: (typeof bolts)[number], box: Box, was: number): { edge: number; take: () => void }[] {
   const met: { edge: number; take: () => void }[] = [];
   for (const g of hereOf((l) => l.boggs)) {
     const cel = celRec(lvl.sbk, boggsCel(g));
@@ -840,18 +789,8 @@ function boltMeetsBoggs(lvl: Level, b: (typeof bolts)[number], box: BoltBox, was
       // it) — 5988's is x −151..31, y −36..127, so a bolt at a standing
       // player's knee height passes under the body and meets the machine
       // behind it
-      const gb = {
-        left: g.x + cel.body.x0,
-        right: g.x + cel.body.x1,
-        top: g.y + cel.body.y0,
-        bottom: g.y + cel.body.y1,
-      };
-      if (
-        box.right > gb.left &&
-        box.left < gb.right &&
-        box.bottom > gb.top &&
-        box.top < gb.bottom
-      ) {
+      const gb = celBoxAt(g.x, g.y, cel.body);
+      if (overlaps(box, gb)) {
         met.push({
           edge: b.vx >= 0 ? Math.max(gb.left, was) : Math.min(gb.right, was),
           take: () => {
@@ -866,12 +805,7 @@ function boltMeetsBoggs(lvl: Level, b: (typeof bolts)[number], box: BoltBox, was
     for (let k = 0; k < g.machines.length; k++) {
       const mb = machineBox(g, k);
       if (!mb) continue;
-      if (!(
-        box.right > mb.left &&
-        box.left < mb.right &&
-        box.bottom > mb.top &&
-        box.top < mb.bottom
-      ))
+      if (!overlaps(box, mb))
         continue;
       met.push({
         // clamped to where the bolt STARTED this step: it materialises 120px
@@ -917,7 +851,7 @@ function boltThroughFoes(
   pool: Level["spawned"][number],
   b: (typeof bolts)[number],
   art: SbkCel | undefined,
-  box: BoltBox,
+  box: Box,
   at: NonNullable<(typeof bolts)[number]["was"]>,
 ): void {
   let str: number = b.code;
@@ -926,12 +860,7 @@ function boltThroughFoes(
     const c = celRec(lvl.sbk, celOf(e));
     if (!c?.body) continue;
     const hurt = hurtBox(e, c, lvl);
-    if (!(
-      box.right > hurt.left &&
-      box.left < hurt.right &&
-      box.bottom > hurt.top &&
-      box.top < hurt.bottom
-    ))
+    if (!overlaps(box, hurt))
       continue;
     const foe = FOES[e.kind];
     if (str === -1) {
@@ -1012,12 +941,7 @@ export function flareHits(): void {
       const c = celRec(lvl.sbk, celOf(e));
       if (!c) continue;
       const hurt = hurtBox(e, c, lvl);
-      if (!(
-        box.right > hurt.left &&
-        box.left < hurt.right &&
-        box.bottom > hurt.top &&
-        box.top < hurt.bottom
-      ))
+      if (!overlaps(box, hurt))
         continue;
       /**
        * ...and on a STAGE 5 a flare is not a hundred at all — it is a −9.
@@ -1083,12 +1007,7 @@ export function flareHits(): void {
         const art = celRec(lvl.sbk, castCel(c));
         if (!art) continue;
         const hurt = castHurtBox(c, art);
-        if (!(
-          box.right > hurt.left &&
-          box.left < hurt.right &&
-          box.bottom > hurt.top &&
-          box.top < hurt.bottom
-        ))
+        if (!overlaps(box, hurt))
           continue;
         strikeCast(c, BURN_CODE);
         f.burn = -1;

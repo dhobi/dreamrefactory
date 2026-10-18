@@ -241,7 +241,7 @@ test.skipIf(!haveRip())("casts", async () => {
   if (globs.seen.some((s) => s.blow !== -2)) fail(`0x43dbda holds a glob at -2; saw ${blows(globs.seen)}`);
   ok(`the eye spits — ${globs.seen.length} frames, cels ${globCels.join(",")}, every one worth -2`);
 
-  const jolt = game.BLOW_CODES[-2]?.act;
+  const jolt = game.blowCodes[-2]?.act;
   if (!jolt || !globs.acts.has(jolt)) {
     fail(`a glob that lands is 0x42ea34's jolt (${jolt}); the player played ${[...globs.acts].join(", ") || "nothing"}`);
   }

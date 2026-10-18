@@ -48,7 +48,7 @@ import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
-import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
+import { SCREEN_H, SCREEN_W, canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
@@ -866,13 +866,7 @@ async function playMovie(name: string, isHome = false): Promise<void> {
 }
 
 /** the point on the game's own 512x384 screen a pointer event landed on */
-function screenPoint(e: { clientX: number; clientY: number }): { x: number; y: number } {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: Math.round(((e.clientX - r.left) / r.width) * SCREEN_W),
-    y: Math.round(((e.clientY - r.top) / r.height) * SCREEN_H),
-  };
-}
+const toScreen = canvasCoordsFor(canvas, { width: SCREEN_W, height: SCREEN_H });
 
 /** the prefs panel, for the status line */
 function prefsSay(): string {
@@ -1175,7 +1169,7 @@ function prefsKey(e: KeyboardEvent): boolean {
  * controls nothing is worse than an absent one.
  */
 const touch = new TouchGestures({
-  coords: (e: PointerEventLike) => (film || prefsOpen ? screenPoint(e) : null),
+  coords: (e: PointerEventLike) => (film || prefsOpen ? toScreen(e) : null),
   // a region takes its press at once, so the menu answers a thumb the moment it
   // lands rather than 220 ms later — and the PICTURE keeps the wait, which is
   // what leaves double-tap-to-skip available exactly where a film is playing
@@ -1206,7 +1200,7 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
   if (!film && !prefsOpen) return;
-  const { x, y } = screenPoint(e);
+  const { x, y } = toScreen(e);
   clickAt(x, y);
 });
 

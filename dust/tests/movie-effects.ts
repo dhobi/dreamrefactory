@@ -506,7 +506,7 @@ function greyRoom(): RoomLayer {
   pal.set([0, 0, 0, 200, 200, 200]);
   const nothing = () => {};
   return {
-    roomVersion: 1,
+    spritesByDepth: true,
     roomAnimating: false,
     roomFrame: () => frame,
     roomPalette: () => pal,

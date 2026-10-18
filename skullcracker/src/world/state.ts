@@ -109,27 +109,27 @@ export const ui: GameUi = {
  *
  * `?char=1` picks one before the level loads; Shift+C is action 11.
  */
-export let CHARACTER: 0 | 1 = QUERY.get("char") === "1" ? 1 : 0;
-export let KIT = PLAYERS[CHARACTER];
-export let ANIM = KIT.anim;
-export let ACTIONS = KIT.actions;
-export let MEASURED = KIT.measured;
-export let STAND_FEET = KIT.standFeet;
-export let TUCK_FEET = KIT.tuckFeet;
-export let BLOW_CODES = PLAYER_CODES[CHARACTER];
-export let HELD = PLAYER_HELD[CHARACTER];
+export let character: 0 | 1 = QUERY.get("char") === "1" ? 1 : 0;
+export let kit = PLAYERS[character];
+export let anim = kit.anim;
+export let actions = kit.actions;
+export let measured = kit.measured;
+export let standFeet = kit.standFeet;
+export let tuckFeet = kit.tuckFeet;
+export let blowCodes = PLAYER_CODES[character];
+export let heldPose = PLAYER_HELD[character];
 
 /** action 11: the other player, and the level again so the pose is theirs */
 export function useCharacter(n: 0 | 1): void {
-  CHARACTER = n;
-  KIT = PLAYERS[CHARACTER];
-  ANIM = KIT.anim;
-  ACTIONS = KIT.actions;
-  MEASURED = KIT.measured;
-  STAND_FEET = KIT.standFeet;
-  TUCK_FEET = KIT.tuckFeet;
-  BLOW_CODES = PLAYER_CODES[CHARACTER];
-  HELD = PLAYER_HELD[CHARACTER];
+  character = n;
+  kit = PLAYERS[character];
+  anim = kit.anim;
+  actions = kit.actions;
+  measured = kit.measured;
+  standFeet = kit.standFeet;
+  tuckFeet = kit.tuckFeet;
+  blowCodes = PLAYER_CODES[character];
+  heldPose = PLAYER_HELD[character];
 }
 
 /**

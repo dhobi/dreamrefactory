@@ -4,8 +4,6 @@ import { s16 } from "./point";
 
 /** TI.EXE's (Titanic, and tl.exe's Timelapse): positions in 16-bit words, the camera's table bearing */
 export class CricketsV4 extends Crickets {
-  readonly engine: 1 | 4 = 4;
-
   protected word(v: number): number {
     return s16(v);
   }

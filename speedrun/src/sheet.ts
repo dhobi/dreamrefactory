@@ -54,6 +54,9 @@
  * the other way round.
  */
 
+/** how a bevel list ends once it has run out: walk out, or hand back with the plaque standing (`then:`) */
+export type Then = "leave" | "stop";
+
 /** one action, parsed */
 export interface Step {
   /** the verb, lowercased — `up`, `click`, `talk`, `split` */
@@ -70,7 +73,7 @@ export interface Step {
    * ({@link thenOf}). A field of its own rather than a `then` written into
    * `opts`, which would make the options object a thenable.
    */
-  ending?: "leave" | "stop";
+  ending?: Then;
   /** how many times to do it — `x3`, default 1 */
   repeat: number;
   /** 1-based line in the sheet, for errors and for the report */

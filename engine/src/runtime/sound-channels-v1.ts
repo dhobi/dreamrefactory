@@ -32,8 +32,6 @@ export function pickSoundChannelV1(rule: SoundRuleV1, p: number, p1: number, p2:
  * read, so a playing clip is not re-placed.
  */
 export class SoundChannelsV1 extends SoundChannels {
-  readonly engine = 1;
-
   play(name: string, overlap: boolean, rule: SoundRule = overlap ? "multiple" : "single"): void {
     const found = this.clip(name);
     if (!found) return;

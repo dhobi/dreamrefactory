@@ -1,7 +1,7 @@
 import { BinaryReader } from "./binary";
 import { ByteOrder, PC, little } from "./byte-order";
 import { DFContainerFile } from "./container";
-import { versionOf } from "./version";
+import { isV5, versionOf } from "./version";
 import type { BankChunk } from "./bank-chunk";
 import { readSndFileFrom, sndLoopChunks, sndLoopNames } from "./snd";
 
@@ -220,10 +220,6 @@ export function readLoopTableV5(
   for (let i = 0; i < loops && V5_LOOP.order + i * 2 < V5_LOOP.records; i++) order.push(v.getInt16(V5_LOOP.order + i * 2, le));
   return { order, records };
 }
-
-/** is this a DreamFactory 5 container of this four-character kind? */
-const isV5 = (d: Uint8Array, kind: string): boolean =>
-  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;
 
 export function readBankTables(file: DFContainerFile): BankTables {
   const c0 = file.containers[0].data;

@@ -26,7 +26,6 @@ export function cricketPanV5(heading: number, bearing: number): number {
  * made and again only when the camera has moved, and no set wanted to make one.
  */
 export class CricketsV5 extends Crickets {
-  readonly engine = 5;
   protected override readonly needsSet = false;
 
   protected word(v: number): number {

@@ -1793,7 +1793,7 @@ export class GameSession {
     this.actorRuntime.enginePointTests = enginePointTests;
     this.propRuntime.enginePointTests = enginePointTests;
     this.interp.shortCircuit = scripts.shortCircuit;
-    this.interp.classic = scripts.typed;
+    this.interp.typed = scripts.typed;
     // an untyped engine keeps true/false as 1/0 — so does anything set before
     // the BOOTFILE said which engine this is (the host's `tour` default)
     if (!scripts.typed) for (const [k, g] of this.interp.globals) if (typeof g === "boolean") this.interp.globals.set(k, g ? 1 : 0);

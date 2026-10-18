@@ -1,5 +1,6 @@
 import { BinaryReader, writeNameAt } from "./binary";
 import { Container, DFContainerFile, patchContainerData, readContainerFile } from "./container";
+import { isV5 } from "./version";
 
 /**
  * SHP ("shop") files — prop definitions. Port of DFshp (dfet DFshp.h).
@@ -249,10 +250,6 @@ const STATE_V5 = {
    *  (RedJack.exe 0x42d211); the group is v4's {@link STATE.frameGroup} (0x42d202) */
   frameAngle: 0x26,
 } as const;
-
-/** is this container DreamFactory 5's, and of this four-character kind? */
-export const isV5 = (d: Uint8Array, kind: string): boolean =>
-  d.length > 8 && d[2] === 5 && d[3] === 0 && String.fromCharCode(d[7], d[6], d[5], d[4]) === kind;
 
 export function readShpFile(data: Uint8Array): ShpFile {
   const file = readContainerFile(data);

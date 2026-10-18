@@ -5,7 +5,7 @@
 import { TICK_SCALE } from "../brains/kit";
 import { Flypast, PROBE } from "../props";
 import { WINDOW } from "../hud";
-import { player, ANIM, p, TUCK_FEET, STAND_FEET, level, sound, CHARACTER, inCensus, held } from "./state";
+import { player, anim, p, tuckFeet, standFeet, level, sound, character, inCensus, held } from "./state";
 import { celRec, lastCel } from "./cels";
 
 /**
@@ -64,16 +64,16 @@ export const viewH = (): number => (iface ? WINDOW.h : FULL_H);
 export function poseFeet(): void {
   const rec = celRec(player, lastCel);
   const hung =
-    ANIM.hang.includes(lastCel) ||
-    ANIM.climb.some((t) => t.includes(lastCel)) ||
-    ANIM.bar.some((t) => t.includes(lastCel));
+    anim.hang.includes(lastCel) ||
+    anim.climb.some((t) => t.includes(lastCel)) ||
+    anim.bar.some((t) => t.includes(lastCel));
   // the tuck's cels are 200 and 220: a run's leap from its first frame, a
   // standing jump's from the frame after 253's launch
   const tucked = !p.onGround && (p.leap || p.airFrames >= 1);
   let want: number;
   if (p.climbing) want = p.feet;
   else if (rec && !hung) want = rec.height - rec.posY;
-  else want = tucked ? TUCK_FEET : STAND_FEET;
+  else want = tucked ? tuckFeet : standFeet;
   if (want === p.feet) return;
   p.y += want - p.feet;
   p.feet = want;
@@ -294,7 +294,7 @@ export function stepProbes(): void {
         clock: 0,
       });
     }
-    sound?.own(PROBE.sound[CHARACTER] ?? PROBE.sound[0], p.x, py);
+    sound?.own(PROBE.sound[character] ?? PROBE.sound[0], p.x, py);
   }
 }
 

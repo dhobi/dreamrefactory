@@ -2,6 +2,7 @@ import { ScriptError, Value } from "../interp";
 import { pointX, pointY } from "../point";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
+import { int, str } from "./df5-args";
 
 /**
  * DreamFactory 5's outside movie players — `playqt`, `playsmacker`,
@@ -54,12 +55,6 @@ export function registerDf5MediaBuiltins(ctx: BuiltinCtx): void {
   const r5 = v5Registrar(ctx);
   const disk = () => session.df5Disk;
 
-  /** 0x410560: a string, or 0xe */
-  const str = (cmd: string, v: Value | undefined): string => {
-    if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-    return v;
-  };
-
   /**
    * The integers after the file — `(from, to)`, `(from, to, mode)`,
    * `(from, to, at, size)` or `(from, to, at, size, mode)` — read by each
@@ -72,10 +67,7 @@ export function registerDf5MediaBuiltins(ctx: BuiltinCtx): void {
    */
   const timing = (cmd: string, rest: Value[]): Timing => {
     const n = Math.min(rest.length, 5);
-    const v = rest.slice(0, n).map((a) => {
-      if (typeof a !== "number") throw new ScriptError(0xe, `${cmd}: ${String(a)} is not an integer`);
-      return a | 0;
-    });
+    const v = rest.slice(0, n).map((a) => int(cmd, a));
     if (n === 1) throw new ScriptError(0xe, `${cmd}: a start with no end`);
     const t: Timing = { from: 0, to: 0x7fffffff, x: -1000, y: -1000, width: 0, height: 0, mode: 2 };
     if (n >= 2) [t.from, t.to] = v;

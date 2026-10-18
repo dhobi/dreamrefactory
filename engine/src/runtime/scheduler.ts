@@ -1,5 +1,6 @@
 import { ENGINE_STEP_MS, ticksAt } from "./clock";
 import { engineBearing } from "./geometry";
+import { forEngine, type PerEngine } from "./engine";
 import { schedulerRules, type SchedulerRules } from "./scheduler-rules";
 import { SoundBoard, type SoundChannels } from "./sound-channels";
 import type { Cricket, Crickets } from "./crickets";
@@ -122,34 +123,34 @@ export type PassWait = "clock" | "frames" | "jump";
 export class Scheduler {
   constructor(private readonly session: GameSession) {
     this.soundsByEngine = {
-      1: new SoundChannelsV1(this.soundBoard, session),
-      4: new SoundChannelsV4(this.soundBoard, session),
-      5: new SoundChannelsV5(this.soundBoard, session),
+      v4: new SoundChannelsV4(this.soundBoard, session),
+      v1: new SoundChannelsV1(this.soundBoard, session),
+      v5: new SoundChannelsV5(this.soundBoard, session),
     };
     const sounds = (): SoundChannels => this.sounds;
     const rand = (n: number): number => this.rand(n);
     this.cricketsByEngine = {
-      1: new CricketsV1(this.cricketTable, session, sounds, rand),
-      4: new CricketsV4(this.cricketTable, session, sounds, rand),
-      5: new CricketsV5(this.cricketTable, session, sounds, rand),
+      v4: new CricketsV4(this.cricketTable, session, sounds, rand),
+      v1: new CricketsV1(this.cricketTable, session, sounds, rand),
+      v5: new CricketsV5(this.cricketTable, session, sounds, rand),
     };
   }
 
   readonly loops: GameLoop[] = [];
   /** the 16 cricket slots, kept across a change of engine */
   private readonly cricketTable: Cricket[] = [];
-  private readonly cricketsByEngine: Record<1 | 4 | 5, Crickets>;
+  private readonly cricketsByEngine: PerEngine<Crickets>;
   /** the cricket table and its builtins, as this session's engine runs them (crickets.ts) */
   get crickets(): Crickets {
-    return this.cricketsByEngine[this.rules.engine];
+    return forEngine(this.session, this.cricketsByEngine);
   }
 
   /** the sound effects' channels, loop flags, volumes and pans, kept across a change of engine */
   private readonly soundBoard = new SoundBoard();
-  private readonly soundsByEngine: Record<1 | 4 | 5, SoundChannels>;
+  private readonly soundsByEngine: PerEngine<SoundChannels>;
   /** the sound effect builtins, as this session's engine plays them (sound-channels.ts) */
   get sounds(): SoundChannels {
-    return this.soundsByEngine[this.rules.engine];
+    return forEngine(this.session, this.soundsByEngine);
   }
 
   /**

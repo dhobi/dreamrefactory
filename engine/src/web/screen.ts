@@ -52,9 +52,6 @@
 export const SCREEN_W = 512;
 export const SCREEN_H = 384;
 
-/** bytes in one full screen of RGBA at the default size */
-export const SCREEN_BYTES = SCREEN_W * SCREEN_H * 4;
-
 /** how big a screen is: what a {@link ScreenPresenter} is built with */
 export interface ScreenSize {
   width: number;

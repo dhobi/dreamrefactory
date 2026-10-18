@@ -85,8 +85,6 @@ export const PHOTO_H = 240;
 /** where the album flat shows one (tz.dll 0x140016af, a Y-first rect) */
 export const PHOTO_X = 160;
 export const PHOTO_Y = 120;
-/** the film in the camera: `docamera` refuses past 35, `updateflat` counts 36 down */
-export const EXPOSURES = 36;
 
 /**
  * Somewhere for photographs to live between sessions.

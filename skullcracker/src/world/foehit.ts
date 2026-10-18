@@ -11,6 +11,7 @@ import { DIVISOR } from "./motion";
 import { foeAnchor } from "./cels";
 import { sparkAt, killFoe, spray, knockback, rallyFall } from "./blows";
 import { BURN_CODE, burnFoe, dropBoard, canAt } from "./casts";
+import { type Box } from "./box";
 
 /** a blow's hitter as {@link strikeFoe}'s exchange reads it */
 interface FoeHitter {
@@ -47,7 +48,7 @@ export interface FoeBlow {
   shove: { dx: number; dy: number };
   from: number;
   mid: number;
-  box: { top: number; left: number; bottom: number; right: number };
+  box: Box;
   /**
    * A CODE — and against a creature there is only one, which is fire. None is 0.
    *

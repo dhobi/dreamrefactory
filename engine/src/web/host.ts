@@ -707,7 +707,7 @@ export class GameHost {
     if (this.session.profile.loadOpensItsSet) {
       this.current?.abandonMovie();
       if (!(await this.session.loadGame(bytes))) throw new Error(`not a game this engine could load`);
-      this.session.fade.level = 0;
+      this.session.fade.lift();
       return;
     }
     let save;
@@ -761,7 +761,7 @@ export class GameHost {
     //
     // Cleared and not ramped, for the same reason the builtin gives: there is
     // nothing to reveal from. The room is already painted underneath.
-    this.session.fade.level = 0;
+    this.session.fade.lift();
   }
 
   /**
@@ -857,7 +857,7 @@ export class GameHost {
        * that has no room simply has no room — the demo's menu, Dust's two intro
        * films, and every frame of a game that has no `.SET` on any of its discs.
        */
-      session.fade.level = 1;
+      session.fade.holdBlack();
       session.currentSetName = "none";
       session.currentSetFile = "";
       await session.runGlobal("boot");
@@ -892,7 +892,7 @@ export class GameHost {
     // room's openset — for bedsit1 that would start the flat's radio before the
     // logos. advanceday() opens it for real later (radio then).
     await this.loadServerSet(plan.landingSet, { skipOpen: true });
-    session.fade.level = 1; // keep the host black until the first movie draws
+    session.fade.holdBlack(); // keep the host black until the first movie draws
     // boot()'s front half: black -> logo.mov -> playmode.mov -> resources -> tour.
     // boot() ENDS with its own `sendtostage(advanceday())`; mute the
     // sendtostage->boot fallback across this call so that closing advance stays

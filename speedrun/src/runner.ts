@@ -12,10 +12,8 @@
  * presentation-shaped is behind {@link RunHooks}. What is left is the loop.
  */
 import {
-  clearWatches,
   resolveIn,
   verbsOf,
-  watches,
   type Action,
   type ActionContext,
   type ActionTable,
@@ -82,11 +80,17 @@ export interface Split {
   actions: number;
 }
 
+/** the line a run stopped on, and why */
+export interface Failure {
+  step: Step;
+  error: Error;
+}
+
 export interface RunResult {
   timings: Timing[];
   splits: Split[];
-  total: { ms: number; frames: number; game: number; loading: number };
-  failure: { step: Step; error: Error } | null;
+  total: ClockSpan;
+  failure: Failure | null;
   /** where the game was standing when it stopped — only sampled on failure */
   where: string | null;
   /**
@@ -300,10 +304,9 @@ export async function runSheet(
   const timings: Timing[] = [];
   const splits: Split[] = [];
   const invalid: string[] = [];
-  let failure: { step: Step; error: Error } | null = null;
-
+  let failure: Failure | null = null;
   // a watch belongs to the run that registered it, not to the process
-  clearWatches();
+  const watches: Watch[] = [];
 
   const started: Clock = await d.clock();
   let splitFrom = started;
@@ -311,7 +314,7 @@ export async function runSheet(
   const actionCount = steps.filter((s) => s.verb !== "split").length;
   let index = 0;
 
-  const watchdog = watchdogFor(d, actions, hooks, verbs);
+  const run: StepRun = { d, actions, hooks, verbs, watches, watchdog: watchdogFor(d, actions, hooks, verbs, watches) };
   for (const step of steps) {
     if (step.verb === "split") {
       const now = await d.clock();
@@ -325,7 +328,7 @@ export async function runSheet(
 
     hooks.onStep?.(step, index++, actionCount);
     const action = resolve(step.verb)!;
-    const ran = await runStep(d, step, action, actions, hooks, verbs, watchdog);
+    const ran = await runStep(run, step, action);
     const { timing, voided } = ran;
     // null until now: a failure ends the loop below
     failure = ran.failure;
@@ -348,28 +351,29 @@ export async function runSheet(
   return {
     timings,
     splits,
-    total: {
-      ms: netMs(started, ended),
-      frames: ended.frames - started.frames,
-      game: ended.game - started.game,
-      loading: ended.loading - started.loading,
-    },
+    total: clockBetween(started, ended),
     failure,
     where,
     invalid,
   };
 }
 
-/** one split: the clock between `from` and `to`, and the actions run in it */
-function splitBetween(name: string, from: Clock, to: Clock, actions: number): Split {
+/** how far the clock moved between two readings */
+type ClockSpan = { ms: number; frames: number; game: number; loading: number };
+
+/** the clock between `from` and `to`: wall time net of the network, frames, game ms and loading */
+function clockBetween(from: Clock, to: Clock): ClockSpan {
   return {
-    name,
     ms: netMs(from, to),
     frames: to.frames - from.frames,
     game: to.game - from.game,
     loading: to.loading - from.loading,
-    actions,
   };
+}
+
+/** one split: the clock between `from` and `to`, and the actions run in it */
+function splitBetween(name: string, from: Clock, to: Clock, actions: number): Split {
+  return { name, ...clockBetween(from, to), actions };
 }
 
 /**
@@ -382,6 +386,7 @@ function watchdogFor(
   actions: ActionTable,
   hooks: RunHooks,
   verbs: ReturnType<typeof verbsOf>,
+  watches: Watch[],
 ): (done: () => boolean, finished: Promise<void>) => Promise<void> {
   const resolve = (verb: string): Action | undefined => resolveIn(actions, verb);
   /**
@@ -404,7 +409,7 @@ function watchdogFor(
    * a sheet that does not use them pays nothing.
    */
   const runWatches = async (sheet: boolean): Promise<void> => {
-    const live = watches();
+    const live = watches;
     if (!live.length) return;
     let fire: boolean[];
     try {
@@ -431,6 +436,7 @@ function watchdogFor(
           say: (m: string) => said.push(m),
           suggest: () => {},
           verbs,
+          watches,
         });
         hooks.onWatch?.(w, said);
       } catch (e) {
@@ -517,7 +523,7 @@ function watchdogFor(
    */
   const watchdog = (done: () => boolean, finished: Promise<void>): Promise<void> =>
     (async () => {
-      const live = watches();
+      const live = watches;
       const sheet = await openWatches(live);
       try {
         while (!done()) {
@@ -532,17 +538,23 @@ function watchdogFor(
   return watchdog;
 }
 
+/** what every line of one run is run with (runSheet) */
+interface StepRun {
+  d: SpeedrunDriver;
+  actions: ActionTable;
+  hooks: RunHooks;
+  verbs: ReturnType<typeof verbsOf>;
+  watches: Watch[];
+  watchdog: ReturnType<typeof watchdogFor>;
+}
+
 /** one line of the sheet, run and timed: its says, its suggestion, and the failure it stopped on */
 async function runStep(
-  d: SpeedrunDriver,
+  { d, actions, hooks, verbs, watches, watchdog }: StepRun,
   step: Step,
   action: Action,
-  actions: ActionTable,
-  hooks: RunHooks,
-  verbs: ReturnType<typeof verbsOf>,
-  watchdog: (done: () => boolean, finished: Promise<void>) => Promise<void>,
-): Promise<{ timing: Timing; voided: boolean; failure: { step: Step; error: Error } | null }> {
-  let failure: { step: Step; error: Error } | null = null;
+): Promise<{ timing: Timing; voided: boolean; failure: Failure | null }> {
+  let failure: Failure | null = null;
   const says: string[] = [];
   let suggestion: string | undefined;
   let voided = false;
@@ -581,11 +593,12 @@ async function runStep(
       suggest: (line: string) => (suggestion = line),
       voidTime: () => (voided = true),
       verbs,
+      watches,
     };
     let over = false;
     let finish = (): void => {};
     const finished = new Promise<void>((r) => (finish = r));
-    const dog = watches().length && step.verb !== "watchfor"
+    const dog = watches.length && step.verb !== "watchfor"
       ? watchdog(() => over, finished)
       : null;
     try {
@@ -605,10 +618,7 @@ async function runStep(
   const after = await d.clock().catch(() => before);
   const timing: Timing = {
     step,
-    ms: netMs(before, after),
-    frames: after.frames - before.frames,
-    game: after.game - before.game,
-    loading: after.loading - before.loading,
+    ...clockBetween(before, after),
     padded: d.padded() - paddedBefore,
     says,
     suggestion,

@@ -70,7 +70,7 @@ export function registerSaveGameBuiltins(ctx: BuiltinCtx): void {
     if (!(await session.loadGame(bytes, toStr(version ?? "")))) return back();
     // Loaded. The restore blacked the screen and rebuilt the room behind it;
     // what is showing now is the room, so stop holding the black over it.
-    session.fade.level = 0;
+    session.fade.lift();
     return 0;
   });
 }
@@ -100,17 +100,9 @@ export function registerSaveGameBuiltins(ctx: BuiltinCtx): void {
  * `blacktoscreen` — so a save is already black here without any help.
  */
 function blackTheScreen(session: GameSession): () => number {
-  const f = session.fade;
-  const was = { level: f.level, queue: [...f.queue], snapshot: f.snapshot, pending: f.pendingReveal };
-  f.queue.length = 0;
-  f.snapshot = null;
-  f.level = 1;
-  f.pendingReveal = false;
+  const restore = session.fade.blackUntilRestored();
   return () => {
-    f.level = was.level;
-    f.queue.push(...was.queue);
-    f.snapshot = was.snapshot;
-    f.pendingReveal = was.pending;
+    restore();
     return 0;
   };
 }

@@ -520,8 +520,8 @@ test.skipIf(!haveRip())("tower", async () => {
     h.frame(4);
     toStrike();
     h.frame();
-    if (game.CHARACTER !== 1 || game.p.act !== "dying" || game.actOf("dying")?.cels[0] !== 9700)
-      fail(`the second, struck unarmed: 0x476758 tag 3, from 9700; ${game.CHARACTER} ${game.p.act} ${game.actOf("dying")?.cels[0]}`);
+    if (game.character !== 1 || game.p.act !== "dying" || game.actOf("dying")?.cels[0] !== 9700)
+      fail(`the second, struck unarmed: 0x476758 tag 3, from 9700; ${game.character} ${game.p.act} ${game.actOf("dying")?.cels[0]}`);
     await h.load("level=12&x=17600&y=14700&lives=3&char=1");
     h.frame(4);
     game.inv.weapon = LIGHTFX.rod;

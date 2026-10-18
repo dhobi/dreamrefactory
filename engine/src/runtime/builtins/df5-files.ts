@@ -1,7 +1,8 @@
-import { ScriptError, Value } from "../interp";
+import { ScriptError } from "../interp";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
 import type { Df5Disk } from "../df5-disk";
+import { int, str, bool } from "./df5-args";
 
 /** names as 0x469110 compares them: same length, letters folded */
 const same = (a: string, b: string): boolean => a.length === b.length && a.toLowerCase() === b.toLowerCase();
@@ -30,21 +31,6 @@ interface CacheEntry {
   /** +0x108: what it is a copy of */
   src: string;
 }
-
-const int = (cmd: string, v: Value | undefined): number => {
-  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-  return v | 0;
-};
-// 0x410560: a string, or 0xe
-const str = (cmd: string, v: Value | undefined): string => {
-  if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-  return v;
-};
-// a v5 boolean is 1/0, so `cmp word [arg], 2` can only turn a string away here
-const bool = (cmd: string, v: Value | undefined): number => {
-  if (typeof v === "string" || v === undefined) throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a boolean`);
-  return v ? 1 : 0;
-};
 
 /**
  * DreamFactory 5's file, folder, volume and registry commands, each read out

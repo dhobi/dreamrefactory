@@ -6,7 +6,7 @@
 import type { Foe } from "../foes";
 import { TICK_SCALE } from "../brains/kit";
 import { OWN } from "../sound";
-import { p, held, MEASURED, sound, ANIM, KIT, level } from "./state";
+import { p, held, measured, sound, anim, kit, level } from "./state";
 
 /**
  * Where a lift car's cel hangs off its deck: cel 1160 is 133x108 with its anchor
@@ -129,7 +129,7 @@ export function steerAir(): void {
  */
 export function airThink(dir: number): void {
   if (held.up && p.hold > 0) {
-    p.vyRaw += roundAway(-MEASURED.rise / DIVISOR);
+    p.vyRaw += roundAway(-measured.rise / DIVISOR);
     p.hold -= 1;
   }
   if (dir && dir !== p.facing) {
@@ -151,9 +151,9 @@ export function airThink(dir: number): void {
 export function startJump(run: boolean, moving: boolean): void {
   sound?.own(OWN.jump, p.x, p.y);
   p.leap = run;
-  p.windup = run ? 1 : ANIM.launch.length;
-  if (run) p.launchDx = MEASURED.runJumpDx;
-  else p.launchDx = moving ? MEASURED.launchDx : 0;
+  p.windup = run ? 1 : anim.launch.length;
+  if (run) p.launchDx = measured.runJumpDx;
+  else p.launchDx = moving ? measured.launchDx : 0;
 }
 
 export function engineFrame(): void {
@@ -175,7 +175,7 @@ export function engineFrame(): void {
 }
 /**
  * The player's own speed divisor, `mov word ptr [eax+0xe], 0xc` at `0x42e412`.
- * It turns {@link MEASURED} into pixels per engine frame — walk 8, run 15, jump
+ * It turns {@link measured} into pixels per engine frame — walk 8, run 15, jump
  * 35 — by the rounding-away-from-zero divide in `0x42f8b0`.
  *
  * It is a constant, which took a byte scan to establish rather than a
@@ -200,7 +200,7 @@ export const DIVISOR = 12;
  * +614). Four sixtieths is a fifteenth: a frame is 1/15s.
  *
  * The animation stepper advances one cel per frame, so every animation in the
- * game plays at 15fps. It also turns {@link MEASURED}'s per-frame pixels into
+ * game plays at 15fps. It also turns {@link measured}'s per-frame pixels into
  * pixels per SECOND: the walk's
  * 8 a frame settles against the ground's drag at 12 — 180 a second — the run's
  * 15 at 22 (330), and the launch leaves the ground at 35 in one frame.
@@ -335,7 +335,7 @@ export const LADDER = {
   /** the cel a ladder holds you on, and whose box says where the feet are */
   /** character 0's; character 1 rests on 5405 — {@link PlayerKit.restCel} */
   get restCel(): number {
-    return KIT.restCel;
+    return kit.restCel;
   },
   from: "0x42ae50 / 0x471e78 / the ladder records' own param",
 };
@@ -468,11 +468,11 @@ export function roomHolds(): boolean {
  */
 // ...and they are functions rather than constants because the character can
 // change under them: character 1 walks at 105 and runs at 200
-export const stridePx = (): number => MEASURED.walk / DIVISOR;
+export const stridePx = (): number => measured.walk / DIVISOR;
 /** the same for the run: dx 180 over one frame, so 15px of ground a cel */
-export const runStridePx = (): number => MEASURED.run / DIVISOR;
+export const runStridePx = (): number => measured.run / DIVISOR;
 /** and the crawl: dx 47, so 3.9px of ground a cel */
-export const crawlStridePx = (): number => MEASURED.crawl / DIVISOR;
+export const crawlStridePx = (): number => measured.crawl / DIVISOR;
 /** `0x471c68`'s `ticksPerFrame` — engine frames each airborne cel is held */
 export const AIR_HOLD = 4;
 /** `0x471648`'s — engine frames each idle cel is held */

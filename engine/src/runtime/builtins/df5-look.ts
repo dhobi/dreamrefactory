@@ -11,17 +11,8 @@ import type { PlayHandle } from "../audio";
 import { panFrom255 } from "../sound-channels";
 import { BuiltinCtx } from "./context";
 import { v5Registrar } from "./df5";
+import { int, str } from "./df5-args";
 
-/** an integer argument, or 0xe (`cmp word [arg], 4`) */
-const int = (cmd: string, v: Value | undefined): number => {
-  if (typeof v !== "number") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not an integer`);
-  return v | 0;
-};
-/** a string argument, or 0xe (0x410560) */
-const str = (cmd: string, v: Value | undefined): string => {
-  if (typeof v !== "string") throw new ScriptError(0xe, `${cmd}: ${String(v)} is not a string`);
-  return v;
-};
 /** a channel 1..3 for a value form (0x42c26b, 0x41adcf), or 0xa */
 const channel = (cmd: string, v: Value | undefined): number => {
   const k = int(cmd, v);

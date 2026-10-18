@@ -32,7 +32,6 @@ import type { ClutDim, RoomLayer, ScreenDirector } from "./screen-director";
  */
 export class MazeView implements RoomLayer {
   readonly maze: MazeRuntime;
-  readonly roomVersion = 4 as const;
   /** actors and props in one list by distance (ScreenDirector.compositeWorld) */
   readonly spritesByDepth = true;
   private readonly width: number;

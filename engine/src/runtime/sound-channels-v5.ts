@@ -6,8 +6,6 @@ import { SoundChannels } from "./sound-channels";
  * second play of it while it sounds is not a second loop.
  */
 export class SoundChannelsV5 extends SoundChannels {
-  readonly engine = 5;
-
   play(name: string, overlap: boolean): void {
     const found = this.clip(name);
     if (!found) return;

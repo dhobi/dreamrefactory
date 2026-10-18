@@ -13,8 +13,6 @@ import { forEngine, type EngineFlags } from "./engine";
  * number, are classes of their own (sound-channels.ts and its -v1, -v4, -v5), and so are the crickets (crickets.ts).
  */
 export interface SchedulerRules {
-  readonly engine: 1 | 4 | 5;
-
   // ---- loops (makeloop) ----
   /** the loop table's slots: TI.EXE's 32, RedJack.exe's 64 (0x4c4a80) */
   readonly loopSlots: number;
@@ -60,7 +58,6 @@ export interface SchedulerRules {
 
 /** Titanic: the scheduler as TI.EXE runs it, the one the others are told apart from */
 const V4: SchedulerRules = {
-  engine: 4,
   loopSlots: 32,
   loopTableFullThrows: false,
   negativePeriodIsDeadline: false,
@@ -80,7 +77,6 @@ const V4: SchedulerRules = {
 /** Dust */
 const V1: SchedulerRules = {
   ...V4,
-  engine: 1,
   turnStepsActor: true,
   pauseAnswer: logic,
   propsByCamera: true,
@@ -89,7 +85,6 @@ const V1: SchedulerRules = {
 /** RedJack */
 const V5: SchedulerRules = {
   ...V4,
-  engine: 5,
   loopSlots: 64,
   loopTableFullThrows: true,
   negativePeriodIsDeadline: true,

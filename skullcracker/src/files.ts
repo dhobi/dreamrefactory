@@ -54,6 +54,7 @@
  */
 
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { readStream } from "@dreamfactory/engine/web/rip-files";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
 /** this page's own URL for a served path, so it runs from any directory */
@@ -99,7 +100,9 @@ export class SkullFiles {
     if (!res.ok) return null;
     // read as it arrives where the browser gives a body to read: one film is
     // up to 27 MB, and a bar that only moves on completion does not move
-    return res.body ? await this.readStream(key, res.body) : new Uint8Array(await res.arrayBuffer());
+    return res.body
+      ? await readStream(res.body, (n) => this.onChunk?.(key, n))
+      : new Uint8Array(await res.arrayBuffer());
   };
 
   /** index the rip from the manifest the dev server and the build both publish */
@@ -202,26 +205,5 @@ export class SkullFiles {
     } finally {
       if (this.inFlight.delete(key)) this.onBusyChange?.(this.inFlight.size);
     }
-  }
-
-  /** drain a response body, reporting each chunk, then join it into one array */
-  private async readStream(key: string, body: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      total += value.byteLength;
-      this.onChunk?.(key, value.byteLength);
-    }
-    const out = new Uint8Array(total);
-    let at = 0;
-    for (const c of chunks) {
-      out.set(c, at);
-      at += c.byteLength;
-    }
-    return out;
   }
 }

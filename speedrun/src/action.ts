@@ -34,7 +34,7 @@
  * the engine the same question the browser suites ask, through the same
  * {@link aim} sweep, and never moves the game by writing to it.
  */
-import { SheetError, type Step, type VerbSpec } from "./sheet";
+import { SheetError, type Step, type Then, type VerbSpec } from "./sheet";
 import type { SpeedrunDriver, WaitMode } from "./driver";
 import { SCREEN, SHOWING, budgetNow } from "./driver";
 
@@ -69,6 +69,11 @@ export interface ActionContext {
    * `watchFor` would have been parsed against Titanic's vocabulary.
    */
   verbs: Record<string, VerbSpec>;
+  /**
+   * The run's standing watches, in the order they were registered (`watchFor`).
+   * The run's own, for the same reason: one run cannot leak into the next.
+   */
+  watches: Watch[];
 }
 
 export type ActionFn = (c: ActionContext) => Promise<void>;
@@ -815,7 +820,7 @@ export function otherwiseOf(step: Step): Otherwise {
  * conversation and close it on its own line. Absent is the answer this language
  * gave before there was an option: fall through to `otherwise:`.
  */
-export function thenOf(step: Step): "leave" | "stop" | undefined {
+export function thenOf(step: Step): Then | undefined {
   if (step.ending) return step.ending;
   const asked = step.opts.then;
   if (asked === undefined) return undefined;
@@ -826,15 +831,11 @@ export function thenOf(step: Step): "leave" | "stop" | undefined {
   return v;
 }
 
-/** the plaque's reply ids, joined — "has the question changed" in one read */
-export const QUESTION_IDS =
-  `((window.dbg.viewer && window.dbg.viewer.choices) || []).map((ch) => ch.id).join(",")`;
-
 export async function converse(
   c: ActionContext,
   bevels: number[],
   otherwise: Otherwise,
-  then?: "leave" | "stop",
+  then?: Then,
 ): Promise<void> {
   const { d } = c;
   const wanted = [...bevels];
@@ -1068,8 +1069,8 @@ function chooseBevel(
   wanted: number[],
   picked: number[],
   otherwise: Otherwise,
-  then: "leave" | "stop" | undefined,
-): number | "leave" | "stop" {
+  then: Then | undefined,
+): number | Then {
   let idx = wanted.length ? choices.findIndex((ch) => ch.id === wanted[0]) : -1;
   if (idx >= 0) {
     picked.push(wanted.shift()!);
@@ -1712,18 +1713,6 @@ export function path(step: Step): Step[] {
     }
   }
   return out;
-}
-
-export const WATCHES: Watch[] = [];
-
-/** the standing watches, in the order they were registered */
-export function watches(): Watch[] {
-  return WATCHES;
-}
-
-/** forget every watch — the runner calls this so one run cannot leak into the next */
-export function clearWatches(): void {
-  WATCHES.length = 0;
 }
 
 
