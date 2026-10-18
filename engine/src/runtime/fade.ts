@@ -42,9 +42,12 @@ export class Fade {
    * view stands on one frame through the 240-step fade back into the engine
    * room, and only `close()` after it animates (#541).
    */
-  ramping = 0;
-  /** what waits for the ramp to be over — see SessionTransitions.untilRampEnds */
-  readonly afterRamp: (() => void)[] = [];
+  get ramping(): number {
+    return this.rampers;
+  }
+  private rampers = 0;
+  /** what waits for the ramp to be over — see {@link whenRampEnds} */
+  private readonly afterRamp: (() => void)[] = [];
 
   /**
    * The screen is at `level` from this instant: no ramp left to run, no frame
@@ -82,8 +85,57 @@ export class Fade {
     this.blanked = false;
   }
 
+  /** is a ramp queued or running? */
+  get fading(): boolean {
+    return this.queue.length > 0;
+  }
+
+  /** a script enters a blocking ramp (SessionTransitions.ramp) */
+  enterRamp(): void {
+    this.rampers++;
+  }
+
+  /**
+   * ...and leaves it. The last one out runs `whenLast` (the clock lets go of
+   * what it held) and then everything waiting on {@link whenRampEnds}.
+   */
+  leaveRamp(whenLast: () => void): void {
+    if (--this.rampers !== 0) return;
+    whenLast();
+    for (const w of this.afterRamp.splice(0)) w();
+  }
+
+  /** resolves once no script is blocked in a ramp — at once when none is */
+  whenRampEnds(): Promise<void> {
+    if (!this.ramping) return Promise.resolve();
+    return new Promise((resolve) => this.afterRamp.push(resolve));
+  }
+
+  /**
+   * No ramp queued: the ramp clock starts afresh with the next one, and a
+   * reveal owed is made once nothing holds the frame and no script is `busy`
+   * (SessionTransitions.tickFade).
+   */
+  idle(busy: boolean): void {
+    this.lastTick = null;
+    if (this.pendingReveal && !this.snapshot && !busy) this.reset(0);
+  }
+
+  /**
+   * Take every step due up to `tick`, one tick at a time from the tick before
+   * the ramp was asked on (see {@link lastTick}). A ramp running owes no reveal.
+   */
+  advanceTo(tick: number): void {
+    this.pendingReveal = false;
+    this.lastTick ??= tick - 1;
+    while (this.queue.length && this.lastTick < tick) {
+      this.lastTick++;
+      this.step();
+    }
+  }
+
   /** one tick of the ramp at the front of the queue, which leaves it once it is there */
-  step(): void {
+  private step(): void {
     const ramp = this.queue[0];
     if (ramp.to === 0) this.snapshot = null; // fading back in reveals the live frame
     const delta = 1 / ramp.steps;

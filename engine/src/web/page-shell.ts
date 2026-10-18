@@ -303,3 +303,74 @@ export class BootCaption {
     }
   };
 }
+
+/**
+ * The loading gauge's bar, which only ever goes forwards, whatever order the
+ * answers arrive in; {@link set} is the page's `progress(f, label?)`.
+ *
+ * What differs between the pages is only the markup: where the gauge keeps its
+ * accessible value (a `<progress>`'s `value`, or an `aria-valuenow`) and where a
+ * label goes (a {@link BootCaption}, or straight into its line). The fill and
+ * the percentage are written only when the whole percent changes.
+ */
+export class BootBar {
+  private done = 0;
+  private shownPct = -1;
+
+  constructor(
+    private readonly fill: HTMLElement,
+    private readonly pctEl: HTMLElement,
+    /** the gauge's accessible value, in whole percent */
+    private readonly value: (pct: number) => void,
+    /** the caption is one line and the newest one wins */
+    private readonly label: (text: string) => void,
+  ) {}
+
+  /** how far the bar stands, 0..1 — for a label said without moving it */
+  get at(): number {
+    return this.done;
+  }
+
+  set = (f: number, label?: string): void => {
+    this.done = Math.max(this.done, Math.min(1, f));
+    const pct = Math.round(this.done * 100);
+    if (pct !== this.shownPct) {
+      this.shownPct = pct;
+      this.fill.style.width = `${pct}%`;
+      this.pctEl.textContent = `${pct}%`;
+      this.value(pct);
+    }
+    if (label) this.label(label);
+  };
+}
+
+/** a real pause, for the one place that wants to be SEEN rather than be quick */
+const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The boot is done: hold the full bar for `ms`, then {@link waitForStart}.
+ *
+ * Held because the fill's own `width` transition takes time, and swapping the
+ * gauge out the instant the number says 100 means the bar never visibly arrives
+ * — the whole point of counting real work was to earn that end, so it gets to be
+ * watched reaching it.
+ */
+export async function untilStarted(bootEl: HTMLElement, startEl: HTMLElement, ms: number, autostart = false): Promise<void> {
+  await hold(ms);
+  await waitForStart(bootEl, startEl, autostart);
+}
+
+/**
+ * The title card, closed up when it fails to load: hidden, and the page told
+ * (`nobrand`) so the band it sat in closes too. A module runs after parsing, so
+ * the image may already have failed by the time this is called.
+ */
+export function brandFallback(brandEl: HTMLImageElement | null): void {
+  if (!brandEl) return;
+  const drop = (): void => {
+    brandEl.hidden = true;
+    document.body.classList.add("nobrand");
+  };
+  if (brandEl.complete && brandEl.naturalWidth === 0) drop();
+  else brandEl.addEventListener("error", drop);
+}

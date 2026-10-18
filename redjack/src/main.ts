@@ -26,8 +26,10 @@ import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import {
+  BootBar,
   GestureAudio,
   PageLog,
+  brandFallback,
   busySpinner,
   screenPlate,
   showVersion,
@@ -66,14 +68,7 @@ const stageEl = document.getElementById("stage") as HTMLElement;
 showVersion(VERSION);
 
 /** the title card, which closes the band up when it fails to load — see #brand in index.html */
-const brandEl = document.getElementById("brand") as HTMLImageElement;
-function dropBrand(): void {
-  brandEl.hidden = true;
-  document.body.classList.add("nobrand");
-}
-// a module runs after parsing, so the image may already have failed by now
-if (brandEl.complete && brandEl.naturalWidth === 0) dropBrand();
-else brandEl.addEventListener("error", dropBrand);
+brandFallback(document.getElementById("brand") as HTMLImageElement | null);
 
 /* ------------------------------------------------------------------------- *
  * The log
@@ -141,15 +136,13 @@ const PLANNED = 0.08;
 const FETCHED = 0.96;
 
 /** the bar only ever goes forwards */
-let charged = 0;
-function progress(f: number, label?: string): void {
-  charged = Math.max(charged, Math.min(1, f));
-  const pct = Math.round(charged * 100);
-  chargeEl.style.width = `${pct}%`;
-  bootPctEl.textContent = `${pct}%`;
-  barEl.value = pct;
-  if (label) bootSayEl.textContent = label;
-}
+const bar = new BootBar(
+  chargeEl,
+  bootPctEl,
+  (pct) => (barEl.value = pct),
+  (label) => (bootSayEl.textContent = label),
+);
+const progress = bar.set;
 
 function beginPlaying(): void {
   document.body.classList.remove("booting");
@@ -245,7 +238,7 @@ async function main(): Promise<void> {
   let arrived = 0;
   await Promise.all(
     prefetch.map(async (name) => {
-      progress(charged, `opening ${name}`);
+      progress(bar.at, `opening ${name}`);
       await files.load(name, (n) => {
         arrived += n;
         progress(PLANNED + (FETCHED - PLANNED) * (arrived / Math.max(1, arrived + files.bytesLeft(prefetch))));

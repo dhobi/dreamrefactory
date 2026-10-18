@@ -67,9 +67,28 @@ export abstract class RipFiles implements HostFiles {
    *  `FileStore` has the same hook, and the same canvas-corner spinner on it */
   onBusyChange: ((inFlight: number) => void) | null = null;
 
-  abstract setDisc(disc: number): void;
+  /**
+   * The game is on another disc. Nothing to do for a store whose every disc is
+   * indexed at once with no copy that differs between them, which is all but
+   * RedJack's: a rip with per-disc copies of a name overrides this.
+   */
+  setDisc(_disc: number): void {
+    // every disc is indexed already
+  }
+
   abstract activeEdition(): string;
   abstract serverSetNames(): string[];
+
+  /**
+   * The manifest the dev server and the build both publish, read from `src`:
+   * every served path → its size in bytes. Nothing at all where it could not be
+   * read, so a page that indexed nothing can say so instead of throwing. Which
+   * paths to take and which copy of a repeated name wins is each game's `open`.
+   */
+  protected static async readManifest(src: string): Promise<Record<string, number>> {
+    const res = await fetch(src);
+    return res.ok ? await res.json() : {};
+  }
 
   /** how many names the rip offers — a boot that indexed nothing says so */
   get size(): number {
@@ -234,6 +253,11 @@ export abstract class RipFiles implements HostFiles {
   evict(): number {
     return 0;
   }
+}
+
+/** the name a manifest path is indexed under: its basename, lowercased */
+export function ripName(path: string): string {
+  return path.split("/").pop()!.toLowerCase();
 }
 
 /**

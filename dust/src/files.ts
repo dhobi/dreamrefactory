@@ -1,5 +1,5 @@
 import type { WireEvent } from "@dreamfactory/engine/web/host";
-import { RipFiles } from "@dreamfactory/engine/web/rip-files";
+import { RipFiles, ripName } from "@dreamfactory/engine/web/rip-files";
 import { siteUrl } from "@dreamfactory/chrome/site";
 
 /**
@@ -10,7 +10,8 @@ import { siteUrl } from "@dreamfactory/chrome/site";
  * it and no changes above. That is the whole reason this file is short: the play
  * page's `FileStore` carries six editions, two CDs, per-disc basename collisions
  * and an LRU for 37 MB cutscenes, none of which Dust has. One volume, one
- * edition, one copy of every name.
+ * edition, one copy of every name — and no `setDisc`, because Dust's boot has
+ * no `setpath(disk)` and nothing to swap to.
  *
  * ## Two things it has to get right
  *
@@ -105,12 +106,11 @@ export class DustFiles extends RipFiles {
     // (tools/manifest.ts), so this download is the one disc and not every
     // TAOOT edition beside it. Resolved through siteUrl, like every URL a
     // page builds itself, so the page runs from any directory of any host.
-    const res = await fetch(siteUrl("gamefiles.json"));
-    const manifest: Record<string, number> = res.ok ? await res.json() : {};
+    const manifest = await RipFiles.readManifest(siteUrl("gamefiles.json"));
     for (const path of Object.keys(manifest)) {
       store.paths.push(path);
       if (!path.startsWith(root)) continue;
-      const base = path.split("/").pop()!.toLowerCase();
+      const base = ripName(path);
       const url = siteUrl(path);
       const have = store.urls.get(base);
       if (!have || rank(url) < rank(have)) {
@@ -207,10 +207,6 @@ export class DustFiles extends RipFiles {
 
   protected override flightOver(key: string): void {
     this.background.delete(key);
-  }
-
-  setDisc(): void {
-    /* one volume — Dust's boot has no setpath(disk) and nothing to swap to */
   }
 
   activeEdition(): string {

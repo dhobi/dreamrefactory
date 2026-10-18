@@ -26,6 +26,7 @@ import {
   SavedWalk,
   RawSaveFile,
   SaveGame,
+  ScriptGlobals,
   ThemePatch,
   readSaveFile,
 } from "../df/savegame";
@@ -52,11 +53,7 @@ export function saveBase(session: GameSession): RawSaveFile | null {
 }
 
 /** The script globals a save carries, split the way the file stores them. */
-export function scriptGlobals(session: GameSession): {
-  numGlobals: Map<string, number>;
-  strGlobals: Map<string, string>;
-  boolGlobals: Set<string>;
-} {
+export function scriptGlobals(session: GameSession): ScriptGlobals {
   const numGlobals = new Map<string, number>();
   const strGlobals = new Map<string, string>();
   // a boolean is stored as its 0/1 with the boolean tag (2), as the engines
@@ -85,7 +82,7 @@ export function scriptGlobals(session: GameSession): {
  */
 export function replaceGlobals(
   session: GameSession,
-  save: { numGlobals: Map<string, number>; strGlobals: Map<string, string>; boolGlobals: Set<string> },
+  save: ScriptGlobals,
 ): void {
   const globals = session.interp.globals;
   for (const name of globals.keys()) {

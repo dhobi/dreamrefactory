@@ -23,7 +23,6 @@ import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { GameSession } from "@dreamfactory/engine/runtime/session";
 import { StgRegion } from "@dreamfactory/engine/df/stg";
 import { LANGUAGES, LANG_FLAT, LANG_GLOBAL, LANG_STAGE, isEditionCode, isLanguageCode } from "./languages";
-import { SCREEN_H, SCREEN_W } from "@dreamfactory/engine/web/screen";
 
 /** a chooser button: the STG's region, and whether the data behind it exists */
 export interface LangButton {
@@ -159,9 +158,6 @@ export class LangChooser {
     this.session.interp.globals.delete(LANG_GLOBAL);
   }
 }
-
-/** the screen size the chooser draws at — the game's, since it IS a game screen */
-export const CHOOSER_SIZE = { width: SCREEN_W, height: SCREEN_H } as const;
 
 /**
  * The edition to boot without asking: an explicit `?edition=`, then what the player

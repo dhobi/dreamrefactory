@@ -69,7 +69,7 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { BootCaption, busySpinner, titleRise, waitForStart } from "@dreamfactory/engine/web/page-shell";
+import { BootBar, BootCaption, brandFallback, busySpinner, titleRise, untilStarted } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
@@ -369,14 +369,7 @@ function say(line: string): void {
 }
 /** the title card, which rises rather than leaving — see #brand in dust/index.html */
 const brandEl = document.getElementById("brand") as HTMLImageElement | null;
-function dropBrand(): void {
-  if (!brandEl) return;
-  brandEl.hidden = true;
-  document.body.classList.add("nobrand");
-}
-// a module runs after parsing, so the image may already have failed by now
-if (brandEl?.complete && brandEl.naturalWidth === 0) dropBrand();
-else brandEl?.addEventListener("error", dropBrand);
+brandFallback(brandEl);
 /** the fuse: the bar, the burnt length, the boot's newest word, the percentage */
 const bootEl = document.getElementById("boot") as HTMLElement;
 const startEl = document.getElementById("start") as HTMLButtonElement;
@@ -499,22 +492,18 @@ async function fetchWatched(url: string, from: number, to: number): Promise<Resp
 }
 
 
-/** the bar only ever goes forwards, whatever order the answers arrive in */
-let burnt = 0;
-let shownPct = -1;
-function progress(f: number, label?: string): void {
-  burnt = Math.max(burnt, Math.min(1, f));
-  const pct = Math.round(burnt * 100);
-  if (pct !== shownPct) {
-    shownPct = pct;
-    burnEl.style.width = `${pct}%`;
-    bootPctEl.textContent = `${pct}%`;
-    fuseValueEl.value = pct;
-  }
-  // the caption is one line and the newest one wins: what a player watches for
-  // two seconds is the engine naming what it just opened
-  if (label) caption.say(label);
-}
+/**
+ * The bar only ever goes forwards, whatever order the answers arrive in. The
+ * caption is one line and the newest one wins: what a player watches for two
+ * seconds is the engine naming what it just opened.
+ */
+const fuse = new BootBar(
+  burnEl,
+  bootPctEl,
+  (pct) => (fuseValueEl.value = pct),
+  (label) => caption.say(label),
+);
+const progress = fuse.set;
 
 /**
  * The title card rises, by FLIP.
@@ -533,10 +522,6 @@ function progress(f: number, label?: string): void {
  * fade out where the player last saw it instead of jumping to the top with the
  * logo.
  */
-/** a real pause, for the one place that wants to be SEEN rather than be quick */
-const hold = (ms: number): Promise<void> =>
-  new Promise((r) => setTimeout(r, ms));
-
 /**
  * The boot is done; wait to be told to go.
  *
@@ -567,11 +552,6 @@ const BURN_OUT = 520;
  * measures gestures and frames, not whether the intro was scored.
  */
 const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
-
-async function untilStarted(): Promise<void> {
-  await hold(BURN_OUT);
-  await waitForStart(bootEl, startEl, AUTOSTART);
-}
 
 /** the title card rises off the burnt-out fuse, by FLIP, once however many
  *  failure paths reach it (engine/src/web/page-shell.ts) */
@@ -836,7 +816,7 @@ async function runBoot(): Promise<void> {
   // for the same middle of the same page, and only one of them is the picture.
   const bootSay = (l: string) => {
     say(l);
-    progress(burnt, l.trim());
+    progress(fuse.at, l.trim());
   };
   progress(...HEAD_STEPS[3]);
   // the build the reader is looking at, first thing in its own account —
@@ -1016,7 +996,7 @@ async function runBoot(): Promise<void> {
    * its end instead of being started and abandoned) and gives the movie player
    * something that renders it.
    */
-  await untilStarted();
+  await untilStarted(bootEl, startEl, BURN_OUT, AUTOSTART);
   /**
    * The canvas is NOT blank here: the fallback browser painted its preview room
    * onto it during the load, behind the title card — harmless when the game's
@@ -1617,7 +1597,7 @@ start().catch((e) => {
   // a boot that threw has an account of itself and no picture: raise the card so
   // the log has the page, and stop the fuse where it stopped rather than leaving
   // it burning at whatever fraction it had reached
-  progress(burnt, String(e));
+  progress(fuse.at, String(e));
   raiseTitle();
   logEl.hidden = false;
 });

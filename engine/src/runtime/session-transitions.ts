@@ -21,22 +21,17 @@ export class SessionTransitions {
    * ramp runs until it is done.
    */
   untilRampEnds(): Promise<void> {
-    if (!this.fade.ramping) return Promise.resolve();
-    return new Promise((resolve) => this.fade.afterRamp.push(resolve));
+    return this.fade.whenRampEnds();
   }
 
   /** a script enters a blocking fade ramp of `ms` and leaves it (builtins/scene.ts) */
   async ramp(ms: number): Promise<void> {
-    const f = this.fade;
-    f.ramping++;
+    this.fade.enterRamp();
     this.session.clock.rampOnly = true;
     try {
       await this.session.clock.sleep(ms, true);
     } finally {
-      if (--f.ramping === 0) {
-        this.session.clock.releaseHeld();
-        for (const w of f.afterRamp.splice(0)) w();
-      }
+      this.fade.leaveRamp(() => this.session.clock.releaseHeld());
     }
   }
   /**
@@ -242,15 +237,14 @@ export class SessionTransitions {
   }
 
   get fading(): boolean {
-    return this.fade.queue.length > 0;
+    return this.fade.fading;
   }
 
   /** advance the fade one script tick at a time — the ramp's own clock in the
    *  original, not the service pass ({@link RAMP_STEP_MS}) */
   tickFade(now: number): void {
     const f = this.fade;
-    if (!f.queue.length) {
-      f.lastTick = null;
+    if (!f.fading) {
       // A movie has ended and the script that played it has finished talking
       // (no dispatch left in flight): whatever black it left behind is nobody's
       // any more, so lift it. Deferring to here — rather than revealing the
@@ -260,10 +254,9 @@ export class SessionTransitions {
       // fades the flat in; revealing at movie end would flash the room, fully lit,
       // in between). A stage that never fades still gets its reveal (TAOOT's
       // bomb: blackscreen -> bombopen.mov -> setvisible(false), no fade follows).
-      if (f.pendingReveal && !f.snapshot && !this.session.scriptBusy) f.reset(0);
+      f.idle(this.session.scriptBusy);
       return;
     }
-    f.pendingReveal = false;
     // Counted in the original's own tick numbers rather than by accumulating a
     // 16.666… ms step: a step is 1/60 s exactly and the sum of thirds is not, so
     // `now - lastTick >= step` fell a hair short about one call in five and lost
@@ -276,11 +269,6 @@ export class SessionTransitions {
     // the first frame instead, a frame arriving k ticks late left the last k
     // steps running after the script had gone on — and a key pressed in those
     // ticks met a fade the original never has outliving its script.
-    const tick = ticksAt(now);
-    f.lastTick ??= tick - 1;
-    while (f.queue.length && f.lastTick < tick) {
-      f.lastTick++;
-      f.step();
-    }
+    f.advanceTo(ticksAt(now));
   }
 }

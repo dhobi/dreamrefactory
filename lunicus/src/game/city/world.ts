@@ -31,8 +31,6 @@ export interface DrawItem {
   mirror: boolean;
 }
 
-export const FULL_VIEW: Rect = [0, 0, 264, 384];
-
 export class World {
   cam!: Camera;
   /** where the player stands and where a move is going (`[0x42e0c8]`, `[0x42e0ce]`) */

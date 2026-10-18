@@ -3242,11 +3242,6 @@ export const FOES: Readonly<Record<string, Foe>> = {
   },
 };
 
-/** how many engine frames one run of an animation lasts */
-export function animFrames(a: FoeAnim): number {
-  return a.cels.length * a.hold;
-}
-
 /** which cel of a one-shot animation is showing after `frames` engine frames */
 export function celAt(a: FoeAnim, frames: number): number {
   const i = Math.min(a.cels.length - 1, Math.floor(frames / a.hold));
