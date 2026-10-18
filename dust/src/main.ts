@@ -44,7 +44,7 @@
  * second — a price worth paying to make the rendering unarguable rather than
  * clever, and a price the game does not pay because it does not need to.
  */
-import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { DF_CURSORS } from "./cursor-art";
 import {
   decodeFrame,
@@ -69,7 +69,7 @@ import {
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { titleRise } from "@dreamfactory/engine/web/page-shell";
+import { busySpinner, titleRise, waitForStart } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
@@ -590,14 +590,9 @@ const BURN_OUT = 520;
  */
 const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
 
-async function waitForStart(): Promise<void> {
+async function untilStarted(): Promise<void> {
   await hold(BURN_OUT);
-  bootEl.classList.add("ready");
-  if (AUTOSTART) return;
-  startEl.focus();
-  await new Promise<void>((resolve) =>
-    startEl.addEventListener("click", () => resolve(), { once: true }),
-  );
+  await waitForStart(bootEl, startEl, AUTOSTART);
 }
 
 /** the title card rises off the burnt-out fuse, by FLIP, once however many
@@ -879,24 +874,7 @@ async function runBoot(): Promise<void> {
    * only ever appears when there is a wait to report. Invisible before Start by
    * construction: it lives inside #frame, which the page fades in with play.
    */
-  const netbusy = document.getElementById("netbusy") as HTMLDivElement;
-  const BUSY_AFTER_MS = 400;
-  let busyTimer = 0;
-  files.onBusyChange = (inFlight) => {
-    if (inFlight > 0) {
-      if (busyTimer || !netbusy.hidden) return;
-      busyTimer = window.setTimeout(() => {
-        busyTimer = 0;
-        netbusy.hidden = false;
-      }, BUSY_AFTER_MS);
-      return;
-    }
-    if (busyTimer) {
-      clearTimeout(busyTimer);
-      busyTimer = 0;
-    }
-    netbusy.hidden = true;
-  };
+  files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
   /**
    * The load remover, on the same wire as the mark above
    * (engine/src/web/load-clock.ts, #251).
@@ -1060,7 +1038,7 @@ async function runBoot(): Promise<void> {
    * its end instead of being started and abandoned) and gives the movie player
    * something that renders it.
    */
-  await waitForStart();
+  await untilStarted();
   /**
    * The canvas is NOT blank here: the fallback browser painted its preview room
    * onto it during the load, behind the title card — harmless when the game's
@@ -1447,14 +1425,9 @@ function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: 
  * builds share eight of the nine byte for byte and disagree about the pointing
  * hand.
  */
-const cursors = new CursorSheet(DF_CURSORS);
-
-/** the name last answered, so a resize can redraw it at the new size */
-let cursorShown = "";
-
+const cursor = new ShownCursor(canvas, new CursorSheet(DF_CURSORS), canvas);
+const showCursor = cursor.show;
 /**
- * Show what the thing under the pointer asked for.
- *
  * The scale is the ratio the CANVAS is stretched by, and nothing else. This
  * divided by {@link SCALE} as well, on the reasoning that the page composites a
  * 512-wide game into a 1024-wide canvas — which is true of the element in the
@@ -1464,14 +1437,8 @@ let cursorShown = "";
  * running it asked for a 128x128 cursor over a picture at 2x — exactly twice the
  * size the artist drew. Reported as "it looks like it's not scaled".
  */
-function showCursor(name: string): void {
-  cursorShown = name;
-  const rect = canvas.getBoundingClientRect();
-  canvas.style.cursor = cursors.css(name || "arrow", rect.width / canvas.width, rect.height / canvas.height);
-}
-addEventListener("resize", () => showCursor(cursorShown));
-// ...and when TH scales the picture inside the same box
-th.onRescale = () => showCursor(cursorShown);
+// ...and redrawn when TH scales the picture inside the same box
+th.onRescale = cursor.redraw;
 
 canvas.addEventListener("pointerdown", (e) => {
   const host = playing;
@@ -1504,12 +1471,10 @@ canvas.addEventListener("pointerdown", (e) => {
   // a MOUSE press is a click on a room, and there is no room to click
   const v = host.viewer;
   if (!v) return;
-  host.session.pointerDown = true;
   // what the press CARRIED: Dust reads `shiftkey()` inside its own mousedown
   // (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`), so the question is
   // what was held when the click happened, not what is held now.
-  host.session.shiftDown = e.shiftKey;
-  void host.session.track(v.press(x, y), `press ${x},${y}`);
+  void host.session.track(host.director.buttonDown(x, y, { shift: e.shiftKey }), `press ${x},${y}`);
 });
 
 // on the window, not the canvas: a drag that ends off-canvas still has to end.
@@ -1548,8 +1513,7 @@ addEventListener("pointerup", (e) => {
   if (touch.up(e)) return;
   const host = playing;
   if (!host?.viewer) return;
-  host.session.pointerDown = false;
-  host.viewer?.release(host.session.pointerX, host.session.pointerY);
+  host.director.buttonUp(host.session.pointerX, host.session.pointerY);
 });
 
 // ---------------------------------------------------------------------------
@@ -1579,12 +1543,7 @@ addEventListener("pointerup", (e) => {
  * binder — it appends `.invertturn`/`.invertwalk` to this prefix, which is what
  * this page has always written — so a player's setting survives the migration.
  */
-const swipeInvert = bindSwipeInvert({
-  storageKey: "dust.swipe",
-  turnBox: document.getElementById("swipeInvertTurn") as HTMLInputElement | null,
-  walkBox: document.getElementById("swipeInvertWalk") as HTMLInputElement | null,
-  reveal: document.getElementById("swipeOpts"),
-});
+const swipeInvert = bindSwipeInvert("dust.swipe");
 
 /**
  * The recogniser, and only the DISPATCH is Dust's.
@@ -1620,19 +1579,15 @@ const touch = new TouchGestures({
   /** a mousedown needs a room to land in; a film on screen has none */
   press: (x, y) => {
     const host = playing;
-    const v = host?.viewer;
-    if (!host || !v) return;
-    host.session.pointerDown = true;
+    if (!host?.viewer) return;
     // a finger holds no shift key, and Dust reads `shiftkey()` inside its own
     // mousedown (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`)
-    host.session.shiftDown = false;
-    void host.session.track(v.press(x, y), `press ${x},${y}`);
+    void host.session.track(host.director.buttonDown(x, y, { shift: false }), `press ${x},${y}`);
   },
   release: (x, y) => {
     const host = playing;
     if (!host) return;
-    host.session.pointerDown = false;
-    host.viewer?.release(x, y);
+    host.director.buttonUp(x, y);
   },
   /** a swipe's arrow and a double-tap's ESCAPE, on the route the keyboard uses */
   sendKey: (key: GestureKey, special: boolean) => sendGestureKey(key, special),

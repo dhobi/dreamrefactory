@@ -86,14 +86,10 @@ class FakeHost {
   viewer: null | {
     moviePlaying: boolean;
     startTheme(): void;
-    press(x: number, y: number): Promise<void>;
-    release(x: number, y: number): void;
     hover(x: number, y: number): Promise<string>;
   } = {
     moviePlaying: false,
     startTheme: () => void calls.push("startTheme"),
-    press: async (x, y) => void calls.push(`press ${x},${y} shift ${this.session.shiftDown}`),
-    release: (x, y) => void calls.push(`release ${x},${y}`),
     hover: async () => "touch",
   };
   session = {
@@ -141,6 +137,15 @@ class FakeHost {
     tick: () => {},
     render: () => {},
     keyDown: async (k: string, esc: boolean) => void calls.push(`key ${k}${esc ? " esc" : ""}`),
+    buttonDown: async (x: number, y: number, carried: { shift?: boolean } = {}) => {
+      this.session.pointerDown = true;
+      if (carried.shift !== undefined) this.session.shiftDown = carried.shift;
+      calls.push(`press ${x},${y} shift ${this.session.shiftDown}`);
+    },
+    buttonUp: (x: number, y: number) => {
+      this.session.pointerDown = false;
+      calls.push(`release ${x},${y}`);
+    },
   };
   constructor() {
     current.host = this;

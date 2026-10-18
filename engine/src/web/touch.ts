@@ -306,31 +306,30 @@ export interface SwipeInvert {
 }
 
 /**
- * Bind two checkboxes to a live {@link SwipeInvert}, remembering each.
+ * Bind the page's two checkboxes (`#swipeInvertTurn`, `#swipeInvertWalk`, in the
+ * row `#swipeOpts`) to a live {@link SwipeInvert}, remembering each.
  *
  * Returns the object the recogniser should read through `TouchHooks.invert` —
  * live, so a box ticked mid-gesture applies to that gesture, and safe to call on
  * a page where the elements are absent (a shell that offers no options still gets
  * a working default).
  *
- * `reveal` is shown only where a swipe is possible at all: on a desktop the
+ * The row is shown only where a swipe is possible at all: on a desktop the
  * question is noise, because a mouse has the arrow keys and never reaches a
  * gesture. `maxTouchPoints` as WELL as the media query, because a laptop with a
  * touchscreen reports a FINE pointer while still delivering `pointerType ===
  * "touch"` — the gesture is live there, so the setting has to be reachable.
  */
-export function bindSwipeInvert(opts: {
+export function bindSwipeInvert(
   /** localStorage prefix, e.g. `"timelapse.swipe"` — one namespace per game */
-  storageKey: string;
-  turnBox: HTMLInputElement | null;
-  walkBox: HTMLInputElement | null;
-  /** the container to unhide when a finger is possible */
-  reveal?: HTMLElement | null;
-}): SwipeInvert {
+  storageKey: string,
+): SwipeInvert {
   const invert: SwipeInvert = { turn: false, walk: false };
   const touchable = navigator.maxTouchPoints > 0 || matchMedia("(pointer: coarse)").matches;
   if (!touchable) return invert;
-  if (opts.reveal) opts.reveal.hidden = false;
+  const byId = <T extends HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
+  const reveal = byId("swipeOpts");
+  if (reveal) reveal.hidden = false;
 
   const bind = (box: HTMLInputElement | null, key: string, apply: (on: boolean) => void): void => {
     if (!box) return;
@@ -351,7 +350,7 @@ export function bindSwipeInvert(opts: {
       }
     });
   };
-  bind(opts.turnBox, `${opts.storageKey}.invertturn`, (on) => (invert.turn = on));
-  bind(opts.walkBox, `${opts.storageKey}.invertwalk`, (on) => (invert.walk = on));
+  bind(byId<HTMLInputElement>("swipeInvertTurn"), `${storageKey}.invertturn`, (on) => (invert.turn = on));
+  bind(byId<HTMLInputElement>("swipeInvertWalk"), `${storageKey}.invertwalk`, (on) => (invert.walk = on));
   return invert;
 }

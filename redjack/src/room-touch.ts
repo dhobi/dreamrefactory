@@ -94,10 +94,7 @@ export function bindRoomTouch({ host, touch, coords, screen, now = () => perform
     look = null;
   };
   const endZoom = () => {
-    if (zoom && s.pointerDown) {
-      s.pointerDown = false;
-      host.director.release(zoom.x, zoom.y);
-    }
+    if (zoom && s.pointerDown) host.director.buttonUp(zoom.x, zoom.y);
   };
 
   return {
@@ -120,9 +117,7 @@ export function bindRoomTouch({ host, touch, coords, screen, now = () => perform
       touch.cancel({ pointerId: first, clientX: e.clientX, clientY: e.clientY });
       zoom = middle();
       s.setPointer(zoom.x, zoom.y);
-      s.pointerDown = true;
-      s.pointerButton = 2;
-      void s.track(host.director.press(zoom.x, zoom.y), `zoom ${zoom.x},${zoom.y}`);
+      void s.track(host.director.buttonDown(zoom.x, zoom.y, { button: 2 }), `zoom ${zoom.x},${zoom.y}`);
       return true;
     },
     /** after {@link TouchGestures.down}: a finger on the room, not a control, may look round */

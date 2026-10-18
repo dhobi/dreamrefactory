@@ -218,3 +218,46 @@ export function titleRise(bootEl: HTMLElement, brandEl: HTMLElement | null): () 
     bootEl.addEventListener("transitionend", () => bootEl.remove(), { once: true });
   };
 }
+
+/**
+ * The disc is read; wait to be told to go — a keyboard gesture as much as a
+ * click, because the button takes focus and Enter and Space are what a focused
+ * button already does. It is also the gesture an AudioContext wants.
+ *
+ * `autostart` (a page's `<meta name="autostart">`) skips the wait: a driven run
+ * measures gestures and frames, not whether the intro was scored.
+ */
+export async function waitForStart(bootEl: HTMLElement, startEl: HTMLElement, autostart = false): Promise<void> {
+  bootEl.classList.add("ready");
+  if (autostart) return;
+  startEl.focus();
+  await new Promise<void>((resolve) => startEl.addEventListener("click", () => resolve(), { once: true }));
+}
+
+/** how long a fetch must be in flight before the spinner is worth showing */
+const BUSY_AFTER_MS = 400;
+
+/**
+ * The spinner in the corner of the picture, once a wait is long enough to be one;
+ * returns the handler for the files' `onBusyChange`.
+ *
+ * Waiting first, because a spinner for every fetch would strobe through ordinary
+ * play and mean nothing; this way it only ever appears when there is a wait to
+ * report.
+ */
+export function busySpinner(el: HTMLElement): (inFlight: number) => void {
+  let timer = 0;
+  return (inFlight) => {
+    if (inFlight > 0) {
+      if (timer || !el.hidden) return;
+      timer = window.setTimeout(() => {
+        timer = 0;
+        el.hidden = false;
+      }, BUSY_AFTER_MS);
+      return;
+    }
+    if (timer) clearTimeout(timer);
+    timer = 0;
+    el.hidden = true;
+  };
+}

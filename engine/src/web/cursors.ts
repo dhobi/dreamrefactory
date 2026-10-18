@@ -201,3 +201,48 @@ export class CursorSheet {
     }
   }
 }
+
+/**
+ * The cursor a canvas is showing, kept at the size the picture is shown at.
+ *
+ * Scaled against `screen` — the game's own screen size — and not against the
+ * element: the canvas may be a doubled plate (Timelapse, RedJack), and what a
+ * cursor has to match is how big the game's screen is being SHOWN. Where the
+ * canvas IS the framebuffer (Titanic, Dust), `screen` is the canvas itself.
+ *
+ * Redrawn whenever the element changes size, which a window resize is only one
+ * way to do: the workbench picks a whole-number scale with no resize event, and
+ * a frame that was `display: none` while booting sizes from nothing.
+ */
+export class ShownCursor {
+  private shown: string | null = null;
+
+  constructor(
+    private readonly el: HTMLElement,
+    private readonly sheet: CursorSheet,
+    private readonly screen: { readonly width: number; readonly height: number },
+  ) {
+    addEventListener("resize", this.redraw);
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(this.redraw).observe(el);
+  }
+
+  /**
+   * Show what the thing under the pointer asked for.
+   *
+   * An empty answer is the game's ARROW rather than the browser's default:
+   * `CURS.ARROW` is the window class's cursor in each exe, which is what the
+   * player saw everywhere no script had claimed the pointer.
+   */
+  show = (name: string): void => {
+    if (name === this.shown) return;
+    this.shown = name;
+    this.redraw();
+  };
+
+  /** the same cursor again, at the size the picture is shown at now */
+  redraw = (): void => {
+    if (this.shown === null) return;
+    const rect = this.el.getBoundingClientRect();
+    this.el.style.cursor = this.sheet.css(this.shown || "arrow", rect.width / this.screen.width, rect.height / this.screen.height);
+  };
+}

@@ -109,6 +109,14 @@ class FakeHost {
     keyDown: async (k: string, special: boolean) => void calls.push(`key ${k}${special ? " special" : ""}`),
     press: async (x: number, y: number) => void calls.push(`press ${x},${y}`),
     release: (x: number, y: number) => void calls.push(`release ${x},${y}`),
+    buttonDown: (x: number, y: number, c: { button?: 1 | 2; shift?: boolean } = {}) => {
+      Object.assign(this.session, { pointerDown: true, pointerButton: c.button ?? 1 }, c.shift === undefined ? {} : { shiftDown: c.shift });
+      return this.director.press(x, y);
+    },
+    buttonUp: (x: number, y: number) => {
+      this.session.pointerDown = false;
+      this.director.release(x, y);
+    },
     hover: async () => "goup",
     screenOwner: () => "flat",
   };

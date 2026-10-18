@@ -31,13 +31,10 @@ export function deliverInput(host: GameHost, e: InputEvent): void {
   switch (e.type) {
     case "pointerdown":
       session.setPointer(x, y);
-      session.pointerDown = true;
-      session.shiftDown = !!e.shiftKey;
-      void session.track(host.director.press(x, y), `press ${x},${y}`);
+      void session.track(host.director.buttonDown(x, y, { shift: !!e.shiftKey }), `press ${x},${y}`);
       return;
     case "pointerup":
-      session.pointerDown = false;
-      host.director.release(session.pointerX, session.pointerY);
+      host.director.buttonUp(session.pointerX, session.pointerY);
       return;
     case "mousemove":
       if (session.pointerDown) session.setPointer(x, y);

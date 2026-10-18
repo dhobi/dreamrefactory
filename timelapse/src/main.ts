@@ -27,13 +27,21 @@
 import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { GestureAudio, PageLog, screenPlate, showVersion, titleRise } from "@dreamfactory/engine/web/page-shell";
+import {
+  GestureAudio,
+  PageLog,
+  busySpinner,
+  screenPlate,
+  showVersion,
+  titleRise,
+  waitForStart,
+} from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures, bindSwipeInvert } from "@dreamfactory/engine/web/touch";
-import { CursorSheet } from "@dreamfactory/engine/web/cursors";
+import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { TIMELAPSE } from "@dreamfactory/chrome/games";
@@ -233,47 +241,22 @@ function meterTick(): void {
 const hold = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
- * The disc is read; wait to be told to go.
+ * The disc is read; wait to be told to go (engine/src/web/page-shell.ts).
  *
  * Held open for {@link CHARGED} first, because the fill's own `width` transition
  * is 380ms and swapping it out the instant the number says 100 means the bar
  * never visibly arrives — the whole point of counting real bytes was to earn that
- * end, so it gets to be watched reaching it.
- *
- * Then the gauge crossfades to the button in the same slot and the button takes
- * focus, so this is a keyboard gesture as much as a pointer one: Enter and Space
- * are what a focused button already does, and an AudioContext accepts either.
+ * end, so it gets to be watched reaching it. Then the gauge crossfades to the
+ * button in the same slot.
  */
 const CHARGED = 520;
-async function waitForStart(): Promise<void> {
+async function untilStarted(): Promise<void> {
   await hold(CHARGED);
-  bootEl.classList.add("ready");
-  startEl.focus();
-  await new Promise<void>((resolve) => startEl.addEventListener("click", () => resolve(), { once: true }));
+  await waitForStart(bootEl, startEl);
 }
 
 /** the title card rises, by FLIP (engine/src/web/page-shell.ts); the failure paths reach here too */
 const raiseTitle = titleRise(bootEl, brandEl);
-
-/** the spinner in the corner of the picture, once a wait is long enough to be one */
-const BUSY_AFTER_MS = 400;
-function watchNetwork(files: TimelapseFiles): void {
-  const netbusy = document.getElementById("netbusy") as HTMLDivElement;
-  let timer = 0;
-  files.onBusyChange = (inFlight) => {
-    if (inFlight > 0) {
-      if (timer || !netbusy.hidden) return;
-      timer = window.setTimeout(() => {
-        timer = 0;
-        netbusy.hidden = false;
-      }, BUSY_AFTER_MS);
-      return;
-    }
-    if (timer) clearTimeout(timer);
-    timer = 0;
-    netbusy.hidden = true;
-  };
-}
 
 /* ------------------------------------------------------------------------- *
  * The boot
@@ -292,7 +275,7 @@ async function main(): Promise<void> {
   progress(INDEXED, `indexed ${files.size} names across four discs`);
   say(`indexed ${files.size} names across the rip`);
   files.onChunk = (_name, bytes) => meter.chunk(bytes, performance.now());
-  watchNetwork(files);
+  files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
   meterTimer = window.setInterval(meterTick, TICK_MS);
 
   const host = new GameHost(
@@ -510,7 +493,7 @@ async function main(): Promise<void> {
   }
 
   progress(1, "ready");
-  await waitForStart();
+  await untilStarted();
   ensureAudio();
   raiseTitle();
 
@@ -571,31 +554,13 @@ function canvasCoords(e: { clientX: number; clientY: number }): { x: number; y: 
  * of those two were redrawn for this game: the same names in Titanic's build are
  * plain arrows (`tools/dumpcursors.ts` has the comparison).
  */
-const cursors = new CursorSheet(TL_CURSORS);
-
-/** the name last answered, so a window resize can redraw it at the new size */
-let cursorShown = "";
-
+const cursor = new ShownCursor(canvas, new CursorSheet(TL_CURSORS), SCREEN);
 /**
- * Show what the thing under the pointer asked for.
- *
- * An empty answer is the ARROW and not the browser's default: `CURS.ARROW` is the
- * window class's cursor in `tl.exe`, which is what the player sees everywhere no
- * script has claimed the pointer — so it is this game's arrow that belongs over
- * its own picture, not the host operating system's.
- *
  * Scaled against {@link SCREEN} rather than against the canvas, for the reason
- * {@link canvasCoords} is: these were drawn for a 640-wide screen, and what they
- * have to match is how big that screen is being SHOWN. The canvas is twice the
- * game's own width, so dividing by it would ask for a cursor half the size the
- * artist drew.
+ * {@link canvasCoords} is: the canvas is twice the game's own width, so dividing
+ * by it would ask for a cursor half the size the artist drew.
  */
-function showCursor(name: string): void {
-  cursorShown = name;
-  const rect = canvas.getBoundingClientRect();
-  canvas.style.cursor = cursors.css(name || "arrow", rect.width / SCREEN.width, rect.height / SCREEN.height);
-}
-addEventListener("resize", () => showCursor(cursorShown));
+const showCursor = cursor.show;
 
 /**
  * Is this a machine that navigates by finger?
@@ -632,12 +597,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
    * Its own storage prefix and not the other two shells': a player who inverted
    * Titanic's turn has said nothing about this one's.
    */
-  const swipeInvert = bindSwipeInvert({
-    storageKey: "timelapse.swipe",
-    turnBox: document.getElementById("swipeInvertTurn") as HTMLInputElement | null,
-    walkBox: document.getElementById("swipeInvertWalk") as HTMLInputElement | null,
-    reveal: document.getElementById("swipeOpts"),
-  });
+  const swipeInvert = bindSwipeInvert("timelapse.swipe");
 
   const touch = new TouchGestures({
     coords: (e: PointerEventLike) => canvasCoords(e),
@@ -658,13 +618,11 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
       // picture is where a thumb rests, and walking on a resting thumb is worse
       // than not walking. Swipe is the whole navigation there.
       if (navHotspot(x, y)) return;
-      s.pointerDown = true;
-      void s.track(host.director.press(x, y), `press ${x},${y}`);
+      void s.track(host.director.buttonDown(x, y), `press ${x},${y}`);
     },
     release: (x, y) => {
       if (!s.pointerDown) return; // the press was suppressed: nothing to let go of
-      s.pointerDown = false;
-      host.director.release(x, y);
+      host.director.buttonUp(x, y);
     },
     sendKey: (key: GestureKey, special: boolean) => sendKey(key, special),
     // read at RELEASE, so a box ticked mid-gesture applies to that gesture
@@ -679,12 +637,11 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
       touch.down(e);
       return;
     }
-    s.pointerDown = true;
     // and ask again once the click has been dealt with: a click that walks or
     // turns changes what is under a pointer that has not moved, and a mouse at
     // rest gets no move event to notice it with
     void host.director
-      .press(x, y)
+      .buttonDown(x, y)
       .then(() => say(`click ${x},${y} · flat ${s.currentFlat}`))
       .then(() => host.director.hover(x, y))
       .then(showCursor);
@@ -705,9 +662,8 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
   addEventListener("pointerup", (e) => {
     if (touch.up(e)) return;
     if (!s.pointerDown) return;
-    s.pointerDown = false;
     const { x, y } = canvasCoords(e);
-    host.director.release(x, y);
+    host.director.buttonUp(x, y);
   });
 
   /** a gesture the browser took away (a system edge-swipe) */
