@@ -65,7 +65,7 @@ skipped.
 
 | Workflow | Trigger | What |
 |---|---|---|
-| [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` on GitHub's machines; `full` (whole auto suite + every package's playthrough) self-hosted, and in it Skull Cracker's, Timelapse's, RedJack's, Lunicus's and Jump Raven's machine suites — each game stood up headless on its rip ([Skull Cracker's](../skullcracker/verification.md), [Timelapse's](../timelapse/README.md#machine-suites), [RedJack's](../redjack/README.md#machine-suites), [Lunicus's](../lunicus/README.md#machine-suites), [Jump Raven's](../jumpraven/README.md#machine-suites)). The `full` job's NAME is a required status check — renaming it blocks every PR |
+| [`tests.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/tests.yml) | every PR, push to master | `portable` and `lint` on GitHub's machines ([lint](#lint)); `full` (whole auto suite + every package's playthrough) self-hosted, and in it Skull Cracker's, Timelapse's, RedJack's, Lunicus's and Jump Raven's machine suites — each game stood up headless on its rip ([Skull Cracker's](../skullcracker/verification.md), [Timelapse's](../timelapse/README.md#machine-suites), [RedJack's](../redjack/README.md#machine-suites), [Lunicus's](../lunicus/README.md#machine-suites), [Jump Raven's](../jumpraven/README.md#machine-suites)). The `full` job's NAME is a required status check — renaming it blocks every PR |
 | [`browser.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/browser.yml) | nightly from 02:17 Swiss time, manual, or a `full-run-<game>` label on a PR | that game's browser suite — ~39 min for Titanic's, because it costs what the game costs |
 | [`docs.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/docs.yml) | push to master under `docs/` | publishes this site to `/dreamrefactory/docs/`, over the same FTP mirror the builds use. Not versioned against a game — [why](deploy.md#the-documentation-is-not-a-release) |
 | [`coverage.yml`](https://github.com/dhobi/dreamrefactory/blob/master/.github/workflows/coverage.yml) | nightly 01:17 Swiss time, manual | every suite of every game with V8 coverage on, self-hosted, and the badges on the README — [coverage](#coverage) — then the [SonarQube Cloud](#sonarqube-cloud) analysis. Not a check: it gates nothing |
@@ -128,6 +128,20 @@ workflow's own token, and force-pushes the one badge file, `badge.json`, to the
 `human-controlled` branch as a single commit. Its own branch rather than
 `badges`, which coverage.yml replaces whole every night. The run's summary page
 has the full report.
+
+## Lint
+
+`npm run lint` runs ESLint with the SonarJS rules SonarCloud gates a pull
+request on, so a finding turns up before the push instead of after a CI run.
+`eslint.config.js` sorts them three ways: errors for mechanical defects (an
+unused import, a dead store, a block without braces), warnings for shape
+(cognitive complexity, nesting, regexes that can backtrack), and off for the
+repository's own idioms and for the security rules SonarCloud keeps as hotspots
+for a person to review. The file says why each rule is where it is.
+
+The `lint` job in `tests.yml` lints the files a pull request changes and fails
+on errors only, so code a change does not touch never blocks it. A push to
+master lints the whole tree.
 
 ## SonarQube Cloud
 

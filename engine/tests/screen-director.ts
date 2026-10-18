@@ -159,7 +159,7 @@ test("a click reaches a flat's region with no room in the chain", async () => {
 });
 
 test("hittest with no room answers for the stage, never for a scene", async () => {
-  const { session, dir } = newDirector();
+  const { session } = newDirector();
   await session.stageCtrl.openStageFile("test.stg");
   // "button" over the region, "flat" beside it — and never "scene" or "painting",
   // which are the room's two answers and cannot arise without one. Asked through

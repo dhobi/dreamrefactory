@@ -27,7 +27,7 @@ import { StateTrace, formatTrace } from "@dreamfactory/engine/runtime/trace";
 import { Playthrough, checkpoint, newPlaythrough, resume, saveOf } from "./play";
 import { dialStops } from "./nav/dials";
 import { isHarnessPaced } from "@dreamfactory/engine/runtime/masks";
-import { BEDSIT_OBJECTS, MENU_GAME, refuseZeitelAgain, segment1, segment2, segment3, segment4, segment5, segment6, segment7, segment8, segment9, segment10, segment11, segment12, segment13, segment14, segment15, segment16, segment17, segment18, segment19, segment20, segment21, segment22, segment23, segment24, segment25, segment26, segment27 } from "./segments";
+import { MENU_GAME, refuseZeitelAgain, segment1, segment2, segment3, segment4, segment5, segment6, segment7, segment8, segment9, segment10, segment11, segment12, segment13, segment14, segment15, segment16, segment17, segment18, segment19, segment20, segment21, segment22, segment23, segment24, segment25, segment26, segment27 } from "./segments";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const golden = (n: string) => join(HERE, "golden", `playthrough-${n}.json`);
@@ -91,6 +91,7 @@ function assertTrace(trace: StateTrace[], file: string, n?: number): void {
   // what the goldens hold. A filtered run (`-t "playthrough 13"`) loads instead:
   // its segment's own expectations still run and still catch a route break, and
   // only the trace comparison stands down.
+  // eslint-disable-next-line sonarjs/no-empty-collection -- empty on purpose, see LOADS_IN_A_FULL_RUN
   const wantCarried = n === undefined || !LOADS_IN_A_FULL_RUN.has(n);
   if (carriedIn !== wantCarried && !process.env.TAOOT_RECORD) {
     console.log(`${file.split("/").pop()}: ${carriedIn ? "carried" : "loaded"} — trace not compared`);

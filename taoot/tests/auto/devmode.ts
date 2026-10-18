@@ -524,6 +524,7 @@ describe("the console's history", () => {
   test("the same line twice is one entry", () => {
     const h = new ConsoleHistory();
     h.add("same");
+    // eslint-disable-next-line sonarjs/no-element-overwrite -- the repeat is what is tested
     h.add("same");
     h.add("  same  ");
     expect(h.all).toEqual(["same"]);

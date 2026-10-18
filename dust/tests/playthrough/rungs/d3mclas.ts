@@ -147,7 +147,7 @@ export const rung: Segment = {
     await clickActor(p, "laurel", "Laurel at the courthouse corner");
     let q = await answer(p, 101, "Why?");
     q = await answer(p, 102, "What happened next?", q);
-    q = await answer(p, 111, "Where's he now?", q);
+    await answer(p, 111, "Where's he now?", q);
     await p.pump(() => num("laurelphase") === 1, "Laurel to finish her story");
 
     // ---- 4-5. let her go, and then the courthouse door ---------------------
@@ -166,7 +166,7 @@ export const rung: Segment = {
     s = await answer(p, 102, "Can I help?", s);
     s = await answer(p, 103, "What's that?", s);
     s = await answer(p, 104, "You're talking about the Devil's Breath Mine?", s);
-    s = await answer(p, 103, "How will I know what these items look like?", s);
+    await answer(p, 103, "How will I know what these items look like?", s);
     await p.pump(() => num("sonomaphase") === 1, "Sonoma to give us the mission");
 
     // ---- 8. through the rice-paper door, into the schoolroom ---------------

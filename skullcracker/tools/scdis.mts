@@ -311,7 +311,7 @@ if (mode === "find") {
   }
   // the level setups: whoever calls a registration function that only they call
   const setups = new Map<number, number>();
-  for (const [f, owners] of callersOf) {
+  for (const [, owners] of callersOf) {
     if (owners.size > 6) continue;   // a shared helper, not a level's own
     for (const o of owners) setups.set(o, (setups.get(o) ?? 0) + 1);
   }

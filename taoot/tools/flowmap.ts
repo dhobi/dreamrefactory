@@ -318,7 +318,6 @@ function harvest(stmts: Stmt[]): void {
  * twice, while a genuinely different variant is kept and tagged with its disc.
  */
 const seenScripts = new Map<string, ParsedScript>();
-const seenFiles = new Set<string>();
 let discVariants = 0;
 for (const { path, disc } of walk(rootDir)) {
   const name = basename(path);
@@ -332,7 +331,6 @@ for (const { path, disc } of walk(rootDir)) {
     continue;
   }
   filesScanned++;
-  seenFiles.add(name.toLowerCase());
 
   for (let i = 0; i < file.containers.length; i++) {
     const tokens = sniffScript(file.containers[i].data);
@@ -589,7 +587,7 @@ for (const e of events) {
   const fromM = ctx.mission ?? "?";
   const fromP = ctx.phase ?? "?";
   let toM = fromM;
-  let toP = fromP;
+  let toP: string;
   if (e.target === "mission") {
     toM = v;
     toP = "0"; // a mission bump conventionally resets phase; approximate

@@ -71,14 +71,14 @@ const lu = functions(load("lunicus/gamefiles/LUNICUS/lunicus/lunicus.exe"));
 const pairs = new Map<number, { lu: number; score: number }>();
 const luTaken = new Set<number>();
 // exact, and unique on both sides
-const byKey = (fs: Fn[]) => { const m = new Map<string, Fn[]>(); for (const f of fs) m.set(f.key, [...(m.get(f.key) ?? []), f]); return m; };
+const byKey = (fs: Fn[]) => { const m = new Map<string, Fn[]>(); for (const f of fs) { m.set(f.key, [...(m.get(f.key) ?? []), f]); } return m; };
 const rk = byKey(rv), lk = byKey(lu);
 for (const [k, rs] of rk) { const ls = lk.get(k); if (rs.length === 1 && ls?.length === 1 && rs[0].ops.length > 3) { pairs.set(rs[0].va, { lu: ls[0].va, score: 1 }); luTaken.add(ls[0].va); } }
 // fuzzy, mutual best
-const sim = (a: Fn, b: Fn) => { let n = 0; for (const g of a.grams) if (b.grams.has(g)) n++; return n / Math.max(1, a.grams.size + b.grams.size - n); };
+const sim = (a: Fn, b: Fn) => { let n = 0; for (const g of a.grams) { if (b.grams.has(g)) n++; } return n / Math.max(1, a.grams.size + b.grams.size - n); };
 const rLeft = rv.filter((f) => !pairs.has(f.va) && f.grams.size >= 4);
 const lLeft = lu.filter((f) => !luTaken.has(f.va) && f.grams.size >= 4);
-const best = (f: Fn, pool: Fn[]) => { let b: Fn | null = null, s = 0; for (const g of pool) { if (Math.abs(g.grams.size - f.grams.size) > Math.max(f.grams.size, g.grams.size) * 0.6) continue; const x = sim(f, g); if (x > s) (s = x), (b = g); } return { b, s }; };
+const best = (f: Fn, pool: Fn[]) => { let b: Fn | null = null, s = 0; for (const g of pool) { if (Math.abs(g.grams.size - f.grams.size) > Math.max(f.grams.size, g.grams.size) * 0.6) { continue; } const x = sim(f, g); if (x > s) { s = x; b = g; } } return { b, s }; };
 for (const f of rLeft) {
   const { b, s } = best(f, lLeft);
   if (!b || s < 0.35) continue;
@@ -88,7 +88,7 @@ for (const f of rLeft) {
 
 const [, , mode, arg] = process.argv;
 const hex = (n: number) => "0x" + n.toString(16);
-const containing = (fs: Fn[], va: number) => { let c: Fn | undefined; for (const f of fs) if (f.va <= va) c = f; return c; };
+const containing = (fs: Fn[], va: number) => { let c: Fn | undefined; for (const f of fs) { if (f.va <= va) c = f; } return c; };
 if (mode === "lu") {
   const want = Number(arg), f = containing(lu, want)!;
   const hit = [...pairs].find(([, p]) => p.lu === f.va);
@@ -108,7 +108,7 @@ if (mode === "lu") {
   for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
   console.log(`raven ${hex(r.va)} (${a.length}) vs lunicus ${hex(l.va)} (${b.length}): ${dp[0][0]} in common`);
   let i = 0, j = 0, same = 0;
-  const flush = () => { if (same) console.log(`   … ${same} the same`); same = 0; };
+  const flush = () => { if (same) { console.log(`   … ${same} the same`); } same = 0; };
   while (i < a.length || j < b.length) {
     if (i < a.length && j < b.length && a[i] === b[j]) { same++; i++; j++; }
     else if (j < b.length && (i === a.length || dp[i][j + 1] >= dp[i + 1][j])) { flush(); console.log(`lu ${b[j++]}`); }

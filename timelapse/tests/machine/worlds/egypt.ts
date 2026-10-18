@@ -3,7 +3,7 @@
  * the gene pod and the crystal home.
  */
 import { fail, ok, type Headless } from "../harness";
-import { clickProp, clickRegion, drag, extent, goTo, propPoint, regionPoint } from "../nav";
+import { clickRegion, drag, extent, goTo, propPoint } from "../nav";
 import { travel } from "./easter";
 
 export const need = (h: Headless, name: string, want: string, what: string): void => {

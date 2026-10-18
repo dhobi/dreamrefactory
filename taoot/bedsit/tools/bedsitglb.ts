@@ -338,7 +338,7 @@ if (volume < 0 && !exact) {
  */
 function islands(): number[][] {
   const n = world.length / 3, up = new Int32Array(n).map((_, i) => i);
-  const find = (a: number): number => { while (up[a] !== a) a = up[a] = up[up[a]]; return a; };
+  const find = (a: number): number => { while (up[a] !== a) { a = up[a] = up[up[a]]; } return a; };
   for (let i = 0; i < index.length; i += 3) {
     const [a, b2, c] = [index[i], index[i + 1], index[i + 2]].map(find);
     up[b2] = a; up[c] = a;
@@ -630,7 +630,8 @@ for (const [i, one] of parts.entries()) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const t of one) for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) {
     const v = world[index[t + k] * 3 + c];
-    if (v < lo[c]) lo[c] = v; if (v > hi[c]) hi[c] = v;
+    if (v < lo[c]) lo[c] = v;
+    if (v > hi[c]) hi[c] = v;
   }
   const box = (c: number) => `${lo[c].toFixed(0)}..${hi[c].toFixed(0)}`;
   console.log(`  island ${String(i).padStart(2)}: ${String(one.length).padStart(5)} tri  x ${box(0).padStart(11)}  y ${box(1).padStart(13)}  z ${box(2).padStart(11)}`);
@@ -657,7 +658,8 @@ if (bands.length) {
       let lo = Infinity, hi = -Infinity;
       for (const t of one) for (let k = 0; k < 3; k++) {
         const z = world[index[t + k] * 3 + 2];
-        if (z < lo) lo = z; if (z > hi) hi = z;
+        if (z < lo) lo = z;
+        if (z > hi) hi = z;
       }
       const mid = (lo + hi) / 2;
       return mid >= band.z0 && mid < band.z1;

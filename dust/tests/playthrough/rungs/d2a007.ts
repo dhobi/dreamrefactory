@@ -2,7 +2,6 @@ import {
   LEAVING, answer, ask, clickActor, offerInTalk, openDoor, room, set, talkOut, walkTo,
   type Segment,
 } from "../route";
-import type { Pumped } from "../harness";
 
 /**
  * Day 2, afternoon: the sugarcubes for Trotter, and the town History from Chin.

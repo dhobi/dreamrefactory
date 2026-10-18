@@ -480,7 +480,7 @@ test("goto that runs out of plans says where the last one was made", async () =>
     if (name === "scene b1") w.standAt(0, 0, "east");
   };
   await expect(play("goto(2, 0, tries: 2)")).rejects.toThrow(
-    /three ArrowUp presses and the world did not move[\s\S]*\n    planning in town \(from scene a1\) via east -> east$/,
+    /three ArrowUp presses and the world did not move[\s\S]*\n {4}planning in town \(from scene a1\) via east -> east$/,
   );
   expect(said).toContain("plan 1 stopped after 0 road(s); re-planning");
 });

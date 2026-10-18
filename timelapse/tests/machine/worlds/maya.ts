@@ -3,7 +3,7 @@
  * to the Sun temple's gene pod and the crystal on.
  */
 import { fail, ok, type Headless } from "../harness";
-import { clickProp, clickRegion, drag, extent, goTo, propPoint, regionPoint, regions } from "../nav";
+import { clickRegion, drag, extent, goTo, propPoint, regionPoint, regions } from "../nav";
 import { travel } from "./easter";
 
 export const need = (h: Headless, name: string, want: string, what: string): void => {
@@ -417,8 +417,6 @@ export async function monkey(h: Headless): Promise<void> {
       }
       return true;
     };
-    let back: [number, number] = await green();
-    let last = back;
     for (const [x, y] of corners) {
       let going = false;
       for (let n = 0; n < 4000 && !ended; n++) {
@@ -429,7 +427,6 @@ export async function monkey(h: Headless): Promise<void> {
             break;
         }
         const here = await green();
-        last = here;
         if (Math.abs(here[0] - x) + Math.abs(here[1] - y) <= 1) break;
         // wait at the corner until the whole run is clear, then commit to it:
         // standing in the middle of a corridor is what gets the spider eaten
@@ -437,7 +434,6 @@ export async function monkey(h: Headless): Promise<void> {
         h.moveTo(going ? x : here[0], going ? y : here[1]);
       }
       if (ended) break;
-      back = [x, y];
     }
     h.mouseUp(corners.at(-1)![0], corners.at(-1)![1]);
     await h.frame(3);
@@ -791,7 +787,7 @@ export async function slider(h: Headless): Promise<void> {
       const cells = tiles.map((t) => CORNER[g][t - g * 4]);
       if (tiles.every((t) => !board.cell.has(t))) continue; // already whole and fixed
       const clicks = slideTo(board, tiles, cells);
-      if (!clicks) { stuck = true; break; }
+      if (!clicks) break;
       for (const c of clicks) {
         const t = [...readBoard(h).cell].find(([, at]) => at === c)?.[0];
         if (t === undefined) { stuck = true; break; }

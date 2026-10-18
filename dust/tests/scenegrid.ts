@@ -42,6 +42,7 @@ function town(): ((src: string) => Promise<unknown>) | null {
   session.dfVersion = 1;
   // the v1 reader and its conversion to the shape the runtime speaks
   const set = readSetFileAsV4(new Uint8Array(readFileSync(TOWN)));
+  // eslint-disable-next-line sonarjs/constructor-for-side-effects -- it hangs the set's scripts on the session
   new SetScripts(set, session);
   return async (src: string) => {
     const inst = session.instanceFrom(compileScript(`code ask ()\n\treturn (${src})\nendcode\n`), "ask");

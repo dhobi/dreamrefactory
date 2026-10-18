@@ -11,7 +11,7 @@
  * field, and a re-encoded chunk still decodes to the waveform it was given).
  */
 import { test, expect } from "vitest";
-import { Container, DFContainerFile, readContainerFile, writeContainerFile } from "@dreamfactory/engine/df/container";
+import { DFContainerFile, readContainerFile, writeContainerFile } from "@dreamfactory/engine/df/container";
 import { decodeAudioContainer, encodeAudioContainer, encodeV41 } from "@dreamfactory/engine/df/audio";
 import { buildBankFile } from "@dreamfactory/engine/df/banks-build";
 import { i16, i32 } from "@dreamfactory/engine/df/build";

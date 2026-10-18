@@ -450,15 +450,14 @@ describe("the boot", () => {
   });
 
   it("stays on the boot text with no manifest, and with no sets", async () => {
-    let p = await openPage({ world: { manifest: [] } });
+    await openPage({ world: { manifest: [] } });
     await new Promise((r) => setTimeout(r, 20));
     expect(calls.some((c) => c.startsWith("coldBoot"))).toBe(false);
     expect(current.files!.registered).toEqual([]);
-    p = await openPage({ world: { sets: [] } });
+    await openPage({ world: { sets: [] } });
     await vi.waitFor(() => expect(calls).toContain("volumes TITANIC1"));
     await new Promise((r) => setTimeout(r, 20));
     expect(calls.some((c) => c.startsWith("coldBoot"))).toBe(false);
-    void p;
   });
 
   it("takes ?edition=, then a remembered one, before asking", async () => {
@@ -689,7 +688,7 @@ describe("the session hooks", () => {
     });
     const p = await openPage();
     await booted(p);
-    p.fire("pointerdown");
+    expect(() => p.fire("pointerdown")).not.toThrow();
   });
 });
 
@@ -856,7 +855,7 @@ describe("input", () => {
     p.point("pointerdown", { pointerType: "touch", pointerId: 2, clientX: 500, clientY: 200 });
     p.point("pointermove", { pointerType: "touch", pointerId: 2, clientX: 500, clientY: 600 });
     p.fire("pointerup", { pointerType: "touch", pointerId: 2, clientX: 500, clientY: 600 });
-    expect(calls.some((c) => /^nav (uparrow|downarrow)|viewer key downarrow/.test(c))).toBe(true);
+    expect(calls.some((c) => /(?:^nav (?:uparrow|downarrow))|viewer key downarrow/.test(c))).toBe(true);
     // a prop takes the finger at once
     current.host!.hit = { type: "prop" };
     p.point("pointerdown", { pointerType: "touch", pointerId: 3, clientX: 100, clientY: 100 });

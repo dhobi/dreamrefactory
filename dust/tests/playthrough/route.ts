@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { ScriptError } from "@dreamfactory/engine/runtime/interp";
 import { readSetFileV1 } from "@dreamfactory/engine/df/set-v1";
 import { facingFor, mergeCompass, planRoute, sceneAt } from "./nav";
-import { CD, indexDisc, type Pumped } from "./harness";
+import { indexDisc, type Pumped } from "./harness";
 
 export interface Segment {
   /**

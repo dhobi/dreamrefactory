@@ -21,7 +21,7 @@
  */
 import {
   LEAVING, answer, ask, clickActor, clickProp, clickThrough, converse,
-  excuseUs, hold, offerInTalk, offerTo, openDoor, question, room, set, takeInHand,
+  excuseUs, offerInTalk, offerTo, openDoor, question, room, set, takeInHand,
   talkOut, walkTo, type Segment,
 } from "./route";
 import { sceneAt } from "./nav";
@@ -1402,8 +1402,6 @@ export const segment12: Segment = {
     const num = (n: string): number => Number(p.session.interp.globals.get(n) ?? 0);
     const shots = (): number => num("targetshotcount");
     const point = (x: number, y: number): number => Number(ask(p, "makepoint", [x, y]));
-    const onGun = (x: number, y: number): boolean =>
-      Number(ask(p, "pointinprop", ["gunhand", point(x, y)])) === 1;
 
     // ---- out of the undertaker's and across town to the range --------------
     await talkOut(p, LEAVING, "Sidewinder", 2);
