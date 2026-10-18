@@ -79,9 +79,10 @@ jobs:
           if [ -n "$BASE" ]; then
             git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- '*.ts' '*.mts' '*.js' '*.mjs' > changed.txt
             if [ ! -s changed.txt ]; then echo "no script changed"; exit 0; fi
-            xargs npx eslint --quiet --no-warn-ignored < changed.txt
+            # the ESLint npm ci installed, never one npx would fetch
+            xargs node_modules/.bin/eslint --quiet --no-warn-ignored < changed.txt
           else
-            npx eslint --quiet .
+            node_modules/.bin/eslint --quiet .
           fi
 
   # ---------------------------------------------------------------------------
