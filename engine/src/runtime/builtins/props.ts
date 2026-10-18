@@ -5,6 +5,7 @@ import {
 } from "../props";
 import { packPoint } from "../point";
 import { accessorFamily, BuiltinCtx } from "./context";
+import { byEngine, commandRules, forEngine, onlyOnV5 } from "./command-rules";
 
 
 /**
@@ -37,13 +38,16 @@ function registerPropLifecycle(ctx: BuiltinCtx): void {
   // jail.shop's keys ask it — `if propis3d (me)` is keys on the floor, to pick
   // up; otherwise keys in the hand, to carry — and with 0 the keys on the floor
   // could only be dragged about.
-  r("propis3d", (_i, [n, v]) => {
-    const p = session.isV5 ? prop(n ?? "") : null;
-    if (!p) return 0;
-    if (v === undefined) return p.worldSpace ? 1 : 0;
-    p.worldSpace = truthy(v);
-    return 0;
-  });
+  r("propis3d", byEngine(session, {
+    v4: () => 0,
+    v5: (_i, [n, v]) => {
+      const p = prop(n ?? "");
+      if (!p) return 0;
+      if (v === undefined) return p.worldSpace ? 1 : 0;
+      p.worldSpace = truthy(v);
+      return 0;
+    },
+  }));
   // propdelete(name): permanently remove a prop from the set (e.g. clearing
   // TAOOT's greenhouse plants). Distinct from prophide, which only toggles visibility.
   r("propdelete", (_i, [n]) => session.propRuntime.remove(toStr(n ?? "")));
@@ -251,7 +255,7 @@ function registerPropPlacement(ctx: BuiltinCtx): void {
         default: return 0;
       }
     }
-    becomeWorldProp(p, session.isV1); // see propstar
+    becomeWorldProp(p, commandRules(session).worldPropsDrawAuthored); // see propstar
     p.worldX = toNum(x);
     p.worldY = toNum(y);
     p.worldZ = toNum(z ?? 0);
@@ -302,7 +306,7 @@ function registerPropPlacement(ctx: BuiltinCtx): void {
   acc("propset", "", (p) => p.setName, (p, v) => {
     const name = toStr(v).toLowerCase();
     p.setName = name;
-    if (name) becomeWorldProp(p, session.isV1);
+    if (name) becomeWorldProp(p, commandRules(session).worldPropsDrawAuthored);
   });
   acc("propscale", 0, (p) => p.scale, (p, v) => {
     p.scale = Number(v) || 0;
@@ -330,15 +334,17 @@ function registerPropLook(ctx: BuiltinCtx): void {
   /** getter/setter by arity; a missing prop answers the empty value */
   const acc = accessorFamily(r, prop, ctx.miss);
   r("propinstance", (_i, [src, dst]) => {
-    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""), session.isV5);
+    session.propRuntime.instance(toStr(src ?? ""), toStr(dst ?? ""), commandRules(session).propInstanceCopiesRecord);
   });
   // propdeg selects a discrete frame of a rotational/selector prop (TAOOT's
   // deck map "buttons" highlight: 9 frames, deg 0..7 = deck 1..8, deg 8 = none).
   // The pinned frame overrides auto-animation until propview() changes state.
   acc("propdeg", 0, (p) => p.deg, (p, v) => {
-    // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
-    if (session.isV5) p.deg = Math.trunc(Number(v) || 0) & 0xffffff;
-    else p.deg = typeof v === "string" ? v : toNum(v);
+    p.deg = forEngine(session, {
+      v4: typeof v === "string" ? v : toNum(v),
+      // v5 keeps it to 24 bits (RedJack.exe 0x4288fc)
+      v5: Math.trunc(Number(v) || 0) & 0xffffff,
+    });
     // A world prop's propdeg is an ORIENTATION (0..255), not a frame index: the
     // frame is chosen at draw time from this facing vs. the camera bearing (a
     // 32-view card table, a 21-view fire). Clamping it as a frame index froze
@@ -423,18 +429,8 @@ function registerPropLook(ctx: BuiltinCtx): void {
   acc("propflip", 0, (p) => p.flip, (p, v) => {
     p.flip = Math.trunc(Number(v)) || 0;
   });
-  const propflip = interp.builtins.get("propflip")!;
-  interp.builtins.set("propflip", (i, args, call, frame) => {
-    if (session.isV5) return propflip(i, args, call, frame);
-    i.onUnknown("propflip", args);
-    return 0;
-  });
-  const propink = interp.builtins.get("propink")!;
-  interp.builtins.set("propink", (i, args, call, frame) => {
-    if (session.isV5) return propink(i, args, call, frame);
-    i.onUnknown("propink", args);
-    return 0;
-  });
+  onlyOnV5(session, interp, "propflip");
+  onlyOnV5(session, interp, "propink");
 }
 
 /** the prop table by index, error, values and stars */
@@ -541,13 +537,13 @@ function registerPropTables(ctx: BuiltinCtx): void {
   acc("propstar", "", (p) => p.starName, (p, starName) => {
     const star = findStar(starName);
     if (star) {
-      becomeWorldProp(p, session.isV1);
+      becomeWorldProp(p, commandRules(session).worldPropsDrawAuthored);
       p.worldX = star.positionX;
       p.worldY = star.positionZ;
       p.worldZ = star.positionY;
       // a v5 star is a point and no more: RedJack.exe's `propstar` (0x428430)
       // copies its three coordinates and leaves the facing alone
-      if (!session.isV5) p.deg = star.rotation8 & 0xff;
+      if (commandRules(session).starsFace) p.deg = star.rotation8 & 0xff;
     }
     p.starName = toStr(starName).toLowerCase();
     /**

@@ -1,6 +1,7 @@
-import { Builtin, ScriptError, Value, toNum, toStr, truthy } from "../interp";
+import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { bearingV5, engineBearing } from "../geometry";
 import { BuiltinCtx } from "./context";
+import { byEngine, commandRules, forEngine } from "./command-rules";
 import { packPoint, pointX, pointY, s16 } from "../point";
 import { decodeText, encodeText } from "../../df/text";
 import { latin1 } from "../../df/binary";
@@ -83,8 +84,10 @@ function registerStrings(ctx: BuiltinCtx): void {
     const str = toStr(s ?? "");
     const i = Number(idx) || 0;
     if (charMode(delim)) return i >= 1 && i <= str.length ? str[i - 1] : "";
-    if (session.isV1) return findwordV1(str, toStr(delim), i);
-    return str.split(toStr(delim))[(i || 1) - 1] ?? "";
+    return forEngine(session, {
+      v4: () => str.split(toStr(delim))[(i || 1) - 1] ?? "",
+      v1: () => findwordV1(str, toStr(delim), i),
+    })();
   });
   // putword(str, delim, idx, word): replace the idx-th (1-based) word. With an
   // empty delimiter it is the character-wise counterpart, and TI.EXE's arm
@@ -256,21 +259,21 @@ function registerGeometry(ctx: BuiltinCtx): void {
   });
   // calcdeg(fromPacked, toPacked): bearing between two packed (x<<16|y)
   // points in the engine's 0..255 angle space (turntodeg targets)
-  r("calcdeg", (_i, [from, to, x2, y2]) => {
+  r("calcdeg", byEngine(session, {
+    v4: (_i, [from, to]) => {
+      // signed halves, for the reason spelled out on calcdist below
+      const fx = pointX(toNum(from ?? 0));
+      const fy = pointY(toNum(from ?? 0));
+      const tx = pointX(toNum(to ?? 0));
+      const ty = pointY(toNum(to ?? 0));
+      // the engines' table, not atan2 (TI.EXE 0x429e70 -> 0x43d450 -> 0x43d480)
+      return engineBearing(tx - fx, ty - fy);
+    },
     // DreamFactory 5: four coordinates, not two packed points, and a heading in
     // 2^24ths of a turn — RedJack.exe 0x4184f0 → 0x41df00:
     // `ftol(atan2 (y2 - y1, x2 - x1) * 16777216 / 2π) & 0xffffff`
-    if (session.isV5) {
-      return bearingV5(toNum(x2 ?? 0) - toNum(from ?? 0), toNum(y2 ?? 0) - toNum(to ?? 0));
-    }
-    // signed halves, for the reason spelled out on calcdist below
-    const fx = pointX(toNum(from ?? 0));
-    const fy = pointY(toNum(from ?? 0));
-    const tx = pointX(toNum(to ?? 0));
-    const ty = pointY(toNum(to ?? 0));
-    // the engines' table, not atan2 (TI.EXE 0x429e70 -> 0x43d450 -> 0x43d480)
-    return engineBearing(tx - fx, ty - fy);
-  });
+    v5: (_i, [x1, y1, x2, y2]) => bearingV5(toNum(x2 ?? 0) - toNum(x1 ?? 0), toNum(y2 ?? 0) - toNum(y1 ?? 0)),
+  }));
   // calcmod(a, b): the remainder of `idiv` — the sign of `a` (TI.EXE 0x429af0,
   // tl.exe 0x439230; DF.EXE has no calcmod, its 20082 is `cacheinfo`). TAOOT's
   // one use, the bridge wheel's getpropdeg, passes 0..255, where the sign never
@@ -310,23 +313,24 @@ function registerGeometry(ctx: BuiltinCtx): void {
    * `calcdeg` above decodes the same pair and had the same bug; a bearing
    * computed from 65508 instead of −28 points the wrong way round.
    */
-  r("calcdist", (_i, [a, b, c, d]) => {
+  r("calcdist", byEngine(session, {
+    v4: (_i, [a, b]) => {
+      const ax = pointX(toNum(a ?? 0));
+      const ay = pointY(toNum(a ?? 0));
+      const bx = pointX(toNum(b ?? 0));
+      const by = pointY(toNum(b ?? 0));
+      // TI.EXE 0x429f20 (DF.EXE 0x42c070 the same): the halves' differences
+      // squared and summed in 32-bit registers, then 0x436100's integer square root
+      // of that as UNSIGNED — floor, never rounded — and the low word of it
+      const dx = bx - ax;
+      const dy = by - ay;
+      return isqrt32((Math.imul(dx, dx) + Math.imul(dy, dy)) >>> 0) & 0xffff;
+    },
     // DreamFactory 5: `calcdist (x1, y1, x2, y2)`, in floating point and
     // truncated — RedJack.exe 0x4185c0 → 0x41df70
-    if (session.isV5) {
-      return Math.trunc(Math.hypot(toNum(a ?? 0) - toNum(c ?? 0), toNum(b ?? 0) - toNum(d ?? 0)));
-    }
-    const ax = pointX(toNum(a ?? 0));
-    const ay = pointY(toNum(a ?? 0));
-    const bx = pointX(toNum(b ?? 0));
-    const by = pointY(toNum(b ?? 0));
-    // TI.EXE 0x429f20 (DF.EXE 0x42c070 the same): the halves' differences
-    // squared and summed in 32-bit registers, then 0x436100's integer square root
-    // of that as UNSIGNED — floor, never rounded — and the low word of it
-    const dx = bx - ax;
-    const dy = by - ay;
-    return isqrt32((Math.imul(dx, dx) + Math.imul(dy, dy)) >>> 0) & 0xffff;
-  });
+    v5: (_i, [x1, y1, x2, y2]) =>
+      Math.trunc(Math.hypot(toNum(x1 ?? 0) - toNum(x2 ?? 0), toNum(y1 ?? 0) - toNum(y2 ?? 0))),
+  }));
 
   // calcvectx(angle, mag) / calcvecty(angle, mag): the (dx, dy) components of a
   // vector of length `mag` pointing along the engine's 0..255 bearing `angle` —
@@ -362,10 +366,8 @@ function registerGeometry(ctx: BuiltinCtx): void {
     (trig: (rad: number) => number) =>
     (_i: unknown, [angle, mag]: Value[]) =>
       Math.trunc(toNum(mag ?? 0) * trig(toNum(angle ?? 0) * 2 * Math.PI * 5.960464477539063e-8));
-  const byEngine = (v4: Builtin, v5: Builtin): Builtin => (i, args, call, frame) =>
-    (session.isV5 ? v5 : v4)(i, args, call, frame);
-  r("calcvectx", byEngine(vecComponent(Math.cos), vecComponentV5(Math.cos)));
-  r("calcvecty", byEngine(vecComponent(Math.sin), vecComponentV5(Math.sin)));
+  r("calcvectx", byEngine(session, { v4: vecComponent(Math.cos), v5: vecComponentV5(Math.cos) }));
+  r("calcvecty", byEngine(session, { v4: vecComponent(Math.sin), v5: vecComponentV5(Math.sin) }));
 }
 
 /** the disc, dialogs, quit, the machine, clocks, menu, bevels and path slots */
@@ -384,11 +386,13 @@ function registerSystem(ctx: BuiltinCtx): void {
   // and `actorhitbox (actor, rz, rxy)` — the box a ball hits (runtime/balls.ts).
   // Dust's 32 calls all have that shape, and answering them as the disc wrote
   // the actor's name into mountedCd, which a save carries.
-  r("currentcd", (_i, [name, a, b]) => {
-    if (session.isV1) return actorHitbox(toStr(name ?? ""), a, b);
-    if (name !== undefined) session.mountedCd = toStr(name);
-    return session.mountedCd;
-  });
+  r("currentcd", byEngine(session, {
+    v4: (_i, [name]) => {
+      if (name !== undefined) session.mountedCd = toStr(name);
+      return session.mountedCd;
+    },
+    v1: (_i, [name, a, b]) => actorHitbox(toStr(name ?? ""), a, b),
+  }));
   /**
    * DF.EXE 0x4131b0 (getter) and 0x4130a0 (setter). `"player"` is the player's
    * own box (0x460b68/0x460b6a), any other name an actor's (record +0x50/+0x52).
@@ -565,7 +569,7 @@ function registerSystem(ctx: BuiltinCtx): void {
       // RedJack's `resetpaths` does the same with `"RJ" @ disk`, one disc per
       // day (`advanceday`): `path (5, "RJDisk2:movies:")`. Its three discs each
       // carry a different `death.move`, so the film you die to is the day's.
-      const vol = (session.isV5 ? /^rjdisk([1-3]):/i : /^titanic([12]):/i).exec(value);
+      const vol = commandRules(session).discPath.exec(value);
       if (vol) session.onDiscChange?.(Number(vol[1]));
     }
     return 0;

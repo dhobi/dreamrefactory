@@ -1,6 +1,7 @@
 import { ScriptError, Value, toNum, toStr, truthy } from "../interp";
 import { pauseDepthOf } from "../pause";
 import { accessorFamily, BuiltinCtx } from "./context";
+import { commandRules, onlyOnV5 } from "./command-rules";
 import { packPoint } from "../point";
 import { RIGHTTURNS, isqrt, readFrameRegister, readStarPath } from "../../df/set";
 import { foldAscii } from "../caseless";
@@ -282,7 +283,7 @@ function registerActorLifecycle(ctx: BuiltinCtx): void {
     if (!to || session.actorRuntime.get(to)) return;
     // DreamFactory 1 copies the source's whole record (DF.EXE 0x411cc0, see
     // copyActorRecord); v4's copy stays a fresh actor until TI.EXE is read
-    session.actorRuntime.instance(from, to, session.isV1);
+    session.actorRuntime.instance(from, to, commandRules(session).actorInstanceCopiesRecord);
     if (session.actorRuntime.get(to)) session.instanceCastScript(from, to);
   });
   r("actordelete", async (_i, [n], _call, frame) => {
@@ -294,7 +295,7 @@ function registerActorLifecycle(ctx: BuiltinCtx): void {
     // no pass meets a walker that is not there. No shipped script answers
     // `closeactor`, so the message runs nothing there; an actor the message
     // cannot find is error 0xa (0x405072 -> 0x406550), and nothing is deleted.
-    if (session.isV5) {
+    if (commandRules(session).deleteClosesActor) {
       if (!session.actorRuntime.get(name)) throw new ScriptError(0xa, `actordelete: no actor "${name}"`);
       await session.sendEvent("sendtoactor", name, "closeactor", [], frame.ctx.me, frame);
       session.scheduler.walks.delete(name.toLowerCase());
@@ -450,7 +451,7 @@ function registerActorState(ctx: BuiltinCtx): void {
      * talk found him when `actorstar ("lyle", "lyledock2")` puts him on the dock,
      * where every later lesson and fight expects him ("I'll be on the dock").
      */
-    if (session.isV5) session.scheduler.walks.delete(a.name.toLowerCase());
+    if (commandRules(session).starStopsWalk) session.scheduler.walks.delete(a.name.toLowerCase());
     // placing at a real star teleports the actor there; a value that isn't a
     // star (the "walkonpath"/"custom"/"resume" sentinels, or a packed point)
     // is just stored — the walk-resume logic reads these back
@@ -460,7 +461,7 @@ function registerActorState(ctx: BuiltinCtx): void {
       a.worldY = star.positionZ;
       a.worldZ = star.positionY;
       // a v5 star has no facing (see propstar)
-      if (!session.isV5) a.deg = star.rotation8 & 0xff;
+      if (commandRules(session).starsFace) a.deg = star.rotation8 & 0xff;
     }
     a.starName = toStr(starName).toLowerCase();
     // A star this set has never heard of. Dust's are qualified by set
@@ -472,8 +473,7 @@ function registerActorState(ctx: BuiltinCtx): void {
     if (star) a.worldSpace = true; // as for actorxyz: a real placement in the world
   });
   acc("actordeg", 0, (a) => a.deg, (a, v) => {
-    // a v5 angle is a whole turn in 2²⁴ parts (engine/src/runtime/maze.ts)
-    a.deg = toNum(v) & (session.isV5 ? 0xffffff : 0xff);
+    a.deg = toNum(v) & commandRules(session).angleMask;
   });
   acc("actorpose", "", (a) => a.poseName, (a, v) => {
     a.poseName = toStr(v).toLowerCase();
@@ -485,12 +485,7 @@ function registerActorState(ctx: BuiltinCtx): void {
     const n = Math.trunc(Number(v));
     if (n >= 1 && n <= 9) a.ink = n;
   });
-  const actorink = ctx.interp.builtins.get("actorink")!;
-  ctx.interp.builtins.set("actorink", (i, args, call, frame) => {
-    if (session.isV5) return actorink(i, args, call, frame);
-    i.onUnknown("actorink", args);
-    return 0;
-  });
+  onlyOnV5(session, ctx.interp, "actorink");
   acc("actorscale", 0, (a) => a.scale, (a, v) => {
     a.scale = toNum(v);
   });
@@ -578,7 +573,7 @@ function registerWalking(ctx: BuiltinCtx): void {
       );
       return 0;
     }
-    if (a && !session.isV1) {
+    if (a && commandRules(session).defersWalksOffSet) {
       // TI.EXE's walktostar (0x442f00): the record is built now when the
       // walker's set is the open one, and deferred to the first pass that it is
       // otherwise (0x442fb4 -> 0x443ac0); the builder finds the star in the open
@@ -861,7 +856,7 @@ function registerWalking(ctx: BuiltinCtx): void {
     const fromName = toStr(from ?? "").toLowerCase();
     // deferred like walktostar's outside the walker's own set (0x443235 ->
     // 0x443ac0, mode 3, the route's start kept at +0x5e; RedJack.exe 0x41c959)
-    if (!session.isV1 && a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
+    if (commandRules(session).defersWalksOffSet && a.setName.toLowerCase() !== session.actorRuntime.currentSet) {
       a.starName = WALK_DEFER;
       session.scheduler.deferWalk(toStr(n), toName, () => walkOnPath(a, toStr(n), from, to), 3, fromName);
       return 0;
@@ -874,7 +869,7 @@ function registerWalking(ctx: BuiltinCtx): void {
     // RedJack.exe builds the walk from the route alone (0x41ce80): none between
     // the two, or none ending at the destination for "resume", is error 0xa
     // (0x41cefc) — there is no straight line to fall back on
-    if (session.isV5) {
+    if (commandRules(session).pathWalksNeedRoute) {
       if (startPathWalk(a, n, fromName, toName)) return;
       throw new ScriptError(0xa, `walkonpath: no route from ${fromName} to ${toName}`);
     }

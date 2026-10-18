@@ -35,6 +35,7 @@ import type { DrawSignature } from "@dreamfactory/engine/runtime/signature";
  * which is a reading of RedJack's art rather than of RedJack.exe yet.
  */
 import { SCREEN_W, SCREEN_H } from "./screen";
+import { screenRules, type ScreenRules } from "./screen-rules";
 
 /** the scene backdrop a puppet composites over (the live set view) */
 export interface PuppetBackdrop {
@@ -172,6 +173,11 @@ function rawFromRGBA(rgba: Uint8ClampedArray): Uint8Array {
 const FULL_SCREEN = { width: SCREEN_W, height: SCREEN_H };
 
 export class PuppetView {
+  /** where this engine's screen parts ways with the others (screen-rules.ts) */
+  private get rules(): ScreenRules {
+    return screenRules(this.session);
+  }
+
   /**
    * The palette the puppet's TEXT is inked from. A v1/v4 puppet has one in its
    * header; a DreamFactory 5 one does not (df/pup.ts), and its answer band is
@@ -323,7 +329,7 @@ export class PuppetView {
    * 0x430d3d hand its slot to the blitter); the backdrop is not the puppet's
    */
   private puppetLit(pal: Uint8ClampedArray): Uint8ClampedArray {
-    return this.session.isV5 ? groupPalette(pal, this.session.lights.group(LIT_PUPPET)!) : pal;
+    return this.rules.lightGroups ? groupPalette(pal, this.session.lights.group(LIT_PUPPET)!) : pal;
   }
 
   /**
@@ -352,7 +358,7 @@ export class PuppetView {
     // it, moving the brightness mid-conversation would leave the character at the old one
     // until their next lip-sync frame changed the key by itself
     // DreamFactory 1's puppetgrab: the set's view stands in for layer 0 (below)
-    const grab = this.session.isV1 && this.session.puppetGrab;
+    const grab = this.rules.puppetGrab && this.session.puppetGrab;
     const grabLo = this.session.puppetParams.get(1) ?? 0;
     const grabHi = this.session.puppetParams.get(2) ?? 128;
     const key = `${p.name}:${p.stanceIdx}:${clipY}:${screenGammaGeneration()}:${
@@ -441,7 +447,7 @@ export class PuppetView {
              * (mwife's all-166, cobb's all-223) are the grab case, and the painted
              * ones (dead.pup, the saloon games) the scripts clear the flag for.
              */
-            if (l === 0 && this.session.isV1) {
+            if (l === 0 && this.rules.puppetGrab) {
               if (grab) continue;
             } else if (l === 0) {
               // Titanic and the others: not read out of their executables yet, so
@@ -607,7 +613,7 @@ export class PuppetView {
     // the answer rows, straight onto the band artwork (0x440e30)
     const rects = this.bevelRects();
     const ink = (slot: number, fallback: number): string =>
-      this.session.isV5 ? rgbColor(this.param(slot, fallback)) : clutColor(pal, this.param(slot, fallback));
+      this.rules.bevelInkIsRgb ? rgbColor(this.param(slot, fallback)) : clutColor(pal, this.param(slot, fallback));
     ctx.fillStyle = ink(PARAM.bevelColor, 250);
     rects.forEach((r, i) => ctx.fillText(p.bevels[i].text, r.x + marginX, r.y + BASELINE));
     if (replyIds.shown) {

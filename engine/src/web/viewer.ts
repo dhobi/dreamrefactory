@@ -14,6 +14,7 @@ import { ClutDim, RoomLayer, ScreenDirector, dimPalette } from "./screen-directo
 // the font drawstring() paints and stringwidth() measures with — one definition
 // so pen advance matches the glyphs, and so both get the CJK fall-through
 import { overlayFont } from "./fonts";
+import { screenRules, type ScreenRules } from "./screen-rules";
 
 /**
  * Navigation state machine over a parsed SET file. The decoded scenery frames
@@ -134,6 +135,11 @@ export interface NavHooks {
  * rooms at all, and *Timelapse* does not.
  */
 export class SetViewer implements RoomLayer {
+  /** where this engine's screen parts ways with the others (screen-rules.ts) */
+  private get rules(): ScreenRules {
+    return screenRules(this.session);
+  }
+
   readonly set: SetFile;
   private palette: Uint8ClampedArray;
   /** full 256-entry set palette — props colorize through the set's CLUT. Only
@@ -240,7 +246,7 @@ export class SetViewer implements RoomLayer {
    *    walk (0x439e10), and the passes step it from there ({@link passMotion}).
    */
   private async navigateAsExe(dir: string): Promise<void> {
-    if (this.session.isV1) return this.navigateAsDf(dir);
+    if (this.rules.dfMoves) return this.navigateAsDf(dir);
     const pace = this.session.navFromScript ? FRAME_MS : this.playerPace;
     if (dir === "strait" && (this.animating || !this.availableRoads().length)) return;
     const sceneIdx = this.sceneIdx;
@@ -304,12 +310,12 @@ export class SetViewer implements RoomLayer {
   private pendingJumpScene: string | null = null;
   private readonly sceneJump = (scene: string): void | Promise<void> => {
     this.session.navHappened = true;
-    if (this.session.isV1) return this.jumpV1(scene, null);
+    if (this.rules.jumpsAtOnce) return this.jumpV1(scene, null);
     this.pendingJumpScene = scene;
   };
   private readonly viewJump = (view: string): void | Promise<void> => {
     this.session.navHappened = true;
-    if (this.session.isV1) return this.jumpV1(null, view);
+    if (this.rules.jumpsAtOnce) return this.jumpV1(null, view);
     const scene = this.pendingJumpScene;
     this.pendingJumpScene = null;
     this.teleport(scene, view);
@@ -738,14 +744,14 @@ export class SetViewer implements RoomLayer {
      * openscene then runs for the same scene a second time. A jump to another
      * scene, or another set, from openset ends it with no second openscene.
      */
-    if (this.session.isV1 && (this.session.sceneJumpDriver !== this.sceneJump || this.sceneIdx !== from)) return;
+    if (this.rules.openSetJumpEndsOpening && (this.session.sceneJumpDriver !== this.sceneJump || this.sceneIdx !== from)) return;
     /**
      * TI.EXE's opening (0x407ea0, en build) asks too, and only about the set:
      * `openset ()` (0x407eca), and an error ends it there; then, if the set was
      * closed or another opened in its place (0x407ed7, 0x407ee6 against the set
      * handle it noted), no `openscene ()` (0x407f45) for this one.
      */
-    if (!this.session.isV1 && (!opened || this.session.currentBinding !== this.scripts)) return;
+    if (!this.rules.openSetJumpEndsOpening && (!opened || this.session.currentBinding !== this.scripts)) return;
     await this.scripts.openScene(this.sceneIdx);
   }
 
@@ -1553,7 +1559,7 @@ export class SetViewer implements RoomLayer {
     // a running script like the pass's loop handlers (Scheduler.sendInPass):
     // DF.EXE's main loop takes no event until the idle that runs it has
     // returned (0x4115f0), so a press made meanwhile waits for it
-    if (!departure) return this.session.isV1 ? this.session.track(arrive(), label) : arrive();
+    if (!departure) return this.rules.arrivalIsScript ? this.session.track(arrive(), label) : arrive();
     void this.session.track(departure.then(arrive), label);
   }
 
@@ -1605,7 +1611,7 @@ export class SetViewer implements RoomLayer {
    * v1 only.
    */
   private refusedMove(label: string): void {
-    if (this.session.isV1) void this.departScene(label);
+    if (this.rules.refusedMoveDeparts) void this.departScene(label);
   }
 
   availableRoads(): { road: Transition; register: number; arriveViewID: number }[] {
@@ -1927,7 +1933,7 @@ export class SetViewer implements RoomLayer {
 
   /** a DreamFactory 1 room whose camera the pass steps — DF.EXE's 0x433d20 */
   private get dfStepped(): boolean {
-    return this.session.isV1 && this.passStepped;
+    return this.rules.passStepsCamera && this.passStepped;
   }
 
   /**

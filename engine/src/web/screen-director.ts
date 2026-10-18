@@ -61,6 +61,7 @@ import { composeDfEffect, composeDissolve, composeEffect, dfPassesAt, passesAt, 
 import { DEFAULT_SCREEN, ScreenSize } from "./screen";
 import { displayPalette, screenGammaGeneration } from "./screen-gamma";
 import { groupPalette } from "@dreamfactory/engine/runtime/shading";
+import { screenRules, type ScreenRules } from "./screen-rules";
 
 
 /** a mixclut(target,"black",lo,hi,amt) request: darken palette entries lo..hi */
@@ -210,6 +211,11 @@ export interface RoomLayer {
 }
 
 export class ScreenDirector {
+  /** where this engine's screen parts ways with the others (screen-rules.ts) */
+  private get rules(): ScreenRules {
+    return screenRules(this.session);
+  }
+
   /**
    * The one surface everything composites into. Owned here rather than by a
    * viewer, which is the lifetime it always wanted: a set change swaps the room
@@ -496,7 +502,7 @@ export class ScreenDirector {
     // there: a room with a per-frame loop going (the credits' `namesup`) never
     // took a queued click at all. Here only what is still running from an
     // earlier pass holds it, which is the original's rule.
-    if (this.session.isV1 && this.session.events.length) this.room?.takeInputOnly?.();
+    if (this.rules.inputAtPassHead && this.session.events.length) this.room?.takeInputOnly?.();
     this.session.tickTime(now); // delay() clock + coarse loop/cricket service
     // A DreamFactory 5 room has no SetViewer, which is where a v4 room pops the
     // clicks and keys made while a script ran (SetViewer.drainOneEvent). So they
@@ -510,7 +516,7 @@ export class ScreenDirector {
     // no SetViewer ever drained its queue. A click made while a flat's loop was
     // running went nowhere — the spear's jab at Egypt's crocodile, whose
     // `animtick` is running most of the time the beast's head is turned.
-    if ((this.session.isV5 || !this.room) && this.takesQueuedInput) this.takeQueued();
+    if ((this.rules.directorTakesQueue || !this.room) && this.takesQueuedInput) this.takeQueued();
     this.serviceCursor();
     if (this.movies.playing) {
       // a self-paced movie may finish mid-tick; fall back to the settled room
@@ -541,7 +547,7 @@ export class ScreenDirector {
       const { pointerX: px, pointerY: py } = this.session;
       const back = (): void => {
         const moved = this.session.pointerX !== e.x || this.session.pointerY !== e.y;
-        if (!this.session.isV5 || !moved) this.session.setPointer(px, py);
+        if (!this.rules.queuedClickKeepsMove || !moved) this.session.setPointer(px, py);
       };
       void this.session.track(this.click(e.x, e.y).then(back).finally(() => e.taken?.()), `queued click ${e.x},${e.y}`);
     }
@@ -575,7 +581,7 @@ export class ScreenDirector {
   }
 
   private untickedFrame(): CachedFrame | null {
-    if ((this.session.isV5 || !this.room) && this.takesQueuedInput) this.takeQueued();
+    if ((this.rules.directorTakesQueue || !this.room) && this.takesQueuedInput) this.takeQueued();
     this.serviceCursor();
     if (this.movies.playing) return this.movies.currentFrame() ?? this.room?.roomFrame() ?? null;
     return this.room ? (this.room.takeInputOnly?.() ?? this.room.roomFrame()) : null;
@@ -931,7 +937,7 @@ export class ScreenDirector {
       // there is no screen to show, black.
       if (covers || !this.paintWorldInto()) this.screen.clearFrame();
       const buf = this.screen.scratchFor(f.width * f.height * 4);
-      indexedToRGBA(f.pixels, f.width, f.height, this.session.isV5 ? groupPalette(f.palette, this.session.lights.movie) : f.palette, buf);
+      indexedToRGBA(f.pixels, f.width, f.height, this.rules.lightGroups ? groupPalette(f.palette, this.session.lights.movie) : f.palette, buf);
       if (f.drawn && this.filmUnder) underUndrawn(buf, f, this.filmUnder);
       this.screen.blitAt(buf, f.width, f.height, f.originX, f.originY);
       this.screen.frameValid = true;
@@ -1405,7 +1411,7 @@ export class ScreenDirector {
     // (credits.shop) roll over liznite's first node.
     this.session.propRuntime.composite(
       data, width, height, palette, cam,
-      (animating || this.session.viewShowing) && !this.session.isV5,
+      (animating || this.session.viewShowing) && this.rules.onlyUiPropsOverRoom,
       occ,
     );
   }
@@ -1455,7 +1461,7 @@ export class ScreenDirector {
     // not while the BOOTFILE idle runs: it is taken after it returns (TI.EXE en
     // 0x431c43), and a clock held for it would hold the idle that it waits on
     if (!this.session.events.length || this.session.scheduler.idleRunning) return false;
-    if (this.session.isV5 || !this.room) return !this.inputLocked;
+    if (this.rules.directorTakesQueue || !this.room) return !this.inputLocked;
     if (this.movies.playing) return false;
     // a key queued behind a fade is taken once the fade is over (see keyNow)
     return !this.movingCamera && !this.session.fading;
@@ -1511,7 +1517,7 @@ export class ScreenDirector {
    * head (DF.EXE, see {@link tick}).
    */
   private get gestureWaitsForIdle(): boolean {
-    return this.session.scheduler.idleRunning && !this.session.isV1;
+    return this.session.scheduler.idleRunning && this.rules.idleHoldsGestures;
   }
 
   /** {@link keyDown}, saying when a queued press has been taken */
@@ -1573,7 +1579,7 @@ export class ScreenDirector {
     // Not in DreamFactory 5: RedJack's duels are fought by keys while their
     // loops run, and a tracked key held the fight's `think` off until the
     // Spaniard's duel on day seven never ended (redjack/tests/machine/day7.ts).
-    if (this.session.isV5) return this.keyDispatch(keyName);
+    if (!this.rules.keysHoldEngine) return this.keyDispatch(keyName);
     return this.session.track(this.keyDispatch(keyName), `key ${keyName}`);
   }
 
@@ -1620,7 +1626,7 @@ export class ScreenDirector {
    */
   async keyUp(keyName: string): Promise<boolean> {
     this.session.noteEvent();
-    if (!this.session.isV5 || this.movies.playing) return false;
+    if (!this.rules.hearsKeyUp || this.movies.playing) return false;
     // an event like the press: RedJack.exe's main loop takes it after an idle
     // (0x41e9b1), in the order it came, so a release made while the idle runs
     // waits behind the press it ends instead of overtaking it
@@ -1836,7 +1842,7 @@ export class ScreenDirector {
       // beaten with is clicked in the band below `think`'s strikes (y 384 on,
       // sCombat.shop), and was dropped here.
       // (waiting only for the idle, no loop of a script's is polling it)
-      if (forIdle || this.session.isV5 || !this.session.pollingInput()) {
+      if (forIdle || this.rules.queuesBusyPresses || !this.session.pollingInput()) {
         this.session.events.post({ kind: "mousedown", x, y, taken });
         return true;
       }
@@ -1888,7 +1894,7 @@ export class ScreenDirector {
       // cannon.sett turns on the arrows, and the click that fires then stopped
       // at the set's `passcode` instead of going on to the library that fires
       // (the room's keys start the same way, MazeView.roomKeyDown)
-      if (this.session.isV5) this.session.interp.eventConsumed = false;
+      if (this.rules.clickClearsConsumed) this.session.interp.eventConsumed = false;
       try {
         await this.session.interp.runHandler(
           dispatcher, "mousedown", [this.session.pointerPoint()],
@@ -2030,7 +2036,7 @@ export class ScreenDirector {
     // a v5 flat is drawn at the stage's origin (`stageorigin`), and its regions are
     // the flat's own coordinates: scombat2.stag's "Vine" is x 677–841 of a flat
     // wider than the screen, in reach only once Nick leans and the origin moves
-    if (this.session.isV5) {
+    if (this.rules.flatsAtStageOrigin) {
       x -= this.session.stageOrigin.x;
       y -= this.session.stageOrigin.y;
     }
@@ -2339,7 +2345,7 @@ export class ScreenDirector {
    * and only the flat — the props over it are lit by their own (`proplitby`)
    */
   private stageLit(pal: Uint8ClampedArray): Uint8ClampedArray {
-    return this.session.isV5 ? groupPalette(pal, this.session.lights.stage) : pal;
+    return this.rules.lightGroups ? groupPalette(pal, this.session.lights.stage) : pal;
   }
 
   private flatPalette(base: Uint8ClampedArray): Uint8ClampedArray {
