@@ -1794,70 +1794,68 @@ function patchStandpointV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, 
 /** the sound: per-sound settings of every open bank */
 function patchSoundV1(base: RawSaveFile, out: RawSaveFile, index: V1Index, patch: SavePatchV1, drop: NonNullable<SavePatchV1["onDrop"]>): void {
   // ---- the sound -----------------------------------------------------------
-  {
-    const c0 = out.containers[0]?.data;
-    const files = c0 ? readFiles(c0) : [];
-    const handleOf = (file: string): number => {
-      const want = file.toLowerCase();
-      return files.find((f) => (f.path.split(":").pop() ?? "").toLowerCase() === want)?.handle ?? 0;
-    };
-    if (c0 && patch.theme !== undefined) {
-      const h = patch.theme ? handleOf(patch.theme) : 0;
-      if (patch.theme && !h) drop(patch.theme, "the theme's bank is not in the base's open-file manifest");
-      put32(c0, C0_THEME, h);
-    }
-    // the bank tables, as (bank file, kind, name) -> record offset
-    const records = new Map<string, { data: Uint8Array; at: number }[]>();
-    const cb = out.containers[6]?.data;
-    if (cb) {
-      const dvb = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
-      for (let i = 0; i < index.banks; i++) {
-        const bank = fileByHandle(files, dvb.getUint32(i * BANK_STRIDE + BANK_FILE, true)).toLowerCase();
-        const arrays: ["sound" | "chunk", number, number][] = [
-          ["sound", 7 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_SOUNDS, true)],
-          ["chunk", 8 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_CHUNKS, true)],
-        ];
-        for (const [kind, ci, count] of arrays) {
-          const d = out.containers[ci]?.data;
-          if (!d) continue;
-          for (let r = 0; r < count && (r + 1) * SOUND_STRIDE <= d.length; r++) {
-            const name = pstr(d, r * SOUND_STRIDE + SOUND_NAME, 31).toLowerCase();
-            const key = kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${name}`;
-            const list = records.get(key) ?? [];
-            // a one-shot is one record; a theme's volume is on all of its chunks
-            if (kind === "chunk" || !list.length) list.push({ data: d, at: r * SOUND_STRIDE });
-            records.set(key, list);
-          }
+  const c0 = out.containers[0]?.data;
+  const files = c0 ? readFiles(c0) : [];
+  const handleOf = (file: string): number => {
+    const want = file.toLowerCase();
+    return files.find((f) => (f.path.split(":").pop() ?? "").toLowerCase() === want)?.handle ?? 0;
+  };
+  if (c0 && patch.theme !== undefined) {
+    const h = patch.theme ? handleOf(patch.theme) : 0;
+    if (patch.theme && !h) drop(patch.theme, "the theme's bank is not in the base's open-file manifest");
+    put32(c0, C0_THEME, h);
+  }
+  // the bank tables, as (bank file, kind, name) -> record offset
+  const records = new Map<string, { data: Uint8Array; at: number }[]>();
+  const cb = out.containers[6]?.data;
+  if (cb) {
+    const dvb = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
+    for (let i = 0; i < index.banks; i++) {
+      const bank = fileByHandle(files, dvb.getUint32(i * BANK_STRIDE + BANK_FILE, true)).toLowerCase();
+      const arrays: ["sound" | "chunk", number, number][] = [
+        ["sound", 7 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_SOUNDS, true)],
+        ["chunk", 8 + 3 * i, dvb.getInt16(i * BANK_STRIDE + BANK_CHUNKS, true)],
+      ];
+      for (const [kind, ci, count] of arrays) {
+        const d = out.containers[ci]?.data;
+        if (!d) continue;
+        for (let r = 0; r < count && (r + 1) * SOUND_STRIDE <= d.length; r++) {
+          const name = pstr(d, r * SOUND_STRIDE + SOUND_NAME, 31).toLowerCase();
+          const key = kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${name}`;
+          const list = records.get(key) ?? [];
+          // a one-shot is one record; a theme's volume is on all of its chunks
+          if (kind === "chunk" || !list.length) list.push({ data: d, at: r * SOUND_STRIDE });
+          records.set(key, list);
         }
       }
     }
-    if (c0 && patch.effect !== undefined) {
-      let file = 0;
-      let record = 0;
-      if (patch.effect) {
-        const e = patch.effect;
-        const rec = records.get(`${e.bank.toLowerCase()}|sound|${e.name.toLowerCase()}`)?.[0];
-        file = handleOf(e.bank);
-        record = rec ? new DataView(rec.data.buffer, rec.data.byteOffset).getInt32(rec.at + SOUND_RECORD, true) : 0;
-        if (!file || !record) {
-          drop(e.name, "the playing sound's bank is not one the base has open");
-          file = 0;
-          record = 0;
-        }
+  }
+  if (c0 && patch.effect !== undefined) {
+    let file = 0;
+    let record = 0;
+    if (patch.effect) {
+      const e = patch.effect;
+      const rec = records.get(`${e.bank.toLowerCase()}|sound|${e.name.toLowerCase()}`)?.[0];
+      file = handleOf(e.bank);
+      record = rec ? new DataView(rec.data.buffer, rec.data.byteOffset).getInt32(rec.at + SOUND_RECORD, true) : 0;
+      if (!file || !record) {
+        drop(e.name, "the playing sound's bank is not one the base has open");
+        file = 0;
+        record = 0;
       }
-      put32(c0, C0_EFFECT_FILE, file);
-      put32(c0, C0_EFFECT_RECORD, record);
     }
-    for (const snd of patch.sounds ?? []) {
-      const bank = snd.bank.toLowerCase();
-      const key = snd.kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${snd.name.toLowerCase()}`;
-      // a bank the base never had open has no records to carry it
-      for (const rec of records.get(key) ?? []) {
-        put16(rec.data, rec.at + SOUND_VOLUME, snd.volume);
-        if (snd.kind === "chunk") continue;
-        put16(rec.data, rec.at + SOUND_PAN, snd.pan);
-        put16(rec.data, rec.at + SOUND_LOOP, snd.loop ? 1 : 0);
-      }
+    put32(c0, C0_EFFECT_FILE, file);
+    put32(c0, C0_EFFECT_RECORD, record);
+  }
+  for (const snd of patch.sounds ?? []) {
+    const bank = snd.bank.toLowerCase();
+    const key = snd.kind === "chunk" ? `${bank}|chunk` : `${bank}|sound|${snd.name.toLowerCase()}`;
+    // a bank the base never had open has no records to carry it
+    for (const rec of records.get(key) ?? []) {
+      put16(rec.data, rec.at + SOUND_VOLUME, snd.volume);
+      if (snd.kind === "chunk") continue;
+      put16(rec.data, rec.at + SOUND_PAN, snd.pan);
+      put16(rec.data, rec.at + SOUND_LOOP, snd.loop ? 1 : 0);
     }
   }
 }
