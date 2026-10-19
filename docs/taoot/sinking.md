@@ -195,14 +195,15 @@ leaves you at 13:15 after the cutscene.
 
 ## What this port does
 
-The heartbeat is faithful:
-[`serviceGameClock`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts)
-dispatches `calctime` every 50 ms of the host's clock, on both hosts — wall time
-in the browser, the pumped virtual clock headless. It runs at most once per pass
-and never makes up a late one, as `TI.EXE` does not, so a machine too slow for
-twenty passes a second runs the sinking slower rather than in bursts
-([timing](../engine/runtime/timing.md)). It skips while a script is in flight
-and re-anchors, as the original's `idle()` only ran between events.
+The heartbeat is faithful: the port runs the boot library's own `idle()`
+([`Scheduler.serviceIdle`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/runtime/scheduler.ts))
+whenever nothing holds the engine, so `calctime` runs once a pass, right after the
+`forceupdate()` whose throttle waits out the pass's 50 ms of the host's clock, on
+both hosts — wall time in the browser, the pumped virtual clock headless. A late
+pass is never made up, as in `TI.EXE`, so a machine too slow for twenty
+passes a second runs the sinking slower rather than in bursts
+([timing](../engine/runtime/timing.md)). While a script is in flight there is no
+idle and so no `calctime`, as the original's `idle()` only ran between events.
 
 The movement bump fires on both kinds of arrival. A turn runs the `openscene` of
 the scene script, the set main and the **boot** scripts, which is where the bump
@@ -262,8 +263,8 @@ code idle ()
 
 `forceupdate()` *is* the master pass (the engine's handler tail-calls `0x442550`),
 so everything a pass dispatches — including the `openscene` a view change fires —
-has already happened when `calctime()` runs. That is the port's order too:
-`serviceStep()` and then `serviceGameClock()`.
+has already happened when `calctime()` runs. That is the port's order too,
+because it is the same `idle()`: the pass, and then `calctime()`.
 
 **So the two are phase-locked, and the bump always lands first.** A bump sets
 `secframe = frame()` and `clockcount = 0` together, so both counters

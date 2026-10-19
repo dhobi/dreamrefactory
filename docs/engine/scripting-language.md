@@ -283,8 +283,9 @@ neither.
 **Which event a frame belongs to is carried by the frame**, not by the
 interpreter, because this port runs more than one chain at a time and the original
 never does. TI.EXE's main loop pops one event and runs it to completion; here the
-heartbeat overlaps a player's press deliberately — `serviceGameClock` dispatches
-`calctime` so that it does *not* count as a busy script, or a press posted while it
+heartbeat overlaps a player's press deliberately — the scheduler's `serviceIdle`
+runs the BOOTFILE `idle ()`, and with it `calctime`, so that it does *not* count
+as a busy script, or a press posted while it
 settled would sit in the queue — so a press drained on the same tick begins while
 `calctime` is still suspended at an `await`. A single interpreter-wide "current
 event" field would give the press `calctime`'s name, every `exitcode` in its chain

@@ -91,7 +91,7 @@ export async function newPlaythrough(): Promise<Playthrough> {
   // wrapper `async` took THIS host from 30/30 to 10 failures — `async f { return
   // p }` settles one microtask later than `p`, and the engine is built on exactly
   // that margin (`track()` joins `inflight` synchronously while its promise
-  // settles a tick later, which is why `serviceGameClock` must run last; see
+  // settles a tick later, which is why `Scheduler.serviceIdle` must run last; see
   // scheduler.ts). The probe was changing the thing it measured. A hook on the
   // one builtin that writes the value adds nothing to any dispatch.
   //

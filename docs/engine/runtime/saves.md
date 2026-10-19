@@ -583,7 +583,7 @@ Four differences:
 The store is the play page's, with a database of its own (`dust-saves`) and its
 own extension: see `SaveKind` in
 [`save-store.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/save-store.ts),
-and `dust-saves.ts` for the seeding of the saves that ship beside the disc —
+and [`saves.ts`](https://github.com/dhobi/dreamrefactory/blob/master/dust/src/saves.ts) for the seeding of the saves that ship beside the disc —
 one of which is also the base a fresh playthrough's first save is patched into.
 
 ## The saved-games UI

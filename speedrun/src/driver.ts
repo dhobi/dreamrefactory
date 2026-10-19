@@ -524,11 +524,14 @@ export const SCREEN = `(window.dbg && (window.dbg.viewer || (window.dbg.host && 
  * precisely "locked, with none of the three owners" — which in practice means a
  * fade is ramping and nothing else is.
  *
- * That gap is real and documented in the engine (the long NOTE on `pressNav` in
- * engine/src/web/viewer.ts): a press made while a fade ramps is DISCARDED, no handler runs,
- * nothing is logged. It cost the browser suite a 120 s timeout at ENGINE.SET's
- * View120 once. A speedrun presses earlier than anything else ever has, so it
- * meets that gap constantly and this gate is not optional.
+ * That gap is real and documented in the engine (the NOTE on `pressNav` in
+ * engine/src/web/viewer.ts): a press made while a fade ramps used to be DISCARDED,
+ * no handler run, nothing logged — it cost the browser suite a 120 s timeout at
+ * ENGINE.SET's View120 once. It is QUEUED now (`ScreenDirector.keyDown`) and taken
+ * when the fade is over, so the press is no longer lost, but it lands after the
+ * fade rather than when it was sent. A speedrun presses earlier than anything
+ * else ever has, so it meets that gap constantly and this gate keeps the press
+ * where the sheet put it.
  *
  * `movingCamera` is private in TypeScript and a plain getter at runtime. This is
  * evaluated rather than compiled, so it reads it directly — deliberately, because

@@ -1,7 +1,7 @@
 /**
  * Take a piece of the built room back out to Blender, split into its parts.
  *
- *   npx tsx taoot/tools/bedsitdump.ts <out-dir>
+ *   npx tsx taoot/bedsit/tools/bedsitdump.ts <out-dir>
  *
  * The counterpane came IN this way — modelled elsewhere, baked, imported — but
  * everything else on the bed is drawn by `bed()` out of lathes, tubes and boxes,
@@ -22,7 +22,7 @@ import { BED, FURNITURE_PAINT as P, furnish } from "../src/bedsit-furniture";
 
 const U = 1549.4;
 const OUT = process.argv[2];
-if (!OUT) { console.error("usage: npx tsx taoot/tools/bedsitdump.ts <out-dir>"); process.exit(2); }
+if (!OUT) { console.error("usage: npx tsx taoot/bedsit/tools/bedsitdump.ts <out-dir>"); process.exit(2); }
 mkdirSync(OUT, { recursive: true });
 
 /** the bed's corner, with room for the counterpane hanging off the near side */

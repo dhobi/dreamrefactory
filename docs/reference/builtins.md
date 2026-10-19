@@ -249,7 +249,7 @@ knob, the gramophone crank) are built from.
 `trackbut` is deliberately **not** here. It is a BOOTFILE library code the game
 ships (container 0002), built out of the primitives above — `propxy`,
 `propvisible`, `stilldown`, `forceupdate`, `mouse`, `pointinbutton` — and the
-engine resolves it through `Interp.fallbackScripts` like any other library call.
+engine resolves it through `Interpreter.fallbackScripts` like any other library call.
 It answers `pointinbutton(currentflat(), target, mouse())`, so what a push-button
 tests is the flat's named click REGION, not the bevel prop it lights.
 

@@ -1242,6 +1242,14 @@ export class Scheduler {
    * the flat's own idle.
    *
    * A session with no BOOTFILE idle (a bare test session) runs the pass alone.
+   *
+   * UNTRACKED — not in the session's `inflight`, so it never reads as
+   * `scriptBusy`. In the original the idle cannot overlap the event dispatch
+   * further down the same loop; here it is an async dispatch, and `scriptBusy`
+   * is what the input queue waits on, so tracking it would make the clock eat
+   * keys and clicks: measured with the heartbeat in `inflight` on both hosts, a
+   * press made during a walk went `posted=3 taken=0 dropped=2`. What keeps a
+   * press from starting inside the idle is {@link idleRunning}.
    */
   serviceIdle(): void {
     if (this.idling || this.session.scriptBusy || this.session.idleHeld()) return;

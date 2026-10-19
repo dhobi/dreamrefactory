@@ -408,7 +408,7 @@ So the grid is found by **agreement** instead: whatever address a session ran
 at, all of its nodes carry the same one, and the most common word at `+20`
 across the container wins by about a hundred to one. Nodes whose names are
 12–15 characters clobber their own vtable (see below) and are left out of the
-vote. `nodeVtable` in `engine/src/df/savegame.ts`; the fixture and the regression are
+vote. `nodeVtable` in `engine/src/df/save-vars.ts`; the fixture and the regression are
 `taoot/tests/data/M4P0FCL.ti` and `taoot/tests/auto/save-original.ts`, the one save test
 that needs no copy of the rip.
 

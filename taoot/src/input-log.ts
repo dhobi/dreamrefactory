@@ -33,8 +33,8 @@
  * A press the engine refused is the single most useful line here, because it is
  * the shape of the report this came from: ESC skipping something it should not
  * have ([#171](https://github.com/dhobi/dreamrefactory/issues/171)), a forward
- * eaten in the gap between `movingCamera` and `inputLocked` where a press is
- * silently discarded (`SetViewer.pressNav`). "The key I pressed is not in the
+ * eaten in the gap between `movingCamera` and `inputLocked` where a press used
+ * to be silently discarded (`SetViewer.pressNav`). "The key I pressed is not in the
  * log at all" is indistinguishable from "the log is broken", so a gesture that
  * achieved nothing says so in as many words.
  *

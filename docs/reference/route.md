@@ -3,7 +3,7 @@
 *Prerequisite: [Tests](tests.md), and
 [How we know it's right](../taoot/verification.md) for what the playthrough is for.*
 
-This page is the route itself: what the twenty-seven segments cross, how much of
+This page is the route itself: what the segments cross, how much of
 it to run while you work, what driving each of the game's minigames costs, and
 the conventions a new segment will trip on. The suites that run it are
 **[the test reference](tests.md)**.
@@ -16,7 +16,7 @@ test:machine` headless, and the browser gate **91 beats over 27
 segments with no divergence at all** — every one of them carried, zero checkpoint
 loads, 23.7 min, ending on `credits.mov`.
 
-## The twenty-seven segments
+## The segments
 
 Each row is one test in
 [`playthrough.ts`](https://github.com/dhobi/dreamrefactory/blob/master/taoot/tests/playthrough/playthrough.ts),
@@ -92,7 +92,7 @@ twenty-four minutes.
 
 ```
 npm test                        # the gate
-npm run test:machine        # the 27 segments and the property tests — writes out/checkpoints/*.ti
+npm run test:machine        # the segments and the property tests — writes out/checkpoints/*.ti
 TAOOT_RECORD=1 npx vitest run --config taoot/vitest.machine.config.ts   # re-record goldens
 TAOOT_RECHECKPOINT=1 …          # …and rebuild the .ti checkpoints (after a save change)
 npm run watch:m2p0 -w taoot              # watch segment 7 in a real window

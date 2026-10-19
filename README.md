@@ -103,7 +103,7 @@ Each top-level directory is a thing rather than a kind of file.
     stage layer, save and load
   - `src/web/` — how a session is presented in a browser: the host, the viewer,
     the screen, the save store
-- **`taoot/`** — Titanic: its four pages, six editions and the demo, its own
+- **`taoot/`** — Titanic: its pages, six editions and the demo, its own
   tools, and the suites that play it through to the end
 - **`dust/`** — Dust: three pages (the game, the collection, the speedrun), its
   own disc, its own tools
@@ -128,6 +128,10 @@ Each top-level directory is a thing rather than a kind of file.
 - **`chrome/`** — what every page shares, the front door, the editors and the
   games alike: the top bar and its menus, the version, the registry of games,
   editions, the bug report, and the words in every language
+- **`speedrun/`** — the speedrun workbench any game can carry: the sheet
+  language and its parser, the run loop, the drivers that play a sheet in the
+  page or headless, and the panel. A game brings its own verbs and a few facts
+  about its page
 - **`site/`** — the project's own web presence: the front door and the format
   editors
 - **`tools/`** — tools that work on any DreamFactory rip because they take one as
@@ -140,14 +144,15 @@ Dependencies point one way only, and there is a test that says so
 
     engine        ←  nothing
     chrome        ←  engine
+    speedrun      ←  engine
     site          ←  engine, chrome
-    taoot         ←  engine, chrome
-    dust          ←  engine, chrome
-    timelapse     ←  engine, chrome
-    skullcracker  ←  engine, chrome
-    redjack       ←  engine, chrome
-    lunicus       ←  engine, chrome
-    jumpraven     ←  engine, chrome
+    taoot         ←  engine, chrome, speedrun
+    dust          ←  engine, chrome, speedrun
+    timelapse     ←  engine, chrome, speedrun
+    skullcracker  ←  engine, chrome, speedrun
+    redjack       ←  engine, chrome, speedrun
+    lunicus       ←  engine, chrome, speedrun
+    jumpraven     ←  engine, chrome, speedrun
 
 Nothing shared imports a game. The palettes — Titanic's abyss-and-brass,
 Dust's dusk-and-ember, Timelapse's glass-and-chrome, Skull Cracker's

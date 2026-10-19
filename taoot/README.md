@@ -157,7 +157,7 @@ npm run test:browser:demo -w taoot # the 1996 demo's menu — the edition that o
 Three categories, because they have different budgets. The **gate** jumps to a
 state and probes it, and runs on every commit. A **playthrough** plays the game
 from the boot — the menu, the objects, the rooms, the conversations — and
-asserts a recorded state trace; it runs to the ending in 27 segments, carried as
+asserts a recorded state trace; it runs to the ending in segments, carried as
 one continuous session, and covers minutes of game time per segment.
 The **browser** suites replay the same routes through real mouse and keyboard
 events against the same golden traces, and cost what the game costs in real
@@ -175,7 +175,7 @@ coordinates — `goto("gym")` works out the nine rooms and the gestures itself
 are in [docs/reference/tests.md](../docs/reference/tests.md), and what the
 playthrough is *for* — with the bugs it has caught that nothing else would — is
 in [docs/taoot/verification.md](../docs/taoot/verification.md). The route itself — what its
-twenty-seven segments cross, how much of it to run while you work, and the
+segments cross, how much of it to run while you work, and the
 conventions a new one will trip on — is in
 [docs/reference/route.md](../docs/reference/route.md).
 
@@ -239,11 +239,12 @@ have to explain. A speedrun compares nothing, so each action waits on the
 minimum precondition instead (`wait=none|taken|ready|quiet`), and clicks are
 buffered against the engine's own event queue rather than serialised.
 
-Second: **keys are not buffered across a fade.** `SetViewer.keyDown` queues on
-`movingCamera` but refuses on `inputLocked`, and the two differ by exactly
-`session.fading` — a press in that gap is silently discarded (the note on
-`pressNav` in `engine/src/web/viewer.ts`). A run that presses as early as possible
-meets that gap constantly, so every key is gated, and `left`/`right`/`up` confirm
+Second: **a key pressed during a fade waits for it.** `ScreenDirector.keyDown`
+queues a press made while the camera moves, a fade ramps or the BOOTFILE idle
+runs, and takes it after, as TI.EXE's main loop does (the note in
+`engine/src/web/screen-director.ts`); it once refused one in the fade's gap, and
+the press was silently discarded. A run that presses as early as possible meets
+that gap constantly, so every key is still gated, and `left`/`right`/`up` confirm
 the standpoint changed and press again if it did not.
 
 The run is **human-legal**: every gesture is a real Playwright mouse or keyboard
@@ -294,11 +295,13 @@ standing still cannot be mistaken for a hung page.
 
 **The workbench.** `/speedrun/` is an unlisted page — nothing links to it, it is
 not in the top bar, it carries `noindex` — that puts an editor under the game:
-write a sheet, press Play, watch it play, read which line broke. It is a copy of
-the play page rather than the play page reused, because the two are meant to
-diverge; the workbench has no need of the memory or picture options, and it skips
-the Nightdive film (`<meta name="skip-intro">`) because it is reloaded to get a
-clean game far more often than it is opened to play one.
+write a sheet, press Play, watch it play, read which line broke. It is the play
+page itself, rearranged when it is served and built (`speedrun/vite.ts`, from the
+few facts in `taoot/speedrun/workbench.ts`) rather than a second copy that would
+drift from it; it drops what it has no need of — the settings strip with the
+memory and picture options, the edition picker — and it skips the Nightdive film
+(`<meta name="skip-intro">`) because it is reloaded to get a clean game far more
+often than it is opened to play one.
 
 It shares the parser, the action table and the run loop with the CLI — all three
 are the speedrun workspace's (`speedrun/src/`), with this ship's own verbs

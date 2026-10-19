@@ -176,8 +176,11 @@ on a promise left unawaited on purpose, `| 0` as the original's integer
 conversion, the complexity of a function that ports one routine of an original
 executable, Skull Cracker's exported game state, `Math.hypot` (which rounds
 differently from the original's square root), type aliases that name a
-meaning, and, in single files, a parameter list copied from the original and
-`.dataset` where the suites' DOM misreads it. Nothing is marked in the
+meaning, and, in single files, the bedsit geometry builder's corner
+parameters, `.dataset` where the suites' DOM misreads it, top-level await in
+the games' boot modules, the speedrun panel's contrast over a backdrop Sonar
+cannot see, `tabindex` on the collection's box and booklet, and the two
+`!important` rules that must beat every other. Nothing is marked in the
 code (`NOSONAR`) or accepted in Sonar's UI: a finding is fixed, or its rule is
 switched off there, where a pull request can see the decision.
 

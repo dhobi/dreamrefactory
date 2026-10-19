@@ -74,8 +74,9 @@ export const CORE_ACTIONS: ActionTable = {
    * they are not the same for all three:
    *
    *   - the space waits `ready`, the fade gate. A door opening is exactly the
-   *     ramp in which the NEXT key press is silently discarded (the note on
-   *     `pressNav`), so walking without that gate is how an ArrowUp goes missing.
+   *     ramp in which the NEXT key press waits in the queue until the fade is
+   *     over (the note on `pressNav`; it used to be dropped there), so walking
+   *     without that gate is how an ArrowUp lands later than the line says.
    *   - the walk waits for nothing, because {@link arrow} already confirms it by
    *     the standpoint changing and presses again if it did not. A settle here
    *     would be paid twice over, once in the middle and once at the end.

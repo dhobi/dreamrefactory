@@ -85,7 +85,7 @@ So it will not come inside 150 of you on its own, it only dives once you have
 marked it, and the dive is what turns the water on. The `-9` a flare hits it
 with is driven: it sends the boss into state 9, which drags it onto a sprinkler
 ([What is still read and not done](#what-is-still-read-and-not-done)). The `dy`
-impulses its scripts carry are not: `walk.ts` spends a script's `dy` as an
+impulses its scripts carry are not: `world/enemies.ts` spends a script's `dy` as an
 impulse only on a class that does not float, and this one is weightless.
 
 ## Two of them kill you without a blow
@@ -873,7 +873,7 @@ against a walk on 1910…1915 that carries none. Only the attacks ever leave the
 floor, which is what the `dy` field is for.
 
 `src/fights.ts` is the table — the bands, the walk and the attacks for the
-twenty-six classes that have them — and `stepFight` in `src/page/walk.ts` is the
+twenty-six classes that have them — and `stepFight` in `src/world/enemies.ts` is the
 machine.
 
 ### It takes nothing
@@ -942,7 +942,7 @@ hundred or a zero depending on how fast it is going (`0x4556d3`).
 
 **All thirty classes in `FOES` have a machine of their own in `src/brains/`**,
 so the shared "innermost band swings" reading governs no enemy in the game. An
-animation's `dy` is applied — `walk.ts` spends it as an IMPULSE into the thing's
+animation's `dy` is applied — `world/enemies.ts` spends it as an IMPULSE into the thing's
 velocity on the frame it appears, which is what `0x42f8b0` does with it, and
 `tests/machine/fights.ts` watches `initwerea` leap.
 
@@ -1108,7 +1108,7 @@ carries both as its `onCode`, and `CastKit.bang` carries the sound and the flash
 for every burst of the shot, whatever set it off, and its `shakes` the three bands.
 `0x65` is the one strength `0x430443` leaves on a hitter after a hit, so a burst
 goes on striking for as long as its cels carry a box (7000..7002), and
-`chainCasts` in `walk.ts` runs it against the other casts. `0x4303b3` passes over
+`chainCasts` in `world/casts.ts` runs it against the other casts. `0x4303b3` passes over
 a victim whose cel has no body box, and the burst cels 7000..7005 have none, so
 a shot that is already bursting is struck by nothing. A shot set off mid-air
 bursts where it is: `0x45d090` leaves its velocity alone, and the page stops it. The mailbox's `0x44fe89` arm is

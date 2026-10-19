@@ -528,8 +528,8 @@ const COMPILERS: Record<string, (c: Cond) => string> = {
   },
   /**
    * No fade is ramping. Worth having as its own condition because it is
-   * exactly the gap in which a key press is DROPPED (viewer.ts's note on
-   * `pressNav`), so "the room has finished arriving" is a different claim from
+   * exactly the gap in which a key press waits in the queue rather than being
+   * taken (viewer.ts's note on `pressNav`; it used to be dropped), so "the room has finished arriving" is a different claim from
    * "a movie is not playing" and a route needs to be able to make it.
    */
   faded: (c) => {
@@ -1480,12 +1480,11 @@ export const WORLD = `(() => {
  * turn in the London flat: the arrow went in, the report said 0.0s, and the run
  * was still standing in View14 three actions later.
  *
- * Underneath that is the drop this whole harness is careful about: a press made
- * while a fade is ramping — and nothing else is — is silently discarded
- * (`SetViewer.pressNav`'s note; the queue asks `movingCamera` and the refusal
- * asks `inputLocked`, and the two differ by exactly `session.fading`). A
- * speedrun presses earlier than anything else ever has, so it meets that gap
- * constantly.
+ * Underneath that is the gap this whole harness is careful about: a press made
+ * while a fade is ramping is not taken until the fade is over
+ * (`SetViewer.pressNav`'s note; it was silently discarded until the fade joined
+ * `movingCamera` in `ScreenDirector.keyDown`'s queue). A speedrun presses
+ * earlier than anything else ever has, so it meets that gap constantly.
  *
  * So: press, then wait for the {@link WORLD} to change, and press again if it
  * does not — which is what a player who saw nothing happen does. `confirm: no`
@@ -1559,8 +1558,8 @@ export const arrow = (name: string): ActionFn => async (c) => {
    * was still arriving.
    *
    * Waiting costs nothing that was not already owed: a press made while a fade
-   * ramps is dropped anyway (the note on `pressNav`), so the earliest a press can
-   * work is the moment this goes true.
+   * ramps waits in the queue until it is over (the note on `pressNav`), so the
+   * earliest a press can work is the moment this goes true.
    */
   let before = "?";
   for (let press = 1; press <= 3; press++) {

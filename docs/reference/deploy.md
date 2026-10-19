@@ -60,7 +60,7 @@ from the Actions tab, where a `workflow_dispatch` input picks the target.
 ### Adding a game to the lane
 
 Four lines in `deploy.yml` and nothing else, because everything after the target
-is resolved is driven by the name: `npm run build:<target>` writes
+is resolved is driven by the name: `npm run build -w <target>` writes
 `dist/<target>`, and that directory is mirrored to `<target>/`. The four are the
 `push.tags` trigger, the `workflow_dispatch` choices, the concurrency group and
 the shell that turns a tag into a target — and

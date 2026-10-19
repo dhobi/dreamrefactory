@@ -1,7 +1,7 @@
 /**
  * The chimney's brickwork, drawn by the same hand as the wall's.
  *
- *   npx tsx taoot/tools/bedsitbrick.ts
+ *   npx tsx taoot/bedsit/tools/bedsitbrick.ts
  *
  * Where the plaster has come away the walls show London stocks in stretcher
  * bond, and `bedsit-paint.ts` draws them. The chimney behind the fire wants the

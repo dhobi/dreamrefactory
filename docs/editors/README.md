@@ -54,8 +54,10 @@ and read the same way. Its mazes have a page of their own, the
 | [Sett editor](setts.md) | `/editors/setts.html` | [SETT](../engine/formats/sett.md) — RedJack's rooms: spheres, roads, scenes; quads & stars editable | [`site/editors/sett-editor.ts`](https://github.com/dhobi/dreamrefactory/blob/master/site/editors/sett-editor.ts) |
 
 All of it lives in `site/editors/`: one HTML page and one module per editor,
-the `editor.css` all of them share, and an `index.html` that lists them — the
-page `/editors/` itself serves. Each page is its own Vite entry point in
+the `editor.css` all of them share, the modules they share (`editor-kit.ts`, the
+furniture every page has — open, list, draw, import, export, boot — and
+`sources.ts`, which rips there are to open from), and an `index.html` that lists
+them — the page `/editors/` itself serves. Each page is its own Vite entry point in
 `site/vite.config.ts`, beside the front door.
 
 They are the **site's** rather than a game's: an editor opens a file out of
@@ -66,8 +68,11 @@ to call them, which code page each one's text is in — is
 literals are shown in (`scriptToText` with the tree's encoding), so a Japanese
 puppet's answers read as Japanese rather than one byte per character.
 
-Nothing in there imports `engine/src/runtime/`; the only shared code is
-`engine/src/df/` and `engine/src/web/screen.ts`. That is the line that keeps an
+The shared code they import is `engine/src/df/`, the manifest reader in
+`engine/src/web/rip-files.ts`, and from `engine/src/runtime/` only what draws or
+paces a file the way the game does: a DreamFactory 5 room's camera and sphere
+(`maze.ts`, `maze-render.ts`) and the engine's frame step (`clock.ts`). Nothing
+from the interpreter, the session or the host. That is the line that keeps an
 editor a file tool rather than half a game.
 
 ## What they have in common

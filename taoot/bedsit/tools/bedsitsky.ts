@@ -1,7 +1,7 @@
 /**
  * The street photograph: its painted smoke taken out, and its chimneys found.
  *
- *   npx tsx taoot/tools/bedsitsky.ts [out.jpg]
+ *   npx tsx taoot/bedsit/tools/bedsitsky.ts [out.jpg]
  *
  * The picture the bedsit's windows look out on (`bedsit-street-original.jpg`,
  * beside this file) has plumes painted into its sky, off the tall stacks on the

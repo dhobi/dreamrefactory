@@ -1,7 +1,7 @@
 /**
  * The rug on the bedsit's floor, out of a photograph of one.
  *
- *   npx tsx taoot/tools/bedsitrug.ts [out.jpg]
+ *   npx tsx taoot/bedsit/tools/bedsitrug.ts [out.jpg]
  *
  * `bedsit-rug-original.avif` is a shop's photograph of a rug — a distressed
  * blue-and-rust Persian, laid flat and shot square on a white ground. Three

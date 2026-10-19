@@ -159,9 +159,9 @@ export class Frame {
      *
      * On the frame rather than on the interpreter, because the interpreter runs
      * more than one chain at a time and a single field cannot say which. The
-     * heartbeat is the one that overlaps by design — `serviceGameClock`
-     * dispatches `calctime` through `trackIdle` precisely so it does NOT read as
-     * a busy player script, so a press drained on the same tick begins while
+     * heartbeat is the one that overlaps by design — `Scheduler.serviceIdle`
+     * runs the BOOTFILE `idle ()`, and its `calctime`, untracked precisely so it
+     * does NOT read as a busy player script, so a press drained on the same tick begins while
      * calctime is still suspended at an await. A shared field set only at depth 0
      * would never be set for that press at all: it would still say "calctime",
      * every `exitcode` in the press's chain would compare against the wrong name
