@@ -863,7 +863,7 @@ export class GameSession {
   /** wait until all in-flight script dispatches finish (tests, shutdown) */
   async settle(maxRounds = 1000): Promise<void> {
     for (let i = 0; i < maxRounds && this.inflight.size; i++) {
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled(this.inflight);
     }
   }
 
