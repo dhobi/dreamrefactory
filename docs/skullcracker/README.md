@@ -301,7 +301,7 @@ question of, and all three are answered:
   answers `1` for `exitfarm`, `2` for `exitroom`, **`3` for `monkeybar`**, `4`
   for `ladder` and `5` for `initswitch`. Answering 3 installs `0x472048`, whose
   KIND is the state: hanging is state 8 and `0x42b410` is its handler. One
-  record ships, VAT's, and `MONKEYBAR` in `src/page/walk.ts` has the rest.
+  record ships, VAT's, and `MONKEYBAR` in `src/world/motion.ts` has the rest.
 
 ### What a probe is, and the word that was hiding in the constructor
 
@@ -430,7 +430,7 @@ a level with no class anywhere.
 - `skullcracker/tests/machine/harness.ts` — the game stood up headless on the rip,
   stepped a frame at a time
 - `skullcracker/tests/*.ts` — the page's pieces on their own (HUD, files, film,
-  pad, barrels, brains), in the repository's gate
+  pad, barrels, brains) and both pages run in node, in the repository's gate
 - `skullcracker/tools/runsuites.mts` — the page suites, one process, one Chromium:
   `npm run test:browser:all -w skullcracker`
 - `skullcracker/tests/browser/menu.ts` — the menu in a real browser

@@ -184,13 +184,13 @@ export const MATERIALS: Readonly<Record<string, { scene?: string; deg?: number; 
    * the rip has no view of the inside of a flue, because in the game there is
    * no inside of a flue. What it does have is the same brick everywhere the
    * plaster has come off a wall, and `bedsit-paint.ts` draws that; the tile is
-   * that drawing, baked out by `taoot/tools/bedsitbrick.ts` at the fireplace
+   * that drawing, baked out by `taoot/bedsit/tools/bedsitbrick.ts` at the fireplace
    * wall's own seed, so these are literally that wall's bricks. 3,400 units is
    * where the bond comes back round — ten bricks by thirty-four courses — which
    * is more than twice the recess, so it never repeats where it is seen.
    */
   /**
-   * The chimneypiece's mahogany, drawn by `taoot/tools/bedsitwood.ts`.
+   * The chimneypiece's mahogany, drawn by `taoot/bedsit/tools/bedsitwood.ts`.
    *
    * `stain` is a 45x65 patch of the door, and at 900 units to the repeat that is
    * 20 units to a frame pixel. On a door across the room it is right; on a
@@ -2558,7 +2558,7 @@ function futilityChart(S: Settee): Chart {
  * standpoint whose eye is far enough back that the whole two-seater falls
  * inside the frame, and `Scene3/View25` for the chair, which is the same
  * problem solved by the same means — and baked into a module beside this one by
- * `taoot/tools/bedsitglb.ts`.
+ * `taoot/bedsit/tools/bedsitglb.ts`.
  *
  * They arrived with nothing but positions: no normals, no texture coordinates,
  * no material. That suits the room. `Builder.mesh` averages the normals and

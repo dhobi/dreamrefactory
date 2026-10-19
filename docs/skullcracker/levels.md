@@ -43,9 +43,10 @@ level two finishable. Its constructor is a list of denials — divisor 10 where 
 player's is 12, `0x42f850(obj, 0)` for gravity, `obj+0x30 = 0` for never on the
 ground — so it is a rect moved by its own state machine and by nothing else. The
 five states are the five tags of script `0x477db0`: idle on cel 1160, a beat of
-wind-up, and then travel at `0x28` over that divisor of ten, which is **four
-pixels an engine frame, sixty a second**. It owns its landing the way a plank
-owns its floor, and the level authored one landing per lift: applying `0x42fb70`
+wind-up, and then travel at `0x28` over that divisor of ten — an impulse of four
+pixels an engine frame, not a speed: down is clamped to 6 a frame and up to 13,
+so a car runs at **90 pixels a second down and 195 up**. It owns its landing
+the way a plank owns its floor, and the level authored one landing per lift: applying `0x42fb70`
 at the SHAFT'S BOTTOM — not at the record's stored point, which is the shaft's
 middle and is inside nothing — claims #53, #54, #55, #79 and #103, and those five
 are the only platforms in CITY between 120 and 135 pixels wide.
@@ -54,12 +55,12 @@ CITY has no `ladder` record, its goal is at y1802, and the walk east tops out
 around y3590. Without the cars **45 of its 73 platforms are reachable and the
 goal is not one of them**; with them, all 73 are.
 
-One thing in it is not read. `obj+0x46` gates every state and nothing
-disassembled so far writes it, so what calls a car is a guess — but a guess the
-code constrains: tags 2 and 4 end by installing tag 0, and tag 0 departs again
-the instant the gate is set, so a car held by a standing rider would yo-yo for
-ever. The gate is an EDGE. The page models it as boarding, latched, and says so
-in `ELEVATOR.trigger`.
+Nothing calls a car. `obj+0x46` gates every state, and the one routine that
+writes it is the animation stepper `0x45d0f0` (`0x45d151` and `0x45d15f`): it
+means *my script's last frame completed this frame*. So tag 0's eighteen frames
+of cel 1160 run out and the car goes, whether or not anyone is standing on it,
+and it pauses another eighteen at the far end. The lift shuttles, and the rider
+catches it — see `ELEVATOR` in `src/props.ts`.
 
 A **crow** is the first flying thing here, and its constructor says so: divisor 1,
 `obj+0x2e = 0`, gravity 0. It sleeps on cels 1854..1859 with its own sleep sound

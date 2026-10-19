@@ -1,7 +1,7 @@
 /**
  * The fireplace's slips, drawn from their measurements.
  *
- *   npx tsx taoot/tools/bedsittiles.ts
+ *   npx tsx taoot/bedsit/tools/bedsittiles.ts
  *
  * Every other material in this room is a patch of a frame, and this one cannot
  * be. The slips are plain grey plates with near-black joints between them, and

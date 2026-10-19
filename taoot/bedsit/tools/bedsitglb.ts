@@ -1,12 +1,12 @@
 /**
  * Baking an imported mesh into the room.
  *
- *   npx tsx taoot/tools/bedsitglb.ts <in.glb> <name> <length> <depth> <height>
+ *   npx tsx taoot/bedsit/tools/bedsitglb.ts <in.glb> <name> <length> <depth> <height>
  *                                     [--detach <ranks> <name>]... [--drop <ranks>] [--flip]
  *                                     [--band <name> <z0> <z1>]... [--part <material> <name>]...
  *                                     [--turn <degrees>] [--up z]
  *                                     [--exact <units per metre>] [--simplify <triangles>]
- *   npx tsx taoot/tools/bedsitglb.ts <in.glb> x 1 1 1 --list
+ *   npx tsx taoot/bedsit/tools/bedsitglb.ts <in.glb> x 1 1 1 --list
  *
  * The room's parts are built synchronously when the page's module loads, so an
  * imported mesh cannot be fetched: it has to be in the source. This reads a GLB
@@ -137,7 +137,7 @@ const upZ = upAt >= 0 && argv[upAt + 1] === "z";
 const firstFlag = argv.findIndex((a) => a.startsWith("--"));
 const [file, name, ...sizes] = (firstFlag < 0 ? argv : argv.slice(0, firstFlag));
 if (!file || !name || sizes.length !== 3 || detaches.some((d) => d.ranks.some((r) => !Number.isFinite(r)) || !d.name)) {
-  console.error("usage: npx tsx taoot/tools/bedsitglb.ts <in.glb> <name> <length> <depth> <height> [--detach <ranks> <name>]...");
+  console.error("usage: npx tsx taoot/bedsit/tools/bedsitglb.ts <in.glb> <name> <length> <depth> <height> [--detach <ranks> <name>]...");
   process.exit(2);
 }
 const [LEN, DEP, HT] = sizes.map(Number);

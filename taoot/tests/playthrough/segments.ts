@@ -3149,7 +3149,7 @@ export async function segment24(s: Story): Promise<void> {
  * set one deck further under water. So nothing a route does advances the phase,
  * and there are six of them, which is what the six `sink0..5.trk` themes are.
  *
- * **Which is why this segment is short.** `serviceGameClock` runs on both hosts
+ * **Which is why this segment is short.** The BOOTFILE `idle ()` runs on both hosts
  * — gated on `hasRealFrames` it would freeze the sinking in the host that writes
  * the goldens. Ungated, the two agree to the minute, because
  * `canadvance()` pins hrs/min at each threshold until `sinkmovie()` has played

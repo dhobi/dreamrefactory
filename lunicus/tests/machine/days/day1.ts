@@ -2,7 +2,7 @@
  * Day one's route: from the intro to the bed that ends the day, through
  * everything the station has on day one — both floors, their rooms, the
  * briefing, the lockers, the guard, and a talk with each of the crew. Day two
- * starts where it ends (`days/day2.ts`).
+ * starts where it ends (`day2.ts`).
  */
 import { LOWER, MSG, UPPER } from "../../../src/game/data";
 import { fail, ok, posesWith, type Headless } from "../harness";

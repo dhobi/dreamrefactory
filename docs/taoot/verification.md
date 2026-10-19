@@ -266,13 +266,13 @@ action frames** — six of the eleven points that arm the bomb — and `BEDSIT1`
 reads `actionframe(1)` only after `spotmovie` returns. Esc before those frames is
 a lower score, exactly as it would be for a player.
 
-The harness **skips lines the way a player does**. The original lets you click
-through speech, and the engine implements it — `PuppetCtrl.puppetSpeak` races
-each line against a click. Two gesture shapes defeat it: a skip that then waits
+The harness **skips lines the way a player does**. The original lets you Esc
+through speech, and the engine implements it — `PuppetController.puppetSpeak`
+races each line against the key. Two gesture shapes defeat it: a skip that then waits
 for the room to go quiet skips one line and sits through every remaining one, and
 a bevel click that waits for quiet waits for the *next* plaque, i.e. plays the
-whole reply. Both gestures return as soon as the click has been taken, and the
-settle treats "someone is talking to you" as a place to stop — so a route clicks
+whole reply. Both gestures return as soon as they have been taken, and the
+settle treats "someone is talking to you" as a place to stop — so a route skips
 through dialogue at the pace a player would.
 
 **Run the browser suite on its own.** It waits on real frames, so anything else
@@ -292,13 +292,15 @@ coming, and segment 3's inventory bag stuck in `lightopen`. Both are a
 `makeloop("prop", me, "doinven", 6)`, not from the click, and `bagidle()` is
 false meanwhile so clicking again is ignored by design.
 
-`serviceGameClock` dispatches BOOTFILE's `calctime` through `session.track`, which
+`serviceGameClock` dispatched BOOTFILE's `calctime` through `session.track`, which
 adds to `inflight` **synchronously** while the promise settles in a microtask. It
 ran BEFORE the service steps in the same task, so `fireDueLoops` saw
 `session.scriptBusy` true — because of the dispatch the scheduler itself had just
-started — and skipped firing. `CALCTIME_MS` and `ENGINE_STEP_MS` are both 50 ms,
-so the two are phase-locked. The fix is one reordering: wind the pocketwatch
-LAST, after the steps.
+started — and skipped firing. `CALCTIME_MS` and `ENGINE_STEP_MS` were both 50 ms,
+so the two were phase-locked. The fix was one reordering: wind the pocketwatch
+LAST, after the steps. The scheduler has since dropped a heartbeat of its own: it
+runs the BOOTFILE's `idle ()` (`Scheduler.serviceIdle`), so the order is the
+script's.
 
 Three points generalise:
 

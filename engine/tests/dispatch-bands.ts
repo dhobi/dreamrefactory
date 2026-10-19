@@ -8,7 +8,7 @@
  * through another (0x4258c8), each a pair of jump-table bands; past them both
  * answer `mov ax, 1` (0x43c797, 0x4258f7). DF.EXE's bands are shorter
  * (0x41ee68, 0x42a5b8): its statements stop at 12088 and its values at 20108.
- * DreamFactory 5 is not classic and is not asked.
+ * DreamFactory 5 is not `typed` and is not asked.
  */
 import { expect, test } from "vitest";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";

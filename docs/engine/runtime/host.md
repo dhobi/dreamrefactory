@@ -18,7 +18,8 @@ other half: the page, its DOM, and which disc it reads.
 | File | Role |
 |------|------|
 | [`host.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/host.ts) | `GameHost` — what it means to *run* the game: set activation, prefetch, cold boot, resuming a save |
-| [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — navigation state machine + renderer |
+| [`viewer.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/viewer.ts) | `SetViewer` — the navigation state machine over a parsed SET |
+| [`screen-director.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-director.ts) | `ScreenDirector` — who owns the screen and who gets a click: the compositor, the per-frame service and the input priority chain, with or without a room |
 | [`screen-presenter.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-presenter.ts) | `ScreenPresenter` — the one persistent framebuffer everything composites into, and the "is this picture already on the canvas?" check. Owned by the host, so it **outlives the viewers** |
 | [`screen-gamma.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/screen-gamma.ts) | the palette power curve `TI.EXE` applies before anything reaches the screen |
 | [`ring-cache.ts`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/ring-cache.ts) | the LRU of decoded turn/walk rings the viewer draws from |
@@ -60,7 +61,11 @@ belongs below the line.
 It is also what lets one host run two games. `HostFiles` is the whole contract
 for "where is the data", so Dust's small `files.ts` and Titanic's
 six-edition `FileStore` are interchangeable to everything above them — a second
-game needs a shell rather than a second engine.
+game needs a shell rather than a second engine. Dust's, Timelapse's and
+RedJack's stores are each a
+[`RipFiles`](https://github.com/dhobi/dreamrefactory/blob/master/engine/src/web/rip-files.ts):
+the basename index, the one fetch per name and the progress report are the
+engine's, and only which copy of a repeated name wins is the game's.
 
 ## One rule the host keeps breaking
 

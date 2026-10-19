@@ -73,7 +73,7 @@ const REPAINT_CHECK = !!process.env.REPAINT_CHECK && process.env.REPAINT_CHECK !
  *
  * The default is every segment, endgame included: a default that stops short
  * reports "PASSED" without replaying the fight or the smokestack. The endgame
- * needs the game clock on both hosts (`serviceGameClock` not gated on
+ * needs the game clock on both hosts (`Scheduler.serviceIdle` not gated on
  * `hasRealFrames`, or headless the sinking never starts) — the two then agree
  * to the minute, 13:15 in each — and it needs the route to wait for the game:
  * for `sinkmovie()` to have its chance on a crowded deck before a lifeboat is
@@ -189,7 +189,7 @@ const BEDSIT_OBJECTS = ["memory", "obit", "paper", "cabinet", "cards", "poster",
  * Game-clock globals, excluded from the comparison.
  *
  * Not flakiness — a real difference in what the two hosts do, and one that
- * survives `serviceGameClock` running on both hosts: the clock deliberately
+ * survives the BOOTFILE `idle ()` running on both hosts: the clock deliberately
  * discards any time that passes
  * while a script is busy (BOOTFILE's `idle()` only ran between events, so it
  * cannot tick through a movie or a walk). What is left is IDLE time — and a

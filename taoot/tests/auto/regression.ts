@@ -10563,8 +10563,8 @@ test("an interrupted route resumes where it was left (#230)", async () => {
 // press (see Interpreter.eventConsumed). The port answered "which event" from a
 // single interpreter-wide field, set by `runHandler` when its depth counter read
 // zero. That counter is shared, and the port runs more than one chain at a time:
-// `serviceGameClock` dispatches `calctime` through `trackIdle` PRECISELY so the
-// heartbeat does not read as a busy player script, so a press drained on the same
+// `Scheduler.serviceIdle` runs the BOOTFILE `idle ()`, and its `calctime`,
+// untracked PRECISELY so the heartbeat does not read as a busy player script, so a press drained on the same
 // tick begins while calctime is still suspended at an await, sees depth > 0, and
 // never names its own event. Every `exitcode` in that chain then compared itself
 // against "calctime", quietly declined to consume, and the chain ran on into the

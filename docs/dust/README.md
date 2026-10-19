@@ -84,7 +84,7 @@ player on a clock, the `.rtd` round trip, every set read without a game tick
 (`sets.ts`), and the play page itself run in node (`page.ts`) — and the ones
 that open the disc **skip** rather than fail without a rip, which is why the
 CI runner treats Dust's disc as optional ([Continuous
-integration](../reference/ci.md)). The [test reference](../reference/tests.md#dusts-suites--dusttests)
+integration](../reference/ci.md)). The [test reference](../reference/tests.md#dust-s-suites-—-dust-tests)
 lists them all. Its tools are
 `dust/tools/`: `dustsets.ts`, the sweep the v1 SET reader was built against,
 `rtdthread.ts` for [the golden thread](thread.md), `mkdustlogo.ts` for the title
@@ -92,7 +92,7 @@ card, and the two that write run sheets below.
 
 ## The speedrun
 
-Dust has Titanic's speedrun workbench, off the same engine modules
+Dust has Titanic's speedrun workbench, off the same `speedrun/` modules
 ([the speedrun](../reference/tests.md#the-speedrun)), at `/speedrun/`. Its own
 verbs are in `dust/src/speedrun/actions.ts`, each earned by the route: `goto` a
 grid cell (the shape the whole map and the thread's ladder are written in),

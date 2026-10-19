@@ -257,8 +257,9 @@ commands](reference/builtins.md)**, **[tools](reference/tools.md)**,
 ### How the repository is arranged
 
 One npm workspace per package, and the split these docs follow: **`engine/`**
-knows about no particular game, **`site/`** is the shared web presence and the
-format editors, and every other package is a game.
+knows about no particular game, **`chrome/`** is what every page shares,
+**`speedrun/`** is the speedrun workbench any game can carry, **`site/`** is the
+shared web presence and the format editors, and every other package is a game.
 Dependencies point one way only and there is a test that says so. The map is
 **[Engine architecture](engine/architecture.md)**.
 

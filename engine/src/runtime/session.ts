@@ -825,22 +825,6 @@ export class GameSession {
 
   /** scripts currently executing/suspended (delay) — input waits on these */
   private readonly inflight = new Set<Promise<unknown>>();
-  /**
-   * The idle heartbeat's own dispatches — awaited by {@link settle} but NOT by
-   * {@link scriptBusy}, because they are not scripts the player started.
-   *
-   * A boot library's `idle()` calls its clock handler (TAOOT: `calctime()`)
-   * straight through, synchronously, once per main-loop pass: in the original it
-   * cannot possibly overlap the event
-   * dispatch further down the same handler. Here it is an async dispatch, so
-   * putting it in `inflight` would make the engine look busy for the microtask it
-   * takes to settle — and `scriptBusy` is what the input queue waits on. The
-   * clock would then eat keys and clicks: measured with the heartbeat in
-   * `inflight` on both hosts, a press made during a walk went `posted=3 taken=0
-   * dropped=2`. Separating the two sets is what lets the clock tick without
-   * the player's input paying for it.
-   */
-  private readonly idleInflight = new Set<Promise<unknown>>();
 
   /**
    * What each in-flight dispatch IS, for the one question a stall asks: the
@@ -852,19 +836,10 @@ export class GameSession {
 
   /** run a script dispatch in the background, tracked for busy/settle */
   track<T>(p: Promise<T>, label = ""): Promise<T> {
-    return this.trackIn(this.inflight, p, label);
-  }
-
-  /** as {@link track}, for the idle heartbeat — settle waits, scriptBusy doesn't */
-  trackIdle<T>(p: Promise<T>, label = ""): Promise<T> {
-    return this.trackIn(this.idleInflight, p, label);
-  }
-
-  private trackIn<T>(set: Set<Promise<unknown>>, p: Promise<T>, label = ""): Promise<T> {
-    set.add(p);
+    this.inflight.add(p);
     if (label) this.labels.set(p, label);
     void p.catch((e) => this.onLog(`script error: ${(e as Error).message}`)).then(() => {
-      set.delete(p);
+      this.inflight.delete(p);
     });
     return p;
   }
@@ -887,8 +862,8 @@ export class GameSession {
 
   /** wait until all in-flight script dispatches finish (tests, shutdown) */
   async settle(maxRounds = 1000): Promise<void> {
-    for (let i = 0; i < maxRounds && (this.inflight.size || this.idleInflight.size); i++) {
-      await Promise.allSettled([...this.inflight, ...this.idleInflight]);
+    for (let i = 0; i < maxRounds && this.inflight.size; i++) {
+      await Promise.allSettled(this.inflight);
     }
   }
 

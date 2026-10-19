@@ -16,7 +16,7 @@ the page around it: the canvas, the drawing, the HUD, the keys, the films. The
 two meet in a few places only:
 
 - **the switches** — `?level=`, `?x=`, `?damage=` and the rest are read through
-  one `QUERY`, which a headless run supplies as a string (`setQuery`);
+  one `query`, which a headless run supplies as a string (`setQuery`);
 - **the files** — `SkullFiles` reads the rip by `fetch` in a page and from disk
   headless (`SkullFiles.fromReader`), through the same manifest rules;
 - **what only a page can do** — films, the status line, the level picker and
@@ -66,7 +66,10 @@ panel and HUD painter (`hud`), the file store (`files`), the film player
 (`film`), the touch pad's logic (`pad`), and the states a playthrough does not
 happen to reach — the floating barrels frame by frame (`barrels`) and the class
 think functions against a stand-in context, where the test holds the dice
-(`brains`). They are quick, so they run in the repository's
+(`brains`) — and the two pages themselves run in node, the front end
+(`menupage`) and the level runner (`walkpage`), with the real HTML parsed and
+a recording canvas, to pin which key, tap and pad press reaches which game call.
+They are quick, so they run in the repository's
 gate with every other package's (`npm test` at the root; `vitest.config.ts`
 here), while the machine suites stay out of it.
 

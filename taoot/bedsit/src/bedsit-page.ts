@@ -2387,7 +2387,7 @@ const PICTURE_FILES: Readonly<Record<string, string>> = {
   futility: "bedsit/futility.png",
   /** and the rug, which is neither a picture nor a wall but is laid the same
    *  way: one photograph over one chart, once, no repeat. Cut and toned by
-   *  `taoot/tools/bedsitrug.ts`; the drawn rag rug stays underneath it as what
+   *  `taoot/bedsit/tools/bedsitrug.ts`; the drawn rag rug stays underneath it as what
    *  the floor wears if the file does not arrive. */
   rug: "bedsit/rug.jpg",
   /**
