@@ -1,9 +1,9 @@
 /**
  * Timelapse's speedrun workbench — this page's entry point.
  *
- * Dust's (dust/src/speedrun/page.ts) with this game's name, its spine and no
- * route yet: the workbench and every verb it runs are the speedrun
- * workspace's, and the page under it is the play page (`index.html`, rearranged
+ * Dust's (dust/src/speedrun/page.ts) with this game's name, its spine and its
+ * verbs (./actions.ts): the workbench is the speedrun workspace's, and the page
+ * under it is the play page (`index.html`, rearranged
  * by speedrun/vite.ts from timelapse/speedrun/workbench.ts).
  *
  * No `warmup` and no Calculate, for the reasons Dust gives none: the boot's own
@@ -51,7 +51,7 @@ startWorkbench({
   // game's workbench on the same origin (dust/src/speedrun/page.ts)
   game: "timelapse",
   actions: ACTIONS,
-  /** the placeholder route, published beside this page by speedrun/vite.ts */
+  /** the route (tests/speedrun/run.sheet.txt), published beside this page by speedrun/vite.ts */
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
   /** the contributed sheets (timelapse/speedrun/sheets/), resolved the same way */
   contributedSheets: siteUrl("speedrun/sheets.json"),

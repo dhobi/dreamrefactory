@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   mkdirSync(CHECKPOINTS, { recursive: true });
   const file = (name: string): string => join(CHECKPOINTS, `${name.toLowerCase().replace(/[^a-z0-9_-]+/g, "_")}.rtd`);
   const started = Date.now();
-  const { driver } = await headlessRun({
+  const { driver, host } = await headlessRun({
     prepare: (s) => {
       s.nominalTime = true;
       s.sheetClock = true;
@@ -78,6 +78,11 @@ async function main(): Promise<void> {
   });
   const r = await runSheet(driver, steps, ACTIONS, {
     onStep: (step, i, total) => process.env.VERBOSE && console.log(`  [${i + 1}/${total}] ${step.source}`),
+    // what each line cost, in game time and frames, and what it said: the
+    // workbench's columns, for comparing a line between the two
+    onDone: (t) =>
+      process.env.VERBOSE &&
+      console.log(`      ${ms(host().session.gameNow).padStart(8)} +${ms(t.game)} ${t.frames}f${t.says.length ? `  ${t.says.join("; ")}` : ""}`),
   });
 
   let at = 0;
@@ -86,7 +91,7 @@ async function main(): Promise<void> {
     at += s.game;
     console.log(`  ${s.name.padEnd(28)} ${ms(at).padStart(9)}   +${ms(s.game)}`);
   }
-  console.log(`\n  in-game ${ms(r.total.game)}   (${((Date.now() - started) / 1000).toFixed(1)} s of this machine)`);
+  console.log(`\n  in-game ${ms(r.total.game)}, ${r.total.frames} frames   (${((Date.now() - started) / 1000).toFixed(1)} s of this machine)`);
   if (r.invalid.length) console.log(`  NOT A VALID TIME: ${r.invalid.join(", ")}`);
   if (r.failure) {
     console.log(`\n  STOPPED at line ${r.failure.step.line}: ${r.failure.step.source}\n    ${r.failure.error.message}`);

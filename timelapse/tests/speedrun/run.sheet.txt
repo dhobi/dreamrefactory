@@ -1,23 +1,107 @@
-# title: Timelapse — the boot, and the first moves
+# title: Timelapse — Easter Island
 #
-# A placeholder, not a route: what it proves is the plumbing. A seeded cold
-# boot, `open.mov` skipped, and then the two ways in — the keys and a click —
-# each confirmed by the game moving.
+# The machine suites' route (tests/machine/worlds/easter.ts) as a sheet: the
+# boot, the island, and the crystal into Egypt.
 #
 #   npm run speedrun -w timelapse            in node
 #   /timelapse/speedrun/                     in the workbench
 #
-# No room on any disc, so no viewer: "where you are" is the stage and the
-# flat on screen (speedrun/src/driver.ts ROOMLESS).
+# A place is a stage and a frame (no room on any disc); goto() walks there by
+# the stages' own tables (src/nav.ts).
 
 reset(seed: 1)
 skipMovie(until: js == window.dbg.booted, budget: 180000)
 settle()
-# the hilltop (stage 1, frame 100): turn right, and forward from there — the
-# stage's own table says frame 103 leads on to 330
-right()
-up()
-settle()
-# and a click: the edge region the cursor shows a back arrow over
-click(down)
-settle()
+split(the hilltop)
+# every film that is not asking anything goes to ESC, as a player's would:
+# the walk-in to the console (t001), the gate's (T018) and Egypt's arrival
+# (E025) — over a minute. The face rising and the pours are animations of
+# the flat, not films, and play out.
+watchFor(playing, skipMovie())
+
+# the camp: the camera (gCameraTaken), and the professor's journal beside it
+goto(1, 349)
+region(camera)
+wait(global.gcamerataken == 1)
+goto(1, 350)
+region(journal)
+split(camp)
+
+# the matches off the table in the hut
+goto(4, 605)
+prop(TableMatchBox)
+wait(global.ghasmatches == 1)
+# the lantern at the cave's mouth, lit by its instructions: ten strokes, the
+# primer up, the gas knob up twice, a struck match to the mantle, primer down
+goto(5, 867)
+region(Lantern)
+pump(10)
+wait(global.glanternpumps == 10)
+prop(PrimeLever)
+prop(GasKnob, x2)
+wait(global.ggasknob == 2)
+strikeMatch()
+prop(PrimeLever)
+wait(global.gprimelever == 0)
+split(lantern)
+
+# the six masks. The stone face is reached through frame 51's hotspot the
+# first time; once its lava has melted the tables lead to frame 299. Water
+# on the face turns the lava to stone and the mask lifts off; each goes on
+# the hand of the statue whose symbols name it (frame 514): slot 1 takes
+# mask 5, then 1, 6, 3, 2, 4 — the slot is a band of x (i.shp HeadInSlot).
+goto(7, 51)
+# the face rises out of the lava in a film (i023.mov)
+region(up, budget: 60000)
+eyes(4)
+region(pour)
+prop(MeltedHeads)
+goto(7, 514)
+drag(Heads, 570, 300)
+
+goto(7, 299)
+eyes(5)
+region(pour)
+prop(MeltedHeads)
+goto(7, 514)
+drag(Heads, 80, 300)
+
+goto(7, 299)
+eyes(6)
+region(pour)
+prop(MeltedHeads)
+goto(7, 514)
+drag(Heads, 262, 300)
+
+goto(7, 299)
+eyes(3)
+region(pour)
+prop(MeltedHeads)
+goto(7, 514)
+drag(Heads, 357, 300)
+
+goto(7, 299)
+eyes(2)
+region(pour)
+prop(MeltedHeads)
+goto(7, 514)
+drag(Heads, 459, 300)
+
+goto(7, 299)
+eyes(1)
+region(pour)
+prop(MeltedHeads)
+goto(7, 514)
+drag(Heads, 170, 300)
+wait(global.gheadssolved == 1)
+split(masks)
+
+# the glowing eyes open the particle door; the console is beyond it, and its
+# first button is Egypt
+goto(7, 520)
+region(Open)
+wait(global.gportalopen == 1)
+goto(8, 101)
+travel(Button10)
+wait(global.curworldchar == E)
+split(Egypt)
