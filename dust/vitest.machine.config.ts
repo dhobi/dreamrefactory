@@ -26,6 +26,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "tests/playthrough/playthrough.ts",
+      "tests/speedrun/sheets.ts",
       "tests/speedrun/blackjack.ts",
       "tests/speedrun/menu-saves.ts",
       "tests/machine/*.ts",

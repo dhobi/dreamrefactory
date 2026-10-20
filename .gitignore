@@ -30,11 +30,6 @@ assumptions.md
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 
-# The leg sweep's memory of which legs it has seen pass
-# (dust/tests/browser/legs.ts) — a measurement of one machine's run, and stale
-# the moment a verb changes.
-.legs.json
-.legs.green.json
 
 # `npm run coverage` (tools/coverage.mts): the raw data, the reports and the badge files
 /coverage

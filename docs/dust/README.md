@@ -88,7 +88,7 @@ integration](../reference/ci.md)). The [test reference](../reference/tests.md#du
 lists them all. Its tools are
 `dust/tools/`: `dustsets.ts`, the sweep the v1 SET reader was built against,
 `rtdthread.ts` for [the golden thread](thread.md), `mkdustlogo.ts` for the title
-card, and the two that write run sheets below.
+card, and the speedrun's below.
 
 ## The speedrun
 
@@ -104,15 +104,36 @@ cash in hand reaches the target
 (`dust/src/speedrun/menu.ts`); `loadSave()`, like Titanic's `load()`, makes a run
 NOT A VALID TIME.
 
-`dust/tests/speedrun/run.sheet.txt` is the route as legs, one per rung of the
-thread, and every leg opens by loading the save it starts from — so it is the
-route, not yet a continuous run, and its total is not a time. The commands
-around it:
+`dust/tests/speedrun/run.sheet.txt` is the route, and the sheet the workbench's
+"Copy the full run" hands out: cold boot to the credits, no save loaded on the
+way. It is not CyberFlix's order of play. Each part of the day is built from
+what the scripts gate it on — `NEW.FLT/0001 canadvance`, the beds' `cansleep`,
+the four puzzles under the mission — so night 1 ends in the Mayor's guest bed
+and day 2's gun comes out of the well. It plays in node, with no dev server, and
+is Dust's nightly full run:
 
 ```
-npm run speedrun:sheet -w dust    # regenerate the sheet from the thread's ladder (overwrites; diff first)
-npm run speedrun:rung -w dust -- d2a006   # one playthrough rung's gestures as sheet lines (--all for every rung)
-npm run speedrun:legs -w dust     # every leg in one boot, against a dev server (ONLY=, FROM=)
+npm run speedrun -w dust                        # from the boot
+npm run speedrun -w dust -- --from=day3night    # from one of its save() points
+SEED=7 npm run speedrun -w dust                 # the same dice every time
 ```
+
+`dust/speedrun/sheets/dhobis-fastest.sheet.txt` is the same route on one seed,
+`reset(seed: 7)`, the fastest of seeds 1 to 16, and so its own category. With
+the dice fixed it can name what an unseeded run has to search for: where a
+character will pass, and `intercept(who)` to click them on the first tick the
+click reaches them (the gang cast's own test, GANG.CST: their row or column,
+inside `hotdist`), in place of `meet()`'s walk and chase; and an `after:` pause
+before Jan's table that deals winning cards. Any change before a table re-rolls
+its dice, so that pause is searched again after one.
+
+Every `save()` it passes is kept in `dust/.speedrun-saves/` for `--from`. A save
+taken while a script is still running loses the rest of that script when it is
+loaded, so the sheet's save points stand where the game is quiet.
+
+`dust/tools/doors.ts` prints every door in the game as a `doorAt` line, and
+`dust/tools/films.ts` where a film stops to be clicked and which click reaches
+the frame its script pays on. `npm run speedrun:rung -w dust -- d2a006` prints
+one playthrough rung's gestures as sheet lines (`--all` for every rung).
 
 Back to [Documentation](../README.md).

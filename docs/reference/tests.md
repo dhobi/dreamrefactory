@@ -572,7 +572,7 @@ npx tsx dust/tests/browser/built-layout.ts                # Dust's page as BUILT
 npx tsx dust/tests/browser/load-standpoint.ts             # where a load puts you on a game that has just booted
 npx tsx dust/tests/browser/shooting-range.ts             # are the range's targets actually on the canvas?
 npx tsx dust/tests/browser/walk-back.ts                  # does a character walk back after a conversation? (#289)
-npm run speedrun:legs -w dust                             # dust/tests/browser/legs.ts: every leg of the run sheet in one boot, each from its own save
+npm run speedrun -w dust                                  # dust/tests/speedrun/speedrun.ts: the whole run sheet in node, from the cold boot (-- --from=<save>)
 npm run play -w dust -- D2A_006                           # not a test: Dust open at a shipped save, keyboard handed over
 npx tsx taoot/tests/browser/minigames.ts                  # do the three minigames boot without the ship?
 npx tsx taoot/tests/browser/bedsit-vr.ts                  # the bedsit's VR mode against a headset that is not there

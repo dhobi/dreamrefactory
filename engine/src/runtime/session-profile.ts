@@ -79,6 +79,16 @@ export interface SessionProfile {
   readonly libraryHearsSends: boolean;
   /** `sendtocast`, `sendtoprop`, `sendtoshop` and `sendtoquad` find their target among their own kind first (RedJack.exe 0x405370, 0x42b550) */
   readonly sendsFindTheirKind: boolean;
+  /**
+   * `sendtoshop` finds its target among the open SHOPS first. Dust needs it:
+   * `FLUTE.SET/0041` sends `sendtoshop ("flute", initprops ())` to FLUTE.PRP,
+   * and the inventory has a prop called Flute whose script answers first
+   * through its parent, INVEN.PRP — whose `initprops` is the whole day's
+   * inventory, so the flute left the hand before it could be offered and the
+   * temple puzzle could not be solved. The 1995 playthrough's own saves have it
+   * solved (`flutepuzzle "done"`), so DF.EXE sent it to the shop.
+   */
+  readonly sendtoshopFindsShops: boolean;
   /** a flat is drawn at the stage's origin (`stageorigin`), its regions in the flat's own coordinates */
   readonly flatsAtStageOrigin: boolean;
   /** of overlapping regions the first wins; the older engines take the last */
@@ -122,6 +132,7 @@ const V4: SessionProfile = {
   setsOpenVisible: false,
   libraryHearsSends: false,
   sendsFindTheirKind: false,
+  sendtoshopFindsShops: false,
   flatsAtStageOrigin: false,
   firstRegionWins: false,
   closesOutsideIn: false,
@@ -143,6 +154,18 @@ const V1: SessionProfile = {
   load: (session, bytes) => loadGameV1(session, bytes),
   loadOpensItsSet: true,
   closesOutsideIn: true,
+  sendtoshopFindsShops: true,
+  /*
+   * Dust's solved puzzles leave by `closestagefile ()` and a set change and
+   * never say `setvisible (true)` — FLUTE.FLT evaluate () is `closestagefile ()`
+   * then `sendtostage (gotohub ())`, `closesetfile ()` / `opensetfile
+   * ("hub.set")` — after FLUTE.SET hid the room for the puzzle. The ways out
+   * that stay in the same set (SCORP.FLT, CRACK.FLT, DRUG.FLT give-ups) all say
+   * it themselves, and no Dust handler hides the room and then opens a set it
+   * wants hidden. So the set opening is what showed it again in 1995: without
+   * it the hub after the flute took every key as the stage's.
+   */
+  setsOpenVisible: true,
   oneConversation: true,
   unknownLineTicks: (length) => (length >> 1) + 60,
 };

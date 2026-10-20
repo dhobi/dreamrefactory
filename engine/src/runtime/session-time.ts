@@ -88,6 +88,19 @@ export class SessionTime {
     // next one in some runs and not in others: a spoken answer a tick apart.
     const resumed = this.wasHeld && !held;
     this.wasHeld = held;
+    // the frames a sheet's budget counts (sheetBudgetMs): the one that starts
+    // the game again, which runs no tick, and — at most one a tick of real time,
+    // so a stuck line still runs out — the ones a hold spends with the game
+    // stopped for the player's input or the boot. Never a file's wait.
+    if (this.sheetClock && !this.sheetHalted && this.blockedOnFiles === 0) {
+      if (resumed) this.budgetFrames++;
+      const holding = this.runningHolds() > 0 || this.pausePasses > 0;
+      if (!held || !holding) this.heldBudgetAt = null;
+      else if (this.heldBudgetAt === null || raw + TICK_SLACK_MS - this.heldBudgetAt >= TICK_MS) {
+        this.budgetFrames++;
+        this.heldBudgetAt = raw;
+      }
+    }
     if (this.stepAnchor === null) {
       this.startStepping(real);
     } else if (resumed) {
@@ -99,6 +112,7 @@ export class SessionTime {
         // reading plus the slack — or every later tick sits on the slack's edge
         this.stepAnchor = tick.next === real + TICK_SLACK_MS ? real : tick.next;
         this.stepTicks++;
+        if (this.sheetClock && !this.sheetHalted) this.budgetFrames++;
         this.gameNow = tickMs(this.stepTicks);
         // a poll waits out a fade ramp another script is blocked in: TI.EXE runs
         // nothing else until it is over (SessionTransitions.ramp, #541)
@@ -277,6 +291,29 @@ export class SessionTime {
   private stepAnchor: number | null = null;
   /** ticks of stepped game time — {@link gameNow} is {@link tickMs} of it */
   private stepTicks = 0;
+  /** the frames {@link sheetBudgetMs} counts */
+  private budgetFrames = 0;
+  /** the raw time a held frame was last counted, while a hold waits on a stopped game */
+  private heldBudgetAt: number | null = null;
+
+  /**
+   * What a sheet's `budget:` counts on, in ms, in a page and headless alike:
+   * the frames the game ran under the sheet's clock, in whole ticks — every
+   * tick, the tickless frame that starts the game again after it stood still,
+   * and a hold's frames with the game stopped for input (see gameTime).
+   *
+   * So a hold that is MEANT to run out — a click that missed, given a moment to
+   * take — runs the game for the same number of ticks in either host. On the
+   * wall clock a page ran it for as many ticks as the machine managed, and
+   * headless summed sixtieths of a second in floating point, so a budget of a
+   * whole number of ticks (700 ms is 42) ran out a tick early or not depending
+   * on rounding noise: a seeded Dust sheet came out three or four frames apart
+   * between a browser and headless, all of it from `takeInHand`'s 700 ms after
+   * each missed click and the passes it put out of step.
+   */
+  get sheetBudgetMs(): number {
+    return tickMs(this.budgetFrames);
+  }
   /** ticks of the pass a pause is in, counted to three */
   private pauseTicks = 0;
   private tickWaiters: (() => void)[] = [];

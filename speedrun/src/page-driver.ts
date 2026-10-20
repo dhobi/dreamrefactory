@@ -221,7 +221,18 @@ export function pageDriver(opts: PageDriverOptions): SpeedrunDriver {
 
   const frame = (): Promise<void> => new Promise((r) => win.requestAnimationFrame(() => r()));
 
-  const budgetClock = opts.budgetNow ?? (() => performance.now());
+  /*
+   * Under a sheet's clock, the game's own frames (GameSession.sheetBudgetMs):
+   * a hold that runs out has then run the game as long here as headless, which
+   * counts the same frames. The wall otherwise, and before there is a game.
+   */
+  const budgetClock =
+    opts.budgetNow ??
+    (() => {
+      const s = (win as unknown as { dbg?: { session?: { sheetClock?: boolean; sheetBudgetMs?: number } } }).dbg
+        ?.session;
+      return s && s.sheetClock && typeof s.sheetBudgetMs === "number" ? s.sheetBudgetMs : performance.now();
+    });
   const page: Page = {
     opts,
     canvas,
@@ -363,7 +374,7 @@ function makeDriver(page: Page, watch: boolean): SpeedrunDriver {
     },
 
     log,
-    budgetNow: opts.budgetNow,
+    budgetNow: page.budgetClock,
     get seed() {
       return page.pinned;
     },

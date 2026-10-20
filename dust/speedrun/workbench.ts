@@ -43,4 +43,6 @@ export const WORKBENCH: WorkbenchPage = {
   css: "/src/speedrun.css",
   entry: "/src/speedrun/page.ts",
   sheet: "tests/speedrun/run.sheet.txt",
+  // the sheets contributed by pull request, each checked by tests/speedrun/sheets.ts
+  sheetsDir: "speedrun/sheets",
 };

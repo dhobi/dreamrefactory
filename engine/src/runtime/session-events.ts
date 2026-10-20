@@ -249,7 +249,7 @@ export class SessionEvents {
     // itself among them: jcombat.shop calls itself "combat", and the alley fight
     // asks `sendtoshop ("combat", moveobjects ())` every step (see openShopKey)
     const shopFirst =
-      /^sendtoshop(fx)?$/.test(cmd) && this.session.profile.sendsFindTheirKind ? this.session.resourceCtrl.shopMains.get(this.session.resourceCtrl.openShopKey(targetName)) ?? null : null;
+      /^sendtoshop(fx)?$/.test(cmd) && (this.session.profile.sendsFindTheirKind || this.session.profile.sendtoshopFindsShops) ? this.session.resourceCtrl.shopMains.get(this.session.resourceCtrl.openShopKey(targetName)) ?? null : null;
     // ...and its `sendtoquad` among the room's QUADS (0x446570 → 0x446190 walks
     // the set's 80-byte quad records, the name at +0x1c): horn4.sett calls itself
     // "horn", as it does the quad the horn stands on, and the boot's

@@ -216,8 +216,10 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     keys: saveKeys(game.game),
     log: game.log,
     // budgets on this run's own frames: the game runs as fast as the CPU goes,
-    // and ten seconds of the wall would be hours of it
-    budgetNow: () => budgetWall,
+    // and ten seconds of the wall would be hours of it. Under a sheet's clock,
+    // the session's own count, which a page's driver reads too
+    // (GameSession.sheetBudgetMs), so a hold that runs out runs as long in both
+    budgetNow: () => (host.session.sheetClock ? host.session.sheetBudgetMs : budgetWall),
   });
   const driver: SpeedrunDriver = {
     ...page,

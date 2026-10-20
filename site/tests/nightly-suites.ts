@@ -9,7 +9,7 @@
  *
  *   - **What a game's full run IS.** `test:browser` is the right answer for
  *     exactly one of the three. Dust's runs three short suites while its depth
- *     is `speedrun:legs`, the fifty-five legs off the run sheet; Skull Cracker's
+ *     is `speedrun`, the whole run sheet from the cold boot; Skull Cracker's
  *     opens the menu and stops, and its page suites together are `test:browser:all`.
  *     With one default for all three, a `full-run-skullcracker` label ran the
  *     menu and reported the pull request green.
@@ -91,7 +91,7 @@ test("a full run means that game's own suite, and each one exists", () => {
   const byGame = Object.fromEntries(fullRun.map((f) => [f.game, f.suite]));
   // the two whose `test:browser` is not their full run — the whole reason the
   // table exists. A default of `test:browser` covers everyone else.
-  expect(byGame.dust).toBe("speedrun:legs");
+  expect(byGame.dust).toBe("speedrun");
   expect(byGame.skullcracker).toBe("test:browser:all");
   for (const { game, suite } of fullRun) {
     expect(Object.keys(scripts(game)), `${game}'s full run is ${suite}`).toContain(suite);

@@ -44,7 +44,7 @@ function deliver(host: GameHost, e: InputEvent): void {
     case "keydown": {
       const act = keyAction({ key: e.key ?? "", ctrlKey: false, metaKey: false, altKey: false, repeat: false, target: null });
       if (!act || "log" in act) return;
-      session.interp.globals.set("isrepeat", act.repeat ? 1 : 0);
+      session.interp.globals.set("isrepeat", act.repeat);
       void session.track(host.director.keyDown(act.key, act.escape));
       return;
     }
@@ -57,17 +57,20 @@ export async function headlessRun(opts: {
   prepare?: (session: GameSession) => void;
   seed: number | null;
   log?: (message: string) => void;
+  /** where `save()` puts a checkpoint and `load()` finds one — in memory unless given */
+  putSave?: (name: string, bytes: Uint8Array) => void;
+  getSave?: (name: string) => Uint8Array | null;
 }): Promise<HeadlessRun> {
   const saves = new Map<string, Uint8Array>();
+  const put = opts.putSave ?? ((name: string, bytes: Uint8Array) => void saves.set(name, bytes));
+  const get = opts.getSave ?? ((name: string) => saves.get(name) ?? null);
   return runHeadless({
     game: "dust",
     makeHost: async () => dustHost().host,
     prepare: (s) => opts.prepare?.(s),
     deliver,
-    putSave: async (name, bytes) => {
-      saves.set(name, bytes);
-    },
-    getSave: async (name) => saves.get(name) ?? null,
+    putSave: async (name, bytes) => put(name, bytes),
+    getSave: async (name) => get(name),
     seed: opts.seed,
     log: opts.log,
   });
