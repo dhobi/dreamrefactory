@@ -68,7 +68,7 @@ const main = async (): Promise<void> => {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.on("pageerror", (e) => console.log("[pageerror]", e.message));
-    await page.goto(APP_URL);
+    await page.goto(`${APP_URL}play/`);
     await page.locator("#start").waitFor({ state: "visible", timeout: 120000 });
     await page.locator("#start").click();
     await page.waitForFunction(() => !!(window as unknown as { dbg?: { viewer?: unknown } }).dbg?.viewer, null, {

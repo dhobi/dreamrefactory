@@ -77,7 +77,7 @@ const main = async (): Promise<void> => {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.on("pageerror", (e) => console.log("[pageerror]", e.message));
-    await page.goto(APP_URL);
+    await page.goto(`${APP_URL}play/`);
 
     // the page boots itself behind a button; `dbg` appears with `play()`, which is
     // the frame loop starting — so waiting for it is waiting for a running game

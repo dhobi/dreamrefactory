@@ -15,7 +15,7 @@ goes out on its own:
 |---|---|---|
 | `site-v0.1.1` | `npm run build -w site` | `/dreamrefactory/` — the front door and the format editors |
 | `taoot-v0.9.53` | `npm run build -w taoot` | `/dreamrefactory/taoot/` — Titanic's four pages (the front page, `/play/`, `/collection/`, the unlisted `/speedrun/`) |
-| `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's three pages (the game, `/collection/`, the unlisted `/speedrun/`) |
+| `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's four pages (the welcome page, `/play/`, `/collection/`, `/speedrun/`) |
 | `timelapse-v0.1.0` | `npm run build -w timelapse` | `/dreamrefactory/timelapse/` — Timelapse's one page |
 | `skullcracker-v0.1.0` | `npm run build -w skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
 | `redjack-v0.1.1` | `npm run build -w redjack` | `/dreamrefactory/redjack/` — RedJack's one page |

@@ -5,7 +5,7 @@ import type { WorkbenchPage } from "../../speedrun/vite";
  * speedrun/vite.ts makes out of the play page. Read by vite.config.ts.
  */
 export const WORKBENCH: WorkbenchPage = {
-  play: "index.html",
+  play: "play/index.html",
   game: ["stage"],
   // The title card (#brand) is the play page's welcome, and a workbench is
   // reloaded on every `reset()`; main.ts reads it as nullable, and `nobrand`

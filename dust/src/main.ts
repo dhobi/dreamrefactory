@@ -109,6 +109,7 @@ import {
 import { siteUrl } from "@dreamfactory/chrome/site";
 import { VERSION } from "@dreamfactory/chrome/version";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
 import { DUST } from "@dreamfactory/chrome/games";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
@@ -260,6 +261,11 @@ const verEl = document.getElementById("ver");
    readable off it. */
 if (verEl) verEl.textContent = `v${VERSION}`;
 
+// Play and Speedrunner folded into one "Play", as on Titanic's pages
+// (chrome/src/play-menu.ts), in English: Dust is not translated. The workbench
+// boots this file too and gets the same
+void installPlayMenu({ english: true });
+
 /**
  * The two levers the port adds: a fullscreen picture, and a bug report that
  * arrives with the screen attached.
@@ -368,7 +374,7 @@ function say(line: string): void {
   // scrollTop forces layout, so only when there is something to scroll
   if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
 }
-/** the title card, which rises rather than leaving — see #brand in dust/index.html */
+/** the title card, which rises rather than leaving — see #brand in dust/play/index.html */
 const brandEl = document.getElementById("brand") as HTMLImageElement | null;
 brandFallback(brandEl);
 /** the fuse: the bar, the burnt length, the boot's newest word, the percentage */

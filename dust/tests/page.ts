@@ -1,5 +1,5 @@
 /**
- * The play page (`src/main.ts`), in node: the real `index.html` parsed by
+ * The play page (`src/main.ts`), in node: the real `play/index.html` parsed by
  * linkedom, with the engine's host, the file store, the saved-games dialog and
  * the bug report standing in for the browser's, and `fetch` answered off the
  * disc on this machine.
@@ -181,6 +181,8 @@ vi.mock("../src/saves", () => ({
   shippedDustSaves: () => [{ rel: "save/START.RTD", url: "/site/gamefiles/dustcd/save/START.RTD", name: "START" }],
 }));
 vi.mock("@dreamfactory/engine/web/save-store", () => ({ useSaveKind: () => void calls.push("useSaveKind") }));
+// the Play menu reads the address bar, which this page has none of (site/tests: play-menu)
+vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => 0 }));
 vi.mock("@dreamfactory/engine/web/save-browser", () => ({
   browseForSave: async (_b: Uint8Array, name: string) => void calls.push(`save as ${name}`),
   browseForLoad: async () => (calls.push("load"), null),
@@ -194,7 +196,7 @@ vi.mock("@dreamfactory/chrome/site", () => ({ siteUrl: (p: string) => `/site/${p
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
+const HTML = readFileSync(join(ROOT, "play/index.html"), "utf8");
 
 /** `fetch`, answered off the disc: the manifest from {@link Disc}, files by path */
 async function fakeFetch(url: string): Promise<Response> {
