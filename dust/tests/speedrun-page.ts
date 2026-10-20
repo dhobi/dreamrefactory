@@ -27,6 +27,7 @@ it("starts the workbench in Dust's own key space, with Dust's actions and route"
   expect(workbench!.game).toBe("dust");
   expect(workbench!.actions).toBe(ACTIONS);
   expect(workbench!.fixtureSheet).toBe("/site/speedrun/run.sheet.txt");
+  expect(workbench!.contributedSheets).toBe("/site/speedrun/sheets.json");
   expect(stateList!.storageKey).toBe("dust.details.state");
   expect(stateList!.defaultOn).toBe(true);
   // the pane waits for a game to snapshot, and then snapshots it live

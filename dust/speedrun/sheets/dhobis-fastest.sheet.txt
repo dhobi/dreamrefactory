@@ -1,0 +1,816 @@
+# title: dhobi's fastest
+# author: dhobi
+# notes: dust/tests/speedrun/run.sheet.txt on seed 7, the fastest of seeds 1-16; seeded, so its own category
+#
+# THE SPEEDRUN — Dust: A Tale of the Wired West, any%
+#
+# One sequence from the cold boot to the credits, no disc saves loaded.
+# Built from what the scripts gate each part of the day on — NEW.FLT/0001
+# `canadvance` and `day2items`, HOTROOM.SET/0034 `cansleep` and
+# `day3bedtime`, and on day 4 the four puzzles under the mission — rather
+# than from the order CyberFlix played in.
+#
+#   npm run speedrun -w dust                       from the boot, in node
+#   npm run speedrun -w dust -- --from=day3night   from a save() below
+#
+# Unseeded: blackjack, poker and the gunfights roll dice, so the time moves
+# from run to run. Where a hand can be lost, the verb saves through the game's
+# own menu and loads on a loss (on the clock, as a player would).
+
+reset(seed: 7)   # one seed at the boot: the run is the same dice every time
+skipMovie(until: js == !!window.dbg.viewer, budget: 180000)
+# THE BOOT LEAVES A CONVERSATION OPEN, and this waits for it by name.
+#
+# A viewer is the first moment there is a game, not the last moment of
+# the boot — `coldBoot` runs on past it — so the line after this one was
+# asking before there was anybody to answer: "conversation ended before
+# saying 104 (picked nothing)".
+#
+# Nobody clicks Leroy. `GANG.CST/0002 leroyidle ()` arms
+# `hasattention (10)` and the boot hands over with `curattention =
+# "leroy"` — that timer ALREADY RUN DOWN — so he accosts you as soon as
+# the boot stops, from the standpoint it leaves you on: he stands at
+# town.leroy1, cell (6,13), and you are at (6,14) facing north.
+#
+# So a run does not WAIT for it. `accost` makes the same gesture the
+# timer would have made — `hasattention ()` fires `sendtoactor (target,
+# mousedown (0))`, which is a click on him — and it turns to find him
+# first if the boot left us facing somewhere else.
+accost(leroy)
+talkOut([104])   # Leroy by the sign
+goto(6, 11, north, set: nite)
+key(ArrowUp, until: visible.help, budget: 60000)   # up the street into the dog
+skipMovie(until: quiet, budget: 60000)   # past what that press started
+meet(help)   # the help character outside Chin's
+say([103,102,101], then: stop, patience: 20000)   # What should I do? / So I'll use my brain. Now what? / What should I look for?
+goto(6, 14, west, set: nite)   # facing the Bone, which lies one cell west
+takeInHand(bone)   # the Bone in the street
+goto(6, 11, north, set: nite)
+give(bone, to, dog)   # the Bone
+talkOut([102])   # the help character's parting gift
+wait(global.phase == 2 and !puppet, budget: 60000)   # the bone taken (EXTRA.CST/0039 offerobject); a dog still in the road blocks the street all night
+split(opening)
+save(opening)
+
+# ---------------------------------------------------------------------
+# NIGHT 1 — the Mayor's guest bed
+#
+# The night has no gate of its own (`canadvance` is false all day 1), and
+# `MAYROOM.SET/0037` sleeps you on day 1 from the Mayor's guest bed. The way
+# in is his wife: leaving the saloon by its front door with more than $5
+# (`SALLOWER.SET/0052`, `day = 1 & phase < 3 & playercash > 5`) puts her in
+# the street, and her dinner invitation opens the house.
+# ---------------------------------------------------------------------
+goto(6, 7, west, set: nite)
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon door
+goto(2, 3, west, set: sallower, after: 1700)   # Jan's table; 1.7 s on seed 7 deals the cards that win soonest
+blackjack(20)   # Jan's table: $10 for Oona, and $10 more, which is out of the door with over $5 (SALLOWER.SET/0052 puts Mrs Mayor in the street), all a robber leaves anyway, and $9 at the poker table after the bank's dollar
+save(cards)
+# The ring the help character gave us in the street goes to Ruby for safe
+# keeping. Day 3 morning wants it on Jones's finger (`canadvance`), and the
+# morning's inventory takes away any ring the stranger is still carrying
+# (INVEN.PRP/0001 initprops, `dumpinven ("ring")`); what it leaves alone is a
+# ring somebody else holds, and Ruby gives hers back for the asking
+# (RUBY.PUP/0058). Through her door: two knocks only move `rubyphase`, the
+# third opens six questions whose 999 is the one that keeps her talking, and
+# the plaque after them takes a gift. Oona keeps the stairs, for $10, and
+# only after a civil word (OONA.PUP/0052: retort 102 → startgood → gameloop
+# 105 is `oonaphase = 1`; 101 at the first plaque is hostile, and out).
+meet(oona)
+say([102,101,105], then: stop, patience: 20000)   # Oh, about $3 of good whiskey. / There a game I can get in on? / So long, Oona.
+wait(!puppet, budget: 20000)
+meet(oona)
+say([101,101], then: stop, patience: 20000)   # I want to go upstairs. / I'll settle up with you. — oonaphase 3
+wait(!puppet, budget: 20000)
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the saloon stairs
+goto(0, 0, north, set: salupper)
+takeInHand(ring)
+clickAt(233, 133, wait: quiet)   # Ruby's door
+talkOut([301,201,104,102,101,103])
+clickAt(233, 133, wait: quiet)
+talkOut([301,201,104,102,101,103])
+clickAt(233, 133, wait: quiet)
+say([999,999,999,999,999,999], then: stop, patience: 20000)   # RUBY.PUP/0033's six
+offer(ring)   # RUBY.PUP/0007 gift: hers now
+say([999], then: stop, patience: 20000)   # Goodbye, Miss.
+wait(prop.ring == ruby and !puppet, budget: 30000)
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down the saloon stairs
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)   # the saloon's front door
+goto(5, 3, east, set: nite)   # where she walks the street on seed 7: west along row 3 from (6,3)
+intercept(mwife)   # her conversation to open, on the first tick a click reaches her
+say([101,101], then: stop, patience: 20000)   # I'm sorry. / Please.
+save(mayhall)
+goto(2, 2, west, set: mayhall)
+doorAt(142, 77, 368, 263, owner: study)   # the study door
+goto(1, 2, east, set: maystudy)
+clickAt(260, 132, wait: taken)   # the display case (MAYSTUDY/0039 pointincase)
+clickAt(341, 160, until: global.mwifephase >= 3, gap: 500, budget: 45000)   # the postcards in getcards.mov, and her
+wait(set == maydine, budget: 60000)   # she leads us in to dinner
+wait(global.mariephase == 1 and !puppet, budget: 60000)   # and seats them both
+save(dinner)
+# Marie's last question decides the night. The original answered 101, "I'd
+# rather explore the town", and slept at the hotel. 102, "Thanks, I think
+# I'll stay" (MARIE.PUP/0053), bumps `mwifephase` and her mother's next
+# comment sends her upstairs at 12 — which opens the stairs
+# (MAYHALL/0044) and the guest room (MAYROOM/0035) for the night.
+talk(marie[101,101,101,102])   # Enchanted. / Tell me about her / Yes. / Thanks, I think I'll stay.
+wait(global.mwifephase == 12 and !puppet, budget: 30000)
+goto(3, 1, west, set: maydine)
+doorAt(120, 20, 388, 263, owner: hall2)   # the dining door
+goto(2, 2, north, set: mayhall)
+key(ArrowUp)   # up the stairs (mayup.mov)
+wait(set == mayupper, budget: 30000)
+goto(1, 0, north, set: mayupper)
+doorAt(168, 23, 336, 263, owner: room)   # the guest room
+# MAYROOM/0035 trigger(): a knock, the room turned round twice, and Marie at
+# the door (`mariephase = 5`, her maskgiving()). Talk only — no mask changes
+# hands. A save before she has gone would drop the rest of this script.
+wait(set == mayroom and global.mariephase == 5 and choosing, budget: 60000)
+say([101])   # Yes.
+wait(!puppet, budget: 30000)
+save(guestroom)
+goto(1, 1, north, set: mayroom)
+clickAt(230, 205, wait: taken)   # the bed (MAYROOM/0037 pointinbed) — day 1 ends here
+# MAYROOM/0037 sleep() advances the day only `if actionframe (1)`, and
+# maybed.mov reaches it through two stops: (161,57)-(368,204) → 3, then
+# (181,72)-(388,219) → 4. Escape, or the rest of either screen, is getting up.
+film([264,130], [284,145])   # lie down, and sleep
+wait(global.day == 2, budget: 60000)
+skipMovie(until: quiet, budget: 120000)   # d1nd2m.mov
+split(night 1)
+save(day2morning)
+
+# ---------------------------------------------------------------------
+# DAY 2 MORNING — two of the gun, the boots and the bullets
+#
+# `canadvance` (NEW.FLT/0001) lets the morning end once `day2items () > 1`,
+# and then the town counts 5 + random (10) scenes walked before it moves the
+# clock. The boots are out of reach from here (the Mayor's are upstairs only
+# once `phase > 1`, which is the hotel's breakfast; Jenix's want $5 given
+# her on night 1), so it is the other two: the bullets Abe keeps at the
+# stage office for whoever gave Deadnettle his postcards (STAGE.SET/0034),
+# and the gun at the bottom of the well, which Ned shows you once you have
+# sent him off from the livery (NED.PUP/0076 reply 104, TOWN.SET/0174,
+# TOWN.SET/0105).
+# ---------------------------------------------------------------------
+goto(0, 1, south, set: mayroom)
+doorAt(172, 19, 345, 263, owner: exit)   # out of the guest room
+wait(set == mayupper and global.phase == 1 and !puppet, budget: 60000)   # Marie wakes us (MARIE.PUP/0054 wakeup)
+goto(2, 0, south, set: mayupper)
+key(ArrowUp)   # down the stairs (maydn.mov)
+wait(set == mayhall, budget: 30000)
+goto(2, 3, south, set: mayhall)
+doorAt(165, 58, 356, 263, owner: front)   # the front door
+wait(set == town, budget: 30000)
+save(day2street)
+# Breakfast first: every door on the street that matters this morning is
+# locked while `phase < 2` (TOWN lockstage and the rest), and the hotel's
+# breakfast is what moves it (HOTLOWER/0040 breakready, `phase = 1` from
+# Marie's wake-up being its condition). Laurel speaks first.
+goto(6, 4, east, set: town)
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel
+goto(1, 2, south, set: hotlower)
+clickAt(264, 232, wait: taken)   # the breakfast table — Laurel first
+say([101,301,101], then: stop, patience: 20000)   # Morning. / Goodbye, Laurel. / What is it Laurel? — her bye() sets laurelphase 1
+wait(!puppet, budget: 20000)
+clickAt(264, 232, until: global.phase == 2, gap: 500, budget: 30000)   # and now breakfast
+# HOTPLATE.FLT lets you up only from its last screen, the one with the
+# biscuits and the sugarcubes both taken
+clickAt(216, 137, wait: quiet)   # the biscuits
+clickAt(461, 95, wait: quiet)   # the sugarcubes
+clickAt(256, 350, wait: quiet)   # up from the table
+goto(0, 0, west, set: hotlower)
+doorAt(128, 73, 394, 262, owner: hotout)   # the lobby door
+save(breakfast)
+# $1 into the bank. TOWN.SET/0001 openscene sends a robber at 20 in 1000 on
+# every street scene of the day while `playeraccount <= 0` — harmless (he
+# takes all but $10, which this route does not need) but he stops whatever
+# gesture is in flight. A dollar in the account closes that for the game.
+goto(6, 5, west, set: town)
+doorAt(200, 81, 306, 232, owner: bank)   # the bank
+goto(3, 2, west, set: bank)
+clickAt(247, 135, wait: taken)   # the teller (BANK.SET/0045 pointinteller)
+say([101,101,104,105], then: stop, patience: 20000)   # I want to deposit money. / Add $1 / Make deposit. / Bye.
+wait(global.playeraccount > 0 and !puppet, budget: 30000)
+goto(3, 1, east, set: bank)
+doorAt(177, 30, 339, 263, owner: dollar)   # out of the bank
+goto(6, 7, east, set: town)
+doorAt(220, 98, 285, 209, owner: stage)   # the stage office
+takeInHand(postcards)   # a gift is offered from the hand (addhandbevel)
+meet(dead)   # Deadnettle at the counter
+say([102], then: stop, patience: 20000)   # Stage in yet? — addhandbevel only offers a gift with three replies or fewer up
+offer(postcards)   # DEAD.PUP/0007 gift: the postcards are his
+goto(0, 0, east, set: stage)
+# NOT skipped: STAGE.SET/0034 hands the bullets over only `if actionframe (1)`
+clickAt(137, 85, wait: taken)   # Abe (pointinabe)
+# abe.mov stops twice (dust/tools/films.ts): frame 1 on the box (215,200)-
+# (233,220) → 3, frame 15 on (102,164)-(163,212) → 17, its action frame.
+# Anywhere else is the whole-screen region that ends it empty-handed.
+film([224,210], [132,188])   # the box of bullets, and take them
+wait(owns.bullets, budget: 30000)
+save(bullets)
+goto(0, 1, west, set: stage)
+doorAt(176, 63, 336, 261, owner: car)   # out of the stage office
+goto(9, 5, east, set: town)
+doorAt(204, 82, 293, 235, owner: livery)   # the livery
+meet(ned)   # Ned at the stalls
+say([104], then: stop, patience: 20000)   # Time for me to go... — nedphase 2, and he leaves for the well
+wait(!puppet, budget: 30000)
+goto(3, 1, east, set: livery)
+doorAt(157, 35, 340, 264, owner: horse)   # out — J6's openscene sends Ned to town.ned2 (TOWN.SET/0174)
+goto(4, 11, south, set: town)
+# wellgun.mov stops at frame 1 on (201,0)-(305,264) → 2 and at frame 20 on
+# (153,19)-(366,213) → 22, its action frame; TOWN.SET/0105 gives the gun
+# `if actionframe (1)`.
+wait(star.ned == town.ned2, budget: 120000)   # Ned has to be standing at the well, not walking to it
+clickAt(258, 212, wait: taken)   # the well (pointinwell)
+film([253,132], [259,116])   # down the well, and the gun
+wait(owns.gun, budget: 30000)
+save(gun)
+# Two of the three: the town now counts 5 + random (10) scenes walked
+# (TOWN.SET/0001 openscene) and moves the clock on the next one with
+# nobody of the gang within 300 (toonear).
+goto(6, 3, north, set: town, until: global.clock == 2 or playing, budget: 120000)   # up the main street until the afternoon
+goto(6, 14, south, set: town, until: global.clock == 2 or playing, budget: 120000)   # and back down, if the dice wanted more
+skipMovie(until: quiet, budget: 120000)   # d2md2a.mov
+split(day 2 morning)
+save(day2afternoon)
+
+# ---------------------------------------------------------------------
+# DAY 2 AFTERNOON — Cobb at the shack
+#
+# The afternoon ends when the Mayor has been seen after `phase = 3`
+# (TOWN.SET/0135, GANG.CST/1097). 3 is Cobb dealt with at the shack
+# (GANG.CST/0419 hit, or a pie: COBB.PUP/0007 gift), 2 is his standoff
+# (COBB.PUP/0076 shackit), and 1 is Flippo sending him there — which he
+# does only for a stranger carrying the gun, the boots AND the bullets
+# (FLIPPO.PUP/0076, `day2items () >= 3`). So first the boots, which this
+# afternoon are lying in the Mayor's upstairs hall (MAYUPPER.SET/0001).
+# ---------------------------------------------------------------------
+meet(marie)   # Marie in the street — while she is in sight the Mayor's door is shut (lockmayor)
+say([101,103,222], then: stop, patience: 20000)   # any opener / Will you let me in your house? / the quiz's right answer, which sends her home
+wait(!puppet, budget: 30000)
+goto(9, 8, east, set: town)
+doorAt(174, 82, 335, 228, owner: mayor)   # the Mayor's gate
+goto(2, 2, north, set: mayhall)
+key(ArrowUp)   # the stairs — steps.mov, and creaking ones
+# MAYHALL/0044: up only `if actionframe (1)`. steps.mov stops nine times
+# (dust/tools/films.ts); after the first, each stop has one safe tread of
+# three and the other two jump to frame 109, which is being caught.
+film([260,110], [134,110], [253,110], [375,110], [252,110], [135,110], [255,110], [371,110], [256,110])
+# frame 107 is the action frame and 108 stops once more, its only region
+# going back to the start of the stairs. Escape ends it there with 107
+# passed — and only there: an Escape before 107 skips the action frame and
+# the Mayor catches you on the landing.
+wait(js == (window.dbg.viewer.movieRegions || []).some((r) => r.x0 === 70), budget: 30000)   # the top (frame 108)
+esc()
+wait(set == mayupper, budget: 60000)
+save(upstairs)
+goto(1, 0, south, set: mayupper)
+click(boots)   # on the landing (mayupper.boots), seen from B1 facing south
+wait(owns.boots, budget: 30000)
+goto(2, 0, south, set: mayupper)
+key(ArrowUp)   # down (maydn.mov)
+wait(set == mayhall, budget: 30000)
+goto(2, 3, south, set: mayhall)
+doorAt(165, 58, 356, 263, owner: front)   # out of the front door
+wait(set == town, budget: 30000)
+save(boots)
+goto(3, 7, west, set: town)
+doorAt(213, 98, 282, 211, owner: paper)   # the newspaper office
+meet(flippo)   # Flippo, who has heard what is planned at Chin's
+say([101], then: stop, patience: 20000)   # In Diamondback? — phase 1, and Cobb and Dell to the shack
+wait(global.phase == 1 and !puppet, budget: 30000)
+save(flippo)
+goto(1, 1, east, set: paper)
+doorAt(138, 47, 365, 264, owner: flipout)   # out of the newspaper office
+takeInHand(gun)   # in hand now: after Cobb draws there are ten seconds (GANG.CST/0419 hasattention (10))
+meet(cobb)   # Cobb at the shack, Dell beside him
+say([102], then: stop, patience: 20000)   # I don't want to get involved. — shackit (): phase 2, and Cobb draws
+wait(global.phase == 2 and !puppet, budget: 60000)
+# The gun in the hand is drawn on the panel at (316,320); a click on it
+# raises `gunhand` (INVEN.PRP/0406), and with it up a click on the room is a
+# shot (BOOTFILE/0001 mousedown → NEW.FLT/0002 bullet → hittest). Six rounds
+# are already in it, so nothing to load. GANG.CST/0419 hit () is phase 3.
+clickAt(316, 320, wait: taken)   # raise the gun
+wait(js == window.dbg.session.interp.builtins.get("propview")(window.dbg.session.interp, ["gunhand"]) === "idle", budget: 10000)
+click(cobb)   # one round
+wait(global.phase == 3, budget: 30000)
+skipMovie(until: puppet, budget: 60000)   # cobbshot.mov, then Dell (DELL1.PUP: hands up, and the Mayor sent for)
+talkOut([301,201,104,102,101,103])   # Dell
+clickAt(316, 320, wait: taken)   # lower the gun: with it up, every click is another round
+wait(js == window.dbg.session.interp.builtins.get("propvisible")(window.dbg.session.interp, ["gunhand"]) == 0, budget: 10000)
+wait(visible.mayor, budget: 60000)   # the Mayor walking over (GANG.CST/1097 sherif)
+save(cobbshot)
+meet(mayor)   # MAYOR.PUP/0073 makesherrif (): the badge, Dell to the jail
+say([102,103], then: stop, patience: 20000)   # any of four refusals-or-not, then either question
+wait(global.clock == 3, budget: 120000)   # GANG.CST/1097: advanceday once the puppet is done
+skipMovie(until: quiet, budget: 120000)   # d2ad2n.mov — night, in the jail
+split(day 2 afternoon)
+save(day2night)
+
+# ---------------------------------------------------------------------
+# DAY 2 NIGHT — to bed
+#
+# No gate: HOTROOM/0034 cansleep () is true on any day-2 night, and the room
+# key came with Marie's wake-up this morning (MARIE.PUP/0054 wakeup).
+# hotbed.mov reaches its action frame through two stops, like the Mayor's.
+# ---------------------------------------------------------------------
+goto(0, 0, west, set: jail)
+doorAt(183, 34, 361, 263, owner: lock)   # out of the jail
+goto(6, 4, east, set: nite)
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel
+goto(3, 2, north, set: hotlower)
+key(ArrowUp)   # up to the landing
+goto(2, 3, west, set: hotupper)
+doorAt(168, 50, 329, 263, owner: playroom)   # our room
+goto(0, 0, west, set: hotroom)
+clickAt(332, 237, wait: taken)   # the sign over the bed (pointinsign)
+film([264,130], [264,130])   # lie down, and sleep
+wait(global.day == 3, budget: 60000)
+skipMovie(until: quiet, budget: 120000)   # d2nd3m.mov
+split(day 2 night)
+save(day3morning)
+
+# ---------------------------------------------------------------------
+# DAY 3 MORNING — the ring on Jones, and the pages
+#
+# `canadvance`: `propowner ("ring") = "jones" & propowner ("pages") =
+# "stranger"`. The ring is Ruby's since night 1; she gives it back once
+# Jones has told his story (`jonesringstory`, JONES.PUP/0074 bigstep 105).
+# The pages are under the scorpion in the schoolhouse desk (SCORP.FLT),
+# safe to take once he is inside a matchbox — and the matchbox is Leroy's
+# prize for a fair morning at his range.
+# ---------------------------------------------------------------------
+goto(1, 0, east, set: hotroom)
+doorAt(176, 62, 339, 263, owner: inside)   # out of our room
+goto(3, 0, south, set: hotupper)
+key(ArrowUp)   # down the stairs
+goto(1, 2, south, set: hotlower)
+clickAt(264, 232, wait: quiet)   # breakfast — Buick first (HOTLOWER/0040, buickphase 0)
+talkOut([201])   # Buick over breakfast
+clickAt(264, 232, until: global.phase == 2, gap: 500, budget: 30000)   # and breakfast: phase 2 opens the town's doors
+# HOTPLATE.FLT lets you up only from its last screen, the one with the
+# biscuits and the sugarcubes both taken
+clickAt(216, 137, wait: quiet)   # the biscuits
+clickAt(461, 95, wait: quiet)   # the sugarcubes
+clickAt(256, 350, wait: quiet)   # up from the table
+goto(0, 0, west, set: hotlower)
+doorAt(128, 73, 394, 262, owner: hotout)   # the lobby door
+meet(jones)   # Jones down by the bone
+say([101,102,104,105], then: stop, patience: 20000)   # Why so glum? / What's bothering you? / Marriage is a big step. / I'll try to find you a ring.
+wait(global.jonesringstory == 1 and !puppet, budget: 30000)
+save(ringstory)
+goto(3, 9, east, set: town)
+doorAt(3, 83, 91, 234, owner: back)   # the saloon's back door — the front is shut mornings (locksaloon)
+goto(3, 5, west, set: sallower)
+key(ArrowUp)   # up the stairs
+goto(0, 0, north, set: salupper)
+clickAt(233, 133, wait: quiet)   # Ruby's door
+say([102], then: stop, patience: 20000)   # I need my ring back. (RUBY.PUP/0058: hers since night 1, and no gun story to send it to Oona)
+wait(owns.ring and !puppet, budget: 30000)
+goto(0, 3, east, set: salupper)
+key(ArrowUp)   # down
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)   # out the front — locked only from the street
+takeInHand(ring)
+meet(jones)
+offer(ring)   # JONES.PUP/0007 gift: on day 3 he takes it
+wait(prop.ring == jones, budget: 30000)
+save(ringgiven)
+# Leroy's range: his "Yes." lends the gun and opens TARGET.SET with it up.
+# The score is accuracy (TARGET.FLT/0005): one shot that hits is 100% of one,
+# which is "fair", and on day 3 fair is a matchbox (LEROY.PUP/0088
+# aftertarget). The exit is the panel's button at (297,304).
+meet(leroy)   # Leroy at the range
+say([101], then: stop, patience: 20000)   # Yes.
+wait(set == target and quiet, budget: 60000)
+click(bottle1targ)   # one round, one bottle
+wait(global.bottlehitcount == 1, budget: 20000)
+clickAt(298, 304, wait: quiet)   # done shooting
+wait(set == town, budget: 30000)
+meet(leroy)   # aftertarget (): the score, and the prize
+talkOut([301,201,104,102,101,103])
+wait(owns.matchbox and !puppet, budget: 30000)
+save(matchbox)
+goto(6, 3, north, set: town)
+doorAt(160, 22, 338, 214, owner: court)   # the courthouse
+goto(2, 2, north, set: court)
+doorAt(148, 45, 355, 263, owner: schoolin)   # through to the schoolhouse
+goto(0, 1, north, set: school)
+# The drawer is a screen (SCORP.FLT, doscorp ()), and it takes two visits:
+# the matchbox left open in it, a walk out to the courthouse corner — where
+# TOWN.SET/0127 openscene gives the box to the scorpion — and back, to a
+# scorpion shut in the box and off the pages.
+clickAt(286, 225, wait: taken)   # the desk (SCHOOL.SET/0035 pointindesk)
+wait(flat == mainscorp, budget: 30000)   # the drawer runs open
+wait(quiet, budget: 20000)   # and SCORP.FLT trigger () ends `flushevents ()`: a press before that is thrown away
+give(matchbox, to, [256,132])   # let go over the drawer: SCORP.FLT offerobject, matchbox "desk"
+wait(prop.matchbox == desk, budget: 10000)
+clickAt(94, 323, wait: quiet)   # mainscorp's exit — the drawer shut
+wait(noflat, budget: 30000)
+goto(1, 1, south, set: school)
+doorAt(147, 78, 376, 263, owner: schoolout)   # out of the schoolroom
+goto(2, 4, south, set: court)
+doorAt(147, 37, 377, 263, owner: courtout)   # out through the mission gate
+wait(prop.matchbox == scorpion, budget: 30000)   # TOWN.SET/0127, on the corner
+goto(6, 3, north, set: town)
+doorAt(160, 22, 338, 214, owner: court)   # and straight back in
+goto(2, 2, north, set: court)
+doorAt(148, 45, 355, 263, owner: schoolin)
+goto(0, 1, north, set: school)
+clickAt(286, 225, wait: taken)   # the desk again
+wait(flat == mainscorp, budget: 30000)
+wait(quiet, budget: 20000)
+click(thepages)   # SCORP.FLT hitpage: thepages at deg 0 now, with the scorpion in the box
+wait(owns.pages, budget: 10000)
+click(thematch)   # and the box, scorpion and all
+clickAt(94, 323, wait: quiet)   # shut the drawer
+wait(noflat, budget: 30000)
+save(pages)
+goto(1, 1, south, set: school)
+doorAt(147, 78, 376, 263, owner: schoolout)
+goto(2, 4, south, set: court)
+doorAt(147, 37, 377, 263, owner: courtout)
+goto(6, 14, south, set: town, until: global.clock == 2 or playing, budget: 120000)   # the ring and the pages: the town counts its scenes again
+goto(6, 3, north, set: town, until: global.clock == 2 or playing, budget: 120000)
+skipMovie(until: quiet, budget: 120000)   # d3md3a.mov
+split(day 3 morning)
+save(day3afternoon)
+
+# ---------------------------------------------------------------------
+# DAY 3 AFTERNOON — the mask, the yunni book, the flute
+#
+# `canadvance`: all three the stranger's. The mask hangs on the Mayor's
+# dining-room wall (MAYDINE.SET/0001); his door is shut while his wife is in
+# the street (lockmayor), and three insults send her home (MWIFE.PUP/0076,
+# `mwifelike < -2`). Take the mask with the parrot unfed and the Mayor walks
+# in and stands in the doorway (INVEN.PRP/0083), so the apple on his table
+# goes to the birdcage first. Oona has the yunni book for whoever asks
+# (OONA.PUP/0095 threepm); Trotter has the flute, in the doctor's back room
+# once the Doc's prescription is made up (DOC.PUP/0041).
+# ---------------------------------------------------------------------
+meet(mwife)   # Mrs Mayor in the street
+say([201,201,201], then: stop, patience: 20000)   # ...you look like death warmed over, three times — and she goes home
+wait(!puppet and !visible.mwife, budget: 30000)
+goto(9, 8, east, set: town)
+doorAt(174, 82, 335, 228, owner: mayor)   # the Mayor's gate
+goto(2, 2, east, set: mayhall)
+doorAt(146, 78, 366, 262, owner: dine)   # the dining room
+goto(3, 2, east, set: maydine)
+click(apple)   # off the table
+takeInHand(apple)
+goto(3, 2, south, set: maydine)   # the cage, in the corner behind us
+give(apple, to, birdcage)   # EXTRA.CST/0198: the parrot takes an apple
+wait(prop.apple == birdcage, budget: 20000)
+goto(3, 2, east, set: maydine)
+click(mask)   # off the wall, with nobody squawking for the Mayor
+wait(owns.mask, budget: 20000)
+save(mask)
+goto(3, 1, west, set: maydine)
+doorAt(120, 20, 388, 263, owner: hall2)   # back to the hall
+goto(2, 3, south, set: mayhall)
+doorAt(165, 58, 356, 263, owner: front)   # out
+goto(6, 7, west, set: town)
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon, open in the afternoon
+meet(oona)   # threepm (): the yunni book, for the asking
+say([101], then: stop, patience: 20000)   # Thanks, Oona.
+wait(owns.yunnibook, budget: 30000)
+talkOut([301,201,104,102,101,103])
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)
+save(yunnibook)
+# The flute. DOC.PUP/0041 threepuzzle walks `docphase`: his three questions
+# are the prescription (2); Watson in the street, told, is 3 (WATSON.PUP/0084
+# onstreet); 3 is what lets the apothecary's bottles be mixed (HOUSE.PRP/0678
+# puzzletime), and 1,1,0,0,1,0,1,1 is the right mixture (DRUG.FLT drugok, 6);
+# the Doc takes it (7), and on the next visit is 8 — which puts Trotter in the
+# back room (DOCTOR2.SET/0001), and Trotter hands over the flute (TROTTER.PUP
+# /0075 threepm).
+goto(6, 4, west, set: town)
+doorAt(215, 85, 299, 225, owner: doctor)   # the doctor's
+meet(doc)
+say([101,102,103], then: stop, patience: 20000)   # What's wrong? / Where? / What do I need? — the prescription
+wait(global.docphase == 2 and !puppet, budget: 30000)
+goto(1, 0, east, set: doctor1)
+doorAt(204, 67, 321, 263, owner: doc2)   # out
+meet(watson)   # Watson in the street
+talkOut([301,201,104,102,101,103])
+wait(global.docphase == 3, budget: 30000)
+save(watson)
+goto(6, 8, east, set: town)
+doorAt(218, 94, 286, 205, owner: apoth)   # the apothecary
+goto(0, 1, north, set: apoth)
+click(bottles)   # HOUSE.PRP/0678 dodrugs: DRUG.FLT, the shelf of eight
+wait(js == /^flat/i.test(String(window.dbg.session.currentFlat || "")) && !window.dbg.session.scriptBusy, budget: 30000)
+# one of each of 1,1,0,0,1,0,1,1 (DRUG.FLT drugmovie counts clicks per bottle)
+clickAt(19, 75, wait: taken)   # cactus
+skipMovie(until: quiet, budget: 30000)
+clickAt(93, 70, wait: taken)   # rose
+skipMovie(until: quiet, budget: 30000)
+clickAt(297, 69, wait: taken)   # shroom
+skipMovie(until: quiet, budget: 30000)
+clickAt(427, 70, wait: taken)   # armwort
+skipMovie(until: quiet, budget: 30000)
+clickAt(498, 68, wait: taken)   # pinto
+skipMovie(until: quiet, budget: 30000)
+clickAt(110, 324, wait: taken)   # accept (drugok)
+wait(global.docphase == 6 and noflat, budget: 30000)
+goto(2, 1, east, set: apoth)
+doorAt(163, 33, 336, 263, owner: pharm)   # out
+save(mixture)
+goto(6, 4, west, set: town)
+doorAt(215, 85, 299, 225, owner: doctor)
+meet(doc)
+say([101], then: stop, patience: 20000)   # I'm sure it is. — he takes the mixture (7)
+wait(global.docphase == 7 and !puppet, budget: 30000)
+goto(1, 0, east, set: doctor1)
+doorAt(204, 67, 321, 263, owner: doc2)   # out, so that coming back in sets him up again
+goto(6, 4, west, set: town)
+doorAt(215, 85, 299, 225, owner: doctor)
+meet(doc)   # 7 → 8
+wait(global.docphase == 8 and !puppet, budget: 30000)
+goto(1, 0, west, set: doctor1)
+doorAt(190, 65, 307, 261, owner: doc1)   # the curtain to the back room — Trotter (DOCTOR2.SET/0001)
+meet(trotter)
+say([101], then: stop, patience: 20000)   # Thanks Nate.
+wait(owns.flute and !puppet, budget: 30000)
+save(flute)
+goto(0, 0, east, set: doctor2)
+doorAt(205, 68, 319, 262, owner: doc4)   # back through the curtain
+goto(1, 0, east, set: doctor1)
+doorAt(204, 67, 321, 263, owner: doc2)   # out
+goto(6, 14, south, set: town, until: global.clock == 3 or playing, budget: 120000)   # mask, book and flute: the town counts again
+goto(6, 3, north, set: town, until: global.clock == 3 or playing, budget: 120000)
+skipMovie(until: quiet, budget: 120000)   # d3ad3n.mov
+split(day 3 afternoon)
+save(day3night)
+
+# ---------------------------------------------------------------------
+# DAY 3 NIGHT — the Thunderbird, the yunni stone, and phase past 3
+#
+# HOTROOM/0034 cansleep () wants day3bedtime (): the Thunderbird and the
+# yunni stone the stranger's and `phase > 3`. The night's `phase`: Laurel
+# crossing the street to you is 1 however the talk goes (LAUREL.PUP/0053);
+# a hand at Mez's poker table is 2, and a won hand is the Thunderbird
+# (MEZ.PUP/0058 winner); the street outside the saloon at 2 is the bounty
+# hunters (NITE.SET/0131 openfight, 3); and the saloon after them is 4
+# (SALLOWER.SET/0001). The stone is in the bank's safe (CRACK.FLT).
+# ---------------------------------------------------------------------
+# Night 3's 1 is Jackalope and Laurel made up (JONES.PUP/0074 makeup):
+# Laurel first (laurelphase 1), Flippo to say where he is hiding, Jones in the
+# chicken pen (jonesphase 1), Laurel told he is sorry (laurelphase 2), and
+# Jones told it is all right — phase 1.
+meet(laurel)   # Laurel, across the street
+say([101,103], then: stop, patience: 20000)   # No. / Goodbye, Laurel.
+wait(global.laurelphase == 1 and !puppet, budget: 30000)
+goto(6, 7, west, set: nite)
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon
+meet(flippo)   # Flippo at the bar
+say([109,103], then: stop, patience: 20000)   # Where is Jackalope? / Goodbye Mr. Flippo.
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)   # out
+goto(4, 10, west, set: nite)
+key(ArrowUp)   # west into the chicken pen
+goto(1, 10, west, set: nite)
+say([101,102,201], then: stop, patience: 20000)   # Yes. / You try talking to Laurel? / What'll you do now?
+meet(laurel)
+say([111,101,102,103,104], then: stop, patience: 20000)   # I've seen Jackalope. He says he's sorry. / Yes, he did. / Honest. / I could ask him for you. / I sure will Laurel.
+goto(1, 10, west, set: nite)
+hammer(jones, until: puppet, gap: 1500, budget: 60000)   # Jackalope, out of the chickens
+say([101], then: stop, patience: 20000)   # I spoke with Laurel. Everything's okay.
+wait(global.phase == 1 and !puppet, budget: 30000)
+goto(6, 7, west, set: nite)
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon
+goto(2, 1, east, set: sallower)   # the gamblers' table (HOUSE.PRP/0165, within 500); on seed 7 the first hand dealt wins
+poker()   # one hand: phase 2, and the Thunderbird if it is won
+save(poker)
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)   # out, into the ambush (NITE.SET/0131 openscene at phase 2)
+bountyHunters()   # five down; phase 3
+goto(6, 8, north, set: nite)   # seed 7: where Trotter will pass
+intercept(trotter)   # Trotter, on the first tick a click reaches him
+say([103], then: stop, patience: 20000)   # That all? — trotterphase 1 and fighton 0, which is the bank's door
+wait(global.fighton == 0 and !puppet, budget: 30000)
+save(bounty)
+# The bank, shut for the night: the hairpin opens it (NITE.SET/0129, and the
+# hairpin is in the night's inventory, INVEN.PRP/0001 initprops).
+goto(6, 5, west, set: nite)
+clickAt(253, 157, wait: quiet)   # the bank door, and the hairpin in the lock
+wait(set == bank, budget: 30000)
+goto(3, 0, west, set: bank)
+clickAt(261, 131, wait: taken)   # the safe (BANK.SET/0043) — CRACK.FLT
+safe(8, 23, 41)   # right to 08, left to 23, right to 41, and the handle
+# vault.mov, then safebox.mov, which stops twice before its action frame:
+# (75,13)-(403,264) → 2, then (105,23)-(390,251) → 17 — the stone is
+# CRACK.FLT's `if actionframe (1) = true`
+film([240,140], [248,137])   # open the box, and take the stone
+wait(owns.tstone, budget: 60000)
+wait(noflat and quiet, budget: 60000)
+save(tstone)
+goto(3, 1, east, set: bank)
+doorAt(177, 30, 339, 263, owner: dollar)   # out of the bank
+goto(6, 7, west, set: nite)
+doorAt(241, 92, 307, 201, owner: saloon)   # in at the saloon: SALLOWER.SET/0001 openset, phase 3 → 4
+wait(global.phase == 4, budget: 30000)
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)
+goto(6, 4, east, set: nite)
+doorAt(200, 91, 305, 203, owner: hotel)   # the hotel
+goto(3, 2, north, set: hotlower)
+key(ArrowUp)   # up the stairs
+goto(2, 3, west, set: hotupper)
+doorAt(168, 50, 329, 263, owner: playroom)   # our room
+goto(0, 0, west, set: hotroom)
+clickAt(332, 237, wait: taken)   # the sign over the bed — day3bedtime () is true now
+film([264,130], [264,130])   # lie down, and sleep
+wait(global.day == 4, budget: 60000)
+skipMovie(until: quiet, budget: 120000)
+split(day 3 night)
+save(day4morning)
+
+# ---------------------------------------------------------------------
+# DAY 4 — Jones, the Kid's gang, and the Kid
+#
+# The morning's one event: Jones in the saloon, twice (JONES.PUP/0075:
+# jonesphase 1, then 2 and `phase = 1`). Stepping back out onto the street
+# at phase 1 turns the day (TOWN.SET/0131), and the afternoon is the gang's
+# fight (NEW.FLT/0001 advanceday → openfight). It ends at `phase = 3`, which
+# arms the Kid on the hotel's doorstep facing south (TOWN.SET/0128 openkid):
+# five cut-downs, all 101 (KID.PUP/0051), and his draw (kiddie.mov) whose
+# boxes go by without waiting. Then night.
+# ---------------------------------------------------------------------
+goto(1, 0, east, set: hotroom)
+doorAt(176, 62, 339, 263, owner: inside)   # out of our room
+goto(3, 0, south, set: hotupper)
+key(ArrowUp)   # down the stairs
+goto(0, 0, north, set: hotlower)   # facing the desk (his talk would stop the walk anyway)
+hammer(fear, until: global.fearphase >= 1, gap: 1500, budget: 60000)   # Fear at the desk has something to say
+goto(0, 0, west, set: hotlower)
+doorAt(128, 73, 394, 262, owner: hotout)   # the lobby door
+goto(6, 7, west, set: town)
+doorAt(241, 92, 307, 201, owner: saloon)   # the saloon, open on day 4 (locksaloon)
+goto(2, 2, west, set: sallower)   # Jones and Trotter at the bar
+hammer(jones, until: global.jonesphase >= 1, gap: 1500, budget: 60000)   # Jones, first
+hammer(jones, until: global.phase == 1, gap: 1500, budget: 60000)   # Jones, again — phase 1
+wait(!puppet, budget: 20000)
+save(day4jones)
+goto(3, 0, east, set: sallower)
+doorAt(144, 7, 387, 264, owner: salout)   # out: the morning turns, and the gang opens up
+kidGang()   # three rounds; phase 3
+save(gangdown)
+goto(6, 3, south, set: town)   # down Scene G4 to the hotel's doorstep, facing south
+key(ArrowUp, wait: taken)   # onto G5: TOWN.SET/0128 openkid () — which runs on inside this one step
+wait(puppet, budget: 60000)   # the Kid walks up the street
+say([101,101,101,101,101], then: stop, patience: 20000)   # five cut-downs; the fifth wants the matchbox for his cigar
+filmBoxes(until: global.clock == 3)   # kiddie.mov: through all three boxes to its action frame — and the night
+skipMovie(until: quiet, budget: 120000)   # d4ad4n.mov
+split(day 4)
+save(day4night)
+
+# ---------------------------------------------------------------------
+# DAY 4 NIGHT — under the mission
+#
+# The day ends in TUMBLE.FLT, and only once the flute, the snake, the mine
+# and the thunderbird puzzles are all "done" (`phase = 1`), and the
+# bloodstone after them. The way down is the mission: Sonoma in the night
+# courtyard, the padre's room, the yunni stone into its box, and the
+# fountain.
+# ---------------------------------------------------------------------
+goto(6, 3, north, set: nite)
+doorAt(160, 22, 338, 214, owner: court)   # the mission at night
+goto(2, 2, north, set: nitecour)
+meet(sonoma)   # Sonoma in the courtyard
+say([101], then: stop, patience: 20000)   # What happens after that?
+wait(global.sonomaphase == 1 and !puppet, budget: 30000)
+doorAt(148, 45, 355, 263, owner: schoolin)   # the schoolhouse
+goto(0, 1, west, set: nitescho)
+doorAt(207, 79, 320, 263, owner: padre)   # the padre's door
+takeInHand(tstone)   # the yunni stone, for the box it was cut for
+goto(0, 2, east, set: padre)
+clickAt(251, 187, until: js == /yunnibox/i.test(String(window.dbg.session.stageName || "")), gap: 500, budget: 30000)   # the yunni box
+clickAt(262, 123, until: flat == flat 1, gap: 500, budget: 30000)   # its lid
+wait(quiet, budget: 20000)
+give(tstone, to, [247,150])   # the stone in
+wait(prop.tstone == box, budget: 20000)
+clickAt(247, 105, until: js == !/yunnibox/i.test(String(window.dbg.session.stageName || "")), gap: 500, budget: 30000)   # the lid shut
+wait(set == padre and quiet, budget: 30000)
+goto(0, 1, east, set: padre)
+doorAt(193, 81, 303, 264, owner: padreout)
+goto(1, 1, south, set: nitescho)
+doorAt(147, 78, 376, 263, owner: schoolout)
+goto(2, 2, south, set: nitecour)
+clickAt(259, 212, until: set == hub, gap: 500, budget: 30000)   # the fountain, and down
+key(ArrowLeft, until: global.blackout == -1, budget: 60000)   # the dark under the mission
+save(hub)
+# The flute room: the sundial at 0/0/8 (SUNDIAL.FLT exitsundial), and its
+# dark edge is the hub's east one (HUB.SET/0079, Scene G4).
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: taken)   # the sundial (HUB.SET/0059 pointinsundial)
+sundial(0, 0, 8)
+wait(global.nextroom == flute and flat == mainpanel, budget: 30000)
+goto(6, 3, east, set: hub)
+key(ArrowUp, until: set == flute, budget: 60000)   # into the dark
+save(fluteroom)
+# The flute into the idol, and the tune FLUTE.FLT evaluate () spells out:
+# `answerstr = "1,2,3,4,5,"`, its five buttons in their numbered order.
+takeInHand(flute)
+clickAt(424, 232, wait: taken)   # the idol (FLUTE.SET/0041 pointinflute)
+wait(flat == flat 0 and quiet, budget: 30000)
+give(flute, to, [256,150])   # FLUTE.FLT offerobject: the temple's now
+wait(prop.flute == temple and flat == flat 1, budget: 20000)
+clickAt(431, 124, wait: quiet)   # but 1
+clickAt(431, 177, wait: quiet)   # but 2
+clickAt(431, 97, wait: quiet)   # but 3
+clickAt(430, 150, wait: quiet)   # but 4
+clickAt(429, 69, wait: taken)   # but 5 — flutepuzzle "done", flute.mov, and the hub
+wait(global.flutepuzzle == done and set == hub, budget: 60000)
+key(ArrowLeft, until: global.blackout == -1, budget: 60000)   # the dark
+save(flutedone)
+# The snake: the sundial at 8/12/4, the hub's west arm, and the hex lock
+# (SNAKE.SET/0040 pointinhexbut); solved, the snake takes the Blade.
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: taken)   # the sundial
+sundial(8, 12, 4)
+wait(global.nextroom == snake and flat == mainpanel, budget: 30000)
+goto(0, 3, west, set: hub)
+key(ArrowUp, until: set == snake, budget: 60000)   # into the dark under the west arm
+goto(1, 2, south, set: snake)
+clickAt(350, 162, wait: taken)   # the hex button: SNAKE.FLT, scrambled
+hexLock()
+wait(global.snakepuzzle == done and set == hub, budget: 90000)   # snake.mov, and the hub
+key(ArrowUp, until: global.blackout == -1, budget: 60000)   # the dark
+save(snakedone)
+# The mine: the Mask in hand BEFORE going in, or the skeleton is only a
+# wanderer (MINE.CST/0002 initxyz); the sundial at 4/8/12; the north arm.
+takeInHand(mask)
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: taken)   # the sundial
+sundial(4, 8, 12)
+wait(global.nextroom == mine and flat == mainpanel, budget: 30000)
+goto(3, 0, north, set: hub)
+key(ArrowUp, until: set == mine, budget: 60000)   # into the dark at the north arm
+mineMaze()   # the skeleton to the centre, and stand with it
+give(mask, to, skeleton)   # MINE.CST/0002 offerobject: minepuzzle "done"
+wait(global.minepuzzle == done and set == hub, budget: 90000)   # skeleton.mov, and the hub
+key(ArrowUp, until: global.blackout == -1, budget: 60000)
+save(minedone)
+# The thunderbird: the sundial at 12/4/8, the south arm, the podium
+# (TBIRD.SET/0039 pointinpodium), the bird into the temple, and the
+# tumblers to TUMBLE.PRP nametodeg (). Four puzzles done is `phase = 1`.
+takeInHand(tbird)
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: taken)   # the sundial
+sundial(12, 4, 8)
+wait(global.nextroom == tbird and flat == mainpanel, budget: 30000)
+goto(3, 6, south, set: hub)
+key(ArrowUp, until: set == tbird, budget: 60000)   # into the dark at the south arm
+goto(1, 1, north, set: tbird)
+clickAt(261, 147, wait: taken)   # the podium — TUMBLE.FLT
+wait(flat == tumble0 and quiet, budget: 30000)
+give(tbird, to, [256,132])   # into the temple
+wait(prop.tbird == temple and flat == tumble2 and quiet, budget: 200000)   # tumopen.mov, and the tumblers
+tumblers(8, 8, 4, 20, 12)
+clickAt(253, 219, wait: taken)   # quit — gototbird () finds them solved
+wait(global.tbirdpuzzle == done and global.phase == 1, budget: 30000)
+wait(set == hub, budget: 400000)   # tumtran.mov, and the hub
+key(ArrowUp, until: global.blackout == -1, budget: 60000)
+save(fourdone)
+
+# ---------------------------------------------------------------------
+# THE END — Bloodstone, the temple, and day 5
+#
+# The sundial at 12/4/12 with all four done raises the chest (SUNDIAL.FLT
+# exitsundial, phase 3); the chest fetches Bloodstone, who takes the gun and
+# sends you to the temple with the Thunder Bird (phase 5). The temple's
+# tumblers at `killblood ()`'s 8/8/0/20/16 end the night (TUMBLE.FLT,
+# advanceday), and day 5's main street, faced south at G14, is the town's
+# goodbye and the credits (TOWN.SET/0137, phase 99).
+# ---------------------------------------------------------------------
+goto(3, 4, north, set: hub)
+clickAt(257, 166, wait: taken)   # the sundial
+sundial(12, 4, 12)
+wait(global.phase == 3 and flat == mainpanel and quiet, budget: 80000)   # chestapp.mov
+click(chest)   # Bloodstone
+wait(puppet, budget: 80000)
+say([101,101], then: stop, patience: 20000)   # his two questions
+wait(owns.tbird and !puppet and set == tbird, budget: 80000)
+goto(1, 1, north, set: tbird)
+clickAt(261, 147, wait: taken)   # the podium
+wait(flat == tumble0 and quiet, budget: 30000)
+give(tbird, to, [256,150])
+wait(prop.tbird == temple and flat == tumble2 and quiet, budget: 200000)
+tumblers(8, 8, 0, 20, 16)   # killblood ()
+clickAt(253, 219, wait: taken)   # quit
+wait(global.day == 5 and set == town, budget: 400000)   # the end of the night, and the chest
+skipMovie(until: quiet, budget: 120000)
+goto(6, 13, south, set: town)   # G14 facing south: the finale
+# Everybody's goodbye is a puppet each (TOWN.SET/0137 doapuppet), and the
+# last, Oona's `decide ()`, asks where you are going. Escape at her plaque is
+# the -1 answer, which is the desert (phase 6, deserend.mov) — Escape through
+# all of it, a player's key, is the whole of the finale.
+key(Escape, until: global.phase == 99, gap: 200, budget: 600000)
+split(the end)

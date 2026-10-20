@@ -962,9 +962,19 @@ export async function converse(
     const at = (s.rects ?? [])[idx];
     if (!at) throw new Error(`no plaque rectangle for choice ${idx}`);
     await d.clickAt(at.x, at.y, "none");
-    // only until the answer is TAKEN; the reply's lines get skipped above
+    /*
+     * Only until the answer is TAKEN; the reply's lines get skipped above.
+     *
+     * Taken is the plaque going away — or coming back different. A reply that
+     * says nothing and loops (Dust's bank: "Add $1 to deposit." is `actdep (1)`
+     * and straight back to `puppetevent`) clears the plaque and draws it again
+     * inside one pass, and a headless run only looks between passes, so it never
+     * sees the gap; what it does see is the deposit total in the plaque's text.
+     */
+    const shown = JSON.stringify(choices.map((ch) => ch.text));
     await d.hold(
-      `!(window.dbg.viewer && window.dbg.viewer.awaitingChoice)`,
+      `!(window.dbg.viewer && window.dbg.viewer.awaitingChoice) || ` +
+        `JSON.stringify((window.dbg.viewer.choices || []).map((c) => c.text)) !== ${JSON.stringify(shown)}`,
       `bevel ${idx} to be taken`,
       Math.max(1000, deadline - budgetNow(c.d)),
     );

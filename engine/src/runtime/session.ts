@@ -984,6 +984,7 @@ export class GameSession {
   get runMs() { return this.timeCtrl.runMs; }
   get frozen() { return this.timeCtrl.frozen; }
   get loadingFiles() { return this.timeCtrl.loadingFiles; }
+  get sheetBudgetMs() { return this.timeCtrl.sheetBudgetMs; }
   gameTime(...a: Parameters<SessionTime["gameTime"]>) { return this.timeCtrl.gameTime(...a); }
   countRun(...a: Parameters<SessionTime["countRun"]>) { return this.timeCtrl.countRun(...a); }
   freezeTime(...a: Parameters<SessionTime["freezeTime"]>) { return this.timeCtrl.freezeTime(...a); }

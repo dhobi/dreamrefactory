@@ -14,20 +14,29 @@
  * `blackjack` (./blackjack.ts: Jan's bet plaque is asked again on the very pass
  * it is answered, which `say` cannot see go by).
  *
+ * Films that ask: `film` answers a film's stops one click each, and
+ * `filmBoxes` clicks a film whose boxes go by without stopping (the Kid's draw).
+ *
+ * And the ones the run sheet needed for the parts of the game that are a
+ * loop or a puzzle rather than a line, each in its own file: `poker`,
+ * `bountyHunters` and `kidGang` (./fight.ts), `safe`, `sundial`, `hexLock`,
+ * `mineMaze` and `tumblers`. A sheet does not branch, so a course that reacts —
+ * a hand of cards, a gunman who walks — is one named verb.
+ *
  * Everything else a route needs is the engine's ({@link CORE_ACTIONS}): the four
  * arrows and Space, a click at a named thing or a raw pixel, a held press, ESC
  * through a film, a conversation answered by bevel, the waits, and the run's own
  * bookkeeping. All of it is written against a DreamFactory session, and Dust is
  * one — the same `hittest`, the same props, the same conversation machinery.
  *
- * Not here yet: the shooting range (a light-gun aim, `combo`'s shape but wanting
- * a name) and poker. A verb is added when a route needs it, not before: a table
- * of verbs written ahead of any route would be wrong in ways nobody can see yet.
+ * A verb is added when a route needs it, not before: a table of verbs written
+ * ahead of any route would be wrong in ways nobody can see yet.
  */
 import type { VerbSpec } from "@dreamfactory/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
 import {
   composeActions,
+  condition,
   menuVerbs,
   type ActionContext,
   resolveIn,
@@ -37,6 +46,14 @@ import {
 } from "@dreamfactory/speedrun/action";
 import { BLACKJACK } from "./blackjack";
 import { PANEL } from "./menu";
+import { POKER } from "./poker";
+import { INTERCEPT } from "./intercept";
+import { bountyHunters, kidGang } from "./fight";
+import { SAFE } from "./safe";
+import { SUNDIAL } from "./sundial";
+import { HEX_LOCK } from "./hexlock";
+import { mineMaze } from "./mine";
+import { TUMBLERS } from "./tumblers";
 
 /**
  * Give the thing in your hand to somebody, or to something.
@@ -96,9 +113,10 @@ import { PANEL } from "./menu";
  */
 const GIVE: Action = {
   args: [2, 3],
+  groups: true,
   wait: "none",
   sig: "give(bone, to, dog)",
-  help: "drag the thing in your hand onto somebody or something — give(bone, to, dog)",
+  help: "drag the thing in your hand onto somebody or something — give(bone, to, dog), or onto a point: give(matchbox, to, [256,132])",
   run: async (c) => {
     // `to`/`on` are noise a sheet reads better WITH, exactly as Titanic's `use`
     // takes them (taoot/src/speedrun/actions.ts) — one grammar for the two verbs
@@ -130,8 +148,46 @@ const GIVE: Action = {
       return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
     })()`);
     if (!from) throw new Error(`the engine will not say where the ${item} is drawn`);
-    const to = await c.d.aim("thing", target);
-    if (!to) throw new Error(`no ${target} here to give the ${item} to`);
+    /*
+     * A POINT as the target, for a drop that lands on a screen rather than on
+     * anybody: INVEN.PRP/0001 stdmouse hands an item let go over a stage to
+     * `sendtoflat (currentflat (), offerobject (what))`, which is how the
+     * matchbox goes into the schoolhouse drawer (SCORP.FLT) — there is no prop
+     * there to aim at, only the drawer the screen is a picture of.
+     */
+    const point = /^\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]$/.exec(target);
+    const aimed = point ? { x: Number(point[1]), y: Number(point[2]) } : await c.d.aim("thing", target);
+    if (!aimed) throw new Error(`no ${target} here to give the ${item} to`);
+    /*
+     * And for somebody, the middle of them rather than `aim`'s point. The aim
+     * sweep answers with the FIRST pixel that hits, which is the top edge of the
+     * sprite, and the drop lands a drag later: the dog on day 1 sniffs, and on
+     * one seed in three his head had moved off 210,170 by the release — the bone
+     * fell in the street, `offerobject` never ran, and the dog stood in the road
+     * all night (NITE.SET/0135 keydown). The hit point nearest the centre of
+     * everything that hits is inside him whichever frame is up.
+     */
+    const to = point
+      ? aimed
+      : ((await c.d.evaluate<{ x: number; y: number } | null>(`(() => {
+      const s = window.dbg.session, scr = window.dbg.host && window.dbg.host.screen;
+      if (!scr || !s.hitTestAt) return null;
+      const w = scr.width, h = scr.height;
+      // inside their own drawn box when the engine has one, not the whole screen:
+      // fifty thousand hit tests were seconds of a browser's time on every give
+      const boxes = (s.thingBoxes ? s.thingBoxes(${JSON.stringify(target.toLowerCase())}) : []) || [];
+      const r = boxes.length
+        ? boxes.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }))
+        : { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
+      const hits = [];
+      for (let y = Math.max(0, r.y0); y <= Math.min(h - 1, r.y1); y += 2) for (let x = Math.max(0, r.x0); x <= Math.min(w - 1, r.x1); x += 2) {
+        const t = s.hitTestAt(x, y);
+        if (t && String(t.name || "").toLowerCase() === ${JSON.stringify(target.toLowerCase())}) hits.push({ x, y });
+      }
+      if (!hits.length) return null;
+      const cx = hits.reduce((a, p) => a + p.x, 0) / hits.length, cy = hits.reduce((a, p) => a + p.y, 0) / hits.length;
+      return hits.reduce((b, p) => ((p.x - cx) ** 2 + (p.y - cy) ** 2 < (b.x - cx) ** 2 + (b.y - cy) ** 2 ? p : b));
+    })()`)) ?? aimed);
 
     /*
      * The two waits, as expressions the driver polls — and the second is why one
@@ -149,7 +205,11 @@ const GIVE: Action = {
       const i = window.dbg.session.interp;
       const f = i.builtins.get("propxy");
       if (!f) return false;
-      return Number(f(i, [${item$}, 1])) === ${to.x} && Number(f(i, [${item$}, 2])) === ${to.y};
+      // within two pixels and not exactly: on a canvas drawn smaller than 1:1 (a
+      // phone) a pointer cannot reach every framebuffer pixel, and the item is
+      // drawn under the one beside the point aimed at — exact, the wait never
+      // came true and the bone was held over the dog for the whole budget
+      return Math.abs(Number(f(i, [${item$}, 1])) - ${to.x}) <= 2 && Math.abs(Number(f(i, [${item$}, 2])) - ${to.y}) <= 2;
     })()`;
     const got = await c.d.dragOnto(from, to, {
       armed: `window.dbg.session.pollingInput()`,
@@ -197,6 +257,8 @@ interface Walk {
   /** the way to face on arrival, if any */
   want: string | undefined;
   spent: number;
+  /** `until:`, compiled — the walk is over the moment it holds, wherever that is */
+  until: string | null;
 }
 
 /**
@@ -331,12 +393,22 @@ const READ = `(() => {
 /** there: face the way asked, and say how many plans it took */
 async function arrive(w: Walk, set: string, goal: { name: string }, plans: number): Promise<void> {
   const { c, want, x, z } = w;
+  // the turns on arrival can be swallowed as a step can — see waitOutSpeech
   if (want) {
-    await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want] }, wait: "none" });
+    for (let turn = 1; ; turn++) {
+      await waitOutSpeech(c);
+      try {
+        await faceShortWay(c, want);
+        break;
+      } catch (e) {
+        if (turn >= 3) throw e;
+      }
+    }
   }
   let how = ", already there";
   if (w.spent) how = `, ${w.spent} road(s)` + (plans > 1 ? ` over ${plans} plans` : "");
   c.say(`${set} ${goal.name} (${x},${z})` + how);
+  await waitOutSpeech(c);
   await c.d.settle(c.wait, `the walk to ${x},${z}`, c.budget);
 }
 
@@ -518,11 +590,59 @@ const CELL = `(() => {
   return String(v.scene.sceneName || "").toLowerCase();
 })()`;
 
+/**
+ * Wait out somebody who only TALKS — no plaque to answer, nothing to click.
+ *
+ * The robber (TOWN.SET/0001 openscene: 20 in 1000 a street scene until the
+ * bank holds a dollar) is sent by the scene a step has just walked into, so he
+ * starts in the middle of whatever comes next — a turn, a door's click, the
+ * press through it — and swallows it. He is a dozen `puppetspeak` lines, longer
+ * than any one gesture's budget, so the town's verbs wait for him to finish
+ * before they gesture, and try a gesture again that he took.
+ */
+const SPEECH_OVER = `!window.dbg.session.puppet || !!(window.dbg.viewer && window.dbg.viewer.awaitingChoice)`;
+const waitOutSpeech = (c: ActionContext): Promise<boolean> => c.d.tryHold(SPEECH_OVER, 120_000);
+
+/**
+ * Turn to `want` the SHORT way round.
+ *
+ * The core `face` turns right until it gets there, so a view one step to the
+ * left cost three right turns: 141 of them in dhobi's fastest. Each scene's two
+ * turn rings (`turns[0]` right, `turns[1]` left) say where every press stops,
+ * the same walk `turnRing` (engine/src/df/set.ts) makes. Whichever direction
+ * plays fewer frames to reach the view gets the presses; a tie goes right.
+ */
+const TURN_FRAMES = (want: string): string => `(() => {
+  const v = window.dbg.viewer, sc = v && v.scene;
+  if (!sc || !sc.turns) return null;
+  const idx = sc.views.findIndex((w) => String(w.viewName || "").toLowerCase() === ${JSON.stringify(want)});
+  if (idx < 0) return null;
+  const cost = (d) => {
+    const ring = sc.turns[d] && sc.turns[d].frames;
+    if (!ring || !ring.length) return Infinity;
+    let at = ring.findIndex((f) => f.viewID === v.viewIdx && f.motionInfo > 0);
+    if (at < 0) return Infinity;
+    for (let n = 1; n <= ring.length; n++) {
+      const f = ring[(at + n) % ring.length];
+      if (f.viewID === idx && f.motionInfo > 0) return n;
+    }
+    return Infinity;
+  };
+  return [cost(0), cost(1)];
+})()`;
+
+async function faceShortWay(c: ActionContext, want: string): Promise<void> {
+  const cost = await c.d.evaluate<[number, number] | null>(TURN_FRAMES(want.toLowerCase()));
+  const dir = cost && cost[1] < cost[0] ? "left" : "right";
+  await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [want], opts: { ...c.step.opts, dir } }, wait: "none" });
+}
+
 /** walk the plan from `from`, a road at a time, looking after each where it actually put us */
 async function walkSteps(w: Walk, steps: { face: string }[], goal: Cell, from: string): Promise<void> {
   const { c } = w;
   let expected = from;
   for (const step of steps) {
+    if (w.until && (await c.d.evaluate<boolean>(`!!(${w.until})`))) return;
     /*
      * Wait for the world to be BOTH unfrozen and willing to take a press.
      *
@@ -534,11 +654,16 @@ async function walkSteps(w: Walk, steps: { face: string }[], goal: Cell, from: s
      * bound is generous because the thing being waited out is somebody
      * else's script, not ours.
      */
+    // somebody talking with nothing to answer first — see waitOutSpeech
+    await waitOutSpeech(c);
+    // and over the moment `until:` comes true while we wait: a film the line
+    // was walking towards starts here, and it is the next line's to skip
     await c.d.tryHold(
-      `!(${FROZEN}) && (${IDLE_ENOUGH})`,
+      `(!(${FROZEN}) && (${IDLE_ENOUGH}))` + (w.until ? ` || !!(${w.until})` : ""),
       Math.min(Math.max(c.budget, 20_000), 30_000),
     );
-    await CORE_ACTIONS.face.run({ ...c, step: { ...c.step, args: [step.face] }, wait: "none" });
+    if (w.until && (await c.d.evaluate<boolean>(`!!(${w.until})`))) return;
+    await faceShortWay(c, step.face);
     // `wait: none` because `arrow` confirms the walk itself, by the
     // standpoint changing, and presses again when it did not — a settle
     // here would be paid once per cell for nothing
@@ -622,9 +747,11 @@ async function walkSteps(w: Walk, steps: { face: string }[], goal: Cell, from: s
 const GOTO: Action = {
   args: [2, 3],
   wait: "none",
-  opts: ["set", "replies", "tries"],
+  opts: ["set", "replies", "tries", "until"],
   sig: "goto(10, 10, north)",
-  help: "walk to a grid cell of this room — goto(10, 10), and goto(10, 10, north) to face a way as well",
+  help:
+    "walk to a grid cell of this room — goto(10, 10), and goto(10, 10, north) to face a way as well; " +
+    "until: ends the walk wherever it has got to once that is true",
   run: async (c) => {
     const [xs, zs, want] = c.step.args;
     const x = Number(xs);
@@ -637,7 +764,18 @@ const GOTO: Action = {
     }
     const spoken = (c.step.opts.replies ?? "").trim().toLowerCase();
     const tries = Math.max(1, Number(c.step.opts.tries ?? 4));
-    const walk: Walk = { c, x, z, want, spent: 0 };
+    /*
+     * `until:` is for a walk whose END is not a cell: the town counts the scenes
+     * you walk and moves the clock on one of them (TOWN.SET/0001 openscene), so
+     * "walk to the end of the street" is really "walk until it is afternoon", and
+     * which cell that happens on is the dice's. Asked before every step and after
+     * anything that stops a walk, because what it waits for is usually the thing
+     * that stopped it — a film starting is not a failed walk if it is the film the
+     * line was walking towards.
+     */
+    const until = c.step.opts.until ? condition(c.step.opts.until) : null;
+    const done = async (): Promise<boolean> => !!until && (await c.d.evaluate<boolean>(`!!(${until})`));
+    const walk: Walk = { c, x, z, want, spent: 0, until };
     let last = "";
     /*
      * Re-planned from where we ACTUALLY are, every pass — the note above says
@@ -645,7 +783,12 @@ const GOTO: Action = {
      * settle, read the room, plan, walk it.
      */
     for (let attempt = 1; attempt <= tries; attempt++) {
+      if (await done()) {
+        c.say(`${c.step.opts.until} after ${walk.spent} road(s)`);
+        return;
+      }
       await clearOrSay(c, spoken);
+      await waitOutSpeech(c);
       await c.d.settle("quiet", `the room before planning the walk to ${x},${z}`, c.budget);
 
       const room = await c.d.evaluate<Room | null>(READ);
@@ -675,6 +818,10 @@ const GOTO: Action = {
       let drifted = "";
       try {
         await walkSteps(walk, steps, goal, room.here);
+        if (await done()) {
+          c.say(`${c.step.opts.until} after ${walk.spent} road(s)`);
+          return;
+        }
         // and if the plan ran out somewhere other than the goal, say so and let
         // the outer loop plan again from here rather than reporting success
         const ended = await c.d.evaluate<string>(CELL);
@@ -688,6 +835,10 @@ const GOTO: Action = {
         // be none (`tries: 1`), and this plan is the one that got us there
         if (ended === goal.name) return arrive(walk, room.set, goal, attempt);
       } catch (e) {
+        if (await done()) {
+          c.say(`${c.step.opts.until} after ${walk.spent} road(s)`);
+          return;
+        }
         /*
          * A walk that stops is USUALLY somebody talking, and the next pass
          * answers it and re-plans from wherever we got to. Only the last pass
@@ -777,17 +928,17 @@ async function flatRegion(
  * in both — the difference is only what opened it, `mainpanel`'s `self` button in
  * one case and a conversation's own plaque in the other.
  *
- * ## The wait nobody expects
+ * ## The press that arrives early
  *
- * `pollingInput ()` before the item is clicked, and it is not caution. The panel
- * is not listening the moment it is on screen: whatever opened it fades to it
- * (`blacktoscreen ("stage", 30)`) and only THEN enters `handleselect ()`, whose
- * `if button ()` is what a press has to arrive at. A press that beats the loop is
- * dropped in silence, the OK a moment later closes the panel with `handitem`
- * unchanged, and the next thing that reads the hand gets whatever was in it
- * before — measured in the harness as the harmonica going to Trotter with
- * `trotterphase` still 3. `pollingInput ()` is the engine's own answer to "is a
- * script sitting in an input poll right now", which is exactly the question.
+ * The panel is not listening the moment it is on screen: whatever opened it
+ * fades to it (`blacktoscreen ("stage", 30)`) and only THEN enters
+ * `handleselect ()`, whose `if button ()` is what a press has to arrive at. A
+ * CLICK that beats the loop is dropped in silence — measured in the harness as
+ * the harmonica going to Trotter with `trotterphase` still 3. The item's press
+ * is therefore HELD until the hand changes, and a button still down when the
+ * loop comes round is a button `if button ()` sees. Waiting for `pollingInput ()`
+ * first, as this once did, waited out its whole ten seconds every time: an
+ * `if button ()` is not a poll the engine counts, only `stilldown ()` loops are.
  *
  * OK is pressed WHATEVER happened, because a panel left open is a game with no
  * room on screen and every later gesture aimed at the wrong flat. Whether the
@@ -797,7 +948,6 @@ async function flatRegion(
 async function pickFromAvatar(c: ActionContext, item: string): Promise<boolean> {
   const want = item.toLowerCase();
   const held = async (): Promise<string> => (await c.d.evaluate<string>(HAND)).toLowerCase();
-  await c.d.tryHold(`window.dbg.session.pollingInput()`, Math.min(c.budget, 10_000));
 
   // Where the panel drew it, asked each time round: `showprop ()` lays the
   // carried props out when the flat opens, so this is only answerable now.
@@ -837,8 +987,25 @@ async function pickFromAvatar(c: ActionContext, item: string): Promise<boolean> 
   }
   const got = (await held()) === want;
 
+  /*
+   * OK is HELD for two passes and let go: the release is what closes the panel,
+   * so holding on until it HAD closed — as this did — waited out the whole
+   * budget, ten seconds of game time on every takeInHand and offer. Two passes
+   * because one was measured not to be seen (the panel stayed up), and if two
+   * ever are not either, OK is pressed again for longer rather than the run
+   * waiting on a panel nobody closed.
+   */
   const ok = await flatRegion(c, "avatar", "OK");
-  await c.d.holdAt(ok.x, ok.y, { until: `${FLAT} !== "avatar"` }, Math.min(c.budget, 10_000));
+  for (const passes of [2, 6, 20]) {
+    const from = await c.d.evaluate<number>(`window.dbg.session.frameCounter`);
+    await c.d.holdAt(
+      ok.x,
+      ok.y,
+      { until: `window.dbg.session.frameCounter >= ${from + passes} || ${FLAT} !== "avatar"` },
+      Math.min(c.budget, 10_000),
+    );
+    if (await c.d.tryHold(`${FLAT} !== "avatar"`, 1500)) break;
+  }
   await c.d.hold(`${FLAT} !== "avatar"`, "the avatar panel to close", c.budget);
   return got;
 }
@@ -883,17 +1050,10 @@ function carried(c: ActionContext): Promise<string[]> {
  * not have to know which: the playthrough's own helper does not distinguish them
  * either, and `opening.ts` uses it on a Bone lying in the street.
  *
- * ## The wait nobody expects
+ * ## The press that arrives early
  *
- * `pollingInput ()` before the item is clicked, and it is not caution. The panel
- * is not listening the moment it is on screen: `selhandbevel ()` fades to it
- * (`blacktoscreen ("stage", 30)`) and only THEN enters `handleselect ()`, whose
- * `if button ()` is what a press has to arrive at. A press that beats the loop is
- * dropped in silence, the OK a moment later closes the panel with `handitem`
- * unchanged, and the NEXT thing that reads the hand gets whatever was in it
- * before — measured in the harness as the harmonica going to Trotter with
- * `trotterphase` still 3. `pollingInput ()` is the engine's own answer to "is a
- * script sitting in an input poll right now", which is exactly the question.
+ * The panel is not listening the moment it is on screen, so the item's press is
+ * held until the hand changes rather than clicked — see {@link pickFromAvatar}.
  */
 const TAKE_IN_HAND: Action = {
   args: [1, 1],
@@ -994,8 +1154,19 @@ const TAKE_IN_HAND: Action = {
        * lazy list means the common case never performs it.
        */
       for (const find of [
-        () =>
-          at && at.visible && at.x > 0 && at.y > 0 && at.x < 512 && at.y < 384 ? { x: at.x, y: at.y } : null,
+        // and only if the engine's hit test agrees the thing is under it: a prop
+        // in the room behind us still has a drawn point, and a click there
+        // missed and waited its 700 ms out on every view
+        async () =>
+          at && at.visible && at.x > 0 && at.y > 0 && at.x < 512 && at.y < 384 &&
+          (await c.d.evaluate<boolean>(`(() => {
+            const s = window.dbg.session, t = s.hitTestAt(${at.x}, ${at.y});
+            const v = window.dbg.viewer, p = v && v.propUnder ? v.propUnder(${at.x}, ${at.y}) : null;
+            const n = ${JSON.stringify(item.toLowerCase())};
+            return String((t && t.name) || "").toLowerCase() === n || String((p && (p.name || p.group.name)) || "").toLowerCase() === n;
+          })()`))
+            ? { x: at.x, y: at.y }
+            : null,
         () => c.d.aim("thing", item),
       ]) {
         const spot = await find();
@@ -1204,18 +1375,12 @@ const DOOR_AT: Action = {
     const startedIn = await c.d.evaluate<string>(ROOM);
     const wentThrough = async (): Promise<boolean> =>
       (await c.d.evaluate<string>(ROOM)) !== startedIn;
-    const opened = async (): Promise<boolean> => {
-      if (!owner) return false;
-      return (
-        (
-          await c.d.evaluate<string>(`(() => {
-            const i = window.dbg.session.interp;
-            const f = i.builtins.get("propowner");
-            return String(f ? f(i, ["door"]) ?? "" : "");
-          })()`)
-        ).toLowerCase() === owner
-      );
-    };
+    const OPEN = `(() => {
+      const i = window.dbg.session.interp;
+      const f = i.builtins.get("propowner");
+      return String(f ? f(i, ["door"]) ?? "" : "").toLowerCase() === ${JSON.stringify(owner)};
+    })()`;
+    const opened = async (): Promise<boolean> => !!owner && (await c.d.evaluate<boolean>(OPEN));
 
     /**
      * A point inside the rectangle that the SCENE answers for.
@@ -1250,8 +1415,19 @@ const DOOR_AT: Action = {
         await c.d.sleep(Math.min(1000, c.budget));
         continue;
       }
-      await c.d.clickAt(at.x, at.y, "taken", c.budget);
-      await c.d.tryHold(`${ROOM} !== ${JSON.stringify(startedIn)}`, 1500);
+      await waitOutSpeech(c);
+      try {
+        await c.d.clickAt(at.x, at.y, "taken", c.budget);
+      } catch (e) {
+        // the robber can start on the click's own tick and outlast its wait:
+        // wait him out and look at the door again (see waitOutSpeech)
+        if (!(await c.d.evaluate<boolean>(`!!window.dbg.session.puppet`))) throw e;
+        await waitOutSpeech(c);
+        continue;
+      }
+      // through already, or open: either ends the wait — an open door used to
+      // sit out the whole 1.5 s before the press that walks through it
+      await c.d.tryHold(`${ROOM} !== ${JSON.stringify(startedIn)}` + (owner ? ` || ${OPEN}` : ""), 1500);
     }
 
     if (await wentThrough()) {
@@ -1270,8 +1446,20 @@ const DOOR_AT: Action = {
           (blocked ? `; ${blocked} of ${tries} tries found somebody across the whole rectangle` : ""),
       );
     }
-    // and through it, which is the half a click does not do
-    await CORE_ACTIONS.up.run({ ...c, step: { ...c.step, args: [] }, wait: "none" });
+    // and through it, which is the half a click does not do — once more if
+    // the robber took the press (see waitOutSpeech)
+    for (let press = 1; ; press++) {
+      await waitOutSpeech(c);
+      try {
+        await CORE_ACTIONS.up.run({ ...c, step: { ...c.step, args: [] }, wait: "none" });
+        break;
+      } catch (e) {
+        if (press >= 3 || (await wentThrough())) {
+          if (await wentThrough()) break;
+          throw e;
+        }
+      }
+    }
     const looks = blocked > 1 ? "looks" : "look";
     c.say("through" + (blocked ? ` (waited out ${blocked} blocked ${looks})` : ""));
     await c.d.settle(c.wait, `the room beyond the door`, c.budget);
@@ -1649,17 +1837,117 @@ const TALK_OUT: Action = {
   },
 };
 
+/**
+ * Answer a parked film, stop by stop.
+ *
+ * Dust's films ask more than once. `abe.mov` stops on the box of bullets and
+ * again on taking them, `wellgun.mov` on the well and again on the gun, and
+ * `steps.mov` — the Mayor's creaking stairs — eight times, one safe tread of
+ * three each, any other one a jump to the end where you are caught. What pays
+ * is reaching the film's action frame (`actionframe (1)` in the script that
+ * played it), and Escape or a wrong rectangle skips it. So this takes the
+ * points in order and clicks each on its OWN stop: a stop is told from the one
+ * before by its regions, because right after a click the film is still parked
+ * on the old stop for a pass or two, and a second click landing there is the
+ * whole-screen region that ends the film empty-handed. Measured at the stage
+ * office before this existed, as bullets that never came.
+ *
+ * Which point is which stop is read off the film (`dust/tools/films.ts`).
+ */
+const FILM: Action = {
+  args: [1, 64],
+  groups: true,
+  wait: "none",
+  sig: "film([224,210], [132,188])",
+  help: "answer a parked film's stops in order, one click each — film([224,210], [132,188])",
+  run: async (c) => {
+    const points = c.step.args.map((a) => {
+      const m = /^\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]$/.exec(a);
+      if (!m) throw new Error(`"${a}" is not a point — film takes bracketed pairs, film([224,210], [132,188])`);
+      return { x: Number(m[1]), y: Number(m[2]) };
+    });
+    const REGIONS = `JSON.stringify((window.dbg.viewer && window.dbg.viewer.movieRegions) || [])`;
+    let last = "";
+    for (const [i, at] of points.entries()) {
+      const fresh = `(${REGIONS}) !== "[]" && (${REGIONS}) !== ${JSON.stringify(last)}`;
+      if (!(await c.d.tryHold(fresh, c.budget))) {
+        throw new Error(
+          `stop ${i + 1} of ${points.length} never came — ` +
+            (last ? `the film did not move on from the last one` : `no film is parked`),
+        );
+      }
+      last = await c.d.evaluate<string>(REGIONS);
+      await c.d.clickAt(at.x, at.y, "taken", c.budget);
+    }
+    c.say(`${points.length} stop${points.length === 1 ? "" : "s"} answered`);
+  },
+};
+
+/**
+ * A film whose boxes go by without waiting, clicked as they go.
+ *
+ * `kiddie.mov`, the Kid's draw, is three stretches of frames that each offer a
+ * small box (the next stretch) over the whole picture (which ends the film
+ * where it stands, and the player with it) — and its frames do NOT stop: they
+ * run on with the regions live, one frame wide. So this clicks the SMALLEST
+ * region up, every pass, until the condition holds. `film` is for films that
+ * park; this is for films that do not.
+ */
+const FILM_BOXES: Action = {
+  args: [0, 0],
+  wait: "none",
+  opts: ["until"],
+  sig: "filmBoxes(until: global.clock == 3)",
+  help: "click the smallest region of a running film on every pass, until a condition holds — for films whose boxes do not wait",
+  run: async (c) => {
+    if (!c.step.opts.until) throw new Error(`filmBoxes needs an until: condition`);
+    const until = condition(c.step.opts.until);
+    const SMALLEST = `(() => {
+      const rs = (window.dbg.viewer && window.dbg.viewer.movieRegions) || [];
+      if (!rs.length) return null;
+      const r = rs.slice().sort((a, b) => (a.x1 - a.x0) * (a.y1 - a.y0) - (b.x1 - b.x0) * (b.y1 - b.y0))[0];
+      return { x: Math.round((r.x0 + r.x1) / 2), y: Math.round((r.y0 + r.y1) / 2) };
+    })()`;
+    let clicks = 0;
+    for (let i = 0; i < 20000; i++) {
+      if (await c.d.evaluate<boolean>(`!!(${until})`)) {
+        c.say(`${c.step.opts.until} after ${clicks} box${clicks === 1 ? "" : "es"}`);
+        return;
+      }
+      const at = await c.d.evaluate<{ x: number; y: number } | null>(SMALLEST);
+      if (at) {
+        await c.d.clickAt(at.x, at.y, "none", c.budget);
+        clicks++;
+      } else {
+        await c.d.sleep(17);
+      }
+    }
+    throw new Error(`${c.step.opts.until} never came true`);
+  },
+};
+
 /** what Dust adds to the engine's vocabulary — see the header */
 export const DUST_ACTIONS: ActionTable = {
   blackjack: BLACKJACK,
+  bountyhunters: bountyHunters(GOTO),
+  kidgang: kidGang(GOTO),
   doorat: DOOR_AT,
+  film: FILM,
+  filmboxes: FILM_BOXES,
   give: GIVE,
+  hexlock: HEX_LOCK,
   goto: GOTO,
   loadsave: LOAD_SAVE,
   meet: MEET,
+  minemaze: mineMaze(GOTO),
   offer: OFFER,
+  poker: POKER,
+  intercept: INTERCEPT,
+  safe: SAFE,
+  sundial: SUNDIAL,
   takeinhand: TAKE_IN_HAND,
   talkout: TALK_OUT,
+  tumblers: TUMBLERS,
 };
 
 /**

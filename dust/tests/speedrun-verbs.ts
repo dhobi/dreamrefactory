@@ -320,9 +320,11 @@ test("the repository's route parses against Dust's vocabulary, every line of it"
   const sheet = readFileSync(fileURLToPath(new URL("./speedrun/run.sheet.txt", import.meta.url)), "utf8");
   const steps = parseSheet(sheet, { verbs: VERBS });
   const used = new Set(steps.map((s) => s.verb));
-  for (const verb of ["goto", "doorat", "loadsave", "meet", "talkout", "takeinhand", "offer", "give"]) {
+  for (const verb of ["goto", "doorat", "meet", "talkout", "takeinhand", "offer", "give", "film", "poker", "safe", "tumblers"]) {
     expect(used, verb).toContain(verb);
   }
+  // one sequence from the cold boot: a disc save loaded on the way would make it no time at all
+  expect(used).not.toContain("loadsave");
 });
 
 test("a verb's grammar is checked when the sheet is read, not when the line runs", () => {
@@ -567,6 +569,8 @@ test("takeInHand opens the panel for a thing already carried, without hunting th
 
 test("takeInHand picks up a thing lying in the room where the engine drew it", async () => {
   w.props.set("bone", { owner: "", visible: true, x: 140, y: 200 });
+  // the hit test is asked before the drawn point is clicked
+  w.hitTest = (x, y) => (x === 140 && y === 200 ? { type: "prop", name: "bone" } : { type: "scene" });
   w.onClick = (x, y) => {
     if (x === 140 && y === 200) w.globals.set("handitem", "bone");
   };
@@ -579,6 +583,8 @@ test("takeInHand turns round the cell to find a thing that lies behind it", asyn
   // drawn only while we face west, three turns to the right of north
   w.props.set("bone", { owner: "", visible: true, x: 140, y: 200 });
   Object.defineProperty(w.props.get("bone")!, "visible", { get: () => w.viewIdx === 3 });
+  w.hitTest = (x, y) =>
+    w.viewIdx === 3 && x === 140 && y === 200 ? { type: "prop", name: "bone" } : { type: "scene" };
   w.onClick = (x, y) => {
     if (w.viewIdx === 3 && x === 140 && y === 200) w.globals.set("handitem", "bone");
   };

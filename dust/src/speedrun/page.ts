@@ -18,8 +18,8 @@
  *   - ~~**No sheet to copy.**~~ There is one now — `tests/speedrun/run.sheet.txt`,
  *     published beside this page by the shared speedrun plugin
  *     (speedrun/vite.ts) exactly as Titanic's is, so the panel offers
- *     "copy the full run" here too. It was written against the golden thread
- *     (docs/dust/thread.md), which is the route this game actually has.
+ *     "copy the full run" here too: cold boot to the credits in one sequence,
+ *     planned from the story's gates (docs/dust/README.md, "The speedrun").
  */
 import { startWorkbench } from "@dreamfactory/speedrun/workbench";
 import { installStateList } from "@dreamfactory/engine/web/state-list";
@@ -95,4 +95,6 @@ startWorkbench({
    * deployed under a subdirectory.
    */
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
+  /** the contributed sheets (dust/speedrun/sheets/), resolved the same way */
+  contributedSheets: siteUrl("speedrun/sheets.json"),
 });

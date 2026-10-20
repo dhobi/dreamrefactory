@@ -19,8 +19,7 @@
     "test:browser:walkback": "tsx tests/browser/walk-back.ts",
     "test:browser:workbench": "tsx tests/browser/workbench.ts",
     "mklogo": "tsx tools/mkdustlogo.ts",
-    "speedrun:sheet": "tsx tools/mkrunsheet.ts",
-    "speedrun:rung": "tsx tools/rung2sheet.ts",
-    "speedrun:legs": "tsx tests/browser/legs.ts"
+    "speedrun": "tsx tests/speedrun/speedrun.ts",
+    "speedrun:rung": "tsx tools/rung2sheet.ts"
   }
 }
