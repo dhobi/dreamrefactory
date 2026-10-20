@@ -68,13 +68,14 @@ export async function installPlayMenu(opts: { english?: boolean } = {}): Promise
   // A game with no translation (Dust) keeps its menu in English, whatever
   // language the reader picked on another game's pages: "Play" over an English
   // page in any other word would promise something the page cannot keep.
-  const word = (key: "navPlay" | "navPlayMenuTitle" | "navOriginal"): string =>
-    opts.english ? en.site[key] : t(`site.${key}`);
+  // the keys spelled out whole: site/tests/locales.ts finds a key in use by its
+  // literal, and a key built from a template reads as unused
+  const english = !!opts.english;
   // The words before the menu that is made of them. Awaited here rather than
   // left to the caller: three pages called this with `void installI18n()` on
   // the line above and built a Russian bar with an English "Play" in it. The
   // install is memoised, so this joins the one already in flight.
-  if (!opts.english) await installI18n();
+  if (!english) await installI18n();
   const nav = document.querySelector(".topnav");
   if (!nav) return 0;
   const links = [...nav.querySelectorAll<HTMLAnchorElement>(`a.${WAY}[href]`)];
@@ -88,8 +89,8 @@ export async function installPlayMenu(opts: { english?: boolean } = {}): Promise
   // nine of the ten pages that have this bar, and reading it meant the summary
   // was only as translated as the markup happened to be — English on the tenth,
   // and English everywhere if this ran before the catalogue landed.
-  summary.textContent = word("navPlay");
-  summary.title = word("navPlayMenuTitle");
+  summary.textContent = english ? en.site.navPlay : t("site.navPlay");
+  summary.title = english ? en.site.navPlayMenuTitle : t("site.navPlayMenuTitle");
   menu.appendChild(summary);
 
   const list = document.createElement("div");
@@ -126,7 +127,7 @@ export async function installPlayMenu(opts: { english?: boolean } = {}): Promise
   // node from the catalogue, and a link that kept the key would be turned back
   // into "Play" by any later pass over the document.
   links[0].removeAttribute("data-i18n");
-  links[0].textContent = word("navOriginal");
+  links[0].textContent = english ? en.site.navOriginal : t("site.navOriginal");
   menu.appendChild(list);
 
   // a click anywhere else closes it, which <details> does not do by itself
