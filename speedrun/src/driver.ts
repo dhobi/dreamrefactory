@@ -557,8 +557,44 @@ export const KEY_SAFE = `(() => {
 /** the engine has consumed everything posted to it */
 export const QUEUE_EMPTY = `window.dbg.session.events.length === 0`;
 
-/** the browser suite's settle predicate, unchanged */
-export const QUIET = `(() => { const v = window.dbg && window.dbg.viewer; return !!v && (v.quiescent || v.conversing); })()`;
+/**
+ * A game with no room at all, and so never a viewer: `window.dbg.roomless`,
+ * which such a page sets (timelapse/src/main.ts) and the headless runner copies
+ * from the game (`HeadlessGame.roomless`).
+ *
+ * DECLARED rather than read off `!window.dbg.viewer`, and that is the point of
+ * it. Dust and Titanic have no viewer either until the boot opens a SET — the
+ * logos, the menu, the opening films — and every predicate below that falls
+ * back to the director is asked through that stretch too. Keyed on "no viewer"
+ * alone, a `settle()` on their boot would come back on the title menu where it
+ * has always waited for the room, which is a different route. Keyed on this,
+ * nothing a viewer-game's sheet evaluates reads a byte differently.
+ */
+export const ROOMLESS = `!!(window.dbg && window.dbg.roomless)`;
+
+/**
+ * {@link QUIET} on a {@link ROOMLESS} game: the Timelapse machine harness's own
+ * idea of idle (timelapse/tests/machine/harness.ts `idle`) — the world owns the
+ * screen, the director is quiescent, and no handler is running outside the
+ * BOOTFILE `idle ()`'s chain (`Interpreter.handlersAtWork`, which is what the
+ * harness's AsyncLocalStorage count is on a page). Measured against the
+ * harness's own count at every pass of the boot and the island's first two
+ * puzzles: 730 passes, no disagreement. Or a conversation, as the viewer's.
+ */
+export const ROOMLESS_QUIET = `(() => {
+  const h = window.dbg.host, d = h.director;
+  return (d.quiescent && d.screenOwner() === "world" && h.session.interp.handlersAtWork === 0) || d.conversing;
+})()`;
+
+/**
+ * The browser suite's settle predicate, unchanged where there is a viewer to
+ * ask; on a {@link ROOMLESS} game, {@link ROOMLESS_QUIET}.
+ */
+export const QUIET = `(() => {
+  const v = window.dbg && window.dbg.viewer;
+  if (!v && ${ROOMLESS}) return ${ROOMLESS_QUIET};
+  return !!v && (v.quiescent || v.conversing);
+})()`;
 
 /** a cutscene is on screen and is not asking anything — the one state ESC is for */
 export const SHOWING = `(() => { const v = ${SCREEN}; return !!v && v.moviePlaying && v.movieRegions.length === 0; })()`;

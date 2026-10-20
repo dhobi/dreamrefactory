@@ -391,6 +391,31 @@ export class Interpreter {
   }
 
   /**
+   * The frames running right now that are not part of the BOOTFILE `idle ()`'s
+   * own chain — what a harness means by "a script is still running".
+   *
+   * `scriptBusy` cannot say it: it counts the dispatches the engine TRACKS, and
+   * not every handler is one (the idle is deliberately not, see
+   * `Scheduler.serviceIdle`, and neither is a `hover`'s `setcursor`). The
+   * machine harnesses answer it by wrapping `runHandler` in an
+   * AsyncLocalStorage, which a page does not have; a frame knows its chain
+   * ({@link Frame.dispatch}), so this asks the frames. A Set of them and not
+   * {@link liveHandlers}, which is popped as a stack: two chains interleaved
+   * across an await end out of order, and the count has to stay right when
+   * they do.
+   *
+   * Read by the speedrun's settle on a game with no room (Timelapse; the
+   * shared predicates in speedrun/src/driver.ts), where there is no viewer to
+   * ask. Counted for every game, read by none of the others.
+   */
+  private readonly framesAtWork = new Set<Frame>();
+
+  /** handlers running outside the idle's chain — see {@link framesAtWork} */
+  get handlersAtWork(): number {
+    return this.framesAtWork.size;
+  }
+
+  /**
    * Which GAME is running. Every {@link Frame} is stamped with it, and
    * {@link execBlock} refuses to run a statement for a frame that does not
    * match — see {@link abandonRunning}.
@@ -555,6 +580,7 @@ export class Interpreter {
     const prevEvent = this.currentEvent;
     this.currentEvent = ++this.handlerSeq;
     this.liveHandlers.push({ inst, handler });
+    if (frame.dispatch !== "idle") this.framesAtWork.add(frame);
     this.onHandler?.(handler);
     try {
       const sig = await this.execBlock(block.body, frame);
@@ -569,6 +595,7 @@ export class Interpreter {
       throw e;
     } finally {
       this.liveHandlers.pop();
+      this.framesAtWork.delete(frame);
       this.depth--;
       this.currentEvent = prevEvent;
     }

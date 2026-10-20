@@ -54,6 +54,8 @@ import { isNavRegion, keyAction } from "./input";
 import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { bugLine, exitsHtml, whereHtml } from "./location";
 import { NetMeter, fmtSize } from "@dreamfactory/chrome/net-meter";
+import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
+import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 
 /**
  * This game's screen, and it is NOT the engine's default.
@@ -216,6 +218,20 @@ const caption = new BootCaption(bootSayEl, () => meter.caption(performance.now()
 /** the title card rises, by FLIP (engine/src/web/page-shell.ts); the failure paths reach here too */
 const raiseTitle = titleRise(bootEl, brandEl);
 
+/**
+ * Boot without waiting for the Enter press — on a page that says so with
+ * `<meta name="autostart">`.
+ *
+ * The speedrun workbench (timelapse/speedrun/workbench.ts) declares it, for
+ * Dust's reason (the note on AUTOSTART in dust/src/main.ts): that page is
+ * RELOADED to get a clean game far more often than it is opened to play one —
+ * `reset()` is a line of a sheet — and a gesture asked for once per boot is a
+ * gesture asked for on every run. The audio the press would have bought waits
+ * for the first click of the run instead (`GestureAudio`), of which a run makes
+ * many.
+ */
+const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
+
 /* ------------------------------------------------------------------------- *
  * The boot
  * ------------------------------------------------------------------------- */
@@ -233,6 +249,10 @@ async function main(): Promise<void> {
   progress(INDEXED, `indexed ${files.size} names across four discs`);
   say(`indexed ${files.size} names across the rip`);
   files.onChunk = (_name, bytes) => meter.chunk(bytes, performance.now());
+  // the load remover's subscription (engine/src/web/load-clock.ts, #251): from
+  // the first fetch, because a clock armed when a timer starts has missed the
+  // boot. Read through `window.dbg.loading()` below
+  watchLoads(files);
   files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
   meterTimer = window.setInterval(caption.tick, TICK_MS);
 
@@ -252,6 +272,10 @@ async function main(): Promise<void> {
    */
   host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
   host.session.hasRealFrames = true;
+  // A workbench `reset(seed: N)` reloaded us: the dice are pinned before the boot
+  // draws its first one (speedrun/src/boot-seed.ts)
+  const bootSeed = takeBootSeed("timelapse");
+  if (bootSeed !== null) host.session.seedRandom(bootSeed);
   // tl.exe's script error box (0x43cfc0): Yes goes on, No is `quit()`, which on
   // this page does what the game's own quit() does here — nothing but say so
   host.session.onScriptErrorBox = scriptErrorBox((l) => say(`  ${l}`));
@@ -429,6 +453,32 @@ async function main(): Promise<void> {
       return inst ? (await s.interp.runHandler(inst, "consoleeval", [], { me: "consoleeval", target: "" })).value : null;
     },
   };
+  /**
+   * `window.dbg`, the name every other game's page publishes its handle under
+   * (dust/src/main.ts, taoot/src/main.ts) and so the one the speedrun driver
+   * evaluates its predicates against. `tl` above stays the console's.
+   *
+   * What differs is what this game is: there is no room, so `viewer` is always
+   * null, and `roomless` says so — it is what turns the shared predicates over
+   * to the director (speedrun/src/driver.ts ROOMLESS) instead of leaving them
+   * waiting for a viewer that will never come. `booted` is this page's "the game
+   * is up", which a viewer-game reads off the viewer appearing: `coldBoot` has
+   * returned, `open.mov` and all.
+   */
+  (window as unknown as { dbg: unknown }).dbg = {
+    host,
+    session: s,
+    director: host.director,
+    get viewer() {
+      return host.viewer;
+    },
+    roomless: true,
+    get booted() {
+      return booted;
+    },
+    /** the load remover's reading, in the shape the other pages publish (dust/src/main.ts) */
+    loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),
+  };
 
   /**
    * The input, BEFORE the boot rather than after it.
@@ -451,15 +501,24 @@ async function main(): Promise<void> {
   }
 
   progress(1, "ready");
-  await untilStarted(bootEl, startEl);
+  await untilStarted(bootEl, startEl, AUTOSTART);
   ensureAudio();
   raiseTitle();
 
-  await log.coldBoot(host, errEl);
+  // TRACKED, as Titanic's page tracks its boot (taoot/src/main.ts) and the
+  // speedrun's headless runner tracks every game's (speedrun/src/headless.ts):
+  // a boot in flight is a script running, so the BOOTFILE idle and the loops
+  // wait for it as they wait for any other. Untracked, they ran under the boot
+  // here and not there, and a seeded sheet came out a tick apart from its first
+  // key on (the idle's phase), with the boot itself taking a different time.
+  await s.track(log.coldBoot(host, errEl), "coldBoot");
+  booted = true;
   log.bootSummary(host, files);
 }
 
 let lastLoc = "";
+/** whether the cold boot has returned — `window.dbg.booted` */
+let booted = false;
 
 /**
  * Refresh the readout, but only when the position actually changed — it is

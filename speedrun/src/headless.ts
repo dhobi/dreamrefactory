@@ -79,6 +79,48 @@ export interface HeadlessGame {
   putSave(name: string, bytes: Uint8Array): Promise<void>;
   seed: number | null;
   log?(message: string): void;
+  /**
+   * The game has no room and so never a viewer (Timelapse): published as
+   * `window.dbg.roomless`, which is what turns on the shared predicates'
+   * director fallbacks (driver.ts ROOMLESS). Absent for a game with rooms.
+   */
+  roomless?: boolean;
+  /**
+   * Composite every frame, as the page's loop does after its tick
+   * (`director.render`), into a canvas that draws nothing ({@link nullCanvas}).
+   *
+   * What the game can SEE of a render is the framebuffer: `captureFrame` reads
+   * the last presented composite, and a reveal (`visualeffect`) captures the
+   * picture it starts from that way. A game with rooms falls back to the room's
+   * own frame when nothing was ever presented; a game without one gets null, and
+   * a null capture is no reveal at all — Timelapse's turns, which are
+   * `turnhalfright` + `turnright` pushes, went by in a pass headless and took
+   * their twenty-odd ticks on the page. Off for Dust and Titanic, whose headless
+   * runs are measured without it.
+   */
+  paints?: boolean;
+}
+
+/**
+ * A 2D context that keeps nothing: what `director.render` writes into when no
+ * one is looking. The framebuffer it composites is the engine's own; the canvas
+ * is only where a page shows it.
+ */
+function nullCanvas(): CanvasRenderingContext2D {
+  const canvas = { width: 0, height: 0 };
+  const image = (width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4), width, height });
+  const nothing = (): void => {};
+  return {
+    canvas,
+    createImageData: image,
+    putImageData: nothing,
+    drawImage: nothing,
+    fillRect: nothing,
+    fillText: nothing,
+    save: nothing,
+    restore: nothing,
+    measureText: () => ({ width: 0 }),
+  } as unknown as CanvasRenderingContext2D;
 }
 
 export interface HeadlessRun {
@@ -103,6 +145,9 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
   let budgetWall = 0;
   let queued: FrameRequestCallback[] = [];
   let pending = false;
+  /** whether this host's cold boot has returned — a roomless page's `dbg.booted` */
+  let booted = false;
+  const painted = game.paints ? nullCanvas() : null;
 
   /**
    * One animation frame: the page loop's tick, then everyone else who asked —
@@ -116,6 +161,7 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     wall += FRAME_MS;
     if (!host.session.loadingFiles && !host.session.sheetHalted) budgetWall += FRAME_MS;
     host.director.tick(wall);
+    if (painted) host.director.render(painted);
     const due = queued;
     queued = [];
     const next = (i: number): void => {
@@ -153,7 +199,15 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     // first line of the sheet is charged the frame before it
     host.director.tick(wall);
     // the page's boot, from the click on GAME on: the films, the menu, the flat
-    void s.track(host.coldBoot(), "coldBoot");
+    booted = false;
+    const mine = host;
+    void s.track(host.coldBoot(), "coldBoot").then(
+      () => {
+        if (host === mine) booted = true;
+      },
+      // a boot that threw is the tracked promise's to report, as it always was
+      () => {},
+    );
   };
   await boot();
 
@@ -172,6 +226,10 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     },
     snapshotState,
     loading: () => ({ ms: 0, waiting: false }),
+    roomless: !!game.roomless,
+    get booted() {
+      return booted;
+    },
   };
   const send = (e: InputEvent): boolean => {
     game.deliver(host, e);

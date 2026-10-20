@@ -1,0 +1,23 @@
+# title: Timelapse — the boot, and the first moves
+#
+# A placeholder, not a route: what it proves is the plumbing. A seeded cold
+# boot, `open.mov` skipped, and then the two ways in — the keys and a click —
+# each confirmed by the game moving.
+#
+#   npm run speedrun -w timelapse            in node
+#   /timelapse/speedrun/                     in the workbench
+#
+# No room on any disc, so no viewer: "where you are" is the stage and the
+# flat on screen (speedrun/src/driver.ts ROOMLESS).
+
+reset(seed: 1)
+skipMovie(until: js == window.dbg.booted, budget: 180000)
+settle()
+# the hilltop (stage 1, frame 100): turn right, and forward from there — the
+# stage's own table says frame 103 leads on to 330
+right()
+up()
+settle()
+# and a click: the edge region the cursor shows a back arrow over
+click(down)
+settle()
