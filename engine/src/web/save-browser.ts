@@ -13,7 +13,7 @@
  *
  * Both modes share the list, so a save flow can also download/delete existing
  * saves, and either mode can import (upload) a save from disk. The markup +
- * styles live in the page (`#saveModal` in `index.html` and in `dust/index.html`);
+ * styles live in the page (`#saveModal` in `index.html` and in `dust/play/index.html`);
  * this module drives them, and everything game-specific about it — the
  * extension, the folder headings, what counts as a valid file — comes from the
  * page's declared {@link SaveKind} rather than from here.

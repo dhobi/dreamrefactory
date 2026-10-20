@@ -43,6 +43,7 @@
  */
 
 import { installI18n, t } from "./locales";
+import { en } from "./locales/en";
 
 /** the class the markup puts on each way in */
 const WAY = "playway";
@@ -63,12 +64,17 @@ function lastSegment(href: string): string {
  * Does nothing where there is no top bar and nothing where the bar carries fewer
  * than two of them — one way in is better as a link.
  */
-export async function installPlayMenu(): Promise<number> {
+export async function installPlayMenu(opts: { english?: boolean } = {}): Promise<number> {
+  // A game with no translation (Dust) keeps its menu in English, whatever
+  // language the reader picked on another game's pages: "Play" over an English
+  // page in any other word would promise something the page cannot keep.
+  const word = (key: "navPlay" | "navPlayMenuTitle" | "navOriginal"): string =>
+    opts.english ? en.site[key] : t(`site.${key}`);
   // The words before the menu that is made of them. Awaited here rather than
   // left to the caller: three pages called this with `void installI18n()` on
   // the line above and built a Russian bar with an English "Play" in it. The
   // install is memoised, so this joins the one already in flight.
-  await installI18n();
+  if (!opts.english) await installI18n();
   const nav = document.querySelector(".topnav");
   if (!nav) return 0;
   const links = [...nav.querySelectorAll<HTMLAnchorElement>(`a.${WAY}[href]`)];
@@ -82,8 +88,8 @@ export async function installPlayMenu(): Promise<number> {
   // nine of the ten pages that have this bar, and reading it meant the summary
   // was only as translated as the markup happened to be — English on the tenth,
   // and English everywhere if this ran before the catalogue landed.
-  summary.textContent = t("site.navPlay");
-  summary.title = t("site.navPlayMenuTitle");
+  summary.textContent = word("navPlay");
+  summary.title = word("navPlayMenuTitle");
   menu.appendChild(summary);
 
   const list = document.createElement("div");
@@ -120,7 +126,7 @@ export async function installPlayMenu(): Promise<number> {
   // node from the catalogue, and a link that kept the key would be turned back
   // into "Play" by any later pass over the document.
   links[0].removeAttribute("data-i18n");
-  links[0].textContent = t("site.navOriginal");
+  links[0].textContent = word("navOriginal");
   menu.appendChild(list);
 
   // a click anywhere else closes it, which <details> does not do by itself

@@ -3,7 +3,7 @@
  *
  *   npm run test:built -w dust
  *
- * `dust/index.html` links the shared chrome and then overrides it in its own
+ * `dust/play/index.html` links the shared chrome and then overrides it in its own
  * `<style>`; the build resolves that `<link>` into a bundle and re-inserts it at
  * the END of `<head>`, after the inline block. Two `body` rules of equal
  * specificity can therefore swap places: let the chrome's `display: flex;
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
       const page = await browser.newPage({
         viewport: { width: vp.width, height: vp.height },
       });
-      const m = await measure(page, `http://127.0.0.1:${PORT}/`);
+      const m = await measure(page, `http://127.0.0.1:${PORT}/play/`);
       const at = `${vp.name} ${vp.width}x${vp.height}`;
 
       // the two declarations that actually flipped

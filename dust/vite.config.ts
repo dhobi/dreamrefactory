@@ -42,7 +42,7 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
     // the speedrun workbench: the play page with a sheet to drive it, made from
-    // index.html by speedrun/vite.ts. Unlisted, but built
+    // play/index.html by speedrun/vite.ts
     ...speedrunPage({ root: HERE, ...WORKBENCH }),
     gamefilesManifest({
       gamefiles: join(HERE, "gamefiles"),
@@ -111,7 +111,9 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        // the welcome page, with no game on it; Play goes to play/
         dust: join(HERE, "index.html"),
+        play: join(HERE, "play/index.html"),
         // The collection page: how to run the 1995 DOS game instead of this
         // port of it. Its download sits beside the rip on the host and is
         // not in this repository.

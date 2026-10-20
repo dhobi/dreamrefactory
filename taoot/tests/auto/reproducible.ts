@@ -144,7 +144,7 @@ const CLOCK_ALLOWED = new Set([
   "save-seed.ts",
   "booklet.ts",
   "bug-report.ts",
-  // The Dust shell (dust/index.html), which is not the engine and does not run one: it
+  // The Dust shell (dust/play/index.html), which is not the engine and does not run one: it
   // is an experiment in reading a DreamFactory 1 disc, and its two calls are a
   // stopwatch around `coldBoot` printed into a log and thrown away. Nothing it
   // measures reaches a session, a golden or a decision.

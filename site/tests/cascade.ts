@@ -128,7 +128,7 @@ function rulesIn(css: string): Map<string, Map<string, string>> {
  * carrier (it `@import`s it), so comparing it against the chrome would report
  * the chrome against itself; the sheets that matter are the ones a page brings
  * of its own. Resolved against the package the page is in — `/src/game.css` on
- * `dust/index.html` means `dust/src/game.css`, because that is what the page's
+ * `dust/play/index.html` means `dust/src/game.css`, because that is what the page's
  * own Vite root makes it mean.
  *
  * One level of `@import` is followed, because a page's sheet may be nothing but

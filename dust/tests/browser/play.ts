@@ -91,7 +91,7 @@ const main = async (): Promise<void> => {
   const browser = await chromium.launch({ headless: HEADLESS });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on("pageerror", (e) => console.log("[pageerror]", e.message));
-  await page.goto(APP_URL);
+  await page.goto(`${APP_URL}play/`);
 
   const start = page.locator("#start");
   console.log("waiting for the start button…");
