@@ -58,13 +58,13 @@ async function turnTo(c: ActionContext, map: Map16, name: string, target: number
   const grips = Object.keys(map.grip[name] ?? {}).map(Number).sort((a, b) => a - b);
   if (!grips.length) throw new Error(`no point on screen is the ${name}`);
   const lo = values[0];
-  const hi = values[values.length - 1];
+  const hi = values.at(-1) ?? lo;
   for (let stroke = 0; stroke < 12; stroke++) {
     const now = await d.evaluate<number>(DEG(name));
     if (now === target) return;
     // the shorter way round, and which end of the screen's arc to grip from
     const up = (target - now + 16) % 16 <= 8;
-    const start = up ? grips[0] : grips[grips.length - 1];
+    const start = up ? grips[0] : (grips.at(-1) ?? grips[0]);
     const from = map.grip[name][start];
     let v = start;
     await d.dragProp(
