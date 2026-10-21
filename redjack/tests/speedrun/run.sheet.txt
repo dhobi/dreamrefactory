@@ -8,11 +8,16 @@
 #
 # The moves are the suites' own (src/play/): goto() walks a room by its
 # exits, click() finds a thing by the boot's hittest, answer() picks a plaque
-# by the start of its text.
+# by the start of its text. Every film that asks nothing goes to ESC, and
+# every spoken line too (hush(): ESC at a plaque would walk out of the talk).
 
 reset(seed: 1)
 skipMovie(until: js == window.dbg.booted && window.dbg.session.currentSetFile === "liznite", budget: 600000)
 idle()
+# every film that asks nothing goes to ESC, and every spoken line: the
+# conversation is on its next plaque, or over, at once
+watchFor(playing, skipMovie())
+watchFor(js == window.dbg.host.director.speaking, hush())
 split(Hangman's Reef)
 
 # ---------------------------------------------------------------- day one
@@ -368,6 +373,9 @@ split(the scepter)
 # action frame gives Nick RedJack's key (top.sett skeleton); RedJack's word
 # (redjack3.pupp dream), and Anne after it
 goto(Scene25)
+# the dream is watched, not skipped: dream2.move's action frame is what hands
+# Nick RedJack's key, and ESC goes past it
+watchFor(playing, off)
 click(skeleton, quad)
 clickFilm()
 clickFilm()
@@ -376,6 +384,7 @@ answer(I think I fell asleep.)
 answer(I have something to tell you about your father.)
 answer(I saw RedJack. He was your father.)
 owns(rjkey)
+watchFor(playing, skipMovie())
 
 # the lockbox: the key onto it (inven.shop rjkey), and the journal in it
 goto(Scene56)

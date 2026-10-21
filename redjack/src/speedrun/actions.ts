@@ -29,6 +29,7 @@ import { sinkTheGalleons } from "../play/ballista";
 import { playGems } from "../play/gems";
 import { crossTheLava, pullTheVine, runTheFlames, swingTheChain } from "../play/lava";
 import { rideTheMine } from "../play/mine";
+import { ESCAPE_KEY } from "@dreamfactory/engine/web/keys";
 import { move, num, passesOf } from "./move";
 import { DAY2_ACTIONS } from "./day2";
 import { DAY3_ACTIONS } from "./day3";
@@ -139,6 +140,19 @@ const REDJACK_ACTIONS: ActionTable = {
     async (h) => {
       if (h.idle() && !h.host.director.awaitingChoice) return;
       await converse(h, [], "the conversation");
+    },
+  ),
+  /**
+   * ESC on a line being spoken: the line ends, and the rest of its speech run
+   * with it (puppet.ts `skipLine`). Pressed now or not at all — a press that
+   * waited a pass could find the line over and a plaque up, and ESC at a plaque
+   * answers -1, which walks Nick out of the conversation (#131). For
+   * `watchFor(speaking, hush())`, which halts the game the pass a line starts.
+   */
+  hush: move(
+    { args: [0, 0], sig: "hush()", help: "ESC on the line being spoken, now — never at a plaque, where ESC walks out" },
+    async (h) => {
+      if (h.host.director.speaking) h.tap(ESCAPE_KEY, true);
     },
   ),
   clickfilm: move(
