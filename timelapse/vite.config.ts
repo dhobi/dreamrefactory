@@ -36,7 +36,7 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
     // the speedrun workbench: the play page with a sheet to drive it, made from
-    // index.html by speedrun/vite.ts
+    // play/index.html by speedrun/vite.ts
     ...speedrunPage({ root: HERE, ...WORKBENCH }),
     gamefilesManifest({
       gamefiles: join(HERE, "gamefiles"),
@@ -79,7 +79,11 @@ export default defineConfig({
     rollupOptions: {
       // named, because the speedrun plugin adds its page as a second entry
       // beside these and a bare default would be replaced rather than joined
-      input: { timelapse: join(HERE, "index.html") },
+      input: {
+        // the welcome page, with no game on it; Play goes to play/
+        timelapse: join(HERE, "index.html"),
+        play: join(HERE, "play/index.html"),
+      },
     },
   },
 });

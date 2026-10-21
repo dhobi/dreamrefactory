@@ -8,7 +8,7 @@ import type { WorkbenchPage } from "../../speedrun/vite";
  * difference is where the play page keeps its readouts.
  */
 export const WORKBENCH: WorkbenchPage = {
-  play: "index.html",
+  play: "play/index.html",
   // the title card's curtain, the boot gauge, the picture and the log all live
   // in #stage, as Dust's do
   game: ["stage"],
