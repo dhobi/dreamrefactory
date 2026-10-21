@@ -216,15 +216,16 @@ export async function clickOn(h: Player, name: string, type?: HitType): Promise<
 
 /**
  * Play a conversation to its end: every plaque the game offers is answered
- * with the next of `answers` (the start of its text is enough), and the game
- * offering none of the answer's text is a failure that prints what it did offer.
+ * with the next of `answers` — the start of its text, or its id, the number
+ * `puppetevent` hands the script — and the game offering none of them is a
+ * failure that prints what it did offer.
  * A frame of a film that waits for a click (a letter shown in the middle of a
  * talk) is clicked through. Ends when the room has the screen back — or, with
  * `thenAsks`, at the first question after the last answer.
  */
 export async function converse(
   h: Player,
-  answers: string[],
+  answers: (string | number)[],
   what: string,
   opts: { thenAsks?: boolean } = {},
 ): Promise<void> {
@@ -257,8 +258,11 @@ export async function converse(
     // ship is the day's last; the next day opens on a question of its own)
     if (want === undefined && opts.thenAsks) return;
     if (want === undefined) fail(`${what}: the game asks again (${offered.join(" | ")}) and the route has no answer`);
-    const i = offered.findIndex((t) => t.toLowerCase().startsWith(want.toLowerCase()));
-    if (i < 0) fail(`${what}: no "${want}" among ${offered.join(" | ")}`);
+    const i =
+      typeof want === "number"
+        ? dir.choices.findIndex((c) => c.id === want)
+        : offered.findIndex((t) => t.toLowerCase().startsWith(want.toLowerCase()));
+    if (i < 0) fail(`${what}: no ${JSON.stringify(want)} among ${dir.choices.map((c) => `${c.id} ${c.text}`).join(" | ")}`);
     const r = dir.choiceRects[i];
     h.click(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2));
     answered = offered.join("|");

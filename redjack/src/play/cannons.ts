@@ -180,13 +180,11 @@ export async function sinkTheDinghies(h: Player, maxShots = 60): Promise<number>
     const want = best - 1;
     // the way to the tilt asked again at every press: two presses can land at once
     await pressUntil(() => (signed(m.pitch) < want ? "up" : "down"), () => signed(m.pitch) === want, `tilting to ${best}°`, () => m.pitch);
-    const before = actors.get(who)!.poseName;
     h.click(320, 240);
     shots++;
     await h.until(() => !inCannons() || !!props.get("cannon ball")?.visible, "the shot", 20);
     await h.until(() => !inCannons() || !props.get("cannon ball")?.visible, "the ball to land", 200);
     tally();
-    if (process.env.TRACE_CANNON) console.log(`  shot ${shots} at ${who} (tilt ${best}): ${before} -> ${actors.get(who)?.poseName}`);
   }
   // the last one's explosion counts it (its `endanim`), and the fourth ends the game
   await h.until(() => !inCannons(), "the last dinghy to go down", 400);

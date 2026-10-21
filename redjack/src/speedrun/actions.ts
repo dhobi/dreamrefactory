@@ -127,17 +127,18 @@ const REDJACK_ACTIONS: ActionTable = {
    * ------------------------------------------------------------------ */
 
   /**
-   * One plaque of a conversation, by the start of its text, and on to the next
-   * question or the end — the suites' `converse` a line at a time. A frame of a
-   * film that waits for a click on the way is clicked through.
+   * A conversation, one plaque at a time: each id answers the next plaque
+   * that asks — the number `puppetevent` hands the script, so two plaques of
+   * one id are the same answer to it — and after the last, on to the next
+   * question or the end. Without ids, a conversation that asks nothing played
+   * to its end. A frame of a film that waits for a click on the way is
+   * clicked through.
    */
-  answer: move(
-    { args: [1, 1], rest: true, sig: "answer(Who are you?)", help: "answer the conversation with the plaque that starts with this text, then on to its next question or its end" },
-    (h, c) => converse(h, [c.step.args[0]], `"${c.step.args[0]}"`, { thenAsks: true }),
-  ),
   talkout: move(
-    { args: [0, 0], sig: "talkOut()", help: "let a conversation that asks nothing play to its end" },
-    async (h) => {
+    { args: [0, 0], bevels: true, sig: "talkOut([101,105,103])", help: "answer each plaque with the next of these ids, then on to the next question or the end; talkOut() for a talk that asks nothing" },
+    async (h, c) => {
+      const ids = c.step.bevels ?? [];
+      if (ids.length) return converse(h, ids, `talkOut([${ids.join(",")}])`, { thenAsks: true });
       if (h.idle() && !h.host.director.awaitingChoice) return;
       await converse(h, [], "the conversation");
     },

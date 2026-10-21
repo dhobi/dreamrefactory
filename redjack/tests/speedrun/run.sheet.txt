@@ -7,9 +7,10 @@
 #   /redjack/speedrun/                     in the workbench
 #
 # The moves are the suites' own (src/play/): goto() walks a room by its
-# exits, click() finds a thing by the boot's hittest, answer() picks a plaque
-# by the start of its text. Every film that asks nothing goes to ESC, and
-# every spoken line too (hush(): ESC at a plaque would walk out of the talk).
+# exits, click() finds a thing by the boot's hittest, talkOut([ids]) answers
+# a conversation a plaque at a time by the game's own answer numbers. Every
+# film that asks nothing goes to ESC, and every spoken line too (hush(): ESC
+# at a plaque would walk out of the talk).
 
 reset(seed: 1)
 skipMovie(until: js == window.dbg.booted && window.dbg.session.currentSetFile === "liznite", budget: 600000)
@@ -24,49 +25,26 @@ split(Hangman's Reef)
 # Bone, by the crates (bone1.pupp meetbone)
 goto(Node48)
 click(bone)
-answer(Who are you?)
-answer(My pockets are empty.)
-answer(No sir.)
-answer(I don't know her.)
+talkOut([101,101,105,103])   # Who are you?
 
 # Lyle, on the beach: Node58 has him jump Nick the first time
 goto(Node58)
-answer(Who are you?)
-answer(All right then.)
-answer(Nick.)
-answer(Were you left behind)
-answer(Goodbye.)
+talkOut([101,102,101,101,103])   # Who are you?
 
 # Jan, in the woods, and Lyle saves Nick: the fire goes out
 goto(Node54)
-answer(Who was that?)
-answer(I could have taken care of myself.)
-answer(Can you teach me how to fight?)
-answer(Tell me what else you know.)
-answer(Can you tell me where to get a sword?)
-answer(I'll bring you some ale.)
+talkOut([101,103,101,102,103,102])   # Who was that?
 
 # the bar: knock, and the bartender lets Nick in
 goto(Node37)
 click(door l2b)
-answer(I want to come inside.)
+talkOut([101])   # I want to come inside.
 # the bartender inside: the ale for Lyle, then Captain Justice
 goto(Scene35)
 face(bartend)
 near(bartend, 1100000)
 click(bartend)
-answer(Where's all the action?)
-answer(Could I have a mug of ale?)
-answer(Thanks for letting me in.)
-answer(Have you seen anyone strange)
-answer(Introduce me.)
-answer(Yes, I came to get an ale)
-answer(I'm an aspiring pirate.)
-answer(Do you need men on your pirate ship?)
-answer(What does a person have to do)
-answer(I want to join your crew.)
-answer(A sword and experience.)
-answer(How long will you be here?)
+talkOut([101,102,103,104,101,102,103,103,102,101,101,103])   # Where's all the action?
 goto(Scene34)
 click(door b2l)
 idle()
@@ -92,15 +70,7 @@ click(sword)
 owns(sword, pistol)
 click(lid)
 # and Patch, of RedJack's crew, waiting in the cave
-answer(Who are you?)
-answer(You look like some kind of sailor.)
-answer(What happened to the treasure?)
-answer(When is the reunion?)
-answer(Who was the traitor?)
-answer(How many Brethren are left?)
-answer(Hasn't anyone tried)
-answer(Where is this island?)
-answer(What should I do?)
+talkOut([104,102,101,102,103,104,101,102,102])   # Who are you?
 goto(Node29)
 click(ladder)
 idle()
@@ -114,16 +84,13 @@ goto(Node49)
 face(lyle)
 near(lyle, 65000)
 click(lyle)
-answer(I want to learn defense.)
-answer(I'm ready.)
+talkOut([101,101])   # I want to learn defense.
 defense()
-answer(I want to learn dodging.)
-answer(I'm ready.)
+talkOut([103,101])   # I want to learn dodging.
 dodging()
-answer(I want to learn striking.)
-answer(Let's fight.)
+talkOut([102,101])   # I want to learn striking.
 striking()
-answer(I want to fight !)
+talkOut([104])   # I want to fight !
 duel(combat.stag)
 talkOut()
 idle()
@@ -134,9 +101,9 @@ goto(Node48)
 face(bone)
 near(bone, 65000)
 click(bone)
-answer(This is your ship?)
+talkOut([101])   # This is your ship?
 click(bone)
-answer(What are you doing?)
+talkOut([101])   # What are you doing?
 
 # the charcoal, from the fire Lyle put out
 goto(Node58)
@@ -163,33 +130,14 @@ split(day one)
 
 # the stowaway, found: justice1b.pupp stowaway → setsail; "I do." sets
 # justphase 1 and sends Justice down to his cabin
-answer(I really want to join your crew.)
-answer(Two men in black robes with scimitars.)
-answer(I do.)
+talkOut([101,101,101])   # I really want to join your crew.
 
 # ---------------------------------------------------------------- day two
 # Lyle, by the cannons: lyle1b.pupp ondeck → met → sullivan, who is Anne, and
 # her own anne1.pupp talk — the letter from her father among it
 goto(Node18)
 click(lyle)
-answer(I feel fine.)
-answer(No, introduce me.)
-answer(Hello.)
-answer(So far.)
-answer(Why did you join up?)
-answer(What do you mean?)
-answer(Snuck on in a crate.)
-answer(Why do you ask?)
-answer(No.)
-answer(OK, you go first.)
-answer(Really?)
-answer(Why did you have to get on the ship?)
-answer(Is he a pirate?)
-answer(Tell me more.)
-answer(That letter was written to your mother?)
-answer(How did she die?)
-answer(Is her husband still alive?)
-answer(I don't have one.)
+talkOut([101,102,101,101,101,101,102,101,101,101,101,101,101,101,101,101,102,101])   # I feel fine.
 
 # the cannons: Lyle's word on them, and cannon.sett, whose openset sets
 # didcannon; four dinghies sunk end it (cannon.cast endanim → endcannon)
@@ -210,44 +158,29 @@ idle()
 # and montage.move sails her to Port Royal (ship.cast justice, advanceday)
 approach(justice)
 click(justice)
-answer(Tell me about the Brethren.)
-answer(Some old man.)
-answer(What's different?)
-answer(How many Brethren are left?)
-answer(Do you protect it?)
+talkOut([101,101,101,101,101])   # Tell me about the Brethren.
 day(3)
 split(day two)
 
 # the docks: justice2.pupp docks, and his watch
-answer(When should we be back?)
+talkOut([101])   # When should we be back?
 
 # ---------------------------------------------------------------- day three
 # Erzulie: erzulie.sett's openset plays erzintro.move and her talk
 # (erzulie2.pupp day3), which ends with her gone (erzulphase 1)
 goto(Scene16)
 click(door pr2e, quad)
-answer(How do you know my name?)
-answer(Yes.)
-answer(Tell me about the Brethren.)
-answer(Yes.)
-answer(Was that a vision of the future or the past?)
-answer(What about the Brethren?)
-answer(Where is the condemned man?)
-answer(What can I do about this curse?)
-answer(What about the treasure?)
-answer(What about RedJack?)
-answer(You know Blackbeard?)
+talkOut([101,101,101,101,101,102,103,104,105,101,101])   # How do you know my name?
 
 # her door out, and the alley: Justice's runfight → juskill.move → jcombat.stag,
 # Jan and then his second (J1.shop's death plays jswitch.move, opens J2.shop)
 goto(Node10)
 click(door e2pr, quad)
-answer(Who are you meeting?)
+talkOut([102])   # Who are you meeting?
 duel(jcombat.stag)
 
 # postfight: justicedead.move, and the constable's questions (const2.pupp alley)
-answer(I just found this dead body.)
-answer(He gave it to me.)
+talkOut([101,101])   # I just found this dead body.
 wait(js == window.dbg.session.currentSetFile === "jail1")
 idle()
 split(the alley)
@@ -257,8 +190,7 @@ split(the alley)
 click(tray, quad)
 wait(js == window.dbg.session.stageName === "jail.stag" && window.dbg.session.propRuntime.get("lid")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
 rattleOn(jmug, window)
-answer(What are you doing here?)
-answer(Rum?)
+talkOut([101,101])   # What are you doing here?
 
 # the tray shut arms the constable's checkforrock (jail.stag closestage): he
 # takes the rum in a talk of his own (const2b.pupp takerum) and paces between
@@ -268,9 +200,7 @@ wait(js == window.dbg.session.stageName !== "jail.stag" && window.dbg.session.in
 wait(js == !window.dbg.session.propRuntime.get("rum")?.visible && !window.dbg.session.scheduler.isWalk("constable"))
 idle()
 click(constable, actor)
-answer(Let me out.)
-answer(I'm hungry.)
-answer(I'm thirsty.)
+talkOut([101,102,103])   # Let me out.
 wait(js == window.dbg.session.currentSetFile === "jail2", budget: 250000)
 idle()
 
@@ -299,7 +229,7 @@ click(trunk, quad)
 wait(js == window.dbg.session.currentSetFile === "jail5" && window.dbg.session.interp.handlersInPlay === 0)
 goto(Node13)
 click(door j2pr, quad)
-answer(All right.)
+talkOut([101])   # All right.
 wait(js == window.dbg.session.currentSetFile === "ptroyal" && window.dbg.session.interp.handlersInPlay === 0)
 split(out of jail)
 
@@ -365,8 +295,7 @@ goto(Node196)
 chain(Node195)
 goto(Node192)
 click(door h2t, quad)
-answer(I got in a fight.)
-answer(I don't want to talk about it.)
+talkOut([101,101])   # I got in a fight.
 split(the scepter)
 
 # the skeleton's dream: dream1.move asks for two clicks, and dream2.move's
@@ -380,9 +309,7 @@ click(skeleton, quad)
 clickFilm()
 clickFilm()
 wait(js == window.dbg.session.propRuntime.get("rjkey")?.owner === "nick" || window.dbg.host.director.awaitingChoice, budget: 250000)
-answer(I think I fell asleep.)
-answer(I have something to tell you about your father.)
-answer(I saw RedJack. He was your father.)
+talkOut([101,101,102])   # I think I fell asleep.
 owns(rjkey)
 watchFor(playing, skipMovie())
 
@@ -396,7 +323,7 @@ click(book, prop)
 owns(journal)
 clickAt(560, 430)
 stage(none)
-answer(A book.)
+talkOut([101])   # A book.
 closeInventory()
 
 # down again: the top's door (journal and key), the hub, the lava's jump at
@@ -430,7 +357,7 @@ click(crate horn, prop)
 owns(horn)
 click(ok, prop)
 stage(none)
-answer(I found this thing in the crate.)
+talkOut([101])   # I found this thing in the crate.
 
 # link1, whose lock takes the scepter (oscepter.move → link2, dooropen)
 goto(scene22)
@@ -482,20 +409,12 @@ goto(Scene10)
 face(firepit, prop)
 inventory()
 drag(torch, firepit, prop)
-answer(We got marooned.)
-answer(No.)
-answer(To some.)
-answer(Murder.)
-answer(Yes.)
-answer(He's dead.)
-answer(You've got to help me.)
-answer(What do you think of this tattoo.)
+talkOut([101,101,101,101,101,101,101,101])   # We got marooned.
 day(5)
 split(day four)
 
 # Rockfish at the dock (rock2a.pupp preelevator), asking as day five opens
-answer(When can I see Blackbeard?)
-answer(Are you afraid of him?)
+talkOut([101,101])   # When can I see Blackbeard?
 
 # ---------------------------------------------------------------- day five
 # Blackbeard's island: up the lift (bb1 Node18 facing 266°) to the lounge,
@@ -503,15 +422,14 @@ answer(Are you afraid of him?)
 goto(Node18)
 walkFacing(266)
 lift(bb2)
-answer(What kind of drink?)
+talkOut([101])   # What kind of drink?
 
 # Lyle and his sulphur pot (lylebbsulph.pupp): asked twice, he gives some
 approach(lyle)
 click(lyle, actor)
-answer(What are you doing?)
-answer(I don't want to know.)
+talkOut([101,103])   # What are you doing?
 click(lyle, actor)
-answer(Can I have some of your sulphur?)
+talkOut([101])   # Can I have some of your sulphur?
 
 # the coal: down the lift (bb2 Node10 facing 271°) to the charcoal bin by the
 # dock (charcoal.stag); a click on the open bin takes a coal, carried to the
@@ -545,25 +463,17 @@ wait(js == window.dbg.session.stageName !== "drink.stag" && window.dbg.session.i
 # rock2a.pupp drink); Denton rants, Blackbeard comes down, drinks, tells of
 # Marquez and passes out (BBStory.pupp), and Jan's men attack: the mine carts
 goto(Node15)
-answer(I hope so, I really need to see him.)
-answer(Yes, I made it.)
-answer(I'm Nick Dove.)
-answer(It's true.)
-answer(He told me to look for you.)
-answer(They carry scimitars.)
-answer(It's not your fault.)
-answer(Do you think RedJack will really come back?)
+talkOut([101,101,101,101,102,101,102,101])   # I hope so, I really need to see him.
 wait(js == window.dbg.session.currentSetFile === "mc1")
 idle()
 
 # the mine carts, three sets of Jan's men, the crash, and Bone (bone2b.pupp)
 mine()
-answer(I'm going to kill you.)
+talkOut([101])   # I'm going to kill you.
 duel(bcombat.stag)
 # Blackbeard after the fight (bbeard2b.pupp afterfight), arrive.move and
 # advanceday: Cartagena
-answer(Who are they?)
-answer(What now?)
+talkOut([101,102])   # Who are they?
 day(6)
 split(day five)
 
@@ -576,11 +486,10 @@ split(day five)
 # the bottom of the lock alone (lock3)
 approach(anne)
 click(anne, actor)
-answer(Rockfish.)
-answer(What should we do?)
+talkOut([102,102])   # Rockfish.
 goto(Scene13)
 click(anne, actor)
-answer(Turn the valve on the left.)
+talkOut([101])   # Turn the valve on the left.
 wait(js == window.dbg.session.currentSetFile === "lock3")
 idle()
 
@@ -597,9 +506,9 @@ wait(js == window.dbg.session.propRuntime.get("ldoor")?.value === 0)
 idle()
 goto(Node16)
 click(pipe, quad)
-answer(Turn the fill valve.)
+talkOut([102])   # Turn the fill valve.
 click(pipe, quad)
-answer(Get on the raft.)
+talkOut([103])   # Get on the raft.
 click(valves, quad)
 stage(botvalves.stag)
 click(drain, prop)
@@ -610,16 +519,14 @@ idle()
 # pulls a chain at Node13, and with both held the sword cuts the raft's rope
 # (inven.shop `sword` → lock3 `raft`, exitlock.move)
 wait(js == window.dbg.host.director.awaitingChoice, budget: 150000)
-answer(How long before we get there?)
-answer(Thank you.)
-answer(Go around and help Anne)
+talkOut([101,101,101])   # How long before we get there?
 wait(js == window.dbg.session.actorRuntime.get("anne")?.starName === "anne 5" && window.dbg.session.actorRuntime.get("rockfish")?.starName === "rockfish 5")
 idle()
 goto(Node13)
 click(anne, actor)
-answer(Pull the chain.)
+talkOut([101])   # Pull the chain.
 click(rockfish, actor)
-answer(Pull the chain.)
+talkOut([101])   # Pull the chain.
 face(rope, quad)
 inventory()
 drag(sword, rope, quad)
@@ -782,7 +689,7 @@ goto(Scene16)
 walkFacing(8)
 approach(elizabeth)
 click(elizabeth, actor)
-answer(This is Anne.)
+talkOut([101])   # This is Anne.
 
 # the study's inner door, with Jake free (study.sett "secret door"):
 # armrm.move, marqintro.move, Marquez (marquez2.pupp day6), and advanceday
@@ -793,15 +700,7 @@ wait(js == window.dbg.session.currentSetFile === "study")
 idle()
 goto(Node13)
 click(secret door, quad)
-answer(You're the one who hired the Janizaries?)
-answer(What do you want to talk about?)
-answer(Do you believe in ghosts?)
-answer(You don't seem so sure.)
-answer(How did you know about me?)
-answer(What do you mean?)
-answer(Why are you doing this?)
-answer(Why?)
-answer(I'll take you to the island.)
+talkOut([101,101,101,101,101,101,101,101,102])   # You're the one who hired the Janizaries?
 day(7)
 split(day six)
 
@@ -810,7 +709,7 @@ split(day six)
 # who Marquez is (bbintro3.pupp day7 `exchange`, marquez3.pupp); the
 # Spaniards come out of the trees (advanceday: gunshot.move, anncaught.move,
 # beachdraw.move) and the Spaniard draws (spancombat.stag)
-answer(He's the traitor!)
+talkOut([101])   # He's the traitor!
 wait(js == window.dbg.session.stageName === "spancombat.stag", budget: 1000000)
 duel(spancombat.stag)
 # the fight's end is a loop's (spancombat.stag closestage → "safe turner"
@@ -862,8 +761,7 @@ goto(Scene94)
 click(set totem 1, prop)
 wait(js == window.dbg.session.stageName.startsWith("totem") && window.dbg.session.interp.handlersInPlay === 0)
 click(top head, prop)
-answer(What are we going to do about those Spanish galleons?)
-answer(Yes, the ballistas.)
+talkOut([102,101])   # What are we going to do about those Spanish galleons?
 wait(js == window.dbg.session.currentSetFile === "ballista")
 idle()
 
@@ -871,13 +769,7 @@ idle()
 # the beach with the dart and the horn done: `theend ()`
 ballista()
 ending()
-answer(The pirate life.)
-answer(Why do you ask?)
-answer(Then what will you do?)
-answer(Thank you.)
-answer(I will.)
-answer(I'm sure.)
-answer(Got my own ship, want to be my weatherman?)
+talkOut([101,101,101,101,101,101,102])   # The pirate life.
 ending()
 wait(js == window.dbg.session.stageName === "control.stag")
 split(the end)
