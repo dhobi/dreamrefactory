@@ -1,6 +1,6 @@
 {
   "name": "@dreamfactory/site",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "private": true,
   "description": "The front door and the format editors. The chrome they share with the games is the chrome workspace.",
   "type": "module",
