@@ -28,8 +28,9 @@ export interface SessionProfile {
   /** put a save back; `version` is what `opengame` was given */
   readonly load: (session: GameSession, bytes: Uint8Array, version: string | undefined) => Promise<boolean>;
   /**
-   * A load opens its own set and is not this engine's save format (Dust): the
-   * host hands it the bytes and does not take its HUD apart first.
+   * A load opens its own set and is not this engine's save format (Dust's, and
+   * RedJack's `.save`): the host hands it the bytes and does not take its HUD
+   * apart first.
    */
   readonly loadOpensItsSet: boolean;
   /**
@@ -180,6 +181,9 @@ const V5: SessionProfile = {
   // a load is a script's (`opengame`), and RedJack.exe sends no idle while one
   // runs: held as a running script, wherever the host starts it from
   load: (session, bytes, version) => session.track(loadGameV5(session, bytes, version), "load"),
+  // ...and opens the room it was saved in itself (saveload-v5.ts), so a host's
+  // load (a speedrun's `load()`) hands it the bytes as Dust's does
+  loadOpensItsSet: true,
   loadMutesOpens: true,
   refusesBusySaves: true,
   scripts: { shortCircuit: true, typed: false },

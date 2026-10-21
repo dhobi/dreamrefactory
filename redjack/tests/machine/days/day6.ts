@@ -35,9 +35,9 @@
  *     and Elizabeth points Nick at the study's inner door.
  */
 import { fail, ok, type Headless } from "../harness";
-import { cauldronFight, whipFight } from "../fight";
+import { cauldronFight, whipFight } from "../../../src/play/fight";
 import { films } from "./day5";
-import { ai, clickOn, closeInventory, converse, drag, face, global, goTo, openInventory, pathTo, upFacing, walkUpTo } from "../route";
+import { ai, clickOn, closeInventory, converse, drag, face, global, goTo, openInventory, pathTo, upFacing, walkUpTo } from "../../../src/play/route";
 
 /** the gearbox each symbol goes in, and the node it is reached from (cartegena.shop gearbox `inreach`) */
 const GEARBOXES: [n: number, node: string][] = [

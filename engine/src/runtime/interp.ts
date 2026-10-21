@@ -416,6 +416,28 @@ export class Interpreter {
   }
 
   /**
+   * {@link framesAtWork}, counted the way RedJack's machine harness counts
+   * (redjack/tests/machine/harness.ts `running`): a handler the idle's chain
+   * starts is the idle's own — its `hittest`, its `setcursor` — unless it
+   * starts while a scheduler pass is running ({@link passing}). A pass inside the
+   * idle's `forceupdate` is the world moving: a loop, a walk's `endwalk`, the
+   * `openscene` a road ends in, and a fight stage's `idle` calling its
+   * `endfight`, which runs for seconds and is a script running if anything is.
+   * Everything a counted handler starts is counted with it. Read by RedJack's
+   * speedrun verbs (redjack/src/speedrun/actions.ts), which play the suites'
+   * routes on a page and so need the suites' idea of idle; {@link
+   * handlersAtWork} stays what Timelapse's sheets were timed against.
+   */
+  get handlersInPlay(): number {
+    return this.framesInPlay.size;
+  }
+  private readonly framesInPlay = new Set<Frame>();
+  /** the idle's own chain, as {@link handlersInPlay} reads it: frames that are not counted */
+  private readonly idleFrames = new WeakSet<Frame>();
+  /** whether a scheduler pass is running — the session's scheduler answers (session.ts) */
+  passing: () => boolean = () => false;
+
+  /**
    * Which GAME is running. Every {@link Frame} is stamped with it, and
    * {@link execBlock} refuses to run a statement for a frame that does not
    * match — see {@link abandonRunning}.
@@ -581,6 +603,9 @@ export class Interpreter {
     this.currentEvent = ++this.handlerSeq;
     this.liveHandlers.push({ inst, handler });
     if (frame.dispatch !== "idle") this.framesAtWork.add(frame);
+    const idleChain = handler === "idle" || (!!parent && this.idleFrames.has(parent) && !this.passing());
+    if (idleChain) this.idleFrames.add(frame);
+    else this.framesInPlay.add(frame);
     this.onHandler?.(handler);
     try {
       const sig = await this.execBlock(block.body, frame);
@@ -596,6 +621,7 @@ export class Interpreter {
     } finally {
       this.liveHandlers.pop();
       this.framesAtWork.delete(frame);
+      this.framesInPlay.delete(frame);
       this.depth--;
       this.currentEvent = prevEvent;
     }

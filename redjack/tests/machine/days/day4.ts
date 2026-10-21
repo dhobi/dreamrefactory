@@ -17,12 +17,12 @@
  * On the way: the totems set asleep, or the darts at Scene129 kill.
  */
 import { fail, ok, type Headless } from "../harness";
-import { playGems } from "../gems";
-import { crossTheLava, pullTheVine, runTheFlames, swingTheChain } from "../lava";
+import { playGems } from "../../../src/play/gems";
+import { crossTheLava, pullTheVine, runTheFlames, swingTheChain } from "../../../src/play/lava";
 import {
   ai, clickFilm, clickOn, closeInventory, converse, drag, face, filmWaits, findOnScreen, global, goTo, openInventory,
   upFacing, walkScenes,
-} from "../route";
+} from "../../../src/play/route";
 
 /** day four from the beach to day five at Blackbeard's, each step checked as it goes */
 export async function playDay4(h: Headless): Promise<void> {

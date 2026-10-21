@@ -602,6 +602,8 @@ export class GameSession {
     audio: AudioSink,
   ) {
     this.audio = new TimedAudio(audio, () => this.gameNow, () => this.nominalTime);
+    // a handler a scheduler pass starts is the world moving (Interpreter.handlersInPlay)
+    this.interp.passing = () => this.scheduler.inPass;
     this.propRuntime.lights = this.actorRuntime.lights = this.lights;
     this.lights.screenOf = () => ({ bright: this.screenBright, contrast: this.screenContrast });
     this.actorRuntime.origin = this.propRuntime.origin;

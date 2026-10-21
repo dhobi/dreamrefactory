@@ -1,0 +1,157 @@
+# title: RedJack — the whole game
+#
+# The machine suites' route (tests/machine/days/*.ts) as a sheet: the boot,
+# then the seven days, to the end of the game.
+#
+#   npm run speedrun -w redjack            in node
+#   /redjack/speedrun/                     in the workbench
+#
+# The moves are the suites' own (src/play/): goto() walks a room by its
+# exits, click() finds a thing by the boot's hittest, answer() picks a plaque
+# by the start of its text.
+
+reset(seed: 1)
+skipMovie(until: js == window.dbg.booted && window.dbg.session.currentSetFile === "liznite", budget: 600000)
+idle()
+split(Hangman's Reef)
+
+# ---------------------------------------------------------------- day one
+# Bone, by the crates (bone1.pupp meetbone)
+goto(Node48)
+click(bone)
+answer(Who are you?)
+answer(My pockets are empty.)
+answer(No sir.)
+answer(I don't know her.)
+
+# Lyle, on the beach: Node58 has him jump Nick the first time
+goto(Node58)
+answer(Who are you?)
+answer(All right then.)
+answer(Nick.)
+answer(Were you left behind)
+answer(Goodbye.)
+
+# Jan, in the woods, and Lyle saves Nick: the fire goes out
+goto(Node54)
+answer(Who was that?)
+answer(I could have taken care of myself.)
+answer(Can you teach me how to fight?)
+answer(Tell me what else you know.)
+answer(Can you tell me where to get a sword?)
+answer(I'll bring you some ale.)
+
+# the bar: knock, and the bartender lets Nick in
+goto(Node37)
+click(door l2b)
+answer(I want to come inside.)
+# the bartender inside: the ale for Lyle, then Captain Justice
+goto(Scene35)
+face(bartend)
+near(bartend, 1100000)
+click(bartend)
+answer(Where's all the action?)
+answer(Could I have a mug of ale?)
+answer(Thanks for letting me in.)
+answer(Have you seen anyone strange)
+answer(Introduce me.)
+answer(Yes, I came to get an ale)
+answer(I'm an aspiring pirate.)
+answer(Do you need men on your pirate ship?)
+answer(What does a person have to do)
+answer(I want to join your crew.)
+answer(A sword and experience.)
+answer(How long will you be here?)
+goto(Scene34)
+click(door b2l)
+idle()
+
+# the ale to Lyle, waiting in the woods
+goto(Node54)
+face(lyle)
+near(lyle, 65000)
+click(lyle)
+talkOut()
+
+# the sword, in the trunk in the cave under the lighthouse
+goto(Node36)
+click(door l2lh)
+idle()
+goto(Node11)
+click(door lh2c)
+idle()
+goto(Node27)
+click(chest, quad)
+wait(js == !!window.dbg.session.propRuntime.get("sword")?.visible)
+click(sword)
+owns(sword, pistol)
+click(lid)
+# and Patch, of RedJack's crew, waiting in the cave
+answer(Who are you?)
+answer(You look like some kind of sailor.)
+answer(What happened to the treasure?)
+answer(When is the reunion?)
+answer(Who was the traitor?)
+answer(How many Brethren are left?)
+answer(Hasn't anyone tried)
+answer(Where is this island?)
+answer(What should I do?)
+goto(Node29)
+click(ladder)
+idle()
+goto(Node10)
+click(door lh2l)
+idle()
+split(the sword)
+
+# Lyle's school, on the dock
+goto(Node49)
+face(lyle)
+near(lyle, 65000)
+click(lyle)
+answer(I want to learn defense.)
+answer(I'm ready.)
+defense()
+answer(I want to learn dodging.)
+answer(I'm ready.)
+dodging()
+answer(I want to learn striking.)
+answer(Let's fight.)
+striking()
+answer(I want to fight !)
+duel(combat.stag)
+talkOut()
+idle()
+split(Lyle beaten)
+
+# Bone again: he and Cross go out to the ship
+goto(Node48)
+face(bone)
+near(bone, 65000)
+click(bone)
+answer(This is your ship?)
+click(bone)
+answer(What are you doing?)
+
+# the charcoal, from the fire Lyle put out
+goto(Node58)
+click(lpfirepit)
+stage(firepit.stag)
+click(stick)
+owns(charcoal)
+click(button10)
+idle()
+
+# the crate: an X, and in
+goto(Node47)
+click(the crate)
+stage(crate.stag)
+click(chest, prop)
+wait(js == !!window.dbg.session.propRuntime.get("charcoal")?.visible && window.dbg.session.interp.handlersInPlay === 0)
+drag(charcoal, crate2)
+wait(js == String(window.dbg.session.currentFlat).toLowerCase() === "crate1x 1" && window.dbg.session.interp.handlersInPlay === 0)
+click(crate2x)
+idle()
+click(getin)
+day(2)
+split(day one)

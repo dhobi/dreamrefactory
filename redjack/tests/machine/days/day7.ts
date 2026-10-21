@@ -27,10 +27,10 @@
  *     (control.stag).
  */
 import { fail, ok, type Headless } from "../harness";
-import { sinkTheGalleons } from "../ballista";
-import { duel, marquezFight } from "../fight";
+import { sinkTheGalleons } from "../../../src/play/ballista";
+import { duel, marquezFight } from "../../../src/play/fight";
 import { films } from "./day5";
-import { ai, clickFilm, clickOn, converse, filmWaits, findOnScreen, goTo, upFacing } from "../route";
+import { ai, clickFilm, clickOn, converse, filmWaits, findOnScreen, goTo, upFacing } from "../../../src/play/route";
 
 /** the room has the screen again, or someone asks something */
 const settled = (h: Headless): boolean => h.idle() || h.host.director.awaitingChoice;

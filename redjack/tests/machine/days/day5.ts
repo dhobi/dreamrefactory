@@ -21,9 +21,9 @@
  *     sword (bcombat.stag).
  */
 import { fail, ok, type Headless } from "../harness";
-import { duel } from "../fight";
-import { rideTheMine } from "../mine";
-import { ai, carry, clickOn, closeInventory, drag, openInventory, converse, findOnScreen, global, goTo, upFacing, walkUpTo } from "../route";
+import { duel } from "../../../src/play/fight";
+import { rideTheMine } from "../../../src/play/mine";
+import { ai, carry, clickOn, closeInventory, drag, openInventory, converse, findOnScreen, global, goTo, upFacing, walkUpTo } from "../../../src/play/route";
 
 /**
  * The lift's handle (elevator.shop handle): held and moved, it steps its
@@ -41,7 +41,7 @@ export async function pullTheHandle(h: Headless, moves: [dx: number, dy: number,
     for (let i = 0; i < n; i++) {
       x += dx;
       y += dy;
-      h.session.setPointer(x, y);
+      h.point(x, y);
       await h.frame(2);
     }
   }

@@ -13,10 +13,10 @@
  *     the route names, and fails if the game offers something else.
  */
 import { TURN, type MazeFilm } from "@dreamfactory/engine/df/sett";
-import { fail, type Headless } from "./harness";
+import { fail, type Player } from "./player";
 
 /** the room's nodes by the name the scripts use, and its exits as node names */
-function graph(h: Headless): Map<string, string[]> {
+function graph(h: Player): Map<string, string[]> {
   const maze = h.session.maze;
   if (!maze) fail("no room on screen");
   const sett = (maze as unknown as { sett: { nodes: { name: string; node: number }[] } }).sett;
@@ -29,7 +29,7 @@ function graph(h: Headless): Map<string, string[]> {
 const same = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
 /** the node names from here to `to`, not counting here; fails if there is no way */
-export function pathTo(h: Headless, to: string): string[] {
+export function pathTo(h: Player, to: string): string[] {
   const g = graph(h);
   const from = [...g.keys()].find((n) => same(n, h.node()));
   const goal = [...g.keys()].find((n) => same(n, to));
@@ -53,8 +53,8 @@ export function pathTo(h: Headless, to: string): string[] {
 }
 
 /** press a key and let the game answer it */
-export async function press(h: Headless, key: string, what = key): Promise<void> {
-  h.key(key);
+export async function press(h: Player, key: string, what = key): Promise<void> {
+  h.tap(key);
   await h.settle(`${what} at ${h.node()}`);
 }
 
@@ -63,7 +63,7 @@ export async function press(h: Headless, key: string, what = key): Promise<void>
  * it is the one `nearexit` finds ahead, then "up". A node with more exits than
  * a turn visits in one lap has had its lap when the heading comes round again.
  */
-export async function step(h: Headless, to: string, arrived = (): boolean => same(h.node(), to)): Promise<void> {
+export async function step(h: Player, to: string, arrived = (): boolean => same(h.node(), to)): Promise<void> {
   const maze = h.session.maze!;
   const here = h.node();
   const exits = graph(h).get([...graph(h).keys()].find((n) => same(n, here))!) ?? [];
@@ -87,7 +87,7 @@ export async function step(h: Headless, to: string, arrived = (): boolean => sam
 }
 
 /** a conversation is waiting for an answer */
-export const talking = (h: Headless): boolean => h.host.director.awaitingChoice;
+export const talking = (h: Player): boolean => h.host.director.awaitingChoice;
 
 /**
  * Walk to a node of this room by the shortest way. A node that starts a
@@ -96,7 +96,7 @@ export const talking = (h: Headless): boolean => h.host.director.awaitingChoice;
  * A road can end in another room — horn1's to its "Scene10" comes out in
  * link2 — and `leaving` says so: the last hop is done when the room changes.
  */
-export async function goTo(h: Headless, to: string, leaving = false): Promise<void> {
+export async function goTo(h: Player, to: string, leaving = false): Promise<void> {
   const room = h.room();
   const path = pathTo(h, to);
   for (const [i, next] of path.entries()) {
@@ -119,7 +119,7 @@ const hitIs = (hit: { name: string; type: string }, name: string, type?: HitType
  * a few hundred tests and a small one still is.
  */
 export function findOnScreen(
-  h: Headless,
+  h: Player,
   name: string,
   type?: HitType,
   grids: number[] = [16, 8],
@@ -148,7 +148,7 @@ export function findOnScreen(
  * finds it if it is behind; resting the pointer on the edge it is near brings it
  * in the way `idle ()` turns the view (boot tracknodescroll). Answers where it is.
  */
-export async function face(h: Headless, name: string, type?: HitType): Promise<{ x: number; y: number }> {
+export async function face(h: Player, name: string, type?: HitType): Promise<{ x: number; y: number }> {
   let at = findOnScreen(h, name, type);
   const margin = Number(global(h, "margin") || 0);
   const { width, height } = h.host.director.screen;
@@ -169,7 +169,7 @@ export async function face(h: Headless, name: string, type?: HitType): Promise<{
   const panned = !at;
   for (const r of rest) {
     for (let pan = 0; !at && pan < r.n; pan++) {
-      h.session.setPointer(r.x, r.y);
+      h.point(r.x, r.y);
       await h.frame(4);
       // the coarse grid alone while the view moves; the fine one once it is found
       at = findOnScreen(h, name, type, [16]) && findOnScreen(h, name, type);
@@ -183,7 +183,7 @@ export async function face(h: Headless, name: string, type?: HitType): Promise<{
   // a thing found clear of the margin is clicked once the hand is back in the
   // middle and the view has stopped (the skull's gem quad, found panning)
   if (panned && !inMargin(at)) {
-    h.session.setPointer(width / 2, height / 2);
+    h.point(width / 2, height / 2);
     await h.settle(`the view to stop on ${name}`);
     at = findOnScreen(h, name, type) ?? fail(`${h.node()}: "${name}" is gone once the view stopped`);
   }
@@ -198,17 +198,17 @@ export async function face(h: Headless, name: string, type?: HitType): Promise<{
   if (!inMargin(at) || near || !h.session.setVisible || h.session.maze?.view !== "node") return at;
   for (let hover = 0; at && inMargin(at); hover++) {
     if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin (at ${at.x},${at.y}, the middle answers ${h.session.hitTestAt(width / 2, height / 2).name})`);
-    h.session.setPointer(at.x, at.y);
+    h.point(at.x, at.y);
     await h.frame(4);
     at = findOnScreen(h, name, type);
   }
-  h.session.setPointer(width / 2, height / 2);
+  h.point(width / 2, height / 2);
   await h.settle(`the view to stop on ${name}`);
   return findOnScreen(h, name, type) ?? fail(`${h.node()}: "${name}" is gone once the view stopped`);
 }
 
 /** click on what `hittest` calls `name`, {@link face}d first */
-export async function clickOn(h: Headless, name: string, type?: HitType): Promise<void> {
+export async function clickOn(h: Player, name: string, type?: HitType): Promise<void> {
   const at = await face(h, name, type);
   h.click(at.x, at.y);
   await h.frame(3);
@@ -223,7 +223,7 @@ export async function clickOn(h: Headless, name: string, type?: HitType): Promis
  * `thenAsks`, at the first question after the last answer.
  */
 export async function converse(
-  h: Headless,
+  h: Player,
   answers: string[],
   what: string,
   opts: { thenAsks?: boolean } = {},
@@ -269,10 +269,10 @@ export async function converse(
 }
 
 /** a film on screen is standing on a frame that waits for a click (anne1.pupp letter: letter.move's "Letter 1") */
-export const filmWaits = (h: Headless): boolean => h.host.director.movies.waitingRegions.length > 0;
+export const filmWaits = (h: Player): boolean => h.host.director.movies.waitingRegions.length > 0;
 
 /** click the first of the regions a waiting film frame offers, in its middle, and let the film go on */
-export async function clickFilm(h: Headless): Promise<void> {
+export async function clickFilm(h: Player): Promise<void> {
   const r = h.host.director.movies.waitingRegions[0];
   const x = Math.round((r.x0 + r.x1) / 2);
   const y = Math.round((r.y0 + r.y1) / 2);
@@ -281,17 +281,17 @@ export async function clickFilm(h: Headless): Promise<void> {
 }
 
 /** an ai flag the way the scripts read it: `sendtoactorfx (who, getai (flag))` */
-export async function ai(h: Headless, who: string, flag: string): Promise<string> {
+export async function ai(h: Player, who: string, flag: string): Promise<string> {
   return String(await h.session.sendEvent("sendtoactorfx", who, "getai", [flag], "route"));
 }
 
 /** a global the way the scripts read it */
-export function global(h: Headless, name: string): string {
+export function global(h: Player, name: string): string {
   return String(h.session.interp.globals.get(name) ?? "");
 }
 
 /** how far `who` stands from the player, as the cast's `nearactor` measures it: `calcdist` on x and y */
-export function distanceTo(h: Headless, who: string): number {
+export function distanceTo(h: Player, who: string): number {
   const cam = h.session.maze?.camera();
   const a = h.session.actorRuntime.get(who);
   if (!cam || !a) fail(`no ${!cam ? "camera" : `actor ${who}`} to measure from`);
@@ -304,7 +304,7 @@ export function distanceTo(h: Headless, who: string): number {
  * player crosses the room first (Justice at his desk is out of reach from the
  * cabin door, capts.sett Node10).
  */
-export async function walkUpTo(h: Headless, who: string): Promise<void> {
+export async function walkUpTo(h: Player, who: string): Promise<void> {
   const a = h.session.actorRuntime.get(who) ?? fail(`no actor ${who} in ${h.room()}`);
   const nodes = (h.session.maze as unknown as { sett: { nodes: { name: string; x: number; y: number }[] } }).sett.nodes;
   const d = (n: { x: number; y: number }): number => Math.hypot(n.x - a.worldX, n.y - a.worldY);
@@ -317,7 +317,7 @@ export async function walkUpTo(h: Headless, who: string): Promise<void> {
  * pace (the bartender walks between his two stars) are only talked to when they
  * come near, and a click on one too far away is a click on the room, which walks.
  */
-export async function waitNear(h: Headless, who: string, hotdist: number): Promise<void> {
+export async function waitNear(h: Player, who: string, hotdist: number): Promise<void> {
   await h.until(() => distanceTo(h, who) < hotdist && h.idle(), `${who} to come within ${hotdist}`);
 }
 
@@ -328,9 +328,9 @@ export async function waitNear(h: Headless, who: string, hotdist: number): Promi
  * (tracknodescroll), so a drop made near an edge — the rifle in jail2 — would
  * turn the next room round.
  */
-function letGo(h: Headless): void {
+function letGo(h: Player): void {
   const { width, height } = h.host.director.screen;
-  h.session.setPointer(width / 2, height / 2);
+  h.point(width / 2, height / 2);
 }
 
 /**
@@ -339,7 +339,7 @@ function letGo(h: Headless): void {
  * `while stilldown ()` loop — and let go over `onto`, which is where the item's
  * own test looks (`pointinbutton`, `pointinprop`, `pointinactor`).
  */
-export async function drag(h: Headless, what: string, onto: string, ontoType?: HitType): Promise<void> {
+export async function drag(h: Player, what: string, onto: string, ontoType?: HitType): Promise<void> {
   // the thing carried is always a prop; the target may share its name (horn3's
   // quad "horn" is where the inventory's "horn" goes)
   const to = findOnScreen(h, onto, ontoType) ?? fail(`${h.node()}: nothing called "${onto}" to drop ${what} on`);
@@ -348,7 +348,7 @@ export async function drag(h: Headless, what: string, onto: string, ontoType?: H
   await h.frame(3);
   const steps = 12;
   for (let i = 1; i <= steps; i++) {
-    h.session.setPointer(Math.round(from.x + ((to.x - from.x) * i) / steps), Math.round(from.y + ((to.y - from.y) * i) / steps));
+    h.point(Math.round(from.x + ((to.x - from.x) * i) / steps), Math.round(from.y + ((to.y - from.y) * i) / steps));
     await h.frame(1);
   }
   h.mouseUp(to.x, to.y);
@@ -363,7 +363,7 @@ export async function drag(h: Headless, what: string, onto: string, ontoType?: H
  * (jail.shop `stdmove`: every move of more than the bars' spacing across the
  * window or the cell door rings, and letting go calls whoever is there).
  */
-export async function rattle(h: Headless, what: string, where: { x: number; y: number }, strokes = 6): Promise<void> {
+export async function rattle(h: Player, what: string, where: { x: number; y: number }, strokes = 6): Promise<void> {
   const from = findOnScreen(h, what) ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
   h.mouseDown(from.x, from.y);
   await h.frame(3);
@@ -371,7 +371,7 @@ export async function rattle(h: Headless, what: string, where: { x: number; y: n
   for (let i = 1; i <= 8; i++) path.push({ x: from.x + ((where.x - from.x) * i) / 8, y: from.y + ((where.y - from.y) * i) / 8 });
   for (let i = 0; i < strokes; i++) path.push({ x: where.x + (i % 2 ? 30 : -30), y: where.y });
   for (const p of path) {
-    h.session.setPointer(Math.round(p.x), Math.round(p.y));
+    h.point(Math.round(p.x), Math.round(p.y));
     await h.frame(1);
   }
   h.mouseUp(where.x, where.y);
@@ -380,12 +380,12 @@ export async function rattle(h: Headless, what: string, where: { x: number; y: n
 }
 
 /** carry `what` with the button held along a straight line to (x, y), and let go there */
-export async function carry(h: Headless, what: string, to: { x: number; y: number }, type?: HitType): Promise<void> {
+export async function carry(h: Player, what: string, to: { x: number; y: number }, type?: HitType): Promise<void> {
   const from = findOnScreen(h, what, type) ?? fail(`${h.node()}: "${what}" is not on screen to pick up`);
   h.mouseDown(from.x, from.y);
   await h.frame(3);
   for (let i = 1; i <= 10; i++) {
-    h.session.setPointer(Math.round(from.x + ((to.x - from.x) * i) / 10), Math.round(from.y + ((to.y - from.y) * i) / 10));
+    h.point(Math.round(from.x + ((to.x - from.x) * i) / 10), Math.round(from.y + ((to.y - from.y) * i) / 10));
     await h.frame(1);
   }
   h.mouseUp(to.x, to.y);
@@ -400,7 +400,7 @@ export async function carry(h: Headless, what: string, to: { x: number; y: numbe
  * "up" along it. Answers the scenes passed through.
  */
 export async function walkScenes(
-  h: Headless,
+  h: Player,
   wanted: (road: { to: number; toScene: number }, scene: string) => boolean,
   max = 30,
 ): Promise<string[]> {
@@ -427,9 +427,9 @@ export async function walkScenes(
  * `mouseonchest`: x 15–149, y 366–475), so the hand goes there, the chest fades
  * in, and it is clicked.
  */
-export async function openInventory(h: Headless): Promise<void> {
+export async function openInventory(h: Player): Promise<void> {
   const chest = h.session.propRuntime.get("chest") ?? fail("no inventory chest");
-  h.session.setPointer(80, 420);
+  h.point(80, 420);
   await h.until(() => chest.visible && Number(chest.ink) >= 7, "the chest to fade in", 200);
   const at = findOnScreen(h, "chest", "prop") ?? fail("the chest is not on screen");
   h.click(at.x, at.y);
@@ -438,13 +438,13 @@ export async function openInventory(h: Headless): Promise<void> {
 }
 
 /** close the inventory: a click on the open chest (common.shop chest: `propdeg` 12 is open) */
-export async function closeInventory(h: Headless): Promise<void> {
+export async function closeInventory(h: Player): Promise<void> {
   const chest = h.session.propRuntime.get("chest") ?? fail("no inventory chest");
   if (Number(chest.deg) !== 12) return;
   const at = findOnScreen(h, "chest", "prop") ?? fail("the open chest is not on screen");
   h.click(at.x, at.y);
   await h.until(() => Number(chest.deg) === 0 && h.running().length === 0, "the inventory to close", 400);
-  h.session.setPointer(320, 240);
+  h.point(320, 240);
 }
 
 /**
@@ -452,7 +452,7 @@ export async function closeInventory(h: Headless): Promise<void> {
  * the doors that are no exit of the node but a scripted jump the set's `keydown`
  * makes when you face them (the hub's lava, the beach's way to the links)
  */
-export async function upFacing(h: Headless, deg: number): Promise<void> {
+export async function upFacing(h: Player, deg: number): Promise<void> {
   const m = h.session.maze ?? fail("no room");
   const at = (): number => Math.round((m.heading * 360) / TURN);
   for (let i = 0; Math.abs(((at() - deg + 540) % 360) - 180) > 20; i++) {

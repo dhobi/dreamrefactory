@@ -18,8 +18,8 @@
  *     word on them. The route plays them out (`cannons.ts`): four dinghies sunk.
  */
 import { fail, ok, type Headless } from "../harness";
-import { sinkTheDinghies } from "../cannons";
-import { ai, clickOn, converse, global, goTo, walkUpTo } from "../route";
+import { sinkTheDinghies } from "../../../src/play/cannons";
+import { ai, clickOn, converse, global, goTo, walkUpTo } from "../../../src/play/route";
 
 /** day two from Justice's first question to day three's first, each step checked as it goes */
 export async function playDay2(h: Headless): Promise<void> {

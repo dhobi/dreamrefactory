@@ -26,7 +26,7 @@
  */
 import { TURN } from "@dreamfactory/engine/df/sett";
 import { degToSimple, simpleToDeg } from "@dreamfactory/engine/runtime/maze";
-import { fail, type Headless } from "./harness";
+import { fail, type Player } from "./player";
 
 const cos = (a: number, m: number): number => Math.trunc(m * Math.cos((a * 2 * Math.PI) / TURN));
 const sin = (a: number, m: number): number => Math.trunc(m * Math.sin((a * 2 * Math.PI) / TURN));
@@ -38,8 +38,8 @@ const signed = (a: number): number => {
 const DINGHIES = [1, 2, 3, 4].map((i) => `dingy ${i}`);
 
 /** play the cannons until all four dinghies are down and the game ends; answers the shots it took */
-export async function sinkTheDinghies(h: Headless, maxShots = 60): Promise<number> {
-  const maze = (): NonNullable<Headless["session"]["maze"]> => h.session.maze ?? fail("no room");
+export async function sinkTheDinghies(h: Player, maxShots = 60): Promise<number> {
+  const maze = (): NonNullable<Player["session"]["maze"]> => h.session.maze ?? fail("no room");
   const props = h.session.propRuntime;
   const actors = h.session.actorRuntime;
   const afloat = (): string[] =>
@@ -100,7 +100,7 @@ export async function sinkTheDinghies(h: Headless, maxShots = 60): Promise<numbe
   const pressUntil = async (key: string, done: () => boolean, what: string): Promise<void> => {
     for (let n = 0; !done(); n++) {
       if (n > 400) fail(`${what}: ${key} never got there`);
-      h.key(key);
+      h.tap(key);
       await h.frame(1);
     }
   };
@@ -142,7 +142,7 @@ export async function sinkTheDinghies(h: Headless, maxShots = 60): Promise<numbe
         if (scores(who, m.heading + simpleToDeg(turn), tilt, c) >= 0) {
           best = tilt;
           for (let i = 0; i < Math.abs(turn); i++) {
-            h.key(turn > 0 ? "left" : "right");
+            h.tap(turn > 0 ? "left" : "right");
             await h.frame(1);
           }
           break;

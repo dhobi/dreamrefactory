@@ -51,6 +51,9 @@ import { RJ_CURSORS } from "./cursor-art";
 import { bindRoomTouch } from "./room-touch";
 import { SWIPE_ARROWS, arrowUp, defaultSaveName, heldKeys, keyAction, whereLine } from "./input";
 import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
+import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
+import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 
 const SCREEN = REDJACK.screen;
 
@@ -66,6 +69,10 @@ const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
 const stageEl = document.getElementById("stage") as HTMLElement;
 showVersion(VERSION);
+// Play and Speedrunner folded into one "Play", as on Titanic's, Dust's and
+// Timelapse's pages (chrome/src/play-menu.ts), in English: RedJack is not
+// translated. The workbench boots this file too and gets the same
+void installPlayMenu({ english: true });
 
 /** the title card, which closes the band up when it fails to load — see #brand in index.html */
 brandFallback(document.getElementById("brand") as HTMLImageElement | null);
@@ -159,6 +166,19 @@ function beginPlaying(): void {
 const cursor = new ShownCursor(canvas, new CursorSheet(RJ_CURSORS), SCREEN);
 const showCursor = cursor.show;
 
+/**
+ * Boot without waiting for the Enter press — on a page that says so with
+ * `<meta name="autostart">`: the speedrun workbench (redjack/speedrun/
+ * workbench.ts), for Dust's reason (the note on AUTOSTART in dust/src/main.ts).
+ * That page is reloaded for a clean game far more often than it is opened to
+ * play one, and a gesture asked for per boot is one asked for per run. The
+ * audio the press would have bought waits for the run's first click instead.
+ */
+const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
+
+/** whether the cold boot has returned — `window.dbg.booted` */
+let booted = false;
+
 /* ------------------------------------------------------------------------- *
  * The boot
  * ------------------------------------------------------------------------- */
@@ -177,6 +197,10 @@ async function main(): Promise<void> {
   progress(INDEXED, `indexed ${files.size} names across three discs`);
   say(`indexed ${files.size} names across the rip`);
   files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
+  // the load remover's subscription (engine/src/web/load-clock.ts, #251): from
+  // the first fetch, because a clock armed when a timer starts has missed the
+  // boot. Read through `window.dbg.loading()` below
+  watchLoads(files);
 
   const host = new GameHost(
     files,
@@ -191,6 +215,10 @@ async function main(): Promise<void> {
   // poll loops advance (see timelapse/src/main.ts)
   host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
   host.session.hasRealFrames = true;
+  // A workbench `reset(seed: N)` reloaded us: the dice are pinned before the boot
+  // draws its first one (speedrun/src/boot-seed.ts)
+  const bootSeed = takeBootSeed("redjack");
+  if (bootSeed !== null) host.session.seedRandom(bootSeed);
 
   // Saved games: the control panel's SAVE and LOAD run `savegame ("2")` and
   // `opengame ("2")`, which block on these hooks, and the shared dialog answers
@@ -282,15 +310,46 @@ async function main(): Promise<void> {
     },
   };
 
+  /**
+   * `window.dbg`, the name every other game's page publishes its handle under
+   * and so the one the speedrun driver evaluates its predicates against
+   * (timelapse/src/main.ts says the rest). `rj` above stays the console's.
+   *
+   * A DreamFactory 5 room is no set viewer: `host.viewer` stays null and the
+   * room is `session.maze`, drawn by the director — so this page is `roomless`
+   * to the shared predicates (speedrun/src/driver.ts ROOMLESS), which ask the
+   * director instead of waiting for a viewer that never comes. `booted` is
+   * "the game is up": `coldBoot` has returned.
+   */
+  (window as unknown as { dbg: unknown }).dbg = {
+    host,
+    session: s,
+    director: host.director,
+    get viewer() {
+      return host.viewer;
+    },
+    roomless: true,
+    get booted() {
+      return booted;
+    },
+    /** the load remover's reading, in the shape the other pages publish (dust/src/main.ts) */
+    loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),
+  };
+
   // the input BEFORE the boot, so a modal film at the start can be skipped
   bindInput(host, s);
 
   progress(1, "ready");
-  await waitForStart(bootEl, startEl);
+  await waitForStart(bootEl, startEl, AUTOSTART);
   ensureAudio();
   beginPlaying();
 
-  if (!(await log.coldBoot(host, errEl))) showLog(true);
+  // TRACKED, as Timelapse's page tracks its boot (timelapse/src/main.ts): a boot
+  // in flight is a script running, so the BOOTFILE idle waits for it here as it
+  // does in the speedrun's headless runner
+  const up = await s.track(log.coldBoot(host, errEl), "coldBoot");
+  booted = true;
+  if (!up) showLog(true);
   log.bootSummary(host, files, `set ${s.currentSetName || "none"} · `);
 }
 
@@ -308,7 +367,14 @@ function showLocation(host: GameHost): void {
  * Input
  * ------------------------------------------------------------------------- */
 
-const canvasCoords = canvasCoordsFor(canvas, SCREEN);
+/**
+ * Floored, as Dust's, Titanic's and Timelapse's are: a client pixel belongs to
+ * the game pixel it lies in. Rounded, the right half of each doubled pixel
+ * answered for its neighbour, and every click the speedrun driver aims at the
+ * middle of a pixel (speedrun/src/driver.ts `clientAxis`) landed one right and
+ * down of where it was aimed.
+ */
+const canvasCoords = canvasCoordsFor(canvas, SCREEN, Math.floor);
 
 function bindInput(host: GameHost, s: GameHost["session"]): void {
   const input = bindPointerInput(host, canvas, {

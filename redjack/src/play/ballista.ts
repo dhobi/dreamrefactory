@@ -25,7 +25,7 @@
  */
 import { TURN } from "@dreamfactory/engine/df/sett";
 import { degToSimple, simpleToDeg } from "@dreamfactory/engine/runtime/maze";
-import type { Headless } from "./harness";
+import type { Player } from "./player";
 
 const SHIPS = [1, 2, 3, 4].map((i) => `ship ${i}`);
 const cos = (a: number, m: number): number => Math.trunc(m * Math.cos((a * 2 * Math.PI) / TURN));
@@ -40,10 +40,10 @@ const whole = (a: number): number => {
 /** `getdegree`'s inner band: a pixel past the still strip, in angle a pass */
 const PER_PX = 699045 / 1240;
 
-type Actor = NonNullable<ReturnType<Headless["session"]["actorRuntime"]["get"]>>;
+type Actor = NonNullable<ReturnType<Player["session"]["actorRuntime"]["get"]>>;
 
 /** fire the ballista until the galleons are beaten and the room closes; answers the shots it took */
-export async function sinkTheGalleons(h: Headless): Promise<number> {
+export async function sinkTheGalleons(h: Player): Promise<number> {
   const actors = h.session.actorRuntime;
   const props = h.session.propRuntime;
   let shots = 0;
@@ -64,7 +64,7 @@ export async function sinkTheGalleons(h: Headless): Promise<number> {
       if (!target || !afloat.includes(target)) target = afloat.sort((a, b) => dist(a) - dist(b))[0];
       const a = target;
       if (!a) {
-        h.session.setPointer(320, 240);
+        h.point(320, 240);
         return false;
       }
       // its course, a pass at a time
@@ -119,12 +119,12 @@ export async function sinkTheGalleons(h: Headless): Promise<number> {
       const push = (e: number): number => Math.min(231, Math.max(1, Math.abs(e) / 2 / PER_PX));
       const x = Math.abs(eH) < 600 ? 320 : eH > 0 ? 310 - push(eH) : 330 + push(eH);
       const y = tilt === null || whole(m.pitch) === tilt ? 240 : eP > 0 ? 232 - push(eP) : 248 + push(eP);
-      h.session.setPointer(Math.round(x), Math.round(y));
+      h.point(Math.round(x), Math.round(y));
       return false;
     },
     "the ballista",
     60_000,
   );
-  h.session.setPointer(320, 240);
+  h.point(320, 240);
   return shots;
 }

@@ -22,7 +22,7 @@
  * harpoon the view would throw — worked out as `launch` and `move` fly it —
  * lands on anyone, a dagger or a bomb on its way included.
  */
-import type { Headless } from "./harness";
+import type { Player } from "./player";
 
 const FOE = /^(jan|dagger|molotov) \d+$/;
 /** mine.shop launcher `launch`/`throw`: a harpoon starts 100000 ahead, 190000 up the pitch less 50000, and flies 80010 a pass */
@@ -35,9 +35,9 @@ const REACH = 253023;
 /** a whole turn, as the scripts count angles */
 const TURN = 2 ** 24;
 
-type Actor = NonNullable<ReturnType<Headless["session"]["actorRuntime"]["get"]>>;
+type Actor = NonNullable<ReturnType<Player["session"]["actorRuntime"]["get"]>>;
 
-export async function rideTheMine(h: Headless, done: () => boolean): Promise<number> {
+export async function rideTheMine(h: Player, done: () => boolean): Promise<number> {
   const actors = h.session.actorRuntime;
   let shots = 0;
   let cool = 0;
@@ -73,7 +73,7 @@ export async function rideTheMine(h: Headless, done: () => boolean): Promise<num
       // the harpoon leaves three passes after the click (`makeloop … launch 3`),
       // along the view as it is then: so the view holds still till it has gone
       if (cool > 2) {
-        h.session.setPointer(320, 240);
+        h.point(320, 240);
         return false;
       }
       if (cool === 0 && live.some(hits)) {
@@ -89,7 +89,7 @@ export async function rideTheMine(h: Headless, done: () => boolean): Promise<num
       if (!target || !men.includes(target)) target = men.sort((a, b) => dist(a) - dist(b))[0];
       const a = target;
       if (!a) {
-        h.session.setPointer(320, 240);
+        h.point(320, 240);
         return false;
       }
       // where the harpoon will be on screen when it is as far off as he is
@@ -135,12 +135,12 @@ export async function rideTheMine(h: Headless, done: () => boolean): Promise<num
       };
       const x = Math.abs(eH) < 0.002 ? 320 : eH > 0 ? 310 - push(eH) : 330 + push(eH);
       const y = Math.abs(eP) < 0.002 ? 240 : eP > 0 ? 232 - push(eP) : 248 + push(eP);
-      h.session.setPointer(Math.round(x), Math.round(y));
+      h.point(Math.round(x), Math.round(y));
       return false;
     },
     "the mine carts",
     60_000,
   );
-  h.session.setPointer(320, 240);
+  h.point(320, 240);
   return shots;
 }
