@@ -38,7 +38,12 @@ const ms = (n: number): string => {
   return `${Math.floor(t / 600)}:${String(Math.floor((t % 600) / 10)).padStart(2, "0")}.${t % 10}`;
 };
 
-/** the sheet re-entered after its `save(name)` line, with the boot and a load in front */
+/**
+ * The sheet re-entered after its `save(name)` line, with the boot and a load in
+ * front — and the watches the sheet had standing there, its `watchFor` lines
+ * before the save replayed in order (an `off` among them included), so a run
+ * from a save skips the films and the speech the whole run does.
+ */
 function enterAt(steps: Step[], name: string): Step[] {
   const at = steps.findIndex((s) => s.verb === "save" && (s.args[0] ?? "").toLowerCase() === name.toLowerCase());
   if (at < 0) {
@@ -50,7 +55,8 @@ function enterAt(steps: Step[], name: string): Step[] {
     ["skipMovie(until: js == window.dbg.booted, budget: 180000)", `load(${steps[at].args[0]})`].join("\n"),
     { verbs: VERBS },
   );
-  return [...boot, ...steps.slice(at + 1)];
+  const watches = steps.slice(0, at).filter((s) => s.verb === "watchfor");
+  return [...boot, ...watches, ...steps.slice(at + 1)];
 }
 
 async function main(): Promise<void> {

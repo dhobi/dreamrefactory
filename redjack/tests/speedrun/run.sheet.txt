@@ -6,6 +6,9 @@
 #   npm run speedrun -w redjack            in node
 #   /redjack/speedrun/                     in the workbench
 #
+# Each split but the first and the last is followed by a save(): load(day5)
+# in the workbench, or --from=day5 in node, starts the run there.
+#
 # The moves are the suites' own (src/play/): goto() walks a room by its
 # exits, click() finds a thing by the boot's hittest, talkOut([ids]) answers
 # a conversation a plaque at a time by the game's own answer numbers. Every
@@ -78,6 +81,7 @@ goto(Node10)
 click(door lh2l)
 idle()
 split(the sword)
+save(sword)
 
 # Lyle's school, on the dock
 goto(Node49)
@@ -95,6 +99,7 @@ duel(combat.stag)
 talkOut()
 idle()
 split(Lyle beaten)
+save(lyle)
 
 # Bone again: he and Cross go out to the ship
 goto(Node48)
@@ -131,6 +136,7 @@ split(day one)
 # the stowaway, found: justice1b.pupp stowaway → setsail; "I do." sets
 # justphase 1 and sends Justice down to his cabin
 talkOut([101,101,101])   # I really want to join your crew.
+save(day2)
 
 # ---------------------------------------------------------------- day two
 # Lyle, by the cannons: lyle1b.pupp ondeck → met → sullivan, who is Anne, and
@@ -164,6 +170,7 @@ split(day two)
 
 # the docks: justice2.pupp docks, and his watch
 talkOut([101])   # When should we be back?
+save(day3)
 
 # ---------------------------------------------------------------- day three
 # Erzulie: erzulie.sett's openset plays erzintro.move and her talk
@@ -184,6 +191,7 @@ talkOut([101,101])   # I just found this dead body.
 wait(js == window.dbg.session.currentSetFile === "jail1")
 idle()
 split(the alley)
+save(alley)
 
 # Anne at the window: the cup scraped along its bars (jail.shop stdmove,
 # flag "anne") calls her, and her rum comes in (anne2b.pupp injail1)
@@ -232,12 +240,14 @@ click(door j2pr, quad)
 talkOut([101])   # All right.
 wait(js == window.dbg.session.currentSetFile === "ptroyal" && window.dbg.session.interp.handlersInPlay === 0)
 split(out of jail)
+save(street)
 
 # the street fight, three waves (bfight.cast nextphase → endfight), and the
 # day's end: endfight.move, the trial at sea, and RedJack's beach
 shootout(4)
 day(4)
 split(day three)
+save(day4)
 
 # day four opens on RedJack's beach with nothing asked: the trial at sea's
 # films end with the room on screen, so nothing to answer before the save
@@ -264,6 +274,7 @@ gems()
 wait(js == window.dbg.session.currentSetFile === "lava", budget: 250000)
 idle()
 split(into the skull)
+save(skull)
 
 # the lava: pillar to pillar to Scene23, and up facing 241 degrees into the hub
 lava()
@@ -297,6 +308,7 @@ goto(Node192)
 click(door h2t, quad)
 talkOut([101,101])   # I got in a fight.
 split(the scepter)
+save(scepter)
 
 # the skeleton's dream: dream1.move asks for two clicks, and dream2.move's
 # action frame gives Nick RedJack's key (top.sett skeleton); RedJack's word
@@ -341,6 +353,7 @@ walkFacing(88)
 wait(js == window.dbg.session.currentSetFile === "rjbeach", budget: 250000)
 idle()
 split(out of the skull)
+save(outofskull)
 
 # the crate at Scene11: its crowbar breaks its lock (inven.shop crowbar), and
 # the horn is inside
@@ -395,6 +408,7 @@ goto(Scene41)
 click(torch, prop)
 owns(torch)
 split(the torch)
+save(torch)
 
 # back to the beach's fire pit, and the torch to it (inven.shop torch → safe
 # turner callrockfish): rockfish.move, his talk (rock3.pupp day4), advanceday
@@ -415,6 +429,7 @@ split(day four)
 
 # Rockfish at the dock (rock2a.pupp preelevator), asking as day five opens
 talkOut([101,101])   # When can I see Blackbeard?
+save(day5)
 
 # ---------------------------------------------------------------- day five
 # Blackbeard's island: up the lift (bb1 Node18 facing 266°) to the lounge,
@@ -476,6 +491,7 @@ duel(bcombat.stag)
 talkOut([101,102])   # Who are they?
 day(6)
 split(day five)
+save(day6)
 
 # Day six opens with the room Nick's (cartegena lock1): Blackbeard's last
 # words were day five's (bbeard2b.pupp afterfight), so nothing is asked here.
@@ -710,6 +726,7 @@ split(day six)
 # Spaniards come out of the trees (advanceday: gunshot.move, anncaught.move,
 # beachdraw.move) and the Spaniard draws (spancombat.stag)
 talkOut([101])   # He's the traitor!
+save(day7)
 wait(js == window.dbg.session.stageName === "spancombat.stag", budget: 1000000)
 duel(spancombat.stag)
 # the fight's end is a loop's (spancombat.stag closestage → "safe turner"
