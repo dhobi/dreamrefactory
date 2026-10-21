@@ -122,7 +122,10 @@ export const HEX_LOCK: Action = {
     // the lock's own stage up and its script idle — not every ring visible:
     // a scramble can leave one where its art is not drawn
     const drawn = STOPS.map((n) => "!!window.dbg.session.propRuntime.get(" + JSON.stringify(n) + ")").join(" && ");
-    const ready = `/snake/i.test(String(window.dbg.session.stageName || "")) && ${drawn} && !window.dbg.session.scriptBusy`;
+    // and the film's last frame let go of: the screen is HELD after hexopen.mov
+    // until the script falls quiet on a frame (Fade.idle), and a drag on the
+    // frame it finishes keeps it busy — every turn then happens behind the film
+    const ready = `/snake/i.test(String(window.dbg.session.stageName || "")) && ${drawn} && !window.dbg.session.scriptBusy && !window.dbg.session.fade.pendingReveal`;
     // `mangle ()` spins the rings a random while, and the film before it plays first
     await d.hold(ready, "the hex lock", Math.max(c.budget, 120_000));
     const coupling = await d.evaluate<number[][]>(COUPLING);

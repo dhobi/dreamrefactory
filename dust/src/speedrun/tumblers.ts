@@ -33,6 +33,14 @@ export const TUMBLERS: Action = {
   run: async (c) => {
     const { d } = c;
     const want = c.step.args.map(Number);
+    // tumopen.mov's last frame holds the screen until the script falls quiet on
+    // a frame (Fade.idle); a click on the frame it finishes keeps it busy, and
+    // every turn would happen behind the film
+    await d.hold(
+      "!window.dbg.session.scriptBusy && !window.dbg.session.fade.pendingReveal",
+      "the tumblers on screen",
+      c.budget,
+    );
     for (const [k, target] of want.entries()) {
       const name = `tumbler${k + 1}`;
       const g = await d.evaluate<{ x: number; up: number; down: number } | null>(GRIP(name));
