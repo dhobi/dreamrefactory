@@ -4,7 +4,6 @@
  *   npm run speedrun -w redjack                     # run.sheet.txt, from the boot
  *   npm run speedrun -w redjack -- --from=day3      # from one of its save() points
  *   npm run speedrun -w redjack -- --lint           # parse it and say nothing else
- *   npm run speedrun -w redjack -- --day=3          # days/day3.sheet.txt, from the day3 save
  *   SHEET=path/to/other.sheet.txt npm run speedrun -w redjack
  *
  * Timelapse's (timelapse/tests/speedrun/speedrun.ts) for RedJack: the same
@@ -32,18 +31,6 @@ const argv = process.argv.slice(2);
 const flag = (name: string): boolean => argv.includes(`--${name}`);
 const FROM = argv.find((a) => a.startsWith("--from="))?.slice("--from=".length) ?? process.env.FROM;
 const SEED = process.env.SEED ? Number(process.env.SEED) : null;
-/**
- * A day of the route on its own, while it is being written: the boot, the
- * port's save at that day's start (gamefiles/save/dayN.save, loaded through
- * `load(dayN)` below) and `days/dayN.sheet.txt`, which goes on from where the
- * save stands to the next day's first question.
- */
-const DAY = argv.find((a) => a.startsWith("--day="))?.slice("--day=".length);
-const BOOT = [
-  "reset(seed: 1)",
-  `skipMovie(until: js == window.dbg.booted && window.dbg.session.currentSetFile === "liznite", budget: 600000)`,
-  "idle()",
-];
 
 const ms = (n: number): string => {
   const t = Math.round(n / 100);
@@ -67,10 +54,9 @@ function enterAt(steps: Step[], name: string): Step[] {
 }
 
 async function main(): Promise<void> {
-  const sheet = DAY ? join(HERE, "days", `day${DAY}.sheet.txt`) : SHEET;
+  const sheet = SHEET;
   if (!existsSync(sheet)) throw new Error(`no sheet at ${sheet}`);
-  const text = readFileSync(sheet, "utf8");
-  const whole = parseSheet(DAY ? [...BOOT, `load(day${DAY})`, "idle()", text].join("\n") : text, { verbs: VERBS });
+  const whole = parseSheet(readFileSync(sheet, "utf8"), { verbs: VERBS });
   const steps = FROM ? enterAt(whole, FROM) : whole;
   console.log(`sheet ${relative(ROOT, sheet)} — ${describeSheet(whole)}${FROM ? `\n  from "${FROM}"` : ""}`);
   if (flag("lint")) return;

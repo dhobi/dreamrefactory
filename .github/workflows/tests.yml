@@ -259,7 +259,9 @@ jobs:
           fi
 
       # RedJack's, the same way: the shared engine stood up in node on the three
-      # discs, stepped as fast as the CPU goes, with no film pixels decoded.
+      # discs, stepped as fast as the CPU goes, with no film pixels decoded —
+      # and every contributed speedrun sheet played to its end
+      # (redjack/tests/speedrun/sheets.ts).
       - name: RedJack machine suites
         if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' redjack ')
         run: |

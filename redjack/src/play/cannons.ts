@@ -96,12 +96,19 @@ export async function sinkTheDinghies(h: Player, maxShots = 60): Promise<number>
     return -1;
   };
 
-  /** press `key` until `done`, a frame a press, as the arrows are held */
-  const pressUntil = async (key: string, done: () => boolean, what: string): Promise<void> => {
+  /**
+   * Press `key` until `done`, each press let land before the next: a press
+   * waits its turn behind the idle (RedJack.exe 0x41e9b1), so one made every
+   * frame piles up behind the last and the barrel runs past the degree it was
+   * stopping at. `reading` is what the press moves — the heading, the tilt.
+   */
+  const pressUntil = async (key: () => string, done: () => boolean, what: string, reading: () => number): Promise<void> => {
     for (let n = 0; !done(); n++) {
-      if (n > 400) fail(`${what}: ${key} never got there`);
-      h.tap(key);
-      await h.frame(1);
+      if (n > 400) fail(`${what}: ${key()} never got there`);
+      const was = reading();
+      h.tap(key());
+      // ...or a few passes, and press again: not every press is answered
+      for (let wait = 0; wait < 10 && reading() === was && inCannons(); wait++) await h.frame(1);
     }
   };
 
@@ -133,7 +140,23 @@ export async function sinkTheDinghies(h: Player, maxShots = 60): Promise<number>
     };
     const heading = (): number => degToSimple(m.heading);
     const off = (): number => ((lead() - heading() + 540) % 360) - 180;
-    await pressUntil(off() > 0 ? "left" : "right", () => Math.abs(off()) < 1 || !inCannons(), `turning to ${who}`);
+    // The short way round, unless the dinghy is sailing that way too, at the
+    // cannon's own degree a press or faster: chased, it is never caught, and
+    // the barrel goes round after it for good. Met the other way, it comes on.
+    const was = lead();
+    await h.frame(1);
+    const drift = ((lead() - was + 540) % 360) - 180;
+    let toward = off() > 0 ? 1 : -1;
+    if (Math.sign(drift) === toward && Math.abs(drift) >= 1) toward = -toward;
+    // turning a degree a press while it sails on, the two can pass each other
+    // between presses: crossing it is as good as landing on it
+    const side = Math.sign(off());
+    await pressUntil(
+      () => (toward > 0 ? "left" : "right"),
+      () => Math.abs(off()) < 1 || Math.sign(off()) !== side || !inCannons(),
+      `turning to ${who}`,
+      () => m.heading,
+    );
     c = await course(who);
     // the tilt that scores, from the flattest up; the click adds a degree
     let best: number | null = null;
@@ -155,7 +178,8 @@ export async function sinkTheDinghies(h: Player, maxShots = 60): Promise<number>
       continue;
     }
     const want = best - 1;
-    await pressUntil(signed(m.pitch) < want ? "up" : "down", () => signed(m.pitch) === want, `tilting to ${best}°`);
+    // the way to the tilt asked again at every press: two presses can land at once
+    await pressUntil(() => (signed(m.pitch) < want ? "up" : "down"), () => signed(m.pitch) === want, `tilting to ${best}°`, () => m.pitch);
     const before = actors.get(who)!.poseName;
     h.click(320, 240);
     shots++;

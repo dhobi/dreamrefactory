@@ -3,7 +3,7 @@
  *
  * Each is one of the moves the machine suites play the game with
  * (src/play/: the walk, the click on a named thing, the conversation, the set
- * pieces), played through the speedrun driver by {@link playerFor} — so a sheet
+ * pieces), played through the speedrun driver by `playerFor` (./player.ts) — so a sheet
  * line does what the suite's line does, a pass at a time, and the route a sheet
  * writes down is the suites' route (tests/machine/days/).
  *
@@ -15,8 +15,8 @@
  */
 import type { VerbSpec } from "@dreamfactory/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
-import { composeActions, resolveIn, verbsOf, type Action, type ActionContext, type ActionTable } from "@dreamfactory/speedrun/action";
-import { fail, type Player } from "../play/player";
+import { composeActions, resolveIn, verbsOf, type Action, type ActionTable } from "@dreamfactory/speedrun/action";
+import type { Player } from "../play/player";
 import {
   carry, clickFilm, clickOn, closeInventory, converse, drag, face, filmWaits, global, goTo, openInventory, rattle, upFacing,
   walkScenes, walkUpTo, waitNear, type HitType,
@@ -29,32 +29,13 @@ import { sinkTheGalleons } from "../play/ballista";
 import { playGems } from "../play/gems";
 import { crossTheLava, pullTheVine, runTheFlames, swingTheChain } from "../play/lava";
 import { rideTheMine } from "../play/mine";
-import { playerFor } from "./player";
+import { move, num, passesOf } from "./move";
 import { DAY2_ACTIONS } from "./day2";
 import { DAY3_ACTIONS } from "./day3";
 import { DAY4_ACTIONS } from "./day4";
 import { DAY5_ACTIONS } from "./day5";
 import { DAY6_ACTIONS } from "./day6";
 import { DAY7_ACTIONS } from "./day7";
-
-/** a line's `budget:` as passes, when the line gives one */
-const passesOf = (c: ActionContext): number | undefined =>
-  c.step.opts.budget === undefined ? undefined : Math.max(1, Math.round(Number(c.step.opts.budget) / 50));
-
-/** a verb that is one move of the suites' — `wait: none`, it has waited already */
-const move = (spec: Omit<Action, "run" | "wait">, play: (h: Player, c: ActionContext) => Promise<unknown>): Action => ({
-  ...spec,
-  wait: "none",
-  run: async (c) => {
-    await play(await playerFor(c), c);
-  },
-});
-
-const num = (c: ActionContext, i: number, what: string): number => {
-  const n = Number(c.step.args[i]);
-  if (!Number.isFinite(n)) fail(`${c.step.verb}: ${what} is a number, not "${c.step.args[i] ?? ""}"`);
-  return n;
-};
 
 /** wait for the game to open `stage`, and nothing to be running in it */
 const stageUp = (h: Player, stage: string, max = 3_000): Promise<number> =>

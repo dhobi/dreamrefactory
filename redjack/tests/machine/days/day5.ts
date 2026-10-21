@@ -8,7 +8,7 @@
  * as the scripts have it:
  *
  *   - **the lift** (bb1 Node18 facing 266°, bb2 Node10 facing 271° →
- *     elevator.stag): its handle, dragged through its slot (`pullTheHandle`).
+ *     elevator.stag): its handle, dragged through its slot (`pullTheHandle`, src/play/bbisland.ts).
  *   - **the drink**: Rockfish wants one mixed for Blackbeard (rock2a.pupp
  *     lounge, rockphase 1). Lyle, asked twice, gives sulphur
  *     (lylebbsulph.pupp); the charcoal bin by the dock a coal (charcoal.stag);
@@ -23,78 +23,12 @@
 import { fail, ok, type Headless } from "../harness";
 import { duel } from "../../../src/play/fight";
 import { rideTheMine } from "../../../src/play/mine";
-import { ai, carry, clickOn, closeInventory, drag, openInventory, converse, findOnScreen, global, goTo, upFacing, walkUpTo } from "../../../src/play/route";
-
-/**
- * The lift's handle (elevator.shop handle): held and moved, it steps its
- * `propdeg` along a slot — `movex` on 1–8 and 14–23 (the upper arm the other
- * way round), `movey` on 8–15 and 24–27 — and let go at 1 or 23 it sends the
- * lift to the first floor or the second (`elevate`). Each pass of its
- * `while stilldown ()` loop moves it a step for a pointer that moved.
- */
-export async function pullTheHandle(h: Headless, moves: [dx: number, dy: number, n: number][]): Promise<void> {
-  const at = findOnScreen(h, "handle", "prop") ?? fail("the handle is not on screen");
-  let { x, y } = at;
-  h.mouseDown(x, y);
-  await h.frame(2);
-  for (const [dx, dy, n] of moves) {
-    for (let i = 0; i < n; i++) {
-      x += dx;
-      y += dy;
-      h.point(x, y);
-      await h.frame(2);
-    }
-  }
-  h.mouseUp(x, y);
-  await h.frame(3);
-}
-
-/** the lift on its way (elevator.shop move → `whichset`), and a click on it once the rope stands idle closes it there */
-async function rideTheLift(h: Headless, to: string): Promise<void> {
-  const props = h.session.propRuntime;
-  await h.until(() => global(h, "whichset") === to && props.get("rope")?.stateName === "idle" && h.running().length === 0, `the lift to ${to}`, 5_000);
-  h.click(320, 240);
-  // the stage closes after what it starts there: Rockfish's first word upstairs
-  await h.until(() => h.room() === to && (h.session.stageName !== "elevator.stag" || h.host.director.awaitingChoice), `off the lift at ${to}`, 1_000);
-}
+import { mixTheDrink, takeTheLift } from "../../../src/play/bbisland";
+import { ai, carry, clickOn, converse, global, goTo, upFacing, walkUpTo } from "../../../src/play/route";
 
 /** the films played since log line `from`, by name */
 export const films = (h: Headless, from: number): string[] =>
   h.logs.slice(from).filter((l) => l.startsWith("movie: ")).map((l) => l.split(" ")[1]);
-
-/**
- * Blackbeard's drink (inven.shop `checkmix`): what went into the mug is counted
- * by ingredient against `001211112` — none of bottles 1 and 2, one of 3, two of
- * the salt (4), one each of 5, 6, the sulphur (7) and the coal (8), and two
- * pulls of ale (9, the spigot, drink.shop). A bottle is carried from the bar
- * and let go over the mug (`pour`, while the mug stands on the bar); the
- * sulphur and coal come out of the chest the same way; the ale runs while the
- * mug stands under the keg. Order does not matter, only the count.
- */
-async function mixTheDrink(h: Headless): Promise<void> {
-  for (const b of ["3", "4", "4", "5", "6"]) {
-    await drag(h, b, "mug", "button");
-    await h.until(() => h.running().length === 0, `bottle ${b} poured`, 1_000);
-  }
-  await openInventory(h);
-  for (const c of ["sulphur", "coal"]) {
-    await drag(h, c, "mug", "button");
-    await h.until(() => h.running().length === 0, `the ${c} in`, 1_000);
-  }
-  await closeInventory(h);
-  const props = h.session.propRuntime;
-  await drag(h, "dmug", "keg", "button");
-  if (props.get("dmug")?.stateName !== "keg") fail(`the mug goes under the keg; it is at ${props.get("dmug")?.stateName}`);
-  for (let i = 0; i < 2; i++) {
-    await clickOn(h, "spigot", "prop");
-    await h.until(() => h.running().length === 0 && props.get("spigot")?.stateName === "closed", "the ale to run", 1_000);
-  }
-  if ((await ai(h, "nick", "mixdrink")) !== "1") fail(`the drink is mixed right (mixdrink); it holds ${global(h, "themix")}`);
-  // the mug, full, into the chest (inven.shop dmug: `mouseonchest`)
-  await carry(h, "dmug", { x: 80, y: 420 }, "prop");
-  await h.until(() => h.running().length === 0, "the mug into the chest", 500);
-  if (props.get("dmug")?.owner !== "nick") fail("Nick has the drink");
-}
 
 export async function playDay5(h: Headless): Promise<void> {
   // Rockfish at the dock (rock2a.pupp preelevator), asking as day five opens
@@ -102,9 +36,7 @@ export async function playDay5(h: Headless): Promise<void> {
   ok("Rockfish at the dock");
   await goTo(h, "Node18");
   await upFacing(h, 266);
-  await h.until(() => h.session.stageName === "elevator.stag" && h.running().length === 0, "the lift", 3_000);
-  await pullTheHandle(h, [[-1, 0, 7], [0, -1, 7], [1, 0, 8]]);
-  await rideTheLift(h, "bb2");
+  await takeTheLift(h, "bb2");
   await converse(h, ["What kind of drink?"], "Rockfish in the lounge");
   if ((await ai(h, "rockfish", "rockphase")) !== "1") fail("Rockfish asks for a drink (rockphase 1)");
   ok("up the lift to the lounge: Rockfish wants a drink mixed for Blackbeard");
@@ -124,9 +56,7 @@ export async function playDay5(h: Headless): Promise<void> {
   // open bin takes a coal (charcoal.shop), and a second closes it
   await goTo(h, "Node10");
   await upFacing(h, 271);
-  await h.until(() => h.session.stageName === "elevator.stag" && h.running().length === 0, "the lift", 3_000);
-  await pullTheHandle(h, [[-1, 0, 8], [0, 1, 7], [1, 0, 7]]);
-  await rideTheLift(h, "bb1");
+  await takeTheLift(h, "bb1");
   await h.settle("the dock");
   await clickOn(h, "charcoal bin", "prop");
   await h.until(() => h.session.stageName === "charcoal.stag" && h.running().length === 0, "the charcoal bin", 2_000);
@@ -142,9 +72,7 @@ export async function playDay5(h: Headless): Promise<void> {
   ok("a coal from the charcoal bin on the dock");
   await goTo(h, "Node18");
   await upFacing(h, 266);
-  await h.until(() => h.session.stageName === "elevator.stag" && h.running().length === 0, "the lift", 3_000);
-  await pullTheHandle(h, [[-1, 0, 7], [0, -1, 7], [1, 0, 8]]);
-  await rideTheLift(h, "bb2");
+  await takeTheLift(h, "bb2");
   await h.settle("the lounge");
 
   // the drink, behind the bar (bb2 Node17, drink.stag)
