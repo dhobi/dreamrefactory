@@ -51,6 +51,51 @@ export type FileOf = (name: string) => Uint8Array | null;
 /** a stage's file, as `gotostage` builds the name */
 export const stageFile = (world: string, stage: number): string => `${world.toLowerCase()}${String(stage).padStart(3, "0")}.stg`;
 
+/**
+ * The value list of a `case` line (`case 120` → "120", `case 5, 6` → "5, 6"),
+ * or null for a line that is not one. Read off the trimmed line rather than
+ * by one pattern over it, which backtracks on its spaces.
+ */
+function caseOf(line: string): string | null {
+  const t = line.trim();
+  if (!/^case\s/.test(t)) return null;
+  const rest = t.slice(5).trim();
+  return rest === "" ? null : rest;
+}
+
+/** a word of a script's keywords at the start of `text`, and not the start of a longer word */
+const startsWithWord = (text: string, words: string[]): boolean =>
+  words.some((w) => text.startsWith(w) && !/\w/.test(text.charAt(w.length)));
+
+/**
+ * The global a hotspot's jump is guarded by — `if gHyper196 = 1` on the line
+ * before its `gotostage`, `jumptoframe` or `gotoregion` (blank lines between
+ * allowed) — lowercased, or undefined. The first such pair in the script.
+ */
+function guardOf(md: string): string | undefined {
+  const lines = md.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /if (\w+) = 1$/.exec(lines[i].trimEnd());
+    if (!m) continue;
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim() === "") j++;
+    if (j < lines.length && startsWithWord(lines[j].trimStart(), ["gotostage", "jumptoframe", "gotoregion"])) return m[1].toLowerCase();
+  }
+  return undefined;
+}
+
+/** a branch's text up to the line its `else` begins on (blank lines before it dropped) */
+function beforeElse(part: string): string {
+  const lines = part.split("\n");
+  for (let k = 1; k < lines.length; k++) {
+    if (!startsWithWord(lines[k].trimStart(), ["else"])) continue;
+    let end = k;
+    while (end > 1 && lines[end - 1].trim() === "") end--;
+    return lines.slice(0, end).join("\n");
+  }
+  return part;
+}
+
 /** frame → every six-word answer its `getframeaction` can give */
 export type Table = Map<number, string[][]>;
 const tables = new Map<string, Table>();
@@ -87,10 +132,10 @@ export function tableOf(file: FileOf, world: string, stage: number): Table {
     for (const line of body.split("\n")) {
       if (/^\s*switch\b/.test(line)) depth++;
       else if (/^\s*endswitch\b/.test(line)) depth--;
-      const c = depth <= 1 ? /^\s*case\s+(.+?)\s*$/.exec(line) : null;
-      if (c) {
+      const c = depth <= 1 ? caseOf(line) : null;
+      if (c !== null) {
         if (!open) frames = [];
-        frames.push(...c[1].split(/\s*,\s*/).map(Number).filter((n) => !Number.isNaN(n)));
+        frames.push(...c.split(",").map((v) => Number(v.trim())).filter((n) => !Number.isNaN(n)));
         open = true;
         continue;
       }
@@ -158,7 +203,7 @@ export function hotspotsOf(file: FileOf, world: string, stage: number): Map<numb
       if (g) to = { stage: Number(g[1]), frame: Number(g[3]) };
       else if (gr) to = { stage, frame: Number(gr[2]) };
       else if (j) to = { stage, frame: Number(j[1]) };
-      const when = /if (\w+) = 1\s*\n\s*(?:gotostage|jumptoframe|gotoregion)\b/.exec(md)?.[1]?.toLowerCase();
+      const when = guardOf(md);
       if (when) hotspotGlobals.add(when);
       if (to) (out.get(frame) ?? out.set(frame, []).get(frame)!).push({ region: r.name, to, ...(when ? { when } : {}) });
     }
@@ -385,7 +430,7 @@ export function dropSpotsIn(src: string): DropSpot[] {
   const out: DropSpot[] = [];
   for (const part of md.split(/curframenum = /).slice(1)) {
     const frame = Number(/^(\d+)/.exec(part)?.[1]);
-    const body = part.split(/\n\s*else\b/)[0];
+    const body = beforeElse(part);
     const b = /dx > (\d+) & dx < (\d+) & dy > (\d+) & dy < (\d+)/.exec(body);
     const r = /pointinbutton \([^,]+, "([^"]+)"/.exec(body);
     out.push({ frame, box: b ? [Number(b[1]), Number(b[3]), Number(b[2]), Number(b[4])] : undefined, region: r?.[1] });

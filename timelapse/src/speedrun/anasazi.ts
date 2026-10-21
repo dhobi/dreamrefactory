@@ -50,7 +50,7 @@ const AIM_BOW = (wind: number, head: number): string => `((wind, head) => {
 })(${wind}, ${head})`;
 
 /** the nine glyphs the flashlight shows in the cave, worth 3722528 to the rock of hand prints (`isfinished`) */
-const HAND_GLYPHS = [1, 2, 3, 7, 8, 11, 12, 14, 17];
+const HAND_GLYPHS = new Set([1, 2, 3, 7, 8, 11, 12, 14, 17]);
 
 /**
  * A point of `name` (a prop not necessarily drawn) that no prop of the list
@@ -205,7 +205,7 @@ export const ANASAZI_ACTIONS: ActionTable = {
         return /^inv(small|med|large)head$/.test(h) ? h : null;
       };
       let shot = 0;
-      for (; (await g(c, "wonarrow")) !== "true"; shot++) {
+      while ((await g(c, "wonarrow")) !== "true") {
         const head = await heads();
         if (!head) throw new Error(`${shot} arrows and none through the spire`);
         if (!(await c.d.evaluate<boolean>(`!!window.dbg.session.propRuntime.get("arrow")?.visible`))) {
@@ -241,6 +241,7 @@ export const ANASAZI_ACTIONS: ActionTable = {
           600_000,
         );
         await settle(c, `shot ${shot + 1}`);
+        shot++;
       }
       c.say(`${shot} shot(s)`);
     },
@@ -262,7 +263,7 @@ export const ANASAZI_ACTIONS: ActionTable = {
           `((p) => { if (!p) return null; const r = p.screenRect(); return { visible: !!p.visible, x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) }; })(window.dbg.session.propRuntime.get("newglyph${n}"))`,
         );
         if (!p) throw new Error(`no glyph ${n} on the rock`);
-        if (p.visible === HAND_GLYPHS.includes(n)) continue;
+        if (p.visible === HAND_GLYPHS.has(n)) continue;
         await clickThen(c, p, `glyph ${n}`, "quiet");
       }
       await c.d.hold(`${global("gHandPrint")} === "1"`, "the coyote", c.budget);

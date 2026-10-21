@@ -18,8 +18,8 @@ export function wheelPresses(from: number[], to: number[]): string[] {
   const key = (w: number[]): string => w.join("");
   const prev = new Map<string, { k: string; press: string } | null>([[key(from), null]]);
   const queue = [from];
-  for (let q = 0; q < queue.length; q++) {
-    const w = queue[q];
+  // the queue grows while it is walked: a for...of reads its length afresh each turn
+  for (const w of queue) {
     if (key(w) === key(to)) {
       const out: string[] = [];
       for (let p = prev.get(key(w)); p; p = prev.get(p.k)) out.unshift(p.press);

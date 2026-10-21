@@ -81,7 +81,7 @@ export const EGYPT_ACTIONS: ActionTable = {
     run: async (c) => {
       const turned = `${global("animphase")} === "seq" && ${UNLOCKED} && ((d) => d >= 1 && d <= 5)(${DEG("e1.104")})`;
       let jabs = 0;
-      for (; (await gNum(c, "crocdamage")) < 3; jabs++) {
+      while ((await gNum(c, "crocdamage")) < 3) {
         if (jabs > 12) throw new Error(`twelve jabs and the crocodile still stands (${await g(c, "crocdamage")} hits)`);
         await c.d.hold(`(${turned}) || Number(${global("crocdamage")}) >= 3`, "the crocodile to turn its head", 600_000);
         if ((await gNum(c, "crocdamage")) >= 3) break;
@@ -91,6 +91,7 @@ export const EGYPT_ACTIONS: ActionTable = {
           "the crocodile to recover",
           c.budget,
         );
+        jabs++;
       }
       await c.d.hold(`${global("crockilled")} === "1"`, "the crocodile gone", c.budget);
       await settle(c, "the crocodile gone");
@@ -112,9 +113,11 @@ export const EGYPT_ACTIONS: ActionTable = {
     run: async (c) => {
       for (const [r, prop] of ["e10.25a", "e10.25b", "e10.25c"].entries()) {
         const want = num(c, r, `row ${r + 1}`);
-        for (let i = 0; (await c.d.evaluate<number>(DEG(prop))) !== want; i++) {
+        let i = 0;
+        while ((await c.d.evaluate<number>(DEG(prop))) !== want) {
           if (i >= 16) throw new Error(`row ${r + 1} never came to ${want}`);
           await clickThen(c, { x: 335, y: 150 + r * 100 }, `row ${r + 1}`, "quiet");
+          i++;
         }
       }
     },
@@ -132,11 +135,12 @@ export const EGYPT_ACTIONS: ActionTable = {
     help: "drop the red gem on the cobra until it leaves",
     run: async (c) => {
       let tries = 0;
-      for (; (await g(c, "snakekilled")) !== "1"; tries++) {
+      while ((await g(c, "snakekilled")) !== "1") {
         if (tries > 8) throw new Error("the gem never found the cobra");
         const [x0, y0, x1, y1] = await extent(c, "e10.2");
         await carry(c, await middle(c, "e16.1"), { x: Math.round((x0 + x1) / 2), y: Math.round(y0 + (y1 - y0) * 0.7) }, 12, "the gem to the cobra");
         await c.d.hold(`${global("snakekilled")} === "1" || ${global("animphase")} === "seq"`, "the cobra's answer", c.budget);
+        tries++;
       }
       await c.d.hold(`${global("snakekilled")} === "1"`, "the cobra to go", c.budget);
       await settle(c, "the cobra gone");
@@ -159,9 +163,10 @@ export const EGYPT_ACTIONS: ActionTable = {
       // die does nothing until red is there (`Dice` mousedown)
       await c.d.hold(`!!window.dbg.session.propRuntime.get("red")?.visible`, "red on the board", c.budget);
       let rolls = 0;
-      for (; (await g(c, "wonsnakes")) !== "1"; rolls++) {
+      while ((await g(c, "wonsnakes")) !== "1") {
         if (rolls > 1000) throw new Error("a thousand rolls and red has not won");
         await clickThen(c, await propIn(c, "Dice"), `roll ${rolls + 1}`, "quiet");
+        rolls++;
       }
       c.say(`${rolls} roll(s)`);
     },

@@ -624,8 +624,9 @@ function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "
         await settle(wait, `click ${x},${y}`, budget);
       },
 
-      hover: async (x, y) => {
+      hover: (x, y) => {
         movePointer(clientPoint(x, y));
+        return Promise.resolve();
       },
 
       holdAt: async (x, y, opts, budget = timeout) => {

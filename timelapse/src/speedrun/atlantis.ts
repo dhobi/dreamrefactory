@@ -20,9 +20,11 @@ export const ATLANTIS_ACTIONS: ActionTable = {
     run: async (c) => {
       for (let b = 1; b <= 4; b++) {
         const want = num(c, b - 1, `button ${b}`);
-        for (let i = 0; Number(await g(c, `gElevEntButton${b}`)) !== want; i++) {
+        let i = 0;
+        while (Number(await g(c, `gElevEntButton${b}`)) !== want) {
           if (i >= 40) throw new Error(`button ${b} never came to ${want}`);
           await clickThen(c, await propIn(c, `Button${b}`), `button ${b}`, "quiet");
+          i++;
         }
       }
     },
@@ -81,7 +83,7 @@ export const ATLANTIS_ACTIONS: ActionTable = {
       );
       const ball = `!!window.dbg.session.propRuntime.get("EnergyBall")?.visible`;
       let shots = 0;
-      for (; (await g(c, "gBaSolved")) !== "1"; shots++) {
+      while ((await g(c, "gBaSolved")) !== "1") {
         if (shots > 40) throw new Error(`forty shots and the robot is not in the tube (state ${await g(c, "baState")})`);
         if ((await g(c, "gGameEnding")) === "9") throw new Error("the robot got you");
         await c.d.hold(`["0", "1", "2"].includes(${global("baState")}) && !${ball} && ${UNLOCKED}`, "the robot to stand", 150_000);
@@ -106,6 +108,7 @@ export const ATLANTIS_ACTIONS: ActionTable = {
         await c.d.clickAt(pick.m.x, pick.m.y, "none", c.budget);
         await c.d.tryHold(ball, 3000);
         await c.d.hold(`!${ball}`, "the ball to land", c.budget);
+        shots++;
       }
       await c.d.hold(
         `String(window.dbg.session.currentFlat || "").toLowerCase() === "z0001.196.1" && ${global("lockevents")} !== "true"`,

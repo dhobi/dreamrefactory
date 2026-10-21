@@ -150,7 +150,8 @@ async function spiderPath(c: ActionContext, grid: Uint8Array): Promise<[number, 
           dist[j] = nd;
           prev[j] = i;
         }
-        (buckets[nd] ??= []).push(j);
+        buckets[nd] ??= [];
+        buckets[nd].push(j);
       }
     }
   }
@@ -246,9 +247,12 @@ function safeRun(
   pace: number,
 ): boolean {
   const pts: [number, number][] = [st.green, ...corners.slice(k, j + 1)];
-  const futures = st.byRed.flatMap((red, r) =>
-    red ? (red[3] ? redFutures(r, [red[0], red[1]], was[r], speeds[r], !red[2]) : [() => [red[0], red[1]] as [number, number]]) : [],
-  );
+  const futures = st.byRed.flatMap((red, r) => {
+    if (!red) return [];
+    // a patrolling red on its beat; one with no patrol stays where it stands
+    if (red[3]) return redFutures(r, [red[0], red[1]], was[r], speeds[r], !red[2]);
+    return [() => [red[0], red[1]] as [number, number]];
+  });
   let t = 0;
   for (let i = 1; i < pts.length; i++) {
     const [a, b] = [pts[i - 1], pts[i]];
@@ -284,7 +288,7 @@ async function spiders(c: ActionContext): Promise<void> {
   const seenRed: ([number, number] | null)[] = [null, null, null, null, null];
   /** the green spider's own pace, px a turn */
   const pace = 1;
-  for (; !(await c.d.evaluate<Spiders>(SPIDERS)).got; legs++) {
+  while (!(await c.d.evaluate<Spiders>(SPIDERS)).got) {
     if (legs > 40 || catches > 12) throw new Error(`the spider never reached the ball (${catches} times caught)`);
     await c.d.hold(SPIDER_AT_REST, "the green spider at rest", 150_000);
     const corners = cornersOf(await spiderPath(c, grid));
@@ -352,6 +356,7 @@ async function spiders(c: ActionContext): Promise<void> {
     const got = (await c.d.evaluate<Spiders>(SPIDERS)).got;
     c.d.log(`spiders: leg ${legs + 1} ended at ${gx},${gy} (${ended || "held"}) after ${turns} turns`);
     if (!got && gx === 310 && gy === 101 && (startAt[0] !== 310 || startAt[1] !== 101 || ended)) catches++;
+    legs++;
   }
   c.say(`${legs} leg(s), caught ${catches} time(s)`);
 }
@@ -376,15 +381,17 @@ export const MAYA_ACTIONS: ActionTable = {
     help: "touch the chameleon and answer its colours back on the buttons, round after round, until it vanishes",
     run: async (c) => {
       let rounds = 0;
-      for (; !truthy(await g(c, "chameleon")); rounds++) {
+      while (!truthy(await g(c, "chameleon"))) {
         if (rounds > 10) throw new Error("ten rounds and the chameleon stays");
         const empty = async (): Promise<boolean> => ["", "0"].includes(await g(c, "lizstring"));
         if (await empty()) await clickThen(c, await propIn(c, "lizard", undefined, 3, 30_000), "the chameleon's colours", "quiet");
-        if (await empty()) continue;
-        for (const v of (await g(c, "lizstring")).split(",").map(Number)) {
-          if (truthy(await g(c, "chameleon"))) break;
-          await clickThen(c, await propIn(c, `button${v - 1}`), `colour ${v}`, "quiet");
+        if (!(await empty())) {
+          for (const v of (await g(c, "lizstring")).split(",").map(Number)) {
+            if (truthy(await g(c, "chameleon"))) break;
+            await clickThen(c, await propIn(c, `button${v - 1}`), `colour ${v}`, "quiet");
+          }
         }
+        rounds++;
       }
       c.say(`${rounds} round(s)`);
     },
@@ -452,7 +459,8 @@ export const MAYA_ACTIONS: ActionTable = {
         const from = await propIn(c, `ground${bone}`, [0, 380, 640, 480]);
         // the bone's own place, turn by turn, for the report when it does not set
         const seen: string[] = [];
-        const WALL = `((p) => p ? (p.visible ? "" : "hidden ") + p.anchorX + "," + p.anchorY : "none")(${PROP(`wall${bone}`)})`;
+        const wallProp = PROP(`wall${bone}`);
+        const WALL = `((p) => p ? (p.visible ? "" : "hidden ") + p.anchorX + "," + p.anchorY : "none")(${wallProp})`;
         const path = line(from, { x: at[0], y: at[1] }, 16);
         let i = 0;
         await c.d.hold(UNLOCKED, `a moment to start bone ${bone}`, c.budget);
@@ -466,7 +474,7 @@ export const MAYA_ACTIONS: ActionTable = {
         );
         await settle(c, `bone ${bone}`);
         if (truthy(await g(c, "skelsolved"))) continue;
-        const wall = await c.d.evaluate<{ up: boolean; x: number }>(`((p) => ({ up: !!p?.visible, x: p ? p.anchorX : -1 }))(${PROP(`wall${bone}`)})`);
+        const wall = await c.d.evaluate<{ up: boolean; x: number }>(`((p) => ({ up: !!p?.visible, x: p ? p.anchorX : -1 }))(${wallProp})`);
         if (!wall.up || Math.abs(wall.x - at[0]) > 2) {
           throw new Error(
             `bone ${bone} did not set at ${at.join(", ")} (joints ${await g(c, "gConnectlist")}; pressed at ${from.x},${from.y}; ` +
@@ -626,7 +634,7 @@ export const MAYA_ACTIONS: ActionTable = {
         return boardOf(s.tiles, s.whole, s.hole);
       };
       const first = await board();
-      const missing = [...Array(16).keys()].find((t) => !first.cell.has(t))!;
+      const missing = [...new Array(16).keys()].find((t) => !first.cell.has(t))!;
       const last = Math.floor(missing / 4);
       // a player who counts the stones' parity sees it at a glance: half the
       // shuffles cannot be finished, and the remedy is another shuffle
@@ -653,8 +661,8 @@ export const MAYA_ACTIONS: ActionTable = {
       // into the hole and back
       if ((await g(c, "slidersolved")) !== "true") {
         const b = await board();
-        const nextTo = [b.hole - 4, b.hole + 4, b.hole % 4 ? b.hole - 1 : -1, b.hole % 4 < 3 ? b.hole + 1 : -1];
-        const t = [...b.cell].find(([, at]) => nextTo.includes(at))?.[0];
+        const nextTo = new Set([b.hole - 4, b.hole + 4, b.hole % 4 ? b.hole - 1 : -1, b.hole % 4 < 3 ? b.hole + 1 : -1]);
+        const t = [...b.cell].find(([, at]) => nextTo.has(at))?.[0];
         if (t !== undefined) {
           await clickThen(c, await propIn(c, `small${t}`), `tile ${t}`, "quiet");
           await clickThen(c, await propIn(c, `small${t}`), `tile ${t} back`, "quiet");
@@ -663,7 +671,8 @@ export const MAYA_ACTIONS: ActionTable = {
       }
       if (!(await c.d.tryHold(`${global("slidersolved")} === "true"`, c.budget))) {
         const b = await board();
-        throw new Error(`the stones are slid and not solved (slidersolved ${await g(c, "slidersolved")}, large ${await c.d.evaluate(`[0,1,2,3].map((g) => !!window.dbg.session.propRuntime.get("large" + g)?.visible)`)}): ${JSON.stringify([...b.cell])}, hole ${b.hole}, fixed ${[...b.locked].join(",")}`);
+        const large = await c.d.evaluate(`[0,1,2,3].map((g) => !!window.dbg.session.propRuntime.get("large" + g)?.visible)`);
+        throw new Error(`the stones are slid and not solved (slidersolved ${await g(c, "slidersolved")}, large ${large}): ${JSON.stringify([...b.cell])}, hole ${b.hole}, fixed ${[...b.locked].join(",")}`);
       }
       c.say(`${clicks} slide(s)`);
     },

@@ -128,7 +128,11 @@ export const truthy = (v: string): boolean => v === "true" || v === "1";
 /** fail the line unless a global holds `want` (`need` in the machine suites) */
 export async function need(c: ActionContext, name: string, want: string, what: string): Promise<void> {
   const v = await g(c, name);
-  const norm = (x: string): string => (x === "true" ? "1" : x === "false" ? "0" : x);
+  const norm = (x: string): string => {
+    if (x === "true") return "1";
+    if (x === "false") return "0";
+    return x;
+  };
   if (norm(v) !== norm(want)) throw new Error(`${what}: ${name} is ${v || "unset"}, not ${want} (${await here(c)})`);
 }
 

@@ -82,7 +82,7 @@ const GOTO: Action = {
           c.d.evaluate<Record<string, string>>(
             `Object.fromEntries(${JSON.stringify(names)}.map((n) => [n, String(window.dbg.session.interp.globals.get(n) ?? "")]))`,
           ),
-        exits: async () => null,
+        exits: () => Promise.resolve(null),
         press: async (way) => {
           await c.d.hold(SETTLED, `the game to take ${way}`, c.budget);
           await c.d.key(PAGE_KEY[way], "none", c.budget);
@@ -106,7 +106,8 @@ const GOTO: Action = {
       (s) => s.stage === want.stage && s.frame === want.frame,
       spotId(want),
     );
-    c.say(`${presses} step(s)${strikes ? `, ${strikes} refused` : ""}`);
+    const refused = strikes ? `, ${strikes} refused` : "";
+    c.say(`${presses} step(s)${refused}`);
     await settle(c, `arriving at ${spotId(want)}`);
   },
 };
@@ -203,11 +204,10 @@ const TIMELAPSE_ACTIONS: ActionTable = {
       if (!spot) {
         throw new Error(`${name} cannot be let go on frame ${frame}; its script takes it on ${spots.map((s) => s.frame).join(", ") || "no frame"}`);
       }
-      const to = spot.region
-        ? await regionPoint(c, spot.region)
-        : spot.box
-          ? { x: Math.round((spot.box[0] + spot.box[2]) / 2), y: Math.round((spot.box[1] + spot.box[3]) / 2) }
-          : { x: 320, y: 240 };
+      // the region it names, the middle of its box, or anywhere: the screen's middle
+      let to: Point = { x: 320, y: 240 };
+      if (spot.region) to = await regionPoint(c, spot.region);
+      else if (spot.box) to = { x: Math.round((spot.box[0] + spot.box[2]) / 2), y: Math.round((spot.box[1] + spot.box[3]) / 2) };
       await carry(c, await propPoint(c, name), to, 14, `${name} to frame ${frame}`);
     },
   },

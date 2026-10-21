@@ -187,8 +187,8 @@ export function slideTo(board: Board, tiles: number[], cells: number[]): number[
   const done = (pos: number[]): boolean => pos.every((p, i) => p === cells[i]);
   const prev = new Map<string, { k: string; click: number } | null>([[key(board.hole, start), null]]);
   const queue: [number, number[]][] = [[board.hole, start]];
-  for (let q = 0; q < queue.length; q++) {
-    const [hole, pos] = queue[q];
+  // the queue grows while it is walked: a for...of reads its length afresh each turn
+  for (const [hole, pos] of queue) {
     if (done(pos)) {
       const clicks: number[] = [];
       for (let p = prev.get(key(hole, pos)); p; p = prev.get(p.k)) clicks.unshift(p.click);
