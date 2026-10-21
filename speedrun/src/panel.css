@@ -617,23 +617,23 @@ body.sr-resizing * {
 
 /* the palette. Live code is the brightest thing here; prose recedes; a
    DRAFT line has to read as neither. */
-.sr-highlight .v { color: #7fb3d5; }            /* verb */
-.sr-highlight .k { color: #c89b4a; }            /* named argument */
-.sr-highlight .q { color: #6fae9f; }            /* condition — a question about the world */
-.sr-highlight .n { color: #b58ac9; }            /* number */
-.sr-highlight .s { color: #8fbf7f; }            /* quoted string */
-.sr-highlight .b { color: #b58ac9; }            /* bevel list */
-.sr-highlight .p { color: #55606c; }            /* punctuation */
-.sr-highlight .c { color: #4d5a4a; font-style: italic; }  /* comment */
-.sr-highlight .d { color: #6b5a3a; opacity: 0.75; }       /* #| draft */
-.sr-highlight .d .v,
-.sr-highlight .d .k,
-.sr-highlight .d .q,
-.sr-highlight .d .n,
-.sr-highlight .d .s,
-.sr-highlight .d .b,
-.sr-highlight .d .p,
-.sr-highlight .d .c { color: inherit; font-style: normal; }
+.sr-highlight .sr-v { color: #7fb3d5; }            /* verb */
+.sr-highlight .sr-k { color: #c89b4a; }            /* named argument */
+.sr-highlight .sr-q { color: #6fae9f; }            /* condition — a question about the world */
+.sr-highlight .sr-n { color: #b58ac9; }            /* number */
+.sr-highlight .sr-s { color: #8fbf7f; }            /* quoted string */
+.sr-highlight .sr-b { color: #b58ac9; }            /* bevel list */
+.sr-highlight .sr-p { color: #55606c; }            /* punctuation */
+.sr-highlight .sr-c { color: #4d5a4a; font-style: italic; }  /* comment */
+.sr-highlight .sr-d { color: #6b5a3a; opacity: 0.75; }       /* #| draft */
+.sr-highlight .sr-d .sr-v,
+.sr-highlight .sr-d .sr-k,
+.sr-highlight .sr-d .sr-q,
+.sr-highlight .sr-d .sr-n,
+.sr-highlight .sr-d .sr-s,
+.sr-highlight .sr-d .sr-b,
+.sr-highlight .sr-d .sr-p,
+.sr-highlight .sr-d .sr-c { color: inherit; font-style: normal; }
 #srrow { display: flex; gap: 0.45rem; align-items: center; flex-wrap: wrap; }
 /* The transport and the info button: drawn, not typed.
    
