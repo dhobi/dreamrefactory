@@ -527,6 +527,8 @@ export class PuppetController {
       new Promise<void>((resolve) => (p.speakSkip = resolve)),
     ]);
     p.speakSkip = null;
+    // a sheet's watches see the line end before the next one starts
+    if (this.session.profile.watchesHearLineEnds && this.session.sheetWatches.size) this.session.timeCtrl.sampleSheetWatches();
     // ...and silences it. Only the NEXT puppetspeak would otherwise cut it (a
     // non-overlapping play halts the channel first), and what follows a line is
     // often not another line: PENNY2.PUP's Lenin beat runs `puppetspeak(28)`,

@@ -34,6 +34,13 @@ export interface SessionProfile {
    */
   readonly loadOpensItsSet: boolean;
   /**
+   * A speedrun sheet's watches are asked again as each spoken line ends, not
+   * only once a frame (SessionTime.sampleSheetWatches) — RedJack's, whose
+   * route needed it; the other games' sheets keep the timing they were
+   * measured with.
+   */
+  readonly watchesHearLineEnds: boolean;
+  /**
    * A load runs no `open…` handler while it rebuilds — `openactor`, `openshop`,
    * `openprop`, `openstage`, `openflat`, `openset`, `openscene`
    * (docs/engine/formats/savegame-v5.md); the v4 and v1 loads mute only the
@@ -119,6 +126,7 @@ const V4: SessionProfile = {
   save: (session) => snapshotSave(session),
   load: (session, bytes) => loadGame(session, bytes),
   loadOpensItsSet: false,
+  watchesHearLineEnds: false,
   loadMutesOpens: false,
   refusesBusySaves: false,
   scripts: { shortCircuit: false, typed: true },
@@ -184,6 +192,7 @@ const V5: SessionProfile = {
   // ...and opens the room it was saved in itself (saveload-v5.ts), so a host's
   // load (a speedrun's `load()`) hands it the bytes as Dust's does
   loadOpensItsSet: true,
+  watchesHearLineEnds: true,
   loadMutesOpens: true,
   refusesBusySaves: true,
   scripts: { shortCircuit: true, typed: false },

@@ -250,8 +250,26 @@ export class SessionTime {
       if (this.sheetHalted && !this.sheetWatchHolds.has(id)) continue;
       if (asked(met)) this.sheetHolds.delete(id);
     }
+    this.sampleSheetWatches();
+  }
+
+  /**
+   * Note every watch that rose since it was last asked. Once a frame, with the
+   * holds — and in RedJack also as a spoken line ends (SessionProfile
+   * `watchesHearLineEnds`), because
+   * a line cut short with ESC and the next one in a puppet opened straight
+   * after it (RedJack's trial at sea, common.shop `trialatsea`) fall between
+   * two frames: asked only then, `speaking` is never seen to stop, and a watch
+   * on it fires for the first line of the run and none after.
+   */
+  sampleSheetWatches(): void {
     for (const w of this.sheetWatches.values()) {
-      const now = asked(w.met);
+      let now: boolean;
+      try {
+        now = w.met();
+      } catch {
+        now = false; // a throwing condition counts as not yet
+      }
       if (now && !w.was) {
         w.rose = true;
         this.sheetHalted = true;
