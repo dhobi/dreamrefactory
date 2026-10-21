@@ -181,7 +181,7 @@ split(the gem)
 # eye on the wall comes away and goes on the cabinet door, and behind it,
 # past the scroll, the gene pod
 goto(24, 118)
-snakes()
+snakes(budget: 60000)
 prop(eye)
 wait(global.haseye == 1)
 goto(23, 124)
@@ -296,17 +296,9 @@ drag(invjaghead, 465, 267)
 wait(global.jaghead == 0)
 region(Button10, budget: 60000)
 wait(global.coolcount >= 0)
-goto(21, 355)
-wait(flat == m0010.355.9, budget: 120000)
-region(Button11)
-wait(global.heart == 2)
-goto(14, 307)
-drag(invheart, 335, 325)
-wait(flat == m0010.307.16)
-region(Button11)
-goto(46, 301)
-drag(invjaggem, 330, 206)
-wait(global.jaggem == 0)
+# the gold cools seventy seconds from the blood (`coolcount = tick ()`), on
+# the clock and not on the frame: the bridge, the eyes and the salamander
+# are done in the meantime, and the heart fetched after
 split(the jaguar temple)
 
 # the Lizard temple's bridge: frog, spider, scorpion against the statue's
@@ -349,6 +341,21 @@ drag(invlizard, 325, 360)
 wait(global.goldlizard == 0)
 split(the salamander)
 
+# back for the cooled gold heart; the green statue's pot trades it for the
+# red gem, which goes into the Jaguar temple's hole
+goto(21, 355)
+wait(flat == m0010.355.9, budget: 120000)
+region(Button11)
+wait(global.heart == 2)
+goto(14, 307)
+drag(invheart, 335, 325)
+wait(flat == m0010.307.16)
+region(Button11)
+goto(46, 301)
+drag(invjaggem, 330, 206)
+wait(global.jaggem == 0)
+split(the heart)
+
 # the Maya's gene pod on the podium, the axe from under it, and the podium
 # weighed to 8 with the debris; the axe rings the stalactites' tune back
 goto(38, 229)
@@ -383,9 +390,8 @@ split(the Sun temple's door)
 
 # the Sun temple's sliding stones, as this seed shuffles them. A shuffle
 # whose last group can't be finished (half of them, by parity) is left for
-# another: back a step and in again. Seed 1's first shuffle is one of those.
-goto(24, 556)
-goto(24, 500)
+# another: back a step and in again, as often as the seed needs — once on
+# seed 1.
 goto(24, 556)
 goto(24, 500)
 goto(24, 556)

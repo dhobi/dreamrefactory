@@ -34,6 +34,23 @@ Timelapse has no rooms: every picture is a stage's flat. So a sheet's idea of "t
 
 ## What the check does
 
-Nothing yet. Dust and Titanic have a CI check that plays every sheet in their folder to its last line; Timelapse does not have one. Until it does, play your sheet headless with the command above before you open the pull request, and say in it that it finishes.
+CI plays every sheet in this folder to its last line, headless, on the sheet clock. The pull request fails if a sheet:
 
-A sheet that starts with `reset(seed: N)` is one run on that seed. A seeded time is its own category and is not compared with unseeded ones.
+- has no `# title:` on line 1;
+- does not parse (the error names the line);
+- stops before its last line (the error names the line and the in-game time it got to).
+
+A sheet that starts with `reset(seed: N)` is one run on that seed. Without it, the sheet is played on three seeds and must finish on each, because an unseeded route has to survive the dice (the snakes and jewels, the bridge statue, the sliding stones' shuffle, the wind at the spire). The check is `timelapse/tests/speedrun/sheets.ts`, part of `npm run test:machine -w timelapse`. A seeded time is its own category and is not compared with unseeded ones.
+
+The times are listed in the job summary of the check.
+
+## For maintainers: a pull request from a fork
+
+The check needs the game files, and the CI job that has them never runs a fork's pull request: a sheet's conditions are compiled to JavaScript, so a sheet is code on that machine. Read the sheet, then push it to a branch of this repository so the check plays it:
+
+```
+gh pr checkout <number>
+git push origin HEAD:sheet/<number>
+```
+
+The check's result shows on that branch's run; merge the original pull request once it is green.
