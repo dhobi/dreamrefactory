@@ -14,9 +14,10 @@ import { defineConfig } from "vitest/config";
  * the players the suites are written in.
  *
  * Shared by the games whose suites live in `tests/machine/`; `pkg` is the
- * package's own directory (`import.meta.dirname` in its config).
+ * package's own directory (`import.meta.dirname` in its config); `extra` names
+ * further suites outside `tests/machine/`, relative to it.
  */
-export function machineConfig(pkg: string) {
+export function machineConfig(pkg: string, extra: string[] = []) {
   const dir = join(pkg, "tests/machine");
   const suites = readdirSync(dir)
     .filter((f) => f.endsWith(".ts") && !f.startsWith(".") && /^test\b/m.test(readFileSync(join(dir, f), "utf8")))
@@ -25,7 +26,9 @@ export function machineConfig(pkg: string) {
   return defineConfig({
     test: {
       environment: "node",
-      include: suites,
+      // and any other suite a game names, from its own root (Timelapse's
+      // contributed speedrun sheets, tests/speedrun/sheets.ts)
+      include: [...suites, ...extra],
       pool: "forks",
       maxWorkers: Math.max(1, availableParallelism() - 1),
       // a suite is a whole day of the game; it is bounded by its own tick limits

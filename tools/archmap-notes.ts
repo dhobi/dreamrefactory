@@ -72,6 +72,8 @@ export const COMPONENTS: Record<string, string> = {
   "dust/speedrun": "What Dust's speedrun workbench page is made of: which nodes of the play page are the game, and the Details column it adds.",
   "dust/tools": "Dust tools: the golden thread, run sheets and set diagnostics.",
   "timelapse/src": "Timelapse's page, its four-disc host, region input and location tracking.",
+  "timelapse/src/speedrun": "Timelapse's speedrun workbench entry and its verbs — the engine's core table, nothing of its own yet.",
+  "timelapse/speedrun": "What Timelapse's speedrun workbench page is made of: which nodes of the play page are the game, and the Details column it adds.",
   "timelapse/tools": "Indexes of Timelapse's stage flats and shop props.",
   "redjack/src": "RedJack's page, its three-disc host, keys, room touch and saves.",
   "redjack/tools": "rjdis.mts (the RedJack.exe disassembler), the day saves and the logo.",

@@ -36,7 +36,7 @@
  */
 import { SheetError, type Step, type Then, type VerbSpec } from "./sheet";
 import type { SpeedrunDriver, WaitMode } from "./driver";
-import { SCREEN, SHOWING, budgetNow } from "./driver";
+import { QUIET, ROOMLESS, SCREEN, SHOWING, budgetNow } from "./driver";
 
 export interface ActionContext {
   d: SpeedrunDriver;
@@ -513,7 +513,9 @@ const COMPILERS: Record<string, (c: Cond) => string> = {
   // what is on screen
   quiet: (c) => {
     const { bare } = c;
-    return bare(`(() => { const v = window.dbg.viewer; return !!v && (v.quiescent || v.conversing); })()`);
+    // the driver's own settle, which is the same question and a roomless
+    // game's answer to it (driver.ts ROOMLESS_QUIET)
+    return bare(QUIET);
   },
   /**
    * The engine is waiting on a CLICK — a movie parked on its regions with the
@@ -1470,9 +1472,20 @@ export const key = (name: string): ActionFn => async (c) => {
  *
  * This is only ever asked twice a press, either side of it, so it costs one
  * string compare and buys the whole class of doors that open onto a script.
+ *
+ * A {@link ROOMLESS} game (Timelapse) has no set, scene or view to stand in: a
+ * place there IS the flat on screen, and the stage it belongs to. So the same
+ * string is built of the stage, the flat, the film and the conversation, all
+ * of which the director and the session answer without a room.
  */
 export const WORLD = `(() => {
   const s = window.dbg.session, v = window.dbg.viewer;
+  if (!v && ${ROOMLESS}) {
+    const d = window.dbg.host.director;
+    return String(s.stageName || "") + "|" + String(s.currentFlat || "") +
+      "|" + String(d.movieFile || "") +
+      "|" + (d.conversing ? "talking" : "");
+  }
   if (!v) return "?";
   return String(s.currentSetFile || "") + "/" + v.sceneIdx + "/" + v.viewIdx +
     "|" + String(s.currentFlat || "") +
@@ -1517,9 +1530,13 @@ export const WORLD = `(() => {
  * `busyOnEntry` was true, the press was filed, and something flushed it. The
  * conversation opened five seconds later anyway, because he notices you on his
  * own, which is what made it look like a slow click rather than no click.
+ *
+ * The viewer's `inputLocked` is the director's (viewer.ts forwards it), so a
+ * {@link ROOMLESS} game asks the director the same question.
  */
 export const IDLE = `(() => {
   const s = window.dbg.session, v = window.dbg.viewer;
+  if (!v && ${ROOMLESS}) return !window.dbg.host.director.inputLocked && s.events.length === 0;
   if (!v) return false;
   return !v.inputLocked && s.events.length === 0;
 })()`;

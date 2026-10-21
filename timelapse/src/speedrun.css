@@ -1,0 +1,95 @@
+/**
+ * Timelapse's workbench sheet: the shared panel, and what this game's own page
+ * has to be told to stop doing.
+ *
+ * The panel is `speedrun/src/panel.css`, imported for the reason Dust's sheet
+ * gives (dust/src/speedrun.css): Vite resolves a bare package specifier in a CSS
+ * `@import` and not in a `<link href>`. What is left here is the difference
+ * between the pages — and it is Dust's difference again, because the play page
+ * (index.html) was built the same way: a grid pinned to the window, a stage whose
+ * every child is absolutely positioned, and a picture matted in a moulding.
+ *
+ * Every override is written with MORE specificity than the rule it beats, never
+ * relying on order: both sheets become bundles in a build and their order is
+ * the bundler's (site/tests/cascade.ts).
+ */
+@import "@dreamfactory/speedrun/panel.css";
+
+/* the page is a document again, not a grid of three rows pinned to the window */
+html body.nobrand {
+  display: block;
+}
+
+/* the stage back into FLOW: on the play page its children are absolute against
+   a box sized to the window, which in a column measures two pads and leaves the
+   picture lying over the sheet (the bug Dust's sheet describes) */
+#srgame #stage {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+}
+
+#srgame #curtain,
+#srgame #frame {
+  position: static;
+  inset: auto;
+  margin: 0 auto;
+}
+
+/* ...and out of its moulding: the rim the workbench keeps is its own, on
+   `#srgame #screen` in panel.css */
+#srgame #frame {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  width: fit-content;
+  height: fit-content;
+}
+#srgame #frame::before {
+  display: none;
+}
+
+/* The framebuffer is 640x480 where the other two games' is 512x384
+   (src/main.ts SCREEN), so a whole multiple of it is a multiple of 640: at
+   panel.css's 512 the 2x step would draw each game pixel 1.6 canvas pixels wide. */
+#srlayout #srgame #screen {
+  width: calc(640px * var(--px));
+}
+
+/* the location readout, moved into the Details column: a block under the
+   heading, in the column's own type */
+#details #loc {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  font-size: 0.75rem;
+}
+
+/* The game's column is as wide as THIS picture. panel.css sizes it
+   `var(--game-w, 512px × --px)`, Titanic's and Dust's width, and the canvas
+   above is 640 × --px: without this the picture spilled 128 px per step of
+   scale into the column beside it, over the Timer. */
+#srgame {
+  --game-w: calc(640px * var(--px));
+}
+
+/* ...and the row breaks where THIS picture and a 512 column fit beside each
+   other, which is panel.css's three thresholds moved by the same 128 px per
+   step (1069 + 128, 1581 + 256, 2093 + 384, each with its ~20 px of
+   cushion). Below them the row is stacked, as panel.css's own break says. */
+@media (max-width: 1214px) {
+  :root[data-px="1"] {
+    --row: 0;
+  }
+}
+@media (max-width: 1854px) {
+  :root:not([data-px="1"]):not([data-px="3"]) {
+    --row: 0;
+  }
+}
+@media (max-width: 2494px) {
+  :root[data-px="3"] {
+    --row: 0;
+  }
+}

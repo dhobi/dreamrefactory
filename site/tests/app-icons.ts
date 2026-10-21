@@ -47,7 +47,7 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const APPS = [
   { dir: "taoot", short: "Titanic", pages: ["taoot/index.html", "taoot/play/index.html"] },
   { dir: "dust", short: "Dust", pages: ["dust/index.html", "dust/play/index.html"] },
-  { dir: "timelapse", short: "Timelapse", pages: ["timelapse/index.html"] },
+  { dir: "timelapse", short: "Timelapse", pages: ["timelapse/index.html", "timelapse/play/index.html"] },
   { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html"] },
   { dir: "redjack", short: "RedJack", pages: ["redjack/index.html"] },
   { dir: "lunicus", short: "Lunicus", pages: ["lunicus/index.html"] },

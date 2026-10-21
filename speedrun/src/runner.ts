@@ -228,6 +228,18 @@ export function waitOf(actions: ActionTable, step: Step): WaitMode {
 export const WHERE = `(() => {
   const s = window.dbg.session, v = window.dbg.viewer;
   const set = String(s.currentSetFile || s.currentSetName || "?");
+  // a game with no room (driver.ts ROOMLESS) stands on a stage's flat, and the
+  // director knows the rest; the same pieces as below, without the view
+  if (!v && window.dbg.roomless) {
+    const d = window.dbg.host.director;
+    return [
+      "stage " + s.stageName + ' flat "' + (s.currentFlat || "none") + '"',
+      d.screenOwner() !== "world" ? d.screenOwner() + " owns the screen" : "",
+      d.moviePlaying ? "movie " + (d.movieFile || "?") + (d.movieRegions.length ? " (parked, " + d.movieRegions.length + " regions)" : " (playing)") : "",
+      s.scriptBusy ? "script busy (" + (s.pending().join(", ") || "unlabelled") + ")" : "",
+      s.interp.handlersAtWork ? s.interp.handlersAtWork + " handler(s) at work" : "",
+    ].filter(Boolean).join(", ");
+  }
   if (!v) return set + " (no viewer — still booting?)";
   const view = v.scene.views[v.viewIdx];
   const bits = [

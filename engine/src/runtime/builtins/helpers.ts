@@ -468,6 +468,7 @@ function registerDialogs(ctx: BuiltinCtx): void {
     return latin1(encodeText(typed, session.textEncoding(), 255));
   });
   r("quit", async () => {
+    session.quits++;
     await session.onQuit();
     return 0;
   });

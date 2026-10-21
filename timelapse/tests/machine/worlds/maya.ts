@@ -5,6 +5,21 @@
 import { fail, ok, type Headless } from "../harness";
 import { clickRegion, drag, extent, goTo, propPoint, regionPoint, regions } from "../nav";
 import { travel } from "./easter";
+import {
+  GODS, GROUP_CELLS, HOLES, PODIUM_RISE, STALACTITE_X, beatCost, boardOf, skeleton, skullOrder, slideTo, turnsTo,
+  type Board, type Wheels,
+} from "../../../src/maya";
+
+/** the sliding stones as the props stand (src/maya.ts `boardOf`) */
+function readBoard(h: Headless): Board {
+  const tiles: { t: number; x: number; y: number }[] = [];
+  for (let t = 0; t < 16; t++) {
+    const p = h.session.propRuntime.get(`small${t}`);
+    if (p?.visible) tiles.push({ t, x: p.anchorX, y: p.anchorY });
+  }
+  const whole = [0, 1, 2, 3].map((g) => !!h.session.propRuntime.get(`large${g}`)?.visible);
+  return boardOf(tiles, whole, Number(h.g("hole")));
+}
 
 export const need = (h: Headless, name: string, want: string, what: string): void => {
   // a boolean global reads "true"/"false"; a want of "1"/"0" means the same
@@ -85,39 +100,6 @@ export async function counting(h: Headless): Promise<void> {
  * three, the big one the small one (m.shp `wheels`, `wheelup`/`wheeldown`,
  * three steps of 24, 36 and 48 a turn), so the turns are found by search.
  */
-type Wheels = [number, number, number];
-const MOD: Wheels = [24, 36, 48];
-/** what one turn (+1 = the drag down, `wheelup`) of each wheel does to all three */
-const TURN: Record<"a" | "b" | "c", Wheels> = { a: [-3, -3, 0], b: [-3, -3, 3], c: [3, 0, 3] };
-const GODS: { god: number; ball: string; date: (w: Wheels) => boolean; flag: string }[] = [
-  { god: 1, ball: "B", flag: "skullflag", date: ([a, b, c]) => a === 12 && b === 6 && c === 12 },
-  { god: 2, ball: "C", flag: "monkeyflag", date: ([a, b, c]) => (a === 0 || a === 3) && b === 9 && c === 24 },
-  { god: 3, ball: "D", flag: "jaguarflag", date: ([a, b, c]) => a === 6 && b === 0 && c === 6 },
-  { god: 4, ball: "E", flag: "lizardflag", date: ([a, b, c]) => a === 12 && b === 30 && c === 45 },
-];
-
-function turnsTo(from: Wheels, done: (w: Wheels) => boolean): { wheel: "a" | "b" | "c"; dir: 1 | -1 }[] {
-  const key = (w: Wheels): string => w.join(",");
-  const prev = new Map<string, { at: Wheels; wheel: "a" | "b" | "c"; dir: 1 | -1 } | null>([[key(from), null]]);
-  const queue: Wheels[] = [from];
-  while (queue.length) {
-    const at = queue.shift()!;
-    if (done(at)) {
-      const path: { wheel: "a" | "b" | "c"; dir: 1 | -1 }[] = [];
-      for (let p = prev.get(key(at)); p; p = prev.get(key(p.at))) path.unshift({ wheel: p.wheel, dir: p.dir });
-      return path;
-    }
-    for (const wheel of ["a", "b", "c"] as const)
-      for (const dir of [1, -1] as const) {
-        const next = at.map((v, i) => (((v + dir * TURN[wheel][i]) % MOD[i]) + MOD[i]) % MOD[i]) as Wheels;
-        if (prev.has(key(next))) continue;
-        prev.set(key(next), { at, wheel, dir });
-        queue.push(next);
-      }
-  }
-  return fail(`no turns of the calendar reach the date from ${from.join(", ")}`);
-}
-
 export async function calendar(h: Headless): Promise<void> {
   for (const { god, ball, date, flag } of GODS) {
     // the ball to the god: a drag from the region of its state to the god's
@@ -160,50 +142,6 @@ export async function calendar(h: Headless): Promise<void> {
  * within 10 px of their place (`wallpt`). So the order is found by playing
  * the table: a bone goes where it snaps into its own place.
  */
-const BONE: Record<number, { h: number; v: number; oh?: number; ov?: number; z: number }> = {
-  0: { h: 1, v: 18, oh: 1, ov: -16, z: 1 }, 1: { h: 2, v: 17, oh: 0, ov: -20, z: 100 },
-  2: { h: 10, v: 28, oh: 5, ov: 27, z: 3 }, 3: { h: 6, v: 29, oh: 1, ov: -29, z: 100 },
-  4: { h: 15, v: 19, z: -1 }, 5: { h: 1, v: 36, oh: 3, ov: -36, z: 100 },
-  6: { h: -11, v: 50, z: -1 }, 7: { h: 6, v: 42, oh: 3, ov: -42, z: 100 },
-  8: { h: 10, v: 59, z: -1 }, 9: { h: -4, v: 31, oh: 3, ov: -24, z: 10 },
-  10: { h: 4, v: 12, oh: -1, ov: -12, z: 100 }, 11: { h: -1, v: 38, oh: 4, ov: -38, z: 100 },
-  12: { h: -10, v: 25, z: -1 },
-};
-const JOINT: Record<number, { oh: number; ov: number }> = { 18: { oh: -56, ov: 162 }, 19: { oh: 45, ov: 162 }, 20: { oh: -34, ov: 34 }, 21: { oh: 17, ov: 34 } };
-const PLACE: Record<number, [number, number]> = {
-  0: [257, 93], 1: [256, 127], 2: [247, 179], 3: [245, 181], 4: [235, 229], 5: [369, 113], 6: [382, 199],
-  7: [281, 249], 8: [275, 352], 9: [342, 237], 10: [341, 275], 11: [340, 328], 12: [355, 391],
-};
-
-/** the bones in an order that sets each in its place, with where to let each go */
-function skeleton(): { bone: number; at: [number, number] }[] {
-  const pos = new Map<number, [number, number]>([18, 19, 20, 21].map((j) => [j, [320, 240]]));
-  let open = [18, 19, 20, 21];
-  const order: { bone: number; at: [number, number] }[] = [];
-  const left = new Set(Object.keys(BONE).map(Number));
-  while (left.size) {
-    let placed = false;
-    for (const b of left) {
-      for (const [i, j] of open.entries()) {
-        const joint = j >= 18 ? { ...JOINT[j], z: 100 } : { oh: BONE[j].oh!, ov: BONE[j].ov!, z: BONE[j].z };
-        if (joint.z !== 100 && joint.z !== b) continue;
-        const [jx, jy] = pos.get(j)!;
-        const at: [number, number] = [jx + joint.oh - BONE[b].h, jy - joint.ov + BONE[b].v];
-        if (Math.abs(at[0] - PLACE[b][0]) > 10 || Math.abs(at[1] - PLACE[b][1]) > 10) continue;
-        pos.set(b, at);
-        order.push({ bone: b, at });
-        open = [...open.slice(0, i), ...(BONE[b].z === -1 ? [] : [b]), ...open.slice(i + 1)];
-        left.delete(b);
-        placed = true;
-        break;
-      }
-      if (placed) break;
-    }
-    if (!placed) return fail(`no bone of ${[...left].join(", ")} sets on the joints ${open.join(", ")}`);
-  }
-  return order;
-}
-
 export async function skull(h: Headless): Promise<void> {
   await goTo(h, { stage: 43, frame: 802 });
   for (const { bone, at } of skeleton()) {
@@ -247,34 +185,6 @@ async function setGem(h: Headless, stage: number, frame: number, prop: string, g
  * (`ballout`). So the way is searched pixel by pixel over the hit test, and
  * walked a straight run at a time, and searched again if a red spider catches it.
  */
-const HOLES: Record<string, { to: [number, number]; snake?: string }> = {
-  button24: { to: [181, 351] }, button26: { to: [542, 422] }, button28: { to: [83, 45] },
-  button10: { to: [156, 123], snake: "snakes0" }, button15: { to: [102, 421], snake: "snakes2" },
-  button13: { to: [409, 287], snake: "snakes4" }, button21: { to: [366, 366], snake: "snakes10" },
-  button20: { to: [578, 221], snake: "snakes8" }, button17: { to: [487, 264], snake: "snakes6" },
-};
-
-/** each red spider's beat (m.shp `red`: `red1`, `red2`, `red3`, then `red2` again, by its row) */
-const BEAT: [number, number][][] = [
-  [[56, 167], [60, 73], [179, 71]], [[95, 248], [95, 212], [58, 210]], [[280, 250], [279, 300], [169, 300]],
-  [[311, 390], [308, 324], [206, 324]], [[581, 117], [579, 27], [429, 25]],
-];
-
-/** the cost of a step onto (x, y): dear within 14 px of an awake red spider's beat */
-function beatCost(awake: number[]): (x: number, y: number) => number {
-  const lines = awake.flatMap((r) => [[BEAT[r][0], BEAT[r][1]], [BEAT[r][1], BEAT[r][2]]] as [[number, number], [number, number]][]);
-  return (x, y) => {
-    for (const [[ax, ay], [bx, by]] of lines) {
-      const len = Math.max(Math.abs(bx - ax), Math.abs(by - ay), 1);
-      for (let t = 0; t <= len; t += 3) {
-        const px = ax + ((bx - ax) * t) / len, py = ay + ((by - ay) * t) / len;
-        if (Math.abs(px - x) < 14 && Math.abs(py - y) < 14) return 40;
-      }
-    }
-    return 1;
-  };
-}
-
 async function spiderPath(h: Headless): Promise<[number, number][]> {
   const vis = async (p: string): Promise<boolean> => Number(await h.eval(`return (propvisible ("${p}"))`)) === 1;
   const snakes = new Map<string, boolean>();
@@ -558,32 +468,6 @@ export async function eyes(h: Headless): Promise<void> {
  * salamander goes into the hatch (frame 251, x 230…420, y 240…480,
  * `lizarddrop`).
  */
-const SKULL_STEPS = [4, 5, 8, -5, -6, -8];
-const SKULL_USES = [3, 5, 4, 4, 3, 3];
-
-function skullOrder(): number[] {
-  const uses = [...SKULL_USES];
-  const lit = new Array<boolean>(22).fill(false);
-  const order: number[] = [];
-  const dfs = (at: number): boolean => {
-    if (order.length === 22) return true;
-    for (let s = 0; s < 6; s++) {
-      if (!uses[s]) continue;
-      const next = (((at + SKULL_STEPS[s]) % 22) + 22) % 22;
-      if (lit[next]) continue;
-      uses[s]--;
-      lit[next] = true;
-      order.push(s);
-      if (dfs(next)) return true;
-      order.pop();
-      lit[next] = false;
-      uses[s]++;
-    }
-    return false;
-  };
-  return dfs(0) ? order : fail("no order of the skulls lights all 22");
-}
-
 export async function salamander(h: Headless): Promise<void> {
   await goTo(h, { stage: 44, frame: 290 });
   await clickRegion(h, "Button10", "the cracked heart");
@@ -619,8 +503,6 @@ export async function salamander(h: Headless): Promise<void> {
  * each is let go over the podium, x 190…448 and y, less the podium's own rise
  * at its weight then (`PodiumYOffSet`), 170…270.
  */
-const PODIUM_RISE: Record<number, number> = { 0: 180, 1: 110, 2: 70, 3: 34, 4: -4, 5: -30, 6: -48, 7: -70, 8: -92, 9: -116 };
-
 export async function mayaPod(h: Headless): Promise<void> {
   await goTo(h, { stage: 38, frame: 229 });
   await clickRegion(h, "PodM", "the gene pod");
@@ -647,8 +529,6 @@ export async function mayaPod(h: Headless): Promise<void> {
  * "5 3 4 2 2 5 5 1", no more than five seconds apart (`dingone`) — opens the
  * way on (gMallet 0).
  */
-const STALACTITE_X = [155, 246, 324, 399, 469];
-
 export async function stalactites(h: Headless): Promise<void> {
   await goTo(h, { stage: 39, frame: 226 });
   await clickRegion(h, "Button15", "the tune");
@@ -724,50 +604,6 @@ export async function sunDoor(h: Headless): Promise<void> {
  * group missing a tile last. When that last group cannot be finished (half
  * the shuffles, by parity), it steps out and back for a new shuffle.
  */
-const GROUP_CELLS = [[0, 1, 4, 5], [8, 9, 12, 13], [2, 3, 6, 7], [10, 11, 14, 15]];
-
-type Board = { cell: Map<number, number>; hole: number; locked: Set<number> };
-
-function readBoard(h: Headless): Board {
-  const cell = new Map<number, number>();
-  for (let t = 0; t < 16; t++) {
-    const p = h.session.propRuntime.get(`small${t}`);
-    if (!p?.visible) continue;
-    const col = Math.floor((p.anchorX - 221) / 56), row = Math.floor((p.anchorY - 231) / 44);
-    cell.set(t, row * 4 + col);
-  }
-  const locked = new Set<number>();
-  for (let g = 0; g < 4; g++) if (h.session.propRuntime.get(`large${g}`)?.visible) for (const c of GROUP_CELLS[g]) locked.add(c);
-  return { cell, hole: Number(h.g("hole")), locked };
-}
-
-/** the cells to click, in turn, to bring `tiles` onto `cells` */
-function slideTo(board: Board, tiles: number[], cells: number[]): number[] | null {
-  const adj = (c: number): number[] =>
-    [c - 4, c + 4, c % 4 ? c - 1 : -1, c % 4 < 3 ? c + 1 : -1].filter((n) => n >= 0 && n < 16 && !board.locked.has(n));
-  const key = (hole: number, pos: number[]): string => `${hole}|${pos.join(",")}`;
-  const start = tiles.map((t) => board.cell.get(t)!);
-  const done = (pos: number[]): boolean => pos.every((p, i) => p === cells[i]);
-  const prev = new Map<string, { k: string; click: number } | null>([[key(board.hole, start), null]]);
-  const queue: [number, number[]][] = [[board.hole, start]];
-  for (let q = 0; q < queue.length; q++) {
-    const [hole, pos] = queue[q];
-    if (done(pos)) {
-      const clicks: number[] = [];
-      for (let p = prev.get(key(hole, pos)); p; p = prev.get(p.k)) clicks.unshift(p.click);
-      return clicks;
-    }
-    for (const c of adj(hole)) {
-      const next = pos.map((p) => (p === c ? hole : p));
-      const k = key(c, next);
-      if (prev.has(k)) continue;
-      prev.set(k, { k: key(hole, pos), click: c });
-      queue.push([c, next]);
-    }
-  }
-  return null;
-}
-
 export async function slider(h: Headless): Promise<void> {
   for (let shuffle = 0; h.g("slidersolved") !== "true"; shuffle++) {
     if (shuffle > 8) fail(`eight shuffles and the Sun temple's stones never came out (${h.here()})`);

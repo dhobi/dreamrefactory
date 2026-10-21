@@ -1,5 +1,5 @@
 /**
- * The play page (`src/main.ts`), in node: the real `index.html` parsed by
+ * The play page (`src/main.ts`), in node: the real `play/index.html` parsed by
  * linkedom, with the engine's host, the file store and the bug report standing
  * in for the browser's.
  *
@@ -140,13 +140,15 @@ const current: { host?: FakeHost; files?: FakeFiles } = {};
 
 vi.mock("@dreamfactory/engine/web/host", () => ({ GameHost: FakeHost }));
 vi.mock("../src/files", () => ({ TimelapseFiles: FakeFiles }));
+// the Play menu reads the address bar, which this page has none of
+vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => 0 }));
 vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
 }));
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(import.meta.dirname, "../index.html"), "utf8");
+const HTML = readFileSync(join(import.meta.dirname, "../play/index.html"), "utf8");
 
 /** the thirteen the page prefetches, and the six it reads tags from */
 const DISCS: Record<string, number> = {

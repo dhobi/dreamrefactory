@@ -18,6 +18,8 @@ import { join, resolve } from "node:path";
 import { defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
 import { siblingSignposts } from "../tools/vite-siblings";
+import { speedrunPage } from "../speedrun/vite";
+import { WORKBENCH } from "./speedrun/workbench";
 
 /** this file's own directory, not the working directory */
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -33,6 +35,9 @@ export default defineConfig({
   appType: "mpa",
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
+    // the speedrun workbench: the play page with a sheet to drive it, made from
+    // play/index.html by speedrun/vite.ts
+    ...speedrunPage({ root: HERE, ...WORKBENCH }),
     gamefilesManifest({
       gamefiles: join(HERE, "gamefiles"),
       publicDir: join(HERE, "public"),
@@ -71,5 +76,14 @@ export default defineConfig({
     target: "es2022",
     outDir: resolve(HERE, "../dist/timelapse"),
     emptyOutDir: true,
+    rollupOptions: {
+      // named, because the speedrun plugin adds its page as a second entry
+      // beside these and a bare default would be replaced rather than joined
+      input: {
+        // the welcome page, with no game on it; Play goes to play/
+        timelapse: join(HERE, "index.html"),
+        play: join(HERE, "play/index.html"),
+      },
+    },
   },
 });

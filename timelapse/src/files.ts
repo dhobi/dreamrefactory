@@ -89,22 +89,35 @@ const INSTALLED = [
   "p.stg", "camera.fil",
 ];
 
+/**
+ * What the rip's paths are relative to: the page's own directory, unless the
+ * page says the site's root is elsewhere (`<meta name="site-root">`) — which
+ * the speedrun workbench does, one directory down at `speedrun/`, and which a
+ * page-relative `gamefiles.json` would ask for under it and find nothing
+ * (speedrun/vite.ts writes the meta; chrome/src/site.ts reads it the same way).
+ */
+function siteBase(): string {
+  const declared = document.querySelector?.('meta[name="site-root"]')?.getAttribute("content");
+  return declared ? new URL(declared, document.baseURI).href : document.baseURI;
+}
+
 export class TimelapseFiles extends RipFiles {
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<TimelapseFiles> {
     const store = new TimelapseFiles();
     // through pageUrl, so the page runs from any directory
-    const manifest = await readManifest(pageUrl("gamefiles.json"));
+    const at = siteBase();
+    const manifest = await readManifest(pageUrl("gamefiles.json", at));
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;
       const base = ripName(path);
       // lowest disc wins: the keys are sorted, so the first one seen is it
       if (store.urls.has(base)) continue;
-      store.urls.set(base, pageUrl(path));
+      store.urls.set(base, pageUrl(path, at));
       store.sizes.set(base, manifest[path]);
     }
     for (const base of INSTALLED) {
-      if (!store.urls.has(base)) store.urls.set(base, pageUrl(INSTALL_DIR + base));
+      if (!store.urls.has(base)) store.urls.set(base, pageUrl(INSTALL_DIR + base, at));
     }
     return store;
   }

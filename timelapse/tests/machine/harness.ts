@@ -31,6 +31,7 @@ import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { TIMELAPSE } from "../../../chrome/src/games";
+import { EXITS, type Exit } from "../../src/nav";
 
 const RIP = resolve(import.meta.dirname, "../../gamefiles");
 const INSTALLED = join(RIP, "TLAPSE1/install/data");
@@ -65,9 +66,9 @@ export function indexDiscs(): Map<string, string> {
   return found;
 }
 
-/** the six directions a stage's table has a word for, in its order */
-export const EXITS = ["forward", "back", "left", "right", "backleft", "backright"] as const;
-export type Exit = (typeof EXITS)[number];
+// the six directions a stage's table has a word for, in its order — the
+// planner's (src/nav.ts), which the speedrun's walk shares
+export { EXITS, type Exit };
 
 export interface Where {
   world: string;

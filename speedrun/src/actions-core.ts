@@ -1112,7 +1112,14 @@ export const CORE_ACTIONS: ActionTable = {
       // and the page resumes itself on the other side. Under Playwright the run
       // is outside the page and simply carries on, so the waits below are real.
       await c.d.restart();
-      await c.d.hold(`!!(window.dbg && window.dbg.viewer)`, "the game to come back up", c.budget);
+      // A game with no room (driver.ts ROOMLESS) never gets a viewer: there it
+      // is up once its boot has returned, which is what its page says on
+      // `dbg.booted`. The viewer's half is the expression it always was.
+      await c.d.hold(
+        `!!(window.dbg && (window.dbg.viewer || (window.dbg.roomless && window.dbg.booted)))`,
+        "the game to come back up",
+        c.budget,
+      );
       await c.d.settle("quiet", "the fresh boot", c.budget);
     },
   },

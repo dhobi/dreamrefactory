@@ -272,7 +272,8 @@ jobs:
 
       # Timelapse's: the shared engine stood up in node on the four discs and
       # played through the whole game, world by world
-      # (docs/timelapse/README.md#machine-suites). About a minute.
+      # (docs/timelapse/README.md#machine-suites), and every contributed speedrun
+      # sheet played to its end (timelapse/tests/speedrun/sheets.ts). A few minutes.
       - name: Timelapse machine suites
         if: steps.pt.outputs.all == '1' || contains(steps.pt.outputs.games, ' timelapse ')
         run: |

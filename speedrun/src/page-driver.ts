@@ -473,12 +473,31 @@ function waitsOf(page: Page, watch: boolean): Waits {
   return { sleep, wallWait, until, hold, tryHold, settle };
 }
 
+/**
+ * The size a page maps its pointer against: the game's own screen, read off
+ * the host.
+ *
+ * Not the canvas's backing store. Dust's and Titanic's presenters pin that to
+ * the screen on the first frame (ScreenPresenter.blit), so the two agree; but
+ * Timelapse draws a doubled 1280x960 plate and maps a pointer against its
+ * 640x480 (timelapse/src/main.ts `canvasCoords`), and a point aimed through the
+ * canvas there arrived at half its coordinates. The canvas stays the fallback
+ * for a page with no host to ask yet.
+ */
+function gameScreen(
+  win: Window & typeof globalThis,
+  canvas: HTMLCanvasElement,
+): { width: number; height: number } {
+  const screen = (win as unknown as { dbg?: { host?: { screen?: { width: number; height: number } } } }).dbg?.host?.screen;
+  return screen && screen.width > 0 && screen.height > 0 ? screen : canvas;
+}
+
 /** the hand: canvas points, pointer and mouse events, a held button, and the keys */
 function handsOf(page: Page): Hands {
   const { canvas, win, frame } = page;
   /** canvas pixel (512x384) -> a client point, through main.ts's own mapping */
   const clientPoint = (x: number, y: number): Point =>
-    clientPointFor(x, y, canvas.getBoundingClientRect(), canvas);
+    clientPointFor(x, y, canvas.getBoundingClientRect(), gameScreen(win, canvas));
 
   const pointer = (type: string, at: Point, target: EventTarget = canvas): void => {
     target.dispatchEvent(
@@ -592,7 +611,7 @@ function handsOf(page: Page): Hands {
 }
 
 /** a click, a press held until a condition, and a key hammered until one */
-function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "clickAt" | "holdAt" | "hammer"> {
+function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "clickAt" | "hover" | "holdAt" | "hammer"> {
   const { win, timeout, defaultGap, budgetClock, check, run, frame } = page;
   const { settle, until, wallWait, sleep } = waits;
   const { clientPoint, pointer, movePointer, heldFrames, pressKey } = hands;
@@ -603,6 +622,11 @@ function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "
         await heldFrames();
         pointer("pointerup", at, win);
         await settle(wait, `click ${x},${y}`, budget);
+      },
+
+      hover: (x, y) => {
+        movePointer(clientPoint(x, y));
+        return Promise.resolve();
       },
 
       holdAt: async (x, y, opts, budget = timeout) => {
@@ -661,6 +685,10 @@ function aiming(page: Page): Pick<SpeedrunDriver, "aim"> {
         const dbg = (win as unknown as { dbg: any }).dbg;
         const s = dbg.session;
         const v = dbg.viewer;
+        // a game with no room (driver.ts ROOMLESS) asks the director, which is
+        // what the viewer forwards `propUnder` to anyway; elsewhere a missing
+        // viewer fails here exactly as it always has
+        const screen = v ?? (dbg.roomless ? dbg.host.director : null);
         const adapter = {
           // the framebuffer's size, not this canvas's: Dust draws 512x384 through
           // a 1024x768 canvas, and a hit test is asked in framebuffer pixels
@@ -671,18 +699,21 @@ function aiming(page: Page): Pick<SpeedrunDriver, "aim"> {
           // (aim.ts, `sweep`) — the page's own floor, applied to clickAt's point
           reach: (x: number, y: number) => {
             const r = canvas.getBoundingClientRect();
-            const c = clientPointFor(x, y, r, canvas);
-            return screenPoint({ clientX: c.x, clientY: c.y }, r, canvas, Math.floor);
+            const size = gameScreen(win, canvas);
+            const c = clientPointFor(x, y, r, size);
+            return screenPoint({ clientX: c.x, clientY: c.y }, r, size, Math.floor);
           },
           hitTest: (x: number, y: number) => s.hitTestAt(x, y),
           propUnder: (x: number, y: number) => {
-            const p = v.propUnder(x, y);
+            const p = screen.propUnder(x, y);
             return p ? p.group.name : null;
           },
           inFlat: !s.viewShowing && !!s.stageScript,
           where: (n: string) => flatWhere(s, n),
           boxes: (n: string) => s.thingBoxes(n),
           hotspot: (n: string) => {
+            // no room, no view, no view hotspots: a flat's regions are hit-tested
+            if (!v && dbg.roomless) return null;
             const obj = v.scene.views[v.viewIdx].objects.find(
               (o: { identifier?: string }) => (o.identifier || "").toLowerCase() === n.toLowerCase(),
             );

@@ -308,6 +308,13 @@ export class GameSession {
     initial;
   onQuit: () => void | Promise<void> = () => this.onLog("quit()");
   /**
+   * How many times a script has called `quit ()` — what a harness or a
+   * speedrun sheet waits on for the end of a game, since a page's quit does
+   * nothing else it could see (Timelapse's last question answered, and the
+   * game ends there).
+   */
+  quits = 0;
+  /**
    * host hook: put a script error in front of the player, as TI.EXE and tl.exe
    * do — the box is runtime/script-errors.ts's, and the answer is the player's:
    * true goes on ("Yes"), false quits ("No", the flag `quit()` raises, so
