@@ -1,6 +1,6 @@
 # title: dhobi's fastest
 # author: dhobi
-# notes: redjack/tests/speedrun/run.sheet.txt on seed 6, the fastest of seeds 1-9; seeded, so its own category
+# notes: redjack/tests/speedrun/run.sheet.txt on seed 2, the fastest of seeds 1-9; seeded, so its own category
 #
 # RedJack: Revenge of the Brethren, any%, from the cold boot
 # The machine suites' route (tests/machine/days/*.ts) as a sheet: the boot,
@@ -15,7 +15,7 @@
 # film that asks nothing goes to ESC, and every spoken line too (hush(): ESC
 # at a plaque would walk out of the talk).
 
-reset(seed: 6)
+reset(seed: 2)
 skipMovie(until: js == window.dbg.booted && window.dbg.session.currentSetFile === "liznite", budget: 600000)
 idle()
 # every film that asks nothing goes to ESC, and every spoken line: the
