@@ -556,8 +556,15 @@ async function showLocation(host: GameHost): Promise<void> {
  *
  * Against {@link SCREEN}, not against `canvas.width`: the canvas is the doubled
  * plate, and the engine's coordinates are the 640x480 the game thinks in.
+ *
+ * Floored, as Dust's and Titanic's are: a client pixel belongs to the game pixel
+ * it lies in. Rounded, the right half of each doubled pixel answered for its
+ * neighbour, so every click landed one pixel right and down of where it was
+ * aimed — the speedrun driver aims at the middle of a pixel's interval
+ * (speedrun/src/driver.ts `clientAxis`), and the Maya's skeleton, whose
+ * joints snap within three pixels, set its bones headless and not on the page.
  */
-const canvasCoords = canvasCoordsFor(canvas, SCREEN);
+const canvasCoords = canvasCoordsFor(canvas, SCREEN, Math.floor);
 
 /**
  * The pointer, drawn the way Timelapse drew it.

@@ -12,7 +12,7 @@ import {
   type Board, type Wheels,
 } from "../maya";
 import {
-  DEG, UNLOCKED, carry, clickThen, g, gNum, global, middle, need, num, propIn, settle, truthy, type Point,
+  DEG, UNLOCKED, carry, clickThen, g, gNum, global, line, middle, need, num, propIn, settle, truthy, type Point,
 } from "./gestures";
 
 /** a prop of the shop on screen, page-side */
@@ -450,10 +450,29 @@ export const MAYA_ACTIONS: ActionTable = {
     run: async (c) => {
       for (const { bone, at } of skeleton()) {
         const from = await propIn(c, `ground${bone}`, [0, 380, 640, 480]);
-        await carry(c, from, { x: at[0], y: at[1] }, 16, `bone ${bone}`);
+        // the bone's own place, turn by turn, for the report when it does not set
+        const seen: string[] = [];
+        const WALL = `((p) => p ? (p.visible ? "" : "hidden ") + p.anchorX + "," + p.anchorY : "none")(${PROP(`wall${bone}`)})`;
+        const path = line(from, { x: at[0], y: at[1] }, 16);
+        let i = 0;
+        await c.d.hold(UNLOCKED, `a moment to start bone ${bone}`, c.budget);
+        await c.d.dragProp(
+          from,
+          async () => {
+            seen.push(await c.d.evaluate<string>(WALL));
+            return i < path.length ? path[i++] : null;
+          },
+          c.budget,
+        );
+        await settle(c, `bone ${bone}`);
         if (truthy(await g(c, "skelsolved"))) continue;
         const wall = await c.d.evaluate<{ up: boolean; x: number }>(`((p) => ({ up: !!p?.visible, x: p ? p.anchorX : -1 }))(${PROP(`wall${bone}`)})`);
-        if (!wall.up || Math.abs(wall.x - at[0]) > 2) throw new Error(`bone ${bone} did not set at ${at.join(", ")} (joints ${await g(c, "gConnectlist")})`);
+        if (!wall.up || Math.abs(wall.x - at[0]) > 2) {
+          throw new Error(
+            `bone ${bone} did not set at ${at.join(", ")} (joints ${await g(c, "gConnectlist")}; pressed at ${from.x},${from.y}; ` +
+              `the bone turn by turn ${seen.join(" ")})`,
+          );
+        }
       }
       await need(c, "skelsolved", "true", "the skeleton");
     },
