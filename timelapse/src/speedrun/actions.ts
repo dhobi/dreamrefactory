@@ -19,7 +19,7 @@
  */
 import type { VerbSpec } from "@dreamfactory/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
-import { composeActions, condition, resolveIn, verbsOf, type Action, type ActionContext, type ActionTable } from "@dreamfactory/speedrun/action";
+import { composeActions, condition, resolveIn, verbsOf, type Action, type ActionTable } from "@dreamfactory/speedrun/action";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { PAGE_KEY, dropSpotsIn, spotId, walkTo, type Spot } from "../nav";
 import {

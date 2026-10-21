@@ -13,8 +13,10 @@
 /* ---- the calendar (m008, frame 907) ---- */
 export type Wheels = [number, number, number];
 export const MOD: Wheels = [24, 36, 48];
+/** the calendar's three wheels, by the names its props carry */
+export type Wheel = "a" | "b" | "c";
 /** what one turn (+1 = the drag down, `wheelup`) of each wheel does to all three */
-export const TURN: Record<"a" | "b" | "c", Wheels> = { a: [-3, -3, 0], b: [-3, -3, 3], c: [3, 0, 3] };
+export const TURN: Record<Wheel, Wheels> = { a: [-3, -3, 0], b: [-3, -3, 3], c: [3, 0, 3] };
 export const GODS: { god: number; ball: string; date: (w: Wheels) => boolean; flag: string }[] = [
   { god: 1, ball: "B", flag: "skullflag", date: ([a, b, c]) => a === 12 && b === 6 && c === 12 },
   { god: 2, ball: "C", flag: "monkeyflag", date: ([a, b, c]) => (a === 0 || a === 3) && b === 9 && c === 24 },
@@ -22,14 +24,14 @@ export const GODS: { god: number; ball: string; date: (w: Wheels) => boolean; fl
   { god: 4, ball: "E", flag: "lizardflag", date: ([a, b, c]) => a === 12 && b === 30 && c === 45 },
 ];
 
-export function turnsTo(from: Wheels, done: (w: Wheels) => boolean): { wheel: "a" | "b" | "c"; dir: 1 | -1 }[] {
+export function turnsTo(from: Wheels, done: (w: Wheels) => boolean): { wheel: Wheel; dir: 1 | -1 }[] {
   const key = (w: Wheels): string => w.join(",");
-  const prev = new Map<string, { at: Wheels; wheel: "a" | "b" | "c"; dir: 1 | -1 } | null>([[key(from), null]]);
+  const prev = new Map<string, { at: Wheels; wheel: Wheel; dir: 1 | -1 } | null>([[key(from), null]]);
   const queue: Wheels[] = [from];
   while (queue.length) {
     const at = queue.shift()!;
     if (done(at)) {
-      const path: { wheel: "a" | "b" | "c"; dir: 1 | -1 }[] = [];
+      const path: { wheel: Wheel; dir: 1 | -1 }[] = [];
       for (let p = prev.get(key(at)); p; p = prev.get(key(p.at))) path.unshift({ wheel: p.wheel, dir: p.dir });
       return path;
     }
