@@ -1,7 +1,8 @@
-# title: Timelapse — Easter Island to the Anasazi
+# title: Timelapse — the whole game
 #
-# The machine suites' route (tests/machine/worlds/easter.ts) as a sheet: the
-# boot, the island, and the crystal into Egypt.
+# The machine suites' route (tests/machine/worlds/*.ts) as a sheet: the boot,
+# Easter Island, Egypt, the Maya, the Anasazi and Atlantis, to the escape and
+# the game's own quit.
 #
 #   npm run speedrun -w timelapse            in node
 #   /timelapse/speedrun/                     in the workbench
@@ -394,3 +395,258 @@ goto(47, 101)
 travel(Button11)
 wait(global.curworldchar == A)
 split(the Anasazi)
+
+# ---- the Anasazi -------------------------------------------------------------
+# the log laid over the chasm
+goto(1, 979)
+take()
+wait(global.log == 2)
+goto(1, 118)
+useOn(invlog)
+wait(global.logbridge == true)
+split(the log bridge)
+
+# East, the calendar lever on East: the squirrel seen on its two rocks leaves
+# its acorn; the stick dipped in the hive takes it with honey, and it opens
+# the corn hole. A match from the box, struck on the rock, lights the fire.
+goto(3, 157)
+lever(2)
+goto(10, 622)
+goto(11, 640)
+wait(global.squirrel == 3)
+goto(12, 650)
+region(Button12)
+wait(global.honeystick == 2)
+goto(10, 632)
+honey()
+goto(11, 980)
+tipTo(invhoneystick, 86, 63, acorn)
+wait(global.acorn == 2)
+goto(12, 649)
+useOn(invacorn)
+wait(global.acorn == 3)
+goto(38, 108)
+region(Box)
+region(Match)
+wait(global.gmatchbox == 2)
+goto(38, 101)
+strikeRock()
+split(east)
+
+# South, the lever on South: the arrowheads (dealt at random where the canyon
+# is entered), and the bow at the spire, each shot flown first for the wind
+goto(3, 157)
+lever(5)
+goto(8, 819)
+region(Button10)
+goto(8, 839)
+archery()
+goto(35, 104)
+wait(global.gsouthrock == 1)
+split(south)
+
+# West, the lever on West: the rock of hand prints set to the nine glyphs the
+# flashlight shows in the cave, the coyote, the door, the dripping water
+goto(3, 157)
+lever(1)
+goto(17, 252)
+handprints()
+goto(17, 253)
+region(Button10)
+wait(global.handdooropen == true)
+goto(34, 116)
+wait(global.gwestrock == 1)
+split(west)
+
+# North, the lever on North: five feathers that show only now, to the stand
+# of bird heads in the order turkey, owl, crow, quail, woodpecker
+goto(3, 157)
+lever(4)
+goto(18, 515)
+take()
+goto(18, 933)
+drag(invturkeyfeathe, 228, 366)
+wait(global.headf1 == 1)
+goto(4, 502)
+take()
+goto(18, 933)
+drag(invowlfeather, 267, 360)
+wait(global.headf2 == 2)
+goto(18, 519)
+take()
+goto(18, 933)
+drag(invcrowfeather, 318, 358)
+wait(global.headf3 == 3)
+goto(5, 611)
+take()
+goto(18, 933)
+drag(invquailfeather, 370, 360)
+wait(global.headf4 == 4)
+goto(18, 509)
+take()
+goto(18, 933)
+drag(invwoodfeather, 418, 366)
+wait(global.headf5 == 5)
+region(Button11)
+wait(global.headsolved == true)
+goto(37, 103)
+wait(global.gnorthrock == 1)
+split(north)
+
+# the lever back on Off, and the four tablets: each way's animal and sound;
+# their button opens the way to the gene pod
+goto(3, 157)
+lever(3)
+goto(7, 834)
+tablets()
+region(Button10)
+wait(global.pizzadoor == true)
+goto(36, 112)
+region(Button10)
+wait(global.haspoda == true, budget: 60000)
+split(the Anasazi's pod)
+
+# the corn: the long arrow as a spear into the five cactus pieces that hold
+# water; the rattle shaken at the snake; the blanket woven on the loom
+goto(19, 937)
+region(Button10)
+wait(global.arrow == 2)
+goto(19, 313)
+cactus()
+goto(22, 330)
+region(Button11)
+wait(global.rattle == 2)
+goto(22, 328)
+rattle()
+goto(24, 345)
+loom()
+# the drums, in the wind chime's tune: 1 4 2 0 3
+goto(25, 363)
+region(Button10)
+wait(global.drumstick == 2)
+goto(25, 362)
+tipTo(invdrumstick, 45, 25, Drum1)
+tipTo(invdrumstick, 45, 25, Drum4)
+tipTo(invdrumstick, 45, 25, Drum2)
+tipTo(invdrumstick, 45, 25, Drum0)
+tipTo(invdrumstick, 45, 25, Drum3)
+wait(global.drumsolved == true)
+# the glowing stick finds the rag in the fourth alcove; wet in the pot it
+# cleans the wall
+goto(27, 370)
+region(Button15)
+goto(27, 371)
+tipTo(invglowstick, 20, 50, snake2)
+wait(global.gglowstickused == 1)
+region(snake2)
+wait(global.rag == 2)
+goto(27, 373)
+tipTo(invrag, 25, 0, bowl)
+wait(global.gdunkrag == 1)
+drag(invrag, Wipe)
+wait(global.gragsolved == 1)
+split(the cliff city)
+
+# the kiva: three leaves on the spiral, the brown leaf into the hole beside
+# the door, and inside seven pictures on three walls open the circle
+goto(21, 932)
+leaves()
+goto(20, 931)
+region(Button10)
+wait(global.gkivaleaf == 1)
+goto(25, 364)
+tipTo(invkivaleaf, 0, 0, leafhole)
+wait(global.gkivaopen == 1)
+goto(39, 105)
+pictures(glyphs105, 1, 10)
+goto(39, 106)
+pictures(glyphs106, 0, 1, 5)
+goto(39, 107)
+pictures(glyphs107, 7, 10)
+goto(39, 104)
+region(Button11)
+wait(global.finalkiva == true)
+# past the kiva the last console; with three pods its third button is Atlantis
+goto(42, 101)
+travel(Button12)
+wait(global.curworldchar == Z)
+split(Atlantis)
+
+# ---- Atlantis ----------------------------------------------------------------
+# the city's four buildings visited, and the elevator's panel set to their
+# symbols: 17 6 28 11
+goto(3, 96)
+goto(4, 112)
+goto(6, 108)
+goto(2, 104)
+wait(global.ginbuilding == 1 1 1 1)
+goto(7, 744)
+panel(17, 6, 28, 11)
+prop(Button5)
+wait(global.elevsolved == true)
+split(the elevator)
+
+# down to the basement for the red crystal, into the elevator's slot, up, and
+# out of the slot again
+goto(8, 120)
+region(Button12)
+wait(global.elevfloor == 3, budget: 30000)
+settle()
+goto(16, 833)
+region(Button10)
+wait(global.ginvcrystal == 1)
+goto(8, 120)
+drag(invcrystal, dock)
+wait(global.ginvcrystal == 3)
+region(Button10)
+wait(global.elevfloor == 1, budget: 30000)
+settle()
+prop(dock)
+wait(global.ginvcrystal == 1)
+split(the red crystal)
+
+# the stasis tube's lights set (not engaged: it is the robot's trap), the
+# crystal on its floor as bait, the six wheels turned home, and the robot
+# driven back into the tube
+goto(10, 419)
+stasis()
+goto(10, 911)
+drag(invcrystal, DropCrystal)
+wait(global.ginvcrystal == 4)
+goto(10, 363)
+rgb()
+region(Center)
+wait(global.grgbsolved == 1)
+wait(flat == z0001.363.1)
+settle()
+goto(10, 200)
+robot()
+split(the robot)
+
+# the gene pods into the receptacle, the receptacle onto the transmission
+# panel's podium — two minutes to launch — and the elevator's blinking symbol:
+# Atlantis leaves without you
+goto(14, 600)
+region(Device)
+wait(global.gpods == 3)
+settle()
+space()
+wait(js == String(window.dbg.session.stageName).toLowerCase().startsWith("p."))
+settle()
+region(gene pod)
+prop(egypt)
+wait(global.gpods == 4)
+wait(global.curstagenum == 14)
+settle()
+region(Device)
+wait(global.curinvprop == InvGenetic)
+goto(14, 402)
+region(Activate)
+drag(InvGenetic, GeneticDrop)
+wait(global.gescpodactive == 1)
+goto(8, 120)
+prop(Escape, budget: 30000)
+# OUT41 and OUT42 go to ESC like every film; the game's last question is
+# answered no (the page answers every question so) and it quits
+wait(js == window.dbg.session.quits > 0, budget: 120000)
+split(the end)

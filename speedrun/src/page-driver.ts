@@ -611,7 +611,7 @@ function handsOf(page: Page): Hands {
 }
 
 /** a click, a press held until a condition, and a key hammered until one */
-function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "clickAt" | "holdAt" | "hammer"> {
+function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "clickAt" | "hover" | "holdAt" | "hammer"> {
   const { win, timeout, defaultGap, budgetClock, check, run, frame } = page;
   const { settle, until, wallWait, sleep } = waits;
   const { clientPoint, pointer, movePointer, heldFrames, pressKey } = hands;
@@ -622,6 +622,10 @@ function presses(page: Page, waits: Waits, hands: Hands): Pick<SpeedrunDriver, "
         await heldFrames();
         pointer("pointerup", at, win);
         await settle(wait, `click ${x},${y}`, budget);
+      },
+
+      hover: async (x, y) => {
+        movePointer(clientPoint(x, y));
       },
 
       holdAt: async (x, y, opts, budget = timeout) => {

@@ -81,8 +81,13 @@ export function tableOf(file: FileOf, world: string, stage: number): Table {
     const body = text.slice(at, text.indexOf("endcode", at));
     let frames: number[] = [];
     let open = false;
+    // a frame's answer may switch on the game's state in turn (z008's frame
+    // 120 on `elevfloor`): only the outer switch's cases are frames
+    let depth = 0;
     for (const line of body.split("\n")) {
-      const c = /^\s*case\s+(.+?)\s*$/.exec(line);
+      if (/^\s*switch\b/.test(line)) depth++;
+      else if (/^\s*endswitch\b/.test(line)) depth--;
+      const c = depth <= 1 ? /^\s*case\s+(.+?)\s*$/.exec(line) : null;
       if (c) {
         if (!open) frames = [];
         frames.push(...c[1].split(/\s*,\s*/).map(Number).filter((n) => !Number.isNaN(n)));
@@ -309,12 +314,18 @@ export async function walkTo(w: Walker, goal: (s: Spot) => boolean, what: string
     // table at all and move you on themselves (Atlantis's frame 200, whose
     // flat script turns you to 199)
     if (!path?.length) {
-      const words = live ?? tableOf(w.file, world, at.stage).get(at.frame)?.[0] ?? [];
-      const i = EXITS.findIndex((e, i) => {
-        const to = target(at, words[i] ?? "X");
-        return to && !visited.has(spotId(to)) && !struck.has(`${spotId(at)}>${e}`);
-      });
-      if (i >= 0) path = [{ way: EXITS[i], to: target(at, words[i])! }];
+      // every answer the table might give, where the game has not said which
+      const answers = live ? [live] : (tableOf(w.file, world, at.stage).get(at.frame) ?? []);
+      for (const words of answers) {
+        const i = EXITS.findIndex((e, i) => {
+          const to = target(at, words[i] ?? "X");
+          return to && !visited.has(spotId(to)) && !struck.has(`${spotId(at)}>${e}`);
+        });
+        if (i >= 0) {
+          path = [{ way: EXITS[i], to: target(at, words[i])! }];
+          break;
+        }
+      }
     }
     // and with no answer from the game to plan on, a way whose frame the table
     // builds at run time (`"TR." @ numtostring (count)`): pressed blind, and

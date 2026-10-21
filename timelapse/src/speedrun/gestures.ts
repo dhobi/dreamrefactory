@@ -243,3 +243,54 @@ export const num = (c: ActionContext, i: number, what: string): number => {
  * that does not poll gives the turn nothing to count.
  */
 export const tap = (c: ActionContext, at: Point): Promise<void> => c.d.dragProp(at, () => null, c.budget);
+
+/**
+ * The middle of a region of the flat on screen, or of its base flat's (a
+ * close-up drawn as a flat of its own, `a0001.632.4`, keeps its regions on
+ * `a0001.632`) — where a carried thing is aimed, not clicked, so the hit test
+ * is not asked.
+ */
+export const REGION_MID = (name: string): string => `((want) => {
+  const s = window.dbg.session, flat = String(s.currentFlat || "");
+  const base = flat.split(".").slice(0, 2).join(".");
+  const r = s.stageCtrl.currentFlatRegions().find((r) => r.name.toLowerCase() === want.toLowerCase()) ?? s.stageCtrl.flatRegion(base, want);
+  return r ? { x: Math.round((r.left + r.right) / 2), y: Math.round((r.top + r.bottom) / 2) } : null;
+})(${JSON.stringify(name)})`;
+
+export async function regionMid(c: ActionContext, name: string): Promise<Point> {
+  const at = await c.d.evaluate<Point | null>(REGION_MID(name));
+  if (!at) throw new Error(`no region ${name} on ${await here(c)}`);
+  return at;
+}
+
+/** a prop's anchor (`propxy`) */
+export const anchor = (c: ActionContext, name: string): Promise<Point> =>
+  c.d.evaluate<Point>(`((p) => ({ x: p ? p.anchorX : 0, y: p ? p.anchorY : 0 }))(window.dbg.session.propRuntime.get(${JSON.stringify(name)}))`);
+
+/**
+ * A carried thing taken where it is drawn and moved so that a point of it,
+ * `tip` up and left of its own place, passes through each of `points` — ten
+ * moves to each, held three turns there (the machine suites' `tipDrag`): the
+ * honey stick into the hive, the drum stick onto a drum.
+ */
+export async function tipPath(c: ActionContext, prop: string, tip: [number, number], points: Point[], what: string): Promise<void> {
+  const grab = await propPoint(c, prop);
+  const a = await anchor(c, prop);
+  const hand = (p: Point): Point => ({ x: p.x + tip[0] + grab.x - a.x, y: p.y + tip[1] + grab.y - a.y });
+  const path: Point[] = [];
+  let at = grab;
+  for (const p of points) {
+    const to = hand(p);
+    path.push(...line(at, to, 10), to, to, to);
+    at = to;
+  }
+  await c.d.hold(UNLOCKED, `a moment to start ${what}`, c.budget);
+  await heldPath(c, grab, path);
+  await settle(c, what);
+}
+
+/** the hand moved with no button down, which a driver has to be able to do */
+export async function hover(c: ActionContext, at: Point): Promise<void> {
+  if (!c.d.hover) throw new Error("this driver cannot move the hand without pressing");
+  await c.d.hover(at.x, at.y);
+}

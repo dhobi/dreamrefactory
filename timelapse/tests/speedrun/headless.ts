@@ -99,7 +99,7 @@ export async function headlessRun(opts: {
   const get = opts.getSave ?? ((name: string) => saves.get(name) ?? null);
   return runHeadless({
     game: "timelapse",
-    makeHost: async () => timelapseHost(),
+    makeHost: async () => timelapseHost(process.env.ENGINELOG ? (l) => console.log(`  engine: ${l}`) : undefined),
     prepare: (s) => opts.prepare?.(s),
     deliver,
     putSave: async (name, bytes) => put(name, bytes),

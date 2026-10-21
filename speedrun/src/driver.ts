@@ -284,6 +284,13 @@ export interface SpeedrunDriver {
   rawKey(name: string): Promise<void>;
   clickAt(x: number, y: number, wait?: WaitMode, budget?: number): Promise<void>;
   /**
+   * Move the hand to a point with no button down — what a thing that follows
+   * the cursor (Timelapse's spear on the cactus, its gun at the robot) is
+   * steered by before the press. Optional: a driver without it has no way to
+   * hover, and a verb that needs one says so.
+   */
+  hover?(x: number, y: number): Promise<void>;
+  /**
    * Press at a point and KEEP THE BUTTON DOWN until `until` holds.
    *
    * For the scripts that wait for a press by POLLING for one, rather than by

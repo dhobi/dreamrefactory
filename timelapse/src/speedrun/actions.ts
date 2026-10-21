@@ -28,6 +28,8 @@ import {
 } from "./gestures";
 import { EGYPT_ACTIONS } from "./egypt";
 import { MAYA_ACTIONS } from "./maya";
+import { ANASAZI_ACTIONS } from "./anasazi";
+import { ATLANTIS_ACTIONS } from "./atlantis";
 
 /* ------------------------------------------------------------------ *
  * The walk
@@ -176,7 +178,7 @@ const TIMELAPSE_ACTIONS: ActionTable = {
     help: "carry a prop to a point of the screen, or to a region by name — drag(invlefteye, lefteye) — and let it go there",
     run: async (c) => {
       const name = c.step.args[0];
-      const to = c.step.args.length === 3 ? { x: num(c, 1, "x"), y: num(c, 2, "y") } : await regionPoint(c, c.step.args[1]);
+      const to = c.step.args.length === 3 ? { x: num(c, 1, "x"), y: num(c, 2, "y") } : await regionWhen(c, c.step.args[1]);
       await carry(c, await middle(c, name), to, 12, `${name} to ${c.step.args.slice(1).join(",")}`);
     },
   },
@@ -318,7 +320,7 @@ const TIMELAPSE_ACTIONS: ActionTable = {
  * because the workbench and the parser must be handed the SAME table
  * (`speedrun/src/runner.ts`, `runSheet`).
  */
-export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, TIMELAPSE_ACTIONS, EGYPT_ACTIONS, MAYA_ACTIONS);
+export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, TIMELAPSE_ACTIONS, EGYPT_ACTIONS, MAYA_ACTIONS, ANASAZI_ACTIONS, ATLANTIS_ACTIONS);
 
 /** the grammar half of {@link ACTIONS}, for the parser */
 export const VERBS: Record<string, VerbSpec> = verbsOf(ACTIONS);
