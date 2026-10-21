@@ -19,174 +19,15 @@
  */
 import type { VerbSpec } from "@dreamfactory/speedrun/sheet";
 import { CORE_ACTIONS } from "@dreamfactory/speedrun/actions-core";
-import { QUIET } from "@dreamfactory/speedrun/driver";
-import { composeActions, resolveIn, verbsOf, type Action, type ActionContext, type ActionTable } from "@dreamfactory/speedrun/action";
+import { composeActions, condition, resolveIn, verbsOf, type Action, type ActionContext, type ActionTable } from "@dreamfactory/speedrun/action";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
 import { PAGE_KEY, dropSpotsIn, spotId, walkTo, type Spot } from "../nav";
-
-type Point = { x: number; y: number };
-
-/* ------------------------------------------------------------------ *
- * Questions, as page-side expressions
- * ------------------------------------------------------------------ */
-
-/** a BOOTFILE global, as the scripts see it */
-const global = (name: string): string =>
-  `String(window.dbg.session.interp.globals.get(${JSON.stringify(name.toLowerCase())}) ?? "")`;
-
-/** world, stage and frame — the three globals the page's readout shows */
-const WHERE = `({ world: ${global("curworldchar")}, stage: Number(${global("curstagenum")}), frame: Number(${global("curframenum")}) })`;
-
-/** you stand somewhere other than `s` */
-const OFF = (s: Spot): string =>
-  `(Number(${global("curstagenum")}) !== ${s.stage} || Number(${global("curframenum")}) !== ${s.frame})`;
-
-/** the flat's regions by name */
-const REGIONS = `window.dbg.session.stageCtrl.currentFlatRegions().map((r) => r.name)`;
-
-/**
- * A point the hit test gives to this region, nearest the middle of its box:
- * regions overlap (the console's buttons sit inside its `down`), and the first
- * of them in the flat's list wins. The machine suites' `regionPoint`.
- */
-const REGION_POINT = (name: string): string => `((want) => {
-  const s = window.dbg.session;
-  const r = s.stageCtrl.currentFlatRegions().find((r) => r.name.toLowerCase() === want);
-  if (!r) return null;
-  const hits = (x, y) => { const t = s.hitTestAt(x, y); return t.type === "button" && t.name.toLowerCase() === want; };
-  const cx = Math.round((r.left + r.right) / 2), cy = Math.round((r.top + r.bottom) / 2);
-  if (hits(cx, cy)) return { x: cx, y: cy };
-  let best = null, d = Infinity;
-  for (let y = r.top; y < r.bottom; y += 2)
-    for (let x = r.left; x < r.right; x += 2) {
-      const dd = (x - cx) ** 2 + (y - cy) ** 2;
-      if (dd < d && hits(x, y)) { d = dd; best = { x, y }; }
-    }
-  return best;
-})(${JSON.stringify(name.toLowerCase())})`;
-
-/**
- * The points of a prop the hit test gives to it, on a grid over its drawn box
- * (a prop drawn over it, or a transparent pixel of it, is not it) — the
- * machine suites' `propHits`.
- */
-const PROP_HITS = (name: string, step: number): string => `((want, step) => {
-  const h = window.dbg.host, s = h.session;
-  const p = s.propRuntime.get(want);
-  if (!p || !p.visible || p.hidden) return [];
-  const r = p.screenRect();
-  if (!r) return [];
-  const W = h.director.screen.width, H = h.director.screen.height;
-  const x0 = Math.max(0, r.x), y0 = Math.max(0, r.y), x1 = Math.min(W, r.x + r.w), y1 = Math.min(H, r.y + r.h);
-  const out = [];
-  for (let y = y0 + (step >> 1); y < y1; y += step)
-    for (let x = x0 + (step >> 1); x < x1; x += step) {
-      const hit = s.hitTestAt(x, y);
-      if (hit.type === "prop" && hit.name.toLowerCase() === want.toLowerCase()) out.push([x, y]);
-    }
-  return out;
-})(${JSON.stringify(name)}, ${step})`;
-
-/** the props drawn now, for an error that says what there was instead */
-const PROPS_ON_SCREEN = `[...window.dbg.session.propRuntime.props.values()].filter((p) => p.visible && !p.hidden && p.screenRect()).map((p) => p.name)`;
-
-/**
- * The player has the game: {@link QUIET}, or a conversation parked on its
- * choices — the professor at the time machine's console is one, and his film
- * plays on under it until a button is pressed. The machine harness's `settle`.
- */
-const SETTLED = `(${QUIET}) || window.dbg.host.director.awaitingChoice`;
-
-/** the wait half of a gesture: `quiet` as the harness means it ({@link SETTLED}), else the driver's */
-async function settle(c: ActionContext, what: string, wait = c.wait): Promise<void> {
-  if (wait === "quiet") await c.d.hold(SETTLED, `${what} to settle`, c.budget);
-  else await c.d.settle(wait, what, c.budget);
-}
-
-/** click a point and wait as {@link settle} does */
-async function clickThen(c: ActionContext, at: Point, what: string, wait = c.wait): Promise<void> {
-  await c.d.clickAt(at.x, at.y, "none", c.budget);
-  await settle(c, what, wait);
-}
-
-/** a press made now is acted on now (the machine harness's `drag` waits for the same) */
-const UNLOCKED = `!window.dbg.host.director.inputLocked`;
-
-async function here(c: ActionContext): Promise<string> {
-  const w = await c.d.evaluate<{ world: string; stage: number; frame: number }>(WHERE);
-  return `${w.world} stage ${w.stage} frame ${w.frame}`;
-}
-
-async function regionPoint(c: ActionContext, name: string): Promise<Point> {
-  const at = await c.d.evaluate<Point | null>(REGION_POINT(name));
-  if (at) return at;
-  const names = await c.d.evaluate<string[]>(REGIONS);
-  throw new Error(`no region "${name}" to click on ${await here(c)}: ${names.join(", ") || "(none)"}`);
-}
-
-async function propHits(c: ActionContext, name: string, step: number): Promise<[number, number][]> {
-  const hits = await c.d.evaluate<[number, number][]>(PROP_HITS(name, step));
-  if (hits.length) return hits;
-  const props = await c.d.evaluate<string[]>(PROPS_ON_SCREEN);
-  throw new Error(`no prop "${name}" on ${await here(c)}: ${props.join(", ") || "(none)"}`);
-}
-
-/** where a prop is drawn: the point of it nearest its middle (the machine suites' `findProp`) */
-async function propPoint(c: ActionContext, name: string): Promise<Point> {
-  const hits = await propHits(c, name, 4);
-  const cx = hits.reduce((a, [x]) => a + x, 0) / hits.length;
-  const cy = hits.reduce((a, [, y]) => a + y, 0) / hits.length;
-  let best = hits[0], d = Infinity;
-  for (const [x, y] of hits) if ((x - cx) ** 2 + (y - cy) ** 2 < d) ((d = (x - cx) ** 2 + (y - cy) ** 2), (best = [x, y]));
-  return { x: best[0], y: best[1] };
-}
-
-/** a prop's box on screen, [left, top, right, bottom], of the points the hit test gives it */
-async function extent(c: ActionContext, name: string): Promise<[number, number, number, number]> {
-  const hits = await propHits(c, name, 2);
-  const xs = hits.map(([x]) => x), ys = hits.map(([, y]) => y);
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-}
-
-/**
- * A held drag along `path`, one turn of the holding script's `while stilldown
- * ()` loop per point (the driver's `dragProp`), released at the last — and,
- * with `until`, held there until that holds first.
- */
-async function heldPath(c: ActionContext, from: Point, path: Point[], until?: { expr: string; what: string }): Promise<void> {
-  let i = 0;
-  await c.d.dragProp(
-    from,
-    async () => {
-      if (i < path.length) return path[i++];
-      if (until && i++ === path.length) await c.d.hold(until.expr, until.what, c.budget);
-      return null;
-    },
-    c.budget,
-  );
-}
-
-/** the points of a straight line from `a` to `b`, in `steps` moves */
-const line = (a: Point, b: Point, steps: number): Point[] =>
-  Array.from({ length: steps }, (_, i) => ({
-    x: Math.round(a.x + ((b.x - a.x) * (i + 1)) / steps),
-    y: Math.round(a.y + ((b.y - a.y) * (i + 1)) / steps),
-  }));
-
-/** carry what is pressed at `from` to `to` and let it go, as a hand does */
-async function carry(c: ActionContext, from: Point, to: Point, steps: number, what: string): Promise<void> {
-  // a press while a loop runs is queued and replayed later, by when the hand
-  // has let go: a player's drag starts between the loop's ticks
-  await c.d.hold(UNLOCKED, `a moment to start ${what}`, c.budget);
-  await heldPath(c, from, line(from, to, steps));
-  await settle(c, what);
-}
-
-const num = (c: ActionContext, i: number, what: string): number => {
-  const n = Number(c.step.args[i]);
-  if (!Number.isFinite(n)) throw new Error(`${c.step.verb} wants a number for ${what}, not "${c.step.args[i] ?? ""}"`);
-  return n;
-};
+import {
+  OFF, REGIONS, SETTLED, UNLOCKED, WHERE, boxOf, carry, clickThen, extent, global, heldPath, middle, num, propIn, propPoint, regionPoint,
+  regionWhen, settle, type Point,
+} from "./gestures";
+import { EGYPT_ACTIONS } from "./egypt";
+import { MAYA_ACTIONS } from "./maya";
 
 /* ------------------------------------------------------------------ *
  * The walk
@@ -275,41 +116,68 @@ const GOTO: Action = {
 const TIMELAPSE_ACTIONS: ActionTable = {
   goto: GOTO,
 
+  /**
+   * A region of the flat, once the flat has it (a melt that has to run, a
+   * flower that has to open, before there is anything to click). `until:`
+   * clicks it again, each let settle, until that holds: a game played round
+   * after round against the statue on the Maya's bridge.
+   */
   region: {
     args: [1, 1],
     wait: "quiet",
+    opts: ["until"],
     sig: "region(camera)",
-    help: "click a region of the flat on screen by name, at the point of it nearest its middle",
+    help: "click a region of the flat by name, nearest its middle, once it is there; until: clicks again until it holds",
     run: async (c) => {
-      await clickThen(c, await regionPoint(c, c.step.args[0]), c.step.args[0]);
-    },
-  },
-
-  prop: {
-    args: [1, 1],
-    wait: "quiet",
-    sig: "prop(TableMatchBox)",
-    help: "click a prop on screen by name, at the point of it nearest its middle",
-    run: async (c) => {
-      await clickThen(c, await propPoint(c, c.step.args[0]), c.step.args[0]);
+      const name = c.step.args[0];
+      const until = c.step.opts.until ? condition(c.step.opts.until) : null;
+      for (let n = 0; n < 1000; n++) {
+        if (until && (await c.d.evaluate<boolean>(`!!(${until})`))) {
+          c.say(`${n} click(s)`);
+          return;
+        }
+        await clickThen(c, await regionWhen(c, name), name);
+        if (!until) return;
+      }
+      throw new Error(`a thousand clicks on ${name} and never ${c.step.opts.until}`);
     },
   },
 
   /**
-   * A prop taken hold of at the middle of its box and let go at a point — where
-   * the hand lets go is what the prop's script reads (the masks' slots on frame
-   * 514 are bands of x, i.shp `HeadInSlot`).
+   * A prop, once it is drawn where a hand can reach it: at the point of it
+   * nearest its middle, or with `box:` the first point of it inside that box
+   * (a basket that swings, a button below a line).
    */
-  drag: {
-    args: [3, 3],
+  prop: {
+    args: [1, 1],
     wait: "quiet",
-    sig: "drag(Heads, 80, 300)",
-    help: "carry a prop to a point of the screen and let it go there",
+    opts: ["box"],
+    sig: "prop(TableMatchBox)",
+    help: "click a prop by name once it is on screen, nearest its middle — box: x0 y0 x1 y1 for the first point of it in a box",
     run: async (c) => {
       const name = c.step.args[0];
-      const [x0, y0, x1, y1] = await extent(c, name);
-      const from = { x: Math.round((x0 + x1) / 2), y: Math.round((y0 + y1) / 2) };
-      await carry(c, from, { x: num(c, 1, "x"), y: num(c, 2, "y") }, 12, `${name} to ${c.step.args[1]},${c.step.args[2]}`);
+      const box = c.step.opts.box ? boxOf(c.step.opts.box) : null;
+      const at = box
+        ? await propIn(c, name, box)
+        : (await propIn(c, name), await propPoint(c, name));
+      await clickThen(c, at, name);
+    },
+  },
+
+  /**
+   * A prop taken hold of at the middle of its box and let go at a point, or at
+   * a region of the flat — where the hand lets go is what the prop's script
+   * reads (the masks' slots on frame 514 are bands of x, i.shp `HeadInSlot`).
+   */
+  drag: {
+    args: [2, 3],
+    wait: "quiet",
+    sig: "drag(Heads, 80, 300)",
+    help: "carry a prop to a point of the screen, or to a region by name — drag(invlefteye, lefteye) — and let it go there",
+    run: async (c) => {
+      const name = c.step.args[0];
+      const to = c.step.args.length === 3 ? { x: num(c, 1, "x"), y: num(c, 2, "y") } : await regionPoint(c, c.step.args[1]);
+      await carry(c, await middle(c, name), to, 12, `${name} to ${c.step.args.slice(1).join(",")}`);
     },
   },
 
@@ -450,7 +318,7 @@ const TIMELAPSE_ACTIONS: ActionTable = {
  * because the workbench and the parser must be handed the SAME table
  * (`speedrun/src/runner.ts`, `runSheet`).
  */
-export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, TIMELAPSE_ACTIONS);
+export const ACTIONS: ActionTable = composeActions(CORE_ACTIONS, TIMELAPSE_ACTIONS, EGYPT_ACTIONS, MAYA_ACTIONS);
 
 /** the grammar half of {@link ACTIONS}, for the parser */
 export const VERBS: Record<string, VerbSpec> = verbsOf(ACTIONS);

@@ -1,4 +1,4 @@
-# title: Timelapse — Easter Island
+# title: Timelapse — Easter Island to the Anasazi
 #
 # The machine suites' route (tests/machine/worlds/easter.ts) as a sheet: the
 # boot, the island, and the crystal into Egypt.
@@ -105,3 +105,292 @@ goto(8, 101)
 travel(Button10)
 wait(global.curworldchar == E)
 split(Egypt)
+
+# ---- Egypt -----------------------------------------------------------------
+# the water that opens the dock: four basketfuls into the cistern, emptied
+# into the well's bucket by the lever under the pulley, then two more — six
+# fills it, a seventh would spill. The pulley swung back, the full bucket's
+# weight lets the dock's lever open the gate.
+goto(25, 111)
+basket(4)
+goto(25, 154)
+pulley()
+clickAt(508, 372, wait: quiet)
+wait(global.bucketlevel == 4)
+goto(25, 111)
+basket(2)
+goto(25, 154)
+clickAt(508, 372, wait: quiet)
+wait(global.bucketlevel == 6)
+pulley()
+goto(26, 170)
+dockLever()
+wait(global.gateopen == 1)
+split(the dock)
+
+# across on the barge: the spear from the far bank, and the crocodile at the
+# dock temple, three jabs to the neck while its head is turned
+goto(34, 102)
+prop(e1.102)
+wait(global.hasspear == 1)
+goto(34, 104)
+crocodile()
+split(the crocodile)
+
+# the eight crystals at the gods' feet, set to what the pool's own script
+# asks (e014 HotTub), whatever the obelisks show. Each is written as its
+# close-up is left, so the next goto is what saves it.
+goto(14, 21)
+crystal(8, 19, 29)
+goto(14, 22)
+crystal(7, 13, 22)
+goto(14, 23)
+crystal(3, 9, 23)
+goto(13, 24)
+crystal(5, 18, 27)
+goto(13, 25)
+crystal(4, 15, 26)
+goto(14, 26)
+crystal(2, 20, 28)
+goto(14, 27)
+crystal(6, 10, 25)
+goto(14, 28)
+crystal(1, 16, 24)
+goto(14, 9)
+wait(global.crystal8 == 1 16 24)
+split(the crystals)
+
+# the pool gives up the red gem; on the cobra it sends the snake off, and
+# over the pool at the causeway's end it falls in. The button beside it opens
+# the stairs.
+region(HotTub)
+prop(e16.1b)
+wait(global.hascrystal == 1)
+goto(15, 2)
+cobra()
+goto(18, 12)
+drag(e16.1, 330, 315)
+wait(global.hascrystal == 2)
+goto(17, 5)
+prop(e22.5b)
+wait(global.stairsopen != 0)
+split(the gem)
+
+# snakes and jewels, red home on the gold pillar by the game's own dice; the
+# eye on the wall comes away and goes on the cabinet door, and behind it,
+# past the scroll, the gene pod
+goto(24, 118)
+snakes()
+prop(eye)
+wait(global.haseye == 1)
+goto(23, 124)
+drag(e24.118, 345, 250)
+wait(global.eyeondoor == 1)
+goto(23, 126)
+prop(e24.126a)
+wait(global.gegyptpod == 1)
+wait(global.haspode == true)
+split(Egypt's pod)
+
+# the pillar by the dock's top button, then the pyramid door's wheels at
+# 32 11 14 25 (the scroll's 3 10 9 4) and the button between them
+goto(7, 183)
+prop(e1.183a, box: 0 0 640 188)
+wait(global.pillarbutton == 0)
+goto(30, 168)
+wheels(32, 11, 14, 25)
+prop(eb216801a)
+wait(global.pyrdoorsolved == 1)
+# past the sarcophagus the second console; its fourth button is the Maya's
+goto(33, 101)
+travel(Button13)
+wait(global.curworldchar == M)
+split(the Maya)
+
+# ---- the Maya ----------------------------------------------------------------
+# the carving from the green monster head on the beach, its jaw opened first;
+# on the platform it becomes the chameleon, whose colours are answered back
+goto(2, 7)
+region(Button13)
+wait(flat == m0001.007.33)
+region(Button14)
+wait(global.amulet == 2)
+goto(5, 60)
+drag(invamulet, 325, 337)
+wait(global.amulet == 0)
+chameleon()
+split(the chameleon)
+
+# the Castillo's counting stones: 13 + 8, 12 + 1, 20 + 2, 14 + 9, and the handle
+goto(8, 904)
+region(Button11)
+region(Button16)
+region(Button19)
+region(Button13)
+region(Button18)
+region(Button20)
+region(Button14)
+region(Button15)
+region(Button21)
+region(Button12)
+region(Button17)
+region(Button22)
+prop(lever)
+wait(global.leverpulled == true)
+split(the counting stones)
+
+# the four gods' dates: the crystal ball turned to a god's face, and the
+# calendar to that god's date (the scripts' own, whatever the steles show)
+goto(9, 121)
+ball(1)
+goto(8, 907)
+calendar(1)
+goto(9, 121)
+ball(2)
+goto(8, 907)
+calendar(2)
+goto(9, 121)
+ball(3)
+goto(8, 907)
+calendar(3)
+goto(9, 121)
+ball(4)
+goto(8, 907)
+calendar(4)
+split(the calendar)
+
+# the Skull temple's skeleton hung bone by bone; its jaw gives up the green
+# gem, which goes into the hole in the wall behind
+goto(43, 802)
+skeleton()
+region(Button10)
+region(Button10)
+wait(global.skullgem == 2)
+goto(43, 800)
+drag(invskullgem, 323, 243)
+wait(global.skullgem == 0)
+split(the skull temple)
+
+# the Monkey temple: the head wakes the spider maze, and the green spider is
+# walked to the blue gem; that goes into the temple's hole
+goto(20, 518)
+region(Button10)
+wait(global.spideractive == true)
+goto(20, 556)
+spiders()
+goto(42, 508)
+drag(invmonkeygem, 306, 251)
+wait(global.monkeygem == 0)
+split(the monkey temple)
+
+# the Jaguar temple: the mural's glyphs at 1 40 57 74 open its box on the
+# golden head; melted in the fire and cooled with the blood from the cup it
+# is a heart, which the green statue's pot trades for the red gem
+goto(41, 359)
+glyphs(1, 40, 57, 74)
+region(Button12)
+wait(global.jaghead == 2)
+goto(21, 353)
+drag(invjaghead, 465, 267)
+wait(global.jaghead == 0)
+region(Button10, budget: 60000)
+wait(global.coolcount >= 0)
+goto(21, 355)
+wait(flat == m0010.355.9, budget: 120000)
+region(Button11)
+wait(global.heart == 2)
+goto(14, 307)
+drag(invheart, 335, 325)
+wait(flat == m0010.307.16)
+region(Button11)
+goto(46, 301)
+drag(invjaggem, 330, 206)
+wait(global.jaggem == 0)
+split(the jaguar temple)
+
+# the Lizard temple's bridge: frog, spider, scorpion against the statue's
+# own random(3), three games won, and the bridge rises as you step back
+goto(16, 199)
+region(Button12, until: global.gbridgesolved == 1)
+goto(18, 103)
+wait(global.gbridgeup == 1)
+# past it the stone with two eye sockets: the orange gem from the pink
+# flower, the green one the spider lowers; the orange eye pressed, and four
+# chops of the machete clear the vines
+region(lefteye, budget: 60000)
+goto(18, 100)
+drag(invlefteye, lefteye)
+wait(global.lefteye == 1)
+goto(18, 217)
+region(righteye, budget: 60000)
+goto(18, 100)
+drag(invrighteye, righteye)
+wait(global.righteye == 1)
+region(righteye)
+region(machette, until: global.righteye == 0)
+split(the eyes)
+
+# the cracked heart into the yellow bowl wakes the double pyramid; its six
+# skulls light all 22 lights, and the golden salamander goes into the hatch
+goto(44, 290)
+region(Button10)
+wait(global.redheart == 2)
+goto(31, 204)
+drag(invredheart, 318, 430)
+wait(global.redheart == 0)
+goto(32, 282)
+skulls()
+wait(global.curinvprop == invlizard)
+goto(31, 251)
+region(Button11)
+wait(flat == m0011.251.71)
+drag(invlizard, 325, 360)
+wait(global.goldlizard == 0)
+split(the salamander)
+
+# the Maya's gene pod on the podium, the axe from under it, and the podium
+# weighed to 8 with the debris; the axe rings the stalactites' tune back
+goto(38, 229)
+region(PodM)
+wait(global.haspodm == true)
+region(Button10, budget: 60000)
+wait(global.gmallet == 2)
+podium()
+goto(39, 226)
+region(Button15)
+chime(5, 3, 4, 2, 2, 5, 5, 1)
+split(the Maya's pod)
+
+# the yellow gem tugged out of the skeleton's hand, into the Lizard temple's
+# hole; the orange eye pressed back opens the way to the purple gem, and
+# that goes into the Sun temple's door
+goto(40, 400)
+tug()
+goto(30, 208)
+drag(invlizardgem, 321, 196)
+wait(global.lizardgem == 0)
+goto(18, 100)
+prop(leftjungle)
+wait(global.lefteye == 0)
+goto(22, 423)
+region(jewel)
+wait(global.doorcenter == 2)
+goto(23, 444)
+drag(invdoorcenter, Button10)
+wait(global.doorcenter == 0)
+split(the Sun temple's door)
+
+# the Sun temple's sliding stones, as this seed shuffles them. A shuffle
+# whose last group can't be finished (half of them, by parity) is left for
+# another: back a step and in again. Seed 1's first shuffle is one of those.
+goto(24, 556)
+goto(24, 500)
+goto(24, 556)
+goto(24, 500)
+goto(24, 556)
+slider()
+# through the temple to the third console; its second button is the Anasazi
+goto(47, 101)
+travel(Button11)
+wait(global.curworldchar == A)
+split(the Anasazi)

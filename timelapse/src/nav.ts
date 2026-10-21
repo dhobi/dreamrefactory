@@ -164,6 +164,8 @@ export function hotspotsOf(file: FileOf, world: string, stage: number): Map<numb
 /** where one word goes from `from`, or null for none the plan can use */
 export function target(from: Spot, word: string): Spot | null {
   const [verb, ...n] = word.split(".").map((w, i) => (i ? Number(w) : w)) as [string, ...number[]];
+  // a number built at run time (`"TR." @ numtostring (count)`) is no place yet
+  if (n.some((v) => Number.isNaN(v))) return null;
   // upper-cased as `transitionaction`'s switch compares, caselessly: e002's
   // "s.1.1.137" and m010's "j.252" are exits the game takes
   switch (verb.toUpperCase()) {
@@ -183,6 +185,8 @@ export interface Step {
   /** a key, or a hotspot's region to click */
   way: Exit | { region: string };
   to: Spot;
+  /** a way whose frame is computed at run time: `to` is unknown, and any move is the step taken */
+  blind?: boolean;
 }
 
 /** the shortest press-by-press path, over the tables, avoiding `struck` */
@@ -312,6 +316,14 @@ export async function walkTo(w: Walker, goal: (s: Spot) => boolean, what: string
       });
       if (i >= 0) path = [{ way: EXITS[i], to: target(at, words[i])! }];
     }
+    // and with no answer from the game to plan on, a way whose frame the table
+    // builds at run time (`"TR." @ numtostring (count)`): pressed blind, and
+    // wherever it leads is planned on from
+    if (!path?.length && !live) {
+      const answers = tableOf(w.file, world, at.stage).get(at.frame) ?? [];
+      const i = EXITS.findIndex((e, i) => answers.some((ws) => ws[i]?.includes("?")) && !struck.has(`${spotId(at)}>${e}`));
+      if (i >= 0) path = [{ way: EXITS[i], to: at, blind: true }];
+    }
     if (!path?.length) {
       // a close-up the tables give no way out of: its `down` region is the way
       // back, as the arrow a player sees at the bottom of it says
@@ -336,7 +348,7 @@ export async function walkTo(w: Walker, goal: (s: Spot) => boolean, what: string
     // before taking it for a way the game refused
     if (spotId(await w.spot()) === spotId(at)) await w.moved(at, 120);
     const now = await w.spot();
-    if (spotId(now) !== spotId(step.to)) {
+    if (step.blind ? spotId(now) === spotId(at) : spotId(now) !== spotId(step.to)) {
       w.log?.(`nav: ${spotId(at)} ${way} landed ${spotId(now)}, not ${spotId(step.to)}`);
       struck.add(`${spotId(at)}>${way}`);
     }
