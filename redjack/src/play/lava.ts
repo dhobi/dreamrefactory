@@ -159,12 +159,21 @@ export async function pullTheVine(h: Player): Promise<void> {
   h.tap("right");
   await h.frame(20);
   const vine = props.get("fvine") ?? fail("no vine on the skeleton's stage");
+  // a point of the vine over the button with two pixels of both all round it:
+  // a screen smaller than the picture (a phone shows it at about 0.6) cannot
+  // aim at every one of its pixels, and the click lands on a neighbour
+  // (speedrun/src/driver.ts clientAxis) — the vine's middle sample was at the
+  // edge of the overlap, and missed on a phone
+  const AROUND = [-2, 0, 2].flatMap((dx) => [-2, 0, 2].map((dy) => ({ dx, dy })));
+  const all = (p: { x: number; y: number }, ok: (x: number, y: number) => boolean): boolean => AROUND.every(({ dx, dy }) => ok(p.x + dx, p.y + dy));
   const on: { x: number; y: number }[] = [];
   for (let y = 386; y < 480; y += 4) for (let x = 2; x < 640; x += 4) if (h.session.hitTestAt(x, y).name === "fvine") on.push({ x, y });
+  const amid = on.filter((p) => all(p, (x, y) => h.session.hitTestAt(x, y).name === "fvine"));
   vine.visible = false;
   const over = on.filter((p) => h.session.hitTestAt(p.x, p.y).type === "button");
+  const clear = amid.filter((p) => all(p, (x, y) => h.session.hitTestAt(x, y).type === "button"));
   vine.visible = true;
-  const at = over[Math.floor(over.length / 2)] ?? fail("the vine is over no button, leaning");
+  const at = (clear.length ? clear : over)[Math.floor((clear.length ? clear : over).length / 2)] ?? fail("the vine is over no button, leaning");
   h.click(at.x, at.y);
   await h.until(() => h.session.stageName !== "scombat2.stag" && h.running().length === 0, "the vine to bring the skeleton down", 3_000);
   h.keyUp("right");
