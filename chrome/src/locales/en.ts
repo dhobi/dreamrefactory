@@ -138,7 +138,7 @@ export const en = {
     dustBody: "The engine two years earlier, and a different shape of file. Opens on its films; the town is walkable. Smaller, and growing." as Text,
     lunicusBody: "CyberFlix's first game, and no scripts at all: the whole of it is in its executable, and it was ported from the disassembly. A moon base, six days and the hive at the end; it plays through to the queen, and it saves." as Text,
     jumpravenBody: "CyberFlix's second game, on Lunicus's engine and ported from its executable the same way. Three days over a drowned New York in a hovercraft \u2014 the shop, the repair bay, six copilots and a boss at the end of each day; it plays through to the pilot's ending, it saves, and it can play itself." as Text,
-    timelapseBody: "Four discs and no rooms at all — a world of stage flats, navigated by the shape of the cursor. Opens on its film; the first world is walkable. Newest, and least finished." as Text,
+    timelapseBody: "Four discs and no rooms at all — a world of stage flats, navigated by the shape of the cursor. Opens on its film and plays through every world to the end, with a speedrun mode." as Text,
     skullcrackerBody: "The same studio and the same file formats, with no interpreter: this one's logic is compiled into its executable. So the films and the game's own menu play, and a level is walkable — read out of the executable rather than scripted in the data." as Text,
     redjackBody: "CyberFlix's last game, on the engine's last version: rooms are panoramas you turn round in. The test suites play all seven days to the end; in the browser it is walkable, and it cannot save yet." as Text,
     docsTitle: "Documentation" as Text,
