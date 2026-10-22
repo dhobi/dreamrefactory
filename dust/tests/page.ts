@@ -514,7 +514,7 @@ describe("the game, once it runs", () => {
   });
 
   it("keeps the log a column where the page says it is one", async () => {
-    const p = await openPage({ html: (h) => h.replace("<head>", '<head><meta name="details-always" content="1" />') });
+    const p = await openPage({ html: (h) => h.replace("<head>", '<head><meta name="details-always" content="log" />') });
     await enter(p);
     p.el("log").hidden = false;
     p.fire("keydown", { key: "b" });

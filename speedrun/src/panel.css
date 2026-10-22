@@ -1252,7 +1252,7 @@ body.sr-resizing * {
  *
  * Scoped `#srgame #stage` / `#srgame #screen` rather than by element id alone,
  * and that is load-bearing: Dust's game page sizes its own canvas and mats it in
- * wood (`dust/src/game.css`), and the workbench links that sheet too. Two ids
+ * wood (`dust/src/play.css`), and the workbench links that sheet too. Two ids
  * beat one whichever order the bundler puts them in, which is the discipline
  * `site/tests/cascade.ts` exists to enforce.
  * ==================================================================== */

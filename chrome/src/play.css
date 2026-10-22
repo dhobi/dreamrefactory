@@ -1,0 +1,109 @@
+/*
+ * What every game's play page has in common, under each game's own sheet
+ * (<game>/src/play.css, linked by tools/vite-shell.ts), which @imports this
+ * first and writes after it what is its own.
+ *
+ * Each of the six pages used to carry all of this in its `<style>`. What is
+ * here is only what all six said the same way; where a game says it
+ * differently its own sheet says it, at the same specificity and later in the
+ * same bundle, so it wins by order — which here, unlike between two `<link>`s
+ * (site/tests/cascade.ts), is fixed: an @import chain is one sheet.
+ *
+ * Two shapes of play page add their own layer between this and the game:
+ * play-flow.css (the stage as one column: RedJack, Lunicus, Jump Raven) and
+ * play-pinned.css (the frame pinned in the stage: Dust, Timelapse).
+ *
+ * Structure only, like chrome.css: every colour is the page's.
+ */
+
+:root {
+  --pad: 16px;
+  /* the shared top bar's height, pinned as the other pages pin it: it is
+     a term in the height the picture gets */
+  --bar: 49px;
+  --stage-h: calc(100vh - var(--bar));
+}
+
+#curtain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+body.playing #curtain {
+  gap: 0;
+}
+
+#curtain::before {
+  content: "";
+  position: absolute;
+  aspect-ratio: 2 / 1;
+  translate: -50% -50%;
+  transition: opacity 500ms ease-out;
+}
+
+body.playing #curtain::before {
+  opacity: 0;
+}
+
+#brand {
+  display: block;
+  width: auto;
+  object-fit: contain;
+}
+
+#boot.ready #gauge {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#bootline {
+  display: flex;
+  justify-content: space-between;
+}
+
+#start {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  cursor: pointer;
+  transform: scale(0.94);
+}
+
+#boot.ready #start {
+  transform: none;
+}
+
+#screen {
+  display: block;
+  touch-action: none;
+}
+
+#under .bar {
+  flex-wrap: wrap;
+}
+
+#stage.fs {
+  position: fixed;
+  z-index: 200;
+  width: 100dvw;
+  height: 100dvh;
+  min-height: 0;
+  background: #000;
+}
+
+#stage.fs #frame {
+  margin: 0;
+  padding: 0;
+  width: auto;
+  background: none;
+  box-shadow: none;
+}
+
+#foot {
+  margin: 0 auto var(--pad);
+  padding: 10px 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

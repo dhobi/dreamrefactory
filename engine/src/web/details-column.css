@@ -54,7 +54,7 @@ body > #details {
    which are two names for the same thing because each page named its own before
    there was a column to put it in. Both are styled here so the two workbenches
    read alike; `#details #log` scopes Dust's away from the absolutely-positioned
-   overlay the same element is on its game page (dust/src/game.css). */
+   overlay the same element is on its game page (dust/src/play.css). */
 #scriptlog,
 #details #log {
   display: none;

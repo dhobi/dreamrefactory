@@ -1,0 +1,843 @@
+/* ------------------------------------------------------------------
+   The same page Dust has, in the other half of the spectrum.
+
+   Two states and one movement between them:
+
+     body.booting  the title card, centred, with the conduit charging
+     body.playing  the title card small at the top, the picture underneath
+
+   The state lives on the BODY rather than in six places, so a rule can say
+   which state it belongs to and be read.
+
+   What this page was before is worth saying, because one thing survives
+   from it: it was an INSTRUMENT — a 640x480 surface and a log of what the
+   port managed to read — and the log is still the deliverable when this
+   game goes wrong. So the log did not become decoration; it became a panel
+   over the picture that `b` opens, the way Dust's did, and the newest line
+   of it is the caption under the gauge while the boot runs.
+   ------------------------------------------------------------------ */
+
+/* what every play page shares, under what is this game's own */
+@import "@dreamfactory/chrome/play-pinned.css";
+
+/* ------------------------------------------------------------------
+   Every colour on this page is either a role from timelapse/src/theme.css
+   or one of the six numbers below — and those six are the LETTERS' OWN
+   MOULDING, measured rather than chosen.
+
+   A scanline across a letter of TIMELAPSE, from the black inwards
+   (`out/logo-probe.mts`, y=650 of 826):
+
+     x=84   #19203f   a one-pixel dark rule, the letter against the black
+     x=85   #678ac2   the shoulder, coming up out of it
+     86-97  #cfdbf1   the chrome face, twelve pixels, falling gently
+     98-101 #816a8c   a lilac inner shade under the bevel
+    102-105 #001721   a hard dark valley
+     106+   #0459ba   the shell inlay begins
+
+   That is a picture frame. Which is why #frame below is not "a border in
+   the theme's colours" but that profile continued OUTWARD, and why the
+   moulding looks like it belongs to the artwork rather than to a web page:
+   it is the artwork's own moulding, carried on past the letter.
+
+   The top rail is brighter than the sides in the render (#fffff9 along the
+   top of a letter against #cfdbf1 down its edge) because the light is
+   straight above, so the gradient runs top to bottom and starts at white.
+   ------------------------------------------------------------------ */
+:root {
+  /* the letter's outline, and the darkest line in the moulding */
+  --bezel-rule: #19203f;
+  /* the valley between the bevel and the inlay */
+  --bezel-valley: #001721;
+  /* the lit lip just outside it */
+  --bezel-lip: #816a8c;
+
+  /* ------------------------------------------------------------------
+     THE PICTURE'S OWN SIZE, and why there are two of them.
+
+     Timelapse's stages say 640x480 in their own headers where Titanic and
+     Dust say 512x384, and 640 CSS pixels in a 1920px window is a postage
+     stamp. So the canvas is 1280x960 and the engine's 640x480 frame is
+     blitted into it at 2x — the same arrangement Dust uses for the same
+     reason (see the plate in timelapse/src/main.ts).
+
+     It matters which way round the two are used. The canvas may only ever
+     SHRINK from 1280, and shrinking a picture that has already been doubled
+     by an integer is a DOWNSCALE — soft at worst. Sizing the 640 canvas up
+     to the same width instead would be a non-integer nearest-neighbour
+     UPSCALE, where some source pixels are two device pixels wide and their
+     neighbours are one, and 1996 art shows that as a limp.
+     ------------------------------------------------------------------ */
+  /* the canvas's own size, which is the game's screen doubled */
+  --pic-max: 1280px;
+
+  /* ------------------------------------------------------------------
+     THE MOULDING AND THE NAMEPLATE, and why neither is a leftover.
+
+     Both of these were the room going begging once the canvas and the
+     padding had had theirs — `--spare`, which is how Dust's page sizes the
+     same two things. It does not transfer, and the reason is one number:
+     this game's canvas is 960 tall where Dust's is 768. On a 1080p screen
+     Dust has 231 spare pixels and takes the full 22px moulding and a 134px
+     nameplate out of them; this page has 39, which bought a 6px hairline
+     and a 28px title card — MEASURED, and the card came out 67 pixels wide
+     over a 1265-pixel picture, which is not a nameplate, it is a smudge.
+
+     So both are a FRACTION OF THE ROOM instead, and the picture pays for
+     them out of its height. That reverses Dust's priority deliberately: a
+     thousand rows of 1996 art against nine hundred is a difference nobody
+     can see, and a title card that can be read against one that cannot is
+     the whole identity of the page. There is no cycle in it either — the
+     stage's height is known before anything is laid out, where the
+     picture's is not.
+
+     9% and 1.6% are chosen so that a 1080p screen gets a 92px nameplate
+     and a 16px moulding, and a 1440p one reaches both caps. The floors are
+     what a phone gets, where the picture is limited by WIDTH and these two
+     are costing it nothing.
+
+     `round(down, …, 2px)` keeps both EVEN, so every box below is an integer
+     width and `margin: auto` cannot centre the canvas on a half pixel,
+     which on `image-rendering: pixelated` is a visibly soft picture.
+     ------------------------------------------------------------------ */
+  --frame: clamp(
+    8px,
+    round(down, calc(var(--stage-h) * 0.016), 2px),
+    22px
+  );
+  --brand-h: clamp(
+    30px,
+    round(down, calc(var(--stage-h) * 0.09), 2px),
+    134px
+  );
+
+  /* ------------------------------------------------------------------
+     The width is chosen and the height is derived, and it has to be that
+     way round: given a definite width, `aspect-ratio` transfers nothing,
+     and clamping the height afterwards does not go back and narrow the
+     width. So the WIDTH is the least of the three things that can limit it
+     — the canvas's own 1280, the room across, and the room down converted
+     through 4:3 — and the height follows.
+
+     Declared here AND on body.playing, not hoisted once, because a custom
+     property substitutes its own `var()`s where it is DECLARED: `--band`
+     would freeze at this 0px and the height budget would be out by a whole
+     title card.
+     ------------------------------------------------------------------ */
+  --pic-w: min(
+    var(--pic-max),
+    calc(var(--page-w) - 2 * var(--pad) - 2 * var(--frame)),
+    calc(
+      (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) *
+        4 / 3
+    )
+  );
+}
+/* ------------------------------------------------------------------
+   The band the picture starts below is the card MINUS THE LAP, which is
+   what sets the card down ON the moulding rather than above it. `#curtain`
+   is already the layer above `#frame`, so the overlap needs no z-index of
+   its own; it needs the band to be short by --lap.
+   ------------------------------------------------------------------ */
+body.playing {
+  /* ------------------------------------------------------------------
+     How far the PAIR sits down from the top of the stage, because the card
+     and the moulding have to move together: the frame is TOP-aligned in
+     its inset box so it stays under the card at every size, and this is the
+     half of the slack they both come down by instead. Zero the moment the
+     picture is being clamped — there is no slack to share then, and the
+     `max()` is what says so rather than a media query guessing where that
+     happens.
+     ------------------------------------------------------------------ */
+  --pic-w: min(
+    var(--pic-max),
+    calc(var(--page-w) - 2 * var(--pad) - 2 * var(--frame)),
+    calc(
+      (var(--stage-h) - 2 * var(--pad) - var(--band) - 2 * var(--frame)) *
+        4 / 3
+    )
+  );
+}
+
+/*
+ * `html body`, not `body`, and the extra token is load-bearing.
+ *
+ * The shared chrome sets `display: flex; align-items: center` on `body` —
+ * the right thing for the reading pages it was written for, and fatal here.
+ * This page is a grid, and a centred flex child SHRINK-WRAPS: `#stage`'s
+ * children are all absolutely positioned, so it would collapse to its own
+ * two pads and take the moulding into a corner with it.
+ *
+ * Equal specificity would leave the decision to the BUILD rather than to
+ * this file — dev serves the authored order, every build inverts it. One
+ * extra element in the selector takes the vote away from the bundler.
+ */
+html body {
+  background: var(--void-1000);
+  color: var(--text);
+  /* NO `overflow: hidden`: the rows under the picture are reachable only if
+     the document is allowed to scroll to them. */
+}
+
+/* ------------------------------------------------------------------
+   The frame is what gets POSITIONED; the canvas just sits in it.
+
+   The moulding cannot be a border on the canvas: `box-sizing: border-box`
+   is on everything here, so a border would come out of the 1280x960 and
+   resample the picture to pay for its own moulding — and `content-box` on
+   one element to dodge that puts every max-width on the page into a
+   different coordinate system. So the mat is this element's PADDING, its
+   size is the picture plus two mats, and the canvas fills what is left.
+   ------------------------------------------------------------------ */
+#frame {
+  /* the letters' own bevel, top-lit: white rail, chrome face, lilac shade */
+  background: linear-gradient(
+    var(--chrome-100),
+    var(--chrome-200) 26%,
+    var(--chrome-400) 58%,
+    var(--stone-200) 82%,
+    var(--stone-400)
+  );
+  /* the letter's outline on the OUTER edge, and the page beneath it */
+  box-shadow:
+    0 0 0 1px var(--bezel-rule),
+    0 30px 74px -26px #000;
+}
+/* The moulding's surface, and it is two materials at once because the
+   artwork's is: the pyramid's courses run ACROSS (a fine horizontal step,
+   two periods that do not divide each other so it does not read as a
+   pattern) and the chrome is brushed the other way, very faintly. */
+#frame::before {
+  background:
+    repeating-linear-gradient(0deg, #ffffff10 0 1px, #0000 1px 3px),
+    repeating-linear-gradient(0deg, #00000014 0 1px, #0000 1px 7px),
+    repeating-linear-gradient(90deg, #00000008 0 1px, #0000 1px 2px);
+}
+/* the game is waiting on the network — the play page's corner spinner, in
+   this page's chrome. Quiet and small: it reports a wait, it does not ask
+   to be looked at, and main.ts only shows it once the wait is long enough
+   to be one. Its plate carries its own ground, because what is under it is
+   whatever the game last drew. */
+#netbusy {
+  border: 1px solid var(--stone-300);
+  border-radius: 50%;
+  background: rgba(4, 5, 14, 0.74);
+}
+#netbusy span {
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-top-color: var(--glass-300);
+  border-radius: 50%;
+}
+
+/* a reader who has asked for less motion still needs to know it is waiting,
+   so the mark stays and breathes instead of turning */
+@media (prefers-reduced-motion: reduce) {
+  #netbusy span {
+    animation: netpulse 1.4s ease-in-out infinite;
+    border-color: var(--glass-300);
+  }
+  @keyframes netpulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+#screen {
+ /* over the surface */
+  /* the valley and the lit lip, in the order the letter has them: the two
+     lines the scanline found at x=102 and x=98 */
+  box-shadow:
+    0 0 0 2px var(--bezel-valley),
+    0 0 0 3px var(--bezel-lip);
+}
+
+body.playing #frame {
+  opacity: 1;
+  transform: none;
+}
+
+/* ------------------------------------------------------------------
+   The title card, and the one movement on the page.
+
+   The logo is 2.4:1 and full of detail — five courses of glass, a temple
+   with sphinxes on its lintel, letters inlaid with shell. Shrunk to the
+   28px a one-line band can spare it, that is mush; so it takes the whole
+   stage while the disc is being read and then RISES rather than leaving,
+   which is what a title card wants to become once the game is running.
+
+   The move itself is done in JS by FLIP (raiseTitle in main.ts) — measure
+   where it is, switch the class, measure where it landed, play the
+   difference back as a transform — because the two states size the image by
+   DIFFERENT properties and a transition between two sizing modes has
+   nothing to interpolate.
+
+   `#curtain` is what holds the two positions: the whole stage while
+   booting, a thin band at the top after, with its child centred in it
+   either way, so "the middle" and "the top" are one rule.
+   ------------------------------------------------------------------ */
+
+/* the light the card sits in while it is the whole page: the glow off the
+   pyramid's own glass, so the logo is lit rather than pasted on. 100% wide
+   and not more — a box wider than its parent plus a centring translate puts
+   scrollable overflow outside the page, and the falloff does the softening
+   the extra width would have been for. */
+#curtain::before {
+  background: radial-gradient(
+    ellipse at center,
+    #199ba955,
+    #1e2c5833 42%,
+    #0000 74%
+  );
+}
+
+#brand {
+  /* the artwork is keyed off its own black (tools/keylogo.ts), so on this
+     page it sits in its own light rather than on a plate */
+  filter: drop-shadow(0 6px 24px #000) drop-shadow(0 0 46px #10485c);
+}
+
+/* ------------------------------------------------------------------
+   The conduit.
+
+   A progress bar, and shaped like one thing rather than styled like
+   nothing: light climbing the pyramid. The trough is dark glass notched
+   into FIVE courses, because the artwork's pyramid has five — a scan down
+   its axis puts the lit chrome rails at y = 53, 148, 189, 240 and 285 of
+   826 (`out/logo-probe.mts`). Evenly spaced here, where the render has them
+   crowding towards the apex: that spacing is perspective, and a gauge is
+   read left to right rather than in perspective.
+
+   The fill is the two materials of the logo in the order the eye meets
+   them — the letters' shell blue, then the glass turquoise — with the one
+   white-hot node at the leading edge, and an iridescence sliding along
+   what is already lit, because that is what abalone does.
+
+   It is driven by real bytes, never by a timer: this game moves 69.9 MB
+   before the first frame, two files are three quarters of it, and the
+   manifest sizes almost all of it — so the bar is bytes arrived over bytes
+   still owed. See EXTRA and the prefetch in src/main.ts.
+   ------------------------------------------------------------------ */
+
+#conduit {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(#070917, #0d1030);
+  box-shadow:
+    inset 0 1px 2px #000000aa,
+    0 0 0 1px #26203c;
+}
+/* the five courses, and a glaze over them */
+#conduit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #0000 0 calc(20% - 1px),
+      #9ae3ee26 calc(20% - 1px) 20%
+    ),
+    linear-gradient(#ffffff12, #0000 60%);
+}
+#charge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--nacre-600),
+    var(--nacre-500) 34%,
+    var(--glass-500) 66%,
+    var(--glass-300)
+  );
+  box-shadow:
+    0 0 15px -2px var(--glass-400),
+    0 0 5px #1fd3d9cc;
+  /* the width is set from JS; this is what makes each step a slide rather
+     than a jump, and 380ms is under the gap between two boot milestones */
+  transition: width 380ms cubic-bezier(0.32, 0.9, 0.3, 1);
+}
+/* the iridescence, over what is already lit */
+#charge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #fff0 0%,
+    #d9f6fa66 42%,
+    #9ae3ee44 58%,
+    #fff0 100%
+  );
+  background-size: 46% 100%;
+  background-repeat: no-repeat;
+}
+#node {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  margin: -8px -8px 0 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #ffffff 0%,
+    #d9f6fa 24%,
+    var(--glass-300) 46%,
+    #1fd3d900 72%
+  );
+}
+/* nothing lit yet, so nothing glowing yet */
+#charge[style*="width: 0%"] > #node {
+  opacity: 0;
+}
+
+#bootsay {
+  color: var(--text-mute);
+}
+#bootpct {
+  color: var(--glass-200);
+}
+
+/* ------------------------------------------------------------------
+   The Start button, and why the page needs one at all.
+
+   A browser will not build an AudioContext except from a user gesture, so
+   something has to be clicked before Timelapse can be heard — and the boot
+   IS the show here: `boot()` ends in `enterworld("I")`, which plays
+   `open.mov` as a modal film, seven segments and 51 seconds of audio. For as
+   long as this page started the boot on load, that film played to a page
+   that had never been clicked, silently. So the click is asked for at the
+   one moment when waiting for it costs nothing, and it is the ONE gesture:
+   the disc is indexed, the BOOTFILE is read, and the only thing left is to
+   go in.
+
+   It is the only warm thing on the page, and that is the design rather than
+   an accident: everything else here is glass, chrome and cut stone, and the
+   one gold thing in the artwork is the temple's stair — which is the way
+   IN. So the button that goes in is the stair, in the palette's own commit
+   colours, and nothing else on the page is allowed to be that colour.
+   ------------------------------------------------------------------ */
+
+#start {
+  color: var(--commit-text);
+  border: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    var(--commit-edge),
+    var(--commit-face-bottom) 46%,
+    var(--commit-face-deep)
+  );
+  box-shadow:
+    0 0 0 1px var(--bezel-rule),
+    inset 0 1px 0 #ffe9c477,
+    0 8px 20px -10px #000;
+}
+
+#start:hover {
+  background: linear-gradient(
+    var(--commit-edge-hover),
+    var(--commit-edge) 46%,
+    var(--commit-face-bottom)
+  );
+  color: var(--commit-text-hover);
+}
+#start:active {
+  box-shadow:
+    0 0 0 1px var(--bezel-rule),
+    inset 0 2px 7px #000000aa;
+}
+#start:focus-visible {
+  outline: 2px solid var(--glass-300);
+  outline-offset: 3px;
+}
+
+/* the gesture line under the Start button. Absolute and hung off the bottom
+   of #boot, which is a fixed 48px with everything in it positioned — so this
+   costs the card no height and cannot move the button it sits under. */
+#touchtip {
+  color: var(--text-mute);
+}
+
+#touchtip b {
+  color: var(--text);
+}
+@media (pointer: coarse) and (hover: none) {
+  #touchtip {
+    display: block;
+  }
+}
+
+/* ------------------------------------------------------------------
+   UNDER THE PICTURE: the controls and the readout, as rows.
+
+   Not a bar fixed to the bottom of the window. A row is as tall as it needs
+   to be, it wraps, and the page scrolls to it — which is how both other
+   pages in this project show this kind of thing, and it keeps the only
+   pressable things on the page out of the corner of a phone that is hardest
+   to reach.
+   ------------------------------------------------------------------ */
+#under {
+  /* as wide as the picture and centred under it, so it reads as belonging
+     to the picture rather than to the page */
+  width: min(var(--pic-max), calc(100% - 2 * var(--pad)));
+  border-top: 1px solid var(--border);
+}
+#under .bar {
+  display: flex;
+  color: var(--text-dim);
+}
+/* a rule between rows and not around them: the rows are one list, and a box
+   per row would read as one control each */
+#under .bar + .bar {
+  border-top: 1px solid var(--border);
+}
+/* ------------------------------------------------------------------
+   The controls belong to the PICTURE, so they wait for it.
+
+   Every one of them acts on something that is not on screen yet:
+   fullscreen has nothing to letterbox, the log has nothing to report, the
+   key hints describe keys that do nothing, and the swipe options configure
+   a gesture that has nowhere to land. Before Start they were a row of live
+   buttons under an empty stage, which reads as an interface that is already
+   running.
+
+   So the rule is on #under rather than on each row: while booting AND with
+   nothing in #err, every row is hidden. The moment #err has something to
+   say the whole strip comes back — which is the behaviour a failed boot
+   wants, because that is exactly when the bug reporter is needed and there
+   is no picture to reach it from.
+
+   One rule and not two on purpose. Hiding rows individually and then
+   re-showing them on error gives two selectors of identical specificity
+   whose order decides the outcome, and Dust's swipe options share a row
+   with #err — so a per-row `:has(> #err)` exemption left the options
+   visible under an empty stage.
+
+   And it is on #under itself rather than on its rows, because hiding every
+   row still left the container: #under carries a 1px border, so all three
+   pages drew a stray hairline across the stage under the title card with
+   nothing above or below it. A row that is not there is not a row; a strip
+   with no rows in it is not a strip.
+   ------------------------------------------------------------------ */
+
+#under b {
+  color: var(--text);
+  font-weight: 600;
+}
+#under .k {
+  color: var(--text);
+}
+/* the levers this port adds, in cut stone with a lit top edge — the frame's
+   own material seen from the shadow side, so they read as part of the
+   cabinet rather than as web buttons */
+#under button {
+  font:
+    600 12px/1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--text);
+  background: linear-gradient(var(--void-600), var(--void-800));
+  border: 1px solid var(--stone-600);
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 #ffffff12;
+}
+#under button:hover {
+  border-color: var(--glass-300);
+  color: var(--text-bright);
+}
+#under button:focus-visible {
+  outline: 2px solid var(--glass-300);
+  outline-offset: 2px;
+}
+/* ------------------------------------------------------------------
+   The row of the GAME's own controls, and it only exists for a finger.
+
+   SPACE is a key the game reads and the two boxes are questions about
+   swiping, so on a machine with a keyboard and a mouse the row is three
+   controls that say nothing: the space bar is already the space bar (the
+   hint above even says so), and a mouse never reaches a gesture to invert.
+
+   Hidden by default and revealed by the media query rather than the other
+   way round, because the query is the specific case: a desktop is what a
+   page gets when nothing has said otherwise. Same test the two hints use —
+   `hover: none` as well as `coarse`, so a touchscreen LAPTOP, which has
+   both a finger and a space bar, keeps the keyboard's version of the page.
+   ------------------------------------------------------------------ */
+#under .bar.touchonly {
+  display: none;
+}
+@media (pointer: coarse) and (hover: none) {
+  #under .bar.touchonly {
+    display: flex;
+  }
+}
+/* SPACE is not one of the port's levers — it is a key the GAME reads
+   (`interfacekey(" ")` opens P.Stg, the journal and the camera), and a
+   machine with no keyboard cannot reach it any other way. So it is lettered
+   like a key and lit like one. */
+#spacekey {
+  letter-spacing: 0.22em;
+  padding: 6px 16px;
+  color: var(--glass-100);
+  border-color: var(--stone-400);
+  /* `manipulation` and not `none`: the button WANTS its click, it only
+     declines the double-tap-to-zoom delay that would sit in front of it */
+  touch-action: manipulation;
+}
+/* what became of the screenshot: said beside the button that took it, and
+   taken down again once it has been read (main.ts) */
+#under .note {
+  color: var(--glass-200);
+}
+/* ------------------------------------------------------------------
+   Where you are, which is this page's own instrument.
+
+   Timelapse ships no .SET on any of its four discs, so there is no scene
+   and view to read the way there is in Titanic — the position is a world
+   letter, a stage, a region and a FRAME, and the frame is the standpoint
+   and the facing at once. The second line is the stage's own
+   `getframeaction` table: what each of the six directions does from here,
+   including the ones it refuses.
+
+   An inset panel rather than a row of text, because it is a readout and it
+   updates: giving it a recess is what stops the eye reading it as prose.
+   ------------------------------------------------------------------ */
+#loc {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 7px 10px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font: inherit;
+  white-space: pre-wrap;
+  min-height: 1.2em;
+}
+#loc b {
+  color: var(--glass-200);
+  font-weight: 600;
+}
+#loc i {
+  color: var(--text-mute);
+  font-style: normal;
+}
+/* ------------------------------------------------------------------
+   Fullscreen: the picture letterboxed in a black field.
+
+   The STAGE is fullscreened rather than the canvas, so the UA does not take
+   over sizing the letterbox. The moulding comes off with everything else: at
+   fullscreen the picture is the whole screen and a frame drawn around it
+   would be a frame around a frame.
+
+   A CLASS and not `:fullscreen`, because an iPhone has no element fullscreen
+   for a pseudo to match: engine/src/web/fullscreen.ts puts `.fs` on by
+   whichever route the browser has, and pins the stage over the viewport
+   itself where there is no real one. Hence `position: fixed`, which is what
+   the UA's own `:fullscreen` rule already does — free on the real route, and
+   the whole of the other one. Both in one selector list is the thing NOT to
+   do: an engine that cannot parse one member of a list drops the whole list,
+   so the pseudo would take the class down with it on exactly the browsers
+   this is for.
+
+   `dvh`, not `vh`: on an iPhone `100vh` is the LARGE viewport — the one that
+   assumes the toolbars are gone — and faux fullscreen cannot make them go, so
+   a `vh`-tall overlay hangs the bottom of the picture behind Safari's bar.
+   ------------------------------------------------------------------ */
+#stage.fs {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+#under .touchhint {
+  display: none;
+}
+/* the hint that fits the pointer: keys for a mouse, the gesture for glass.
+   `hover: none` as well as `coarse` so a touchscreen LAPTOP — which has both
+   a finger and arrow keys — keeps the keys line. */
+@media (pointer: coarse) and (hover: none) {
+  #under .keyhint {
+    display: none;
+  }
+  #under .touchhint {
+    display: inline;
+  }
+}
+
+/* an author `display` BEATS the `hidden` attribute, whose `display: none`
+   comes from the UA stylesheet — so without this the row shows on a desktop,
+   where a mouse has the arrow keys and never reaches a gesture */
+#swipeOpts[hidden] {
+  display: none;
+}
+#swipeOpts label {
+  display: flex;
+  color: var(--text-dim);
+  cursor: pointer;
+  /* a checkbox on a phone is a TARGET before it is a label */
+  padding: 6px 0;
+}
+#swipeOpts input {
+  /* the tick in the pyramid's own turquoise, and sized to the line rather
+     than the browser's default 13px, which is smaller than a finger */
+  accent-color: var(--glass-300);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+#swipeOpts input:focus-visible {
+  outline: 2px solid var(--glass-300);
+  outline-offset: 2px;
+}
+#err {
+  color: var(--alarm);
+}
+
+/* the log's two voices: a step the boot took, and something it had to
+   complain about */
+#log b {
+  color: var(--glass-200);
+  font-weight: 600;
+}
+#log i {
+  color: var(--sand-300);
+  font-style: normal;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* the only two loops on the page, and both are on the conduit: the node
+     at the leading edge, and the iridescence sliding along what is lit.
+     Everything else moves once, when the boot ends. */
+  #node {
+    animation: flicker 1.15s ease-in-out infinite;
+  }
+  #charge::after {
+    animation: iridesce 2.4s linear infinite;
+  }
+  /* and the stair under the button, once there is a button */
+  #boot.ready #startwrap {
+    animation: stair 2.9s ease-in-out 900ms infinite;
+  }
+}
+@keyframes stair {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 #cf995b00);
+  }
+  50% {
+    filter: drop-shadow(0 0 13px #cf995b99);
+  }
+}
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+  34% {
+    opacity: 0.74;
+    scale: 0.88;
+  }
+  58% {
+    opacity: 1;
+    scale: 1.12;
+  }
+  80% {
+    opacity: 0.84;
+    scale: 0.96;
+  }
+}
+@keyframes iridesce {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #frame,
+  #charge,
+  #boot,
+  #curtain::before {
+    transition-duration: 1ms;
+  }
+}
+/* ------------------------------------------------------------------
+   The ask, under the picture and under the controls.
+
+   Buy Me a Coffee's own button, rebuilt in the page — the same one
+   taoot/index.html and dust/index.html carry, and rebuilt for the same
+   reasons: upstream ships it as a <script> from cdnjs.buymeacoffee.com
+   that writes the markup at runtime and pulls Cookie off Google Fonts,
+   and this site has no third-party script and no third-party font on any
+   page. The widget's data attributes read straight across, so a button in
+   this palette is a configuration of it rather than a departure:
+
+     data-color         --raised     the surface, one step up from the page
+     data-outline-color --border-strong
+     data-font-color    --accent     what the page already links in
+     data-coffee-color  #1FD3D9      the COFFEE — the small filled path
+                                     inside the cup, which is the only part
+                                     of the mark that is not linework.
+                                     Upstream fills it #FFDD00, a brand
+                                     swatch; here it is `--accent (--glass-300)`,
+                                     the colour of the WORDS beside it, so
+                                     the drink and the label are one note
+                                     and the cup around them is the page's.
+
+                                     Baked into the art rather than taken
+                                     from the cascade: an <img> cannot
+                                     inherit `currentColor`, and inlining
+                                     8 KB of path data on a game page to
+                                     win a hover is a bad trade. So the
+                                     words lighten on hover and the coffee
+                                     does not — which reads as the label
+                                     responding, not as the mark failing to.
+     data-font          Cookie       public/cookie.woff2, below
+
+   The mark's linework is #0D0C22 upstream, drawn to sit on a yellow
+   button. On a dark surface the parts of it that fall OUTSIDE the cup —
+   lid, steam, outline — vanish into the background. The art redraws
+   them in `--border-hover (--stone-100)`, which is the colour of
+   this button's OWN border on hover: the cup is the button's outline
+   drawn round again, and the drink inside it is the button's text. All
+   five pages do it that way and only the ramp changes — brass was the
+   first try, and it was the one page pulling a decorative colour in
+   where the others had used a structural one.
+
+   Below the controls rather than inside them, and that is why #foot is
+   its own element: #under waits for the picture
+   (`body:not(.playing)` hides it), so an ask living there would be absent
+   from the title card and absent forever for somebody who reads the page
+   and leaves without pressing Start — which is most people, and exactly
+   who is being asked.
+   ------------------------------------------------------------------ */
+#foot {
+  /* the picture's own width, so it lines up with the frame and the strip
+     above it rather than with the page */
+  width: min(var(--pic-max), calc(100% - 2 * var(--pad)));
+  /* The rule belongs BETWEEN the controls and the ask, so it goes away
+     with them: a hairline under the picture with nothing above it is
+     worse than no rule at all. The selector below is #under's own hiding
+     condition. */
+  border-top: 1px solid var(--border);
+}
+

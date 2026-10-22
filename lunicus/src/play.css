@@ -1,0 +1,312 @@
+/* ------------------------------------------------------------------
+   The same page the other games have, in navy, chrome, gold and fire.
+
+   Two states and one movement between them:
+
+     body.booting  the title card, centred, with the gauge under it
+     body.playing  the title card small at the top, lapping over the
+                   picture's frame, and the picture underneath
+
+   What it composes with is in src/theme.css: the letters are chrome in
+   a gold bevel with a dark rule round it, and half the card is the fire
+   they stand in front of. So the page is the crew's navy, the frame is
+   a letter's bevel turned round the picture, the Enter button is a
+   letter, and the gauge is the one thing that burns.
+   ------------------------------------------------------------------ */
+
+/* what every play page shares, under what is this game's own */
+@import "@dreamfactory/chrome/play-flow.css";
+
+:root {
+  /* the bevel round the picture: the rule, the gold, and the rule again */
+  --frame-w: clamp(6px, 0.8vw, 11px);
+  /* the width the picture can have across, which the risen card is sized
+     from (it cannot come from --pic-w, which pays for the card: a cycle) */
+  --fit-w: min(1024px, calc(100vw - 2 * var(--pad) - 2 * var(--frame-w)));
+  /* The risen card. The artwork is 900x789, 1.14:1 — squarer than
+     RedJack's — so a smaller share of the width gives the same height. */
+  --brand-h: clamp(56px, calc(var(--fit-w) * 0.12), 118px);
+  /* the picture: 512x384 art on a 1024x768 canvas, as large as the room
+     across and the room down (converted through 4:3) allow */
+  --pic-w: min(
+    1024px,
+    var(--fit-w),
+    /* ...but never below a size worth playing at: past that the page
+       scrolls down rather than shrinking the picture to a stamp */
+    max(
+        320px,
+        calc(
+          (
+              100vh - var(--bar) - 2 * var(--pad) - var(--brand-h) +
+                var(--lap) - 2 * var(--frame-w) - var(--under)
+            ) *
+            4 / 3
+        )
+      )
+  );
+}
+
+/* on a phone the shared bar wraps its links to a second line */
+@media (max-width: 560px) {
+  :root {
+    --bar: 72px;
+  }
+}
+
+/* ---- the curtain: the title card and the gauge ------------------- */
+
+/* the light the card sits in: the explosion's, hot at the heart and
+   red at the edge, on the navy */
+#curtain::before {
+  left: 50%;
+  top: 44%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(252, 215, 6, 0.14),
+    rgba(201, 44, 19, 0.14) 42%,
+    #0000 72%
+  );
+}
+
+/* The card. src/main.ts hides it and sets body.nobrand when it fails to
+   load, so a missing file closes the band up instead of leaving a broken
+   frame. */
+#brand {
+  /* against the VIEWPORT: #curtain is shrink-to-fit and takes its width
+     from this image, so a percentage here is circular (Skull Cracker's
+     note, measured there) */
+  max-width: min(680px, calc(100vw - 2 * var(--pad)));
+  max-height: 52vh;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 0 34px rgba(251, 120, 3, 0.18));
+}
+
+/* ---- the gauge and the button, sharing one cell ------------------ */
+
+/* ------------------------------------------------------------------
+   THE GAUGE IS A TRACER SHOT.
+
+   Dust burns a fuse, Timelapse charges a conduit, Skull Cracker cracks a
+   plate, RedJack pours gold. On Lunicus's card the fighters come out of
+   the fire trailing streaks of it, so the gauge is a slot in a gold-
+   edged plate with the fire running along it, smoke-red where it has
+   been and white-hot where it is.
+
+     #bar     the slot — the night, sunk, in a bevel's gold
+     #charge  the width JS drives, the fire's trail; its ::after is the
+              white-hot head
+   ------------------------------------------------------------------ */
+
+#bar {
+  height: 12px;
+  border-radius: var(--radius);
+  background: linear-gradient(var(--rule), var(--night-900) 55%, var(--night-700));
+  box-shadow:
+    0 0 0 1px var(--gold-600),
+    0 0 0 2px var(--gold-300),
+    0 0 0 3px var(--rule),
+    inset 0 2px 3px rgb(0 0 0 / 80%);
+}
+#charge {
+  border-radius: var(--radius) 0 0 var(--radius);
+  background:
+    linear-gradient(rgb(255 255 255 / 22%), #0000 45%, rgb(0 0 0 / 28%)),
+    linear-gradient(
+      90deg,
+      var(--fire-900),
+      var(--fire-700) 30%,
+      var(--fire-600) 60%,
+      var(--fire-400) 85%,
+      var(--fire-200)
+    );
+  box-shadow: 0 0 12px -2px rgba(251, 120, 3, 0.55);
+}
+/* the head: the shot itself, white at the heart */
+#charge::after {
+  right: -3px;
+  top: -3px;
+  bottom: -3px;
+  width: 6px;
+  border-radius: 50%;
+  background: var(--fire-100);
+  box-shadow:
+    0 0 6px 2px rgba(252, 215, 6, 0.85),
+    0 0 16px 5px rgba(251, 120, 3, 0.5);
+}
+
+#bootline {
+  margin: 0.65rem 0 0;
+}
+
+/* ------------------------------------------------------------------
+   THE BUTTON IS A LETTER: the chrome face, the gold bevel round it and
+   the dark rule outside that, with a navy label in the letters' slab
+   serif. Dust's and Skull Cracker's geometry — uppercase, wide tracking,
+   scale-in on `.ready` — in this card's materials.
+   ------------------------------------------------------------------ */
+#start {
+  font: 700 15px/1 var(--font-display);
+  background: linear-gradient(
+    var(--chrome-200),
+    var(--chrome-400) 46%,
+    var(--sky-200) 60%,
+    var(--chrome-600)
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--gold-600),
+    inset 0 2px 0 rgba(253, 253, 247, 0.6),
+    0 0 0 2px var(--gold-300),
+    0 0 0 3px var(--rule),
+    0 10px 22px -10px #000;
+  text-shadow: 0 1px 0 rgba(253, 253, 247, 0.45);
+  transition:
+    opacity 260ms ease-out,
+    transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
+    background 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+#start:hover {
+  background: linear-gradient(
+    var(--chrome-100),
+    var(--chrome-300) 46%,
+    var(--sky-100) 60%,
+    var(--chrome-500)
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--gold-600),
+    inset 0 2px 0 rgba(253, 253, 247, 0.8),
+    0 0 0 2px var(--gold-100),
+    0 0 0 3px var(--rule),
+    0 0 24px -4px rgba(251, 120, 3, 0.55),
+    0 10px 22px -10px #000;
+}
+/* sky, not the accent: the accent is the gold the button is already
+   edged in, and a gold ring round a gold edge is not a ring */
+#start:focus-visible {
+  outline: 2px solid var(--sky-100);
+  outline-offset: 5px;
+}
+
+/* ---- the picture, in its bevel --------------------------------- */
+
+/* ------------------------------------------------------------------
+   The bevel is the frame's PADDING, so the canvas keeps its size, drawn
+   as the card draws one round a letter: the dark rule outside, the gold
+   lit on top and falling to its shadow side at the bottom, and a thin
+   rule again where it meets the picture.
+   ------------------------------------------------------------------ */
+#frame {
+  border-radius: var(--radius-lg);
+  background-color: var(--gold-500);
+  background-image:
+    linear-gradient(
+      180deg,
+      var(--gold-100) 0 1px,
+      var(--gold-200) 1px 45%,
+      var(--gold-400) 45% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    ),
+    linear-gradient(
+      0deg,
+      var(--gold-800) 0 1px,
+      var(--gold-700) 1px 45%,
+      var(--gold-600) 45% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    ),
+    linear-gradient(
+      90deg,
+      var(--gold-300) 0 1px,
+      var(--gold-400) 1px 50%,
+      var(--gold-500) 50% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    ),
+    linear-gradient(
+      270deg,
+      var(--gold-700) 0 1px,
+      var(--gold-600) 1px 50%,
+      var(--gold-500) 50% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    );
+  box-shadow:
+    0 0 0 2px var(--rule),
+    0 0 40px -8px rgba(251, 120, 3, 0.25),
+    0 26px 60px -24px #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #brand,
+  #frame,
+  #start,
+  #gauge {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---- the log, a panel over the stage ---------------------------- */
+
+#log {
+  position: absolute;
+  inset: var(--pad) max(var(--pad), calc((100% - var(--pic-w)) / 2 - var(--frame-w))) 0;
+  margin: 0;
+  z-index: 4;
+  overflow: auto;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--night-1000) 90%, transparent);
+  backdrop-filter: blur(3px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: 12px/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#log[hidden] {
+  display: none;
+}
+
+#log i {
+  color: var(--alarm);
+}
+
+/* ---- the controls under it -------------------------------------- */
+
+#under .bar {
+  display: flex;
+}
+
+#loc:empty {
+  display: none;
+}
+.k {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: 11px/1.5 var(--font-mono);
+  color: var(--text-bright);
+  background: var(--night-800);
+}
+#under .keyhint {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* ---- fullscreen -------------------------------------------------- */
+
+/* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
+   engine/src/web/fullscreen.ts pins the stage over the viewport instead */
+#stage.fs {
+  display: grid;
+  place-items: center;
+  gap: 0;
+}
+#stage.fs #curtain {
+  display: none;
+}
+
+/* ---- the ask, under everything ---------------------------------- */
+

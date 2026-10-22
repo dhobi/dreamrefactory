@@ -280,7 +280,7 @@ const stageEl = document.getElementById("stage") as HTMLElement;
 let currentRoom = "";
 
 // The STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
-// UA, and the picture is a fixed 512x384 either way — see #stage.fs in game.css.
+// UA, and the picture is a fixed 512x384 either way — see #stage.fs in play.css.
 // A class and not the `:fullscreen` pseudo because an iPhone has no element
 // fullscreen to match, and the page fills itself there instead — the detection
 // and the way back out are engine/src/web/fullscreen.ts.

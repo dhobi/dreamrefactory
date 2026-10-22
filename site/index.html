@@ -417,57 +417,6 @@
       }
       /* no rule of its own: `.caveat` above already draws one, and two lines a
          few rem apart at the bottom of a page reads as a mistake */
-
-      /* Cookie by Ania Kruk, SIL Open Font License 1.1 — the licence travels
-         with the font at public/cookie-OFL.txt. Latin subset, 14 KB, served
-         from this origin. `swap` so a slow font never holds the button back:
-         the fallback is the page's own display face. */
-      @font-face {
-        font-family: "Cookie";
-        src: url("/cookie.woff2") format("woff2");
-        font-weight: 400;
-        font-style: normal;
-        font-display: swap;
-      }
-
-      a.bmc {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3em;
-        padding: 0.1rem 0.8rem;
-        border: 1px solid var(--border-strong);
-        /* the widget's own 5px, which is also this sheet's --radius-lg */
-        border-radius: var(--radius-lg);
-        background: var(--raised);
-        color: var(--accent);
-        font-family: "Cookie", var(--font-display);
-        font-size: 1.05rem;
-        line-height: 1.85;
-        letter-spacing: 0.02em;
-        text-decoration: none;
-        transition:
-          border-color 110ms linear,
-          color 110ms linear,
-          transform 110ms ease-out;
-      }
-      /* the same step every other link on the site takes on hover */
-      a.bmc:hover {
-        border-color: var(--border-hover);
-        color: var(--accent-hover);
-        transform: translateY(-1px);
-      }
-      a.bmc:active {
-        transform: none;
-      }
-      /* Cookie is a script face: its baseline sits high in the box, so the cup
-         is centred on the line box and then nudged to the letters' optical
-         centre rather than the box's. */
-      a.bmc img {
-        height: 1.15em;
-        width: auto;
-        position: relative;
-        top: -0.06em;
-      }
     </style>
   </head>
   <!--

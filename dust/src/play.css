@@ -19,6 +19,9 @@
  * are the reason it is worth moving whole rather than reorganising on the way.
  */
 
+/* what every play page shares, under what is this game's own */
+@import "@dreamfactory/chrome/play-pinned.css";
+
 /* ------------------------------------------------------------------
    Deliberately nothing like the play page.
 
@@ -86,44 +89,6 @@
   /* the panel's inner rule, and the darkest thing in its frame */
   --rule: #1a1210;
 
-  --pad: 16px;
-  /* ------------------------------------------------------------------
-     The page has a floor. Below this the strip's one line has nothing like
-     the room it needs, the boot bar's caption is three words wide, and the
-     picture is smaller than the panel it is half made of — so the page stops
-     shrinking and the browser scrolls instead, which degrades honestly where
-     squashing further does not.
-     ------------------------------------------------------------------ */
-  --min-w: 400px;
-  /* how wide the PAGE is, which past the floor is no longer how wide the
-     viewport is — and the canvas below measures itself against the page */
-  --page-w: max(var(--min-w), 100vw);
-  /* The SHARED TOP BAR's height, pinned rather than measured, and pinned for
-     the reason the footer strip used to be: it is the one term that decides
-     how tall the stage is, and a browser that lays that bar out half a pixel
-     differently would cost the canvas its 1:1 scale.
-
-     It replaces `--strip`. The status line used to be a fixed 38px footer and
-     this budget subtracted it; the controls are rows BELOW the picture now,
-     which the page scrolls to, so the only chrome spending viewport height is
-     the bar above. `dust/tests/browser/built-layout.ts` checks this number
-     against the bar the browser actually draws — a pinned height that drifts
-     unnoticed is worse than a measured one. */
-  --bar: 49px;
-  /* The rows under the picture are NOT a term here, and that is deliberate.
-
-     Subtracting them made the picture pay for them: at 1440x900 a perfect
-     1024x768 became 959x719, because 768 plus the mat plus the title card
-     plus the bar plus the rows simply does not fit in 900px. The old fixed
-     strip appeared to fit only because `overflow: hidden` on the body was
-     quietly clipping the difference.
-
-     So the picture is sized against the WINDOW, `#stage` is sized against
-     the FRAME (see its min-height), and the rows follow the stage. When the
-     two together exceed the window the page scrolls, which is the honest
-     outcome and the one that keeps 1:1 art. */
-  --stage-h: calc(100vh - var(--bar));
-
   /* ------------------------------------------------------------------
      THE LEFTOVERS, and who gets to spend them.
 
@@ -153,35 +118,6 @@
     round(down, calc(var(--spare) - 2 * var(--frame)), 2px),
     134px
   );
-  /* ------------------------------------------------------------------
-     How far the card sits DOWN over the frame, and it is deliberately far
-     enough to cross the wood and BITE INTO THE PICTURE.
-
-     The first version of this kept the lap strictly under the mat, so that
-     the card could never cover a single game pixel. That was the cautious
-     reading and it was the wrong one: a nameplate that stops exactly at the
-     inner edge of the frame reads as a coincidence, and the few rows it
-     costs are the top of the sky. So the lap is the whole mat plus a bite,
-     and the bite is what makes it look nailed on rather than balanced there.
-
-     Nothing is lost to the click: `#curtain` is `pointer-events: none`, so
-     the strip of picture under the card is still the canvas's to handle.
-
-     Last in the chain on purpose — spare feeds the frame, the frame feeds
-     the card, and both feed this — so there is no cycle and no window size
-     is tuned at another's expense.
-     ------------------------------------------------------------------ */
-  --bite: clamp(2px, round(calc(var(--brand-h) * 0.04), 2px), 8px);
-  --lap: calc(var(--frame) + var(--bite));
-  /* how far down the picture starts — nothing while the card is centred */
-  --band: 0px;
-  /* and how far down the pair starts; see body.playing */
-  /* The cap on --drop, where the reasoning lives. Dust's page and
-     Timelapse's are the same composition — a title card over a framed
-     picture — so they cap it at the same 96px and behave alike on a phone. */
-  --drop-max: 96px;
-
-  --drop: 0px;
 
   /* ------------------------------------------------------------------
      THE PICTURE'S SIZE, named once because three other rules need it.
@@ -208,7 +144,6 @@
         4 / 3
     )
   );
-  --pic-h: calc(var(--pic-w) * 3 / 4);
 }
 /* ------------------------------------------------------------------
    The band the picture starts below is the card MINUS THE LAP, which is what
@@ -223,7 +158,6 @@
    the same place relative to the moulding whether the moulding is 6px or 22.
    ------------------------------------------------------------------ */
 body.playing {
-  --band: calc(var(--brand-h) - var(--lap));
   /* ------------------------------------------------------------------
      How far the PAIR sits down from the top of the stage.
 
@@ -248,65 +182,8 @@ body.playing {
         4 / 3
     )
   );
-  --pic-h: calc(var(--pic-w) * 3 / 4);
-  /* Half the slack, measured against the picture THERE IS, and never more
-     than --drop-max.
-
-     Written against a flat 768px first, which is only the picture's height
-     when the height is what limits it — at 400x600 the width limits it, the
-     real picture is 267 tall, and the formula saw 768, called the slack
-     negative and left all 231 spare pixels in one lump under the frame.
-
-     Capped, because on a phone half the slack is most of the screen. At
-     412x915 the picture is 273px tall and the drop came out around 240, so
-     the canvas started 389px down a 915px window with 253px below it —
-     reported as "the game canvas moves too far downwards", and true: the
-     composition hung in the middle of the page with a third of the window
-     empty above it. A picture hung a little high with its controls under it
-     is the better answer, and it is the answer Timelapse's page already
-     gives — same composition, same cap, same behaviour. */
-  --drop: min(
-    var(--drop-max),
-    max(
-      0px,
-      round(
-        down,
-        calc(
-          (
-              var(--stage-h) - 2 * var(--pad) - var(--band) -
-                var(--pic-h) - 2 * var(--frame)
-            ) /
-            2
-        ),
-        2px
-      )
-    )
-  );
-}
-/* no logo file, no band: the page is honest about it rather than leaving a
-   gap where a picture failed to arrive (see #brand's onerror) */
-body.nobrand {
-  --brand-h: 0px;
-  --bite: 0px;
-  --lap: 0px;
 }
 
-* {
-  box-sizing: border-box;
-}
-html {
-  height: 100%;
-}
-/* No `height: 100%` here, and no `min-height` either. The rows under the
-   picture may push the document past one screen — which is the point of
-   them — and the shared chrome already says `min-height: 100vh` on this
-   selector. Saying `100%` as well was the same instruction in different
-   units on the SAME selector, so the build got to pick which applied;
-   `site/tests/cascade.ts` failed on it, which is what that test is for. */
-body {
-  margin: 0;
-  min-width: var(--min-w);
-}
 /*
  * `html body`, not `body`, and the extra token is load-bearing.
  *
@@ -324,83 +201,11 @@ body {
 html body {
   background: var(--soot);
   color: var(--ink);
-  font:
-    13px/1.5 ui-monospace,
-    "SF Mono",
-    Menlo,
-    Consolas,
-    monospace;
-  display: grid;
-  /*
-   * THREE rows now: the shared top bar, the stage, the status strip. It was
-   * `1fr auto` for two children, and adding the bar as a third made the bar
-   * itself take the `1fr` — so the stage collapsed to its content and the
-   * strip rode up under the title card. A grid with fewer rows than children
-   * does not complain; it just puts them somewhere else.
-   */
-  grid-template-rows: auto 1fr auto;
-  /*
-   * The shared chrome centres a page's children (`align-items: center` on
-   * body, for the reading pages it was written for). On a grid that centres
-   * each item INSIDE its row instead of letting it fill it, which left the
-   * stage sized to its content and the title card floating off-centre with
-   * the START button over the status strip. This page wants its rows filled.
-   */
-  align-items: stretch;
-  justify-items: stretch;
   /* NO `overflow: hidden` here any more. It was right when the page was
      exactly one screen with a fixed footer; the rows under the picture
      are reachable only if the document is allowed to scroll to them. */
 }
 
-/* the picture, centred, integer-scaled, and never smoothed: this is
-   1995 art and a bilinear filter is a lie about it */
-/* A POSITIONED box, so the canvas's max-height has something definite to
-   be a percentage of. As a centred grid item its `max-height: 100%` did
-   not resolve — the 1fr row is not a definite height for percentage
-   purposes — so a short window clamped the width and left the height at
-   768, and the picture hung off the bottom. Absolute inside a relative
-   parent resolves against the padding box, which is definite. */
-#stage {
-  position: relative;
-  /*
-   * A HEIGHT of its own, because what sits below it is no longer a fixed 38px
-   * the budget could subtract. As a bare `1fr` grid row the stage got whatever
-   * the rows under it left over, so every control added there came out of the
-   * picture: a taller `#under` meant a smaller game.
-   *
-   * Pinned to the viewport minus the bar above instead — which is exactly what
-   * `--stage-h` means — so the WINDOW sizes the picture and the rows are what
-   * the document scrolls to.
-   */
-  /* NOT a height of its own. Pinned to `--stage-h` it claimed the whole
-     window and left the rows a screen below the picture — the picture was
-     sized right and the rows were nowhere near it. As a bare grid row the
-     stage gets what the bar above and the rows below leave, so the rows sit
-     directly under the frame and the canvas's own `max-height: 100%` — which
-     resolves against THIS box — shrinks the picture to fit whatever is left.
-     That last part is why nothing has to be pinned: a row that wraps on a
-     phone takes its space out of the picture automatically. */
-  /* AS TALL AS ITS CONTENT, which is the frame — not the window, and not
-     whatever the grid has left.
-
-     `min-height: var(--stage-h)` claimed the whole window and left the rows
-     a screen below the picture. A bare `0` let the grid hand the stage less
-     than the frame needs, and the frame — absolutely positioned — spilled
-     68px OVER the rows, so the buttons could not be clicked and there was
-     nothing to scroll to either.
-
-     This is the frame's own height, term for term: the two pads, the slack
-     the pair comes down by, the title card's band, the picture, and the mat
-     on both sides of it. So the rows sit directly under the frame at every
-     size, the picture keeps the whole window to be big in, and when the sum
-     is taller than the window the page scrolls. */
-  min-height: calc(
-    2 * var(--pad) + var(--drop) + var(--band) + var(--pic-h) + 2 *
-      var(--frame)
-  );
-  padding: var(--pad);
-}
 /* ------------------------------------------------------------------
    The frame is what gets POSITIONED; the canvas just sits in it.
 
@@ -412,24 +217,6 @@ html body {
    two mats, and the canvas fills what is left, which is the picture exactly.
    ------------------------------------------------------------------ */
 #frame {
-  position: absolute;
-  top: calc(var(--pad) + var(--drop) + var(--band));
-  right: var(--pad);
-  bottom: var(--pad);
-  left: var(--pad);
-  /* centred across, TOP-aligned down: see --drop. Centring it down as well
-     let it drift away from the card on a tall window. */
-  margin: 0 auto auto;
-  /* SHRINK-WRAPPED, not sized: the mat is whatever the picture turned out
-     to be plus two --frames, so it stays a uniform width on every side.
-     Given the frame an explicit 1024+2F and a max-height instead, a short
-     window clamped its height but not its width and the picture letterboxed
-     INSIDE the mat — measured at 1440x860: a 984px picture centred in a
-     1024px opening, with 20px of black down both edges of the wood. The
-     constraint belongs on the canvas, where the aspect ratio is. */
-  width: fit-content;
-  height: fit-content;
-  padding: var(--frame);
   /* the mat: wood, lit from above, in NEW.FLT's own four browns */
   background: linear-gradient(
     var(--wood-lit),
@@ -446,10 +233,6 @@ html body {
    periods that do not divide each other, which is what stops it reading as
    a pattern at this width. */
 #frame::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
   background:
     repeating-linear-gradient(90deg, #ffffff08 0 1px, #0000 1px 3px),
     repeating-linear-gradient(90deg, #00000012 0 1px, #0000 1px 7px);
@@ -460,40 +243,16 @@ html body {
    to be one (see BUSY_AFTER_MS there). Its plate carries its own ground —
    what is under it is whatever the game last drew. */
 #netbusy {
-  position: absolute;
-  right: calc(var(--frame) + 12px);
-  bottom: calc(var(--frame) + 12px);
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border: 1px solid var(--wood-lit);
   border-radius: 50%;
   background: rgba(10, 4, 3, 0.72);
-  box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
 }
 #netbusy span {
-  display: block;
-  width: 14px;
-  height: 14px;
-  box-sizing: border-box;
   border: 2px solid rgba(255, 255, 255, 0.18);
   border-top-color: var(--spark);
   border-radius: 50%;
-  animation: netspin 700ms linear infinite;
 }
-/* not redundant with the UA sheet: the `display: flex` above beats
-   `[hidden] { display: none }`, the same trap the play page documents */
-#netbusy[hidden] {
-  display: none;
-}
-@keyframes netspin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+
 /* a reader who has asked for less motion still needs to know it is
    waiting, so the mark stays and breathes instead of turning */
 @media (prefers-reduced-motion: reduce) {
@@ -512,37 +271,7 @@ html body {
   }
 }
 #screen {
-  /* ------------------------------------------------------------------
-     1024x768 CSS pixels — the canvas's own size, so one canvas pixel is one
-     screen pixel and the 2x blit inside it is the only scaling that happens.
-     It may only ever SHRINK, for a viewport that cannot fit it.
-
-     `aspect-ratio` is what makes the shrinking safe: with it, clamping the
-     height takes the width down with it and the picture stays 4:3, so
-     `object-fit` never has anything to letterbox and the mat around it stays
-     even. And the ceilings are in VIEWPORT units rather than percentages,
-     because the frame above is shrink-to-fit — a percentage here would be
-     asking the parent how wide it is while the parent is asking this.
-
-     Percentages were also the shape of the bug this replaced: a percentage
-     max-height on an absolutely positioned box resolves against its
-     containing block's padding box, NOT against the insets above it, so
-     `max-height: 100%` let a 768px canvas sit in a 741px slot unclamped and
-     `margin: auto` centred the overflow — 36px past the bottom of the stage
-     at 1280x700, clipped by the body and under the title card at the top.
-     ------------------------------------------------------------------ */
-  image-rendering: pixelated;
-  display: block;
-  /* the swipe gestures (dust/src/main.ts) need every drag on the canvas: without
-     this the browser claims a vertical drag for scrolling and the
-     walk-forward swipe never arrives. Scoped here, so the page still scrolls. */
-  touch-action: none;
-  position: relative; /* over the grain */
-  aspect-ratio: 4 / 3;
-  /* both from --pic-w, which is where the reasoning about them lives */
-  width: var(--pic-w);
-  height: auto;
-  background: #000;
+ /* over the grain */
   /* the panel's own inner rule, on the inner edge of the mat, with the lit
      lip of the moulding just outside it — the two lines the profile found at
      x = 13 and x = 8, in the order it found them */
@@ -550,39 +279,10 @@ html body {
     0 0 0 2px var(--rule),
     0 0 0 3px #5a3527;
 }
-#screen.busy {
-  cursor: progress;
-}
-/* the room BLENDS IN rather than appearing: it comes up out of the dark a
-   touch under scale while the title card is still rising, so the two read
-   as one movement instead of a swap. The FRAME comes with it — the moulding
-   belongs to the picture, so it must not be on the page before the picture
-   is. */
-/*
- * `pointer-events: none` and not only `opacity: 0`, because an invisible
- * element still takes the click.
- *
- * #frame comes after #curtain in the DOM and neither carries a z-index, so
- * it paints on top and is hit-tested first — over the loader's own START
- * button, which sits in #boot inside #curtain. Pressing START did nothing:
- * `document.elementFromPoint` at the middle of the button returned #screen.
- *
- * It was a race before, which is why it looked fine here and failed on a
- * real connection: the canvas has to exist to cover anything, and clicking
- * the moment the button appeared beat it. The one place that never won that
- * race was the deployed site.
- */
-body:not(.playing) #frame {
-  opacity: 0;
-  transform: scale(0.985);
-  pointer-events: none;
-}
+
 body.playing #frame {
   opacity: 1;
   transform: none;
-  transition:
-    opacity 620ms ease-out 180ms,
-    transform 900ms cubic-bezier(0.28, 0.74, 0.22, 1) 180ms;
 }
 
 /* ------------------------------------------------------------------
@@ -607,81 +307,22 @@ body.playing #frame {
    stage while booting and a thin band at the top after, and its child is
    centred in it either way, so "the middle" and "the top" are one rule.
    ------------------------------------------------------------------ */
-#curtain {
-  position: absolute;
-  top: var(--pad);
-  right: var(--pad);
-  bottom: var(--pad);
-  left: var(--pad);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 40px;
-  z-index: 3;
-  /* decoration, never a click target: the canvas is under it. The Start
-     button turns this back on for itself alone (#startwrap). */
-  pointer-events: none;
-}
-body.playing #curtain {
-  bottom: auto;
-  top: calc(var(--pad) + var(--drop));
-  height: var(--brand-h);
-  gap: 0;
-}
+
 /* the light the card sits in while it is the whole page — a low warm glow
    off the artwork's own fire, so the logo is lit rather than pasted on */
 #curtain::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  /* 100% and not the 130% this started at. Wider than its parent plus a
-     centring `translate` puts scrollable overflow outside the page, and a
-     transformed descendant carries that up: measured at 700x800, a document
-     784px wide and a horizontal scrollbar under a page that fits. Clipping it
-     at #stage would have cost the frame's drop shadow, so the fix is at the
-     source — the falloff below does the softening the extra width was for. */
-  width: min(1100px, 100%);
-  aspect-ratio: 2 / 1;
-  translate: -50% -50%;
   background: radial-gradient(
     ellipse at center,
     #4a220c66,
     #2d120c22 40%,
     #0000 74%
   );
-  opacity: 1;
-  transition: opacity 500ms ease-out;
-}
-body.playing #curtain::before {
-  opacity: 0;
 }
 
 #brand {
-  display: block;
-  width: auto;
-  max-width: min(840px, 100%);
-  max-height: 100%;
-  object-fit: contain;
   /* the artwork is drawn on white; on this page it wants to sit in its own
      light rather than on a panel, so it gets a warm glow instead of a box */
   filter: drop-shadow(0 6px 24px #000) drop-shadow(0 0 40px #3a1f0d);
-}
-body.booting #brand {
-  max-height: 46vh;
-}
-/* Risen: sized by HEIGHT, which is what makes the band exact — and with NO
-   shadow. The glow below is for a card floating on a bare page; once it is
-   resting on the frame's top rail a drop-shadow reads as the card hovering
-   over the wood instead of sitting on it, which is the opposite of what the
-   overlap is for. */
-body.playing #brand {
-  height: 100%;
-  filter: none;
-}
-#brand[hidden] {
-  display: none;
 }
 
 /* ------------------------------------------------------------------
@@ -704,30 +345,7 @@ body.playing #brand {
    so the swap is a crossfade and not a reflow — the title card is 40px above
    this and a collapsing bar would jog it.
    ------------------------------------------------------------------ */
-#boot {
-  position: relative;
-  width: min(440px, 76%);
-  height: 48px;
-  transition:
-    opacity 340ms ease-out,
-    translate 460ms ease-out,
-    filter 340ms ease-out;
-}
-#gauge {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  transition:
-    opacity 260ms ease-out,
-    transform 320ms ease-out;
-}
-#boot.ready #gauge {
-  opacity: 0;
-  transform: translateY(-70%);
-  pointer-events: none;
-}
+
 /* what a screen reader is told; the cord below is what is seen */
 #fusevalue {
   position: absolute;
@@ -811,30 +429,11 @@ body.playing #brand {
   opacity: 0;
 }
 
-#bootline {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 11px;
-  /* a FIXED line box: the caption is the boot's own words and they change
-     length every 200ms, and a bar that jumps a pixel each time one of them
-     wraps is worse than one that clips a long one */
-  height: 17px;
-  overflow: hidden;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-}
 #bootsay {
   color: var(--dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 #bootpct {
   color: var(--spark);
-  font-variant-numeric: tabular-nums;
-  flex: none;
 }
 
 /* ------------------------------------------------------------------
@@ -854,35 +453,11 @@ body.playing #brand {
    goes down. The ember under it is the only thing on the page that asks for
    attention, and it does it slowly.
    ------------------------------------------------------------------ */
-#startwrap {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 300ms ease-out 130ms;
-}
-#boot.ready #startwrap {
-  opacity: 1;
-  pointer-events: auto;
-}
+
 #start {
-  font:
-    600 13px/1 ui-monospace,
-    "SF Mono",
-    Menlo,
-    Consolas,
-    monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.3em;
-  /* the right padding is short by the letter-spacing, which is added AFTER
-     the last letter and would otherwise sit the label left of centre */
-  padding: 14px 22px 14px 30px;
   color: #ffe9c4;
   border: 0;
   border-radius: 3px;
-  cursor: pointer;
   background: linear-gradient(
     var(--wood-lit),
     var(--wood) 40%,
@@ -892,22 +467,13 @@ body.playing #brand {
     0 0 0 1px var(--rule),
     inset 0 1px 0 #8a5a3c77,
     0 8px 20px -10px #000;
-  transform: scale(0.94);
-  transition:
-    transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
-    background 160ms ease-out,
-    color 160ms ease-out;
 }
-#boot.ready #start {
-  transform: none;
-}
+
 #start:hover {
   background: linear-gradient(#83513a, #663d27 40%, #4b2d1b);
   color: #fff6dd;
 }
 #start:active {
-  transform: translateY(1px);
-  transition: transform 40ms;
   box-shadow:
     0 0 0 1px var(--rule),
     inset 0 2px 7px #000000aa;
@@ -922,24 +488,11 @@ body.playing #brand {
    costs the card no height and cannot move the button it sits under. It
    arrives with the button and leaves with the whole card. */
 #touchtip {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  translate: -50% 10px;
-  margin: 0;
   color: var(--dim);
-  font-size: 12px;
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity 300ms ease-out 200ms;
 }
-#boot.ready #touchtip {
-  opacity: 1;
-}
+
 #touchtip b {
   color: var(--ink);
-  font-weight: 600;
 }
 @media (pointer: coarse) and (hover: none) {
   #touchtip {
@@ -962,23 +515,13 @@ body.playing #brand {
    (taoot/play/index.html: #under, .bar, and the rule between rows).
    ------------------------------------------------------------------ */
 #under {
-  /* above the picture in the stacking order, always: the frame is absolutely
-     positioned and overlapped these when the budget was wrong, and an
-     unreachable button is a worse failure than a scrollbar */
-  position: relative;
-  z-index: 1;
   /* as wide as the picture's frame and centred under it, so it reads as
      belonging to the picture rather than to the page */
   width: min(1024px, calc(100% - 2 * var(--pad)));
-  margin: 0 auto var(--pad);
   border-top: 1px solid var(--edge);
 }
 #under .bar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 18px;
-  padding: 10px 2px;
   color: var(--dim);
 }
 /* a rule between rows and not around them: the rows are one list, and a box
@@ -1014,17 +557,7 @@ body.playing #brand {
    nothing above or below it. A row that is not there is not a row; a strip
    with no rows in it is not a strip.
    ------------------------------------------------------------------ */
-body:not(.playing) #under:not(:has(#err:not(:empty))) {
-  display: none;
-}
-/* ...and the options are for playing whether or not anything went wrong */
-body:not(.playing) #swipeOpts {
-  display: none;
-}
-/* an empty row is not a row — #err is silent almost always */
-#under .bar:not(:has(> *:not(#err))):has(> #err:empty) {
-  display: none;
-}
+
 #under b {
   color: var(--ink);
   font-weight: 600;
@@ -1086,76 +619,13 @@ body:not(.playing) #swipeOpts {
   /* the picture's own width, so it lines up with the frame and the strip
      above it rather than with the page */
   width: min(1024px, calc(100% - 2 * var(--pad)));
-  margin: 0 auto var(--pad);
-  padding: 10px 2px;
-  display: flex;
-  align-items: center;
-  /* centred under the picture, unlike the controls above it. Those are a
-     list and read from the left edge like one; this is a single object
-     with the whole width to itself, and left-aligned it read as a fourth
-     control that had lost its row. */
-  justify-content: center;
   /* The rule belongs BETWEEN the controls and the ask, so it goes away with
      them — the same "a hairline with nothing above it" problem that put
      #under's border on the container rather than on its rows. The selector
      is #under's own hiding condition, repeated. */
   border-top: 1px solid var(--edge);
 }
-body:not(.playing) #under:not(:has(#err:not(:empty))) + #foot {
-  border-top: 0;
-}
 
-/* Cookie by Ania Kruk, SIL Open Font License 1.1 — the licence travels
-   with the font at public/cookie-OFL.txt. Latin subset, 14 KB, served
-   from this origin. `swap` so a slow font never holds the button back:
-   the fallback is the page's own display face, and the button is legible
-   either way. */
-@font-face {
-  font-family: "Cookie";
-  src: url("/cookie.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-a.bmc {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  padding: 0.1rem 0.8rem;
-  border: 1px solid var(--border-strong);
-  /* the widget's own 5px, which is also this sheet's --radius-lg */
-  border-radius: var(--radius-lg);
-  background: var(--raised);
-  color: var(--accent);
-  font-family: "Cookie", var(--font-display);
-  font-size: 1.05rem;
-  line-height: 1.85;
-  letter-spacing: 0.02em;
-  text-decoration: none;
-  transition:
-    border-color 110ms linear,
-    color 110ms linear,
-    transform 110ms ease-out;
-}
-/* the same step every other link on the page takes on hover */
-a.bmc:hover {
-  border-color: var(--border-hover);
-  color: var(--accent-hover);
-  transform: translateY(-1px);
-}
-a.bmc:active {
-  transform: none;
-}
-/* Cookie is a script face: its baseline sits high in the box, so the cup
-   is centred on the line box and then nudged to the letters' optical
-   centre rather than the box's. */
-a.bmc img {
-  height: 1.15em;
-  width: auto;
-  position: relative;
-  top: -0.06em;
-}
 /* The two levers, in the picture frame's own wood — the same treatment the
    save dialog's buttons get, because they are the same kind of thing: a
    control this port added, not one the game had. */
@@ -1170,9 +640,6 @@ a.bmc img {
   background: linear-gradient(var(--wood-lit) 0%, var(--wood-shade) 100%);
   border: 1px solid var(--rule);
   border-radius: 2px;
-  padding: 6px 10px;
-  cursor: pointer;
-  white-space: nowrap;
 }
 #under button:hover {
   border-color: var(--spark);
@@ -1185,7 +652,6 @@ a.bmc img {
 /* what became of the screenshot: said beside the button that took it, and
    taken down again once it has been read (dust/src/main.ts) */
 #under .note {
-  font-size: 11px;
   color: var(--spark);
 }
 /* ------------------------------------------------------------------
@@ -1212,60 +678,11 @@ a.bmc img {
    a `vh`-tall overlay hangs the bottom of the picture behind Safari's bar.
    ------------------------------------------------------------------ */
 #stage.fs {
-  /* The UA's own `:fullscreen` sheet zeroes an element's min/max box
-     constraints, and the real route was quietly living off that: this stage
-     carries a `min-height` tall enough to hold its frame (see #stage above),
-     which no browser resets when the class is doing the work instead. Without
-     this the faux overlay came out taller than the screen and pushed the
-     picture off the bottom of it. */
-  min-height: 0;
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 200;
   display: grid;
   place-items: center;
-  width: 100dvw;
-  height: 100dvh;
   padding: 0;
-  background: #000;
 }
-#stage.fs #curtain,
-#stage.fs #brand {
-  display: none;
-}
-#stage.fs #frame {
-  position: static;
-  margin: 0;
-  padding: 0;
-  width: auto;
-  height: auto;
-  background: none;
-  box-shadow: none;
-}
-#stage.fs #screen {
-  width: min(100dvw, calc(100dvh * 4 / 3));
-  height: min(100dvh, calc(100dvw * 3 / 4));
-  max-width: none;
-  max-height: none;
-}
-/* The player's other answer: the whole display, out of 4:3. Both sides
-   given, so `aspect-ratio` has nothing to derive and steps aside; the
-   pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
-#stage.fs.stretch #screen {
-  width: 100dvw;
-  height: 100dvh;
-}
-/* The hint no longer has to give way to anything: it WRAPS. The strip could
-   not, being one line of fixed height, so the sentence ellipsized and the
-   title attribute carried the rest — which a phone cannot hover to read.
-   Both hints keep their `title` anyway; it costs nothing and a mouse still
-   gets the long form. */
-#under .keyhint,
-#under .touchhint {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+
 #under .touchhint {
   display: none;
 }
@@ -1287,20 +704,12 @@ a.bmc img {
     display: none;
   }
 }
-/* the two swipe boxes: one group, so the gap between them is tighter than
-   the strip's own and they read as one question with two answers */
-#swipeOpts {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
+
 #swipeOpts[hidden] {
   display: none;
 }
 #swipeOpts label {
   display: flex;
-  gap: 5px;
-  align-items: center;
   color: var(--dim);
   cursor: pointer;
   /* a checkbox on a phone is a TARGET before it is a label: the strip is
@@ -1313,7 +722,6 @@ a.bmc img {
   accent-color: var(--spark);
   width: 15px;
   height: 15px;
-  margin: 0;
   cursor: pointer;
 }
 #swipeOpts input:focus-visible {
@@ -1493,7 +901,6 @@ a.bmc img {
 #saveUploadInput {
   display: none;
 }
-
 
 @media (prefers-reduced-motion: no-preference) {
   /* the only two loops on the page, and both are on the fuse: a spark that

@@ -4,7 +4,8 @@
  * the footer. The home page is made of them (tools/vite-home.ts), and a play
  * page asks for them by leaving the slot empty:
  *
- *     <!-- shell:head -->               the title, icons, manifest, theme
+ *     <!-- shell:head -->               the title, icons, manifest, theme, and
+ *                                       the page's own sheet, src/play.css
  *     <header class="topbar"></header>  the brand, the version, the ways in
  *     <footer id="foot"></footer>       the ask
  *
@@ -75,7 +76,7 @@ export const bmcLink = `<a class="bmc" href="https://buymeacoffee.com/danielhobi
 /** a page with its empty slots filled; one with none is returned as it was */
 export function expandShell(html: string, p: HomePage, up = "../"): string {
   return html
-    .replace("<!-- shell:head -->", headTags(p))
+    .replace("<!-- shell:head -->", `${headTags(p)}\n    <link rel="stylesheet" href="/src/play.css" />`)
     .replace(`<header class="topbar"></header>`, topbar(p, up))
     .replace(`<footer id="foot"></footer>`, `<footer id="foot">\n      ${bmcLink}\n    </footer>`);
 }

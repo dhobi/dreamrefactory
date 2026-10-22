@@ -31,7 +31,7 @@
  * ## What is NOT here
  *
  * Dust's dialog. It styles `#saveModal` directly, in its own wood
- * (`dust/src/game.css`), and has only ever had one copy — so there is nothing
+ * (`dust/src/play.css`), and has only ever had one copy — so there is nothing
  * to deduplicate there and nothing to gain by pulling it onto this sheet except
  * a changed look. Its pages do not link this.
  *

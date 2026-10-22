@@ -228,6 +228,11 @@
         it.
       </p>
     </div>
-    <script type="module" src="/src/home.ts"></script>
+    <!-- Play folds Original and Speedrunner into one menu, as on the game's
+         other pages (chrome/src/play-menu.ts) -->
+    <script type="module">
+      import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+      void installPlayMenu({ english: true });
+    </script>
   </body>
 </html>

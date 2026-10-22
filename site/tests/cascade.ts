@@ -46,9 +46,12 @@
 import { test, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { workbenchHtml, type WorkbenchPage } from "../../speedrun/vite";
+import { HOME_PAGES } from "../../tools/home-pages";
+import { homePageHtml } from "../../tools/vite-home";
+import { expandShell } from "../../tools/vite-shell";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -131,10 +134,12 @@ function rulesIn(css: string): Map<string, Map<string, string>> {
  * `dust/play/index.html` means `dust/src/game.css`, because that is what the page's
  * own Vite root makes it mean.
  *
- * One level of `@import` is followed, because a page's sheet may be nothing but
- * one: `taoot/src/speedrun.css` is a single import of the workbench panel from
- * the engine, and without this the eleven hundred rules it pulls in would be
- * read as nothing at all. `chrome.css` is never followed for the reason above.
+ * Its `@import`s are followed, all the way down, because a page's sheet may be
+ * nothing but one: `taoot/src/speedrun.css` is a single import of the workbench
+ * panel from the engine, and every game's `play.css` imports the play-page
+ * layers in chrome/src (play.css, play-flow.css, play-pinned.css) before what
+ * is its own. Without this the rules they pull in would be read as nothing at
+ * all. `chrome.css` is never followed for the reason above.
  */
 function ownCss(page: string, html: string): string {
   const pkg = page.split("/")[0];
@@ -145,21 +150,39 @@ function ownCss(page: string, html: string): string {
       return ""; // a link to something that is not there is somebody else's test
     }
   };
-  /** `@dreamfactory/speedrun/panel.css` → `speedrun/src/panel.css` */
-  const imported = (css: string): string[] =>
-    [...css.matchAll(/@import\s+["']@dreamfactory\/([a-z]+)\/([A-Za-z0-9_./-]+\.css)["']/g)]
-      .filter(([, , rest]) => !rest.endsWith("chrome.css"))
-      .map(([, other, rest]) => read(join(ROOT, other, "src", rest)));
+  /**
+   * The sheet at `path` and every sheet it imports: `@dreamfactory/speedrun/panel.css`
+   * is `speedrun/src/panel.css`, and `./play.css` is beside the importer.
+   */
+  const withImports = (path: string): string[] => {
+    const css = read(path);
+    const imports = [...css.matchAll(/@import\s+["']([^"']+\.css)["']/g)]
+      .map(([, spec]) => {
+        const pkg = /^@dreamfactory\/([a-z]+)\/(.+)$/.exec(spec);
+        return pkg ? join(ROOT, pkg[1], "src", pkg[2]) : join(dirname(path), spec);
+      })
+      .filter((p) => !p.endsWith("chrome.css"));
+    return [css, ...imports.flatMap(withImports)];
+  };
 
   const linked = [...html.matchAll(/<link[^>]+href="\/src\/([A-Za-z0-9_.-]+\.css)"/g)]
     .map((m) => m[1])
     .filter((name) => name !== "theme.css")
-    .flatMap((name) => {
-      const css = read(join(ROOT, pkg, "src", name));
-      return [css, ...imported(css)];
-    });
+    .flatMap((name) => withImports(join(ROOT, pkg, "src", name)));
   const inline = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
   return [...inline, ...linked].join("\n");
+}
+
+/**
+ * A page as it is served: a game's home page is written from its facts
+ * (tools/vite-home.ts), and its other pages have their shell slots filled
+ * (tools/vite-shell.ts) — which is where their stylesheet links come from.
+ */
+function pageHtml(page: string): string {
+  const facts = HOME_PAGES.find((h) => page.startsWith(`${h.dir}/`));
+  const html = readFileSync(join(ROOT, page), "utf8");
+  if (!facts) return html;
+  return page === `${facts.dir}/index.html` ? homePageHtml(facts) : expandShell(html, facts);
 }
 
 /**
@@ -171,7 +194,7 @@ const WORKBENCHES: [string, string][] = await Promise.all(
   globSync("*/speedrun/workbench.ts", { cwd: ROOT }).map(async (f): Promise<[string, string]> => {
     const pkg = f.split("/")[0];
     const { WORKBENCH } = (await import(join(ROOT, f))) as { WORKBENCH: WorkbenchPage };
-    return [`${pkg}/speedrun/index.html`, workbenchHtml(readFileSync(join(ROOT, pkg, WORKBENCH.play), "utf8"), WORKBENCH)];
+    return [`${pkg}/speedrun/index.html`, workbenchHtml(pageHtml(`${pkg}/${WORKBENCH.play}`), WORKBENCH)];
   }),
 );
 
@@ -190,7 +213,7 @@ function pagesLayeringChrome(): [page: string, html: string][] {
     .split("\n")
     .filter(Boolean);
   const pages: [string, string][] = [
-    ...tracked.map((f): [string, string] => [f, readFileSync(join(ROOT, f), "utf8")]),
+    ...tracked.map((f): [string, string] => [f, pageHtml(f)]),
     ...WORKBENCHES,
   ];
   // a page with no shared stylesheet has nothing to collide with, and a page
@@ -201,6 +224,10 @@ function pagesLayeringChrome(): [page: string, html: string][] {
 test("the shared chrome is in the tree the pages layer on", () => {
   expect(rulesIn(readFileSync(CHROME, "utf8")).size).toBeGreaterThan(20);
   expect(pagesLayeringChrome().length).toBeGreaterThan(5);
+  // a play page links its sheets through its shell slot, so a test that read
+  // the file as it is on disk would quietly stop covering every one of them
+  const checked = pagesLayeringChrome().map(([page]) => page);
+  for (const { dir } of HOME_PAGES) expect(checked).toContain(`${dir}/play/index.html`);
 });
 
 test("no page and the chrome set the same property on the same selector", () => {

@@ -1,0 +1,413 @@
+/* ------------------------------------------------------------------
+   The same page the other games have, in wood, brass and paper.
+
+   Two states and one movement between them:
+
+     body.booting  the title card, centred, with the gauge under it
+     body.playing  the title card small at the top, lapping over the
+                   picture's frame, and the picture underneath
+
+   What it composes with is in src/theme.css: sixty per cent of the card
+   is one orange-brown hue at three values (plank, parchment, brass), the
+   brand is the letters' crimson, and the only cold thing in it is one
+   silver coin. So the page is dark wood, the frame is a plank with a gold
+   lip, the gauge is a groove filling with gold, and silver is spent on
+   the glint at its tip.
+   ------------------------------------------------------------------ */
+
+/* what every play page shares, under what is this game's own */
+@import "@dreamfactory/chrome/play-flow.css";
+
+:root {
+  /* the moulding: a plank's worth of wood with the bevel's gold on its
+     inner edge. Four stops need room to be four stops. */
+  --frame-w: clamp(8px, 1vw, 14px);
+  /* the width the picture can have across, which the risen card is sized
+     from (it cannot come from --pic-w, which pays for the card: a cycle) */
+  --fit-w: min(1280px, calc(100vw - 2 * var(--pad) - 2 * var(--frame-w)));
+  /* The risen card. The artwork is 900x573, 1.57:1, so 0.11 of the width
+     gives a card about 17% of the frame across, with a floor a phone can
+     still read as the card. */
+  --brand-h: clamp(56px, calc(var(--fit-w) * 0.11), 124px);
+  /* the picture: 640x480 art on a 1280x960 canvas, as large as the room
+     across and the room down (converted through 4:3) allow */
+  --pic-w: min(
+    1280px,
+    var(--fit-w),
+    /* ...but never below a size worth playing at: past that the page
+       scrolls down rather than shrinking the picture to a stamp */
+    max(
+        320px,
+        calc(
+          (
+              100vh - var(--bar) - 2 * var(--pad) - var(--brand-h) +
+                var(--lap) - 2 * var(--frame-w) - var(--under)
+            ) *
+            4 / 3
+        )
+      )
+  );
+}
+
+/* on a phone the shared bar wraps its links to a second line */
+@media (max-width: 560px) {
+  :root {
+    --bar: 72px;
+  }
+}
+
+/* ---- the curtain: the title card and the gauge ------------------- */
+
+/* the light the card sits in: the gold's, warm and low, with the
+   letters' red at its heart — lamplight in a hold */
+#curtain::before {
+  left: 50%;
+  top: 40%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(236, 172, 49, 0.16),
+    rgba(151, 5, 3, 0.16) 40%,
+    #0000 72%
+  );
+}
+
+/* The card. src/main.ts hides it and sets body.nobrand when it fails to
+   load, so a missing file closes the band up instead of leaving a broken
+   frame. */
+#brand {
+  /* against the VIEWPORT: #curtain is shrink-to-fit and takes its width
+     from this image, so a percentage here is circular (Skull Cracker's
+     note, measured there) */
+  max-width: min(760px, calc(100vw - 2 * var(--pad)));
+  max-height: 48vh;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 0 34px rgba(236, 172, 49, 0.16));
+}
+
+/* ---- the gauge and the button, sharing one cell ------------------ */
+
+/* ------------------------------------------------------------------
+   THE GAUGE IS A GROOVE FILLING WITH GOLD.
+
+   Dust burns a fuse, Timelapse charges a conduit, Skull Cracker cracks a
+   plate. RedJack's material is the plank the skull is nailed to and the
+   coins stacked on it, so the gauge is a groove cut in a dark board, a
+   brass rivet at each end as the card has two either side of the skull,
+   and it fills with the bevel's gold left to right. The leading edge is
+   the one silver thing on the page: the glint, where it is live.
+
+     #bar     the groove — the plank's darkest grain, sunk
+     #charge  the width JS drives, the gold poured into it; its ::after
+              is the glint at the tip
+   ------------------------------------------------------------------ */
+
+#bar {
+  height: 14px;
+  margin: 0 13px;
+  border-radius: 2px;
+  background: linear-gradient(
+    var(--hold-1000),
+    var(--hold-800) 60%,
+    var(--hold-600)
+  );
+  box-shadow:
+    0 0 0 1px var(--brass-700),
+    0 0 0 2px var(--hold-1000),
+    inset 0 2px 3px rgb(0 0 0 / 80%),
+    0 1px 0 2px rgba(111, 74, 50, 0.45);
+}
+/* the two rivets, the card's own: a brass dome lit from above */
+#bar::before,
+#bar::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  translate: 0 -50%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 38% 32%,
+    var(--brass-100) 0 14%,
+    var(--brass-300) 30%,
+    var(--brass-500) 58%,
+    var(--brass-700) 82%,
+    var(--hold-1000) 100%
+  );
+}
+#bar::before {
+  left: -13px;
+}
+#bar::after {
+  right: -13px;
+}
+#charge {
+  border-radius: 2px 0 0 2px;
+  /* the bevel's scanline turned on its side: lit lip, face, falling away */
+  background: linear-gradient(
+    var(--brass-100) 0 2px,
+    var(--brass-200) 2px 38%,
+    var(--brass-400) 62%,
+    var(--brass-600)
+  );
+  box-shadow: 0 0 10px -2px rgba(236, 172, 49, 0.45);
+}
+/* the glint: silver, the only cold pixel on the page, at the pour's edge */
+#charge::after {
+  right: -1px;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--silver-100);
+  box-shadow:
+    0 0 5px 1px rgba(234, 234, 232, 0.8),
+    0 0 12px 3px rgba(190, 183, 176, 0.45);
+}
+
+#bootline {
+  margin: 0.55rem 0 0;
+}
+
+/* ------------------------------------------------------------------
+   THE BUTTON IS A LETTER: the crimson face, the gold bevel round it and
+   the letters' dark rule outside that, with a parchment label in the
+   banner's serif. Dust's and Skull Cracker's geometry — uppercase, wide
+   tracking, scale-in on `.ready` — in this card's materials.
+   ------------------------------------------------------------------ */
+#start {
+  font: 600 15px/1 var(--font-display);
+  background: linear-gradient(
+    var(--jack-300),
+    var(--commit-face-bottom) 48%,
+    var(--commit-face-deep)
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--brass-600),
+    inset 0 2px 0 rgba(247, 211, 123, 0.35),
+    0 0 0 2px var(--brass-400),
+    0 0 0 3px var(--jack-800),
+    0 10px 22px -10px #000;
+  text-shadow: 0 1px 0 var(--jack-800);
+  transition:
+    opacity 260ms ease-out,
+    transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
+    background 160ms ease-out,
+    color 160ms ease-out;
+}
+
+#start:hover {
+  background: linear-gradient(
+    var(--jack-200),
+    var(--jack-300) 48%,
+    var(--jack-500)
+  );
+  color: var(--commit-text-hover);
+  box-shadow:
+    inset 0 0 0 1px var(--brass-600),
+    inset 0 2px 0 rgba(247, 211, 123, 0.5),
+    0 0 0 2px var(--brass-200),
+    0 0 0 3px var(--jack-800),
+    0 0 22px -4px rgba(236, 172, 49, 0.45),
+    0 10px 22px -10px #000;
+}
+/* bone, not the accent: the accent is the gold the button is already
+   edged in, and a gold ring round a gold edge is not a ring */
+#start:focus-visible {
+  outline: 2px solid var(--bone-100);
+  outline-offset: 5px;
+}
+
+/* ---- the picture, in its plank --------------------------------- */
+
+/* ------------------------------------------------------------------
+   The moulding is the frame's PADDING, so the canvas keeps its size; four
+   rails rather than one gradient, dark outside and lit inside, the top
+   reaching the gold lip because the card is lit from above. A brass
+   rivet at each corner, as the plank on the card is nailed.
+   ------------------------------------------------------------------ */
+#frame {
+  border-radius: var(--radius);
+  background-color: var(--hold-900);
+  background-image:
+    linear-gradient(
+      180deg,
+      var(--hold-1000) 0 1px,
+      var(--plank-300) 1px 2px,
+      var(--plank-400) 2px 40%,
+      var(--hold-600) 40% calc(100% - 3px),
+      var(--brass-600) calc(100% - 3px) calc(100% - 2px),
+      var(--brass-300) calc(100% - 2px)
+    ),
+    linear-gradient(
+      0deg,
+      var(--hold-1000) 0 1px,
+      var(--hold-700) 1px 3px,
+      var(--hold-600) 3px calc(100% - 2px),
+      var(--brass-600) calc(100% - 2px)
+    ),
+    linear-gradient(
+      90deg,
+      var(--hold-1000) 0 1px,
+      var(--plank-500) 1px 3px,
+      var(--hold-600) 3px calc(100% - 2px),
+      var(--brass-500) calc(100% - 2px)
+    ),
+    linear-gradient(
+      270deg,
+      var(--hold-1000) 0 1px,
+      var(--plank-500) 1px 3px,
+      var(--hold-600) 3px calc(100% - 2px),
+      var(--brass-500) calc(100% - 2px)
+    );
+  box-shadow:
+    0 0 0 1px var(--hold-1000),
+    0 26px 60px -24px #000;
+}
+
+/* the four rivets, each centred in its own tile so the dome is the same
+   at every --frame-w */
+#frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --rivet: radial-gradient(
+    circle at 42% 38%,
+    var(--brass-100) 0 0.9px,
+    var(--brass-300) 0.9px 1.9px,
+    var(--brass-600) 1.9px 2.7px,
+    var(--hold-1000) 2.7px 3.2px,
+    #0000 3.3px
+  );
+  background-repeat: no-repeat;
+  background-size: 8px 8px;
+  background-image:
+    var(--rivet), var(--rivet), var(--rivet), var(--rivet);
+  background-position:
+    calc(var(--frame-w) / 2 - 4px) calc(var(--frame-w) / 2 - 4px),
+    calc(100% - var(--frame-w) / 2 + 4px) calc(var(--frame-w) / 2 - 4px),
+    calc(var(--frame-w) / 2 - 4px) calc(100% - var(--frame-w) / 2 + 4px),
+    calc(100% - var(--frame-w) / 2 + 4px)
+      calc(100% - var(--frame-w) / 2 + 4px);
+}
+
+#netbusy {
+  position: absolute;
+  right: calc(var(--frame-w) + 12px);
+  bottom: calc(var(--frame-w) + 12px);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--brass-600);
+  border-radius: 50%;
+  background: rgb(7 4 2 / 72%);
+  pointer-events: none;
+}
+#netbusy span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(190, 183, 176, 0.18);
+  /* silver: it is live */
+  border-top-color: var(--silver-100);
+  border-radius: 50%;
+  animation: netspin 700ms linear infinite;
+}
+/* `display: flex` above beats the UA's `[hidden]` */
+#netbusy[hidden] {
+  display: none;
+}
+@keyframes netspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #netbusy span {
+    animation: none;
+  }
+  #brand,
+  #frame,
+  #start,
+  #gauge {
+    transition: none;
+    animation: none;
+  }
+}
+
+#log i {
+  color: var(--alarm);
+}
+
+/* ---- the controls under it -------------------------------------- */
+
+#under .bar {
+  display: flex;
+}
+
+#loc:empty {
+  display: none;
+}
+.keycap {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: 11px/1.5 var(--font-mono);
+  color: var(--text-bright);
+  background: var(--hold-800);
+}
+#under .keyhint,
+#under .touchhint {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+#under .touchhint,
+#under .bar.touchonly {
+  display: none;
+}
+#swipeOpts label {
+  margin-right: 10px;
+}
+/* the hint that fits the pointer: keys for a mouse, the gesture for
+   glass — `hover: none` too, so a touchscreen laptop keeps its keys */
+@media (pointer: coarse) and (hover: none) {
+  #under .keyhint {
+    display: none;
+  }
+  #under .touchhint {
+    display: inline;
+  }
+  body.playing #under .bar.touchonly {
+    display: flex;
+  }
+}
+
+/* ---- fullscreen -------------------------------------------------- */
+
+/* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
+   engine/src/web/fullscreen.ts pins the stage over the viewport instead */
+#stage.fs {
+  display: grid;
+  place-items: center;
+  gap: 0;
+}
+#stage.fs #curtain,
+#stage.fs #frame::before {
+  display: none;
+}
+
+/* the player's other answer: the whole display, out of 4:3
+   (engine/src/web/stretch.ts) */
+#stage.fs.stretch #frame > #screen {
+  width: 100dvw;
+  height: 100dvh;
+}
+
+/* ---- the ask, under everything ---------------------------------- */
+

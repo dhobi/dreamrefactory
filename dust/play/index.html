@@ -12,16 +12,6 @@
          (base "./") and siteUrl resolves the rest. -->
     <meta name="site-root" content="../" />
     <!-- shell:head -->
-    <!-- the chrome every page in the project shares, in this game's own colours.
-         Where the two describe the same element, Dust's own look has to win — but
-         NOT by being linked first. The build resolves this <link> into a bundle
-         and re-inserts it at the END of <head>, after the <style> below, so the
-         authored order holds in dev and inverts in every build. `html body` below
-         is what actually settles it; `site/tests/cascade.ts` keeps it settled. -->
-    <!-- This game's chrome, in a sheet of its own because the workbench page
-         (dust/speedrun/) boots the same main.ts and needs the same elements
-         styled. See its header. -->
-    <link rel="stylesheet" href="/src/game.css" />
   </head>
   <body class="booting deep">
     <!--

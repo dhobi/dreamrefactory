@@ -10,8 +10,8 @@
  * `<link href>`.
  *
  * What is left here is the difference between the two games' PAGES. This one
- * links `game.css` as well, because the workbench boots the same `main.ts` and
- * that module queries nineteen elements it styles — and `game.css` is written
+ * links `play.css` as well, because the workbench boots the same `main.ts` and
+ * that module queries nineteen elements it styles — and `play.css` is written
  * for a page that IS the game: the stage fills the window, the picture is matted
  * in wood, and the whole thing is pinned rather than in flow. None of that is
  * right for one column of three, so the overrides below undo exactly those
@@ -30,7 +30,7 @@
 /**
  * The page is a document again, not a grid pinned to the window.
  *
- * `game.css` makes `body` a grid whose one row the stage takes, which is right
+ * `play.css` makes `body` a grid whose one row the stage takes, which is right
  * for a page that is nothing but the game and wrong for one that scrolls through
  * a row of columns.
  */
