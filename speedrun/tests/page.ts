@@ -20,6 +20,7 @@ const PLAY = `<!doctype html>
     <nav class="topnav"><a href="./collection/">Collection</a><a href="../">dreamREfactory</a><a href="https://example.org/">Out</a></nav></header>
   <div id="stage"><div id="title">card</div><canvas id="screen"></canvas><pre id="log" hidden></pre></div>
   <div id="under"><button id="fsBtn">Fullscreen</button></div>
+  <div id="details" hidden><h2>Details</h2><div id="dbgRows"></div></div>
   <script type="module" src="/src/main.ts"></script>
 </body></html>`;
 
@@ -29,7 +30,6 @@ const PAGE: WorkbenchPage = {
   drop: ["title", "under"],
   bodyClass: "nobrand",
   meta: { autostart: "1" },
-  details: `<div id="details" hidden><h2>Details</h2><div id="dbgRows"></div></div>`,
   intoDetails: ["log"],
   css: "/src/speedrun.css",
   entry: "/src/speedrun/page.ts",
@@ -88,5 +88,6 @@ test("the head says what this page is, and the game's entry runs after its main"
 
 test("a node the game names and the play page lacks is an error, not a quiet gap", () => {
   expect(() => make({ ...PAGE, game: ["stage", "nowhere"] })).toThrow(/#nowhere/);
-  expect(() => make({ ...PAGE, details: undefined })).toThrow(/no #details/);
+  const noColumn = PLAY.replace(/<div id="details".*?<\/div><\/div>\n/, "");
+  expect(() => workbenchHtml(noColumn, PAGE)).toThrow(/no #details/);
 });

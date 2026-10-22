@@ -5,7 +5,6 @@
  */
 import { fileURLToPath } from "node:url";
 import { gameConfig } from "../tools/vite-game";
-import { speedrunPage } from "../speedrun/vite";
 import { WORKBENCH } from "./speedrun/workbench";
 
 /** this file's own directory, not the working directory */
@@ -14,5 +13,5 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 export default gameConfig({
   root: HERE,
   dir: "redjack",
-  plugins: [...speedrunPage({ root: HERE, ...WORKBENCH })],
+  workbench: WORKBENCH,
 });

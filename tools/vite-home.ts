@@ -11,17 +11,9 @@
  */
 import type { Plugin } from "vite";
 import type { HomePage } from "./home-pages";
-
-const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+import { bmcLink, esc, headTags, topbar } from "./vite-shell";
 
 export function homePageHtml(p: HomePage): string {
-  const ways = [
-    `<a href="./play/" class="playway">Play</a>`,
-    ...(p.speedrun
-      ? [`<a href="./speedrun/" class="playway" title="Speedrun workbench — drive the game from a run sheet against the clock">Speedrunner</a>`]
-      : []),
-    ...(p.links ?? []).map((l) => `<a href="${esc(l.href)}"${l.title ? ` title="${esc(l.title)}"` : ""}>${esc(l.text)}</a>`),
-  ];
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -30,39 +22,10 @@ export function homePageHtml(p: HomePage): string {
     <meta name="robots" content="noindex, nofollow" />
     <!-- where the site's root is from THIS page: its own directory -->
     <meta name="site-root" content="./" />
-    <title>${esc(p.heading ?? `${p.name}: ${p.subtitle}`)}</title>
-    <link rel="icon" type="image/svg+xml" href="/${p.dir}-mark.svg" />
-    <!-- the same install tags as the play page; site/tests/app-icons.ts holds them to their source -->
-    <link rel="manifest" href="/app.webmanifest" />
-    <link rel="apple-touch-icon" href="/${p.dir}-apple-touch-180.png" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-    <meta name="apple-mobile-web-app-title" content="${esc(p.name)}" />
-    <meta name="theme-color" content="${p.themeColor}" />
-    <link rel="stylesheet" href="/src/theme.css" />
+    ${headTags(p)}
   </head>
   <body class="deep">
-    <header class="topbar">
-      <a
-        class="brand"
-        href="./"
-        title="RE — reverse-engineered: a best-effort re-implementation of the DreamFactory engine, not the original ${p.year} release"
-      >
-        <img class="brand-mark" src="/${p.dir}-mark.svg" alt="" width="30" height="30" />
-        <span class="brand-text">
-          <b>${esc(p.name)}</b>
-          <span>${esc(p.subtitle)}</span>
-        </span>
-      </a>
-      <span class="version" id="ver"></span>
-      <nav class="topnav">
-        ${ways.join("\n        ")}
-        <a href="../" title="dreamREfactory — the engine, and the other games">dreamREfactory</a>
-        <a href="../docs/">Docs</a>
-        <a href="https://github.com/dhobi/dreamrefactory">Source</a>
-      </nav>
-    </header>
+    ${topbar(p, "")}
 
     <div id="home">
       <!-- decorative: the <h1> below is the page's name for itself -->
@@ -84,9 +47,7 @@ export function homePageHtml(p: HomePage): string {
 
       <p class="credits">Built with the support of Claude Opus and Claude Fable.</p>
 
-      <a class="bmc" href="https://buymeacoffee.com/danielhobi" rel="noopener"
-        ><img src="/bmc-mark.svg" alt="" width="35" height="50" /><span>Buy me a coffee</span></a
-      >
+      ${bmcLink}
     </div>
 
     <script type="module">

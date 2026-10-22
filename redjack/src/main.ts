@@ -32,7 +32,6 @@ import {
   brandFallback,
   busySpinner,
   screenPlate,
-  showVersion,
   waitForStart,
 } from "@dreamfactory/engine/web/page-shell";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
@@ -41,7 +40,7 @@ import { SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { bindPointerInput } from "@dreamfactory/engine/web/shell-input";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { REDJACK } from "@dreamfactory/chrome/games";
-import { VERSION } from "@dreamfactory/chrome/version";
+import { VERSION, installVersion } from "@dreamfactory/chrome/version";
 import { fmtSize } from "@dreamfactory/chrome/net-meter";
 import { RedJackFiles } from "./files";
 import { REDJACK_SAVES, keepDf5Disk, seedRedJackSaves } from "./saves";
@@ -72,7 +71,7 @@ const logEl = document.getElementById("log") as HTMLPreElement;
 const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
 const stageEl = document.getElementById("stage") as HTMLElement;
-showVersion(VERSION);
+installVersion();
 // Play and Speedrunner folded into one "Play", as on Titanic's, Dust's and
 // Timelapse's pages (chrome/src/play-menu.ts), in English: RedJack is not
 // translated. The workbench boots this file too and gets the same

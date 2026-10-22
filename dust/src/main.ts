@@ -109,7 +109,7 @@ import {
   WebAudioSink,
 } from "@dreamfactory/engine/runtime/audio";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import { VERSION } from "@dreamfactory/chrome/version";
+import { VERSION, installVersion } from "@dreamfactory/chrome/version";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
 import { DUST } from "@dreamfactory/chrome/games";
@@ -255,13 +255,7 @@ const plateCtx = plate.getContext("2d", { alpha: false })!;
  * shows. A failure still reaches the log and the console either way.
  */
 const errEl = document.getElementById("err") as HTMLElement | null;
-const verEl = document.getElementById("ver");
-/* Just the version. The `dust-` prefix was there when this sat in a status
-   line under the picture with nothing around it to say which page it
-   belonged to; in the top bar it is a hand's width from a mark and a title
-   that both say Dust, and the tag it names (dust-v*, deploy.yml) is still
-   readable off it. */
-if (verEl) verEl.textContent = `v${VERSION}`;
+installVersion();
 
 // Play and Speedrunner folded into one "Play", as on Titanic's pages
 // (chrome/src/play-menu.ts), in English: Dust is not translated. The workbench

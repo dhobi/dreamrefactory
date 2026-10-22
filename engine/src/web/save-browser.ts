@@ -12,9 +12,10 @@
  *    file; resolves when the player is done (whether they saved or not).
  *
  * Both modes share the list, so a save flow can also download/delete existing
- * saves, and either mode can import (upload) a save from disk. The markup +
- * styles live in the page (`#saveModal` in `index.html` and in `dust/play/index.html`);
- * this module drives them, and everything game-specific about it — the
+ * saves, and either mode can import (upload) a save from disk. The markup is
+ * built here ({@link buildModal}) unless the page carries its own (Titanic's,
+ * translated); the styles are save-browser.css or the page's own (Dust's wood).
+ * This module drives them, and everything game-specific about it — the
  * extension, the folder headings, what counts as a valid file — comes from the
  * page's declared {@link SaveKind} rather than from here.
  */
@@ -67,8 +68,37 @@ interface Els {
 }
 let els: Els | null = null;
 
+/**
+ * The dialog, for a page that does not carry its own: every game's was the same
+ * markup with its save extension in it. Titanic's page keeps its own, because
+ * it translates it.
+ */
+function buildModal(): void {
+  const ext = saveKind().ext;
+  const modal = document.createElement("div");
+  modal.id = "saveModal";
+  modal.className = "modal";
+  modal.innerHTML = `<div class="modal-box">
+  <div class="modal-head">
+    <span id="saveModalTitle">Saved Games</span>
+    <button id="saveModalClose" type="button" title="Close">✕</button>
+  </div>
+  <div id="saveList" class="save-list"></div>
+  <div class="modal-foot">
+    <div id="saveNewRow">
+      <input aria-label="save name" id="saveNameInput" type="text" placeholder="save name" />
+      <button id="saveConfirmBtn" type="button">Save</button>
+    </div>
+    <button id="saveUploadBtn" type="button">⬆ Upload ${ext}</button>
+    <input aria-label="${ext} file" id="saveUploadInput" type="file" accept="${ext},${ext.toUpperCase()}" />
+  </div>
+</div>`;
+  document.body.appendChild(modal);
+}
+
 function elements(): Els {
   if (els) return els;
+  if (!document.getElementById("saveModal")) buildModal();
   const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   els = {
     modal: get<HTMLDivElement>("saveModal"),

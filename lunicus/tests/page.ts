@@ -486,7 +486,9 @@ describe("input", () => {
     p.key("keydown", { key: "ArrowUp" });
     expect(touchOpts.coords({ clientX: 1, clientY: 1 })).toBeNull();
     world.savesOpen = false;
-    p.key("keydown", { key: "ArrowUp" }, "saveNameInput");
+    // a text field on the page (the saves dialog's is built only when it opens)
+    document.body.insertAdjacentHTML("beforeend", '<input id="aField" type="text" />');
+    p.key("keydown", { key: "ArrowUp" }, "aField");
     expect(calls.some((c) => c.startsWith("keyDown"))).toBe(false);
   });
 

@@ -17,6 +17,8 @@ import { gamefilesManifest } from "./vite-gamefiles";
 import { siblingSignposts, siblingsBut, SIBLINGS } from "./vite-siblings";
 import { HOME_PAGES } from "./home-pages";
 import { homePage } from "./vite-home";
+import { expandShell, shellParts } from "./vite-shell";
+import { speedrunPage, type WorkbenchPage } from "../speedrun/vite";
 
 export interface GameConfigOptions {
   /** the game's directory, its package's own (`import.meta` of its vite.config.ts) */
@@ -27,6 +29,8 @@ export interface GameConfigOptions {
   pages?: Record<string, string>;
   /** the game's own plugins, run before the shared ones */
   plugins?: PluginOption[];
+  /** the speedrun workbench made from the play page, for a game that has one (speedrun/vite.ts) */
+  workbench?: WorkbenchPage;
   /** the game-file subtrees to list beyond the default (tools/vite-gamefiles.ts `include`) */
   gamefiles?: { include?: string[] };
   /** anything else for `server` (Titanic's tunnel host) */
@@ -68,8 +72,12 @@ export function gameConfig(o: GameConfigOptions): UserConfig {
     define: { __APP_VERSION__: JSON.stringify(version) },
     ...(o.worker ? { worker: o.worker } : {}),
     plugins: [
-      ...(home ? [homePage(home)] : []),
+      // the home page, and the parts every other page leaves a slot for (vite-shell.ts)
+      ...(home ? [homePage(home), shellParts(home)] : []),
       ...(o.plugins ?? []),
+      ...(o.workbench
+        ? speedrunPage({ root: o.root, ...o.workbench, prepare: home ? (html) => expandShell(html, home) : undefined })
+        : []),
       gamefilesManifest({ gamefiles: join(o.root, "gamefiles"), publicDir: join(o.root, "public"), include: o.gamefiles?.include }),
       siblingSignposts(siblingsBut(o.dir)),
     ],

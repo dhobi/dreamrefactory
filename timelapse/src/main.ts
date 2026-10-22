@@ -34,7 +34,6 @@ import {
   PageLog,
   busySpinner,
   screenPlate,
-  showVersion,
   titleRise,
   untilStarted,
 } from "@dreamfactory/engine/web/page-shell";
@@ -47,7 +46,7 @@ import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { TIMELAPSE } from "@dreamfactory/chrome/games";
-import { VERSION } from "@dreamfactory/chrome/version";
+import { VERSION, installVersion } from "@dreamfactory/chrome/version";
 import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
 import { TL_CURSORS } from "./cursor-art";
 import { TimelapseFiles } from "./files";
@@ -85,7 +84,7 @@ const logEl = document.getElementById("log") as HTMLPreElement;
 const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
 const stageEl = document.getElementById("stage") as HTMLElement;
-showVersion(VERSION);
+installVersion();
 // Play and Speedrunner folded into one "Play", as on Titanic's and Dust's pages
 // (chrome/src/play-menu.ts), in English: Timelapse is not translated. The
 // workbench boots this file too and gets the same

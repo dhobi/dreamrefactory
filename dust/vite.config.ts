@@ -5,7 +5,6 @@
  */
 import { fileURLToPath } from "node:url";
 import { gameConfig } from "../tools/vite-game";
-import { speedrunPage } from "../speedrun/vite";
 import { WORKBENCH } from "./speedrun/workbench";
 
 /** this file's own directory, not the working directory */
@@ -17,5 +16,5 @@ export default gameConfig({
   // The collection page: how to run the 1995 DOS game instead of this port of
   // it. Its download sits beside the rip on the host and is not in this repository.
   pages: { collection: "collection/index.html" },
-  plugins: [...speedrunPage({ root: HERE, ...WORKBENCH })],
+  workbench: WORKBENCH,
 });

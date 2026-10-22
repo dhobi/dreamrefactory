@@ -46,12 +46,6 @@ export function screenPlate(
   return { ctx, plate, plateCtx };
 }
 
-/** the build's version, where the page has a place for it */
-export function showVersion(version: string): void {
-  const verEl = document.getElementById("ver");
-  if (verEl) verEl.textContent = `v${version}`;
-}
-
 /**
  * The log: a panel over the picture, opened by its button or a key.
  *

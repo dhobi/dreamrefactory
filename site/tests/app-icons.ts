@@ -39,6 +39,7 @@ import { test, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { HOME_PAGES } from "../../tools/home-pages";
 import { homePageHtml } from "../../tools/vite-home";
+import { expandShell } from "../../tools/vite-shell";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { parseHTML } from "linkedom";
@@ -157,10 +158,11 @@ test.each(APPS)("$dir: every icon exists and is the size it claims", ({ dir }) =
   expect(maskable.length, `${dir} ships a maskable icon`).toBeGreaterThan(0);
 });
 
-/** a page as it is served: a home page from its template (tools/vite-home.ts), any other as written */
+/** a page as it is served: a home page from its template (tools/vite-home.ts), any other with its slots filled (vite-shell.ts) */
 function pageHtml(page: string): string {
-  const home = HOME_PAGES.find((h) => page === `${h.dir}/index.html`);
-  return home ? homePageHtml(home) : readFileSync(join(ROOT, page), "utf8");
+  const facts = HOME_PAGES.find((h) => page.startsWith(`${h.dir}/`));
+  if (!facts) return readFileSync(join(ROOT, page), "utf8");
+  return page === `${facts.dir}/index.html` ? homePageHtml(facts) : expandShell(readFileSync(join(ROOT, page), "utf8"), facts);
 }
 
 test.each(APPS)("$dir: the pages say on iOS what the manifest says on Android", ({ dir, short, pages }) => {

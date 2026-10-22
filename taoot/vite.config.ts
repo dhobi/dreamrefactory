@@ -13,7 +13,6 @@ import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import { gameConfig } from "../tools/vite-game";
-import { speedrunPage } from "../speedrun/vite";
 import { WORKBENCH } from "./speedrun/workbench";
 // RELATIVE, like everything a Vite config reaches: the config is bundled and run
 // under Node, where a bare specifier is left external for a loader that can
@@ -60,11 +59,9 @@ export default gameConfig({
     fencing: "minigames/fence/index.html",
     fistfight: "minigames/fight/index.html",
   },
-  plugins: [
-    nightdiveMovie(),
-    // the speedrun workbench, made from play/index.html by speedrun/vite.ts
-    ...speedrunPage({ root: HERE, ...WORKBENCH }),
-  ],
+  plugins: [nightdiveMovie()],
+  // the speedrun workbench, made from play/index.html by speedrun/vite.ts
+  workbench: WORKBENCH,
   /**
    * The workbench's Calculate worker (src/speedrun/calc-worker.ts) is an ES
    * module: it reaches the speedrun workspace's code, which loads one module on
