@@ -41,6 +41,15 @@ export interface SessionProfile {
    */
   readonly watchesHearLineEnds: boolean;
   /**
+   * A conversation's own drawing ends the hold a film leaves on the screen
+   * (`fade.pendingReveal`, ScreenDirector.screenOwner): a spoken line plays its
+   * frames to the screen (RedJack.exe 0x4406c7) and a set of plaques draws
+   * them. RedJack's scenes chain lines straight after a film — the trial at
+   * sea, Erzulie, the constable — with the script never falling quiet, so the
+   * film's last frame stood through all of it.
+   */
+  readonly puppetDrawEndsHold: boolean;
+  /**
    * A load runs no `open…` handler while it rebuilds — `openactor`, `openshop`,
    * `openprop`, `openstage`, `openflat`, `openset`, `openscene`
    * (docs/engine/formats/savegame-v5.md); the v4 and v1 loads mute only the
@@ -127,6 +136,7 @@ const V4: SessionProfile = {
   load: (session, bytes) => loadGame(session, bytes),
   loadOpensItsSet: false,
   watchesHearLineEnds: false,
+  puppetDrawEndsHold: false,
   loadMutesOpens: false,
   refusesBusySaves: false,
   scripts: { shortCircuit: false, typed: true },
@@ -193,6 +203,7 @@ const V5: SessionProfile = {
   // load (a speedrun's `load()`) hands it the bytes as Dust's does
   loadOpensItsSet: true,
   watchesHearLineEnds: true,
+  puppetDrawEndsHold: true,
   loadMutesOpens: true,
   refusesBusySaves: true,
   scripts: { shortCircuit: true, typed: false },

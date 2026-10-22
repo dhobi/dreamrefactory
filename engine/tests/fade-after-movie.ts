@@ -250,3 +250,38 @@ test("a fade with no film behind it still rebuilds the close-up", async () => {
     "the conversation screen was rebuilt, not the stale film frame kept",
   ).not.toBe(GATE_OPEN);
 });
+
+/**
+ * RedJack's scenes go straight from a film to a conversation that never lets the
+ * script fall quiet — the trial at sea plays `trialset.move` and then line after
+ * line, Erzulie and the constable the same — so the film's last frame stood
+ * through all of it, voices over a still. A conversation drawing is the script
+ * saying what the screen shows (SessionProfile.puppetDrawEndsHold): here the
+ * plaques going up.
+ */
+test("a v5 conversation that draws after a film takes the screen", async () => {
+  const { session, dir, ctx } = newWorld();
+  session.isV5 = true;
+  showCloseUp(session);
+  await playToEnd(session, dir, ctx);
+  expect(dir.screenOwner(), "the film's last frame holds").toBe("held");
+
+  const p = session.puppet as unknown as { bevels: unknown[]; idle: unknown[] };
+  p.bevels = [{ text: "I do.", id: 101 }];
+  p.idle = [];
+  void session.puppetCtrl.puppetEvent();
+  expect(session.fade.pendingReveal, "the plaques end the hold").toBe(false);
+  expect(dir.screenOwner()).toBe("puppet");
+});
+
+test("…and Titanic's conversation still leaves the film to the quiet", async () => {
+  const { session, dir, ctx } = newWorld();
+  showCloseUp(session);
+  await playToEnd(session, dir, ctx);
+
+  const p = session.puppet as unknown as { bevels: unknown[]; idle: unknown[] };
+  p.bevels = [{ text: "Going up.", id: 101 }];
+  p.idle = [];
+  void session.puppetCtrl.puppetEvent();
+  expect(dir.screenOwner(), "held, as #380 measured it").toBe("held");
+});
