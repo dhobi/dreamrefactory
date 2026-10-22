@@ -42,9 +42,6 @@
         <!-- 1024x768: the game window's 512x384, doubled (src/main.ts) -->
         <canvas id="screen" width="1024" height="768"></canvas>
       </div>
-      <!-- the boot's own account of itself; `b` opens it, and an error opens it
-           by itself -->
-      <pre id="log" hidden></pre>
     </div>
 
     <div id="under">
@@ -59,7 +56,7 @@
         <!-- File ▸ Open (0x4184cc): the saved games, the shared dialog; the panel's
              floppy button saves -->
         <button id="loadBtn" type="button" title="Open a saved game (File ▸ Open)">📂 Load</button>
-        <button id="logBtn" type="button" title="The boot log, in full (b)">▤ Boot log</button>
+        <button id="logBtn" type="button" title="Details: the boot log, in full (b)">▤ Boot log</button>
         <span class="keyhint" title="the arrows walk and turn · a click walks toward it or uses what is ahead · esc skips a film or ends a talk · b opens the boot log · Settings ▸ Keys changes the letters"
           ><span class="k">↑</span><span class="k">←</span><span class="k">→</span> walk <span class="k">click</span> go / use / fire
           <span class="k">H</span><span class="k">J</span><span class="k">K</span><span class="k">L</span> move · gun · grenades · rockets
@@ -76,6 +73,10 @@
     <!-- The ask, below the controls strip, so it is there on the title card
          too. `/bmc-mark.svg` is root-absolute because Vite rewrites a `public/`
          path the markup names per page depth. -->
+    <!-- Details, behind b (or the log button): the boot's own account of
+         itself and Copy details — built by engine/src/web/details-column.ts,
+         the column every play page carries. An error opens it by itself. -->
+    <div id="details" hidden></div>
     <footer id="foot"></footer>
     <script type="module" src="/src/main.ts"></script>
   </body>

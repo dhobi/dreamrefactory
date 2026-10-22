@@ -21,7 +21,8 @@ import "@dreamfactory/engine/web/window-bar.css";
 import { openWindowDialog, windowDialogOpen } from "@dreamfactory/engine/web/window-dialog";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { $, GESTURE_KEYS, V0Page } from "@dreamfactory/engine/web/v0-page";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
+import { JUMPRAVEN } from "@dreamfactory/chrome/games";
 import { VERSION } from "@dreamfactory/chrome/version";
 import { dayOf, TICKS_PER_SECOND } from "./game/data";
 import { JumpRaven } from "./game/game";
@@ -58,7 +59,16 @@ const SPEED = AUTOPLAY ? Math.min(32, Math.max(1, Number(params.get("speed")) ||
 /** the log, the disc, the sound and the screen: the shell Lunicus's page shares (engine/src/web/v0-page.ts) */
 const page = new V0Page({ name: "Jump Raven", year: 1994, slug: "jumpraven", rip: RIP, version: VERSION });
 const { canvas, locEl, complain, say, toggleLog, files, speaker, at } = page;
-installBugReport($<HTMLButtonElement>("bugBtn"), page.bugReport);
+// fullscreen and the bug report, as every play page has them (chrome/src/play-page.ts)
+installPageControls({
+  game: JUMPRAVEN,
+  canvas,
+  stage: $<HTMLDivElement>("stage"),
+  say,
+  edition: () => `${JUMPRAVEN.short} CD (${RIP})`,
+  where: () => locEl.textContent ?? "",
+  log: (n) => page.log.lines.slice(-n),
+});
 
 /* ------------------------------------------------------------------------- *
  * The machine

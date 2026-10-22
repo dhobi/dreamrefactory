@@ -322,7 +322,8 @@ describe("the boot", () => {
     expect(p.el("err").textContent).toBe("no game data: gamefiles/ is empty (see taoot/README.md#game-data)");
     expect(p.el("bootsay").textContent).toBe("no disc");
     expect(p.el("bootpct").textContent).toBe("0%");
-    expect(p.el("log").hidden).toBe(false);
+    // the Details column, which the log and the film line sit in
+    expect(p.el("details").hidden).toBe(false);
     expect((p.el("start") as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -354,10 +355,11 @@ describe("the boot", () => {
     expect(calls).toEqual(expect.arrayContaining(["fullscreen", "stretch"]));
     expect(bugOpts!.edition()).toBe("Skull Cracker (gamefiles/SKULL/)");
     expect((bugOpts!.log as (n: number) => string[])(1)).toEqual([expect.stringContaining("error: no game data")]);
+    // the words every play page says (chrome/src/play-page.ts)
     (bugOpts!.note as (how: string) => void)("clipboard");
-    expect(p.el("bugNote").textContent).toBe("screenshot copied");
-    (bugOpts!.note as (how: string) => void)("download");
-    expect(p.el("bugNote").textContent).toBe("screenshot downloaded");
+    expect(p.el("bugNote").textContent).toBe("screen copied — paste it into the issue");
+    (bugOpts!.note as (how: string) => void)("file");
+    expect(p.el("bugNote").textContent).toBe("screen saved — attach skullcracker-bug.png to the issue");
     // no film and no level yet: nowhere
     expect(bugOpts!.where()).toBe("");
   });
@@ -366,13 +368,14 @@ describe("the boot", () => {
     const p = await openPage({ disc: { manifest: {} } });
     p.press(400, 93);
     expect(p.log()).not.toContain("click at");
-    p.el("log").hidden = true;
+    p.el("details").hidden = true;
+    // the log and the film line open and shut together: both are in the Details column
     p.key("b");
-    expect(p.el("log").hidden).toBe(false);
-    expect(p.el("loc").hidden).toBe(false);
+    expect(p.el("details").hidden).toBe(false);
+    expect(p.el("details").contains(p.el("log"))).toBe(true);
+    expect(p.el("details").contains(p.el("loc"))).toBe(true);
     p.key("b");
-    expect(p.el("log").hidden).toBe(true);
-    expect(p.el("loc").hidden).toBe(true);
+    expect(p.el("details").hidden).toBe(true);
   });
 });
 

@@ -2,7 +2,8 @@
  * The page around a DreamFactory 0 machine (`v0/machine.ts`): what *Lunicus*'s
  * and *Jump Raven*'s `src/main.ts` each did line for line before it was here.
  *
- *   - the log under the screen, the fullscreen button and the title card
+ *   - the log, in the Details column every play page carries
+ *     (details-column.ts), and the title card
  *   - the rip: the files the machine asks for, fetched in the background while
  *     it waits (`GameFiles.want`), and the boot's gauge over the ones read
  *     before Enter
@@ -15,12 +16,14 @@
  * What stays in each game's page is what differs: its clock (Lunicus replays
  * and is driven, Jump Raven plays itself), its status line, its menu bar and
  * dialogs, and how its hands reach the machine. The engine knows no site, so
- * the bug report is the game's to install, from {@link V0Page.bugReport}.
+ * the controls under the picture — fullscreen and the bug report — are the
+ * game's to install (chrome/src/play-page.ts `installPageControls`), from
+ * {@link V0Page.log}.
  */
 import { SCREEN_H, SCREEN_W, type Screen } from "../v0/screen";
 import type { GameFiles, Speaker } from "../v0/machine";
-import { installFullscreen } from "./fullscreen";
-import { BootBar, brandFallback, escHtml } from "./page-shell";
+import { DetailsColumn } from "./details-column";
+import { BootBar, PageLog, brandFallback } from "./page-shell";
 import { pageUrl, siteBase } from "./page-url";
 import { readManifest, readStream } from "./rip-files";
 import { browseForSave } from "./save-browser";
@@ -34,7 +37,6 @@ export const GESTURE_KEYS: Record<GestureKey, string> = { uparrow: "ArrowUp", do
 
 const SCALE = 2;
 const SCREEN = { width: SCREEN_W, height: SCREEN_H };
-const BUG_NOTE_MS = 6000;
 
 export interface V0PageOptions {
   /** the game's name, as the log and the bug report say it ("Jump Raven") */
@@ -63,9 +65,10 @@ export class V0Page {
   /** the status line under the screen */
   readonly locEl = $<HTMLPreElement>("loc");
   private readonly ctx = this.canvas.getContext("2d")!;
-  private readonly logEl = $<HTMLPreElement>("log");
   private readonly errEl = $<HTMLSpanElement>("err");
-  private readonly logLines: string[] = [];
+  /** the Details column the log sits in, behind b or the log button */
+  readonly column: DetailsColumn;
+  readonly log: PageLog;
 
   private sizes: Record<string, number> = {};
   private readonly bytes = new Map<string, Uint8Array>();
@@ -98,52 +101,27 @@ export class V0Page {
     // the title card, which closes the band up when it fails to load — see #brand in index.html
     brandFallback($<HTMLImageElement>("brand"));
 
-    $("logBtn").addEventListener("click", this.toggleLog);
-    installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: this.say, landscape: true });
+    // the column builds the log it holds, so it comes first
+    this.column = new DetailsColumn(opts.slug);
+    this.log = new PageLog($<HTMLPreElement>("log"), $("logBtn"), 600, this.column);
+    this.column.installLog({ lines: () => this.log.lines, version: opts.version });
   }
 
   /* ----------------------------------------------------------------------- *
    * The log
    * ----------------------------------------------------------------------- */
 
-  readonly step = (line: string): void => {
-    this.logLines.push(line);
-    this.logEl.innerHTML += `<b>${escHtml(line)}</b>\n`;
-  };
+  /** something the boot did */
+  readonly step = (line: string): void => this.log.say(line, "step");
+  /** a complaint: said under the picture too, and the log opened on it */
   readonly complain = (line: string): void => {
-    this.logLines.push(line);
-    this.logEl.innerHTML += `<i>${escHtml(line)}</i>\n`;
+    this.log.say(line, "warn");
     this.errEl.textContent = line;
-    this.logEl.hidden = false;
+    this.log.show(true);
   };
-  readonly say = (line: string): void => {
-    this.logLines.push(line);
-    this.logEl.innerHTML += `${escHtml(line)}\n`;
-    this.logEl.scrollTop = this.logEl.scrollHeight;
-  };
-  readonly toggleLog = (): void => {
-    this.logEl.hidden = !this.logEl.hidden;
-  };
-
-  /** what the site's bug report (`@dreamfactory/chrome/bug-report`) asks of the page */
-  get bugReport() {
-    const bugNote = $("bugNote");
-    const { name, slug, rip, version } = this.opts;
-    return {
-      game: name,
-      canvas: this.canvas,
-      shotName: `${slug}-bug.png`,
-      version,
-      where: () => this.locEl.textContent ?? "",
-      edition: () => `${name} CD (${rip})`,
-      log: (n: number) => this.logLines.slice(-n),
-      note: (how: string) => {
-        bugNote.textContent =
-          how === "clipboard" ? "the screen is on the clipboard — paste it into the issue" : "the screen was downloaded — attach it to the issue";
-        setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-      },
-    };
-  }
+  readonly say = (line: string): void => this.log.say(line);
+  /** b and the log button */
+  readonly toggleLog = (): void => this.log.toggle();
 
   /* ----------------------------------------------------------------------- *
    * The disc

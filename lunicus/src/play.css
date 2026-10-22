@@ -16,6 +16,9 @@
 
 /* what every play page shares, under what is this game's own */
 @import "@dreamfactory/chrome/play-flow.css";
+/* the game window's menu bar, on the frame over the picture (src/menu.ts) — in
+   the Windows system grey, not in these roles: it is the game's window */
+@import "@dreamfactory/engine/web/window-bar.css";
 
 :root {
   /* the bevel round the picture: the rule, the gold, and the rule again */
@@ -244,32 +247,6 @@
   }
 }
 
-/* ---- the log, a panel over the stage ---------------------------- */
-
-#log {
-  position: absolute;
-  inset: var(--pad) max(var(--pad), calc((100% - var(--pic-w)) / 2 - var(--frame-w))) 0;
-  margin: 0;
-  z-index: 4;
-  overflow: auto;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--night-1000) 90%, transparent);
-  backdrop-filter: blur(3px);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text);
-  font: 12px/1.6 var(--font-mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-#log[hidden] {
-  display: none;
-}
-
-#log i {
-  color: var(--alarm);
-}
-
 /* ---- the controls under it -------------------------------------- */
 
 #under .bar {
@@ -310,3 +287,10 @@
 
 /* ---- the ask, under everything ---------------------------------- */
 
+
+/* The log, in the Details column (engine/src/web/details-column.css): its plain
+   lines in the words' own dim rather than in --accent-line, which this palette
+   keeps for a rule and not for text. */
+#details #log {
+  color: var(--text-dim);
+}

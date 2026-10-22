@@ -13,8 +13,13 @@
  * play-flow.css (the stage as one column: RedJack, Lunicus, Jump Raven) and
  * play-pinned.css (the frame pinned in the stage: Dust, Timelapse).
  *
- * Structure only, like chrome.css: every colour is the page's.
+ * Structure only, like chrome.css: every colour is the page's. The Details
+ * column's insides are imported here rather than by each game's theme.css,
+ * which a game's home page links too and has no column on it.
  */
+
+/* the Details column every play page carries (engine/src/web/details-column.ts) */
+@import "@dreamfactory/engine/web/details-column.css";
 
 :root {
   --pad: 16px;

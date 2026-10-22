@@ -26,7 +26,6 @@
 /* The structure comes first: an @import has to lead the file, and custom
    properties resolve where they are USED. */
 @import "@dreamfactory/chrome/chrome.css";
-@import "@dreamfactory/engine/web/details-column.css";
 
 /* ---- dusk: the ground ------------------------------------------------- */
 

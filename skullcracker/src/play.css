@@ -834,21 +834,6 @@ html.mobile #stage.fs #frame {
   --frame-w: 0px;
 }
 
-#log {
-  width: min(60rem, calc(100vw - 2 * var(--pad)));
-  max-height: 18rem;
-  overflow: auto;
-  margin: 0;
-  padding: var(--gap);
-  background: var(--inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 0.82em;
-  white-space: pre-wrap;
-}
-
 /* ---- the controls, as rows UNDER the picture ---------------------- */
 
 /* Rows rather than a strip fixed to the bottom of the window, which is the
@@ -1002,3 +987,10 @@ body:not(.playing) #swipeOpts {
   width: min(60rem, calc(100vw - 2 * var(--pad)));
 }
 
+
+/* The log, in the Details column (engine/src/web/details-column.css): its plain
+   lines in the words' own dim rather than in --accent-line, which this palette
+   keeps for a rule and not for text. */
+#details #log {
+  color: var(--text-dim);
+}

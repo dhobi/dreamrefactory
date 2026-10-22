@@ -70,15 +70,6 @@
         <canvas id="screen" width="1024" height="768"></canvas>
         <div id="netbusy" hidden aria-hidden="true"><span></span></div>
       </div>
-      <!-- The page's own account of itself: the log in full, and under it the
-           film that is playing, frame by frame. `b` opens the pair and an error
-           opens the log by itself. Both are HIDDEN rather than gone, because
-           both are read — the bug reporter sends the log's last lines with an
-           issue, and the browser suites read `#loc` to find out which film the
-           page thinks it is on. What they are not is something to read while
-           the game plays, which is why neither is on the page any more. -->
-      <pre id="log" hidden></pre>
-      <pre id="loc" hidden></pre>
     </div>
     <div id="under">
       <div class="bar">
@@ -129,6 +120,14 @@
          so it is there before a script runs and visible to whatever reads the
          page. `/bmc-mark.svg` is root-absolute because Vite rewrites a
          `public/` path the MARKUP names per page depth. -->
+    <!-- Details, behind b: the page's own account of itself — the log, and
+         the film that is playing frame by frame (#loc) — and Copy details,
+         in the column every play page carries (engine/src/web/details-column.ts).
+         An error opens it by itself. HIDDEN rather than gone, because both
+         are read: the bug reporter sends the log's last lines with an issue,
+         and the browser suites read `#loc` to find out which film the page
+         thinks it is on. -->
+    <div id="details" hidden><pre id="loc"></pre></div>
     <footer id="foot"></footer>
     <script type="module" src="/src/page/main.ts"></script>
   </body>

@@ -42,9 +42,6 @@
         <!-- 1024x768: the game window's 512x384, doubled (src/main.ts) -->
         <canvas id="screen" width="1024" height="768"></canvas>
       </div>
-      <!-- the boot's own account of itself; `b` opens it, and an error opens it
-           by itself -->
-      <pre id="log" hidden></pre>
     </div>
 
     <div id="under">
@@ -61,7 +58,7 @@
         <button id="loadBtn" type="button" title="Open a saved game (File ▸ Open) — on the high scores screen, or before Enter">📂 Load</button>
         <!-- ?autoplay: the page plays the game itself (src/player.ts) -->
         <button id="autoBtn" type="button" title="Watch the game play itself — the machine tests' player, four times as fast">▶ Autoplay</button>
-        <button id="logBtn" type="button" title="The boot log, in full (b)">▤ Boot log</button>
+        <button id="logBtn" type="button" title="Details: the boot log, in full (b)">▤ Boot log</button>
         <span class="keyhint" title="a click or esc skips a film or ends a briefing · in flight a click in the view fires the chosen weapon there, space fires the defensive, T is HOVER/FLY and the arrows (or W A S D) fly or slide · b opens the boot log · on a phone a double tap is esc and a swipe an arrow"
           ><span class="k">esc</span> skip <span class="k">click</span> fire <span class="k">space</span> defensive <span class="k">T</span> hover / fly <span class="k">↑</span><span class="k">←</span><span class="k">→</span> fly
           <span class="k">b</span> log</span
@@ -77,6 +74,10 @@
     <!-- The ask, below the controls strip, so it is there on the title card
          too. `/bmc-mark.svg` is root-absolute
          because Vite rewrites a `public/` path the markup names per page depth. -->
+    <!-- Details, behind b (or the log button): the boot's own account of
+         itself and Copy details — built by engine/src/web/details-column.ts,
+         the column every play page carries. An error opens it by itself. -->
+    <div id="details" hidden></div>
     <footer id="foot"></footer>
     <script type="module" src="/src/main.ts"></script>
   </body>

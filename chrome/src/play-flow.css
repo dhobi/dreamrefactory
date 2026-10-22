@@ -8,6 +8,8 @@
  * takes play.css alone.
  */
 @import "./play.css";
+/* the saved-games dialog, drawn in the page's roles (Dust draws its own in wood) */
+@import "@dreamfactory/engine/web/save-browser.css";
 
 :root {
   /* the ask under everything (#foot), which the title card leaves room

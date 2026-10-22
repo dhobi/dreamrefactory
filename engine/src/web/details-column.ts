@@ -36,14 +36,8 @@ import type { GameHost } from "./host";
 import { stateDump, type SpineVar } from "./debug-panel";
 import { bindRememberedBox, installStateList, type StateList } from "./state-list";
 
-/** what {@link DetailsColumn.install} wires the column to */
-export interface DetailsColumnOptions {
-  /** the few variables worth naming before the rest */
-  spine: readonly SpineVar[];
-  /** the game, whose live state the list shows and a copy carries */
-  host?: Pick<GameHost, "session" | "viewer">;
-  /** ...or the live state itself, for a page that snapshots its own way */
-  state?(): StateTrace;
+/** what {@link DetailsColumn.installLog} wires the column to: a page with a log and no script state */
+export interface DetailsLogOptions {
   /** every line of the log, for Copy details */
   lines(): readonly string[];
   /** the game's version, for the head of a copy */
@@ -54,6 +48,16 @@ export interface DetailsColumnOptions {
   inputs?: { on: boolean };
   /** what the note beside the button says once the copy is on the clipboard, or saved as a file — asked at the press, so a page that changes language says it in the new one */
   said?(): { copied: string; saved: string };
+}
+
+/** what {@link DetailsColumn.install} wires the column to */
+export interface DetailsColumnOptions extends DetailsLogOptions {
+  /** the few variables worth naming before the rest */
+  spine: readonly SpineVar[];
+  /** the game, whose live state the list shows and a copy carries */
+  host?: Pick<GameHost, "session" | "viewer">;
+  /** ...or the live state itself, for a page that snapshots its own way */
+  state?(): StateTrace;
 }
 
 /** how long the note beside Copy details stays */
@@ -70,7 +74,9 @@ export class DetailsColumn {
   readonly never = !!meta("details-never");
   readonly el = document.getElementById("details") as HTMLDivElement | null;
   private readonly openKey: string;
-  private o: DetailsColumnOptions | null = null;
+  private o: DetailsLogOptions | null = null;
+  /** the live state, where the page has one to show */
+  private live: (() => StateTrace) | null = null;
 
   /**
    * The column of `game` — which names what it remembers: `<game>.details.open`,
@@ -88,28 +94,30 @@ export class DetailsColumn {
 
   /** the state list, the input log's box and Copy details — once, when the page has a game to read */
   install(o: DetailsColumnOptions): StateList {
-    this.o = o;
-    const inputsKey = `${this.game}.details.inputs`;
-    const stateList = installStateList({
-      state: () => this.state(),
+    this.live = o.state ?? (() => snapshotState(o.host!.session, o.host!.viewer ?? null, "live"));
+    this.installLog(o);
+    return installStateList({
+      state: () => this.live!(),
       spine: o.spine,
       storageKey: `${this.game}.details.state`,
       defaultOn: this.always && this.panes,
       visible: () => !!this.el && !this.el.hidden,
     });
-    const inputsBox = document.getElementById("dbgInputsOn") as HTMLInputElement | null;
-    const inputs = o.inputs;
-    if (inputsBox && inputs) bindRememberedBox(inputsBox, inputsKey, (on) => (inputs.on = on), this.always && this.panes);
-    else if (inputsBox) (inputsBox.closest("label") ?? inputsBox).setAttribute("hidden", "");
-    document.getElementById("dbgCopy")?.addEventListener("click", () => void this.copy());
-    return stateList;
   }
 
-  /** the live game state, the goldens' own shape (runtime/trace.ts) */
-  private state(): StateTrace {
-    const o = this.o!;
-    if (o.state) return o.state();
-    return snapshotState(o.host!.session, o.host!.viewer ?? null, "live");
+  /**
+   * The input log's box and Copy details, for a page whose game keeps no
+   * script state to list — a DreamFactory 0 machine, Skull Cracker's: the state
+   * box is not offered, and a copy is the log.
+   */
+  installLog(o: DetailsLogOptions): void {
+    this.o = o;
+    if (!this.live) (document.getElementById("dbgStateOn")?.closest("label") ?? null)?.setAttribute("hidden", "");
+    const inputsBox = document.getElementById("dbgInputsOn") as HTMLInputElement | null;
+    const inputs = o.inputs;
+    if (inputsBox && inputs) bindRememberedBox(inputsBox, `${this.game}.details.inputs`, (on) => (inputs.on = on), this.always && this.panes);
+    else if (inputsBox) (inputsBox.closest("label") ?? inputsBox).setAttribute("hidden", "");
+    document.getElementById("dbgCopy")?.addEventListener("click", () => void this.copy());
   }
 
   /**
@@ -153,7 +161,7 @@ export class DetailsColumn {
     const o = this.o;
     if (!o) return;
     const head = o.head?.() ?? [`${this.game} ${o.version ?? ""}`.trim(), `browser: ${navigator.userAgent}`];
-    const text = stateDump(this.state(), o.lines(), head);
+    const text = this.live ? stateDump(this.live(), o.lines(), head) : [...head, "", "log:", ...o.lines(), ""].join("\n");
     const words = o.said?.() ?? { copied: "copied", saved: "saved as a file" };
     let said = words.copied;
     try {
