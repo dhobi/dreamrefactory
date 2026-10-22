@@ -54,6 +54,8 @@ import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
+import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
+import { InputLog } from "@dreamfactory/engine/web/input-log";
 
 const SCREEN = REDJACK.screen;
 
@@ -64,6 +66,8 @@ const canvas = document.getElementById("screen") as HTMLCanvasElement;
  */
 const { ctx, plate, plateCtx } = screenPlate(canvas, SCREEN);
 
+/** the Details column the log sits in, behind x, b or the log button (engine/src/web/details-column.ts) */
+const column = new DetailsColumn("redjack");
 const logEl = document.getElementById("log") as HTMLPreElement;
 const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
@@ -82,8 +86,13 @@ brandFallback(document.getElementById("brand") as HTMLImageElement | null);
  * ------------------------------------------------------------------------- */
 
 /** one line of the log: `step` is something the boot did, `warn` a complaint */
-const log = new PageLog(logEl, document.getElementById("logBtn"));
-const { say, show: showLog, lines: logLines } = log;
+/** the game, once there is one — what the input log asks where it stands */
+let current: GameHost | null = null;
+const log = new PageLog(logEl, document.getElementById("logBtn"), 600, column);
+const { say, show: showLog, toggle: toggleLog, lines: logLines } = log;
+
+/** every press and click, what it hit and what it did — behind the column's `inputs` box (engine/src/web/input-log.ts) */
+const inputs = new InputLog({ say: (line) => say(line), where: () => (current ? whereLine(current.session) : "booting") });
 
 /* ------------------------------------------------------------------------- *
  * The shared controls
@@ -211,6 +220,16 @@ async function main(): Promise<void> {
     },
     { screen: SCREEN },
   );
+  column.install({
+    // which day it is — the BOOTFILE's `day`, which `advanceday ()` moves on and
+    // every day's scripts branch on; where you stand is the #loc readout
+    spine: [{ name: "day", label: "Day" }],
+    host,
+    version: VERSION,
+    lines: () => logLines,
+    inputs,
+  });
+  current = host;
   // a real frame source before the boot runs, so a modal film and the game's own
   // poll loops advance (see timelapse/src/main.ts)
   host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -379,9 +398,10 @@ const canvasCoords = canvasCoordsFor(canvas, SCREEN, Math.floor);
 function bindInput(host: GameHost, s: GameHost["session"]): void {
   const input = bindPointerInput(host, canvas, {
     coords: canvasCoords,
+    inputs,
     swipeKey: "redjack.swipe",
     // `sysparam (7)`: a room's mousedown zooms while the right button is held
-    click: (x, y, e) => void host.director.buttonDown(x, y, { button: e.button === 2 ? 2 : 1 }).then(() => say(`click ${x},${y}`)),
+    click: (x, y, e) => host.director.buttonDown(x, y, { button: e.button === 2 ? 2 : 1 }).then(() => say(`click ${x},${y}`)),
     gestureKey: (key) => SWIPE_ARROWS[key] ?? key,
     // a finger in a room: look round, flick, zoom (src/room-touch.ts)
     front: (touch) => bindRoomTouch({ host, touch, coords: canvasCoords, screen: SCREEN }),
@@ -460,7 +480,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     const act = keyAction(e);
     if (!act) return;
     e.preventDefault();
-    if ("log" in act) showLog(logEl.hidden);
+    if ("log" in act) toggleLog();
     else sendKey(act.key, act.special);
   });
 }

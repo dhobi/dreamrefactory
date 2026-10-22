@@ -17,29 +17,7 @@ export const WORKBENCH: WorkbenchPage = {
   // boot without waiting for a Start press (main.ts AUTOSTART): a press per
   // boot is a press per run
   meta: { autostart: "1" },
-  /**
-   * The play page has no Details column, so the workbench brings one: the boot
-   * log, and the state list (engine/src/web/state-list.ts, wired in
-   * src/speedrun/page.ts) — a DreamFactory game's plot lives entirely in script
-   * globals, so a snapshot of them IS the game state.
-   */
-  details: `<div id="details">
-  <h2>Details</h2>
-  <div id="dbgBar">
-    <label title="Every script global, and the two this game's own suites reach for"><input type="checkbox" id="dbgStateOn" /> <span>state</span></label>
-  </div>
-  <div id="dbgState" hidden>
-    <div id="dbgSpine"></div>
-    <div id="dbgTools">
-      <input aria-label="filter" id="dbgFilter" type="search" placeholder="filter" title="One or more terms, | or , apart: day|clock — matched against a variable's name or a row's type (prop, actor)" />
-      <label title="Every global, not just the ones that have just moved"><input type="checkbox" id="dbgAll" /> <span>all</span></label>
-    </div>
-    <div id="dbgRows"></div>
-  </div>
-</div>`,
-  // the boot's own account of itself, above the variables: the log says what
-  // just happened and the list says where that left the game
-  intoDetails: ["log"],
+  // the Details column is the play page's (its log, its state list), opened here
   css: "/src/speedrun.css",
   entry: "/src/speedrun/page.ts",
   sheet: "tests/speedrun/run.sheet.txt",

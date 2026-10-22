@@ -57,6 +57,8 @@ import { bugLine, exitsHtml, whereHtml } from "./location";
 import { NetMeter, fmtSize } from "@dreamfactory/chrome/net-meter";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
+import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
+import { InputLog } from "@dreamfactory/engine/web/input-log";
 
 /**
  * This game's screen, and it is NOT the engine's default.
@@ -77,6 +79,8 @@ const canvas = document.getElementById("screen") as HTMLCanvasElement;
  */
 const { ctx, plate, plateCtx } = screenPlate(canvas, SCREEN);
 
+/** the Details column the log sits in, behind x, b or the log button (engine/src/web/details-column.ts) */
+const column = new DetailsColumn("timelapse");
 const logEl = document.getElementById("log") as HTMLPreElement;
 const locEl = document.getElementById("loc") as HTMLElement;
 const errEl = document.getElementById("err") as HTMLElement;
@@ -93,8 +97,11 @@ void installPlayMenu({ english: true });
  * because a bug report carries the tail of them (see installBugReport below)
  * and because the newest one is the caption under the loading gauge.
  */
-const log = new PageLog(logEl, document.getElementById("logBtn"));
-const { say, show: showLog, lines: logLines } = log;
+const log = new PageLog(logEl, document.getElementById("logBtn"), 600, column);
+const { say, show: showLog, toggle: toggleLog, lines: logLines } = log;
+
+/** every press and click, what it hit and what it did — behind the column's `inputs` box (engine/src/web/input-log.ts) */
+const inputs = new InputLog({ say: (line) => say(line), where: () => currentWhere || "booting" });
 
 /**
  * Audio waits for a gesture, as every browser insists — and on this game the
@@ -270,6 +277,20 @@ async function main(): Promise<void> {
     },
     { screen: SCREEN, propAnchor: TIMELAPSE.propAnchor },
   );
+  column.install({
+    // Where you are, as the BOOTFILE keeps it: the world letter, the stage and
+    // the frame — the three globals the location readout and the machine
+    // harness's `where()` both read. There is no room to name, so a place is these.
+    spine: [
+      { name: "curworldchar", label: "World" },
+      { name: "curstagenum", label: "Stage" },
+      { name: "curframenum", label: "Frame" },
+    ],
+    host,
+    version: VERSION,
+    lines: () => logLines,
+    inputs,
+  });
   /**
    * A real frame source before the boot runs, so `playmovie` is modal and the
    * game's own poll loops (`while stilldown()`, `forceupdate()`) advance — the
@@ -611,6 +632,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
 
   const { sendKey } = bindPointerInput(host, canvas, {
     coords: canvasCoords,
+    inputs,
     /**
      * Which way the two swipe axes read, remembered per game.
      *
@@ -631,7 +653,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     // turns changes what is under a pointer that has not moved, and a mouse at
     // rest gets no move event to notice it with
     click: (x, y) =>
-      void host.director
+      host.director
         .buttonDown(x, y)
         .then(() => say(`click ${x},${y} · flat ${s.currentFlat}`))
         .then(() => host.director.hover(x, y))
@@ -661,7 +683,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     const act = keyAction(e);
     if (!act) return;
     e.preventDefault();
-    if ("log" in act) showLog(logEl.hidden);
+    if ("log" in act) toggleLog();
     else if ("about" in act) showAbout();
     else sendKey(act.key, act.special);
   });

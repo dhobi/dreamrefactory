@@ -15,6 +15,11 @@
  *     [+01:18.2] [Click 214,180]   region "ok" → wireless — wireless 1
  *     [+01:20.0] [Esc]             — nothing changed
  *
+ * Titanic's play page grew it; every play page with a Details column carries
+ * it now, behind the column's `inputs` box (details-column.ts) — Timelapse's and
+ * RedJack's through the pointer binder they share (shell-input.ts), Dust's from
+ * its own handlers.
+ *
  * ## In the log rather than beside it
  *
  * One stream, interleaved with the engine's own lines, and not a second pane.
@@ -210,16 +215,20 @@ export const effectLine = (at: number, from: string, to: string): string =>
 
 /** the four questions this asks of the page, and the one thing it tells it */
 export interface InputLogPorts {
-  /** ms since the session began */
-  now(): number;
+  /** ms since the session began — absent, since this log was made */
+  now?(): number;
   /** put a line in the script log */
   say(line: string): void;
   /** where the game is standing, in one phrase */
   where(): string;
-  /** what will happen to a gesture arriving right now */
-  gate(): Gate;
-  /** run `fn` in `ms`, and give back the way to call it off */
-  after(ms: number, fn: () => void): () => void;
+  /**
+   * What will happen to a gesture arriving right now — Titanic's page knows
+   * (taoot/src/play-rules.ts); absent, every gesture is taken as `ready` and
+   * its line says nothing about a gate.
+   */
+  gate?(): Gate;
+  /** run `fn` in `ms`, and give back the way to call it off — absent, a window timer */
+  after?(ms: number, fn: () => void): () => void;
 }
 
 /**
@@ -235,10 +244,22 @@ export interface InputLogPorts {
  * blocked the browser's event loop on a two-minute film.
  */
 export class InputLog {
-  /** off unless the reader asked (or the page is a workbench) — see main.ts */
+  /** off unless the reader asked (or the page is a workbench) — the Details column's `inputs` box */
   on = false;
 
+  private readonly started = performance.now();
+
   constructor(private readonly ports: InputLogPorts) {}
+
+  private now(): number {
+    return this.ports.now?.() ?? performance.now() - this.started;
+  }
+
+  private after(ms: number, fn: () => void): () => void {
+    if (this.ports.after) return this.ports.after(ms, fn);
+    const t = setTimeout(fn, ms);
+    return () => clearTimeout(t);
+  }
 
   /**
    * Record one gesture and dispatch it.
@@ -254,24 +275,24 @@ export class InputLog {
       return;
     }
     const cause: Cause = {
-      at: this.ports.now(),
+      at: this.now(),
       what,
       // asked here and not by the caller, so a log that is off costs the engine
       // no hit test: `hitTestAt` walks the sprites, the view's hotspots and the
       // stage's regions, and a click is not the moment to do that for nothing
       hit: hit?.() ?? null,
-      gate: this.ports.gate(),
+      gate: this.ports.gate?.() ?? "ready",
       where: this.ports.where(),
     };
     let said = false;
-    const cancel = this.ports.after(SLOW_MS, () => {
+    const cancel = this.after(SLOW_MS, () => {
       said = true;
       this.ports.say(inputLine(cause, null));
     });
     const done = (): void => {
       cancel();
       const to = this.ports.where();
-      if (said) this.ports.say(effectLine(this.ports.now(), cause.where, to));
+      if (said) this.ports.say(effectLine(this.now(), cause.where, to));
       else this.ports.say(inputLine(cause, to));
     };
     // `Promise.resolve` because a dispatch need not be one: a gesture that
@@ -292,7 +313,7 @@ export class InputLog {
    */
   noteAnswered(what: string, where: string, answer: string): void {
     if (!this.on) return;
-    const head = `${stamp(this.ports.now())} ${what.padEnd(LABEL_WIDTH)}`;
+    const head = `${stamp(this.now())} ${what.padEnd(LABEL_WIDTH)}`;
     this.ports.say(`${head}${answer} · ${where}`);
   }
 }

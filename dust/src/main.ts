@@ -70,6 +70,8 @@ import {
 } from "@dreamfactory/engine/df/stg";
 import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { BootBar, BootCaption, brandFallback, busySpinner, titleRise, untilStarted } from "@dreamfactory/engine/web/page-shell";
+import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
+import { InputLog, clickLabel, inputLabel } from "@dreamfactory/engine/web/input-log";
 import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
@@ -332,18 +334,17 @@ if (bugBtn) {
     },
   });
 }
+/**
+ * The Details column the log sits in, behind b, x or the log button
+ * (engine/src/web/details-column.ts) — the column Titanic's play page carries,
+ * and on the workbench (`<meta name="details-always">`) a column always open.
+ */
+const column = new DetailsColumn("dust");
 const logEl = document.getElementById("log") as HTMLPreElement;
 
-/**
- * Does the log BELONG to this page, rather than cover it?
- *
- * `<meta name="details-always">`, which the speedrun workbench declares and
- * Titanic's uses for the same purpose (taoot/src/main.ts). On the game page the
- * log is an overlay over the picture that `b` lifts, and hiding it once the boot
- * is read is right; on the workbench it is a column of its own beside the
- * picture, so there is nothing to lift it off and nothing to hide it for.
- */
-const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
+
+/** every press and click, what it hit and what it did — behind the column's `inputs` box (engine/src/web/input-log.ts) */
+const inputs = new InputLog({ say: (line) => say(line), where: () => currentRoom || "booting" });
 
 /**
  * The log, and it is the page's ONLY prose surface.
@@ -372,7 +373,7 @@ function say(line: string): void {
     logEl.append(`${line}\n`);
   }
   // scrollTop forces layout, so only when there is something to scroll
-  if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
+  if (!(column.el?.hidden ?? true)) logEl.scrollTop = logEl.scrollHeight;
 }
 /** the title card, which rises rather than leaving — see #brand in dust/play/index.html */
 const brandEl = document.getElementById("brand") as HTMLImageElement | null;
@@ -879,6 +880,20 @@ async function runBoot(): Promise<void> {
     log: bootSay,
     hud: (t) => t && bootSay(`  ${t}`),
   });
+  column.install({
+    // The two variables worth naming before the rest — the ones Dust's own
+    // suites reach for to put the game in a known state: `day`, which decides
+    // the targets the shooting range sets out (tests/targets.ts), and `clock`,
+    // which the house's props read (tests/props.ts).
+    spine: [
+      { name: "day", label: "Day" },
+      { name: "clock", label: "Clock" },
+    ],
+    host,
+    version: VERSION,
+    lines: () => logLines,
+    inputs,
+  });
   /**
    * Give the session a real frame source before the boot runs.
    *
@@ -1027,7 +1042,7 @@ async function runBoot(): Promise<void> {
   } else {
     // no viewer: what is on screen is black, so the log opens — at this point
     // the log IS the result.
-    logEl.hidden = false;
+    column.show(true);
   }
 }
 
@@ -1114,12 +1129,9 @@ function play(host: GameHost, files: DustFiles): void {
   };
   (window as unknown as { dbg: unknown }).dbg = dbg;
   (window as unknown as { dust: unknown }).dust = dbg; // the older name, kept as an alias
-  // The boot's chatter has been read by whoever wanted it; the game gets a clean
-  // picture. Except where the log IS part of the page rather than an overlay on
-  // it ({@link DETAILS_ALWAYS}) — on the workbench it is a column, and a column
-  // that emptied itself the moment the game came up would be a column nobody
-  // could use.
-  if (!DETAILS_ALWAYS) logEl.hidden = true;
+  // The boot's chatter has been read by whoever wanted it; the column goes back
+  // to what the reader left it at — and stays, where it is part of the page
+  column.show(column.wanted());
   const s = host.session;
   let shownRoom = "";
   let shownSize = "";
@@ -1243,9 +1255,8 @@ addEventListener("keydown", (e) => {
   if (savesOpen()) return;
   if ("log" in act) {
     e.preventDefault();
-    // inert where the log is a column rather than an overlay — there is nothing
-    // to toggle it to, which is the same rule Titanic's X follows
-    if (!DETAILS_ALWAYS) logEl.hidden = !logEl.hidden;
+    // remembered, and inert where the column is the page (DetailsColumn.toggle)
+    column.toggle();
     return;
   }
   /**
@@ -1288,7 +1299,7 @@ addEventListener("keydown", (e) => {
    * mentions `isrepeat` at all, in any of the six editions.
    */
   host.session.interp.globals.set("isrepeat", act.repeat);
-  void host.session.track(host.director.keyDown(act.key, act.escape));
+  inputs.note(inputLabel(act.key), () => host.session.track(host.director.keyDown(act.key, act.escape)));
   e.preventDefault();
 });
 
@@ -1409,7 +1420,11 @@ canvas.addEventListener("pointerdown", (e) => {
   // what the press CARRIED: Dust reads `shiftkey()` inside its own mousedown
   // (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`), so the question is
   // what was held when the click happened, not what is held now.
-  void host.session.track(host.director.buttonDown(x, y, { shift: e.shiftKey }), `press ${x},${y}`);
+  inputs.note(
+    clickLabel(x, y),
+    () => host.session.track(host.director.buttonDown(x, y, { shift: e.shiftKey }), `press ${x},${y}`),
+    () => host.session.hitTestAt(x, y),
+  );
 });
 
 // on the window, not the canvas: a drag that ends off-canvas still has to end.
@@ -1517,7 +1532,11 @@ const touch = new TouchGestures({
     if (!host?.viewer) return;
     // a finger holds no shift key, and Dust reads `shiftkey()` inside its own
     // mousedown (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`)
-    void host.session.track(host.director.buttonDown(x, y, { shift: false }), `press ${x},${y}`);
+    inputs.note(
+      clickLabel(x, y),
+      () => host.session.track(host.director.buttonDown(x, y, { shift: false }), `press ${x},${y}`),
+      () => host.session.hitTestAt(x, y),
+    );
   },
   release: (x, y) => {
     const host = playing;
@@ -1551,7 +1570,7 @@ function sendGestureKey(ch: string, isEsc = false): void {
   // a gesture is never a held key: don't let a stale 1 from a leant-on arrow
   // make an `isrepeat` door guard swallow the swipe
   host.session.interp.globals.set("isrepeat", false);
-  void host.session.track(host.director.keyDown(ch, isEsc));
+  inputs.note(inputLabel(ch), () => host.session.track(host.director.keyDown(ch, isEsc)));
 }
 
 
@@ -1577,5 +1596,5 @@ start().catch((e) => {
   // it burning at whatever fraction it had reached
   fuse.say(String(e));
   raiseTitle();
-  logEl.hidden = false;
+  column.show(true);
 });

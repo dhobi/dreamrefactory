@@ -1,8 +1,8 @@
 /**
- * What the player pressed, said in a line (taoot/src/input-log.ts,
+ * What the player pressed, said in a line (engine/src/web/input-log.ts,
  * [#178](https://github.com/dhobi/dreamrefactory/issues/178)).
  *
- *   npx vitest run taoot/tests/auto/input-log.ts
+ *   npx vitest run engine/tests/input-log.ts
  *
  * The log's other half. The script log has always said what the GAME did —
  * `opensetfile(…)`, `click bag` — and nothing about what was done to it, so a
@@ -34,7 +34,7 @@ import {
   stamp,
   type Cause,
   type Gate,
-} from "../../src/input-log";
+} from "@dreamfactory/engine/web/input-log";
 
 /* ------------------------------------------------------------------ *
  * The words

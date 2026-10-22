@@ -367,14 +367,18 @@ describe("the game, once it runs", () => {
     expect(current.host!.globals.get("isrepeat")).toBe(false);
   });
 
-  it("keeps b for the log", async () => {
+  it("keeps b and x for the Details column the log sits in", async () => {
     const p = await openPage();
     await enter(p);
-    expect(p.el("log").hidden).toBe(true);
+    expect(p.el("details").hidden).toBe(true);
     p.fire("keydown", { key: "b" });
-    expect(p.el("log").hidden).toBe(false);
+    expect(p.el("details").hidden).toBe(false);
+    p.fire("keydown", { key: "x" });
+    expect(p.el("details").hidden).toBe(true);
+    p.fire("keydown", { key: "x" });
+    expect(p.el("details").hidden).toBe(false);
     p.click("logBtn");
-    expect(p.el("log").hidden).toBe(true);
+    expect(p.el("details").hidden).toBe(true);
     expect(calls).not.toContain("key b");
   });
 

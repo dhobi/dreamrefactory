@@ -131,8 +131,6 @@
              page's wood) -->
         <div id="netbusy" hidden aria-hidden="true"><span></span></div>
       </div>
-      <!-- the boot's own account of itself, in full; `b` opens it -->
-      <pre id="log" hidden></pre>
     </div>
     <!-- The strip is the CONTROLS and nothing else.
 
@@ -227,6 +225,10 @@
         <span id="err"></span>
       </div>
     </div>
+    <!-- Details, behind b (or x, or the log button): the boot's own account of
+         itself, the state list and Copy details — built by
+         engine/src/web/details-column.ts, the column Titanic's play page carries. -->
+    <div id="details" hidden></div>
     <!-- The ask, in its own element BELOW the controls strip.
 
          It was a third row of #under first, which was wrong: that strip waits

@@ -1494,31 +1494,6 @@ a.bmc img {
   display: none;
 }
 
-/* the boot log, over the picture. Not up during the boot any more — the
-   fuse's caption carries the newest line and the wall of text fought the
-   title card for the same middle of the same page — so this is now what `b`
-   opens, and what an error opens by itself. */
-#log {
-  position: absolute;
-  top: calc(var(--pad) + var(--band));
-  right: var(--pad);
-  bottom: var(--pad);
-  left: var(--pad);
-  margin: 0;
-  z-index: 4;
-  overflow: auto;
-  padding: 14px 16px;
-  background: #08060488;
-  backdrop-filter: blur(3px);
-  border: 1px solid var(--edge);
-  color: var(--ink);
-  font:
-    12px/1.6 ui-monospace,
-    Menlo,
-    Consolas,
-    monospace;
-  white-space: pre-wrap;
-}
 
 @media (prefers-reduced-motion: no-preference) {
   /* the only two loops on the page, and both are on the fuse: a spark that

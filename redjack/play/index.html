@@ -565,28 +565,6 @@
         }
       }
 
-      /* ---- the log, a panel over the stage ---------------------------- */
-
-      #log {
-        position: absolute;
-        inset: var(--pad)
-          max(var(--pad), calc((100% - var(--pic-w)) / 2 - var(--frame-w))) 0;
-        margin: 0;
-        z-index: 4;
-        overflow: auto;
-        padding: 14px 16px;
-        background: color-mix(in srgb, var(--hold-1000) 90%, transparent);
-        backdrop-filter: blur(3px);
-        border: 1px solid var(--border-strong);
-        border-radius: var(--radius);
-        color: var(--text);
-        font: 12px/1.6 var(--font-mono);
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-      #log[hidden] {
-        display: none;
-      }
       /* its two voices: a step the boot took, and something it complained about */
       #log b {
         color: var(--accent);
@@ -842,9 +820,6 @@
         <!-- the game is waiting on the network, once the wait is long enough -->
         <div id="netbusy" hidden aria-hidden="true"><span></span></div>
       </div>
-      <!-- the boot's own account of itself; `b` opens it, and an error opens it
-           by itself -->
-      <pre id="log" hidden></pre>
     </div>
 
     <div id="under">
@@ -914,6 +889,11 @@
         <pre id="loc"></pre>
       </div>
     </div>
+    <!-- Details, behind x (or b, or the log button): the boot's own account of
+         itself, the state list and Copy details — built by
+         engine/src/web/details-column.ts, the column Titanic's play page carries.
+         An error opens it by itself. -->
+    <div id="details" hidden></div>
     <!-- The ask, below the controls strip, so it is there on the title card
          too. `/bmc-mark.svg` is root-absolute because Vite rewrites a `public/`
          path the markup names per page depth. -->

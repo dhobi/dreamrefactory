@@ -23,27 +23,7 @@
  */
 import { startWorkbench } from "@dreamfactory/speedrun/workbench";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
 import { ACTIONS } from "./actions";
-
-/**
- * The two variables worth naming before the rest.
- *
- * Titanic's six come from a readout the original game itself carries; Dust has
- * no such dialog to read the answer off, so these are the two its own suites
- * reach for when they need to put the game in a known state — `day`, which
- * decides which targets the shooting range sets out (dust/tests/targets.ts: day
- * 2 and 3 add the pig and the chicken), and `clock`, which the house's props
- * read (dust/tests/props.ts).
- *
- * A short list on purpose. A spine is what a reader wants before anything else,
- * and a guess at that is worse than the full table underneath it — which is
- * always there. When a Dust route exists, what it waits on is what belongs here.
- */
-const SPINE: readonly SpineVar[] = [
-  { name: "day", label: "Day" },
-  { name: "clock", label: "Clock" },
-];
 
 startWorkbench({
   // Its own key space, and this is the whole reason the namespace exists: the
@@ -53,7 +33,6 @@ startWorkbench({
   // does not have.
   game: "dust",
   actions: ACTIONS,
-  details: { spine: SPINE },
   /**
    * The repository's own route, published beside this page by the speedrun
    * plugin (speedrun/vite.ts) — middleware in dev, an emitted asset in a build, at

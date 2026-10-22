@@ -9,8 +9,8 @@ import type { WorkbenchPage } from "../../speedrun/vite";
  */
 export const WORKBENCH: WorkbenchPage = {
   play: "play/index.html",
-  // the title card's curtain, the boot gauge, the picture and the log all live
-  // in #stage, as Dust's do
+  // the title card's curtain, the boot gauge and the picture all live in
+  // #stage, as Dust's do
   game: ["stage"],
   // The title card (#brand) is the play page's welcome, and a workbench is
   // reloaded on every `reset()`; main.ts reads it as nullable, and `nobrand`
@@ -25,29 +25,10 @@ export const WORKBENCH: WorkbenchPage = {
   // boot without waiting for the Enter press (main.ts AUTOSTART): a press per
   // boot is a press per run
   meta: { autostart: "1" },
-  /**
-   * The play page has no Details column, so the workbench brings one: the
-   * location, the boot log, and the state list (engine/src/web/state-list.ts,
-   * wired in src/speedrun/page.ts) — the day's plot lives in script globals
-   * and the cast's ai flags, which the state list shows.
-   */
-  details: `<div id="details">
-  <h2>Details</h2>
-  <div id="dbgBar">
-    <label title="Every script global, and the few that say where you are"><input type="checkbox" id="dbgStateOn" /> <span>state</span></label>
-  </div>
-  <div id="dbgState" hidden>
-    <div id="dbgSpine"></div>
-    <div id="dbgTools">
-      <input aria-label="filter" id="dbgFilter" type="search" placeholder="filter" title="One or more terms, | or , apart: day|nick — matched against a variable's name or a row's type (prop, actor)" />
-      <label title="Every global, not just the ones that have just moved"><input type="checkbox" id="dbgAll" /> <span>all</span></label>
-    </div>
-    <div id="dbgRows"></div>
-  </div>
-</div>`,
-  // where you stand first (the play page's own readout, with the stage's exit
-  // table), then why a boot failed if it did, then the boot's account of itself
-  intoDetails: ["loc", "err", "log"],
+  // The Details column is the play page's (its log, its state list), opened
+  // here; into it, under the heading, where you stand (the play page's own
+  // readout, with the stage's exit table), then why a boot failed if it did
+  intoDetails: ["loc", "err"],
   css: "/src/speedrun.css",
   entry: "/src/speedrun/page.ts",
   sheet: "tests/speedrun/run.sheet.txt",

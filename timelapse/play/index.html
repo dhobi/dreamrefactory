@@ -1181,37 +1181,6 @@
         color: var(--alarm);
       }
 
-      /* ------------------------------------------------------------------
-         The boot log, over the picture.
-
-         This page used to BE this element. It is a diagnostic surface for a game
-         whose four discs are still being found out, and when something goes wrong
-         it is the only thing that says what — so it is still the full account,
-         still every line, and it is what `b` opens. Not up during the boot any
-         more: the gauge's caption carries the newest line, and a wall of text
-         fought the title card for the same middle of the same page.
-         ------------------------------------------------------------------ */
-      #log {
-        position: absolute;
-        top: calc(var(--pad) + var(--band));
-        right: var(--pad);
-        bottom: var(--pad);
-        left: var(--pad);
-        margin: 0;
-        z-index: 4;
-        overflow: auto;
-        padding: 14px 16px;
-        background: #04050ecc;
-        backdrop-filter: blur(3px);
-        border: 1px solid var(--border-strong);
-        color: var(--text);
-        font:
-          12px/1.6 ui-monospace,
-          Menlo,
-          Consolas,
-          monospace;
-        white-space: pre-wrap;
-      }
       /* the log's two voices: a step the boot took, and something it had to
          complain about */
       #log b {
@@ -1502,9 +1471,6 @@
              wait is long enough to be one -->
         <div id="netbusy" hidden aria-hidden="true"><span></span></div>
       </div>
-      <!-- the boot's own account of itself, in full; `b` opens it, and an error
-           opens it by itself -->
-      <pre id="log" hidden></pre>
     </div>
     <div id="under">
       <div class="bar">
@@ -1591,6 +1557,11 @@
         <pre id="loc"></pre>
       </div>
     </div>
+    <!-- Details, behind x (or b, or the log button): the boot's own account of
+         itself, the state list and Copy details — built by
+         engine/src/web/details-column.ts, the column Titanic's play page carries.
+         An error opens it by itself. -->
+    <div id="details" hidden></div>
     <!-- The ask, in its own element BELOW the controls strip — see the note in
          the stylesheet. An anchor in the markup rather than anything injected,
          so it is there before a script runs and visible to whatever reads the

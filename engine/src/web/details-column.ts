@@ -31,7 +31,8 @@
  * column, the state list and the input log all on, and remembered, because
  * what such a report was missing is most often which gesture caused the thing.
  */
-import type { StateTrace } from "@dreamfactory/engine/runtime/trace";
+import { snapshotState, type StateTrace } from "@dreamfactory/engine/runtime/trace";
+import type { GameHost } from "./host";
 import { stateDump, type SpineVar } from "./debug-panel";
 import { bindRememberedBox, installStateList, type StateList } from "./state-list";
 
@@ -39,16 +40,18 @@ import { bindRememberedBox, installStateList, type StateList } from "./state-lis
 export interface DetailsColumnOptions {
   /** the few variables worth naming before the rest */
   spine: readonly SpineVar[];
-  /** the live game state */
-  state(): StateTrace;
-  /** whether there is a game to snapshot yet — absent, always (a page whose session exists from the start) */
-  ready?(): boolean;
+  /** the game, whose live state the list shows and a copy carries */
+  host?: Pick<GameHost, "session" | "viewer">;
+  /** ...or the live state itself, for a page that snapshots its own way */
+  state?(): StateTrace;
   /** every line of the log, for Copy details */
   lines(): readonly string[];
-  /** what heads a copy: the game's name and version, its edition, the browser */
-  head(): string[];
-  /** turns the input log on and off; absent, the `inputs` box is not offered */
-  inputs?(on: boolean): void;
+  /** the game's version, for the head of a copy */
+  version?: string;
+  /** what heads a copy, in place of the game, its version and the browser — Titanic's names its edition */
+  head?(): string[];
+  /** the input log the `inputs` box turns on and off (input-log.ts); absent, the box is not offered */
+  inputs?: { on: boolean };
   /** what the note beside the button says once the copy is on the clipboard, or saved as a file — asked at the press, so a page that changes language says it in the new one */
   said?(): { copied: string; saved: string };
 }
@@ -76,7 +79,8 @@ export class DetailsColumn {
    */
   constructor(private readonly game: string) {
     this.openKey = `${game}.details.open`;
-    if (new URLSearchParams(window.location.search).get("debug") === "1" && !this.never && this.el) {
+    if (this.el && !this.el.querySelector("#dbgBar")) fill(this.el);
+    if (new URLSearchParams(window.location?.search ?? "").get("debug") === "1" && !this.never && this.el) {
       this.el.hidden = false;
       for (const key of ["open", "state", "inputs"]) remember(`${game}.details.${key}`, true);
     }
@@ -87,17 +91,25 @@ export class DetailsColumn {
     this.o = o;
     const inputsKey = `${this.game}.details.inputs`;
     const stateList = installStateList({
-      state: () => o.state(),
+      state: () => this.state(),
       spine: o.spine,
       storageKey: `${this.game}.details.state`,
       defaultOn: this.always && this.panes,
-      visible: () => !!this.el && !this.el.hidden && (o.ready?.() ?? true),
+      visible: () => !!this.el && !this.el.hidden,
     });
     const inputsBox = document.getElementById("dbgInputsOn") as HTMLInputElement | null;
-    if (inputsBox && o.inputs) bindRememberedBox(inputsBox, inputsKey, o.inputs, this.always && this.panes);
+    const inputs = o.inputs;
+    if (inputsBox && inputs) bindRememberedBox(inputsBox, inputsKey, (on) => (inputs.on = on), this.always && this.panes);
     else if (inputsBox) (inputsBox.closest("label") ?? inputsBox).setAttribute("hidden", "");
     document.getElementById("dbgCopy")?.addEventListener("click", () => void this.copy());
     return stateList;
+  }
+
+  /** the live game state, the goldens' own shape (runtime/trace.ts) */
+  private state(): StateTrace {
+    const o = this.o!;
+    if (o.state) return o.state();
+    return snapshotState(o.host!.session, o.host!.viewer ?? null, "live");
   }
 
   /**
@@ -140,7 +152,8 @@ export class DetailsColumn {
   private async copy(): Promise<void> {
     const o = this.o;
     if (!o) return;
-    const text = (o.ready?.() ?? true) ? stateDump(o.state(), o.lines(), o.head()) : [...o.head(), "", ...o.lines()].join("\n");
+    const head = o.head?.() ?? [`${this.game} ${o.version ?? ""}`.trim(), `browser: ${navigator.userAgent}`];
+    const text = stateDump(this.state(), o.lines(), head);
     const words = o.said?.() ?? { copied: "copied", saved: "saved as a file" };
     let said = words.copied;
     try {
@@ -159,6 +172,34 @@ export class DetailsColumn {
     note.textContent = said;
     window.setTimeout(() => (note.textContent = ""), NOTE_MS);
   }
+}
+
+/**
+ * The column's insides, for a page that gives an empty `<div id="details">`:
+ * Dust's, Timelapse's and RedJack's, which each carried this markup until it
+ * was here. Titanic's page keeps its own, because it translates it. What the
+ * workbench moved in at build time (speedrun/vite.ts `intoDetails` — where you
+ * stand, why a boot failed) stays, under the heading.
+ */
+function fill(el: HTMLElement): void {
+  const moved = [...el.children];
+  el.innerHTML = `<h2>Details</h2>
+<div id="dbgBar">
+  <label title="Every script global, and the few worth naming first"><input type="checkbox" id="dbgStateOn" /> <span>state</span></label>
+  <label title="Every press and click, what it hit, and what it did — in the log, so a report carries it"><input type="checkbox" id="dbgInputsOn" /> <span>inputs</span></label>
+  <button id="dbgCopy" type="button" title="Copy the state and the whole log, to attach to a bug report">⧉ Copy details</button>
+  <span id="dbgNote" class="note"></span>
+</div>
+<pre id="log"></pre>
+<div id="dbgState" hidden>
+  <div id="dbgSpine"></div>
+  <div id="dbgTools">
+    <input aria-label="filter" id="dbgFilter" type="search" placeholder="filter" title="One or more terms, | or , apart — matched against a variable's name or a row's type (prop, actor)" />
+    <label title="Every global, not just the ones that have just moved"><input type="checkbox" id="dbgAll" /> <span>all</span></label>
+  </div>
+  <div id="dbgRows"></div>
+</div>`;
+  el.querySelector("h2")!.after(...moved);
 }
 
 /** an answer kept past the tab, where storage allows */

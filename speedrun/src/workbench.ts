@@ -82,8 +82,6 @@ import { panelKeys, type PanelKeys } from "./panel-keys";
 import { buildPanel } from "./panel";
 import { installColumnWidths, installPictureScale } from "./widths";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
-import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
-import { installDetails } from "./details";
 import { markUnattended } from "@dreamfactory/engine/web/error-box";
 
 // A run is timed by a sheet, not watched by a person: the game's script error
@@ -156,13 +154,6 @@ export interface Workbench {
    * game that takes none.
    */
   contributedSheets?: string;
-  /**
-   * The Details column's variables list, led by `spine` — the few variables
-   * worth naming before the rest (./details.ts). Absent where the page under
-   * the workbench installs the column itself: Titanic's play page shows it
-   * outside the workbench too (taoot/src/main.ts).
-   */
-  details?: { spine: readonly SpineVar[] };
   /**
    * Work the open sheet's time out without playing it on screen, or absent for a
    * game with no Calculate button (#509): headless, in a Web Worker, as fast as
@@ -2147,7 +2138,6 @@ export function startWorkbench(open: Workbench): void {
   installColumnWidths(PANEL);
   installPictureScale(PANEL);
   installMute(PANEL);
-  if (open.details) installDetails(open.game, open.details.spine);
   // No files to warm, no button: the control would be a press that says
   // "nothing to warm", which is a worse answer than not offering it
   warmBtn.hidden = !open.warmup;

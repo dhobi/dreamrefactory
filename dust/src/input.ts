@@ -43,7 +43,8 @@ export type KeyAction = { log: true } | { key: string; escape: boolean; repeat: 
 export function keyAction(e: KeyEventLike): KeyAction | null {
   if (focusOwnsKey(e.target, e.key)) return null;
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
-  if (e.key === "b" || e.key === "B") return { log: true };
+  // b is the log, and x the Details column it sits in (Titanic's key for it)
+  if (e.key === "b" || e.key === "B" || e.key === "x" || e.key === "X") return { log: true };
   const name = ARROWS[e.key] ?? SPECIAL_KEYS[e.key] ?? null;
   const ch = name ?? (e.key.length === 1 ? e.key.toLowerCase() : "");
   if (!ch) return null;

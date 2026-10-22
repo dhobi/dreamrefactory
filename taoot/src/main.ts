@@ -55,7 +55,7 @@ import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
-import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
+import { InputLog, clickLabel, inputLabel, type Hit } from "@dreamfactory/engine/web/input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
@@ -1127,7 +1127,7 @@ void boot();
  * has to maintain: what is logged is what the game was given.
  *
  * The three questions the recorder asks are answered below rather than inside
- * it, so the wording can be tested without an engine (taoot/src/input-log.ts).
+ * it, so the wording can be tested without an engine (engine/src/web/input-log.ts).
  */
 const SESSION_START = performance.now();
 
@@ -1615,7 +1615,7 @@ const stateList = column.install({
   // The input log (#178): on the workbench a run IS a sequence of gestures, and
   // on the play page a player who has not asked should not have their log
   // doubled in length. This game's own, because this game's log is.
-  inputs: (on) => (inputs.on = on),
+  inputs,
   said: () => ({ copied: t("play.debugCopied"), saved: t("play.debugSaved") }),
 });
 

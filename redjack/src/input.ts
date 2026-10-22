@@ -29,9 +29,10 @@ export function keyAction(e: KeyEventLike): KeyAction | null {
   // Escape is `"."` with the special marker, which is what the film player
   // tests for (see ESCAPE_KEY)
   if (e.key === "Escape") return { key: ESCAPE_KEY, special: true };
-  // `b` is the log, and it does not go on to the game: the BOOTFILE's key
-  // router answers to the arrows, space, escape and F1, and `b` is none of them
-  if (e.key === "b") return { log: true };
+  // `b` is the log, and `x` the Details column it sits in — Titanic's key for
+  // it — and neither goes on to the game: the BOOTFILE's key router answers to
+  // the arrows, space, escape and F1, and they are none of them
+  if (e.key === "b" || e.key === "x" || e.key === "X") return { log: true };
   return { key: ARROWS[e.key] ?? e.key.toLowerCase(), special: false };
 }
 

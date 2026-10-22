@@ -6,8 +6,8 @@
  *
  * The workbench itself is the speedrun workspace's and has its own suites; what is Dust's
  * here is the wiring — this game's key space, its own actions, the route the
- * build publishes beside the page, and the spine its Details column leads with
- * (the column itself is the workbench's: speedrun/tests/details.ts).
+ * build publishes beside the page. Its Details column is the play page's
+ * (engine/src/web/details-column.ts).
  */
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -26,6 +26,4 @@ it("starts the workbench in Dust's own key space, with Dust's actions and route"
   expect(workbench!.actions).toBe(ACTIONS);
   expect(workbench!.fixtureSheet).toBe("/site/speedrun/run.sheet.txt");
   expect(workbench!.contributedSheets).toBe("/site/speedrun/sheets.json");
-  const details = workbench!.details as { spine: { name: string }[] };
-  expect(details.spine.map((v) => v.name)).toEqual(["day", "clock"]);
 });

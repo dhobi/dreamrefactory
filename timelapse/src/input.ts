@@ -55,14 +55,15 @@ export function keyAction(e: { key: string; metaKey: boolean; ctrlKey: boolean; 
   // reached the script chain and skipped no film (see ESCAPE_KEY)
   if (e.key === "Escape") return { key: ESCAPE_KEY, special: true };
   /**
-   * `b` is the log, and it does NOT go on to the game.
+   * `b` is the log, and `x` the Details column it sits in (Titanic's key for
+   * it), and neither goes on to the game.
    *
    * Safe to take, and checked rather than assumed: the BOOTFILE's key router
    * (container 1, `keydown`) answers to the arrows, `w`/`s`/`a`/`d`, `z`/`c`
-   * and the space — `b` is not one of them, so nothing is being intercepted
+   * and the space — `b` and `x` are not among them, so nothing is being intercepted
    * from the game here.
    */
-  if (e.key === "b") return { log: true };
+  if (e.key === "b" || e.key === "x" || e.key === "X") return { log: true };
   /**
    * F12 is tl.exe's About box (engine/src/runtime/about-box.ts): the window
    * proc's F12 arm (0x4055db) calls 0x4060c0, and the key goes no further.

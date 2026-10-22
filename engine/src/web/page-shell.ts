@@ -12,6 +12,7 @@
  * What stays in each game's page is what differs: its screen, its loading page,
  * its keys and touch, and its bug report — the engine knows no site.
  */
+import type { DetailsColumn } from "./details-column";
 import { DeferredAudioSink, WebAudioSink } from "../runtime/audio";
 import type { GameHost } from "./host";
 
@@ -62,13 +63,30 @@ export function showVersion(version: string): void {
 export class PageLog {
   readonly lines: string[] = [];
 
+  /**
+   * `column`: the Details column the log sits in (details-column.ts), which is
+   * then what the button and {@link toggle} open and shut — remembered, as X
+   * is. Without one the log is a panel of its own, shown by its `hidden`.
+   */
   constructor(
     readonly el: HTMLPreElement,
     button: HTMLElement | null,
     private readonly max = 600,
+    private readonly column: DetailsColumn | null = null,
   ) {
-    button?.addEventListener("click", () => this.show(this.el.hidden));
+    button?.addEventListener("click", () => this.toggle());
   }
+
+  /** whether the log is on screen */
+  get open(): boolean {
+    return this.column ? !(this.column.el?.hidden ?? true) : !this.el.hidden;
+  }
+
+  /** b, X and the log button: open it, or shut it */
+  toggle = (): void => {
+    if (this.column) this.column.toggle();
+    else this.show(this.el.hidden);
+  };
 
   /** one line of the log */
   say = (line: string, kind: "" | "step" | "warn" = ""): void => {
@@ -79,11 +97,13 @@ export class PageLog {
     else if (kind === "warn") tag = "i";
     this.el.insertAdjacentHTML("beforeend", tag ? `<${tag}>${escHtml(line)}</${tag}>\n` : `${escHtml(line)}\n`);
     // scrollTop forces layout, so only when there is something to scroll
-    if (!this.el.hidden) this.el.scrollTop = this.el.scrollHeight;
+    if (this.open) this.el.scrollTop = this.el.scrollHeight;
   };
 
+  /** open or shut it for now — a failure opens it on itself */
   show = (open: boolean): void => {
-    this.el.hidden = !open;
+    if (this.column) this.column.show(open);
+    else this.el.hidden = !open;
     if (open) this.el.scrollTop = this.el.scrollHeight;
   };
 
