@@ -86,8 +86,9 @@ export interface HeadlessGame {
    */
   roomless?: boolean;
   /**
-   * Composite every frame, as the page's loop does after its tick
-   * (`director.render`), into a canvas that draws nothing ({@link nullCanvas}).
+   * Composite after the tick, as the page's loop does (`director.render`), into
+   * a canvas that draws nothing ({@link nullCanvas}) — until the first picture
+   * is presented, which is all of a render the game can tell (below).
    *
    * What the game can SEE of a render is the framebuffer: `captureFrame` reads
    * the last presented composite, and a reveal (`visualeffect`) captures the
@@ -166,7 +167,11 @@ export async function headlessRun(game: HeadlessGame): Promise<HeadlessRun> {
     wall += FRAME_MS;
     if (!host.session.loadingFiles && !host.session.sheetHalted) budgetWall += FRAME_MS;
     host.director.tick(wall);
-    if (painted) host.director.render(painted);
+    // ...until something has been presented: all a game can tell of a render is
+    // whether there is a picture to capture (ScreenPresenter.capture), and once
+    // there is one there always is, so the frames after it would composite a
+    // picture no one reads
+    if (painted && !host.director.screen.frameValid) host.director.render(painted);
     const due = queued;
     queued = [];
     const next = (i: number): void => {

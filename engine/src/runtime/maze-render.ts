@@ -155,6 +155,33 @@ export class SphereImage {
   }
 
   /**
+   * The one pixel (x, y) exactly as {@link render} draws it, rays rounded to
+   * the Float32Array it keeps them in — which {@link at}'s doubles are not, so
+   * the two can part on a tile's edge. What a hit test reads of the depth
+   * sphere without rendering all of it (maze-view.ts `hitOcclusion`).
+   */
+  rendered(x: number, y: number, width: number, height: number, { heading, pitch, fov, roll = 0 }: SphereLook): number {
+    const f = width / (2 * Math.tan(fov / 2));
+    const c = Math.cos(pitch);
+    const s = Math.sin(pitch);
+    const px = x + 0.5 - width / 2;
+    const py = y + 0.5 - height / 2;
+    const dx = roll ? px * Math.cos(roll) - py * Math.sin(roll) : px;
+    const dy = roll ? px * Math.sin(roll) + py * Math.cos(roll) : py;
+    const ry = dy * c - f * s;
+    const rz = f * c + dy * s;
+    let lon = (Math.PI - heading + Math.fround(Math.atan2(dx, rz))) % TAU;
+    if (lon < 0) lon += TAU;
+    const lat = Math.fround(Math.PI / 2 + Math.atan2(ry, Math.hypot(dx, rz)));
+    const { cells, cell, cellsX, cellsY } = this;
+    const t = cells[Math.min(cellsY - 1, Math.max(0, (lat / cell) | 0)) * cellsX + Math.min(cellsX - 1, (lon / cell) | 0)];
+    if (!t) return this.none;
+    const tx = Math.min(255, ((lon - t.lon0) / t.scale) | 0);
+    const ty = Math.min(255, Math.max(0, ((lat - t.lat0) / t.scale) | 0));
+    return t.palette[t.pixels[ty * 256 + tx]];
+  }
+
+  /**
    * Draw the view into `out` (one RGBA word per pixel), looking along
    * `heading` with `pitch` up, `roll` about the line of sight and a horizontal
    * field of view of `fov`.
