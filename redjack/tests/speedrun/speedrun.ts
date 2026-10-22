@@ -64,7 +64,8 @@ async function main(): Promise<void> {
   if (!existsSync(sheet)) throw new Error(`no sheet at ${sheet}`);
   const whole = parseSheet(readFileSync(sheet, "utf8"), { verbs: VERBS });
   const steps = FROM ? enterAt(whole, FROM) : whole;
-  console.log(`sheet ${relative(ROOT, sheet)} — ${describeSheet(whole)}${FROM ? `\n  from "${FROM}"` : ""}`);
+  const from = FROM ? '\n  from "' + FROM + '"' : "";
+  console.log(`sheet ${relative(ROOT, sheet)} — ${describeSheet(whole)}${from}`);
   if (flag("lint")) return;
   if (!haveRip()) throw new Error("no RedJack rip at redjack/gamefiles/ — the run needs the game");
 
@@ -94,7 +95,7 @@ async function main(): Promise<void> {
     // workbench's columns, for comparing a line between the two
     onDone: (t) =>
       process.env.VERBOSE &&
-      console.log(`      ${ms(host().session.gameNow).padStart(8)} +${ms(t.game)} ${t.frames}f${t.says.length ? `  ${t.says.join("; ")}` : ""}`),
+      console.log(`      ${ms(host().session.gameNow).padStart(8)} +${ms(t.game)} ${t.frames}f${t.says.length ? "  " + t.says.join("; ") : ""}`),
   });
 
   let at = 0;

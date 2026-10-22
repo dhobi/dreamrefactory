@@ -75,11 +75,13 @@ export async function playerFor(c: ActionContext): Promise<Player> {
     }
     if (done()) return max;
     const s = session();
-    return fail(
-      `stuck waiting for ${what} (${max} passes, ${owner()} at ${room()}/${node()}` +
-        `${director().busy ? ", director busy" : ""}${running().length ? `, running ${running().join(", ")}` : ""}` +
-        `${s.maze?.walk ? ", walking" : ""}${director().quiescent ? "" : ", not quiescent"})`,
-    );
+    const notes = [
+      director().busy ? ", director busy" : "",
+      running().length ? ", running " + running().join(", ") : "",
+      s.maze?.walk ? ", walking" : "",
+      director().quiescent ? "" : ", not quiescent",
+    ].join("");
+    return fail(`stuck waiting for ${what} (${max} passes, ${owner()} at ${room()}/${node()}${notes})`);
   };
   return {
     get host() {

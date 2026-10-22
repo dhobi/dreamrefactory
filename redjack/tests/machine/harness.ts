@@ -24,7 +24,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { GameHost, type HostFiles } from "@dreamfactory/engine/web/host";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
-import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import { REDJACK } from "../../../chrome/src/games";
 import { PlayFailure, type Player } from "../../src/play/player";
 

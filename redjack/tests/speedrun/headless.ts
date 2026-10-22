@@ -30,7 +30,11 @@ export function redjackHost(log: (line: string) => void = () => {}): GameHost {
 }
 
 /** a key event as `keyAction` and `heldKeys` read one: `code` from the driver's own spelling */
-const codeOf = (key: string): string => (key === " " ? "Space" : key.startsWith("Arrow") || key === "Escape" ? key : key.length === 1 ? `Key${key.toUpperCase()}` : key);
+const codeOf = (key: string): string => {
+  if (key === " ") return "Space";
+  if (key.length === 1) return `Key${key.toUpperCase()}`;
+  return key; // ArrowLeft, Escape and the rest are their own code
+};
 
 function deliver(host: GameHost, e: InputEvent): void {
   const session = host.session;
