@@ -2,7 +2,7 @@ import { SettFile } from "@dreamfactory/engine/df/sett";
 import { depthV5 } from "@dreamfactory/engine/df/image-v5";
 import { Value } from "@dreamfactory/engine/runtime/interp";
 import { MazeRuntime } from "@dreamfactory/engine/runtime/maze";
-import { DEPTH_FAR, FilmFrames, SphereImage } from "@dreamfactory/engine/runtime/maze-render";
+import { DEPTH_FAR, FilmFrames, SphereImage, type SphereLook } from "@dreamfactory/engine/runtime/maze-render";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import type { Occlusion, WorldCamera } from "@dreamfactory/engine/runtime/geometry";
 import type { DrawSignature } from "@dreamfactory/engine/runtime/signature";
@@ -203,22 +203,58 @@ export class MazeView implements RoomLayer {
       return this.depth.occ;
     }
     if (!m.node || !cam) return null;
-    const key = `${m.node.sphere}:${cam.heading}:${cam.pitch}:${cam.fov}:${cam.roll}`;
-    if (this.depth?.key !== key) {
-      let s = this.depthSpheres.get(m.node.sphere);
-      if (!s) {
-        s = new SphereImage(this.sett.file, m.node.sphere, true);
-        this.depthSpheres.clear();
-        this.depthSpheres.set(m.node.sphere, s);
-      }
-      // the film's map is its own; a sphere renders into a buffer of the view's size
-      const z = this.depth?.key.startsWith("film:") === false ? (this.depth.occ.z as Uint32Array) : new Uint32Array(this.width * this.height);
-      s.render(z, this.width, this.height, cam);
-      this.depth = { key, occ: { z, w: this.width, h: this.height, scale: 1, levels: DEPTH_FAR } };
-    }
+    return this.nodeDepth(m.node.sphere, cam);
+  }
+
+  /** the view's distances at a node: its depth sphere rendered through `cam`, kept while the camera stays */
+  private nodeDepth(sphere: number, cam: SphereLook): Occlusion {
+    const key = `${sphere}:${cam.heading}:${cam.pitch}:${cam.fov}:${cam.roll}`;
+    if (this.depth?.key === key) return this.depth.occ;
+    // nobody looks (session.drawsPictures): the composite's sprites ask their
+    // own pixels, as a hit test does, rather than the whole view being drawn
+    if (!this.session.drawsPictures) return this.pixelDepth(sphere, cam);
+    // the film's map is its own; a sphere renders into a buffer of the view's size
+    const z = this.depth?.key.startsWith("film:") === false ? (this.depth.occ.z as Uint32Array) : new Uint32Array(this.width * this.height);
+    this.depthSphere(sphere).render(z, this.width, this.height, cam);
+    this.depth = { key, occ: { z, w: this.width, h: this.height, scale: 1, levels: DEPTH_FAR } };
     return this.depth.occ;
   }
   private depth: { key: string; occ: Occlusion } | null = null;
+
+  /**
+   * {@link roomOcclusion} for a hit test: the same distances, but at a node
+   * whose view has not been rendered for this camera, only the pixels the test
+   * asks about, each worked out alone ({@link SphereImage.rendered}). A hit
+   * test reads one or two; the render it replaces is the whole view, and with
+   * the pointer moving over sprites while the view turns — the mine carts, a
+   * fight — that was a depth render every frame.
+   */
+  private hitOcclusion(): Occlusion | null {
+    const m = this.maze;
+    const cam = m.camera();
+    if (m.walkFrame() || m.shot || !m.node || !cam) return this.roomOcclusion();
+    const key = `${m.node.sphere}:${cam.heading}:${cam.pitch}:${cam.fov}:${cam.roll}`;
+    if (this.depth?.key === key) return this.depth.occ;
+    return this.pixelDepth(m.node.sphere, cam);
+  }
+
+  /** the depth sphere's distances through `cam`, a pixel at a time, never kept as {@link depth} */
+  private pixelDepth(container: number, cam: SphereLook): Occlusion {
+    const s = this.depthSphere(container);
+    const { width: w, height: h } = this;
+    return { z: [], w, h, scale: 1, levels: DEPTH_FAR, at: (x, y) => s.rendered(x, y, w, h, cam) };
+  }
+
+  /** the depth sphere of `container`, the one kept */
+  private depthSphere(container: number): SphereImage {
+    let s = this.depthSpheres.get(container);
+    if (!s) {
+      s = new SphereImage(this.sett.file, container, true);
+      this.depthSpheres.clear();
+      this.depthSpheres.set(container, s);
+    }
+    return s;
+  }
   private readonly depthSpheres = new Map<number, SphereImage>();
   applyRoomClut(_dim: ClutDim | null): void {
     // a DreamFactory 5 room is drawn in true colour: it has no palette to rebuild
@@ -305,7 +341,7 @@ export class MazeView implements RoomLayer {
     // whenever the camera has moved, which `idle ()` hit-testing the pointer every
     // frame of a scroll or a walk would otherwise pay each frame.
     if (!s.propRuntime.propAt(x, y, cam, false) && !s.actorRuntime.actorAt(x, y, cam)) return null;
-    const occ = this.roomOcclusion();
+    const occ = this.hitOcclusion();
     const prop = s.propRuntime.propAt(x, y, cam, false, occ);
     const actor = s.actorRuntime.actorAt(x, y, cam, occ);
     if (actor && prop) {

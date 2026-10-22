@@ -82,6 +82,12 @@ export interface SpriteCamera {
 export interface Occlusion {
   /** v4's levels; a v5 room's distances, with a scale of 1 (engine/src/web/maze-view.ts) */
   z: ArrayLike<number>;
+  /**
+   * The distance at one pixel, worked out alone, in place of `z` — a hit test's
+   * (maze-view.ts `hitOcclusion`), which reads a pixel or two of a view a full
+   * depth render would have spent the whole frame on.
+   */
+  at?: (x: number, y: number) => number;
   w: number;
   h: number;
   scale: number;
@@ -151,7 +157,7 @@ export function depthLevel(depth: number, occ: Occlusion): number {
 /** true if the scenery at (x,y) is NEARER than the sprite level → hide the pixel */
 export function sceneryOccludes(occ: Occlusion, x: number, y: number, level: number): boolean {
   if (x < 0 || y < 0 || x >= occ.w || y >= occ.h) return false;
-  return occ.z[y * occ.w + x] < level;
+  return (occ.at ? occ.at(x, y) : occ.z[y * occ.w + x]) < level;
 }
 
 // the port's rounded 0..255 bearing lives with the file readers that need it

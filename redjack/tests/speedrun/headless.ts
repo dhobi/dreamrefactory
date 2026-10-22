@@ -94,7 +94,14 @@ export async function headlessRun(opts: {
   const get = opts.getSave ?? ((name: string) => saves.get(name) ?? null);
   return runHeadless({
     game: "redjack",
-    makeHost: async () => redjackHost(process.env.ENGINELOG ? (l) => console.log(`  engine: ${l}`) : undefined),
+    makeHost: async () => {
+      const host = redjackHost(process.env.ENGINELOG ? (l) => console.log(`  engine: ${l}`) : undefined);
+      // nobody looks at a film's pixels or the room's, as in the machine suites
+      // (session.drawsPictures): a whole run is the same frame for frame
+      // without them, and they were half its time
+      host.session.drawsPictures = false;
+      return host;
+    },
     prepare: (s) => opts.prepare?.(s),
     deliver,
     putSave: async (name, bytes) => put(name, bytes),
