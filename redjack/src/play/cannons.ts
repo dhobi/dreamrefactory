@@ -103,8 +103,9 @@ export async function sinkTheDinghies(h: Player, maxShots = 60): Promise<number>
    * stopping at. `reading` is what the press moves — the heading, the tilt.
    */
   const pressUntil = async (key: () => string, done: () => boolean, what: string, reading: () => number): Promise<void> => {
-    for (let n = 0; !done(); n++) {
-      if (n > 400) fail(`${what}: ${key()} never got there`);
+    let n = 0;
+    while (!done()) {
+      if (n++ > 400) fail(`${what}: ${key()} never got there`);
       const was = reading();
       h.tap(key());
       // ...or a few passes, and press again: not every press is answered

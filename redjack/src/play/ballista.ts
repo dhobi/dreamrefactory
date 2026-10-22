@@ -26,6 +26,7 @@
 import { TURN } from "@dreamfactory/engine/df/sett";
 import { degToSimple, simpleToDeg } from "@dreamfactory/engine/runtime/maze";
 import type { Player } from "./player";
+import { steer } from "./route";
 
 const SHIPS = [1, 2, 3, 4].map((i) => `ship ${i}`);
 const cos = (a: number, m: number): number => Math.trunc(m * Math.cos((a * 2 * Math.PI) / TURN));
@@ -61,7 +62,10 @@ export async function sinkTheGalleons(h: Player): Promise<number> {
         (a): a is Actor => !!a?.visible && a.poseName !== "sink" && a.poseName !== "explode",
       );
       const dist = (a: Actor): number => Math.hypot(a.worldX - cam.x, a.worldY - cam.y);
-      if (!target || !afloat.includes(target)) target = afloat.sort((a, b) => dist(a) - dist(b))[0];
+      if (!target || !afloat.includes(target)) {
+        afloat.sort((a, b) => dist(a) - dist(b));
+        target = afloat[0];
+      }
       const a = target;
       if (!a) {
         h.point(320, 240);
@@ -115,10 +119,11 @@ export async function sinkTheGalleons(h: Player): Promise<number> {
       }
       // steer: half the error a pass, in `getdegree`'s inner band
       const eH = diff(heading, m.heading);
-      const eP = tilt === null ? 0 : diff(simpleToDeg(tilt < 0 ? tilt + 360 : tilt), m.pitch);
+      const tiltDeg = tilt !== null && tilt < 0 ? tilt + 360 : tilt;
+      const eP = tiltDeg === null ? 0 : diff(simpleToDeg(tiltDeg), m.pitch);
       const push = (e: number): number => Math.min(231, Math.max(1, Math.abs(e) / 2 / PER_PX));
-      const x = Math.abs(eH) < 600 ? 320 : eH > 0 ? 310 - push(eH) : 330 + push(eH);
-      const y = tilt === null || whole(m.pitch) === tilt ? 240 : eP > 0 ? 232 - push(eP) : 248 + push(eP);
+      const x = steer(eH, Math.abs(eH) < 600, 320, 10, push);
+      const y = steer(eP, tilt === null || whole(m.pitch) === tilt, 240, 8, push);
       h.point(Math.round(x), Math.round(y));
       return false;
     },

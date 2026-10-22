@@ -23,6 +23,7 @@
  * lands on anyone, a dagger or a bomb on its way included.
  */
 import type { Player } from "./player";
+import { steer } from "./route";
 
 const FOE = /^(jan|dagger|molotov) \d+$/;
 /** mine.shop launcher `launch`/`throw`: a harpoon starts 100000 ahead, 190000 up the pitch less 50000, and flies 80010 a pass */
@@ -86,7 +87,10 @@ export async function rideTheMine(h: Player, done: () => boolean): Promise<numbe
       // till he is down or gone back into cover
       const men = live.filter((a) => a.name.startsWith("jan "));
       const dist = (a: Actor): number => Math.hypot(a.worldX - cam.x, a.worldY - cam.y);
-      if (!target || !men.includes(target)) target = men.sort((a, b) => dist(a) - dist(b))[0];
+      if (!target || !men.includes(target)) {
+        men.sort((a, b) => dist(a) - dist(b));
+        target = men[0];
+      }
       const a = target;
       if (!a) {
         h.point(320, 240);
@@ -133,8 +137,8 @@ export async function rideTheMine(h: Player, done: () => boolean): Promise<numbe
         if (units < 155 * (699045 / 310)) return 154;
         return Math.min(225, units / (699045 / 310));
       };
-      const x = Math.abs(eH) < 0.002 ? 320 : eH > 0 ? 310 - push(eH) : 330 + push(eH);
-      const y = Math.abs(eP) < 0.002 ? 240 : eP > 0 ? 232 - push(eP) : 248 + push(eP);
+      const x = steer(eH, Math.abs(eH) < 0.002, 320, 10, push);
+      const y = steer(eP, Math.abs(eP) < 0.002, 240, 8, push);
       h.point(Math.round(x), Math.round(y));
       return false;
     },

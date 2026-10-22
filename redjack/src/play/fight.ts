@@ -362,7 +362,8 @@ export async function shootout(h: Player, done: () => boolean): Promise<number> 
         const off = ((want - cam.heading + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
         const p = eye.project(a.worldX, a.worldY, a.worldZ);
         const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
-        const x = !p || Math.abs(off) > 0.8 ? (off > 0 ? 4 : 636) : clamp(p.x, 4, 636);
+        const edge = off > 0 ? 4 : 636;
+        const x = !p || Math.abs(off) > 0.8 ? edge : clamp(p.x, 4, 636);
         const y = p ? clamp(p.y, 4, 476) : 240;
         h.point(Math.round(x), Math.round(y));
       }

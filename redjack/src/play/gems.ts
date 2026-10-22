@@ -56,7 +56,7 @@ function next(s: State, m: Move): State | null {
     colour = gems[i];
     if (colour === "x" || hand.includes(colour)) return null;
     gems[i] = "x";
-    held = [...hand + colour].sort().join("");
+    held = [...hand + colour].sort((a, b) => a.localeCompare(b)).join("");
   } else {
     colour = c!;
     if (!hand.includes(colour) || gems[i] !== "x") return null;
@@ -108,7 +108,8 @@ export async function playGems(h: Player): Promise<number> {
     const [act, c] = m.split(" ");
     // what the click lands on: a lift, or the gem a hand holds (biggem 1–3 are
     // Nick's green, red and blue, 4–6 Anne's)
-    const what = c ? `biggem ${STEPS[c] + (act === "anneput" ? 3 : 0)}` : act;
+    const anne = act === "anneput" ? 3 : 0;
+    const what = c ? `biggem ${STEPS[c] + anne}` : act;
     const at = findOnScreen(h, what, "prop") ?? fail(`the gem lifts: "${what}" is not on screen`);
     h.click(at.x, at.y);
     await h.frame(3);

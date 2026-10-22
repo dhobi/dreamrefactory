@@ -152,8 +152,9 @@ const REDJACK_ACTIONS: ActionTable = {
    */
   hush: move(
     { args: [0, 0], sig: "hush()", help: "ESC on the line being spoken, now — never at a plaque, where ESC walks out" },
-    async (h) => {
+    (h) => {
       if (h.host.director.speaking) h.tap(ESCAPE_KEY, true);
+      return Promise.resolve();
     },
   ),
   clickfilm: move(

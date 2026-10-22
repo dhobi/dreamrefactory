@@ -75,13 +75,15 @@ export async function step(h: Player, to: string, arrived = (): boolean => same(
     const d = Math.abs(((maze.exitField(here, want, 1) - maze.heading) % TURN + TURN) % TURN);
     return Math.min(d, TURN - d);
   };
-  for (let turn = 0; maze.nearExit(here, maze.heading) !== want || off() >= TURN / 12; turn++) {
-    if (turn > exits.length + 1) fail(`${here}: turning never faced the exit to ${to}`);
+  let turn = 0;
+  while (maze.nearExit(here, maze.heading) !== want || off() >= TURN / 12) {
+    if (turn++ > exits.length + 1) fail(`${here}: turning never faced the exit to ${to}`);
     await press(h, "right", `turning towards ${to}`);
   }
   // "up" scrolls to face the exit first and walks only when it is within 30°
-  for (let tries = 0; !arrived() && !talking(h); tries++) {
-    if (tries === 3) fail(`${here}: "up" at the exit to ${to} left us at ${h.node()}`);
+  let tries = 0;
+  while (!arrived() && !talking(h)) {
+    if (tries++ === 3) fail(`${here}: "up" at the exit to ${to} left us at ${h.node()}`);
     await press(h, "up", `walking to ${to}`);
   }
 }
@@ -196,8 +198,9 @@ export async function face(h: Player, name: string, type?: HitType): Promise<{ x
     (hit.type === "prop" && Number(h.session.propRuntime.get(hit.name)?.dist ?? 0) < 0) ||
     (hit.type === "actor" && Number(h.session.actorRuntime.get(hit.name)?.dist ?? 0) < 0);
   if (!inMargin(at) || near || !h.session.setVisible || h.session.maze?.view !== "node") return at;
-  for (let hover = 0; at && inMargin(at); hover++) {
-    if (hover === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin (at ${at.x},${at.y}, the middle answers ${h.session.hitTestAt(width / 2, height / 2).name})`);
+  let hover = 0;
+  while (at && inMargin(at)) {
+    if (hover++ === 100) fail(`${h.node()}: resting on the edge never brought "${name}" out of the margin (at ${at.x},${at.y}, the middle answers ${h.session.hitTestAt(width / 2, height / 2).name})`);
     h.point(at.x, at.y);
     await h.frame(4);
     at = findOnScreen(h, name, type);
@@ -262,7 +265,7 @@ export async function converse(
       typeof want === "number"
         ? dir.choices.findIndex((c) => c.id === want)
         : offered.findIndex((t) => t.toLowerCase().startsWith(want.toLowerCase()));
-    if (i < 0) fail(`${what}: no ${JSON.stringify(want)} among ${dir.choices.map((c) => `${c.id} ${c.text}`).join(" | ")}`);
+    if (i < 0) fail(`${what}: no ${JSON.stringify(want)} among ${dir.choices.map((c) => c.id + " " + c.text).join(" | ")}`);
     const r = dir.choiceRects[i];
     h.click(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2));
     answered = offered.join("|");
@@ -294,11 +297,22 @@ export function global(h: Player, name: string): string {
   return String(h.session.interp.globals.get(name) ?? "");
 }
 
+/**
+ * Where to rest the pointer to turn a gun by `e`: on the centre once it is
+ * `still`, else off it on the side to turn to, `gap` px clear of the dead band
+ * plus `push`'s distance — the ballista's and the mine cart harpoon's steering.
+ */
+export function steer(e: number, still: boolean, centre: number, gap: number, push: (e: number) => number): number {
+  if (still) return centre;
+  return e > 0 ? centre - gap - push(e) : centre + gap + push(e);
+}
+
 /** how far `who` stands from the player, as the cast's `nearactor` measures it: `calcdist` on x and y */
 export function distanceTo(h: Player, who: string): number {
   const cam = h.session.maze?.camera();
   const a = h.session.actorRuntime.get(who);
-  if (!cam || !a) fail(`no ${!cam ? "camera" : `actor ${who}`} to measure from`);
+  if (!cam) fail("no camera to measure from");
+  if (!a) fail(`no actor ${who} to measure from`);
   return Math.hypot(a.worldX - cam.x, a.worldY - cam.y);
 }
 
@@ -312,7 +326,7 @@ export async function walkUpTo(h: Player, who: string): Promise<void> {
   const a = h.session.actorRuntime.get(who) ?? fail(`no actor ${who} in ${h.room()}`);
   const nodes = (h.session.maze as unknown as { sett: { nodes: { name: string; x: number; y: number }[] } }).sett.nodes;
   const d = (n: { x: number; y: number }): number => Math.hypot(n.x - a.worldX, n.y - a.worldY);
-  const nearest = nodes.reduce((m, n) => (d(n) < d(m) ? n : m));
+  const nearest = nodes.reduce((m, n) => (d(n) < d(m) ? n : m), nodes[0]);
   if (!same(nearest.name, h.node())) await goTo(h, nearest.name);
 }
 
@@ -409,15 +423,17 @@ export async function walkScenes(
   max = 30,
 ): Promise<string[]> {
   const passed: string[] = [];
-  for (let hop = 0; h.session.maze?.scene; hop++) {
-    if (hop === max) fail(`the scenes never led out (${passed.join(" > ")})`);
+  let hop = 0;
+  while (h.session.maze?.scene) {
+    if (hop++ === max) fail(`the scenes never led out (${passed.join(" > ")})`);
     const m = h.session.maze;
     const sc = m.scene!;
     passed.push(sc.name);
     const goal = sc.views.find((v) => v.road && wanted(v.road, sc.name));
     if (!goal) fail(`${sc.name} has no road the walk wants`);
-    for (let turn = 0; m.sceneView !== goal.name; turn++) {
-      if (turn > sc.views.length + 1) fail(`${sc.name}: turning never faced ${goal.name}`);
+    let turn = 0;
+    while (m.sceneView !== goal.name) {
+      if (turn++ > sc.views.length + 1) fail(`${sc.name}: turning never faced ${goal.name}`);
       await press(h, "right", `turning to ${goal.name}`);
     }
     await press(h, "up", `walking out of ${sc.name}`);
@@ -459,8 +475,9 @@ export async function closeInventory(h: Player): Promise<void> {
 export async function upFacing(h: Player, deg: number): Promise<void> {
   const m = h.session.maze ?? fail("no room");
   const at = (): number => Math.round((m.heading * 360) / TURN);
-  for (let i = 0; Math.abs(((at() - deg + 540) % 360) - 180) > 20; i++) {
-    if (i === 16) fail(`${h.node()}: turning never faced ${deg} degrees`);
+  let i = 0;
+  while (Math.abs(((at() - deg + 540) % 360) - 180) > 20) {
+    if (i++ === 16) fail(`${h.node()}: turning never faced ${deg} degrees`);
     await press(h, "right", `turning to ${deg} degrees`);
   }
   // ...again if the set's keydown dropped it: lava.sett's ignores a key while
@@ -470,8 +487,9 @@ export async function upFacing(h: Player, deg: number): Promise<void> {
   const where = (): string => `${h.room()}/${h.node()}/${h.session.stageName}`;
   const from = where();
   const node = h.node();
-  for (let tries = 0; where() === from && !talking(h); tries++) {
-    if (tries === 3) fail(`${node}: "up" at ${deg} degrees went nowhere`);
+  let tries = 0;
+  while (where() === from && !talking(h)) {
+    if (tries++ === 3) fail(`${node}: "up" at ${deg} degrees went nowhere`);
     await press(h, "up", `going on at ${deg} degrees`);
   }
 }

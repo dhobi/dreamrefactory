@@ -89,7 +89,7 @@ export async function runTheFlames(h: Player, done: () => boolean): Promise<numb
   let steps = 0;
   const out = (name: string): boolean => {
     const p = props.get(name);
-    return !p || !p.visible || Number(p.value) <= 3;
+    return !p?.visible || Number(p.value) <= 3;
   };
   await h.until(
     () => {
