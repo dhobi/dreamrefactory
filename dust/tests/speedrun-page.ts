@@ -1,21 +1,19 @@
 /**
  * The speedrun workbench's page (`src/speedrun/page.ts`): what it hands the
- * shared workbench and the state list, read in node with both stood in for.
+ * shared workbench, read in node with it stood in for.
  *
  *   npx vitest run --project dust dust/tests/speedrun-page.ts
  *
  * The workbench itself is the speedrun workspace's and has its own suites; what is Dust's
  * here is the wiring — this game's key space, its own actions, the route the
- * build publishes beside the page, and a state pane that waits for a game.
+ * build publishes beside the page, and the spine its Details column leads with
+ * (the column itself is the workbench's: speedrun/tests/details.ts).
  */
 import { afterEach, expect, it, vi } from "vitest";
 
 let workbench: Record<string, unknown> | null = null;
-let stateList: Record<string, (...a: never[]) => unknown> | null = null;
 
 vi.mock("@dreamfactory/speedrun/workbench", () => ({ startWorkbench: (o: Record<string, unknown>) => void (workbench = o) }));
-vi.mock("@dreamfactory/engine/web/state-list", () => ({ installStateList: (o: typeof stateList) => void (stateList = o) }));
-vi.mock("@dreamfactory/engine/runtime/trace", () => ({ snapshotState: (_s: unknown, v: unknown, how: string) => ({ viewer: v, how }) }));
 vi.mock("@dreamfactory/chrome/site", () => ({ siteUrl: (p: string) => `/site/${p}` }));
 
 afterEach(() => vi.unstubAllGlobals());
@@ -28,12 +26,6 @@ it("starts the workbench in Dust's own key space, with Dust's actions and route"
   expect(workbench!.actions).toBe(ACTIONS);
   expect(workbench!.fixtureSheet).toBe("/site/speedrun/run.sheet.txt");
   expect(workbench!.contributedSheets).toBe("/site/speedrun/sheets.json");
-  expect(stateList!.storageKey).toBe("dust.details.state");
-  expect(stateList!.defaultOn).toBe(true);
-  // the pane waits for a game to snapshot, and then snapshots it live
-  expect(stateList!.visible()).toBe(false);
-  vi.stubGlobal("window", { dbg: { host: { session: {}, viewer: null } } });
-  expect(stateList!.visible()).toBe(true);
-  expect(stateList!.state()).toEqual({ viewer: null, how: "live" });
-  expect((stateList!.spine as unknown as { name: string }[]).map((v) => v.name)).toEqual(["day", "clock"]);
+  const details = workbench!.details as { spine: { name: string }[] };
+  expect(details.spine.map((v) => v.name)).toEqual(["day", "clock"]);
 });

@@ -7,10 +7,7 @@
  * speedrun/vite.ts from redjack/speedrun/workbench.ts).
  */
 import { startWorkbench } from "@dreamfactory/speedrun/workbench";
-import { installStateList } from "@dreamfactory/engine/web/state-list";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import { snapshotState } from "@dreamfactory/engine/runtime/trace";
-import type { GameHost } from "@dreamfactory/engine/web/host";
 import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
 import { ACTIONS } from "./actions";
 
@@ -21,26 +18,12 @@ import { ACTIONS } from "./actions";
  */
 const SPINE: readonly SpineVar[] = [{ name: "day", label: "Day" }];
 
-/** `window.dbg`, which main.ts publishes for exactly this — see Dust's page */
-const dbg = (): { host?: GameHost } => (window as unknown as { dbg?: { host?: GameHost } }).dbg ?? {};
-
-installStateList({
-  state: () => {
-    const host = dbg().host!;
-    return snapshotState(host.session, host.viewer ?? null, "live");
-  },
-  spine: SPINE,
-  // this game's own namespace: every game on the deployed site shares an origin
-  storageKey: "redjack.details.state",
-  defaultOn: true,
-  visible: () => !!dbg().host?.session,
-});
-
 startWorkbench({
   // its own key space: a RedJack checkpoint must never be offered to another
   // game's workbench on the same origin (dust/src/speedrun/page.ts)
   game: "redjack",
   actions: ACTIONS,
+  details: { spine: SPINE },
   /** the route (tests/speedrun/run.sheet.txt), published beside this page by speedrun/vite.ts */
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
   /** the contributed sheets (redjack/speedrun/sheets/), resolved the same way */

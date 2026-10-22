@@ -22,10 +22,7 @@
  *     planned from the story's gates (docs/dust/README.md, "The speedrun").
  */
 import { startWorkbench } from "@dreamfactory/speedrun/workbench";
-import { installStateList } from "@dreamfactory/engine/web/state-list";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import { snapshotState } from "@dreamfactory/engine/runtime/trace";
-import type { GameHost } from "@dreamfactory/engine/web/host";
 import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
 import { ACTIONS } from "./actions";
 
@@ -48,33 +45,6 @@ const SPINE: readonly SpineVar[] = [
   { name: "clock", label: "Clock" },
 ];
 
-/**
- * The Details column, wired to the running game.
- *
- * `window.dbg` and not an import, because the game is `main.ts`'s and this is a
- * second module on the same page: that handle is what the page publishes for
- * exactly this (its own header says so), and it is what every probe and console
- * session already reaches for. Polled rather than awaited — the boot takes
- * minutes and the column should be up and empty in the meantime, not absent.
- */
-const dbg = (): { host?: GameHost } => (window as unknown as { dbg?: { host?: GameHost } }).dbg ?? {};
-
-installStateList({
-  state: () => {
-    const host = dbg().host!;
-    return snapshotState(host.session, host.viewer ?? null, "live");
-  },
-  spine: SPINE,
-  // this game's own namespace: every game on the deployed site shares an origin
-  storageKey: "dust.details.state",
-  // the pane IS this page's third column, so it opens on the list rather than
-  // on nothing at all
-  defaultOn: true,
-  // there is no X here and nothing hides the column, but the poll still costs a
-  // snapshot per tick — so it waits for a game to snapshot
-  visible: () => !!dbg().host?.session,
-});
-
 startWorkbench({
   // Its own key space, and this is the whole reason the namespace exists: the
   // deployed site serves every game from one origin, so `dust:speedrun:save:…`
@@ -83,6 +53,7 @@ startWorkbench({
   // does not have.
   game: "dust",
   actions: ACTIONS,
+  details: { spine: SPINE },
   /**
    * The repository's own route, published beside this page by the speedrun
    * plugin (speedrun/vite.ts) — middleware in dev, an emitted asset in a build, at
