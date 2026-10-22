@@ -412,14 +412,28 @@ function watchdogFor(run: RunContext): (done: () => boolean, finished: Promise<v
    */
   const runWatches = async (sheet: boolean): Promise<void> => {
     if (!watches.length) return;
-    let fire: boolean[];
-    try {
-      fire = sheet
-        ? await d.evaluate<boolean[]>(takeRises(watches))
-        : edges(watches, await d.evaluate<boolean[]>("[" + watches.map((w) => `!!(${w.expr})`).join(",") + "]"));
-    } catch {
-      return; // a page mid-navigation is not a watch failing
+    for (;;) {
+      let fire: boolean[];
+      try {
+        fire = sheet
+          ? await d.evaluate<boolean[]>(takeRises(watches))
+          : edges(watches, await d.evaluate<boolean[]>("[" + watches.map((w) => `!!(${w.expr})`).join(",") + "]"));
+      } catch {
+        return; // a page mid-navigation is not a watch failing
+      }
+      if (!(await actOn(fire, sheet)) || !sheet) return;
+      // acted on: the interrupted line may go on — unless another watch rose
+      // while the action ran the game. Then the game stays halted and that one
+      // is acted on at once: let go, the game ran on until the runner's next
+      // poll, which is wall time — a whole spoken line headless, where nothing
+      // waits on a frame, and a quarter of a second on a page (RedJack's
+      // constable after the alley: the film's ESC, then his first line)
+      if (!(await d.evaluate<boolean>(UNHALT_UNLESS_RISEN).catch(() => false))) return;
     }
+  };
+
+  /** run the actions of the watches that fired; whether any did */
+  const actOn = async (fire: boolean[], sheet: boolean): Promise<boolean> => {
     for (let i = 0; i < watches.length; i++) {
       if (!fire[i]) continue;
       const w = watches[i];
@@ -434,10 +448,7 @@ function watchdogFor(run: RunContext): (done: () => boolean, finished: Promise<v
         hooks.onWatch?.(w, [`failed: ${(e as Error).message}`]);
       }
     }
-    // acted on: the interrupted line may go on
-    if (sheet && fire.some(Boolean)) {
-      await d.evaluate(`void (window.dbg && ${UNHALT})`).catch(() => {});
-    }
+    return fire.some(Boolean);
   };
 
   /** which watches rose since the last poll on the runner's beat; going false re-arms the edge */
@@ -457,6 +468,18 @@ function watchdogFor(run: RunContext): (done: () => boolean, finished: Promise<v
    */
   const watchDriver = d.forWatch?.() ?? d;
   const UNHALT = `((s) => { s.sheetHalted = false; s.sheetWatchHolds.clear(); s.sheetWatchPasses = 0; })(window.dbg.session)`;
+  /** {@link UNHALT}, unless a watch rose meanwhile: then it stays halted for it, and answers true */
+  const UNHALT_UNLESS_RISEN = `(() => {
+    const s = window.dbg && window.dbg.session;
+    if (!s) return false;
+    if ([...s.sheetWatches.values()].some((w) => w.rose)) {
+      s.sheetWatchHolds.clear();
+      s.sheetWatchPasses = 0;
+      return true;
+    }
+    ${UNHALT};
+    return false;
+  })()`;
   const watchIds = new Map<Watch, number>();
   const idOf = (w: Watch): number => {
     if (!watchIds.has(w)) watchIds.set(w, watchIds.size + 1);
