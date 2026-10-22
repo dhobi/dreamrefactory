@@ -44,7 +44,10 @@ export function topbar(p: HomePage, up: string): string {
     ...(p.speedrun
       ? [`<a href="${up}./speedrun/" class="playway" title="Speedrun workbench — drive the game from a run sheet against the clock">Speedrunner</a>`]
       : []),
-    ...(p.links ?? []).map((l) => `<a href="${up}${esc(l.href)}"${l.title ? ` title="${esc(l.title)}"` : ""}>${esc(l.text)}</a>`),
+    ...(p.links ?? []).map((l) => {
+      const title = l.title ? ` title="${esc(l.title)}"` : "";
+      return `<a href="${up}${esc(l.href)}"${title}>${esc(l.text)}</a>`;
+    }),
   ].map((a) => a.replace(`href=".././`, `href="../`));
   return `<header class="topbar">
       <a
