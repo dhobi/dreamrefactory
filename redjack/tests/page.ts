@@ -1,5 +1,5 @@
 /**
- * The play page (`src/main.ts`), in node: the real `index.html` parsed by
+ * The play page (`src/main.ts`), in node: the real `play/index.html` parsed by
  * linkedom, with the engine's host, the file store, the saved-games dialog and
  * the bug report standing in for the browser's.
  *
@@ -175,7 +175,10 @@ vi.mock("@dreamfactory/chrome/bug-report", () => ({
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(import.meta.dirname, "../index.html"), "utf8");
+// the Play menu reads the address bar, which this page has none of (site/tests: play-menu)
+vi.mock("@dreamfactory/chrome/play-menu", () => ({ installPlayMenu: async () => 0 }));
+
+const HTML = readFileSync(join(import.meta.dirname, "../play/index.html"), "utf8");
 const DISCS: Record<string, number> = { bootfile: 300_000, "hub.sett": 9 * 1024 * 1024 };
 
 interface Page {
