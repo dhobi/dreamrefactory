@@ -11,6 +11,7 @@
     "build": "vite build",
     "test": "vitest run --config vitest.machine.config.ts",
     "test:machine": "vitest run --config vitest.machine.config.ts",
+    "speedrun": "tsx tests/speedrun/speedrun.ts",
     "manifest": "tsx ../tools/mkmanifest.ts ../dist/redjack gamefiles public",
     "mklogo": "tsx tools/mkredjacklogo.ts"
   }

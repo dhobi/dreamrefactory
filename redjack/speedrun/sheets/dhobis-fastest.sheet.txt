@@ -1,0 +1,795 @@
+# title: dhobi's fastest
+# author: dhobi
+# notes: redjack/tests/speedrun/run.sheet.txt on seed 2, the fastest of seeds 1-9; seeded, so its own category
+#
+# RedJack: Revenge of the Brethren, any%, from the cold boot
+# The machine suites' route (tests/machine/days/*.ts) as a sheet: the boot,
+# then the seven days, to the end of the game.
+#
+#   npm run speedrun -w redjack            in node
+#   /redjack/speedrun/                     in the workbench
+#
+# Each split but the first and the last is followed by a save(): load(day5)
+# in the workbench, or --from=day5 in node, starts the run there.
+#
+# The moves are the suites' own (src/play/): goto() walks a room by its
+# exits, click() finds a thing by the boot's hittest, talkOut([ids]) answers
+# a conversation a plaque at a time by the game's own answer numbers. Every
+# film that asks nothing goes to ESC, and every spoken line too (hush(): ESC
+# at a plaque would walk out of the talk).
+
+reset(seed: 2)
+skipMovie(until: js == window.dbg.booted && window.dbg.session.currentSetFile === "liznite", budget: 600000)
+idle()
+# every film that asks nothing goes to ESC, and every spoken line: the
+# conversation is on its next plaque, or over, at once
+watchFor(playing, skipMovie())
+watchFor(js == window.dbg.host.director.speaking, hush())
+split(Hangman's Reef)
+
+# ---------------------------------------------------------------- day one
+# Bone, by the crates (bone1.pupp meetbone)
+goto(Node48)
+click(bone)
+talkOut([101,101,105,103])   # Who are you?
+
+# Lyle, on the beach: Node58 has him jump Nick the first time
+goto(Node58)
+talkOut([101,102,101,101,103])   # Who are you?
+
+# Jan, in the woods, and Lyle saves Nick: the fire goes out
+goto(Node54)
+talkOut([101,103,101,102,103,102])   # Who was that?
+
+# the bar: knock, and the bartender lets Nick in
+goto(Node37)
+click(door l2b)
+talkOut([101])   # I want to come inside.
+# the bartender inside: the ale for Lyle, then Captain Justice
+goto(Scene35)
+face(bartend)
+near(bartend, 1100000)
+click(bartend)
+talkOut([101,102,103,104,101,102,103,103,102,101,101,103])   # Where's all the action?
+goto(Scene34)
+click(door b2l)
+idle()
+
+# the ale to Lyle, waiting in the woods
+goto(Node54)
+face(lyle)
+near(lyle, 65000)
+click(lyle)
+talkOut()
+
+# the sword, in the trunk in the cave under the lighthouse
+goto(Node36)
+click(door l2lh)
+idle()
+goto(Node11)
+click(door lh2c)
+idle()
+goto(Node27)
+click(chest, quad)
+wait(js == !!window.dbg.session.propRuntime.get("sword")?.visible)
+click(sword)
+owns(sword, pistol)
+click(lid)
+# and Patch, of RedJack's crew, waiting in the cave
+talkOut([104,102,101,102,103,104,101,102,102])   # Who are you?
+goto(Node29)
+click(ladder)
+idle()
+goto(Node10)
+click(door lh2l)
+idle()
+split(the sword)
+save(sword)
+
+# Lyle's school, on the dock
+goto(Node49)
+face(lyle)
+near(lyle, 65000)
+click(lyle)
+talkOut([101,101])   # I want to learn defense.
+defense()
+talkOut([103,101])   # I want to learn dodging.
+dodging()
+talkOut([102,101])   # I want to learn striking.
+striking()
+talkOut([104])   # I want to fight !
+duel(combat.stag)
+talkOut()
+idle()
+split(Lyle beaten)
+save(lyle)
+
+# Bone again: he and Cross go out to the ship
+goto(Node48)
+face(bone)
+near(bone, 65000)
+click(bone)
+talkOut([101])   # This is your ship?
+click(bone)
+talkOut([101])   # What are you doing?
+
+# the charcoal, from the fire Lyle put out
+goto(Node58)
+click(lpfirepit)
+stage(firepit.stag)
+click(stick)
+owns(charcoal)
+click(button10)
+idle()
+
+# the crate: an X, and in
+goto(Node47)
+click(the crate)
+stage(crate.stag)
+click(chest, prop)
+wait(js == !!window.dbg.session.propRuntime.get("charcoal")?.visible && window.dbg.session.interp.handlersInPlay === 0)
+drag(charcoal, crate2)
+wait(js == String(window.dbg.session.currentFlat).toLowerCase() === "crate1x 1" && window.dbg.session.interp.handlersInPlay === 0)
+click(crate2x)
+idle()
+click(getin)
+day(2)
+split(day one)
+
+# the stowaway, found: justice1b.pupp stowaway → setsail; "I do." sets
+# justphase 1 and sends Justice down to his cabin
+talkOut([101,101,101])   # I really want to join your crew.
+save(day2)
+
+# ---------------------------------------------------------------- day two
+# Lyle, by the cannons: lyle1b.pupp ondeck → met → sullivan, who is Anne, and
+# her own anne1.pupp talk — the letter from her father among it
+goto(Node18)
+click(lyle)
+talkOut([101,102,101,101,101,101,102,101,101,101,101,101,101,101,101,101,102,101])   # I feel fine.
+
+# the cannons: Lyle's word on them, and cannon.sett, whose openset sets
+# didcannon; four dinghies sunk end it (cannon.cast endanim → endcannon)
+click(cannons)
+talkOut()
+wait(js == window.dbg.session.currentSetFile === "cannon" && window.dbg.session.interp.handlersInPlay === 0)
+cannons()
+wait(js == window.dbg.session.currentSetFile === "ship")
+idle()
+
+# the cabin: door s2c at Node16 lets Nick down now (ship.sett quad script)
+goto(Node16)
+click(door s2c)
+wait(js == window.dbg.session.currentSetFile === "capts")
+idle()
+
+# Justice at his desk: incabin → brethren → later → protect sets justphase 2,
+# and montage.move sails her to Port Royal (ship.cast justice, advanceday)
+approach(justice)
+click(justice)
+talkOut([101,101,101,101,101])   # Tell me about the Brethren.
+day(3)
+split(day two)
+
+# the docks: justice2.pupp docks, and his watch
+talkOut([101])   # When should we be back?
+save(day3)
+
+# ---------------------------------------------------------------- day three
+# Erzulie: erzulie.sett's openset plays erzintro.move and her talk
+# (erzulie2.pupp day3), which ends with her gone (erzulphase 1)
+goto(Scene16)
+click(door pr2e, quad)
+talkOut([101,101,101,101,101,102,103,104,105,101,101])   # How do you know my name?
+
+# her door out, and the alley: Justice's runfight → juskill.move → jcombat.stag,
+# Jan and then his second (J1.shop's death plays jswitch.move, opens J2.shop)
+goto(Node10)
+click(door e2pr, quad)
+talkOut([102])   # Who are you meeting?
+duel(jcombat.stag)
+
+# postfight: justicedead.move, and the constable's questions (const2.pupp alley)
+talkOut([101,101])   # I just found this dead body.
+wait(js == window.dbg.session.currentSetFile === "jail1")
+idle()
+split(the alley)
+save(alley)
+
+# Anne at the window: the cup scraped along its bars (jail.shop stdmove,
+# flag "anne") calls her, and her rum comes in (anne2b.pupp injail1)
+click(tray, quad)
+wait(js == window.dbg.session.stageName === "jail.stag" && window.dbg.session.propRuntime.get("lid")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+rattleOn(jmug, window)
+talkOut([101,101])   # What are you doing here?
+
+# the tray shut arms the constable's checkforrock (jail.stag closestage): he
+# takes the rum in a talk of his own (const2b.pupp takerum) and paces between
+# his two stars; "I'm thirsty." sends him to his desk to drink (walktodesk)
+click(lid, prop)
+wait(js == window.dbg.session.stageName !== "jail.stag" && window.dbg.session.interp.handlersInPlay === 0)
+wait(js == !window.dbg.session.propRuntime.get("rum")?.visible && !window.dbg.session.scheduler.isWalk("constable"))
+idle()
+click(constable, actor)
+talkOut([101,102,103])   # Let me out.
+wait(js == window.dbg.session.currentSetFile === "jail2", budget: 250000)
+idle()
+
+# a rock out of the wall, raked loose with the spoon, thrown at the rifle
+# (throwrock → riflefall.move → jail3)
+click(tray, quad)
+wait(js == window.dbg.session.stageName === "jail.stag" && window.dbg.session.propRuntime.get("lid")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+rake(spoon, rock 3)
+wait(js == window.dbg.session.propRuntime.get("rock 3")?.owner === "loose" && window.dbg.session.interp.handlersInPlay === 0)
+carry(rock 3, 560, 220, prop)
+owns(nrock 3)
+click(lid, prop)
+wait(js == window.dbg.session.stageName !== "jail.stag" && window.dbg.session.interp.handlersInPlay === 0)
+carryTo(nrock 3, rifle)
+wait(js == window.dbg.session.currentSetFile === "jail3" && window.dbg.session.interp.handlersInPlay === 0)
+
+# the keys on the floor, and onto the lock: nickesc.move → jail4
+click(keys, prop)
+wait(js == !!window.dbg.session.propRuntime.get("ikeys")?.visible && window.dbg.session.interp.handlersInPlay === 0)
+carryTo(ikeys, lock)
+wait(js == window.dbg.session.currentSetFile === "jail4" && window.dbg.session.interp.handlersInPlay === 0)
+
+# the trunk gives back the sword and pistol (jail5), and the soldier at the
+# door lets Nick out (soldier2b.pupp leaving) into the street
+click(trunk, quad)
+wait(js == window.dbg.session.currentSetFile === "jail5" && window.dbg.session.interp.handlersInPlay === 0)
+goto(Node13)
+click(door j2pr, quad)
+talkOut([101])   # All right.
+wait(js == window.dbg.session.currentSetFile === "ptroyal" && window.dbg.session.interp.handlersInPlay === 0)
+split(out of jail)
+save(street)
+
+# the street fight, three waves (bfight.cast nextphase → endfight), and the
+# day's end: endfight.move, the trial at sea, and RedJack's beach
+shootout(4)
+day(4)
+split(day three)
+save(day4)
+
+# day four opens on RedJack's beach with nothing asked: the trial at sea's
+# films end with the room on screen, so nothing to answer before the save
+
+# ---------------------------------------------------------------- day four
+# the totems at Scene94: both must sleep, or rjbeach.sett Scene129's openscene
+# fires the darts. The top head sleeps on its own click; ok turns both (totem.shop)
+goto(Scene94)
+click(set totem 1, prop)
+wait(js == window.dbg.session.stageName.startsWith("totem") && window.dbg.session.interp.handlersInPlay === 0)
+click(top head, prop)
+wait(js == window.dbg.session.propRuntime.get("top head")?.stateName === "sleep" && window.dbg.session.interp.handlersInPlay === 0)
+click(ok, prop)
+stage(none)
+
+# the skull's teeth: Anne's lift answers only once she offers to help, after
+# a first try alone (gem.shop wait → firsttry, which opens the lifts again)
+goto(Scene130)
+click(gem, quad)
+stage(gem.stag)
+clickAt(350, 430)
+wait(js == String(window.dbg.session.interp.globals.get("endgem")) === "0" && window.dbg.session.stageName === "gem.stag" && window.dbg.session.interp.handlersInPlay === 0 && window.dbg.session.propRuntime.get("nick")?.stateName === "1", budget: 150000)
+gems()
+wait(js == window.dbg.session.currentSetFile === "lava", budget: 250000)
+idle()
+split(into the skull)
+save(skull)
+
+# the lava: pillar to pillar to Scene23, and up facing 241 degrees into the hub
+lava()
+walkFacing(241)
+wait(js == window.dbg.session.currentSetFile === "hub", budget: 250000)
+idle()
+
+# the flame corridor: Node191's third exit is a film into old-style scenes;
+# between the bursts to the switch, which drops door 2, and back
+walkFacing(270)
+flames(Scene46, Scene47)
+idle()
+click(switch, prop)
+wait(js == window.dbg.session.propRuntime.get("switch")?.stateName === "down" && window.dbg.session.interp.handlersInPlay === 0)
+scenesBack()
+
+# the chain to Node196, the skeleton and the scepter
+goto(Node195)
+chain(Node196)
+goto(Node199)
+click(set scepter, prop)
+wait(js == window.dbg.session.stageName === "scombat2.stag" && window.dbg.session.interp.handlersInPlay <= 1, budget: 1000000)
+vine()
+idle()
+owns(scepter)
+
+# back over the chain, and up to the top (door h2t takes the scepter; wenttop)
+goto(Node196)
+chain(Node195)
+goto(Node192)
+click(door h2t, quad)
+talkOut([101,101])   # I got in a fight.
+split(the scepter)
+save(scepter)
+
+# the skeleton's dream: dream1.move asks for two clicks, and dream2.move's
+# action frame gives Nick RedJack's key (top.sett skeleton); RedJack's word
+# (redjack3.pupp dream), and Anne after it
+goto(Scene25)
+# the dream is watched, not skipped: dream2.move's action frame is what hands
+# Nick RedJack's key, and ESC goes past it
+watchFor(playing, off)
+click(skeleton, quad)
+clickFilm()
+clickFilm()
+wait(js == window.dbg.session.propRuntime.get("rjkey")?.owner === "nick" || window.dbg.host.director.awaitingChoice, budget: 250000)
+talkOut([101,101,102])   # I think I fell asleep.
+owns(rjkey)
+watchFor(playing, skipMovie())
+
+# the lockbox: the key onto it (inven.shop rjkey), and the journal in it
+goto(Scene56)
+face(lockbox, quad)
+inventory()
+drag(rjkey, lockbox, quad)
+wait(js == window.dbg.session.stageName.startsWith("lockbox") && !!window.dbg.session.propRuntime.get("book")?.visible && window.dbg.session.interp.handlersInPlay === 0)
+click(book, prop)
+owns(journal)
+clickAt(560, 430)
+stage(none)
+talkOut([101])   # A book.
+closeInventory()
+
+# down again: the top's door (journal and key), the hub, the lava's jump at
+# Node191 (0 degrees), and the lava's mouth to the beach (node10, 88 degrees)
+goto(Scene10)
+click(door t2h, quad)
+wait(js == window.dbg.session.currentSetFile === "hub", budget: 250000)
+idle()
+goto(Node191)
+walkFacing(0)
+wait(js == window.dbg.session.currentSetFile === "lava", budget: 250000)
+idle()
+goto(node10)
+walkFacing(88)
+wait(js == window.dbg.session.currentSetFile === "rjbeach", budget: 250000)
+idle()
+split(out of the skull)
+save(outofskull)
+
+# the crate at Scene11: its crowbar breaks its lock (inven.shop crowbar), and
+# the horn is inside
+goto(Scene11)
+click(the crate, prop)
+stage(bcrate.stag)
+click(crowbar, prop)
+owns(crowbar)
+inventory()
+drag(crowbar, lock, button)
+wait(js == !!window.dbg.session.propRuntime.get("crate horn")?.visible && window.dbg.session.interp.handlersInPlay === 0)
+closeInventory()
+click(crate horn, prop)
+owns(horn)
+click(ok, prop)
+stage(none)
+talkOut([101])   # I found this thing in the crate.
+
+# link1, whose lock takes the scepter (oscepter.move → link2, dooropen)
+goto(scene22)
+walkFacing(280)
+wait(js == window.dbg.session.currentSetFile === "link1", budget: 250000)
+idle()
+face(scepter lock, quad)
+inventory()
+drag(scepter, scepter lock, quad)
+wait(js == window.dbg.session.currentSetFile === "link2", budget: 250000)
+idle()
+closeInventory()
+
+# the horn caves: horn1, on to horn3 by Scene57, the horn onto its place at
+# Scene73 (horn4: the horn set, the squid door open), back into horn2, the torch
+walkFacing(196)
+wait(js == window.dbg.session.currentSetFile === "horn1", budget: 250000)
+idle()
+goto(Scene57)
+walkFacing(354)
+wait(js == window.dbg.session.currentSetFile === "horn3", budget: 250000)
+idle()
+goto(Scene73)
+face(horn, quad)
+inventory()
+drag(horn, horn, quad)
+wait(js == window.dbg.session.currentSetFile === "horn4", budget: 250000)
+idle()
+closeInventory()
+goto(Scene57)
+walkFacing(97)
+wait(js == window.dbg.session.currentSetFile === "horn2", budget: 250000)
+idle()
+goto(Scene41)
+click(torch, prop)
+owns(torch)
+split(the torch)
+save(torch)
+
+# back to the beach's fire pit, and the torch to it (inven.shop torch → safe
+# turner callrockfish): rockfish.move, his talk (rock3.pupp day4), advanceday
+goto(Scene10)
+wait(js == window.dbg.session.currentSetFile === "link2", budget: 150000)
+idle()
+goto(Node121)
+walkFacing(150)
+wait(js == window.dbg.session.currentSetFile === "rjbeach", budget: 150000)
+idle()
+goto(Scene10)
+face(firepit, prop)
+inventory()
+drag(torch, firepit, prop)
+talkOut([101,101,101,101,101,101,101,101])   # We got marooned.
+day(5)
+split(day four)
+
+# Rockfish at the dock (rock2a.pupp preelevator), asking as day five opens
+talkOut([101,101])   # When can I see Blackbeard?
+save(day5)
+
+# ---------------------------------------------------------------- day five
+# Blackbeard's island: up the lift (bb1 Node18 facing 266°) to the lounge,
+# where Rockfish wants a drink mixed for Blackbeard (rock2a.pupp lounge)
+goto(Node18)
+walkFacing(266)
+lift(bb2)
+talkOut([101])   # What kind of drink?
+
+# Lyle and his sulphur pot (lylebbsulph.pupp): asked twice, he gives some
+approach(lyle)
+click(lyle, actor)
+talkOut([101,103])   # What are you doing?
+click(lyle, actor)
+talkOut([101])   # Can I have some of your sulphur?
+
+# the coal: down the lift (bb2 Node10 facing 271°) to the charcoal bin by the
+# dock (charcoal.stag); a click on the open bin takes a coal, carried to the
+# chest (inven.shop stdmove: `mouseonchest`), and a second click closes it
+goto(Node10)
+walkFacing(271)
+lift(bb1)
+idle()
+click(charcoal bin, prop)
+stage(charcoal.stag)
+click(bin, prop)
+owns(coal)
+carry(coal, 80, 420, prop)
+wait(js == window.dbg.session.propRuntime.get("coal")?.stateName === "chest" && window.dbg.session.interp.handlersInPlay === 0)
+click(bin, prop)
+wait(js == window.dbg.session.stageName !== "charcoal.stag" && window.dbg.session.interp.handlersInPlay === 0)
+goto(Node18)
+walkFacing(266)
+lift(bb2)
+idle()
+
+# the drink, behind the bar (bb2 Node17, drink.stag)
+goto(Node17)
+click(set drinks, prop)
+stage(drink.stag)
+mixDrink()
+click(ok, prop)
+wait(js == window.dbg.session.stageName !== "drink.stag" && window.dbg.session.interp.handlersInPlay === 0)
+
+# back through Node15 Rockfish tastes it and takes it up (bb2.sett openscene,
+# rock2a.pupp drink); Denton rants, Blackbeard comes down, drinks, tells of
+# Marquez and passes out (BBStory.pupp), and Jan's men attack: the mine carts
+goto(Node15)
+talkOut([101,101,101,101,102,101,102,101])   # I hope so, I really need to see him.
+wait(js == window.dbg.session.currentSetFile === "mc1")
+idle()
+
+# the mine carts, three sets of Jan's men, the crash, and Bone (bone2b.pupp)
+mine()
+talkOut([101])   # I'm going to kill you.
+duel(bcombat.stag)
+# Blackbeard after the fight (bbeard2b.pupp afterfight), arrive.move and
+# advanceday: Cartagena
+talkOut([101,102])   # Who are they?
+day(6)
+split(day five)
+save(day6)
+
+# Day six opens with the room Nick's (cartegena lock1): Blackbeard's last
+# words were day five's (bbeard2b.pupp afterfight), so nothing is asked here.
+
+# ---------------------------------------------------------------- day six
+# Cartagena's lock: Anne first (anne2.pupp bigintro), then the valve on the
+# left with Nick standing in the drain (`nickdrain`, ndrain.move): he is at
+# the bottom of the lock alone (lock3)
+approach(anne)
+click(anne, actor)
+talkOut([102,102])   # Rockfish.
+goto(Scene13)
+click(anne, actor)
+talkOut([101])   # Turn the valve on the left.
+wait(js == window.dbg.session.currentSetFile === "lock3")
+idle()
+
+# the lock door (it opens only while the upper lock is drained): through it,
+# and shut behind; through the pipe the fill valve and the raft (lock2.pupp);
+# the bottom valves drain the lock (botvalves.stag → valves `drain`)
+goto(Node11)
+click(ldoor, prop)
+wait(js == window.dbg.session.propRuntime.get("ldoor")?.value === 1)
+idle()
+goto(Node12)
+click(ldoor, prop)
+wait(js == window.dbg.session.propRuntime.get("ldoor")?.value === 0)
+idle()
+goto(Node16)
+click(pipe, quad)
+talkOut([102])   # Turn the fill valve.
+click(pipe, quad)
+talkOut([103])   # Get on the raft.
+click(valves, quad)
+stage(botvalves.stag)
+click(drain, prop)
+wait(js == window.dbg.session.stageName !== "botvalves.stag")
+idle()
+
+# Rockfish on the raft (rock2b.pupp ondeck), and round to Anne's gate; each
+# pulls a chain at Node13, and with both held the sword cuts the raft's rope
+# (inven.shop `sword` → lock3 `raft`, exitlock.move)
+wait(js == window.dbg.host.director.awaitingChoice, budget: 150000)
+talkOut([101,101,101])   # How long before we get there?
+wait(js == window.dbg.session.actorRuntime.get("anne")?.starName === "anne 5" && window.dbg.session.actorRuntime.get("rockfish")?.starName === "rockfish 5")
+idle()
+goto(Node13)
+click(anne, actor)
+talkOut([101])   # Pull the chain.
+click(rockfish, actor)
+talkOut([101])   # Pull the chain.
+face(rope, quad)
+inventory()
+drag(sword, rope, quad)
+wait(js == window.dbg.session.currentSetFile === "dock")
+idle()
+
+# Anne mourns Rockfish on the dock, and the hold's door at Node13
+gotoPast(Node13)
+click(door, quad)
+wait(js == window.dbg.session.currentSetFile === "hold")
+idle()
+
+# down the stairs (hold.sett Scene11 facing 171°), and through the torture
+# chamber's door into the fight (whipsword.move, tcombat.stag)
+goto(Scene11)
+walkFacing(171)
+goto(Node25)
+click(door h2t, quad)
+whip()
+cauldron()
+wait(js == window.dbg.session.currentSetFile === "torture")
+idle()
+
+# the study key and the hat, on the chamber's floor (torture.sett openset)
+goto(Node18)
+click(study key, prop)
+idle()
+goto(Node21)
+click(hat, prop)
+idle()
+
+# back to the hold, up the far stairs (Scene16 facing 8°), and the key in the
+# study's door (inven.shop `studykey` on "door h2s")
+goto(Node14)
+click(door t2h, quad)
+wait(js == window.dbg.session.currentSetFile === "hold")
+idle()
+goto(Scene16)
+walkFacing(8)
+goto(Scene15)
+face(door h2s, quad)
+inventory()
+drag(study key, door h2s, quad)
+closeInventory()
+click(door h2s, quad)
+wait(js == window.dbg.session.currentSetFile === "study")
+idle()
+
+# the four shields (study.sett Node12): the door opened, the symbol taken
+# (shield.shop icons → `addinven`), and the stage's button closes it
+goto(Node12)
+click(shield 1, quad)
+stage(shield.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+click(icons, prop)
+owns(icon 1)
+click(Button11, button)
+wait(js == window.dbg.session.stageName !== "shield.stag")
+idle()
+click(shield 2, quad)
+stage(shield.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+click(icons, prop)
+owns(icon 2)
+click(Button11, button)
+wait(js == window.dbg.session.stageName !== "shield.stag")
+idle()
+click(shield 3, quad)
+stage(shield.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+click(icons, prop)
+owns(icon 3)
+click(Button11, button)
+wait(js == window.dbg.session.stageName !== "shield.stag")
+idle()
+click(shield 4, quad)
+stage(shield.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+click(icons, prop)
+owns(icon 4)
+click(Button11, button)
+wait(js == window.dbg.session.stageName !== "shield.stag")
+idle()
+
+# down again (Scene13 facing 8°), and each gearbox (switch.stag): its door,
+# its symbol set in (inven.shop `icon` → `replace`), its lever thrown
+# (`switches` 1–4), and the stage's button
+goto(Node10)
+click(door, quad)
+wait(js == window.dbg.session.currentSetFile === "hold")
+idle()
+goto(Scene13)
+walkFacing(8)
+goto(Node48)
+click(gearbox 1, prop)
+stage(switch.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+inventory()
+drag(icon 1, mounts, prop)
+closeInventory()
+click(switch2, prop)
+wait(js == window.dbg.session.propRuntime.get("switch2")?.stateName === "down" && window.dbg.session.interp.handlersInPlay === 0)
+click(Button10, button)
+wait(js == window.dbg.session.stageName !== "switch.stag")
+idle()
+goto(Scene24)
+click(gearbox 2, prop)
+stage(switch.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+inventory()
+drag(icon 2, mounts, prop)
+closeInventory()
+click(switch2, prop)
+wait(js == window.dbg.session.propRuntime.get("switch2")?.stateName === "down" && window.dbg.session.interp.handlersInPlay === 0)
+click(Button10, button)
+wait(js == window.dbg.session.stageName !== "switch.stag")
+idle()
+goto(Scene23)
+click(gearbox 3, prop)
+stage(switch.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+inventory()
+drag(icon 3, mounts, prop)
+closeInventory()
+click(switch2, prop)
+wait(js == window.dbg.session.propRuntime.get("switch2")?.stateName === "down" && window.dbg.session.interp.handlersInPlay === 0)
+click(Button10, button)
+wait(js == window.dbg.session.stageName !== "switch.stag")
+idle()
+goto(Scene17)
+click(gearbox 4, prop)
+stage(switch.stag)
+click(sdoor, prop)
+wait(js == window.dbg.session.propRuntime.get("sdoor")?.stateName === "open" && window.dbg.session.interp.handlersInPlay === 0)
+inventory()
+drag(icon 4, mounts, prop)
+closeInventory()
+click(switch2, prop)
+wait(js == window.dbg.session.propRuntime.get("switch2")?.stateName === "down" && window.dbg.session.interp.handlersInPlay === 0)
+click(Button10, button)
+wait(js == window.dbg.session.stageName !== "switch.stag")
+idle()
+
+# the switch at Scene19 lowers the cage (cartegena.cast switches
+# `lowercage`): Jake and Elizabeth climb out onto the upper floor
+goto(Scene19)
+click(switch, prop)
+wait(js == window.dbg.session.actorRuntime.get("jake")?.starName === "jake" && window.dbg.session.actorRuntime.get("elizabeth")?.starName === "elizabeth", budget: 150000)
+idle()
+
+# Elizabeth, up the stairs (elizncage.pupp solvedpuzzle)
+goto(Scene16)
+walkFacing(8)
+approach(elizabeth)
+click(elizabeth, actor)
+talkOut([101])   # This is Anne.
+
+# the study's inner door, with Jake free (study.sett "secret door"):
+# armrm.move, marqintro.move, Marquez (marquez2.pupp day6), and advanceday
+# sails for RedJack's island
+goto(Scene15)
+click(door h2s, quad)
+wait(js == window.dbg.session.currentSetFile === "study")
+idle()
+goto(Node13)
+click(secret door, quad)
+talkOut([101,101,101,101,101,101,101,101,102])   # You're the one who hired the Janizaries?
+day(7)
+split(day six)
+
+# ---------------------------------------------------------------- day seven
+# RedJack's beach: Blackbeard and Marquez face to face, and Nick's word on
+# who Marquez is (bbintro3.pupp day7 `exchange`, marquez3.pupp); the
+# Spaniards come out of the trees (advanceday: gunshot.move, anncaught.move,
+# beachdraw.move) and the Spaniard draws (spancombat.stag)
+talkOut([101])   # He's the traitor!
+save(day7)
+wait(js == window.dbg.session.stageName === "spancombat.stag", budget: 1000000)
+duel(spancombat.stag)
+# the fight's end is a loop's (spancombat.stag closestage → "safe turner"
+# `postfight`): Marquez takes Anne up the hill (annemarq.move)
+idle()
+
+# ---------------------------------------------------------------- day seven
+# Marquez, behind the squid door in the horn caves (link1's door stands open
+# on day seven: advanceday `dooropen`)
+goto(scene22)
+walkFacing(280)
+wait(js == window.dbg.session.currentSetFile === "link2")
+idle()
+walkFacing(196)
+wait(js == window.dbg.session.currentSetFile === "horn1")
+idle()
+goto(Scene36)
+# the squid door opens on him with Anne (rjbeach.shop squid door `endanim` →
+# drawmarq.move, mcombat.stag); beaten, he is chained (`beatmarquez`)
+click(button, quad)
+marquez()
+idle()
+
+# the horn at horn4's Scene73, blown with Marquez chained below: the squid
+# takes him (marqsquid.move, `blewhorn`)
+goto(Scene57)
+walkFacing(354)
+wait(js == window.dbg.session.currentSetFile === "horn4")
+idle()
+goto(Scene73)
+click(horn, quad)
+idle()
+
+# back to the beach, and a totem woken with the Spaniards there (totem.shop
+# `backtoidle` → `doballista`: savebb.move); Blackbeard's question answered
+# with the ballistas (bbend3.pupp `hands`)
+goto(Scene57)
+walkFacing(97)
+wait(js == window.dbg.session.currentSetFile === "horn1")
+idle()
+goto(Scene10, leave)
+wait(js == window.dbg.session.currentSetFile === "link2")
+idle()
+goto(Node121)
+walkFacing(150)
+wait(js == window.dbg.session.currentSetFile === "rjbeach")
+idle()
+goto(Scene94)
+click(set totem 1, prop)
+wait(js == window.dbg.session.stageName.startsWith("totem") && window.dbg.session.interp.handlersInPlay === 0)
+click(top head, prop)
+talkOut([102,101])   # What are we going to do about those Spanish galleons?
+wait(js == window.dbg.session.currentSetFile === "ballista")
+idle()
+
+# two galleons sunk end the ballista's game (`endgame`) and bring Nick back to
+# the beach with the dart and the horn done: `theend ()`
+ballista()
+ending()
+talkOut([101,101,101,101,101,101,102])   # The pirate life.
+ending()
+wait(js == window.dbg.session.stageName === "control.stag")
+split(the end)

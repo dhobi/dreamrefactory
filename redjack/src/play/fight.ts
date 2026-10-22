@@ -7,14 +7,14 @@
  * its own small game and gets its own player here, each citing the script it
  * answers.
  */
-import { fail, type Headless } from "./harness";
+import { fail, type Player } from "./player";
 import { findOnScreen } from "./route";
 
 /** what the opponent shows: the `enemy` prop's view ("idle", "S left", …) */
-export const enemyView = (h: Headless): string => h.session.propRuntime.get("enemy")?.stateName ?? "";
+export const enemyView = (h: Player): string => h.session.propRuntime.get("enemy")?.stateName ?? "";
 
 /** a fight stage is up */
-export const fighting = (h: Headless, stage: string): boolean => h.session.stageName === stage;
+export const fighting = (h: Player, stage: string): boolean => h.session.stageName === stage;
 
 /**
  * Where the pointer blocks each strike in the school of defense.
@@ -54,13 +54,13 @@ const OPEN = { x: 320, y: 200 };
  * Ends when the stage closes: Lyle's `endfight` runs out his idle budget
  * (`Eidle` from 30 down to -10, a step every 100 frames).
  */
-export async function schoolOfDefense(h: Headless): Promise<void> {
+export async function schoolOfDefense(h: Player): Promise<void> {
   if (!fighting(h, "sdcombat.stag")) fail(`the school of defense is not up (stage ${h.session.stageName})`);
   await h.until(
     () => {
       if (!fighting(h, "sdcombat.stag")) return true;
       const at = guardFor(enemyView(h)) ?? OPEN;
-      h.session.setPointer(at.x, at.y);
+      h.point(at.x, at.y);
       return false;
     },
     "the school of defense to end",
@@ -87,7 +87,7 @@ const LANE: Record<number, number> = { 150: 0, 410: -100, 650: -199 };
  * So each frame the player rules out every lane a bottle is about to land in,
  * and stands in what is left — the middle if he can ({@link dodger}).
  */
-export async function schoolOfDodging(h: Headless): Promise<void> {
+export async function schoolOfDodging(h: Player): Promise<void> {
   if (!fighting(h, "sdocombat.stag")) fail(`the school of dodging is not up (stage ${h.session.stageName})`);
   const dodge = dodger(h);
   await h.until(
@@ -112,7 +112,7 @@ export async function schoolOfDodging(h: Headless): Promise<void> {
  * `centerx`) both play it; in the fight Lyle throws faster than a bottle falls,
  * so a lane whose bottle is still high is not one to run from yet.
  */
-function dodger(h: Headless): { step(): void; stop(): void } {
+function dodger(h: Player): { step(): void; stop(): void } {
   const props = h.session.propRuntime;
   let held = "";
   const hold = (key: string): void => {
@@ -165,7 +165,7 @@ const STRIKES = [
  * So the player strikes only when Nick is idle, strong, and Lyle open, and goes
  * round the three strikes in turn.
  */
-export async function schoolOfStriking(h: Headless): Promise<void> {
+export async function schoolOfStriking(h: Player): Promise<void> {
   if (!fighting(h, "sscombat.stag")) fail(`the school of striking is not up (stage ${h.session.stageName})`);
   const props = h.session.propRuntime;
   let next = 0;
@@ -210,7 +210,7 @@ export async function schoolOfStriking(h: Headless): Promise<void> {
  * strikes, in turn and at a hand's pace, while he is open. Won when Lyle's life
  * runs out (enemy1.shop `death`, fightstat "n"); lost when Nick's does ("l").
  */
-export const fightLyle = (h: Headless): Promise<void> => duel(h, "combat.stag", "the fight with Lyle");
+export const fightLyle = (h: Player): Promise<void> => duel(h, "combat.stag", "the fight with Lyle");
 
 /**
  * A sword fight on a fight stage, played as {@link fightLyle} explains: guard
@@ -220,7 +220,7 @@ export const fightLyle = (h: Headless): Promise<void> => duel(h, "combat.stag", 
  * enemy's `propdeg` to 1 — where "up" closes in again (jcombat.stag keydown →
  * `advance`). A second half of bottles (enemy2.shop) is dodged.
  */
-export async function duel(h: Headless, stage: string, what: string): Promise<void> {
+export async function duel(h: Player, stage: string, what: string): Promise<void> {
   if (!fighting(h, stage)) fail(`${what}: the stage is not up (stage ${h.session.stageName})`);
   const props = h.session.propRuntime;
   let next = 0;
@@ -251,7 +251,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
       if (props.get("enemy")?.deg === 1 && props.get("enemy")?.visible) {
         letGo();
         if (closing-- <= 0) {
-          h.key("up");
+          h.tap("up");
           closing = 10;
         }
         return false;
@@ -262,7 +262,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
       if (guard) {
         letGo();
         aim = null;
-        h.session.setPointer(guard.x, guard.y);
+        h.point(guard.x, guard.y);
         return false;
       }
       if (held) return false;
@@ -275,7 +275,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
         // was — every strike the same, and samestrike () has it blocked
         if (!aim) {
           aim = STRIKES[next++ % STRIKES.length];
-          h.session.setPointer(aim.x, aim.y);
+          h.point(aim.x, aim.y);
           return false;
         }
         h.mouseDown(aim.x, aim.y);
@@ -283,7 +283,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
         aim = null;
       } else {
         aim = null;
-        h.session.setPointer(OPEN.x, OPEN.y);
+        h.point(OPEN.x, OPEN.y);
       }
       return false;
     },
@@ -305,7 +305,7 @@ export async function duel(h: Headless, stage: string, what: string): Promise<vo
  * So the gunner clicks any of them it sees, the one nearest first, and turns
  * the barrel of the view with the arrows toward one it does not.
  */
-export async function shootout(h: Headless, done: () => boolean): Promise<number> {
+export async function shootout(h: Player, done: () => boolean): Promise<number> {
   const actors = h.session.actorRuntime;
   const foe = /^(dropper|runner|sharpshooter) \d+$/;
   let shots = 0;
@@ -362,9 +362,10 @@ export async function shootout(h: Headless, done: () => boolean): Promise<number
         const off = ((want - cam.heading + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
         const p = eye.project(a.worldX, a.worldY, a.worldZ);
         const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
-        const x = !p || Math.abs(off) > 0.8 ? (off > 0 ? 4 : 636) : clamp(p.x, 4, 636);
+        const edge = off > 0 ? 4 : 636;
+        const x = !p || Math.abs(off) > 0.8 ? edge : clamp(p.x, 4, 636);
         const y = p ? clamp(p.y, 4, 476) : 240;
-        h.session.setPointer(Math.round(x), Math.round(y));
+        h.point(Math.round(x), Math.round(y));
       }
       return false;
     },
@@ -387,7 +388,7 @@ export async function shootout(h: Headless, done: () => boolean): Promise<number
  * (tcombat.shop `nextenemy`, tenemy2.shop) — a sword fight, for
  * {@link cauldronFight}.
  */
-export async function whipFight(h: Headless): Promise<void> {
+export async function whipFight(h: Player): Promise<void> {
   if (!fighting(h, "tcombat.stag")) fail(`the whip: the stage is not up (stage ${h.session.stageName})`);
   let held = "";
   let looks = 0;
@@ -433,7 +434,7 @@ export async function whipFight(h: Headless): Promise<void> {
  * to the sixth node or backs off to the seventh, clicks the cauldron, and
  * strikes while the torturer dances.
  */
-export async function cauldronFight(h: Headless): Promise<void> {
+export async function cauldronFight(h: Player): Promise<void> {
   if (!fighting(h, "tcombat.stag")) fail(`the cauldron: the stage is not up (stage ${h.session.stageName})`);
   const g = (name: string): number => Number(h.session.interp.globals.get(name) ?? 0);
   let held = 0;
@@ -446,10 +447,10 @@ export async function cauldronFight(h: Headless): Promise<void> {
       if (held) return false;
       const guard = guardFor(view);
       if (guard) {
-        h.session.setPointer(guard.x, guard.y);
+        h.point(guard.x, guard.y);
         return false;
       }
-      h.session.setPointer(OPEN.x, OPEN.y);
+      h.point(OPEN.x, OPEN.y);
       if (wait > 0) {
         wait--;
         return false;
@@ -463,8 +464,7 @@ export async function cauldronFight(h: Headless): Promise<void> {
       if (g("imbeingused") !== 0 || view !== "idle") return false;
       const node = g("znode");
       if (node > 7) {
-        h.key("down");
-        h.keyUp("down");
+        h.tap("down");
         wait = 10;
         return false;
       }
@@ -510,7 +510,7 @@ export async function cauldronFight(h: Headless): Promise<void> {
  *
  * Nick guards where the wind-up says, as in {@link duel}, all the while.
  */
-export async function marquezFight(h: Headless): Promise<void> {
+export async function marquezFight(h: Player): Promise<void> {
   if (!fighting(h, "mcombat.stag")) fail(`Marquez: the stage is not up (stage ${h.session.stageName})`);
   const props = h.session.propRuntime;
   const g = (name: string): number => Number(h.session.interp.globals.get(name) ?? 0);
@@ -523,7 +523,7 @@ export async function marquezFight(h: Headless): Promise<void> {
       if (h.host.director.movies.playing) return false;
       const view = enemyView(h).toLowerCase();
       const guard = guardFor(view);
-      h.session.setPointer((guard ?? OPEN).x, (guard ?? OPEN).y);
+      h.point((guard ?? OPEN).x, (guard ?? OPEN).y);
       if (wait > 0) {
         wait--;
         return false;
@@ -533,8 +533,7 @@ export async function marquezFight(h: Headless): Promise<void> {
       if (!second) {
         // back to the switch's node if a kick sent him off it
         if (node !== 2 && g("imbeingused") === 0 && !view.startsWith("s ")) {
-          h.key(node < 2 ? "up" : "down");
-          h.keyUp(node < 2 ? "up" : "down");
+          h.tap(node < 2 ? "up" : "down");
           wait = 10;
           return false;
         }
@@ -558,8 +557,7 @@ export async function marquezFight(h: Headless): Promise<void> {
         return false;
       }
       if (guard || g("imbeingused") !== 0) return false;
-      h.key("up");
-      h.keyUp("up");
+      h.tap("up");
       wait = 6;
       return false;
     },

@@ -18,7 +18,7 @@ goes out on its own:
 | `dust-v0.3.6` | `npm run build -w dust` | `/dreamrefactory/dust/` — Dust's four pages (the welcome page, `/play/`, `/collection/`, `/speedrun/`) |
 | `timelapse-v0.1.0` | `npm run build -w timelapse` | `/dreamrefactory/timelapse/` — Timelapse's three pages (the welcome page, `/play/`, `/speedrun/`) |
 | `skullcracker-v0.1.0` | `npm run build -w skullcracker` | `/dreamrefactory/skullcracker/` — Skull Cracker's two pages (the films and its menu, `walk.html`) |
-| `redjack-v0.1.1` | `npm run build -w redjack` | `/dreamrefactory/redjack/` — RedJack's one page |
+| `redjack-v0.1.1` | `npm run build -w redjack` | `/dreamrefactory/redjack/` — RedJack's three pages (the welcome page, `/play/`, `/speedrun/`) |
 | `lunicus-v0.1.0` | `npm run build -w lunicus` | `/dreamrefactory/lunicus/` — Lunicus's one page |
 | `jumpraven-v0.1.0` | `npm run build -w jumpraven` | `/dreamrefactory/jumpraven/` — Jump Raven's one page |
 | *(no tag)* | `npm run docs:build` | `/dreamrefactory/docs/` — on any push that touches `docs/` |

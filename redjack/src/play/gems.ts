@@ -20,7 +20,7 @@
  * Nothing moves while a lift or a hand is moving, so the route waits for both
  * to stand still between clicks, and checks each click against the model.
  */
-import { fail, type Headless } from "./harness";
+import { fail, type Player } from "./player";
 import { findOnScreen } from "./route";
 
 type Gem = "r" | "g" | "b" | "x";
@@ -56,7 +56,7 @@ function next(s: State, m: Move): State | null {
     colour = gems[i];
     if (colour === "x" || hand.includes(colour)) return null;
     gems[i] = "x";
-    held = [...hand + colour].sort().join("");
+    held = [...hand + colour].sort((a, b) => a.localeCompare(b)).join("");
   } else {
     colour = c!;
     if (!hand.includes(colour) || gems[i] !== "x") return null;
@@ -95,7 +95,7 @@ export function solveGems(): Move[] {
 }
 
 /** play the solution on the open gem stage, a click at a time; answers the clicks */
-export async function playGems(h: Headless): Promise<number> {
+export async function playGems(h: Player): Promise<number> {
   if (h.session.stageName !== "gem.stag") fail(`the gem lifts are not up (stage ${h.session.stageName})`);
   const props = h.session.propRuntime;
   const still = (): boolean =>
@@ -108,7 +108,8 @@ export async function playGems(h: Headless): Promise<number> {
     const [act, c] = m.split(" ");
     // what the click lands on: a lift, or the gem a hand holds (biggem 1–3 are
     // Nick's green, red and blue, 4–6 Anne's)
-    const what = c ? `biggem ${STEPS[c] + (act === "anneput" ? 3 : 0)}` : act;
+    const anne = act === "anneput" ? 3 : 0;
+    const what = c ? `biggem ${STEPS[c] + anne}` : act;
     const at = findOnScreen(h, what, "prop") ?? fail(`the gem lifts: "${what}" is not on screen`);
     h.click(at.x, at.y);
     await h.frame(3);

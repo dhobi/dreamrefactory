@@ -244,6 +244,15 @@ export interface HammerOptions {
  * A gesture is a key or a point; a question is a string of JavaScript. That is
  * the whole contract.
  */
+/** {@link SpeedrunDriver.hand}: single events, sent at once */
+export interface Hand {
+  press(x: number, y: number): void;
+  release(x: number, y: number): void;
+  move(x: number, y: number): void;
+  keyDown(name: string): void;
+  keyUp(name: string): void;
+}
+
 export interface SpeedrunDriver {
   /** wall clock and the engine's displayed-frame count, sampled together */
   clock(): Promise<Clock>;
@@ -290,6 +299,17 @@ export interface SpeedrunDriver {
    * hover, and a verb that needs one says so.
    */
   hover?(x: number, y: number): Promise<void>;
+  /**
+   * The hand on its own, with no wait in any of it: the button going down or
+   * coming up, the pointer moving, a key going down or coming up — each one
+   * event, sent now. For a verb that plays the game a pass at a time and
+   * decides between passes what the hand does (RedJack's fights, which read the
+   * opponent's wind-up every pass and guard with the pointer, the button held
+   * through a strike), where a whole gesture with its settle built in would
+   * spend passes the verb has to spend itself. A key here is a canvas name
+   * (`ArrowRight`, `Escape`, `Space`). Optional, as {@link hover} is.
+   */
+  hand?: Hand;
   /**
    * Press at a point and KEEP THE BUTTON DOWN until `until` holds.
    *

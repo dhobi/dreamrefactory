@@ -519,6 +519,7 @@ export class PuppetController {
     // ~30/s alongside the voice; the last record stays as the idle pose
     const frames = readAnimLogic(p.pup, line.animLogicLocation);
     if (frames.length) p.anim = { frames, start: this.session.clock.now };
+    this.drawn(p);
     // ESC cuts the rest of the line short — and only ESC. A click cannot: the
     // wait's filter (0x441d80) drops any event that is not a KEY on its first
     // instruction, so the original has no click-to-skip at all. See {@link key}.
@@ -527,6 +528,8 @@ export class PuppetController {
       new Promise<void>((resolve) => (p.speakSkip = resolve)),
     ]);
     p.speakSkip = null;
+    // a sheet's watches see the line end before the next one starts
+    if (this.session.profile.watchesHearLineEnds && this.session.sheetWatches.size) this.session.timeCtrl.sampleSheetWatches();
     // ...and silences it. Only the NEXT puppetspeak would otherwise cut it (a
     // non-overlapping play halts the channel first), and what follows a line is
     // often not another line: PENNY2.PUP's Lenin beat runs `puppetspeak(28)`,
@@ -541,6 +544,12 @@ export class PuppetController {
         p.anim = null;
       }
     }
+  }
+
+  /** the conversation is on the screen now: a film's last frame no longer holds it (SessionProfile.puppetDrawEndsHold) */
+  private drawn(p: NonNullable<PuppetController["puppet"]>): void {
+    const f = this.session.fade;
+    if (this.session.profile.puppetDrawEndsHold && p.visible && f.pendingReveal && !f.snapshot) f.reset(0);
   }
 
   /** the layer state to draw right now (animLogic playback or held pose) */
@@ -772,6 +781,7 @@ export class PuppetController {
     // a plaque is where a skip ends: the flag comes down before the wait (0x43f718)
     p.interrupted = false;
     if (!p.bevels.length) return Promise.resolve(-1);
+    this.drawn(p);
     const wait = new Promise<number>((resolve) => {
       p.eventWaiter = (id) => {
         p.eventWaiter = null;

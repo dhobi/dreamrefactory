@@ -291,6 +291,7 @@ interface Hands {
   movePointer: (at: Point) => void;
   heldFrames: () => Promise<void>;
   pressKey: (name: string) => void;
+  sendKey: (type: "keydown" | "keyup", name: string) => void;
 }
 
 /**
@@ -345,6 +346,13 @@ function makeDriver(page: Page, watch: boolean): SpeedrunDriver {
     rawKey: async (name) => {
       pressKey(name);
       await frame();
+    },
+    hand: {
+      press: (x, y) => hands.pointer("pointerdown", hands.clientPoint(x, y)),
+      release: (x, y) => hands.pointer("pointerup", hands.clientPoint(x, y), win),
+      move: (x, y) => hands.movePointer(hands.clientPoint(x, y)),
+      keyDown: (name) => hands.sendKey("keydown", name),
+      keyUp: (name) => hands.sendKey("keyup", name),
     },
 
     ...presses(page, waits, hands),
@@ -586,17 +594,17 @@ function handsOf(page: Page): Hands {
     for (let i = 0; i < CLICK_FRAMES; i++) await frame();
   };
 
-  const pressKey = (name: string): void => {
+  /** one key event at the window — the half of a press {@link SpeedrunDriver.hand} sends alone */
+  const sendKey = (type: "keydown" | "keyup", name: string): void => {
     // `key` is what main.ts reads; the rest are filled in because a listener
     // further up the page may look at them, and a half-built event is a bug
     // waiting for the first person who adds one
     const key = name === "Space" ? " " : name;
-    win.dispatchEvent(
-      new win.KeyboardEvent("keydown", { key, code: keyCode(key), bubbles: true, cancelable: true }),
-    );
-    win.dispatchEvent(
-      new win.KeyboardEvent("keyup", { key, code: keyCode(key), bubbles: true, cancelable: true }),
-    );
+    win.dispatchEvent(new win.KeyboardEvent(type, { key, code: keyCode(key), bubbles: true, cancelable: true }));
+  };
+  const pressKey = (name: string): void => {
+    sendKey("keydown", name);
+    sendKey("keyup", name);
   };
 
   /** a best-effort `code` for the few keys a sheet actually sends */
@@ -607,7 +615,7 @@ function handsOf(page: Page): Hands {
     if (key.length === 1) return /[a-z]/i.test(key) ? `Key${key.toUpperCase()}` : "";
     return key;
   };
-  return { clientPoint, pointer, movePointer, heldFrames, pressKey };
+  return { clientPoint, pointer, movePointer, heldFrames, pressKey, sendKey };
 }
 
 /** a click, a press held until a condition, and a key hammered until one */

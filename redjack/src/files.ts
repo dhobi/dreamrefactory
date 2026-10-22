@@ -33,6 +33,19 @@ import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 /** the name the engine asks for → the name this rip ships it under */
 const ALIASES: Record<string, string> = { bootfile: "bootfile.boot" };
 
+/**
+ * What the rip's paths are relative to: the page's own directory, unless the
+ * page says the site's root is elsewhere (`<meta name="site-root">`) — which
+ * the play page does from `play/` and the speedrun workbench from `speedrun/`,
+ * each one directory down, where a page-relative `gamefiles.json` is asked for
+ * and found nowhere (timelapse/src/files.ts, which this is; chrome/src/site.ts
+ * reads the meta the same way).
+ */
+function siteBase(): string {
+  const declared = document.querySelector?.('meta[name="site-root"]')?.getAttribute("content");
+  return declared ? new URL(declared, document.baseURI).href : document.baseURI;
+}
+
 export class RedJackFiles extends RipFiles {
   /** a name more than one disc carries → each disc's copy (1-based) */
   private readonly copies = new Map<string, Map<number, { url: string; size: number }>>();
@@ -48,7 +61,8 @@ export class RedJackFiles extends RipFiles {
   static async open(root = "gamefiles/"): Promise<RedJackFiles> {
     const store = new RedJackFiles();
     // through pageUrl, so the page runs from any directory
-    const manifest = await readManifest(pageUrl("gamefiles.json"));
+    const at = siteBase();
+    const manifest = await readManifest(pageUrl("gamefiles.json", at));
     /** which disc each name was first found on, while the index is built */
     const discOf = new Map<string, number>();
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
@@ -56,7 +70,7 @@ export class RedJackFiles extends RipFiles {
       const base = ripName(path);
       const disc = Number(/\/RJDisk(\d)\//i.exec(path)?.[1] ?? 0);
       if (disc) store.tree.set(path.slice(root.length), manifest[path]);
-      const copy = { url: pageUrl(path), size: manifest[path] };
+      const copy = { url: pageUrl(path, at), size: manifest[path] };
       if (store.urls.has(base)) {
         // a second disc's copy: kept, and served when that disc is mounted
         let byDisc = store.copies.get(base);

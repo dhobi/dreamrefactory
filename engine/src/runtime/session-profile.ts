@@ -28,10 +28,27 @@ export interface SessionProfile {
   /** put a save back; `version` is what `opengame` was given */
   readonly load: (session: GameSession, bytes: Uint8Array, version: string | undefined) => Promise<boolean>;
   /**
-   * A load opens its own set and is not this engine's save format (Dust): the
-   * host hands it the bytes and does not take its HUD apart first.
+   * A load opens its own set and is not this engine's save format (Dust's, and
+   * RedJack's `.save`): the host hands it the bytes and does not take its HUD
+   * apart first.
    */
   readonly loadOpensItsSet: boolean;
+  /**
+   * A speedrun sheet's watches are asked again as each spoken line ends, not
+   * only once a frame (SessionTime.sampleSheetWatches) — RedJack's, whose
+   * route needed it; the other games' sheets keep the timing they were
+   * measured with.
+   */
+  readonly watchesHearLineEnds: boolean;
+  /**
+   * A conversation's own drawing ends the hold a film leaves on the screen
+   * (`fade.pendingReveal`, ScreenDirector.screenOwner): a spoken line plays its
+   * frames to the screen (RedJack.exe 0x4406c7) and a set of plaques draws
+   * them. RedJack's scenes chain lines straight after a film — the trial at
+   * sea, Erzulie, the constable — with the script never falling quiet, so the
+   * film's last frame stood through all of it.
+   */
+  readonly puppetDrawEndsHold: boolean;
   /**
    * A load runs no `open…` handler while it rebuilds — `openactor`, `openshop`,
    * `openprop`, `openstage`, `openflat`, `openset`, `openscene`
@@ -118,6 +135,8 @@ const V4: SessionProfile = {
   save: (session) => snapshotSave(session),
   load: (session, bytes) => loadGame(session, bytes),
   loadOpensItsSet: false,
+  watchesHearLineEnds: false,
+  puppetDrawEndsHold: false,
   loadMutesOpens: false,
   refusesBusySaves: false,
   scripts: { shortCircuit: false, typed: true },
@@ -180,6 +199,11 @@ const V5: SessionProfile = {
   // a load is a script's (`opengame`), and RedJack.exe sends no idle while one
   // runs: held as a running script, wherever the host starts it from
   load: (session, bytes, version) => session.track(loadGameV5(session, bytes, version), "load"),
+  // ...and opens the room it was saved in itself (saveload-v5.ts), so a host's
+  // load (a speedrun's `load()`) hands it the bytes as Dust's does
+  loadOpensItsSet: true,
+  watchesHearLineEnds: true,
+  puppetDrawEndsHold: true,
   loadMutesOpens: true,
   refusesBusySaves: true,
   scripts: { shortCircuit: true, typed: false },

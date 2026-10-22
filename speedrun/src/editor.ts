@@ -43,6 +43,12 @@ const ESCAPE: Record<string, string> = {
   '"': "&quot;",
 };
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ESCAPE[c]);
+/**
+ * A span of the highlight, its class `sr-` prefixed: the workbench is built
+ * from a game's play page, and RedJack's had a `.k` of its own (its keycaps)
+ * whose box and border every named argument took.
+ */
+const spanOf = (s: Span): string => (s.cls ? `<span class="sr-${s.cls}">${esc(s.text)}</span>` : `<span>${esc(s.text)}</span>`);
 
 /** `verb(` at the head of a statement */
 const VERB = /^(\s*)([A-Za-z]\w*)(\s*\()/;
@@ -155,22 +161,22 @@ function line(text: string): string {
     const lead = text.slice(0, text.length - trimmed.length);
     const [c, comment] = splitComment(trimmed.slice(2));
     const inner = code(c)
-      .map((s) => `<span class="${s.cls}">${esc(s.text)}</span>`)
+      .map((s) => spanOf(s))
       .join("");
     return (
-      `<span class="d">${esc(lead)}#|</span><span class="d">${inner}` +
-      (comment ? `<span class="c">${esc(comment)}</span>` : "") +
+      `<span class="sr-d">${esc(lead)}#|</span><span class="sr-d">${inner}` +
+      (comment ? `<span class="sr-c">${esc(comment)}</span>` : "") +
       `</span>`
     );
   }
 
-  if (trimmed.startsWith("#")) return `<span class="c">${esc(text)}</span>`;
+  if (trimmed.startsWith("#")) return `<span class="sr-c">${esc(text)}</span>`;
 
   const [c, comment] = splitComment(text);
   return (
     code(c)
-      .map((s) => `<span class="${s.cls}">${esc(s.text)}</span>`)
-      .join("") + (comment ? `<span class="c">${esc(comment)}</span>` : "")
+      .map((s) => spanOf(s))
+      .join("") + (comment ? `<span class="sr-c">${esc(comment)}</span>` : "")
   );
 }
 

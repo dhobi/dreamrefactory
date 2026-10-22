@@ -49,7 +49,7 @@ const APPS = [
   { dir: "dust", short: "Dust", pages: ["dust/index.html", "dust/play/index.html"] },
   { dir: "timelapse", short: "Timelapse", pages: ["timelapse/index.html", "timelapse/play/index.html"] },
   { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html"] },
-  { dir: "redjack", short: "RedJack", pages: ["redjack/index.html"] },
+  { dir: "redjack", short: "RedJack", pages: ["redjack/index.html", "redjack/play/index.html"] },
   { dir: "lunicus", short: "Lunicus", pages: ["lunicus/index.html"] },
   { dir: "jumpraven", short: "Jump Raven", pages: ["jumpraven/index.html"] },
 ] as const;

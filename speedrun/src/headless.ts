@@ -110,17 +110,22 @@ function nullCanvas(): CanvasRenderingContext2D {
   const canvas = { width: 0, height: 0 };
   const image = (width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4), width, height });
   const nothing = (): void => {};
-  return {
+  const known: Record<string, unknown> = {
     canvas,
     createImageData: image,
-    putImageData: nothing,
-    drawImage: nothing,
-    fillRect: nothing,
-    fillText: nothing,
-    save: nothing,
-    restore: nothing,
+    getImageData: (_x: number, _y: number, width: number, height: number) => image(width, height),
     measureText: () => ({ width: 0 }),
-  } as unknown as CanvasRenderingContext2D;
+  };
+  // every other call a composite makes — a fill, a stroke, a path, a
+  // transform — draws nothing, and every property set on it is kept and
+  // forgotten: a conversation's plaques stroke their frames, a room may clip
+  return new Proxy(known, {
+    get: (t, key) => (typeof key === "string" && key in t ? t[key] : nothing),
+    set: (t, key, v) => {
+      if (typeof key === "string") t[key] = v;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
 }
 
 export interface HeadlessRun {

@@ -16,7 +16,7 @@
  *
  * So the route is found on those rules, and walked a hop at a time.
  */
-import { fail, type Headless } from "./harness";
+import { fail, type Player } from "./player";
 import { face, findOnScreen, step } from "./route";
 
 const ROCK = new Set(["node10", "scene12", "scene13", "scene29", "scene35", "scene37", "scene40"]);
@@ -32,7 +32,7 @@ function standing(node: string, saw29: boolean, saw40: boolean): boolean {
 }
 
 /** the hops from Node10 to Scene23 that never land on a pillar that is down */
-export function lavaPath(h: Headless): string[] {
+export function lavaPath(h: Player): string[] {
   const maze = h.session.maze ?? fail("no room");
   const sett = (maze as unknown as { sett: { nodes: { name: string; node: number }[] } }).sett;
   const byContainer = new Map(sett.nodes.map((n) => [n.node, n.name]));
@@ -64,7 +64,7 @@ export function lavaPath(h: Headless): string[] {
 }
 
 /** walk the lava to Scene23 and jump to the hub */
-export async function crossTheLava(h: Headless): Promise<string[]> {
+export async function crossTheLava(h: Player): Promise<string[]> {
   const path = lavaPath(h);
   for (const to of path) await step(h, to);
   return path;
@@ -79,7 +79,7 @@ export async function crossTheLava(h: Headless): Promise<string[]> {
  * only while both flames of the next step are out and the next beat is further
  * off than a step takes to walk.
  */
-export async function runTheFlames(h: Headless, done: () => boolean): Promise<number> {
+export async function runTheFlames(h: Player, done: () => boolean): Promise<number> {
   const props = h.session.propRuntime;
   const g = (n: string): number => Number(h.session.interp.globals.get(n) ?? 0);
   let lastBeat = g("drumbeat");
@@ -89,7 +89,7 @@ export async function runTheFlames(h: Headless, done: () => boolean): Promise<nu
   let steps = 0;
   const out = (name: string): boolean => {
     const p = props.get(name);
-    return !p || !p.visible || Number(p.value) <= 3;
+    return !p?.visible || Number(p.value) <= 3;
   };
   await h.until(
     () => {
@@ -111,7 +111,7 @@ export async function runTheFlames(h: Headless, done: () => boolean): Promise<nu
       const node = g("node");
       if (!out(`flame ${node}`) || !out(`fflame ${node}`)) return false;
       if (sinceBeat + walk + 2 >= 32) return false;
-      h.key("up");
+      h.tap("up");
       steps++;
       walking = 0;
       return false;
@@ -129,7 +129,7 @@ export async function runTheFlames(h: Headless, done: () => boolean): Promise<nu
  * fall (`die`). The swing restarts at each end of its animation (`endanim` →
  * `swing`, which stamps the tick), so the click waits for a fresh swing.
  */
-export async function swingTheChain(h: Headless, to: string): Promise<void> {
+export async function swingTheChain(h: Player, to: string): Promise<void> {
   const tick = (): number => Math.floor((h.session.clock.now * 3) / 50);
   const chain = h.session.propRuntime.get("chain") ?? fail("no chain in the hub");
   // the prop, not the room's quad of the same name
@@ -154,17 +154,26 @@ export async function swingTheChain(h: Headless, to: string): Promise<void> {
  * button beneath (sCombat.shop fvine), and the button wins (`swin1.move`) — in
  * the band below the strikes (`think` strikes above y 384).
  */
-export async function pullTheVine(h: Headless): Promise<void> {
+export async function pullTheVine(h: Player): Promise<void> {
   const props = h.session.propRuntime;
-  h.key("right");
+  h.tap("right");
   await h.frame(20);
   const vine = props.get("fvine") ?? fail("no vine on the skeleton's stage");
+  // a point of the vine over the button with two pixels of both all round it:
+  // a screen smaller than the picture (a phone shows it at about 0.6) cannot
+  // aim at every one of its pixels, and the click lands on a neighbour
+  // (speedrun/src/driver.ts clientAxis) — the vine's middle sample was at the
+  // edge of the overlap, and missed on a phone
+  const AROUND = [-2, 0, 2].flatMap((dx) => [-2, 0, 2].map((dy) => ({ dx, dy })));
+  const all = (p: { x: number; y: number }, ok: (x: number, y: number) => boolean): boolean => AROUND.every(({ dx, dy }) => ok(p.x + dx, p.y + dy));
   const on: { x: number; y: number }[] = [];
   for (let y = 386; y < 480; y += 4) for (let x = 2; x < 640; x += 4) if (h.session.hitTestAt(x, y).name === "fvine") on.push({ x, y });
+  const amid = on.filter((p) => all(p, (x, y) => h.session.hitTestAt(x, y).name === "fvine"));
   vine.visible = false;
   const over = on.filter((p) => h.session.hitTestAt(p.x, p.y).type === "button");
+  const clear = amid.filter((p) => all(p, (x, y) => h.session.hitTestAt(x, y).type === "button"));
   vine.visible = true;
-  const at = over[Math.floor(over.length / 2)] ?? fail("the vine is over no button, leaning");
+  const at = (clear.length ? clear : over)[Math.floor((clear.length ? clear : over).length / 2)] ?? fail("the vine is over no button, leaning");
   h.click(at.x, at.y);
   await h.until(() => h.session.stageName !== "scombat2.stag" && h.running().length === 0, "the vine to bring the skeleton down", 3_000);
   h.keyUp("right");

@@ -21,8 +21,8 @@
  */
 import { bearingV5 } from "@dreamfactory/engine/runtime/geometry";
 import { fail, ok, type Headless } from "../harness";
-import { fightLyle, fighting, schoolOfDefense, schoolOfDodging, schoolOfStriking } from "../fight";
-import { ai, clickOn, converse, drag, face, global, goTo, waitNear } from "../route";
+import { fightLyle, fighting, schoolOfDefense, schoolOfDodging, schoolOfStriking } from "../../../src/play/fight";
+import { ai, clickOn, converse, drag, face, global, goTo, waitNear } from "../../../src/play/route";
 
 
 /** day one from the cold boot to the crate, each step checked as it goes */

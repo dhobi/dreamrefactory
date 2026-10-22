@@ -20,8 +20,8 @@
  *   - **the street fight** (jail5 `door j2pr` → ptroyal scene23, `bfight`).
  */
 import { fail, ok, type Headless } from "../harness";
-import { duel, shootout } from "../fight";
-import { ai, carry, clickOn, converse, face, findOnScreen, global, goTo, rattle } from "../route";
+import { duel, shootout } from "../../../src/play/fight";
+import { ai, carry, clickOn, converse, face, findOnScreen, global, goTo, rattle } from "../../../src/play/route";
 
 /** day three from Justice's first question to the beach, each step checked as it goes */
 export async function playDay3(h: Headless): Promise<void> {

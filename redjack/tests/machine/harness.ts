@@ -24,8 +24,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { GameHost, type HostFiles } from "@dreamfactory/engine/web/host";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
-import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import { REDJACK } from "../../../chrome/src/games";
+import { PlayFailure, type Player } from "../../src/play/player";
 
 const RIP = resolve(import.meta.dirname, "../../gamefiles");
 const DISCS = [1, 2, 3];
@@ -61,55 +61,25 @@ export function indexDiscs(): Map<string, Map<number, string>> {
   return found;
 }
 
-export interface Headless {
-  host: GameHost;
-  session: GameSession;
+/**
+ * The player the routes in src/play/ are written against (src/play/player.ts),
+ * pumped here in node — and the engine's log, which a suite reads to see what
+ * films a step played.
+ */
+export interface Headless extends Player {
   /** every line the engine logged, in order */
   logs: string[];
-  /**
-   * the handlers still running, outermost first — not counting `idle ()` — and
-   * a gesture still waiting in the queue to be taken after it (RedJack.exe takes
-   * one an idle, 0x41e9b1): a click made is a script about to run
-   */
-  running(): string[];
   /** the disc the game last said it is on */
   disc(): number;
-  /** step `n` service passes */
-  frame(n?: number): Promise<void>;
-  /**
-   * Step until `done()` answers true, at most `max` passes. Answers how many it
-   * took; throws naming `what` when it ran out, so a hang says what it hung on.
-   */
-  until(done: () => boolean, what: string, max?: number): Promise<number>;
-  /** the player has the game: the room on screen, nothing walking and no script running */
-  idle(): boolean;
-  /** step until the player has the game again, or the game asks a question */
-  settle(what: string, max?: number): Promise<number>;
-  /** who owns the screen: "movie", "puppet", "faded", "world" or "held" */
-  owner(): ReturnType<GameHost["director"]["screenOwner"]>;
-  /** the room's `.sett` name, without the extension */
-  room(): string;
-  /** the node the room stands at */
-  node(): string;
-  /**
-   * a click as the page makes one, not awaited — a modal film would stall the
-   * pump. The pointer is parked in the middle after it unless `stay`: a hand
-   * that stays where it clicked (a fight reads where the pointer IS, a pass later)
-   */
-  click(x: number, y: number, stay?: boolean): () => boolean;
-  /** the button pressed and held at (x, y), until {@link mouseUp} */
-  mouseDown(x: number, y: number): void;
-  /** the button let go */
-  mouseUp(x: number, y: number): void;
-  /** a key coming up, as the page hands the arrows' releases over */
-  keyUp(name: string): void;
-  /** a key as the page hands one over */
-  key(name: string, special?: boolean): () => boolean;
 }
 
-/** the game on the discs, booted, with a seeded `random()` */
-export async function headless(): Promise<Headless> {
-  if (!haveRip()) fail(`no rip: ${RIP}/RJDisk1/RedJack/bootfile.boot`);
+/**
+ * The three discs as the engine's file store, as `redjack/src/files.ts` serves
+ * them: a name off the disc the game says it is on, else off the lowest. Each
+ * file is read off the disk once — the engine asks for a room's files again at
+ * every visit, and a suite that walks back and forth would pay for each.
+ */
+export function discFiles(): HostFiles {
   const index = indexDiscs();
   let disc = 1;
   const pathOf = (name: string): string | undefined => {
@@ -128,15 +98,23 @@ export async function headless(): Promise<Headless> {
     if (!bytes) cache.set(path, (bytes = new Uint8Array(readFileSync(path))));
     return bytes;
   };
-  const logs: string[] = [];
-  const files: HostFiles = {
+  return {
     provide: read,
     load: async (name) => read(name),
     setDisc: (n) => void (disc = n),
     has: (name) => pathOf(name) !== undefined,
     serverSetNames: () => [...index.keys()].filter((n) => n.endsWith(".sett")),
     evict: () => 0,
-  };
+    /** not the engine's: which disc the game last said it is on */
+    disc: () => disc,
+  } as HostFiles & { disc(): number };
+}
+
+/** the game on the discs, booted, with a seeded `random()` */
+export async function headless(): Promise<Headless> {
+  if (!haveRip()) fail(`no rip: ${RIP}/RJDisk1/RedJack/bootfile.boot`);
+  const files = discFiles() as HostFiles & { disc(): number };
+  const logs: string[] = [];
   const host = new GameHost(files, new NullAudioSink(), { log: (l) => logs.push(l) }, { screen: REDJACK.screen });
   const session = host.session;
   session.onLog = (l) => logs.push(l);
@@ -258,16 +236,19 @@ export async function headless(): Promise<Headless> {
     void host.director.keyDown(name, special).then(() => (done = true));
     return () => done;
   };
-  return { host, session, logs, idle, keyUp, mouseDown, mouseUp, running: () => [...running.values(), ...queued()], disc: () => disc, frame, until, settle, owner, room, node, click, key };
+  const point = (x: number, y: number): void => session.setPointer(x, y);
+  // the key goes down and is never let go: a release in a room reaches no
+  // scene, and the suites were written to press the way this harness always has
+  const tap = (name: string, special = false): void => void key(name, special);
+  return { host, session, logs, idle, keyUp, mouseDown, mouseUp, point, tap, running: () => [...running.values(), ...queued()], disc: files.disc, frame, until, settle, owner, room, node, click, key };
 }
 
-export class SuiteFailure extends Error {}
 export function ok(what: string): void {
   console.log(`ok    ${what}`);
 }
 export function fail(why: string): never {
   console.log(`FAIL  ${why}`);
-  throw new SuiteFailure(why);
+  throw new PlayFailure(why);
 }
 /** the suite's last word — and its end, since a film or a loop still armed would keep node up */
 export function pass(what: string): void {
