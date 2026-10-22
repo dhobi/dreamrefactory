@@ -73,8 +73,13 @@ beforeEach(() => {
   bar.calls = 0;
   live = true;
   opened = 0;
-  where.href = "https://example.test/lunicus/";
+  where.href = "https://example.test/lunicus/play/";
   vi.stubGlobal("location", where);
+  // the play page, one folder under the game's root (its `site-root` meta)
+  vi.stubGlobal("document", {
+    baseURI: "https://example.test/lunicus/play/",
+    querySelector: (q: string) => (q === 'meta[name="site-root"]' ? { getAttribute: () => "../" } : null),
+  });
   vi.stubGlobal("addEventListener", (type: string, fn: KeyHandler, o: { capture?: boolean }) => {
     if (type === "keydown" && o?.capture) keydown = fn;
   });
@@ -130,7 +135,7 @@ test("File ▸ Open on the title is the page's saves dialog, and File ▸ Exit t
   setUp();
   bar.opts!.onSelect("202");
   expect(opened).toBe(1);
-  expect(where.href).toBe("https://example.test/lunicus/");
+  expect(where.href).toBe("https://example.test/lunicus/play/");
   bar.opts!.onSelect("204");
   expect(where.href).toBe("https://example.test/");
   expect(opened).toBe(1);

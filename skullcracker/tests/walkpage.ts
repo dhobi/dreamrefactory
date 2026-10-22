@@ -434,11 +434,11 @@ describe.skipIf(!have)("the pause panel", () => {
     p.key("Escape");
     await until(p, /frame ([6-9]|\d\d+)\//);
     p.point(p.el("screen"), "pointerdown", { clientX: 400, clientY: 227 });
-    for (let i = 0; i < 40 && p.location.href !== "index.html"; i++) {
+    for (let i = 0; i < 40 && p.location.href !== "play/"; i++) {
       p.frames();
       await new Promise((r) => setTimeout(r, 0));
     }
-    expect(p.location.href).toBe("index.html");
+    expect(p.location.href).toBe("play/");
   });
 });
 
@@ -465,7 +465,7 @@ describe.skipIf(!have)("a film", () => {
   it("ends a game on the board, and goes back to the front door", async () => {
     const p = await openPage("?level=1&foes=0");
     p.game.ui.gameOver(5000, 3, 1);
-    expect(p.location.href).toBe("index.html");
+    expect(p.location.href).toBe("play/");
     expect(p.hud()).toMatch(/^game over — row 1 of the board$/);
     expect([...p.stored.values()].join()).toContain("TESTER");
   });

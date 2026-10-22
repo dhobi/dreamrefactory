@@ -21,7 +21,7 @@ import { SCREEN_H, SCREEN_W, type Screen } from "../v0/screen";
 import type { GameFiles, Speaker } from "../v0/machine";
 import { installFullscreen } from "./fullscreen";
 import { BootBar, brandFallback, escHtml } from "./page-shell";
-import { pageUrl } from "./page-url";
+import { pageUrl, siteBase } from "./page-url";
 import { readManifest, readStream } from "./rip-files";
 import { browseForSave } from "./save-browser";
 import { screenPoint } from "./screen";
@@ -153,7 +153,7 @@ export class V0Page {
     let p = this.fetching.get(path);
     if (!p) {
       p = (async () => {
-        const res = await fetch(pageUrl(this.opts.rip + path));
+        const res = await fetch(pageUrl(this.opts.rip + path, siteBase()));
         if (!res.ok || !res.body) throw new Error(`${path}: ${res.status}`);
         let got = 0;
         const out = await readStream(res.body, (n) => {
@@ -309,7 +309,7 @@ export class V0Page {
     this.ctx.fillStyle = "#000";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.step(`${name} (${year}) — DreamFactory 0`);
-    const manifest = await readManifest(pageUrl("gamefiles.json"), {
+    const manifest = await readManifest(pageUrl("gamefiles.json", siteBase()), {
       orThrow: (status) => new Error(`no gamefiles.json (${status}) — is ${slug}/gamefiles/ there?`),
     });
     this.sizes = Object.fromEntries(Object.entries(manifest).filter(([k]) => k.startsWith(rip)));

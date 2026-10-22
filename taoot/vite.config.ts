@@ -9,12 +9,10 @@
  * The output goes to `dist/taoot/`, which is the shape of the URL it is served
  * at (`…/dreamrefactory/taoot/`), and the deploy uploads that directory into it.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join, resolve } from "node:path";
-import { Plugin, defineConfig } from "vite";
-import { gamefilesManifest } from "../tools/vite-gamefiles";
-import { siblingSignposts } from "../tools/vite-siblings";
+import type { Plugin } from "vite";
+import { gameConfig } from "../tools/vite-game";
 import { speedrunPage } from "../speedrun/vite";
 import { WORKBENCH } from "./speedrun/workbench";
 // RELATIVE, like everything a Vite config reaches: the config is bundled and run
@@ -25,9 +23,6 @@ import { NIGHTDIVE_GIF, NIGHTDIVE_OUT, writeNightdiveMov } from "./tools/mknight
 /** this file's own directory — not the working directory, which differs between
     `npm run build -w @dreamfactory/taoot` and `vite build --config` */
 const HERE = fileURLToPath(new URL(".", import.meta.url));
-
-/** the port's version, from the package that holds this game and nothing else */
-const VERSION = JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")).version as string;
 
 /**
  * `nightdive.mov` from its GIF, when the GIF is the newer of the two.
@@ -50,60 +45,33 @@ function nightdiveMovie(): Plugin {
   };
 }
 
-export default defineConfig({
+export default gameConfig({
   root: HERE,
-  publicDir: join(HERE, "public"),
+  dir: "taoot",
+  pages: {
+    freeroam: "freeroam/index.html",
+    devmode: "devmode/index.html",
+    collection: "collection/index.html",
+    captions: "captions/index.html",
+    bedsit: "bedsit/index.html",
+    chimneys: "bedsit/chimneys/index.html",
+    minigames: "minigames/index.html",
+    blackjack: "minigames/blackjack/index.html",
+    fencing: "minigames/fence/index.html",
+    fistfight: "minigames/fight/index.html",
+  },
+  plugins: [
+    nightdiveMovie(),
+    // the speedrun workbench, made from play/index.html by speedrun/vite.ts
+    ...speedrunPage({ root: HERE, ...WORKBENCH }),
+  ],
   /**
    * The workbench's Calculate worker (src/speedrun/calc-worker.ts) is an ES
    * module: it reaches the speedrun workspace's code, which loads one module on
    * demand, and the default `iife` worker cannot be split (#509).
    */
   worker: { format: "es" },
-  /**
-   * Every URL the build emits is relative to the page that names it, so the
-   * output runs from a subdirectory of some other host as readily as from a
-   * domain root. Vite does that rewriting for what it can see — the module
-   * scripts, the stylesheets and the `public/` images the HTML names, all still
-   * written "/…" in source BECAUSE that is what it rewrites — and it works out
-   * the number of `../` per page, which is why the four entries sit at two
-   * depths.
-   *
-   * The two kinds it never sees are handled by hand: `<a href>` between pages is
-   * written relative in the HTML, and URLs built in TypeScript go through
-   * `siteUrl` (chrome/src/site.ts), which resolves them against this game's root
-   * rather than the host's.
-   */
-  base: "./",
-  /**
-   * A multi-page site, not a single-page app. Without this, Vite answers every
-   * unknown path with this package's `index.html` — so a link into another
-   * package (`../editors/`, `../docs/`) came back 200 with the wrong page in it,
-   * and a broken cross-site link looked like a working one.
-   */
-  appType: "mpa",
-  // substituted into the source text, so the version travels in the bundle and
-  // no page has to fetch anything to know it
-  define: { __APP_VERSION__: JSON.stringify(VERSION) },
-  plugins: [
-    nightdiveMovie(),
-    gamefilesManifest({ gamefiles: join(HERE, "gamefiles"), publicDir: join(HERE, "public") }),
-    // the speedrun workbench, made from play/index.html by speedrun/vite.ts:
-    // reached by its mark (🏃‍➡️) in the top bar, carrying `noindex`, and built
-    ...speedrunPage({ root: HERE, ...WORKBENCH }),
-    siblingSignposts([
-      { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
-      { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
-      { path: "dust", command: "npm run dev -w dust", port: 5176, what: "Dust" },
-      { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
-      { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
-      { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
-      { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
-      { path: "jumpraven", command: "npm run dev -w jumpraven", port: 5181, what: "Jump Raven" },
-    ]),
-  ],
   server: {
-    port: 5175,
-    strictPort: true,
     /**
      * The hostnames this dev server will answer to, beyond the usual ones.
      *
@@ -117,68 +85,7 @@ export default defineConfig({
      * secure context, so `/bedsit/` in a headset cannot be served over plain
      * http from the LAN. The subdomain is random and different every run, which
      * is why this is the whole domain and not one host.
-     *
-     * It costs nothing when no tunnel is running: a name that resolves nowhere
-     * reaches nothing. Anything longer-lived belongs on its own hostname, added
-     * here beside it.
      */
     allowedHosts: [".trycloudflare.com"],
-    watch: {
-      // gamefiles/ is a CD rip — ~7,800 files that the middleware streams as raw
-      // bytes. Vite never transforms them and a change to one could not
-      // hot-reload anything, but chokidar still spends an inotify handle per
-      // file: a quarter of a default `fs.inotify.max_user_watches` (28556 here)
-      // on data that cannot move. Two dev servers at once therefore ENOSPC'd
-      // outright, which is how this was found.
-      ignored: ["**/gamefiles/**"],
-    },
-  },
-  build: {
-    target: "es2022",
-    outDir: resolve(HERE, "../dist/taoot"),
-    emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        main: join(HERE, "index.html"),
-        play: join(HERE, "play/index.html"),
-        // Free roam: the disc's own guided tour (`playmode.mov`'s second
-        // button, `tour = true`) entered directly, with the six doors that
-        // answer a tour with a knock opened anyway. The play page with the
-        // story turned off, and LISTED — it is a way to play rather than a tool.
-        freeroam: join(HERE, "freeroam/index.html"),
-        // Developer mode: the debug build put back up — `debugging` raised after
-        // the boot, `optionkey()`/`commandkey()` answering for real, and
-        // TI.EXE's own menu bar read out of its RT_MENU resource. Reached by its
-        // mark (🛠️) in the top bar, and built for the reason the workbench is.
-        devmode: join(HERE, "devmode/index.html"),
-        // The collection page: the physical release's box and CD artwork, and
-        // the offline DBGL downloads that sit beside the rip on the host.
-        collection: join(HERE, "collection/index.html"),
-        // The caption editor (#50): listen to the voice clips the game never
-        // prints and correct their transcript, taoot/src/captions/*.json.
-        captions: join(HERE, "captions/index.html"),
-        // The bedsit as a solid, walked in the browser — the room BEDSIT1.SET
-        // never had, worked out of the depth images it ships for occluding
-        // actors. Unlisted like the workbench, and carrying no game data at all:
-        // the model is in the source (bedsit/src/bedsit-room.ts).
-        bedsit: join(HERE, "bedsit/index.html"),
-        // The chimney picker for the bedsit's window: the photograph London is
-        // seen through, and a way to click the flues that smoke in it. Unlisted
-        // too, and built for the same reason the workbench is — a tool that
-        // only exists on a dev server is a tool nobody uses.
-        chimneys: join(HERE, "bedsit/chimneys/index.html"),
-        // The three diversions aboard that are whole games rather than puzzles:
-        // blackjack at Buick's table, the fencing bout with Haderlitz and the
-        // fist fight with Vlad. Each is a STAGE with its own
-        // shapes, track and globals and no room at all, so each opens without
-        // the ship around it (taoot/minigames/src/minigame-boot.ts). LISTED —
-        // the door is linked from this game's own front page, unlike the
-        // workbench and the bedsit beside them here.
-        minigames: join(HERE, "minigames/index.html"),
-        blackjack: join(HERE, "minigames/blackjack/index.html"),
-        fencing: join(HERE, "minigames/fence/index.html"),
-        fistfight: join(HERE, "minigames/fight/index.html"),
-      },
-    },
   },
 });

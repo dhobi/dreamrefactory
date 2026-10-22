@@ -1,6 +1,6 @@
 /**
- * The front-end page (`src/page/main.ts`, `index.html`), in node: the real
- * `index.html` parsed by linkedom, a recording 2D context and audio sink
+ * The front-end page (`src/page/main.ts`, `play/index.html`), in node: the real
+ * `play/index.html` parsed by linkedom, a recording 2D context and audio sink
  * standing in for the browser's, the animation frames driven by hand, and
  * `fetch` answered off the disc on this machine.
  *
@@ -89,7 +89,7 @@ vi.mock("@dreamfactory/engine/runtime/audio", async (real) => ({
 vi.mock("@dreamfactory/engine/web/fullscreen", () => ({ installFullscreen: () => void calls.push("fullscreen") }));
 vi.mock("@dreamfactory/engine/web/stretch", () => ({ installStretch: () => void calls.push("stretch") }));
 // the store's URLs, rooted where the fetch stub below can find them
-vi.mock("@dreamfactory/engine/web/page-url", () => ({ pageUrl: (p: string) => `/site/${p}` }));
+vi.mock("@dreamfactory/engine/web/page-url", () => ({ pageUrl: (p: string) => `/site/${p}`, siteBase: () => "/site/" }));
 vi.mock("@dreamfactory/chrome/version", () => ({ VERSION: "test", installVersion: () => {} }));
 vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
@@ -128,7 +128,7 @@ async function fakeFetch(url: string): Promise<Response> {
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
+const HTML = readFileSync(join(ROOT, "play/index.html"), "utf8");
 
 interface Page {
   document: Document;

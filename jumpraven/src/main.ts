@@ -16,6 +16,7 @@
  *
  * The machine tests (`tests/machine/`) drive the same machine with no page.
  */
+import { siteBase } from "@dreamfactory/engine/web/page-url";
 import "@dreamfactory/engine/web/window-bar.css";
 import { openWindowDialog, windowDialogOpen } from "@dreamfactory/engine/web/window-dialog";
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
@@ -142,7 +143,7 @@ const menu = installMenu(frameEl, game, input, {
     ] }, { onCommand: (id, d) => id === 101 && d.close() });
   },
   // File ▸ Exit closed the window (0x4222fb(4)); a page leaves for the front door
-  exit: () => (location.href = new URL("../", location.href).href),
+  exit: () => (location.href = new URL("../", siteBase()).href),
   live: () => running && !windowDialogOpen() && !savesOpen(),
 });
 

@@ -289,7 +289,7 @@ ui.gameOver = (score, level, difficulty) => {
   const rank = offerScore(boards, difficulty, score, level, () => prompt(NAME_PROMPT, ""));
   saveBoards(boards);
   hud.textContent = rank < 0 ? "game over" : `game over — row ${rank + 1} of the board`;
-  location.href = "index.html";
+  location.href = "play/";
 };
 const W = canvas.width;
 const H = canvas.height;
@@ -407,7 +407,7 @@ async function openPause(): Promise<void> {
   if (pauseAnswer === 1) await saveGame();
   // `0x404303`: state 5 is the only answer that leaves, and `0x403c89` puts the
   // shell back at its own front door. This page's front door is the menu page.
-  else if (pauseAnswer === 2) location.href = "index.html";
+  else if (pauseAnswer === 2) location.href = "play/";
   else lastTick = 0;
 }
 

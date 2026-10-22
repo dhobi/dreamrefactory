@@ -30,7 +30,7 @@ import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { LUNICUS_SAVES, seedLunicusSaves } from "./saves";
 import { installMenu } from "./menu";
 import { askHighScoreName, editKeys } from "./dialogs";
-import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { pageUrl, siteBase } from "@dreamfactory/engine/web/page-url";
 
 const RIP = "gamefiles/LUNICUS/";
 /** what the opening and day one's lower floor read, fetched before Enter */
@@ -46,7 +46,7 @@ const MAX_CATCH_UP = 6;
 const page = new V0Page({ name: "Lunicus", year: 1994, slug: "lunicus", rip: RIP, version: VERSION });
 const { canvas, locEl, complain, say, toggleLog, fetchBytes, files, speaker, at } = page;
 installBugReport($<HTMLButtonElement>("bugBtn"), page.bugReport);
-const url = (path: string): string => pageUrl(path);
+const url = (path: string): string => pageUrl(path, siteBase());
 
 /* ------------------------------------------------------------------------- *
  * The machine

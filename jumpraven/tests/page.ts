@@ -1,5 +1,5 @@
 /**
- * The play page (`src/main.ts`), in node: the real `index.html` parsed by
+ * The play page (`src/main.ts`), in node: the real `play/index.html` parsed by
  * linkedom, with the shared V0 shell, the game, its input door, the menu bar,
  * the dialogs, the player and the saves standing in for themselves.
  *
@@ -188,8 +188,8 @@ vi.mock("@dreamfactory/chrome/bug-report", () => ({ installBugReport: () => {} }
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(import.meta.dirname, "../index.html"), "utf8");
-const HREF = "http://host/jumpraven/index.html";
+const HTML = readFileSync(join(import.meta.dirname, "../play/index.html"), "utf8");
+const HREF = "http://host/jumpraven/play/";
 
 interface Page {
   game: FakeGame;
