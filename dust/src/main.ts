@@ -68,11 +68,9 @@ import {
   readStgRegions,
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { BootBar, BootCaption, brandFallback, busySpinner, titleRise, untilStarted } from "@dreamfactory/engine/web/page-shell";
 import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
 import { InputLog, clickLabel, inputLabel } from "@dreamfactory/engine/web/input-log";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
@@ -110,7 +108,7 @@ import {
 } from "@dreamfactory/engine/runtime/audio";
 import { siteUrl } from "@dreamfactory/chrome/site";
 import { VERSION, installVersion } from "@dreamfactory/chrome/version";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
 import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
 import { DUST } from "@dreamfactory/chrome/games";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
@@ -262,32 +260,26 @@ installVersion();
 // boots this file too and gets the same
 void installPlayMenu({ english: true });
 
-/**
- * The two levers the port adds: a fullscreen picture, and a bug report that
- * arrives with the screen attached.
- *
- * Both are the play page's, and the reporter is now literally the same module —
- * it moved to `site/` when this page wanted it, because a game may not import
- * another game (site/tests/layering.ts) and nothing in it was ever Titanic's
- * except the name it gave the downloaded PNG.
- */
-const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
-const bugNote = document.getElementById("bugNote");
 const stageEl = document.getElementById("stage") as HTMLElement;
 
 /** where the player is, for the issue body: the trace line, kept as it changes */
 let currentRoom = "";
 
-// The STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
-// UA, and the picture is a fixed 512x384 either way — see #stage.fs in play.css.
-// A class and not the `:fullscreen` pseudo because an iPhone has no element
-// fullscreen to match, and the page fills itself there instead — the detection
-// and the way back out are engine/src/web/fullscreen.ts.
-installFullscreen(fsBtn, stageEl, { report: say, landscape: true });
-// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
+// Fullscreen, its stretch and the bug report, as every play page has them
+// (chrome/src/play-page.ts) — the reporter literally the same module as
+// Titanic's, since nothing in it was ever Titanic's but the PNG's name.
+installPageControls({
+  game: DUST,
+  canvas,
+  stage: stageEl,
+  say,
+  // one disc, one language: there is nothing to choose between, and saying so
+  // is more use in an issue than leaving the field out
+  edition: () => "Dust CD (gamefiles/dustcd/)",
+  where: () => currentRoom,
+  log: (n) => logLines.slice(-n),
+});
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
-installStretch(stretchBox, stageEl, "dust.picture.stretch");
 /**
  * ...or TH mode, the menu band tucked away (engine/src/web/tylerhartman.ts).
  * The page sizes its frame and stage from a 4:3 `--pic-h`, declared on :root
@@ -305,29 +297,6 @@ const th = new TylerHartman(stageEl, canvas, thBox, "dust.picture.th", {
 });
 excludeEachOther(thBox, stretchBox);
 
-/** how long the screenshot's fate stays on screen before it is taken down */
-const BUG_NOTE_MS = 6000;
-if (bugBtn) {
-  installBugReport(bugBtn, {
-    game: DUST.short,
-    canvas,
-    shotName: "dust-bug.png",
-    version: VERSION,
-    where: () => currentRoom,
-    // one disc, one language: there is nothing to choose between, and saying so
-    // is more use in an issue than leaving the field out
-    edition: () => "Dust CD (gamefiles/dustcd/)",
-    log: (n) => logLines.slice(-n),
-    note: (how) => {
-      if (!bugNote) return;
-      bugNote.textContent =
-        how === "clipboard"
-          ? "screen copied — paste it into the issue"
-          : "screen saved — attach dust-bug.png to the issue";
-      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-    },
-  });
-}
 /**
  * The Details column the log sits in, behind b, x or the log button
  * (engine/src/web/details-column.ts) — the column Titanic's play page carries,

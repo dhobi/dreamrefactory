@@ -24,24 +24,14 @@
 import { detectVersion } from "@dreamfactory/engine/df/version";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
 import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import {
-  BootBar,
-  GestureAudio,
-  PageLog,
-  brandFallback,
-  busySpinner,
-  screenPlate,
-  waitForStart,
-} from "@dreamfactory/engine/web/page-shell";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
-import { GameHost } from "@dreamfactory/engine/web/host";
+import { busySpinner } from "@dreamfactory/engine/web/page-shell";
+import type { GameHost } from "@dreamfactory/engine/web/host";
 import { SPACE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { bindPointerInput } from "@dreamfactory/engine/web/shell-input";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { REDJACK } from "@dreamfactory/chrome/games";
-import { VERSION, installVersion } from "@dreamfactory/chrome/version";
+import { VERSION } from "@dreamfactory/chrome/version";
 import { fmtSize } from "@dreamfactory/chrome/net-meter";
+import { PlayPage } from "@dreamfactory/chrome/play-page";
 import { RedJackFiles } from "./files";
 import { REDJACK_SAVES, keepDf5Disk, seedRedJackSaves } from "./saves";
 import { browseForLoad, browseForSave, savesOpen } from "@dreamfactory/engine/web/save-browser";
@@ -50,119 +40,29 @@ import { RJ_CURSORS } from "./cursor-art";
 import { bindRoomTouch } from "./room-touch";
 import { SWIPE_ARROWS, arrowUp, defaultSaveName, heldKeys, keyAction, whereLine } from "./input";
 import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
-import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
-import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
-import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
-import { InputLog } from "@dreamfactory/engine/web/input-log";
 
 const SCREEN = REDJACK.screen;
 
-const canvas = document.getElementById("screen") as HTMLCanvasElement;
 /**
- * The picture is composed at 640x480 and blitted up into a 1280x960 canvas, so
- * the page only ever SHRINKS it — see `screenPlate` (engine/src/web/page-shell.ts).
+ * The page every DreamFactory game's is (chrome/src/play-page.ts): the picture
+ * composed at 640x480 and blitted up into a 1280x960 canvas, the controls, the
+ * Details column the log sits in, and the gauge — a groove filling with gold.
  */
-const { ctx, plate, plateCtx } = screenPlate(canvas, SCREEN);
-
-/** the Details column the log sits in, behind x, b or the log button (engine/src/web/details-column.ts) */
-const column = new DetailsColumn("redjack");
-const logEl = document.getElementById("log") as HTMLPreElement;
-const locEl = document.getElementById("loc") as HTMLElement;
-const errEl = document.getElementById("err") as HTMLElement;
-const stageEl = document.getElementById("stage") as HTMLElement;
-installVersion();
-// Play and Speedrunner folded into one "Play", as on Titanic's, Dust's and
-// Timelapse's pages (chrome/src/play-menu.ts), in English: RedJack is not
-// translated. The workbench boots this file too and gets the same
-void installPlayMenu({ english: true });
-
-/** the title card, which closes the band up when it fails to load — see #brand in index.html */
-brandFallback(document.getElementById("brand") as HTMLImageElement | null);
-
-/* ------------------------------------------------------------------------- *
- * The log
- * ------------------------------------------------------------------------- */
-
-/** one line of the log: `step` is something the boot did, `warn` a complaint */
-/** the game, once there is one — what the input log asks where it stands */
-let current: GameHost | null = null;
-const log = new PageLog(logEl, document.getElementById("logBtn"), 600, column);
-const { say, show: showLog, toggle: toggleLog, lines: logLines } = log;
-
-/** every press and click, what it hit and what it did — behind the column's `inputs` box (engine/src/web/input-log.ts) */
-const inputs = new InputLog({ say: (line) => say(line), where: () => (current ? whereLine(current.session) : "booting") });
-
-/* ------------------------------------------------------------------------- *
- * The shared controls
- * ------------------------------------------------------------------------- */
-
-/**
- * Audio waits for a gesture — the Enter button. Deferred rather than absent, so
- * whatever the boot starts before then is held and started when the sink comes.
- */
-const { sink: audio, ensure: ensureAudio } = new GestureAudio(say);
-
-// the STAGE, not the canvas: see #stage.fs in src/theme.css
-installFullscreen(document.getElementById("fsBtn") as HTMLButtonElement | null, stageEl, { report: say, landscape: true });
-// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
-installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "redjack.picture.stretch");
-
-/** where the player is, for a bug report: the readout's own line */
-let currentWhere = "";
-const BUG_NOTE_MS = 6000;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
-const bugNote = document.getElementById("bugNote");
-if (bugBtn) {
-  installBugReport(bugBtn, {
-    game: REDJACK.short,
-    canvas,
-    shotName: "redjack-bug.png",
-    version: VERSION,
-    where: () => currentWhere,
-    edition: () => "RedJack 3CD (gamefiles/RJDisk1-3/)",
-    log: (n) => logLines.slice(-n),
-    note: (how) => {
-      if (!bugNote) return;
-      bugNote.textContent =
-        how === "clipboard"
-          ? "screen copied — paste it into the issue"
-          : "screen saved — attach redjack-bug.png to the issue";
-      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-    },
-  });
-}
-
-/* ------------------------------------------------------------------------- *
- * The loading bar
- * ------------------------------------------------------------------------- */
-
-const bootEl = document.getElementById("boot") as HTMLElement;
-const startEl = document.getElementById("start") as HTMLButtonElement;
-const barEl = document.getElementById("barvalue") as HTMLProgressElement;
-const chargeEl = document.getElementById("charge") as HTMLElement;
-const bootSayEl = document.getElementById("bootsay") as HTMLElement;
-const bootPctEl = document.getElementById("bootpct") as HTMLElement;
+const page = new PlayPage({
+  game: REDJACK,
+  edition: "RedJack 3CD (gamefiles/RJDisk1-3/)",
+  shape: "flow",
+  value: (pct) => ((document.getElementById("barvalue") as HTMLProgressElement).value = pct),
+  caption: (label) => (document.getElementById("bootsay")!.textContent = label),
+});
+const { canvas, say, progress } = page;
 
 /** where the bar stands once the index has arrived, and once the BOOTFILE has */
 const INDEXED = 0.04;
 const PLANNED = 0.08;
 /** and where the prefetch leaves it: the last few per cent are the boot's own */
 const FETCHED = 0.96;
-
-/** the bar only ever goes forwards */
-const bar = new BootBar(
-  chargeEl,
-  bootPctEl,
-  (pct) => (barEl.value = pct),
-  (label) => (bootSayEl.textContent = label),
-);
-const progress = bar.set;
-
-function beginPlaying(): void {
-  document.body.classList.remove("booting");
-  document.body.classList.add("playing");
-}
 
 /**
  * The pointer, by the name the game gives it: RedJack.exe's own `CURS.*`
@@ -174,19 +74,6 @@ function beginPlaying(): void {
 const cursor = new ShownCursor(canvas, new CursorSheet(RJ_CURSORS), SCREEN);
 const showCursor = cursor.show;
 
-/**
- * Boot without waiting for the Enter press — on a page that says so with
- * `<meta name="autostart">`: the speedrun workbench (redjack/speedrun/
- * workbench.ts), for Dust's reason (the note on AUTOSTART in dust/src/main.ts).
- * That page is reloaded for a clean game far more often than it is opened to
- * play one, and a gesture asked for per boot is one asked for per run. The
- * audio the press would have bought waits for the run's first click instead.
- */
-const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
-
-/** whether the cold boot has returned — `window.dbg.booted` */
-let booted = false;
-
 /* ------------------------------------------------------------------------- *
  * The boot
  * ------------------------------------------------------------------------- */
@@ -195,48 +82,18 @@ async function main(): Promise<void> {
   say(`RedJack RE ${VERSION} — the 1998 discs on this port (prototype)`, "step");
 
   const files = await RedJackFiles.open();
-  if (!files.size) {
-    say("the manifest indexed nothing: is redjack/gamefiles/ there?", "warn");
-    errEl.textContent = "no game data — press b for the log";
-    progress(1, "no disc");
-    showLog(true);
-    return;
-  }
+  if (!files.size) return page.noDisc("the manifest indexed nothing: is redjack/gamefiles/ there?");
   progress(INDEXED, `indexed ${files.size} names across three discs`);
   say(`indexed ${files.size} names across the rip`);
-  files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
-  // the load remover's subscription (engine/src/web/load-clock.ts, #251): from
-  // the first fetch, because a clock armed when a timer starts has missed the
-  // boot. Read through `window.dbg.loading()` below
-  watchLoads(files);
+  page.watch(files, busySpinner(document.getElementById("netbusy") as HTMLDivElement));
 
-  const host = new GameHost(
-    files,
-    audio,
-    {
-      log: (l) => say(`  ${l}`),
-      hud: (t) => t && say(`  hud: ${t}`),
-    },
-    { screen: SCREEN },
-  );
-  column.install({
+  const host = page.host(files, {
     // which day it is — the BOOTFILE's `day`, which `advanceday ()` moves on and
     // every day's scripts branch on; where you stand is the #loc readout
     spine: [{ name: "day", label: "Day" }],
-    host,
-    version: VERSION,
-    lines: () => logLines,
-    inputs,
+    // a workbench `reset(seed: N)` reloaded us (speedrun/src/boot-seed.ts)
+    seed: takeBootSeed("redjack"),
   });
-  current = host;
-  // a real frame source before the boot runs, so a modal film and the game's own
-  // poll loops advance (see timelapse/src/main.ts)
-  host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
-  host.session.hasRealFrames = true;
-  // A workbench `reset(seed: N)` reloaded us: the dice are pinned before the boot
-  // draws its first one (speedrun/src/boot-seed.ts)
-  const bootSeed = takeBootSeed("redjack");
-  if (bootSeed !== null) host.session.seedRandom(bootSeed);
 
   // Saved games: the control panel's SAVE and LOAD run `savegame ("2")` and
   // `opengame ("2")`, which block on these hooks, and the shared dialog answers
@@ -257,13 +114,7 @@ async function main(): Promise<void> {
 
   progress(PLANNED, "reading the BOOTFILE");
   const boot = await files.load("bootfile");
-  if (!boot) {
-    say("no BOOTFILE: is RJDisk1/RedJack/bootfile.boot under redjack/gamefiles/?", "warn");
-    errEl.textContent = "no game data — press b for the log";
-    progress(1, "no disc");
-    showLog(true);
-    return;
-  }
+  if (!boot) return page.noDisc("no BOOTFILE: is RJDisk1/RedJack/bootfile.boot under redjack/gamefiles/?");
   say(`BOOTFILE: DreamFactory ${detectVersion(boot) || "?"} (${fmtSize(boot.byteLength)})`, "step");
 
   const plan = await host.bootPlan();
@@ -281,40 +132,26 @@ async function main(): Promise<void> {
   const prefetch = [...new Set([...named, ...(plan.landingSet && files.serverUrl(plan.landingSet) ? [plan.landingSet] : [])])];
   const total = prefetch.reduce((a, n) => a + files.sizeOf(n), 0);
   say(`prefetching ${prefetch.length} file(s), ${fmtSize(total)}`, "step");
-  let arrived = 0;
-  await Promise.all(
-    prefetch.map(async (name) => {
-      bar.say(`opening ${name}`);
-      await files.load(name, (n) => {
-        arrived += n;
-        progress(PLANNED + (FETCHED - PLANNED) * (arrived / Math.max(1, arrived + files.bytesLeft(prefetch))));
-      });
-    }),
-  );
+  await page.prefetch(files, prefetch, PLANNED, FETCHED);
   say("version tags:", "step");
   for (const name of prefetch) {
     const bytes = await files.load(name);
     say(bytes ? `  ${name}: DreamFactory ${detectVersion(bytes) || "?"} (${fmtSize(bytes.byteLength)})` : `  ${name}: missing`);
   }
 
-  /** the engine's own frame loop, on the engine's own screen, blitted up */
-  const loop = (now: number): void => {
-    host.director.tick(now);
-    host.director.render(plateCtx);
-    ctx.drawImage(plate, 0, 0, canvas.width, canvas.height);
+  page.frameLoop(host, () => {
     showLocation(host);
     // a conversation keeps the arrow however a script inside it changes the
     // cursor: RedJack.exe's puppet code sets `CURS.ARROW` as it runs (#446)
     if (host.session.cursorHidden) showCursor("none");
     else showCursor(host.session.puppet?.visible ? "arrow" : host.session.cursorName);
-    requestAnimationFrame(loop);
-  };
-  requestAnimationFrame(loop);
+  });
 
   const s = host.session;
   /**
    * A handle on the running game, for the console — `rj.eval('return (currentset())')`.
-   * This page is a prototype and meant to be poked at.
+   * This page is a prototype and meant to be poked at. `window.dbg` is the
+   * speedrun driver's (chrome/src/play-page.ts `publish`).
    */
   (window as Window & { rj?: unknown }).rj = {
     host,
@@ -327,48 +164,12 @@ async function main(): Promise<void> {
       return inst ? (await s.interp.runHandler(inst, "consoleeval", [], { me: "consoleeval", target: "" })).value : null;
     },
   };
-
-  /**
-   * `window.dbg`, the name every other game's page publishes its handle under
-   * and so the one the speedrun driver evaluates its predicates against
-   * (timelapse/src/main.ts says the rest). `rj` above stays the console's.
-   *
-   * A DreamFactory 5 room is no set viewer: `host.viewer` stays null and the
-   * room is `session.maze`, drawn by the director — so this page is `roomless`
-   * to the shared predicates (speedrun/src/driver.ts ROOMLESS), which ask the
-   * director instead of waiting for a viewer that never comes. `booted` is
-   * "the game is up": `coldBoot` has returned.
-   */
-  (window as unknown as { dbg: unknown }).dbg = {
-    host,
-    session: s,
-    director: host.director,
-    get viewer() {
-      return host.viewer;
-    },
-    roomless: true,
-    get booted() {
-      return booted;
-    },
-    /** the load remover's reading, in the shape the other pages publish (dust/src/main.ts) */
-    loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),
-  };
+  page.publish(host);
 
   // the input BEFORE the boot, so a modal film at the start can be skipped
   bindInput(host, s);
 
-  progress(1, "ready");
-  await waitForStart(bootEl, startEl, AUTOSTART);
-  ensureAudio();
-  beginPlaying();
-
-  // TRACKED, as Timelapse's page tracks its boot (timelapse/src/main.ts): a boot
-  // in flight is a script running, so the BOOTFILE idle waits for it here as it
-  // does in the speedrun's headless runner
-  const up = await s.track(log.coldBoot(host, errEl), "coldBoot");
-  booted = true;
-  if (!up) showLog(true);
-  log.bootSummary(host, files, `set ${s.currentSetName || "none"} · `);
+  await page.play(host, files, () => `set ${s.currentSetName || "none"} · `);
 }
 
 /** the readout under the picture, refreshed only when it changes */
@@ -377,8 +178,8 @@ function showLocation(host: GameHost): void {
   const where = whereLine(host.session);
   if (where === lastLoc) return;
   lastLoc = where;
-  currentWhere = where;
-  locEl.textContent = where;
+  page.where = where;
+  page.locEl.textContent = where;
 }
 
 /* ------------------------------------------------------------------------- *
@@ -397,7 +198,7 @@ const canvasCoords = canvasCoordsFor(canvas, SCREEN, Math.floor);
 function bindInput(host: GameHost, s: GameHost["session"]): void {
   const input = bindPointerInput(host, canvas, {
     coords: canvasCoords,
-    inputs,
+    inputs: page.inputs,
     swipeKey: "redjack.swipe",
     // `sysparam (7)`: a room's mousedown zooms while the right button is held
     click: (x, y, e) => host.director.buttonDown(x, y, { button: e.button === 2 ? 2 : 1 }).then(() => say(`click ${x},${y}`)),
@@ -479,12 +280,9 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     const act = keyAction(e);
     if (!act) return;
     e.preventDefault();
-    if ("log" in act) toggleLog();
+    if ("log" in act) page.log.toggle();
     else sendKey(act.key, act.special);
   });
 }
 
-void main().catch((e) => {
-  log.fail(e, errEl);
-  beginPlaying();
-});
+page.boot(main);

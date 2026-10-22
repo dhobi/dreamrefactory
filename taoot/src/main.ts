@@ -38,8 +38,6 @@ import {
   presetOf,
   whereLine,
 } from "./play-rules";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
@@ -85,7 +83,7 @@ import {
   markEdition,
 } from "./editions";
 import { installI18n, t } from "@dreamfactory/chrome/locales";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
 import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
 import { SPINE } from "./state-spine";
@@ -157,7 +155,6 @@ const help = document.getElementById("help");
 /** which copy of the game is being played, as buttons (chrome/src/lang-menu.ts).
  *  Absent on /speedrun/: a route is timed against one edition, English. */
 const editionPicker = document.getElementById("editionPicker");
-const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
 /** whether fullscreen stretches the picture to the display (engine/src/web/stretch.ts) */
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
 /** whether fullscreen hides the menu band (engine/src/web/tylerhartman.ts) */
@@ -165,9 +162,6 @@ const thBox = document.getElementById("thBox") as HTMLInputElement | null;
 /** whether the lines the original only lets you hear are subtitled too (#50) */
 const everyLineBox = document.getElementById("everyLineBox") as HTMLInputElement | null;
 const preferPortBox = document.getElementById("preferPortBox") as HTMLInputElement | null;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
-/** where the bug button says what became of the screenshot */
-const bugNote = document.getElementById("bugNote");
 const pictureModeSel = document.getElementById(
   "pictureMode",
 ) as HTMLSelectElement | null;
@@ -202,8 +196,23 @@ const mapCtx = minimap.getContext("2d")!;
 // A class rather than the `:fullscreen` pseudo because an iPhone has no element
 // fullscreen to match: there the page pins the stage over the viewport itself,
 // which is the whole of what engine/src/web/fullscreen.ts is for.
-installFullscreen(fsBtn, stage, { report: log, landscape: true });
-installStretch(stretchBox, stage, "taoot.picture.stretch");
+//
+// The bug report beside them (chrome/src/play-page.ts, as on every play page)
+// arrives with the screen attached; its note is said in the reader's language,
+// and only there — the issue itself is English, because it is read by whoever
+// fixes it. There is no button on /speedrun/: nothing to report from a stopwatch.
+installPageControls({
+  game: TITANIC,
+  canvas: screen,
+  stage,
+  say: log,
+  edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
+  where: () => hud.textContent ?? "",
+  log: (n) => logLines.tail(n),
+  note: (how) => (how === "clipboard" ? t("play.bugShotClipboard") : t("play.bugShotFile")),
+  /** how long the word about the screenshot stands before the bar is a bar again */
+  noteMs: 15_000,
+});
 const th = new TylerHartman(stage, screen, thBox, "taoot.picture.th");
 excludeEachOther(thBox, stretchBox);
 
@@ -274,34 +283,10 @@ watchLoads(files);
  * The tail comes off {@link logLines}, so what the player can open with X and
  * what a report carries are the same lines by construction.
  */
-/** how long the word about the screenshot stands before the bar is a bar again */
-const BUG_NOTE_MS = 15_000;
 
 /** which copy of the game is running — settled by initServerBrowser, for reports */
 let editionCode = DEFAULT_LANGUAGE;
 
-// no button on /speedrun/, and nothing to report from a stopwatch
-if (bugBtn) {
-  installBugReport(bugBtn, {
-    game: TITANIC.short,
-    canvas: screen,
-    shotName: "taoot-bug.png",
-    version: VERSION,
-    where: () => hud.textContent ?? "",
-    edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
-    log: (n) => logLines.tail(n),
-    // said in the reader's language, and only here: the issue itself is English,
-    // because it is read by whoever fixes it
-    note: (how) => {
-      if (!bugNote) return;
-      bugNote.textContent =
-        how === "clipboard"
-          ? t("play.bugShotClipboard")
-          : t("play.bugShotFile");
-      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-    },
-  });
-}
 
 /** the pane's contents — the pane renders these, and a bug report is their tail */
 const logLines = new LogBuffer(LOG_LINES_KEPT);
