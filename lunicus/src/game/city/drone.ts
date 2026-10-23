@@ -23,7 +23,7 @@
 import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import { CELL, CELL_CENTRE } from "../data";
 import type { Target } from "./weapons";
-import { World, tooFar, type Obj } from "./world";
+import { World, sees, spawnPlaces, tooFar, type Obj } from "./world";
 
 /** 0x40428b's two: the tank's and the jeep's cells (0x40836b, 0x41b1bc) */
 export interface Grounded {
@@ -68,27 +68,8 @@ export class Drone {
   /** 0x403827: five cells off, round the player (0x40393a — the tank's way in) */
   spawn(): void {
     const w = this.w;
-    const cands: Obj[] = [];
-    const px = w.pose.x;
-    const py = w.pose.y;
-    const ways: [number, number, number, boolean][] = [
-      [0x40, px, py - 5, true],
-      [0xc0, px, py + 5, true],
-      [0x80, px + 5, py, false],
-      [0, px - 5, py, false],
-    ];
-    ways.forEach(([angle, x0, y0, across], dir) => {
-      const add = (x: number, y: number): void => void cands.push({ angle, x: 0, y: 0, z: 0, cellX: x, cellY: y });
-      if (w.pose.dir !== dir && !w.blocked(x0, y0)) add(x0, y0);
-      let [ax, ay, bx, by] = [x0, y0, x0, y0];
-      for (let k = 0; k < 5; k++) {
-        if (across) (ax++, bx--);
-        else (ay++, by--);
-        if (!w.blocked(ax, ay)) add(ax, ay);
-        if (!w.blocked(bx, by)) add(bx, by);
-      }
-    });
-    if (!cands.length) throw new Error(`a drone: nowhere to come from around ${px},${py}`);
+    const cands = spawnPlaces(w, (x, y) => w.blocked(x, y));
+    if (!cands.length) throw new Error(`a drone: nowhere to come from around ${w.pose.x},${w.pose.y}`);
     const c = cands[w.roll(cands.length) - 1];
     this.o = { ...c, x: c.cellX * CELL + CELL_CENTRE, y: c.cellY * CELL + CELL_CENTRE, z: w.building ? 0xc8 : 0x74 };
     this.mirror = w.roll(2) - 1 === 1;
@@ -131,37 +112,13 @@ export class Drone {
     w.addFixed(within, pt.depth, pt.y, pt.x, this.frames[n], false);
   }
 
-  /** 0x41d66d: the player down a row or a column, nothing between — only once `[0x42d110]` > 0 */
-  private sees(): number | null {
-    const w = this.w;
-    if (w.state <= 0) return null;
-    const { cellX: x, cellY: y } = this.o;
-    const cx = w.cam.cellX;
-    const cy = w.cam.cellY;
-    if (x !== cx && y !== cy) return null;
-    if (x === cx) {
-      if (y < cy) {
-        for (let k = y + 1; k <= cy; k++) if (w.blocked(x, k)) return null;
-        return 0x40;
-      }
-      for (let k = y - 1; k >= cy; k--) if (w.blocked(x, k)) return null;
-      return 0xc0;
-    }
-    if (x < cx) {
-      for (let k = x + 1; k <= cx; k++) if (w.blocked(k, y)) return null;
-      return 0;
-    }
-    for (let k = x - 1; k >= cx; k--) if (w.blocked(k, y)) return null;
-    return 0x80;
-  }
-
   /** 0x403d3b */
   private think(): void {
     const w = this.w;
     const o = this.o;
     switch (this.state) {
       case 0: {
-        const a = this.sees();
+        const a = sees(this.w, this.o);
         if (a !== null) {
           o.angle = a;
           this.state = 4;
@@ -210,7 +167,7 @@ export class Drone {
         if (--this.steps <= 0) this.state = this.state === 5 ? 0 : 8;
         return;
       case 8: {
-        const a = this.sees();
+        const a = sees(this.w, this.o);
         if (a !== null) {
           o.angle = a;
           this.state = 4;

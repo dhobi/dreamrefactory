@@ -880,7 +880,7 @@ function drawLevelCel(
 /**
  * One cel of the PLAYER's book, placed by its anchor — the same rule
  * {@link drawLevelCel} follows, against the other of the two books a level has
- * open. The pickups and the craft already needed it; the flypasts are the third.
+ * open: the pickups, the guns on the floor, the green balls and the flypasts.
  */
 function drawPlayerCel(
   id: number,
@@ -959,16 +959,7 @@ function drawEnemy(e: Enemy, camX: number, camY: number): void {
 function drawPickups(camX: number, camY: number): void {
   for (const q of hereOf((l) => l.pickups)) {
     const kind = PICKUP.kinds[q.code];
-    const loc = player?.byId.get(kind.cels[loopIndex(kind, q.clock)]);
-    if (loc === undefined) continue;
-    const art = playerCel(loc);
-    const f = playerFrame(loc);
-    if (!art || !f) continue;
-    const left = q.x - camX + W / 2 - f.posXraw;
-    const top = q.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
-      continue;
-    ctx.drawImage(art, left, top);
+    drawPlayerCel(kind.cels[loopIndex(kind, q.clock)], q.x, q.y, camX, camY, false);
   }
 }
 
@@ -982,16 +973,7 @@ function drawGuns(camX: number, camY: number): void {
     // `0x45ae23`: the pickup class draws nothing for code 2. That is a can's
     // pickup, and the can lying on top of it is the picture
     if (g.code === 2) continue;
-    const loc = player?.byId.get(GUN_CODES[g.code]?.cel ?? -1);
-    if (loc === undefined) continue;
-    const art = playerCel(loc);
-    const f = playerFrame(loc);
-    if (!art || !f) continue;
-    const left = g.x - camX + W / 2 - f.posXraw;
-    const top = g.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
-      continue;
-    ctx.drawImage(art, left, top);
+    drawPlayerCel(GUN_CODES[g.code]?.cel ?? -1, g.x, g.y, camX, camY, false);
   }
 }
 
@@ -1055,16 +1037,7 @@ function drawPops(camX: number, camY: number): void {
       VANISH.cels[
         Math.min(VANISH.cels.length - 1, Math.floor(q.age / VANISH.hold))
       ];
-    const loc = player?.byId.get(id);
-    if (loc === undefined) continue;
-    const art = playerCel(loc);
-    const f = playerFrame(loc);
-    if (!art || !f) continue;
-    const left = q.x - camX + W / 2 - f.posXraw;
-    const top = q.y - camY + VIEW.y - f.posYraw;
-    if (left + art.width < 0 || top + art.height < 0 || left > W || top > H)
-      continue;
-    ctx.drawImage(art, left, top);
+    drawPlayerCel(id, q.x, q.y, camX, camY, false);
   }
 }
 

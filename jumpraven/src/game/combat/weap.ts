@@ -30,7 +30,7 @@ import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { WeapApi } from "./api";
 import { approach, callDepot, craftOver, depotWhere, driveDepot, driveOff, drawDepot, newDepot, shiftDepot } from "./fuel";
 import { objOf } from "./fleet";
-import { tooFar } from "./lib";
+import { burstOver, tooFar } from "./lib";
 import { KIND, cosMul, readPictures, setObj, sinMul, type Obj, type World } from "./world";
 
 /** who the dealer is on the comms (0x4142b9's 2) */
@@ -82,20 +82,10 @@ export class Weap implements WeapApi {
     setObj(r.last, r);
     this.think();
     if (w.pyro.hitsCraft(r.last, r, 0x10e0, 0x19)) {
-      this.flash(r);
+      burstOver(w, r);
       w.sound(0x31);
     }
     drawDepot(w, r, this.pics, 0x20);
-  }
-
-  /** 0x4297db: pyro's burst picture over `o`, just in front of it */
-  private flash(o: Obj): void {
-    const w = this.w;
-    const p = w.project(o);
-    if (p.depth < 0x40) return;
-    let n = (p.depth - 0x40) >> 7;
-    if (n >= 0x10) n = 0xf;
-    w.sprite(w.pyro.pics[0xc0 + n], p.y, p.x, p.depth - 1, false);
   }
 
   /** 0x42982f */

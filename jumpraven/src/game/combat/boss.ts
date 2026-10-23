@@ -49,7 +49,7 @@ import type { FrameV0 } from "@dreamfactory/engine/df/image-v0";
 import type { BossApi } from "./api";
 import { drawShot, withinReach, type VehicleShot } from "./jeep";
 import { objOf } from "./fleet";
-import { aimAt, callShell, inBlock, lookAlong, meets } from "./lib";
+import { aimAt, burstOver, callShell, inBlock, lookAlong, meets } from "./lib";
 import { KIND, abs, copyObj, cosMul, newObj, readPictures, sinMul, type Obj, type World } from "./world";
 
 /** the boss, the EXE's globals from 0x434584 (its object the first 0x18) */
@@ -138,7 +138,7 @@ export class Boss implements BossApi {
     if (r.self < 0) return;
     this.think();
     if (w.pyro.hitsCraft(r, r, 0x21c0, 0x1e)) {
-      this.flash(r);
+      burstOver(w, r);
       w.sound(0x31);
     }
     const p = w.project(r);
@@ -149,16 +149,6 @@ export class Boss implements BossApi {
     if (q >= 4) q = 3;
     // the EXE passes a stack slot it never set as the mirror flag (0x403014); its four quarters need none
     w.sprite(this.pics[d + (q << 5)], p.y, p.x, p.depth, false);
-  }
-
-  /** 0x40302f: pyro's burst picture over `o`, just in front of it */
-  private flash(o: Obj): void {
-    const w = this.w;
-    const p = w.project(o);
-    if (p.depth < 0x40) return;
-    let n = (p.depth - 0x40) >> 7;
-    if (n >= 0x10) n = 0xf;
-    w.sprite(w.pyro.pics[0xc0 + n], p.y, p.x, p.depth - 1, false);
   }
 
   /** 0x403083 */

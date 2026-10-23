@@ -299,6 +299,63 @@ export function tooFar(w: World, o: Obj): boolean {
   return Math.abs(o.cellX - w.cam.cellX) >= 9 || Math.abs(o.cellY - w.cam.cellY) >= 9;
 }
 
+/**
+ * Where a drone (0x403827) or a tank or jeep (0x41ab8a) may come in: five cells
+ * off the player on each side, and the cells either way along that line —
+ * except straight ahead of the way the player faces. The two routines differ
+ * only in what counts as `blocked`.
+ */
+export function spawnPlaces(w: World, blocked: (x: number, y: number) => boolean): Obj[] {
+  const cands: Obj[] = [];
+  const px = w.pose.x;
+  const py = w.pose.y;
+  const ways: [number, number, number, boolean][] = [
+    [0x40, px, py - 5, true],
+    [0xc0, px, py + 5, true],
+    [0x80, px + 5, py, false],
+    [0, px - 5, py, false],
+  ];
+  ways.forEach(([angle, x0, y0, across], dir) => {
+    const add = (x: number, y: number): void => void cands.push({ angle, x: 0, y: 0, z: 0, cellX: x, cellY: y });
+    if (w.pose.dir !== dir && !blocked(x0, y0)) add(x0, y0);
+    let [ax, ay, bx, by] = [x0, y0, x0, y0];
+    for (let k = 0; k < 5; k++) {
+      if (across) (ax++, bx--);
+      else (ay++, by--);
+      if (!blocked(ax, ay)) add(ax, ay);
+      if (!blocked(bx, by)) add(bx, by);
+    }
+  });
+  return cands;
+}
+
+/**
+ * 0x41d66d, for a drone and a vehicle alike: the heading to the player when they
+ * are in the same row or column as `o` with nothing between, else null — only
+ * once `[0x42d110]` > 0
+ */
+export function sees(w: World, o: Obj): number | null {
+  if (w.state <= 0) return null;
+  const { cellX: x, cellY: y } = o;
+  const cx = w.cam.cellX;
+  const cy = w.cam.cellY;
+  if (x !== cx && y !== cy) return null;
+  if (x === cx) {
+    if (y < cy) {
+      for (let k = y + 1; k <= cy; k++) if (w.blocked(x, k)) return null;
+      return 0x40;
+    }
+    for (let k = y - 1; k >= cy; k--) if (w.blocked(x, k)) return null;
+    return 0xc0;
+  }
+  if (x < cx) {
+    for (let k = x + 1; k <= cx; k++) if (w.blocked(k, y)) return null;
+    return 0;
+  }
+  for (let k = x - 1; k >= cx; k--) if (w.blocked(k, y)) return null;
+  return 0x80;
+}
+
 /** 0x41d7e9: a shot out of the air (2) or into a wall (1), else 0 */
 export function shotWall(w: World, o: Obj): number {
   if (o.z > w.ceiling || o.z < 0) return 2;
