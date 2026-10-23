@@ -15,7 +15,8 @@
  */
 import { afterEach, expect, test } from "vitest";
 import { buildBankBytes } from "@dreamfactory/engine/df/banks-build";
-import { AudioLibrary, DeferredAudioSink, NullAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
+import { AudioLibrary, DeferredAudioSink, NullAudioSink } from "@dreamfactory/engine/runtime/audio";
+import { fakeContext } from "./helpers/fake-webaudio";
 
 const tone = (n: number, sampleRate = 11025) => ({ sampleRate, samples: new Float32Array(n).fill(0.25) });
 
@@ -76,71 +77,6 @@ test("after the attach everything goes straight through", () => {
 });
 
 // ---- WebAudioSink ----
-
-interface FakeSource {
-  buffer: unknown;
-  loop: boolean;
-  onended: (() => void) | null;
-  started: number;
-  stopped: number;
-  connect: (n: unknown) => void;
-  start: () => void;
-  stop: () => void;
-}
-
-function fakeContext() {
-  const sources: FakeSource[] = [];
-  const gains: { gain: { value: number } }[] = [];
-  const panners: { pan: { value: number } }[] = [];
-  const mergers: unknown[] = [];
-  const log: string[] = [];
-  const ctx = {
-    destination: {},
-    state: "running" as string,
-    createGain: () => {
-      const g = { gain: { value: 1 }, connect: () => {} };
-      gains.push(g);
-      return g;
-    },
-    createStereoPanner: () => {
-      const p = { pan: { value: 0 }, connect: () => {} };
-      panners.push(p);
-      return p;
-    },
-    createChannelSplitter: () => ({ connect: () => {} }),
-    createChannelMerger: () => {
-      const m = { connect: () => {} };
-      mergers.push(m);
-      return m;
-    },
-    createBuffer: (channels: number, length: number, rate: number) => {
-      const samples: Float32Array[] = [];
-      return { channels, length, rate, samples,
-        copyToChannel: (data: Float32Array, channel: number) => { samples[channel] = data.slice(); } };
-    },
-    createBufferSource: () => {
-      const s: FakeSource = {
-        buffer: null,
-        loop: false,
-        onended: null,
-        started: 0,
-        stopped: 0,
-        connect: () => {},
-        start: () => void s.started++,
-        stop: () => {
-          // a real source throws when stopped twice
-          if (s.stopped++) throw new Error("InvalidStateError");
-        },
-      };
-      sources.push(s);
-      return s;
-    },
-    suspend: () => (log.push("suspend"), Promise.resolve()),
-    resume: () => (log.push("resume"), Promise.resolve()),
-    close: () => (log.push("close"), Promise.resolve()),
-  };
-  return { ctx, sources, gains, panners, mergers, log, sink: () => new WebAudioSink(ctx as unknown as AudioContext) };
-}
 
 test("fixed stereo attenuation reaches both output channels without equal-power panning", () => {
   const f = fakeContext();

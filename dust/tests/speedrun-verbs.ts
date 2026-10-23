@@ -19,6 +19,10 @@
  * the room; `offer` works the picker the 55555 plaque opens; `doorAt` clicks
  * where the SCENE shows through, not the person standing in the doorway;
  * `talkOut` never spends the same reply twice on the same plaque.
+ * The second half holds each verb to what it SAYS when the world goes another
+ * way (its refusals and retries), which is what a runner reads when a sheet
+ * stops; for that the fake has a few more readings it can switch (a film's
+ * regions, a puppet on screen, the scheduler's walkers, the frame counter).
  *
  * Two engine verbs are stood in for: `say` and `accost`. Both are the engine's
  * (speedrun/src/actions-core.ts), both drive a conversation through
@@ -112,6 +116,14 @@ class World {
   hitTest: (x: number, y: number) => { type: string } | null = () => ({ type: "scene" });
   aimAt: Record<string, Point> = {};
   loadSave: ((name: string) => Promise<boolean>) | undefined;
+  /** a parked film's click regions */
+  movieRegions: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  /** a puppet is on screen (somebody is speaking a line) */
+  puppet = false;
+  /** the engine's frame counter, which the avatar's OK press counts passes by */
+  frames = 0;
+  /** whether the scheduler has somebody walking */
+  isWalk: (who: string) => boolean = () => false;
 
   /* the hooks, each defaulting to "nothing happens" */
   onArrive: (name: string) => void = () => {};
@@ -155,7 +167,9 @@ class World {
       },
       pollingInput: () => w.flat === "avatar" || w.globals.get("polling") === 1,
       hitTestAt: (x: number, y: number) => w.hitTest(x, y),
-      scheduler: { isWalk: () => false },
+      scheduler: { isWalk: (who: string) => w.isWalk(who) },
+      get puppet() { return w.puppet; },
+      get frameCounter() { return w.frames; },
     };
     const viewer = {
       get set() { return w.set; },
@@ -167,7 +181,7 @@ class World {
       get choices() { return w.choices; },
       inputLocked: false,
       moviePlaying: false,
-      movieRegions: [],
+      get movieRegions() { return w.movieRegions; },
       movieFile: "",
     };
     this.window = {
@@ -303,6 +317,12 @@ beforeEach(() => {
   });
 });
 afterEach(() => vi.restoreAllMocks());
+
+/** the session's builtins, for a test that takes one away */
+const builtins = (): Map<string, unknown> =>
+  (w.window.dbg.session as { interp: { builtins: Map<string, unknown> } }).interp.builtins;
+
+const keys = (name: string): number => gestures.filter((g) => g === `key ${name}`).length;
 
 /* ------------------------------------------------------------------ *
  * The vocabulary
@@ -540,7 +560,7 @@ test("give refuses a drop nothing took the press for, and a target that is not h
 
 /** the avatar panel: a click on `self` opens it, a held press on a slot takes,
  *  a held press on OK closes it */
-function avatarPanel(slots: Record<string, Point>, ok: Point = { x: 317, y: 333 }): void {
+function avatarPanel(slots: Record<string, Point>, ok: Point = { x: 317, y: 333 }, onOk: () => void = () => {}): void {
   const prevClick = w.onClick;
   w.onClick = (x, y) => {
     if (w.flat === "mainpanel" && x === 451 && y === 324) {
@@ -551,7 +571,10 @@ function avatarPanel(slots: Record<string, Point>, ok: Point = { x: 317, y: 333 
   };
   w.onHold = (x, y) => {
     if (w.flat !== "avatar") return;
-    if (x === ok.x && y === ok.y) w.flat = "mainpanel";
+    if (x === ok.x && y === ok.y) {
+      w.flat = "mainpanel";
+      onOk();
+    }
     for (const [n, at] of Object.entries(slots)) if (at.x === x && at.y === y) w.globals.set("handitem", n);
   };
 }
@@ -824,4 +847,534 @@ test("talkOut with nobody talking is fine, and says so", async () => {
   await play("talkOut([301], patience: 10)");
   expect(said).toEqual(["nobody was talking"]);
   expect(asked).toEqual([]);
+});
+
+/* ==================================================================== *
+ * The edges: what each verb SAYS when the world goes another way — the
+ * refusals and retries a runner reads when a sheet stops.
+ * ==================================================================== */
+
+/* ------------------------------------------------------------------ *
+ * give
+ * ------------------------------------------------------------------ */
+
+test("give with the thing in hand but nowhere drawn says the engine will not place it", async () => {
+  w.globals.set("handitem", "bone");
+  await expect(play("give(bone, to, dog)")).rejects.toThrow(/the engine will not say where the bone is drawn/);
+  expect(gestures).toEqual([]);
+});
+
+/* ------------------------------------------------------------------ *
+ * goto
+ * ------------------------------------------------------------------ */
+
+test("goto's until: ends the walk on the road where it came true", async () => {
+  w.standAt(0, 0, "east");
+  w.onArrive = (name) => {
+    if (name === "scene b1") w.globals.set("x", 1);
+  };
+  await play("goto(2, 0, until: global.x == 1)");
+  // one road, and the second was never pressed
+  expect(w.here.split(" ")[0]).toBe("1,0");
+  expect(keys("ArrowUp")).toBe(1);
+  expect(said.at(-1)).toBe("global.x == 1 after 1 road(s)");
+});
+
+test("goto's until: that comes true while a press is failing still counts as done", async () => {
+  w.standAt(0, 0, "east");
+  // the press is swallowed, but what it set off is the thing the line waits for
+  w.onKey = (k) => {
+    if (k !== "ArrowUp") return false;
+    w.globals.set("x", 1);
+    return true;
+  };
+  await play("goto(2, 0, until: global.x == 1)");
+  expect(w.here).toBe("0,0 east");
+  expect(said.at(-1)).toBe("global.x == 1 after 0 road(s)");
+});
+
+test("goto asked for the night town waits for the day town too, which is the same place", async () => {
+  w.setFile = "HUB.SET";
+  let ticks = 0;
+  w.onTick = () => {
+    if (++ticks === 3) w.setFile = "TOWN.SET";
+  };
+  w.standAt(0, 0, "east");
+  await play("goto(1, 0, set: nite)");
+  expect(said).toContain("waited for nite to open");
+  expect(w.here.split(" ")[0]).toBe("1,0");
+});
+
+test("goto whose only plan waits for its room says it was interrupted, not where it planned", async () => {
+  w.setFile = "SNAKE.SET";
+  w.onTick = () => void (w.setFile = "HUB.SET");
+  await expect(play("goto(2, 0, set: hub, tries: 1)")).rejects.toThrow(
+    /^1 plans and never reached 2,0 — the walk kept being interrupted$/,
+  );
+});
+
+test("goto names a cell that has no views when it is not built on either", async () => {
+  // the corner cell loses its views but keeps its ground
+  w.set.scenes[8].views = [];
+  await expect(play("goto(2, 2)")).rejects.toThrow(/cell 2,2 \(scene c3\) cannot be stood on — it has no views\. The 7 that can/);
+});
+
+test("goto refuses a cell no road leads into", async () => {
+  // every road into (2,2) taken away: it is still a standpoint, but off the street
+  const into = new Set(w.set.scenes[8].views.map((v) => v.viewID));
+  w.set.transitions = w.set.transitions.filter((t) => !into.has(t.viewIDend));
+  await expect(play("goto(2, 2)")).rejects.toThrow(
+    /no way through town from scene a1 to scene c3 \(2,2\) — nothing joins them/,
+  );
+});
+
+test("goto with no room in memory refuses to plan", async () => {
+  (w as unknown as { set: null }).set = null;
+  await expect(play("goto(1, 0)")).rejects.toThrow(/there is no room in memory to plan a walk through/);
+});
+
+test("goto that cannot face the way asked on arrival tries three times and then gives up", async () => {
+  w.standAt(0, 0, "north");
+  // the turn keys go nowhere
+  w.onKey = (k) => k === "ArrowRight" || k === "ArrowLeft";
+  await expect(play("goto(0, 0, east)")).rejects.toThrow(/three ArrowRight presses and the world did not move/);
+  // three tries, each one a single failed press of three
+  expect(keys("ArrowRight")).toBe(9);
+});
+
+test("goto re-reads the room when the walk ends on a cell that gives no name", async () => {
+  w.standAt(0, 0, "east");
+  w.onArrive = (name) => {
+    if (name === "scene b1") w.set.scenes[1].sceneName = "";
+  };
+  await play("goto(1, 0)");
+  // the nameless cell is (1,0) all the same, and the second reading finds us on it
+  expect(said.at(-1)).toBe("town  (1,0), 1 road(s)");
+});
+
+test("goto names what a conversation that will not close is still offering", async () => {
+  w.conversing = true;
+  w.choices = [{ id: 101, text: "hello" }];
+  await expect(play("goto(1, 0, tries: 1)")).rejects.toThrow(/would not close .* Its plaque offers 101:hello$/);
+  // ten turns, each the first thing on offer
+  expect(asked).toEqual(Array(10).fill(101));
+});
+
+test("goto gives up waiting on a conversation whose plaque never fills", async () => {
+  // not speaking and nothing on offer: there is nothing to cut short and nothing to answer
+  w.conversing = true;
+  await expect(play("goto(1, 0, tries: 1)")).rejects.toThrow(/Nothing is on its plaque — it is still speaking/);
+  expect(keys("Escape")).toBe(0);
+  expect(asked).toEqual([]);
+});
+
+/* ------------------------------------------------------------------ *
+ * takeInHand
+ * ------------------------------------------------------------------ */
+
+test("takeInHand of a carried thing the engine cannot place in the panel says so", async () => {
+  w.props.set("jug", { owner: "stranger", visible: false, x: 0, y: 0 });
+  avatarPanel({});
+  builtins().delete("propxy");
+  await expect(play("takeInHand(jug)")).rejects.toThrow(/the engine will not say where the panel drew jug/);
+});
+
+test("takeInHand with the panel already open picks from it and says it found it open", async () => {
+  w.props.set("jug", { owner: "stranger", visible: true, x: 130, y: 264 });
+  avatarPanel({ jug: { x: 130, y: 264 } });
+  w.flat = "avatar";
+  await play("takeInHand(jug)");
+  expect(gestures.filter((g) => g.startsWith("click"))).toEqual([]);
+  expect(said).toEqual(["jug in hand (the panel was already open)"]);
+});
+
+test("takeInHand presses OK again when the panel does not close on the first press", async () => {
+  w.props.set("jug", { owner: "stranger", visible: false, x: 0, y: 0 });
+  avatarPanel({ jug: { x: 130, y: 264 } });
+  const take = w.onHold;
+  let oks = 0;
+  w.onHold = (x, y) => {
+    // the first press on OK lands while the panel is still busy
+    if (x === 317 && y === 333 && ++oks === 1) return;
+    take(x, y);
+  };
+  await play("takeInHand(jug)");
+  expect(oks).toBe(2);
+  expect(w.flat).toBe("mainpanel");
+});
+
+test("takeInHand of a carried thing the panel will not give up says the panel was the only place", async () => {
+  w.props.set("jug", { owner: "stranger", visible: false, x: 0, y: 0 });
+  avatarPanel({ jug: { x: 130, y: 264 } });
+  const close = w.onHold;
+  // the slot press takes nothing; OK still closes
+  w.onHold = (x, y) => {
+    if (x === 317 && y === 333) close(x, y);
+  };
+  await expect(play("takeInHand(jug)")).rejects.toThrow(
+    /^jug would not go in hand\. The player is carrying it, so the panel is the only place it could come from, and it would not take it; the hand holds "nothing" and the player is carrying jug$/,
+  );
+});
+
+test("takeInHand clicks a spot once when the drawing and the aim agree, and reports a visible thing it could not take", async () => {
+  w.props.set("bone", { owner: "", visible: true, x: 140, y: 200 });
+  w.hitTest = (x, y) => (x === 140 && y === 200 ? { type: "prop", name: "bone" } : { type: "scene" });
+  w.aimAt.bone = { x: 140, y: 200 };
+  avatarPanel({});
+  await expect(play("takeInHand(bone)")).rejects.toThrow(
+    /it was at \[140,200 140,200 140,200 140,200\], and the panel would not take it either; .* The engine draws it at 140,200$/,
+  );
+  // one click per view, never two at the same point
+  expect(gestures.filter((g) => g === "click 140,200")).toHaveLength(4);
+});
+
+/* ------------------------------------------------------------------ *
+ * offer
+ * ------------------------------------------------------------------ */
+
+test("offer with nothing carried says the player has nothing", async () => {
+  w.conversing = true;
+  await expect(play("offer(ring)")).rejects.toThrow(/not carrying ring — the player has nothing$/);
+});
+
+test("offer stops when the conversation ends with the picker closed", async () => {
+  w.props.set("ring", { owner: "stranger", visible: false, x: 0, y: 0 });
+  w.conversing = true;
+  w.choices = [{ id: 55555, text: "Would you like something...?" }];
+  // OK on the picker ends the conversation, taking the ring with it
+  avatarPanel({ ring: { x: 200, y: 250 } }, undefined, () => void (w.conversing = false));
+  answer = (b) => {
+    if (b !== 55555) return;
+    w.flat = "avatar";
+    Object.assign(w.props.get("ring")!, { x: 200, y: 250 });
+  };
+  await play("offer(ring)");
+  expect(said).toEqual(["the conversation ended — ring went with it"]);
+});
+
+test("offer reports a gift nobody is named as owning", async () => {
+  w.props.set("ring", { owner: "stranger", visible: false, x: 0, y: 0 });
+  w.globals.set("handitem", "ring");
+  w.conversing = true;
+  w.choices = [{ id: 55555, text: "" }];
+  answer = () => {
+    w.conversing = false;
+    w.props.get("ring")!.owner = "";
+  };
+  await play("offer(ring)");
+  expect(said).toEqual(["offered ring"]);
+});
+
+test("offer whose picker takes nothing says what the hand holds", async () => {
+  w.props.set("ring", { owner: "stranger", visible: false, x: 0, y: 0 });
+  w.conversing = true;
+  w.choices = [{ id: 55555, text: "" }];
+  avatarPanel({ ring: { x: 200, y: 250 } });
+  const close = w.onHold;
+  w.onHold = (x, y) => {
+    if (x === 317 && y === 333) close(x, y);
+  };
+  answer = () => void (w.flat = "avatar");
+  await expect(play("offer(ring)")).rejects.toThrow(/the picker would not take ring — the hand holds "nothing"$/);
+});
+
+test("offer that the plaque keeps asking for gives up after its tries", async () => {
+  w.props.set("ring", { owner: "stranger", visible: false, x: 0, y: 0 });
+  w.conversing = true;
+  w.choices = [{ id: 55555, text: "" }];
+  avatarPanel({ ring: { x: 200, y: 250 } });
+  // the plaque opens the picker every time and never takes the gift
+  answer = () => {
+    w.flat = "avatar";
+    Object.assign(w.props.get("ring")!, { x: 200, y: 250 });
+  };
+  await expect(play("offer(ring, tries: 2)")).rejects.toThrow(/^ring was never taken — 2 presses of the offer plaque$/);
+  expect(asked).toEqual([55555, 55555]);
+});
+
+/* ------------------------------------------------------------------ *
+ * doorAt
+ * ------------------------------------------------------------------ */
+
+test("doorAt with no owner clicks its tries out and then walks through", async () => {
+  w.standAt(0, 0, "east");
+  await play("doorAt(241, 92, 307, 201, tries: 2)");
+  // the middle shows the scene, so every try clicks there
+  expect(gestures.filter((g) => g.startsWith("click"))).toEqual(["click 274,147", "click 274,147"]);
+  expect(w.here.split(" ")[0]).toBe("1,0");
+  expect(said).toEqual(["through"]);
+});
+
+test("doorAt waits out somebody across the door and says how many looks it took", async () => {
+  w.standAt(0, 0, "east");
+  // somebody stands in the whole doorway for two looks, and steps away while we wait
+  let across = 2;
+  w.hitTest = () => (across > 0 ? { type: "actor" } : { type: "scene" });
+  w.onTick = () => void across--;
+  await play("doorAt(241, 92, 307, 201, tries: 3)");
+  expect(said).toEqual(["through (waited out 2 blocked looks)"]);
+});
+
+test("doorAt that cannot click while a puppet speaks waits for it, and rethrows a click refused with nobody speaking", async () => {
+  w.standAt(0, 0, "east");
+  let refusals = 0;
+  w.onClick = () => {
+    if (++refusals === 1) {
+      w.puppet = true;
+      throw new Error("the click was not taken");
+    }
+  };
+  // a puppet is up at the first refusal; it is gone again by the wait that follows
+  w.onTick = () => void (w.puppet = false);
+  await play("doorAt(241, 92, 307, 201, tries: 2)");
+  expect(said).toEqual(["through"]);
+
+  w.onClick = () => {
+    throw new Error("the click was not taken");
+  };
+  await expect(play("doorAt(241, 92, 307, 201)")).rejects.toThrow(/the click was not taken/);
+});
+
+test("doorAt whose door stays shut with nobody in the way says only that", async () => {
+  await expect(play("doorAt(241, 92, 307, 201, owner: saloon, tries: 1)")).rejects.toThrow(
+    /^the door did not open — its prop is not "saloon", standing at TOWN\.SET SCENE A1 north$/,
+  );
+});
+
+test("doorAt's walk through: three refused presses fail, a refused press that changed the room does not", async () => {
+  w.standAt(0, 0, "east");
+  w.onKey = (k) => k === "ArrowUp";
+  await expect(play("doorAt(241, 92, 307, 201, tries: 1)")).rejects.toThrow(/three ArrowUp presses/);
+  expect(keys("ArrowUp")).toBe(9);
+
+  // the press moves the ROOM but no standpoint the arrow can see: through all the same
+  gestures = [];
+  said = [];
+  w.onKey = (k) => {
+    if (k !== "ArrowUp") return false;
+    w.setFile = "SALOON.SET";
+    w.window.dbg.session = { ...(w.window.dbg.session as object), events: [1] };
+    return true;
+  };
+  await play("doorAt(241, 92, 307, 201, tries: 1)");
+  expect(said).toEqual(["through"]);
+});
+
+test("offer at a conversation asking nothing names that", async () => {
+  w.props.set("ring", { owner: "stranger", visible: false, x: 0, y: 0 });
+  w.conversing = true;
+  await expect(play("offer(ring)")).rejects.toThrow(/no offer plaque \(55555\) in this conversation — it is asking nothing\./);
+});
+
+/* ------------------------------------------------------------------ *
+ * meet
+ * ------------------------------------------------------------------ */
+
+/** accost stood in for: it works, or throws, as the test says */
+const accost = (does: () => void) =>
+  vi.spyOn(CORE_ACTIONS.accost, "run").mockImplementation(async () => does());
+
+test("meet counts the rounds it spent before the conversation opened", async () => {
+  // nobody is anywhere for two rounds; on the third the scheduler's walk check
+  // finds a conversation already started
+  let looked = 0;
+  w.isWalk = () => {
+    if (++looked === 3) w.conversing = true;
+    return false;
+  };
+  await play("meet(jones, rounds: 5)");
+  expect(said).toEqual(["jones after 3 rounds"]);
+  expect(gestures).toEqual([]);
+});
+
+test("meet that opens a conversation on the walk over counts that round", async () => {
+  w.standAt(0, 0, "east");
+  w.actors.set("jones", { x: 1, z: 0 });
+  w.onArrive = () => void (w.conversing = true);
+  const a = accost(() => {});
+  await play("meet(jones)");
+  expect(a).not.toHaveBeenCalled();
+  expect(said.at(-1)).toBe("jones after 1 round");
+});
+
+test("meet accosts on a later round and says how many it took", async () => {
+  w.standAt(0, 0, "east");
+  w.actors.set("jones", { x: 1, z: 0 });
+  let tries = 0;
+  // the first round's six presses miss — they are gone by each one
+  accost(() => {
+    if (++tries <= 6) throw new Error("nobody there");
+    w.conversing = true;
+  });
+  await play("meet(jones)");
+  expect(tries).toBe(7);
+  expect(said.at(-1)).toBe("jones from 1,0 with them at 1,0 after 2 rounds");
+});
+
+test("meet reports a conversation that opens between its presses on a later round", async () => {
+  w.standAt(0, 0, "east");
+  w.actors.set("jones", { x: 1, z: 0 });
+  let tries = 0;
+  // an accost that misses, and on the second round opens the talk while saying it missed
+  accost(() => {
+    tries++;
+    if (tries === 7) w.conversing = true;
+    throw new Error("nobody there");
+  });
+  await play("meet(jones)");
+  expect(said.at(-1)).toBe("jones after 2 rounds");
+});
+
+test("meet gives up on somebody who is never anywhere, and on somebody who vanishes when reached", async () => {
+  await expect(play("meet(ghost, rounds: 2)")).rejects.toThrow(/^could not get to ghost in 2 rounds$/);
+
+  w.standAt(0, 0, "east");
+  w.actors.set("wife", { x: 1, z: 0 });
+  w.onArrive = () => void w.actors.delete("wife");
+  const a = accost(() => {});
+  await expect(play("meet(wife, rounds: 1)")).rejects.toThrow(/^could not get to wife in 1 rounds — 1,0 never shared a line;$/);
+  expect(a).not.toHaveBeenCalled();
+});
+
+test("meet tries the accost from where it stands when the walk fails, and rounds on when that fails too", async () => {
+  w.standAt(0, 1, "east");
+  w.actors.set("blood", { x: 1, z: 1 }); // the built-on middle: no walk gets there
+  accost(() => {
+    throw new Error("too far");
+  });
+  await expect(play("meet(blood, rounds: 2)")).rejects.toThrow(
+    /^could not get to blood in 2 rounds — 1,1 unreachable; 1,1 unreachable;$/,
+  );
+});
+
+/* ------------------------------------------------------------------ *
+ * talkOut
+ * ------------------------------------------------------------------ */
+
+test("talkOut with no list answers whatever is on offer", async () => {
+  w.conversing = true;
+  w.choices = [{ id: 102, text: "" }];
+  answer = () => void (w.conversing = false);
+  await play("talkOut()");
+  expect(asked).toEqual([102]);
+  expect(said).toEqual(["left on 102"]);
+});
+
+test("talkOut gives up after sixty rounds of a conversation that stays open", async () => {
+  // a plaque that never fills and a line nobody is speaking
+  w.conversing = true;
+  await expect(play("talkOut([101])")).rejects.toThrow(
+    /^the conversation would not close — answered nothing and it is still going\. Its plaque offers nothing$/,
+  );
+
+  // and one whose plaque turns over at every answer, so no reply is ever spent twice
+  let next = 500;
+  w.choices = [{ id: next, text: "" }];
+  answer = () => void (w.choices = [{ id: ++next, text: "" }]);
+  await expect(play("talkOut([101])")).rejects.toThrow(/answered 500,501,.*,559 and it is still going\. Its plaque offers 560$/);
+  expect(asked).toHaveLength(60);
+});
+
+test("talkOut waits for a conversation that is about to open", async () => {
+  let ticks = 0;
+  w.onTick = () => {
+    if (++ticks === 2) {
+      w.conversing = true;
+      w.choices = [{ id: 104, text: "" }];
+    }
+  };
+  answer = () => void (w.conversing = false);
+  await play("talkOut([104])");
+  expect(said).toEqual(["left on 104"]);
+});
+
+/* ------------------------------------------------------------------ *
+ * film and filmBoxes
+ * ------------------------------------------------------------------ */
+
+test("film clicks each stop as the film parks on it", async () => {
+  w.movieRegions = [{ x0: 200, y0: 200, x1: 250, y1: 220 }];
+  w.onClick = (x) => {
+    w.movieRegions = x === 224 ? [{ x0: 100, y0: 180, x1: 160, y1: 200 }] : [];
+  };
+  await play("film([224,210], [132,188])");
+  expect(gestures).toEqual(["click 224,210", "click 132,188"]);
+  expect(said).toEqual(["2 stops answered"]);
+
+  said = [];
+  w.movieRegions = [{ x0: 0, y0: 0, x1: 10, y1: 10 }];
+  await play("film([5,5])");
+  expect(said).toEqual(["1 stop answered"]);
+});
+
+test("film says which stop never came, and refuses a stop that is not a point", async () => {
+  await expect(play("film([224,210])")).rejects.toThrow(/^stop 1 of 1 never came — no film is parked$/);
+  // the film parks once and never moves on from that stop
+  w.movieRegions = [{ x0: 200, y0: 200, x1: 250, y1: 220 }];
+  await expect(play("film([224,210], [132,188])")).rejects.toThrow(
+    /^stop 2 of 2 never came — the film did not move on from the last one$/,
+  );
+  await expect(play("film(224)")).rejects.toThrow(/"224" is not a point — film takes bracketed pairs/);
+});
+
+test("filmBoxes clicks the smallest box until its condition holds, and needs one", async () => {
+  await expect(play("filmBoxes()")).rejects.toThrow(/filmBoxes needs an until: condition/);
+
+  w.movieRegions = [
+    { x0: 0, y0: 0, x1: 100, y1: 100 },
+    { x0: 300, y0: 300, x1: 310, y1: 320 },
+  ];
+  w.onClick = () => w.globals.set("clock", 3);
+  await play("filmBoxes(until: global.clock == 3)");
+  expect(gestures).toEqual(["click 305,310"]);
+  expect(said).toEqual(["global.clock == 3 after 1 box"]);
+
+  // no film yet: it waits a pass, then clicks twice
+  said = [];
+  gestures = [];
+  w.globals.set("clock", 0);
+  w.movieRegions = [];
+  let clicks = 0;
+  w.onTick = () => void (w.movieRegions = [{ x0: 10, y0: 10, x1: 20, y1: 20 }]);
+  w.onClick = () => {
+    if (++clicks === 2) w.globals.set("clock", 3);
+  };
+  await play("filmBoxes(until: global.clock == 3)");
+  expect(said).toEqual(["global.clock == 3 after 2 boxes"]);
+});
+
+/* ------------------------------------------------------------------ *
+ * the puzzle verbs, before they touch anything
+ * ------------------------------------------------------------------ */
+
+test("the puzzle verbs refuse numbers their puzzle does not have, before a gesture", async () => {
+  await expect(play("sundial(0, 0, 16)")).rejects.toThrow(/sundial takes three ring values 0\.\.15/);
+  await expect(play("sundial(0, -1, 8)")).rejects.toThrow(/sundial takes three ring values 0\.\.15/);
+  await expect(play("safe(8, 23, 50)")).rejects.toThrow(/safe takes three dial numbers 0\.\.49/);
+  await expect(play("safe(8, 2.5, 41)")).rejects.toThrow(/safe takes three dial numbers 0\.\.49/);
+  await expect(play("blackjack(lots)")).rejects.toThrow(/blackjack\(800\) wants a whole number of dollars, not "lots"/);
+  await expect(play("blackjack($0)")).rejects.toThrow(/not "\$0"/);
+  await expect(play("blackjack(800, max: 0)")).rejects.toThrow(/max: needs a whole number of hands, not "0"/);
+  expect(gestures).toEqual([]);
+});
+
+test("blackjack with the money already, with none, and away from the table", async () => {
+  w.globals.set("playercash", 900);
+  await play("blackjack($800)");
+  expect(said).toEqual(["already $900"]);
+
+  w.globals.set("playercash", 0);
+  await expect(play("blackjack(800)")).rejects.toThrow(/^no cash to bet$/);
+
+  w.globals.set("playercash", 400);
+  await expect(play("blackjack(800)")).rejects.toThrow(/the blackjack table is not clickable from here/);
+  expect(gestures).toEqual([]);
+});
+
+test("poker with the night's hand already won and the Thunderbird ours does nothing", async () => {
+  w.globals.set("phase", 2);
+  w.props.set("tbird", { owner: "stranger", visible: false, x: 0, y: 0 });
+  await play("poker()");
+  expect(said).toEqual(["the Thunderbird is already won"]);
+  expect(gestures).toEqual([]);
 });

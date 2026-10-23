@@ -29,6 +29,9 @@ const have = existsSync(join(ROOT, "gamefiles/dustcd/DATA/APOTH.SET"));
 
 /** what the page asked the engine (and the dialogs) to do, in order */
 const calls: string[] = [];
+/** how many shipped saves the next page seeds, and what its boot asks for and never gets */
+let seeded = 5;
+let missesNext = ["nowhere.snd", "unilib.snd"];
 
 interface Disc {
   /** what the manifest lists, by site path */
@@ -45,7 +48,7 @@ class FakeFiles {
   onChunk: ((name: string, bytes: number) => void) | null = null;
   onFileLoaded: ((name: string, bytes: number) => void) | null = null;
   loads: string[] = [];
-  misses = ["nowhere.snd", "unilib.snd"];
+  misses = [...missesNext];
   paths = ["gamefiles/dustcd/save/START.RTD"];
   size = 1234;
   static async open(): Promise<FakeFiles> {
@@ -177,7 +180,7 @@ vi.mock("../src/saves", () => ({
   DUST_SAVES: { name: "dust" },
   dustTemplate: () => "template",
   loadDustTemplate: async () => void calls.push("loadDustTemplate"),
-  seedDustSaves: async () => 5,
+  seedDustSaves: async () => seeded,
   shippedDustSaves: () => [{ rel: "save/START.RTD", url: "/site/gamefiles/dustcd/save/START.RTD", name: "START" }],
 }));
 vi.mock("@dreamfactory/engine/web/save-store", () => ({ useSaveKind: () => void calls.push("useSaveKind") }));
@@ -288,6 +291,8 @@ async function enter(p: Page): Promise<void> {
 }
 
 afterEach(() => {
+  seeded = 5;
+  missesNext = ["nowhere.snd", "unilib.snd"];
   vi.unstubAllGlobals();
   vi.useRealTimers();
   nextHost = null;
@@ -586,5 +591,67 @@ describe("a finger", () => {
     expect(current.host!.globals.get("isrepeat")).toBe(false);
     p.point("pointerdown", { pointerType: "touch", pointerId: 3, clientX: 500, clientY: 700 });
     p.fire("pointercancel", { pointerType: "touch", pointerId: 3 });
+  });
+});
+
+describe("the boot's account", () => {
+  it("says (none) for every list that is empty, and one saved game in the singular", async () => {
+    seeded = 1;
+    missesNext = [];
+    nextHost = (h) => {
+      h.plan = { resources: [], casts: [], landingSet: "TOWN.SET" };
+      Object.assign(h.session, { stageName: "", currentSetFile: "" });
+      h.session.stageCtrl = { ...h.session.stageCtrl, stageFile: undefined as unknown as { flats: number[] } };
+      h.session.propRuntime = { shops: new Map() };
+      h.session.actorRuntime = { ...h.session.actorRuntime, casts: new Map() };
+    };
+    const p = await openPage();
+    await enter(p);
+    const log = p.log();
+    expect(log).toContain("boot plan: (none)");
+    expect(log).toContain("  casts: (none)  first room: TOWN.SET");
+    expect(log).toContain("stage: (none) · flat: mainpanel · 0 flats · 3 buttons on it");
+    expect(log).toContain("shops open: (none)");
+    expect(log).toContain("casts open: (none) · 2 actors");
+    expect(log).toContain("asked for and never got: (nothing)");
+    expect(log).toContain("room: (none) · viewer up");
+    await vi.waitFor(() => expect(p.log()).toContain("seeded 1 saved game from the disc"));
+  });
+
+  it("says nothing of seeding when the disc ships no saves", async () => {
+    seeded = 0;
+    const p = await openPage();
+    await enter(p);
+    await vi.waitFor(() => expect(calls).toContain("loadDustTemplate"));
+    expect(p.log()).not.toContain("seeded");
+  });
+});
+
+describe("the trace", () => {
+  it("stays quiet while a film owns the screen, then names the room with no camera to count from", async () => {
+    const p = await openPage();
+    await enter(p);
+    const host = current.host!;
+    host.viewer!.moviePlaying = true;
+    host.session.currentSetFile = "";
+    host.session.activeCamera = () => null as unknown as object;
+    p.frame(10_000);
+    expect(p.log()).not.toContain("? G15");
+    host.viewer!.moviePlaying = false;
+    p.frame(20_000);
+    expect(p.log()).toContain("? G15 · north · 1 here, 0 in view");
+  });
+
+  it("keeps the last four hundred lines and counts the ones that rolled off", async () => {
+    const p = await openPage();
+    await enter(p);
+    const dbg = (globalThis as unknown as { dbg: { log(): { lines: string[]; dropped: number }; loadSave(n: string): Promise<boolean> } }).dbg;
+    for (let i = 0; i < 400; i++) await dbg.loadSave(`nope${i}`);
+    const { lines, dropped } = dbg.log();
+    expect(lines).toHaveLength(400);
+    expect(dropped).toBeGreaterThan(0);
+    expect(lines.at(-1)).toBe('dbg.loadSave: no shipped save called "nope399"');
+    // the page shows what is kept, from the oldest kept line
+    expect(p.log().split("\n")[0]).toBe(lines[0]);
   });
 });

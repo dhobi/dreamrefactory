@@ -148,7 +148,10 @@ master lints the whole tree.
 [SonarQube Cloud](https://sonarcloud.io/project/overview?id=dhobi_dreamrefactory)
 analyses master as the last step of that same nightly run, and reads the LCOV
 report the run has just written (`coverage/vitest/lcov.info`), so coverage is
-measured once and Sonar's figure is the badges' figure. Between nightlies,
+measured once. Sonar's figure is not the badges' figure all the same: a badge
+counts lines, and Sonar's Coverage counts lines and branches together (lines
+run plus branches taken, over lines plus branches), so it reads lower whenever
+branches lag lines; its Line Coverage is the badges' number. Between nightlies,
 `sonar.yml` scans master after every merge, on GitHub's machine, with the report
 the last nightly kept as an artifact (`lcov`, fourteen days): the badges follow
 the merge, and the coverage figure stays last night's rather than going blank.
