@@ -12,54 +12,30 @@
  */
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
-import { calculateSheet } from "@dreamfactory/speedrun/calculate";
+import { serveCalculation } from "@dreamfactory/speedrun/calc-worker";
 import { FileStore } from "../files";
 import { ACTIONS } from "./actions";
 import { deliverInput } from "./input";
-import type { CalcMessage, CalcRequest } from "./calc";
+import type { TitanicCalc } from "./calc";
 
-const post = (m: CalcMessage): void => (self as unknown as Worker).postMessage(m);
-
-self.onmessage = async (e: MessageEvent<CalcRequest>) => {
-  const req = e.data;
-  const saves = new Map(Object.entries(req.saves));
-  try {
-    const result = await calculateSheet(
-      {
-        game: "taoot",
-        makeHost: async () => {
-          const files = new FileStore();
-          for (const [name, url] of req.files) files.registerServerFile(name, url);
-          files.setEdition(req.edition);
-          const host = new GameHost(files, new NullAudioSink());
-          files.setVolumes((await host.bootPlan()).volumes);
-          return host;
-        },
-        prepare: (s) => {
-          // what main.ts sets: a fresh game borrows a shipped save to write its own over
-          s.saveTemplate = () => {
-            const mission = s.interp.globals.get("mission");
-            return typeof mission === "number" && mission >= 4
-              ? (req.templates[1] ?? req.templates[0])
-              : (req.templates[0] ?? req.templates[1]);
-          };
-        },
-        deliver: deliverInput,
-        getSave: (name) => Promise.resolve(saves.get(name) ?? null),
-        // kept for the rest of this calculation, never written back: Calculate
-        // reports, it does not move the sheet's checkpoints
-        putSave: (name, bytes) => {
-          saves.set(name, bytes);
-          return Promise.resolve();
-        },
-        seed: req.seed,
-      },
-      req.text,
-      ACTIONS,
-      (p) => post({ kind: "progress", progress: p }),
-    );
-    post({ kind: "done", result });
-  } catch (err) {
-    post({ kind: "error", message: (err as Error).message });
-  }
-};
+serveCalculation<TitanicCalc>(ACTIONS, ({ game: req }) => ({
+  game: "taoot",
+  makeHost: async () => {
+    const files = new FileStore();
+    for (const [name, url] of req.files) files.registerServerFile(name, url);
+    files.setEdition(req.edition);
+    const host = new GameHost(files, new NullAudioSink());
+    files.setVolumes((await host.bootPlan()).volumes);
+    return host;
+  },
+  prepare: (s) => {
+    // what main.ts sets: a fresh game borrows a shipped save to write its own over
+    s.saveTemplate = () => {
+      const mission = s.interp.globals.get("mission");
+      return typeof mission === "number" && mission >= 4
+        ? (req.templates[1] ?? req.templates[0])
+        : (req.templates[0] ?? req.templates[1]);
+    };
+  },
+  deliver: deliverInput,
+}));

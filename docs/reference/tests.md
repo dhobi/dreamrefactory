@@ -717,7 +717,9 @@ What it cannot run is what the workbench cannot: `travel`, `hunt` and `stand`.
 Its budgets count its own frames, not the wall.
 
 **On the workbench, Calculate** does the same in a Web Worker beside the page
-(`taoot/src/speedrun/calc-worker.ts`): it plays the open sheet from a cold boot,
+(`<game>/src/speedrun/calc-worker.ts` on Titanic, Dust, Timelapse and RedJack,
+over `speedrun/src/calc-worker.ts`; the other three take their host and input
+from `src/speedrun/headless.ts`, which their node runner plays too): it plays the open sheet from a cold boot,
 headless and at full CPU speed, with a bar for how far it has got, and ends in
 one of two answers — the sheet's in-game time and frames, or the line it stopped
 at, how far in, and a button that puts the editor on that line. The game on

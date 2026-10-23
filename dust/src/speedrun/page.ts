@@ -1,28 +1,22 @@
 /**
  * Dust's speedrun workbench — this page's entry point.
  *
- * The workbench is the speedrun workspace's (`speedrun/src/workbench.ts`) and so
- * is every verb it can run today (`./speedrun/actions.ts` says why there are no
- * Dust ones yet), which is what makes this file four lines of substance.
+ * The workbench is the speedrun workspace's (`speedrun/src/workbench.ts`); what
+ * this game tells it is its name, its verbs (./actions.ts), its route, and the
+ * two things it has to know about its files: which ones the Warm button pulls
+ * through the cache, and what a Calculate worker (./calc-worker.ts) needs to
+ * boot off them.
  *
- * ## What this game does not tell it
- *
- * No `warmup` and no `fixtureSheet`, and both absences are the truth rather than
- * a stub:
- *
- *   - **No Warm button.** Titanic's warms one edition of six out of a 1.2 GB
- *     tree because a route re-run fifty times is otherwise timed against the
- *     download. Dust is one volume and a boot touches fourteen files of it, so
- *     there is nothing to choose and little to prefetch; when a route exists and
- *     the download is what it is fighting, the list goes here.
- *   - ~~**No sheet to copy.**~~ There is one now — `tests/speedrun/run.sheet.txt`,
- *     published beside this page by the shared speedrun plugin
- *     (speedrun/vite.ts) exactly as Titanic's is, so the panel offers
- *     "copy the full run" here too: cold boot to the credits in one sequence,
- *     planned from the story's gates (docs/dust/README.md, "The speedrun").
+ * The route is the repository's — `tests/speedrun/run.sheet.txt`, published
+ * beside this page by the shared speedrun plugin (speedrun/vite.ts), so the
+ * panel offers "copy the full run": cold boot to the credits in one sequence,
+ * planned from the story's gates (docs/dust/README.md, "The speedrun").
  */
 import { startWorkbench } from "@dreamfactory/speedrun/workbench";
+import { calculateInWorker } from "@dreamfactory/speedrun/calc-worker";
 import { siteUrl } from "@dreamfactory/chrome/site";
+import { DustFiles } from "../files";
+import { dustTemplate, loadDustTemplate } from "../saves";
 import { ACTIONS } from "./actions";
 
 startWorkbench({
@@ -33,6 +27,9 @@ startWorkbench({
   // does not have.
   game: "dust",
   actions: ACTIONS,
+  // every file the game can ask for — the disc's, not its installer's or its readers'
+  warmup: async () => (await DustFiles.open()).warmFiles(),
+  warmWhat: "every file of the disc",
   /**
    * The repository's own route, published beside this page by the speedrun
    * plugin (speedrun/vite.ts) — middleware in dev, an emitted asset in a build, at
@@ -47,4 +44,15 @@ startWorkbench({
   fixtureSheet: siteUrl("speedrun/run.sheet.txt"),
   /** the contributed sheets (dust/speedrun/sheets/), resolved the same way */
   contributedSheets: siteUrl("speedrun/sheets.json"),
+  // headless in a worker (./calc-worker.ts), told where the site is and handed
+  // the save main.ts lends a fresh game — loaded here if a press beat main.ts to it
+  calculate: async (sheet, onProgress, signal) => {
+    if (!dustTemplate()) await loadDustTemplate();
+    return calculateInWorker(
+      new Worker(new URL("./calc-worker.ts", import.meta.url), { type: "module" }),
+      { ...sheet, seed: null, game: { site: siteUrl(""), template: dustTemplate() } },
+      onProgress,
+      signal,
+    );
+  },
 });

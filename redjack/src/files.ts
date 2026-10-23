@@ -1,6 +1,7 @@
 import { RipFiles, readManifest, ripName } from "@dreamfactory/engine/web/rip-files";
 import { pageUrl } from "@dreamfactory/engine/web/page-url";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
+import { biggestFirst, type WarmFile } from "@dreamfactory/engine/web/cache-warmup";
 
 /**
  * The three RedJack CDs as one `HostFiles` (a {@link RipFiles}).
@@ -58,10 +59,10 @@ export class RedJackFiles extends RipFiles {
   readonly tree = new Map<string, number>();
 
   /** index the rip from the manifest the dev server and the build both publish */
-  static async open(root = "gamefiles/"): Promise<RedJackFiles> {
+  static async open(root = "gamefiles/", at = siteBase()): Promise<RedJackFiles> {
     const store = new RedJackFiles();
-    // through pageUrl, so the page runs from any directory
-    const at = siteBase();
+    // `at` through pageUrl, so the page runs from any directory; a worker,
+    // which has no document to read the site's root off, says what it is
     const manifest = await readManifest(pageUrl("gamefiles.json", at));
     /** which disc each name was first found on, while the index is built */
     const discOf = new Map<string, number>();
@@ -109,6 +110,13 @@ export class RedJackFiles extends RipFiles {
       this.sizes.set(name, copy.size);
       this.cache.delete(name);
     }
+  }
+
+  /** every disc's copy of a repeated name, not only the mounted one's */
+  override warmFiles(): WarmFile[] {
+    const all = new Map(super.warmFiles().map((f) => [f.url, f]));
+    for (const byDisc of this.copies.values()) for (const c of byDisc.values()) all.set(c.url, { url: c.url, bytes: c.size });
+    return biggestFirst([...all.values()]);
   }
 
   activeDisc(): number {

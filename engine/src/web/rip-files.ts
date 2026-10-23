@@ -1,4 +1,5 @@
 import type { HostFiles } from "./host";
+import { biggestFirst, type WarmFile } from "./cache-warmup";
 
 /**
  * A rip indexed by lowercase BASENAME, fetched on demand and kept — the
@@ -78,6 +79,17 @@ export abstract class RipFiles implements HostFiles {
 
   abstract activeEdition(): string;
   abstract serverSetNames(): string[];
+
+  /**
+   * Every file this rip can serve, by the URL it is fetched from and its size:
+   * what the workbench's Warm button pulls through the browser's cache
+   * (cache-warmup.ts). The index, not the manifest — the manifest of a disc
+   * also lists its installer and its readers, which the game never asks for.
+   * Biggest first, as a warmup wants them (cache-warmup.ts `warmupList`).
+   */
+  warmFiles(): WarmFile[] {
+    return biggestFirst([...this.urls].map(([name, url]) => ({ url, bytes: this.sizes.get(name) ?? 0 })));
+  }
 
   /** how many names the rip offers — a boot that indexed nothing says so */
   get size(): number {

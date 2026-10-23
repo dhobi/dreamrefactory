@@ -99,19 +99,20 @@ export class DustFiles extends RipFiles {
    * Index the disc from the manifest the dev server and the build both publish,
    * so this page needs no directory listing of its own.
    */
-  static async open(root = "gamefiles/dustcd/"): Promise<DustFiles> {
+  static async open(root = "gamefiles/dustcd/", at = siteUrl("")): Promise<DustFiles> {
     const store = new DustFiles();
     // the Dust page's own manifest: the walk of its OWN rip, at its own site
     // root, rather than a filtered slice of Titanic's
     // (tools/manifest.ts), so this download is the one disc and not every
-    // TAOOT edition beside it. Resolved through siteUrl, like every URL a
-    // page builds itself, so the page runs from any directory of any host.
-    const manifest = await readManifest(siteUrl("gamefiles.json"));
+    // TAOOT edition beside it. Resolved against the site's root, siteUrl's,
+    // like every URL a page builds itself, so the page runs from any directory
+    // of any host; a worker, which has no document to read it off, says what it is.
+    const manifest = await readManifest(at + "gamefiles.json");
     for (const path of Object.keys(manifest)) {
       store.paths.push(path);
       if (!path.startsWith(root)) continue;
       const base = ripName(path);
-      const url = siteUrl(path);
+      const url = at + path;
       const have = store.urls.get(base);
       if (!have || rank(url) < rank(have)) {
         store.urls.set(base, url);
@@ -122,7 +123,7 @@ export class DustFiles extends RipFiles {
       }
     }
     for (const [base, url] of Object.entries(OFF_MANIFEST)) {
-      if (!store.urls.has(base)) store.urls.set(base, siteUrl(url));
+      if (!store.urls.has(base)) store.urls.set(base, at + url);
     }
     return store;
   }
