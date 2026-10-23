@@ -369,6 +369,12 @@ body.playing #brand {
   transform: translateY(1px);
   transition: transform 40ms;
 }
+@media (prefers-reduced-motion: reduce) {
+  #start,
+  #start:active {
+    transition: none;
+  }
+}
 
 #touchtip {
   display: none;

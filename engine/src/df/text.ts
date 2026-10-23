@@ -113,7 +113,7 @@ function reverseTable(enc: DfEncoding): Map<string, number[]> {
         two[0] = lead;
         two[1] = trail;
         const s = dec.decode(two);
-        if (s.length === 1 && s !== "�" && !table.has(s)) table.set(s, [lead, trail]);
+        if (s.length === 1 && s !== "\uFFFD" && !table.has(s)) table.set(s, [lead, trail]);
       }
     }
   }
