@@ -3,55 +3,16 @@
  * speedrun/src/headless.ts), for the verbs that need the real game
  * under them: `blackjack` (tests/speedrun/blackjack.ts).
  *
- * The page's input handlers (src/main.ts) with the page taken out: a mouse
- * press goes to the viewer, a release ends it where the pointer last was, a
- * move hovers, and a key goes to the director as `keyAction` names it. Keep
- * the two in step — a press routed differently here is a different game.
+ * Where an input goes is the workbench Calculate's too
+ * (src/speedrun/headless.ts).
  *
  * Load points are kept in memory: a test puts the disc's own save in as one
  * and loads it, as `loadSave` would on the page.
  */
-import type { GameHost } from "@dreamfactory/engine/web/host";
-import { headlessRun as runHeadless, type HeadlessRun, type InputEvent } from "@dreamfactory/speedrun/headless";
+import { headlessRun as runHeadless, type HeadlessRun } from "@dreamfactory/speedrun/headless";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
-import { keyAction } from "../../src/input";
+import { headlessGame } from "../../src/speedrun/headless";
 import { dustHost } from "../playthrough/harness";
-
-function deliver(host: GameHost, e: InputEvent): void {
-  const session = host.session;
-  const x = Math.floor(e.clientX ?? 0);
-  const y = Math.floor(e.clientY ?? 0);
-  switch (e.type) {
-    case "pointerdown": {
-      session.setPointer(x, y);
-      const v = host.viewer;
-      if (!v) return;
-      session.pointerDown = true;
-      session.shiftDown = !!e.shiftKey;
-      void session.track(v.press(x, y), `press ${x},${y}`);
-      return;
-    }
-    case "pointerup":
-      if (!host.viewer) return;
-      session.pointerDown = false;
-      host.viewer.release(session.pointerX, session.pointerY);
-      return;
-    case "pointermove":
-    case "mousemove":
-      session.setPointer(x, y);
-      if (host.viewer && !session.pointerDown) void host.viewer.hover(x, y);
-      return;
-    case "keydown": {
-      const act = keyAction({ key: e.key ?? "", ctrlKey: false, metaKey: false, altKey: false, repeat: false, target: null });
-      if (!act || "log" in act) return;
-      session.interp.globals.set("isrepeat", act.repeat);
-      void session.track(host.director.keyDown(act.key, act.escape));
-      return;
-    }
-    default:
-      return;
-  }
-}
 
 export async function headlessRun(opts: {
   prepare?: (session: GameSession) => void;
@@ -65,10 +26,8 @@ export async function headlessRun(opts: {
   const put = opts.putSave ?? ((name: string, bytes: Uint8Array) => void saves.set(name, bytes));
   const get = opts.getSave ?? ((name: string) => saves.get(name) ?? null);
   return runHeadless({
-    game: "dust",
-    makeHost: async () => dustHost().host,
+    ...headlessGame(async () => dustHost().host),
     prepare: (s) => opts.prepare?.(s),
-    deliver,
     putSave: async (name, bytes) => put(name, bytes),
     getSave: async (name) => get(name),
     seed: opts.seed,

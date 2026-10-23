@@ -6,7 +6,7 @@
  * builds sits under `dist/<game>/`. What differs is passed in: the port, the
  * pages besides the home page and the play page, the game's own plugins (the
  * speedrun workbench, Titanic's intro film, Lunicus's replays), and the odd
- * server or worker setting. The rest — the base, the version define, the
+ * server setting. The rest — the base, the version define, the worker format, the
  * game-file manifest, the signposts to the sibling servers — is the same for
  * all of them and lives here.
  */
@@ -35,8 +35,6 @@ export interface GameConfigOptions {
   gamefiles?: { include?: string[] };
   /** anything else for `server` (Titanic's tunnel host) */
   server?: UserConfig["server"];
-  /** a worker's format, where a page builds one (Titanic's Calculate) */
-  worker?: UserConfig["worker"];
 }
 
 export function gameConfig(o: GameConfigOptions): UserConfig {
@@ -70,7 +68,12 @@ export function gameConfig(o: GameConfigOptions): UserConfig {
     // substituted into the source text, so the version travels in the bundle and
     // no page has to fetch anything to know it
     define: { __APP_VERSION__: JSON.stringify(version) },
-    ...(o.worker ? { worker: o.worker } : {}),
+    /*
+     * The workbench's Calculate worker (<game>/src/speedrun/calc-worker.ts) is
+     * an ES module: it reaches the speedrun workspace's code, which loads one
+     * module on demand, and the default `iife` worker cannot be split (#509).
+     */
+    worker: { format: "es" },
     plugins: [
       // the home page, and the parts every other page leaves a slot for (vite-shell.ts)
       ...(home ? [homePage(home), shellParts(home)] : []),

@@ -43,11 +43,9 @@ async function calculate(
   return calculateInWorker(
     {
       text: sheet.text,
-      files,
-      edition: warmEdition(),
       saves: sheet.saves,
-      templates: [saveTemplateFor("1"), saveTemplateFor("2")],
       seed: null,
+      game: { files, edition: warmEdition(), templates: [saveTemplateFor("1"), saveTemplateFor("2")] },
     },
     onProgress,
     signal,

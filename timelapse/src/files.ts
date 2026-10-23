@@ -103,10 +103,10 @@ function siteBase(): string {
 
 export class TimelapseFiles extends RipFiles {
   /** index the rip from the manifest the dev server and the build both publish */
-  static async open(root = "gamefiles/"): Promise<TimelapseFiles> {
+  static async open(root = "gamefiles/", at = siteBase()): Promise<TimelapseFiles> {
     const store = new TimelapseFiles();
-    // through pageUrl, so the page runs from any directory
-    const at = siteBase();
+    // `at` through pageUrl, so the page runs from any directory; a worker,
+    // which has no document to read the site's root off, says what it is
     const manifest = await readManifest(pageUrl("gamefiles.json", at));
     for (const path of Object.keys(manifest).sort(byCodeUnit)) {
       if (!path.startsWith(root)) continue;

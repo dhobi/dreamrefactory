@@ -62,12 +62,6 @@ export default gameConfig({
   plugins: [nightdiveMovie()],
   // the speedrun workbench, made from play/index.html by speedrun/vite.ts
   workbench: WORKBENCH,
-  /**
-   * The workbench's Calculate worker (src/speedrun/calc-worker.ts) is an ES
-   * module: it reaches the speedrun workspace's code, which loads one module on
-   * demand, and the default `iife` worker cannot be split (#509).
-   */
-  worker: { format: "es" },
   server: {
     /**
      * The hostnames this dev server will answer to, beyond the usual ones.

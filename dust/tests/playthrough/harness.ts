@@ -25,11 +25,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GameHost, type HostFiles } from "@dreamfactory/engine/web/host";
-import { NullAudioSink } from "@dreamfactory/engine/runtime/audio";
+import type { GameHost, HostFiles } from "@dreamfactory/engine/web/host";
 import { ENGINE_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import type { GameSession } from "@dreamfactory/engine/runtime/session";
 import type { SetViewer } from "@dreamfactory/engine/web/viewer";
+import { headlessHost } from "../../src/speedrun/headless";
 
 /** the rip, anchored to this file rather than the working directory */
 export const CD = fileURLToPath(new URL("../../gamefiles/dustcd", import.meta.url));
@@ -101,9 +101,8 @@ export function dustHost(): { host: GameHost; logs: string[] } {
     serverSetNames: () => [...index.keys()].filter((n) => n.endsWith(".set")),
     evict: () => 0,
   };
-  const host = new GameHost(files, new NullAudioSink(), { log: (l) => logs.push(l) });
-  // a save is a dump of the engine's own tables, and those are v1's here
-  host.session.dfVersion = 1;
+  // the headless sheet's host too (src/speedrun/headless.ts), DF1 saves and all
+  const host = headlessHost(files, (l) => logs.push(l));
   return { host, logs };
 }
 

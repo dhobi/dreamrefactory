@@ -193,10 +193,16 @@ export function warmupList(
   pick: (path: string) => boolean,
   toUrl: (path: string) => string,
 ): WarmFile[] {
-  return Object.keys(sizes)
-    .filter(pick)
-    .map((path) => ({ url: toUrl(path), bytes: sizes[path] }))
-    .sort((a, b) => b.bytes - a.bytes || (a.url < b.url ? -1 : 1));
+  return biggestFirst(
+    Object.keys(sizes)
+      .filter(pick)
+      .map((path) => ({ url: toUrl(path), bytes: sizes[path] })),
+  );
+}
+
+/** `files` in the order a warmup should fetch them: see {@link warmupList} */
+export function biggestFirst(files: WarmFile[]): WarmFile[] {
+  return files.sort((a, b) => b.bytes - a.bytes || (a.url < b.url ? -1 : 1));
 }
 
 /**
