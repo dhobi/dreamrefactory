@@ -52,6 +52,95 @@ export interface FrameV0 {
 const HEADER = 8;
 
 /**
+ * One run of a row: its pixel count from the flag byte, and what it draws at
+ * `at` from the bytes at `p` — returning where the next flag is.
+ */
+interface RunCodec {
+  count(flag: number): number;
+  draw(data: Uint8Array, flag: number, p: number, at: number, count: number, f: FrameV0): number;
+}
+
+/**
+ * The container both v0 codecs share: an eight-byte header (height, width, the
+ * anchor), then each row as its byte length and its runs, which must come to
+ * the width exactly and end on the row's last byte.
+ */
+function decodeV0(data: Uint8Array, what: string, codec: RunCodec): FrameV0 {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  if (data.length < HEADER) throw new Error(`${what}: ${data.length} bytes is no header`);
+  const height = view.getInt16(0, true);
+  const width = view.getInt16(2, true);
+  const anchorY = view.getInt16(4, true);
+  const anchorX = view.getInt16(6, true);
+  if (height <= 0 || width <= 0) throw new Error(`${what}: ${width}x${height}`);
+
+  const f: FrameV0 = {
+    width,
+    height,
+    anchorY,
+    anchorX,
+    indexed: new Uint8Array(width * height),
+    opaque: new Uint8Array(width * height),
+  };
+  let p = HEADER;
+  for (let row = 0; row < height; row++) {
+    if (p + 2 > data.length) throw new Error(`${what}: ends before row ${row}`);
+    const end = p + 2 + view.getInt16(p, true);
+    p += 2;
+    if (end > data.length) throw new Error(`${what}: row ${row} runs past the container`);
+    const base = row * width;
+    let x = 0;
+    while (p < end) {
+      const flag = data[p++];
+      const count = codec.count(flag);
+      if (x + count > width) throw new Error(`${what}: row ${row} overruns its width`);
+      p = codec.draw(data, flag, p, base + x, count, f);
+      x += count;
+    }
+    if (p !== end || x !== width) throw new Error(`${what}: row ${row} is ${x} of ${width} pixels`);
+  }
+  if (p !== data.length) throw new Error(`${what}: ${data.length - p} bytes after the last row`);
+  return f;
+}
+
+/** two kind bits and a six-bit count: skip, literal, repeat, or a copy from earlier in the stream */
+const FRAME_RUNS: RunCodec = {
+  count: (flag) => flag >> 2,
+  draw(data, flag, p, at, count, { indexed, opaque }) {
+    switch (flag & 3) {
+      case 1: // skip
+        return p;
+      case 3: // literal
+        indexed.set(data.subarray(p, p + count), at);
+        opaque.fill(1, at, at + count);
+        return p + count;
+      case 2: // repeat
+        indexed.fill(data[p], at, at + count);
+        opaque.fill(1, at, at + count);
+        return p + 1;
+      default: {
+        // back-reference into the compressed stream
+        const from = p + 1 - data[p];
+        indexed.set(data.subarray(from, from + count), at);
+        opaque.fill(1, at, at + count);
+        return p + 1;
+      }
+    }
+  },
+};
+
+/** one kind bit and a seven-bit count: literal pixels, or a skip */
+const FIGURE_RUNS: RunCodec = {
+  count: (flag) => flag >> 1,
+  draw(data, flag, p, at, count, { indexed, opaque }) {
+    if (!(flag & 1)) return p;
+    indexed.set(data.subarray(p, p + count), at);
+    opaque.fill(1, at, at + count);
+    return p + count;
+  },
+};
+
+/**
  * Decode one v0 picture container.
  *
  * Strict where the original is forgiving: LUNICUS.EXE clips every run against
@@ -60,56 +149,7 @@ const HEADER = 8;
  * throws here, because that is a misread and not a picture.
  */
 export function decodeFrameV0(data: Uint8Array): FrameV0 {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (data.length < HEADER) throw new Error(`v0 frame: ${data.length} bytes is no header`);
-  const height = view.getInt16(0, true);
-  const width = view.getInt16(2, true);
-  const anchorY = view.getInt16(4, true);
-  const anchorX = view.getInt16(6, true);
-  if (height <= 0 || width <= 0) throw new Error(`v0 frame: ${width}x${height}`);
-
-  const indexed = new Uint8Array(width * height);
-  const opaque = new Uint8Array(width * height);
-  let p = HEADER;
-  for (let row = 0; row < height; row++) {
-    if (p + 2 > data.length) throw new Error(`v0 frame: ends before row ${row}`);
-    const end = p + 2 + view.getInt16(p, true);
-    p += 2;
-    if (end > data.length) throw new Error(`v0 frame: row ${row} runs past the container`);
-    const base = row * width;
-    let x = 0;
-    while (p < end) {
-      const flag = data[p++];
-      const count = flag >> 2;
-      if (x + count > width) throw new Error(`v0 frame: row ${row} overruns its width`);
-      const at = base + x;
-      switch (flag & 3) {
-        case 1: // skip
-          break;
-        case 3: // literal
-          indexed.set(data.subarray(p, p + count), at);
-          opaque.fill(1, at, at + count);
-          p += count;
-          break;
-        case 2: // repeat
-          indexed.fill(data[p++], at, at + count);
-          opaque.fill(1, at, at + count);
-          break;
-        case 0: {
-          // back-reference into the compressed stream
-          const back = data[p++];
-          const from = p - back;
-          indexed.set(data.subarray(from, from + count), at);
-          opaque.fill(1, at, at + count);
-          break;
-        }
-      }
-      x += count;
-    }
-    if (p !== end || x !== width) throw new Error(`v0 frame: row ${row} is ${x} of ${width} pixels`);
-  }
-  if (p !== data.length) throw new Error(`v0 frame: ${data.length - p} bytes after the last row`);
-  return { width, height, anchorY, anchorX, indexed, opaque };
+  return decodeV0(data, "v0 frame", FRAME_RUNS);
 }
 
 /**
@@ -126,36 +166,5 @@ export function decodeFrameV0(data: Uint8Array): FrameV0 {
  * and 8 from the front (LUNICUS.EXE 0x416514; `lunicus/src/game/crew.ts`).
  */
 export function decodeFigureV0(data: Uint8Array): FrameV0 {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (data.length < HEADER) throw new Error(`v0 figure: ${data.length} bytes is no header`);
-  const height = view.getInt16(0, true);
-  const width = view.getInt16(2, true);
-  const anchorY = view.getInt16(4, true);
-  const anchorX = view.getInt16(6, true);
-  if (height <= 0 || width <= 0) throw new Error(`v0 figure: ${width}x${height}`);
-
-  const indexed = new Uint8Array(width * height);
-  const opaque = new Uint8Array(width * height);
-  let p = HEADER;
-  for (let row = 0; row < height; row++) {
-    if (p + 2 > data.length) throw new Error(`v0 figure: ends before row ${row}`);
-    const end = p + 2 + view.getInt16(p, true);
-    p += 2;
-    const base = row * width;
-    let x = 0;
-    while (p < end) {
-      const flag = data[p++];
-      const count = flag >> 1;
-      if (x + count > width) throw new Error(`v0 figure: row ${row} overruns its width`);
-      if (flag & 1) {
-        indexed.set(data.subarray(p, p + count), base + x);
-        opaque.fill(1, base + x, base + x + count);
-        p += count;
-      }
-      x += count;
-    }
-    if (p !== end || x !== width) throw new Error(`v0 figure: row ${row} is ${x} of ${width} pixels`);
-  }
-  if (p !== data.length) throw new Error(`v0 figure: ${data.length - p} bytes after the last row`);
-  return { width, height, anchorY, anchorX, indexed, opaque };
+  return decodeV0(data, "v0 figure", FIGURE_RUNS);
 }

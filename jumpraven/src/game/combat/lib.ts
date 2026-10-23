@@ -37,6 +37,18 @@ export function meets(w: World, from: Obj, to: Obj): boolean {
   return met;
 }
 
+/**
+ * Pyro's burst picture over `o`, just in front of it: the boss's (0x40302f) and
+ * the weapons ship's (0x4297db), two copies of one routine in the EXE
+ */
+export function burstOver(w: World, o: Obj): void {
+  const p = w.project(o);
+  if (p.depth < 0x40) return;
+  let n = (p.depth - 0x40) >> 7;
+  if (n >= 0x10) n = 0xf;
+  w.sprite(w.pyro.pics[0xc0 + n], p.y, p.x, p.depth - 1, false);
+}
+
 /** 0x427afd: `o` is nine cells or more from the craft's cell, either way */
 export function tooFar(w: World, o: Obj): boolean {
   return abs(o.cellX - w.cam.cellX) >= 9 || abs(o.cellY - w.cam.cellY) >= 9;

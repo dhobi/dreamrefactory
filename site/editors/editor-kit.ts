@@ -14,7 +14,7 @@ import type { Container, DFContainerFile } from "@dreamfactory/engine/df/contain
 import { writeContainerFile } from "@dreamfactory/engine/df/container";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { scriptToText, sniffScript } from "@dreamfactory/engine/df/script";
-import type { ShpFrame } from "@dreamfactory/engine/df/shp";
+import { encodeShpFrame, type ShpFrame } from "@dreamfactory/engine/df/shp";
 import type { DfEncoding } from "@dreamfactory/engine/df/text";
 import type { GameScreen } from "@dreamfactory/chrome/games";
 import { installGamesMenu } from "@dreamfactory/chrome/games-menu";
@@ -329,6 +329,35 @@ export function artSizes(file: File, img: ImageData, data: Uint8Array, was: Uint
     kb: (data.length / 1024).toFixed(1),
     was: (was.length / 1024).toFixed(1),
   };
+}
+
+/**
+ * Replace the sprite in container `loc` with an image file, as the cast and
+ * shop editors' Import does: matched to `palette`, at the anchor of `old` (the
+ * sprite it replaces). Returns the status line — the new size, the bytes before
+ * and after, and a warning if the size changed — or null, said, if the file is
+ * not an image.
+ */
+export async function importArt(
+  file: File,
+  containers: Container[],
+  loc: number,
+  palette: Uint8ClampedArray,
+  old: ShpFrame | null,
+  /** the editor's own lines for it: the replacement, and a size that changed */
+  say: { replaced(params: Record<string, string | number>): string; resized(params: Record<string, string | number>): string },
+  log: Log,
+): Promise<string | null> {
+  const img = await readImage(file, log);
+  if (!img) return null;
+  const container = containers[loc];
+  const data = encodeShpFrame(spriteFromImage(img, palette, old));
+  containers[loc] = { id: container.id, data };
+  const resized = old && (old.width !== img.width || old.height !== img.height);
+  return (
+    say.replaced({ loc, ...artSizes(file, img, data, container.data) }) +
+    (resized ? say.resized({ w: old.width, h: old.height }) : "")
+  );
 }
 
 // --- export -----------------------------------------------------------------

@@ -20,18 +20,16 @@ import { byExtension, chosenSource, encodingOf, filesIn, listSources, screenOf, 
 import { DEFAULT_ENCODING, type DfEncoding } from "@dreamfactory/engine/df/text";
 import {
   $,
-  artSizes,
+  importArt,
   drawScreenBands,
   EditLog,
   exportContainerFile,
   fillSwatches,
   installEditorPage,
   paintFrame,
-  readImage,
   savePng,
   serverNote,
   serverRow,
-  spriteFromImage,
   wireFileOpen,
   wirePngImport,
 } from "./editor-kit";
@@ -49,7 +47,7 @@ import {
   patchPoseName,
   readCstFile,
 } from "@dreamfactory/engine/df/cst";
-import { ShpFrame, decodeShpFrame, encodeShpFrame, patchFrameAnchor } from "@dreamfactory/engine/df/shp";
+import { ShpFrame, decodeShpFrame, patchFrameAnchor } from "@dreamfactory/engine/df/shp";
 import type { GameScreen } from "@dreamfactory/chrome/games";
 
 
@@ -828,24 +826,14 @@ wirePngImport((file) => {
  */
 async function importPng(file: File, loc: number): Promise<void> {
   if (!cst) return;
-  const old = frameAt(loc);
-  const img = await readImage(file, log);
-  if (!img) return;
-  const frame = spriteFromImage(img, palette, old);
-  const container = cst.file.containers[loc];
-  const data = encodeShpFrame(frame);
-  cst.file.containers[loc] = { id: container.id, data };
+  const said = await importArt(file, cst.file.containers, loc, palette, frameAt(loc), {
+    replaced: (p) => t("casts.artReplaced", p),
+    resized: (p) => t("casts.artSizeWarn", p),
+  }, log);
+  if (!said) return;
   frameCache.delete(loc);
   edits.mark(t("casts.artEdit", { loc, file: file.name }));
-  log(
-    t("casts.artReplaced", {
-      loc,
-      ...artSizes(file, img, data, container.data),
-    }) +
-      (old && (old.width !== img.width || old.height !== img.height)
-        ? t("casts.artSizeWarn", { w: old.width, h: old.height })
-        : ""),
-  );
+  log(said);
   buildFrames();
   renderPreview();
 }
