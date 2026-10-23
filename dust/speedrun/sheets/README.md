@@ -4,7 +4,7 @@ Run sheets for *Dust: A Tale of the Wired West*, contributed by pull request. Ea
 
 ## Adding a sheet
 
-1. Write and test your route in the workbench (`/dust/speedrun/`). `SHEET=dust/speedrun/sheets/<file> npm run speedrun -w dust` plays it headless and tells you its in-game time, or the line it stops at.
+1. Write and test your route in the workbench (`/dust/speedrun/`). **Calculate** plays it headless and tells you its in-game time, or the line it stops at; so does `SHEET=dust/speedrun/sheets/<file> npm run speedrun -w dust`.
 2. Save it here as `<something>.sheet.txt`: lowercase, words joined with `-`, for example `any-percent-glitchless.sheet.txt`.
 3. Open a pull request with that one file.
 

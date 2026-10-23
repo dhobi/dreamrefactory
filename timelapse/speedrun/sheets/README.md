@@ -4,7 +4,7 @@ Run sheets for *Timelapse: Ancient Civilizations*, contributed by pull request. 
 
 ## Adding a sheet
 
-1. Write and test your route in the workbench (`/timelapse/speedrun/`). `SHEET=timelapse/speedrun/sheets/<file> npm run speedrun -w timelapse` plays it headless and tells you its in-game time, or the line it stops at.
+1. Write and test your route in the workbench (`/timelapse/speedrun/`). **Calculate** plays it headless and tells you its in-game time, or the line it stops at; so does `SHEET=timelapse/speedrun/sheets/<file> npm run speedrun -w timelapse`.
 2. Save it here as `<something>.sheet.txt`: lowercase, words joined with `-`, for example `any-percent.sheet.txt`.
 3. Open a pull request with that one file.
 
