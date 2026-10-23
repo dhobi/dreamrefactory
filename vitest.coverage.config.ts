@@ -36,7 +36,13 @@ export default defineConfig({
       provider: "v8",
       // every file of these, loaded or not, so an untested one counts as 0
       include: ["engine/src/**/*.ts", "*/src/**/*.ts"],
-      exclude: ["engine/src/web/**", "speedrun/**", "chrome/**", "site/**", "**/*.d.ts"],
+      /*
+       * Matched anywhere in the file's absolute path (picomatch `contains`), so
+       * each names a package's `src/`: a bare "speedrun/**" also caught every
+       * game's own `src/speedrun/`, the sheets' actions the machine suites play,
+       * and Sonar, which does measure those, counted them as never run.
+       */
+      exclude: ["engine/src/web/**", "speedrun/src/**", "chrome/src/**", "site/src/**", "**/*.d.ts"],
       reporter: ["json-summary", "text-summary", "lcovonly"],
       reportsDirectory: "coverage/vitest",
       reportOnFailure: true,
