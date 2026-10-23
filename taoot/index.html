@@ -176,6 +176,11 @@
       a.play:active {
         transform: none;
       }
+      @media (prefers-reduced-motion: reduce) {
+        a.play {
+          transition: none;
+        }
+      }
       /* the triangle says "play" a second time, so it stays quiet */
       a.play .glyph {
         font-family: var(--font-ui);

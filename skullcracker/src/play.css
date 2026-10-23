@@ -677,6 +677,11 @@ body.playing #frame {
     transform: none;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  body.playing #frame {
+    animation: none;
+  }
+}
 /* the rivets. The card's subtitle plate is bolted down at both ends and the
    collars around the skull are studded; four heads at the corners are the
    smallest quotation of that which does not become a border pattern. */

@@ -201,6 +201,11 @@ body.playing #frame {
     transform: none;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  body.playing #frame {
+    animation: none;
+  }
+}
 
 /* the page only ever shrinks the canvas below its own size, which is soft
    at worst */
