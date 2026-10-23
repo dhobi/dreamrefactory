@@ -37,6 +37,9 @@
  */
 import { test, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
+import { HOME_PAGES } from "../../tools/home-pages";
+import { homePageHtml } from "../../tools/vite-home";
+import { expandShell } from "../../tools/vite-shell";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { parseHTML } from "linkedom";
@@ -48,10 +51,10 @@ const APPS = [
   { dir: "taoot", short: "Titanic", pages: ["taoot/index.html", "taoot/play/index.html"] },
   { dir: "dust", short: "Dust", pages: ["dust/index.html", "dust/play/index.html"] },
   { dir: "timelapse", short: "Timelapse", pages: ["timelapse/index.html", "timelapse/play/index.html"] },
-  { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html"] },
+  { dir: "skullcracker", short: "Skull Cracker", pages: ["skullcracker/index.html", "skullcracker/play/index.html"] },
   { dir: "redjack", short: "RedJack", pages: ["redjack/index.html", "redjack/play/index.html"] },
-  { dir: "lunicus", short: "Lunicus", pages: ["lunicus/index.html"] },
-  { dir: "jumpraven", short: "Jump Raven", pages: ["jumpraven/index.html"] },
+  { dir: "lunicus", short: "Lunicus", pages: ["lunicus/index.html", "lunicus/play/index.html"] },
+  { dir: "jumpraven", short: "Jump Raven", pages: ["jumpraven/index.html", "jumpraven/play/index.html"] },
 ] as const;
 
 interface Icon {
@@ -155,11 +158,18 @@ test.each(APPS)("$dir: every icon exists and is the size it claims", ({ dir }) =
   expect(maskable.length, `${dir} ships a maskable icon`).toBeGreaterThan(0);
 });
 
+/** a page as it is served: a home page from its template (tools/vite-home.ts), any other with its slots filled (vite-shell.ts) */
+function pageHtml(page: string): string {
+  const facts = HOME_PAGES.find((h) => page.startsWith(`${h.dir}/`));
+  if (!facts) return readFileSync(join(ROOT, page), "utf8");
+  return page === `${facts.dir}/index.html` ? homePageHtml(facts) : expandShell(readFileSync(join(ROOT, page), "utf8"), facts);
+}
+
 test.each(APPS)("$dir: the pages say on iOS what the manifest says on Android", ({ dir, short, pages }) => {
   const m = manifest(dir);
 
   for (const page of pages) {
-    const { document } = parseHTML(readFileSync(join(ROOT, page), "utf8"));
+    const { document } = parseHTML(pageHtml(page));
     const where = `${page}:`;
 
     const link = document.querySelector('link[rel="manifest"]');

@@ -16,6 +16,7 @@
  * plain 6 key, and Ctrl+6 is nothing. Of the rest, Ctrl+N and Ctrl+T never reach
  * a page; New is a click on the title as well (0x417126), Theme is on the bar.
  */
+import { siteBase } from "@dreamfactory/engine/web/page-url";
 import { attachWindowBar } from "@dreamfactory/engine/web/window-bar";
 import type { Lunicus } from "./lunicus";
 import type { Input } from "./input";
@@ -38,7 +39,7 @@ export function installMenu(frame: HTMLElement, game: Lunicus, input: Input, dep
     if (input.menu(n)) return;
     if (n === ID.open) deps.open();
     // File ▸ Exit from the title quits (0x418639); a page leaves for the front door
-    if (n === ID.exit) location.href = new URL("../", location.href).href;
+    if (n === ID.exit) location.href = new URL("../", siteBase()).href;
   };
   // the QUICKEYS slip, ahead of the bar's own keys (both on window, capture):
   // a plain 6 is Sound Level 6 (id 507), anywhere, and Ctrl+6 is nothing

@@ -13,3 +13,16 @@ export function pageUrl(path: string, base: string = document.baseURI, origin: s
   if (u.origin !== origin) throw new Error(`refusing to fetch ${u.href}: not on ${origin}`);
   return u.href;
 }
+
+/**
+ * The game's root, as a page states it: `<meta name="site-root">`, resolved
+ * against the page — "./" on a game's home page, "../" on its play page one
+ * folder down. Where a game's files are (`gamefiles/`, `gamefiles.json`) is
+ * relative to this, not to whichever page asks. A page without the meta is its
+ * own root.
+ */
+export function siteBase(): string {
+  // a test's stand-in document may have no query at all: it is then its own root
+  const declared = typeof document.querySelector === "function" ? document.querySelector('meta[name="site-root"]')?.getAttribute("content") : null;
+  return new URL(declared ?? "./", document.baseURI).href;
+}

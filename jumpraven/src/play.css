@@ -1,0 +1,296 @@
+/* ------------------------------------------------------------------
+   The same page the other games have, in the raven's night, bronze,
+   the letters' red and the sunset.
+
+   Two states and one movement between them:
+
+     body.booting  the title card, centred, with the gauge under it
+     body.playing  the title card small at the top, lapping over the
+                   picture's frame, and the picture underneath
+
+   What it composes with is in src/theme.css: the letters are red on a
+   black band in a bronze rim, under the raven's blue-black wings, and
+   behind them the sky burns from violet to gold. So the page is the
+   wings' night, the frame is the band's rim turned round the picture,
+   the Enter button is a letter, and the gauge is the one thing that
+   burns.
+   ------------------------------------------------------------------ */
+
+/* what every play page shares, under what is this game's own */
+@import "@dreamfactory/chrome/play-flow.css";
+
+:root {
+  /* the rim round the picture: the rule, the bronze, and the rule again */
+  --frame-w: clamp(6px, 0.8vw, 11px);
+  /* the width the picture can have across, which the risen card is sized
+     from (it cannot come from --pic-w, which pays for the card: a cycle) */
+  --fit-w: min(1024px, calc(100vw - 2 * var(--pad) - 2 * var(--frame-w)));
+  /* The risen card. The artwork is 900x614, 1.47:1 — wider than
+     Lunicus's — so a smaller share of the width gives the same height. */
+  --brand-h: clamp(56px, calc(var(--fit-w) * 0.1), 110px);
+  /* the picture: 512x384 art on a 1024x768 canvas, as large as the room
+     across and the room down (converted through 4:3) allow */
+  --pic-w: min(
+    1024px,
+    var(--fit-w),
+    /* ...but never below a size worth playing at: past that the page
+       scrolls down rather than shrinking the picture to a stamp */
+    max(
+        320px,
+        calc(
+          (
+              100vh - var(--bar) - 2 * var(--pad) - var(--brand-h) +
+                var(--lap) - 2 * var(--frame-w) - var(--under)
+            ) *
+            4 / 3
+        )
+      )
+  );
+}
+
+/* on a phone the shared bar wraps its links to a second line */
+@media (max-width: 560px) {
+  :root {
+    --bar: 72px;
+  }
+}
+
+/* ---- the curtain: the title card and the gauge ------------------- */
+
+/* the light the card sits in: the sunset's, gold at the horizon and
+   violet overhead, on the wings' night */
+#curtain::before {
+  left: 50%;
+  top: 44%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(253, 200, 58, 0.14),
+    rgba(135, 73, 103, 0.18) 42%,
+    #0000 72%
+  );
+}
+
+/* The card. src/main.ts hides it and sets body.nobrand when it fails to
+   load, so a missing file closes the band up instead of leaving a broken
+   frame. */
+#brand {
+  /* against the VIEWPORT: #curtain is shrink-to-fit and takes its width
+     from this image, so a percentage here is circular (Skull Cracker's
+     note, measured there) */
+  max-width: min(680px, calc(100vw - 2 * var(--pad)));
+  max-height: 52vh;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 0 34px rgba(246, 138, 54, 0.18));
+}
+
+/* ---- the gauge and the button, sharing one cell ------------------ */
+
+/* ------------------------------------------------------------------
+   THE GAUGE IS THE SKYLINE AT SUNSET.
+
+   Dust burns a fuse, Timelapse charges a conduit, Skull Cracker cracks a
+   plate, RedJack pours gold, Lunicus fires a tracer. On Jump Raven's
+   card the sky over the drowned city goes from violet overhead to gold
+   at the horizon, so the gauge is a slot in a bronze-rimmed band with
+   the sky running along it, violet where it has been and gold where it
+   is, and the hovercraft's yellow lamp at its head.
+
+     #bar     the slot — the night, sunk, in the band's bronze rim
+     #charge  the width JS drives, the sky; its ::after is the lamp
+   ------------------------------------------------------------------ */
+
+#bar {
+  height: 12px;
+  border-radius: var(--radius);
+  background: linear-gradient(var(--rule), var(--night-900) 55%, var(--night-700));
+  box-shadow:
+    0 0 0 1px var(--bronze-600),
+    0 0 0 2px var(--bronze-300),
+    0 0 0 3px var(--rule),
+    inset 0 2px 3px rgb(0 0 0 / 80%);
+}
+#charge {
+  border-radius: var(--radius) 0 0 var(--radius);
+  background:
+    linear-gradient(rgb(255 255 255 / 22%), #0000 45%, rgb(0 0 0 / 28%)),
+    linear-gradient(
+      90deg,
+      var(--sunset-900),
+      var(--sunset-800) 30%,
+      var(--sunset-600) 60%,
+      var(--sunset-400) 85%,
+      var(--sunset-300)
+    );
+  box-shadow: 0 0 12px -2px rgba(246, 138, 54, 0.55);
+}
+/* the head: one of the craft's lamps, yellow at the heart */
+#charge::after {
+  right: -3px;
+  top: -3px;
+  bottom: -3px;
+  width: 6px;
+  border-radius: 50%;
+  background: var(--sunset-100);
+  box-shadow:
+    0 0 6px 2px rgba(253, 200, 58, 0.85),
+    0 0 16px 5px rgba(246, 138, 54, 0.5);
+}
+
+#bootline {
+  margin: 0.65rem 0 0;
+}
+
+/* ------------------------------------------------------------------
+   THE BUTTON IS A LETTER: the red face lit at its top, the bronze rim
+   round it and the dark rule outside that, with a label in the raven's
+   chrome, heavy and leant forward as the letters are. Dust's and Skull
+   Cracker's geometry — uppercase, wide tracking, scale-in on `.ready` —
+   in this card's materials.
+   ------------------------------------------------------------------ */
+#start {
+  font: italic 900 15px/1 var(--font-display);
+  background: linear-gradient(
+    var(--red-100),
+    var(--red-200) 22%,
+    var(--red-400) 50%,
+    var(--red-500)
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--bronze-600),
+    inset 0 2px 0 rgba(252, 233, 173, 0.6),
+    0 0 0 2px var(--bronze-300),
+    0 0 0 3px var(--rule),
+    0 10px 22px -10px #000;
+  text-shadow: 0 1px 0 rgba(20, 10, 6, 0.7);
+  transition:
+    opacity 260ms ease-out,
+    transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
+    background 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+#start:hover {
+  background: linear-gradient(
+    var(--bronze-100),
+    var(--red-100) 12%,
+    var(--red-300) 50%,
+    var(--red-400)
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--bronze-600),
+    inset 0 2px 0 rgba(252, 233, 173, 0.85),
+    0 0 0 2px var(--bronze-100),
+    0 0 0 3px var(--rule),
+    0 0 24px -4px rgba(246, 138, 54, 0.55),
+    0 10px 22px -10px #000;
+}
+/* chrome, not the accent: the accent is the bronze the button is
+   already edged in, and a bronze ring round a bronze edge is not a ring */
+#start:focus-visible {
+  outline: 2px solid var(--chrome-100);
+  outline-offset: 5px;
+}
+
+/* ---- the picture, in its bevel --------------------------------- */
+
+/* ------------------------------------------------------------------
+   The bevel is the frame's PADDING, so the canvas keeps its size, drawn
+   as the card draws one round its band: the dark rule outside, the bronze
+   lit on top and falling to its shadow side at the bottom, and a thin
+   rule again where it meets the picture.
+   ------------------------------------------------------------------ */
+#frame {
+  border-radius: var(--radius-lg);
+  background-color: var(--bronze-500);
+  background-image:
+    linear-gradient(
+      180deg,
+      var(--bronze-100) 0 1px,
+      var(--bronze-200) 1px 45%,
+      var(--bronze-400) 45% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    ),
+    linear-gradient(
+      0deg,
+      var(--bronze-800) 0 1px,
+      var(--bronze-700) 1px 45%,
+      var(--bronze-600) 45% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    ),
+    linear-gradient(
+      90deg,
+      var(--bronze-300) 0 1px,
+      var(--bronze-400) 1px 50%,
+      var(--bronze-500) 50% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    ),
+    linear-gradient(
+      270deg,
+      var(--bronze-700) 0 1px,
+      var(--bronze-600) 1px 50%,
+      var(--bronze-500) 50% calc(100% - 1px),
+      var(--rule) calc(100% - 1px)
+    );
+  box-shadow:
+    0 0 0 2px var(--rule),
+    0 0 40px -8px rgba(246, 138, 54, 0.25),
+    0 26px 60px -24px #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #brand,
+  #frame,
+  #start,
+  #gauge {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---- the controls under it -------------------------------------- */
+
+#under .bar {
+  display: flex;
+}
+
+#loc:empty {
+  display: none;
+}
+.k {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: 11px/1.5 var(--font-mono);
+  color: var(--text-bright);
+  background: var(--night-800);
+}
+#under .keyhint {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* ---- fullscreen -------------------------------------------------- */
+
+/* a CLASS, not `:fullscreen` — an iPhone has no element fullscreen, and
+   engine/src/web/fullscreen.ts pins the stage over the viewport instead */
+#stage.fs {
+  display: grid;
+  place-items: center;
+  gap: 0;
+}
+#stage.fs #curtain {
+  display: none;
+}
+
+/* ---- the ask, under everything ---------------------------------- */
+
+
+/* The log, in the Details column (engine/src/web/details-column.css): its plain
+   lines in the words' own dim rather than in --accent-line, which this palette
+   keeps for a rule and not for text. */
+#details #log {
+  color: var(--text-dim);
+}

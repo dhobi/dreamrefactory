@@ -27,6 +27,8 @@
  * no 404 to find it by. A declaration in the markup is not clever enough to be
  * rewritten by anything.
  */
+import { siteBase } from "@dreamfactory/engine/web/page-url";
+
 let root: string | null = null;
 
 function siteRoot(): string {
@@ -37,8 +39,7 @@ function siteRoot(): string {
     root = "/";
     return root;
   }
-  const declared = document.querySelector('meta[name="site-root"]')?.getAttribute("content");
-  root = new URL(declared ?? "./", document.baseURI).href;
+  root = siteBase();
   return root;
 }
 

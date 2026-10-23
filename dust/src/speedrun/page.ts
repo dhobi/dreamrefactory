@@ -22,58 +22,8 @@
  *     planned from the story's gates (docs/dust/README.md, "The speedrun").
  */
 import { startWorkbench } from "@dreamfactory/speedrun/workbench";
-import { installStateList } from "@dreamfactory/engine/web/state-list";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import { snapshotState } from "@dreamfactory/engine/runtime/trace";
-import type { GameHost } from "@dreamfactory/engine/web/host";
-import type { SpineVar } from "@dreamfactory/engine/web/debug-panel";
 import { ACTIONS } from "./actions";
-
-/**
- * The two variables worth naming before the rest.
- *
- * Titanic's six come from a readout the original game itself carries; Dust has
- * no such dialog to read the answer off, so these are the two its own suites
- * reach for when they need to put the game in a known state — `day`, which
- * decides which targets the shooting range sets out (dust/tests/targets.ts: day
- * 2 and 3 add the pig and the chicken), and `clock`, which the house's props
- * read (dust/tests/props.ts).
- *
- * A short list on purpose. A spine is what a reader wants before anything else,
- * and a guess at that is worse than the full table underneath it — which is
- * always there. When a Dust route exists, what it waits on is what belongs here.
- */
-const SPINE: readonly SpineVar[] = [
-  { name: "day", label: "Day" },
-  { name: "clock", label: "Clock" },
-];
-
-/**
- * The Details column, wired to the running game.
- *
- * `window.dbg` and not an import, because the game is `main.ts`'s and this is a
- * second module on the same page: that handle is what the page publishes for
- * exactly this (its own header says so), and it is what every probe and console
- * session already reaches for. Polled rather than awaited — the boot takes
- * minutes and the column should be up and empty in the meantime, not absent.
- */
-const dbg = (): { host?: GameHost } => (window as unknown as { dbg?: { host?: GameHost } }).dbg ?? {};
-
-installStateList({
-  state: () => {
-    const host = dbg().host!;
-    return snapshotState(host.session, host.viewer ?? null, "live");
-  },
-  spine: SPINE,
-  // this game's own namespace: every game on the deployed site shares an origin
-  storageKey: "dust.details.state",
-  // the pane IS this page's third column, so it opens on the list rather than
-  // on nothing at all
-  defaultOn: true,
-  // there is no X here and nothing hides the column, but the poll still costs a
-  // snapshot per tick — so it waits for a game to snapshot
-  visible: () => !!dbg().host?.session,
-});
 
 startWorkbench({
   // Its own key space, and this is the whole reason the namespace exists: the

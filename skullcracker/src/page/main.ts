@@ -46,14 +46,14 @@ import { readMovFile } from "@dreamfactory/engine/df/mov";
 import { LEVEL_ORDER } from "@dreamfactory/engine/df/sbk";
 import { indexedToRGBA } from "@dreamfactory/engine/df/image";
 import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { SCREEN_H, SCREEN_W, canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
-import { BootBar } from "@dreamfactory/engine/web/page-shell";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { BootBar, PageLog, brandFallback } from "@dreamfactory/engine/web/page-shell";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
+import { SKULLCRACKER } from "@dreamfactory/chrome/games";
 import { VERSION, installVersion } from "@dreamfactory/chrome/version";
+import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
 import { SkullFiles } from "../files";
 import { SkullSave, readSkl, SKL } from "../savegame";
 // puts `mobile` on <html>, which index.html's fullscreen frame rule reads
@@ -303,15 +303,27 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 
 const canvas = $<HTMLCanvasElement>("screen");
 const ctx = canvas.getContext("2d", { alpha: false })!;
-const logEl = $<HTMLPreElement>("log");
 const errEl = $<HTMLSpanElement>("err");
 const nowEl = $<HTMLPreElement>("loc");
 
-const lines: string[] = [];
+/**
+ * The page's own account of itself, in the Details column every play page
+ * carries (engine/src/web/details-column.ts), with the film line under it.
+ * There is no button for it: neither is addressed to a reader. `b` is what a
+ * developer presses; the bug reporter is what a player presses, and it sends
+ * the log without showing it.
+ */
+// the title card, which closes the band up when it fails to load
+brandFallback($<HTMLImageElement>("brand"));
+
+const column = new DetailsColumn("skullcracker");
+const pageLog = new PageLog($<HTMLPreElement>("log"), null, 2000, column);
+// the film line under the log it annotates, not under the column's heading
+pageLog.el.after(nowEl);
+const lines = pageLog.lines;
+column.installLog({ lines: () => lines, version: VERSION });
 function log(line: string): void {
-  lines.push(line);
-  logEl.textContent = lines.join("\n");
-  logEl.scrollTop = logEl.scrollHeight;
+  pageLog.say(line);
 }
 
 function fail(what: unknown): void {
@@ -319,7 +331,7 @@ function fail(what: unknown): void {
   errEl.textContent = message;
   log(`error: ${message}`);
   // an error opens the log by itself: the page's one job is to say what happened
-  logEl.hidden = false;
+  pageLog.show(true);
 }
 
 /** the picture, painted from an indexed frame and the segment's own palette */
@@ -923,11 +935,11 @@ function frameLoop(now: number): void {
 async function boot(): Promise<void> {
   installVersion();
   const say = $<HTMLSpanElement>("bootsay");
-  const conduit = $<HTMLDivElement>("conduit");
+  const barvalue = $<HTMLProgressElement>("barvalue");
   const progress = new BootBar(
     $<HTMLDivElement>("charge"),
     $<HTMLSpanElement>("bootpct"),
-    (pct) => conduit.setAttribute("aria-valuenow", String(pct)),
+    (pct) => (barvalue.value = pct),
     (label) => (say.textContent = label),
   ).set;
 
@@ -1001,56 +1013,32 @@ async function boot(): Promise<void> {
 
 // ---- the controls, which are the ones every page in the project has ----------
 
-// The STAGE, not the frame. #frame is the
-// picture plus two mouldings, so handing THAT to the UA stretches the moulding
-// to the height of a monitor; the other three ports all fill with #stage and
-// take the moulding off in `#stage.fs`. A class and not the `:fullscreen`
-// pseudo because an iPhone has no element fullscreen to match, and the page
-// fills itself there instead — engine/src/web/fullscreen.ts.
-installFullscreen($<HTMLButtonElement>("fsBtn"), $<HTMLDivElement>("stage"), { report: log, landscape: true });
-// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
-installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, $<HTMLDivElement>("stage"), "skullcracker.picture.stretch");
-
-/**
- * Whether this page offers to file a bug. It does.
- *
- * This page is the game: logo, intro, menu, the chooser, sixteen levels and the
- * credits, all of it in this document. A player who meets a wall they cannot
- * pass or a foe that will not die has something worth reporting.
- */
-const BUG_REPORTS = true;
-
-const bugBtn = $<HTMLButtonElement>("bugBtn");
-if (BUG_REPORTS) {
-  installBugReport(bugBtn, {
-    canvas,
-    // ...and WHERE is not always a film. Once the chooser has handed
-    // the canvas to the level runner this page stops drawing, `film` is null for
-    // good, and the level's own status line is what knows where the player is —
-    // its first fields are the level, the room and the position, which is
-    // exactly what a bug report means by "where".
-    where: () => {
-      if (film) return film.where;
-      const line = document.getElementById("hud")?.textContent ?? "";
-      return line.split(" · ").slice(0, 4).join(" · ");
-    },
-    edition: () => "Skull Cracker (gamefiles/SKULL/)",
-    log: (n) => lines.slice(-n),
-    shotName: "skullcracker.png",
-    version: VERSION,
-    // bracketed into the issue title, so one repository's issue list stays
-    // scannable across four games (chrome/src/bug-report.ts says why the page
-    // supplies it rather than this being derived)
-    game: "Skull Cracker",
-    note: (how) => {
-      $<HTMLSpanElement>("bugNote").textContent =
-        how === "clipboard" ? "screenshot copied" : "screenshot downloaded";
-    },
-  });
-} else {
-  bugBtn.hidden = true;
-  $<HTMLSpanElement>("bugNote").hidden = true;
-}
+// Fullscreen, its stretch and the bug report, as every play page has them
+// (chrome/src/play-page.ts). Fullscreen fills the STAGE, not the frame: #frame
+// is the picture plus two mouldings, so handing THAT to the UA would stretch
+// the moulding to the height of a monitor, and `#stage.fs` takes it off.
+//
+// This page is the game — logo, intro, menu, the chooser, sixteen levels and
+// the credits — so a player who meets a wall they cannot pass or a foe that
+// will not die has something worth reporting.
+installPageControls({
+  game: SKULLCRACKER,
+  canvas,
+  stage: $<HTMLDivElement>("stage"),
+  say: log,
+  edition: () => "Skull Cracker (gamefiles/SKULL/)",
+  // ...and WHERE is not always a film. Once the chooser has handed the canvas
+  // to the level runner this page stops drawing, `film` is null for good, and
+  // the level's own status line is what knows where the player is — its first
+  // fields are the level, the room and the position, which is exactly what a
+  // bug report means by "where".
+  where: () => {
+    if (film) return film.where;
+    const line = document.getElementById("hud")?.textContent ?? "";
+    return line.split(" · ").slice(0, 4).join(" · ");
+  },
+  log: (n) => lines.slice(-n),
+});
 
 /** the control under a point, `0x45d640`'s loop over the fourteen rects */
 function prefsHit(x: number, y: number): PrefsControl | undefined {
@@ -1223,14 +1211,8 @@ window.addEventListener("keydown", (e) => {
   } else if (prefsOpen) {
     if (prefsKey(e)) e.preventDefault();
   } else if (e.key === "b") {
-    // the page's own account of itself — the log and the film line together.
-    // There is no button for it: neither is addressed to a
-    // reader, and a film position under the picture is the page talking to
-    // itself. `b` is what a developer presses; the bug reporter is what a
-    // player presses, and it sends the log without showing it.
-    const show = logEl.hidden;
-    logEl.hidden = !show;
-    nowEl.hidden = !show;
+    // the page's own account of itself — the log and the film line together
+    pageLog.toggle();
   }
 });
 

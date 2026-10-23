@@ -260,7 +260,7 @@ const ACCEPT = { x: 255, y: 244 };
 const front = await browser.newPage({ ...devices["Pixel 5"] });
 const frontThrew: string[] = [];
 front.on("pageerror", (e) => frontThrew.push(e.message));
-await front.goto(`${BASE}/index.html`);
+await front.goto(`${BASE}/play/`);
 const start = front.locator("#start");
 await start.waitFor({ timeout: 60_000 });
 for (let i = 0; i < 400 && (await start.isDisabled()); i++) await front.waitForTimeout(200);

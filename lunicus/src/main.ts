@@ -18,7 +18,8 @@
  */
 import { focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { $, GESTURE_KEYS, V0Page } from "@dreamfactory/engine/web/v0-page";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
+import { LUNICUS } from "@dreamfactory/chrome/games";
 import { VERSION } from "@dreamfactory/chrome/version";
 import { TICKS_PER_SECOND, VIEW_H, VIEW_W } from "./game/data";
 import { TouchGestures } from "@dreamfactory/engine/web/touch";
@@ -30,7 +31,7 @@ import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { LUNICUS_SAVES, seedLunicusSaves } from "./saves";
 import { installMenu } from "./menu";
 import { askHighScoreName, editKeys } from "./dialogs";
-import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { pageUrl, siteBase } from "@dreamfactory/engine/web/page-url";
 
 const RIP = "gamefiles/LUNICUS/";
 /** what the opening and day one's lower floor read, fetched before Enter */
@@ -45,8 +46,17 @@ const MAX_CATCH_UP = 6;
 /** the log, the disc, the sound and the screen: the shell Jump Raven's page shares (engine/src/web/v0-page.ts) */
 const page = new V0Page({ name: "Lunicus", year: 1994, slug: "lunicus", rip: RIP, version: VERSION });
 const { canvas, locEl, complain, say, toggleLog, fetchBytes, files, speaker, at } = page;
-installBugReport($<HTMLButtonElement>("bugBtn"), page.bugReport);
-const url = (path: string): string => pageUrl(path);
+// fullscreen and the bug report, as every play page has them (chrome/src/play-page.ts)
+installPageControls({
+  game: LUNICUS,
+  canvas,
+  stage: $<HTMLDivElement>("stage"),
+  say,
+  edition: () => `${LUNICUS.short} CD (${RIP})`,
+  where: () => locEl.textContent ?? "",
+  log: (n) => page.log.lines.slice(-n),
+});
+const url = (path: string): string => pageUrl(path, siteBase());
 
 /* ------------------------------------------------------------------------- *
  * The machine

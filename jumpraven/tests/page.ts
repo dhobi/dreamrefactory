@@ -1,5 +1,5 @@
 /**
- * The play page (`src/main.ts`), in node: the real `index.html` parsed by
+ * The play page (`src/main.ts`), in node: the real `play/index.html` parsed by
  * linkedom, with the shared V0 shell, the game, its input door, the menu bar,
  * the dialogs, the player and the saves standing in for themselves.
  *
@@ -188,8 +188,8 @@ vi.mock("@dreamfactory/chrome/bug-report", () => ({ installBugReport: () => {} }
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(import.meta.dirname, "../index.html"), "utf8");
-const HREF = "http://host/jumpraven/index.html";
+const HTML = readFileSync(join(import.meta.dirname, "../play/index.html"), "utf8");
+const HREF = "http://host/jumpraven/play/";
 
 interface Page {
   game: FakeGame;
@@ -483,7 +483,9 @@ describe("input", () => {
     world.savesOpen = true;
     p.key("keydown", { key: "b" });
     world.savesOpen = false;
-    p.key("keydown", { key: "ArrowUp" }, "saveNameInput");
+    // a text field on the page (the saves dialog's is built only when it opens)
+    document.body.insertAdjacentHTML("beforeend", '<input id="aField" type="text" />');
+    p.key("keydown", { key: "ArrowUp" }, "aField");
     expect(calls.some((c) => c.startsWith("keyDown") || c === "toggleLog")).toBe(false);
   });
 });

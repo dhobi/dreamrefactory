@@ -26,36 +26,22 @@
  */
 import { RAMP_STEP_MS } from "@dreamfactory/engine/runtime/clock";
 import { detectVersion } from "@dreamfactory/engine/df/version";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import {
-  BootBar,
-  BootCaption,
-  GestureAudio,
-  PageLog,
-  busySpinner,
-  screenPlate,
-  showVersion,
-  titleRise,
-  untilStarted,
-} from "@dreamfactory/engine/web/page-shell";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
-import { GameHost } from "@dreamfactory/engine/web/host";
+import { BootCaption, busySpinner } from "@dreamfactory/engine/web/page-shell";
+import type { GameHost } from "@dreamfactory/engine/web/host";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
 import { SPACE_KEY } from "@dreamfactory/engine/web/keys";
 import { bindPointerInput } from "@dreamfactory/engine/web/shell-input";
 import { CursorSheet, ShownCursor } from "@dreamfactory/engine/web/cursors";
 import { compileScript } from "@dreamfactory/engine/df/script-asm";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
 import { TIMELAPSE } from "@dreamfactory/chrome/games";
 import { VERSION } from "@dreamfactory/chrome/version";
-import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
+import { PlayPage } from "@dreamfactory/chrome/play-page";
 import { TL_CURSORS } from "./cursor-art";
 import { TimelapseFiles } from "./files";
 import { isNavRegion, keyAction } from "./input";
 import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { bugLine, exitsHtml, whereHtml } from "./location";
 import { NetMeter, fmtSize } from "@dreamfactory/chrome/net-meter";
-import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
 import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 
 /**
@@ -69,94 +55,24 @@ import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
  */
 const SCREEN = { width: 640, height: 480 };
 
-const canvas = document.getElementById("screen") as HTMLCanvasElement;
 /**
- * The picture is composed at 640x480 and blitted up into a 1280x960 canvas, so
- * the page only ever SHRINKS it (engine/src/web/page-shell.ts). Dust's page does
- * the same thing for the same reason at 512x384.
+ * The page every DreamFactory game's is (chrome/src/play-page.ts): the picture
+ * composed at 640x480 and blitted up into a 1280x960 canvas, so the page only
+ * ever SHRINKS it; the controls; the Details column the log sits in — which on
+ * this game is still the deliverable — and the gauge, a conduit charging.
+ * Audio waits for the Enter press, because the first thing the boot does is
+ * play a 51-second film with a score on it.
  */
-const { ctx, plate, plateCtx } = screenPlate(canvas, SCREEN);
-
-const logEl = document.getElementById("log") as HTMLPreElement;
-const locEl = document.getElementById("loc") as HTMLElement;
-const errEl = document.getElementById("err") as HTMLElement;
-const stageEl = document.getElementById("stage") as HTMLElement;
-showVersion(VERSION);
-// Play and Speedrunner folded into one "Play", as on Titanic's and Dust's pages
-// (chrome/src/play-menu.ts), in English: Timelapse is not translated. The
-// workbench boots this file too and gets the same
-void installPlayMenu({ english: true });
-
-/**
- * One line of the log, which on this game is still the deliverable — see
- * `PageLog` for its two voices. The plain lines are kept as strings as well,
- * because a bug report carries the tail of them (see installBugReport below)
- * and because the newest one is the caption under the loading gauge.
- */
-const log = new PageLog(logEl, document.getElementById("logBtn"));
-const { say, show: showLog, lines: logLines } = log;
-
-/**
- * Audio waits for a gesture, as every browser insists — and on this game the
- * gesture is the Enter button, because the first thing the boot does is play a
- * 51-second film with a score on it. Held until then, so the boot's
- * `LoopSound`/`gototheme` calls are started when the sink arrives rather than
- * lost (`GestureAudio`).
- */
-const { sink: audio, ensure: ensureAudio } = new GestureAudio(say);
-
-/**
- * The two levers this port adds, both of them the play page's: a fullscreen
- * picture, and a bug report that arrives with the screen attached.
- */
-const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
-// the STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
-// UA, and the picture is a fixed 4:3 either way — see #stage.fs. A class and not
-// the `:fullscreen` pseudo because an iPhone has no element fullscreen to match,
-// and the page fills itself there instead — engine/src/web/fullscreen.ts.
-installFullscreen(fsBtn, stageEl, { report: say, landscape: true });
-// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
-installStretch(document.getElementById("stretchBox") as HTMLInputElement | null, stageEl, "timelapse.picture.stretch");
-
-/** where the player is, for a bug report: the readout's own line, kept as it changes */
-let currentWhere = "";
-/** how long the screenshot's fate stays on screen before it is taken down */
-const BUG_NOTE_MS = 6000;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
-const bugNote = document.getElementById("bugNote");
-if (bugBtn) {
-  installBugReport(bugBtn, {
-    game: TIMELAPSE.short,
-    canvas,
-    shotName: "timelapse-bug.png",
-    version: VERSION,
-    where: () => currentWhere,
-    // four discs, one language: there is nothing to choose between, and saying so
-    // is more use in an issue than leaving the field out
-    edition: () => "Timelapse 4CD (gamefiles/TLAPSE1-4/)",
-    log: (n) => logLines.slice(-n),
-    note: (how) => {
-      if (!bugNote) return;
-      bugNote.textContent =
-        how === "clipboard"
-          ? "screen copied — paste it into the issue"
-          : "screen saved — attach timelapse-bug.png to the issue";
-      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-    },
-  });
-}
-
-/* ------------------------------------------------------------------------- *
- * The loading page
- * ------------------------------------------------------------------------- */
-
-const brandEl = document.getElementById("brand") as HTMLImageElement | null;
-const bootEl = document.getElementById("boot") as HTMLElement;
-const startEl = document.getElementById("start") as HTMLButtonElement;
-const conduitEl = document.getElementById("conduit") as HTMLElement;
-const chargeEl = document.getElementById("charge") as HTMLElement;
-const bootSayEl = document.getElementById("bootsay") as HTMLElement;
-const bootPctEl = document.getElementById("bootpct") as HTMLElement;
+const page = new PlayPage({
+  game: TIMELAPSE,
+  // four discs, one language: there is nothing to choose between, and saying so
+  // is more use in an issue than leaving the field out
+  edition: "Timelapse 4CD (gamefiles/TLAPSE1-4/)",
+  shape: "pinned",
+  value: (pct) => ((document.getElementById("barvalue") as HTMLProgressElement).value = pct),
+  caption: (label) => caption.say(label),
+});
+const { canvas, say, progress } = page;
 
 /**
  * What the loader has to fetch that the boot's own plan does not name.
@@ -196,19 +112,6 @@ const PLANNED = 0.07;
 /** and where the prefetch leaves it: the last few per cent are the boot's own */
 const FETCHED = 0.96;
 
-/**
- * The bar only ever goes forwards, whatever order the answers arrive in. The
- * caption is one line and the newest one wins: what a player watches is the
- * loader naming what it is opening.
- */
-const bar = new BootBar(
-  chargeEl,
-  bootPctEl,
-  (pct) => conduitEl.setAttribute("aria-valuenow", String(pct)),
-  (label) => caption.say(label),
-);
-const progress = bar.set;
-
 /** the network meter (chrome/src/net-meter.ts), read on a timer while the prefetch runs */
 const TICK_MS = 250;
 const meter = new NetMeter();
@@ -218,24 +121,7 @@ let bytesLeft: (() => number) | null = null;
 /** F12's About box, once there is a session to report on */
 let showAbout: () => void = () => {};
 /** the boot caption: the name of the file being opened, or the rate while bytes are arriving */
-const caption = new BootCaption(bootSayEl, () => meter.caption(performance.now(), bytesLeft?.() ?? 0));
-
-/** the title card rises, by FLIP (engine/src/web/page-shell.ts); the failure paths reach here too */
-const raiseTitle = titleRise(bootEl, brandEl);
-
-/**
- * Boot without waiting for the Enter press — on a page that says so with
- * `<meta name="autostart">`.
- *
- * The speedrun workbench (timelapse/speedrun/workbench.ts) declares it, for
- * Dust's reason (the note on AUTOSTART in dust/src/main.ts): that page is
- * RELOADED to get a clean game far more often than it is opened to play one —
- * `reset()` is a line of a sheet — and a gesture asked for once per boot is a
- * gesture asked for on every run. The audio the press would have bought waits
- * for the first click of the run instead (`GestureAudio`), of which a run makes
- * many.
- */
-const AUTOSTART = !!document.querySelector('meta[name="autostart"]');
+const caption = new BootCaption(document.getElementById("bootsay")!, () => meter.caption(performance.now(), bytesLeft?.() ?? 0));
 
 /* ------------------------------------------------------------------------- *
  * The boot
@@ -245,42 +131,26 @@ async function main(): Promise<void> {
   say(`Timelapse RE ${VERSION} — the 1996 discs on this port`, "step");
 
   const files = await TimelapseFiles.open();
-  if (!files.size) {
-    say("the manifest indexed nothing: is timelapse/gamefiles/ there?", "warn");
-    progress(1, "no disc");
-    showLog(true);
-    return;
-  }
+  if (!files.size) return page.noDisc("the manifest indexed nothing: is timelapse/gamefiles/ there?");
   progress(INDEXED, `indexed ${files.size} names across four discs`);
   say(`indexed ${files.size} names across the rip`);
   files.onChunk = (_name, bytes) => meter.chunk(bytes, performance.now());
-  // the load remover's subscription (engine/src/web/load-clock.ts, #251): from
-  // the first fetch, because a clock armed when a timer starts has missed the
-  // boot. Read through `window.dbg.loading()` below
-  watchLoads(files);
-  files.onBusyChange = busySpinner(document.getElementById("netbusy") as HTMLDivElement);
+  page.watch(files, busySpinner(document.getElementById("netbusy") as HTMLDivElement));
   meterTimer = window.setInterval(caption.tick, TICK_MS);
 
-  const host = new GameHost(
-    files,
-    audio,
-    {
-      log: (l) => say(`  ${l}`),
-      hud: (t) => t && say(`  hud: ${t}`),
-    },
-    { screen: SCREEN, propAnchor: TIMELAPSE.propAnchor },
-  );
-  /**
-   * A real frame source before the boot runs, so `playmovie` is modal and the
-   * game's own poll loops (`while stilldown()`, `forceupdate()`) advance — the
-   * difference between a boot that completed and a game that runs.
-   */
-  host.session.nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
-  host.session.hasRealFrames = true;
-  // A workbench `reset(seed: N)` reloaded us: the dice are pinned before the boot
-  // draws its first one (speedrun/src/boot-seed.ts)
-  const bootSeed = takeBootSeed("timelapse");
-  if (bootSeed !== null) host.session.seedRandom(bootSeed);
+  const host = page.host(files, {
+    // Where you are, as the BOOTFILE keeps it: the world letter, the stage and
+    // the frame — the three globals the location readout and the machine
+    // harness's `where()` both read. There is no room to name, so a place is these.
+    spine: [
+      { name: "curworldchar", label: "World" },
+      { name: "curstagenum", label: "Stage" },
+      { name: "curframenum", label: "Frame" },
+    ],
+    // a workbench `reset(seed: N)` reloaded us (speedrun/src/boot-seed.ts)
+    seed: takeBootSeed("timelapse"),
+    propAnchor: TIMELAPSE.propAnchor,
+  });
   // tl.exe's script error box (0x43cfc0): Yes goes on, No is `quit()`, which on
   // this page does what the game's own quit() does here — nothing but say so
   host.session.onScriptErrorBox = scriptErrorBox((l) => say(`  ${l}`));
@@ -309,13 +179,7 @@ async function main(): Promise<void> {
    * same 98 KB out of the cache on the next line.
    */
   progress(PLANNED, "reading the BOOTFILE");
-  if (!(await files.load("bootfile"))) {
-    say("no BOOTFILE: is the rip under timelapse/gamefiles/?", "warn");
-    errEl.textContent = "no game data — press b for the log";
-    progress(1, "no disc");
-    showLog(true);
-    return;
-  }
+  if (!(await files.load("bootfile"))) return page.noDisc("no BOOTFILE: is the rip under timelapse/gamefiles/?");
   const plan = await host.bootPlan();
   const named = plan.resources.filter((n) => files.serverUrl(n));
   const notFiles = plan.resources.filter((n) => !files.serverUrl(n));
@@ -352,30 +216,12 @@ async function main(): Promise<void> {
     "step",
   );
   bytesLeft = () => files.bytesLeft(prefetch);
-  let arrived = 0;
-  const missing: string[] = [];
-  await Promise.all(
-    prefetch.map(async (name) => {
-      bar.say(`opening ${name}`);
-      const bytes = await files.load(name, (n) => {
-        arrived += n;
-        // The denominator GROWS rather than being fixed at the manifest's total,
-        // and it stays that way now that the manifest sizes all thirteen: what
-        // has landed plus what is still owed can only RISE, so a name nothing
-        // could weigh — a manifest built without the installed tree, or a file
-        // the game asks for that this list did not name — slows the bar down
-        // instead of letting it arrive while bytes are still coming. It lands
-        // exactly on the truth when the last remainder reaches zero.
-        progress(PLANNED + (FETCHED - PLANNED) * (arrived / Math.max(1, arrived + files.bytesLeft(prefetch))));
-      });
-      if (!bytes) missing.push(name);
-    }),
-  );
+  const missing = await page.prefetch(files, prefetch, PLANNED, FETCHED);
   if (missing.length) {
     // said in the controls as well as in the log: a boot that is about to fail
     // for want of a file should not look like one that is about to work
     say(`${missing.length} of the prefetch is not on the discs: ${missing.join(", ")}`, "warn");
-    errEl.textContent = `${missing.length} file(s) missing — press b for the log`;
+    page.errEl.textContent = `${missing.length} file(s) missing — press b for the log`;
   }
   bytesLeft = null;
   clearInterval(meterTimer);
@@ -402,15 +248,7 @@ async function main(): Promise<void> {
     say(`  ${name}: DreamFactory ${detectVersion(bytes) || "?"} (${fmtSize(bytes.byteLength)})`);
   }
 
-  /** the engine's own frame loop, on the engine's own screen, blitted up */
-  const loop = (now: number): void => {
-    host.director.tick(now);
-    host.director.render(plateCtx);
-    ctx.drawImage(plate, 0, 0, canvas.width, canvas.height);
-    void showLocation(host);
-    requestAnimationFrame(loop);
-  };
-  requestAnimationFrame(loop);
+  page.frameLoop(host, () => void showLocation(host));
 
   const s = host.session;
   /**
@@ -458,32 +296,8 @@ async function main(): Promise<void> {
       return inst ? (await s.interp.runHandler(inst, "consoleeval", [], { me: "consoleeval", target: "" })).value : null;
     },
   };
-  /**
-   * `window.dbg`, the name every other game's page publishes its handle under
-   * (dust/src/main.ts, taoot/src/main.ts) and so the one the speedrun driver
-   * evaluates its predicates against. `tl` above stays the console's.
-   *
-   * What differs is what this game is: there is no room, so `viewer` is always
-   * null, and `roomless` says so — it is what turns the shared predicates over
-   * to the director (speedrun/src/driver.ts ROOMLESS) instead of leaving them
-   * waiting for a viewer that will never come. `booted` is this page's "the game
-   * is up", which a viewer-game reads off the viewer appearing: `coldBoot` has
-   * returned, `open.mov` and all.
-   */
-  (window as unknown as { dbg: unknown }).dbg = {
-    host,
-    session: s,
-    director: host.director,
-    get viewer() {
-      return host.viewer;
-    },
-    roomless: true,
-    get booted() {
-      return booted;
-    },
-    /** the load remover's reading, in the shape the other pages publish (dust/src/main.ts) */
-    loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),
-  };
+  // `window.dbg`, the speedrun driver's (chrome/src/play-page.ts); `tl` above stays the console's
+  page.publish(host);
 
   /**
    * The input, BEFORE the boot rather than after it.
@@ -505,25 +319,10 @@ async function main(): Promise<void> {
     say(`mouse: ${Object.keys(TL_CURSORS).length} of the game's own cursors, out of tl.exe`, "step");
   }
 
-  progress(1, "ready");
-  await untilStarted(bootEl, startEl, AUTOSTART);
-  ensureAudio();
-  raiseTitle();
-
-  // TRACKED, as Titanic's page tracks its boot (taoot/src/main.ts) and the
-  // speedrun's headless runner tracks every game's (speedrun/src/headless.ts):
-  // a boot in flight is a script running, so the BOOTFILE idle and the loops
-  // wait for it as they wait for any other. Untracked, they ran under the boot
-  // here and not there, and a seeded sheet came out a tick apart from its first
-  // key on (the idle's phase), with the boot itself taking a different time.
-  await s.track(log.coldBoot(host, errEl), "coldBoot");
-  booted = true;
-  log.bootSummary(host, files);
+  await page.play(host, files);
 }
 
 let lastLoc = "";
-/** whether the cold boot has returned — `window.dbg.booted` */
-let booted = false;
 
 /**
  * Refresh the readout, but only when the position actually changed — it is
@@ -544,16 +343,16 @@ async function showLocation(host: GameHost): Promise<void> {
     frame,
     flat: s.currentFlat,
   };
-  currentWhere = bugLine(place);
+  page.where = bugLine(place);
   const where = whereHtml(place);
-  locEl.innerHTML = where;
+  page.locEl.innerHTML = where;
   if (s.stageName === "none") return;
   // the stage's own table of where each direction leads (src/location.ts)
   const action = String(
     (await s.sendEvent("sendtostagefx", s.stageName, "getframeaction", [Number(frame)], s.stageName)) ?? "",
   );
   if (lastLoc !== key) return; // moved again while we asked
-  locEl.innerHTML = `${where}\n<i>${exitsHtml(action)}</i>`;
+  page.locEl.innerHTML = `${where}\n<i>${exitsHtml(action)}</i>`;
 }
 
 /**
@@ -611,6 +410,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
 
   const { sendKey } = bindPointerInput(host, canvas, {
     coords: canvasCoords,
+    inputs: page.inputs,
     /**
      * Which way the two swipe axes read, remembered per game.
      *
@@ -631,7 +431,7 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     // turns changes what is under a pointer that has not moved, and a mouse at
     // rest gets no move event to notice it with
     click: (x, y) =>
-      void host.director
+      host.director
         .buttonDown(x, y)
         .then(() => say(`click ${x},${y} · flat ${s.currentFlat}`))
         .then(() => host.director.hover(x, y))
@@ -661,15 +461,10 @@ function bindInput(host: GameHost, s: GameHost["session"]): void {
     const act = keyAction(e);
     if (!act) return;
     e.preventDefault();
-    if ("log" in act) showLog(logEl.hidden);
+    if ("log" in act) page.log.toggle();
     else if ("about" in act) showAbout();
     else sendKey(act.key, act.special);
   });
 }
 
-void main().catch((e) => {
-  log.fail(e, errEl);
-  // whatever went wrong, the page must not be left as a title card over a bar
-  // that never finished: the log IS the result on this game
-  raiseTitle();
-});
+page.boot(main);

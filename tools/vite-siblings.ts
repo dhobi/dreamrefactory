@@ -71,3 +71,23 @@ export function siblingSignposts(siblings: readonly Sibling[]): Plugin {
     },
   };
 }
+
+/**
+ * Every dev server in the repository, each on its own port: the front door
+ * with the editors, the docs, and every game. One list, so a page served by any
+ * of them can name the others; {@link siblingsBut} leaves out the one asking.
+ */
+export const SIBLINGS: readonly Sibling[] = [
+  { path: "editors", command: "npm run dev", port: 5173, what: "The format editors" },
+  { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
+  { path: "taoot", command: "npm run dev -w taoot", port: 5175, what: "Titanic" },
+  { path: "dust", command: "npm run dev -w dust", port: 5176, what: "Dust" },
+  { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
+  { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
+  { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
+  { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
+  { path: "jumpraven", command: "npm run dev -w jumpraven", port: 5181, what: "Jump Raven" },
+];
+
+/** every sibling but `path` — the server asking */
+export const siblingsBut = (path: string): Sibling[] => SIBLINGS.filter((s) => s.path !== path);

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- where the site's root is from THIS page: one folder up. The build
+         emits relative URLs (base "./") and siteUrl resolves the rest, so the
+         page runs from /skullcracker/ and from a directory of its own alike. -->
+    <meta name="site-root" content="../" />
+    <title>Skull Cracker RE</title>
+    <!-- shell:head -->
+  </head>
+  <body class="booting deep">
+    <!--
+      The same band the other three games and the front door carry, with this
+      game's own links. No "Play" — this page IS such game as there is — and no
+      "Collection": there is no physical release page for it.
+    -->
+    <header class="topbar"></header>
+
+    <div id="stage">
+      <!-- The title card and the fracture under it: the whole page until the game
+           is running, a band at the top after. the page removes the image rather than
+           leaving a broken frame (`brandFallback`), and the band closes up:
+           the logo is decoration and the experiment is the picture below it. -->
+      <div id="curtain">
+        <img
+          id="brand"
+          src="/skullcracker-logo.png"
+          alt="Skull Cracker: An Action Horror Fighting Game"
+        />
+        <div id="boot">
+          <div id="gauge">
+            <progress id="barvalue" aria-label="reading the disc" max="100" value="0"></progress>
+            <div id="conduit" aria-hidden="true">
+              <div id="charge" style="width: 0%">
+                <i id="crack"></i><i id="node"></i>
+              </div>
+            </div>
+            <div id="bootline">
+              <span id="bootsay">reading the disc…</span>
+              <span id="bootpct">0%</span>
+            </div>
+          </div>
+          <!-- the gesture the AudioContext needs, asked for at the one moment
+               when waiting for it costs nothing: the menu is already in hand,
+               and its music should start with the picture -->
+          <div id="startwrap">
+            <button id="start" type="button" disabled>Start</button>
+          </div>
+          <p id="touchtip">tap the menu · <b>esc</b> skips a film</p>
+        </div>
+      </div>
+      <div id="frame">
+        <!-- 1024x768, which is the game's own 512x384 doubled: see PLATE in
+             src/page/main.ts, and --pic-w in the styles -->
+        <canvas id="screen" width="1024" height="768"></canvas>
+        <div id="netbusy" hidden aria-hidden="true"><span></span></div>
+      </div>
+    </div>
+    <div id="under">
+      <div class="bar">
+        <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">
+          ⛶ Fullscreen
+        </button>
+        <!-- what fullscreen does with the display's own shape (engine/src/web/stretch.ts) -->
+        <label class="stretchopt" title="In fullscreen, fill the whole display instead of keeping the original 4:3 — the picture is stretched to fit"
+          ><input type="checkbox" id="stretchBox" /> <span>stretch to fill</span></label
+        >
+        <!-- opens a prefilled GitHub issue and puts the screen on the clipboard,
+             which is the only way an image reaches one (chrome/src/bug-report.ts,
+             shared with the other three pages) -->
+        <button
+          id="bugBtn"
+          type="button"
+          title="Report something the port gets wrong"
+        >
+          🪲 Report a bug
+        </button>
+        <span id="bugNote" class="note"></span>
+        <!-- The hint names the two things a PLAYER does. The page's own account
+             of itself is still a keystroke away (`b`, in src/page/main.ts) and still
+             opens by itself when something goes wrong; it is simply not a
+             control on the page any more, because neither it nor the film
+             position under the picture was ever addressed to a reader. -->
+        <span class="keyhint" title="click the menu · esc skips a film"
+          >click the menu <span class="k">esc</span> skip</span
+        >
+        <!-- the touch line names the DOUBLE-TAP and not esc: a phone has no esc,
+             and skipping a film was keyboard-only until it did -->
+        <span
+          class="touchhint"
+          title="tap the menu · double-tap to skip a film"
+          >tap the menu <span class="k">double-tap</span> skips</span
+        >
+      </div>
+      <!-- Errors read as part of the controls rather than as a status line, and
+           they get a row to themselves so that the row can be ABSENT: it is the
+           only thing in it, and the rule above hides a row whose only child is
+           an empty #err — which is almost always. -->
+      <div class="bar">
+        <span id="err"></span>
+      </div>
+    </div>
+    <!-- The ask, in its own element BELOW the controls strip — see the note in
+         the stylesheet. An anchor in the markup rather than anything injected,
+         so it is there before a script runs and visible to whatever reads the
+         page. `/bmc-mark.svg` is root-absolute because Vite rewrites a
+         `public/` path the MARKUP names per page depth. -->
+    <!-- Details, behind b: the page's own account of itself — the log, and
+         the film that is playing frame by frame (#loc) — and Copy details,
+         in the column every play page carries (engine/src/web/details-column.ts).
+         An error opens it by itself. HIDDEN rather than gone, because both
+         are read: the bug reporter sends the log's last lines with an issue,
+         and the browser suites read `#loc` to find out which film the page
+         thinks it is on. -->
+    <div id="details" hidden><pre id="loc"></pre></div>
+    <footer id="foot"></footer>
+    <script type="module" src="/src/page/main.ts"></script>
+  </body>
+</html>

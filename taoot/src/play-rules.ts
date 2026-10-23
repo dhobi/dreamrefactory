@@ -14,7 +14,7 @@ import {
   SCREEN_GAMMA_STEP,
   type GammaChannels,
 } from "@dreamfactory/engine/web/screen-gamma";
-import type { Gate } from "./input-log";
+import type { Gate } from "@dreamfactory/engine/web/input-log";
 
 /**
  * Browser key -> the name the engine sees, the window proc's whole job.

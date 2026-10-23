@@ -60,10 +60,11 @@ export interface WorkbenchPage {
   /** classes added to `<body>` */
   readonly bodyClass?: string;
   /**
-   * The Details column's markup, for a play page that has none. A play page
-   * that has a `#details` gives its own, opened: the workbench is read through it.
+   * The play page's text before it is rearranged: the game's shared parts
+   * filled in (tools/vite-shell.ts), so the top bar and the footer this moves
+   * and drops are there to move.
    */
-  readonly details?: string;
+  readonly prepare?: (html: string) => string;
   /** play-page nodes moved to the top of the Details column, under its heading */
   readonly intoDetails?: readonly string[];
   /** the game's speedrun stylesheet, from its root: `/src/speedrun.css` */
@@ -158,12 +159,8 @@ function sayWhatThisIs(document: Doc, page: WorkbenchPage): void {
 
 /** the Details column, opened, with the nodes the game moves into it under its heading */
 function detailsColumn(document: Doc, page: WorkbenchPage, layout: Element): void {
-  let details: Element | null = document.getElementById("details");
-  if (!details) {
-    if (!page.details) throw new Error(`speedrun page: ${page.play} has no #details and the game gave none`);
-    layout.insertAdjacentHTML("beforeend", page.details);
-    details = layout.lastElementChild!;
-  }
+  const details = document.getElementById("details");
+  if (!details) throw new Error(`speedrun page: ${page.play} has no #details (engine/src/web/details-column.ts)`);
   details.removeAttribute("hidden");
   layout.appendChild(details);
   const heading = details.querySelector("h2");
@@ -273,7 +270,7 @@ function sheets(src: string | undefined, sheetsDir: string | undefined): Plugin 
  */
 function workbench(root: string, page: WorkbenchPage): Plugin {
   const id = join(root, PAGE_DIR, "index.html");
-  const html = (): string => workbenchHtml(readFileSync(join(root, page.play), "utf8"), page);
+  const html = (): string => workbenchHtml((page.prepare ?? ((h) => h))(readFileSync(join(root, page.play), "utf8")), page);
   return {
     name: "speedrun-page",
     config(config) {

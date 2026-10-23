@@ -1,6 +1,6 @@
 /**
- * The front-end page (`src/page/main.ts`, `index.html`), in node: the real
- * `index.html` parsed by linkedom, a recording 2D context and audio sink
+ * The front-end page (`src/page/main.ts`, `play/index.html`), in node: the real
+ * `play/index.html` parsed by linkedom, a recording 2D context and audio sink
  * standing in for the browser's, the animation frames driven by hand, and
  * `fetch` answered off the disc on this machine.
  *
@@ -89,7 +89,7 @@ vi.mock("@dreamfactory/engine/runtime/audio", async (real) => ({
 vi.mock("@dreamfactory/engine/web/fullscreen", () => ({ installFullscreen: () => void calls.push("fullscreen") }));
 vi.mock("@dreamfactory/engine/web/stretch", () => ({ installStretch: () => void calls.push("stretch") }));
 // the store's URLs, rooted where the fetch stub below can find them
-vi.mock("@dreamfactory/engine/web/page-url", () => ({ pageUrl: (p: string) => `/site/${p}` }));
+vi.mock("@dreamfactory/engine/web/page-url", () => ({ pageUrl: (p: string) => `/site/${p}`, siteBase: () => "/site/" }));
 vi.mock("@dreamfactory/chrome/version", () => ({ VERSION: "test", installVersion: () => {} }));
 vi.mock("@dreamfactory/chrome/bug-report", () => ({
   installBugReport: (_btn: unknown, opts: typeof bugOpts) => void (bugOpts = opts),
@@ -128,7 +128,7 @@ async function fakeFetch(url: string): Promise<Response> {
 
 /* ----------------------------------------------------------------- the page */
 
-const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
+const HTML = readFileSync(join(ROOT, "play/index.html"), "utf8");
 
 interface Page {
   document: Document;
@@ -322,7 +322,8 @@ describe("the boot", () => {
     expect(p.el("err").textContent).toBe("no game data: gamefiles/ is empty (see taoot/README.md#game-data)");
     expect(p.el("bootsay").textContent).toBe("no disc");
     expect(p.el("bootpct").textContent).toBe("0%");
-    expect(p.el("log").hidden).toBe(false);
+    // the Details column, which the log and the film line sit in
+    expect(p.el("details").hidden).toBe(false);
     expect((p.el("start") as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -354,10 +355,11 @@ describe("the boot", () => {
     expect(calls).toEqual(expect.arrayContaining(["fullscreen", "stretch"]));
     expect(bugOpts!.edition()).toBe("Skull Cracker (gamefiles/SKULL/)");
     expect((bugOpts!.log as (n: number) => string[])(1)).toEqual([expect.stringContaining("error: no game data")]);
+    // the words every play page says (chrome/src/play-page.ts)
     (bugOpts!.note as (how: string) => void)("clipboard");
-    expect(p.el("bugNote").textContent).toBe("screenshot copied");
-    (bugOpts!.note as (how: string) => void)("download");
-    expect(p.el("bugNote").textContent).toBe("screenshot downloaded");
+    expect(p.el("bugNote").textContent).toBe("screen copied — paste it into the issue");
+    (bugOpts!.note as (how: string) => void)("file");
+    expect(p.el("bugNote").textContent).toBe("screen saved — attach skullcracker-bug.png to the issue");
     // no film and no level yet: nowhere
     expect(bugOpts!.where()).toBe("");
   });
@@ -366,13 +368,14 @@ describe("the boot", () => {
     const p = await openPage({ disc: { manifest: {} } });
     p.press(400, 93);
     expect(p.log()).not.toContain("click at");
-    p.el("log").hidden = true;
+    p.el("details").hidden = true;
+    // the log and the film line open and shut together: both are in the Details column
     p.key("b");
-    expect(p.el("log").hidden).toBe(false);
-    expect(p.el("loc").hidden).toBe(false);
+    expect(p.el("details").hidden).toBe(false);
+    expect(p.el("details").contains(p.el("log"))).toBe(true);
+    expect(p.el("details").contains(p.el("loc"))).toBe(true);
     p.key("b");
-    expect(p.el("log").hidden).toBe(true);
-    expect(p.el("loc").hidden).toBe(true);
+    expect(p.el("details").hidden).toBe(true);
   });
 });
 

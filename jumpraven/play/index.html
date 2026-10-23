@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- where the site's root is from THIS page: one folder up -->
+    <meta name="site-root" content="../" />
+    <title>Jump Raven RE</title>
+    <!-- shell:head -->
+  </head>
+  <body class="booting deep">
+    <!-- The same band every page carries, with this game's mark in it. -->
+    <header class="topbar"></header>
+
+    <div id="stage">
+      <!-- The title card and the gauge under it: the whole page until the game
+           is running, a band at the top after. A logo that fails to load is
+           removed rather than left as a broken frame (`brandFallback` in engine/src/web/page-shell.ts):
+           the logo is decoration. -->
+      <div id="curtain">
+        <img
+          id="brand"
+          src="/jumpraven-logo.png"
+          alt="Jump Raven"
+        />
+        <div id="boot">
+          <div id="gauge">
+            <progress id="barvalue" aria-label="reading the disc" max="100" value="0"></progress>
+            <div id="bar" aria-hidden="true">
+              <div id="charge" style="width: 0%"></div>
+            </div>
+            <div id="bootline">
+              <span id="bootsay">reading the disc…</span>
+              <span id="bootpct">0%</span>
+            </div>
+          </div>
+          <!-- the gesture an AudioContext needs, asked for once the films are read -->
+          <button id="start" type="button">Enter</button>
+        </div>
+      </div>
+      <div id="frame">
+        <!-- 1024x768: the game window's 512x384, doubled (src/main.ts) -->
+        <canvas id="screen" width="1024" height="768"></canvas>
+      </div>
+    </div>
+
+    <div id="under">
+      <div class="bar">
+        <button id="fsBtn" type="button" title="Fullscreen (letterboxed 4:3)">⛶ Fullscreen</button>
+        <!-- a prefilled GitHub issue with the screen on the clipboard
+             (chrome/src/bug-report.ts, shared with the other pages) -->
+        <button id="bugBtn" type="button" title="Report something the port gets wrong">
+          🪲 Report a bug
+        </button>
+        <span id="bugNote" class="note"></span>
+        <!-- File ▸ Open: the saved games (.RVN), the shared dialog — on the high
+             scores screen, or before Enter; the HUD's SAVE button saves -->
+        <button id="loadBtn" type="button" title="Open a saved game (File ▸ Open) — on the high scores screen, or before Enter">📂 Load</button>
+        <!-- ?autoplay: the page plays the game itself (src/player.ts) -->
+        <button id="autoBtn" type="button" title="Watch the game play itself — the machine tests' player, four times as fast">▶ Autoplay</button>
+        <button id="logBtn" type="button" title="Details: the boot log, in full (b)">▤ Boot log</button>
+        <span class="keyhint" title="a click or esc skips a film or ends a briefing · in flight a click in the view fires the chosen weapon there, space fires the defensive, T is HOVER/FLY and the arrows (or W A S D) fly or slide · b opens the boot log · on a phone a double tap is esc and a swipe an arrow"
+          ><span class="k">esc</span> skip <span class="k">click</span> fire <span class="k">space</span> defensive <span class="k">T</span> hover / fly <span class="k">↑</span><span class="k">←</span><span class="k">→</span> fly
+          <span class="k">b</span> log</span
+        >
+      </div>
+      <div class="bar">
+        <span id="err"></span>
+      </div>
+      <div class="bar">
+        <pre id="loc"></pre>
+      </div>
+    </div>
+    <!-- The ask, below the controls strip, so it is there on the title card
+         too. `/bmc-mark.svg` is root-absolute
+         because Vite rewrites a `public/` path the markup names per page depth. -->
+    <!-- Details, behind b (or the log button): the boot's own account of
+         itself and Copy details — built by engine/src/web/details-column.ts,
+         the column every play page carries. An error opens it by itself. -->
+    <div id="details" hidden></div>
+    <footer id="foot"></footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

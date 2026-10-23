@@ -82,7 +82,10 @@ async function servePreview(): Promise<ChildProcess> {
       String(PORT),
       "--strictPort",
     ],
-    { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] },
+    // its own process group: `npx` starts the server as a child of its own, and
+    // killing npx alone left that server running with its pipes open, so this
+    // script printed its verdict and then never exited
+    { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], detached: true },
   );
   const deadline = Date.now() + 30_000;
   for (;;) {
@@ -255,7 +258,7 @@ async function main(): Promise<void> {
     }
   } finally {
     await browser.close();
-    server.kill();
+    if (server.pid) process.kill(-server.pid);
   }
 
   if (failures.length) {

@@ -62,6 +62,9 @@
  * `<link href>` into another workspace package is not.
  */
 
+/* the Details column's insides, shared with the play pages that carry the column */
+@import "@dreamfactory/engine/web/details-column.css";
+
 
 /* ---- the speedrun panels ----
    A sheet to paste, controls to run it, and the splits as they land. Same
@@ -332,18 +335,10 @@
    middle of a column. */
 #srpanel h2,
 #srtimer h2,
+/* The heading's look is engine/src/web/details-column.css's, the play pages'
+   as well; here it is also the handle */
 #details h2 {
-  font-size: 0.9rem;
-  /* #details is a flex column (the log and the state list share its
-     height); the other two are too. A heading gives up none of it. */
-  flex: none;
-  margin: 0;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  opacity: 0.7;
-  border-bottom: 1px solid var(--border-strong);
-  padding-bottom: 0.4rem;
-  /* it is also the handle: which of these two panels comes first is the
+  /* the handle: which of these two panels comes first is the
      reader's to decide, by dragging one onto the other
      (columns.ts) */
   cursor: grab;
@@ -353,12 +348,6 @@
 #srtimer h2:active,
 #details h2:active {
   cursor: grabbing;
-}
-/* The two sections space their children with `gap`; #details does not —
-   the log and the state list carry their own top margins — so its heading
-   has to space itself. */
-#details h2 {
-  margin-bottom: 0.5rem;
 }
 /* The grip, DRAWN rather than typed. A glyph would read better than dots
    and every one of them — ⠿, ⣿, ⋮⋮ — is a font dependency this page cannot
@@ -1263,7 +1252,7 @@ body.sr-resizing * {
  *
  * Scoped `#srgame #stage` / `#srgame #screen` rather than by element id alone,
  * and that is load-bearing: Dust's game page sizes its own canvas and mats it in
- * wood (`dust/src/game.css`), and the workbench links that sheet too. Two ids
+ * wood (`dust/src/play.css`), and the workbench links that sheet too. Two ids
  * beat one whichever order the bundler puts them in, which is the discipline
  * `site/tests/cascade.ts` exists to enforce.
  * ==================================================================== */
@@ -1407,171 +1396,7 @@ body.sr-resizing * {
  * top of this file.
  * ==================================================================== */
 
-/* ---- the script log, and the bars of controls ---- */
-
-/* The X pane. A column of #srlayout on a wide window and a block of the
-   stack on a narrow one, so it carries the screen's width here and is
-   overridden there.
-
-   The padding is #srpanel's and #srtimer's, exactly: they inset their
-   contents 0.5rem sideways and nothing from the top, and this had it the
-   other way round — which put the DETAILS heading 8px below its
-   neighbours' and 8px to the left of them, in a row where all three are
-   read as one line of headings. */
-#details {
-  width: 1024px;
-  max-width: 96vw;
-  padding: 0 0.5rem;
-}
-/* Each game's log, in the column — Titanic's `#scriptlog` and Dust's `#log`,
-   which are two names for the same thing because each page named its own before
-   there was a column to put it in. Both are styled here so the two workbenches
-   read alike; `#details #log` scopes Dust's away from the absolutely-positioned
-   overlay the same element is on its game page (dust/src/game.css). */
-#scriptlog,
-#details #log {
-  display: none;
-  min-height: 250px;
-  max-height: 8em;
-  overflow-y: auto;
-  width: 100%;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  line-height: 1.5;
-  color: var(--accent-line);
-  margin: 0.5rem 0 0;
-  background: var(--inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.45rem 0.6rem;
-}
-/* ...and Dust's is an overlay on its own page: absolute, inset to the picture's
-   pads, over the canvas. In a column it is a block like any other. */
-#details #log {
-  position: static;
-  inset: auto;
-  z-index: auto;
-  backdrop-filter: none;
-  white-space: pre-wrap;
-}
-/* Shown once there is something in it, which is what each game's own `log()`
-   does by clearing `display`/`hidden`. Written here so a log that is not empty
-   cannot be invisible for want of a rule. */
-#details #log:not([hidden]) {
-  display: block;
-}
-
-/* ---- the state list ----
-   Names and numbers out of the game's own tables, so it is mono and it is
-   not translated: `neckphase 4` is the same sentence in six languages. */
-#dbgBar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0 0.4rem;
-  font-size: 0.78rem;
-  color: var(--text-mute);
-}
-/* A column with the scrollport INSIDE it, not a scrollport with everything
-   in it (#178). The six the game names and the filter box stay put while
-   the list moves under them: the ask was to watch the props and the main
-   states at once, which the one-scrollport shape made impossible — the
-   spine went off the top on the first turn of the wheel, and so did the
-   box you type the filter into, which is worse because you are typing in
-   it while you read.
-
-   `overflow: hidden` here and `overflow-y: auto` on #dbgRows below, so
-   there is exactly one scroller and it is the list. #dbgRows also needs
-   `min-height: 0`: a flex item's floor is its own content, so without it
-   it refuses to shrink, takes the whole column and scrolls nothing. */
-#dbgState {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  /* Stacked, nothing above this bounds the column, so it needs a ceiling
-     of its own — with no scroll there is nothing to pin anything out of,
-     and the spine leaves with the page instead. #scriptlog's own
-     max-height above is the same admission. Side by side, #details hands
-     this a definite height and the media query below drops the ceiling. */
-  max-height: 60vh;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  line-height: 1.6;
-  margin-top: 0.5rem;
-  background: var(--inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.45rem 0.6rem;
-}
-#dbgState[hidden] {
-  display: none;
-}
-/* The six the game's own HELP button answers with — apart from the rest,
-   because they are the ones the game itself thinks locate a player. */
-#dbgSpine {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.1rem 0.9rem;
-  color: var(--accent-hover);
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--border);
-  /* Never shrinks and never scrolls: it wraps to two lines at a narrow
-     width and both of them are meant to be readable (#178) */
-  flex: 0 0 auto;
-}
-/* Pinned with the spine, because it is read with it: a filter box that
-   scrolls away from the list it is filtering is the same complaint (#178) */
-#dbgTools {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0;
-  flex: 0 0 auto;
-}
-#dbgTools input[type="search"] {
-  flex: 1;
-  min-width: 4rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  padding: 0.15rem 0.35rem;
-  color: var(--text);
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-}
-#dbgTools label {
-  font-family: var(--font-ui);
-  font-size: 0.72rem;
-  color: var(--text-mute);
-  white-space: nowrap;
-}
-/* The one thing in the section that scrolls — see #dbgState */
-#dbgRows {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-#dbgRows .row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  color: var(--accent-line);
-}
-#dbgRows .row b {
-  font-weight: normal;
-  color: var(--text-mute);
-}
-/* Brass for what has just moved: the palette's rule is that brass marks a
-   change and ice marks what is live (site/src/theme.css). */
-#dbgRows .row.lit,
-#dbgSpine .lit {
-  color: var(--mark);
-}
-#dbgRows .none,
-#dbgState .quiet {
-  color: var(--text-mute);
-}
+/* ---- the Details column's insides: engine/src/web/details-column.css (imported above) ---- */
 
 /* Calculate's "go to line" — a link-sized button inside the bar's reading */
 .sr-calc-go {

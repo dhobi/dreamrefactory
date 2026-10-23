@@ -1,0 +1,491 @@
+/*
+ * The play page whose picture is pinned in the stage — the title card over
+ * it, shrinking to a band at its top when the game starts, the frame placed
+ * absolutely under that band — as Dust and Timelapse lay it out. Between what
+ * every play page shares (play.css, imported first) and each game's own sheet,
+ * which @imports this.
+ */
+@import "./play.css";
+
+:root {
+  /* ------------------------------------------------------------------
+     The page has a floor. Below this the location readout has nothing like
+     the room it needs, the gauge's caption is three words wide, and the
+     picture is smaller than the moulding around it — so the page stops
+     shrinking and the browser scrolls instead, which degrades honestly
+     where squashing further does not.
+     ------------------------------------------------------------------ */
+  --min-w: 400px;
+  /* how wide the PAGE is, which past the floor is no longer how wide the
+     viewport is — and the picture below measures itself against the page */
+  --page-w: max(var(--min-w), 100vw);
+  /* ------------------------------------------------------------------
+     How far the card sits DOWN over the moulding, and it is deliberately
+     far enough to cross the moulding and BITE INTO THE PICTURE. A nameplate
+     that stops exactly at the inner edge of a frame reads as a
+     coincidence; the bite is what makes it look fixed on rather than
+     balanced there. Nothing is lost to the click — `#curtain` is
+     `pointer-events: none`, so the strip of picture under the card is
+     still the canvas's to handle.
+     ------------------------------------------------------------------ */
+  --bite: clamp(2px, round(calc(var(--brand-h) * 0.04), 2px), 8px);
+  --lap: calc(var(--frame) + var(--bite));
+  /* how far down the picture starts — nothing while the card is centred */
+  --band: 0px;
+  /* the most of the leftover height the composition may come down by; see
+     --drop, which is where the reasoning lives */
+  --drop-max: 96px;
+  /* and how far down the pair starts; see body.playing */
+  --drop: 0px;
+  --pic-h: calc(var(--pic-w) * 3 / 4);
+}
+
+body.playing {
+  --band: calc(var(--brand-h) - var(--lap));
+  --pic-h: calc(var(--pic-w) * 3 / 4);
+  /* ------------------------------------------------------------------
+     Half the slack, and never more than --drop-max.
+
+     Half, measured against the picture THERE IS: a flat 960 here would be
+     its height only when the height is what limits it, and on a narrow
+     window the WIDTH limits it — the slack would come out negative and the
+     `max()` is what says so rather than a media query guessing where that
+     happens.
+
+     Capped, because on a phone the slack is most of the screen: a 356px
+     picture in an 800px window has some 400 pixels going begging, and half
+     of that hangs the composition in the middle of the page with its own
+     controls below the fold. A picture hung a little high with its controls
+     under it is the better answer, and it is the same answer on a 1440p
+     desktop, where the cap also bites.
+     ------------------------------------------------------------------ */
+  --drop: min(
+    var(--drop-max),
+    max(
+      0px,
+      round(
+        down,
+        calc(
+          (
+              var(--stage-h) - 2 * var(--pad) - var(--band) - var(--pic-h) - 2 *
+                var(--frame)
+            ) /
+            2
+        ),
+        2px
+      )
+    )
+  );
+}
+
+/* no logo file, no band: the page is honest about it rather than leaving a
+   gap where a picture failed to arrive (see #brand's onerror) */
+body.nobrand {
+  --brand-h: 0px;
+  --bite: 0px;
+  --lap: 0px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: var(--min-w);
+}
+
+html body {
+  font:
+    13px/1.5 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  display: grid;
+  /* three rows: the shared bar, the stage, the controls under it. A grid
+     with fewer rows than children does not complain; it puts one somewhere
+     else — which with two rows meant the bar took the `1fr` and the stage
+     collapsed to its content. */
+  grid-template-rows: auto 1fr auto;
+  /* chrome.css centres a page's children, which on a grid centres each item
+     INSIDE its row instead of letting it fill it. This page wants its rows
+     filled. */
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+/* A POSITIONED box, so the canvas's max-height has something definite to be
+   a percentage of, and AS TALL AS ITS CONTENT rather than as tall as the
+   window — pinned to `--stage-h` it would claim the whole viewport and leave
+   the controls a screen below the picture, and given nothing it would let
+   the grid hand the stage less than the moulding needs and the moulding,
+   being absolute, would spill over the controls.
+
+   This is the frame's own height, term for term: two pads, the slack the
+   pair comes down by, the title card's band, the picture, and the moulding
+   on both sides of it. */
+#stage {
+  position: relative;
+  min-height: calc(
+    2 * var(--pad) + var(--drop) + var(--band) + var(--pic-h) + 2 * var(--frame)
+  );
+  padding: var(--pad);
+}
+
+#frame {
+  position: absolute;
+  top: calc(var(--pad) + var(--drop) + var(--band));
+  right: var(--pad);
+  bottom: var(--pad);
+  left: var(--pad);
+  /* centred across, TOP-aligned down: see --drop */
+  margin: 0 auto auto;
+  /* SHRINK-WRAPPED, not sized: the mat is whatever the picture turned out
+     to be plus two --frames, so it stays a uniform width on every side. An
+     explicit width with a max-height would letterbox the picture INSIDE the
+     mat on a short window; the constraint belongs on the canvas, where the
+     aspect ratio is. */
+  width: fit-content;
+  height: fit-content;
+  padding: var(--frame);
+}
+
+#frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#netbusy {
+  position: absolute;
+  right: calc(var(--frame) + 12px);
+  bottom: calc(var(--frame) + 12px);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 22px -8px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+#netbusy span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  animation: netspin 700ms linear infinite;
+}
+
+/* not redundant with the UA sheet: the `display: flex` above beats
+   `[hidden] { display: none }`, the same trap the play page documents */
+#netbusy[hidden] {
+  display: none;
+}
+
+@keyframes netspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#screen {
+  image-rendering: pixelated;
+  position: relative;
+  /* with a definite width, this is what makes the shrinking safe: clamping
+     the height takes the width with it and the picture stays 4:3, so
+     `object-fit` never has anything to letterbox and the mat stays even */
+  aspect-ratio: 4 / 3;
+  width: var(--pic-w);
+  height: auto;
+  background: #000;
+}
+
+#screen.busy {
+  cursor: progress;
+}
+
+/* the picture BLENDS IN rather than appearing: it comes up out of the dark a
+   touch under scale while the title card is still rising, so the two read as
+   one movement instead of a swap. The moulding comes with it — it belongs to
+   the picture, so it must not be on the page before the picture is.
+
+   `pointer-events: none` and not only `opacity: 0`, because an invisible
+   element still takes the click: #frame comes after #curtain in the DOM and
+   neither carries a z-index, so it paints on top and is hit-tested first —
+   over the Start button inside #curtain. */
+body:not(.playing) #frame {
+  opacity: 0;
+  transform: scale(0.985);
+  pointer-events: none;
+}
+
+body.playing #frame {
+  transition:
+    opacity 620ms ease-out 180ms,
+    transform 900ms cubic-bezier(0.28, 0.74, 0.22, 1) 180ms;
+}
+
+#curtain {
+  position: absolute;
+  top: var(--pad);
+  right: var(--pad);
+  bottom: var(--pad);
+  left: var(--pad);
+  gap: 40px;
+  z-index: 3;
+  /* decoration, never a click target: the canvas is under it. The Start
+     button turns this back on for itself alone (#startwrap). */
+  pointer-events: none;
+}
+
+body.playing #curtain {
+  bottom: auto;
+  top: calc(var(--pad) + var(--drop));
+  height: var(--brand-h);
+}
+
+#curtain::before {
+  left: 50%;
+  top: 46%;
+  width: min(1100px, 100%);
+  opacity: 1;
+}
+
+#brand {
+  max-width: min(840px, 100%);
+  max-height: 100%;
+}
+
+body.booting #brand {
+  max-height: 46vh;
+}
+
+/* Risen: sized by HEIGHT, which is what makes the band exact — and with NO
+   glow. The glow is for a card floating on a bare page; once it is resting
+   on the moulding's top rail it reads as the card hovering over the frame
+   instead of sitting on it, which is the opposite of what the overlap is
+   for. */
+body.playing #brand {
+  height: 100%;
+  filter: none;
+}
+
+#brand[hidden] {
+  display: none;
+}
+
+/* One slot, two occupants: the gauge while it is loading, the Start button
+   once it has. A FIXED height with both absolutely inside it, so the swap
+   is a crossfade and not a reflow — the title card is 40px above this and a
+   collapsing bar would jog it. */
+#boot {
+  position: relative;
+  width: min(440px, 76%);
+  height: 48px;
+  transition:
+    opacity 340ms ease-out,
+    translate 460ms ease-out,
+    filter 340ms ease-out;
+}
+
+#gauge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  transition:
+    opacity 260ms ease-out,
+    transform 320ms ease-out;
+}
+
+#boot.ready #gauge {
+  transform: translateY(-70%);
+}
+
+#bootline {
+  align-items: baseline;
+  gap: 14px;
+  margin-top: 11px;
+  /* a FIXED line box: the caption is the boot's own words and they change
+     length every quarter second, and a bar that jumps a pixel each time one
+     of them wraps is worse than one that clips a long one */
+  height: 17px;
+  overflow: hidden;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+#bootsay {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#bootpct {
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+#startwrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out 130ms;
+}
+
+#boot.ready #startwrap {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#start {
+  font:
+    600 13px/1 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+  /* the right padding is short by the letter-spacing, which is added AFTER
+     the last letter and would otherwise sit the label left of centre */
+  padding: 14px 22px 14px 30px;
+  transition:
+    transform 380ms cubic-bezier(0.28, 0.74, 0.22, 1) 130ms,
+    background 160ms ease-out,
+    color 160ms ease-out;
+}
+
+#start:active {
+  transform: translateY(1px);
+  transition: transform 40ms;
+}
+
+#touchtip {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  translate: -50% 10px;
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease-out 200ms;
+}
+
+#boot.ready #touchtip {
+  opacity: 1;
+}
+
+#touchtip b {
+  font-weight: 600;
+}
+
+#under {
+  /* above the picture in the stacking order, always: the frame is
+     absolutely positioned, and an unreachable button is a worse failure
+     than a scrollbar */
+  position: relative;
+  z-index: 1;
+  margin: 0 auto var(--pad);
+}
+
+#under .bar {
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 2px;
+}
+
+body:not(.playing) #under:not(:has(#err:not(:empty))) {
+  display: none;
+}
+
+/* ...and the options are for playing whether or not anything went wrong */
+body:not(.playing) #swipeOpts {
+  display: none;
+}
+
+/* an empty row is not a row — #err is silent almost always */
+#under .bar:not(:has(> *:not(#err))):has(> #err:empty) {
+  display: none;
+}
+
+#under button {
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#under .note {
+  font-size: 11px;
+}
+
+#stage.fs {
+  top: 0;
+  left: 0;
+}
+
+#stage.fs #curtain,
+#stage.fs #brand {
+  display: none;
+}
+
+#stage.fs #frame {
+  position: static;
+  height: auto;
+}
+
+#stage.fs #screen {
+  width: min(100dvw, calc(100dvh * 4 / 3));
+  height: min(100dvh, calc(100dvw * 3 / 4));
+  max-width: none;
+  max-height: none;
+}
+
+/* The player's other answer: the whole display, out of 4:3. Both sides
+   given, so `aspect-ratio` has nothing to derive and steps aside; the
+   pointer maps per axis and does not mind (engine/src/web/stretch.ts). */
+#stage.fs.stretch #screen {
+  width: 100dvw;
+  height: 100dvh;
+}
+
+/* the hint WRAPS rather than ellipsizing, which is the whole reason these
+   are rows and not a one-line strip. Both hints keep their `title` anyway;
+   it costs nothing and a mouse still gets the long form. */
+#under .keyhint,
+#under .touchhint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* the two swipe boxes: one group, so the gap between them is tighter than
+   the row's own and they read as one question with two answers */
+#swipeOpts {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+#swipeOpts label {
+  gap: 5px;
+  align-items: center;
+}
+
+#swipeOpts input {
+  margin: 0;
+}
+
+body:not(.playing) #under:not(:has(#err:not(:empty))) + #foot {
+  border-top: 0;
+}

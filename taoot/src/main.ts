@@ -38,8 +38,6 @@ import {
   presetOf,
   whereLine,
 } from "./play-rules";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
@@ -55,7 +53,7 @@ import { useSaveKind } from "@dreamfactory/engine/web/save-store";
 import { readSaveFile } from "@dreamfactory/engine/df/savegame";
 import { FileStore } from "./files";
 import { loadClock, watchLoads } from "@dreamfactory/engine/web/load-clock";
-import { InputLog, clickLabel, inputLabel, type Hit } from "./input-log";
+import { InputLog, clickLabel, inputLabel, type Hit } from "@dreamfactory/engine/web/input-log";
 import { StateTrace, snapshotState } from "@dreamfactory/engine/runtime/trace";
 import { takeBootSeed } from "@dreamfactory/speedrun/boot-seed";
 import { aboutBox, faultBox, scriptErrorBox } from "@dreamfactory/engine/web/error-box";
@@ -85,11 +83,11 @@ import {
   markEdition,
 } from "./editions";
 import { installI18n, t } from "@dreamfactory/chrome/locales";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
 import { LOG_LINES_KEPT, LogBuffer } from "./log-buffer";
-import { stateDump } from "@dreamfactory/engine/web/debug-panel";
+import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
 import { SPINE } from "./state-spine";
-import { bindRememberedBox, installStateList } from "@dreamfactory/engine/web/state-list";
+import { bindRememberedBox } from "@dreamfactory/engine/web/state-list";
 import { installCaptions } from "./captions";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import {
@@ -157,7 +155,6 @@ const help = document.getElementById("help");
 /** which copy of the game is being played, as buttons (chrome/src/lang-menu.ts).
  *  Absent on /speedrun/: a route is timed against one edition, English. */
 const editionPicker = document.getElementById("editionPicker");
-const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
 /** whether fullscreen stretches the picture to the display (engine/src/web/stretch.ts) */
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
 /** whether fullscreen hides the menu band (engine/src/web/tylerhartman.ts) */
@@ -165,9 +162,6 @@ const thBox = document.getElementById("thBox") as HTMLInputElement | null;
 /** whether the lines the original only lets you hear are subtitled too (#50) */
 const everyLineBox = document.getElementById("everyLineBox") as HTMLInputElement | null;
 const preferPortBox = document.getElementById("preferPortBox") as HTMLInputElement | null;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
-/** where the bug button says what became of the screenshot */
-const bugNote = document.getElementById("bugNote");
 const pictureModeSel = document.getElementById(
   "pictureMode",
 ) as HTMLSelectElement | null;
@@ -178,19 +172,11 @@ const brightnessSeg = document.getElementById("brightnessSeg");
 const brightnessValue = document.getElementById("brightnessValue");
 const movementSeg = document.getElementById("movementSeg");
 const movementValue = document.getElementById("movementValue");
-/** where you are and what the engine is doing: the X pane, off by default */
+/** where you are and what the engine is doing: the X pane, off by default (engine/src/web/details-column.ts) */
+const column = new DetailsColumn("taoot");
 const details = document.getElementById("details") as HTMLDivElement;
 const scriptlog = document.getElementById("scriptlog") as HTMLPreElement;
 /** the state list inside the pane, and what asks for it (#22) */
-const dbgStateOn = document.getElementById("dbgStateOn") as HTMLInputElement;
-const dbgInputsOn = document.getElementById("dbgInputsOn") as HTMLInputElement;
-const dbgState = document.getElementById("dbgState") as HTMLDivElement;
-const dbgSpine = document.getElementById("dbgSpine") as HTMLDivElement;
-const dbgRows = document.getElementById("dbgRows") as HTMLDivElement;
-const dbgFilter = document.getElementById("dbgFilter") as HTMLInputElement;
-const dbgAll = document.getElementById("dbgAll") as HTMLInputElement;
-const dbgCopy = document.getElementById("dbgCopy") as HTMLButtonElement;
-const dbgNote = document.getElementById("dbgNote") as HTMLSpanElement;
 /** the preload bar under the boot text, and the megabytes beside it */
 const preload = document.getElementById("preload") as HTMLDivElement;
 const preloadFill = document.getElementById("preloadFill") as HTMLDivElement;
@@ -210,8 +196,23 @@ const mapCtx = minimap.getContext("2d")!;
 // A class rather than the `:fullscreen` pseudo because an iPhone has no element
 // fullscreen to match: there the page pins the stage over the viewport itself,
 // which is the whole of what engine/src/web/fullscreen.ts is for.
-installFullscreen(fsBtn, stage, { report: log, landscape: true });
-installStretch(stretchBox, stage, "taoot.picture.stretch");
+//
+// The bug report beside them (chrome/src/play-page.ts, as on every play page)
+// arrives with the screen attached; its note is said in the reader's language,
+// and only there — the issue itself is English, because it is read by whoever
+// fixes it. There is no button on /speedrun/: nothing to report from a stopwatch.
+installPageControls({
+  game: TITANIC,
+  canvas: screen,
+  stage,
+  say: log,
+  edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
+  where: () => hud.textContent ?? "",
+  log: (n) => logLines.tail(n),
+  note: (how) => (how === "clipboard" ? t("play.bugShotClipboard") : t("play.bugShotFile")),
+  /** how long the word about the screenshot stands before the bar is a bar again */
+  noteMs: 15_000,
+});
 const th = new TylerHartman(stage, screen, thBox, "taoot.picture.th");
 excludeEachOther(thBox, stretchBox);
 
@@ -282,34 +283,10 @@ watchLoads(files);
  * The tail comes off {@link logLines}, so what the player can open with X and
  * what a report carries are the same lines by construction.
  */
-/** how long the word about the screenshot stands before the bar is a bar again */
-const BUG_NOTE_MS = 15_000;
 
 /** which copy of the game is running — settled by initServerBrowser, for reports */
 let editionCode = DEFAULT_LANGUAGE;
 
-// no button on /speedrun/, and nothing to report from a stopwatch
-if (bugBtn) {
-  installBugReport(bugBtn, {
-    game: TITANIC.short,
-    canvas: screen,
-    shotName: "taoot-bug.png",
-    version: VERSION,
-    where: () => hud.textContent ?? "",
-    edition: () => `${editionName(editionCode)} (gamefiles/${editionCode}/)`,
-    log: (n) => logLines.tail(n),
-    // said in the reader's language, and only here: the issue itself is English,
-    // because it is read by whoever fixes it
-    note: (how) => {
-      if (!bugNote) return;
-      bugNote.textContent =
-        how === "clipboard"
-          ? t("play.bugShotClipboard")
-          : t("play.bugShotFile");
-      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-    },
-  });
-}
 
 /** the pane's contents — the pane renders these, and a bug report is their tail */
 const logLines = new LogBuffer(LOG_LINES_KEPT);
@@ -373,35 +350,14 @@ function clearLog(): void {
   scriptlog.style.display = "none";
 }
 
-/** X: the scene readout and the log, both or neither. Remembered, so a player
- *  who wants it open gets it open on the next launch too — and inert where the
- *  pane is the page (see {@link DETAILS_ALWAYS}), because there is nothing to
- *  toggle it to. */
+/** X: the scene readout and the log, both or neither — remembered (engine/src/web/details-column.ts) */
 function toggleDetails(): void {
-  if (DETAILS_ALWAYS || DETAILS_NEVER) return;
-  details.hidden = !details.hidden;
-  try {
-    window.localStorage.setItem(DETAILS_OPEN_KEY, details.hidden ? "0" : "1");
-  } catch {
-    /* not remembering is survivable — the pane still holds for this tab */
-  }
-  if (!details.hidden) scriptlog.scrollTop = scriptlog.scrollHeight;
+  column.toggle();
 }
 
-/** where the pane's open/shut answer outlives the tab */
-const DETAILS_OPEN_KEY = "taoot.details.open";
-
-/** did the player leave the pane open last time? — and yes, always, on a page
- *  the pane belongs to ({@link DETAILS_ALWAYS}): this is what the boot reads to
- *  decide whether to shut it, and the workbench's boot must not */
+/** did the player leave the pane open last time? — and yes, always, where the pane is the page */
 function detailsWanted(): boolean {
-  if (DETAILS_NEVER) return false;
-  if (DETAILS_ALWAYS) return true;
-  try {
-    return window.localStorage.getItem(DETAILS_OPEN_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return column.wanted();
 }
 
 /**
@@ -820,66 +776,10 @@ async function playableEditions(): Promise<string[] | undefined> {
   return withTour.length ? withTour : undefined;
 }
 
-/**
- * Is the Details pane part of this page rather than something to ask for?
- *
- * `<meta name="details-always">`, and the speedrun workbench says it. The pane
- * is the log and the state list — on the play page that is a debugging aid a
- * player can call up with X and dismiss again, and on the workbench it is half
- * of what the page IS: a route is read off the log, and the sheet being tuned is
- * tuned against what the state list says. A column that has to be summoned
- * every time is a column that is in the way of the thing it belongs to.
- *
- * What it changes is three answers, all of them about the pane and none of them
- * about the game: the pane starts open, X does not shut it, and the `state` box
- * defaults to on ({@link installDebugPanel}). Everything else about the pane —
- * the checkbox still checkable, the filter, the copy button — is the same on
- * both pages, because the pane is the same pane.
- *
- * `content="log"` asks for the column without the two panes inside it — see
- * {@link DETAILS_PANES}.
- *
- * A page-level fact and not a URL parameter, for the reason {@link skipsIntro}
- * gives: `/speedrun/` should behave the same however it was reached, and you can
- * see the declaration by looking at the page. The markup on that page also drops
- * the `hidden` attribute, so the column is up from the first paint rather than
- * from whenever the boot gets round to it — this flag is what stops anything
- * putting it back.
- */
-const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
-
-/**
- * ...and whether the two PANES inside that column start open with it.
- *
- * The state list is every script global — a hundred-odd rows — and the input log
- * doubles the length of the log itself. On the workbench both are wanted from
- * the first paint, because a route is tuned against exactly those. On the
- * developer-mode page the column is the terminal's scrollback and what belongs
- * in it is what the game and the console print; a hundred variable names on
- * arrival is a wall in front of that.
- *
- * So the meta carries a value: `content="log"` is the column with its panes
- * shut, anything else (the workbench says `"1"`) is the column as it was. Both
- * boxes stay checkable and both are remembered, so this decides the FIRST visit
- * and nothing after it.
- */
-const DETAILS_PANES =
-  document.querySelector('meta[name="details-always"]')?.getAttribute("content") !== "log";
-
-/**
- * ...and the other end of the same question: a page the pane is no part of.
- *
- * `<meta name="details-never">`, and the free-roam page says it. That page is
- * the play page with the story turned off — one screen, its bars, and nothing
- * that reads like a tool — so the scene readout and the log have no business
- * appearing on it, by X, by a logged line during the boot or by `?debug=1`.
- *
- * The MARKUP still carries the column, because the log is written to on every
- * page and a bug report is copied out of it; what this decides is only whether
- * it is ever shown. The three places that would raise it check here, and
- * {@link detailsWanted} answers no, which is what the boot reads.
- */
-const DETAILS_NEVER = !!document.querySelector('meta[name="details-never"]');
+/** the Details pane is part of this page, its panes start open with it, or it is no part of it (engine/src/web/details-column.ts) */
+const DETAILS_ALWAYS = column.always;
+const DETAILS_PANES = column.panes;
+const DETAILS_NEVER = column.never;
 
 /**
  * Which copy of the game this PAGE plays, if it is not a question.
@@ -1212,7 +1112,7 @@ void boot();
  * has to maintain: what is logged is what the game was given.
  *
  * The three questions the recorder asks are answered below rather than inside
- * it, so the wording can be tested without an engine (taoot/src/input-log.ts).
+ * it, so the wording can be tested without an engine (engine/src/web/input-log.ts).
  */
 const SESSION_START = performance.now();
 
@@ -1683,97 +1583,33 @@ let onScreenGammaShown: (() => void) | null = null;
 const REFRESH_MS = 250;
 
 
-/** where the state box's answer outlives the tab */
-const DEBUG_STATE_KEY = "taoot.details.state";
-
-/** …and the input log's (#178) */
-const DEBUG_INPUTS_KEY = "taoot.details.inputs";
-
 /**
- * The variables list — the pane's second half, and the engine's
- * (engine/src/web/state-list.ts).
- *
- * It owns the checkbox, the filter, the `all` box, the two lists and the poll,
- * because every one of those is a question about a session and every session is
- * the same shape. What this page keeps is what is ITS: the spine above, the log
- * above that, the Copy-details button, and the X that opens the column.
+ * The column's state list, input log and Copy details (engine/src/web/details-column.ts).
+ * What this page keeps is what is ITS: the spine, the log's lines, the input log,
+ * and what heads a copy.
  */
-const stateList = installStateList({
-  state: liveState,
+const stateList = column.install({
   spine: SPINE,
-  storageKey: DEBUG_STATE_KEY,
-  // On where the pane is the page and off where it is a player's aid — the same
-  // rule the column itself follows (DETAILS_ALWAYS). A workbench whose debug
-  // column opened on the log alone would answer half the question it is there for;
-  // a page that says `content="log"` is asking for exactly that (DETAILS_PANES).
-  defaultOn: DETAILS_ALWAYS && DETAILS_PANES,
-  visible: () => !details.hidden,
-});
-
-function installDebugPanel(): void {
-  const asked =
-    new URLSearchParams(window.location.search).get("debug") === "1";
-  if (asked && !DETAILS_NEVER) {
-    details.hidden = false;
-    try {
-      window.localStorage.setItem(DETAILS_OPEN_KEY, "1");
-      window.localStorage.setItem(DEBUG_STATE_KEY, "1");
-      // The input log too, because `?debug=1` is the link somebody is SENT when
-      // a report needs more than it carried, and what that report was missing
-      // is most often which gesture caused the thing (#178).
-      window.localStorage.setItem(DEBUG_INPUTS_KEY, "1");
-    } catch {
-      /* the link still works for this tab */
-    }
-  }
+  state: liveState,
+  lines: () => logLines.lines,
+  head: () => [
+    `taoot ${VERSION}`,
+    `edition: ${editionName(editionCode)} (gamefiles/${editionCode}/)`,
+    `browser: ${navigator.userAgent}`,
+  ],
   // The input log (#178): on the workbench a run IS a sequence of gestures, and
   // on the play page a player who has not asked should not have their log
   // doubled in length. This game's own, because this game's log is.
-  bindRememberedBox(dbgInputsOn, DEBUG_INPUTS_KEY, (on) => (inputs.on = on), DETAILS_ALWAYS && DETAILS_PANES);
-  dbgCopy.addEventListener("click", () => void copyDetails());
-}
+  inputs,
+  said: () => ({ copied: t("play.debugCopied"), saved: t("play.debugSaved") }),
+});
 
 /** the snapshot the panel and the clipboard both read — the goldens' own */
 function liveState(): StateTrace {
   return snapshotState(session, host.viewer ?? null, "live");
 }
 
-
-/**
- * The whole state and the whole log, on the clipboard.
- *
- * This is what #22 is really asking for: the Report bug button can carry eight
- * lines and no state at all, because the issue travels as a URL under a 4000-byte
- * ceiling and one snapshot is 3234 bytes of state before the log it comes with. So
- * the dump is an attachment,
- * and it is shaped like a golden trace (taoot/src/debug-panel.ts stateDump) so that a
- * reporter's paste can be diffed against a recorded playthrough.
- */
-async function copyDetails(): Promise<void> {
-  const text = stateDump(liveState(), logLines.lines, [
-    `taoot ${VERSION}`,
-    `edition: ${editionName(editionCode)} (gamefiles/${editionCode}/)`,
-    `browser: ${navigator.userAgent}`,
-  ]);
-  let said = t("play.debugCopied");
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // A browser that will not take the clipboard still gets to hand the file over
-    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "taoot-details.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-    said = t("play.debugSaved");
-  }
-  dbgNote.textContent = said;
-  window.setTimeout(() => (dbgNote.textContent = ""), BUG_NOTE_MS);
-}
-
 installPictureOptions();
-installDebugPanel();
 
 /**
  * The arrow keys' own route, shared with the swipe handler: a full-screen overlay

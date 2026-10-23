@@ -53,7 +53,7 @@
  * a film library, which is all the page needs it to be.
  */
 
-import { pageUrl } from "@dreamfactory/engine/web/page-url";
+import { pageUrl, siteBase } from "@dreamfactory/engine/web/page-url";
 import { readManifest, readStream, ripName } from "@dreamfactory/engine/web/rip-files";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
 
@@ -104,7 +104,9 @@ export class SkullFiles {
 
   /** index the rip from the manifest the dev server and the build both publish */
   static async open(root = "gamefiles/"): Promise<SkullFiles> {
-    return SkullFiles.index(await readManifest(pageUrl("gamefiles.json")), pageUrl, root);
+    // the game's root, not the page's: the game is at play/ and walk.html at the root
+    const at = (path: string): string => pageUrl(path, siteBase());
+    return SkullFiles.index(await readManifest(at("gamefiles.json")), at, root);
   }
 
   /**

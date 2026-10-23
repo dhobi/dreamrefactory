@@ -23,12 +23,17 @@ export const VERSION: string = typeof __APP_VERSION__ === "string" ? __APP_VERSI
  * on a page with no top bar.
  */
 export function installVersion(): void {
-  const brand = document.querySelector(".topbar .brand");
-  if (!brand) return;
-  const tag = document.createElement("span");
-  tag.className = "version";
+  // the bar's own box where the page has one (tools/vite-shell.ts writes it into
+  // every game's bar), else a box made beside the wordmark
+  let tag = document.getElementById("ver");
+  if (!tag) {
+    const brand = document.querySelector(".topbar .brand");
+    if (!brand) return;
+    tag = document.createElement("span");
+    tag.className = "version";
+    brand.after(tag);
+  }
   tag.textContent = `v${VERSION}`;
   // hard-coded English, like every string this repo builds in TypeScript
-  tag.title = `This port, version ${VERSION} — the game itself is CyberFlix's 1996 release`;
-  brand.after(tag);
+  tag.title = `This port, version ${VERSION}`;
 }

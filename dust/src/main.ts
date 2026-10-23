@@ -68,9 +68,9 @@ import {
   readStgRegions,
   type StgRegion,
 } from "@dreamfactory/engine/df/stg";
-import { installFullscreen } from "@dreamfactory/engine/web/fullscreen";
 import { BootBar, BootCaption, brandFallback, busySpinner, titleRise, untilStarted } from "@dreamfactory/engine/web/page-shell";
-import { installStretch } from "@dreamfactory/engine/web/stretch";
+import { DetailsColumn } from "@dreamfactory/engine/web/details-column";
+import { InputLog, clickLabel, inputLabel } from "@dreamfactory/engine/web/input-log";
 import { installPictureMode } from "@dreamfactory/engine/web/picture-mode";
 import { TylerHartman, excludeEachOther } from "@dreamfactory/engine/web/tylerhartman";
 import { GameHost } from "@dreamfactory/engine/web/host";
@@ -107,8 +107,8 @@ import {
   WebAudioSink,
 } from "@dreamfactory/engine/runtime/audio";
 import { siteUrl } from "@dreamfactory/chrome/site";
-import { VERSION } from "@dreamfactory/chrome/version";
-import { installBugReport } from "@dreamfactory/chrome/bug-report";
+import { VERSION, installVersion } from "@dreamfactory/chrome/version";
+import { installPageControls } from "@dreamfactory/chrome/play-page";
 import { installPlayMenu } from "@dreamfactory/chrome/play-menu";
 import { DUST } from "@dreamfactory/chrome/games";
 import { byCodeUnit } from "@dreamfactory/engine/runtime/order";
@@ -253,45 +253,33 @@ const plateCtx = plate.getContext("2d", { alpha: false })!;
  * shows. A failure still reaches the log and the console either way.
  */
 const errEl = document.getElementById("err") as HTMLElement | null;
-const verEl = document.getElementById("ver");
-/* Just the version. The `dust-` prefix was there when this sat in a status
-   line under the picture with nothing around it to say which page it
-   belonged to; in the top bar it is a hand's width from a mark and a title
-   that both say Dust, and the tag it names (dust-v*, deploy.yml) is still
-   readable off it. */
-if (verEl) verEl.textContent = `v${VERSION}`;
+installVersion();
 
 // Play and Speedrunner folded into one "Play", as on Titanic's pages
 // (chrome/src/play-menu.ts), in English: Dust is not translated. The workbench
 // boots this file too and gets the same
 void installPlayMenu({ english: true });
 
-/**
- * The two levers the port adds: a fullscreen picture, and a bug report that
- * arrives with the screen attached.
- *
- * Both are the play page's, and the reporter is now literally the same module —
- * it moved to `site/` when this page wanted it, because a game may not import
- * another game (site/tests/layering.ts) and nothing in it was ever Titanic's
- * except the name it gave the downloaded PNG.
- */
-const fsBtn = document.getElementById("fsBtn") as HTMLButtonElement | null;
-const bugBtn = document.getElementById("bugBtn") as HTMLButtonElement | null;
-const bugNote = document.getElementById("bugNote");
 const stageEl = document.getElementById("stage") as HTMLElement;
 
 /** where the player is, for the issue body: the trace line, kept as it changes */
 let currentRoom = "";
 
-// The STAGE, not the canvas: fullscreening the canvas hands the letterbox to the
-// UA, and the picture is a fixed 512x384 either way — see #stage.fs in game.css.
-// A class and not the `:fullscreen` pseudo because an iPhone has no element
-// fullscreen to match, and the page fills itself there instead — the detection
-// and the way back out are engine/src/web/fullscreen.ts.
-installFullscreen(fsBtn, stageEl, { report: say, landscape: true });
-// and whether that picture keeps its 4:3 there (engine/src/web/stretch.ts)
+// Fullscreen, its stretch and the bug report, as every play page has them
+// (chrome/src/play-page.ts) — the reporter literally the same module as
+// Titanic's, since nothing in it was ever Titanic's but the PNG's name.
+installPageControls({
+  game: DUST,
+  canvas,
+  stage: stageEl,
+  say,
+  // one disc, one language: there is nothing to choose between, and saying so
+  // is more use in an issue than leaving the field out
+  edition: () => "Dust CD (gamefiles/dustcd/)",
+  where: () => currentRoom,
+  log: (n) => logLines.slice(-n),
+});
 const stretchBox = document.getElementById("stretchBox") as HTMLInputElement | null;
-installStretch(stretchBox, stageEl, "dust.picture.stretch");
 /**
  * ...or TH mode, the menu band tucked away (engine/src/web/tylerhartman.ts).
  * The page sizes its frame and stage from a 4:3 `--pic-h`, declared on :root
@@ -309,41 +297,17 @@ const th = new TylerHartman(stageEl, canvas, thBox, "dust.picture.th", {
 });
 excludeEachOther(thBox, stretchBox);
 
-/** how long the screenshot's fate stays on screen before it is taken down */
-const BUG_NOTE_MS = 6000;
-if (bugBtn) {
-  installBugReport(bugBtn, {
-    game: DUST.short,
-    canvas,
-    shotName: "dust-bug.png",
-    version: VERSION,
-    where: () => currentRoom,
-    // one disc, one language: there is nothing to choose between, and saying so
-    // is more use in an issue than leaving the field out
-    edition: () => "Dust CD (gamefiles/dustcd/)",
-    log: (n) => logLines.slice(-n),
-    note: (how) => {
-      if (!bugNote) return;
-      bugNote.textContent =
-        how === "clipboard"
-          ? "screen copied — paste it into the issue"
-          : "screen saved — attach dust-bug.png to the issue";
-      window.setTimeout(() => (bugNote.textContent = ""), BUG_NOTE_MS);
-    },
-  });
-}
+/**
+ * The Details column the log sits in, behind b, x or the log button
+ * (engine/src/web/details-column.ts) — the column Titanic's play page carries,
+ * and on the workbench (`<meta name="details-always">`) a column always open.
+ */
+const column = new DetailsColumn("dust");
 const logEl = document.getElementById("log") as HTMLPreElement;
 
-/**
- * Does the log BELONG to this page, rather than cover it?
- *
- * `<meta name="details-always">`, which the speedrun workbench declares and
- * Titanic's uses for the same purpose (taoot/src/main.ts). On the game page the
- * log is an overlay over the picture that `b` lifts, and hiding it once the boot
- * is read is right; on the workbench it is a column of its own beside the
- * picture, so there is nothing to lift it off and nothing to hide it for.
- */
-const DETAILS_ALWAYS = !!document.querySelector('meta[name="details-always"]');
+
+/** every press and click, what it hit and what it did — behind the column's `inputs` box (engine/src/web/input-log.ts) */
+const inputs = new InputLog({ say: (line) => say(line), where: () => currentRoom || "booting" });
 
 /**
  * The log, and it is the page's ONLY prose surface.
@@ -372,7 +336,7 @@ function say(line: string): void {
     logEl.append(`${line}\n`);
   }
   // scrollTop forces layout, so only when there is something to scroll
-  if (!logEl.hidden) logEl.scrollTop = logEl.scrollHeight;
+  if (!(column.el?.hidden ?? true)) logEl.scrollTop = logEl.scrollHeight;
 }
 /** the title card, which rises rather than leaving — see #brand in dust/play/index.html */
 const brandEl = document.getElementById("brand") as HTMLImageElement | null;
@@ -879,6 +843,20 @@ async function runBoot(): Promise<void> {
     log: bootSay,
     hud: (t) => t && bootSay(`  ${t}`),
   });
+  column.install({
+    // The two variables worth naming before the rest — the ones Dust's own
+    // suites reach for to put the game in a known state: `day`, which decides
+    // the targets the shooting range sets out (tests/targets.ts), and `clock`,
+    // which the house's props read (tests/props.ts).
+    spine: [
+      { name: "day", label: "Day" },
+      { name: "clock", label: "Clock" },
+    ],
+    host,
+    version: VERSION,
+    lines: () => logLines,
+    inputs,
+  });
   /**
    * Give the session a real frame source before the boot runs.
    *
@@ -1027,7 +1005,7 @@ async function runBoot(): Promise<void> {
   } else {
     // no viewer: what is on screen is black, so the log opens — at this point
     // the log IS the result.
-    logEl.hidden = false;
+    column.show(true);
   }
 }
 
@@ -1114,12 +1092,9 @@ function play(host: GameHost, files: DustFiles): void {
   };
   (window as unknown as { dbg: unknown }).dbg = dbg;
   (window as unknown as { dust: unknown }).dust = dbg; // the older name, kept as an alias
-  // The boot's chatter has been read by whoever wanted it; the game gets a clean
-  // picture. Except where the log IS part of the page rather than an overlay on
-  // it ({@link DETAILS_ALWAYS}) — on the workbench it is a column, and a column
-  // that emptied itself the moment the game came up would be a column nobody
-  // could use.
-  if (!DETAILS_ALWAYS) logEl.hidden = true;
+  // The boot's chatter has been read by whoever wanted it; the column goes back
+  // to what the reader left it at — and stays, where it is part of the page
+  column.show(column.wanted());
   const s = host.session;
   let shownRoom = "";
   let shownSize = "";
@@ -1243,9 +1218,8 @@ addEventListener("keydown", (e) => {
   if (savesOpen()) return;
   if ("log" in act) {
     e.preventDefault();
-    // inert where the log is a column rather than an overlay — there is nothing
-    // to toggle it to, which is the same rule Titanic's X follows
-    if (!DETAILS_ALWAYS) logEl.hidden = !logEl.hidden;
+    // remembered, and inert where the column is the page (DetailsColumn.toggle)
+    column.toggle();
     return;
   }
   /**
@@ -1288,7 +1262,7 @@ addEventListener("keydown", (e) => {
    * mentions `isrepeat` at all, in any of the six editions.
    */
   host.session.interp.globals.set("isrepeat", act.repeat);
-  void host.session.track(host.director.keyDown(act.key, act.escape));
+  inputs.note(inputLabel(act.key), () => host.session.track(host.director.keyDown(act.key, act.escape)));
   e.preventDefault();
 });
 
@@ -1409,7 +1383,11 @@ canvas.addEventListener("pointerdown", (e) => {
   // what the press CARRIED: Dust reads `shiftkey()` inside its own mousedown
   // (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`), so the question is
   // what was held when the click happened, not what is held now.
-  void host.session.track(host.director.buttonDown(x, y, { shift: e.shiftKey }), `press ${x},${y}`);
+  inputs.note(
+    clickLabel(x, y),
+    () => host.session.track(host.director.buttonDown(x, y, { shift: e.shiftKey }), `press ${x},${y}`),
+    () => host.session.hitTestAt(x, y),
+  );
 });
 
 // on the window, not the canvas: a drag that ends off-canvas still has to end.
@@ -1517,7 +1495,11 @@ const touch = new TouchGestures({
     if (!host?.viewer) return;
     // a finger holds no shift key, and Dust reads `shiftkey()` inside its own
     // mousedown (HOUSE.PRP's HELP button, INVEN.PRP's debug `hotdist`)
-    void host.session.track(host.director.buttonDown(x, y, { shift: false }), `press ${x},${y}`);
+    inputs.note(
+      clickLabel(x, y),
+      () => host.session.track(host.director.buttonDown(x, y, { shift: false }), `press ${x},${y}`),
+      () => host.session.hitTestAt(x, y),
+    );
   },
   release: (x, y) => {
     const host = playing;
@@ -1551,7 +1533,7 @@ function sendGestureKey(ch: string, isEsc = false): void {
   // a gesture is never a held key: don't let a stale 1 from a leant-on arrow
   // make an `isrepeat` door guard swallow the swipe
   host.session.interp.globals.set("isrepeat", false);
-  void host.session.track(host.director.keyDown(ch, isEsc));
+  inputs.note(inputLabel(ch), () => host.session.track(host.director.keyDown(ch, isEsc)));
 }
 
 
@@ -1577,5 +1559,5 @@ start().catch((e) => {
   // it burning at whatever fraction it had reached
   fuse.say(String(e));
   raiseTitle();
-  logEl.hidden = false;
+  column.show(true);
 });

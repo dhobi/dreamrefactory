@@ -418,13 +418,17 @@ describe("the game, once it runs", () => {
     expect(current.host!.globals.get("isrepeat")).toBe(0);
   });
 
-  it("keeps b for the log, and every key for an open saves dialog", async () => {
+  it("keeps b and x for the Details column the log sits in, and every key for an open saves dialog", async () => {
     const p = await openPage();
     await enter(p);
     p.fire("keydown", { key: "b" });
-    expect(p.el("log").hidden).toBe(false);
+    expect(p.el("details").hidden).toBe(false);
+    p.fire("keydown", { key: "x" });
+    expect(p.el("details").hidden).toBe(true);
+    p.fire("keydown", { key: "x" });
+    expect(p.el("details").hidden).toBe(false);
     p.click("logBtn");
-    expect(p.el("log").hidden).toBe(true);
+    expect(p.el("details").hidden).toBe(true);
     dialogUp = true;
     p.fire("keydown", { key: "ArrowUp" });
     p.fire("keydown", { key: "r", ctrlKey: true });

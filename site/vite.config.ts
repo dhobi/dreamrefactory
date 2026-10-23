@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import { defineConfig } from "vite";
 import { gamefilesManifest } from "../tools/vite-gamefiles";
-import { siblingSignposts } from "../tools/vite-siblings";
+import { siblingSignposts, siblingsBut } from "../tools/vite-siblings";
 import { GAMES } from "../chrome/src/games";
 
 /** this file's own directory, not the working directory */
@@ -62,16 +62,7 @@ export default defineConfig({
         include: game === "timelapse" ? ["TLAPSE1/install/data"] : undefined,
       }),
     ),
-    siblingSignposts([
-      { path: "docs", command: "npm run docs:dev", port: 5174, what: "The documentation" },
-      { path: "taoot", command: "npm run dev -w taoot", port: 5175, what: "Titanic" },
-      { path: "dust", command: "npm run dev -w dust", port: 5176, what: "Dust" },
-      { path: "timelapse", command: "npm run dev -w timelapse", port: 5177, what: "Timelapse" },
-      { path: "skullcracker", command: "npm run dev -w skullcracker", port: 5178, what: "Skull Cracker" },
-      { path: "redjack", command: "npm run dev -w redjack", port: 5179, what: "RedJack" },
-      { path: "lunicus", command: "npm run dev -w lunicus", port: 5180, what: "Lunicus" },
-      { path: "jumpraven", command: "npm run dev -w jumpraven", port: 5181, what: "Jump Raven" },
-    ]),
+    siblingSignposts(siblingsBut("editors")),
   ],
   server: {
     // The default `npm run dev`, on the port a browser is already pointed at:

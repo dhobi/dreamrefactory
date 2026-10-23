@@ -128,8 +128,8 @@ const main = async (): Promise<void> => {
   // ---- the bottom button is Exit -----------------------------------------
   await open(2, "Escape");
   await tap(BUTTONS.x, BUTTONS.exit);
-  for (let i = 0; i < 60 && !page.url().includes("index.html"); i++) await page.waitForTimeout(200);
-  if (!page.url().includes("index.html")) {
+  for (let i = 0; i < 60 && !page.url().includes("/play/"); i++) await page.waitForTimeout(200);
+  if (!page.url().includes("/play/")) {
     fail(`the bottom button is actionframe 2, which 0x45e1e0 takes to [0x46b208] = 5 and 0x404303 out of the level`);
   }
   console.log(`ok    the bottom button leaves the level, which is 0x404303's only exit`);
@@ -142,7 +142,7 @@ const main = async (): Promise<void> => {
   menu.on("pageerror", (e) => fail(`the menu threw: ${e.message}`));
   const logEl = menu.locator("#log");
   const logged = async (): Promise<string> => (await logEl.textContent()) ?? "";
-  await menu.goto(`${BASE}/index.html`);
+  await menu.goto(`${BASE}/play/`);
   const start = menu.locator("#start");
   await start.waitFor({ timeout: 40_000 });
   for (let i = 0; i < 200 && (await start.isDisabled()); i++) await menu.waitForTimeout(200);

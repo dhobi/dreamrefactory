@@ -13,6 +13,7 @@
  * that comes and goes, notes its input for the speedrun log, hands the right
  * button to TH and the screen to the saved-games dialog — more hooks than lines.
  */
+import { clickLabel, inputLabel, type Hit, type InputLog } from "./input-log";
 import type { GameHost } from "./host";
 import { type GestureKey, type PointerEventLike, TouchGestures, bindSwipeInvert } from "./touch";
 
@@ -38,8 +39,8 @@ export interface PointerInputOptions {
   coords(e: { clientX: number; clientY: number }): { x: number; y: number };
   /** localStorage prefix for the swipe-axis boxes ({@link bindSwipeInvert}) — one per game */
   swipeKey: string;
-  /** a mouse press at (x, y): the click, and whatever the page does after it */
-  click(x: number, y: number, e: PointerEvent): void;
+  /** a mouse press at (x, y): the click, and whatever the page does after it — answered when it is done */
+  click(x: number, y: number, e: PointerEvent): unknown;
   /** the cursor the thing under a resting mouse asks for, when the page draws one */
   showCursor?(name: string): void;
   /** true where a finger is free to swipe although the game owns the spot */
@@ -50,6 +51,8 @@ export interface PointerInputOptions {
   gestureKey?(key: GestureKey): string;
   /** a layer in front of the recogniser, built once the recogniser exists */
   front?(touch: TouchGestures): PointerLayer;
+  /** the input log every key, click and press goes through (input-log.ts), when the page keeps one */
+  inputs?: InputLog;
 }
 
 /** what a page keeps of its bound pointer */
@@ -68,8 +71,14 @@ export function bindPointerInput(host: GameHost, canvas: HTMLCanvasElement, o: P
     // this look like a repeat. The engine's own false: `false` before
     // DreamFactory 5, 0 in it.
     s.interp.globals.set("isrepeat", s.interp.bool(false));
-    void host.director.keyDown(key, special);
+    note(inputLabel(key), () => host.director.keyDown(key, special));
   };
+  /** a gesture, through the page's input log when it keeps one */
+  const note = (what: string, dispatch: () => unknown, hit?: () => Hit | null): void => {
+    if (o.inputs) o.inputs.note(what, dispatch, hit);
+    else void dispatch();
+  };
+  const hitAt = (x: number, y: number) => (): Hit => s.hitTestAt(x, y);
 
   // which way the two swipe axes read, remembered for this game alone
   const swipeInvert = bindSwipeInvert(o.swipeKey);
@@ -86,7 +95,7 @@ export function bindPointerInput(host: GameHost, canvas: HTMLCanvasElement, o: P
     },
     press: (x, y) => {
       if (o.swallowsPress?.(x, y) || front?.swallowsPress?.(x, y)) return;
-      pressed = s.track(host.director.buttonDown(x, y), `press ${x},${y}`);
+      note(clickLabel(x, y), () => (pressed = s.track(host.director.buttonDown(x, y), `press ${x},${y}`)), hitAt(x, y));
     },
     release: (x, y) => {
       if (!s.pointerDown) return; // the press was swallowed: nothing to let go of
@@ -107,7 +116,7 @@ export function bindPointerInput(host: GameHost, canvas: HTMLCanvasElement, o: P
       front?.afterDown(e);
       return;
     }
-    o.click(x, y, e);
+    note(clickLabel(x, y), () => o.click(x, y, e), hitAt(x, y));
   });
 
   // on the window, not the canvas: a drag that ends off-canvas still has to end
