@@ -76,9 +76,24 @@ export const bmcLink = `<a class="bmc" href="https://buymeacoffee.com/danielhobi
         ><img src="/bmc-mark.svg" alt="" width="35" height="50" /><span>Buy me a coffee</span></a
       >`;
 
+/** the page with its own <title> line taken out, if it has one */
+function withoutTitle(html: string): string {
+  const at = html.indexOf("<title>");
+  if (at < 0) return html;
+  const end = html.indexOf("</title>", at) + "</title>".length;
+  const from = html.lastIndexOf("\n", at) + 1;
+  const line = html.slice(from, at).trim() === "" && html[end] === "\n";
+  return line ? html.slice(0, from) + html.slice(end + 1) : html.slice(0, at) + html.slice(end);
+}
+
 /** a page with its empty slots filled; one with none is returned as it was */
 export function expandShell(html: string, p: HomePage, up = "../"): string {
-  return html
+  // The page's own <title> is there so the file is a page as it stands; the slot
+  // writes the one from the facts, so a stale one cannot ship. Only while the
+  // slot is still there: a page filled once (the workbench is, then served
+  // through the same plugin) keeps the title it was given.
+  const own = html.includes("<!-- shell:head -->") ? withoutTitle(html) : html;
+  return own
     .replace("<!-- shell:head -->", `${headTags(p)}\n    <link rel="stylesheet" href="/src/play.css" />`)
     .replace(`<header class="topbar"></header>`, topbar(p, up))
     .replace(`<footer id="foot"></footer>`, `<footer id="foot">\n      ${bmcLink}\n    </footer>`);

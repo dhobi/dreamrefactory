@@ -69,7 +69,7 @@ const page = new PlayPage({
   // is more use in an issue than leaving the field out
   edition: "Timelapse 4CD (gamefiles/TLAPSE1-4/)",
   shape: "pinned",
-  value: (pct) => document.getElementById("conduit")!.setAttribute("aria-valuenow", String(pct)),
+  value: (pct) => ((document.getElementById("barvalue") as HTMLProgressElement).value = pct),
   caption: (label) => caption.say(label),
 });
 const { canvas, say, progress } = page;

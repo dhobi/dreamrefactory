@@ -49,7 +49,7 @@ import { AudioSink, DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine
 import { SCREEN_H, SCREEN_W, canvasCoordsFor } from "@dreamfactory/engine/web/screen";
 import { ESCAPE_KEY, focusOwnsKey } from "@dreamfactory/engine/web/keys";
 import { GestureKey, PointerEventLike, TouchGestures } from "@dreamfactory/engine/web/touch";
-import { BootBar, PageLog } from "@dreamfactory/engine/web/page-shell";
+import { BootBar, PageLog, brandFallback } from "@dreamfactory/engine/web/page-shell";
 import { installPageControls } from "@dreamfactory/chrome/play-page";
 import { SKULLCRACKER } from "@dreamfactory/chrome/games";
 import { VERSION, installVersion } from "@dreamfactory/chrome/version";
@@ -313,6 +313,9 @@ const nowEl = $<HTMLPreElement>("loc");
  * developer presses; the bug reporter is what a player presses, and it sends
  * the log without showing it.
  */
+// the title card, which closes the band up when it fails to load
+brandFallback($<HTMLImageElement>("brand"));
+
 const column = new DetailsColumn("skullcracker");
 const pageLog = new PageLog($<HTMLPreElement>("log"), null, 2000, column);
 // the film line under the log it annotates, not under the column's heading
@@ -932,11 +935,11 @@ function frameLoop(now: number): void {
 async function boot(): Promise<void> {
   installVersion();
   const say = $<HTMLSpanElement>("bootsay");
-  const conduit = $<HTMLDivElement>("conduit");
+  const barvalue = $<HTMLProgressElement>("barvalue");
   const progress = new BootBar(
     $<HTMLDivElement>("charge"),
     $<HTMLSpanElement>("bootpct"),
-    (pct) => conduit.setAttribute("aria-valuenow", String(pct)),
+    (pct) => (barvalue.value = pct),
     (label) => (say.textContent = label),
   ).set;
 

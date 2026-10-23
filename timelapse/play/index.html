@@ -11,6 +11,7 @@
          lives in play/ under the welcome page. The build emits relative URLs
          (base "./") and siteUrl resolves the rest. -->
     <meta name="site-root" content="../" />
+    <title>Timelapse: Ancient Civilizations RE</title>
     <!-- shell:head -->
   </head>
   <body class="booting deep">
@@ -25,29 +26,19 @@
 
     <div id="stage">
       <!-- The title card and the conduit under it: the whole page until the game
-           is running, a band at the top after. `onerror` removes the image rather
-           than leaving a broken frame, and tells the page so the band closes up:
+           is running, a band at the top after. the page removes the image rather than
+           leaving a broken frame (`brandFallback`), and the band closes up:
            the logo is decoration and the experiment is the picture below it. -->
       <div id="curtain">
         <img
           id="brand"
           src="/timelapse-logo.png"
           alt="Timelapse: Ancient Civilizations RE"
-          onerror="
-            this.hidden = true;
-            document.body.classList.add('nobrand');
-          "
         />
         <div id="boot">
           <div id="gauge">
-            <div
-              id="conduit"
-              role="progressbar"
-              aria-label="reading the discs"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-            >
+            <progress id="barvalue" aria-label="reading the discs" max="100" value="0"></progress>
+            <div id="conduit" aria-hidden="true">
               <div id="charge" style="width: 0%"><i id="node"></i></div>
             </div>
             <div id="bootline">

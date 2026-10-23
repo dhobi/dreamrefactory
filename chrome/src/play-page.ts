@@ -110,6 +110,12 @@ export function installPageControls(o: PageControlsOptions): void {
   });
 }
 
+/** the band's version and its Play menu — in English: the games behind these pages are not translated */
+function installBand(): void {
+  installVersion();
+  void installPlayMenu({ english: true });
+}
+
 export interface PlayPageOptions {
   /** the game, as games.ts lists it: its name, its folder, its screen */
   game: GameEditions;
@@ -176,9 +182,7 @@ export class PlayPage {
     this.log = new PageLog($<HTMLPreElement>("log")!, $("logBtn"), 600, this.column);
     this.inputs = new InputLog({ say: (line) => this.say(line), where: () => this.where || "booting" });
     this.audio = new GestureAudio(this.say);
-    installVersion();
-    // in English: the games behind these pages are not translated
-    void installPlayMenu({ english: true });
+    installBand();
     installPageControls({
       game: o.game,
       canvas: this.canvas,
@@ -301,7 +305,7 @@ export class PlayPage {
    * returned.
    */
   publish(host: GameHost): void {
-    const page = this;
+    const booted = (): boolean => this.booted;
     (window as unknown as { dbg: unknown }).dbg = {
       host,
       session: host.session,
@@ -311,7 +315,7 @@ export class PlayPage {
       },
       roomless: true,
       get booted() {
-        return page.booted;
+        return booted();
       },
       /** the load remover's reading, in the shape the other pages publish (dust/src/main.ts) */
       loading: () => ({ ms: loadClock.ms, waiting: loadClock.waiting }),

@@ -11,6 +11,7 @@
          emits relative URLs (base "./") and siteUrl resolves the rest, so the
          page runs from /skullcracker/ and from a directory of its own alike. -->
     <meta name="site-root" content="../" />
+    <title>Skull Cracker RE</title>
     <!-- shell:head -->
   </head>
   <body class="booting deep">
@@ -23,29 +24,19 @@
 
     <div id="stage">
       <!-- The title card and the fracture under it: the whole page until the game
-           is running, a band at the top after. `onerror` removes the image rather
-           than leaving a broken frame, and tells the page so the band closes up:
+           is running, a band at the top after. the page removes the image rather than
+           leaving a broken frame (`brandFallback`), and the band closes up:
            the logo is decoration and the experiment is the picture below it. -->
       <div id="curtain">
         <img
           id="brand"
           src="/skullcracker-logo.png"
           alt="Skull Cracker: An Action Horror Fighting Game"
-          onerror="
-            this.hidden = true;
-            document.body.classList.add('nobrand');
-          "
         />
         <div id="boot">
           <div id="gauge">
-            <div
-              id="conduit"
-              role="progressbar"
-              aria-label="reading the disc"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
-            >
+            <progress id="barvalue" aria-label="reading the disc" max="100" value="0"></progress>
+            <div id="conduit" aria-hidden="true">
               <div id="charge" style="width: 0%">
                 <i id="crack"></i><i id="node"></i>
               </div>

@@ -112,3 +112,13 @@ body.playing #curtain::before {
   align-items: center;
   justify-content: center;
 }
+
+/* the gauge's value, for a screen reader: #bar is only its picture */
+#barvalue {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
