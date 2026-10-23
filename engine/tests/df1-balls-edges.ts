@@ -1,8 +1,9 @@
 /**
  * DreamFactory 1's balls (engine/src/runtime/balls.ts) off the road
- * df1-balls.ts takes: `makeball` for a prop that is not there, and a full
- * table of 16 (DF.EXE 0x439a90); `pauseball` and its getter for a name with no
- * ball, with no name at all, and `makeball` given arguments with no value;
+ * df1-balls.ts takes: the script errors `makeball` raises (DF.EXE 0x439a90) —
+ * too few arguments, one that is not an integer, a prop that is not there, a
+ * full table of 16; `pauseball` and its getter for a name with no ball and
+ * with no name at all;
  * and a pass asked for while an `endball` is still running, which
  * waits for it rather than servicing the table twice.
  *
@@ -33,26 +34,48 @@ function session() {
   return { s, logs, call, prop };
 }
 
-test("makeball for a prop that is not there, or with every slot taken, throws nothing", () => {
-  const { s, logs, call, prop } = session();
-  call("makecricket", "ghost", 1, 0, 0, 0, 0, 5);
-  expect(logs.at(-1)).toBe("makeball: no prop ghost");
-  for (let i = 0; i <= BALL_SLOTS; i++) {
+const code = (f: () => unknown): number | undefined => {
+  try {
+    f();
+  } catch (e) {
+    return (e as { code?: number }).code;
+  }
+  return undefined;
+};
+
+test("makeball for a prop that is not there is error 0xa, a seventeenth ball error 8 (Too many balls.)", () => {
+  const { s, call, prop } = session();
+  expect(code(() => call("makecricket", "ghost", 1, 0, 0, 0, 0, 5))).toBe(0xa);
+  for (let i = 0; i < BALL_SLOTS; i++) {
     prop(`p${i}`);
     call("makecricket", `p${i}`, 1, 0, 0, 0, 0, 5);
   }
+  prop(`p${BALL_SLOTS}`);
+  expect(code(() => call("makecricket", `p${BALL_SLOTS}`, 1, 0, 0, 0, 0, 5))).toBe(8);
   expect(s.balls.count()).toBe(BALL_SLOTS);
-  expect(logs.at(-1)).toBe(`makeball: ball table full (${BALL_SLOTS}), dropping p${BALL_SLOTS}`);
   expect(call("iscricket", `p${BALL_SLOTS}`)).toBe(0);
 });
 
-test("pauseball for a name with no ball, or no name; makeball's arguments with no value are 0", () => {
+test("makeball reads its arguments as DF.EXE does: too few is 0x1c, a number that is not one 0xe", () => {
   const { s, call, prop } = session();
   prop("a");
-  // arguments with no value are 0: no gravity, no bounce, and frames 0
-  call("makecricket", "a", 3, undefined, undefined, undefined, undefined, undefined);
+  // a `)` where a `,` is wanted, before the prop is looked up and after
+  expect(code(() => call("makecricket", "a", 3))).toBe(0x1c);
+  expect(code(() => call("makecricket", "ghost", 3))).toBe(0x1c);
+  expect(code(() => call("makecricket", "a", 3, 0, 0, 1))).toBe(0x1c);
+  // the prop is looked up after the third number: missing, it wins over a short tail
+  expect(code(() => call("makecricket", "ghost", 3, 0, 0, 1))).toBe(0xa);
+  // an empty argument, or a string, is not an integer
+  expect(code(() => call("makecricket", "a", 3, undefined, 0, 0, 0, 5))).toBe(0xe);
+  expect(code(() => call("makecricket", "a", 3, 0, 0, 0, "x", 5))).toBe(0xe);
+  expect(s.balls.count()).toBe(0);
+});
+
+test("pauseball for a name with no ball, or no name", () => {
+  const { s, call, prop } = session();
+  prop("a");
+  call("makecricket", "a", 3, 0, 0, 0, 0, 0);
   const ball = s.balls.slots.find(Boolean)!;
-  expect([ball.vx, ball.vy, ball.vz, ball.gravity, ball.bounce, ball.frames]).toEqual([3, 0, 0, 0, 0, 0]);
   call("pausecricket", "nobody", 1);
   expect(ball.pause).toBe(0);
   expect(call("pausecricket", "nobody")).toBe(false);

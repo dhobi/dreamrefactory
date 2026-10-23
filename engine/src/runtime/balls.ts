@@ -2,7 +2,7 @@ import { s16 } from "./point";
 import { CELL_UNITS } from "../df/set-v1-to-v4";
 import { becomeWorldProp } from "./props";
 import type { CricketOpcodes } from "./crickets";
-import { logic, toNum, toStr, truthy, type Logic, type Value } from "./interp";
+import { ScriptError, logic, toStr, truthy, type Logic, type Value } from "./interp";
 import type { GameSession } from "./session";
 
 /**
@@ -110,20 +110,15 @@ export class BallRuntime implements CricketOpcodes {
    * Seven arguments, all but the name integers (error 0xe otherwise). The ball
    * starts where the prop stands, with its facing; any ball already moving that
    * prop is stopped first (0x439cb0 calls 0x438a40), and the first free slot
-   * takes it — a full table is error 8.
+   * takes it — a full table is error 8, "Too many balls." (0x439cdb).
    */
   make(name: string, args: number[]): void {
     const p = this.session.propRuntime.get(name);
-    if (!p) {
-      this.session.onLog(`makeball: no prop ${name}`);
-      return;
-    }
+    // the prop is looked up between the third and the fourth number (0x439b43)
+    if (!p) throw new ScriptError(0xa, `makeball: no prop ${name}`);
     this.stop(name);
     const i = this.slots.indexOf(null);
-    if (i < 0) {
-      this.session.onLog(`makeball: ball table full (${BALL_SLOTS}), dropping ${name}`);
-      return;
-    }
+    if (i < 0) throw new ScriptError(8, `makeball (${name}): all ${BALL_SLOTS} balls are moving`);
     const [vx, vy, vz, gravity, bounce, frames] = args.map((a) => s16(a || 0));
     const x = s16(p.worldX), y = s16(p.worldY), z = s16(p.worldZ);
     this.slots[i] = {
@@ -199,8 +194,25 @@ export class BallRuntime implements CricketOpcodes {
 
   // ---- the cricket opcodes, which are these in DF.EXE (Crickets.opcodes) ----
 
+  /**
+   * DF.EXE reads the arguments as it goes (0x439a90): the name and three
+   * numbers (0x42dfa0), the prop, then the last three (0x42dee0). Each reader
+   * wants a `,` after every argument but the last, so a call that runs out of
+   * them is error 0x1c, "Expected comma"; a number that is not an integer, or
+   * an empty argument, is 0xe — and the prop is missing (0xa) only once the
+   * first three have read.
+   */
   makeCricket(name: string, args: readonly (Value | undefined)[]): void {
-    this.make(name, args.slice(0, 6).map((v) => toNum(v ?? 0)));
+    const read = (from: number, to: number): void => {
+      if (args.length < to) throw new ScriptError(0x1c, `makeball (${name}) takes 7 arguments, called with ${args.length + 1}`);
+      for (let k = from; k < to; k++) {
+        if (typeof args[k] !== "number") throw new ScriptError(0xe, `makeball (${name}): argument ${k + 2} is not an integer`);
+      }
+    };
+    read(0, 3);
+    if (!this.session.propRuntime.get(name)) throw new ScriptError(0xa, `makeball: no prop ${name}`);
+    read(3, 6);
+    this.make(name, args.slice(0, 6) as number[]);
   }
   stopCricket(name: string): void {
     this.stop(name);
