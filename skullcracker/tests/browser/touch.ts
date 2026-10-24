@@ -45,7 +45,7 @@
 import { devices } from "playwright";
 import { BASE, fail, finish, launch } from "./harness";
 
-const URL_BASE = `${BASE}/`;
+const URL_BASE = `${BASE}/play/`;
 const HEADED = process.env.HEADED === "1";
 /** where the Begin button is, in the game's own 512x384 screen */
 const BEGIN = { x: 400, y: 93 };
