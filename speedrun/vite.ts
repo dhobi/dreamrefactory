@@ -217,7 +217,8 @@ export function workbenchHtml(playHtml: string, page: WorkbenchPage): string {
   entry.setAttribute("type", "module");
   entry.setAttribute("src", page.entry);
   document.body.appendChild(entry);
-  return document.toString();
+  // linkedom's toString is its serializer, which its types (the DOM's Document) leave out
+  return (document as { toString(): string }).toString();
 }
 
 /**
