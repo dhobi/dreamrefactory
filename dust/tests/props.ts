@@ -19,7 +19,8 @@
  *      are qualified — `town.flower` is the identifier in `TOWN.SET` itself — and
  *      `INVEN.PRP`'s `initprops` places the cemetery flowers on day 2 while the
  *      player is asleep in `mayroom`. The placement is kept for when the set
- *      opens — props share the cast's answer, `ActorRuntime.settleStars`.
+ *      opens — props share the cast's answer, `ActorRuntime.settleStars`, and
+ *      as in DF.EXE every opening of the set seats them again (0x41e590).
  *   3. **`openprop` is a lifecycle handler.** Six prop groups in `HOUSE.PRP`
  *      define one, and it is where the second of every paired prop is made
  *      (`propinstance ("dung1", "dung2")`). Nothing in the corpus calls it, so
@@ -177,18 +178,19 @@ test("a prop placed on another set's star is seated when that set opens", async 
   const star = town.actors.find((a) => a.identifier.toLowerCase() === "town.flower")!;
   expect(star, "TOWN.SET has a town.flower star").toBeTruthy();
   R.currentSet = "town";
-  expect(R.settleStars(town.actors, true), "one prop was waiting for this set").toBe(1);
+  expect(R.settleStars(town.actors, true, true), "one prop was waiting for this set").toBe(1);
   expect(
     [prop.worldX, prop.worldY, prop.worldZ],
     "the flowers are on their star",
   ).toEqual([star.positionX, star.positionZ, star.positionY]);
   expect(prop.starPending, "and are not waiting for anything").toBe(false);
 
-  // a second entry moves nothing: settling is for a placement that MISSED, and
-  // a script is free to nudge a prop with propxyz afterwards
+  // and so is every later entry: DF.EXE's set open seats each world prop of the
+  // set on its star whether it missed or not (0x40e9b0 -> 0x41e590), so a
+  // propxyz nudge lasts until the town opens again
   prop.worldX = star.positionX + 40;
-  expect(R.settleStars(town.actors, true), "nothing is re-seated on the next entry").toBe(0);
-  expect(prop.worldX, "the nudge stands").toBe(star.positionX + 40);
+  expect(R.settleStars(town.actors, true, true), "re-seated on the next entry").toBe(1);
+  expect(prop.worldX, "back on the star").toBe(star.positionX);
 });
 
 // --- 3. what must NOT start waiting for a set ------------------------------

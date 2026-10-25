@@ -792,11 +792,15 @@ export class PropRuntime {
    * re-seating that on set entry would undo the nudge. And not the FACING, which
    * `propstar` seeds from the star only to have the calling script override it a
    * line later.
+   *
+   * `everyone` is DF.EXE's set open, as for the cast: 0x41e590 seats every
+   * world prop (+0x12) of the opened set (+0x5e) on its star (+0x6e), missed
+   * or not.
    */
-  settleStars(stars: readonly StarPoint[], v1 = false): number {
+  settleStars(stars: readonly StarPoint[], v1 = false, everyone = false): number {
     let moved = 0;
     for (const p of this.props.values()) {
-      if (!p.starPending || p.setName !== this.currentSet) continue;
+      if (p.setName !== this.currentSet || !(everyone ? p.worldSpace : p.starPending)) continue;
       const star = stars.find((s) => s.identifier.toLowerCase() === p.starName);
       if (!star) continue;
       becomeWorldProp(p, v1);
