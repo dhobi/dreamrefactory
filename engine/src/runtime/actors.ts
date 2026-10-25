@@ -1,5 +1,4 @@
 import { CstFile, CastMember, CastPose } from "../df/cst";
-import type { Actor as StarRecord } from "../df/set";
 import { ShpFrame, decodeShpFrame } from "../df/shp";
 import {
   WorldCamera, Occlusion, projectPoint, depthLevel, sceneryOccludes, engineBearing, hiddenBy, inkAlpha, inkPixel,
@@ -9,7 +8,7 @@ import type { DrawSignature } from "./signature";
 import { Lights, shadedPalette } from "./shading";
 import type { Value } from "./interp";
 import { scaledBoxCovers, scaledOrigin, spriteCovers, worldSpriteSize } from "./sprite-scaler";
-import { Card, cardOf, cardTexel, paintCard } from "./props";
+import { Card, cardOf, cardTexel, paintCard, type StarPoint } from "./props";
 import { drawWorldSprite, ViewBuffer } from "./sprite-blit";
 
 // Occlusion lives in the neutral ./geometry module; re-exported here so
@@ -155,14 +154,6 @@ export class ActorInstance {
   value: Value = 0;
   /** name of the star the actor was last placed on (actorstar getter) */
   starName = "";
-  /**
-   * `actorstar` named a star the open set does not have, so this actor is still
-   * standing wherever it was — see {@link ActorRuntime.settleStars}.
-   *
-   * Never true in Titanic: its star names are bare and a room places its own
-   * cast from its own `openset`, so the table in hand is always the right one.
-   */
-  starPending = false;
   lastTick = 0;
 
   constructor(
@@ -187,9 +178,7 @@ export class ActorInstance {
  * speed, turn, layer and z-clip, with its value, its owner and its hitbox
  * (+0x50/+0x52): everything the record holds that is not bookkeeping.
  *
- * The record has no field for the port's own derived state, which follows the
- * fields it is derived from: `starPending` with the star and position. The
- * per-frame clock (`lastTick`) starts afresh, as +0x34 does.
+ * The per-frame clock (`lastTick`) starts afresh, as +0x34 does.
  */
 export function copyActorRecord(from: ActorInstance, to: ActorInstance): void {
   to.visible = from.visible;
@@ -223,7 +212,6 @@ export function copyActorRecord(from: ActorInstance, to: ActorInstance): void {
   to.owner = from.owner;
   to.value = from.value;
   to.starName = from.starName;
-  to.starPending = from.starPending;
 }
 
 export class LoadedCast {
@@ -321,63 +309,43 @@ export class ActorRuntime {
   }
 
   /**
-   * Re-seat this set's actors on the stars they name, now that its star table is
-   * the one in hand.
+   * Put this set's actors back on the stars they name, now that its star table
+   * is the one in hand — what every DreamFactory engine does when it opens a set:
    *
-   * `actorstar(who, name)` places an actor the moment it is called, from the star
-   * table of the set that happens to be OPEN. In Titanic that is always the right
-   * table, because a room places its own cast from its own `openset` — the names
-   * are bare (`jones1`), so they could not mean anything else.
+   *   DF.EXE       0x40e9b0 -> 0x414e00
+   *   TI.EXE       0x40768a -> 0x410fa0   (tl.exe 0x4340ba -> 0x427970)
+   *   RedJack.exe  opensetfile -> 0x406700
    *
-   * Dust qualifies them (`town.horse1`, `chin.help3`) and places from the STAGE:
-   * `new.flt`'s `advanceday` calls `sendtocast("gang", initactors())`, which runs
-   * `setupactor` for the whole town while whatever room the player is standing in
-   * is the open one. So most of those calls name a star the current set has never
-   * heard of, and would land the actor at the origin: Leroy would read
-   * `star=town.leroy1 xyz=0,0,0` while the horses, placed by a script that
-   * happened to run in `town`, read real coordinates.
+   * Only a script's `opensetfile` reaches those: a load rebuilds the room on its
+   * own (TI.EXE 0x414080, RedJack.exe 0x43dd80, DF.EXE 0x41ae10, whose only way
+   * to 0x40e9b0 is through the script runner), so the saved positions stand
+   * until the set is opened again.
    *
-   * Deferring to set entry is enough because an actor is only ever DRAWN in its
-   * own set ({@link currentSet}), so a position is only required to be right by
-   * the time that set is the one being looked at.
+   * Each goes through every actor record: one in the world (+0x12) whose set is
+   * the one just opened is looked up by its star and gets the star's x, y and z.
+   * Nothing else — not the facing, and no walk is asked about: a walker is placed
+   * from where its walk started, not from where it stands.
    *
-   * Only actors whose `actorstar` actually MISSED are moved
-   * ({@link ActorInstance.starPending}), never every actor carrying a star name.
-   * The difference matters: a script is free to place an actor by star and then
-   * nudge it with `actorxyz`, and re-seating that on set entry would undo the
-   * nudge. A miss is unambiguous — the position it wanted was never applied.
-   *
-   * Two more things it deliberately does not do:
-   *
-   *  - **the facing.** `actorstar` seeds `deg` from the star, but `setupactor`
-   *    then overrides it (`actordeg (me, 240 + 128)` right after the star), so
-   *    re-seeding here would undo the script.
-   *  - **a walking actor.** Its position is the scheduler's to own until it
-   *    arrives; snapping it back to its departure star would teleport it.
-   *
-   * DF.EXE (`everyone`) is not that restrained. Its set open (0x40e9b0) calls
-   * 0x414e00 right after the load, and that goes through EVERY actor record:
-   * one in the world (+0x12) whose set (+0x64) is the one just opened is looked
-   * up by its star (+0x74, 0x410ce0) and gets the star's x, y, z and tile
-   * (+0x1a..+0x23) — the facing at +0x18 kept, no walk asked about. A miss is
-   * not a flag there, so the position comes back after a load too: D2M_001,
-   * the original's own save, has Todd on `town.extra3` at (0, 0), and its next
-   * save, D2M_002, has him on the star once the town has opened. A walk is
-   * left alone anyway — the scheduler places a walker from where its walk
-   * started, not from where it stands.
+   * It matters because `actorstar` places from the star table of the set that
+   * happens to be OPEN. Dust places from the stage, so `town.leroy1` is named
+   * while the player stands in the hotel and the actor keeps whatever position
+   * it had; the shipped saves hold such records (Dust's D2M_001: Todd on
+   * `town.extra3` at 0, 0; RedJack's day5: Cross on `cross` in bb2 at 0, 0, 0),
+   * and Titanic's endgame moves Max to the boat deck still standing where the
+   * smoking room's `max` put him. And it is unconditional: an `actorxyz` nudge
+   * lasts until the set opens again, where the room's own `openset`, which runs
+   * after this, can make it again.
    */
-  settleStars(stars: readonly StarRecord[], walking: (name: string) => boolean, everyone = false): number {
+  settleStars(stars: readonly StarPoint[]): number {
     let moved = 0;
-    for (const [name, a] of this.actors) {
-      if (a.setName.toLowerCase() !== this.currentSet) continue;
-      if (everyone ? !a.worldSpace : !a.starPending || walking(name)) continue;
+    for (const a of this.actors.values()) {
+      if (!a.worldSpace || a.setName.toLowerCase() !== this.currentSet) continue;
       const want = a.starName.toLowerCase();
       const star = stars.find((s) => s.identifier.toLowerCase() === want);
       if (!star) continue;
       a.worldX = star.positionX;
       a.worldY = star.positionZ;
       a.worldZ = star.positionY;
-      a.starPending = false;
       moved++;
     }
     return moved;

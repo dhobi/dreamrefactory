@@ -76,6 +76,15 @@ export class MazeView implements RoomLayer {
     // a prop or actor `propset` to this room is drawn in it, as a v4 set's (viewer.ts)
     session.propRuntime.currentSet = session.currentSetName;
     session.actorRuntime.currentSet = session.currentSetName;
+    // ...and its cast and props go on their stars, before `openset` runs
+    // (RedJack.exe's `opensetfile` -> 0x406700, 0x42c5b0; ActorRuntime.settleStars).
+    // Not on a load: the resume (0x43dd80) rebuilds the room without it. MARK's
+    // points are in the camera's axes, which a v4 star swaps Y and Z of
+    if (!session.restoringSave) {
+      const stars = sett.stars.map((s) => ({ identifier: s.name, positionX: s.x, positionY: s.z, positionZ: s.y }));
+      session.actorRuntime.settleStars(stars);
+      session.propRuntime.settleStars(stars);
+    }
     session.currentSceneName = () => this.maze.sceneName.toLowerCase();
     session.currentViewName = () => this.maze.view;
     session.interp.onUnknown = (name, args) =>

@@ -18,9 +18,9 @@
  *   2. **A star of a set that is not open is not a failure.** Dust's star names
  *      are qualified — `town.flower` is the identifier in `TOWN.SET` itself — and
  *      `INVEN.PRP`'s `initprops` places the cemetery flowers on day 2 while the
- *      player is asleep in `mayroom`. The placement is kept for when the set
- *      opens — props share the cast's answer, `ActorRuntime.settleStars`, and
- *      as in DF.EXE every opening of the set seats them again (0x41e590).
+ *      player is asleep in `mayroom`. The star's name is kept, and opening the
+ *      set puts every world prop of it on its star, as DF.EXE's set open does
+ *      (0x41e590, `PropRuntime.settleStars`).
  *   3. **`openprop` is a lifecycle handler.** Six prop groups in `HOUSE.PRP`
  *      define one, and it is where the second of every paired prop is made
  *      (`propinstance ("dung1", "dung2")`). Nothing in the corpus calls it, so
@@ -169,7 +169,6 @@ test("a prop placed on another set's star is seated when that set opens", async 
 
   expect(prop.setName, "the flowers belong to the town").toBe("town");
   expect(prop.starName, "...on the town's flower star").toBe("town.flower");
-  expect(prop.starPending, "...which this room's table does not have").toBe(true);
   expect(prop.worldSpace, "and they are scenery either way").toBe(true);
 
   // now the town opens, and its table is the right one. The identifiers in the
@@ -178,25 +177,24 @@ test("a prop placed on another set's star is seated when that set opens", async 
   const star = town.actors.find((a) => a.identifier.toLowerCase() === "town.flower")!;
   expect(star, "TOWN.SET has a town.flower star").toBeTruthy();
   R.currentSet = "town";
-  expect(R.settleStars(town.actors, true, true), "one prop was waiting for this set").toBe(1);
+  expect(R.settleStars(town.actors), "the one town prop placed so far").toBe(1);
   expect(
     [prop.worldX, prop.worldY, prop.worldZ],
     "the flowers are on their star",
   ).toEqual([star.positionX, star.positionZ, star.positionY]);
-  expect(prop.starPending, "and are not waiting for anything").toBe(false);
 
   // and so is every later entry: DF.EXE's set open seats each world prop of the
   // set on its star whether it missed or not (0x40e9b0 -> 0x41e590), so a
   // propxyz nudge lasts until the town opens again
   prop.worldX = star.positionX + 40;
-  expect(R.settleStars(town.actors, true, true), "re-seated on the next entry").toBe(1);
+  expect(R.settleStars(town.actors), "re-seated on the next entry").toBe(1);
   expect(prop.worldX, "back on the star").toBe(star.positionX);
 });
 
-// --- 3. what must NOT start waiting for a set ------------------------------
+// --- 3. what a set's opening must NOT move ---------------------------------
 
-test("a star name that is not a set reference never waits", async () => {
-  if (!have("HOUSE.PRP")) {
+test("a star name that names no star leaves the prop where it was put", async () => {
+  if (!have("HOUSE.PRP", "TOWN.SET")) {
     console.warn(`no ${DATA}/HOUSE.PRP — skipping (needs the Dust rip)`);
     return;
   }
@@ -210,16 +208,15 @@ test("a star name that is not a set reference never waits", async () => {
     );
 
   // Titanic stores placement sentinels through propstar/actorstar — bare words
-  // that are stars nowhere. A prop holding one must not be left waiting for a
-  // set called "custom".
-  call("propstar", ["dung1", "custom"]);
-  expect(R.get("dung1")!.starPending, "a bare sentinel is not a set reference").toBe(false);
-
-  // and an explicit placement answers the question outright
-  call("propstar", ["dung1", "town.jug"]);
-  expect(R.get("dung1")!.starPending, "a qualified miss waits").toBe(true);
+  // that are stars nowhere. The lookup misses, so the opening leaves the prop
+  // where the script put it (0x41e5e1 skips a star 0x410ce0 does not find)
+  call("propset", ["dung1", "town"]);
   call("propxyz", ["dung1", 100, 200, 0]);
-  expect(R.get("dung1")!.starPending, "...until the script says where itself").toBe(false);
+  call("propstar", ["dung1", "custom"]);
+  const town = readSetFileV1(new Uint8Array(readFileSync(`${DATA}/TOWN.SET`)));
+  R.currentSet = "town";
+  expect(R.settleStars(town.actors), "nothing named a town star").toBe(0);
+  expect([R.get("dung1")!.worldX, R.get("dung1")!.worldY], "where propxyz put it").toEqual([100, 200]);
 });
 
 // --- 4. a world prop is clickable only where it is drawn (#393) ------------

@@ -389,9 +389,6 @@ function registerActorState(ctx: BuiltinCtx): void {
     a.worldX = toNum(x);
     a.worldY = toNum(y);
     a.worldZ = toNum(z ?? 0);
-    // an explicit placement settles the question, so a star that never resolved
-    // must not be allowed to overrule it later (ActorRuntime.settleStars)
-    a.starPending = false;
     a.worldSpace = true; // a placement in the world is what makes an actor of it
   });
   /**
@@ -461,13 +458,11 @@ function registerActorState(ctx: BuiltinCtx): void {
       // a v5 star has no facing (see propstar)
       if (commandRules(session).starsFace) a.deg = star.rotation8 & 0xff;
     }
-    a.starName = toStr(starName).toLowerCase();
-    // A star this set has never heard of. Dust's are qualified by set
+    // A star this set has never heard of — Dust's are qualified by set
     // (`town.horse1`) and placed from the stage, so most calls name a room that
-    // is not the open one; the position is applied when that room opens
-    // (ActorRuntime.settleStars). Titanic never reaches this branch with a real
-    // star name — only with the walk sentinels, and those match no star anywhere.
-    a.starPending = !star && a.starName.includes(".");
+    // is not the open one — leaves the actor where it stood, and that room's
+    // opening puts it on the star (ActorRuntime.settleStars).
+    a.starName = toStr(starName).toLowerCase();
     if (star) a.worldSpace = true; // as for actorxyz: a real placement in the world
   });
   acc("actordeg", 0, (a) => a.deg, (a, v) => {
