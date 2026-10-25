@@ -176,6 +176,24 @@ test("settleStars moves only the actors whose star missed, in the open set, not 
   expect(ghost.starPending).toBe(true); // a star this set does not have
 });
 
+test("DF.EXE's set open seats every world actor of the set on its star, missed or not (0x414e00)", () => {
+  const { R } = runtime();
+  const nick = R.actors.get("nick")!;
+  const ghost = R.actors.get("ghost")!;
+  R.currentSet = "town";
+  Object.assign(nick, { setName: "town", starName: "town.well", starPending: false, worldSpace: true, deg: 9 });
+  Object.assign(ghost, { setName: "town", starName: "town.well", worldSpace: false });
+  const stars = [{ identifier: "Town.Well", positionX: 1, positionY: 2, positionZ: 3, rotation8: 77 }] as never;
+  // walking or not: the walk places a walker from where it started
+  expect(R.settleStars(stars, () => true, true)).toBe(1);
+  expect([nick.worldX, nick.worldY, nick.worldZ]).toEqual([1, 3, 2]);
+  expect(nick.deg, "the facing at +0x18 is kept").toBe(9);
+  expect([ghost.worldX, ghost.worldY], "a screen actor (+0x12 = 0) is not").toEqual([0, 0]);
+  R.currentSet = "court";
+  nick.worldX = 50;
+  expect(R.settleStars(stars, () => false, true), "only the set just opened").toBe(0);
+});
+
 test("the draw signature changes with what is drawn, and skips the hidden", () => {
   const { R } = runtime();
   const sig = new DrawSignature();

@@ -354,12 +354,23 @@ export class ActorRuntime {
    *    re-seeding here would undo the script.
    *  - **a walking actor.** Its position is the scheduler's to own until it
    *    arrives; snapping it back to its departure star would teleport it.
+   *
+   * DF.EXE (`everyone`) is not that restrained. Its set open (0x40e9b0) calls
+   * 0x414e00 right after the load, and that goes through EVERY actor record:
+   * one in the world (+0x12) whose set (+0x64) is the one just opened is looked
+   * up by its star (+0x74, 0x410ce0) and gets the star's x, y, z and tile
+   * (+0x1a..+0x23) — the facing at +0x18 kept, no walk asked about. A miss is
+   * not a flag there, so the position comes back after a load too: D2M_001,
+   * the original's own save, has Todd on `town.extra3` at (0, 0), and its next
+   * save, D2M_002, has him on the star once the town has opened. A walk is
+   * left alone anyway — the scheduler places a walker from where its walk
+   * started, not from where it stands.
    */
-  settleStars(stars: readonly StarRecord[], walking: (name: string) => boolean): number {
+  settleStars(stars: readonly StarRecord[], walking: (name: string) => boolean, everyone = false): number {
     let moved = 0;
     for (const [name, a] of this.actors) {
-      if (!a.starPending || a.setName.toLowerCase() !== this.currentSet) continue;
-      if (walking(name)) continue;
+      if (a.setName.toLowerCase() !== this.currentSet) continue;
+      if (everyone ? !a.worldSpace : !a.starPending || walking(name)) continue;
       const want = a.starName.toLowerCase();
       const star = stars.find((s) => s.identifier.toLowerCase() === want);
       if (!star) continue;

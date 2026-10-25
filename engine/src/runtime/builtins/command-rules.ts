@@ -19,6 +19,12 @@ export interface CommandRules {
   readonly starsFace: boolean;
   /** `actorstar` drops the actor's walk before it looks the star up (RedJack.exe) */
   readonly starStopsWalk: boolean;
+  /**
+   * Opening a set puts every world actor and prop of that set back on the star
+   * it names (DF.EXE 0x40e9b0 -> 0x414e00, 0x41e590), not only those whose
+   * `actorstar`/`propstar` missed (ActorRuntime.settleStars)
+   */
+  readonly setOpenSeatsEveryStar: boolean;
   /** `actordelete` first sends the actor `closeactor ()` and takes its walk and loop (RedJack.exe 0x4017f0) */
   readonly deleteClosesActor: boolean;
   /** a walk to a star off the open set waits for that set (TI.EXE 0x442fb4, RedJack.exe 0x41c959); DF.EXE walks at once */
@@ -76,6 +82,7 @@ const V4: CommandRules = {
   worldPropsDrawAuthored: false,
   starsFace: true,
   starStopsWalk: false,
+  setOpenSeatsEveryStar: false,
   deleteClosesActor: false,
   defersWalksOffSet: true,
   pathWalksNeedRoute: false,
@@ -95,6 +102,7 @@ const V1: CommandRules = {
   actorInstanceCopiesRecord: true,
   worldPropsDrawAuthored: true,
   defersWalksOffSet: false,
+  setOpenSeatsEveryStar: true,
   sceneWordsFromSet: true,
   postAndServerAreGrid: true,
   randomRefusesNonPositive: false,
