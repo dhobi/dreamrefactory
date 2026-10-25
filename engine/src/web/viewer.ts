@@ -13,7 +13,6 @@ import { ClutDim, RoomLayer, ScreenDirector, dimPalette } from "./screen-directo
 // the font drawstring() paints and stringwidth() measures with — one definition
 // so pen advance matches the glyphs, and so both get the CJK fall-through
 import { overlayFont } from "./fonts";
-import { commandRules } from "@dreamfactory/engine/runtime/builtins/command-rules";
 import { screenRules, type ScreenRules } from "./screen-rules";
 
 /**
@@ -645,15 +644,16 @@ export class SetViewer implements RoomLayer {
     // canonical set identity = the opened file's basename (see SetScripts)
     session.propRuntime.currentSet = session.currentSetName;
     session.actorRuntime.currentSet = session.currentSetName;
-    // ...and now that this set's star table is the one in hand, seat the actors
-    // and props that were placed on it from somewhere else — see
-    // ActorRuntime.settleStars and PropRuntime.settleStars
-    // ...and remember this set's stars by name, so a script running in another
-    // room can still walk somebody here (GameSession.starRegistry)
+    // remember this set's stars by name, so a script running in another room can
+    // still walk somebody here (GameSession.starRegistry)
     for (const a of set.actors) session.starRegistry.set(a.identifier.toLowerCase(), a);
-    const everyone = commandRules(session).setOpenSeatsEveryStar;
-    session.actorRuntime.settleStars(set.actors, (n) => session.scheduler.isWalk(n), everyone);
-    session.propRuntime.settleStars(set.actors, set.version === 1, everyone);
+    // ...and put this set's cast and props on their stars, as the engines' set
+    // open does before `openset` runs — not on a load, which rebuilds the room
+    // without it and keeps the saved positions (ActorRuntime.settleStars)
+    if (!session.restoringSave) {
+      session.actorRuntime.settleStars(set.actors);
+      session.propRuntime.settleStars(set.actors);
+    }
     // crickets attenuate/pan against the camera's ground position + facing
     session.listener = () => {
       const sc = this.scene;

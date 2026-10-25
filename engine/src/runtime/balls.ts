@@ -381,7 +381,6 @@ export class BallRuntime implements CricketOpcodes {
     p.worldX = b.x;
     p.worldY = b.y;
     p.worldZ = b.z;
-    p.starPending = false;
     if (reason !== null) this.slots[i] = null;
     return reason;
   }

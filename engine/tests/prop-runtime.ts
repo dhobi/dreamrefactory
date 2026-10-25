@@ -76,11 +76,11 @@ test("the shop table: removing a shop that is not open, reordering with repeats 
   expect(R.get("copy")).toBeNull();
   R.instance("lamp", "chair"); // the destination is a prop already
   expect(R.get("chair")!.group.name).toBe("chair");
-  // a star that is not in the set leaves the prop waiting
+  // a star that is not in the set leaves the prop where it is
   const lamp = R.get("lamp")!;
-  Object.assign(lamp, { starPending: true, starName: "town.well", setName: "" });
+  Object.assign(lamp, { worldSpace: true, starName: "town.well", setName: "", worldX: 7 });
   expect(R.settleStars([])).toBe(0);
-  expect(lamp.starPending).toBe(true);
+  expect(lamp.worldX).toBe(7);
   R.removeShop("T.SHP");
   expect(R.props.size).toBe(0);
 });

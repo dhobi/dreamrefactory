@@ -972,10 +972,9 @@ export function restoreProps(session: GameSession, inventory: SavedProp[]): void
     // `sendtoprop ("blkjacktable", setupprop ("smoke"))` is the only thing that
     // ever names a set for the card table, so a load from any other room would
     // leave it belonging nowhere — Riviera and the table missing until you walk
-    // out and back in (#486). The position above is the answer, so no star is pending.
+    // out and back in (#486).
     p.setName = sp.set;
     p.starName = sp.star;
-    p.starPending = false;
     p.deg = sp.deg;
     p.dist = sp.dist;
     if (sp.scale) p.scale = sp.scale;

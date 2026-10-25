@@ -522,15 +522,6 @@ export class PropInstance {
   /** name of the star the prop was placed on (propstar getter) */
   starName = "";
   /**
-   * `propstar` named a star the open set does not have, so this prop has no
-   * position yet — see {@link PropRuntime.settleStars}, and
-   * {@link ActorInstance.starPending}, which is the same flag for the cast.
-   *
-   * Never true in Titanic: its star names are bare and a room decorates itself
-   * from its own `openset`, so the table in hand is always the right one.
-   */
-  starPending = false;
-  /**
    * A world prop whose frames are 8-way-style DIRECTIONAL views (a card table,
    * a plant), not an animation — set when propdeg() gives it an orientation.
    * The drawn frame is then chosen at composite time from the prop's facing
@@ -778,36 +769,24 @@ export class PropRuntime {
   }
 
   /**
-   * Seat the props that were put on a star of THIS set from somewhere else.
-   *
-   * The prop half of {@link ActorRuntime.settleStars}, and the same situation:
-   * Dust's star names are qualified by set (`town.flower`, and the identifier in
-   * the SET file is that too), and a script decorating a room runs wherever the
-   * player is. `INVEN.PRP`'s `initprops` places the cemetery flowers, the jug and
-   * the bone on day 2 while the player is waking up in `mayroom`, so all three
-   * `propstar` calls miss the table in hand — see the note on the builtin.
-   *
-   * Only props whose `propstar` actually MISSED, for the reason the actor twin
-   * gives: a script may place by star and then nudge with `propxyz`, and
-   * re-seating that on set entry would undo the nudge. And not the FACING, which
-   * `propstar` seeds from the star only to have the calling script override it a
-   * line later.
-   *
-   * `everyone` is DF.EXE's set open, as for the cast: 0x41e590 seats every
-   * world prop (+0x12) of the opened set (+0x5e) on its star (+0x6e), missed
-   * or not.
+   * Put this set's props back on the stars they name — the prop half of
+   * {@link ActorRuntime.settleStars}, run beside it by every engine's set open
+   * (DF.EXE 0x41e590, TI.EXE 0x418b20, tl.exe 0x42db20, RedJack.exe 0x42c5b0):
+   * a world prop (+0x12) of the opened set gets its star's x, y and z, and
+   * nothing more. Dust's `INVEN.PRP` `initprops` puts the cemetery flowers on
+   * `town.flower` while the player wakes up in `mayroom`, and this is where
+   * they arrive.
    */
-  settleStars(stars: readonly StarPoint[], v1 = false, everyone = false): number {
+  settleStars(stars: readonly StarPoint[]): number {
     let moved = 0;
     for (const p of this.props.values()) {
-      if (p.setName !== this.currentSet || !(everyone ? p.worldSpace : p.starPending)) continue;
-      const star = stars.find((s) => s.identifier.toLowerCase() === p.starName);
+      if (!p.worldSpace || p.setName !== this.currentSet) continue;
+      const want = p.starName.toLowerCase();
+      const star = stars.find((s) => s.identifier.toLowerCase() === want);
       if (!star) continue;
-      becomeWorldProp(p, v1);
       p.worldX = star.positionX;
       p.worldY = star.positionZ;
       p.worldZ = star.positionY;
-      p.starPending = false;
       moved++;
     }
     return moved;

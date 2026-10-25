@@ -160,38 +160,25 @@ test("world actors: no scale or no picture is never on screen", () => {
   expect(a.pose()!.name).toBe("stand");
 });
 
-test("settleStars moves only the actors whose star missed, in the open set, not walking", () => {
+test("a set's opening puts its world actors on their stars, and nothing more (DF.EXE 0x414e00, TI.EXE 0x410fa0)", () => {
   const { R } = runtime();
   const nick = R.actors.get("nick")!;
   const ghost = R.actors.get("ghost")!;
   R.currentSet = "town";
-  for (const a of [nick, ghost]) Object.assign(a, { setName: "town", starPending: true });
-  nick.starName = "town.well";
-  ghost.starName = "town.gone";
-  const stars = [{ identifier: "Town.Well", positionX: 1, positionY: 2, positionZ: 3 }] as never;
-  // walking: left where the walk has it
-  expect(R.settleStars(stars, () => true)).toBe(0);
-  expect(R.settleStars(stars, () => false)).toBe(1);
-  expect([nick.worldX, nick.worldY, nick.worldZ, nick.starPending]).toEqual([1, 3, 2, false]);
-  expect(ghost.starPending).toBe(true); // a star this set does not have
-});
-
-test("DF.EXE's set open seats every world actor of the set on its star, missed or not (0x414e00)", () => {
-  const { R } = runtime();
-  const nick = R.actors.get("nick")!;
-  const ghost = R.actors.get("ghost")!;
-  R.currentSet = "town";
-  Object.assign(nick, { setName: "town", starName: "town.well", starPending: false, worldSpace: true, deg: 9 });
+  Object.assign(nick, { setName: "town", starName: "town.well", worldSpace: true, deg: 9 });
   Object.assign(ghost, { setName: "town", starName: "town.well", worldSpace: false });
-  const stars = [{ identifier: "Town.Well", positionX: 1, positionY: 2, positionZ: 3, rotation8: 77 }] as never;
-  // walking or not: the walk places a walker from where it started
-  expect(R.settleStars(stars, () => true, true)).toBe(1);
+  const stars = [{ identifier: "Town.Well", positionX: 1, positionY: 2, positionZ: 3 }];
+  expect(R.settleStars(stars)).toBe(1);
   expect([nick.worldX, nick.worldY, nick.worldZ]).toEqual([1, 3, 2]);
   expect(nick.deg, "the facing at +0x18 is kept").toBe(9);
   expect([ghost.worldX, ghost.worldY], "a screen actor (+0x12 = 0) is not").toEqual([0, 0]);
-  R.currentSet = "court";
+  nick.starName = "town.gone";
   nick.worldX = 50;
-  expect(R.settleStars(stars, () => false, true), "only the set just opened").toBe(0);
+  expect(R.settleStars(stars), "a star the set does not have").toBe(0);
+  nick.starName = "town.well";
+  R.currentSet = "court";
+  expect(R.settleStars(stars), "only the set just opened").toBe(0);
+  expect(nick.worldX).toBe(50);
 });
 
 test("the draw signature changes with what is drawn, and skips the hidden", () => {

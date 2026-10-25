@@ -274,9 +274,6 @@ function registerPropXy(ctx: BuiltinCtx): void {
     p.worldX = toNum(x);
     p.worldY = toNum(y);
     p.worldZ = toNum(z ?? 0);
-    // as for actors: an explicit placement answers the question, so a star that
-    // never resolved must not overrule it when its set opens (settleStars)
-    p.starPending = false;
   });
 }
 
@@ -567,7 +564,6 @@ function registerPropTables(ctx: BuiltinCtx): void {
       // copies its three coordinates and leaves the facing alone
       if (commandRules(session).starsFace) p.deg = star.rotation8 & 0xff;
     }
-    p.starName = toStr(starName).toLowerCase();
     /**
      * A star the open set has never heard of, which in Dust is the ordinary
      * case: its star names are qualified by set — the identifiers in the SET
@@ -578,17 +574,11 @@ function registerPropTables(ctx: BuiltinCtx): void {
      * "town")` and `propstar (me, "town.flower")`, and the player is asleep in
      * `mayroom` — so the star misses and the vase has no position at all.
      *
-     * The answer is the one {@link ActorRuntime.settleStars} already gives for
-     * the cast, for the same reason and with the same restraint: remember that
-     * this one MISSED, and seat it when its own set opens. A prop is only ever
-     * drawn in its own set, so a position is only required to be right by the
-     * time that set is the one being looked at.
-     *
-     * Qualified names only. Titanic reaches this branch with bare names that are
-     * simply not stars — `propstar` doubles as a store for placement sentinels
-     * there, the way `actorstar` does — and those must not be waiting for a set
-     * called after them.
+     * Nor does it need one here. The name is kept, and every engine's set open
+     * puts the props of the opened set on the stars they name (PropRuntime.settleStars),
+     * so the vase arrives on its star when the town opens. A prop is only ever
+     * drawn in its own set, so that is soon enough.
      */
-    p.starPending = !star && p.starName.includes(".");
+    p.starName = toStr(starName).toLowerCase();
   });
 }
