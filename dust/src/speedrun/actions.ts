@@ -329,7 +329,16 @@ async function clearOrSay(c: ActionContext, spoken: string): Promise<void> {
         await c.d.tryHold(`!(${SPEAKING}) || (${CHOICES}).length > 0 || !(${TALKING})`, 6000);
         continue;
       }
-      if (!(await c.d.tryHold(`(${CHOICES}).length > 0 || !(${TALKING})`, 6000))) break;
+      /*
+       * NOT YET SPEAKING is a wait for the first line as much as for a plaque.
+       * TOWN.SET/0001's robber (`runpuppet ("robber.pup")`, GANG.CST
+       * prepuppet) fades to his close-up before he says anything, and then
+       * talks for 16 s with nothing on his plaque until postpuppet closes him.
+       * Waking only on a plaque or the close let the line begin unseen and run
+       * the hold out: the Dust speedrun nightly of 2026-10-30 stopped there,
+       * on line 169's walk to the hotel.
+       */
+      if (!(await c.d.tryHold(`${SPEAKING} || (${CHOICES}).length > 0 || !(${TALKING})`, 6000))) break;
       continue;
     }
     await CORE_ACTIONS.say.run({
