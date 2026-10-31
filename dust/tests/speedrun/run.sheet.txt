@@ -9,11 +9,15 @@
 #   npm run speedrun -w dust                       from the boot, in node
 #   npm run speedrun -w dust -- --from=day3night   from a save() below
 #
-# Unseeded: blackjack, poker and the gunfights roll dice, so the time moves
-# from run to run. Where a hand can be lost, the verb saves through the game's
-# own menu and loads on a loss (on the clock, as a player would).
+# A SEEDED RUN: blackjack, poker and the gunfights roll dice, and unpinned they
+# made the nightly a different game every night — one met the day-2 robber
+# mid-walk, and seeds 1 and 3 lose the day-3 poker to its 20-hand cap. Of
+# seeds 1..6, 6 plays the whole sheet fastest (27:14.3 in-game). Re-find it
+# after an edit: a change before a die moves every draw after it. Where a hand
+# can be lost, the verb still saves through the game's own menu and loads on a
+# loss (on the clock, as a player would).
 
-reset()
+reset(seed: 6)
 skipMovie(until: js == !!window.dbg.viewer, budget: 180000)
 # THE BOOT LEAVES A CONVERSATION OPEN, and this waits for it by name.
 #
