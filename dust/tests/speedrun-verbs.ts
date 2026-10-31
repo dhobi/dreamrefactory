@@ -481,6 +481,25 @@ test("goto names a conversation nothing closes, which is what the HELP overlay i
   expect(gestures.filter((g) => g === "key Escape").length).toBeGreaterThan(0);
 });
 
+test("goto waits out a close-up's fade for its first line, and cuts the line short", async () => {
+  // the robber: open, silent while his close-up fades in, then a monologue
+  // with nothing on the plaque that ESC ends
+  w.conversing = true;
+  let ticks = 0;
+  w.onTick = () => {
+    if (++ticks === 5) w.speaking = true;
+  };
+  w.onKey = (k) => {
+    if (k !== "Escape" || !w.speaking) return false;
+    w.speaking = false;
+    w.conversing = false;
+    return true;
+  };
+  await play("goto(1, 0)");
+  expect(keys("Escape")).toBe(1);
+  expect(asked).toEqual([]);
+});
+
 test("goto that is carried off course re-plans from where the world put it", async () => {
   w.standAt(0, 0, "east");
   // a standpoint's own script moves us the first time we land on it
