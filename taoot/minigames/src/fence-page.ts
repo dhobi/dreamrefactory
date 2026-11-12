@@ -71,6 +71,19 @@ void bootMinigame({
     host.session.interp.globals.set("willphase", 201);
   },
   /**
+   * WILLIE HIMSELF, because the bout's result is kept on him.
+   *
+   * `FENCE.STG` ends with `actorowner ("willie", "won")` (or "lost") and his
+   * `postgame ()` opens `if actorowner ("willie") = "won"`. Aboard he is a
+   * `GANG.CST` actor, cast by `boot ()`'s `opencastfile ("gang.cst")`; with no
+   * cast open both are error 0xa ("no such object"), which abandons `postgame`
+   * before `playagain ()` and the rematch is never asked. So the boot's cast is
+   * opened before the stage, as `boot ()` has it.
+   */
+  beforeStage: async (host) => {
+    await host.session.openCastFile("gang.cst");
+  },
+  /**
    * The squash court's own loop, which is the whole of `SQUASH.SET fence ()`:
    *
    *     openpuppetfile ("wilfenc1.pup")

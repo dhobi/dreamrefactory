@@ -73,6 +73,11 @@ export interface Minigame {
    */
   readonly start?: (host: GameHost) => Promise<void> | void;
   /**
+   * Anything `boot ()` would have had open BEFORE the stage — fencing's Willie,
+   * whose `GANG.CST` actor holds the bout's result.
+   */
+  readonly beforeStage?: (host: GameHost) => Promise<void> | void;
+  /**
    * What happens when the game's own scripts LEAVE the stage — which is how both
    * of these end. Blackjack's `closecards ()` and fencing's post-bout
    * `transfromflat ()` both pop the overlay, so "the stage is no longer ours" is
@@ -307,7 +312,19 @@ export async function bootMinigame(game: Minigame): Promise<void> {
    * opened.
    */
   for (const [slot, value] of plan.puppetParams) host.session.puppetParams.set(slot, value);
+  /**
+   * ...and the GLOBALS `boot ()` sets before it does anything else.
+   *
+   * The library's own handlers read them from the first `idle ()` on — `if
+   * debugging`, `if lockevents`, `calctime`'s `if not sinkflag` — and not running
+   * `boot ()` left them as the bare `global` declaration makes them, 0 (or
+   * missing), which a DreamFactory 5 `if` answers with error 0xe (TI.EXE
+   * 0x44415d): "if wants a boolean, got 0 (in boot1.idle)" on every idle, on all
+   * three pages. Read from the BOOTFILE like the puppet params.
+   */
+  for (const [name, value] of plan.globals) host.session.interp.globals.set(name, value);
 
+  await game.beforeStage?.(host);
   say(`opening ${game.stage}…`);
   if (!(await host.session.stageCtrl.openStageFile(game.stage))) {
     say(`could not open ${game.stage} — is the ${edition} tree installed?`);

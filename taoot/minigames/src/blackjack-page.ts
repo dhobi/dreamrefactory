@@ -61,7 +61,7 @@ void bootMinigame({
     await host.session.puppetCtrl.openPuppetFile("blkjack1.pup");
     g.set("playingcards", deck());
     // the two the dealer's conversation would have left behind
-    g.set("firsthand", 1);
+    g.set("firsthand", host.session.interp.bool(true)); // BLKJACK1.PUP: `firsthand = true`
     g.set("buickphase", 1);
     /*
      * `initgame` is the FLAT's, not the stage main's.
@@ -70,7 +70,7 @@ void bootMinigame({
      * container 2 — the flat `blkjack`'s own script — carries the game:
      * `initgame`, `newgame`, `dealcards`, `hitplayer`, `checktotals`. Fired at
      * `stageScript` it lands on a script that has never heard of it, which is a
-     * boot that opens the table and deals nothing (globals `{firsthand: 1}` and
+     * boot that opens the table and deals nothing (globals `{firsthand: true}` and
      * not one card).
      */
     const flat = host.session.flatScripts.get(host.session.currentFlat.toLowerCase());
