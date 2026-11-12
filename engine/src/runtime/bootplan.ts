@@ -151,11 +151,24 @@ export interface BootPlan {
    * that leaves the defaults alone.
    */
   puppetParams: [number, number][];
+  /**
+   * The globals `boot()` sets to a constant at its own top level, in order —
+   * TAOOT's `debugging = false`, `lockevents = false`, `sinkflag = false`,
+   * `themevolume = 255`, … — as literals: booleans stay booleans.
+   *
+   * For the same caller as {@link puppetParams}: the library's handlers read
+   * these from the first `idle ()` on (`if debugging`, `if lockevents`,
+   * `calctime`'s `if not sinkflag`), and without `boot()` they are the bare
+   * `global` declaration's 0, which a DreamFactory 5 `if` refuses with error
+   * 0xe. Only the top level: an assignment under an `if` (`optionquit`, `tour`)
+   * depends on what the boot saw, and is left for the caller to decide.
+   */
+  globals: [string, number | string | boolean][];
 }
 
 /** what a tree with no readable BOOTFILE plans: nothing, and nothing to boot */
 export const EMPTY_BOOT_PLAN: BootPlan = {
-  resources: [], casts: [], landingSet: null, volumes: [], puppetParams: [],
+  resources: [], casts: [], landingSet: null, volumes: [], puppetParams: [], globals: [],
 };
 
 /** the call's first argument if it is a non-empty string literal */
@@ -328,6 +341,15 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
   };
   visit(BOOT_HANDLER);
 
+  const globals = new Map<string, number | string | boolean>();
+  for (const code of codes.get(BOOT_HANDLER) ?? []) {
+    for (const st of code.body) {
+      if (st.t !== "assign" || st.index) continue;
+      const v = st.value;
+      if (v.t === "int" || v.t === "str" || v.t === "bool") globals.set(st.name.toLowerCase(), v.v);
+    }
+  }
+
   // The first room the day machine names. First, not last: the full game's
   // `advanceday` is the whole day switch and names every room the story passes
   // through, and the one that matters here is the one a cold boot lands in.
@@ -352,5 +374,5 @@ export function readBootPlan(bootfile: Uint8Array): BootPlan {
       if (volume && !volumes.includes(volume.toLowerCase())) volumes.push(volume.toLowerCase());
     });
   }
-  return { resources, casts, landingSet, volumes, puppetParams: [...params] };
+  return { resources, casts, landingSet, volumes, puppetParams: [...params], globals: [...globals] };
 }

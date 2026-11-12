@@ -596,6 +596,13 @@ test("bootplan: what the boot needs is read from the BOOTFILE, not known", () =>
   }
   // the demo's CD check names a 9 MB room it only wants to know the existence of
   check("a fileexists() probe is not a resource", !plan.resources.includes("gstair2.set"));
+  // boot()'s top-level constants, for a shell that holds the library without
+  // running it (the minigames): booleans stay booleans, or a DF5 `if` refuses them
+  const g = new Map(plan.globals);
+  check("boot()'s debugging = false is read as a boolean", g.get("debugging") === false, `${g.get("debugging")}`);
+  check("and sinkflag", g.get("sinkflag") === false, `${g.get("sinkflag")}`);
+  check("and themevolume = 255", g.get("themevolume") === 255, `${g.get("themevolume")}`);
+  check("an assignment under an if is not", !g.has("optionquit") && !g.has("tour"), [...g.keys()].join());
   // `setpath` names the volumes: currentcd("Titanic1"/"Titanic2"), in disc order.
   // This is what decides which copy of a both-discs room wins, not a filename
   // regex in the file layer.
