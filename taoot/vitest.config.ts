@@ -25,6 +25,7 @@ import { defaultExclude, defineConfig } from "vitest/config";
  */
 const NEEDS_THE_RIP = [
   "regression",
+  "minigames",
   "savegame",
   "re_builtins",
   "interp",

@@ -31,6 +31,7 @@
  * the middle reply.
  */
 import { bootMinigame, markOption } from "./minigame-boot";
+import { fenceAfterBout, startFence } from "./minigame-session";
 
 /** the three the game offers, by the reply that picks each one */
 const LEVELS: Record<string, number> = { novice: 25, mediocre: 15, excellent: 5 };
@@ -54,7 +55,6 @@ void bootMinigame({
    * the number the player chose.
    */
   start: (host) => {
-    host.session.interp.globals.set("fencelevel", picked.level);
     /**
      * ...and `willphase`, which is where the bout's OWN loop is kept.
      *
@@ -68,20 +68,7 @@ void bootMinigame({
      * 201 is therefore what "you said yes and fenced" looks like, which is
      * exactly the state this page starts you in.
      */
-    host.session.interp.globals.set("willphase", 201);
-  },
-  /**
-   * WILLIE HIMSELF, because the bout's result is kept on him.
-   *
-   * `FENCE.STG` ends with `actorowner ("willie", "won")` (or "lost") and his
-   * `postgame ()` opens `if actorowner ("willie") = "won"`. Aboard he is a
-   * `GANG.CST` actor, cast by `boot ()`'s `opencastfile ("gang.cst")`; with no
-   * cast open both are error 0xa ("no such object"), which abandons `postgame`
-   * before `playagain ()` and the rematch is never asked. So the boot's cast is
-   * opened before the stage, as `boot ()` has it.
-   */
-  beforeStage: async (host) => {
-    await host.session.openCastFile("gang.cst");
+    startFence(host.session, picked.level);
   },
   /**
    * The squash court's own loop, which is the whole of `SQUASH.SET fence ()`:
@@ -97,19 +84,5 @@ void bootMinigame({
    * flat and here reopens the stage. Saying no leaves it at 202, and with no ship
    * to be walked back into, the way out is the chooser.
    */
-  onLeave: async (host) => {
-    const s = host.session;
-    if (!(await s.puppetCtrl.openPuppetFile("wilfenc1.pup"))) return "done";
-    const boot = s.puppet?.scripts.get("boot script");
-    if (boot) {
-      // `fireHandler` passes no arguments and this handler is all argument —
-      // `runyoself (msg)` does nothing at all unless msg is "fence".
-      await s.interp.runHandler(boot, "runyoself", ["fence"], {
-        me: "wilfenc1.pup",
-        target: "",
-      });
-    }
-    s.puppetCtrl.closePuppetFile();
-    return s.interp.globals.get("willphase") === 201 ? "again" : "done";
-  },
+  onLeave: (host) => fenceAfterBout(host.session),
 });

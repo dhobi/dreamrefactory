@@ -33,6 +33,7 @@
  * the log rather than a fault, and the page's own result line is what the player
  * reads.
  */
+import { prepareMinigameSession } from "./minigame-session";
 import { DeferredAudioSink, WebAudioSink } from "@dreamfactory/engine/runtime/audio";
 import { GameHost } from "@dreamfactory/engine/web/host";
 import { canvasCoordsFor } from "@dreamfactory/engine/web/screen";
@@ -72,11 +73,6 @@ export interface Minigame {
    * conversation would have left behind.
    */
   readonly start?: (host: GameHost) => Promise<void> | void;
-  /**
-   * Anything `boot ()` would have had open BEFORE the stage — fencing's Willie,
-   * whose `GANG.CST` actor holds the bout's result.
-   */
-  readonly beforeStage?: (host: GameHost) => Promise<void> | void;
   /**
    * What happens when the game's own scripts LEAVE the stage — which is how both
    * of these end. Blackjack's `closecards ()` and fencing's post-bout
@@ -293,38 +289,7 @@ export async function bootMinigame(game: Minigame): Promise<void> {
   if (!(await host.session.bootedByGame())) {
     say("no BOOTFILE in this edition — the stage will run, its music will not");
   }
-  /**
-   * ...AND THE TWO LINES OF `boot ()` THAT ARE ABOUT THE SCREEN, which not
-   * running it left out.
-   *
-   * `boot ()` opens with `puppetparam (9, 1)` and `puppetparam (10, 25)` and
-   * never puts either back, so aboard they hold for every conversation in the
-   * game. Slot 10 is the left margin of the answer rows, and 25 is the number
-   * that clears the SCREWS: the answer band is a picture inside every PUP with a
-   * rivet drawn at each end of all five plaques, and at the un-booted default of
-   * 8 the text starts on top of the left one — reported against all three of
-   * these pages, and visible in the shot on #391 as Buick's "Yes, I'll play
-   * another hand." beginning inside the screw.
-   *
-   * Read from the BOOTFILE rather than written here, because 25 is TAOOT's
-   * number and not the port's — see BootPlan.puppetParams. Applied AFTER
-   * `bootedByGame`, which is where the file is parsed, and before any puppet is
-   * opened.
-   */
-  for (const [slot, value] of plan.puppetParams) host.session.puppetParams.set(slot, value);
-  /**
-   * ...and the GLOBALS `boot ()` sets before it does anything else.
-   *
-   * The library's own handlers read them from the first `idle ()` on — `if
-   * debugging`, `if lockevents`, `calctime`'s `if not sinkflag` — and not running
-   * `boot ()` left them as the bare `global` declaration makes them, 0 (or
-   * missing), which a DreamFactory 5 `if` answers with error 0xe (TI.EXE
-   * 0x44415d): "if wants a boolean, got 0 (in boot1.idle)" on every idle, on all
-   * three pages. Read from the BOOTFILE like the puppet params.
-   */
-  for (const [name, value] of plan.globals) host.session.interp.globals.set(name, value);
-
-  await game.beforeStage?.(host);
+  await prepareMinigameSession(host.session, plan);
   say(`opening ${game.stage}…`);
   if (!(await host.session.stageCtrl.openStageFile(game.stage))) {
     say(`could not open ${game.stage} — is the ${edition} tree installed?`);
